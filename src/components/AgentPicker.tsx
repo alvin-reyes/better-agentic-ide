@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AGENT_PROFILES, AGENT_CATEGORIES, type AgentProfile } from "../data/agentProfiles";
+import { AGENT_PROFILES, AGENT_CATEGORIES, PROVIDERS, type AgentProfile, type Provider } from "../data/agentProfiles";
+import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
+import { useSettingsStore } from "../stores/settingsStore";
 
 interface AgentPickerProps {
   onClose: () => void;
@@ -13,16 +15,57 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [continuousMode, setContinuousMode] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [installedProviders, setInstalledProviders] = useState<Set<Provider>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
+  const defaultProvider = useSettingsStore((s) => s.defaultProvider);
+  const setDefaultProvider = useSettingsStore((s) => s.setDefaultProvider);
+  const [activeProvider, setActiveProvider] = useState<Provider>(defaultProvider);
 
+  // Detect installed CLI providers on mount
+  useEffect(() => {
+    const detect = async () => {
+      const installed = new Set<Provider>();
+      for (const p of PROVIDERS) {
+        try {
+          await invoke<string>("check_command_exists", { command: p.id });
+          installed.add(p.id);
+        } catch {
+          // not installed
+        }
+      }
+      setInstalledProviders(installed);
+      // If current default isn't installed, switch to first installed
+      if (!installed.has(defaultProvider) && installed.size > 0) {
+        const first = [...installed][0];
+        setActiveProvider(first);
+      }
+    };
+    detect();
+  }, [defaultProvider]);
+
+  // Task routing
+  const routeResult = useMemo(() => {
+    if (!isTaskDescription(query)) return null;
+    return routeTask(query);
+  }, [query]);
+
+  const suggestedAgent = routeResult?.agent ?? null;
+
+  // Filter agent list
   const filtered = useMemo(() => {
     let profiles = AGENT_PROFILES;
     if (activeCategory) {
       profiles = profiles.filter((p) => p.category === activeCategory);
     }
     if (query) {
+      // If it's a task description with a suggestion, show all but prioritize suggestion
+      if (suggestedAgent) {
+        // Put suggested agent first, then rest filtered by category if active
+        const rest = profiles.filter((p) => p.id !== suggestedAgent.id);
+        return [suggestedAgent, ...rest];
+      }
       const q = query.toLowerCase();
       profiles = profiles.filter(
         (p) =>
@@ -32,7 +75,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       );
     }
     return profiles;
-  }, [query, activeCategory]);
+  }, [query, activeCategory, suggestedAgent]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -45,25 +88,29 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const el = list.children[selectedIndex] as HTMLElement;
+    const el = list.children[suggestedAgent && filtered[0]?.id === suggestedAgent.id ? 1 : selectedIndex] as HTMLElement;
     if (el) el.scrollIntoView({ block: "nearest" });
-  }, [selectedIndex]);
+  }, [selectedIndex, suggestedAgent, filtered]);
 
   const launchAgent = useCallback(async (profile: AgentProfile) => {
     const ptyId = getActivePtyId();
     if (ptyId === null) return;
 
-    // Build the command — append continuous flag if enabled
-    let cmd = profile.command;
-    if (continuousMode) {
+    let cmd = profile.providers[activeProvider];
+    if (continuousMode && activeProvider === "claude") {
       cmd = cmd.replace(/^claude /, "claude --dangerously-skip-permissions ");
     }
 
     const data = Array.from(new TextEncoder().encode(cmd + "\r"));
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
+    // Save selected provider as default
+    if (activeProvider !== defaultProvider) {
+      setDefaultProvider(activeProvider);
+    }
+
     onClose();
-  }, [getActivePtyId, onClose, continuousMode]);
+  }, [getActivePtyId, onClose, continuousMode, activeProvider, defaultProvider, setDefaultProvider]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -77,6 +124,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     } else if (e.key === "Enter" && filtered[selectedIndex]) {
       e.preventDefault();
       launchAgent(filtered[selectedIndex]);
+    } else if (e.key === "Tab") {
+      // Tab cycles through providers
+      e.preventDefault();
+      const providerIds = PROVIDERS.map((p) => p.id);
+      const idx = providerIds.indexOf(activeProvider);
+      setActiveProvider(providerIds[(idx + 1) % providerIds.length]);
     }
   };
 
@@ -98,7 +151,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       <div
         style={{
           width: "580px",
-          maxHeight: "540px",
+          maxHeight: "580px",
           backgroundColor: "var(--bg-secondary)",
           border: "1px solid var(--border-strong)",
           borderRadius: "12px",
@@ -145,7 +198,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search agents..."
+            placeholder="Search agents or describe a task..."
             style={{
               width: "100%",
               backgroundColor: "var(--bg-primary)",
@@ -165,49 +218,84 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             }}
           />
 
-          {/* Category pills */}
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            <button
-              onClick={() => setActiveCategory(null)}
-              style={{
-                padding: "3px 10px",
-                borderRadius: "12px",
-                fontSize: "11px",
-                fontWeight: 600,
-                border: "1px solid " + (!activeCategory ? "var(--accent)" : "var(--border)"),
-                backgroundColor: !activeCategory ? "var(--accent-subtle)" : "transparent",
-                color: !activeCategory ? "var(--accent)" : "var(--text-muted)",
-                cursor: "pointer",
-              }}
-            >
-              All
-            </button>
-            {AGENT_CATEGORIES.map((cat) => {
-              const isActive = activeCategory === cat;
-              const catColor =
-                cat === "Backend" ? "#3fb950" :
-                cat === "Frontend" ? "#58a6ff" :
-                cat === "DevOps" ? "#bc8cff" :
-                cat === "Testing" ? "#d29922" : "#ff7b72";
-              return (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(isActive ? null : cat)}
-                  style={{
-                    padding: "3px 10px",
-                    borderRadius: "12px",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    border: `1px solid ${isActive ? catColor : "var(--border)"}`,
-                    backgroundColor: isActive ? catColor + "20" : "transparent",
-                    color: isActive ? catColor : "var(--text-muted)",
-                    cursor: "pointer",
-                  }}
-                >
-                  {cat}
-                </button>
-              );
-            })}
+          {/* Provider selector + Category pills */}
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+            {/* Provider buttons */}
+            <div style={{ display: "flex", gap: "4px" }}>
+              {PROVIDERS.map((p) => {
+                const isActive = activeProvider === p.id;
+                const isInstalled = installedProviders.has(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setActiveProvider(p.id)}
+                    title={isInstalled ? p.name : `${p.name} (not installed)`}
+                    style={{
+                      padding: "3px 10px",
+                      borderRadius: "12px",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      border: `1px solid ${isActive ? p.color : "var(--border)"}`,
+                      backgroundColor: isActive ? p.color + "20" : "transparent",
+                      color: isActive ? p.color : "var(--text-muted)",
+                      cursor: "pointer",
+                      opacity: isInstalled ? 1 : 0.4,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    {isActive && <span style={{ fontSize: "8px" }}>{"\u25CF"}</span>}
+                    {p.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Category pills */}
+            <div style={{ display: "flex", gap: "4px" }}>
+              <button
+                onClick={() => setActiveCategory(null)}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: "12px",
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  border: "1px solid " + (!activeCategory ? "var(--accent)" : "var(--border)"),
+                  backgroundColor: !activeCategory ? "var(--accent-subtle)" : "transparent",
+                  color: !activeCategory ? "var(--accent)" : "var(--text-muted)",
+                  cursor: "pointer",
+                }}
+              >
+                All
+              </button>
+              {AGENT_CATEGORIES.map((cat) => {
+                const isActive = activeCategory === cat;
+                const catColor =
+                  cat === "Backend" ? "#3fb950" :
+                  cat === "Frontend" ? "#58a6ff" :
+                  cat === "DevOps" ? "#bc8cff" :
+                  cat === "Testing" ? "#d29922" : "#ff7b72";
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(isActive ? null : cat)}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: "12px",
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      border: `1px solid ${isActive ? catColor : "var(--border)"}`,
+                      backgroundColor: isActive ? catColor + "20" : "transparent",
+                      color: isActive ? catColor : "var(--text-muted)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -338,6 +426,43 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
           </div>
         )}
 
+        {/* Suggested agent banner */}
+        {suggestedAgent && (
+          <div
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "var(--accent-subtle)",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: 600 }}>
+              {"\u26A1"} Suggested:
+            </span>
+            <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>
+              {suggestedAgent.name}
+            </span>
+            <span
+              style={{
+                fontSize: "9px",
+                fontWeight: 700,
+                fontFamily: "monospace",
+                color: suggestedAgent.color,
+                backgroundColor: suggestedAgent.color + "20",
+                padding: "1px 5px",
+                borderRadius: "3px",
+              }}
+            >
+              {suggestedAgent.category}
+            </span>
+            <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "auto" }}>
+              press {"\u21B5"} to launch
+            </span>
+          </div>
+        )}
+
         {/* Agent list */}
         <div ref={listRef} style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
           {filtered.length === 0 ? (
@@ -352,94 +477,111 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
               No matching agents
             </div>
           ) : (
-            filtered.map((profile, i) => (
-              <div
-                key={profile.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "10px 16px",
-                  cursor: "pointer",
-                  backgroundColor:
-                    i === selectedIndex ? "var(--accent-subtle)" : "transparent",
-                  borderLeft:
-                    i === selectedIndex
-                      ? `2px solid ${profile.color}`
-                      : "2px solid transparent",
-                }}
-                onMouseEnter={() => setSelectedIndex(i)}
-                onClick={() => launchAgent(profile)}
-              >
+            filtered.map((profile, i) => {
+              const isSuggested = suggestedAgent?.id === profile.id;
+              return (
                 <div
+                  key={profile.id}
                   style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "8px",
-                    backgroundColor: profile.color + "20",
-                    border: `1px solid ${profile.color}40`,
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    fontFamily: "monospace",
-                    color: profile.color,
-                    flexShrink: 0,
+                    gap: "12px",
+                    padding: "10px 16px",
+                    cursor: "pointer",
+                    backgroundColor:
+                      i === selectedIndex ? "var(--accent-subtle)" : "transparent",
+                    borderLeft:
+                      i === selectedIndex
+                        ? `2px solid ${profile.color}`
+                        : "2px solid transparent",
                   }}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                  onClick={() => launchAgent(profile)}
                 >
-                  {profile.icon}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "8px",
+                      backgroundColor: profile.color + "20",
+                      border: `1px solid ${profile.color}40`,
                       display: "flex",
                       alignItems: "center",
-                      gap: "8px",
-                      marginBottom: "2px",
+                      justifyContent: "center",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      fontFamily: "monospace",
+                      color: profile.color,
+                      flexShrink: 0,
                     }}
                   >
-                    <span
+                    {profile.icon}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
                       style={{
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        color:
-                          i === selectedIndex
-                            ? "var(--text-primary)"
-                            : "var(--text-secondary)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        marginBottom: "2px",
                       }}
                     >
-                      {profile.name}
-                    </span>
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color:
+                            i === selectedIndex
+                              ? "var(--text-primary)"
+                              : "var(--text-secondary)",
+                        }}
+                      >
+                        {profile.name}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "9px",
+                          fontWeight: 700,
+                          fontFamily: "monospace",
+                          color: profile.color,
+                          backgroundColor: profile.color + "20",
+                          padding: "1px 5px",
+                          borderRadius: "3px",
+                        }}
+                      >
+                        {profile.category}
+                      </span>
+                      {isSuggested && (
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            fontWeight: 700,
+                            color: "var(--accent)",
+                            backgroundColor: "var(--accent-subtle)",
+                            padding: "1px 5px",
+                            borderRadius: "3px",
+                          }}
+                        >
+                          MATCH
+                        </span>
+                      )}
+                    </div>
                     <span
                       style={{
-                        fontSize: "9px",
-                        fontWeight: 700,
-                        fontFamily: "monospace",
-                        color: profile.color,
-                        backgroundColor: profile.color + "20",
-                        padding: "1px 5px",
-                        borderRadius: "3px",
+                        fontSize: "11px",
+                        color: "var(--text-muted)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        display: "block",
                       }}
                     >
-                      {profile.category}
+                      {profile.description}
                     </span>
                   </div>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-muted)",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      display: "block",
-                    }}
-                  >
-                    {profile.description}
-                  </span>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -456,12 +598,13 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
           }}
         >
           <div style={{ display: "flex", gap: "16px" }}>
-            <span>↑↓ navigate</span>
-            <span>↵ launch</span>
+            <span>{"\u2191\u2193"} navigate</span>
+            <span>{"\u21B5"} launch</span>
+            <span>tab provider</span>
             <span>esc close</span>
           </div>
           <span>
-            {filtered.length} agent{filtered.length !== 1 ? "s" : ""}
+            {filtered.length} agent{filtered.length !== 1 ? "s" : ""} {"\u00B7"} {PROVIDERS.find((p) => p.id === activeProvider)?.name}
           </span>
         </div>
       </div>

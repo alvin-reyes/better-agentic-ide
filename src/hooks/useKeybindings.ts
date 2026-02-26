@@ -5,9 +5,7 @@ import { refreshAllTerminals } from "./useTerminal";
 
 interface KeybindingActions {
   toggleScratchpad: () => void;
-  toggleBrainstorm: () => void;
   closeScratchpad: () => void;
-  closeBrainstorm: () => void;
   sendScratchpad: () => void;
   copyScratchpad: () => void;
   saveNoteScratchpad: () => void;
@@ -17,7 +15,6 @@ interface KeybindingActions {
   requestCloseTab: (tabId: string) => void;
   requestClosePane: (tabId: string, paneId: string) => void;
   isScratchpadOpen: boolean;
-  isBrainstormOpen: boolean;
 }
 
 export function useKeybindings(actions: KeybindingActions) {
@@ -78,13 +75,6 @@ export function useKeybindings(actions: KeybindingActions) {
       if (meta && shift && !alt && (e.key === "a" || e.key === "A")) {
         e.preventDefault();
         actions.toggleAgentPicker();
-        return;
-      }
-
-      // Cmd+B: Toggle brainstorm panel
-      if (meta && !shift && !alt && e.key === "b") {
-        e.preventDefault();
-        actions.toggleBrainstorm();
         return;
       }
 
@@ -205,15 +195,11 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Escape: Close open panels (settings > brainstorm > scratchpad) and focus terminal
+      // Escape: Close open panels (settings > scratchpad) and focus terminal
       if (!meta && !shift && !alt && e.key === "Escape") {
         const settings = useSettingsStore.getState();
         if (settings.showSettings) {
           settings.setShowSettings(false);
-          return;
-        }
-        if (actions.isBrainstormOpen) {
-          actions.closeBrainstorm();
           return;
         }
         if (actions.isScratchpadOpen) {

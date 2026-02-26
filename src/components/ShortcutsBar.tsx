@@ -10,7 +10,7 @@ const shortcuts = [
   { keys: "⌘ ⇧ W", action: "Close pane" },
   { keys: "⌘ ←→", action: "Switch pane" },
   { keys: "⌘ R", action: "Rename tab" },
-  { keys: "⌘ B", action: "Brainstorm" },
+  { keys: "⇧⌘ A", action: "Agents" },
   { keys: "⌘ J", action: "Scratchpad" },
   { keys: "⌘ ↵", action: "Send to term" },
   { keys: "⌘ S", action: "Save note" },
