@@ -575,6 +575,7 @@
     </a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#brainstorm">Brainstorm</a>
       <a href="#themes">Themes</a>
       <a href="#shortcuts">Shortcuts</a>
       <a href="https://github.com/alvin-reyes/better-agentic-ide">GitHub</a>
@@ -760,6 +761,80 @@
     </div>
   </section>
 
+  <!-- Brainstorm -->
+  <section class="shortcuts" id="brainstorm" style="background: var(--bg); border: none;">
+    <div class="container">
+      <h2>Brainstorm Mode</h2>
+      <p class="subtitle">Live spec preview side-by-side with your terminal. Watch your AI agent write — review in real time.</p>
+
+      <!-- Brainstorm mockup -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-strong); box-shadow: 0 24px 80px rgba(0,0,0,0.4); max-width: 840px; margin: 0 auto 48px;">
+        <!-- Left: Terminal -->
+        <div style="background: var(--bg); border-right: 1px solid var(--border);">
+          <div style="padding: 8px 12px; background: var(--bg-card); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px;">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: #ff5f57;"></div>
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: #febc2e;"></div>
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: #28c840;"></div>
+            <span style="margin-left: 8px; font-size: 11px; color: var(--text-muted);">Terminal</span>
+          </div>
+          <div style="padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; min-height: 240px; line-height: 1.6;">
+            <div><span style="color: #3fb950;">~</span> <span>claude</span></div>
+            <div style="color: var(--text-dim);">Claude Code v1.0</div>
+            <div style="margin-top: 8px;"><span style="color: #58a6ff;">?</span> <span style="color: var(--text-dim);">What do you want to build?</span></div>
+            <div style="margin-top: 4px;">Design an auth system with JWT</div>
+            <div style="margin-top: 8px; color: #3fb950;">Writing spec to docs/auth-design.md...</div>
+            <div style="color: var(--text-dim); margin-top: 4px;">Added: JWT token flow</div>
+            <div style="color: var(--text-dim);">Added: Refresh token rotation</div>
+            <div style="color: var(--text-dim);">Added: Middleware guards<span style="display: inline-block; width: 2px; height: 13px; background: #58a6ff; animation: blink 1s infinite; vertical-align: text-bottom; margin-left: 2px;"></span></div>
+          </div>
+        </div>
+        <!-- Right: Brainstorm panel -->
+        <div style="background: var(--bg);">
+          <div style="padding: 8px 12px; background: var(--bg-card); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #58a6ff; opacity: 0.6;"></div>
+              <span style="font-size: 11px; font-weight: 600; color: var(--text);">Brainstorm</span>
+              <span style="font-size: 10px; color: var(--text-dim); background: var(--bg-code); padding: 1px 6px; border-radius: 3px; font-family: monospace;">auth-design.md</span>
+            </div>
+            <span style="font-size: 10px; color: var(--text-muted); font-family: monospace;">live</span>
+          </div>
+          <div style="padding: 16px; font-size: 13px; line-height: 1.7; min-height: 240px;">
+            <div style="font-size: 18px; font-weight: 700; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border);">Auth System Design</div>
+            <div style="font-size: 15px; font-weight: 600; margin: 12px 0 6px; color: var(--text);">JWT Token Flow</div>
+            <div style="font-size: 12px; color: var(--text-dim);">User authenticates with credentials. Server returns an access token (15 min) and refresh token (7 days).</div>
+            <div style="font-size: 15px; font-weight: 600; margin: 12px 0 6px; color: var(--text);">Refresh Rotation</div>
+            <div style="font-size: 12px; color: var(--text-dim);">Each refresh issues a new pair. Old refresh tokens are <span style="color: #58a6ff; background: var(--bg-code); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 11px;">invalidated</span> to prevent reuse.</div>
+            <div style="margin: 10px 0; padding: 8px 12px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim);">
+              <span style="color: #bc8cff;">POST</span> /api/auth/login<br>
+              <span style="color: #bc8cff;">POST</span> /api/auth/refresh
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shortcut-categories" style="max-width: 700px; margin: 0 auto;">
+        <div class="shortcut-category">
+          <h3>How it works</h3>
+          <div class="shortcut-list">
+            <div class="shortcut-item"><span>Toggle brainstorm panel</span><kbd>&#8984;B</kbd></div>
+            <div class="shortcut-item"><span>Select any .md file to preview</span><span style="color: var(--accent); font-size: 12px;">file picker</span></div>
+            <div class="shortcut-item"><span>Auto-refreshes as file changes</span><span style="color: var(--green); font-size: 12px;">every 1.5s</span></div>
+            <div class="shortcut-item"><span>Full markdown rendering</span><span style="color: var(--text-dim); font-size: 12px;">GFM support</span></div>
+          </div>
+        </div>
+        <div class="shortcut-category">
+          <h3>Use cases</h3>
+          <div class="shortcut-list">
+            <div class="shortcut-item"><span>Review specs while Claude writes them</span></div>
+            <div class="shortcut-item"><span>Follow along with design docs</span></div>
+            <div class="shortcut-item"><span>Monitor generated READMEs</span></div>
+            <div class="shortcut-item"><span>Read implementation plans</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Shortcuts -->
   <section class="shortcuts" id="shortcuts">
     <div class="container">
@@ -797,6 +872,7 @@
         <div class="shortcut-category">
           <h3>App</h3>
           <div class="shortcut-list">
+            <div class="shortcut-item"><span>Brainstorm panel</span><kbd>&#8984;B</kbd></div>
             <div class="shortcut-item"><span>Settings</span><kbd>&#8984;,</kbd></div>
           </div>
         </div>
