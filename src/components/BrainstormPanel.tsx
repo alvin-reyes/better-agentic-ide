@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import { useTabStore } from "../stores/tabStore";
 
@@ -17,22 +17,35 @@ interface BrainstormPanelProps {
 
 type ClaudeSetupStatus = "checking" | "no-claude" | "no-plugin" | "ready";
 
+type WatchEvent =
+  | { type: "changed"; path: string; content: string }
+  | { type: "created"; path: string }
+  | { type: "removed"; path: string }
+  | { type: "error"; message: string };
+
 export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
   const [mode, setMode] = useState<BrainstormMode>("menu");
   const [claudeSetup, setClaudeSetup] = useState<ClaudeSetupStatus>("checking");
   const [installing, setInstalling] = useState(false);
   const [claudeLaunched, setClaudeLaunched] = useState(false);
   const [filePath, setFilePath] = useState<string | null>(null);
-  const [content, setContent] = useState("");
   const [html, setHtml] = useState("");
   const [mdFiles, setMdFiles] = useState<string[]>([]);
   const [showPicker, setShowPicker] = useState(true);
   const [searchDir, setSearchDir] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [lastModified, setLastModified] = useState<string>("");
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [watching, setWatching] = useState(false);
+  const [recentEvents, setRecentEvents] = useState<string[]>([]);
+  const watchIdRef = useRef<number | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const filePathRef = useRef<string | null>(null);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
+
+  // Keep ref in sync with state for use in watcher callback
+  useEffect(() => {
+    filePathRef.current = filePath;
+  }, [filePath]);
 
   // Check Claude CLI + superpowers plugin status
   const checkClaudeSetup = useCallback(async () => {
@@ -110,43 +123,100 @@ export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
       .catch(() => setMdFiles([]));
   }, [searchDir]);
 
-  useEffect(() => {
-    scanFiles();
-    // Re-scan every 10 seconds to pick up new files
-    const id = setInterval(scanFiles, 10000);
-    return () => clearInterval(id);
+  // Start the native file watcher
+  const startWatcher = useCallback(async (dir: string) => {
+    // Stop any existing watcher
+    if (watchIdRef.current !== null) {
+      await invoke("unwatch_directory", { id: watchIdRef.current }).catch(() => {});
+      watchIdRef.current = null;
+    }
+
+    const channel = new Channel<WatchEvent>();
+    channel.onmessage = (event) => {
+      if (event.type === "changed") {
+        // If this is the currently selected file, update content live
+        if (filePathRef.current && event.path === filePathRef.current) {
+          const rendered = marked.parse(event.content);
+          if (rendered instanceof Promise) {
+            rendered.then((h) => { setHtml(h); setLastModified(new Date().toLocaleTimeString()); });
+          } else {
+            setHtml(rendered);
+            setLastModified(new Date().toLocaleTimeString());
+          }
+        }
+        // Add to recent events
+        const shortPath = event.path.split("/").slice(-2).join("/");
+        setRecentEvents((prev) => [`${shortPath} modified`, ...prev].slice(0, 5));
+      } else if (event.type === "created") {
+        // Re-scan file list to pick up new files
+        scanFiles();
+        const shortPath = event.path.split("/").slice(-2).join("/");
+        setRecentEvents((prev) => [`${shortPath} created`, ...prev].slice(0, 5));
+      } else if (event.type === "removed") {
+        scanFiles();
+        const shortPath = event.path.split("/").slice(-2).join("/");
+        setRecentEvents((prev) => [`${shortPath} removed`, ...prev].slice(0, 5));
+      }
+    };
+
+    try {
+      const id = await invoke<number>("watch_directory", {
+        dir: dir || ".",
+        extensions: ["md"],
+        onEvent: channel,
+      });
+      watchIdRef.current = id;
+      setWatching(true);
+    } catch (err) {
+      console.error("Failed to start watcher:", err);
+      setWatching(false);
+    }
   }, [scanFiles]);
 
-  // Read and poll the selected file
-  const readFile = useCallback(async () => {
-    if (!filePath) return;
+  // Stop the watcher
+  const stopWatcher = useCallback(async () => {
+    if (watchIdRef.current !== null) {
+      await invoke("unwatch_directory", { id: watchIdRef.current }).catch(() => {});
+      watchIdRef.current = null;
+      setWatching(false);
+    }
+  }, []);
+
+  // Start watcher + initial scan when entering markdown mode
+  useEffect(() => {
+    scanFiles();
+    startWatcher(searchDir);
+    // Re-scan every 30s as a fallback (watcher handles real-time)
+    const id = setInterval(scanFiles, 30000);
+    return () => {
+      clearInterval(id);
+      stopWatcher();
+    };
+  }, [scanFiles, startWatcher, stopWatcher, searchDir]);
+
+  // Read the selected file initially (watcher handles subsequent updates)
+  const readFile = useCallback(async (path: string) => {
     try {
-      const text = await invoke<string>("read_file", { path: filePath });
-      if (text !== content) {
-        setContent(text);
-        const rendered = await marked.parse(text);
-        setHtml(rendered);
-        setLastModified(new Date().toLocaleTimeString());
-      }
+      const text = await invoke<string>("read_file", { path });
+      const rendered = marked.parse(text);
+      const html = rendered instanceof Promise ? await rendered : rendered;
+      setHtml(html);
+      setLastModified(new Date().toLocaleTimeString());
       setError(null);
     } catch (err) {
       setError(String(err));
     }
-  }, [filePath, content]);
+  }, []);
 
+  // When file is selected, do initial read (watcher will push updates)
   useEffect(() => {
     if (!filePath) return;
-    readFile();
-    intervalRef.current = setInterval(readFile, 1500);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    readFile(filePath);
   }, [filePath, readFile]);
 
   const selectFile = (path: string) => {
     setFilePath(path);
     setShowPicker(false);
-    setContent("");
     setHtml("");
     setError(null);
   };
@@ -527,9 +597,29 @@ export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
               </svg>
             </button>
           </div>
-          <div style={{ padding: "0 12px 4px", fontSize: "10px", color: "var(--text-muted)" }}>
-            {mdFiles.length} file{mdFiles.length !== 1 ? "s" : ""} found — auto-scanning every 10s
+          <div style={{ padding: "0 12px 4px", fontSize: "10px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+            {watching && (
+              <span style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                backgroundColor: "#3fb950",
+                display: "inline-block",
+                animation: "pulse 2s infinite",
+              }} />
+            )}
+            {mdFiles.length} file{mdFiles.length !== 1 ? "s" : ""} found
+            {watching ? " — watching for changes" : " — polling every 30s"}
           </div>
+          {recentEvents.length > 0 && (
+            <div style={{ padding: "0 12px 4px" }}>
+              {recentEvents.slice(0, 3).map((evt, i) => (
+                <div key={i} style={{ fontSize: "9px", color: "var(--text-muted)", fontFamily: "monospace", opacity: 1 - i * 0.3, padding: "1px 0" }}>
+                  {evt}
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ overflowY: "auto", flex: 1 }}>
             {mdFiles.length === 0 ? (
               <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic" }}>

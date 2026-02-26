@@ -16,6 +16,7 @@ const shortcuts = [
   { keys: "⌘ E", action: "Send Enter ↵" },
   { keys: "⇧ ⌘ ↵", action: "Copy text" },
   { keys: "⌘ P", action: "Commands" },
+  { keys: "⇧ ⌘ A", action: "AI Agents" },
   { keys: "⌘ F", action: "Find" },
   { keys: "⇧⌘ ↵", action: "Zoom pane" },
   { keys: "⌘ ,", action: "Settings" },
