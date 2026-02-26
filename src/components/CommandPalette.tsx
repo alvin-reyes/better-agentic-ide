@@ -14,9 +14,10 @@ interface CommandPaletteProps {
   onClose: () => void;
   onToggleScratchpad: () => void;
   onOpenAgentPicker: () => void;
+  onTogglePreview?: () => void;
 }
 
-export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker }: CommandPaletteProps) {
+export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +65,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       // Panels
       { id: "scratchpad", label: "Toggle Scratchpad", shortcut: "Cmd+J", category: "Panels", action: () => { onToggleScratchpad(); onClose(); } },
       { id: "agents", label: "Launch AI Agent", shortcut: "Cmd+Shift+A", category: "Panels", action: () => { onOpenAgentPicker(); } },
+      { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
       { id: "settings", label: "Open Settings", shortcut: "Cmd+,", category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
       { id: "search", label: "Search in Terminal", shortcut: "Cmd+F", category: "Panels", action: () => { onClose(); } },
       // Theme shortcuts
@@ -103,7 +105,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     });
 
     return actions;
-  }, [tabs, activeTabId, addTab, setActiveTab, onClose, onToggleScratchpad, onOpenAgentPicker]);
+  }, [tabs, activeTabId, addTab, setActiveTab, onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview]);
 
   const filtered = useMemo(() => {
     if (!query) return items;

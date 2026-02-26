@@ -170,6 +170,39 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 }
 
 #[tauri::command]
+fn read_file_base64(path: String) -> Result<String, String> {
+    let resolved = if path.starts_with("~/") {
+        let home = get_home_dir();
+        path.replacen("~", &home, 1)
+    } else {
+        path.clone()
+    };
+    let bytes = std::fs::read(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
+    // Simple base64 encode
+    let table = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::new();
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(table[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(table[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            result.push(table[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(table[(triple & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
     let resolved = if path.starts_with("~/") {
         let home = get_home_dir();
@@ -224,6 +257,7 @@ pub fn run() {
             check_claude_plugin,
             save_temp_image,
             read_file,
+            read_file_base64,
             list_md_files,
         ])
         .run(tauri::generate_context!())

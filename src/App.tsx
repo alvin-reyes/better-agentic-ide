@@ -8,6 +8,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import Tour from "./components/Tour";
 import CommandPalette from "./components/CommandPalette";
 import AgentPicker from "./components/AgentPicker";
+import PreviewPanel from "./components/PreviewPanel";
 import ConfirmDialog from "./components/ConfirmDialog";
 import { useTabStore, findAllPanes } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
@@ -19,6 +20,7 @@ export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string;
@@ -39,6 +41,13 @@ export default function App() {
     const handler = () => setZoomedPane((prev) => !prev);
     window.addEventListener("toggle-zoom-pane", handler);
     return () => window.removeEventListener("toggle-zoom-pane", handler);
+  }, []);
+
+  // Listen for preview open events (from terminal links, etc.)
+  useEffect(() => {
+    const handler = () => setPreviewOpen(true);
+    window.addEventListener("open-preview", handler);
+    return () => window.removeEventListener("open-preview", handler);
   }, []);
 
   const toggleCommandPalette = useCallback(() => {
@@ -62,6 +71,10 @@ export default function App() {
 
   const toggleAgentPicker = useCallback(() => {
     setAgentPickerOpen((prev) => !prev);
+  }, []);
+
+  const togglePreview = useCallback(() => {
+    setPreviewOpen((prev) => !prev);
   }, []);
 
   const sendScratchpad = useCallback(() => {
@@ -145,6 +158,7 @@ export default function App() {
     sendEnterToTerminal,
     toggleCommandPalette,
     toggleAgentPicker,
+    togglePreview,
     requestCloseTab,
     requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
@@ -154,13 +168,16 @@ export default function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ backgroundColor: "var(--bg-primary)" }}>
       <TabBar />
       <div className="flex-1 overflow-hidden flex">
-        <div className="w-full overflow-hidden" style={{ minWidth: 0 }}>
+        <div className="overflow-hidden" style={{ minWidth: 0, flex: 1 }}>
           {activeTab && (
             zoomedPane
               ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
               : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
           )}
         </div>
+        {previewOpen && (
+          <PreviewPanel onClose={() => setPreviewOpen(false)} />
+        )}
       </div>
       <Scratchpad ref={scratchpadRef} />
       <ShortcutsBar />
@@ -171,6 +188,7 @@ export default function App() {
           onClose={() => setPaletteOpen(false)}
           onToggleScratchpad={toggleScratchpad}
           onOpenAgentPicker={() => { setPaletteOpen(false); setAgentPickerOpen(true); }}
+          onTogglePreview={togglePreview}
         />
       )}
       {agentPickerOpen && (
