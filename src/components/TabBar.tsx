@@ -9,6 +9,7 @@ export default function TabBar() {
   const [editValue, setEditValue] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -99,6 +100,10 @@ export default function TabBar() {
             }}
             onClick={() => setActiveTab(tab.id)}
             onDoubleClick={() => startRename(tab.id, tab.name)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
+            }}
           >
             {/* Terminal icon */}
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ opacity: isActive ? 0.9 : 0.4, flexShrink: 0 }}>
@@ -208,6 +213,64 @@ export default function TabBar() {
           <circle cx="8" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.2"/>
         </svg>
       </button>
+
+      {/* Tab context menu */}
+      {contextMenu && (
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 999 }}
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+          />
+          <div
+            style={{
+              position: "fixed",
+              left: contextMenu.x,
+              top: contextMenu.y,
+              zIndex: 1000,
+              backgroundColor: "var(--bg-secondary)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: "8px",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              padding: "4px 0",
+              minWidth: "160px",
+            }}
+          >
+            {[
+              { label: "Rename", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) startRename(t.id, t.name); } },
+              { label: "Duplicate", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) addTab(t.name + " (copy)"); } },
+              { label: "Close", action: () => { if (tabs.length > 1) closeTab(contextMenu.tabId); }, danger: true },
+            ].map((item) => (
+              <button
+                key={item.label}
+                onClick={() => { item.action(); setContextMenu(null); }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "6px 14px",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: (item as { danger?: boolean }).danger ? "#ff7b72" : "var(--text-secondary)",
+                  backgroundColor: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+                  if (!(item as { danger?: boolean }).danger) e.currentTarget.style.color = "var(--text-primary)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  e.currentTarget.style.color = (item as { danger?: boolean }).danger ? "#ff7b72" : "var(--text-secondary)";
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

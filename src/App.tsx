@@ -1,11 +1,13 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import TabBar from "./components/TabBar";
 import PaneContainer from "./components/PaneContainer";
+import TerminalPane from "./components/TerminalPane";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import SettingsPanel from "./components/SettingsPanel";
 import BrainstormPanel from "./components/BrainstormPanel";
 import Tour from "./components/Tour";
+import CommandPalette from "./components/CommandPalette";
 import { useTabStore } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
@@ -14,6 +16,8 @@ import { invoke } from "@tauri-apps/api/core";
 export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [brainstormOpen, setBrainstormOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [zoomedPane, setZoomedPane] = useState(false);
   const { tabs, activeTabId, getActivePtyId } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
@@ -21,6 +25,17 @@ export default function App() {
   useEffect(() => {
     const colors = useSettingsStore.getState().getActiveTheme();
     applyThemeToDOM(colors);
+  }, []);
+
+  // Listen for pane zoom toggle
+  useEffect(() => {
+    const handler = () => setZoomedPane((prev) => !prev);
+    window.addEventListener("toggle-zoom-pane", handler);
+    return () => window.removeEventListener("toggle-zoom-pane", handler);
+  }, []);
+
+  const toggleCommandPalette = useCallback(() => {
+    setPaletteOpen((prev) => !prev);
   }, []);
 
   const toggleScratchpad = useCallback(() => {
@@ -78,6 +93,7 @@ export default function App() {
     copyScratchpad,
     saveNoteScratchpad,
     sendEnterToTerminal,
+    toggleCommandPalette,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
     isBrainstormOpen: brainstormOpen,
   });
@@ -87,7 +103,11 @@ export default function App() {
       <TabBar />
       <div className="flex-1 overflow-hidden flex">
         <div className={brainstormOpen ? "flex-1 overflow-hidden" : "w-full overflow-hidden"} style={{ minWidth: 0 }}>
-          {activeTab && <PaneContainer node={activeTab.root} tabId={activeTab.id} />}
+          {activeTab && (
+            zoomedPane
+              ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
+              : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
+          )}
         </div>
         {brainstormOpen && (
           <div style={{ width: "42%", minWidth: "320px", maxWidth: "600px", flexShrink: 0 }}>
@@ -99,6 +119,13 @@ export default function App() {
       <ShortcutsBar />
       <SettingsPanel />
       <Tour />
+      {paletteOpen && (
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          onToggleScratchpad={toggleScratchpad}
+          onToggleBrainstorm={toggleBrainstorm}
+        />
+      )}
     </div>
   );
 }
