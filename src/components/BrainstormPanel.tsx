@@ -1,12 +1,44 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { marked } from "marked";
+import mermaid from "mermaid";
 import { useTabStore } from "../stores/tabStore";
 
 // Configure marked for safe rendering
 marked.setOptions({
   breaks: true,
   gfm: true,
+});
+
+// Initialize mermaid with dark theme
+mermaid.initialize({
+  startOnLoad: false,
+  theme: "dark",
+  themeVariables: {
+    primaryColor: "#58a6ff",
+    primaryTextColor: "#e6edf3",
+    primaryBorderColor: "#30363d",
+    lineColor: "#8b949e",
+    secondaryColor: "#161b22",
+    tertiaryColor: "#21262d",
+    fontFamily: "Inter, sans-serif",
+    fontSize: "14px",
+  },
+  securityLevel: "loose",
+});
+
+// Custom renderer: convert ```mermaid blocks into placeholder divs for mermaid.js
+let mermaidCounter = 0;
+marked.use({
+  renderer: {
+    code({ text, lang }) {
+      if (lang === "mermaid") {
+        const id = `mermaid-${mermaidCounter++}`;
+        return `<div class="mermaid-container"><pre class="mermaid" id="${id}">${text}</pre></div>`;
+      }
+      return false; // fall back to default renderer
+    },
+  },
 });
 
 type BrainstormMode = "menu" | "claude" | "markdown";
@@ -61,6 +93,19 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
       if (dir) setSearchDir(dir);
     }
   }, [initialFile]);
+
+  // Render mermaid diagrams after HTML content updates
+  const mdBodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!html || mode !== "markdown") return;
+    const container = mdBodyRef.current;
+    if (!container) return;
+    const mermaidEls = container.querySelectorAll("pre.mermaid");
+    if (mermaidEls.length === 0) return;
+    // Reset mermaid counter for re-renders
+    mermaidCounter = 0;
+    mermaid.run({ nodes: mermaidEls as NodeListOf<HTMLElement> }).catch(() => {});
+  }, [html, mode]);
 
   // Check Claude CLI + superpowers plugin status
   const checkClaudeSetup = useCallback(async () => {
@@ -699,6 +744,7 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
           }}
         >
           <div
+            ref={mdBodyRef}
             className="markdown-body"
             dangerouslySetInnerHTML={{ __html: html }}
             style={{
