@@ -103,6 +103,8 @@ function removePaneFromNode(
   return { ...node, children: remaining };
 }
 
+const MAX_SPLITS_PER_DIRECTION = 4;
+
 function splitPaneInNode(
   node: PaneNode,
   paneId: string,
@@ -122,6 +124,27 @@ function splitPaneInNode(
     }
     return { node, newPaneId: null };
   }
+
+  // If this container matches the split direction and the target pane is a direct child,
+  // enforce the max split limit by adding to this container instead of nesting
+  if (node.direction === direction) {
+    const childIdx = node.children.findIndex(
+      (c) => c.type === "pane" && c.pane.id === paneId,
+    );
+    if (childIdx !== -1) {
+      if (node.children.length >= MAX_SPLITS_PER_DIRECTION) {
+        return { node, newPaneId: null }; // limit reached
+      }
+      const newPane = createDefaultPane();
+      const newChildren = [...node.children];
+      newChildren.splice(childIdx + 1, 0, { type: "pane", pane: newPane });
+      return {
+        node: { ...node, children: newChildren },
+        newPaneId: newPane.id,
+      };
+    }
+  }
+
   const newChildren: PaneNode[] = [];
   let foundNewPaneId: string | null = null;
   for (const child of node.children) {
