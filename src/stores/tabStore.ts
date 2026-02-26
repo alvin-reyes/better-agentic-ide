@@ -1,0 +1,225 @@
+import { create } from "zustand";
+
+export type SplitDirection = "horizontal" | "vertical";
+
+export interface Pane {
+  id: string;
+  ptyId: number | null;
+}
+
+export interface SplitNode {
+  type: "pane";
+  pane: Pane;
+}
+
+export interface SplitContainer {
+  type: "split";
+  direction: SplitDirection;
+  children: PaneNode[];
+}
+
+export type PaneNode = SplitNode | SplitContainer;
+
+export interface Tab {
+  id: string;
+  name: string;
+  root: PaneNode;
+  activePaneId: string;
+}
+
+interface TabStore {
+  tabs: Tab[];
+  activeTabId: string;
+
+  addTab: (name?: string) => void;
+  closeTab: (id: string) => void;
+  setActiveTab: (id: string) => void;
+  renameTab: (id: string, name: string) => void;
+
+  setActivePaneInTab: (tabId: string, paneId: string) => void;
+  setPtyId: (paneId: string, ptyId: number) => void;
+  splitPane: (tabId: string, paneId: string, direction: SplitDirection) => void;
+
+  getActivePane: () => Pane | null;
+  getActivePtyId: () => number | null;
+}
+
+let paneCounter = 0;
+const newPaneId = () => `pane-${++paneCounter}`;
+let tabCounter = 0;
+const newTabId = () => `tab-${++tabCounter}`;
+
+function createDefaultPane(): Pane {
+  return { id: newPaneId(), ptyId: null };
+}
+
+function findPane(node: PaneNode, paneId: string): Pane | null {
+  if (node.type === "pane") {
+    return node.pane.id === paneId ? node.pane : null;
+  }
+  for (const child of node.children) {
+    const found = findPane(child, paneId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findAllPanes(node: PaneNode): Pane[] {
+  if (node.type === "pane") return [node.pane];
+  return node.children.flatMap(findAllPanes);
+}
+
+function updatePaneInNode(
+  node: PaneNode,
+  paneId: string,
+  updater: (p: Pane) => Pane,
+): PaneNode {
+  if (node.type === "pane") {
+    if (node.pane.id === paneId) {
+      return { type: "pane", pane: updater(node.pane) };
+    }
+    return node;
+  }
+  return {
+    ...node,
+    children: node.children.map((c) => updatePaneInNode(c, paneId, updater)),
+  };
+}
+
+function splitPaneInNode(
+  node: PaneNode,
+  paneId: string,
+  direction: SplitDirection,
+): { node: PaneNode; newPaneId: string | null } {
+  if (node.type === "pane") {
+    if (node.pane.id === paneId) {
+      const newPane = createDefaultPane();
+      return {
+        node: {
+          type: "split",
+          direction,
+          children: [node, { type: "pane", pane: newPane }],
+        },
+        newPaneId: newPane.id,
+      };
+    }
+    return { node, newPaneId: null };
+  }
+  const newChildren: PaneNode[] = [];
+  let foundNewPaneId: string | null = null;
+  for (const child of node.children) {
+    if (foundNewPaneId) {
+      newChildren.push(child);
+    } else {
+      const result = splitPaneInNode(child, paneId, direction);
+      newChildren.push(result.node);
+      foundNewPaneId = result.newPaneId;
+    }
+  }
+  return { node: { ...node, children: newChildren }, newPaneId: foundNewPaneId };
+}
+
+export const useTabStore = create<TabStore>((set, get) => {
+  const initialPane = createDefaultPane();
+  const initialTabId = newTabId();
+
+  return {
+    tabs: [
+      {
+        id: initialTabId,
+        name: "Terminal",
+        root: { type: "pane", pane: initialPane },
+        activePaneId: initialPane.id,
+      },
+    ],
+    activeTabId: initialTabId,
+
+    addTab: (name) => {
+      const pane = createDefaultPane();
+      const tab: Tab = {
+        id: newTabId(),
+        name: name || "Terminal",
+        root: { type: "pane", pane },
+        activePaneId: pane.id,
+      };
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: tab.id,
+      }));
+    },
+
+    closeTab: (id) => {
+      const state = get();
+      if (state.tabs.length <= 1) return;
+      const tab = state.tabs.find((t) => t.id === id);
+      // Destroy all PTY instances for panes in this tab
+      if (tab) {
+        const panes = findAllPanes(tab.root);
+        for (const pane of panes) {
+          // Lazy import to avoid circular deps — destroyInstance is called async
+          import("../hooks/useTerminal").then(({ destroyInstance }) => {
+            destroyInstance(pane.id);
+          });
+        }
+      }
+      const idx = state.tabs.findIndex((t) => t.id === id);
+      const newTabs = state.tabs.filter((t) => t.id !== id);
+      const newActive =
+        state.activeTabId === id
+          ? newTabs[Math.min(idx, newTabs.length - 1)].id
+          : state.activeTabId;
+      set({ tabs: newTabs, activeTabId: newActive });
+    },
+
+    setActiveTab: (id) => set({ activeTabId: id }),
+
+    renameTab: (id, name) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.id === id ? { ...t, name } : t)),
+      })),
+
+    setActivePaneInTab: (tabId, paneId) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId ? { ...t, activePaneId: paneId } : t,
+        ),
+      })),
+
+    setPtyId: (paneId, ptyId) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) => ({
+          ...t,
+          root: updatePaneInNode(t.root, paneId, (p) => ({ ...p, ptyId })),
+        })),
+      })),
+
+    splitPane: (tabId, paneId, direction) => {
+      const state = get();
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      const result = splitPaneInNode(tab.root, paneId, direction);
+      if (!result.newPaneId) return;
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId
+            ? { ...t, root: result.node, activePaneId: result.newPaneId! }
+            : t,
+        ),
+      }));
+    },
+
+    getActivePane: () => {
+      const state = get();
+      const tab = state.tabs.find((t) => t.id === state.activeTabId);
+      if (!tab) return null;
+      return findPane(tab.root, tab.activePaneId);
+    },
+
+    getActivePtyId: () => {
+      const pane = get().getActivePane();
+      return pane?.ptyId ?? null;
+    },
+  };
+});
+
+export { findAllPanes };
