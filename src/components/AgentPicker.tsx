@@ -15,7 +15,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { addTab, getActivePtyId } = useTabStore();
+  const getActivePtyId = useTabStore((s) => s.getActivePtyId);
 
   const filtered = useMemo(() => {
     let profiles = AGENT_PROFILES;
@@ -50,19 +50,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   }, [selectedIndex]);
 
   const launchAgent = useCallback(async (profile: AgentProfile) => {
-    // Create a new tab named after the agent
-    addTab(`${profile.icon} ${profile.name}`);
-
-    // Wait a tick for the tab to be created and PTY to initialize
-    await new Promise((r) => setTimeout(r, 500));
-
     const ptyId = getActivePtyId();
     if (ptyId === null) return;
 
     // Build the command — append continuous flag if enabled
     let cmd = profile.command;
     if (continuousMode) {
-      // Modify the command to include --continue or auto-accept
       cmd = cmd.replace(/^claude /, "claude --dangerously-skip-permissions ");
     }
 
@@ -70,7 +63,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
     onClose();
-  }, [addTab, getActivePtyId, onClose, continuousMode]);
+  }, [getActivePtyId, onClose, continuousMode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {

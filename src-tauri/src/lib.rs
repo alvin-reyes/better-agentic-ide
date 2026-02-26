@@ -3,36 +3,63 @@ mod watcher;
 
 #[tauri::command]
 fn check_command_exists(command: String) -> Result<String, String> {
-    let home = std::env::var("HOME").unwrap_or_default();
+    // Try multiple ways to get the home directory (Finder-launched apps may not have HOME set)
+    let home = std::env::var("HOME")
+        .or_else(|_| {
+            // Fallback: use the passwd entry
+            let output = std::process::Command::new("sh")
+                .args(["-c", "echo ~"])
+                .output();
+            match output {
+                Ok(o) if o.status.success() => {
+                    Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
+                }
+                _ => Err(std::env::VarError::NotPresent),
+            }
+        })
+        .unwrap_or_else(|_| "/Users/".to_string());
+
     let search_dirs = [
         format!("{}/.local/bin", home),
         format!("{}/.cargo/bin", home),
         format!("{}/bin", home),
+        format!("{}/.nvm/versions/node/*/bin", home), // nvm
         "/usr/local/bin".to_string(),
         "/opt/homebrew/bin".to_string(),
         "/usr/bin".to_string(),
         "/bin".to_string(),
     ];
-    // Check each directory directly for the binary
+
+    // Check each directory directly for the binary (handle glob patterns)
     for dir in &search_dirs {
-        let path = format!("{}/{}", dir, command);
-        if std::path::Path::new(&path).exists() {
-            return Ok(path);
+        if dir.contains('*') {
+            // Expand glob pattern
+            if let Ok(entries) = glob::glob(&format!("{}/{}", dir, command)) {
+                for entry in entries.flatten() {
+                    if entry.exists() {
+                        return Ok(entry.to_string_lossy().to_string());
+                    }
+                }
+            }
+        } else {
+            let path = format!("{}/{}", dir, command);
+            if std::path::Path::new(&path).exists() {
+                return Ok(path);
+            }
         }
     }
-    // Fallback: also check system PATH via `which`
-    let sys_path = std::env::var("PATH").unwrap_or_default();
-    let full_path = format!("{}:{}", search_dirs.join(":"), sys_path);
-    let output = std::process::Command::new("which")
-        .arg(&command)
-        .env("PATH", &full_path)
-        .output()
-        .map_err(|e| format!("Failed to check command: {}", e))?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        Err(format!("{} not found", command))
+
+    // Fallback: use a login shell to resolve PATH (picks up .zshrc, .bashrc, etc.)
+    let shell_check = std::process::Command::new("sh")
+        .args(["-lc", &format!("which {}", command)])
+        .output();
+    if let Ok(output) = shell_check {
+        if output.status.success() {
+            return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+        }
     }
+
+    Err(format!("{} not found", command))
 }
 
 #[tauri::command]
