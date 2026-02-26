@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Provider } from "../data/agentProfiles";
 
 export interface ThemeColors {
   bgPrimary: string;
@@ -287,6 +288,7 @@ interface Settings {
   cursorStyle: "bar" | "block" | "underline";
   cursorBlink: boolean;
   scrollback: number;
+  defaultProvider: Provider;
 }
 
 interface SettingsStore extends Settings {
@@ -305,6 +307,7 @@ interface SettingsStore extends Settings {
   setCursorStyle: (style: "bar" | "block" | "underline") => void;
   setCursorBlink: (blink: boolean) => void;
   setScrollback: (lines: number) => void;
+  setDefaultProvider: (provider: Provider) => void;
   getActiveTheme: () => ThemeColors;
 
   saveWorkspace: (name: string, tabs: { name: string; splits: "none" | "horizontal" | "vertical" }[]) => void;
@@ -346,6 +349,7 @@ const defaults: Settings = {
   cursorStyle: "bar",
   cursorBlink: true,
   scrollback: 10000,
+  defaultProvider: "claude" as Provider,
 };
 
 const saved = loadSettings();
@@ -410,6 +414,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setScrollback: (scrollback) => {
     set({ scrollback });
+    persistSettings(get());
+  },
+
+  setDefaultProvider: (defaultProvider) => {
+    set({ defaultProvider });
     persistSettings(get());
   },
 
