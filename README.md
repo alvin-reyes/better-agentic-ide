@@ -31,6 +31,18 @@ Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [x
 - **Cursor settings** — bar, block, or underline with optional blink
 - **Line height & scrollback** — fine-tune terminal density
 
+### AI Agent Terminals
+- **16 pre-configured agent profiles** — Launch specialized AI agents with `Cmd+Shift+A`
+- **5 categories** — Backend (API, DB, Auth), Frontend (UI, CSS, State), DevOps (Docker, CI/CD, Infra, K8s), Testing (Unit, E2E, Perf), General (Debug, Review, Docs)
+- **Continuous mode** — Autonomous agent execution with `--dangerously-skip-permissions` (with safety disclaimer)
+- **Each agent gets its own named tab** — organized workflow with color-coded categories
+
+### Brainstorm Mode
+- **Claude Brainstorm** — Launch Claude with superpowers brainstorming skill (`Cmd+B`)
+- **Live Markdown Preview** — Watch `.md` files update in real-time with native filesystem watcher
+- **Activity feed** — See file create/modify/remove events as they happen
+- **Resizable panel** — Drag to resize the brainstorm panel (280px–900px)
+
 ### Workspace Management
 - **Save workspaces** — snapshot your current tab layout with names
 - **Restore workspaces** — reload saved configurations instantly
@@ -55,6 +67,10 @@ Every action has a keyboard shortcut. No mouse required.
 | `Cmd+Shift+Enter` | Copy scratchpad to clipboard |
 | `Cmd+S` | Save scratchpad as note |
 | `Cmd+E` | Send Enter to terminal |
+| `Cmd+B` | Toggle brainstorm panel |
+| `Cmd+Shift+A` | Launch AI agent picker |
+| `Cmd+P` | Command palette |
+| `Cmd+F` | Search in terminal |
 | `Cmd+,` | Open settings |
 | `Escape` | Switch focus to terminal |
 
@@ -90,7 +106,8 @@ better-terminal/
 │   ├── src/
 │   │   ├── main.rs         App entry point
 │   │   ├── lib.rs          Tauri command registration
-│   │   └── pty.rs          PTY management (portable-pty + Channel API)
+│   │   ├── pty.rs          PTY management (portable-pty + Channel API)
+│   │   └── watcher.rs      Native filesystem watcher (notify crate)
 │   └── Cargo.toml
 ├── src/                    React frontend
 │   ├── components/
@@ -98,6 +115,9 @@ better-terminal/
 │   │   ├── TerminalPane.tsx  xterm.js wrapper
 │   │   ├── PaneContainer.tsx Split pane layout (react-resizable-panels)
 │   │   ├── Scratchpad.tsx  Thoughts panel with history & notes
+│   │   ├── BrainstormPanel.tsx Claude brainstorm + live markdown preview
+│   │   ├── AgentPicker.tsx AI agent launcher (16 profiles, 5 categories)
+│   │   ├── CommandPalette.tsx Cmd+P command palette
 │   │   ├── SettingsPanel.tsx Theme, font, workspace settings
 │   │   └── ShortcutsBar.tsx  Keyboard shortcut reference
 │   ├── stores/
@@ -122,7 +142,7 @@ better-terminal/
 | Layer | Technology |
 |---|---|
 | Desktop framework | Tauri v2 |
-| Backend | Rust + portable-pty |
+| Backend | Rust + portable-pty + notify (fs watcher) |
 | Frontend | React 19 + TypeScript |
 | Terminal | xterm.js + WebGL addon |
 | State | Zustand |

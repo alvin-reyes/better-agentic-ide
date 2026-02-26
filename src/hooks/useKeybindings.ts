@@ -13,6 +13,7 @@ interface KeybindingActions {
   saveNoteScratchpad: () => void;
   sendEnterToTerminal: () => void;
   toggleCommandPalette: () => void;
+  toggleAgentPicker: () => void;
   isScratchpadOpen: boolean;
   isBrainstormOpen: boolean;
 }
@@ -68,6 +69,13 @@ export function useKeybindings(actions: KeybindingActions) {
       if (meta && !shift && !alt && e.key === "r") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("rename-active-tab"));
+        return;
+      }
+
+      // Cmd+Shift+A: Open agent picker
+      if (meta && shift && !alt && (e.key === "a" || e.key === "A")) {
+        e.preventDefault();
+        actions.toggleAgentPicker();
         return;
       }
 
