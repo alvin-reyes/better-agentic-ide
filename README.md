@@ -5,16 +5,13 @@
 <h1 align="center">ADE — Agentic Development Environment</h1>
 
 <p align="center">
-  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases"><img src="https://img.shields.io/github/v/release/alvin-reyes/better-agentic-ide?style=flat-square" alt="Release"></a>
-  <a href="https://github.com/alvin-reyes/better-agentic-ide/blob/main/LICENSE"><img src="https://img.shields.io/github/license/alvin-reyes/better-agentic-ide?style=flat-square" alt="License"></a>
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases"><img src="https://img.shields.io/github/v/release/alvin-reyes/better-agentic-ide?style=for-the-badge&color=blue" alt="Release"></a>
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/blob/main/LICENSE"><img src="https://img.shields.io/github/license/alvin-reyes/better-agentic-ide?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/stargazers"><img src="https://img.shields.io/github/stars/alvin-reyes/better-agentic-ide?style=for-the-badge" alt="Stars"></a>
+  <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Works_with-Claude_Code-F97316?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
 </p>
 
 <p align="center">A modern desktop terminal built for agentic AI development. Keyboard-first design with smart tab management, split panes, a thoughts scratchpad, and deep customization.</p>
-
-<p align="center">
-  <strong>Works with</strong><br>
-  <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Claude_Code-F97316?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
-</p>
 
 Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [xterm.js](https://xtermjs.org/) + Zustand.
 
