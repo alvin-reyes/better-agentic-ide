@@ -84,29 +84,41 @@ Every action has a keyboard shortcut. No mouse required.
 | `Cmd+,` | Open settings |
 | `Escape` | Switch focus to terminal |
 
-## Getting Started
+## Install
+
+### Homebrew (recommended)
+
+```bash
+brew install --cask alvin-reyes/tap/ade
+```
+
+No Gatekeeper warnings — Homebrew handles code quarantine automatically.
+
+### Manual Download
+
+Download the latest installer from the [Releases page](https://github.com/alvin-reyes/better-agentic-ide/releases):
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `.dmg` |
+| macOS (Intel) | `.dmg` |
+| Windows | `.msi` / `.exe` |
+| Linux | `.deb` / `.AppImage` |
+
+> **macOS manual install:** If you see "app is damaged", run: `xattr -cr /Applications/Better\ Terminal.app`
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) (stable)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — required for AI brainstorming features (`npm install -g @anthropic-ai/claude-code`)
-- macOS (cross-platform support planned)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — required for AI agent features (`npm install -g @anthropic-ai/claude-code`)
 
-### Install & Run
+### Build from Source
 
 ```bash
-# Install dependencies
+# Prerequisites: Node.js 18+, Rust (stable)
 npm install
-
-# Run in development mode
-npm run tauri dev
-
-# Build for production
-npm run tauri build
+npm run tauri dev     # development
+npm run tauri build   # production
 ```
-
-The built app will be at `src-tauri/target/release/better-terminal`.
 
 ## Architecture
 
