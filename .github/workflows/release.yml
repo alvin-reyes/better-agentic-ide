@@ -138,19 +138,14 @@ jobs:
           BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
           echo "Looking for artifacts in: $BUNDLE_DIR"
 
-          # Find all installer files
-          FILES=$(find "$BUNDLE_DIR" -type f \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" \) 2>/dev/null || true)
-
-          if [ -z "$FILES" ]; then
-            echo "::warning::No installer artifacts found in $BUNDLE_DIR"
-            find src-tauri/target/${{ matrix.target }}/release/ -type f -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" 2>/dev/null || echo "No artifacts found anywhere in release dir"
-            exit 0
-          fi
-
-          echo "Found artifacts:"
-          echo "$FILES"
-
-          for FILE in $FILES; do
+          # Find all installer files (using null delimiter to handle spaces in filenames)
+          FOUND=0
+          while IFS= read -r -d '' FILE; do
             echo "Uploading: $FILE"
             gh release upload "${{ github.ref_name }}" "$FILE" --clobber
-          done
+            FOUND=1
+          done < <(find "$BUNDLE_DIR" -type f \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" \) -print0 2>/dev/null)
+
+          if [ "$FOUND" -eq 0 ]; then
+            echo "::warning::No installer artifacts found in $BUNDLE_DIR"
+          fi
