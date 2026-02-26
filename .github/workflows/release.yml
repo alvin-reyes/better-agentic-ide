@@ -20,7 +20,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: 'Better Terminal ${{ github.ref_name }}'
+          name: 'ADE ${{ github.ref_name }}'
           body: |
             ## Downloads
 
@@ -43,12 +43,12 @@ jobs:
             ## What's New in ${{ github.ref_name }}
 
             ### AI Agent Terminals
-            Launch 17 specialized AI agents in dedicated terminal tabs with `Cmd+Shift+A`:
+            Launch 17+ specialized AI agents in dedicated terminal tabs with `Cmd+Shift+A`:
             - **Backend**: API Builder, Database Engineer, Auth Architect
             - **Frontend**: UI Builder, Style Architect, State Manager
             - **DevOps**: Container Ops, CI/CD, Infrastructure, K8s Engineer
             - **Testing**: Unit Tester, E2E Tester, Perf Tester
-            - **General**: Debugger, Code Reviewer, Docs Writer, Interview Coach
+            - **General**: Debugger, Code Reviewer, Docs Writer, Interview Coach, LinkedIn Tech Leader
             - **Continuous mode** for autonomous agent execution (with safety disclaimer)
 
             ### Native Markdown Watcher
@@ -122,28 +122,35 @@ jobs:
       - name: Build Tauri app
         run: npx tauri build --target ${{ matrix.target }}
 
-      - name: Upload macOS DMG
-        if: matrix.platform == 'macos-latest'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+      - name: List bundle output (debug)
+        if: always()
+        shell: bash
+        run: |
+          echo "=== Listing bundle directory ==="
+          find src-tauri/target/${{ matrix.target }}/release/bundle -type f 2>/dev/null || echo "No bundle directory found"
+          echo "=== Done ==="
 
-      - name: Upload Linux installers
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
-            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+      - name: Find and upload artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+          echo "Looking for artifacts in: $BUNDLE_DIR"
 
-      - name: Upload Windows installers
-        if: matrix.platform == 'windows-latest'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          # Find all installer files
+          FILES=$(find "$BUNDLE_DIR" -type f \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" \) 2>/dev/null || true)
+
+          if [ -z "$FILES" ]; then
+            echo "::warning::No installer artifacts found in $BUNDLE_DIR"
+            find src-tauri/target/${{ matrix.target }}/release/ -type f -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" 2>/dev/null || echo "No artifacts found anywhere in release dir"
+            exit 0
+          fi
+
+          echo "Found artifacts:"
+          echo "$FILES"
+
+          for FILE in $FILES; do
+            echo "Uploading: $FILE"
+            gh release upload "${{ github.ref_name }}" "$FILE" --clobber
+          done

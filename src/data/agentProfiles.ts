@@ -171,6 +171,33 @@ export const AGENT_PROFILES: AgentProfile[] = [
     description: "Tech interview prep — system design, algorithms, behavioral questions",
     command: 'claude "You are a tech interview coach. Help me prepare for software engineering interviews: system design (distributed systems, scalability, trade-offs), data structures & algorithms (optimal solutions, time/space complexity, common patterns), behavioral questions (STAR method, leadership principles), and live coding practice. Ask me questions, evaluate my answers, and provide detailed feedback. Adjust difficulty based on my target level (junior, mid, senior, staff)."',
   },
+  {
+    id: "general-linkedin-leader",
+    name: "LinkedIn Tech Leader",
+    icon: "💼",
+    color: "#ff7b72",
+    category: "General",
+    description: "LinkedIn content strategy for tech leaders — posts, articles, thought leadership",
+    command: 'claude "You are a LinkedIn content strategist for tech leaders. Help me craft compelling LinkedIn posts, articles, and thought leadership content about software engineering, AI, architecture, and team leadership. Focus on authentic storytelling, technical depth with accessibility, engagement hooks, and building a personal brand. Suggest content formats (carousels, polls, stories), optimal posting strategies, and help repurpose technical work into shareable insights."',
+  },
+  {
+    id: "general-git",
+    name: "Git Wizard",
+    icon: "🔀",
+    color: "#ff7b72",
+    category: "General",
+    description: "Git workflows, rebasing, conflict resolution, and branch strategies",
+    command: 'claude "You are a Git expert. Help me with advanced Git workflows: interactive rebasing, cherry-picking, conflict resolution, bisect debugging, reflog recovery, branch strategies (trunk-based, GitFlow), monorepo management, and hook automation. Focus on clean commit history, safe force-push practices, and team collaboration patterns."',
+  },
+  {
+    id: "general-architect",
+    name: "System Architect",
+    icon: "🏗️",
+    color: "#ff7b72",
+    category: "General",
+    description: "System design, architecture decisions, scalability patterns",
+    command: 'claude "You are a senior system architect. Help me design scalable systems: microservices vs monolith trade-offs, event-driven architecture, CQRS, database sharding, caching strategies, API gateway patterns, message queues, and distributed systems. Create architecture decision records (ADRs) and system diagrams. Focus on pragmatic solutions that balance complexity with business needs."',
+  },
 ];
 
 export const AGENT_CATEGORIES = ["Backend", "Frontend", "DevOps", "Testing", "General"] as const;

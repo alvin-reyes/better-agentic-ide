@@ -1,10 +1,20 @@
 <p align="center">
-  <img src="icon_logo.jpeg" alt="Better Terminal" width="120" style="border-radius: 20px;">
+  <img src="icon_logo.jpeg" alt="ADE - Agentic Development Environment" width="120" style="border-radius: 20px;">
 </p>
 
-<h1 align="center">Better Terminal</h1>
+<h1 align="center">ADE — Agentic Development Environment</h1>
+
+<p align="center">
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases"><img src="https://img.shields.io/github/v/release/alvin-reyes/better-agentic-ide?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/blob/main/LICENSE"><img src="https://img.shields.io/github/license/alvin-reyes/better-agentic-ide?style=flat-square" alt="License"></a>
+</p>
 
 <p align="center">A modern desktop terminal built for agentic AI development. Keyboard-first design with smart tab management, split panes, a thoughts scratchpad, and deep customization.</p>
+
+<p align="center">
+  <strong>Works with</strong><br>
+  <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Claude_Code-F97316?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
+</p>
 
 Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [xterm.js](https://xtermjs.org/) + Zustand.
 
@@ -32,8 +42,8 @@ Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [x
 - **Line height & scrollback** — fine-tune terminal density
 
 ### AI Agent Terminals
-- **16 pre-configured agent profiles** — Launch specialized AI agents with `Cmd+Shift+A`
-- **5 categories** — Backend (API, DB, Auth), Frontend (UI, CSS, State), DevOps (Docker, CI/CD, Infra, K8s), Testing (Unit, E2E, Perf), General (Debug, Review, Docs)
+- **20+ pre-configured agent profiles** — Launch specialized AI agents with `Cmd+Shift+A`
+- **5 categories** — Backend (API, DB, Auth), Frontend (UI, CSS, State), DevOps (Docker, CI/CD, Infra, K8s), Testing (Unit, E2E, Perf), General (Debug, Review, Docs, Interview Coach, LinkedIn Tech Leader)
 - **Continuous mode** — Autonomous agent execution with `--dangerously-skip-permissions` (with safety disclaimer)
 - **Each agent gets its own named tab** — organized workflow with color-coded categories
 
