@@ -22,9 +22,9 @@ export default function PaneContainer({ node, tabId }: PaneContainerProps) {
             <Separator
               className="group"
               style={{
-                width: direction === "horizontal" ? "6px" : undefined,
-                height: direction === "vertical" ? "6px" : undefined,
-                backgroundColor: "transparent",
+                width: direction === "horizontal" ? "4px" : undefined,
+                height: direction === "vertical" ? "4px" : undefined,
+                backgroundColor: "var(--bg-secondary)",
                 cursor: direction === "horizontal" ? "col-resize" : "row-resize",
                 display: "flex",
                 alignItems: "center",
@@ -35,16 +35,17 @@ export default function PaneContainer({ node, tabId }: PaneContainerProps) {
                 e.currentTarget.style.backgroundColor = "var(--accent-subtle)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.backgroundColor = "var(--bg-secondary)";
               }}
             >
               <div
                 style={{
-                  width: direction === "horizontal" ? "2px" : "32px",
-                  height: direction === "horizontal" ? "32px" : "2px",
-                  borderRadius: "1px",
+                  width: direction === "horizontal" ? "2px" : "40px",
+                  height: direction === "horizontal" ? "40px" : "2px",
+                  borderRadius: "2px",
                   backgroundColor: "var(--border-strong)",
                   transition: "background-color 0.15s ease",
+                  opacity: 0.6,
                 }}
               />
             </Separator>
