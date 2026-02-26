@@ -14,10 +14,9 @@ const shortcuts = [
   { keys: "⌘ ↵", action: "Send to term" },
   { keys: "⌘ S", action: "Save note" },
   { keys: "⌘ E", action: "Send Enter ↵" },
-  { keys: "⇧ ⌘ ↵", action: "Copy text" },
+  { keys: "⇧ ⌘ ↵", action: "Copy / Zoom" },
   { keys: "⌘ P", action: "Commands" },
   { keys: "⌘ F", action: "Find" },
-  { keys: "⇧⌘ ↵", action: "Zoom pane" },
   { keys: "⌘ ,", action: "Settings" },
   { keys: "Esc", action: "Close panel" },
 ];

@@ -42,17 +42,26 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     termRef.current?.focus();
   }, [tabId, paneId, setActivePaneInTab, termRef]);
 
-  // Listen for Cmd+F to open search in this pane
+  // Listen for Cmd+F to open search — only attach when active
   useEffect(() => {
+    if (!isActive) return;
     const handler = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
-      if (meta && !e.shiftKey && !e.altKey && e.key === "f" && isActive) {
+      if (meta && !e.shiftKey && !e.altKey && e.key === "f") {
         e.preventDefault();
         setShowSearch(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+  }, [isActive]);
+
+  // Listen for search triggered from command palette
+  useEffect(() => {
+    if (!isActive) return;
+    const handler = () => setShowSearch(true);
+    window.addEventListener("open-terminal-search", handler);
+    return () => window.removeEventListener("open-terminal-search", handler);
   }, [isActive]);
 
   return (
