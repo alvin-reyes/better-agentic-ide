@@ -24,12 +24,19 @@ export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Scan for .md files in cwd
-  useEffect(() => {
+  // Proactively scan for .md files in cwd and subdirs on open, and re-scan periodically
+  const scanFiles = useCallback(() => {
     invoke<string[]>("list_md_files", { dir: searchDir || "." })
       .then(setMdFiles)
       .catch(() => setMdFiles([]));
   }, [searchDir]);
+
+  useEffect(() => {
+    scanFiles();
+    // Re-scan every 5 seconds to pick up new files
+    const id = setInterval(scanFiles, 5000);
+    return () => clearInterval(id);
+  }, [scanFiles]);
 
   // Read and poll the selected file
   const readFile = useCallback(async () => {
@@ -163,7 +170,7 @@ export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
       {/* File picker */}
       {showPicker && (
         <div style={{ borderBottom: "1px solid var(--border)", flexShrink: 0, maxHeight: "50%", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "8px 12px", display: "flex", gap: "8px" }}>
+          <div style={{ padding: "8px 12px", display: "flex", gap: "8px", alignItems: "center" }}>
             <input
               value={searchDir}
               onChange={(e) => setSearchDir(e.target.value)}
@@ -182,6 +189,31 @@ export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
               onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
             />
+            <button
+              onClick={scanFiles}
+              style={{
+                background: "none",
+                border: "1px solid var(--border)",
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                padding: "5px 8px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "11px",
+                display: "flex",
+                alignItems: "center",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-elevated)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+              title="Rescan files"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M2 8a6 6 0 0111.47-2.5M14 8a6 6 0 01-11.47 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M14 2v4h-4M2 14v-4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div style={{ padding: "0 12px 4px", fontSize: "10px", color: "var(--text-muted)" }}>
+            {mdFiles.length} file{mdFiles.length !== 1 ? "s" : ""} found — auto-scanning every 5s
           </div>
           <div style={{ overflowY: "auto", flex: 1 }}>
             {mdFiles.length === 0 ? (

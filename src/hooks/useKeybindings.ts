@@ -6,11 +6,14 @@ import { refreshAllTerminals } from "./useTerminal";
 interface KeybindingActions {
   toggleScratchpad: () => void;
   toggleBrainstorm: () => void;
+  closeScratchpad: () => void;
+  closeBrainstorm: () => void;
   sendScratchpad: () => void;
   copyScratchpad: () => void;
   saveNoteScratchpad: () => void;
   sendEnterToTerminal: () => void;
   isScratchpadOpen: boolean;
+  isBrainstormOpen: boolean;
 }
 
 export function useKeybindings(actions: KeybindingActions) {
@@ -53,15 +56,10 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+R: Rename active tab
+      // Cmd+R: Rename active tab (dispatches event to TabBar's inline rename)
       if (meta && !shift && !alt && e.key === "r") {
         e.preventDefault();
-        const tab = tabs.find((t) => t.id === activeTabId);
-        if (!tab) return;
-        const newName = prompt("Rename tab:", tab.name);
-        if (newName && newName.trim()) {
-          renameTab(activeTabId, newName.trim());
-        }
+        window.dispatchEvent(new CustomEvent("rename-active-tab"));
         return;
       }
 
@@ -160,6 +158,26 @@ export function useKeybindings(actions: KeybindingActions) {
         e.preventDefault();
         const tab = tabs.find((t) => t.id === activeTabId);
         if (tab) splitPane(activeTabId, tab.activePaneId, "vertical");
+        return;
+      }
+
+      // Escape: Close open panels (settings > brainstorm > scratchpad) and focus terminal
+      if (!meta && !shift && !alt && e.key === "Escape") {
+        const settings = useSettingsStore.getState();
+        if (settings.showSettings) {
+          settings.setShowSettings(false);
+          return;
+        }
+        if (actions.isBrainstormOpen) {
+          actions.closeBrainstorm();
+          return;
+        }
+        if (actions.isScratchpadOpen) {
+          actions.closeScratchpad();
+        }
+        // Always try to focus the terminal
+        const xtermEl = document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
+        xtermEl?.focus();
         return;
       }
     };

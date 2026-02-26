@@ -21,6 +21,16 @@ export default function TabBar() {
     setEditValue(currentName);
   };
 
+  // Listen for rename-tab custom event (triggered by Cmd+R keybinding)
+  useEffect(() => {
+    const handler = () => {
+      const tab = tabs.find((t) => t.id === activeTabId);
+      if (tab) startRename(tab.id, tab.name);
+    };
+    window.addEventListener("rename-active-tab", handler);
+    return () => window.removeEventListener("rename-active-tab", handler);
+  }, [tabs, activeTabId]);
+
   const commitRename = () => {
     if (editingId && editValue.trim()) {
       renameTab(editingId, editValue.trim());

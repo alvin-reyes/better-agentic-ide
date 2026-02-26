@@ -1,6 +1,10 @@
-# Better Terminal
+<p align="center">
+  <img src="icon_logo.jpeg" alt="Better Terminal" width="120" style="border-radius: 20px;">
+</p>
 
-A modern desktop terminal built for agentic AI development. Keyboard-first design with smart tab management, split panes, a thoughts scratchpad, and deep customization.
+<h1 align="center">Better Terminal</h1>
+
+<p align="center">A modern desktop terminal built for agentic AI development. Keyboard-first design with smart tab management, split panes, a thoughts scratchpad, and deep customization.</p>
 
 Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [xterm.js](https://xtermjs.org/) + Zustand.
 
