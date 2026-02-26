@@ -263,7 +263,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       // Pick a new active pane if the closed one was active
       const remainingPanes = findAllPanes(newRoot);
       const newActive = tab.activePaneId === paneId
-        ? remainingPanes[0]?.id ?? tab.activePaneId
+        ? remainingPanes[0].id
         : tab.activePaneId;
       set((s) => ({
         tabs: s.tabs.map((t) =>

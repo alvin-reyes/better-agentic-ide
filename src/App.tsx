@@ -13,11 +13,19 @@ import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
 import { invoke } from "@tauri-apps/api/core";
 
+const BRAINSTORM_DEFAULT_WIDTH = 480;
+const BRAINSTORM_MIN_WIDTH = 280;
+const BRAINSTORM_MAX_WIDTH = 900;
+
 export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [brainstormOpen, setBrainstormOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
+  const [brainstormWidth, setBrainstormWidth] = useState(BRAINSTORM_DEFAULT_WIDTH);
+  const brainstormDragging = useRef(false);
+  const brainstormStartX = useRef(0);
+  const brainstormStartWidth = useRef(BRAINSTORM_DEFAULT_WIDTH);
   const { tabs, activeTabId, getActivePtyId } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
@@ -84,6 +92,36 @@ export default function App() {
     setBrainstormOpen(false);
   }, []);
 
+  const onBrainstormDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    brainstormDragging.current = true;
+    brainstormStartX.current = e.clientX;
+    brainstormStartWidth.current = brainstormWidth;
+
+    const cleanup = () => {
+      brainstormDragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", cleanup);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    const onMove = (ev: MouseEvent) => {
+      if (!brainstormDragging.current) return;
+      const delta = brainstormStartX.current - ev.clientX;
+      setBrainstormWidth(Math.min(BRAINSTORM_MAX_WIDTH, Math.max(BRAINSTORM_MIN_WIDTH, brainstormStartWidth.current + delta)));
+    };
+
+    const onUp = () => cleanup();
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", cleanup);
+  }, [brainstormWidth]);
+
   useKeybindings({
     toggleScratchpad,
     toggleBrainstorm,
@@ -110,7 +148,39 @@ export default function App() {
           )}
         </div>
         {brainstormOpen && (
-          <div style={{ width: "42%", minWidth: "320px", maxWidth: "600px", flexShrink: 0 }}>
+          <div style={{ width: `${brainstormWidth}px`, flexShrink: 0, position: "relative" }}>
+            {/* Resize handle */}
+            <div
+              onMouseDown={onBrainstormDragStart}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: "-3px",
+                bottom: 0,
+                width: "6px",
+                cursor: "col-resize",
+                zIndex: 20,
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget.firstChild as HTMLElement).style.opacity = "1";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget.firstChild as HTMLElement).style.opacity = "0";
+              }}
+            >
+              <div style={{
+                width: "3px",
+                height: "40px",
+                borderRadius: "2px",
+                backgroundColor: "var(--text-muted)",
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                opacity: 0,
+                transition: "opacity 0.15s",
+              }} />
+            </div>
             <BrainstormPanel onClose={() => setBrainstormOpen(false)} />
           </div>
         )}

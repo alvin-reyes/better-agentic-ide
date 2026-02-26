@@ -42,11 +42,12 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     termRef.current?.focus();
   }, [tabId, paneId, setActivePaneInTab, termRef]);
 
-  // Listen for Cmd+F to open search in this pane
+  // Listen for Cmd+F to open search — only attach when this pane is active
   useEffect(() => {
+    if (!isActive) return;
     const handler = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
-      if (meta && !e.shiftKey && !e.altKey && e.key === "f" && isActive) {
+      if (meta && !e.shiftKey && !e.altKey && e.key === "f") {
         e.preventDefault();
         setShowSearch(true);
       }

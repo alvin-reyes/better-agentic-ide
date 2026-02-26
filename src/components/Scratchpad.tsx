@@ -77,6 +77,14 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
   { name: "Step-by-Step Plan", category: "AI", prompt: "Create a step-by-step implementation plan for:\n\n**Task:** \n\nBreak it down into small, testable steps. For each step:\n1. What to do\n2. Which files to touch\n3. How to verify it works" },
 ];
 
+const CATEGORY_COLORS: Record<string, string> = {
+  Code: "var(--accent)",
+  Debug: "#ff7b72",
+  Arch: "#bc8cff",
+  Git: "#3fb950",
+  AI: "#d29922",
+};
+
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
   const [text, setText] = useState("");
@@ -96,12 +104,22 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const mountedRef = useRef(false);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
 
-  // Drag-to-resize handler
+  // Drag-to-resize handler — also handle blur/visibility to clean up interrupted drags
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     draggingRef.current = true;
     startYRef.current = e.clientY;
     startHeightRef.current = height;
+
+    const cleanup = () => {
+      draggingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", cleanup);
+      document.removeEventListener("visibilitychange", cleanup);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
 
     const onMove = (ev: MouseEvent) => {
       if (!draggingRef.current) return;
@@ -110,18 +128,14 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       setHeight(newHeight);
     };
 
-    const onUp = () => {
-      draggingRef.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
+    const onUp = () => cleanup();
 
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", cleanup);
+    document.addEventListener("visibilitychange", cleanup);
   }, [height]);
 
   const toggle = useCallback(() => {
@@ -614,8 +628,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
                   fontSize: "9px",
                   fontWeight: 700,
                   fontFamily: "monospace",
-                  color: tmpl.category === "Code" ? "var(--accent)" : tmpl.category === "Debug" ? "#ff7b72" : tmpl.category === "Arch" ? "#bc8cff" : tmpl.category === "Git" ? "#3fb950" : "#d29922",
-                  backgroundColor: (tmpl.category === "Code" ? "var(--accent)" : tmpl.category === "Debug" ? "#ff7b72" : tmpl.category === "Arch" ? "#bc8cff" : tmpl.category === "Git" ? "#3fb950" : "#d29922") + "20",
+                  color: CATEGORY_COLORS[tmpl.category] ?? "var(--text-muted)",
+                  backgroundColor: (CATEGORY_COLORS[tmpl.category] ?? "var(--text-muted)") + "20",
                   padding: "1px 4px",
                   borderRadius: "3px",
                 }}>
