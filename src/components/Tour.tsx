@@ -164,7 +164,7 @@ export default function Tour() {
           {step === 0 && (
             <div style={{ textAlign: "center", marginBottom: "16px" }}>
               <img
-                src="/icon_logo.jpeg"
+                src="/ade_logo.png"
                 alt="Better Terminal"
                 style={{
                   width: "64px",

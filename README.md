@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon_logo.jpeg" alt="ADE - Agentic Development Environment" width="120" style="border-radius: 20px;">
+  <img src="ade_logo.png" alt="ADE - Agentic Development Environment" width="120" style="border-radius: 20px;">
 </p>
 
 <h1 align="center">ADE — Agentic Development Environment</h1>
