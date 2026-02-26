@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
+import { isPaneActive } from "../hooks/useTerminal";
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -119,6 +120,10 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
   { name: "Brainstorm Ideas", category: "AI", prompt: "Help me brainstorm solutions for:\n\n**Problem:** \n**Constraints:**\n- \n**What I've considered:** \n\nGive me 3-5 different approaches with pros/cons for each." },
   { name: "Write Documentation", category: "AI", prompt: "Write documentation for:\n\n**Component/API:** \n**Audience:** (developer/end-user)\n**Include:**\n- Overview\n- Quick start\n- API reference\n- Examples\n- Common pitfalls" },
   { name: "Convert/Translate", category: "AI", prompt: "Convert this code:\n\n```\n\n```\n\n**From:** \n**To:** \n\nPreserve the logic and use idiomatic patterns in the target language." },
+  // Prompt Chains
+  { name: "Design Session", category: "Chain", prompt: "Analyze the current codebase structure. List the key files, architecture patterns, and tech stack being used.\n---\nBased on your analysis, propose 2-3 approaches for implementing: [DESCRIBE FEATURE]. Include trade-offs for each approach.\n---\nWrite a detailed technical spec for the recommended approach. Include: components, data flow, API design, and edge cases.\n---\nCreate a step-by-step implementation plan with exact file paths and code changes for each step." },
+  { name: "Code Review Chain", category: "Chain", prompt: "Review all recent changes in this project. List every file that was modified.\n---\nFor each changed file, analyze: correctness, security issues, performance concerns, and code style.\n---\nWrite a summary of findings with severity ratings (critical/warning/info) and specific fix recommendations." },
+  { name: "Debug Chain", category: "Chain", prompt: "Investigate the following issue: [DESCRIBE BUG]. Start by reading the relevant source files and understanding the current behavior.\n---\nIdentify the root cause. Show the exact lines of code causing the issue and explain why.\n---\nImplement a fix for the bug. Write tests to prevent regression." },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -127,6 +132,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Arch: "#bc8cff",
   Git: "#3fb950",
   AI: "#d29922",
+  Chain: "#8b5cf6",
   Ops: "#56d4dd",
 };
 
@@ -150,6 +156,10 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isListening, setIsListening] = useState(false);
+  const [chainRunning, setChainRunning] = useState(false);
+  const [chainStep, setChainStep] = useState(0);
+  const [chainTotal, setChainTotal] = useState(0);
+  const chainCancelledRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const draggingRef = useRef(false);
   const startYRef = useRef(0);
@@ -435,6 +445,90 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     setText("");
     setPastedImages([]);
   }, [text, pastedImages, getActivePtyId, history, sendEnter]);
+
+  // Detect if text contains chain separators
+  const chainSteps = text.split(/\n---\n/).filter((s) => s.trim());
+  const isChain = chainSteps.length > 1;
+
+  const sendChain = useCallback(async () => {
+    const ptyId = getActivePtyId();
+    if (ptyId === null) return;
+
+    const steps = text.split(/\n---\n/).filter((s) => s.trim());
+    if (steps.length <= 1) {
+      // Not a chain — use normal send
+      send();
+      return;
+    }
+
+    // Get the active pane ID for activity polling
+    const activePane = useTabStore.getState().getActivePane();
+    if (!activePane) return;
+
+    setChainRunning(true);
+    setChainTotal(steps.length);
+    setChainStep(0);
+    chainCancelledRef.current = false;
+
+    // Save the full chain to history
+    if (text.trim()) {
+      const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
+      setHistory(newHistory);
+      saveHistory(newHistory);
+    }
+
+    for (let i = 0; i < steps.length; i++) {
+      if (chainCancelledRef.current) break;
+
+      setChainStep(i + 1);
+      const step = steps[i].trim();
+
+      // Send the step
+      const stepData = Array.from(new TextEncoder().encode(step + "\r"));
+      try {
+        await invoke("write_pty", { id: ptyId, data: stepData });
+      } catch {
+        break;
+      }
+
+      // Wait for the agent to finish processing (if not last step)
+      if (i < steps.length - 1 && !chainCancelledRef.current) {
+        // First wait a moment for output to start
+        await new Promise((r) => setTimeout(r, 2000));
+
+        // Then poll until the pane is idle (no output for 3s)
+        let idleChecks = 0;
+        const maxWait = 600; // 10 minutes max (600 * 1s)
+        while (idleChecks < maxWait && !chainCancelledRef.current) {
+          await new Promise((r) => setTimeout(r, 1000));
+          if (!isPaneActive(activePane.id)) {
+            // Pane idle — wait one more second to be safe
+            await new Promise((r) => setTimeout(r, 1500));
+            if (!isPaneActive(activePane.id)) {
+              break;
+            }
+          }
+          idleChecks++;
+        }
+      }
+    }
+
+    setChainRunning(false);
+    setChainStep(0);
+    setChainTotal(0);
+    if (!chainCancelledRef.current) {
+      setText("");
+      setSent(true);
+      setTimeout(() => setSent(false), 1500);
+    }
+  }, [text, getActivePtyId, history, send]);
+
+  const cancelChain = useCallback(() => {
+    chainCancelledRef.current = true;
+    setChainRunning(false);
+    setChainStep(0);
+    setChainTotal(0);
+  }, []);
 
   const copy = useCallback(async () => {
     if (!text.trim()) return;
@@ -915,11 +1009,15 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               const xtermEl = document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
               xtermEl?.focus();
             }
-            // Cmd+Enter: send to terminal
+            // Cmd+Enter: send to terminal (or run chain)
             if (meta && !e.shiftKey && e.key === "Enter") {
               e.preventDefault();
               e.stopPropagation(); // prevent global handler from firing too
-              send();
+              if (isChain) {
+                sendChain();
+              } else {
+                send();
+              }
             }
             // Cmd+Shift+Enter: copy to clipboard
             if (meta && e.shiftKey && e.key === "Enter") {
@@ -964,7 +1062,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
           onPaste={handlePaste}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          placeholder="Type your thoughts here... ⌘+Enter to send to terminal. Paste or drop images here."
+          placeholder="Type your thoughts here... ⌘+Enter to send to terminal. Use --- to chain multiple prompts."
           style={{
             flex: 1,
             resize: "none",
@@ -1062,28 +1160,103 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
           </div>
         )}
 
+        {/* Chain progress bar */}
+        {chainRunning && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "6px 12px",
+            backgroundColor: "var(--accent-subtle)",
+            borderRadius: "var(--radius-sm)",
+            border: "1px solid var(--accent)",
+            flexShrink: 0,
+          }}>
+            <div style={{
+              flex: 1,
+              height: "4px",
+              backgroundColor: "var(--bg-elevated)",
+              borderRadius: "2px",
+              overflow: "hidden",
+            }}>
+              <div style={{
+                height: "100%",
+                width: `${(chainStep / chainTotal) * 100}%`,
+                backgroundColor: "var(--accent)",
+                transition: "width 0.5s ease",
+                borderRadius: "2px",
+              }} />
+            </div>
+            <span style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              color: "var(--accent)",
+              fontFamily: "monospace",
+              whiteSpace: "nowrap",
+            }}>
+              Step {chainStep}/{chainTotal}
+            </span>
+            <button
+              onClick={cancelChain}
+              style={{
+                padding: "3px 10px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "11px",
+                fontWeight: 500,
+                border: "1px solid #ef4444",
+                cursor: "pointer",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                color: "#ef4444",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.2)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           <button
-            onClick={send}
+            onClick={isChain ? sendChain : send}
+            disabled={chainRunning}
             style={{
               padding: "6px 16px",
               borderRadius: "var(--radius-sm)",
               fontSize: "12px",
               fontWeight: 600,
               border: "none",
-              cursor: "pointer",
-              backgroundColor: sent ? "var(--green)" : "var(--accent)",
-              color: "#fff",
+              cursor: chainRunning ? "not-allowed" : "pointer",
+              backgroundColor: sent ? "var(--green)" : chainRunning ? "var(--bg-elevated)" : isChain ? "#8b5cf6" : "var(--accent)",
+              color: chainRunning ? "var(--text-muted)" : "#fff",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              opacity: chainRunning ? 0.5 : 1,
             }}
             onMouseEnter={(e) => {
-              if (!sent) e.currentTarget.style.filter = "brightness(1.15)";
+              if (!sent && !chainRunning) e.currentTarget.style.filter = "brightness(1.15)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.filter = "none";
             }}
           >
-            {sent ? "Sent!" : "Send to Terminal"}
+            {sent ? "Sent!" : isChain ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 4H13M3 8H13M3 12H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <circle cx="7" cy="4" r="1.5" fill="currentColor"/>
+                  <circle cx="10" cy="8" r="1.5" fill="currentColor"/>
+                  <circle cx="5" cy="12" r="1.5" fill="currentColor"/>
+                </svg>
+                Run Chain ({chainSteps.length} steps)
+              </>
+            ) : "Send to Terminal"}
           </button>
           <button
             onClick={copy}
