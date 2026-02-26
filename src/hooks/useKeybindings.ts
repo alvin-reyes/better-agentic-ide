@@ -12,6 +12,7 @@ interface KeybindingActions {
   copyScratchpad: () => void;
   saveNoteScratchpad: () => void;
   sendEnterToTerminal: () => void;
+  toggleCommandPalette: () => void;
   isScratchpadOpen: boolean;
   isBrainstormOpen: boolean;
 }
@@ -47,6 +48,13 @@ export function useKeybindings(actions: KeybindingActions) {
       const meta = e.metaKey || e.ctrlKey;
       const shift = e.shiftKey;
       const alt = e.altKey;
+
+      // Cmd+P: Command palette
+      if (meta && !shift && !alt && e.key === "p") {
+        e.preventDefault();
+        actions.toggleCommandPalette();
+        return;
+      }
 
       // Cmd+,: Open settings
       if (meta && !shift && !alt && e.key === ",") {
@@ -158,6 +166,13 @@ export function useKeybindings(actions: KeybindingActions) {
         e.preventDefault();
         const tab = tabs.find((t) => t.id === activeTabId);
         if (tab) splitPane(activeTabId, tab.activePaneId, "horizontal");
+        return;
+      }
+
+      // Cmd+Shift+Enter: Zoom/unzoom pane
+      if (meta && shift && !alt && e.key === "Enter" && !actions.isScratchpadOpen) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("toggle-zoom-pane"));
         return;
       }
 
