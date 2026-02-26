@@ -14,12 +14,14 @@ interface KeybindingActions {
   sendEnterToTerminal: () => void;
   toggleCommandPalette: () => void;
   toggleAgentPicker: () => void;
+  requestCloseTab: (tabId: string) => void;
+  requestClosePane: (tabId: string, paneId: string) => void;
   isScratchpadOpen: boolean;
   isBrainstormOpen: boolean;
 }
 
 export function useKeybindings(actions: KeybindingActions) {
-  const { addTab, closeTab, setActiveTab, renameTab, splitPane, closePane, focusNextPane, focusPrevPane, tabs, activeTabId } =
+  const { addTab, setActiveTab, renameTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId } =
     useTabStore();
 
   // Watch for settings changes and refresh terminals
@@ -128,18 +130,18 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+Shift+W: Close active split pane
+      // Cmd+Shift+W: Close active split pane (with confirmation if process running)
       if (meta && shift && !alt && (e.key === "w" || e.key === "W")) {
         e.preventDefault();
         const tab = tabs.find((t) => t.id === activeTabId);
-        if (tab) closePane(activeTabId, tab.activePaneId);
+        if (tab) actions.requestClosePane(activeTabId, tab.activePaneId);
         return;
       }
 
-      // Cmd+W: Close tab
+      // Cmd+W: Close tab (with confirmation if process running)
       if (meta && !shift && !alt && e.key === "w") {
         e.preventDefault();
-        closeTab(activeTabId);
+        actions.requestCloseTab(activeTabId);
         return;
       }
 
@@ -226,5 +228,5 @@ export function useKeybindings(actions: KeybindingActions) {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [actions, addTab, closeTab, closePane, setActiveTab, renameTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId]);
+  }, [actions, addTab, setActiveTab, renameTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId]);
 }

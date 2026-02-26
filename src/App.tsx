@@ -9,9 +9,11 @@ import BrainstormPanel from "./components/BrainstormPanel";
 import Tour from "./components/Tour";
 import CommandPalette from "./components/CommandPalette";
 import AgentPicker from "./components/AgentPicker";
-import { useTabStore } from "./stores/tabStore";
+import ConfirmDialog from "./components/ConfirmDialog";
+import { useTabStore, findAllPanes } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
+import { hasActiveProcess } from "./hooks/useTerminal";
 import { invoke } from "@tauri-apps/api/core";
 
 const BRAINSTORM_DEFAULT_WIDTH = 480;
@@ -28,7 +30,12 @@ export default function App() {
   const brainstormDragging = useRef(false);
   const brainstormStartX = useRef(0);
   const brainstormStartWidth = useRef(BRAINSTORM_DEFAULT_WIDTH);
-  const { tabs, activeTabId, getActivePtyId } = useTabStore();
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+  const { tabs, activeTabId, getActivePtyId, closeTab, closePane } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   // Apply saved theme on startup
@@ -98,6 +105,56 @@ export default function App() {
     setBrainstormOpen(false);
   }, []);
 
+  // Guarded close: check for active Claude processes before closing
+  const requestCloseTab = useCallback((tabId: string) => {
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    // Check all panes in this tab for active processes
+    const allPanes = findAllPanes(tab.root);
+    const activeProcesses = allPanes
+      .map((p) => hasActiveProcess(p.id))
+      .filter((name): name is string => name !== null);
+
+    if (activeProcesses.length > 0) {
+      setConfirmDialog({
+        title: "Active process running",
+        message: `This tab has a live ${activeProcesses[0]} session. Closing it will terminate the process. Are you sure?`,
+        onConfirm: () => {
+          closeTab(tabId);
+          setConfirmDialog(null);
+        },
+      });
+    } else {
+      closeTab(tabId);
+    }
+  }, [tabs, closeTab]);
+
+  const requestClosePane = useCallback((tabId: string, paneId: string) => {
+    const processName = hasActiveProcess(paneId);
+    if (processName) {
+      setConfirmDialog({
+        title: "Active process running",
+        message: `This pane has a live ${processName} session. Closing it will terminate the process. Are you sure?`,
+        onConfirm: () => {
+          closePane(tabId, paneId);
+          setConfirmDialog(null);
+        },
+      });
+    } else {
+      closePane(tabId, paneId);
+    }
+  }, [closePane]);
+
+  // Listen for tab close requests from TabBar (X button / context menu)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { tabId } = (e as CustomEvent).detail;
+      requestCloseTab(tabId);
+    };
+    window.addEventListener("request-close-tab", handler);
+    return () => window.removeEventListener("request-close-tab", handler);
+  }, [requestCloseTab]);
+
   const onBrainstormDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     brainstormDragging.current = true;
@@ -139,6 +196,8 @@ export default function App() {
     sendEnterToTerminal,
     toggleCommandPalette,
     toggleAgentPicker,
+    requestCloseTab,
+    requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
     isBrainstormOpen: brainstormOpen,
   });
@@ -206,6 +265,14 @@ export default function App() {
       )}
       {agentPickerOpen && (
         <AgentPicker onClose={() => setAgentPickerOpen(false)} />
+      )}
+      {confirmDialog && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
       )}
     </div>
   );
