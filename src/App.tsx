@@ -8,6 +8,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import BrainstormPanel from "./components/BrainstormPanel";
 import Tour from "./components/Tour";
 import CommandPalette from "./components/CommandPalette";
+import AgentPicker from "./components/AgentPicker";
 import { useTabStore } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
@@ -21,6 +22,7 @@ export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [brainstormOpen, setBrainstormOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [brainstormWidth, setBrainstormWidth] = useState(BRAINSTORM_DEFAULT_WIDTH);
   const brainstormDragging = useRef(false);
@@ -63,6 +65,10 @@ export default function App() {
 
   const toggleBrainstorm = useCallback(() => {
     setBrainstormOpen((prev) => !prev);
+  }, []);
+
+  const toggleAgentPicker = useCallback(() => {
+    setAgentPickerOpen((prev) => !prev);
   }, []);
 
   const sendScratchpad = useCallback(() => {
@@ -132,6 +138,7 @@ export default function App() {
     saveNoteScratchpad,
     sendEnterToTerminal,
     toggleCommandPalette,
+    toggleAgentPicker,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
     isBrainstormOpen: brainstormOpen,
   });
@@ -194,7 +201,11 @@ export default function App() {
           onClose={() => setPaletteOpen(false)}
           onToggleScratchpad={toggleScratchpad}
           onToggleBrainstorm={toggleBrainstorm}
+          onOpenAgentPicker={() => { setPaletteOpen(false); setAgentPickerOpen(true); }}
         />
+      )}
+      {agentPickerOpen && (
+        <AgentPicker onClose={() => setAgentPickerOpen(false)} />
       )}
     </div>
   );

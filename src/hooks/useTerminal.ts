@@ -135,6 +135,21 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     term.writeln(`\x1b[31mFailed to start shell: ${err}\x1b[0m`);
   }
 
+  // Let app-level shortcuts pass through to the window handler
+  term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    const meta = e.metaKey || e.ctrlKey;
+    if (!meta) return true;
+    // Pass Cmd+<key> shortcuts to the app (not consumed by xterm)
+    const passthrough = [
+      "t", "w", "W", "j", "b", "p", "d", "D", "r", "e", "f", ",",
+      "a", "A",  // Agent picker (Cmd+Shift+A)
+      "Enter", "[", "]",
+      "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    ];
+    if (passthrough.includes(e.key)) return false;
+    return true;
+  });
+
   // Keyboard input -> PTY
   term.onData((data: string) => {
     if (inst.ptyId !== null) {

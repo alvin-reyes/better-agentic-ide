@@ -577,6 +577,7 @@
     </a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#agents">AI Agents</a>
       <a href="#brainstorm">Brainstorm</a>
       <a href="#themes">Themes</a>
       <a href="#shortcuts">Shortcuts</a>
@@ -764,6 +765,54 @@
     </div>
   </section>
 
+  <!-- AI Agents -->
+  <section class="shortcuts" id="agents" style="background: var(--bg); border: none;">
+    <div class="container">
+      <h2>AI Agent Terminals</h2>
+      <p class="subtitle">Launch specialized AI agents in dedicated terminal tabs. 16 profiles across 5 categories.</p>
+
+      <!-- Agent categories -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; max-width: 840px; margin: 0 auto 32px;">
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #3fb950; background: #3fb95020; padding: 2px 8px; border-radius: 4px;">Backend</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">API Builder &bull; Database Engineer &bull; Auth Architect</div>
+        </div>
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #58a6ff; background: #58a6ff20; padding: 2px 8px; border-radius: 4px;">Frontend</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">UI Builder &bull; Style Architect &bull; State Manager</div>
+        </div>
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #bc8cff; background: #bc8cff20; padding: 2px 8px; border-radius: 4px;">DevOps</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">Container Ops &bull; CI/CD &bull; Infrastructure &bull; K8s</div>
+        </div>
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #d29922; background: #d2992220; padding: 2px 8px; border-radius: 4px;">Testing</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">Unit Tester &bull; E2E Tester &bull; Perf Tester</div>
+        </div>
+      </div>
+
+      <div class="shortcut-categories" style="max-width: 700px; margin: 0 auto;">
+        <div class="shortcut-category">
+          <h3>How it works</h3>
+          <div class="shortcut-list">
+            <div class="shortcut-item"><span>Open agent picker</span><kbd>&#8984;&#8679;A</kbd></div>
+            <div class="shortcut-item"><span>Search and filter by category</span><span style="color: var(--accent); font-size: 12px;">16 agents</span></div>
+            <div class="shortcut-item"><span>Each agent opens in a new named tab</span><span style="color: var(--green); font-size: 12px;">isolated</span></div>
+            <div class="shortcut-item"><span>Continuous mode (autonomous execution)</span><span style="color: var(--red); font-size: 12px;">optional</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Brainstorm -->
   <section class="shortcuts" id="brainstorm" style="background: var(--bg); border: none;">
     <div class="container">
@@ -821,7 +870,7 @@
           <div class="shortcut-list">
             <div class="shortcut-item"><span>Toggle brainstorm panel</span><kbd>&#8984;B</kbd></div>
             <div class="shortcut-item"><span>Select any .md file to preview</span><span style="color: var(--accent); font-size: 12px;">file picker</span></div>
-            <div class="shortcut-item"><span>Auto-refreshes as file changes</span><span style="color: var(--green); font-size: 12px;">every 1.5s</span></div>
+            <div class="shortcut-item"><span>Native filesystem watcher — instant updates</span><span style="color: var(--green); font-size: 12px;">real-time</span></div>
             <div class="shortcut-item"><span>Full markdown rendering</span><span style="color: var(--text-dim); font-size: 12px;">GFM support</span></div>
           </div>
         </div>
@@ -876,6 +925,8 @@
           <h3>App</h3>
           <div class="shortcut-list">
             <div class="shortcut-item"><span>Brainstorm panel</span><kbd>&#8984;B</kbd></div>
+            <div class="shortcut-item"><span>AI agent picker</span><kbd>&#8984;&#8679;A</kbd></div>
+            <div class="shortcut-item"><span>Command palette</span><kbd>&#8984;P</kbd></div>
             <div class="shortcut-item"><span>Settings</span><kbd>&#8984;,</kbd></div>
           </div>
         </div>
