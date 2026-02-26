@@ -3,37 +3,23 @@ mod watcher;
 
 #[tauri::command]
 fn check_command_exists(command: String) -> Result<String, String> {
-    // Try multiple ways to get the home directory (Finder-launched apps may not have HOME set)
-    let home = std::env::var("HOME")
-        .or_else(|_| {
-            // Fallback: use the passwd entry
-            let output = std::process::Command::new("sh")
-                .args(["-c", "echo ~"])
-                .output();
-            match output {
-                Ok(o) if o.status.success() => {
-                    Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
-                }
-                _ => Err(std::env::VarError::NotPresent),
-            }
-        })
-        .unwrap_or_else(|_| "/Users/".to_string());
+    // Get home directory — try multiple methods for Finder-launched apps
+    let home = get_home_dir();
 
     let search_dirs = [
         format!("{}/.local/bin", home),
         format!("{}/.cargo/bin", home),
         format!("{}/bin", home),
-        format!("{}/.nvm/versions/node/*/bin", home), // nvm
+        format!("{}/.nvm/versions/node/*/bin", home),
         "/usr/local/bin".to_string(),
         "/opt/homebrew/bin".to_string(),
         "/usr/bin".to_string(),
         "/bin".to_string(),
     ];
 
-    // Check each directory directly for the binary (handle glob patterns)
+    // Check each directory directly for the binary
     for dir in &search_dirs {
         if dir.contains('*') {
-            // Expand glob pattern
             if let Ok(entries) = glob::glob(&format!("{}/{}", dir, command)) {
                 for entry in entries.flatten() {
                     if entry.exists() {
@@ -49,17 +35,78 @@ fn check_command_exists(command: String) -> Result<String, String> {
         }
     }
 
-    // Fallback: use a login shell to resolve PATH (picks up .zshrc, .bashrc, etc.)
-    let shell_check = std::process::Command::new("sh")
-        .args(["-lc", &format!("which {}", command)])
-        .output();
-    if let Ok(output) = shell_check {
-        if output.status.success() {
-            return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+    // Fallback: use zsh login shell (macOS default) to resolve PATH
+    for shell in &["/bin/zsh", "/bin/bash", "/bin/sh"] {
+        let shell_check = std::process::Command::new(shell)
+            .args(["-lc", &format!("which {}", command)])
+            .env("HOME", &home)
+            .output();
+        if let Ok(output) = shell_check {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    return Ok(path);
+                }
+            }
         }
     }
 
-    Err(format!("{} not found", command))
+    Err(format!("{} not found in {} or PATH", command, home))
+}
+
+fn get_home_dir() -> String {
+    // 1. Try HOME env var
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() && std::path::Path::new(&home).exists() {
+            return home;
+        }
+    }
+    // 2. Try NSHomeDirectory via swift (macOS specific, works even from Finder)
+    if let Ok(output) = std::process::Command::new("/usr/bin/swift")
+        .args(["-e", "import Foundation; print(NSHomeDirectory())"])
+        .output()
+    {
+        if output.status.success() {
+            let home = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !home.is_empty() && std::path::Path::new(&home).exists() {
+                return home;
+            }
+        }
+    }
+    // 3. Try dscl
+    if let Ok(output) = std::process::Command::new("/usr/bin/dscl")
+        .args([".", "-read", &format!("/Users/{}", whoami()), "NFSHomeDirectory"])
+        .output()
+    {
+        if output.status.success() {
+            let out = String::from_utf8_lossy(&output.stdout);
+            if let Some(path) = out.split_whitespace().last() {
+                if std::path::Path::new(path).exists() {
+                    return path.to_string();
+                }
+            }
+        }
+    }
+    // 4. Try echo ~
+    if let Ok(output) = std::process::Command::new("/bin/sh")
+        .args(["-c", "echo ~"])
+        .output()
+    {
+        if output.status.success() {
+            let home = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !home.is_empty() && home != "~" && std::path::Path::new(&home).exists() {
+                return home;
+            }
+        }
+    }
+    "/Users/unknown".to_string()
+}
+
+fn whoami() -> String {
+    std::process::Command::new("/usr/bin/whoami")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -156,6 +203,7 @@ fn list_md_files(dir: String) -> Result<Vec<String>, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(pty::PtyManager::new())
         .manage(watcher::WatcherManager::new())
         .invoke_handler(tauri::generate_handler![
