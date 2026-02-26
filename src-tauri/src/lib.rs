@@ -72,6 +72,57 @@ fn check_claude_plugin(plugin_name: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn save_temp_image(base64_data: String, extension: String) -> Result<String, String> {
+    use std::io::Write;
+
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let dir = format!("{}/.ade/images", home);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let filename = format!("paste-{}.{}", timestamp, extension);
+    let path = format!("{}/{}", dir, filename);
+
+    let bytes = base64_decode(&base64_data)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    let mut file = std::fs::File::create(&path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    file.write_all(&bytes)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    Ok(path)
+}
+
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    // Simple base64 decoder
+    let table: Vec<u8> = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        .to_vec();
+    let mut output = Vec::new();
+    let mut buf: u32 = 0;
+    let mut bits: u32 = 0;
+
+    for &byte in input.as_bytes() {
+        if byte == b'=' || byte == b'\n' || byte == b'\r' || byte == b' ' {
+            continue;
+        }
+        let val = table.iter().position(|&b| b == byte)
+            .ok_or_else(|| format!("Invalid base64 char: {}", byte as char))? as u32;
+        buf = (buf << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            output.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+    }
+    Ok(output)
+}
+
+#[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path, e))
 }
@@ -116,6 +167,7 @@ pub fn run() {
             watcher::unwatch_directory,
             check_command_exists,
             check_claude_plugin,
+            save_temp_image,
             read_file,
             list_md_files,
         ])

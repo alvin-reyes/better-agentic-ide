@@ -103,6 +103,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   Ops: "#56d4dd",
 };
 
+interface PastedImage {
+  id: string;
+  dataUrl: string;   // for preview
+  tempPath: string;  // saved file path for CLI consumption
+}
+
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
   const [text, setText] = useState("");
@@ -114,6 +120,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [showNotes, setShowNotes] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const draggingRef = useRef(false);
   const startYRef = useRef(0);
@@ -167,19 +174,68 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
   }, [getActivePtyId]);
 
+  // Handle image paste from clipboard
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) continue;
+
+        // Convert to base64 data URL for preview
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const dataUrl = reader.result as string;
+          // Extract base64 data and save to temp file via Rust
+          const base64 = dataUrl.split(",")[1];
+          const ext = item.type.split("/")[1] || "png";
+          try {
+            const tempPath = await invoke<string>("save_temp_image", {
+              base64Data: base64,
+              extension: ext,
+            });
+            const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            setPastedImages((prev) => [...prev, { id, dataUrl, tempPath }]);
+          } catch (err) {
+            console.error("Failed to save pasted image:", err);
+          }
+        };
+        reader.readAsDataURL(blob);
+      }
+    }
+  }, []);
+
+  const removeImage = useCallback((id: string) => {
+    setPastedImages((prev) => prev.filter((img) => img.id !== id));
+  }, []);
+
   const send = useCallback(async () => {
     const ptyId = getActivePtyId();
     if (ptyId === null) {
       console.warn("No active PTY to send to");
       return;
     }
-    // If empty, just send Enter to the terminal
-    if (!text.trim()) {
+    // If empty and no images, just send Enter to the terminal
+    if (!text.trim() && pastedImages.length === 0) {
       await sendEnter();
       return;
     }
+
+    // Build the command — if images are attached, include them as file paths
+    let fullText = text;
+    if (pastedImages.length > 0) {
+      const imagePaths = pastedImages.map((img) => img.tempPath).join(" ");
+      // Prepend image paths for Claude to read
+      fullText = fullText.trim()
+        ? `${fullText.trim()} ${imagePaths}`
+        : imagePaths;
+    }
+
     // Append \r (carriage return) to simulate pressing Enter in the terminal
-    const textWithNewline = text + "\r";
+    const textWithNewline = fullText + "\r";
     const data = Array.from(new TextEncoder().encode(textWithNewline));
     try {
       await invoke("write_pty", { id: ptyId, data });
@@ -188,15 +244,18 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       return;
     }
 
-    // Save to history
-    const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
-    setHistory(newHistory);
-    saveHistory(newHistory);
+    // Save to history (text only, not image paths)
+    if (text.trim()) {
+      const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
+      setHistory(newHistory);
+      saveHistory(newHistory);
+    }
 
     setSent(true);
     setTimeout(() => setSent(false), 1500);
     setText("");
-  }, [text, getActivePtyId, history, sendEnter]);
+    setPastedImages([]);
+  }, [text, pastedImages, getActivePtyId, history, sendEnter]);
 
   const copy = useCallback(async () => {
     if (!text.trim()) return;
@@ -702,7 +761,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               saveNote();
             }
           }}
-          placeholder="Type your thoughts here... press ⌘+Enter to send directly to the active terminal"
+          onPaste={handlePaste}
+          placeholder="Type your thoughts here... press ⌘+Enter to send directly to the active terminal. Paste images with ⌘V."
           style={{
             flex: 1,
             resize: "none",
@@ -725,6 +785,80 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             e.currentTarget.style.boxShadow = "none";
           }}
         />
+
+        {/* Pasted images preview */}
+        {pastedImages.length > 0 && (
+          <div style={{
+            display: "flex",
+            gap: "8px",
+            flexWrap: "wrap",
+            flexShrink: 0,
+          }}>
+            {pastedImages.map((img) => (
+              <div
+                key={img.id}
+                style={{
+                  position: "relative",
+                  width: "64px",
+                  height: "64px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  overflow: "hidden",
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={img.dataUrl}
+                  alt="Pasted"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                />
+                <button
+                  onClick={() => removeImage(img.id)}
+                  style={{
+                    position: "absolute",
+                    top: "2px",
+                    right: "2px",
+                    width: "16px",
+                    height: "16px",
+                    borderRadius: "50%",
+                    border: "none",
+                    backgroundColor: "rgba(0,0,0,0.7)",
+                    color: "#fff",
+                    fontSize: "10px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+                <div style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: "rgba(0,0,0,0.6)",
+                  color: "#fff",
+                  fontSize: "8px",
+                  padding: "1px 4px",
+                  textAlign: "center",
+                  fontFamily: "monospace",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {img.tempPath.split("/").pop()}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Action buttons */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
