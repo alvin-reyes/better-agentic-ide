@@ -75,6 +75,23 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
   // AI Agent
   { name: "Spec Document", category: "AI", prompt: "Write a technical specification for:\n\n**Feature:** \n**Goal:** \n\nInclude:\n- Overview\n- Technical approach\n- API design\n- Data model\n- Edge cases\n- Testing strategy" },
   { name: "Step-by-Step Plan", category: "AI", prompt: "Create a step-by-step implementation plan for:\n\n**Task:** \n\nBreak it down into small, testable steps. For each step:\n1. What to do\n2. Which files to touch\n3. How to verify it works" },
+  // Code Generation (more)
+  { name: "Add API Endpoint", category: "Code", prompt: "Create a new API endpoint:\n\n**Method & Path:** \n**Request body/params:** \n**Response format:** \n**Authentication:** \n**Validation rules:**\n- \n\nInclude error handling and input validation." },
+  { name: "Database Migration", category: "Code", prompt: "Create a database migration for:\n\n**Change:** \n**Tables affected:** \n**New columns/indexes:** \n**Rollback plan:** \n\nEnsure backward compatibility." },
+  { name: "Type Definitions", category: "Code", prompt: "Define TypeScript types/interfaces for:\n\n**Domain:** \n**Entities:**\n- \n**Relationships:**\n- \n\nUse strict types, avoid `any`. Add JSDoc where helpful." },
+  // Debug (more)
+  { name: "Performance Issue", category: "Debug", prompt: "I have a performance issue:\n\n**What's slow:** \n**Current timing:** \n**Expected timing:** \n**Environment:** \n\nHelp me profile and optimize this." },
+  { name: "Investigate Logs", category: "Debug", prompt: "Help me understand these logs:\n\n```\n\n```\n\n**What I expected to see:** \n**What's concerning:** \n\nIdentify the issue and suggest next steps." },
+  // Architecture (more)
+  { name: "System Design", category: "Arch", prompt: "Design the architecture for:\n\n**System:** \n**Scale requirements:** \n**Key constraints:**\n- \n\nCover:\n- High-level components\n- Data flow\n- Technology choices\n- Trade-offs" },
+  { name: "Security Review", category: "Arch", prompt: "Review the security of:\n\n**Component:** \n**Auth mechanism:** \n**Data sensitivity:** \n\nCheck for:\n- OWASP Top 10\n- Input validation\n- Authentication/authorization\n- Data exposure\n- Dependency vulnerabilities" },
+  // Git (more)
+  { name: "Release Notes", category: "Git", prompt: "Write release notes for version:\n\n**Version:** \n**Changes since last release:**\n- \n\nFormat with sections: Features, Bug Fixes, Breaking Changes, Dependencies." },
+  { name: "Git Workflow", category: "Git", prompt: "Help me with this git situation:\n\n**Current state:** \n**What I want to achieve:** \n**Branches involved:** \n\nProvide the exact git commands needed." },
+  // AI (more)
+  { name: "Brainstorm Ideas", category: "AI", prompt: "Help me brainstorm solutions for:\n\n**Problem:** \n**Constraints:**\n- \n**What I've considered:** \n\nGive me 3-5 different approaches with pros/cons for each." },
+  { name: "Write Documentation", category: "AI", prompt: "Write documentation for:\n\n**Component/API:** \n**Audience:** (developer/end-user)\n**Include:**\n- Overview\n- Quick start\n- API reference\n- Examples\n- Common pitfalls" },
+  { name: "Convert/Translate", category: "AI", prompt: "Convert this code:\n\n```\n\n```\n\n**From:** \n**To:** \n\nPreserve the logic and use idiomatic patterns in the target language." },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -83,6 +100,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Arch: "#bc8cff",
   Git: "#3fb950",
   AI: "#d29922",
+  Ops: "#56d4dd",
 };
 
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {

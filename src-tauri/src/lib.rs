@@ -1,19 +1,28 @@
 mod pty;
+mod watcher;
 
 #[tauri::command]
 fn check_command_exists(command: String) -> Result<String, String> {
     let home = std::env::var("HOME").unwrap_or_default();
-    // Build an expanded PATH that includes common install locations
-    let extra_paths = [
+    let search_dirs = [
         format!("{}/.local/bin", home),
         format!("{}/.cargo/bin", home),
         format!("{}/bin", home),
         "/usr/local/bin".to_string(),
         "/opt/homebrew/bin".to_string(),
+        "/usr/bin".to_string(),
+        "/bin".to_string(),
     ];
+    // Check each directory directly for the binary
+    for dir in &search_dirs {
+        let path = format!("{}/{}", dir, command);
+        if std::path::Path::new(&path).exists() {
+            return Ok(path);
+        }
+    }
+    // Fallback: also check system PATH via `which`
     let sys_path = std::env::var("PATH").unwrap_or_default();
-    let full_path = format!("{}:{}", extra_paths.join(":"), sys_path);
-
+    let full_path = format!("{}:{}", search_dirs.join(":"), sys_path);
     let output = std::process::Command::new("which")
         .arg(&command)
         .env("PATH", &full_path)
@@ -70,11 +79,14 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(pty::PtyManager::new())
+        .manage(watcher::WatcherManager::new())
         .invoke_handler(tauri::generate_handler![
             pty::create_pty,
             pty::write_pty,
             pty::resize_pty,
             pty::kill_pty,
+            watcher::watch_directory,
+            watcher::unwatch_directory,
             check_command_exists,
             check_claude_plugin,
             read_file,
