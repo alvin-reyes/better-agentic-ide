@@ -211,6 +211,7 @@ pub fn run() {
             pty::write_pty,
             pty::resize_pty,
             pty::kill_pty,
+            pty::get_pty_cwd,
             watcher::watch_directory,
             watcher::unwatch_directory,
             check_command_exists,
