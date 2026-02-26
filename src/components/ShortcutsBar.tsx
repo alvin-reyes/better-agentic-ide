@@ -87,7 +87,7 @@ export default function ShortcutsBar() {
           >
             {s.keys}
           </kbd>
-          <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>{s.action}</span>
+          <span style={{ color: "var(--text-secondary)", fontSize: "10px" }}>{s.action}</span>
         </div>
       ))}
     </div>
