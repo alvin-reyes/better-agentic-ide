@@ -63,9 +63,13 @@ export default function Tour() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const done = localStorage.getItem(TOUR_DONE_KEY);
-    if (!done) {
-      setVisible(true);
+    try {
+      const done = localStorage.getItem(TOUR_DONE_KEY);
+      if (!done) {
+        setVisible(true);
+      }
+    } catch {
+      // localStorage may be unavailable; skip tour
     }
   }, []);
 
@@ -78,7 +82,11 @@ export default function Tour() {
 
   const dismiss = () => {
     setVisible(false);
-    localStorage.setItem(TOUR_DONE_KEY, "true");
+    try {
+      localStorage.setItem(TOUR_DONE_KEY, "true");
+    } catch {
+      // localStorage may be unavailable
+    }
   };
 
   const next = () => {
@@ -289,5 +297,9 @@ export default function Tour() {
 
 // Export a function to reset the tour (for settings or manual trigger)
 export function resetTour() {
-  localStorage.removeItem(TOUR_DONE_KEY);
+  try {
+    localStorage.removeItem(TOUR_DONE_KEY);
+  } catch {
+    // localStorage may be unavailable
+  }
 }

@@ -64,6 +64,7 @@ Every action has a keyboard shortcut. No mouse required.
 
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://rustup.rs/) (stable)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — required for AI brainstorming features (`npm install -g @anthropic-ai/claude-code`)
 - macOS (cross-platform support planned)
 
 ### Install & Run

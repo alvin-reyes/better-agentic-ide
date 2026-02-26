@@ -69,10 +69,13 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
   };
 
   // Re-search when options change
-  useEffect(() => {
+  const searchOnOptionsChange = useCallback(() => {
     if (query) doSearch("next", query);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseSensitive, regex, wholeWord]);
+  }, [query, doSearch]);
+
+  useEffect(() => {
+    searchOnOptionsChange();
+  }, [caseSensitive, regex, wholeWord, searchOnOptionsChange]);
 
   const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
     background: active ? "var(--accent-subtle)" : "none",
