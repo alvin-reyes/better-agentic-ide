@@ -42,6 +42,13 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     termRef.current?.focus();
   }, [tabId, paneId, setActivePaneInTab, termRef]);
 
+  // Focus terminal when this pane becomes active (e.g. via keyboard navigation)
+  useEffect(() => {
+    if (isActive && termRef.current) {
+      termRef.current.focus();
+    }
+  }, [isActive, termRef]);
+
   // Listen for Cmd+F to open search — only attach when this pane is active
   useEffect(() => {
     if (!isActive) return;
