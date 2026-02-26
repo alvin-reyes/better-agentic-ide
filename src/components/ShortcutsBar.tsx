@@ -7,6 +7,7 @@ const shortcuts = [
   { keys: "⌘ ⇧ [/]", action: "Prev/next tab" },
   { keys: "⌘ D", action: "Split horiz" },
   { keys: "⌘ ⇧ D", action: "Split vert" },
+  { keys: "⌘ ⇧ W", action: "Close pane" },
   { keys: "⌘ R", action: "Rename tab" },
   { keys: "⌘ B", action: "Brainstorm" },
   { keys: "⌘ J", action: "Scratchpad" },

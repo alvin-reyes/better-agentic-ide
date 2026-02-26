@@ -17,7 +17,7 @@ interface KeybindingActions {
 }
 
 export function useKeybindings(actions: KeybindingActions) {
-  const { addTab, closeTab, setActiveTab, renameTab, splitPane, tabs, activeTabId } =
+  const { addTab, closeTab, setActiveTab, renameTab, splitPane, closePane, tabs, activeTabId } =
     useTabStore();
 
   // Watch for settings changes and refresh terminals
@@ -112,6 +112,14 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
+      // Cmd+Shift+W: Close active split pane
+      if (meta && shift && !alt && (e.key === "w" || e.key === "W")) {
+        e.preventDefault();
+        const tab = tabs.find((t) => t.id === activeTabId);
+        if (tab) closePane(activeTabId, tab.activePaneId);
+        return;
+      }
+
       // Cmd+W: Close tab
       if (meta && !shift && !alt && e.key === "w") {
         e.preventDefault();
@@ -184,5 +192,5 @@ export function useKeybindings(actions: KeybindingActions) {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [actions, addTab, closeTab, setActiveTab, renameTab, splitPane, tabs, activeTabId]);
+  }, [actions, addTab, closeTab, closePane, setActiveTab, renameTab, splitPane, tabs, activeTabId]);
 }
