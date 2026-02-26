@@ -3,8 +3,11 @@ import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
 export default function TabBar() {
-  const { tabs, activeTabId, setActiveTab, addTab, closeTab, renameTab, reorderTabs } =
+  const { tabs, activeTabId, setActiveTab, addTab, renameTab, reorderTabs } =
     useTabStore();
+  const requestCloseTab = (tabId: string) => {
+    window.dispatchEvent(new CustomEvent("request-close-tab", { detail: { tabId } }));
+  };
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -141,7 +144,7 @@ export default function TabBar() {
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  closeTab(tab.id);
+                  requestCloseTab(tab.id);
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = "var(--accent-subtle)";
@@ -239,7 +242,7 @@ export default function TabBar() {
             {[
               { label: "Rename", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) startRename(t.id, t.name); } },
               { label: "Duplicate", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) addTab(t.name + " (copy)"); } },
-              { label: "Close", action: () => { if (tabs.length > 1) closeTab(contextMenu.tabId); }, danger: true },
+              { label: "Close", action: () => { if (tabs.length > 1) requestCloseTab(contextMenu.tabId); }, danger: true },
             ].map((item) => (
               <button
                 key={item.label}

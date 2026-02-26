@@ -144,6 +144,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
       "t", "w", "W", "j", "b", "p", "d", "D", "r", "e", "f", ",",
       "a", "A",  // Agent picker (Cmd+Shift+A)
       "Enter", "[", "]",
+      "ArrowLeft", "ArrowRight",  // Pane navigation
       "1", "2", "3", "4", "5", "6", "7", "8", "9",
     ];
     if (passthrough.includes(e.key)) return false;
@@ -257,5 +258,27 @@ function getSearchAddon(paneId: string): SearchAddon | null {
   return instances.get(paneId)?.searchAddon ?? null;
 }
 
+// Check if a pane's terminal has an active Claude session by scanning recent buffer lines
+function hasActiveProcess(paneId: string): string | null {
+  const inst = instances.get(paneId);
+  if (!inst) return null;
+  const buf = inst.term.buffer.active;
+  const totalLines = buf.length;
+  // Scan the last 50 lines for signs of an active Claude session
+  const startLine = Math.max(0, totalLines - 50);
+  for (let i = totalLines - 1; i >= startLine; i--) {
+    const line = buf.getLine(i)?.translateToString(true) ?? "";
+    // Skip empty lines
+    if (!line.trim()) continue;
+    // If we see "[Process exited]" or a shell prompt ending with $ or %, it's idle
+    if (/\[Process exited\]/.test(line)) return null;
+    // Detect active Claude indicators
+    if (/claude/.test(line.toLowerCase()) && !/\$\s*$/.test(line) && !/%\s*$/.test(line)) {
+      return "Claude";
+    }
+  }
+  return null;
+}
+
 // Export for cleanup when tabs are closed
-export { destroyInstance, refreshAllTerminals, getSearchAddon };
+export { destroyInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess };
