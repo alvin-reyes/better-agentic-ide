@@ -180,7 +180,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
   term.writeln(`${skin}     ██  ▀  ▀  ██     ${accent}██║  ██║██████╔╝███████╗${reset}`);
   term.writeln(`${skin}      ██ ╺━╸ ██      ${accent}╚═╝  ╚═╝╚═════╝ ╚══════╝${reset}`);
   term.writeln(`${skin}       ██▄▄▄██       ${dim}Agentic Development Environment${reset}`);
-  term.writeln(`${shirt}      ▄███████▄      ${dim}v0.3.4  ${green}⌘P${dim} cmds ${green}⌘J${dim} scratchpad ${green}⌘⇧A${dim} agents${reset}`);
+  term.writeln(`${shirt}      ▄███████▄      ${dim}v0.5.0  ${green}⌘P${dim} cmds ${green}⌘J${dim} scratchpad ${green}⌘⇧A${dim} agents${reset}`);
   term.writeln("");
 
   const inst: TerminalInstance = { term, fitAddon, searchAddon, ptyId: null, wrapper };
