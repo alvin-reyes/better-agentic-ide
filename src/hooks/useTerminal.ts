@@ -93,7 +93,7 @@ function getTerminalOptions() {
   };
 }
 
-async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void): Promise<TerminalInstance> {
+async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null): Promise<TerminalInstance> {
   // Create a wrapper div that xterm renders into — lives outside React
   const wrapper = document.createElement("div");
   wrapper.style.width = "100%";
@@ -203,7 +203,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     const ptyId = await invoke<number>("create_pty", {
       rows: term.rows || 24,
       cols: term.cols || 80,
-      cwd: null,
+      cwd: initialCwd || null,
       onEvent,
     });
     inst.ptyId = ptyId;
@@ -278,7 +278,16 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       // Get or create the terminal instance
       let inst = instances.get(paneId);
       if (!inst) {
-        inst = await createInstance(paneId, setPtyId);
+        // Check if pane has an initialCwd (e.g. from split)
+        const panes = useTabStore.getState().tabs.flatMap((t) => {
+          const findPanes = (node: import("../stores/tabStore").PaneNode): import("../stores/tabStore").Pane[] => {
+            if (node.type === "pane") return [node.pane];
+            return node.children.flatMap(findPanes);
+          };
+          return findPanes(t.root);
+        });
+        const pane = panes.find((p) => p.id === paneId);
+        inst = await createInstance(paneId, setPtyId, pane?.initialCwd);
       }
 
       // Move the wrapper element into this container

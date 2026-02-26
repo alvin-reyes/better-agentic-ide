@@ -32,12 +32,24 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       // Split actions
       { id: "split-h", label: "Split Horizontally", shortcut: "Cmd+D", category: "Panes", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) useTabStore.getState().splitPane(activeTabId, tab.activePaneId, "horizontal");
+        if (tab) {
+          import("../hooks/useTerminal").then(({ getPtyCwd }) => {
+            getPtyCwd(tab.activePaneId).then((cwd) => {
+              useTabStore.getState().splitPane(activeTabId, tab.activePaneId, "horizontal", cwd);
+            });
+          });
+        }
         onClose();
       }},
       { id: "split-v", label: "Split Vertically", shortcut: "Cmd+Shift+D", category: "Panes", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) useTabStore.getState().splitPane(activeTabId, tab.activePaneId, "vertical");
+        if (tab) {
+          import("../hooks/useTerminal").then(({ getPtyCwd }) => {
+            getPtyCwd(tab.activePaneId).then((cwd) => {
+              useTabStore.getState().splitPane(activeTabId, tab.activePaneId, "vertical", cwd);
+            });
+          });
+        }
         onClose();
       }},
       { id: "close-pane", label: "Close Pane", shortcut: "Cmd+Shift+W", category: "Panes", action: () => {

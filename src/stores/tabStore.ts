@@ -5,6 +5,7 @@ export type SplitDirection = "horizontal" | "vertical";
 export interface Pane {
   id: string;
   ptyId: number | null;
+  initialCwd?: string | null;
 }
 
 export interface SplitNode {
@@ -38,7 +39,7 @@ interface TabStore {
 
   setActivePaneInTab: (tabId: string, paneId: string) => void;
   setPtyId: (paneId: string, ptyId: number) => void;
-  splitPane: (tabId: string, paneId: string, direction: SplitDirection) => void;
+  splitPane: (tabId: string, paneId: string, direction: SplitDirection, initialCwd?: string | null) => void;
   closePane: (tabId: string, paneId: string) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
 
@@ -111,10 +112,12 @@ function splitPaneInNode(
   node: PaneNode,
   paneId: string,
   direction: SplitDirection,
+  initialCwd?: string | null,
 ): { node: PaneNode; newPaneId: string | null } {
   if (node.type === "pane") {
     if (node.pane.id === paneId) {
       const newPane = createDefaultPane();
+      if (initialCwd) newPane.initialCwd = initialCwd;
       return {
         node: {
           type: "split",
@@ -138,6 +141,7 @@ function splitPaneInNode(
         return { node, newPaneId: null }; // limit reached
       }
       const newPane = createDefaultPane();
+      if (initialCwd) newPane.initialCwd = initialCwd;
       const newChildren = [...node.children];
       newChildren.splice(childIdx + 1, 0, { type: "pane", pane: newPane });
       return {
@@ -153,7 +157,7 @@ function splitPaneInNode(
     if (foundNewPaneId) {
       newChildren.push(child);
     } else {
-      const result = splitPaneInNode(child, paneId, direction);
+      const result = splitPaneInNode(child, paneId, direction, initialCwd);
       newChildren.push(result.node);
       foundNewPaneId = result.newPaneId;
     }
@@ -235,11 +239,11 @@ export const useTabStore = create<TabStore>((set, get) => {
         })),
       })),
 
-    splitPane: (tabId, paneId, direction) => {
+    splitPane: (tabId, paneId, direction, initialCwd) => {
       const state = get();
       const tab = state.tabs.find((t) => t.id === tabId);
       if (!tab) return;
-      const result = splitPaneInNode(tab.root, paneId, direction);
+      const result = splitPaneInNode(tab.root, paneId, direction, initialCwd);
       if (!result.newPaneId) return;
       set((s) => ({
         tabs: s.tabs.map((t) =>
