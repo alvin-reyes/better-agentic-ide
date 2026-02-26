@@ -3,10 +3,12 @@ import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
 export default function TabBar() {
-  const { tabs, activeTabId, setActiveTab, addTab, closeTab, renameTab } =
+  const { tabs, activeTabId, setActiveTab, addTab, closeTab, renameTab, reorderTabs } =
     useTabStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -20,6 +22,16 @@ export default function TabBar() {
     setEditingId(id);
     setEditValue(currentName);
   };
+
+  // Listen for rename-tab custom event (triggered by Cmd+R keybinding)
+  useEffect(() => {
+    const handler = () => {
+      const tab = tabs.find((t) => t.id === activeTabId);
+      if (tab) startRename(tab.id, tab.name);
+    };
+    window.addEventListener("rename-active-tab", handler);
+    return () => window.removeEventListener("rename-active-tab", handler);
+  }, [tabs, activeTabId]);
 
   const commitRename = () => {
     if (editingId && editValue.trim()) {
@@ -48,6 +60,25 @@ export default function TabBar() {
           <div
             key={tab.id}
             className="flex items-center gap-1.5 cursor-pointer text-[13px] relative group"
+            draggable={editingId !== tab.id}
+            onDragStart={(e) => {
+              setDragIndex(idx);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOverIndex(idx);
+            }}
+            onDragLeave={() => setDragOverIndex(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragIndex !== null && dragIndex !== idx) {
+                reorderTabs(dragIndex, idx);
+              }
+              setDragIndex(null);
+              setDragOverIndex(null);
+            }}
+            onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
             style={{
               color: isActive ? "var(--text-primary)" : "var(--text-secondary)",
               backgroundColor: isActive ? "var(--bg-primary)" : "transparent",
@@ -56,6 +87,9 @@ export default function TabBar() {
               fontWeight: isActive ? 500 : 400,
               letterSpacing: "-0.01em",
               transition: "all 0.15s ease",
+              opacity: dragIndex === idx ? 0.5 : 1,
+              borderLeft: dragOverIndex === idx && dragIndex !== null && dragIndex > idx ? "2px solid var(--accent)" : "2px solid transparent",
+              borderRight: dragOverIndex === idx && dragIndex !== null && dragIndex < idx ? "2px solid var(--accent)" : "2px solid transparent",
             }}
             onMouseEnter={(e) => {
               if (!isActive) e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";

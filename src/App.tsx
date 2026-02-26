@@ -5,6 +5,7 @@ import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import SettingsPanel from "./components/SettingsPanel";
 import BrainstormPanel from "./components/BrainstormPanel";
+import Tour from "./components/Tour";
 import { useTabStore } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
@@ -60,14 +61,25 @@ export default function App() {
     invoke("write_pty", { id: ptyId, data }).catch(() => {});
   }, [getActivePtyId]);
 
+  const closeScratchpad = useCallback(() => {
+    scratchpadRef.current?.close();
+  }, []);
+
+  const closeBrainstorm = useCallback(() => {
+    setBrainstormOpen(false);
+  }, []);
+
   useKeybindings({
     toggleScratchpad,
     toggleBrainstorm,
+    closeScratchpad,
+    closeBrainstorm,
     sendScratchpad,
     copyScratchpad,
     saveNoteScratchpad,
     sendEnterToTerminal,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
+    isBrainstormOpen: brainstormOpen,
   });
 
   return (
@@ -86,6 +98,7 @@ export default function App() {
       <Scratchpad ref={scratchpadRef} />
       <ShortcutsBar />
       <SettingsPanel />
+      <Tour />
     </div>
   );
 }

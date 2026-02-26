@@ -39,6 +39,8 @@ interface TabStore {
   setActivePaneInTab: (tabId: string, paneId: string) => void;
   setPtyId: (paneId: string, ptyId: number) => void;
   splitPane: (tabId: string, paneId: string, direction: SplitDirection) => void;
+  closePane: (tabId: string, paneId: string) => void;
+  reorderTabs: (fromIndex: number, toIndex: number) => void;
 
   getActivePane: () => Pane | null;
   getActivePtyId: () => number | null;
@@ -86,6 +88,23 @@ function updatePaneInNode(
   };
 }
 
+function removePaneFromNode(
+  node: PaneNode,
+  paneId: string,
+): PaneNode | null {
+  if (node.type === "pane") {
+    return node.pane.id === paneId ? null : node;
+  }
+  const remaining = node.children
+    .map((c) => removePaneFromNode(c, paneId))
+    .filter((c): c is PaneNode => c !== null);
+  if (remaining.length === 0) return null;
+  if (remaining.length === 1) return remaining[0];
+  return { ...node, children: remaining };
+}
+
+const MAX_SPLITS_PER_DIRECTION = 4;
+
 function splitPaneInNode(
   node: PaneNode,
   paneId: string,
@@ -105,6 +124,27 @@ function splitPaneInNode(
     }
     return { node, newPaneId: null };
   }
+
+  // If this container matches the split direction and the target pane is a direct child,
+  // enforce the max split limit by adding to this container instead of nesting
+  if (node.direction === direction) {
+    const childIdx = node.children.findIndex(
+      (c) => c.type === "pane" && c.pane.id === paneId,
+    );
+    if (childIdx !== -1) {
+      if (node.children.length >= MAX_SPLITS_PER_DIRECTION) {
+        return { node, newPaneId: null }; // limit reached
+      }
+      const newPane = createDefaultPane();
+      const newChildren = [...node.children];
+      newChildren.splice(childIdx + 1, 0, { type: "pane", pane: newPane });
+      return {
+        node: { ...node, children: newChildren },
+        newPaneId: newPane.id,
+      };
+    }
+  }
+
   const newChildren: PaneNode[] = [];
   let foundNewPaneId: string | null = null;
   for (const child of node.children) {
@@ -206,6 +246,39 @@ export const useTabStore = create<TabStore>((set, get) => {
             : t,
         ),
       }));
+    },
+
+    closePane: (tabId, paneId) => {
+      const state = get();
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      const allPanes = findAllPanes(tab.root);
+      if (allPanes.length <= 1) return; // don't close the last pane
+      // Destroy the terminal instance
+      import("../hooks/useTerminal").then(({ destroyInstance }) => {
+        destroyInstance(paneId);
+      });
+      const newRoot = removePaneFromNode(tab.root, paneId);
+      if (!newRoot) return;
+      // Pick a new active pane if the closed one was active
+      const remainingPanes = findAllPanes(newRoot);
+      const newActive = tab.activePaneId === paneId
+        ? remainingPanes[0]?.id ?? tab.activePaneId
+        : tab.activePaneId;
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId ? { ...t, root: newRoot, activePaneId: newActive } : t,
+        ),
+      }));
+    },
+
+    reorderTabs: (fromIndex, toIndex) => {
+      set((s) => {
+        const newTabs = [...s.tabs];
+        const [moved] = newTabs.splice(fromIndex, 1);
+        newTabs.splice(toIndex, 0, moved);
+        return { tabs: newTabs };
+      });
     },
 
     getActivePane: () => {

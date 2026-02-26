@@ -7,6 +7,7 @@ const shortcuts = [
   { keys: "⌘ ⇧ [/]", action: "Prev/next tab" },
   { keys: "⌘ D", action: "Split horiz" },
   { keys: "⌘ ⇧ D", action: "Split vert" },
+  { keys: "⌘ ⇧ W", action: "Close pane" },
   { keys: "⌘ R", action: "Rename tab" },
   { keys: "⌘ B", action: "Brainstorm" },
   { keys: "⌘ J", action: "Scratchpad" },
@@ -14,6 +15,7 @@ const shortcuts = [
   { keys: "⌘ S", action: "Save note" },
   { keys: "⌘ E", action: "Send Enter ↵" },
   { keys: "⇧ ⌘ ↵", action: "Copy text" },
+  { keys: "⌘ F", action: "Find" },
   { keys: "⌘ ,", action: "Settings" },
   { keys: "Esc", action: "Close panel" },
 ];
