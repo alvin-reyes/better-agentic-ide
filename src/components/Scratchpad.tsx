@@ -48,6 +48,10 @@ function persistNotes(notes: SavedNote[]) {
   localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 }
 
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 600;
+const DEFAULT_HEIGHT = 200;
+
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
   const [text, setText] = useState("");
@@ -58,9 +62,41 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [notes, setNotes] = useState<SavedNote[]>(loadNotes);
   const [showNotes, setShowNotes] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const draggingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(DEFAULT_HEIGHT);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(false);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
+
+  // Drag-to-resize handler
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    startYRef.current = e.clientY;
+    startHeightRef.current = height;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const delta = startYRef.current - ev.clientY;
+      const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeightRef.current + delta));
+      setHeight(newHeight);
+    };
+
+    const onUp = () => {
+      draggingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [height]);
 
   const toggle = useCallback(() => {
     setIsOpen((prev) => !prev);
@@ -186,17 +222,49 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
 
   if (!isOpen) return null;
 
+  const effectiveHeight = (showHistory || showNotes) ? Math.max(height, 280) : height;
+
   return (
     <div
       style={{
         backgroundColor: "var(--bg-secondary)",
         borderTop: "1px solid var(--border)",
-        height: (showHistory || showNotes) ? "320px" : "200px",
+        height: `${effectiveHeight}px`,
         display: "flex",
         flexDirection: "column",
-        transition: "height 0.2s ease",
+        position: "relative",
       }}
     >
+      {/* Resize handle */}
+      <div
+        onMouseDown={onDragStart}
+        style={{
+          position: "absolute",
+          top: "-3px",
+          left: 0,
+          right: 0,
+          height: "6px",
+          cursor: "row-resize",
+          zIndex: 10,
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget.firstChild as HTMLElement).style.opacity = "1";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget.firstChild as HTMLElement).style.opacity = "0";
+        }}
+      >
+        <div style={{
+          width: "40px",
+          height: "3px",
+          borderRadius: "2px",
+          backgroundColor: "var(--text-muted)",
+          margin: "2px auto 0",
+          opacity: 0,
+          transition: "opacity 0.15s",
+        }} />
+      </div>
+
       {/* Header */}
       <div
         style={{
