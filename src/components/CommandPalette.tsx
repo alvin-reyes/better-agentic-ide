@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTabStore } from "../stores/tabStore";
-import { useSettingsStore } from "../stores/settingsStore";
+import { useSettingsStore, themePresets } from "../stores/settingsStore";
 
 interface PaletteItem {
   id: string;
@@ -53,27 +53,14 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onToggleBr
       { id: "scratchpad", label: "Toggle Scratchpad", shortcut: "Cmd+J", category: "Panels", action: () => { onToggleScratchpad(); onClose(); } },
       { id: "brainstorm", label: "Toggle Brainstorm", shortcut: "Cmd+B", category: "Panels", action: () => { onToggleBrainstorm(); onClose(); } },
       { id: "settings", label: "Open Settings", shortcut: "Cmd+,", category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
-      { id: "search", label: "Search in Terminal", shortcut: "Cmd+F", category: "Panels", action: () => { onClose(); } },
+      { id: "search", label: "Search in Terminal", shortcut: "Cmd+F", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("open-terminal-search")); onClose(); } },
       // Theme shortcuts
-      ...[
-        { id: "github-dark", name: "GitHub Dark" },
-        { id: "dracula", name: "Dracula" },
-        { id: "monokai", name: "Monokai Pro" },
-        { id: "nord", name: "Nord" },
-        { id: "catppuccin", name: "Catppuccin Mocha" },
-        { id: "solarized-dark", name: "Solarized Dark" },
-        { id: "tokyo-night", name: "Tokyo Night" },
-        { id: "one-dark", name: "One Dark" },
-      ].map((theme) => ({
+      ...themePresets.map((theme) => ({
         id: `theme-${theme.id}`,
         label: `Theme: ${theme.name}`,
         category: "Themes",
         action: () => {
-          const s = useSettingsStore.getState();
-          s.setTheme(theme.id);
-          import("../stores/settingsStore").then(({ applyThemeToDOM }) => {
-            applyThemeToDOM(useSettingsStore.getState().getActiveTheme());
-          });
+          useSettingsStore.getState().setTheme(theme.id);
           onClose();
         },
       })),

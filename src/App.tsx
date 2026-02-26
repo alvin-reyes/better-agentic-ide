@@ -34,6 +34,11 @@ export default function App() {
     return () => window.removeEventListener("toggle-zoom-pane", handler);
   }, []);
 
+  // Reset zoom when switching tabs
+  useEffect(() => {
+    setZoomedPane(false);
+  }, [activeTabId]);
+
   const toggleCommandPalette = useCallback(() => {
     setPaletteOpen((prev) => !prev);
   }, []);

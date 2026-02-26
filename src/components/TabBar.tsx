@@ -225,8 +225,8 @@ export default function TabBar() {
           <div
             style={{
               position: "fixed",
-              left: contextMenu.x,
-              top: contextMenu.y,
+              left: Math.min(contextMenu.x, window.innerWidth - 180),
+              top: Math.min(contextMenu.y, window.innerHeight - 120),
               zIndex: 1000,
               backgroundColor: "var(--bg-secondary)",
               border: "1px solid var(--border-strong)",
@@ -238,7 +238,7 @@ export default function TabBar() {
           >
             {[
               { label: "Rename", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) startRename(t.id, t.name); } },
-              { label: "Duplicate", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) addTab(t.name + " (copy)"); } },
+              { label: "New Tab (copy name)", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) addTab(t.name + " (copy)"); } },
               { label: "Close", action: () => { if (tabs.length > 1) closeTab(contextMenu.tabId); }, danger: true },
             ].map((item) => (
               <button
