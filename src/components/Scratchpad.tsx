@@ -3,6 +3,32 @@ import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
 
+// Web Speech API types
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: Event & { error: string }) => void) | null;
+  onstart: (() => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+  }
+}
+
 export interface ScratchpadHandle {
   toggle: () => void;
   send: () => void;
@@ -123,12 +149,85 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [savedFlash, setSavedFlash] = useState(false);
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const draggingRef = useRef(false);
   const startYRef = useRef(0);
   const startHeightRef = useRef(DEFAULT_HEIGHT);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(false);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
+
+  // Check if Speech Recognition is available
+  const speechAvailable = typeof window !== "undefined" && (
+    "SpeechRecognition" in window || "webkitSpeechRecognition" in window
+  );
+
+  const toggleVoice = useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    if (!speechAvailable) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    let finalTranscript = "";
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + " ";
+        } else {
+          interim = transcript;
+        }
+      }
+      // Append finalized text + show interim preview
+      setText((prev) => {
+        const base = prev.endsWith("\n") || prev === "" ? prev : prev + " ";
+        const finalized = finalTranscript;
+        return base + finalized + (interim ? interim : "");
+      });
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+      // Clean up: commit any final transcript
+      if (finalTranscript.trim()) {
+        setText((prev) => prev.trimEnd() + " ");
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.warn("Speech recognition error:", event.error);
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      finalTranscript = "";
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [isListening, speechAvailable]);
+
+  // Cleanup speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.abort();
+    };
+  }, []);
 
   // Drag-to-resize handler — also handle blur/visibility to clean up interrupted drags
   const onDragStart = useCallback((e: React.MouseEvent) => {
@@ -1073,8 +1172,52 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             Send ↵
             <kbd style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>⌘E</kbd>
           </button>
+          {speechAvailable && (
+            <button
+              onClick={toggleVoice}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "12px",
+                fontWeight: 500,
+                border: isListening ? "1px solid #ef4444" : "1px solid var(--border-strong)",
+                cursor: "pointer",
+                backgroundColor: isListening ? "rgba(239, 68, 68, 0.15)" : "var(--bg-elevated)",
+                color: isListening ? "#ef4444" : "var(--text-secondary)",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                animation: isListening ? "voice-pulse 1.5s ease-in-out infinite" : "none",
+              }}
+              onMouseEnter={(e) => {
+                if (!isListening) {
+                  e.currentTarget.style.backgroundColor = "var(--bg-surface)";
+                  e.currentTarget.style.color = "var(--text-primary)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isListening) {
+                  e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+                  e.currentTarget.style.color = "var(--text-secondary)";
+                }
+              }}
+              title={isListening ? "Stop listening" : "Start voice dictation"}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <rect x="5.5" y="1" width="5" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M3 7.5C3 10.2614 5.23858 12.5 8 12.5C10.7614 12.5 13 10.2614 13 7.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <path d="M8 12.5V15M6 15H10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+              {isListening ? "Listening..." : "Voice"}
+            </button>
+          )}
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+            {isListening && (
+              <span style={{ color: "#ef4444", marginRight: "8px" }}>
+                ● REC
+              </span>
+            )}
             {text.length > 0 ? `${text.length} chars` : ""}
           </span>
         </div>
