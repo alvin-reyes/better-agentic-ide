@@ -42,6 +42,8 @@ interface TabStore {
   closePane: (tabId: string, paneId: string) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
 
+  focusNextPane: (tabId: string) => void;
+  focusPrevPane: (tabId: string) => void;
   getActivePane: () => Pane | null;
   getActivePtyId: () => number | null;
 }
@@ -279,6 +281,36 @@ export const useTabStore = create<TabStore>((set, get) => {
         newTabs.splice(toIndex, 0, moved);
         return { tabs: newTabs };
       });
+    },
+
+    focusNextPane: (tabId) => {
+      const state = get();
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      const allPanes = findAllPanes(tab.root);
+      if (allPanes.length <= 1) return;
+      const idx = allPanes.findIndex((p) => p.id === tab.activePaneId);
+      const next = (idx + 1) % allPanes.length;
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId ? { ...t, activePaneId: allPanes[next].id } : t,
+        ),
+      }));
+    },
+
+    focusPrevPane: (tabId) => {
+      const state = get();
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (!tab) return;
+      const allPanes = findAllPanes(tab.root);
+      if (allPanes.length <= 1) return;
+      const idx = allPanes.findIndex((p) => p.id === tab.activePaneId);
+      const prev = (idx - 1 + allPanes.length) % allPanes.length;
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId ? { ...t, activePaneId: allPanes[prev].id } : t,
+        ),
+      }));
     },
 
     getActivePane: () => {

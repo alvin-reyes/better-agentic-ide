@@ -19,7 +19,7 @@ interface KeybindingActions {
 }
 
 export function useKeybindings(actions: KeybindingActions) {
-  const { addTab, closeTab, setActiveTab, renameTab, splitPane, closePane, tabs, activeTabId } =
+  const { addTab, closeTab, setActiveTab, renameTab, splitPane, closePane, focusNextPane, focusPrevPane, tabs, activeTabId } =
     useTabStore();
 
   // Watch for settings changes and refresh terminals
@@ -192,6 +192,17 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
+      // Cmd+Arrow Left/Right: Navigate between panes (when scratchpad is closed)
+      if (meta && !shift && !alt && (e.key === "ArrowLeft" || e.key === "ArrowRight") && !actions.isScratchpadOpen) {
+        e.preventDefault();
+        if (e.key === "ArrowRight") {
+          focusNextPane(activeTabId);
+        } else {
+          focusPrevPane(activeTabId);
+        }
+        return;
+      }
+
       // Escape: Close open panels (settings > brainstorm > scratchpad) and focus terminal
       if (!meta && !shift && !alt && e.key === "Escape") {
         const settings = useSettingsStore.getState();
@@ -215,5 +226,5 @@ export function useKeybindings(actions: KeybindingActions) {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [actions, addTab, closeTab, closePane, setActiveTab, renameTab, splitPane, tabs, activeTabId]);
+  }, [actions, addTab, closeTab, closePane, setActiveTab, renameTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId]);
 }
