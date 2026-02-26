@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { isPaneActive } from "../hooks/useTerminal";
 
 export default function TabBar() {
   const { tabs, activeTabId, setActiveTab, addTab, renameTab, reorderTabs } =
@@ -13,7 +14,25 @@ export default function TabBar() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
+  const [activeTabs, setActiveTabs] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Poll activity state every second
+  useEffect(() => {
+    const check = () => {
+      const active = new Set<string>();
+      for (const tab of tabs) {
+        const panes = findAllPanes(tab.root);
+        if (panes.some((p) => isPaneActive(p.id))) {
+          active.add(tab.id);
+        }
+      }
+      setActiveTabs(active);
+    };
+    check();
+    const interval = setInterval(check, 1000);
+    return () => clearInterval(interval);
+  }, [tabs]);
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -108,9 +127,22 @@ export default function TabBar() {
               setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
             }}
           >
+            {/* Activity indicator */}
+            {activeTabs.has(tab.id) && !isActive && (
+              <div
+                className="activity-pulse"
+                style={{
+                  width: "6px",
+                  height: "6px",
+                  borderRadius: "50%",
+                  backgroundColor: "#3fb950",
+                  flexShrink: 0,
+                }}
+              />
+            )}
             {/* Terminal icon */}
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ opacity: isActive ? 0.9 : 0.4, flexShrink: 0 }}>
-              <path d="M5.5 4L9.5 8L5.5 12" stroke={isActive ? "var(--accent)" : "currentColor"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.5 4L9.5 8L5.5 12" stroke={isActive && activeTabs.has(tab.id) ? "#3fb950" : isActive ? "var(--accent)" : "currentColor"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
 
             <span className="text-[11px] font-mono" style={{ opacity: 0.35 }}>{idx + 1}</span>

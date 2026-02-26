@@ -26,6 +26,20 @@ interface TerminalInstance {
 
 const instances = new Map<string, TerminalInstance>();
 
+// Activity tracking: timestamp of last output per pane
+const lastActivity = new Map<string, number>();
+const ACTIVITY_TIMEOUT = 3000; // 3 seconds of no output = idle
+
+function markActivity(paneId: string) {
+  lastActivity.set(paneId, Date.now());
+}
+
+function isPaneActive(paneId: string): boolean {
+  const last = lastActivity.get(paneId);
+  if (!last) return false;
+  return Date.now() - last < ACTIVITY_TIMEOUT;
+}
+
 function destroyInstance(paneId: string) {
   const inst = instances.get(paneId);
   if (!inst) return;
@@ -115,6 +129,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
   onEvent.onmessage = (event: PtyEvent) => {
     if (event.type === "output" && event.data) {
       term.write(new Uint8Array(event.data));
+      markActivity(paneId);
     } else if (event.type === "exit") {
       term.writeln("\r\n\x1b[38;5;241m[Process exited]\x1b[0m");
     } else if (event.type === "error") {
@@ -258,6 +273,17 @@ function getSearchAddon(paneId: string): SearchAddon | null {
   return instances.get(paneId)?.searchAddon ?? null;
 }
 
+// Get CWD for a PTY instance
+async function getPtyCwd(paneId: string): Promise<string | null> {
+  const inst = instances.get(paneId);
+  if (!inst || inst.ptyId === null) return null;
+  try {
+    return await invoke<string>("get_pty_cwd", { id: inst.ptyId });
+  } catch {
+    return null;
+  }
+}
+
 // Check if a pane's terminal has an active Claude session by scanning recent buffer lines
 function hasActiveProcess(paneId: string): string | null {
   const inst = instances.get(paneId);
@@ -281,4 +307,4 @@ function hasActiveProcess(paneId: string): string | null {
 }
 
 // Export for cleanup when tabs are closed
-export { destroyInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess };
+export { destroyInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd };

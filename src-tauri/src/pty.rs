@@ -8,6 +8,7 @@ pub struct PtyInstance {
     writer: Box<dyn Write + Send>,
     _child: Box<dyn portable_pty::Child + Send + Sync>,
     master: Box<dyn portable_pty::MasterPty + Send>,
+    pid: Option<u32>,
 }
 
 pub struct PtyManager {
@@ -79,6 +80,7 @@ pub fn create_pty(
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| format!("spawn failed: {}", e))?;
+    let child_pid = child.process_id();
     drop(pair.slave);
 
     let writer = pair.master.take_writer().map_err(|e| format!("take_writer failed: {}", e))?;
@@ -99,6 +101,7 @@ pub fn create_pty(
                 writer,
                 _child: child,
                 master: pair.master,
+                pid: child_pid,
             },
         );
     }
@@ -174,4 +177,52 @@ pub fn kill_pty(state: tauri::State<'_, PtyManager>, id: u32) -> Result<(), Stri
     let mut instances = state.instances.lock().unwrap();
     instances.remove(&id);
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_pty_cwd(state: tauri::State<'_, PtyManager>, id: u32) -> Result<String, String> {
+    let instances = state.instances.lock().unwrap();
+    let instance = instances.get(&id).ok_or("PTY not found")?;
+    let pid = instance.pid.ok_or("No PID")?;
+
+    // On macOS, use lsof to get the CWD of the foreground process group
+    // First try to find the foreground child process, fall back to shell PID
+    let fg_pid = get_foreground_pid(pid).unwrap_or(pid);
+
+    let output = std::process::Command::new("/usr/bin/lsof")
+        .args(["-a", "-d", "cwd", "-p", &fg_pid.to_string(), "-Fn"])
+        .output()
+        .map_err(|e| format!("lsof failed: {}", e))?;
+
+    if !output.status.success() {
+        return Err("lsof returned error".to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if let Some(path) = line.strip_prefix('n') {
+            return Ok(path.to_string());
+        }
+    }
+    Err("CWD not found in lsof output".to_string())
+}
+
+/// Get the foreground process of a shell by finding its child processes
+fn get_foreground_pid(shell_pid: u32) -> Option<u32> {
+    // Use pgrep to find child processes of the shell
+    let output = std::process::Command::new("/usr/bin/pgrep")
+        .args(["-P", &shell_pid.to_string()])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Get the last child (most recently spawned foreground process)
+    stdout
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .last()
 }
