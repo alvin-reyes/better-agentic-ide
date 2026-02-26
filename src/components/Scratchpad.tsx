@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
 
 export interface ScratchpadHandle {
@@ -174,38 +175,117 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
   }, [getActivePtyId]);
 
-  // Handle image paste from clipboard
+  // Save image from base64 data
+  const saveImageFromBase64 = useCallback(async (base64: string, ext: string = "png") => {
+    try {
+      const tempPath = await invoke<string>("save_temp_image", {
+        base64Data: base64,
+        extension: ext,
+      });
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const dataUrl = `data:image/${ext};base64,${base64}`;
+      setPastedImages((prev) => [...prev, { id, dataUrl, tempPath }]);
+    } catch (err) {
+      console.error("Failed to save image:", err);
+    }
+  }, []);
+
+  // Save image from a File/Blob (drag-and-drop)
+  const saveImageBlob = useCallback(async (blob: File | Blob) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1];
+      const ext = blob.type?.split("/")[1]?.replace("jpeg", "jpg") || "png";
+      await saveImageFromBase64(base64, ext);
+    };
+    reader.readAsDataURL(blob);
+  }, [saveImageFromBase64]);
+
+  // Paste from clipboard using Tauri clipboard plugin
+  const pasteImageFromClipboard = useCallback(async () => {
+    try {
+      const img = await readImage();
+      // readImage returns an Image object with rgba() and size()
+      const rgba = await img.rgba();
+      const width = (img as unknown as { width: number }).width;
+      const height = (img as unknown as { height: number }).height;
+
+      // Convert RGBA to PNG using canvas
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return false;
+
+      const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
+      ctx.putImageData(imageData, 0, 0);
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const base64 = dataUrl.split(",")[1];
+      await saveImageFromBase64(base64, "png");
+      return true;
+    } catch {
+      // No image in clipboard — that's fine
+      return false;
+    }
+  }, [saveImageFromBase64]);
+
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+    const clipboardData = e.clipboardData;
 
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith("image/")) {
-        e.preventDefault();
-        const blob = item.getAsFile();
-        if (!blob) continue;
-
-        // Convert to base64 data URL for preview
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const dataUrl = reader.result as string;
-          // Extract base64 data and save to temp file via Rust
-          const base64 = dataUrl.split(",")[1];
-          const ext = item.type.split("/")[1] || "png";
-          try {
-            const tempPath = await invoke<string>("save_temp_image", {
-              base64Data: base64,
-              extension: ext,
-            });
-            const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-            setPastedImages((prev) => [...prev, { id, dataUrl, tempPath }]);
-          } catch (err) {
-            console.error("Failed to save pasted image:", err);
-          }
-        };
-        reader.readAsDataURL(blob);
+    // First try standard web clipboard (for files dragged/pasted from browser)
+    if (clipboardData?.files && clipboardData.files.length > 0) {
+      for (const file of Array.from(clipboardData.files)) {
+        if (file.type.startsWith("image/")) {
+          e.preventDefault();
+          await saveImageBlob(file);
+          return;
+        }
       }
     }
+    if (clipboardData?.items) {
+      for (const item of Array.from(clipboardData.items)) {
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const blob = item.getAsFile();
+          if (blob) {
+            await saveImageBlob(blob);
+            return;
+          }
+        }
+      }
+    }
+
+    // Fallback: use Tauri clipboard plugin (handles macOS screenshots, system copies)
+    // Only try if the paste event didn't have text content
+    const hasText = clipboardData?.types?.includes("text/plain");
+    if (!hasText) {
+      e.preventDefault();
+      const success = await pasteImageFromClipboard();
+      if (!success) {
+        // No image found anywhere — let the default paste behavior happen
+        // (but we already prevented default, so nothing happens)
+      }
+    }
+  }, [saveImageBlob, pasteImageFromClipboard]);
+
+  // Handle drag-and-drop of image files
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith("image/")) {
+        await saveImageBlob(file);
+      }
+    }
+  }, [saveImageBlob]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   }, []);
 
   const removeImage = useCallback((id: string) => {
@@ -762,7 +842,9 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             }
           }}
           onPaste={handlePaste}
-          placeholder="Type your thoughts here... press ⌘+Enter to send directly to the active terminal. Paste images with ⌘V."
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          placeholder="Type your thoughts here... ⌘+Enter to send to terminal. Paste or drop images here."
           style={{
             flex: 1,
             resize: "none",
