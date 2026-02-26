@@ -953,26 +953,26 @@
   <!-- Getting Started -->
   <section class="getting-started" id="install">
     <div class="container">
-      <h2>Get started in 3 steps</h2>
-      <p class="subtitle">Clone, build, launch. That's it.</p>
+      <h2>Install</h2>
+      <p class="subtitle">One command with Homebrew, or download the installer.</p>
       <div class="steps">
         <div class="step">
-          <div class="step-number">1</div>
-          <h3>Clone the repo</h3>
-          <p>Grab the source and install dependencies.</p>
-          <code>git clone https://github.com/alvin-reyes/better-agentic-ide.git<br>cd better-agentic-ide && npm install</code>
+          <div class="step-number">🍺</div>
+          <h3>Homebrew (recommended)</h3>
+          <p>No Gatekeeper warnings. Handles everything automatically.</p>
+          <code>brew install --cask alvin-reyes/tap/ade</code>
         </div>
         <div class="step">
-          <div class="step-number">2</div>
-          <h3>Build the app</h3>
+          <div class="step-number">📦</div>
+          <h3>Download installer</h3>
+          <p>macOS (.dmg), Windows (.msi / .exe), Linux (.deb / .AppImage).</p>
+          <code><a href="https://github.com/alvin-reyes/better-agentic-ide/releases" style="color: var(--accent); text-decoration: none;">Download from GitHub Releases →</a></code>
+        </div>
+        <div class="step">
+          <div class="step-number">🔧</div>
+          <h3>Build from source</h3>
           <p>Requires <a href="https://rustup.rs/">Rust</a>, Node.js 18+, and <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> for AI features.</p>
-          <code>npm run tauri build</code>
-        </div>
-        <div class="step">
-          <div class="step-number">3</div>
-          <h3>Launch</h3>
-          <p>Open the built app or run in dev mode.</p>
-          <code>npm run tauri dev</code>
+          <code>git clone https://github.com/alvin-reyes/better-agentic-ide.git<br>cd better-agentic-ide && npm install<br>npm run tauri dev</code>
         </div>
       </div>
     </div>
