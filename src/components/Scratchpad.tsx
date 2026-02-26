@@ -48,6 +48,35 @@ function persistNotes(notes: SavedNote[]) {
   localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 }
 
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 600;
+const DEFAULT_HEIGHT = 200;
+
+interface PromptTemplate {
+  name: string;
+  category: string;
+  prompt: string;
+}
+
+const PROMPT_TEMPLATES: PromptTemplate[] = [
+  // Code Generation
+  { name: "Implement Feature", category: "Code", prompt: "Implement the following feature:\n\n**Feature:** \n**Requirements:**\n- \n**Files to modify:**\n- \n\nPlease write clean, well-tested code." },
+  { name: "Write Tests", category: "Code", prompt: "Write comprehensive tests for the following:\n\n**Module/Function:** \n**Test cases to cover:**\n- Happy path\n- Edge cases\n- Error handling\n\nUse the existing test framework in this project." },
+  { name: "Refactor Code", category: "Code", prompt: "Refactor the following code to improve:\n\n**File:** \n**Issues:** \n**Goals:**\n- Better readability\n- DRY principles\n- Performance\n\nKeep the same behavior, just improve the implementation." },
+  { name: "Fix Bug", category: "Debug", prompt: "Fix the following bug:\n\n**Bug description:** \n**Steps to reproduce:**\n1. \n**Expected behavior:** \n**Actual behavior:** \n\nPlease identify the root cause and provide a fix." },
+  { name: "Explain Code", category: "Debug", prompt: "Explain this code in detail:\n\n```\n\n```\n\nCover:\n- What it does\n- How it works step by step\n- Any potential issues or improvements" },
+  { name: "Debug Error", category: "Debug", prompt: "I'm getting this error:\n\n```\n\n```\n\n**Context:** \n**What I've tried:** \n\nPlease help me understand and fix this error." },
+  // Architecture
+  { name: "Design Component", category: "Arch", prompt: "Design a component/module for:\n\n**Purpose:** \n**Inputs:** \n**Outputs:** \n**Constraints:**\n- \n\nProvide the interface/API design and implementation approach." },
+  { name: "Code Review", category: "Arch", prompt: "Review the following code changes:\n\n**Files changed:** \n**Purpose of changes:** \n\nCheck for:\n- Correctness\n- Security issues\n- Performance\n- Code style\n- Edge cases" },
+  // Git / DevOps
+  { name: "Write Commit", category: "Git", prompt: "Write a commit message for these changes:\n\n**Changes made:**\n- \n\nUse conventional commits format (feat/fix/refactor/docs/chore)." },
+  { name: "Write PR Description", category: "Git", prompt: "Write a pull request description:\n\n**Title:** \n**Changes:**\n- \n**Testing:**\n- \n**Screenshots:** (if applicable)" },
+  // AI Agent
+  { name: "Spec Document", category: "AI", prompt: "Write a technical specification for:\n\n**Feature:** \n**Goal:** \n\nInclude:\n- Overview\n- Technical approach\n- API design\n- Data model\n- Edge cases\n- Testing strategy" },
+  { name: "Step-by-Step Plan", category: "AI", prompt: "Create a step-by-step implementation plan for:\n\n**Task:** \n\nBreak it down into small, testable steps. For each step:\n1. What to do\n2. Which files to touch\n3. How to verify it works" },
+];
+
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
   const [text, setText] = useState("");
@@ -57,10 +86,43 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [showHistory, setShowHistory] = useState(false);
   const [notes, setNotes] = useState<SavedNote[]>(loadNotes);
   const [showNotes, setShowNotes] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const draggingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(DEFAULT_HEIGHT);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(false);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
+
+  // Drag-to-resize handler
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    startYRef.current = e.clientY;
+    startHeightRef.current = height;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const delta = startYRef.current - ev.clientY;
+      const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeightRef.current + delta));
+      setHeight(newHeight);
+    };
+
+    const onUp = () => {
+      draggingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [height]);
 
   const toggle = useCallback(() => {
     setIsOpen((prev) => !prev);
@@ -186,17 +248,49 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
 
   if (!isOpen) return null;
 
+  const effectiveHeight = (showHistory || showNotes || showTemplates) ? Math.max(height, 320) : height;
+
   return (
     <div
       style={{
         backgroundColor: "var(--bg-secondary)",
         borderTop: "1px solid var(--border)",
-        height: (showHistory || showNotes) ? "320px" : "200px",
+        height: `${effectiveHeight}px`,
         display: "flex",
         flexDirection: "column",
-        transition: "height 0.2s ease",
+        position: "relative",
       }}
     >
+      {/* Resize handle */}
+      <div
+        onMouseDown={onDragStart}
+        style={{
+          position: "absolute",
+          top: "-3px",
+          left: 0,
+          right: 0,
+          height: "6px",
+          cursor: "row-resize",
+          zIndex: 10,
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget.firstChild as HTMLElement).style.opacity = "1";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget.firstChild as HTMLElement).style.opacity = "0";
+        }}
+      >
+        <div style={{
+          width: "40px",
+          height: "3px",
+          borderRadius: "2px",
+          backgroundColor: "var(--text-muted)",
+          margin: "2px auto 0",
+          opacity: 0,
+          transition: "opacity 0.15s",
+        }} />
+      </div>
+
       {/* Header */}
       <div
         style={{
@@ -216,7 +310,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             Thoughts
           </span>
           <button
-            onClick={() => { setShowHistory(!showHistory); if (showNotes) setShowNotes(false); }}
+            onClick={() => { setShowHistory(!showHistory); if (showNotes) setShowNotes(false); if (showTemplates) setShowTemplates(false); }}
             style={{
               background: showHistory ? "var(--accent-subtle)" : "none",
               border: "1px solid var(--border)",
@@ -244,7 +338,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             History ({history.length})
           </button>
           <button
-            onClick={() => { setShowNotes(!showNotes); if (showHistory) setShowHistory(false); }}
+            onClick={() => { setShowNotes(!showNotes); if (showHistory) setShowHistory(false); if (showTemplates) setShowTemplates(false); }}
             style={{
               background: showNotes ? "var(--accent-subtle)" : "none",
               border: "1px solid var(--border)",
@@ -270,6 +364,33 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               <path d="M5.5 5.5H10.5M5.5 8H10.5M5.5 10.5H8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
             </svg>
             Notes ({notes.length})
+          </button>
+          <button
+            onClick={() => { setShowTemplates(!showTemplates); if (showHistory) setShowHistory(false); if (showNotes) setShowNotes(false); }}
+            style={{
+              background: showTemplates ? "var(--accent-subtle)" : "none",
+              border: "1px solid var(--border)",
+              color: showTemplates ? "var(--accent)" : "var(--text-muted)",
+              cursor: "pointer",
+              padding: "2px 8px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "11px",
+              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            onMouseEnter={(e) => {
+              if (!showTemplates) e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+            }}
+            onMouseLeave={(e) => {
+              if (!showTemplates) e.currentTarget.style.backgroundColor = "transparent";
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M2 3H14M2 7H10M2 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Templates
           </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -443,6 +564,67 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Templates panel */}
+      {showTemplates && (
+        <div
+          style={{
+            borderBottom: "1px solid var(--border)",
+            maxHeight: "160px",
+            overflowY: "auto",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 12px" }}>
+            {PROMPT_TEMPLATES.map((tmpl) => (
+              <button
+                key={tmpl.name}
+                onClick={() => {
+                  setText(tmpl.prompt);
+                  setShowTemplates(false);
+                  textareaRef.current?.focus();
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  border: "1px solid var(--border)",
+                  cursor: "pointer",
+                  backgroundColor: "var(--bg-tertiary)",
+                  color: "var(--text-secondary)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+                  e.currentTarget.style.borderColor = "var(--accent)";
+                  e.currentTarget.style.color = "var(--text-primary)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.color = "var(--text-secondary)";
+                }}
+              >
+                <span style={{
+                  fontSize: "9px",
+                  fontWeight: 700,
+                  fontFamily: "monospace",
+                  color: tmpl.category === "Code" ? "var(--accent)" : tmpl.category === "Debug" ? "#ff7b72" : tmpl.category === "Arch" ? "#bc8cff" : tmpl.category === "Git" ? "#3fb950" : "#d29922",
+                  backgroundColor: (tmpl.category === "Code" ? "var(--accent)" : tmpl.category === "Debug" ? "#ff7b72" : tmpl.category === "Arch" ? "#bc8cff" : tmpl.category === "Git" ? "#3fb950" : "#d29922") + "20",
+                  padding: "1px 4px",
+                  borderRadius: "3px",
+                }}>
+                  {tmpl.category}
+                </span>
+                {tmpl.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

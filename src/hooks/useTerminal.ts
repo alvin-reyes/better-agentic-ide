@@ -2,7 +2,10 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { SearchAddon } from "@xterm/addon-search";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
@@ -16,6 +19,7 @@ interface PtyEvent {
 interface TerminalInstance {
   term: Terminal;
   fitAddon: FitAddon;
+  searchAddon: SearchAddon;
   ptyId: number | null;
   wrapper: HTMLDivElement; // the DOM element xterm renders into
 }
@@ -85,6 +89,15 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
+
+  const searchAddon = new SearchAddon();
+  term.loadAddon(searchAddon);
+
+  const webLinksAddon = new WebLinksAddon((_event, uri) => {
+    openUrl(uri).catch(() => {});
+  });
+  term.loadAddon(webLinksAddon);
+
   term.open(wrapper);
 
   try {
@@ -94,7 +107,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     // Canvas fallback
   }
 
-  const inst: TerminalInstance = { term, fitAddon, ptyId: null, wrapper };
+  const inst: TerminalInstance = { term, fitAddon, searchAddon, ptyId: null, wrapper };
   instances.set(paneId, inst);
 
   // Set up PTY channel
@@ -224,5 +237,10 @@ function refreshAllTerminals() {
   });
 }
 
+// Get the SearchAddon for a given pane
+function getSearchAddon(paneId: string): SearchAddon | null {
+  return instances.get(paneId)?.searchAddon ?? null;
+}
+
 // Export for cleanup when tabs are closed
-export { destroyInstance, refreshAllTerminals };
+export { destroyInstance, refreshAllTerminals, getSearchAddon };

@@ -6,15 +6,18 @@ import { refreshAllTerminals } from "./useTerminal";
 interface KeybindingActions {
   toggleScratchpad: () => void;
   toggleBrainstorm: () => void;
+  closeScratchpad: () => void;
+  closeBrainstorm: () => void;
   sendScratchpad: () => void;
   copyScratchpad: () => void;
   saveNoteScratchpad: () => void;
   sendEnterToTerminal: () => void;
   isScratchpadOpen: boolean;
+  isBrainstormOpen: boolean;
 }
 
 export function useKeybindings(actions: KeybindingActions) {
-  const { addTab, closeTab, setActiveTab, renameTab, splitPane, tabs, activeTabId } =
+  const { addTab, closeTab, setActiveTab, renameTab, splitPane, closePane, tabs, activeTabId } =
     useTabStore();
 
   // Watch for settings changes and refresh terminals
@@ -53,15 +56,10 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+R: Rename active tab
+      // Cmd+R: Rename active tab (dispatches event to TabBar's inline rename)
       if (meta && !shift && !alt && e.key === "r") {
         e.preventDefault();
-        const tab = tabs.find((t) => t.id === activeTabId);
-        if (!tab) return;
-        const newName = prompt("Rename tab:", tab.name);
-        if (newName && newName.trim()) {
-          renameTab(activeTabId, newName.trim());
-        }
+        window.dispatchEvent(new CustomEvent("rename-active-tab"));
         return;
       }
 
@@ -114,6 +112,14 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
+      // Cmd+Shift+W: Close active split pane
+      if (meta && shift && !alt && (e.key === "w" || e.key === "W")) {
+        e.preventDefault();
+        const tab = tabs.find((t) => t.id === activeTabId);
+        if (tab) closePane(activeTabId, tab.activePaneId);
+        return;
+      }
+
       // Cmd+W: Close tab
       if (meta && !shift && !alt && e.key === "w") {
         e.preventDefault();
@@ -162,9 +168,29 @@ export function useKeybindings(actions: KeybindingActions) {
         if (tab) splitPane(activeTabId, tab.activePaneId, "vertical");
         return;
       }
+
+      // Escape: Close open panels (settings > brainstorm > scratchpad) and focus terminal
+      if (!meta && !shift && !alt && e.key === "Escape") {
+        const settings = useSettingsStore.getState();
+        if (settings.showSettings) {
+          settings.setShowSettings(false);
+          return;
+        }
+        if (actions.isBrainstormOpen) {
+          actions.closeBrainstorm();
+          return;
+        }
+        if (actions.isScratchpadOpen) {
+          actions.closeScratchpad();
+        }
+        // Always try to focus the terminal
+        const xtermEl = document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
+        xtermEl?.focus();
+        return;
+      }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [actions, addTab, closeTab, setActiveTab, renameTab, splitPane, tabs, activeTabId]);
+  }, [actions, addTab, closeTab, closePane, setActiveTab, renameTab, splitPane, tabs, activeTabId]);
 }
