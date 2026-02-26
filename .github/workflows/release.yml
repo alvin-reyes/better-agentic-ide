@@ -74,6 +74,43 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Better Terminal ${{ github.ref_name }}'
+          releaseBody: |
+            ## Downloads
+
+            | Platform | File | Architecture |
+            |----------|------|-------------|
+            | **macOS (Apple Silicon)** | `.dmg` | M1/M2/M3/M4 |
+            | **macOS (Intel)** | `.dmg` | x86_64 |
+            | **Windows** | `.msi` | x64 |
+            | **Linux** | `.deb` / `.AppImage` | x64 |
+
+            ### macOS: "App is damaged" fix
+            The app is not code-signed. After downloading, run:
+            ```bash
+            xattr -cr /Applications/Better\ Terminal.app
+            ```
+            Or right-click the app and select **Open** to bypass Gatekeeper.
+
+            ---
+
+            ## What's New in ${{ github.ref_name }}
+
+            ### AI Agent Terminals
+            Launch 17 specialized AI agents in dedicated terminal tabs with `Cmd+Shift+A`:
+            - **Backend**: API Builder, Database Engineer, Auth Architect
+            - **Frontend**: UI Builder, Style Architect, State Manager
+            - **DevOps**: Container Ops, CI/CD, Infrastructure, K8s Engineer
+            - **Testing**: Unit Tester, E2E Tester, Perf Tester
+            - **General**: Debugger, Code Reviewer, Docs Writer, Interview Coach
+            - **Continuous mode** for autonomous agent execution (with safety disclaimer)
+
+            ### Native Markdown Watcher
+            Real-time file watching powered by Rust `notify` crate. Instant updates in the brainstorm panel as your AI writes specs and plans.
+
+            ### Claude Brainstorm Mode
+            Launch Claude Code with superpowers brainstorming skill. Auto-detect and install Claude CLI and plugins.
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.2.0...${{ github.ref_name }}
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
