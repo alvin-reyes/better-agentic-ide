@@ -1,6 +1,8 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { useTerminal } from "../hooks/useTerminal";
+import { getSearchAddon } from "../hooks/useTerminal";
 import { useTabStore } from "../stores/tabStore";
+import TerminalSearch from "./TerminalSearch";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalPaneProps {
@@ -13,6 +15,7 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
   const setActivePaneInTab = useTabStore((s) => s.setActivePaneInTab);
   const activeTab = useTabStore((s) => s.tabs.find((t) => t.id === tabId));
   const isActive = activeTab?.activePaneId === paneId;
+  const [showSearch, setShowSearch] = useState(false);
 
   const { termRef } = useTerminal(paneId, containerRef);
 
@@ -21,6 +24,19 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     // Focus the xterm instance so it receives keyboard input
     termRef.current?.focus();
   }, [tabId, paneId, setActivePaneInTab, termRef]);
+
+  // Listen for Cmd+F to open search in this pane
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && !e.shiftKey && !e.altKey && e.key === "f" && isActive) {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isActive]);
 
   return (
     <div
@@ -35,6 +51,15 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
             width: "2px",
             background: "linear-gradient(180deg, var(--accent) 0%, transparent 100%)",
             borderRadius: "1px",
+          }}
+        />
+      )}
+      {showSearch && (
+        <TerminalSearch
+          searchAddon={getSearchAddon(paneId)}
+          onClose={() => {
+            setShowSearch(false);
+            termRef.current?.focus();
           }}
         />
       )}

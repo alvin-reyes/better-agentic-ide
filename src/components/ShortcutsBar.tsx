@@ -14,6 +14,7 @@ const shortcuts = [
   { keys: "⌘ S", action: "Save note" },
   { keys: "⌘ E", action: "Send Enter ↵" },
   { keys: "⇧ ⌘ ↵", action: "Copy text" },
+  { keys: "⌘ F", action: "Find" },
   { keys: "⌘ ,", action: "Settings" },
   { keys: "Esc", action: "Close panel" },
 ];
