@@ -8,6 +8,7 @@ const shortcuts = [
   { keys: "⌘ D", action: "Split horiz" },
   { keys: "⌘ ⇧ D", action: "Split vert" },
   { keys: "⌘ R", action: "Rename tab" },
+  { keys: "⌘ B", action: "Brainstorm" },
   { keys: "⌘ J", action: "Scratchpad" },
   { keys: "⌘ ↵", action: "Send to term" },
   { keys: "⌘ S", action: "Save note" },

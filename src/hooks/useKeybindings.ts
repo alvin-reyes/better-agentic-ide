@@ -5,6 +5,7 @@ import { refreshAllTerminals } from "./useTerminal";
 
 interface KeybindingActions {
   toggleScratchpad: () => void;
+  toggleBrainstorm: () => void;
   sendScratchpad: () => void;
   copyScratchpad: () => void;
   saveNoteScratchpad: () => void;
@@ -61,6 +62,13 @@ export function useKeybindings(actions: KeybindingActions) {
         if (newName && newName.trim()) {
           renameTab(activeTabId, newName.trim());
         }
+        return;
+      }
+
+      // Cmd+B: Toggle brainstorm panel
+      if (meta && !shift && !alt && e.key === "b") {
+        e.preventDefault();
+        actions.toggleBrainstorm();
         return;
       }
 
