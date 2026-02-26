@@ -171,7 +171,13 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path, e))
+    let resolved = if path.starts_with("~/") {
+        let home = get_home_dir();
+        path.replacen("~", &home, 1)
+    } else {
+        path.clone()
+    };
+    std::fs::read_to_string(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))
 }
 
 #[tauri::command]
