@@ -21,3 +21,4 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 portable-pty = "0.9"
 notify = "7"
+glob = "0.3"
