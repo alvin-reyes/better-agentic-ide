@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { refreshAllTerminals } from "./useTerminal";
+import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
 
 interface KeybindingActions {
   toggleScratchpad: () => void;
@@ -165,7 +165,11 @@ export function useKeybindings(actions: KeybindingActions) {
       if (meta && !shift && !alt && e.key === "d") {
         e.preventDefault();
         const tab = tabs.find((t) => t.id === activeTabId);
-        if (tab) splitPane(activeTabId, tab.activePaneId, "horizontal");
+        if (tab) {
+          getPtyCwd(tab.activePaneId).then((cwd) => {
+            splitPane(activeTabId, tab.activePaneId, "horizontal", cwd);
+          });
+        }
         return;
       }
 
@@ -180,7 +184,11 @@ export function useKeybindings(actions: KeybindingActions) {
       if (meta && shift && !alt && e.key === "D") {
         e.preventDefault();
         const tab = tabs.find((t) => t.id === activeTabId);
-        if (tab) splitPane(activeTabId, tab.activePaneId, "vertical");
+        if (tab) {
+          getPtyCwd(tab.activePaneId).then((cwd) => {
+            splitPane(activeTabId, tab.activePaneId, "vertical", cwd);
+          });
+        }
         return;
       }
 
