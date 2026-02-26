@@ -23,6 +23,7 @@ const BRAINSTORM_MAX_WIDTH = 900;
 export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [brainstormOpen, setBrainstormOpen] = useState(false);
+  const [brainstormFile, setBrainstormFile] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
@@ -49,6 +50,17 @@ export default function App() {
     const handler = () => setZoomedPane((prev) => !prev);
     window.addEventListener("toggle-zoom-pane", handler);
     return () => window.removeEventListener("toggle-zoom-pane", handler);
+  }, []);
+
+  // Listen for .md file clicks in terminal to open in markdown viewer
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent).detail;
+      setBrainstormFile(path);
+      setBrainstormOpen(true);
+    };
+    window.addEventListener("open-md-viewer", handler);
+    return () => window.removeEventListener("open-md-viewer", handler);
   }, []);
 
   const toggleCommandPalette = useCallback(() => {
@@ -247,7 +259,10 @@ export default function App() {
                 transition: "opacity 0.15s",
               }} />
             </div>
-            <BrainstormPanel onClose={() => setBrainstormOpen(false)} />
+            <BrainstormPanel
+              onClose={() => { setBrainstormOpen(false); setBrainstormFile(null); }}
+              initialFile={brainstormFile}
+            />
           </div>
         )}
       </div>

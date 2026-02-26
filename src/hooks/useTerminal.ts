@@ -114,12 +114,74 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 
   term.open(wrapper);
 
+  // Register link provider for .md file paths — click to open in markdown viewer
+  // Matches: /absolute/path.md, ~/path.md, ./relative.md, docs/plan.md, CLAUDE.md
+  const mdPathRegex = /(?:^|[\s`'"(])((?:\/|~\/|\.\/)?[^\s`'"()]+\.md)\b/g;
+  term.registerLinkProvider({
+    provideLinks(lineNumber, callback) {
+      const line = term.buffer.active.getLine(lineNumber - 1);
+      if (!line) { callback(undefined); return; }
+      const text = line.translateToString(true);
+      const links: Array<{
+        range: { start: { x: number; y: number }; end: { x: number; y: number } };
+        text: string;
+        decorations: { underline: boolean; pointerCursor: boolean };
+        activate: (_event: MouseEvent, text: string) => void;
+      }> = [];
+
+      let match;
+      mdPathRegex.lastIndex = 0;
+      while ((match = mdPathRegex.exec(text)) !== null) {
+        const path = match[1];
+        const startX = match.index + (match[0].length - path.length) + 1;
+        links.push({
+          range: {
+            start: { x: startX, y: lineNumber },
+            end: { x: startX + path.length - 1, y: lineNumber },
+          },
+          text: path,
+          decorations: { underline: true, pointerCursor: true },
+          activate: (_event: MouseEvent, linkText: string) => {
+            // For relative paths, try to resolve against CWD
+            getPtyCwd(paneId).then((cwd) => {
+              let resolved = linkText;
+              if (cwd && !linkText.startsWith("/") && !linkText.startsWith("~")) {
+                resolved = `${cwd}/${linkText.replace(/^\.\//, "")}`;
+              }
+              window.dispatchEvent(new CustomEvent("open-md-viewer", { detail: { path: resolved } }));
+            });
+          },
+        });
+      }
+      callback(links.length > 0 ? links : undefined);
+    },
+  });
+
   try {
     const webglAddon = new WebglAddon();
     term.loadAddon(webglAddon);
   } catch {
     // Canvas fallback
   }
+
+  // Show ASCII splash with portrait logo
+  const skin = "\x1b[38;5;180m";
+  const hair = "\x1b[38;5;236m";
+  const shirt = "\x1b[38;5;67m";
+  const dim = "\x1b[38;5;239m";
+  const accent = "\x1b[38;5;75m";
+  const green = "\x1b[38;5;114m";
+  const reset = "\x1b[0m";
+  term.writeln("");
+  term.writeln(`${hair}        ▄▄███▄▄        ${accent} █████╗ ██████╗ ███████╗${reset}`);
+  term.writeln(`${hair}      ▄█${skin}████████${hair}█▄      ${accent}██╔══██╗██╔══██╗██╔════╝${reset}`);
+  term.writeln(`${hair}     █${skin}██████████${hair}██     ${accent}███████║██║  ██║█████╗${reset}`);
+  term.writeln(`${skin}     ██▄${hair}▀▀${skin}██${hair}▀▀${skin}▄██     ${accent}██╔══██║██║  ██║██╔══╝${reset}`);
+  term.writeln(`${skin}     ██  ▀  ▀  ██     ${accent}██║  ██║██████╔╝███████╗${reset}`);
+  term.writeln(`${skin}      ██ ╺━╸ ██      ${accent}╚═╝  ╚═╝╚═════╝ ╚══════╝${reset}`);
+  term.writeln(`${skin}       ██▄▄▄██       ${dim}Agentic Development Environment${reset}`);
+  term.writeln(`${shirt}      ▄███████▄      ${dim}v0.3.4  ${green}⌘P${dim} cmds ${green}⌘J${dim} scratchpad ${green}⌘⇧A${dim} agents${reset}`);
+  term.writeln("");
 
   const inst: TerminalInstance = { term, fitAddon, searchAddon, ptyId: null, wrapper };
   instances.set(paneId, inst);

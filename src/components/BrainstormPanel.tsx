@@ -13,6 +13,7 @@ type BrainstormMode = "menu" | "claude" | "markdown";
 
 interface BrainstormPanelProps {
   onClose: () => void;
+  initialFile?: string | null;
 }
 
 type ClaudeSetupStatus = "checking" | "no-claude" | "no-plugin" | "ready";
@@ -23,7 +24,7 @@ type WatchEvent =
   | { type: "removed"; path: string }
   | { type: "error"; message: string };
 
-export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
+export default function BrainstormPanel({ onClose, initialFile }: BrainstormPanelProps) {
   const [mode, setMode] = useState<BrainstormMode>("menu");
   const [claudeSetup, setClaudeSetup] = useState<ClaudeSetupStatus>("checking");
   const [installing, setInstalling] = useState(false);
@@ -46,6 +47,20 @@ export default function BrainstormPanel({ onClose }: BrainstormPanelProps) {
   useEffect(() => {
     filePathRef.current = filePath;
   }, [filePath]);
+
+  // Open a file directly when initialFile prop changes
+  useEffect(() => {
+    if (initialFile) {
+      setMode("markdown");
+      setFilePath(initialFile);
+      setShowPicker(false);
+      setHtml("");
+      setError(null);
+      // Derive search dir from the file path for the watcher
+      const dir = initialFile.substring(0, initialFile.lastIndexOf("/"));
+      if (dir) setSearchDir(dir);
+    }
+  }, [initialFile]);
 
   // Check Claude CLI + superpowers plugin status
   const checkClaudeSetup = useCallback(async () => {
