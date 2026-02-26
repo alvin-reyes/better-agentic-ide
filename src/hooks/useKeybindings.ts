@@ -12,6 +12,7 @@ interface KeybindingActions {
   sendEnterToTerminal: () => void;
   toggleCommandPalette: () => void;
   toggleAgentPicker: () => void;
+  togglePreview: () => void;
   requestCloseTab: (tabId: string) => void;
   requestClosePane: (tabId: string, paneId: string) => void;
   isScratchpadOpen: boolean;
@@ -75,6 +76,13 @@ export function useKeybindings(actions: KeybindingActions) {
       if (meta && shift && !alt && (e.key === "a" || e.key === "A")) {
         e.preventDefault();
         actions.toggleAgentPicker();
+        return;
+      }
+
+      // Cmd+B: Toggle preview panel
+      if (meta && !shift && !alt && e.key === "b") {
+        e.preventDefault();
+        actions.togglePreview();
         return;
       }
 

@@ -11,6 +11,7 @@ const shortcuts = [
   { keys: "⌘ ←→", action: "Switch pane" },
   { keys: "⌘ R", action: "Rename tab" },
   { keys: "⇧⌘ A", action: "Agents" },
+  { keys: "⌘ B", action: "Preview" },
   { keys: "⌘ J", action: "Scratchpad" },
   { keys: "⌘ ↵", action: "Send to term" },
   { keys: "⌘ S", action: "Save note" },

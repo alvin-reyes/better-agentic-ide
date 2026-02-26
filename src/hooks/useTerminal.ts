@@ -218,7 +218,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     if (!meta) return true;
     // Pass Cmd+<key> shortcuts to the app (not consumed by xterm)
     const passthrough = [
-      "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",",
+      "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", "b",
       "a", "A",  // Agent picker (Cmd+Shift+A)
       "Enter", "[", "]",
       "ArrowLeft", "ArrowRight",  // Pane navigation
