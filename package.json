@@ -21,6 +21,7 @@
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "marked": "^17.0.3",
+    "mermaid": "^11.12.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-resizable-panels": "^4.6.5",
