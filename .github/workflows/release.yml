@@ -10,7 +10,59 @@ permissions:
   contents: write
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.id }}
+    steps:
+      - name: Create GitHub Release
+        id: create
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 'Better Terminal ${{ github.ref_name }}'
+          body: |
+            ## Downloads
+
+            | Platform | File | Architecture |
+            |----------|------|-------------|
+            | **macOS (Apple Silicon)** | `.dmg` | M1/M2/M3/M4 |
+            | **macOS (Intel)** | `.dmg` | x86_64 |
+            | **Windows** | `.msi` / `.exe` | x64 |
+            | **Linux** | `.deb` / `.AppImage` | x64 |
+
+            ### macOS: "App is damaged" fix
+            The app is not code-signed. After downloading, run:
+            ```bash
+            xattr -cr /Applications/Better\ Terminal.app
+            ```
+            Or right-click the app and select **Open** to bypass Gatekeeper.
+
+            ---
+
+            ## What's New in ${{ github.ref_name }}
+
+            ### AI Agent Terminals
+            Launch 17 specialized AI agents in dedicated terminal tabs with `Cmd+Shift+A`:
+            - **Backend**: API Builder, Database Engineer, Auth Architect
+            - **Frontend**: UI Builder, Style Architect, State Manager
+            - **DevOps**: Container Ops, CI/CD, Infrastructure, K8s Engineer
+            - **Testing**: Unit Tester, E2E Tester, Perf Tester
+            - **General**: Debugger, Code Reviewer, Docs Writer, Interview Coach
+            - **Continuous mode** for autonomous agent execution (with safety disclaimer)
+
+            ### Native Markdown Watcher
+            Real-time file watching powered by Rust `notify` crate. Instant updates in the brainstorm panel as your AI writes specs and plans.
+
+            ### Claude Brainstorm Mode
+            Launch Claude Code with superpowers brainstorming skill. Auto-detect and install Claude CLI and plugins.
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.2.0...${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
   build:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -68,49 +120,30 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx tauri build --target ${{ matrix.target }}
+
+      - name: Upload macOS DMG
+        if: matrix.platform == 'macos-latest'
+        uses: softprops/action-gh-release@v2
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Better Terminal ${{ github.ref_name }}'
-          releaseBody: |
-            ## Downloads
+          tag_name: ${{ github.ref_name }}
+          files: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
 
-            | Platform | File | Architecture |
-            |----------|------|-------------|
-            | **macOS (Apple Silicon)** | `.dmg` | M1/M2/M3/M4 |
-            | **macOS (Intel)** | `.dmg` | x86_64 |
-            | **Windows** | `.msi` | x64 |
-            | **Linux** | `.deb` / `.AppImage` | x64 |
+      - name: Upload Linux installers
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
 
-            ### macOS: "App is damaged" fix
-            The app is not code-signed. After downloading, run:
-            ```bash
-            xattr -cr /Applications/Better\ Terminal.app
-            ```
-            Or right-click the app and select **Open** to bypass Gatekeeper.
-
-            ---
-
-            ## What's New in ${{ github.ref_name }}
-
-            ### AI Agent Terminals
-            Launch 17 specialized AI agents in dedicated terminal tabs with `Cmd+Shift+A`:
-            - **Backend**: API Builder, Database Engineer, Auth Architect
-            - **Frontend**: UI Builder, Style Architect, State Manager
-            - **DevOps**: Container Ops, CI/CD, Infrastructure, K8s Engineer
-            - **Testing**: Unit Tester, E2E Tester, Perf Tester
-            - **General**: Debugger, Code Reviewer, Docs Writer, Interview Coach
-            - **Continuous mode** for autonomous agent execution (with safety disclaimer)
-
-            ### Native Markdown Watcher
-            Real-time file watching powered by Rust `notify` crate. Instant updates in the brainstorm panel as your AI writes specs and plans.
-
-            ### Claude Brainstorm Mode
-            Launch Claude Code with superpowers brainstorming skill. Auto-detect and install Claude CLI and plugins.
-
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.2.0...${{ github.ref_name }}
-          releaseDraft: false
-          prerelease: false
-          args: --target ${{ matrix.target }}
+      - name: Upload Windows installers
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
