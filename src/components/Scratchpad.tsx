@@ -402,6 +402,23 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   }, []);
 
   const send = useCallback(async () => {
+    // Check if active tab is an orchestrator tab — route to orchestrator chat
+    const tabState = useTabStore.getState();
+    const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId);
+    if (activeTab?.type === "orchestrator" && text.trim()) {
+      window.dispatchEvent(new CustomEvent("orchestrator-send", { detail: { text: text.trim() } }));
+      if (text.trim()) {
+        const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
+        setHistory(newHistory);
+        saveHistory(newHistory);
+      }
+      setSent(true);
+      setTimeout(() => setSent(false), 1500);
+      setText("");
+      setPastedImages([]);
+      return;
+    }
+
     const ptyId = getActivePtyId();
     if (ptyId === null) {
       console.warn("No active PTY to send to");

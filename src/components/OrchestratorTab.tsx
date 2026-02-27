@@ -10,6 +10,10 @@ interface OrchestratorTabProps {
   sessionId: string;
 }
 
+const MIN_PANEL_WIDTH = 260;
+const MAX_PANEL_WIDTH = 700;
+const DEFAULT_PANEL_WIDTH = 360;
+
 export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   const session = useOrchestratorStore((s) => s.sessions.find((sess) => sess.id === sessionId));
   const addMessage = useOrchestratorStore((s) => s.addMessage);
@@ -19,25 +23,22 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   const getDispatchableTasks = useOrchestratorStore((s) => s.getDispatchableTasks);
   const { addTab } = useTabStore();
 
-  const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const draggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(DEFAULT_PANEL_WIDTH);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages, streamingText]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  const sendMessage = useCallback(async (userText: string) => {
+    if (!userText.trim() || streaming || !session) return;
 
-  const sendMessage = useCallback(async () => {
-    if (!input.trim() || streaming || !session) return;
-
-    const userText = input.trim();
-    setInput("");
     addMessage(sessionId, "user", userText);
     setStreaming(true);
     setStreamingText("");
@@ -71,11 +72,24 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
         setStreamingText("");
       },
     });
-  }, [input, streaming, session, sessionId, addMessage, setTasks]);
+  }, [streaming, session, sessionId, addMessage, setTasks]);
+
+  // Listen for messages from the Scratchpad
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { text } = (e as CustomEvent).detail;
+      sendMessage(text);
+    };
+    window.addEventListener("orchestrator-send", handler);
+    return () => window.removeEventListener("orchestrator-send", handler);
+  }, [sendMessage]);
 
   const dispatchTask = useCallback(async (task: OrchestratorTask) => {
     const profile = AGENT_PROFILES.find((p) => p.id === task.agentProfileId);
     if (!profile) return;
+
+    // Remember the orchestrator tab so we can switch back
+    const orchTabId = useTabStore.getState().activeTabId;
 
     addTab(`Agent: ${task.title}`);
 
@@ -85,7 +99,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     if (ptyId === null) return;
 
     const activePane = useTabStore.getState().getActivePane();
-    const tabId = useTabStore.getState().activeTabId;
+    const agentTabId = useTabStore.getState().activeTabId;
 
     const escapedDesc = task.description.replace(/"/g, '\\"');
     const cmd = `claude "${profile.providers.claude} Your task: ${escapedDesc}"`;
@@ -99,8 +113,11 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
         profile.icon,
         "claude",
       );
-      updateTaskStatus(sessionId, task.id, "running", activePane.id, tabId);
+      updateTaskStatus(sessionId, task.id, "running", activePane.id, agentTabId);
     }
+
+    // Switch back to orchestrator tab so dispatch can continue
+    useTabStore.getState().setActiveTab(orchTabId);
 
     setSessionStatus(sessionId, "executing");
   }, [sessionId, addTab, updateTaskStatus, setSessionStatus]);
@@ -112,7 +129,54 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     }
   }, [sessionId, getDispatchableTasks, dispatchTask]);
 
+  // Drag-to-resize the task panel
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = panelWidth;
+
+    const cleanup = () => {
+      draggingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", cleanup);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const delta = startXRef.current - ev.clientX;
+      const newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, startWidthRef.current + delta));
+      setPanelWidth(newWidth);
+    };
+
+    const onUp = () => cleanup();
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", cleanup);
+  }, [panelWidth]);
+
+  // Poll agent sessions for live elapsed time
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!session?.tasks.some((t) => t.status === "running")) return;
+    const interval = setInterval(() => forceUpdate((n) => n + 1), 1000);
+    return () => clearInterval(interval);
+  }, [session?.tasks]);
+
   if (!session) return null;
+
+  const formatElapsed = (startTime: number) => {
+    const seconds = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
 
   const statusColor = (status: OrchestratorTask["status"]) => {
     switch (status) {
@@ -135,7 +199,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   return (
     <div style={{ display: "flex", height: "100%", backgroundColor: "var(--bg-primary)" }}>
       {/* Left: Chat */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid var(--border)" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid var(--border)", minWidth: 0 }}>
         <div style={{
           padding: "12px 16px",
           borderBottom: "1px solid var(--border)",
@@ -160,18 +224,6 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
-          {session.messages.length === 0 && !streaming && (
-            <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "60px 20px" }}>
-              <p style={{ fontSize: "24px", marginBottom: "12px", opacity: 0.3 }}>&#x1f3af;</p>
-              <p style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-                What do you want to build?
-              </p>
-              <p style={{ fontSize: "13px" }}>
-                Describe your project and I'll help you plan it, then dispatch AI agents to build it.
-              </p>
-            </div>
-          )}
-
           {session.messages.map((msg) => (
             <div
               key={msg.id}
@@ -223,57 +275,29 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
           <div ref={chatEndRef} />
         </div>
 
-        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              placeholder="Describe what you want to build..."
-              rows={2}
-              style={{
-                flex: 1,
-                backgroundColor: "var(--bg-secondary)",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                padding: "10px 14px",
-                fontSize: "13px",
-                color: "var(--text-primary)",
-                resize: "none",
-                fontFamily: "inherit",
-                outline: "none",
-              }}
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || streaming}
-              style={{
-                padding: "0 16px",
-                borderRadius: "8px",
-                border: "none",
-                backgroundColor: input.trim() && !streaming ? "var(--accent)" : "var(--bg-surface)",
-                color: input.trim() && !streaming ? "#fff" : "var(--text-muted)",
-                cursor: input.trim() && !streaming ? "pointer" : "default",
-                fontSize: "13px",
-                fontWeight: 600,
-                alignSelf: "flex-end",
-                height: "36px",
-              }}
-            >
-              {streaming ? "..." : "Send"}
-            </button>
+        {streaming && (
+          <div style={{ padding: "8px 16px", borderTop: "1px solid var(--border)", fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
+            AI is thinking...
           </div>
-        </div>
+        )}
       </div>
 
+      {/* Resize handle */}
+      <div
+        onMouseDown={onDragStart}
+        style={{
+          width: "5px",
+          cursor: "col-resize",
+          backgroundColor: "transparent",
+          flexShrink: 0,
+          position: "relative",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--accent-hover)"; }}
+        onMouseLeave={(e) => { if (!draggingRef.current) e.currentTarget.style.backgroundColor = "transparent"; }}
+      />
+
       {/* Right: Backlog */}
-      <div style={{ width: "340px", display: "flex", flexDirection: "column", backgroundColor: "var(--bg-secondary)" }}>
+      <div style={{ width: panelWidth, display: "flex", flexDirection: "column", backgroundColor: "var(--bg-secondary)", flexShrink: 0 }}>
         <div style={{
           padding: "12px 16px",
           borderBottom: "1px solid var(--border)",
@@ -312,21 +336,20 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
 
           {session.tasks.map((task) => {
             const profile = AGENT_PROFILES.find((p) => p.id === task.agentProfileId);
+            const isExpanded = expandedTaskId === task.id;
             return (
               <div
                 key={task.id}
                 style={{
                   padding: "10px 12px",
                   borderRadius: "8px",
-                  border: `1px solid ${task.status === "running" ? "rgba(34,197,94,0.3)" : "var(--border)"}`,
-                  backgroundColor: task.status === "running" ? "rgba(34,197,94,0.05)" : "var(--bg-tertiary)",
+                  border: `1px solid ${isExpanded ? "var(--accent)" : task.status === "running" ? "rgba(34,197,94,0.3)" : "var(--border)"}`,
+                  backgroundColor: isExpanded ? "var(--accent-subtle)" : task.status === "running" ? "rgba(34,197,94,0.05)" : "var(--bg-tertiary)",
                   marginBottom: "6px",
-                  cursor: task.status === "pending" ? "pointer" : "default",
+                  cursor: "pointer",
+                  transition: "border-color 0.15s, background-color 0.15s",
                 }}
-                onClick={() => {
-                  if (task.status === "pending") dispatchTask(task);
-                  if (task.tabId) useTabStore.getState().setActiveTab(task.tabId);
-                }}
+                onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
                   <span style={{ fontSize: "14px" }}>{profile?.icon ?? "?"}</span>
@@ -344,12 +367,129 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                     {statusLabel(task.status)}
                   </span>
                 </div>
-                <p style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: 1.4, margin: 0 }}>
-                  {task.description.slice(0, 120)}{task.description.length > 120 ? "..." : ""}
-                </p>
-                {task.dependencies.length > 0 && (
-                  <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px", fontFamily: "monospace" }}>
-                    depends on: {task.dependencies.join(", ")}
+
+                {!isExpanded && (
+                  <p style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: 1.4, margin: 0 }}>
+                    {task.description.slice(0, 100)}{task.description.length > 100 ? "..." : ""}
+                  </p>
+                )}
+
+                {isExpanded && (
+                  <div style={{ marginTop: "8px" }}>
+                    <p style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.6, margin: "0 0 10px 0", whiteSpace: "pre-wrap" }}>
+                      {task.description}
+                    </p>
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", fontSize: "10px", fontFamily: "monospace" }}>
+                      <span style={{
+                        padding: "2px 6px",
+                        borderRadius: "3px",
+                        backgroundColor: "var(--bg-primary)",
+                        color: "var(--text-secondary)",
+                      }}>
+                        Agent: {profile?.name ?? task.agentProfileId}
+                      </span>
+                      <span style={{
+                        padding: "2px 6px",
+                        borderRadius: "3px",
+                        backgroundColor: "var(--bg-primary)",
+                        color: "var(--text-secondary)",
+                      }}>
+                        Priority: {task.priority}
+                      </span>
+                      {task.dependencies.length > 0 && (
+                        <span style={{
+                          padding: "2px 6px",
+                          borderRadius: "3px",
+                          backgroundColor: "var(--bg-primary)",
+                          color: "var(--text-secondary)",
+                        }}>
+                          Depends: {task.dependencies.join(", ")}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Agent status for running tasks */}
+                    {task.status === "running" && task.paneId && (() => {
+                      const agentSession = useAgentTrackerStore.getState().getActiveSession(task.paneId);
+                      return agentSession ? (
+                        <div style={{
+                          marginTop: "8px",
+                          padding: "6px 10px",
+                          borderRadius: "5px",
+                          backgroundColor: "rgba(34,197,94,0.08)",
+                          border: "1px solid rgba(34,197,94,0.2)",
+                          fontSize: "11px",
+                          fontFamily: "monospace",
+                          color: "#22c55e",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}>
+                          <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#22c55e", animation: "blink 1.5s infinite" }} />
+                          Running for {formatElapsed(agentSession.startTime)}
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* Completed / failed status */}
+                    {(task.status === "completed" || task.status === "failed") && (
+                      <div style={{
+                        marginTop: "8px",
+                        padding: "6px 10px",
+                        borderRadius: "5px",
+                        backgroundColor: task.status === "completed" ? "rgba(168,85,247,0.08)" : "rgba(239,68,68,0.08)",
+                        border: `1px solid ${task.status === "completed" ? "rgba(168,85,247,0.2)" : "rgba(239,68,68,0.2)"}`,
+                        fontSize: "11px",
+                        fontFamily: "monospace",
+                        color: task.status === "completed" ? "#a855f7" : "#ef4444",
+                      }}>
+                        {task.status === "completed" ? "Task completed" : "Task failed"}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: "6px", marginTop: "10px" }}>
+                      {task.status === "pending" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            dispatchTask(task);
+                          }}
+                          style={{
+                            padding: "4px 12px",
+                            borderRadius: "5px",
+                            border: "none",
+                            backgroundColor: "#22c55e",
+                            color: "#fff",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Dispatch
+                        </button>
+                      )}
+                      {task.tabId && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            useTabStore.getState().setActiveTab(task.tabId!);
+                          }}
+                          style={{
+                            padding: "4px 12px",
+                            borderRadius: "5px",
+                            border: "1px solid var(--border)",
+                            backgroundColor: "var(--bg-primary)",
+                            color: "var(--text-secondary)",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Go to Tab
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
