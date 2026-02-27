@@ -66,10 +66,11 @@ export default function SettingsPanel() {
   if (!store.showSettings) return null;
 
   const activeTheme = store.getActiveTheme();
-  const tabs: { id: "theme" | "terminal" | "workspace"; label: string }[] = [
+  const tabs: { id: "theme" | "terminal" | "workspace" | "ai"; label: string }[] = [
     { id: "theme", label: "Themes" },
     { id: "terminal", label: "Terminal" },
     { id: "workspace", label: "Workspace" },
+    { id: "ai", label: "AI API" },
   ];
 
   const commitRename = () => {
@@ -695,6 +696,64 @@ export default function SettingsPanel() {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* AI API Tab */}
+          {store.settingsTab === "ai" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Anthropic API Key
+                </label>
+                <input
+                  type="password"
+                  value={store.anthropicApiKey}
+                  onChange={(e) => store.setAnthropicApiKey(e.target.value)}
+                  placeholder="sk-ant-..."
+                  style={{
+                    width: "100%",
+                    backgroundColor: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    color: "var(--text-primary)",
+                    fontFamily: "monospace",
+                    marginTop: "8px",
+                    outline: "none",
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                />
+                <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
+                  Required for Orchestrator Mode. Get your key at console.anthropic.com
+                </p>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Model
+                </label>
+                <select
+                  value={store.orchestratorModel}
+                  onChange={(e) => store.setOrchestratorModel(e.target.value)}
+                  style={{
+                    width: "100%",
+                    backgroundColor: "var(--bg-primary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    color: "var(--text-primary)",
+                    marginTop: "8px",
+                    outline: "none",
+                  }}
+                >
+                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (recommended)</option>
+                  <option value="claude-opus-4-20250514">Claude Opus 4</option>
+                </select>
               </div>
             </div>
           )}
