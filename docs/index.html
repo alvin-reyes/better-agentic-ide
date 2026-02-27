@@ -6,7 +6,7 @@
   <title>ADE — Agentic Development Environment</title>
   <meta name="description" content="Modern desktop terminal with smart tabs, split panes, thoughts scratchpad, and deep theming. Built for developers who work with agentic AI in the CLI.">
   <meta property="og:title" content="ADE">
-  <meta property="og:description" content="A modern desktop terminal built for agentic AI development. Smart tabs, split panes, thoughts scratchpad, 8 themes.">
+  <meta property="og:description" content="A modern desktop terminal built for agentic AI development. Smart tabs, split panes, agent dashboard, cost tracking, voice dictation, prompt chaining, live preview, and 8 themes.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://alvin-reyes.github.io/better-agentic-ide/">
   <meta property="og:image" content="https://alvin-reyes.github.io/better-agentic-ide/ade_logo.png">
@@ -577,7 +577,7 @@
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#agents">AI Agents</a>
-      <a href="#brainstorm">Brainstorm</a>
+      <a href="#dashboard">Dashboard</a>
       <a href="#themes">Themes</a>
       <a href="#shortcuts">Shortcuts</a>
       <a href="https://github.com/alvin-reyes/better-agentic-ide">GitHub</a>
@@ -589,10 +589,10 @@
   <!-- Hero -->
   <section class="hero">
     <div class="hero-badge">
-      <span>v0.3.0</span> Open Source &middot; Tauri + React
+      <span>v0.5.0</span> Open Source &middot; Tauri + React
     </div>
     <h1><span class="accent">Agentic Development Environment</span></h1>
-    <p class="subtitle">A modern terminal built for AI-powered development. Smart tabs, split panes, 20+ AI agent profiles, live markdown preview, and 8 built-in themes. Keyboard-first design for developers who work with Claude Code, Codex, Gemini CLI, and any agentic tool.</p>
+    <p class="subtitle">A modern terminal built for AI-powered development. Smart tabs, split panes, 20+ AI agent profiles, agent dashboard with cost tracking, voice dictation, prompt chaining, live preview, and 8 built-in themes. Keyboard-first design for developers who work with Claude Code, Codex, Gemini CLI, and any agentic tool.</p>
     <div class="hero-buttons">
       <a href="https://github.com/alvin-reyes/better-agentic-ide/releases" class="btn btn-primary">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V10M8 10L5 7M8 10L11 7M3 12H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -886,6 +886,125 @@
     </div>
   </section>
 
+  <!-- Agent Dashboard -->
+  <section class="features" id="dashboard">
+    <div class="container">
+      <h2>Agent Dashboard</h2>
+      <p class="subtitle">Monitor all your AI agents from one place. Track sessions, costs, and token usage in real time.</p>
+
+      <div class="feature-row">
+        <div class="feature-text">
+          <div class="tag" style="background: rgba(234, 179, 8, 0.12); color: var(--yellow);">Monitoring</div>
+          <h3>Real-time agent tracking</h3>
+          <p>See every running agent at a glance. Live status indicators show when agents are actively working or idle. Get notified when they finish.</p>
+          <ul>
+            <li><span style="color: var(--accent);">Cmd+.</span> &mdash; open agent dashboard</li>
+            <li><span style="color: var(--green);">WORKING / IDLE / DONE</span> &mdash; live status badges</li>
+            <li><span style="color: var(--purple);">Cost estimation</span> &mdash; per-provider token rates</li>
+            <li><span style="color: var(--yellow);">Notifications</span> &mdash; system + in-app alerts</li>
+          </ul>
+        </div>
+        <div class="feature-visual">
+          <div style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">AGENT DASHBOARD</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-bottom: 14px;">
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Active</div>
+              <div style="font-size: 16px; font-weight: 700; color: #22c55e; font-family: monospace;">2</div>
+            </div>
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Today</div>
+              <div style="font-size: 16px; font-weight: 700; color: var(--accent); font-family: monospace;">5</div>
+            </div>
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Time</div>
+              <div style="font-size: 16px; font-weight: 700; color: #a855f7; font-family: monospace;">42m</div>
+            </div>
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
+              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Cost</div>
+              <div style="font-size: 16px; font-weight: 700; color: #eab308; font-family: monospace;">$1.24</div>
+            </div>
+          </div>
+          <div style="background: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.2); border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span style="font-size: 16px;">&#x1f916;</span>
+            <div style="flex: 1;">
+              <div style="font-size: 12px; font-weight: 600; color: var(--text);">Claude Code <span style="font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,0.2); color: #22c55e;">WORKING</span></div>
+              <div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">claude &bull; 3m 24s &bull; 4.2k tokens &bull; $0.18</div>
+            </div>
+          </div>
+          <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">&#x1f50d;</span>
+            <div style="flex: 1;">
+              <div style="font-size: 12px; font-weight: 600; color: var(--text);">Code Review <span style="font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: rgba(168,85,247,0.15); color: #a855f7;">DONE</span></div>
+              <div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">claude &bull; 1m 52s &bull; 2.8k tokens &bull; $0.12</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Voice & Prompt Chaining -->
+      <div class="feature-row reverse">
+        <div class="feature-text">
+          <div class="tag" style="background: rgba(239, 68, 68, 0.12); color: var(--red);">Voice & Chains</div>
+          <h3>Voice dictation & prompt chaining</h3>
+          <p>Dictate prompts hands-free with the built-in microphone, or chain multiple prompts together with <code style="background: var(--bg-code); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent);">---</code> separators. Each step waits for the agent to finish before sending the next.</p>
+          <ul>
+            <li><span style="color: #ef4444;">Voice dictation</span> &mdash; Web Speech API with live transcription</li>
+            <li><span style="color: var(--accent);">Prompt chaining</span> &mdash; multi-step workflows with <code style="background: var(--bg-code); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 11px;">---</code></li>
+            <li><span style="color: var(--green);">Auto-wait</span> &mdash; detects when agent is idle before next step</li>
+            <li><span style="color: var(--purple);">3 templates</span> &mdash; Design Session, Code Review, Debug Chain</li>
+          </ul>
+        </div>
+        <div class="feature-visual">
+          <div style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">PROMPT CHAIN</div>
+          <div style="color: var(--text-dim); margin-bottom: 6px; font-size: 12px;">Analyze the auth module for security issues</div>
+          <div style="color: var(--text-muted); margin: 8px 0; font-weight: 600; letter-spacing: 2px; text-align: center; font-size: 11px;">- - -</div>
+          <div style="color: var(--text-dim); margin-bottom: 6px; font-size: 12px;">Fix the top 3 vulnerabilities you found</div>
+          <div style="color: var(--text-muted); margin: 8px 0; font-weight: 600; letter-spacing: 2px; text-align: center; font-size: 11px;">- - -</div>
+          <div style="color: var(--text-dim); margin-bottom: 12px; font-size: 12px;">Write tests for the security fixes</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 14px;">
+            <div style="flex: 1; height: 4px; background: var(--bg-card); border-radius: 2px; overflow: hidden;">
+              <div style="width: 66%; height: 100%; background: var(--accent); border-radius: 2px;"></div>
+            </div>
+            <span style="font-size: 11px; color: var(--accent); font-family: monospace; font-weight: 600;">Step 2/3</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview Panel -->
+      <div class="feature-row">
+        <div class="feature-text">
+          <div class="tag" style="background: rgba(88, 166, 255, 0.12); color: var(--accent);">Preview</div>
+          <h3>Live file preview</h3>
+          <p>Preview HTML, images, PDFs, and markdown files in a side panel that auto-refreshes when files change. Watch your agent's output render in real time.</p>
+          <ul>
+            <li><span style="color: var(--accent);">Cmd+B</span> &mdash; toggle preview panel</li>
+            <li><span style="color: var(--green);">Auto-refresh</span> &mdash; native filesystem watcher</li>
+            <li><span style="color: var(--purple);">Multi-format</span> &mdash; HTML, images, PDF, markdown</li>
+            <li><span style="color: var(--yellow);">Resizable</span> &mdash; drag to resize (280px–900px)</li>
+          </ul>
+        </div>
+        <div class="feature-visual">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: 0.6;"></div>
+              <span style="font-size: 11px; font-weight: 600; color: var(--text); font-family: Inter, sans-serif;">Preview</span>
+            </div>
+            <span style="font-size: 10px; color: var(--green); font-family: monospace;">auto-refresh on</span>
+          </div>
+          <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
+            <div style="font-size: 16px; font-weight: 700; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border);">API Documentation</div>
+            <div style="font-size: 14px; font-weight: 600; margin: 8px 0 4px; color: var(--text);">Authentication</div>
+            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 8px;">All endpoints require a Bearer token in the Authorization header.</div>
+            <div style="background: var(--bg); padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px;">
+              <span style="color: #bc8cff;">GET</span> <span style="color: var(--text-dim);">/api/users</span><br>
+              <span style="color: #3fb950;">POST</span> <span style="color: var(--text-dim);">/api/auth/login</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Shortcuts -->
   <section class="shortcuts" id="shortcuts">
     <div class="container">
@@ -923,9 +1042,11 @@
         <div class="shortcut-category">
           <h3>App</h3>
           <div class="shortcut-list">
-            <div class="shortcut-item"><span>Brainstorm panel</span><kbd>&#8984;B</kbd></div>
+            <div class="shortcut-item"><span>Preview panel</span><kbd>&#8984;B</kbd></div>
             <div class="shortcut-item"><span>AI agent picker</span><kbd>&#8984;&#8679;A</kbd></div>
+            <div class="shortcut-item"><span>Agent dashboard</span><kbd>&#8984;.</kbd></div>
             <div class="shortcut-item"><span>Command palette</span><kbd>&#8984;P</kbd></div>
+            <div class="shortcut-item"><span>Zoom / unzoom pane</span><kbd>&#8984;&#8679;&#9166;</kbd></div>
             <div class="shortcut-item"><span>Settings</span><kbd>&#8984;,</kbd></div>
           </div>
         </div>

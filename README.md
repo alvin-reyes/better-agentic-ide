@@ -29,6 +29,8 @@ Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [x
 - **Save as note** with `Cmd+S` — persists prompts for reuse
 - **Prompt history** — all sent prompts are saved and searchable
 - **Send Enter** with `Cmd+E` — send a bare Enter to the terminal (confirm prompts without switching focus)
+- **Voice dictation** — microphone button for hands-free brainstorming (Web Speech API)
+- **Prompt chaining** — separate prompts with `---` to run multi-step chains sequentially, waiting for agent completion between steps
 
 ### Theming & Customization
 - **8 built-in themes** — GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark
@@ -49,6 +51,19 @@ Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [x
 - **Live Markdown Preview** — Watch `.md` files update in real-time with native filesystem watcher
 - **Activity feed** — See file create/modify/remove events as they happen
 - **Resizable panel** — Drag to resize the brainstorm panel (280px–900px)
+
+### Preview Panel
+- **Multi-format preview** — View HTML, images, PDF, and markdown files in a side panel
+- **Live auto-refresh** — Files update automatically when saved (native filesystem watcher)
+- **Resizable** — Drag the panel edge to resize (280px–900px)
+- **Toggle** with `Cmd+B` — opens alongside your terminal
+
+### Agent Dashboard & Cost Tracker
+- **Agent Dashboard** (`Cmd+.`) — bird's-eye view of all running agents with live status (WORKING/IDLE/DONE)
+- **Session tracking** — duration, estimated token usage, and cost per session
+- **Cost estimation** — per-provider rates for Claude, Codex, and Gemini
+- **Notifications** — system notification + in-app toast when an agent finishes a task
+- **Session history** — review past sessions with token and cost breakdowns (persisted in localStorage)
 
 ### Workspace Management
 - **Save workspaces** — snapshot your current tab layout with names
@@ -74,10 +89,12 @@ Every action has a keyboard shortcut. No mouse required.
 | `Cmd+Shift+Enter` | Copy scratchpad to clipboard |
 | `Cmd+S` | Save scratchpad as note |
 | `Cmd+E` | Send Enter to terminal |
-| `Cmd+B` | Toggle brainstorm panel |
+| `Cmd+B` | Toggle preview panel |
 | `Cmd+Shift+A` | Launch AI agent picker |
+| `Cmd+.` | Agent dashboard |
 | `Cmd+P` | Command palette |
 | `Cmd+F` | Search in terminal |
+| `Cmd+Shift+Enter` | Zoom / unzoom pane |
 | `Cmd+,` | Open settings |
 | `Escape` | Switch focus to terminal |
 
@@ -135,13 +152,16 @@ better-terminal/
 │   │   ├── PaneContainer.tsx Split pane layout (react-resizable-panels)
 │   │   ├── Scratchpad.tsx  Thoughts panel with history & notes
 │   │   ├── BrainstormPanel.tsx Claude brainstorm + live markdown preview
-│   │   ├── AgentPicker.tsx AI agent launcher (16 profiles, 5 categories)
+│   │   ├── AgentPicker.tsx AI agent launcher (20+ profiles, 5 categories)
+│   │   ├── AgentDashboard.tsx Agent monitoring & cost tracker
+│   │   ├── PreviewPanel.tsx Multi-format file preview (HTML, images, PDF, markdown)
 │   │   ├── CommandPalette.tsx Cmd+P command palette
 │   │   ├── SettingsPanel.tsx Theme, font, workspace settings
 │   │   └── ShortcutsBar.tsx  Keyboard shortcut reference
 │   ├── stores/
 │   │   ├── tabStore.ts     Tab & pane state (Zustand)
-│   │   └── settingsStore.ts Theme, font, workspace persistence
+│   │   ├── settingsStore.ts Theme, font, workspace persistence
+│   │   └── agentTrackerStore.ts Agent session & cost tracking
 │   ├── hooks/
 │   │   ├── useTerminal.ts  Terminal lifecycle & PTY bridge
 │   │   └── useKeybindings.ts Global keyboard shortcuts
