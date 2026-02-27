@@ -289,15 +289,17 @@ interface Settings {
   cursorBlink: boolean;
   scrollback: number;
   defaultProvider: Provider;
+  anthropicApiKey: string;
+  orchestratorModel: string;
 }
 
 interface SettingsStore extends Settings {
   showSettings: boolean;
-  settingsTab: "theme" | "terminal" | "workspace";
+  settingsTab: "theme" | "terminal" | "workspace" | "ai";
   workspaces: WorkspacePreset[];
 
   setShowSettings: (show: boolean) => void;
-  setSettingsTab: (tab: "theme" | "terminal" | "workspace") => void;
+  setSettingsTab: (tab: "theme" | "terminal" | "workspace" | "ai") => void;
   setTheme: (id: string) => void;
   setCustomColor: (key: keyof ThemeColors, value: string) => void;
   clearCustomColors: () => void;
@@ -308,6 +310,8 @@ interface SettingsStore extends Settings {
   setCursorBlink: (blink: boolean) => void;
   setScrollback: (lines: number) => void;
   setDefaultProvider: (provider: Provider) => void;
+  setAnthropicApiKey: (key: string) => void;
+  setOrchestratorModel: (model: string) => void;
   getActiveTheme: () => ThemeColors;
 
   saveWorkspace: (name: string, tabs: { name: string; splits: "none" | "horizontal" | "vertical" }[]) => void;
@@ -350,6 +354,8 @@ const defaults: Settings = {
   cursorBlink: true,
   scrollback: 10000,
   defaultProvider: "claude" as Provider,
+  anthropicApiKey: "",
+  orchestratorModel: "claude-sonnet-4-20250514",
 };
 
 const saved = loadSettings();
@@ -419,6 +425,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setDefaultProvider: (defaultProvider) => {
     set({ defaultProvider });
+    persistSettings(get());
+  },
+
+  setAnthropicApiKey: (key) => {
+    set({ anthropicApiKey: key });
+    persistSettings(get());
+  },
+  setOrchestratorModel: (model) => {
+    set({ orchestratorModel: model });
     persistSettings(get());
   },
 
