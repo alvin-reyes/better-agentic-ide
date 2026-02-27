@@ -355,7 +355,7 @@ const defaults: Settings = {
   scrollback: 10000,
   defaultProvider: "claude" as Provider,
   anthropicApiKey: "",
-  orchestratorModel: "claude-sonnet-4-20250514",
+  orchestratorModel: "claude-opus-4-20250514",
 };
 
 const saved = loadSettings();

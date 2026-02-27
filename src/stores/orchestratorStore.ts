@@ -2,10 +2,16 @@ import { create } from "zustand";
 
 const STORAGE_KEY = "better-terminal-orchestrator";
 
+export interface ChatImage {
+  dataUrl: string;
+  mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  images?: ChatImage[];
   timestamp: number;
 }
 
@@ -28,6 +34,7 @@ export interface OrchestratorSession {
   tasks: OrchestratorTask[];
   createdAt: number;
   status: "planning" | "executing" | "completed";
+  projectDir?: string;
 }
 
 interface OrchestratorStore {
@@ -36,10 +43,11 @@ interface OrchestratorStore {
 
   createSession: (name: string) => string;
   setActiveSession: (id: string) => void;
-  addMessage: (sessionId: string, role: "user" | "assistant", content: string) => void;
+  addMessage: (sessionId: string, role: "user" | "assistant", content: string, images?: ChatImage[]) => void;
   setTasks: (sessionId: string, tasks: Omit<OrchestratorTask, "id" | "status" | "paneId" | "tabId">[]) => void;
   updateTaskStatus: (sessionId: string, taskId: string, status: OrchestratorTask["status"], paneId?: string, tabId?: string) => void;
   setSessionStatus: (sessionId: string, status: OrchestratorSession["status"]) => void;
+  setProjectDir: (sessionId: string, projectDir: string) => void;
   getActiveSession: () => OrchestratorSession | undefined;
   getDispatchableTasks: (sessionId: string) => OrchestratorTask[];
   deleteSession: (id: string) => void;
@@ -85,7 +93,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
 
   setActiveSession: (id) => set({ activeSessionId: id }),
 
-  addMessage: (sessionId, role, content) => {
+  addMessage: (sessionId, role, content, images) => {
     set((state) => {
       const updated = state.sessions.map((s) => {
         if (s.id !== sessionId) return s;
@@ -95,6 +103,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
             id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             role,
             content,
+            ...(images && images.length > 0 ? { images } : {}),
             timestamp: Date.now(),
           }],
         };
@@ -147,6 +156,16 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     set((state) => {
       const updated = state.sessions.map((s) =>
         s.id === sessionId ? { ...s, status } : s
+      );
+      persistSessions(updated);
+      return { sessions: updated };
+    });
+  },
+
+  setProjectDir: (sessionId, projectDir) => {
+    set((state) => {
+      const updated = state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, projectDir } : s
       );
       persistSessions(updated);
       return { sessions: updated };

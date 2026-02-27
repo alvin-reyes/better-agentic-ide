@@ -751,8 +751,8 @@ export default function SettingsPanel() {
                     outline: "none",
                   }}
                 >
-                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (recommended)</option>
-                  <option value="claude-opus-4-20250514">Claude Opus 4</option>
+                  <option value="claude-opus-4-20250514">Claude Opus 4.6 (recommended)</option>
+                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
                 </select>
               </div>
             </div>
