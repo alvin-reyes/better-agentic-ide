@@ -14,6 +14,7 @@ interface KeybindingActions {
   toggleAgentPicker: () => void;
   togglePreview: () => void;
   toggleDashboard: () => void;
+  openOrchestrator: () => void;
   requestCloseTab: (tabId: string) => void;
   requestClosePane: (tabId: string, paneId: string) => void;
   isScratchpadOpen: boolean;
@@ -91,6 +92,13 @@ export function useKeybindings(actions: KeybindingActions) {
       if (meta && !shift && !alt && e.key === ".") {
         e.preventDefault();
         actions.toggleDashboard();
+        return;
+      }
+
+      // Cmd+Shift+O: Open Orchestrator
+      if (meta && shift && !alt && (e.key === "o" || e.key === "O")) {
+        e.preventDefault();
+        actions.openOrchestrator();
         return;
       }
 
