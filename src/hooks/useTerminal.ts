@@ -28,10 +28,62 @@ const instances = new Map<string, TerminalInstance>();
 
 // Activity tracking: timestamp of last output per pane
 const lastActivity = new Map<string, number>();
+const wasActive = new Map<string, boolean>();
 const ACTIVITY_TIMEOUT = 3000; // 3 seconds of no output = idle
+
+// Notification system — detect when a pane transitions from active → idle
+const NOTIFY_COOLDOWN = 10000; // Don't spam — 10s between notifications per pane
+const lastNotified = new Map<string, number>();
+
+function checkIdleTransition(paneId: string) {
+  const last = lastActivity.get(paneId);
+  if (!last) return;
+
+  const active = Date.now() - last < ACTIVITY_TIMEOUT;
+  const prevActive = wasActive.get(paneId) ?? false;
+  wasActive.set(paneId, active);
+
+  // Transition: was active → now idle
+  if (prevActive && !active) {
+    const lastNotify = lastNotified.get(paneId) ?? 0;
+    if (Date.now() - lastNotify < NOTIFY_COOLDOWN) return;
+    lastNotified.set(paneId, Date.now());
+
+    // Check if there's a tracked agent session for this pane
+    import("../stores/agentTrackerStore").then(({ useAgentTrackerStore }) => {
+      const session = useAgentTrackerStore.getState().getActiveSession(paneId);
+      if (session) {
+        useAgentTrackerStore.getState().endSession(paneId);
+        sendNotification(`${session.agentIcon} ${session.agentName} finished`, "Agent completed its task");
+      }
+    });
+  }
+}
+
+function sendNotification(title: string, body: string) {
+  // System notification
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(title, { body, silent: false });
+  } else if ("Notification" in window && Notification.permission !== "denied") {
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") new Notification(title, { body, silent: false });
+    });
+  }
+  // Dispatch custom event for in-app notification
+  window.dispatchEvent(new CustomEvent("agent-notification", { detail: { title, body } }));
+}
+
+// Poll for idle transitions every 2 seconds
+setInterval(() => {
+  lastActivity.forEach((_ts, paneId) => {
+    checkIdleTransition(paneId);
+  });
+}, 2000);
 
 function markActivity(paneId: string) {
   lastActivity.set(paneId, Date.now());
+  // Mark as active immediately
+  wasActive.set(paneId, true);
 }
 
 function isPaneActive(paneId: string): boolean {
@@ -218,7 +270,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     if (!meta) return true;
     // Pass Cmd+<key> shortcuts to the app (not consumed by xterm)
     const passthrough = [
-      "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", "b",
+      "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", ".", "b",
       "a", "A",  // Agent picker (Cmd+Shift+A)
       "Enter", "[", "]",
       "ArrowLeft", "ArrowRight",  // Pane navigation

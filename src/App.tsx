@@ -1,15 +1,18 @@
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect, useState, lazy, Suspense } from "react";
 import TabBar from "./components/TabBar";
 import PaneContainer from "./components/PaneContainer";
 import TerminalPane from "./components/TerminalPane";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
-import SettingsPanel from "./components/SettingsPanel";
-import Tour from "./components/Tour";
-import CommandPalette from "./components/CommandPalette";
-import AgentPicker from "./components/AgentPicker";
-import PreviewPanel from "./components/PreviewPanel";
 import ConfirmDialog from "./components/ConfirmDialog";
+
+// Lazy-load heavy components for faster startup
+const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
+const Tour = lazy(() => import("./components/Tour"));
+const CommandPalette = lazy(() => import("./components/CommandPalette"));
+const AgentPicker = lazy(() => import("./components/AgentPicker"));
+const PreviewPanel = lazy(() => import("./components/PreviewPanel"));
+const AgentDashboard = lazy(() => import("./components/AgentDashboard"));
 import { useTabStore, findAllPanes } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
@@ -21,7 +24,9 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
+  const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string;
     message: string;
@@ -50,6 +55,31 @@ export default function App() {
     return () => window.removeEventListener("open-preview", handler);
   }, []);
 
+  // Listen for agent completion notifications (in-app toast)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { title, body } = (e as CustomEvent).detail;
+      setToast({ title, body });
+      setTimeout(() => setToast(null), 4000);
+    };
+    window.addEventListener("agent-notification", handler);
+    return () => window.removeEventListener("agent-notification", handler);
+  }, []);
+
+  // Request notification permission on startup
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Listen for dashboard toggle from command palette
+  useEffect(() => {
+    const handler = () => setDashboardOpen((prev) => !prev);
+    window.addEventListener("toggle-dashboard", handler);
+    return () => window.removeEventListener("toggle-dashboard", handler);
+  }, []);
+
   const toggleCommandPalette = useCallback(() => {
     setPaletteOpen((prev) => !prev);
   }, []);
@@ -75,6 +105,10 @@ export default function App() {
 
   const togglePreview = useCallback(() => {
     setPreviewOpen((prev) => !prev);
+  }, []);
+
+  const toggleDashboard = useCallback(() => {
+    setDashboardOpen((prev) => !prev);
   }, []);
 
   const sendScratchpad = useCallback(() => {
@@ -159,6 +193,7 @@ export default function App() {
     toggleCommandPalette,
     toggleAgentPicker,
     togglePreview,
+    toggleDashboard,
     requestCloseTab,
     requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
@@ -176,24 +211,31 @@ export default function App() {
           )}
         </div>
         {previewOpen && (
-          <PreviewPanel onClose={() => setPreviewOpen(false)} />
+          <Suspense fallback={null}>
+            <PreviewPanel onClose={() => setPreviewOpen(false)} />
+          </Suspense>
         )}
       </div>
       <Scratchpad ref={scratchpadRef} />
       <ShortcutsBar />
-      <SettingsPanel />
-      <Tour />
-      {paletteOpen && (
-        <CommandPalette
-          onClose={() => setPaletteOpen(false)}
-          onToggleScratchpad={toggleScratchpad}
-          onOpenAgentPicker={() => { setPaletteOpen(false); setAgentPickerOpen(true); }}
-          onTogglePreview={togglePreview}
-        />
-      )}
-      {agentPickerOpen && (
-        <AgentPicker onClose={() => setAgentPickerOpen(false)} />
-      )}
+      <Suspense fallback={null}>
+        <SettingsPanel />
+        <Tour />
+        {paletteOpen && (
+          <CommandPalette
+            onClose={() => setPaletteOpen(false)}
+            onToggleScratchpad={toggleScratchpad}
+            onOpenAgentPicker={() => { setPaletteOpen(false); setAgentPickerOpen(true); }}
+            onTogglePreview={togglePreview}
+          />
+        )}
+        {agentPickerOpen && (
+          <AgentPicker onClose={() => setAgentPickerOpen(false)} />
+        )}
+        {dashboardOpen && (
+          <AgentDashboard onClose={() => setDashboardOpen(false)} />
+        )}
+      </Suspense>
       {confirmDialog && (
         <ConfirmDialog
           title={confirmDialog.title}
@@ -201,6 +243,32 @@ export default function App() {
           onConfirm={confirmDialog.onConfirm}
           onCancel={() => setConfirmDialog(null)}
         />
+      )}
+      {/* Toast notification */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "60px",
+            right: "20px",
+            zIndex: 2500,
+            backgroundColor: "var(--bg-elevated)",
+            border: "1px solid var(--border-strong)",
+            borderRadius: "var(--radius)",
+            padding: "12px 16px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            animation: "toast-slide-in 0.3s ease",
+            maxWidth: "320px",
+          }}
+          onClick={() => setToast(null)}
+        >
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "2px" }}>
+            {toast.title}
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+            {toast.body}
+          </div>
+        </div>
       )}
     </div>
   );
