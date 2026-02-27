@@ -29,6 +29,7 @@ interface AgentTrackerStore {
 }
 
 // Rough cost estimates per 1M tokens (in cents)
+// NOTE: These are approximations and may need updating as provider pricing changes.
 const COST_PER_1M: Record<string, { input: number; output: number }> = {
   claude: { input: 300, output: 1500 },   // ~$3/$15 per 1M
   codex: { input: 250, output: 1000 },    // ~$2.50/$10 per 1M
@@ -42,15 +43,15 @@ function estimateCost(session: AgentSession): number {
   return inputCost + outputCost;
 }
 
-// Estimate tokens from session duration (rough: ~50 tokens/sec output for active agent)
+// Estimate tokens from session duration — rough approximation.
+// Assumes 50% active time with ~30 input tokens/sec and ~80 output tokens/sec.
+// These are coarse estimates; actual usage will vary by agent and task.
 function estimateTokensFromDuration(durationMs: number): { input: number; output: number } {
   const seconds = durationMs / 1000;
-  // Agents typically think 30% of the time, output 70%
-  // Average ~200 tokens/sec when outputting
-  const activeSeconds = seconds * 0.5; // assume 50% active
+  const activeSeconds = seconds * 0.5;
   return {
-    input: Math.round(activeSeconds * 30),  // ~30 input tokens/sec
-    output: Math.round(activeSeconds * 80), // ~80 output tokens/sec
+    input: Math.round(activeSeconds * 30),
+    output: Math.round(activeSeconds * 80),
   };
 }
 
@@ -74,9 +75,12 @@ function persistSessions(sessions: AgentSession[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
 }
 
+const initialSessions = loadSessions();
+const initialTotalSpent = initialSessions.reduce((sum, s) => sum + estimateCost(s), 0);
+
 export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
-  sessions: loadSessions(),
-  totalSpent: loadSessions().reduce((sum, s) => sum + estimateCost(s), 0),
+  sessions: initialSessions,
+  totalSpent: initialTotalSpent,
 
   startSession: (paneId, agentName, agentIcon, provider) => {
     // End any existing session for this pane
@@ -173,7 +177,8 @@ export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
   clearHistory: () => {
     const active = get().sessions.filter((s) => s.status === "running");
     persistSessions(active);
-    set({ sessions: active, totalSpent: 0 });
+    const activeCost = active.reduce((sum, s) => sum + estimateCost(s), 0);
+    set({ sessions: active, totalSpent: activeCost });
   },
 }));
 
