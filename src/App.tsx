@@ -13,6 +13,7 @@ const CommandPalette = lazy(() => import("./components/CommandPalette"));
 const AgentPicker = lazy(() => import("./components/AgentPicker"));
 const PreviewPanel = lazy(() => import("./components/PreviewPanel"));
 const AgentDashboard = lazy(() => import("./components/AgentDashboard"));
+const OrchestratorTab = lazy(() => import("./components/OrchestratorTab"));
 import { useTabStore, findAllPanes } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
@@ -139,6 +140,13 @@ export default function App() {
     scratchpadRef.current?.close();
   }, []);
 
+  const openOrchestrator = useCallback(() => {
+    import("./stores/orchestratorStore").then(({ useOrchestratorStore }) => {
+      const sessionId = useOrchestratorStore.getState().createSession("New Project");
+      useTabStore.getState().addOrchestratorTab(sessionId);
+    });
+  }, []);
+
   // Guarded close: check for active Claude processes before closing
   const requestCloseTab = useCallback((tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
@@ -199,6 +207,7 @@ export default function App() {
     toggleAgentPicker,
     togglePreview,
     toggleDashboard,
+    openOrchestrator,
     requestCloseTab,
     requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
@@ -210,9 +219,13 @@ export default function App() {
       <div className="flex-1 overflow-hidden flex">
         <div className="overflow-hidden" style={{ minWidth: 0, flex: 1 }}>
           {activeTab && (
-            zoomedPane
-              ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
-              : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
+            activeTab.type === "orchestrator" && activeTab.orchestratorSessionId
+              ? <Suspense fallback={null}>
+                  <OrchestratorTab sessionId={activeTab.orchestratorSessionId} />
+                </Suspense>
+              : zoomedPane
+                ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
+                : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
           )}
         </div>
         {previewOpen && (

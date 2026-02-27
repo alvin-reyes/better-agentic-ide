@@ -23,6 +23,7 @@ const shortcuts = [
   { keys: "⌘ F", action: "Find" },
   { keys: "⇧⌘ ↵", action: "Zoom pane" },
   { keys: "⌘ ,", action: "Settings" },
+  { keys: "⇧ ⌘ O", action: "Orchestrator" },
   { keys: "Esc", action: "Close panel" },
 ];
 

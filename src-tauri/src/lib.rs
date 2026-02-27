@@ -119,6 +119,34 @@ fn check_claude_plugin(plugin_name: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn write_text_file(path: String, content: String) -> Result<(), String> {
+    let expanded = if path.starts_with('~') {
+        let home = get_home_dir();
+        path.replacen("~", &home, 1)
+    } else {
+        path.clone()
+    };
+    // Ensure parent dir exists
+    if let Some(parent) = std::path::Path::new(&expanded).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent dir: {}", e))?;
+    }
+    std::fs::write(&expanded, content).map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn create_directory(path: String) -> Result<String, String> {
+    let expanded = if path.starts_with('~') {
+        let home = get_home_dir();
+        path.replacen("~", &home, 1)
+    } else {
+        path.clone()
+    };
+    std::fs::create_dir_all(&expanded).map_err(|e| format!("Failed to create dir: {}", e))?;
+    Ok(expanded)
+}
+
+#[tauri::command]
 fn save_temp_image(base64_data: String, extension: String) -> Result<String, String> {
     use std::io::Write;
 
@@ -255,6 +283,8 @@ pub fn run() {
             watcher::unwatch_directory,
             check_command_exists,
             check_claude_plugin,
+            create_directory,
+            write_text_file,
             save_temp_image,
             read_file,
             read_file_base64,

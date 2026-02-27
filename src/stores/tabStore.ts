@@ -24,6 +24,8 @@ export type PaneNode = SplitNode | SplitContainer;
 export interface Tab {
   id: string;
   name: string;
+  type?: "terminal" | "orchestrator";
+  orchestratorSessionId?: string;
   root: PaneNode;
   activePaneId: string;
 }
@@ -32,7 +34,8 @@ interface TabStore {
   tabs: Tab[];
   activeTabId: string;
 
-  addTab: (name?: string) => void;
+  addTab: (name?: string, initialCwd?: string) => void;
+  addOrchestratorTab: (sessionId: string) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
@@ -180,8 +183,9 @@ export const useTabStore = create<TabStore>((set, get) => {
     ],
     activeTabId: initialTabId,
 
-    addTab: (name) => {
+    addTab: (name, initialCwd) => {
       const pane = createDefaultPane();
+      if (initialCwd) pane.initialCwd = initialCwd;
       const tab: Tab = {
         id: newTabId(),
         name: name || "Terminal",
@@ -192,6 +196,24 @@ export const useTabStore = create<TabStore>((set, get) => {
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,
       }));
+    },
+
+    addOrchestratorTab: (sessionId) => {
+      const id = newTabId();
+      const pane = createDefaultPane();
+      const tab: Tab = {
+        id,
+        name: "Orchestrator",
+        type: "orchestrator",
+        orchestratorSessionId: sessionId,
+        root: { type: "pane", pane },
+        activePaneId: pane.id,
+      };
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: id,
+      }));
+      return id;
     },
 
     closeTab: (id) => {
