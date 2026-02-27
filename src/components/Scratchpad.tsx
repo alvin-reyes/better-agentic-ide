@@ -402,6 +402,30 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   }, []);
 
   const send = useCallback(async () => {
+    // Check if active tab is an orchestrator tab — route to orchestrator chat
+    const tabState = useTabStore.getState();
+    const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId);
+    if (activeTab?.type === "orchestrator" && (text.trim() || pastedImages.length > 0)) {
+      const images = pastedImages.map((img) => ({
+        dataUrl: img.dataUrl,
+        mediaType: (img.dataUrl.startsWith("data:image/jpeg") ? "image/jpeg"
+          : img.dataUrl.startsWith("data:image/gif") ? "image/gif"
+          : img.dataUrl.startsWith("data:image/webp") ? "image/webp"
+          : "image/png") as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
+      }));
+      window.dispatchEvent(new CustomEvent("orchestrator-send", { detail: { text: text.trim(), images } }));
+      if (text.trim()) {
+        const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
+        setHistory(newHistory);
+        saveHistory(newHistory);
+      }
+      setSent(true);
+      setTimeout(() => setSent(false), 1500);
+      setText("");
+      setPastedImages([]);
+      return;
+    }
+
     const ptyId = getActivePtyId();
     if (ptyId === null) {
       console.warn("No active PTY to send to");

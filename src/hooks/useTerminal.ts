@@ -59,6 +59,18 @@ function checkIdleTransition(paneId: string) {
         if (session) {
           useAgentTrackerStore.getState().endSession(paneId);
           sendNotification(`${session.agentIcon} ${session.agentName} finished`, "Agent completed its task");
+
+          // Update orchestrator task status if this pane was dispatched by orchestrator
+          import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
+            const store = useOrchestratorStore.getState();
+            for (const orchSession of store.sessions) {
+              const task = orchSession.tasks.find((t) => t.paneId === paneId && t.status === "running");
+              if (task) {
+                store.updateTaskStatus(orchSession.id, task.id, "completed");
+                break;
+              }
+            }
+          }).catch(() => {});
         }
       })
       .catch(() => {})
@@ -290,6 +302,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     const passthrough = [
       "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", ".", "b",
       "a", "A",  // Agent picker (Cmd+Shift+A)
+      "o", "O",  // Orchestrator (Cmd+Shift+O)
       "Enter", "[", "]",
       "ArrowLeft", "ArrowRight",  // Pane navigation
       "1", "2", "3", "4", "5", "6", "7", "8", "9",

@@ -67,6 +67,15 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "agents", label: "Launch AI Agent", shortcut: "Cmd+Shift+A", category: "Panels", action: () => { onOpenAgentPicker(); } },
       { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
       { id: "dashboard", label: "Agent Dashboard", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-dashboard")); onClose(); } },
+      { id: "orchestrator", label: "Open Orchestrator", shortcut: "Cmd+Shift+O", category: "Panels", action: () => {
+        import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
+          const sessionId = useOrchestratorStore.getState().createSession("New Project");
+          import("../stores/tabStore").then(({ useTabStore }) => {
+            useTabStore.getState().addOrchestratorTab(sessionId);
+          });
+        });
+        onClose();
+      }},
       { id: "settings", label: "Open Settings", shortcut: "Cmd+,", category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
       { id: "search", label: "Search in Terminal", shortcut: "Cmd+F", category: "Panels", action: () => { onClose(); } },
       // Theme shortcuts
