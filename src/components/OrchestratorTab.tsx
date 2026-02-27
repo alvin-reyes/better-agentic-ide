@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useOrchestratorStore, type OrchestratorTask } from "../stores/orchestratorStore";
 import { useTabStore } from "../stores/tabStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { AGENT_PROFILES } from "../data/agentProfiles";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
+import { marked } from "marked";
+import mermaid from "mermaid";
 
 interface OrchestratorTabProps {
   sessionId: string;
@@ -28,13 +30,41 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatBodyRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const startXRef = useRef(0);
   const startWidthRef = useRef(DEFAULT_PANEL_WIDTH);
 
+  // Parse assistant messages as markdown
+  const parsedMessages = useMemo(() => {
+    const parsed: Record<string, string> = {};
+    if (!session) return parsed;
+    for (const msg of session.messages) {
+      if (msg.role === "assistant") {
+        parsed[msg.id] = marked.parse(msg.content) as string;
+      }
+    }
+    return parsed;
+  }, [session?.messages]);
+
+  // Parse streaming text as markdown
+  const streamingHtml = useMemo(() => {
+    if (!streamingText) return "";
+    return marked.parse(streamingText) as string;
+  }, [streamingText]);
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [session?.messages, streamingText]);
+
+  // Render mermaid diagrams after messages update
+  useEffect(() => {
+    const container = chatBodyRef.current;
+    if (!container) return;
+    const mermaidEls = container.querySelectorAll("pre.mermaid:not([data-processed])");
+    if (mermaidEls.length === 0) return;
+    mermaid.run({ nodes: mermaidEls as NodeListOf<HTMLElement> }).catch(() => {});
+  }, [parsedMessages, streamingHtml]);
 
   const sendMessage = useCallback(async (userText: string) => {
     if (!userText.trim() || streaming || !session) return;
@@ -223,7 +253,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
           </span>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
+        <div ref={chatBodyRef} style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
           {session.messages.map((msg) => (
             <div
               key={msg.id}
@@ -234,19 +264,36 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                 alignItems: msg.role === "user" ? "flex-end" : "flex-start",
               }}
             >
-              <div style={{
-                maxWidth: "80%",
-                padding: "10px 14px",
-                borderRadius: "12px",
-                fontSize: "13px",
-                lineHeight: 1.6,
-                backgroundColor: msg.role === "user" ? "var(--accent-subtle)" : "var(--bg-secondary)",
-                color: "var(--text-primary)",
-                border: `1px solid ${msg.role === "user" ? "rgba(88,166,255,0.2)" : "var(--border)"}`,
-                whiteSpace: "pre-wrap",
-              }}>
-                {msg.content}
-              </div>
+              {msg.role === "user" ? (
+                <div style={{
+                  maxWidth: "80%",
+                  padding: "10px 14px",
+                  borderRadius: "12px",
+                  fontSize: "13px",
+                  lineHeight: 1.6,
+                  backgroundColor: "var(--accent-subtle)",
+                  color: "var(--text-primary)",
+                  border: "1px solid rgba(88,166,255,0.2)",
+                  whiteSpace: "pre-wrap",
+                }}>
+                  {msg.content}
+                </div>
+              ) : (
+                <div
+                  className="markdown-body"
+                  style={{
+                    maxWidth: "85%",
+                    padding: "10px 14px",
+                    borderRadius: "12px",
+                    fontSize: "13px",
+                    lineHeight: 1.6,
+                    backgroundColor: "var(--bg-secondary)",
+                    color: "var(--text-primary)",
+                    border: "1px solid var(--border)",
+                  }}
+                  dangerouslySetInnerHTML={{ __html: parsedMessages[msg.id] ?? msg.content }}
+                />
+              )}
               <span style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px", padding: "0 4px" }}>
                 {msg.role === "user" ? "You" : "AI"}
               </span>
@@ -255,20 +302,20 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
 
           {streaming && streamingText && (
             <div style={{ marginBottom: "16px", display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-              <div style={{
-                maxWidth: "80%",
-                padding: "10px 14px",
-                borderRadius: "12px",
-                fontSize: "13px",
-                lineHeight: 1.6,
-                backgroundColor: "var(--bg-secondary)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border)",
-                whiteSpace: "pre-wrap",
-              }}>
-                {streamingText}
-                <span style={{ display: "inline-block", width: "2px", height: "14px", background: "var(--accent)", animation: "blink 1s infinite", verticalAlign: "text-bottom", marginLeft: "2px" }} />
-              </div>
+              <div
+                className="markdown-body"
+                style={{
+                  maxWidth: "85%",
+                  padding: "10px 14px",
+                  borderRadius: "12px",
+                  fontSize: "13px",
+                  lineHeight: 1.6,
+                  backgroundColor: "var(--bg-secondary)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                }}
+                dangerouslySetInnerHTML={{ __html: streamingHtml }}
+              />
             </div>
           )}
 
