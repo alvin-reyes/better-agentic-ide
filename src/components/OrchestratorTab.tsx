@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useOrchestratorStore, type OrchestratorTask } from "../stores/orchestratorStore";
+import { useOrchestratorStore, type OrchestratorTask, type ChatImage, type OrchestratorSession } from "../stores/orchestratorStore";
 import { useTabStore } from "../stores/tabStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { AGENT_PROFILES } from "../data/agentProfiles";
@@ -7,6 +7,40 @@ import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import mermaid from "mermaid";
+
+function buildSpec(session: OrchestratorSession, tasks: OrchestratorTask[]): string {
+  const lines: string[] = [];
+  lines.push(`# ${session.name}`);
+  lines.push("");
+  lines.push("## Conversation");
+  lines.push("");
+  for (const msg of session.messages) {
+    const label = msg.role === "user" ? "**User**" : "**AI**";
+    lines.push(`${label}:`);
+    lines.push("");
+    lines.push(msg.content);
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  }
+  lines.push("## Tasks");
+  lines.push("");
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i];
+    const profile = AGENT_PROFILES.find((p) => p.id === t.agentProfileId);
+    lines.push(`### Task ${i + 1}: ${t.title}`);
+    lines.push("");
+    lines.push(`- **Agent:** ${profile?.name ?? t.agentProfileId}`);
+    lines.push(`- **Priority:** ${t.priority}`);
+    if (t.dependencies.length > 0) {
+      lines.push(`- **Dependencies:** ${t.dependencies.join(", ")}`);
+    }
+    lines.push("");
+    lines.push(t.description);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
 
 interface OrchestratorTabProps {
   sessionId: string;
@@ -22,6 +56,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   const setTasks = useOrchestratorStore((s) => s.setTasks);
   const updateTaskStatus = useOrchestratorStore((s) => s.updateTaskStatus);
   const setSessionStatus = useOrchestratorStore((s) => s.setSessionStatus);
+  const setProjectDir = useOrchestratorStore((s) => s.setProjectDir);
   const getDispatchableTasks = useOrchestratorStore((s) => s.getDispatchableTasks);
   const { addTab } = useTabStore();
 
@@ -66,30 +101,49 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     mermaid.run({ nodes: mermaidEls as NodeListOf<HTMLElement> }).catch(() => {});
   }, [parsedMessages, streamingHtml]);
 
-  const sendMessage = useCallback(async (userText: string) => {
-    if (!userText.trim() || streaming || !session) return;
+  const sendMessage = useCallback(async (userText: string, images?: ChatImage[]) => {
+    if ((!userText.trim() && (!images || images.length === 0)) || streaming || !session) return;
 
-    addMessage(sessionId, "user", userText);
+    addMessage(sessionId, "user", userText, images);
     setStreaming(true);
     setStreamingText("");
 
     const history: ChatTurn[] = [
-      ...session.messages.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user" as const, content: userText },
+      ...session.messages.map((m) => ({ role: m.role, content: m.content, images: m.images })),
+      { role: "user" as const, content: userText, images },
     ];
 
     await sendOrchestratorMessage(history, {
       onText: (text) => {
         setStreamingText((prev) => prev + text);
       },
-      onTasksCreated: (tasks) => {
-        setTasks(sessionId, tasks.map((t) => ({
+      onTasksCreated: async (tasks) => {
+        const mappedTasks = tasks.map((t) => ({
           title: t.title,
           description: t.description,
           agentProfileId: t.agentProfile,
           priority: t.priority,
           dependencies: t.dependencies ?? [],
-        })));
+        }));
+        setTasks(sessionId, mappedTasks);
+
+        // Create project folder and write SPEC.md immediately
+        const sessionName = (session?.name || "project").replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+        const ts = Date.now().toString(36);
+        const folderPath = `~/.ade/orchestrator/${sessionName}-${ts}`;
+        try {
+          const dir = await invoke<string>("create_directory", { path: folderPath });
+          setProjectDir(sessionId, dir);
+
+          // Build spec from the store (setTasks is synchronous so store is already updated)
+          const updatedSession = useOrchestratorStore.getState().sessions.find((s) => s.id === sessionId);
+          if (updatedSession) {
+            const spec = buildSpec(updatedSession, updatedSession.tasks);
+            await invoke("write_text_file", { path: `${dir}/SPEC.md`, content: spec });
+          }
+        } catch (err) {
+          console.error("Failed to create project folder:", err);
+        }
       },
       onDone: (fullText) => {
         addMessage(sessionId, "assistant", fullText);
@@ -107,32 +161,42 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   // Listen for messages from the Scratchpad
   useEffect(() => {
     const handler = (e: Event) => {
-      const { text } = (e as CustomEvent).detail;
-      sendMessage(text);
+      const { text, images } = (e as CustomEvent).detail;
+      sendMessage(text, images);
     };
     window.addEventListener("orchestrator-send", handler);
     return () => window.removeEventListener("orchestrator-send", handler);
   }, [sendMessage]);
 
-  const dispatchTask = useCallback(async (task: OrchestratorTask) => {
+  const dispatchTask = useCallback(async (task: OrchestratorTask, projectDir?: string) => {
     const profile = AGENT_PROFILES.find((p) => p.id === task.agentProfileId);
-    if (!profile) return;
+    if (!profile) {
+      console.warn(`Agent profile not found: ${task.agentProfileId}`);
+      return;
+    }
 
     // Remember the orchestrator tab so we can switch back
     const orchTabId = useTabStore.getState().activeTabId;
 
-    addTab(`Agent: ${task.title}`);
+    addTab(`Agent: ${task.title}`, projectDir);
 
-    await new Promise((r) => setTimeout(r, 800));
-
-    const ptyId = useTabStore.getState().getActivePtyId();
+    // Wait for the new tab's PTY to initialize (retry up to 3s)
+    let ptyId: number | null = null;
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      ptyId = useTabStore.getState().getActivePtyId();
+      if (ptyId !== null) break;
+    }
     if (ptyId === null) return;
 
     const activePane = useTabStore.getState().getActivePane();
     const agentTabId = useTabStore.getState().activeTabId;
 
-    const escapedDesc = task.description.replace(/"/g, '\\"');
-    const cmd = `claude "${profile.providers.claude} Your task: ${escapedDesc}"`;
+    // Build the claude command — agent reads SPEC.md for full context
+    const escapedDesc = task.description.replace(/'/g, "'\\''");
+    const systemPrompt = profile.providers.claude.replace(/^claude\s+"?/, "").replace(/"$/, "");
+    const specRef = projectDir ? " Read SPEC.md for the full project specification and context." : "";
+    const cmd = `claude -p '${systemPrompt}${specRef} Your task: ${escapedDesc}'`;
     const data = Array.from(new TextEncoder().encode(cmd + "\r"));
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
@@ -154,10 +218,30 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
 
   const dispatchAll = useCallback(async () => {
     const tasks = getDispatchableTasks(sessionId);
-    for (const task of tasks) {
-      await dispatchTask(task);
+    if (tasks.length === 0) return;
+
+    // Use the project dir that was created when tasks were first generated
+    let projectDir = session?.projectDir;
+
+    // Fallback: create folder now if it doesn't exist yet
+    if (!projectDir) {
+      const sessionName = (session?.name || "project").replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+      const timestamp = Date.now().toString(36);
+      try {
+        projectDir = await invoke<string>("create_directory", { path: `~/.ade/orchestrator/${sessionName}-${timestamp}` });
+        setProjectDir(sessionId, projectDir);
+        const spec = buildSpec(session!, session!.tasks);
+        await invoke("write_text_file", { path: `${projectDir}/SPEC.md`, content: spec });
+      } catch (err) {
+        console.error("Failed to create project folder:", err);
+        return;
+      }
     }
-  }, [sessionId, getDispatchableTasks, dispatchTask]);
+
+    for (const task of tasks) {
+      await dispatchTask(task, projectDir);
+    }
+  }, [sessionId, session, getDispatchableTasks, dispatchTask, setProjectDir]);
 
   // Drag-to-resize the task panel
   const onDragStart = useCallback((e: React.MouseEvent) => {
@@ -237,7 +321,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
           alignItems: "center",
           gap: "8px",
         }}>
-          <span style={{ fontSize: "16px" }}>&#x1f3af;</span>
+          <img src="/ade_logo.png" alt="ADE" style={{ width: "20px", height: "20px", borderRadius: "4px" }} />
           <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
             Orchestrator
           </span>
@@ -276,6 +360,24 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                   border: "1px solid rgba(88,166,255,0.2)",
                   whiteSpace: "pre-wrap",
                 }}>
+                  {msg.images && msg.images.length > 0 && (
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: msg.content ? "8px" : 0 }}>
+                      {msg.images.map((img, i) => (
+                        <img
+                          key={i}
+                          src={img.dataUrl}
+                          alt="pasted"
+                          style={{
+                            maxWidth: "200px",
+                            maxHeight: "150px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--border)",
+                            objectFit: "contain",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   {msg.content}
                 </div>
               ) : (
@@ -500,7 +602,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            dispatchTask(task);
+                            dispatchTask(task, session?.projectDir);
                           }}
                           style={{
                             padding: "4px 12px",

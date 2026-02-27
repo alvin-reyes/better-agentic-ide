@@ -34,7 +34,7 @@ interface TabStore {
   tabs: Tab[];
   activeTabId: string;
 
-  addTab: (name?: string) => void;
+  addTab: (name?: string, initialCwd?: string) => void;
   addOrchestratorTab: (sessionId: string) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
@@ -183,8 +183,9 @@ export const useTabStore = create<TabStore>((set, get) => {
     ],
     activeTabId: initialTabId,
 
-    addTab: (name) => {
+    addTab: (name, initialCwd) => {
       const pane = createDefaultPane();
+      if (initialCwd) pane.initialCwd = initialCwd;
       const tab: Tab = {
         id: newTabId(),
         name: name || "Terminal",

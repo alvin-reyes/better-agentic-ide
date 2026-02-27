@@ -17,10 +17,12 @@ const CREATE_TASKS_TOOL = {
             agentProfile: {
               type: "string" as const,
               enum: [
-                "api-builder", "db-engineer", "auth-architect",
-                "ui-builder", "style-architect", "state-manager",
-                "unit-tester", "e2e-tester",
-                "debugger", "code-reviewer", "docs-writer", "system-architect",
+                "backend-api", "backend-db", "backend-auth",
+                "frontend-ui", "frontend-css", "frontend-state",
+                "test-unit", "test-e2e", "test-perf",
+                "general-debug", "general-review", "general-docs", "general-architect",
+                "devops-docker", "devops-ci", "devops-infra", "devops-k8s",
+                "general-git", "general-brainstorm",
               ],
               description: "Which agent profile should handle this task",
             },
@@ -51,24 +53,37 @@ When you and the user have agreed on a solid plan, call the create_tasks tool to
 - Dependencies listed if a task requires another to finish first
 
 Available agent profiles:
-- api-builder: REST/GraphQL API endpoints, routing, middleware
-- db-engineer: Database schema, migrations, queries, ORM setup
-- auth-architect: Authentication, authorization, JWT, OAuth
-- ui-builder: React components, pages, layouts
-- style-architect: CSS, Tailwind, responsive design, animations
-- state-manager: State management, data flow, caching
-- unit-tester: Unit tests, mocking, test utilities
-- e2e-tester: End-to-end tests, integration tests
-- debugger: Bug investigation, root cause analysis, fixes
-- code-reviewer: Code review, refactoring, best practices
-- docs-writer: Documentation, READMEs, API docs
-- system-architect: System design, architecture decisions
+- backend-api: REST/GraphQL API endpoints, routing, middleware
+- backend-db: Database schema, migrations, queries, ORM setup
+- backend-auth: Authentication, authorization, JWT, OAuth
+- frontend-ui: React components, pages, layouts
+- frontend-css: CSS, Tailwind, responsive design, animations
+- frontend-state: State management, data flow, caching
+- test-unit: Unit tests, mocking, test utilities
+- test-e2e: End-to-end tests, integration tests
+- test-perf: Performance testing, benchmarks
+- general-debug: Bug investigation, root cause analysis, fixes
+- general-review: Code review, refactoring, best practices
+- general-docs: Documentation, READMEs, API docs
+- general-architect: System design, architecture decisions
+- general-git: Git workflows, branching, merging
+- general-brainstorm: Brainstorming, ideation, planning
+- devops-docker: Docker, containerization
+- devops-ci: CI/CD pipelines
+- devops-infra: Infrastructure, deployment
+- devops-k8s: Kubernetes orchestration
 
 Do NOT call create_tasks until the user confirms the plan. Ask first.`;
+
+export interface ChatImage {
+  dataUrl: string;
+  mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+}
 
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  images?: ChatImage[];
 }
 
 export interface StreamCallbacks {
@@ -79,7 +94,7 @@ export interface StreamCallbacks {
     agentProfile: string;
     priority: number;
     dependencies?: string[];
-  }>) => void;
+  }>) => void | Promise<void>;
   onDone: (fullText: string) => void;
   onError: (error: string) => void;
 }
@@ -100,11 +115,31 @@ export async function sendOrchestratorMessage(
 
   try {
     const response = await client.messages.create({
-      model: settings.orchestratorModel || "claude-sonnet-4-20250514",
+      model: settings.orchestratorModel || "claude-opus-4-20250514",
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: [CREATE_TASKS_TOOL],
-      messages: history.map((m) => ({ role: m.role, content: m.content })),
+      messages: history.map((m) => {
+        if (m.role === "user" && m.images && m.images.length > 0) {
+          type MediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+          const content: Array<
+            | { type: "text"; text: string }
+            | { type: "image"; source: { type: "base64"; media_type: MediaType; data: string } }
+          > = [];
+          for (const img of m.images) {
+            const base64 = img.dataUrl.split(",")[1];
+            content.push({
+              type: "image",
+              source: { type: "base64", media_type: img.mediaType as MediaType, data: base64 },
+            });
+          }
+          if (m.content.trim()) {
+            content.push({ type: "text", text: m.content });
+          }
+          return { role: m.role, content };
+        }
+        return { role: m.role, content: m.content };
+      }),
     });
 
     let fullText = "";
@@ -121,7 +156,7 @@ export async function sendOrchestratorMessage(
           priority: number;
           dependencies?: string[];
         }> };
-        callbacks.onTasksCreated(input.tasks);
+        await callbacks.onTasksCreated(input.tasks);
         fullText += `\n\n[Created ${input.tasks.length} tasks]`;
       }
     }
