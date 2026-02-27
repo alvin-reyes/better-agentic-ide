@@ -1,3 +1,4 @@
+{% raw %}
 # Orchestrator Mode Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
@@ -1199,3 +1200,4 @@ Run: `export PATH="$HOME/.cargo/bin:$PATH" && npm run tauri dev`
 git add -A
 git commit -m "feat: orchestrator mode — AI chat, task backlog, parallel agent dispatch"
 ```
+{% endraw %}
