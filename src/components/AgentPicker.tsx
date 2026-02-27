@@ -4,6 +4,7 @@ import { AGENT_PROFILES, AGENT_CATEGORIES, PROVIDERS, type AgentProfile, type Pr
 import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 
 interface AgentPickerProps {
   onClose: () => void;
@@ -19,6 +20,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
+  const getActivePane = useTabStore((s) => s.getActivePane);
   const defaultProvider = useSettingsStore((s) => s.defaultProvider);
   const setDefaultProvider = useSettingsStore((s) => s.setDefaultProvider);
   const [activeProvider, setActiveProvider] = useState<Provider>(defaultProvider);
@@ -104,13 +106,24 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     const data = Array.from(new TextEncoder().encode(cmd + "\r"));
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
+    // Track agent session
+    const activePane = getActivePane();
+    if (activePane) {
+      useAgentTrackerStore.getState().startSession(
+        activePane.id,
+        profile.name,
+        profile.icon,
+        activeProvider,
+      );
+    }
+
     // Save selected provider as default
     if (activeProvider !== defaultProvider) {
       setDefaultProvider(activeProvider);
     }
 
     onClose();
-  }, [getActivePtyId, onClose, continuousMode, activeProvider, defaultProvider, setDefaultProvider]);
+  }, [getActivePtyId, getActivePane, onClose, continuousMode, activeProvider, defaultProvider, setDefaultProvider]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
