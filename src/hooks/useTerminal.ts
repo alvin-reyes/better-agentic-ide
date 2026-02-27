@@ -34,6 +34,7 @@ const ACTIVITY_TIMEOUT = 3000; // 3 seconds of no output = idle
 // Notification system — detect when a pane transitions from active → idle
 const NOTIFY_COOLDOWN = 10000; // Don't spam — 10s between notifications per pane
 const lastNotified = new Map<string, number>();
+const idleCheckInFlight = new Set<string>(); // Guard against concurrent imports per pane
 
 function checkIdleTransition(paneId: string) {
   const last = lastActivity.get(paneId);
@@ -47,16 +48,23 @@ function checkIdleTransition(paneId: string) {
   if (prevActive && !active) {
     const lastNotify = lastNotified.get(paneId) ?? 0;
     if (Date.now() - lastNotify < NOTIFY_COOLDOWN) return;
+    if (idleCheckInFlight.has(paneId)) return; // Prevent concurrent imports
     lastNotified.set(paneId, Date.now());
+    idleCheckInFlight.add(paneId);
 
     // Check if there's a tracked agent session for this pane
-    import("../stores/agentTrackerStore").then(({ useAgentTrackerStore }) => {
-      const session = useAgentTrackerStore.getState().getActiveSession(paneId);
-      if (session) {
-        useAgentTrackerStore.getState().endSession(paneId);
-        sendNotification(`${session.agentIcon} ${session.agentName} finished`, "Agent completed its task");
-      }
-    });
+    import("../stores/agentTrackerStore")
+      .then(({ useAgentTrackerStore }) => {
+        const session = useAgentTrackerStore.getState().getActiveSession(paneId);
+        if (session) {
+          useAgentTrackerStore.getState().endSession(paneId);
+          sendNotification(`${session.agentIcon} ${session.agentName} finished`, "Agent completed its task");
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        idleCheckInFlight.delete(paneId);
+      });
   }
 }
 
@@ -74,11 +82,16 @@ function sendNotification(title: string, body: string) {
 }
 
 // Poll for idle transitions every 2 seconds
-setInterval(() => {
+const idleCheckInterval = setInterval(() => {
   lastActivity.forEach((_ts, paneId) => {
     checkIdleTransition(paneId);
   });
 }, 2000);
+
+// Allow cleanup if needed (e.g. in tests or app teardown)
+export function stopIdlePolling() {
+  clearInterval(idleCheckInterval);
+}
 
 function markActivity(paneId: string) {
   lastActivity.set(paneId, Date.now());
@@ -101,6 +114,11 @@ function destroyInstance(paneId: string) {
   inst.term.dispose();
   inst.wrapper.remove();
   instances.delete(paneId);
+  // Clean up per-pane tracking state to prevent memory leaks
+  lastActivity.delete(paneId);
+  wasActive.delete(paneId);
+  lastNotified.delete(paneId);
+  idleCheckInFlight.delete(paneId);
 }
 
 function getTerminalOptions() {

@@ -57,13 +57,18 @@ export default function App() {
 
   // Listen for agent completion notifications (in-app toast)
   useEffect(() => {
+    let timeoutId: number | null = null;
     const handler = (e: Event) => {
       const { title, body } = (e as CustomEvent).detail;
       setToast({ title, body });
-      setTimeout(() => setToast(null), 4000);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => setToast(null), 4000);
     };
     window.addEventListener("agent-notification", handler);
-    return () => window.removeEventListener("agent-notification", handler);
+    return () => {
+      window.removeEventListener("agent-notification", handler);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
   }, []);
 
   // Request notification permission on startup

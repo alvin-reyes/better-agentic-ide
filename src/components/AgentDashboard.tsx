@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAgentTrackerStore, estimateCost, type AgentSession } from "../stores/agentTrackerStore";
 import { isPaneActive } from "../hooks/useTerminal";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
@@ -19,7 +19,6 @@ function formatDuration(ms: number): string {
 
 function formatCost(cents: number): string {
   if (cents < 1) return "<$0.01";
-  if (cents < 100) return `$${(cents / 100).toFixed(2)}`;
   return `$${(cents / 100).toFixed(2)}`;
 }
 
@@ -44,6 +43,15 @@ export default function AgentDashboard({ onClose }: AgentDashboardProps) {
     return () => clearInterval(interval);
   }, []);
 
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const activeSessions = sessions.filter((s) => s.status === "running");
   const completedSessions = sessions.filter((s) => s.status !== "running").slice(-30).reverse();
 
@@ -63,7 +71,7 @@ export default function AgentDashboard({ onClose }: AgentDashboardProps) {
     return sum + (end - s.startTime);
   }, 0);
 
-  const navigateToPane = (session: AgentSession) => {
+  const navigateToPane = useCallback((session: AgentSession) => {
     // Find which tab contains this pane
     for (const tab of tabs) {
       const panes = findAllPanes(tab.root);
@@ -74,7 +82,8 @@ export default function AgentDashboard({ onClose }: AgentDashboardProps) {
         return;
       }
     }
-  };
+    // Pane no longer exists (may have been closed)
+  }, [tabs, setActiveTab, onClose]);
 
   return (
     <div
@@ -90,6 +99,9 @@ export default function AgentDashboard({ onClose }: AgentDashboardProps) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agent-dashboard-title"
         style={{
           width: "640px",
           maxHeight: "80vh",
@@ -116,11 +128,12 @@ export default function AgentDashboard({ onClose }: AgentDashboardProps) {
             <rect x="1" y="9" width="6" height="6" rx="1" stroke="var(--accent)" strokeWidth="1.3"/>
             <rect x="9" y="9" width="6" height="6" rx="1" stroke="var(--accent)" strokeWidth="1.3"/>
           </svg>
-          <span style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", flex: 1 }}>
+          <span id="agent-dashboard-title" style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", flex: 1 }}>
             Agent Dashboard
           </span>
           <button
             onClick={onClose}
+            aria-label="Close dashboard"
             style={{
               background: "none",
               border: "none",
