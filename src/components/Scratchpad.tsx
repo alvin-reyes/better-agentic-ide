@@ -1061,27 +1061,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               e.stopPropagation();
               saveNote();
             }
-            // Cmd+Arrow Left/Right: cycle through History / Notes / Templates
-            const panels = ["history", "notes", "templates"] as const;
-            if (meta && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
-              e.preventDefault();
-              e.stopPropagation();
-              const current = showHistory ? 0 : showNotes ? 1 : showTemplates ? 2 : -1;
-              const dir = e.key === "ArrowRight" ? 1 : -1;
-              const next = current === -1
-                ? (e.key === "ArrowRight" ? 0 : 2)
-                : (current + dir + panels.length) % panels.length;
-              // If clicking same panel, close it
-              if (current === next) {
-                setShowHistory(false);
-                setShowNotes(false);
-                setShowTemplates(false);
-              } else {
-                setShowHistory(next === 0);
-                setShowNotes(next === 1);
-                setShowTemplates(next === 2);
-              }
-            }
+            // Cmd+Arrow keys left free for standard text editing (home/end of line)
           }}
           onPaste={handlePaste}
           onDrop={handleDrop}
