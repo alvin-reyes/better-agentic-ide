@@ -133,6 +133,109 @@ function destroyInstance(paneId: string) {
   idleCheckInFlight.delete(paneId);
 }
 
+// Like destroyInstance but does NOT kill the PTY — used when detaching a tab to a new window
+function detachInstance(paneId: string) {
+  const inst = instances.get(paneId);
+  if (!inst) return;
+  inst.term.dispose();
+  inst.wrapper.remove();
+  instances.delete(paneId);
+  lastActivity.delete(paneId);
+  wasActive.delete(paneId);
+  lastNotified.delete(paneId);
+  idleCheckInFlight.delete(paneId);
+}
+
+// Create a terminal instance that reattaches to an existing PTY (for detached windows)
+async function createReattachedInstance(
+  paneId: string,
+  ptyId: number,
+  setPtyId: (paneId: string, ptyId: number) => void,
+): Promise<TerminalInstance> {
+  const wrapper = document.createElement("div");
+  wrapper.style.width = "100%";
+  wrapper.style.height = "100%";
+
+  const term = new Terminal(getTerminalOptions());
+
+  const fitAddon = new FitAddon();
+  term.loadAddon(fitAddon);
+
+  const searchAddon = new SearchAddon();
+  term.loadAddon(searchAddon);
+
+  const webLinksAddon = new WebLinksAddon((_event, uri) => {
+    openUrl(uri).catch(() => {});
+  });
+  term.loadAddon(webLinksAddon);
+
+  term.open(wrapper);
+
+  try {
+    const webglAddon = new WebglAddon();
+    term.loadAddon(webglAddon);
+  } catch {
+    // Canvas fallback
+  }
+
+  const inst: TerminalInstance = { term, fitAddon, searchAddon, ptyId, wrapper };
+  instances.set(paneId, inst);
+
+  // Set up PTY channel for reattached stream
+  const onEvent = new Channel<PtyEvent>();
+  onEvent.onmessage = (event: PtyEvent) => {
+    if (event.type === "output" && event.data) {
+      term.write(new Uint8Array(event.data));
+      markActivity(paneId);
+    } else if (event.type === "exit") {
+      term.writeln("\r\n\x1b[38;5;241m[Process exited]\x1b[0m");
+    } else if (event.type === "error") {
+      term.writeln(`\r\n\x1b[31m[Error: ${event.message}]\x1b[0m`);
+    }
+  };
+
+  try {
+    await invoke("reattach_pty", { id: ptyId, onEvent });
+    inst.ptyId = ptyId;
+    setPtyId(paneId, ptyId);
+  } catch (err) {
+    term.writeln(`\x1b[31mFailed to reattach to PTY: ${err}\x1b[0m`);
+  }
+
+  // Let app-level shortcuts pass through
+  term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    const meta = e.metaKey || e.ctrlKey;
+    if (!meta) return true;
+    const passthrough = [
+      "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", ".", "b",
+      "a", "A", "o", "O", "Enter", "[", "]",
+      "ArrowLeft", "ArrowRight",
+      "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    ];
+    if (passthrough.includes(e.key)) return false;
+    return true;
+  });
+
+  // Keyboard input -> PTY
+  term.onData((data: string) => {
+    if (inst.ptyId !== null) {
+      invoke("write_pty", {
+        id: inst.ptyId,
+        data: Array.from(new TextEncoder().encode(data)),
+      });
+    }
+  });
+
+  // Resize -> PTY
+  term.onResize(({ cols, rows }) => {
+    if (inst.ptyId !== null) {
+      invoke("resize_pty", { id: inst.ptyId, rows, cols });
+    }
+  });
+
+  return inst;
+}
+
 function getTerminalOptions() {
   const s = useSettingsStore.getState();
   const colors = s.getActiveTheme();
@@ -361,7 +464,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       // Get or create the terminal instance
       let inst = instances.get(paneId);
       if (!inst) {
-        // Check if pane has an initialCwd (e.g. from split)
+        // Check if pane has an initialCwd or existing ptyId (e.g. from split or reattach)
         const panes = useTabStore.getState().tabs.flatMap((t) => {
           const findPanes = (node: import("../stores/tabStore").PaneNode): import("../stores/tabStore").Pane[] => {
             if (node.type === "pane") return [node.pane];
@@ -370,7 +473,12 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
           return findPanes(t.root);
         });
         const pane = panes.find((p) => p.id === paneId);
-        inst = await createInstance(paneId, setPtyId, pane?.initialCwd);
+        // If the pane already has a ptyId, reattach instead of creating new
+        if (pane?.ptyId) {
+          inst = await createReattachedInstance(paneId, pane.ptyId, setPtyId);
+        } else {
+          inst = await createInstance(paneId, setPtyId, pane?.initialCwd);
+        }
       }
 
       // Move the wrapper element into this container
@@ -461,4 +569,4 @@ function hasActiveProcess(paneId: string): string | null {
 }
 
 // Export for cleanup when tabs are closed
-export { destroyInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd };
+export { destroyInstance, detachInstance, createReattachedInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd };

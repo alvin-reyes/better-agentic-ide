@@ -46,6 +46,7 @@ interface TabStore {
   closePane: (tabId: string, paneId: string) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
 
+  detachTab: (id: string) => Tab | null;
   focusNextPane: (tabId: string) => void;
   focusPrevPane: (tabId: string) => void;
   getActivePane: () => Pane | null;
@@ -307,6 +308,34 @@ export const useTabStore = create<TabStore>((set, get) => {
         newTabs.splice(toIndex, 0, moved);
         return { tabs: newTabs };
       });
+    },
+
+    detachTab: (id) => {
+      const state = get();
+      const tab = state.tabs.find((t) => t.id === id);
+      if (!tab) return null;
+
+      // Detach all xterm instances (dispose xterm without killing PTY)
+      const panes = findAllPanes(tab.root);
+      for (const pane of panes) {
+        import("../hooks/useTerminal").then(({ detachInstance }) => {
+          detachInstance(pane.id);
+        });
+      }
+
+      // Remove tab from store
+      const idx = state.tabs.findIndex((t) => t.id === id);
+      const newTabs = state.tabs.filter((t) => t.id !== id);
+
+      // If this was the last tab, don't remove it (caller should add a new tab first)
+      if (newTabs.length === 0) return null;
+
+      const newActive =
+        state.activeTabId === id
+          ? newTabs[Math.min(idx, newTabs.length - 1)].id
+          : state.activeTabId;
+      set({ tabs: newTabs, activeTabId: newActive });
+      return tab;
     },
 
     focusNextPane: (tabId) => {

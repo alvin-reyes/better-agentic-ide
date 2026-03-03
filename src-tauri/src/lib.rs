@@ -277,6 +277,7 @@ pub fn run() {
             pty::create_pty,
             pty::write_pty,
             pty::resize_pty,
+            pty::reattach_pty,
             pty::kill_pty,
             pty::get_pty_cwd,
             watcher::watch_directory,

@@ -274,6 +274,7 @@ export default function TabBar() {
             {[
               { label: "Rename", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) startRename(t.id, t.name); } },
               { label: "Duplicate", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) addTab(t.name + " (copy)"); } },
+              { label: "Move to New Window", action: () => { import("../lib/detachWindow").then(({ detachTabToWindow }) => { detachTabToWindow(contextMenu.tabId); }); } },
               { label: "Close", action: () => { if (tabs.length > 1) requestCloseTab(contextMenu.tabId); }, danger: true },
             ].map((item) => (
               <button
