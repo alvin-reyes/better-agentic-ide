@@ -173,6 +173,42 @@ pub fn resize_pty(
 }
 
 #[tauri::command]
+pub fn reattach_pty(
+    state: tauri::State<'_, PtyManager>,
+    id: u32,
+    on_event: Channel<PtyEvent>,
+) -> Result<(), String> {
+    let instances = state.instances.lock().unwrap();
+    let instance = instances.get(&id).ok_or("PTY not found")?;
+    let mut reader = instance
+        .master
+        .try_clone_reader()
+        .map_err(|e| format!("clone_reader failed: {}", e))?;
+    drop(instances);
+
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if on_event
+                        .send(PtyEvent::Output {
+                            data: buf[..n].to_vec(),
+                        })
+                        .is_err()
+                    {
+                        break; // channel closed (window closed)
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
 pub fn kill_pty(state: tauri::State<'_, PtyManager>, id: u32) -> Result<(), String> {
     let mut instances = state.instances.lock().unwrap();
     instances.remove(&id);

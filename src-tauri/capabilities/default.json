@@ -4,6 +4,7 @@
   "windows": ["*"],
   "permissions": [
     "core:default",
+    "core:window:allow-create",
     "opener:default",
     "clipboard-manager:default"
   ]
