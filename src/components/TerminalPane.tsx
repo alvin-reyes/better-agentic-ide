@@ -3,6 +3,7 @@ import { useTerminal, getPtyCwd } from "../hooks/useTerminal";
 import { getSearchAddon } from "../hooks/useTerminal";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import TerminalSearch from "./TerminalSearch";
+import RecordingControls from "./RecordingControls";
 import "@xterm/xterm/css/xterm.css";
 
 // Distinct colors for each split pane
@@ -110,7 +111,7 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
         />
       )}
 
-      {/* Pane header: badge + CWD breadcrumb */}
+      {/* Pane header: badge + CWD breadcrumb + recording */}
       <div
         className="absolute z-10"
         style={{
@@ -170,10 +171,14 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               transition: "opacity 0.2s ease",
+              flex: 1,
             }}
           >
             {formatCwd(cwd)}
           </span>
+        )}
+        {isActive && (
+          <RecordingControls paneId={paneId} />
         )}
       </div>
 

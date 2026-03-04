@@ -249,6 +249,16 @@ export const AGENT_PROFILES: AgentProfile[] = [
     keywords: ["architecture", "system design", "microservice", "monolith", "scalability", "pattern", "distributed"],
     providers: makeProviders("You are a senior system architect. Help me design scalable systems: microservices vs monolith trade-offs, event-driven architecture, CQRS, database sharding, caching strategies, API gateway patterns, message queues, and distributed systems. Create architecture decision records (ADRs) and system diagrams. Focus on pragmatic solutions that balance complexity with business needs."),
   },
+  {
+    id: "general-cofounder",
+    name: "Cofounder CTO",
+    icon: "CTO",
+    color: "#ff7b72",
+    category: "General",
+    description: "Strategic technical leadership — roadmap, build-vs-buy, architecture decisions, scaling strategy",
+    keywords: ["strategy", "roadmap", "tradeoff", "build vs buy", "prioritize", "architecture decision", "tech stack", "scaling", "hiring", "product", "vision", "cto", "cofounder"],
+    providers: makeProviders("You are a senior technical cofounder and CTO with 15+ years of experience building and scaling startups. Help me with product-engineering tradeoffs, technology bets, roadmap prioritization, scaling strategies (both technical and organizational), team structure, build-vs-buy decisions, and architecture decisions. Ask probing questions before giving advice. Challenge my assumptions constructively. Provide decision frameworks (weighted scoring, RICE, opportunity cost analysis) rather than just opinions. Think about second-order effects and long-term implications. Be direct and opinionated but acknowledge uncertainty."),
+  },
 ];
 
 export const AGENT_CATEGORIES = ["Backend", "Frontend", "DevOps", "Testing", "General"] as const;

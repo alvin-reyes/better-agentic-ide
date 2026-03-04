@@ -6,6 +6,8 @@ export interface Pane {
   id: string;
   ptyId: number | null;
   initialCwd?: string | null;
+  serializedBuffer?: string;
+  savedCwd?: string;
 }
 
 export interface SplitNode {
@@ -382,4 +384,164 @@ export const useTabStore = create<TabStore>((set, get) => {
   };
 });
 
-export { findAllPanes };
+// Session persistence
+const SESSION_KEY = "ade-session";
+const MAX_SESSION_SIZE = 5 * 1024 * 1024; // 5MB
+
+interface SavedPane {
+  id: string;
+  serializedBuffer?: string;
+  savedCwd?: string;
+}
+
+interface SavedTab {
+  id: string;
+  name: string;
+  type?: string;
+  root: unknown; // serialized PaneNode tree
+  activePaneId: string;
+}
+
+interface SavedSession {
+  tabs: SavedTab[];
+  activeTabId: string;
+  savedAt: number;
+}
+
+function serializePaneNode(node: PaneNode, paneData: Map<string, SavedPane>): unknown {
+  if (node.type === "pane") {
+    const saved = paneData.get(node.pane.id);
+    return {
+      type: "pane",
+      pane: {
+        id: node.pane.id,
+        serializedBuffer: saved?.serializedBuffer,
+        savedCwd: saved?.savedCwd,
+      },
+    };
+  }
+  return {
+    type: "split",
+    direction: node.direction,
+    children: node.children.map((c) => serializePaneNode(c, paneData)),
+  };
+}
+
+function deserializePaneNode(data: any): PaneNode {
+  if (data.type === "pane") {
+    const pane: Pane & { serializedBuffer?: string; savedCwd?: string } = {
+      id: newPaneId(), // Generate fresh pane IDs
+      ptyId: null,
+      initialCwd: data.pane.savedCwd || null,
+      serializedBuffer: data.pane.serializedBuffer,
+      savedCwd: data.pane.savedCwd,
+    };
+    return { type: "pane", pane: pane as Pane };
+  }
+  return {
+    type: "split",
+    direction: data.direction,
+    children: (data.children || []).map(deserializePaneNode),
+  };
+}
+
+async function saveSession(): Promise<void> {
+  const { serializeTerminalBuffer, getPtyCwd } = await import("../hooks/useTerminal");
+  const state = useTabStore.getState();
+
+  // Only save terminal tabs, not orchestrator tabs
+  const terminalTabs = state.tabs.filter((t) => t.type !== "orchestrator");
+
+  const savedTabs: SavedTab[] = [];
+  for (const tab of terminalTabs) {
+    const panes = findAllPanes(tab.root);
+    const paneData = new Map<string, SavedPane>();
+
+    for (const pane of panes) {
+      const buffer = serializeTerminalBuffer(pane.id);
+      const cwd = await getPtyCwd(pane.id);
+      paneData.set(pane.id, {
+        id: pane.id,
+        serializedBuffer: buffer || undefined,
+        savedCwd: cwd || undefined,
+      });
+    }
+
+    savedTabs.push({
+      id: tab.id,
+      name: tab.name,
+      type: tab.type,
+      root: serializePaneNode(tab.root, paneData),
+      activePaneId: tab.activePaneId,
+    });
+  }
+
+  const session: SavedSession = {
+    tabs: savedTabs,
+    activeTabId: state.activeTabId,
+    savedAt: Date.now(),
+  };
+
+  let json = JSON.stringify(session);
+
+  // If over size limit, truncate scrollback data
+  if (json.length > MAX_SESSION_SIZE) {
+    for (const tab of session.tabs) {
+      const truncateNode = (node: any) => {
+        if (node.type === "pane" && node.pane.serializedBuffer) {
+          node.pane.serializedBuffer = node.pane.serializedBuffer.slice(-10000);
+        } else if (node.children) {
+          node.children.forEach(truncateNode);
+        }
+      };
+      truncateNode(tab.root);
+    }
+    json = JSON.stringify(session);
+  }
+
+  try {
+    localStorage.setItem(SESSION_KEY, json);
+  } catch {
+    // Storage full — clear and retry with minimal data
+    localStorage.removeItem(SESSION_KEY);
+  }
+}
+
+function loadSession(): boolean {
+  try {
+    const json = localStorage.getItem(SESSION_KEY);
+    if (!json) return false;
+
+    const session: SavedSession = JSON.parse(json);
+    if (!session.tabs || session.tabs.length === 0) return false;
+
+    // Restore tabs
+    const restoredTabs: Tab[] = session.tabs.map((saved) => {
+      const root = deserializePaneNode(saved.root);
+      const allPanes = findAllPanes(root);
+      return {
+        id: newTabId(),
+        name: saved.name,
+        type: (saved.type as Tab["type"]) || undefined,
+        root,
+        activePaneId: allPanes[0]?.id || "",
+      };
+    });
+
+    if (restoredTabs.length > 0) {
+      useTabStore.setState({
+        tabs: restoredTabs,
+        activeTabId: restoredTabs[0].id,
+      });
+    }
+
+    // Clear saved session after restoring
+    localStorage.removeItem(SESSION_KEY);
+    return true;
+  } catch {
+    localStorage.removeItem(SESSION_KEY);
+    return false;
+  }
+}
+
+export { findAllPanes, saveSession, loadSession };

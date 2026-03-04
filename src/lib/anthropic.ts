@@ -22,7 +22,7 @@ const CREATE_TASKS_TOOL = {
                 "test-unit", "test-e2e", "test-perf",
                 "general-debug", "general-review", "general-docs", "general-architect",
                 "devops-docker", "devops-ci", "devops-infra", "devops-k8s",
-                "general-git", "general-brainstorm",
+                "general-git", "general-brainstorm", "general-cofounder",
               ],
               description: "Which agent profile should handle this task",
             },
@@ -68,6 +68,7 @@ Available agent profiles:
 - general-architect: System design, architecture decisions
 - general-git: Git workflows, branching, merging
 - general-brainstorm: Brainstorming, ideation, planning
+- general-cofounder: Strategic CTO — roadmap, build-vs-buy, scaling, architecture decisions
 - devops-docker: Docker, containerization
 - devops-ci: CI/CD pipelines
 - devops-infra: Infrastructure, deployment

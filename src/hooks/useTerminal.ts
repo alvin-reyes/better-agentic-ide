@@ -4,6 +4,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
+import { ImageAddon } from "@xterm/addon-image";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore } from "../stores/tabStore";
@@ -20,6 +22,7 @@ interface TerminalInstance {
   term: Terminal;
   fitAddon: FitAddon;
   searchAddon: SearchAddon;
+  serializeAddon: SerializeAddon;
   ptyId: number | null;
   wrapper: HTMLDivElement; // the DOM element xterm renders into
 }
@@ -169,6 +172,9 @@ async function createReattachedInstance(
   });
   term.loadAddon(webLinksAddon);
 
+  const serializeAddon = new SerializeAddon();
+  term.loadAddon(serializeAddon);
+
   term.open(wrapper);
 
   try {
@@ -178,15 +184,25 @@ async function createReattachedInstance(
     // Canvas fallback
   }
 
-  const inst: TerminalInstance = { term, fitAddon, searchAddon, ptyId, wrapper };
+  try {
+    const imageAddon = new ImageAddon({ sixelSupport: true, iipSupport: true });
+    term.loadAddon(imageAddon);
+  } catch {
+    // Image rendering not available
+  }
+
+  const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId, wrapper };
   instances.set(paneId, inst);
 
   // Set up PTY channel for reattached stream
   const onEvent = new Channel<PtyEvent>();
   onEvent.onmessage = (event: PtyEvent) => {
     if (event.type === "output" && event.data) {
-      term.write(new Uint8Array(event.data));
+      const bytes = new Uint8Array(event.data);
+      term.write(bytes);
       markActivity(paneId);
+      const tap = getRecordingTap();
+      if (tap) tap(paneId, bytes);
     } else if (event.type === "exit") {
       term.writeln("\r\n\x1b[38;5;241m[Process exited]\x1b[0m");
     } else if (event.type === "error") {
@@ -278,7 +294,7 @@ function getTerminalOptions() {
   };
 }
 
-async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null): Promise<TerminalInstance> {
+async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null, serializedBuffer?: string): Promise<TerminalInstance> {
   // Create a wrapper div that xterm renders into — lives outside React
   const wrapper = document.createElement("div");
   wrapper.style.width = "100%";
@@ -291,6 +307,9 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 
   const searchAddon = new SearchAddon();
   term.loadAddon(searchAddon);
+
+  const serializeAddon = new SerializeAddon();
+  term.loadAddon(serializeAddon);
 
   const webLinksAddon = new WebLinksAddon((_event, uri) => {
     openUrl(uri).catch(() => {});
@@ -349,34 +368,49 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     // Canvas fallback
   }
 
-  // Show ASCII splash with portrait logo
-  const skin = "\x1b[38;5;180m";
-  const hair = "\x1b[38;5;236m";
-  const shirt = "\x1b[38;5;67m";
-  const dim = "\x1b[38;5;239m";
-  const accent = "\x1b[38;5;75m";
-  const green = "\x1b[38;5;114m";
-  const reset = "\x1b[0m";
-  term.writeln("");
-  term.writeln(`${hair}        ▄▄███▄▄        ${accent} █████╗ ██████╗ ███████╗${reset}`);
-  term.writeln(`${hair}      ▄█${skin}████████${hair}█▄      ${accent}██╔══██╗██╔══██╗██╔════╝${reset}`);
-  term.writeln(`${hair}     █${skin}██████████${hair}██     ${accent}███████║██║  ██║█████╗${reset}`);
-  term.writeln(`${skin}     ██▄${hair}▀▀${skin}██${hair}▀▀${skin}▄██     ${accent}██╔══██║██║  ██║██╔══╝${reset}`);
-  term.writeln(`${skin}     ██  ▀  ▀  ██     ${accent}██║  ██║██████╔╝███████╗${reset}`);
-  term.writeln(`${skin}      ██ ╺━╸ ██      ${accent}╚═╝  ╚═╝╚═════╝ ╚══════╝${reset}`);
-  term.writeln(`${skin}       ██▄▄▄██       ${dim}Agentic Development Environment${reset}`);
-  term.writeln(`${shirt}      ▄███████▄      ${dim}v0.5.0  ${green}⌘P${dim} cmds ${green}⌘J${dim} scratchpad ${green}⌘⇧A${dim} agents${reset}`);
-  term.writeln("");
+  try {
+    const imageAddon = new ImageAddon({ sixelSupport: true, iipSupport: true });
+    term.loadAddon(imageAddon);
+  } catch {
+    // Image rendering not available
+  }
 
-  const inst: TerminalInstance = { term, fitAddon, searchAddon, ptyId: null, wrapper };
+  // Restore serialized buffer or show splash
+  if (serializedBuffer) {
+    term.write(serializedBuffer);
+  } else {
+    // Show ASCII splash with portrait logo
+    const skin = "\x1b[38;5;180m";
+    const hair = "\x1b[38;5;236m";
+    const shirt = "\x1b[38;5;67m";
+    const dim = "\x1b[38;5;239m";
+    const accent = "\x1b[38;5;75m";
+    const green = "\x1b[38;5;114m";
+    const reset = "\x1b[0m";
+    term.writeln("");
+    term.writeln(`${hair}        ▄▄███▄▄        ${accent} █████╗ ██████╗ ███████╗${reset}`);
+    term.writeln(`${hair}      ▄█${skin}████████${hair}█▄      ${accent}██╔══██╗██╔══██╗██╔════╝${reset}`);
+    term.writeln(`${hair}     █${skin}██████████${hair}██     ${accent}███████║██║  ██║█████╗${reset}`);
+    term.writeln(`${skin}     ██▄${hair}▀▀${skin}██${hair}▀▀${skin}▄██     ${accent}██╔══██║██║  ██║██╔══╝${reset}`);
+    term.writeln(`${skin}     ██  ▀  ▀  ██     ${accent}██║  ██║██████╔╝███████╗${reset}`);
+    term.writeln(`${skin}      ██ ╺━╸ ██      ${accent}╚═╝  ╚═╝╚═════╝ ╚══════╝${reset}`);
+    term.writeln(`${skin}       ██▄▄▄██       ${dim}Agentic Development Environment${reset}`);
+    term.writeln(`${shirt}      ▄███████▄      ${dim}v0.5.0  ${green}⌘P${dim} cmds ${green}⌘J${dim} scratchpad ${green}⌘⇧A${dim} agents${reset}`);
+    term.writeln("");
+  }
+
+  const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };
   instances.set(paneId, inst);
 
   // Set up PTY channel
   const onEvent = new Channel<PtyEvent>();
   onEvent.onmessage = (event: PtyEvent) => {
     if (event.type === "output" && event.data) {
-      term.write(new Uint8Array(event.data));
+      const bytes = new Uint8Array(event.data);
+      term.write(bytes);
       markActivity(paneId);
+      const tap = getRecordingTap();
+      if (tap) tap(paneId, bytes);
     } else if (event.type === "exit") {
       term.writeln("\r\n\x1b[38;5;241m[Process exited]\x1b[0m");
     } else if (event.type === "error") {
@@ -477,7 +511,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
         if (pane?.ptyId) {
           inst = await createReattachedInstance(paneId, pane.ptyId, setPtyId);
         } else {
-          inst = await createInstance(paneId, setPtyId, pane?.initialCwd);
+          inst = await createInstance(paneId, setPtyId, pane?.initialCwd || pane?.savedCwd, pane?.serializedBuffer);
         }
       }
 
@@ -568,5 +602,42 @@ function hasActiveProcess(paneId: string): string | null {
   return null;
 }
 
+// Serialize all terminal buffers for session persistence
+function serializeTerminalBuffer(paneId: string): string | null {
+  const inst = instances.get(paneId);
+  if (!inst) return null;
+  try {
+    return inst.serializeAddon.serialize();
+  } catch {
+    return null;
+  }
+}
+
+// Write pre-serialized content into a terminal (used during session restore)
+function writeSerializedBuffer(paneId: string, content: string) {
+  const inst = instances.get(paneId);
+  if (!inst) return;
+  inst.term.write(content);
+}
+
+// Recording tap: allow external hooks to intercept PTY output
+type RecordingTap = (paneId: string, data: Uint8Array) => void;
+let recordingTap: RecordingTap | null = null;
+
+function setRecordingTap(tap: RecordingTap | null) {
+  recordingTap = tap;
+}
+
+function getRecordingTap(): RecordingTap | null {
+  return recordingTap;
+}
+
+// Get terminal dimensions
+function getTerminalDimensions(paneId: string): { cols: number; rows: number } | null {
+  const inst = instances.get(paneId);
+  if (!inst) return null;
+  return { cols: inst.term.cols, rows: inst.term.rows };
+}
+
 // Export for cleanup when tabs are closed
-export { destroyInstance, detachInstance, createReattachedInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd };
+export { destroyInstance, detachInstance, createReattachedInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, writeSerializedBuffer, setRecordingTap, getRecordingTap, getTerminalDimensions };
