@@ -14,11 +14,13 @@ const AgentPicker = lazy(() => import("./components/AgentPicker"));
 const PreviewPanel = lazy(() => import("./components/PreviewPanel"));
 const AgentDashboard = lazy(() => import("./components/AgentDashboard"));
 const OrchestratorTab = lazy(() => import("./components/OrchestratorTab"));
-import { useTabStore, findAllPanes } from "./stores/tabStore";
+const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
+import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useKeybindings } from "./hooks/useKeybindings";
 import { hasActiveProcess } from "./hooks/useTerminal";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
@@ -28,6 +30,7 @@ export default function App() {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
+  const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string;
     message: string;
@@ -40,6 +43,26 @@ export default function App() {
   useEffect(() => {
     const colors = useSettingsStore.getState().getActiveTheme();
     applyThemeToDOM(colors);
+  }, []);
+
+  // Restore session on startup
+  useEffect(() => {
+    loadSession();
+  }, []);
+
+  // Save session on window close
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    getCurrentWindow().onCloseRequested(async (event) => {
+      event.preventDefault();
+      try {
+        await saveSession();
+      } catch {
+        // Save failed, still close
+      }
+      await getCurrentWindow().destroy();
+    }).then((fn) => { unlisten = fn; });
+    return () => { unlisten?.(); };
   }, []);
 
   // Listen for pane zoom toggle
@@ -245,6 +268,7 @@ export default function App() {
             onToggleScratchpad={toggleScratchpad}
             onOpenAgentPicker={() => { setPaletteOpen(false); setAgentPickerOpen(true); }}
             onTogglePreview={togglePreview}
+            onOpenRecordings={() => setRecordingPlayerOpen(true)}
           />
         )}
         {agentPickerOpen && (
@@ -252,6 +276,9 @@ export default function App() {
         )}
         {dashboardOpen && (
           <AgentDashboard onClose={() => setDashboardOpen(false)} />
+        )}
+        {recordingPlayerOpen && (
+          <RecordingPlayer onClose={() => setRecordingPlayerOpen(false)} />
         )}
       </Suspense>
       {confirmDialog && (

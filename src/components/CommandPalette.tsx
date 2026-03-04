@@ -15,9 +15,10 @@ interface CommandPaletteProps {
   onToggleScratchpad: () => void;
   onOpenAgentPicker: () => void;
   onTogglePreview?: () => void;
+  onOpenRecordings?: () => void;
 }
 
-export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview }: CommandPaletteProps) {
+export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onOpenRecordings }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +79,29 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       }},
       { id: "settings", label: "Open Settings", shortcut: "Cmd+,", category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
       { id: "search", label: "Search in Terminal", shortcut: "Cmd+F", category: "Panels", action: () => { onClose(); } },
+      // Recording commands
+      { id: "rec-start", label: "Start Recording", category: "Recording", action: () => {
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (tab) {
+          import("../hooks/useTerminalRecording").then(({ useRecordingStore }) => {
+            useRecordingStore.getState().startRecording(tab.activePaneId);
+          });
+        }
+        onClose();
+      }},
+      { id: "rec-stop", label: "Stop Recording", category: "Recording", action: () => {
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (tab) {
+          import("../hooks/useTerminalRecording").then(({ useRecordingStore }) => {
+            useRecordingStore.getState().stopRecording(tab.activePaneId);
+          });
+        }
+        onClose();
+      }},
+      { id: "rec-view", label: "View Recordings", category: "Recording", action: () => {
+        onOpenRecordings?.();
+        onClose();
+      }},
       // Theme shortcuts
       ...[
         { id: "github-dark", name: "GitHub Dark" },
@@ -164,6 +188,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       case "Panes": return "#3fb950";
       case "Panels": return "#bc8cff";
       case "Themes": return "#d29922";
+      case "Recording": return "#ff7b72";
       default: return "var(--text-muted)";
     }
   };
