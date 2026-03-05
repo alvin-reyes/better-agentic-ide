@@ -1,9 +1,10 @@
-export type Provider = "claude" | "codex" | "gemini";
+export type Provider = "claude" | "codex" | "gemini" | "ollama";
 
 export const PROVIDERS: { id: Provider; name: string; color: string }[] = [
   { id: "claude", name: "Claude", color: "#d97706" },
   { id: "codex", name: "Codex", color: "#10b981" },
   { id: "gemini", name: "Gemini", color: "#3b82f6" },
+  { id: "ollama", name: "Ollama", color: "#ffffff" },
 ];
 
 export interface AgentProfile {
@@ -22,6 +23,7 @@ function makeProviders(systemPrompt: string): Record<Provider, string> {
     claude: `claude "${systemPrompt}"`,
     codex: `codex "${systemPrompt}"`,
     gemini: `gemini "${systemPrompt}"`,
+    ollama: `__OLLAMA__${systemPrompt}`,
   };
 }
 
@@ -177,6 +179,7 @@ export const AGENT_PROFILES: AgentProfile[] = [
       claude: 'claude "/skill superpowers:systematic-debugging"',
       codex: 'codex "You are a systematic debugging specialist. Help me identify and fix bugs through root cause analysis, log inspection, and methodical testing. Focus on reproducing the issue first, then fixing it."',
       gemini: 'gemini "You are a systematic debugging specialist. Help me identify and fix bugs through root cause analysis, log inspection, and methodical testing. Focus on reproducing the issue first, then fixing it."',
+      ollama: '__OLLAMA__You are a systematic debugging specialist. Help me identify and fix bugs through root cause analysis, log inspection, and methodical testing. Focus on reproducing the issue first, then fixing it.',
     },
   },
   {

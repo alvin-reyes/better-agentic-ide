@@ -33,6 +33,73 @@ const fontFamilies = [
   { value: 'monospace', label: "System Monospace" },
 ];
 
+function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
+  const [status, setStatus] = useState<"checking" | "running" | "not_running" | "error">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      setStatus("checking");
+      try {
+        const resp = await fetch(`${endpoint}/api/version`, { signal: AbortSignal.timeout(3000) });
+        if (!cancelled) setStatus(resp.ok ? "running" : "not_running");
+      } catch {
+        if (!cancelled) setStatus("not_running");
+      }
+    };
+    check();
+    return () => { cancelled = true; };
+  }, [endpoint]);
+
+  if (status === "checking") {
+    return (
+      <div style={{ padding: "8px 12px", borderRadius: "6px", backgroundColor: "var(--bg-tertiary)", fontSize: "11px", color: "var(--text-muted)" }}>
+        Checking Ollama status...
+      </div>
+    );
+  }
+
+  if (status === "running") {
+    return (
+      <div style={{ padding: "8px 12px", borderRadius: "6px", backgroundColor: "#3fb95010", border: "1px solid #3fb95030", display: "flex", alignItems: "center", gap: "6px" }}>
+        <span style={{ fontSize: "11px", color: "#3fb950", fontWeight: 600 }}>Ollama is running</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "12px", borderRadius: "6px", backgroundColor: "#d2992210", border: "1px solid #d2992230" }}>
+      <p style={{ fontSize: "11px", color: "#d29922", fontWeight: 600, marginBottom: "6px" }}>
+        Ollama not detected
+      </p>
+      <p style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: "1.5", marginBottom: "8px" }}>
+        Install Ollama to use local AI models for free. After installing, run <code style={{ fontSize: "10px", backgroundColor: "var(--bg-tertiary)", padding: "1px 4px", borderRadius: "3px" }}>ollama serve</code> then pull a model:
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "8px" }}>
+        <code style={{ fontSize: "10px", backgroundColor: "var(--bg-tertiary)", padding: "4px 8px", borderRadius: "4px", color: "var(--text-secondary)", fontFamily: "monospace" }}>
+          curl -fsSL https://ollama.com/install.sh | sh
+        </code>
+        <code style={{ fontSize: "10px", backgroundColor: "var(--bg-tertiary)", padding: "4px 8px", borderRadius: "4px", color: "var(--text-secondary)", fontFamily: "monospace" }}>
+          ollama pull deepseek-r1
+        </code>
+      </div>
+      <a
+        href="https://ollama.com/download"
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => {
+          e.preventDefault();
+          // Use Tauri opener plugin
+          import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl("https://ollama.com/download")).catch(() => {});
+        }}
+        style={{ fontSize: "11px", color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }}
+      >
+        Download Ollama
+      </a>
+    </div>
+  );
+}
+
 export default function SettingsPanel() {
   const store = useSettingsStore();
   const tabStore = useTabStore();
@@ -703,57 +770,167 @@ export default function SettingsPanel() {
           {/* AI API Tab */}
           {store.settingsTab === "ai" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              {/* Orchestrator Provider */}
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Anthropic API Key
+                  Orchestrator Provider
                 </label>
-                <input
-                  type="password"
-                  value={store.anthropicApiKey}
-                  onChange={(e) => store.setAnthropicApiKey(e.target.value)}
-                  placeholder="sk-ant-..."
-                  style={{
-                    width: "100%",
-                    backgroundColor: "var(--bg-primary)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    padding: "8px 12px",
-                    fontSize: "13px",
-                    color: "var(--text-primary)",
-                    fontFamily: "monospace",
-                    marginTop: "8px",
-                    outline: "none",
-                  }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
-                />
+                <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                  {([
+                    { id: "anthropic" as const, name: "Anthropic", color: "#d97706" },
+                    { id: "ollama" as const, name: "Ollama (Local)", color: "#ffffff" },
+                  ]).map((p) => {
+                    const isActive = store.orchestratorProvider === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => store.setOrchestratorProvider(p.id)}
+                        style={{
+                          padding: "8px 20px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          border: `1px solid ${isActive ? p.color : "var(--border)"}`,
+                          backgroundColor: isActive ? p.color + "20" : "var(--bg-tertiary)",
+                          color: isActive ? p.color : "var(--text-secondary)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
                 <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
-                  Required for Orchestrator Mode. Get your key at console.anthropic.com
+                  Choose which AI provider powers the Orchestrator planner.
                 </p>
               </div>
 
-              <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Model
-                </label>
-                <select
-                  value={store.orchestratorModel}
-                  onChange={(e) => store.setOrchestratorModel(e.target.value)}
-                  style={{
-                    width: "100%",
-                    backgroundColor: "var(--bg-primary)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    padding: "8px 12px",
-                    fontSize: "13px",
-                    color: "var(--text-primary)",
-                    marginTop: "8px",
-                    outline: "none",
-                  }}
-                >
-                  <option value="claude-opus-4-20250514">Claude Opus 4.6 (recommended)</option>
-                  <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                </select>
+              {/* Anthropic section — show when anthropic is selected */}
+              {store.orchestratorProvider === "anthropic" && (
+                <>
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Anthropic API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={store.anthropicApiKey}
+                      onChange={(e) => store.setAnthropicApiKey(e.target.value)}
+                      placeholder="sk-ant-..."
+                      style={{
+                        width: "100%",
+                        backgroundColor: "var(--bg-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        padding: "8px 12px",
+                        fontSize: "13px",
+                        color: "var(--text-primary)",
+                        fontFamily: "monospace",
+                        marginTop: "8px",
+                        outline: "none",
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                    />
+                    <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
+                      Required for Orchestrator Mode. Get your key at console.anthropic.com
+                    </p>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Model
+                    </label>
+                    <select
+                      value={store.orchestratorModel}
+                      onChange={(e) => store.setOrchestratorModel(e.target.value)}
+                      style={{
+                        width: "100%",
+                        backgroundColor: "var(--bg-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        padding: "8px 12px",
+                        fontSize: "13px",
+                        color: "var(--text-primary)",
+                        marginTop: "8px",
+                        outline: "none",
+                      }}
+                    >
+                      <option value="claude-opus-4-20250514">Claude Opus 4.6 (recommended)</option>
+                      <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Ollama section — always shown (used for both agent CLI and orchestrator) */}
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Ollama Configuration
+                  </label>
+                  <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "4px", backgroundColor: "#3fb95020", color: "#3fb950", fontWeight: 600 }}>
+                    FREE
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <div>
+                    <label style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-muted)", marginBottom: "4px", display: "block" }}>
+                      Endpoint
+                    </label>
+                    <input
+                      type="text"
+                      value={store.ollamaEndpoint}
+                      onChange={(e) => store.setOllamaEndpoint(e.target.value)}
+                      placeholder="http://localhost:11434"
+                      style={{
+                        width: "100%",
+                        backgroundColor: "var(--bg-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        padding: "8px 12px",
+                        fontSize: "13px",
+                        color: "var(--text-primary)",
+                        fontFamily: "monospace",
+                        outline: "none",
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-muted)", marginBottom: "4px", display: "block" }}>
+                      Model
+                    </label>
+                    <input
+                      type="text"
+                      value={store.ollamaModel}
+                      onChange={(e) => store.setOllamaModel(e.target.value)}
+                      placeholder="deepseek-r1, llama3.2, qwen2.5-coder..."
+                      style={{
+                        width: "100%",
+                        backgroundColor: "var(--bg-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        padding: "8px 12px",
+                        fontSize: "13px",
+                        color: "var(--text-primary)",
+                        fontFamily: "monospace",
+                        outline: "none",
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                    />
+                    <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
+                      Used for both Agent CLI (Cmd+Shift+A) and Orchestrator when Ollama is selected.
+                    </p>
+                  </div>
+
+                  <OllamaDownloadPrompt endpoint={store.ollamaEndpoint} />
+                </div>
               </div>
             </div>
           )}

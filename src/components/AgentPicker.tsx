@@ -99,6 +99,14 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     if (ptyId === null) return;
 
     let cmd = profile.providers[activeProvider];
+    if (activeProvider === "ollama") {
+      const settings = useSettingsStore.getState();
+      const model = settings.ollamaModel || "deepseek-r1";
+      // Extract system prompt from the __OLLAMA__ placeholder
+      const systemPrompt = cmd.startsWith("__OLLAMA__") ? cmd.slice("__OLLAMA__".length) : cmd;
+      const escaped = systemPrompt.replace(/"/g, '\\"');
+      cmd = `ollama run ${model} --system "${escaped}"`;
+    }
     if (continuousMode && activeProvider === "claude") {
       cmd = cmd.replace(/^claude /, "claude --dangerously-skip-permissions ");
     }

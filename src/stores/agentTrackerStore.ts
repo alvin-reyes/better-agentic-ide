@@ -34,6 +34,7 @@ const COST_PER_1M: Record<string, { input: number; output: number }> = {
   claude: { input: 300, output: 1500 },   // ~$3/$15 per 1M
   codex: { input: 250, output: 1000 },    // ~$2.50/$10 per 1M
   gemini: { input: 125, output: 500 },    // ~$1.25/$5 per 1M
+  ollama: { input: 0, output: 0 },        // free local models
 };
 
 function estimateCost(session: AgentSession): number {

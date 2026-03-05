@@ -291,6 +291,9 @@ interface Settings {
   defaultProvider: Provider;
   anthropicApiKey: string;
   orchestratorModel: string;
+  ollamaEndpoint: string;
+  ollamaModel: string;
+  orchestratorProvider: "anthropic" | "ollama";
 }
 
 interface SettingsStore extends Settings {
@@ -312,6 +315,9 @@ interface SettingsStore extends Settings {
   setDefaultProvider: (provider: Provider) => void;
   setAnthropicApiKey: (key: string) => void;
   setOrchestratorModel: (model: string) => void;
+  setOllamaEndpoint: (endpoint: string) => void;
+  setOllamaModel: (model: string) => void;
+  setOrchestratorProvider: (provider: "anthropic" | "ollama") => void;
   getActiveTheme: () => ThemeColors;
 
   saveWorkspace: (name: string, tabs: { name: string; splits: "none" | "horizontal" | "vertical" }[]) => void;
@@ -356,6 +362,9 @@ const defaults: Settings = {
   defaultProvider: "claude" as Provider,
   anthropicApiKey: "",
   orchestratorModel: "claude-opus-4-20250514",
+  ollamaEndpoint: "http://localhost:11434",
+  ollamaModel: "deepseek-r1",
+  orchestratorProvider: "anthropic" as const,
 };
 
 const saved = loadSettings();
@@ -434,6 +443,18 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
   setOrchestratorModel: (model) => {
     set({ orchestratorModel: model });
+    persistSettings(get());
+  },
+  setOllamaEndpoint: (endpoint) => {
+    set({ ollamaEndpoint: endpoint });
+    persistSettings(get());
+  },
+  setOllamaModel: (model) => {
+    set({ ollamaModel: model });
+    persistSettings(get());
+  },
+  setOrchestratorProvider: (provider) => {
+    set({ orchestratorProvider: provider });
     persistSettings(get());
   },
 
