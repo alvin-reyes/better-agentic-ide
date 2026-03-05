@@ -41,6 +41,30 @@ const CREATE_TASKS_TOOL = {
   },
 };
 
+const SYSTEM_PROMPT_OLLAMA = `You are a project planner inside ADE (Agentic Development Environment).
+
+Your job is to help the user plan their project through conversation. Ask clarifying questions about requirements, architecture, constraints, and scope.
+
+When you and the user have agreed on a solid plan, output the tasks as a JSON code block. Format:
+
+\`\`\`json
+{
+  "tasks": [
+    {
+      "title": "Short task title",
+      "description": "Detailed description with acceptance criteria",
+      "agentProfile": "backend-api",
+      "priority": 1,
+      "dependencies": []
+    }
+  ]
+}
+\`\`\`
+
+Available agent profiles: backend-api, backend-db, backend-auth, frontend-ui, frontend-css, frontend-state, test-unit, test-e2e, test-perf, general-debug, general-review, general-docs, general-architect, general-git, general-brainstorm, general-cofounder, devops-docker, devops-ci, devops-infra, devops-k8s.
+
+Do NOT output tasks until the user confirms the plan. Ask first.`;
+
 const SYSTEM_PROMPT = `You are a project planner inside ADE (Agentic Development Environment).
 
 Your job is to help the user plan their project through conversation. Ask clarifying questions about requirements, architecture, constraints, and scope. Help them think through edge cases and trade-offs.
@@ -100,11 +124,72 @@ export interface StreamCallbacks {
   onError: (error: string) => void;
 }
 
+async function sendOllamaOrchestratorMessage(
+  history: ChatTurn[],
+  callbacks: StreamCallbacks,
+) {
+  const settings = useSettingsStore.getState();
+  const endpoint = settings.ollamaEndpoint || "http://localhost:11434";
+  const model = settings.ollamaModel || "deepseek-r1";
+
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT_OLLAMA },
+    ...history.map((m) => ({ role: m.role, content: m.content })),
+  ];
+
+  try {
+    const resp = await fetch(`${endpoint}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, messages }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => resp.statusText);
+      callbacks.onError(`Ollama error (${resp.status}): ${errText}`);
+      return;
+    }
+
+    const data = await resp.json();
+    const content: string = data.choices?.[0]?.message?.content ?? "";
+
+    callbacks.onText(content);
+
+    // Parse JSON task blocks from the response
+    const jsonMatch = content.match(/```json\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1]);
+        if (parsed.tasks && Array.isArray(parsed.tasks)) {
+          await callbacks.onTasksCreated(parsed.tasks);
+        }
+      } catch {
+        // Model output wasn't valid JSON — that's fine, just show text
+      }
+    }
+
+    callbacks.onDone(content);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("Failed to fetch") || message.includes("NetworkError")) {
+      callbacks.onError(`Cannot connect to Ollama at ${endpoint}. Is Ollama running? Start it with: ollama serve`);
+    } else {
+      callbacks.onError(message);
+    }
+  }
+}
+
 export async function sendOrchestratorMessage(
   history: ChatTurn[],
   callbacks: StreamCallbacks,
 ) {
   const settings = useSettingsStore.getState();
+
+  // Route to Ollama if selected
+  if (settings.orchestratorProvider === "ollama") {
+    return sendOllamaOrchestratorMessage(history, callbacks);
+  }
+
   const apiKey = settings.anthropicApiKey;
 
   if (!apiKey) {
