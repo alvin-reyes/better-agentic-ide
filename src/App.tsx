@@ -12,11 +12,13 @@ const Tour = lazy(() => import("./components/Tour"));
 const CommandPalette = lazy(() => import("./components/CommandPalette"));
 const AgentPicker = lazy(() => import("./components/AgentPicker"));
 const PreviewPanel = lazy(() => import("./components/PreviewPanel"));
+const FileBrowser = lazy(() => import("./components/FileBrowser"));
 const AgentDashboard = lazy(() => import("./components/AgentDashboard"));
 const OrchestratorTab = lazy(() => import("./components/OrchestratorTab"));
 const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
+import { useFileBrowserStore } from "./stores/fileBrowserStore";
 import { useKeybindings } from "./hooks/useKeybindings";
 import { hasActiveProcess } from "./hooks/useTerminal";
 import { invoke } from "@tauri-apps/api/core";
@@ -31,6 +33,7 @@ export default function App() {
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
+  const fileBrowserOpen = useFileBrowserStore((s) => s.isOpen);
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string;
     message: string;
@@ -140,6 +143,10 @@ export default function App() {
     setDashboardOpen((prev) => !prev);
   }, []);
 
+  const toggleFileBrowser = useCallback(() => {
+    useFileBrowserStore.getState().toggle();
+  }, []);
+
   const sendScratchpad = useCallback(() => {
     scratchpadRef.current?.send();
   }, []);
@@ -230,6 +237,7 @@ export default function App() {
     toggleAgentPicker,
     togglePreview,
     toggleDashboard,
+    toggleFileBrowser,
     openOrchestrator,
     requestCloseTab,
     requestClosePane,
@@ -240,6 +248,11 @@ export default function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ backgroundColor: "var(--bg-primary)" }}>
       <TabBar />
       <div className="flex-1 overflow-hidden flex">
+        {fileBrowserOpen && (
+          <Suspense fallback={null}>
+            <FileBrowser />
+          </Suspense>
+        )}
         <div className="overflow-hidden" style={{ minWidth: 0, flex: 1 }}>
           {activeTab && (
             activeTab.type === "orchestrator" && activeTab.orchestratorSessionId
@@ -268,6 +281,7 @@ export default function App() {
             onToggleScratchpad={toggleScratchpad}
             onOpenAgentPicker={() => { setPaletteOpen(false); setAgentPickerOpen(true); }}
             onTogglePreview={togglePreview}
+            onToggleFileBrowser={toggleFileBrowser}
             onOpenRecordings={() => setRecordingPlayerOpen(true)}
           />
         )}

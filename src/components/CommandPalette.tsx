@@ -15,10 +15,11 @@ interface CommandPaletteProps {
   onToggleScratchpad: () => void;
   onOpenAgentPicker: () => void;
   onTogglePreview?: () => void;
+  onToggleFileBrowser?: () => void;
   onOpenRecordings?: () => void;
 }
 
-export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onOpenRecordings }: CommandPaletteProps) {
+export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onToggleFileBrowser, onOpenRecordings }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +67,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       // Panels
       { id: "scratchpad", label: "Toggle Scratchpad", shortcut: "Cmd+J", category: "Panels", action: () => { onToggleScratchpad(); onClose(); } },
       { id: "agents", label: "Launch AI Agent", shortcut: "Cmd+Shift+A", category: "Panels", action: () => { onOpenAgentPicker(); } },
-      { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
+      { id: "file-browser", label: "Toggle File Browser", shortcut: "Cmd+B", category: "Panels", action: () => { onToggleFileBrowser?.(); onClose(); } },
+      { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+Shift+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
       { id: "dashboard", label: "Agent Dashboard", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-dashboard")); onClose(); } },
       { id: "orchestrator", label: "Open Orchestrator", shortcut: "Cmd+Shift+O", category: "Panels", action: () => {
         import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
@@ -139,7 +141,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     });
 
     return actions;
-  }, [tabs, activeTabId, addTab, setActiveTab, onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview]);
+  }, [tabs, activeTabId, addTab, setActiveTab, onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onToggleFileBrowser]);
 
   const filtered = useMemo(() => {
     if (!query) return items;

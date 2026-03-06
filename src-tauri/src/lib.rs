@@ -1,6 +1,67 @@
 mod pty;
 mod watcher;
 
+#[derive(serde::Serialize)]
+struct FileEntry {
+    name: String,
+    path: String,
+    is_dir: bool,
+    size: u64,
+    extension: Option<String>,
+    is_hidden: bool,
+}
+
+#[tauri::command]
+fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
+    let resolved = if path.starts_with("~/") {
+        let home = get_home_dir();
+        path.replacen("~", &home, 1)
+    } else if path == "~" {
+        get_home_dir()
+    } else {
+        path.clone()
+    };
+
+    let skip_names: std::collections::HashSet<&str> = [
+        "node_modules", ".git", "target", "dist", ".DS_Store",
+        "__pycache__", ".next", ".cache",
+    ].iter().copied().collect();
+
+    let entries = std::fs::read_dir(&resolved)
+        .map_err(|e| format!("Failed to read directory {}: {}", resolved, e))?;
+
+    let mut files: Vec<FileEntry> = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if skip_names.contains(name.as_str()) {
+            continue;
+        }
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue, // skip unreadable entries
+        };
+        let entry_path = entry.path();
+        let extension = entry_path.extension().map(|e| e.to_string_lossy().to_string());
+        let is_hidden = name.starts_with('.');
+        files.push(FileEntry {
+            name,
+            path: entry_path.to_string_lossy().to_string(),
+            is_dir: meta.is_dir(),
+            size: meta.len(),
+            extension,
+            is_hidden,
+        });
+    }
+
+    // Sort: directories first, then alphabetical (case-insensitive)
+    files.sort_by(|a, b| {
+        b.is_dir.cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+
+    Ok(files)
+}
+
 #[tauri::command]
 fn check_command_exists(command: String) -> Result<String, String> {
     // Get home directory — try multiple methods for Finder-launched apps
@@ -290,6 +351,7 @@ pub fn run() {
             read_file,
             read_file_base64,
             list_md_files,
+            list_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
