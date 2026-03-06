@@ -14,6 +14,7 @@ interface KeybindingActions {
   toggleAgentPicker: () => void;
   togglePreview: () => void;
   toggleDashboard: () => void;
+  toggleFileBrowser: () => void;
   openOrchestrator: () => void;
   requestCloseTab: (tabId: string) => void;
   requestClosePane: (tabId: string, paneId: string) => void;
@@ -81,10 +82,17 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+B: Toggle preview panel
-      if (meta && !shift && !alt && e.key === "b") {
+      // Cmd+Shift+B: Toggle preview panel
+      if (meta && shift && !alt && (e.key === "b" || e.key === "B")) {
         e.preventDefault();
         actions.togglePreview();
+        return;
+      }
+
+      // Cmd+B: Toggle file browser
+      if (meta && !shift && !alt && e.key === "b") {
+        e.preventDefault();
+        actions.toggleFileBrowser();
         return;
       }
 
