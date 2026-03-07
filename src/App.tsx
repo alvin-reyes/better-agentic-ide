@@ -81,9 +81,17 @@ export default function App() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.path) {
-        setPendingPreviewPath(detail.path);
+        // Only store pending path when panel is closed — if already open,
+        // PreviewPanel's own event listener handles it directly
+        setPreviewOpen((wasOpen) => {
+          if (!wasOpen && detail.path) {
+            setPendingPreviewPath(detail.path);
+          }
+          return true;
+        });
+      } else {
+        setPreviewOpen(true);
       }
-      setPreviewOpen(true);
     };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
