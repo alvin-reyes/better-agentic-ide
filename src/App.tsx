@@ -29,6 +29,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [pendingPreviewPath, setPendingPreviewPath] = useState<string | null>(null);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
@@ -75,9 +76,15 @@ export default function App() {
     return () => window.removeEventListener("toggle-zoom-pane", handler);
   }, []);
 
-  // Listen for preview open events (from terminal links, etc.)
+  // Listen for preview open events (from terminal links, file browser, etc.)
   useEffect(() => {
-    const handler = () => setPreviewOpen(true);
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.path) {
+        setPendingPreviewPath(detail.path);
+      }
+      setPreviewOpen(true);
+    };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
   }, []);
@@ -266,7 +273,11 @@ export default function App() {
         </div>
         {previewOpen && (
           <Suspense fallback={null}>
-            <PreviewPanel onClose={() => setPreviewOpen(false)} />
+            <PreviewPanel
+              onClose={() => { setPreviewOpen(false); setPendingPreviewPath(null); }}
+              initialPath={pendingPreviewPath}
+              onInitialPathConsumed={() => setPendingPreviewPath(null)}
+            />
           </Suspense>
         )}
       </div>
