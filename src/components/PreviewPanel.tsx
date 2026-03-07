@@ -78,9 +78,11 @@ function escapeHtml(text: string): string {
 
 interface PreviewPanelProps {
   onClose: () => void;
+  initialPath?: string | null;
+  onInitialPathConsumed?: () => void;
 }
 
-export default function PreviewPanel({ onClose }: PreviewPanelProps) {
+export default function PreviewPanel({ onClose, initialPath, onInitialPathConsumed }: PreviewPanelProps) {
   const [filePath, setFilePath] = useState("");
   const [inputPath, setInputPath] = useState("");
   const [mode, setMode] = useState<PreviewMode>("none");
@@ -125,6 +127,15 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
     }
   }, []);
 
+  // Load initial path on mount (from file browser click, etc.)
+  useEffect(() => {
+    if (initialPath) {
+      setInputPath(initialPath);
+      loadFile(initialPath);
+      onInitialPathConsumed?.();
+    }
+  }, []); // only on mount
+
   // Set up file watcher for auto-refresh
   useEffect(() => {
     if (!filePath || !autoRefresh) return;
@@ -159,12 +170,14 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
     };
   }, [filePath, autoRefresh, loadFile]);
 
-  // Listen for open-preview events from terminal links or other components
+  // Listen for open-preview events from terminal links, file browser, etc.
   useEffect(() => {
     const handler = (e: Event) => {
-      const { path } = (e as CustomEvent).detail;
-      setInputPath(path);
-      loadFile(path);
+      const detail = (e as CustomEvent).detail;
+      if (detail?.path) {
+        setInputPath(detail.path);
+        loadFile(detail.path);
+      }
     };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
