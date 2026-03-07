@@ -92,6 +92,7 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const watcherIdRef = useRef<number | null>(null);
+  const initialPathConsumedRef = useRef(false);
   const dragRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(480);
@@ -128,13 +129,15 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   }, []);
 
   // Load initial path on mount (from file browser click, etc.)
+  // Guarded with ref to prevent double-load in StrictMode
   useEffect(() => {
-    if (initialPath) {
+    if (initialPath && !initialPathConsumedRef.current) {
+      initialPathConsumedRef.current = true;
       setInputPath(initialPath);
       loadFile(initialPath);
       onInitialPathConsumed?.();
     }
-  }, []); // only on mount
+  }, [initialPath, loadFile, onInitialPathConsumed]);
 
   // Set up file watcher for auto-refresh
   useEffect(() => {

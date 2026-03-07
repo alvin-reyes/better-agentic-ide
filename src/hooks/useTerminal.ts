@@ -11,6 +11,10 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
+// File path regex for terminal link detection — module-scoped to avoid per-instance recreation
+const PREVIEW_EXTS = "md|markdown|txt|html|htm|json|yaml|yml|toml|ts|tsx|js|jsx|py|rs|go|css|scss|sh|rb|java|c|cpp|h|swift|kt|png|jpg|jpeg|gif|svg|webp|bmp|ico|pdf";
+const filePathRegex = new RegExp(`(?:^|[\\s\`'"(])((?:\\/|~\\/|\\.\\/)?[^\\s\`'"()]+\\.(?:${PREVIEW_EXTS}))\\b`, "gi");
+
 interface PtyEvent {
   type: "output" | "exit" | "error";
   data?: number[];
@@ -320,8 +324,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 
   // Register link provider for file paths — click to open in preview panel
   // Matches: /absolute/path.ext, ~/path.ext, ./relative.ext, docs/file.ext
-  const previewExts = "md|markdown|txt|html|htm|json|yaml|yml|toml|ts|tsx|js|jsx|py|rs|go|css|scss|sh|rb|java|c|cpp|h|swift|kt|png|jpg|jpeg|gif|svg|webp|bmp|ico|pdf";
-  const filePathRegex = new RegExp(`(?:^|[\\s\`'"(])((?:\\/|~\\/|\\.\\/)?[^\\s\`'"()]+\\.(?:${previewExts}))\\b`, "gi");
+  // Excludes URLs (handled by WebLinksAddon)
   term.registerLinkProvider({
     provideLinks(lineNumber, callback) {
       const line = term.buffer.active.getLine(lineNumber - 1);
@@ -338,6 +341,10 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
       filePathRegex.lastIndex = 0;
       while ((match = filePathRegex.exec(text)) !== null) {
         const path = match[1];
+        // Skip URLs — let WebLinksAddon handle those
+        if (/^https?:\/\/|^file:\/\//.test(path) || text.slice(Math.max(0, match.index - 8), match.index + match[0].length).includes("://")) {
+          continue;
+        }
         const startX = match.index + (match[0].length - path.length) + 1;
         links.push({
           range: {
