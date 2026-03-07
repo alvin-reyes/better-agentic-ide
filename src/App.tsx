@@ -29,7 +29,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const pendingPreviewPathRef = useRef<string | null>(null);
+  const [pendingPreviewPath, setPendingPreviewPath] = useState<string | null>(null);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
@@ -81,7 +81,7 @@ export default function App() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.path) {
-        pendingPreviewPathRef.current = detail.path;
+        setPendingPreviewPath(detail.path);
       }
       setPreviewOpen(true);
     };
@@ -274,9 +274,9 @@ export default function App() {
         {previewOpen && (
           <Suspense fallback={null}>
             <PreviewPanel
-              onClose={() => setPreviewOpen(false)}
-              initialPath={pendingPreviewPathRef.current}
-              onInitialPathConsumed={() => { pendingPreviewPathRef.current = null; }}
+              onClose={() => { setPreviewOpen(false); setPendingPreviewPath(null); }}
+              initialPath={pendingPreviewPath}
+              onInitialPathConsumed={() => setPendingPreviewPath(null)}
             />
           </Suspense>
         )}
