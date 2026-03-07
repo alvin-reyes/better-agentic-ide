@@ -318,9 +318,10 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 
   term.open(wrapper);
 
-  // Register link provider for .md file paths — click to open in markdown viewer
-  // Matches: /absolute/path.md, ~/path.md, ./relative.md, docs/plan.md, CLAUDE.md
-  const mdPathRegex = /(?:^|[\s`'"(])((?:\/|~\/|\.\/)?[^\s`'"()]+\.md)\b/g;
+  // Register link provider for file paths — click to open in preview panel
+  // Matches: /absolute/path.ext, ~/path.ext, ./relative.ext, docs/file.ext
+  const previewExts = "md|markdown|txt|html|htm|json|yaml|yml|toml|ts|tsx|js|jsx|py|rs|go|css|scss|sh|rb|java|c|cpp|h|swift|kt|png|jpg|jpeg|gif|svg|webp|bmp|ico|pdf";
+  const filePathRegex = new RegExp(`(?:^|[\\s\`'"(])((?:\\/|~\\/|\\.\\/)?[^\\s\`'"()]+\\.(?:${previewExts}))\\b`, "gi");
   term.registerLinkProvider({
     provideLinks(lineNumber, callback) {
       const line = term.buffer.active.getLine(lineNumber - 1);
@@ -334,8 +335,8 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
       }> = [];
 
       let match;
-      mdPathRegex.lastIndex = 0;
-      while ((match = mdPathRegex.exec(text)) !== null) {
+      filePathRegex.lastIndex = 0;
+      while ((match = filePathRegex.exec(text)) !== null) {
         const path = match[1];
         const startX = match.index + (match[0].length - path.length) + 1;
         links.push({
@@ -346,13 +347,12 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
           text: path,
           decorations: { underline: true, pointerCursor: true },
           activate: (_event: MouseEvent, linkText: string) => {
-            // For relative paths, try to resolve against CWD
             getPtyCwd(paneId).then((cwd) => {
               let resolved = linkText;
               if (cwd && !linkText.startsWith("/") && !linkText.startsWith("~")) {
                 resolved = `${cwd}/${linkText.replace(/^\.\//, "")}`;
               }
-              window.dispatchEvent(new CustomEvent("open-md-viewer", { detail: { path: resolved } }));
+              window.dispatchEvent(new CustomEvent("open-preview", { detail: { path: resolved } }));
             });
           },
         });
