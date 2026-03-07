@@ -75,7 +75,6 @@ function FileTreeNode({ node, depth, showHidden }: { node: TreeNode; depth: numb
       }
     } else {
       // Open file in PreviewPanel
-      window.dispatchEvent(new CustomEvent("preview:open-file", { detail: { path: node.entry.path } }));
       window.dispatchEvent(new CustomEvent("open-preview", { detail: { path: node.entry.path } }));
     }
   };
