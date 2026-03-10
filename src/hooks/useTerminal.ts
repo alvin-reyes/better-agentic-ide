@@ -44,6 +44,15 @@ const lastNotified = new Map<string, number>();
 const idleCheckInFlight = new Set<string>(); // Guard against concurrent imports per pane
 
 function checkIdleTransition(paneId: string) {
+  // Skip if pane was destroyed while interval was pending
+  if (!instances.has(paneId)) {
+    lastActivity.delete(paneId);
+    wasActive.delete(paneId);
+    lastNotified.delete(paneId);
+    idleCheckInFlight.delete(paneId);
+    return;
+  }
+
   const last = lastActivity.get(paneId);
   if (!last) return;
 

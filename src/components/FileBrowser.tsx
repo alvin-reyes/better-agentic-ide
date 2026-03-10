@@ -158,7 +158,7 @@ export default function FileBrowser() {
   const dragRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(240);
-  const watcherIdRef = useRef<number | null>(null);
+
 
   // CWD sync: poll active terminal's CWD every 3s
   useEffect(() => {
@@ -192,10 +192,13 @@ export default function FileBrowser() {
   useEffect(() => {
     if (!rootPath) return;
 
-    const channel = new Channel<WatchEvent>();
+    let watcherId: number | null = null;
     let debounceTimer: number | null = null;
+    let cancelled = false;
 
+    const channel = new Channel<WatchEvent>();
     channel.onmessage = (event) => {
+      if (cancelled) return;
       if (event.type === "created" || event.type === "removed" || event.type === "changed") {
         if (debounceTimer !== null) clearTimeout(debounceTimer);
         debounceTimer = window.setTimeout(() => {
@@ -209,13 +212,17 @@ export default function FileBrowser() {
       extensions: [],
       onEvent: channel,
     }).then((id) => {
-      watcherIdRef.current = id;
+      if (cancelled) {
+        invoke("unwatch_directory", { id }).catch(() => {});
+      } else {
+        watcherId = id;
+      }
     }).catch(() => {});
 
     return () => {
-      if (watcherIdRef.current !== null) {
-        invoke("unwatch_directory", { id: watcherIdRef.current }).catch(() => {});
-        watcherIdRef.current = null;
+      cancelled = true;
+      if (watcherId !== null) {
+        invoke("unwatch_directory", { id: watcherId }).catch(() => {});
       }
       if (debounceTimer !== null) clearTimeout(debounceTimer);
     };
