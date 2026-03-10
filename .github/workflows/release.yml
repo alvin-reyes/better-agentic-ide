@@ -31,31 +31,11 @@ jobs:
             | **Windows** | `.msi` / `.exe` | x64 |
             | **Linux** | `.deb` / `.AppImage` | x64 |
 
-            ### macOS: "App is damaged" fix
-            The app is not code-signed. After downloading, run:
+            ### Install via Homebrew (macOS)
             ```bash
-            xattr -cr /Applications/Better\ Terminal.app
+            brew tap alvin-reyes/tap
+            brew install --cask ade
             ```
-            Or right-click the app and select **Open** to bypass Gatekeeper.
-
-            ---
-
-            ## What's New in ${{ github.ref_name }}
-
-            ### AI Agent Terminals
-            Launch 17+ specialized AI agents in dedicated terminal tabs with `Cmd+Shift+A`:
-            - **Backend**: API Builder, Database Engineer, Auth Architect
-            - **Frontend**: UI Builder, Style Architect, State Manager
-            - **DevOps**: Container Ops, CI/CD, Infrastructure, K8s Engineer
-            - **Testing**: Unit Tester, E2E Tester, Perf Tester
-            - **General**: Debugger, Code Reviewer, Docs Writer, Interview Coach, LinkedIn Tech Leader
-            - **Continuous mode** for autonomous agent execution (with safety disclaimer)
-
-            ### Native Markdown Watcher
-            Real-time file watching powered by Rust `notify` crate. Instant updates in the brainstorm panel as your AI writes specs and plans.
-
-            ### Claude Brainstorm Mode
-            Launch Claude Code with superpowers brainstorming skill. Auto-detect and install Claude CLI and plugins.
 
             **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.2.0...${{ github.ref_name }}
           draft: false
@@ -116,10 +96,44 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev
 
+      - name: Import Apple certificate
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Decode certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          security import "$CERTIFICATE_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add to search list
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
       - name: Install frontend dependencies
         run: npm ci
 
       - name: Build Tauri app
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx tauri build --target ${{ matrix.target }}
 
       - name: List bundle output (debug)
@@ -149,3 +163,8 @@ jobs:
           if [ "$FOUND" -eq 0 ]; then
             echo "::warning::No installer artifacts found in $BUNDLE_DIR"
           fi
+
+      - name: Cleanup keychain
+        if: runner.os == 'macOS' && always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
