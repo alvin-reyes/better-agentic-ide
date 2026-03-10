@@ -91,7 +91,6 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   const [width, setWidth] = useState(480);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const watcherIdRef = useRef<number | null>(null);
   const initialPathConsumedRef = useRef(false);
   const dragRef = useRef(false);
   const dragStartXRef = useRef(0);
@@ -149,10 +148,13 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
 
     if (!dir) return;
 
+    let watcherId: number | null = null;
+    let cancelled = false;
+
     const channel = new Channel<WatchEvent>();
     channel.onmessage = (event) => {
+      if (cancelled) return;
       if (event.type === "changed" && event.path === filePath) {
-        // Reload the file
         loadFile(filePath);
       }
     };
@@ -162,13 +164,17 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
       extensions: [ext],
       onEvent: channel,
     }).then((id) => {
-      watcherIdRef.current = id;
+      if (cancelled) {
+        invoke("unwatch_directory", { id }).catch(() => {});
+      } else {
+        watcherId = id;
+      }
     }).catch(() => {});
 
     return () => {
-      if (watcherIdRef.current !== null) {
-        invoke("unwatch_directory", { id: watcherIdRef.current }).catch(() => {});
-        watcherIdRef.current = null;
+      cancelled = true;
+      if (watcherId !== null) {
+        invoke("unwatch_directory", { id: watcherId }).catch(() => {});
       }
     };
   }, [filePath, autoRefresh, loadFile]);

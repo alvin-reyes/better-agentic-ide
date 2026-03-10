@@ -67,6 +67,8 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
   const [showPicker, setShowPicker] = useState(true);
   const [searchDir, setSearchDir] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const installPollRef = useRef<number | null>(null);
+  const installTimeoutRef = useRef<number | null>(null);
   const [lastModified, setLastModified] = useState<string>("");
   const [watching, setWatching] = useState(false);
   const [recentEvents, setRecentEvents] = useState<string[]>([]);
@@ -139,33 +141,37 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
     setClaudeLaunched(true);
   }, [writeToPty]);
 
+  const clearInstallTimers = useCallback(() => {
+    if (installPollRef.current !== null) { clearInterval(installPollRef.current); installPollRef.current = null; }
+    if (installTimeoutRef.current !== null) { clearTimeout(installTimeoutRef.current); installTimeoutRef.current = null; }
+  }, []);
+
   const installClaude = useCallback(async () => {
+    clearInstallTimers();
     setInstalling(true);
     await writeToPty("npm install -g @anthropic-ai/claude-code");
-    // Poll for install completion
-    const poll = setInterval(async () => {
+    installPollRef.current = window.setInterval(async () => {
       try {
         await invoke<string>("check_command_exists", { command: "claude" });
-        clearInterval(poll);
+        clearInstallTimers();
         setInstalling(false);
         checkClaudeSetup();
       } catch {
         // Still installing
       }
     }, 3000);
-    // Stop polling after 2 minutes
-    setTimeout(() => { clearInterval(poll); setInstalling(false); }, 120000);
-  }, [writeToPty, checkClaudeSetup]);
+    installTimeoutRef.current = window.setTimeout(() => { clearInstallTimers(); setInstalling(false); }, 120000);
+  }, [writeToPty, checkClaudeSetup, clearInstallTimers]);
 
   const installSuperpowers = useCallback(async () => {
+    clearInstallTimers();
     setInstalling(true);
     await writeToPty("claude /install-plugin superpowers@claude-plugins-official");
-    // Poll for plugin install
-    const poll = setInterval(async () => {
+    installPollRef.current = window.setInterval(async () => {
       try {
         const hasPlugin = await invoke<boolean>("check_claude_plugin", { pluginName: "superpowers@claude-plugins-official" });
         if (hasPlugin) {
-          clearInterval(poll);
+          clearInstallTimers();
           setInstalling(false);
           setClaudeSetup("ready");
         }
@@ -173,8 +179,13 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
         // Still installing
       }
     }, 3000);
-    setTimeout(() => { clearInterval(poll); setInstalling(false); }, 120000);
-  }, [writeToPty]);
+    installTimeoutRef.current = window.setTimeout(() => { clearInstallTimers(); setInstalling(false); }, 120000);
+  }, [writeToPty, clearInstallTimers]);
+
+  // Clean up install poll timers on unmount
+  useEffect(() => {
+    return () => clearInstallTimers();
+  }, [clearInstallTimers]);
 
   // Proactively scan for .md files in cwd and subdirs on open, and re-scan periodically
   const scanFiles = useCallback(() => {

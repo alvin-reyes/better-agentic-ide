@@ -20,7 +20,7 @@ import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/ta
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
 import { useKeybindings } from "./hooks/useKeybindings";
-import { hasActiveProcess } from "./hooks/useTerminal";
+import { hasActiveProcess, stopIdlePolling } from "./hooks/useTerminal";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -54,11 +54,12 @@ export default function App() {
     loadSession();
   }, []);
 
-  // Save session on window close
+  // Save session on window close and clean up global resources
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     getCurrentWindow().onCloseRequested(async (event) => {
       event.preventDefault();
+      stopIdlePolling();
       try {
         await saveSession();
       } catch {
@@ -66,7 +67,10 @@ export default function App() {
       }
       await getCurrentWindow().destroy();
     }).then((fn) => { unlisten = fn; });
-    return () => { unlisten?.(); };
+    return () => {
+      unlisten?.();
+      stopIdlePolling();
+    };
   }, []);
 
   // Listen for pane zoom toggle
