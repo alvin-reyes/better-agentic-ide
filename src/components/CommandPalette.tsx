@@ -79,6 +79,10 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         });
         onClose();
       }},
+      { id: "browser", label: "Open Browser Tab", category: "Tabs", action: () => {
+        useTabStore.getState().addBrowserTab();
+        onClose();
+      }},
       { id: "settings", label: "Open Settings", shortcut: "Cmd+,", category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
       { id: "search", label: "Search in Terminal", shortcut: "Cmd+F", category: "Panels", action: () => { onClose(); } },
       // Recording commands
