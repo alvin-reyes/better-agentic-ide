@@ -80,6 +80,7 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
   const contentRef = useRef<HTMLDivElement>(null);
   const filePathRef = useRef<string | null>(null);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
+  const ollamaModel = useSettingsStore((s) => s.ollamaModel) || "deepseek-r1";
 
   // Keep ref in sync with state for use in watcher callback
   useEffect(() => {
@@ -134,25 +135,31 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
   }, [checkClaudeSetup]);
 
   // Check Ollama availability: CLI installed + server running
-  const checkOllamaSetup = useCallback(async () => {
-    try {
-      await invoke<string>("check_command_exists", { command: "ollama" });
-    } catch {
-      setOllamaSetup("not-installed");
-      return;
-    }
-    try {
-      const endpoint = useSettingsStore.getState().ollamaEndpoint || "http://localhost:11434";
-      const resp = await fetch(`${endpoint}/api/version`, { signal: AbortSignal.timeout(3000) });
-      setOllamaSetup(resp.ok ? "ready" : "not-running");
-    } catch {
-      setOllamaSetup("not-running");
-    }
-  }, []);
-
   useEffect(() => {
-    checkOllamaSetup();
-  }, [checkOllamaSetup]);
+    let cancelled = false;
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        await invoke<string>("check_command_exists", { command: "ollama" });
+      } catch {
+        if (!cancelled) setOllamaSetup("not-installed");
+        return;
+      }
+      try {
+        const endpoint = useSettingsStore.getState().ollamaEndpoint || "http://localhost:11434";
+        const resp = await fetch(`${endpoint}/api/version`, { signal: controller.signal });
+        if (!cancelled) setOllamaSetup(resp.ok ? "ready" : "not-running");
+      } catch {
+        if (!cancelled) setOllamaSetup("not-running");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
 
   const writeToPty = useCallback(async (cmd: string) => {
     const ptyId = getActivePtyId();
@@ -167,10 +174,9 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
   }, [writeToPty]);
 
   const launchOllamaChat = useCallback(async () => {
-    const model = useSettingsStore.getState().ollamaModel || "deepseek-r1";
-    await writeToPty(`ollama run ${model}`);
+    await writeToPty(`ollama run ${ollamaModel}`);
     setOllamaLaunched(true);
-  }, [writeToPty]);
+  }, [writeToPty, ollamaModel]);
 
   const clearInstallTimers = useCallback(() => {
     if (installPollRef.current !== null) { clearInterval(installPollRef.current); installPollRef.current = null; }
@@ -601,7 +607,7 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
               )}
             </div>
             <span style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
-              Interactive chat with local Ollama model ({useSettingsStore.getState().ollamaModel || "deepseek-r1"}) in your terminal
+              Interactive chat with local Ollama model ({ollamaModel}) in your terminal
             </span>
 
             {ollamaSetup === "not-installed" && (
@@ -714,7 +720,6 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
 
   // Ollama mode — launched message
   if (mode === "ollama") {
-    const model = useSettingsStore.getState().ollamaModel || "deepseek-r1";
     return (
       <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "var(--bg-primary)", borderLeft: "1px solid var(--border)" }}>
         {headerContent}
@@ -737,7 +742,7 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
                 Ollama Chat Launched
               </p>
               <p style={{ color: "var(--text-secondary)", fontSize: "12px", textAlign: "center", lineHeight: "1.6", maxWidth: "280px" }}>
-                Running <span style={{ fontFamily: "monospace", color: "var(--accent)" }}>{model}</span> in your active terminal. Switch to your terminal to chat.
+                Running <span style={{ fontFamily: "monospace", color: "var(--accent)" }}>{ollamaModel}</span> in your active terminal. Switch to your terminal to chat.
               </p>
               <button
                 onClick={launchOllamaChat}

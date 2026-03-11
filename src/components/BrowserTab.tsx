@@ -53,6 +53,25 @@ export default function BrowserTab({ tabId, initialUrl }: BrowserTabProps) {
     navigate(initialUrl);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Cleanup iframe on unmount to stop pending loads
+  useEffect(() => {
+    return () => {
+      if (iframeRef.current) {
+        iframeRef.current.src = "about:blank";
+      }
+    };
+  }, []);
+
+  // Loading timeout — if iframe doesn't fire onLoad/onError within 15s, show error
+  useEffect(() => {
+    if (!loading) return;
+    const timeout = window.setTimeout(() => {
+      setLoading(false);
+      setError("Connection timed out. Make sure the server is running.");
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [loading, url]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "var(--bg-primary)" }}>
       {/* URL bar */}
