@@ -26,8 +26,9 @@ export type PaneNode = SplitNode | SplitContainer;
 export interface Tab {
   id: string;
   name: string;
-  type?: "terminal" | "orchestrator";
+  type?: "terminal" | "orchestrator" | "browser";
   orchestratorSessionId?: string;
+  browserUrl?: string;
   root: PaneNode;
   activePaneId: string;
 }
@@ -38,6 +39,7 @@ interface TabStore {
 
   addTab: (name?: string, initialCwd?: string) => void;
   addOrchestratorTab: (sessionId: string) => string;
+  addBrowserTab: (url?: string) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
@@ -209,6 +211,24 @@ export const useTabStore = create<TabStore>((set, get) => {
         name: "Orchestrator",
         type: "orchestrator",
         orchestratorSessionId: sessionId,
+        root: { type: "pane", pane },
+        activePaneId: pane.id,
+      };
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: id,
+      }));
+      return id;
+    },
+
+    addBrowserTab: (url) => {
+      const id = newTabId();
+      const pane = createDefaultPane();
+      const tab: Tab = {
+        id,
+        name: "Browser",
+        type: "browser",
+        browserUrl: url || "http://localhost:3000",
         root: { type: "pane", pane },
         activePaneId: pane.id,
       };
@@ -449,8 +469,8 @@ async function saveSession(): Promise<void> {
   const { serializeTerminalBuffer, getPtyCwd } = await import("../hooks/useTerminal");
   const state = useTabStore.getState();
 
-  // Only save terminal tabs, not orchestrator tabs
-  const terminalTabs = state.tabs.filter((t) => t.type !== "orchestrator");
+  // Only save terminal tabs, not orchestrator or browser tabs
+  const terminalTabs = state.tabs.filter((t) => !t.type || t.type === "terminal");
 
   const savedTabs: SavedTab[] = [];
   for (const tab of terminalTabs) {
