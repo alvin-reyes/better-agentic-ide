@@ -3,6 +3,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import mermaid from "mermaid";
 import { useTabStore } from "../stores/tabStore";
+import { useSettingsStore } from "../stores/settingsStore";
 
 // Configure marked for safe rendering
 marked.setOptions({
@@ -41,7 +42,7 @@ marked.use({
   },
 });
 
-type BrainstormMode = "menu" | "claude" | "markdown";
+type BrainstormMode = "menu" | "claude" | "markdown" | "ollama";
 
 interface BrainstormPanelProps {
   onClose: () => void;
@@ -49,6 +50,7 @@ interface BrainstormPanelProps {
 }
 
 type ClaudeSetupStatus = "checking" | "no-claude" | "no-plugin" | "ready";
+type OllamaSetupStatus = "checking" | "not-installed" | "not-running" | "ready";
 
 type WatchEvent =
   | { type: "changed"; path: string; content: string }
@@ -61,6 +63,8 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
   const [claudeSetup, setClaudeSetup] = useState<ClaudeSetupStatus>("checking");
   const [installing, setInstalling] = useState(false);
   const [claudeLaunched, setClaudeLaunched] = useState(false);
+  const [ollamaSetup, setOllamaSetup] = useState<OllamaSetupStatus>("checking");
+  const [ollamaLaunched, setOllamaLaunched] = useState(false);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [html, setHtml] = useState("");
   const [mdFiles, setMdFiles] = useState<string[]>([]);
@@ -129,6 +133,27 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
     checkClaudeSetup();
   }, [checkClaudeSetup]);
 
+  // Check Ollama availability: CLI installed + server running
+  const checkOllamaSetup = useCallback(async () => {
+    try {
+      await invoke<string>("check_command_exists", { command: "ollama" });
+    } catch {
+      setOllamaSetup("not-installed");
+      return;
+    }
+    try {
+      const endpoint = useSettingsStore.getState().ollamaEndpoint || "http://localhost:11434";
+      const resp = await fetch(`${endpoint}/api/version`, { signal: AbortSignal.timeout(3000) });
+      setOllamaSetup(resp.ok ? "ready" : "not-running");
+    } catch {
+      setOllamaSetup("not-running");
+    }
+  }, []);
+
+  useEffect(() => {
+    checkOllamaSetup();
+  }, [checkOllamaSetup]);
+
   const writeToPty = useCallback(async (cmd: string) => {
     const ptyId = getActivePtyId();
     if (ptyId === null) return;
@@ -139,6 +164,12 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
   const launchClaudeBrainstorm = useCallback(async () => {
     await writeToPty("claude \"/skill superpowers:brainstorming\"");
     setClaudeLaunched(true);
+  }, [writeToPty]);
+
+  const launchOllamaChat = useCallback(async () => {
+    const model = useSettingsStore.getState().ollamaModel || "deepseek-r1";
+    await writeToPty(`ollama run ${model}`);
+    setOllamaLaunched(true);
   }, [writeToPty]);
 
   const clearInstallTimers = useCallback(() => {
@@ -316,7 +347,7 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
         </span>
         {mode !== "menu" && (
           <button
-            onClick={() => { setMode("menu"); setClaudeLaunched(false); }}
+            onClick={() => { setMode("menu"); setClaudeLaunched(false); setOllamaLaunched(false); }}
             style={{
               background: "var(--bg-tertiary)",
               border: "1px solid var(--border)",
@@ -521,6 +552,77 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
             )}
           </button>
 
+          {/* Ollama Chat */}
+          <button
+            onClick={() => {
+              if (ollamaSetup === "ready") {
+                setMode("ollama");
+                launchOllamaChat();
+              }
+            }}
+            style={{
+              width: "100%",
+              maxWidth: "320px",
+              padding: "16px 20px",
+              borderRadius: "12px",
+              border: ollamaSetup === "ready" ? "1px solid #a78bfa" : "1px solid var(--border)",
+              backgroundColor: ollamaSetup === "ready" ? "rgba(167, 139, 250, 0.08)" : "var(--bg-secondary)",
+              cursor: ollamaSetup === "ready" ? "pointer" : "default",
+              textAlign: "left",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+              opacity: ollamaSetup === "checking" ? 0.5 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (ollamaSetup === "ready") e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+            }}
+            onMouseLeave={(e) => {
+              if (ollamaSetup === "ready") e.currentTarget.style.backgroundColor = "rgba(167, 139, 250, 0.08)";
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "18px" }}>&#x1F999;</span>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+                Ollama Chat
+              </span>
+              {ollamaSetup === "ready" && (
+                <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "4px", backgroundColor: "#3fb950", color: "#fff", fontWeight: 600 }}>
+                  Ready
+                </span>
+              )}
+              {ollamaSetup === "checking" && (
+                <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Checking...</span>
+              )}
+              {ollamaSetup === "not-running" && (
+                <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "4px", backgroundColor: "#d29922", color: "#fff", fontWeight: 600 }}>
+                  Not running
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
+              Interactive chat with local Ollama model ({useSettingsStore.getState().ollamaModel || "deepseek-r1"}) in your terminal
+            </span>
+
+            {ollamaSetup === "not-installed" && (
+              <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                <span style={{ fontSize: "11px", color: "#ff7b72" }}>Ollama not found</span>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                  Install from ollama.com or run: curl -fsSL https://ollama.com/install.sh | sh
+                </span>
+              </div>
+            )}
+
+            {ollamaSetup === "not-running" && (
+              <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                <span style={{ fontSize: "11px", color: "#d29922" }}>Ollama server is not running</span>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                  Start it with: ollama serve
+                </span>
+              </div>
+            )}
+          </button>
+
           {/* Markdown Preview */}
           <button
             onClick={() => setMode("markdown")}
@@ -604,6 +706,60 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
             </>
           ) : (
             <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Launching Claude...</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Ollama mode — launched message
+  if (mode === "ollama") {
+    const model = useSettingsStore.getState().ollamaModel || "deepseek-r1";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "var(--bg-primary)", borderLeft: "1px solid var(--border)" }}>
+        {headerContent}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", padding: "24px" }}>
+          {ollamaLaunched ? (
+            <>
+              <div style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "50%",
+                backgroundColor: "#a78bfa",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: 0.8,
+              }}>
+                <span style={{ fontSize: "24px" }}>&#x1F999;</span>
+              </div>
+              <p style={{ color: "var(--text-primary)", fontSize: "14px", fontWeight: 600 }}>
+                Ollama Chat Launched
+              </p>
+              <p style={{ color: "var(--text-secondary)", fontSize: "12px", textAlign: "center", lineHeight: "1.6", maxWidth: "280px" }}>
+                Running <span style={{ fontFamily: "monospace", color: "var(--accent)" }}>{model}</span> in your active terminal. Switch to your terminal to chat.
+              </p>
+              <button
+                onClick={launchOllamaChat}
+                style={{
+                  marginTop: "8px",
+                  padding: "8px 20px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  border: "1px solid var(--border)",
+                  cursor: "pointer",
+                  backgroundColor: "var(--bg-secondary)",
+                  color: "var(--text-secondary)",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-elevated)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-secondary)"; }}
+              >
+                Relaunch
+              </button>
+            </>
+          ) : (
+            <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Launching Ollama...</p>
           )}
         </div>
       </div>
