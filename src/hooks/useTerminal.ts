@@ -71,6 +71,7 @@ function checkIdleTransition(paneId: string) {
     // Check if there's a tracked agent session for this pane
     import("../stores/agentTrackerStore")
       .then(({ useAgentTrackerStore }) => {
+        if (!instances.has(paneId)) return; // Pane destroyed during async import
         const session = useAgentTrackerStore.getState().getActiveSession(paneId);
         if (session) {
           useAgentTrackerStore.getState().endSession(paneId);

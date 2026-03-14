@@ -193,6 +193,12 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   }, [loadFile]);
 
   // Drag to resize
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => { dragCleanupRef.current?.(); };
+  }, []);
+
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragRef.current = true;
@@ -205,6 +211,7 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      dragCleanupRef.current = null;
     };
 
     const onMove = (ev: MouseEvent) => {
@@ -215,6 +222,7 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
 
     const onUp = () => cleanup();
 
+    dragCleanupRef.current = cleanup;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMove);
