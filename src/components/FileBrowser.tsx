@@ -229,6 +229,12 @@ export default function FileBrowser() {
   }, [rootPath, refreshTree]);
 
   // Drag to resize (right edge)
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => { dragCleanupRef.current?.(); };
+  }, []);
+
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragRef.current = true;
@@ -241,6 +247,7 @@ export default function FileBrowser() {
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      dragCleanupRef.current = null;
     };
 
     const onMove = (ev: MouseEvent) => {
@@ -251,6 +258,7 @@ export default function FileBrowser() {
 
     const onUp = () => cleanup();
 
+    dragCleanupRef.current = cleanup;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMove);

@@ -84,7 +84,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
       status: "planning",
     };
     set((state) => {
-      const updated = [...state.sessions, session];
+      const updated = [...state.sessions, session].slice(-20);
       persistSessions(updated);
       return { sessions: updated, activeSessionId: id };
     });

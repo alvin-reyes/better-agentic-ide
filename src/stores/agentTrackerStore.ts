@@ -103,7 +103,7 @@ export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
     };
 
     set((state) => {
-      const updated = [...state.sessions, session];
+      const updated = [...state.sessions, session].slice(-200);
       persistSessions(updated);
       return { sessions: updated };
     });
