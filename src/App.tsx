@@ -202,6 +202,32 @@ export default function App() {
   const requestCloseTab = useCallback((tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
+
+    // Check for unsaved editor changes
+    if (tab.type === "editor") {
+      const checkDirty = new Promise<boolean>((resolve) => {
+        const responseHandler = (ev: Event) => {
+          const detail = (ev as CustomEvent).detail;
+          if (detail.tabId === tabId) {
+            window.removeEventListener("editor-dirty-response", responseHandler);
+            resolve(detail.isDirty);
+          }
+        };
+        window.addEventListener("editor-dirty-response", responseHandler);
+        window.dispatchEvent(new CustomEvent("editor-dirty-check", { detail: { tabId } }));
+        setTimeout(() => resolve(false), 100);
+      });
+
+      checkDirty.then((isDirty) => {
+        if (isDirty) {
+          const confirmed = confirm("This file has unsaved changes. Close anyway?");
+          if (!confirmed) return;
+        }
+        useTabStore.getState().closeTab(tabId);
+      });
+      return;
+    }
+
     const allPanes = findAllPanes(tab.root);
     const activeProcesses = allPanes
       .map((p) => hasActiveProcess(p.id))
