@@ -26,9 +26,10 @@ export type PaneNode = SplitNode | SplitContainer;
 export interface Tab {
   id: string;
   name: string;
-  type?: "terminal" | "orchestrator" | "browser";
+  type?: "terminal" | "orchestrator" | "browser" | "editor";
   orchestratorSessionId?: string;
   browserUrl?: string;
+  editorFilePath?: string;
   root: PaneNode;
   activePaneId: string;
 }
@@ -40,6 +41,7 @@ interface TabStore {
   addTab: (name?: string, initialCwd?: string) => void;
   addOrchestratorTab: (sessionId: string) => string;
   addBrowserTab: (url?: string) => string;
+  addEditorTab: (filePath: string) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
@@ -229,6 +231,32 @@ export const useTabStore = create<TabStore>((set, get) => {
         name: "Browser",
         type: "browser",
         browserUrl: url || "http://localhost:3000",
+        root: { type: "pane", pane },
+        activePaneId: pane.id,
+      };
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: id,
+      }));
+      return id;
+    },
+
+    addEditorTab: (filePath) => {
+      const existing = get().tabs.find(
+        (t) => t.type === "editor" && t.editorFilePath === filePath,
+      );
+      if (existing) {
+        set({ activeTabId: existing.id });
+        return existing.id;
+      }
+      const id = newTabId();
+      const pane = createDefaultPane();
+      const fileName = filePath.split("/").pop() || filePath;
+      const tab: Tab = {
+        id,
+        name: fileName,
+        type: "editor",
+        editorFilePath: filePath,
         root: { type: "pane", pane },
         activePaneId: pane.id,
       };
