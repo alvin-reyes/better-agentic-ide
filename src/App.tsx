@@ -15,6 +15,7 @@ const PreviewPanel = lazy(() => import("./components/PreviewPanel"));
 const FileBrowser = lazy(() => import("./components/FileBrowser"));
 const AgentDashboard = lazy(() => import("./components/AgentDashboard"));
 const OrchestratorTab = lazy(() => import("./components/OrchestratorTab"));
+const EditorTab = lazy(() => import("./components/EditorTab"));
 const BrowserTab = lazy(() => import("./components/BrowserTab"));
 const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
@@ -279,13 +280,17 @@ export default function App() {
               ? <Suspense fallback={null}>
                   <OrchestratorTab sessionId={activeTab.orchestratorSessionId} />
                 </Suspense>
-              : activeTab.type === "browser" && activeTab.browserUrl
+              : activeTab.type === "editor" && activeTab.editorFilePath
                 ? <Suspense fallback={null}>
-                    <BrowserTab tabId={activeTab.id} initialUrl={activeTab.browserUrl} />
+                    <EditorTab tabId={activeTab.id} filePath={activeTab.editorFilePath} />
                   </Suspense>
-                : zoomedPane
-                  ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
-                  : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
+                : activeTab.type === "browser" && activeTab.browserUrl
+                  ? <Suspense fallback={null}>
+                      <BrowserTab tabId={activeTab.id} initialUrl={activeTab.browserUrl} />
+                    </Suspense>
+                  : zoomedPane
+                    ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
+                    : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
           )}
         </div>
         {previewOpen && (
