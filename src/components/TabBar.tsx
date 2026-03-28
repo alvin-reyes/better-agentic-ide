@@ -15,6 +15,7 @@ export default function TabBar() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
   const [activeTabs, setActiveTabs] = useState<Set<string>>(new Set());
+  const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Poll activity state every second
@@ -45,6 +46,20 @@ export default function TabBar() {
     setEditingId(id);
     setEditValue(currentName);
   };
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { tabId, isDirty } = (e as CustomEvent).detail;
+      setDirtyTabs((prev) => {
+        const next = new Set(prev);
+        if (isDirty) next.add(tabId);
+        else next.delete(tabId);
+        return next;
+      });
+    };
+    window.addEventListener("editor-dirty-change", handler);
+    return () => window.removeEventListener("editor-dirty-change", handler);
+  }, []);
 
   // Listen for rename-tab custom event (triggered by Cmd+R keybinding)
   useEffect(() => {
@@ -140,10 +155,27 @@ export default function TabBar() {
                 }}
               />
             )}
-            {/* Terminal icon */}
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ opacity: isActive ? 0.9 : 0.4, flexShrink: 0 }}>
-              <path d="M5.5 4L9.5 8L5.5 12" stroke={isActive && activeTabs.has(tab.id) ? "#3fb950" : isActive ? "var(--accent)" : "currentColor"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            {/* Tab type icon */}
+            {tab.type === "editor" ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                <path
+                  d="M4 1.5H10L13.5 5V13.5C13.5 14.05 13.05 14.5 12.5 14.5H4C3.45 14.5 3 14.05 3 13.5V2.5C3 1.95 3.45 1.5 4 1.5Z"
+                  stroke={isActive ? "#58a6ff" : "currentColor"}
+                  strokeWidth="1"
+                  fill="none"
+                />
+                <path
+                  d="M10 1.5V5H13.5"
+                  stroke={isActive ? "#58a6ff" : "currentColor"}
+                  strokeWidth="1"
+                  fill="none"
+                />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ opacity: isActive ? 0.9 : 0.4, flexShrink: 0 }}>
+                <path d="M5.5 4L9.5 8L5.5 12" stroke={isActive && activeTabs.has(tab.id) ? "#3fb950" : isActive ? "var(--accent)" : "currentColor"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
 
             <span className="text-[11px] font-mono" style={{ opacity: 0.35 }}>{idx + 1}</span>
 
@@ -162,6 +194,16 @@ export default function TabBar() {
               />
             ) : (
               <span className="truncate max-w-[120px]">{tab.name}</span>
+            )}
+
+            {tab.type === "editor" && dirtyTabs.has(tab.id) && (
+              <span style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                backgroundColor: "#e8ab6a",
+                flexShrink: 0,
+              }} />
             )}
 
             {tabs.length > 1 && (
