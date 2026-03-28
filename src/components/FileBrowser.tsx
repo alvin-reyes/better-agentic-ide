@@ -9,6 +9,18 @@ interface WatchEvent {
   path?: string;
 }
 
+const PREVIEW_EXTENSIONS = new Set([
+  "html", "htm",
+  "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico",
+  "pdf",
+  "md", "markdown",
+]);
+
+function shouldOpenInPreview(filePath: string): boolean {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  return PREVIEW_EXTENSIONS.has(ext);
+}
+
 // File icon color by extension
 function getFileColor(entry: FileEntry): string {
   if (entry.isDir) return "var(--accent)";
@@ -73,9 +85,12 @@ function FileTreeNode({ node, depth, showHidden }: { node: TreeNode; depth: numb
       } else {
         expandNode(node.entry.path);
       }
-    } else {
-      // Open file in PreviewPanel
+    } else if (shouldOpenInPreview(node.entry.path)) {
+      // Preview files (HTML, images, PDF, markdown) → PreviewPanel
       window.dispatchEvent(new CustomEvent("open-preview", { detail: { path: node.entry.path } }));
+    } else {
+      // Code/text files → Editor tab
+      useTabStore.getState().addEditorTab(node.entry.path);
     }
   };
 
