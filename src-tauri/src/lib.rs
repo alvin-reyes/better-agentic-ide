@@ -355,6 +355,7 @@ pub fn run() {
             list_md_files,
             list_directory,
             bmad::bmad_status,
+            bmad::scaffold_bmad,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
