@@ -212,26 +212,58 @@ One-time vendoring + resource registration. Network is used here only.
 **Interfaces:**
 - Produces: a bundled asset tree resolvable at runtime via Tauri's resource resolver under `resources/bmad/`.
 
-- [ ] **Step 1: Vendor a pinned BMAD release**
+- [ ] **Step 1: Vendor pinned BMAD v4.44.3 + generate Claude Code commands**
 
-Pin to BMAD-METHOD tag `v4.x` (record the exact tag chosen in `VERSION`). Run once:
+Pin to BMAD-METHOD tag `v4.44.3` (the last v4 release; v5+/v6 dropped the static
+`bmad-core/` bundle model). The raw repo does NOT contain `.claude/commands/BMad/` —
+the installer generates it. Replicate that generation here so scaffolding ships
+ready-to-use command files and needs no `npx` at runtime.
+
+The generation rule (from the v4 installer `tools/installer/lib/ide-setup.js`):
+for each `bmad-core/agents/<id>.md` (and `bmad-core/tasks/<id>.md`), write
+`.claude/commands/BMad/agents/<id>.md` (resp. `tasks/<id>.md`) whose content is:
+
+```
+# /<id> Command
+
+When this command is used, adopt the following agent persona:
+
+<agent file body, with every `{root}` replaced by `.bmad-core`>
+```
+
+Run once (requires network for the clone only):
 
 ```bash
-mkdir -p src-tauri/resources
-git clone --depth 1 --branch <PINNED_TAG> https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad-src
-# Copy the installable core the CLI would place in a project:
+mkdir -p src-tauri/resources/bmad
+git clone --depth 1 --branch v4.44.3 https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad-src
 cp -R /tmp/bmad-src/bmad-core src-tauri/resources/bmad/bmad-core
-# Copy Claude Code command definitions if present in the release:
-mkdir -p src-tauri/resources/bmad/claude-commands
-cp -R /tmp/bmad-src/.claude/commands/BMad src-tauri/resources/bmad/claude-commands/BMad 2>/dev/null || true
-echo "<PINNED_TAG>" > src-tauri/resources/bmad/VERSION
+
+# Generate Claude Code command files (agents + tasks) the way the installer does.
+gen() {           # $1 = subdir (agents|tasks), $2 = header verb
+  local src="/tmp/bmad-src/bmad-core/$1"
+  local out="src-tauri/resources/bmad/claude-commands/BMad/$1"
+  mkdir -p "$out"
+  for f in "$src"/*.md; do
+    [ -e "$f" ] || continue
+    local id; id="$(basename "$f" .md)"
+    { printf '# /%s Command\n\n%s\n\n' "$id" "$2";
+      sed 's|{root}|.bmad-core|g' "$f"; } > "$out/$id.md"
+  done
+}
+gen agents "When this command is used, adopt the following agent persona:"
+gen tasks  "When this command is used, execute the following task:"
+
+echo "v4.44.3" > src-tauri/resources/bmad/VERSION
 rm -rf /tmp/bmad-src
 ```
 
-Verify the tree exists:
+Verify the tree exists and commands were generated:
 
-Run: `find src-tauri/resources/bmad -maxdepth 2 -type d | sort`
-Expected: shows `bmad-core` (agents/templates/tasks/checklists/workflows) and `claude-commands`.
+Run: `find src-tauri/resources/bmad -maxdepth 3 -type d | sort && ls src-tauri/resources/bmad/claude-commands/BMad/agents`
+Expected: shows `bmad-core` (agents/templates/tasks/checklists/workflows) and
+`claude-commands/BMad/agents` + `.../tasks`; the agents dir lists `analyst.md`,
+`architect.md`, `dev.md`, `pm.md`, `po.md`, `qa.md`, `sm.md`, `ux-expert.md`,
+`bmad-master.md`, `bmad-orchestrator.md`.
 
 - [ ] **Step 2: Register the resource**
 
@@ -1231,7 +1263,10 @@ git commit -m "feat: BMAD init banner + per-path dismissal store"
 
 - [ ] **Step 1: Define personas + activation commands**
 
-`src/data/bmadPersonas.ts` (BMAD slash-commands as installed under `.claude/commands/BMad/`):
+`src/data/bmadPersonas.ts`. Claude Code namespaces a command file at
+`.claude/commands/BMad/agents/<id>.md` as the slash-command `/BMad:agents:<id>`
+(directory path joined with colons). These `<id>` values are the vendored agent
+filenames confirmed in Task 2:
 
 ```ts
 export interface BmadPersona {
@@ -1241,18 +1276,22 @@ export interface BmadPersona {
 }
 
 export const BMAD_PERSONAS: BmadPersona[] = [
-  { id: "analyst",   title: "Analyst",   command: "/BMad:analyst" },
-  { id: "pm",        title: "Product Manager", command: "/BMad:pm" },
-  { id: "architect", title: "Architect", command: "/BMad:architect" },
-  { id: "sm",        title: "Scrum Master", command: "/BMad:sm" },
-  { id: "dev",       title: "Developer", command: "/BMad:dev" },
-  { id: "qa",        title: "QA",        command: "/BMad:qa" },
+  { id: "analyst",    title: "Analyst",         command: "/BMad:agents:analyst" },
+  { id: "pm",         title: "Product Manager", command: "/BMad:agents:pm" },
+  { id: "ux-expert",  title: "UX Expert",       command: "/BMad:agents:ux-expert" },
+  { id: "architect",  title: "Architect",       command: "/BMad:agents:architect" },
+  { id: "po",         title: "Product Owner",   command: "/BMad:agents:po" },
+  { id: "sm",         title: "Scrum Master",    command: "/BMad:agents:sm" },
+  { id: "dev",        title: "Developer",       command: "/BMad:agents:dev" },
+  { id: "qa",         title: "QA",              command: "/BMad:agents:qa" },
 ];
 
 export const BMAD_PHASES = ["Planning", "Dev cycle"] as const;
 ```
 
-> Note during implementation: verify the exact command names against the vendored files under `src-tauri/resources/bmad/claude-commands/BMad/`. If BMAD's release uses different command tokens, update the `command` fields to match the actual filenames — this is the single source of truth.
+> The `command` values must match the vendored files under
+> `src-tauri/resources/bmad/claude-commands/BMad/agents/` (Task 2). If a filename
+> differs, correct the `id`/`command` here — the vendored tree is the source of truth.
 
 - [ ] **Step 2: Implement the panel**
 
