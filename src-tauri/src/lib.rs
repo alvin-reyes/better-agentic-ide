@@ -1,3 +1,4 @@
+mod bmad;
 mod pty;
 mod subagent;
 mod watcher;
@@ -353,6 +354,7 @@ pub fn run() {
             read_file_base64,
             list_md_files,
             list_directory,
+            bmad::bmad_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
