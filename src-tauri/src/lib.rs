@@ -1,4 +1,5 @@
 mod pty;
+mod subagent;
 mod watcher;
 
 #[derive(serde::Serialize)]
