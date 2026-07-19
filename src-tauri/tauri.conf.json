@@ -36,6 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico",
       "icons/icon.png"
-    ]
+    ],
+    "resources": ["resources/bmad/**/*"]
   }
 }
