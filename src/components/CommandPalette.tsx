@@ -70,6 +70,21 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "file-browser", label: "Toggle File Browser", shortcut: "Cmd+B", category: "Panels", action: () => { onToggleFileBrowser?.(); onClose(); } },
       { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+Shift+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
       { id: "dashboard", label: "Agent Dashboard", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-dashboard")); onClose(); } },
+      { id: "subagents", label: "Sub-agents: Toggle panel", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-subagents")); onClose(); } },
+      { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
+        const tab = tabs.find(t => t.id === activeTabId);
+        if (tab) {
+          import("../hooks/useTerminal").then(({ getPtyCwd }) => {
+            getPtyCwd(tab.activePaneId).then((cwd) => {
+              import("@tauri-apps/api/core").then(({ invoke }) => {
+                invoke("scaffold_bmad", { path: cwd }).catch(() => {});
+              });
+            });
+          });
+        }
+        onClose();
+      }},
+      { id: "bmad-toggle", label: "BMAD: Toggle panel", category: "BMAD", action: () => { window.dispatchEvent(new CustomEvent("toggle-bmad")); onClose(); } },
       { id: "orchestrator", label: "Open Orchestrator", shortcut: "Cmd+Shift+O", category: "Panels", action: () => {
         import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
           const sessionId = useOrchestratorStore.getState().createSession("New Project");
@@ -195,6 +210,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       case "Panels": return "#bc8cff";
       case "Themes": return "#d29922";
       case "Recording": return "#ff7b72";
+      case "BMAD": return "#2dd4bf";
       default: return "var(--text-muted)";
     }
   };
