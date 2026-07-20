@@ -76,7 +76,7 @@ pub fn newest_transcript(project_dir: &Path) -> Option<PathBuf> {
         if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
             continue;
         }
-        let mtime = entry.metadata().and_then(|m| m.modified()).ok()?;
+        let Ok(mtime) = entry.metadata().and_then(|m| m.modified()) else { continue; };
         if newest.as_ref().map_or(true, |(t, _)| mtime > *t) {
             newest = Some((mtime, path));
         }

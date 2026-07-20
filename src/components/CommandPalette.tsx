@@ -210,7 +210,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       case "Panels": return "#bc8cff";
       case "Themes": return "#d29922";
       case "Recording": return "#ff7b72";
-      case "BMAD": return "#d29922";
+      case "BMAD": return "#2dd4bf";
       default: return "var(--text-muted)";
     }
   };
