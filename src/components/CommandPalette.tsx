@@ -70,6 +70,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "file-browser", label: "Toggle File Browser", shortcut: "Cmd+B", category: "Panels", action: () => { onToggleFileBrowser?.(); onClose(); } },
       { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+Shift+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
       { id: "dashboard", label: "Agent Dashboard", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-dashboard")); onClose(); } },
+      { id: "subagents", label: "Sub-agents: Toggle panel", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-subagents")); onClose(); } },
       { id: "orchestrator", label: "Open Orchestrator", shortcut: "Cmd+Shift+O", category: "Panels", action: () => {
         import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
           const sessionId = useOrchestratorStore.getState().createSession("New Project");
