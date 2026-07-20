@@ -19,6 +19,8 @@ const EditorTab = lazy(() => import("./components/EditorTab"));
 const BrowserTab = lazy(() => import("./components/BrowserTab"));
 const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
 const SubagentPanel = lazy(() => import("./components/SubagentPanel"));
+const BmadPanel = lazy(() => import("./components/BmadPanel"));
+import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
@@ -35,6 +37,7 @@ export default function App() {
   const [pendingPreviewPath, setPendingPreviewPath] = useState<string | null>(null);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [bmadOpen, setBmadOpen] = useState(false);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
@@ -143,9 +146,16 @@ export default function App() {
     return () => window.removeEventListener("toggle-subagents", handler);
   }, []);
 
-  // Resolve the active pane's cwd whenever sub-agents panel opens or active tab changes
+  // Listen for BMAD panel toggle from command palette
   useEffect(() => {
-    if (!subagentsOpen) return;
+    const handler = () => setBmadOpen((prev) => !prev);
+    window.addEventListener("toggle-bmad", handler);
+    return () => window.removeEventListener("toggle-bmad", handler);
+  }, []);
+
+  // Resolve the active pane's cwd whenever sub-agents or BMAD panel opens or active tab changes
+  useEffect(() => {
+    if (!subagentsOpen && !bmadOpen) return;
     const paneId = activeTab?.activePaneId;
     if (!paneId) {
       setActiveCwd(null);
@@ -154,7 +164,7 @@ export default function App() {
     import("./hooks/useTerminal").then(({ getPtyCwd }) => {
       getPtyCwd(paneId).then((cwd) => setActiveCwd(cwd)).catch(() => setActiveCwd(null));
     });
-  }, [subagentsOpen, activeTab?.activePaneId]);
+  }, [subagentsOpen, bmadOpen, activeTab?.activePaneId]);
 
   const toggleCommandPalette = useCallback(() => {
     setPaletteOpen((prev) => !prev);
@@ -352,6 +362,12 @@ export default function App() {
           </Suspense>
         )}
       </div>
+      {activeCwd && (
+        <BmadInitBanner
+          cwd={activeCwd}
+          onInitialized={() => setActiveCwd(activeCwd)}
+        />
+      )}
       <Scratchpad ref={scratchpadRef} />
       <ShortcutsBar />
       <Suspense fallback={null}>
@@ -377,6 +393,13 @@ export default function App() {
           <SubagentPanel
             activeCwd={activeCwd}
             onClose={() => setSubagentsOpen(false)}
+          />
+        )}
+        {bmadOpen && (
+          <BmadPanel
+            ptyId={useTabStore.getState().getActivePtyId()}
+            cwd={activeCwd}
+            onClose={() => setBmadOpen(false)}
           />
         )}
         {recordingPlayerOpen && (
