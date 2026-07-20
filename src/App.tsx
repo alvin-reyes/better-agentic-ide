@@ -18,6 +18,7 @@ const OrchestratorTab = lazy(() => import("./components/OrchestratorTab"));
 const EditorTab = lazy(() => import("./components/EditorTab"));
 const BrowserTab = lazy(() => import("./components/BrowserTab"));
 const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
+const SubagentPanel = lazy(() => import("./components/SubagentPanel"));
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
@@ -33,6 +34,8 @@ export default function App() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pendingPreviewPath, setPendingPreviewPath] = useState<string | null>(null);
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [activeCwd, setActiveCwd] = useState<string | null>(null);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
@@ -132,6 +135,26 @@ export default function App() {
     window.addEventListener("toggle-dashboard", handler);
     return () => window.removeEventListener("toggle-dashboard", handler);
   }, []);
+
+  // Listen for sub-agents panel toggle from command palette
+  useEffect(() => {
+    const handler = () => setSubagentsOpen((prev) => !prev);
+    window.addEventListener("toggle-subagents", handler);
+    return () => window.removeEventListener("toggle-subagents", handler);
+  }, []);
+
+  // Resolve the active pane's cwd whenever sub-agents panel opens or active tab changes
+  useEffect(() => {
+    if (!subagentsOpen) return;
+    const paneId = activeTab?.activePaneId;
+    if (!paneId) {
+      setActiveCwd(null);
+      return;
+    }
+    import("./hooks/useTerminal").then(({ getPtyCwd }) => {
+      getPtyCwd(paneId).then((cwd) => setActiveCwd(cwd)).catch(() => setActiveCwd(null));
+    });
+  }, [subagentsOpen, activeTab?.activePaneId]);
 
   const toggleCommandPalette = useCallback(() => {
     setPaletteOpen((prev) => !prev);
@@ -349,6 +372,12 @@ export default function App() {
         )}
         {dashboardOpen && (
           <AgentDashboard onClose={() => setDashboardOpen(false)} />
+        )}
+        {subagentsOpen && (
+          <SubagentPanel
+            activeCwd={activeCwd}
+            onClose={() => setSubagentsOpen(false)}
+          />
         )}
         {recordingPlayerOpen && (
           <RecordingPlayer onClose={() => setRecordingPlayerOpen(false)} />
