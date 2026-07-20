@@ -39,6 +39,7 @@ export default function App() {
   const [subagentsOpen, setSubagentsOpen] = useState(false);
   const [bmadOpen, setBmadOpen] = useState(false);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
+  const [bannerCwd, setBannerCwd] = useState<string | null>(null);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
@@ -165,6 +166,19 @@ export default function App() {
       getPtyCwd(paneId).then((cwd) => setActiveCwd(cwd)).catch(() => setActiveCwd(null));
     });
   }, [subagentsOpen, bmadOpen, activeTab?.activePaneId]);
+
+  // Resolve bannerCwd independently of panel state — allows the BMAD init banner
+  // to appear whenever the active terminal changes, without requiring a panel open.
+  useEffect(() => {
+    const paneId = activeTab?.activePaneId;
+    if (!paneId) {
+      setBannerCwd(null);
+      return;
+    }
+    import("./hooks/useTerminal").then(({ getPtyCwd }) => {
+      getPtyCwd(paneId).then((cwd) => setBannerCwd(cwd)).catch(() => setBannerCwd(null));
+    });
+  }, [activeTab?.activePaneId]);
 
   const toggleCommandPalette = useCallback(() => {
     setPaletteOpen((prev) => !prev);
@@ -362,10 +376,10 @@ export default function App() {
           </Suspense>
         )}
       </div>
-      {activeCwd && (
+      {bannerCwd && (
         <BmadInitBanner
-          cwd={activeCwd}
-          onInitialized={() => setActiveCwd(activeCwd)}
+          cwd={bannerCwd}
+          onInitialized={() => {}}
         />
       )}
       <Scratchpad ref={scratchpadRef} />
