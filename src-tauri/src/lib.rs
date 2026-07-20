@@ -336,6 +336,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(pty::PtyManager::new())
         .manage(watcher::WatcherManager::new())
+        .manage(subagent::SubagentWatcherManager::new())
         .invoke_handler(tauri::generate_handler![
             pty::create_pty,
             pty::write_pty,
@@ -356,6 +357,8 @@ pub fn run() {
             list_directory,
             bmad::bmad_status,
             bmad::scaffold_bmad,
+            subagent::watch_subagents,
+            subagent::unwatch_subagents,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
