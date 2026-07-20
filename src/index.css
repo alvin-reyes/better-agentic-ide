@@ -276,3 +276,155 @@ button, a, input, textarea {
   background-color: rgba(168, 85, 247, 0.15);
   color: #a855f7;
 }
+
+/* BMAD banner */
+.bmad-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background-color: var(--bg-elevated);
+  border-top: 1px solid var(--border-strong);
+  font-size: 13px;
+  color: var(--text-secondary);
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.bmad-banner__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bmad-banner__actions button {
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bmad-banner__actions button:hover:not(:disabled) {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.bmad-banner__actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* BMAD panel */
+.bmad-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bmad-panel {
+  width: 480px;
+  max-height: 70vh;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bmad-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bmad-panel__close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+}
+
+.bmad-panel__close:hover { color: var(--text-primary); }
+
+.bmad-panel__phases {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bmad-phase {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--accent);
+  background-color: var(--accent-subtle);
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+.bmad-panel__personas {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  list-style: none;
+  margin: 0;
+}
+
+.bmad-persona {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background-color: var(--bg-tertiary);
+  margin-bottom: 4px;
+}
+
+.bmad-persona__title {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.bmad-persona__launch {
+  padding: 4px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bmad-persona__launch:hover:not(:disabled) {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.bmad-persona__launch:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
