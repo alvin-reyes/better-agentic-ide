@@ -26,7 +26,7 @@ export type PaneNode = SplitNode | SplitContainer;
 export interface Tab {
   id: string;
   name: string;
-  type?: "terminal" | "orchestrator" | "browser" | "editor";
+  type?: "terminal" | "orchestrator" | "browser" | "editor" | "fleet";
   orchestratorSessionId?: string;
   browserUrl?: string;
   editorFilePath?: string;
@@ -41,6 +41,7 @@ interface TabStore {
   addTab: (name?: string, initialCwd?: string) => void;
   addOrchestratorTab: (sessionId: string) => string;
   addBrowserTab: (url?: string) => string;
+  addFleetTab: () => string;
   addEditorTab: (filePath: string) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
@@ -238,6 +239,26 @@ export const useTabStore = create<TabStore>((set, get) => {
         tabs: [...s.tabs, tab],
         activeTabId: id,
       }));
+      return id;
+    },
+
+    addFleetTab: () => {
+      // Only ever one fleet tab; focus it if it already exists.
+      const existing = get().tabs.find((t) => t.type === "fleet");
+      if (existing) {
+        set({ activeTabId: existing.id });
+        return existing.id;
+      }
+      const id = newTabId();
+      const pane = createDefaultPane();
+      const tab: Tab = {
+        id,
+        name: "Fleet",
+        type: "fleet",
+        root: { type: "pane", pane },
+        activePaneId: pane.id,
+      };
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: id }));
       return id;
     },
 
