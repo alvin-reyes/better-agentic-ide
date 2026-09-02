@@ -146,18 +146,17 @@ export default function App() {
     return () => window.removeEventListener("toggle-bmad", handler);
   }, []);
 
-  // Resolve the active pane's cwd whenever the fleet or BMAD panel opens or active tab changes
+  // Resolve the active terminal's cwd eagerly. Non-terminal tabs (fleet, editor,
+  // browser, orchestrator) have no PTY, so keep the last resolved value rather
+  // than clearing it — the fleet views read this while a fleet tab is focused.
   useEffect(() => {
-    if (!fleetOpen && !bmadOpen) return;
     const paneId = activeTab?.activePaneId;
-    if (!paneId) {
-      setActiveCwd(null);
-      return;
-    }
+    if (!paneId) return;
+    if (activeTab?.type && activeTab.type !== "terminal") return;
     import("./hooks/useTerminal").then(({ getPtyCwd }) => {
-      getPtyCwd(paneId).then((cwd) => setActiveCwd(cwd)).catch(() => setActiveCwd(null));
+      getPtyCwd(paneId).then((cwd) => { if (cwd) setActiveCwd(cwd); }).catch(() => {});
     });
-  }, [fleetOpen, bmadOpen, activeTab?.activePaneId]);
+  }, [activeTab?.type, activeTab?.activePaneId]);
 
   // Resolve bannerCwd independently of panel state — allows the BMAD init banner
   // to appear whenever the active terminal changes, without requiring a panel open.
