@@ -116,6 +116,26 @@ pub fn newest_transcript(project_dir: &Path) -> Option<PathBuf> {
     newest.map(|(_, p)| p)
 }
 
+/// The `n` most recently modified `.jsonl` transcripts, oldest first so
+/// replayed events arrive in chronological order.
+pub fn recent_transcripts(project_dir: &Path, n: usize) -> Vec<PathBuf> {
+    let Ok(rd) = std::fs::read_dir(project_dir) else {
+        return Vec::new();
+    };
+    let mut entries: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    for entry in rd.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        let Ok(mtime) = entry.metadata().and_then(|m| m.modified()) else { continue; };
+        entries.push((mtime, path));
+    }
+    entries.sort_by_key(|(t, _)| *t);
+    let start = entries.len().saturating_sub(n);
+    entries[start..].iter().map(|(_, p)| p.clone()).collect()
+}
+
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
@@ -173,10 +193,16 @@ pub fn watch_subagents(
 ) -> Result<u32, String> {
     let home = home_dir().ok_or("no HOME")?;
     let project_dir = claude_project_path(&home, &cwd);
-    // Emit events already present, then tail appends.
+    // Replay the 3 most recent transcripts oldest-first, then tail the newest.
+    // Only the newest file gets a live cursor; older ones are history.
     let mut offset: u64 = 0;
-    if let Some(path) = newest_transcript(&project_dir) {
-        offset = emit_from_offset(&path, 0, &on_event);
+    let history = recent_transcripts(&project_dir, 3);
+    let newest = history.last().cloned();
+    for path in &history {
+        let consumed = emit_from_offset(path, 0, &on_event);
+        if Some(path) == newest.as_ref() {
+            offset = consumed;
+        }
     }
     let watch_dir = project_dir.clone();
     let channel = on_event.clone();
@@ -345,5 +371,35 @@ mod tests {
     fn ignores_malformed_line() {
         assert_eq!(parse_line("{not json"), Vec::<SubagentEvent>::new());
         assert_eq!(parse_line(""), Vec::<SubagentEvent>::new());
+    }
+
+    #[test]
+    fn recent_transcripts_returns_oldest_first_capped() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("fleet-rt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Create four .jsonl files plus one non-transcript, each newer than the last.
+        for name in ["a.jsonl", "b.jsonl", "c.jsonl", "d.jsonl", "notes.txt"] {
+            let mut f = std::fs::File::create(dir.join(name)).unwrap();
+            writeln!(f, "{{}}").unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+
+        let got = recent_transcripts(&dir, 3);
+        let names: Vec<String> = got
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["b.jsonl", "c.jsonl", "d.jsonl"]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn recent_transcripts_missing_dir_is_empty() {
+        let got = recent_transcripts(Path::new("/nonexistent/fleet/dir"), 3);
+        assert!(got.is_empty());
     }
 }
