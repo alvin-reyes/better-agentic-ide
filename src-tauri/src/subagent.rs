@@ -12,8 +12,17 @@ use tauri::ipc::Channel;
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind")]
 pub enum SubagentEvent {
-    Spawn { id: String, agent_type: String, description: String },
-    Complete { id: String },
+    Spawn {
+        id: String,
+        agent_type: String,
+        description: String,
+        model: Option<String>,
+        started_at: Option<String>,
+    },
+    Complete {
+        id: String,
+        finished_at: Option<String>,
+    },
 }
 
 pub fn parse_line(line: &str) -> Vec<SubagentEvent> {
@@ -22,6 +31,11 @@ pub fn parse_line(line: &str) -> Vec<SubagentEvent> {
         Ok(v) => v,
         Err(_) => return out,
     };
+    // Transcript lines carry a top-level ISO-8601 timestamp. Metadata lines do not.
+    let ts = v
+        .get("timestamp")
+        .and_then(|t| t.as_str())
+        .map(|s| s.to_string());
     let content = match v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_array()) {
         Some(c) => c,
         None => return out,
@@ -29,7 +43,12 @@ pub fn parse_line(line: &str) -> Vec<SubagentEvent> {
     for block in content {
         let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
         match btype {
-            "tool_use" if block.get("name").and_then(|n| n.as_str()) == Some("Task") => {
+            "tool_use" => {
+                // The sub-agent tool is named "Agent"; "Task" is the pre-2026 name.
+                let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                if name != "Agent" && name != "Task" {
+                    continue;
+                }
                 let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
                 let input = block.get("input");
                 let agent_type = input
@@ -42,13 +61,26 @@ pub fn parse_line(line: &str) -> Vec<SubagentEvent> {
                     .and_then(|s| s.as_str())
                     .unwrap_or("")
                     .to_string();
+                let model = input
+                    .and_then(|i| i.get("model"))
+                    .and_then(|s| s.as_str())
+                    .map(|s| s.to_string());
                 if !id.is_empty() {
-                    out.push(SubagentEvent::Spawn { id, agent_type, description });
+                    out.push(SubagentEvent::Spawn {
+                        id,
+                        agent_type,
+                        description,
+                        model,
+                        started_at: ts.clone(),
+                    });
                 }
             }
             "tool_result" => {
                 if let Some(id) = block.get("tool_use_id").and_then(|i| i.as_str()) {
-                    out.push(SubagentEvent::Complete { id: id.to_string() });
+                    out.push(SubagentEvent::Complete {
+                        id: id.to_string(),
+                        finished_at: ts.clone(),
+                    });
                 }
             }
             _ => {}
@@ -233,11 +265,11 @@ mod tests {
     }
 
     #[test]
-    fn parses_task_spawn() {
-        let line = r#"{"message":{"role":"assistant","content":[
+    fn parses_agent_spawn_with_timestamp() {
+        let line = r#"{"timestamp":"2026-08-07T05:29:32.936Z","message":{"role":"assistant","content":[
           {"type":"text","text":"ok"},
-          {"type":"tool_use","id":"toolu_1","name":"Task",
-           "input":{"description":"Find footer","prompt":"...","subagent_type":"Explore"}}
+          {"type":"tool_use","id":"toolu_1","name":"Agent",
+           "input":{"description":"Find footer","prompt":"...","subagent_type":"Explore","model":"sonnet"}}
         ]}}"#;
         assert_eq!(
             parse_line(line),
@@ -245,20 +277,64 @@ mod tests {
                 id: "toolu_1".into(),
                 agent_type: "Explore".into(),
                 description: "Find footer".into(),
+                model: Some("sonnet".into()),
+                started_at: Some("2026-08-07T05:29:32.936Z".into()),
+            }]
+        );
+    }
+
+    #[test]
+    fn parses_legacy_task_spawn() {
+        let line = r#"{"timestamp":"2026-08-07T05:29:32.936Z","message":{"content":[
+          {"type":"tool_use","id":"toolu_2","name":"Task",
+           "input":{"description":"Old","subagent_type":"Explore"}}
+        ]}}"#;
+        assert_eq!(
+            parse_line(line),
+            vec![SubagentEvent::Spawn {
+                id: "toolu_2".into(),
+                agent_type: "Explore".into(),
+                description: "Old".into(),
+                model: None,
+                started_at: Some("2026-08-07T05:29:32.936Z".into()),
+            }]
+        );
+    }
+
+    #[test]
+    fn spawn_without_timestamp_yields_none() {
+        let line = r#"{"message":{"content":[
+          {"type":"tool_use","id":"toolu_3","name":"Agent",
+           "input":{"description":"d","subagent_type":"t"}}
+        ]}}"#;
+        assert_eq!(
+            parse_line(line),
+            vec![SubagentEvent::Spawn {
+                id: "toolu_3".into(),
+                agent_type: "t".into(),
+                description: "d".into(),
+                model: None,
+                started_at: None,
             }]
         );
     }
 
     #[test]
     fn parses_tool_result_complete() {
-        let line = r#"{"message":{"role":"user","content":[
+        let line = r#"{"timestamp":"2026-08-07T05:31:00.000Z","message":{"role":"user","content":[
           {"type":"tool_result","tool_use_id":"toolu_1","content":"done"}
         ]}}"#;
-        assert_eq!(parse_line(line), vec![SubagentEvent::Complete { id: "toolu_1".into() }]);
+        assert_eq!(
+            parse_line(line),
+            vec![SubagentEvent::Complete {
+                id: "toolu_1".into(),
+                finished_at: Some("2026-08-07T05:31:00.000Z".into()),
+            }]
+        );
     }
 
     #[test]
-    fn ignores_non_task_tool_use() {
+    fn ignores_unrelated_tool_use() {
         let line = r#"{"message":{"content":[
           {"type":"tool_use","id":"x","name":"Bash","input":{"command":"ls"}}
         ]}}"#;
