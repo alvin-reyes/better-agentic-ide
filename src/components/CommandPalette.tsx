@@ -69,8 +69,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "agents", label: "Launch AI Agent", shortcut: "Cmd+Shift+A", category: "Panels", action: () => { onOpenAgentPicker(); } },
       { id: "file-browser", label: "Toggle File Browser", shortcut: "Cmd+B", category: "Panels", action: () => { onToggleFileBrowser?.(); onClose(); } },
       { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+Shift+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
-      { id: "dashboard", label: "Agent Dashboard", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-dashboard")); onClose(); } },
-      { id: "subagents", label: "Sub-agents: Toggle panel", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-subagents")); onClose(); } },
+      { id: "fleet", label: "Fleet: Toggle panel", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-fleet")); onClose(); } },
+      { id: "fleet-tab", label: "Fleet: Open tab", category: "Panels", action: () => { useTabStore.getState().addFleetTab(); onClose(); } },
       { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);
         if (tab) {

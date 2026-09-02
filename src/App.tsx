@@ -13,12 +13,12 @@ const CommandPalette = lazy(() => import("./components/CommandPalette"));
 const AgentPicker = lazy(() => import("./components/AgentPicker"));
 const PreviewPanel = lazy(() => import("./components/PreviewPanel"));
 const FileBrowser = lazy(() => import("./components/FileBrowser"));
-const AgentDashboard = lazy(() => import("./components/AgentDashboard"));
 const OrchestratorTab = lazy(() => import("./components/OrchestratorTab"));
 const EditorTab = lazy(() => import("./components/EditorTab"));
 const BrowserTab = lazy(() => import("./components/BrowserTab"));
 const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
-const SubagentPanel = lazy(() => import("./components/SubagentPanel"));
+const FleetPanel = lazy(() => import("./components/fleet/FleetPanel"));
+const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
 const BmadPanel = lazy(() => import("./components/BmadPanel"));
 import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
@@ -35,8 +35,7 @@ export default function App() {
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pendingPreviewPath, setPendingPreviewPath] = useState<string | null>(null);
-  const [dashboardOpen, setDashboardOpen] = useState(false);
-  const [subagentsOpen, setSubagentsOpen] = useState(false);
+  const [fleetOpen, setFleetOpen] = useState(false);
   const [bmadOpen, setBmadOpen] = useState(false);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   const [bannerCwd, setBannerCwd] = useState<string | null>(null);
@@ -133,18 +132,11 @@ export default function App() {
     }
   }, []);
 
-  // Listen for dashboard toggle from command palette
+  // Listen for fleet panel toggle
   useEffect(() => {
-    const handler = () => setDashboardOpen((prev) => !prev);
-    window.addEventListener("toggle-dashboard", handler);
-    return () => window.removeEventListener("toggle-dashboard", handler);
-  }, []);
-
-  // Listen for sub-agents panel toggle from command palette
-  useEffect(() => {
-    const handler = () => setSubagentsOpen((prev) => !prev);
-    window.addEventListener("toggle-subagents", handler);
-    return () => window.removeEventListener("toggle-subagents", handler);
+    const handler = () => setFleetOpen((prev) => !prev);
+    window.addEventListener("toggle-fleet", handler);
+    return () => window.removeEventListener("toggle-fleet", handler);
   }, []);
 
   // Listen for BMAD panel toggle from command palette
@@ -154,9 +146,9 @@ export default function App() {
     return () => window.removeEventListener("toggle-bmad", handler);
   }, []);
 
-  // Resolve the active pane's cwd whenever sub-agents or BMAD panel opens or active tab changes
+  // Resolve the active pane's cwd whenever the fleet or BMAD panel opens or active tab changes
   useEffect(() => {
-    if (!subagentsOpen && !bmadOpen) return;
+    if (!fleetOpen && !bmadOpen) return;
     const paneId = activeTab?.activePaneId;
     if (!paneId) {
       setActiveCwd(null);
@@ -165,7 +157,7 @@ export default function App() {
     import("./hooks/useTerminal").then(({ getPtyCwd }) => {
       getPtyCwd(paneId).then((cwd) => setActiveCwd(cwd)).catch(() => setActiveCwd(null));
     });
-  }, [subagentsOpen, bmadOpen, activeTab?.activePaneId]);
+  }, [fleetOpen, bmadOpen, activeTab?.activePaneId]);
 
   // Resolve bannerCwd independently of panel state — allows the BMAD init banner
   // to appear whenever the active terminal changes, without requiring a panel open.
@@ -207,8 +199,8 @@ export default function App() {
     setPreviewOpen((prev) => !prev);
   }, []);
 
-  const toggleDashboard = useCallback(() => {
-    setDashboardOpen((prev) => !prev);
+  const toggleFleet = useCallback(() => {
+    setFleetOpen((prev) => !prev);
   }, []);
 
   const toggleFileBrowser = useCallback(() => {
@@ -330,7 +322,7 @@ export default function App() {
     toggleCommandPalette,
     toggleAgentPicker,
     togglePreview,
-    toggleDashboard,
+    toggleFleet,
     toggleFileBrowser,
     openOrchestrator,
     requestCloseTab,
@@ -361,7 +353,11 @@ export default function App() {
                   ? <Suspense fallback={null}>
                       <BrowserTab tabId={activeTab.id} initialUrl={activeTab.browserUrl} />
                     </Suspense>
-                  : zoomedPane
+                  : activeTab.type === "fleet"
+                    ? <Suspense fallback={null}>
+                        <FleetTab activeCwd={activeCwd} />
+                      </Suspense>
+                    : zoomedPane
                     ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
                     : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
           )}
@@ -400,14 +396,17 @@ export default function App() {
         {agentPickerOpen && (
           <AgentPicker onClose={() => setAgentPickerOpen(false)} />
         )}
-        {dashboardOpen && (
-          <AgentDashboard onClose={() => setDashboardOpen(false)} />
-        )}
-        {subagentsOpen && (
-          <SubagentPanel
-            activeCwd={activeCwd}
-            onClose={() => setSubagentsOpen(false)}
-          />
+        {fleetOpen && (
+          <Suspense fallback={null}>
+            <FleetPanel
+              activeCwd={activeCwd}
+              onClose={() => setFleetOpen(false)}
+              onExpand={() => {
+                setFleetOpen(false);
+                useTabStore.getState().addFleetTab();
+              }}
+            />
+          </Suspense>
         )}
         {bmadOpen && (
           <BmadPanel
