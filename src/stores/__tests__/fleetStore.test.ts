@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { buildLanes, useFleetStore, type SubagentRecord, type PaneMeta } from "../fleetStore";
+import { buildLanes, buildPaneMeta, useFleetStore,
+         type SubagentRecord, type PaneMeta, type PaneInfo } from "../fleetStore";
 import type { AgentSession } from "../agentTrackerStore";
 
 function session(over: Partial<AgentSession> = {}): AgentSession {
@@ -68,6 +69,41 @@ describe("buildLanes", () => {
       meta,
     );
     expect(lanes.map((l) => l.startTime)).toEqual([1000, 3000]);
+  });
+});
+
+describe("buildPaneMeta", () => {
+  function pane(over: Partial<PaneInfo> = {}): PaneInfo {
+    return { paneId: "p1", tabId: "t1", tabName: "ide", ptyId: 7, fallbackCwd: null, ...over };
+  }
+
+  it("prefers the live PTY cwd over the stored one", () => {
+    const m = buildPaneMeta([pane({ fallbackCwd: "/stale" })], { p1: "/proj" });
+    expect(m.p1.cwd).toBe("/proj");
+  });
+
+  it("falls back to the stored cwd when no live cwd is known", () => {
+    const m = buildPaneMeta([pane({ ptyId: null, fallbackCwd: "/restored" })], {});
+    expect(m.p1.cwd).toBe("/restored");
+  });
+
+  it("yields null for a pane with neither a live nor a stored cwd", () => {
+    expect(buildPaneMeta([pane({ ptyId: null })], {}).p1.cwd).toBeNull();
+  });
+
+  it("carries tab identity through", () => {
+    const m = buildPaneMeta([pane({ tabId: "t9", tabName: "work" })], { p1: "/proj" });
+    expect(m.p1).toEqual({ tabId: "t9", tabName: "work", cwd: "/proj" });
+  });
+
+  // The regression this fixes: a pane created in the current run has no stored
+  // cwd at all, so its lane used to carry cwd: null while the sub-agent carried
+  // the live cwd — the two could never agree and nothing ever nested.
+  it("nests a sub-agent under a pane that only has a live cwd", () => {
+    const meta = buildPaneMeta([pane({ paneId: "p1", fallbackCwd: null })], { p1: "/proj" });
+    const lanes = buildLanes([session()], [sub({ cwd: "/proj" })], meta);
+    const agent = lanes.find((l) => l.kind === "agent")!;
+    expect(lanes.find((l) => l.kind === "subagent")!.parentId).toBe(agent.id);
   });
 });
 

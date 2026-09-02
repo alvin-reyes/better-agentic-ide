@@ -50,6 +50,14 @@ export default function App() {
   } | null>(null);
   const { tabs, activeTabId, getActivePtyId, closeTab, closePane } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  // The active pane's PTY id, as a primitive so the subscription only fires when
+  // it actually changes. Panes start with ptyId: null and are filled in
+  // asynchronously once create_pty resolves; cwd resolution must wait for that.
+  const activePtyId = useTabStore((s) => {
+    const tab = s.tabs.find((t) => t.id === s.activeTabId);
+    if (!tab) return null;
+    return findAllPanes(tab.root).find((p) => p.id === tab.activePaneId)?.ptyId ?? null;
+  });
 
   // Apply saved theme on startup
   useEffect(() => {
@@ -149,6 +157,12 @@ export default function App() {
   // Resolve the active terminal's cwd eagerly. Non-terminal tabs (fleet, editor,
   // browser, orchestrator) have no PTY, so keep the last resolved value rather
   // than clearing it — the fleet views read this while a fleet tab is focused.
+  //
+  // activePtyId is in the dependency list on purpose: getPtyCwd resolves null
+  // (it does not reject) while the pane's PTY has not been created yet, which is
+  // the state of every pane on the first render. Depending on the PTY id makes
+  // this re-run the moment create_pty lands, which is the only recovery path in
+  // a single-pane layout.
   useEffect(() => {
     const paneId = activeTab?.activePaneId;
     if (!paneId) return;
@@ -156,7 +170,7 @@ export default function App() {
     import("./hooks/useTerminal").then(({ getPtyCwd }) => {
       getPtyCwd(paneId).then((cwd) => { if (cwd) setActiveCwd(cwd); }).catch(() => {});
     });
-  }, [activeTab?.type, activeTab?.activePaneId]);
+  }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
 
   // Resolve bannerCwd independently of panel state — allows the BMAD init banner
   // to appear whenever the active terminal changes, without requiring a panel open.
@@ -169,7 +183,8 @@ export default function App() {
     import("./hooks/useTerminal").then(({ getPtyCwd }) => {
       getPtyCwd(paneId).then((cwd) => setBannerCwd(cwd)).catch(() => setBannerCwd(null));
     });
-  }, [activeTab?.activePaneId]);
+    // activePtyId: same cold-start problem as the activeCwd effect above.
+  }, [activeTab?.activePaneId, activePtyId]);
 
   const toggleCommandPalette = useCallback(() => {
     setPaletteOpen((prev) => !prev);

@@ -40,16 +40,29 @@ export default function FleetPanel({ activeCwd, onClose, onExpand }: FleetPanelP
       <div className="subagent-panel" role="dialog" aria-modal="true" aria-labelledby="fleet-panel-title">
         <div className="subagent-panel__header">
           <span id="fleet-panel-title">Fleet{activeCwd ? "" : " (no active terminal)"}</span>
-          <button onClick={onExpand} aria-label="Expand fleet to tab" className="subagent-panel__close">
-            ↗
-          </button>
-          <button onClick={onClose} aria-label="Close fleet panel" className="subagent-panel__close">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-          </button>
+          {/* Both buttons live in one flex box so the header's space-between puts
+              the title left and the controls right, instead of centring "↗". */}
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <button
+              onClick={onExpand}
+              aria-label="Expand fleet to tab"
+              className="subagent-panel__close"
+              // .subagent-panel__close sets line-height: 0 for its 16px SVG child;
+              // a text glyph needs a real line box or the hit target collapses.
+              style={{ lineHeight: 1, fontSize: "15px" }}
+            >
+              ↗
+            </button>
+            <button onClick={onClose} aria-label="Close fleet panel" className="subagent-panel__close">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
-        <div style={{ padding: "8px 12px" }}>
+        {/* .subagent-panel is max-height: 70vh; overflow: hidden — without an
+            explicit scroll container here, lanes past 70vh are silently clipped. */}
+        <div style={{ padding: "8px 12px", overflowY: "auto", minHeight: 0 }}>
           <FleetSummary runningCount={runningCount} doneCount={doneCount} totalCostCents={totalCostCents} />
           <FleetTimeline lanes={visible} from={from} to={now} />
         </div>
