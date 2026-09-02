@@ -947,15 +947,7 @@ import { useEffect, useMemo } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { useFleetStore, buildLanes, type SubagentEvent, type PaneMeta, type FleetLane } from "../stores/fleetStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
-import { useTabStore, type PaneNode } from "../stores/tabStore";
-
-function collectPanes(node: PaneNode, out: { id: string; cwd: string | null }[]) {
-  if (node.type === "pane") {
-    out.push({ id: node.pane.id, cwd: node.pane.savedCwd ?? node.pane.initialCwd ?? null });
-    return;
-  }
-  for (const child of node.children) collectPanes(child, out);
-}
+import { useTabStore, findAllPanes } from "../stores/tabStore";
 
 export function useFleetData(activeCwd: string | null): {
   lanes: FleetLane[];
@@ -991,10 +983,13 @@ export function useFleetData(activeCwd: string | null): {
   const paneMeta = useMemo(() => {
     const map: Record<string, PaneMeta> = {};
     for (const tab of tabs) {
-      const panes: { id: string; cwd: string | null }[] = [];
-      collectPanes(tab.root, panes);
-      for (const p of panes) {
-        map[p.id] = { tabId: tab.id, tabName: tab.name, cwd: p.cwd };
+      // findAllPanes is already exported from tabStore — do not reimplement it.
+      for (const pane of findAllPanes(tab.root)) {
+        map[pane.id] = {
+          tabId: tab.id,
+          tabName: tab.name,
+          cwd: pane.savedCwd ?? pane.initialCwd ?? null,
+        };
       }
     }
     return map;
@@ -1198,7 +1193,7 @@ git commit -m "feat: FleetPanel modal with summary strip"
 
 **Interfaces:**
 - Consumes: `useFleetData`, `FleetTimeline`, `FleetSummary`
-- Produces: `addFleetTab(): string` on `useTabStore` (focuses the existing fleet tab if one exists); `export default function FleetTab()`
+- Produces: `addFleetTab(): string` on `useTabStore` (focuses the existing fleet tab if one exists); `export default function FleetTab(props: { activeCwd: string | null })`
 
 - [ ] **Step 1: Add the tab type**
 
