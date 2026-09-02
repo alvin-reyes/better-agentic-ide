@@ -84,4 +84,14 @@ describe("FleetTimeline", () => {
     expect(screen.getAllByTestId("project-header").map((h) => h.textContent))
       .toEqual(["proj-a", "proj-b"]);
   });
+
+  it("still renders a sub-agent whose parentId references a lane absent from the array", () => {
+    const missingParentChild = lane({
+      id: "sub:s10", kind: "subagent", parentId: "agent:not-in-lanes", label: "Explore",
+    });
+    render(<FleetTimeline lanes={[missingParentChild]} from={0} to={2000} />);
+    const rows = screen.getAllByTestId("lane-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute("data-kind")).toBe("subagent");
+  });
 });

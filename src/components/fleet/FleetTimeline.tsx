@@ -27,10 +27,18 @@ function geometry(lane: FleetLane, from: number, to: number) {
   return { left: pct(left), width: pct(width) };
 }
 
-/** Order lanes so each sub-agent follows its parent. */
+/**
+ * Order lanes so each sub-agent follows its parent. A sub-agent whose
+ * `parentId` names a lane not present in `lanes` is treated the same as an
+ * unattached (`parentId === null`) sub-agent — dropping it would be silent
+ * data loss for any caller that passes a filtered subset of lanes.
+ */
 function ordered(lanes: FleetLane[]): FleetLane[] {
   const parents = lanes.filter((l) => l.kind === "agent");
-  const orphans = lanes.filter((l) => l.kind === "subagent" && l.parentId === null);
+  const parentIds = new Set(parents.map((p) => p.id));
+  const orphans = lanes.filter(
+    (l) => l.kind === "subagent" && (l.parentId === null || !parentIds.has(l.parentId)),
+  );
   const out: FleetLane[] = [];
   for (const p of parents) {
     out.push(p);
