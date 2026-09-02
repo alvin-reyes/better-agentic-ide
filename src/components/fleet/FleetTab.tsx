@@ -4,7 +4,7 @@ import FleetSummary from "./FleetSummary";
 import { useFleetData } from "../../hooks/useFleetData";
 import { useTabStore } from "../../stores/tabStore";
 import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
-import type { FleetLane } from "../../stores/fleetStore";
+import { useFleetStore, type FleetLane } from "../../stores/fleetStore";
 
 const RANGES: { label: string; ms: number | null }[] = [
   { label: "5m", ms: 5 * 60 * 1000 },
@@ -79,7 +79,13 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
           </button>
         ))}
         <button
-          onClick={clearHistory}
+          // The timeline is a merge of two stores; clearing only the agent one
+          // left orphaned sub-agent bars behind.
+          onClick={() => {
+            clearHistory();
+            useFleetStore.getState().reset();
+            setSelected(null);
+          }}
           style={{
             background: "none", border: "1px solid var(--border)", cursor: "pointer",
             fontSize: "10px", padding: "2px 7px", borderRadius: "var(--radius-sm)",

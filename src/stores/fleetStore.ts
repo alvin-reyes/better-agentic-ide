@@ -22,6 +22,41 @@ export interface PaneMeta {
   cwd: string | null;
 }
 
+/** A pane flattened out of the tab tree, before its cwd has been resolved. */
+export interface PaneInfo {
+  paneId: string;
+  tabId: string;
+  tabName: string;
+  ptyId: number | null;
+  /** savedCwd ?? initialCwd — only ever set for restored or explicitly-opened panes. */
+  fallbackCwd: string | null;
+}
+
+/**
+ * Resolve each pane's cwd for lane construction.
+ *
+ * `liveCwds` holds cwds read from the running PTY (`get_pty_cwd`) — the *same*
+ * source the sub-agent watcher's cwd comes from, so an agent lane and the
+ * sub-agents spawned inside it compare equal in `buildLanes`. The stored
+ * `fallbackCwd` is only a stand-in for panes with no live PTY yet: panes created
+ * in this run carry no cwd at all (`createDefaultPane` sets none), which is what
+ * previously left every agent lane with `cwd: null` and every sub-agent orphaned.
+ */
+export function buildPaneMeta(
+  panes: PaneInfo[],
+  liveCwds: Record<string, string>,
+): Record<string, PaneMeta> {
+  const map: Record<string, PaneMeta> = {};
+  for (const p of panes) {
+    map[p.paneId] = {
+      tabId: p.tabId,
+      tabName: p.tabName,
+      cwd: liveCwds[p.paneId] ?? p.fallbackCwd,
+    };
+  }
+  return map;
+}
+
 export interface FleetLane {
   id: string;
   kind: "agent" | "subagent";
