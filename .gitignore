@@ -2,3 +2,5 @@ node_modules/
 dist/
 src-tauri/target/
 .vite/
+src-tauri/gen/
+.superpowers/
