@@ -13,7 +13,7 @@ interface KeybindingActions {
   toggleCommandPalette: () => void;
   toggleAgentPicker: () => void;
   togglePreview: () => void;
-  toggleDashboard: () => void;
+  toggleFleet: () => void;
   toggleFileBrowser: () => void;
   openOrchestrator: () => void;
   requestCloseTab: (tabId: string) => void;
@@ -96,10 +96,10 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+.: Toggle agent dashboard
+      // Cmd+.: Toggle fleet panel
       if (meta && !shift && !alt && e.key === ".") {
         e.preventDefault();
-        actions.toggleDashboard();
+        actions.toggleFleet();
         return;
       }
 
