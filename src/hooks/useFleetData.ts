@@ -17,7 +17,10 @@ export function useFleetData(activeCwd: string | null): {
 
   // One transcript watcher for the active project, shared by every fleet view.
   useEffect(() => {
-    if (!activeCwd) return;
+    if (!activeCwd) {
+      reset();
+      return;
+    }
     let watchId: number | null = null;
     let cancelled = false;
     reset();
