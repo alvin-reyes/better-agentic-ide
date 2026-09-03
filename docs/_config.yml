@@ -1,0 +1,15 @@
+# GitHub Pages builds this directory as a Jekyll site (the published page is
+# index.html). Everything else here is internal engineering documentation that
+# was only ever swept into the build by accident — nothing on the site links to
+# it.
+#
+# Leaving it in the build also breaks deploys: these documents embed React code
+# samples containing JSX like `style={{ ... }}`, and Jekyll's Liquid parser
+# reads `{{` as the start of a template variable, then fails with
+# "Variable '{{ ...' was not properly terminated".
+#
+# Excluding these directories fixes that permanently, rather than needing
+# {% raw %} fences hand-added to every future plan.
+exclude:
+  - plans/
+  - superpowers/
