@@ -160,7 +160,7 @@ describe("Overlay", () => {
     render(<Overlay onClose={() => {}} className="extra"><p>Body</p></Overlay>);
     const el = screen.getByTestId("overlay-backdrop");
     expect(el.className.includes("extra")).toBe(true);
-    expect(el.className.includes("overlay")).toBe(true);
+    expect(el.className.includes("ui-overlay")).toBe(true);
   });
 
   it("passes arbitrary DOM attributes through", () => {

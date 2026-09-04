@@ -10,19 +10,19 @@ describe("Badge", () => {
 
   it("defaults to the neutral tone", () => {
     render(<Badge>idle</Badge>);
-    expect(screen.getByText("idle").className.includes("badge--neutral")).toBe(true);
+    expect(screen.getByText("idle").className.includes("ui-badge--neutral")).toBe(true);
   });
 
   it("applies the requested tone", () => {
     render(<Badge tone="danger">failed</Badge>);
-    expect(screen.getByText("failed").className.includes("badge--danger")).toBe(true);
+    expect(screen.getByText("failed").className.includes("ui-badge--danger")).toBe(true);
   });
 
   it("merges a caller-supplied className rather than replacing", () => {
     render(<Badge className="extra">idle</Badge>);
     const el = screen.getByText("idle");
     expect(el.className.includes("extra")).toBe(true);
-    expect(el.className.includes("badge")).toBe(true);
+    expect(el.className.includes("ui-badge")).toBe(true);
   });
 
   it("passes arbitrary DOM attributes through", () => {
