@@ -36,6 +36,37 @@ export interface ThemePreset {
 
 export const themePresets: ThemePreset[] = [
   {
+    id: "precision-dark",
+    name: "Precision",
+    colors: {
+      bgPrimary: "#0A0B0D",
+      bgSecondary: "#0F1013",
+      bgTertiary: "#15171B",
+      bgElevated: "#1B1E23",
+      bgSurface: "#262A31",
+      textPrimary: "#E8EAED",
+      textSecondary: "#9BA1AC",
+      textMuted: "#5A616D",
+      accent: "#7C8FFF",
+      green: "#4CC38A",
+      border: "rgba(255, 255, 255, 0.055)",
+      borderStrong: "rgba(255, 255, 255, 0.10)",
+      // Terminal: ANSI values carried over from GitHub Dark unchanged.
+      // These carry meaning in output; only the pane surface is realigned.
+      termBg: "#0A0B0D",
+      termFg: "#E8EAED",
+      termCursor: "#7C8FFF",
+      termBlack: "#484f58",
+      termRed: "#ff7b72",
+      termGreen: "#3fb950",
+      termYellow: "#d29922",
+      termBlue: "#58a6ff",
+      termMagenta: "#bc8cff",
+      termCyan: "#39d353",
+      termWhite: "#b1bac4",
+    },
+  },
+  {
     id: "github-dark",
     name: "GitHub Dark",
     colors: {
@@ -351,7 +382,7 @@ function persistWorkspaces(w: WorkspacePreset[]) {
 }
 
 const defaults: Settings = {
-  themeId: "github-dark",
+  themeId: "precision-dark",
   customColors: null,
   fontSize: 14,
   fontFamily: '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", monospace',
