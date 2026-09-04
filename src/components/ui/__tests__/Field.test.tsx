@@ -61,4 +61,44 @@ describe("Field", () => {
     expect(el.id).toBe("f1");
     expect(el.getAttribute("data-section")).toBe("profile");
   });
+
+  it("stamps .ui-input onto a text input child", () => {
+    render(
+      <Field label="Name" htmlFor="name">
+        <input id="name" className="mine" />
+      </Field>
+    );
+    const el = screen.getByLabelText("Name");
+    expect(el.className.includes("ui-input")).toBe(true);
+    // The child's own className survives.
+    expect(el.className.includes("mine")).toBe(true);
+  });
+
+  it("stamps .ui-input onto select and textarea children", () => {
+    const { container } = render(
+      <Field label="Bio" htmlFor="bio">
+        <textarea id="bio" />
+      </Field>
+    );
+    expect(container.querySelector("textarea")!.className.includes("ui-input")).toBe(true);
+  });
+
+  it("leaves non-text inputs alone", () => {
+    const { container } = render(
+      <Field label="Accent" htmlFor="accent">
+        <input id="accent" type="color" />
+      </Field>
+    );
+    expect(container.querySelector("input")!.className.includes("ui-input")).toBe(false);
+  });
+
+  it("leaves a wrapped or custom child alone", () => {
+    const { container } = render(
+      <Field label="Name" htmlFor="name">
+        <div className="wrapper"><input id="name" /></div>
+      </Field>
+    );
+    expect(container.querySelector(".wrapper")!.className.includes("ui-input")).toBe(false);
+    expect(container.querySelector("input")!.className.includes("ui-input")).toBe(false);
+  });
 });

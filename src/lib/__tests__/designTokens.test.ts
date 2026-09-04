@@ -15,6 +15,7 @@ const REQUIRED_TOKENS = [
   "--hairline-top", "--scrim",
   "--ease-out", "--dur-fast", "--dur-base",
   "--font-ui", "--font-mono",
+  "--control-h", "--control-h-sm",
   // Runtime-set colour tokens that must also have a static fallback.
   "--accent-solid", "--red", "--red-subtle", "--yellow", "--yellow-subtle",
 ];
@@ -45,6 +46,12 @@ describe("design tokens", () => {
 
   it("no longer hardcodes 8px or 9px font sizes", () => {
     expect(/font-size:\s*[89]px/.test(css)).toBe(false);
+  });
+
+  it("transitions filter, so brightness-based hovers ease rather than snap", () => {
+    const rule = /button, a, input, textarea, select \{([^}]+)\}/.exec(css);
+    expect(rule !== null).toBe(true);
+    expect(rule![1].includes("filter var(--dur-fast)")).toBe(true);
   });
 
   it("statically falls back to the default preset's colours", () => {
