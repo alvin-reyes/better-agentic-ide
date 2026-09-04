@@ -39,4 +39,26 @@ describe("Field", () => {
     );
     expect(screen.getByRole("alert").textContent).toBe("Required");
   });
+
+  it("merges a caller-supplied className rather than replacing", () => {
+    const { container } = render(
+      <Field label="Name" htmlFor="name" className="extra">
+        <input id="name" />
+      </Field>
+    );
+    const el = container.firstElementChild!;
+    expect(el.className.includes("extra")).toBe(true);
+    expect(el.className.includes("field")).toBe(true);
+  });
+
+  it("passes arbitrary DOM attributes through", () => {
+    const { container } = render(
+      <Field label="Name" htmlFor="name" id="f1" data-section="profile">
+        <input id="name" />
+      </Field>
+    );
+    const el = container.firstElementChild!;
+    expect(el.id).toBe("f1");
+    expect(el.getAttribute("data-section")).toBe("profile");
+  });
 });

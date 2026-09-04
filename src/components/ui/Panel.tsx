@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import Button from "./Button";
 
-export interface PanelProps {
+export interface PanelProps extends HTMLAttributes<HTMLDivElement> {
   title: string;
   titleId?: string;
   onClose?: () => void;
@@ -14,10 +14,12 @@ export default function Panel({
   titleId,
   onClose,
   footer,
+  className = "",
   children,
+  ...rest
 }: PanelProps) {
   return (
-    <div className="panel">
+    <div className={["panel", className].filter(Boolean).join(" ")} {...rest}>
       <header className="panel__header">
         <h2 className="panel__title" id={titleId}>{title}</h2>
         {onClose && (
