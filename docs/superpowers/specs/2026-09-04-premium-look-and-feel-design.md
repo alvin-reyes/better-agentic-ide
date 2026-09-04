@@ -49,6 +49,7 @@ It also splits the token foundation in two:
 |---|---|
 | Depth | Foundation plus all surfaces |
 | Visual direction | Precision dark — near-black with cool blue-grey undertone, tight type, restrained single accent, hairline borders, real layered elevation |
+| Terminal ANSI | Unchanged from GitHub Dark; only termBg/termFg/termCursor align to the new chrome |
 | Theme presets | New signature `precision-dark` as default; all 8 existing presets retained |
 | Light mode | Out of scope for this pass; dark only |
 | Mechanism | Semantic classes plus a small primitive component layer |
@@ -79,25 +80,42 @@ the flat neutral greys common to terminal themes.
 
 ### Terminal palette for `precision-dark`
 
-Every preset must supply the 11 terminal tokens `applyThemeToDOM` injects. For
-`precision-dark`:
+Every preset must supply the 11 terminal tokens `applyThemeToDOM` injects.
+
+**The 8 ANSI colours are carried over unchanged from GitHub Dark.** ANSI colours
+are load-bearing in a way UI colours are not — they are how diffs, test output,
+`ls`, and log levels are read at a glance. Restyling them for tonal unity with
+the chrome would trade differentiation for aesthetics, which is a functional
+regression in a terminal-centric app. The terminal reading as tonally distinct
+from its frame is acceptable, and arguably correct: content should not be
+camouflaged into chrome.
+
+```
+termBlack   #484f58   termRed     #ff7b72
+termGreen   #3fb950   termYellow  #d29922
+termBlue    #58a6ff   termMagenta #bc8cff
+termCyan    #39d353   termWhite   #b1bac4
+```
+
+**Background, foreground, and cursor do align to the new chrome:**
 
 ```
 termBg      #0A0B0D
 termFg      #E8EAED
 termCursor  #7C8FFF
-termBlack   #5A616D
-termRed     #F4756B
-termGreen   #4CC38A
-termYellow  #D9A441
-termBlue    #7C8FFF
-termMagenta #B78AF5
-termCyan    #4FC3D9
-termWhite   #C3C8D1
 ```
 
-These sit on the same cool blue-grey axis as the UI palette so terminal output
-does not read as a foreign element pasted into the chrome.
+These three are not ANSI content colours — they are the pane's own surface. If
+`termBg` stayed at GitHub Dark's `#0d1117` while the app ground moved to
+`#0A0B0D`, the terminal pane would render as a visibly different-coloured
+rectangle inside the chrome. Aligning them removes that seam without touching
+any colour that carries meaning in output.
+
+**Pre-existing oddity, left as-is:** GitHub Dark's `termCyan` is `#39d353`, which
+is a green hue, not a cyan — so cyan and green output are near-indistinguishable
+under this preset today. This is inherited, not introduced here, and correcting
+it is out of scope for this design since the decision was to leave ANSI values
+untouched. Worth a separate look.
 
 ### Additions to `ThemeColors`
 
