@@ -13,6 +13,7 @@ const REQUIRED_TOKENS = [
   "--elev-1", "--elev-2", "--elev-3",
   "--hairline-top", "--scrim",
   "--ease-out", "--dur-fast", "--dur-base",
+  "--font-ui", "--font-mono",
 ];
 
 describe("design tokens", () => {

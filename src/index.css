@@ -60,6 +60,11 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-fast: 120ms;
   --dur-base: 180ms;
+
+  /* Typography */
+  --font-ui: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont,
+             "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
 }
 
 * {
@@ -74,7 +79,10 @@ html, body, #root {
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
+  font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "ss01" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 ::-webkit-scrollbar {
