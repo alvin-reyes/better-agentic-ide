@@ -30,8 +30,19 @@ The default palette is GitHub Dark's exact values (`#0d1117`, `#58a6ff`,
 
 `src/stores/settingsStore.ts` already implements a runtime theme system: 8
 presets (GitHub Dark, Dracula, Monokai, Nord, Catppuccin, Solarized Dark, Tokyo
-Night, One Dark), per-token custom colours, and `applyThemeToDOM` injecting 12
-UI tokens and 11 terminal tokens as CSS variables at runtime.
+Night, One Dark) and per-token custom colours.
+
+Colour reaches the app by **two separate paths**, which the implementation must
+keep in step:
+
+- **Chrome:** `applyThemeToDOM` (`settingsStore.ts:489`) sets 15 CSS custom
+  properties on `documentElement` from 12 `ThemeColors` fields — three are
+  derived by hex-suffix concatenation (`--accent-subtle` is `accent + "26"`,
+  `--accent-hover` is `accent + "40"`, `--green-subtle` is `green + "26"`).
+- **Terminal:** the 11 `term*` fields never become CSS variables. They are read
+  directly from `getActiveTheme()` and handed to xterm as an `ITheme` object in
+  `src/hooks/useTerminal.ts:271-290`, and again in
+  `src/components/RecordingPlayer.tsx:56-68`.
 
 This means **colour cannot carry the premium quality on its own** — any palette
 is one dropdown away from being replaced. The durable improvement must come from
@@ -80,7 +91,8 @@ the flat neutral greys common to terminal themes.
 
 ### Terminal palette for `precision-dark`
 
-Every preset must supply the 11 terminal tokens `applyThemeToDOM` injects.
+Every preset must supply all 11 `term*` fields, which reach xterm directly via
+`useTerminal.ts` rather than through CSS variables.
 
 **The 8 ANSI colours are carried over unchanged from GitHub Dark.** ANSI colours
 are load-bearing in a way UI colours are not — they are how diffs, test output,
@@ -134,6 +146,13 @@ accentSolid  #4A5FE0    fills
 **`red` and `yellow` tokens.** A large share of the 130 hardcoded hex values are
 error and warning states with no token to reference. Their absence is precisely
 why those states are theme-immune today.
+
+All three new fields must also be emitted by `applyThemeToDOM` as
+`--accent-solid`, `--red`, and `--yellow`, alongside subtle variants
+`--red-subtle` and `--yellow-subtle` following the existing `+ "26"` suffix
+convention. Adding a field to `ThemeColors` without extending `applyThemeToDOM`
+would type-check cleanly and silently do nothing — the failure mode this design
+is specifically correcting.
 
 ### Elevation
 
