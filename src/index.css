@@ -1,21 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #1c2128;
-  --bg-elevated: #21262d;
-  --bg-surface: #30363d;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted: #484f58;
-  --accent: #58a6ff;
-  --accent-subtle: rgba(88, 166, 255, 0.15);
-  --accent-hover: rgba(88, 166, 255, 0.25);
-  --green: #3fb950;
-  --green-subtle: rgba(63, 185, 80, 0.15);
-  --border: rgba(240, 246, 252, 0.1);
-  --border-strong: rgba(240, 246, 252, 0.15);
+  /* Colour fallbacks mirror the `precision-dark` preset in
+     src/stores/settingsStore.ts, which is the default theme. main.tsx
+     overwrites all of these on :root before first render; they exist so the
+     app degrades to the right palette rather than to a stale one if that
+     call ever fails. Keep the two in sync. */
+  --bg-primary: #0A0B0D;
+  --bg-secondary: #0F1013;
+  --bg-tertiary: #15171B;
+  --bg-elevated: #1B1E23;
+  --bg-surface: #262A31;
+  --text-primary: #E8EAED;
+  --text-secondary: #9BA1AC;
+  --text-muted: #5A616D;
+  --accent: #7C8FFF;
+  --accent-subtle: rgba(124, 143, 255, 0.15);
+  --accent-hover: rgba(124, 143, 255, 0.25);
+  --accent-solid: #4A5FE0;
+  --green: #4CC38A;
+  --green-subtle: rgba(76, 195, 138, 0.15);
+  --red: #F4756B;
+  --red-subtle: rgba(244, 117, 107, 0.15);
+  --yellow: #D9A441;
+  --yellow-subtle: rgba(217, 164, 65, 0.15);
+  --border: rgba(255, 255, 255, 0.055);
+  --border-strong: rgba(255, 255, 255, 0.10);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
 
