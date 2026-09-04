@@ -48,7 +48,7 @@ describe("Field", () => {
     );
     const el = container.firstElementChild!;
     expect(el.className.includes("extra")).toBe(true);
-    expect(el.className.includes("field")).toBe(true);
+    expect(el.className.includes("ui-field")).toBe(true);
   });
 
   it("passes arbitrary DOM attributes through", () => {

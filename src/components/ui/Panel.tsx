@@ -19,17 +19,17 @@ export default function Panel({
   ...rest
 }: PanelProps) {
   return (
-    <div className={["panel", className].filter(Boolean).join(" ")} {...rest}>
-      <header className="panel__header">
-        <h2 className="panel__title" id={titleId}>{title}</h2>
+    <div className={["ui-panel", className].filter(Boolean).join(" ")} {...rest}>
+      <header className="ui-panel__header">
+        <h2 className="ui-panel__title" id={titleId}>{title}</h2>
         {onClose && (
           <Button variant="ghost" size="sm" iconOnly aria-label="Close" onClick={onClose}>
             ✕
           </Button>
         )}
       </header>
-      <div className="panel__body">{children}</div>
-      {footer && <footer className="panel__footer">{footer}</footer>}
+      <div className="ui-panel__body">{children}</div>
+      {footer && <footer className="ui-panel__footer">{footer}</footer>}
     </div>
   );
 }

@@ -19,10 +19,10 @@ export default function Button({
   ...rest
 }: ButtonProps) {
   const classes = [
-    "btn",
-    `btn--${variant}`,
-    `btn--${size}`,
-    iconOnly ? "btn--icon" : "",
+    "ui-btn",
+    `ui-btn--${variant}`,
+    `ui-btn--${size}`,
+    iconOnly ? "ui-btn--icon" : "",
     className,
   ]
     .filter(Boolean)

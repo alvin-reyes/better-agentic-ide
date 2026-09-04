@@ -11,20 +11,20 @@ describe("Button", () => {
   it("defaults to the secondary variant at medium size", () => {
     render(<Button>Save</Button>);
     const el = screen.getByRole("button");
-    expect(el.className.includes("btn--secondary")).toBe(true);
-    expect(el.className.includes("btn--md")).toBe(true);
+    expect(el.className.includes("ui-btn--secondary")).toBe(true);
+    expect(el.className.includes("ui-btn--md")).toBe(true);
   });
 
   it("applies the requested variant and size", () => {
     render(<Button variant="danger" size="sm">Delete</Button>);
     const el = screen.getByRole("button");
-    expect(el.className.includes("btn--danger")).toBe(true);
-    expect(el.className.includes("btn--sm")).toBe(true);
+    expect(el.className.includes("ui-btn--danger")).toBe(true);
+    expect(el.className.includes("ui-btn--sm")).toBe(true);
   });
 
   it("marks icon-only buttons for square sizing", () => {
     render(<Button iconOnly aria-label="Close">x</Button>);
-    expect(screen.getByRole("button").className.includes("btn--icon")).toBe(true);
+    expect(screen.getByRole("button").className.includes("ui-btn--icon")).toBe(true);
   });
 
   it("calls onClick when clicked", () => {
@@ -52,6 +52,6 @@ describe("Button", () => {
     render(<Button className="extra">Go</Button>);
     const el = screen.getByRole("button");
     expect(el.className.includes("extra")).toBe(true);
-    expect(el.className.includes("btn")).toBe(true);
+    expect(el.className.includes("ui-btn")).toBe(true);
   });
 });

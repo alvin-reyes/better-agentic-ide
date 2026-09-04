@@ -44,7 +44,7 @@ describe("Panel", () => {
     );
     const el = container.firstElementChild!;
     expect(el.className.includes("extra")).toBe(true);
-    expect(el.className.includes("panel")).toBe(true);
+    expect(el.className.includes("ui-panel")).toBe(true);
   });
 
   it("passes arbitrary DOM attributes through", () => {

@@ -17,7 +17,7 @@ describe("Row", () => {
   it("marks the keyboard cursor separately from the active selection", () => {
     render(<Row selected>Item</Row>);
     const el = screen.getByRole("option");
-    expect(el.className.includes("row--selected")).toBe(true);
+    expect(el.className.includes("ui-row--selected")).toBe(true);
     expect(el.getAttribute("aria-selected")).toBe("false");
   });
 
@@ -68,7 +68,7 @@ describe("Row", () => {
     render(<Row className="extra">Item</Row>);
     const el = screen.getByRole("option");
     expect(el.className.includes("extra")).toBe(true);
-    expect(el.className.includes("row")).toBe(true);
+    expect(el.className.includes("ui-row")).toBe(true);
   });
 
   it("passes arbitrary DOM attributes through", () => {
