@@ -190,3 +190,30 @@
 .badge--success { background: var(--green-subtle);   color: var(--green); }
 .badge--warning { background: var(--yellow-subtle);  color: var(--yellow); }
 .badge--danger  { background: var(--red-subtle);     color: var(--red); }
+
+/* Row
+   ------------------------------------------------------------------ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1-5) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.row:hover:not(.row--disabled) { background: var(--bg-elevated); }
+
+.row--selected { background: var(--bg-elevated); }
+
+.row--active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.row--disabled { opacity: 0.45; cursor: not-allowed; }
