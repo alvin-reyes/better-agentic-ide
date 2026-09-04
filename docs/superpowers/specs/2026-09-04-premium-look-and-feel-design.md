@@ -243,23 +243,38 @@ Each step is independently shippable, in dependency order.
 
 ## Verification
 
-The repository has no test infrastructure and no CI gate: there is no ESLint
-config anywhere, no lint script, and `.github/workflows/release.yml` triggers
-only on tag push with no test job. `npx tsc --noEmit` is the only automated
-check that exists.
+**Test infrastructure exists and is green.** `vitest.config.ts` configures jsdom
+with `globals: true` over `src/**/*.test.{ts,tsx}`; `vitest`,
+`@testing-library/react`, `@testing-library/jest-dom`, and `jsdom` are all in
+`devDependencies`; `npm test` runs `vitest run`. Six test files, 37 tests,
+passing in about one second — including component tests
+(`FleetSummary.test.tsx`, `FleetTimeline.test.tsx`) that render with
+`@testing-library/react`. The house assertion style is plain
+`expect(...).toBeTruthy()` rather than jest-dom matchers.
 
-For a change touching every surface, the gate is:
+What genuinely does not exist: any ESLint config or lint script, and any CI job
+that runs on push or pull request — `.github/workflows/release.yml` triggers only
+on `v*` tag push and `workflow_dispatch`. So the suite is real but nothing runs
+it automatically.
 
+The gate for each rollout step is therefore:
+
+- `npm test` green.
 - `npx tsc --noEmit` clean.
 - A grep-based invariant check asserting the regressions this design eliminates
   stay eliminated: no inline `fontSize:` literals in `src/components/`, no raw
   hex in `src/components/`, no `onMouseEnter` used for styling, no
   `transition: all`.
 
-The invariant check is run manually at the end of each rollout step, not wired
-into CI — there is no CI job on push or pull request to wire it into, and adding
-one is out of scope here. Promoting it to a committed script and a CI gate is a
-reasonable follow-up but is deliberately not part of this design.
+Because a real runner is available, the token foundation and the primitives are
+built test-first: token resolution, preset completeness, and each primitive's
+variant and state behaviour are all assertable in jsdom. Surface migrations are
+guarded by the existing suite plus the invariant check.
+
+The invariant check is run manually at the end of each rollout step rather than
+wired into CI, since no CI job runs on push or pull request and adding one is out
+of scope here. Promoting it to a committed script and a CI gate is a reasonable
+follow-up.
 
 Visual verification remains manual.
 
