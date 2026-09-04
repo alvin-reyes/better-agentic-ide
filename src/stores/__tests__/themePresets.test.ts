@@ -4,7 +4,9 @@ import { themePresets, type ThemeColors } from "../settingsStore";
 const THEME_COLOR_KEYS: (keyof ThemeColors)[] = [
   "bgPrimary", "bgSecondary", "bgTertiary", "bgElevated", "bgSurface",
   "textPrimary", "textSecondary", "textMuted",
-  "accent", "green", "border", "borderStrong",
+  "accent", "green",
+  "accentSolid", "red", "yellow",
+  "border", "borderStrong",
   "termBg", "termFg", "termCursor",
   "termBlack", "termRed", "termGreen", "termYellow",
   "termBlue", "termMagenta", "termCyan", "termWhite",
