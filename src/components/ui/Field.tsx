@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
-export interface FieldProps {
+export interface FieldProps extends HTMLAttributes<HTMLDivElement> {
   label: string;
   htmlFor: string;
   hint?: string;
@@ -8,9 +8,17 @@ export interface FieldProps {
   children: ReactNode;
 }
 
-export default function Field({ label, htmlFor, hint, error, children }: FieldProps) {
+export default function Field({
+  label,
+  htmlFor,
+  hint,
+  error,
+  className = "",
+  children,
+  ...rest
+}: FieldProps) {
   return (
-    <div className="field">
+    <div className={["field", className].filter(Boolean).join(" ")} {...rest}>
       <label className="field__label" htmlFor={htmlFor}>{label}</label>
       {children}
       {error ? (

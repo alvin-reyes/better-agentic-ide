@@ -37,4 +37,22 @@ describe("Panel", () => {
     render(<Panel title="Settings" titleId="settings-title"><p>Body</p></Panel>);
     expect(screen.getByText("Settings").id).toBe("settings-title");
   });
+
+  it("merges a caller-supplied className rather than replacing", () => {
+    const { container } = render(
+      <Panel title="T" className="extra"><p>Body</p></Panel>
+    );
+    const el = container.firstElementChild!;
+    expect(el.className.includes("extra")).toBe(true);
+    expect(el.className.includes("panel")).toBe(true);
+  });
+
+  it("passes arbitrary DOM attributes through", () => {
+    const { container } = render(
+      <Panel title="T" id="p1" data-surface="settings"><p>Body</p></Panel>
+    );
+    const el = container.firstElementChild!;
+    expect(el.id).toBe("p1");
+    expect(el.getAttribute("data-surface")).toBe("settings");
+  });
 });

@@ -155,4 +155,20 @@ describe("Overlay", () => {
       trigger.remove();
     });
   });
+
+  it("merges a caller-supplied className rather than replacing", () => {
+    render(<Overlay onClose={() => {}} className="extra"><p>Body</p></Overlay>);
+    const el = screen.getByTestId("overlay-backdrop");
+    expect(el.className.includes("extra")).toBe(true);
+    expect(el.className.includes("overlay")).toBe(true);
+  });
+
+  it("passes arbitrary DOM attributes through", () => {
+    render(
+      <Overlay onClose={() => {}} id="ov1" data-kind="palette"><p>Body</p></Overlay>
+    );
+    const el = screen.getByTestId("overlay-backdrop");
+    expect(el.id).toBe("ov1");
+    expect(el.getAttribute("data-kind")).toBe("palette");
+  });
 });
