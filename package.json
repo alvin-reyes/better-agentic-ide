@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@fontsource-variable/inter": "^5.3.0",
     "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
@@ -36,17 +37,18 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/jest-dom": "^6.4.0",
-    "jsdom": "^25.0.0",
-    "vitest": "^2.1.0",
     "@tauri-apps/cli": "^2.10.0",
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
     "@types/marked": "^5.0.2",
+    "@types/node": "^26.4.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
+    "jsdom": "^25.0.0",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^2.1.0"
   }
 }

@@ -11,7 +11,10 @@ export interface ThemeColors {
   textSecondary: string;
   textMuted: string;
   accent: string;
+  accentSolid: string;
   green: string;
+  red: string;
+  yellow: string;
   border: string;
   borderStrong: string;
   // Terminal-specific
@@ -36,6 +39,40 @@ export interface ThemePreset {
 
 export const themePresets: ThemePreset[] = [
   {
+    id: "precision-dark",
+    name: "Precision",
+    colors: {
+      bgPrimary: "#0A0B0D",
+      bgSecondary: "#0F1013",
+      bgTertiary: "#15171B",
+      bgElevated: "#1B1E23",
+      bgSurface: "#262A31",
+      textPrimary: "#E8EAED",
+      textSecondary: "#9BA1AC",
+      textMuted: "#5A616D",
+      accent: "#7C8FFF",
+      accentSolid: "#4A5FE0",
+      green: "#4CC38A",
+      red: "#F4756B",
+      yellow: "#D9A441",
+      border: "rgba(255, 255, 255, 0.055)",
+      borderStrong: "rgba(255, 255, 255, 0.10)",
+      // Terminal: ANSI values carried over from GitHub Dark unchanged.
+      // These carry meaning in output; only the pane surface is realigned.
+      termBg: "#0A0B0D",
+      termFg: "#E8EAED",
+      termCursor: "#7C8FFF",
+      termBlack: "#484f58",
+      termRed: "#ff7b72",
+      termGreen: "#3fb950",
+      termYellow: "#d29922",
+      termBlue: "#58a6ff",
+      termMagenta: "#bc8cff",
+      termCyan: "#39d353",
+      termWhite: "#b1bac4",
+    },
+  },
+  {
     id: "github-dark",
     name: "GitHub Dark",
     colors: {
@@ -48,7 +85,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#8b949e",
       textMuted: "#484f58",
       accent: "#58a6ff",
+      accentSolid: "#2F6FD0",
       green: "#3fb950",
+      red: "#ff7b72",
+      yellow: "#d29922",
       border: "rgba(240, 246, 252, 0.1)",
       borderStrong: "rgba(240, 246, 252, 0.15)",
       termBg: "#0d1117",
@@ -77,7 +117,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#b0b8d1",
       textMuted: "#6272a4",
       accent: "#bd93f9",
+      accentSolid: "#6D50C4",
       green: "#50fa7b",
+      red: "#ff5555",
+      yellow: "#f1fa8c",
       border: "rgba(248, 248, 242, 0.1)",
       borderStrong: "rgba(248, 248, 242, 0.15)",
       termBg: "#282a36",
@@ -106,7 +149,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#c1c0c0",
       textMuted: "#727072",
       accent: "#ffd866",
+      accentSolid: "#38788F",
       green: "#a9dc76",
+      red: "#f92672",
+      yellow: "#e6db74",
       border: "rgba(252, 252, 250, 0.1)",
       borderStrong: "rgba(252, 252, 250, 0.15)",
       termBg: "#2d2a2e",
@@ -135,7 +181,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#d8dee9",
       textMuted: "#4c566a",
       accent: "#88c0d0",
+      accentSolid: "#52719A",
       green: "#a3be8c",
+      red: "#bf616a",
+      yellow: "#ebcb8b",
       border: "rgba(236, 239, 244, 0.1)",
       borderStrong: "rgba(236, 239, 244, 0.15)",
       termBg: "#2e3440",
@@ -164,7 +213,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#bac2de",
       textMuted: "#585b70",
       accent: "#89b4fa",
+      accentSolid: "#5C6FA5",
       green: "#a6e3a1",
+      red: "#f38ba8",
+      yellow: "#f9e2af",
       border: "rgba(205, 214, 244, 0.1)",
       borderStrong: "rgba(205, 214, 244, 0.15)",
       termBg: "#1e1e2e",
@@ -193,7 +245,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#93a1a1",
       textMuted: "#586e75",
       accent: "#268bd2",
+      accentSolid: "#1F6E8C",
       green: "#859900",
+      red: "#dc322f",
+      yellow: "#b58900",
       border: "rgba(253, 246, 227, 0.1)",
       borderStrong: "rgba(253, 246, 227, 0.15)",
       termBg: "#002b36",
@@ -222,7 +277,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#a9b1d6",
       textMuted: "#565f89",
       accent: "#7aa2f7",
+      accentSolid: "#3D59A1",
       green: "#9ece6a",
+      red: "#f7768e",
+      yellow: "#e0af68",
       border: "rgba(192, 202, 245, 0.1)",
       borderStrong: "rgba(192, 202, 245, 0.15)",
       termBg: "#1a1b26",
@@ -251,7 +309,10 @@ export const themePresets: ThemePreset[] = [
       textSecondary: "#9da5b4",
       textMuted: "#5c6370",
       accent: "#61afef",
+      accentSolid: "#3B73A9",
       green: "#98c379",
+      red: "#e06c75",
+      yellow: "#e5c07b",
       border: "rgba(171, 178, 191, 0.1)",
       borderStrong: "rgba(171, 178, 191, 0.15)",
       termBg: "#282c34",
@@ -351,7 +412,7 @@ function persistWorkspaces(w: WorkspacePreset[]) {
 }
 
 const defaults: Settings = {
-  themeId: "github-dark",
+  themeId: "precision-dark",
   customColors: null,
   fontSize: 14,
   fontFamily: '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", monospace',
@@ -499,6 +560,11 @@ export function applyThemeToDOM(colors: ThemeColors) {
   root.style.setProperty("--accent", colors.accent);
   root.style.setProperty("--accent-subtle", colors.accent + "26");
   root.style.setProperty("--accent-hover", colors.accent + "40");
+  root.style.setProperty("--accent-solid", colors.accentSolid);
+  root.style.setProperty("--red", colors.red);
+  root.style.setProperty("--red-subtle", colors.red + "26");
+  root.style.setProperty("--yellow", colors.yellow);
+  root.style.setProperty("--yellow-subtle", colors.yellow + "26");
   root.style.setProperty("--green", colors.green);
   root.style.setProperty("--green-subtle", colors.green + "26");
   root.style.setProperty("--border", colors.border);

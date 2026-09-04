@@ -1,0 +1,248 @@
+/* Button
+   ------------------------------------------------------------------ */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1-5);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.ui-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ui-btn--md { height: var(--control-h); padding: 0 var(--space-3); font-size: var(--text-sm); }
+.ui-btn--sm { height: var(--control-h-sm); padding: 0 var(--space-2); font-size: var(--text-xs); }
+
+/* Icon-only buttons never drop below WCAG 2.5.8's 24x24 target, so the sm
+   size floors at 24 rather than the 22 its labelled sibling uses. */
+.ui-btn--icon {
+  padding: 0;
+  aspect-ratio: 1;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.ui-btn--primary {
+  background: var(--accent-solid);
+  color: white;
+  box-shadow: var(--hairline-top);
+}
+.ui-btn--primary:hover:not(:disabled) { filter: brightness(1.12); }
+.ui-btn--primary:active:not(:disabled) { filter: brightness(0.94); }
+
+.ui-btn--secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border);
+  box-shadow: var(--hairline-top);
+}
+.ui-btn--secondary:hover:not(:disabled) {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+}
+.ui-btn--secondary:active:not(:disabled) { background: var(--bg-tertiary); }
+
+.ui-btn--ghost { background: transparent; color: var(--text-secondary); }
+.ui-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.ui-btn--ghost:active:not(:disabled) { background: var(--bg-surface); }
+
+.ui-btn--danger { background: transparent; color: var(--red); border-color: var(--border); }
+.ui-btn--danger:hover:not(:disabled) {
+  background: var(--red-subtle);
+  border-color: var(--red);
+}
+.ui-btn--danger:active:not(:disabled) { filter: brightness(0.94); }
+
+/* Overlay
+   ------------------------------------------------------------------ */
+.ui-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh var(--space-4) var(--space-4);
+  background: var(--scrim);
+}
+
+/* No --hairline-top here: the Panel that fills this box paints its own
+   opaque background over the parent's inset shadow, so the highlight
+   belongs on .ui-panel where it can actually be seen. */
+.ui-overlay__content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elev-3);
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ui-overlay__content {
+    animation: overlay-in var(--dur-base) var(--ease-out);
+  }
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Panel
+   ------------------------------------------------------------------ */
+.ui-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--hairline-top);
+}
+
+.ui-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+  height: 40px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.ui-panel__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+.ui-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.ui-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--bg-tertiary);
+}
+
+/* Field
+   ------------------------------------------------------------------ */
+.ui-field { display: flex; flex-direction: column; gap: var(--space-1-5); }
+
+.ui-field__label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* .ui-input carries the control styling so it works outside a <Field> too;
+   Field stamps it onto its own child. The descendant selectors stay as a
+   safety net for children Field could not clone, and are scoped to direct
+   children and to text-like input types so a colour swatch, checkbox,
+   radio, range or file picker inside a migrated panel is left alone. */
+.ui-input,
+.ui-field > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]),
+.ui-field > select,
+.ui-field > textarea {
+  height: var(--control-h);
+  padding: 0 var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+textarea.ui-input,
+.ui-field > textarea { height: auto; padding: var(--space-2); }
+
+.ui-input:hover,
+.ui-field > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]):hover,
+.ui-field > select:hover,
+.ui-field > textarea:hover { border-color: var(--border-strong); }
+
+.ui-field__hint  { margin: 0; font-size: var(--text-2xs); color: var(--text-muted); }
+.ui-field__error { margin: 0; font-size: var(--text-2xs); color: var(--red); }
+
+/* Badge
+   ------------------------------------------------------------------ */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 var(--space-1-5);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-micro);
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.ui-badge--neutral { background: var(--bg-surface);     color: var(--text-secondary); }
+.ui-badge--accent  { background: var(--accent-subtle);  color: var(--accent); }
+.ui-badge--success { background: var(--green-subtle);   color: var(--green); }
+.ui-badge--warning { background: var(--yellow-subtle);  color: var(--yellow); }
+.ui-badge--danger  { background: var(--red-subtle);     color: var(--red); }
+
+/* Row
+   ------------------------------------------------------------------ */
+.ui-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  padding: var(--space-1-5) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+/* Three distinct grounds: hover is the lightest touch, --selected is the
+   keyboard cursor, --active is the committed selection. Hovering a row that
+   already carries the cursor still has to move, hence the paired rules. */
+.ui-row:hover:not(.ui-row--disabled) { background: var(--bg-tertiary); }
+
+.ui-row--selected { background: var(--bg-elevated); }
+.ui-row--selected:hover:not(.ui-row--disabled) { background: var(--bg-surface); }
+
+.ui-row--active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.ui-row--active:hover:not(.ui-row--disabled) { background: var(--accent-hover); }
+
+.ui-row--disabled { opacity: 0.45; cursor: not-allowed; }
