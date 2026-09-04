@@ -4,3 +4,4 @@ src-tauri/target/
 .vite/
 src-tauri/gen/
 .superpowers/
+.claude/worktrees/
