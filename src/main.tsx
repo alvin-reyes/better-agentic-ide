@@ -1,5 +1,6 @@
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
+import "@fontsource-variable/inter";
 import "./index.css";
 import { hydrateFromDisk, startAutoSave } from "./lib/persistence";
 import { syncBeforeLaunch, startPeriodicSync } from "./lib/sync";
