@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { themePresets } from "../../stores/settingsStore";
 
 const css = readFileSync(resolve(__dirname, "../../index.css"), "utf8");
 
@@ -14,7 +15,15 @@ const REQUIRED_TOKENS = [
   "--hairline-top", "--scrim",
   "--ease-out", "--dur-fast", "--dur-base",
   "--font-ui", "--font-mono",
+  // Runtime-set colour tokens that must also have a static fallback.
+  "--accent-solid", "--red", "--red-subtle", "--yellow", "--yellow-subtle",
 ];
+
+/** Reads a `--token: value;` declaration out of index.css. */
+function tokenValue(name: string): string {
+  const m = new RegExp(`${name}:\\s*([^;]+);`).exec(css);
+  return m ? m[1].trim() : "";
+}
 
 describe("design tokens", () => {
   it("defines every required token in index.css", () => {
@@ -36,5 +45,33 @@ describe("design tokens", () => {
 
   it("no longer hardcodes 8px or 9px font sizes", () => {
     expect(/font-size:\s*[89]px/.test(css)).toBe(false);
+  });
+
+  it("statically falls back to the default preset's colours", () => {
+    const precision = themePresets.find((p) => p.id === "precision-dark")!;
+    const c = precision.colors;
+    const pairs: Array<[string, string]> = [
+      ["--bg-primary", c.bgPrimary],
+      ["--bg-secondary", c.bgSecondary],
+      ["--bg-tertiary", c.bgTertiary],
+      ["--bg-elevated", c.bgElevated],
+      ["--bg-surface", c.bgSurface],
+      ["--text-primary", c.textPrimary],
+      ["--text-secondary", c.textSecondary],
+      ["--text-muted", c.textMuted],
+      ["--accent", c.accent],
+      ["--accent-solid", c.accentSolid],
+      ["--green", c.green],
+      ["--red", c.red],
+      ["--yellow", c.yellow],
+      ["--border", c.border],
+      ["--border-strong", c.borderStrong],
+    ];
+    for (const [token, expected] of pairs) {
+      expect(
+        tokenValue(token).toLowerCase(),
+        `index.css ${token} should fall back to precision-dark's value`
+      ).toBe(expected.toLowerCase());
+    }
   });
 });
