@@ -29,6 +29,11 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
 
+  /* Control heights — one place for the toolbar rhythm every primitive
+     aligns to: buttons, inputs and rows all sit on the same baseline. */
+  --control-h: 28px;
+  --control-h-sm: 22px;
+
   /* Radius — tightened one step from 6/8/12 */
   --radius-sm: 4px;
   --radius: 6px;
@@ -120,6 +125,7 @@ button, a, input, textarea, select {
     color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
     opacity var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out),
     transform var(--dur-fast) var(--ease-out);
 }
 
