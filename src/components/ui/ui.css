@@ -20,10 +20,17 @@
   cursor: not-allowed;
 }
 
-.ui-btn--md { height: 28px; padding: 0 var(--space-3); font-size: var(--text-sm); }
-.ui-btn--sm { height: 22px; padding: 0 var(--space-2); font-size: var(--text-xs); }
+.ui-btn--md { height: var(--control-h); padding: 0 var(--space-3); font-size: var(--text-sm); }
+.ui-btn--sm { height: var(--control-h-sm); padding: 0 var(--space-2); font-size: var(--text-xs); }
 
-.ui-btn--icon { padding: 0; aspect-ratio: 1; }
+/* Icon-only buttons never drop below WCAG 2.5.8's 24x24 target, so the sm
+   size floors at 24 rather than the 22 its labelled sibling uses. */
+.ui-btn--icon {
+  padding: 0;
+  aspect-ratio: 1;
+  min-width: 24px;
+  min-height: 24px;
+}
 
 .ui-btn--primary {
   background: var(--accent-solid);
@@ -50,12 +57,14 @@
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
+.ui-btn--ghost:active:not(:disabled) { background: var(--bg-surface); }
 
 .ui-btn--danger { background: transparent; color: var(--red); border-color: var(--border); }
 .ui-btn--danger:hover:not(:disabled) {
   background: var(--red-subtle);
   border-color: var(--red);
 }
+.ui-btn--danger:active:not(:disabled) { filter: brightness(0.94); }
 
 /* Overlay
    ------------------------------------------------------------------ */
@@ -70,12 +79,17 @@
   background: var(--scrim);
 }
 
+/* No --hairline-top here: the Panel that fills this box paints its own
+   opaque background over the parent's inset shadow, so the highlight
+   belongs on .ui-panel where it can actually be seen. */
 .ui-overlay__content {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 560px;
   max-height: 80vh;
   border-radius: var(--radius-lg);
-  box-shadow: var(--elev-3), var(--hairline-top);
+  box-shadow: var(--elev-3);
   overflow: hidden;
 }
 
@@ -99,6 +113,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--hairline-top);
 }
 
 .ui-panel__header {
@@ -148,10 +163,16 @@
   color: var(--text-secondary);
 }
 
-.ui-field input,
-.ui-field select,
-.ui-field textarea {
-  height: 28px;
+/* .ui-input carries the control styling so it works outside a <Field> too;
+   Field stamps it onto its own child. The descendant selectors stay as a
+   safety net for children Field could not clone, and are scoped to direct
+   children and to text-like input types so a colour swatch, checkbox,
+   radio, range or file picker inside a migrated panel is left alone. */
+.ui-input,
+.ui-field > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]),
+.ui-field > select,
+.ui-field > textarea {
+  height: var(--control-h);
   padding: 0 var(--space-2);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
@@ -161,11 +182,13 @@
   border-radius: var(--radius-sm);
 }
 
-.ui-field textarea { height: auto; padding: var(--space-2); }
+textarea.ui-input,
+.ui-field > textarea { height: auto; padding: var(--space-2); }
 
-.ui-field input:hover,
-.ui-field select:hover,
-.ui-field textarea:hover { border-color: var(--border-strong); }
+.ui-input:hover,
+.ui-field > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]):hover,
+.ui-field > select:hover,
+.ui-field > textarea:hover { border-color: var(--border-strong); }
 
 .ui-field__hint  { margin: 0; font-size: var(--text-2xs); color: var(--text-muted); }
 .ui-field__error { margin: 0; font-size: var(--text-2xs); color: var(--red); }
@@ -197,6 +220,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-height: var(--control-h);
   padding: var(--space-1-5) var(--space-3);
   font-size: var(--text-sm);
   color: var(--text-primary);
@@ -207,13 +231,18 @@
     color var(--dur-fast) var(--ease-out);
 }
 
-.ui-row:hover:not(.ui-row--disabled) { background: var(--bg-elevated); }
+/* Three distinct grounds: hover is the lightest touch, --selected is the
+   keyboard cursor, --active is the committed selection. Hovering a row that
+   already carries the cursor still has to move, hence the paired rules. */
+.ui-row:hover:not(.ui-row--disabled) { background: var(--bg-tertiary); }
 
 .ui-row--selected { background: var(--bg-elevated); }
+.ui-row--selected:hover:not(.ui-row--disabled) { background: var(--bg-surface); }
 
 .ui-row--active {
   background: var(--accent-subtle);
   color: var(--accent);
 }
+.ui-row--active:hover:not(.ui-row--disabled) { background: var(--accent-hover); }
 
 .ui-row--disabled { opacity: 0.45; cursor: not-allowed; }
