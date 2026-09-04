@@ -18,13 +18,13 @@ export default function Field({
   ...rest
 }: FieldProps) {
   return (
-    <div className={["field", className].filter(Boolean).join(" ")} {...rest}>
-      <label className="field__label" htmlFor={htmlFor}>{label}</label>
+    <div className={["ui-field", className].filter(Boolean).join(" ")} {...rest}>
+      <label className="ui-field__label" htmlFor={htmlFor}>{label}</label>
       {children}
       {error ? (
-        <p className="field__error" role="alert">{error}</p>
+        <p className="ui-field__error" role="alert">{error}</p>
       ) : hint ? (
-        <p className="field__hint">{hint}</p>
+        <p className="ui-field__hint">{hint}</p>
       ) : null}
     </div>
   );

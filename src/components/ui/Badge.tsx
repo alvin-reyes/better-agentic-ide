@@ -13,7 +13,7 @@ export default function Badge({
   children,
   ...rest
 }: BadgeProps) {
-  const classes = ["badge", `badge--${tone}`, className].filter(Boolean).join(" ");
+  const classes = ["ui-badge", `ui-badge--${tone}`, className].filter(Boolean).join(" ");
   return (
     <span className={classes} {...rest}>
       {children}

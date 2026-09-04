@@ -1,6 +1,6 @@
 /* Button
    ------------------------------------------------------------------ */
-.btn {
+.ui-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -15,51 +15,51 @@
   user-select: none;
 }
 
-.btn:disabled {
+.ui-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.btn--md { height: 28px; padding: 0 var(--space-3); font-size: var(--text-sm); }
-.btn--sm { height: 22px; padding: 0 var(--space-2); font-size: var(--text-xs); }
+.ui-btn--md { height: 28px; padding: 0 var(--space-3); font-size: var(--text-sm); }
+.ui-btn--sm { height: 22px; padding: 0 var(--space-2); font-size: var(--text-xs); }
 
-.btn--icon { padding: 0; aspect-ratio: 1; }
+.ui-btn--icon { padding: 0; aspect-ratio: 1; }
 
-.btn--primary {
+.ui-btn--primary {
   background: var(--accent-solid);
   color: white;
   box-shadow: var(--hairline-top);
 }
-.btn--primary:hover:not(:disabled) { filter: brightness(1.12); }
-.btn--primary:active:not(:disabled) { filter: brightness(0.94); }
+.ui-btn--primary:hover:not(:disabled) { filter: brightness(1.12); }
+.ui-btn--primary:active:not(:disabled) { filter: brightness(0.94); }
 
-.btn--secondary {
+.ui-btn--secondary {
   background: var(--bg-elevated);
   color: var(--text-primary);
   border-color: var(--border);
   box-shadow: var(--hairline-top);
 }
-.btn--secondary:hover:not(:disabled) {
+.ui-btn--secondary:hover:not(:disabled) {
   background: var(--bg-surface);
   border-color: var(--border-strong);
 }
-.btn--secondary:active:not(:disabled) { background: var(--bg-tertiary); }
+.ui-btn--secondary:active:not(:disabled) { background: var(--bg-tertiary); }
 
-.btn--ghost { background: transparent; color: var(--text-secondary); }
-.btn--ghost:hover:not(:disabled) {
+.ui-btn--ghost { background: transparent; color: var(--text-secondary); }
+.ui-btn--ghost:hover:not(:disabled) {
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
 
-.btn--danger { background: transparent; color: var(--red); border-color: var(--border); }
-.btn--danger:hover:not(:disabled) {
+.ui-btn--danger { background: transparent; color: var(--red); border-color: var(--border); }
+.ui-btn--danger:hover:not(:disabled) {
   background: var(--red-subtle);
   border-color: var(--red);
 }
 
 /* Overlay
    ------------------------------------------------------------------ */
-.overlay {
+.ui-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -70,7 +70,7 @@
   background: var(--scrim);
 }
 
-.overlay__content {
+.ui-overlay__content {
   display: flex;
   flex-direction: column;
   max-height: 80vh;
@@ -80,7 +80,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .overlay__content {
+  .ui-overlay__content {
     animation: overlay-in var(--dur-base) var(--ease-out);
   }
 }
@@ -92,7 +92,7 @@
 
 /* Panel
    ------------------------------------------------------------------ */
-.panel {
+.ui-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -101,7 +101,7 @@
   border-radius: var(--radius-lg);
 }
 
-.panel__header {
+.ui-panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -112,7 +112,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.panel__title {
+.ui-panel__title {
   margin: 0;
   font-size: var(--text-base);
   font-weight: 600;
@@ -120,14 +120,14 @@
   color: var(--text-primary);
 }
 
-.panel__body {
+.ui-panel__body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-4);
 }
 
-.panel__footer {
+.ui-panel__footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -140,17 +140,17 @@
 
 /* Field
    ------------------------------------------------------------------ */
-.field { display: flex; flex-direction: column; gap: var(--space-1-5); }
+.ui-field { display: flex; flex-direction: column; gap: var(--space-1-5); }
 
-.field__label {
+.ui-field__label {
   font-size: var(--text-xs);
   font-weight: 500;
   color: var(--text-secondary);
 }
 
-.field input,
-.field select,
-.field textarea {
+.ui-field input,
+.ui-field select,
+.ui-field textarea {
   height: 28px;
   padding: 0 var(--space-2);
   font-family: var(--font-ui);
@@ -161,18 +161,18 @@
   border-radius: var(--radius-sm);
 }
 
-.field textarea { height: auto; padding: var(--space-2); }
+.ui-field textarea { height: auto; padding: var(--space-2); }
 
-.field input:hover,
-.field select:hover,
-.field textarea:hover { border-color: var(--border-strong); }
+.ui-field input:hover,
+.ui-field select:hover,
+.ui-field textarea:hover { border-color: var(--border-strong); }
 
-.field__hint  { margin: 0; font-size: var(--text-2xs); color: var(--text-muted); }
-.field__error { margin: 0; font-size: var(--text-2xs); color: var(--red); }
+.ui-field__hint  { margin: 0; font-size: var(--text-2xs); color: var(--text-muted); }
+.ui-field__error { margin: 0; font-size: var(--text-2xs); color: var(--red); }
 
 /* Badge
    ------------------------------------------------------------------ */
-.badge {
+.ui-badge {
   display: inline-flex;
   align-items: center;
   height: 16px;
@@ -185,15 +185,15 @@
   white-space: nowrap;
 }
 
-.badge--neutral { background: var(--bg-surface);     color: var(--text-secondary); }
-.badge--accent  { background: var(--accent-subtle);  color: var(--accent); }
-.badge--success { background: var(--green-subtle);   color: var(--green); }
-.badge--warning { background: var(--yellow-subtle);  color: var(--yellow); }
-.badge--danger  { background: var(--red-subtle);     color: var(--red); }
+.ui-badge--neutral { background: var(--bg-surface);     color: var(--text-secondary); }
+.ui-badge--accent  { background: var(--accent-subtle);  color: var(--accent); }
+.ui-badge--success { background: var(--green-subtle);   color: var(--green); }
+.ui-badge--warning { background: var(--yellow-subtle);  color: var(--yellow); }
+.ui-badge--danger  { background: var(--red-subtle);     color: var(--red); }
 
 /* Row
    ------------------------------------------------------------------ */
-.row {
+.ui-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -207,13 +207,13 @@
     color var(--dur-fast) var(--ease-out);
 }
 
-.row:hover:not(.row--disabled) { background: var(--bg-elevated); }
+.ui-row:hover:not(.ui-row--disabled) { background: var(--bg-elevated); }
 
-.row--selected { background: var(--bg-elevated); }
+.ui-row--selected { background: var(--bg-elevated); }
 
-.row--active {
+.ui-row--active {
   background: var(--accent-subtle);
   color: var(--accent);
 }
 
-.row--disabled { opacity: 0.45; cursor: not-allowed; }
+.ui-row--disabled { opacity: 0.45; cursor: not-allowed; }
