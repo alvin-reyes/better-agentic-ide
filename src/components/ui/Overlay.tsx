@@ -101,7 +101,7 @@ export default function Overlay({
   return (
     <div
       {...rest}
-      className={["overlay", className].filter(Boolean).join(" ")}
+      className={["ui-overlay", className].filter(Boolean).join(" ")}
       data-testid="overlay-backdrop"
       onMouseDown={(e) => {
         pressedBackdrop.current = e.target === e.currentTarget;
@@ -118,7 +118,7 @@ export default function Overlay({
     >
       <div
         ref={contentRef}
-        className="overlay__content"
+        className="ui-overlay__content"
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}

@@ -18,10 +18,10 @@ export default function Row({
   ...rest
 }: RowProps) {
   const classes = [
-    "row",
-    selected ? "row--selected" : "",
-    active ? "row--active" : "",
-    disabled ? "row--disabled" : "",
+    "ui-row",
+    selected ? "ui-row--selected" : "",
+    active ? "ui-row--active" : "",
+    disabled ? "ui-row--disabled" : "",
     className,
   ]
     .filter(Boolean)
