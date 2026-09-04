@@ -63,4 +63,25 @@ describe("Row", () => {
     fireEvent.keyDown(screen.getByText("Delete"), { key: "Enter" });
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  it("merges a caller-supplied className rather than replacing", () => {
+    render(<Row className="extra">Item</Row>);
+    const el = screen.getByRole("option");
+    expect(el.className.includes("extra")).toBe(true);
+    expect(el.className.includes("row")).toBe(true);
+  });
+
+  it("passes arbitrary DOM attributes through", () => {
+    render(<Row id="opt-1" title="/some/path" data-depth="2">Item</Row>);
+    const el = screen.getByRole("option");
+    // id matters: a listbox parent needs it for aria-activedescendant.
+    expect(el.id).toBe("opt-1");
+    expect(el.title).toBe("/some/path");
+    expect(el.getAttribute("data-depth")).toBe("2");
+  });
+
+  it("accepts an inline style, as tree indentation needs", () => {
+    render(<Row style={{ paddingLeft: 24 }}>Item</Row>);
+    expect((screen.getByRole("option") as HTMLElement).style.paddingLeft).toBe("24px");
+  });
 });
