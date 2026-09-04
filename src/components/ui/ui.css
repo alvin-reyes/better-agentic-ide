@@ -137,3 +137,56 @@
   border-top: 1px solid var(--border);
   background: var(--bg-tertiary);
 }
+
+/* Field
+   ------------------------------------------------------------------ */
+.field { display: flex; flex-direction: column; gap: var(--space-1-5); }
+
+.field__label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.field input,
+.field select,
+.field textarea {
+  height: 28px;
+  padding: 0 var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.field textarea { height: auto; padding: var(--space-2); }
+
+.field input:hover,
+.field select:hover,
+.field textarea:hover { border-color: var(--border-strong); }
+
+.field__hint  { margin: 0; font-size: var(--text-2xs); color: var(--text-muted); }
+.field__error { margin: 0; font-size: var(--text-2xs); color: var(--red); }
+
+/* Badge
+   ------------------------------------------------------------------ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 var(--space-1-5);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-micro);
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.badge--neutral { background: var(--bg-surface);     color: var(--text-secondary); }
+.badge--accent  { background: var(--accent-subtle);  color: var(--accent); }
+.badge--success { background: var(--green-subtle);   color: var(--green); }
+.badge--warning { background: var(--yellow-subtle);  color: var(--yellow); }
+.badge--danger  { background: var(--red-subtle);     color: var(--red); }
