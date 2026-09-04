@@ -60,6 +60,15 @@ async function boot() {
     startAutoSave();
     startPeriodicSync();
   }
+  // Paint the persisted theme onto :root before React's first render, so the
+  // static :root fallback never flashes for a frame on a cold start. Imported
+  // here rather than at module scope: settingsStore reads localStorage when it
+  // is first evaluated, so it must not load until hydrateFromDisk() above has
+  // restored the saved state.
+  const { useSettingsStore, applyThemeToDOM } = await import(
+    "./stores/settingsStore"
+  );
+  applyThemeToDOM(useSettingsStore.getState().getActiveTheme());
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <Root />
