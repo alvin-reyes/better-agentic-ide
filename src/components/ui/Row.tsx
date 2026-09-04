@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
-export interface RowProps {
+export interface RowProps extends HTMLAttributes<HTMLDivElement> {
   selected?: boolean;
   active?: boolean;
   disabled?: boolean;
@@ -13,13 +13,16 @@ export default function Row({
   active = false,
   disabled = false,
   onSelect,
+  className = "",
   children,
+  ...rest
 }: RowProps) {
   const classes = [
     "row",
     selected ? "row--selected" : "",
     active ? "row--active" : "",
     disabled ? "row--disabled" : "",
+    className,
   ]
     .filter(Boolean)
     .join(" ");
@@ -30,13 +33,22 @@ export default function Row({
 
   return (
     <div
+      {...rest}
       className={classes}
       role="option"
       aria-selected={active}
       aria-disabled={disabled || undefined}
       tabIndex={disabled ? -1 : 0}
-      onClick={handle}
+      onClick={(e) => {
+        rest.onClick?.(e);
+        handle();
+      }}
       onKeyDown={(e) => {
+        rest.onKeyDown?.(e);
+        // Only the row itself activates on Space/Enter. Without this check
+        // the handler also fires for events bubbling from nested controls —
+        // typing a space in a child input would preventDefault and select.
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           handle();

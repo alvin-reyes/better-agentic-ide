@@ -41,4 +41,26 @@ describe("Row", () => {
     fireEvent.keyDown(screen.getByRole("option"), { key: "Enter" });
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
+
+  it("ignores Space bubbling up from a nested control", () => {
+    const onSelect = vi.fn();
+    render(
+      <Row onSelect={onSelect}>
+        <input aria-label="Rename" />
+      </Row>
+    );
+    fireEvent.keyDown(screen.getByLabelText("Rename"), { key: " " });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("ignores Enter bubbling up from a nested control", () => {
+    const onSelect = vi.fn();
+    render(
+      <Row onSelect={onSelect}>
+        <button>Delete</button>
+      </Row>
+    );
+    fireEvent.keyDown(screen.getByText("Delete"), { key: "Enter" });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });
