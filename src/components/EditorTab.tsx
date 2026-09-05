@@ -61,7 +61,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
 
   const save = useCallback(async () => {
     try {
-      await invoke("write_text_file", { path: filePath, contents: content });
+      await invoke("write_text_file", { path: filePath, content });
       setSavedContent(content);
     } catch (err) {
       setError(`Save failed: ${err}`);
