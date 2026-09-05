@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' data: blob: asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost https://cdn.jsdelivr.net https://api.anthropic.com http://localhost:11434 http://127.0.0.1:11434; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
     }
   },
   "bundle": {

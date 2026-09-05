@@ -35,12 +35,28 @@ function getMimeType(filePath: string): string {
   return mimes[ext] ?? "application/octet-stream";
 }
 
-// Minimal markdown-to-HTML renderer (no dependencies)
-function renderMarkdown(md: string): string {
-  let html = md
-    // Code blocks
+// Only these schemes may reach an href. Anything else — javascript:, data:,
+// vbscript:, file: — becomes inert. Relative and fragment links are allowed.
+function safeUrl(raw: string): string {
+  const url = raw.trim();
+  if (/^(https?:\/\/|mailto:)/i.test(url)) return url;
+  // Relative or fragment: no scheme before the first path separator.
+  if (/^[./#?]/.test(url) || !/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
+  return "#";
+}
+
+// Minimal markdown-to-HTML renderer (no dependencies).
+//
+// The output goes to dangerouslySetInnerHTML inside the privileged Tauri
+// webview, so the input is escaped IN FULL before any transform runs. Every
+// tag below is introduced by this function afterwards; nothing from the source
+// document survives as markup. Do not move an escape later in the chain, and
+// do not interpolate a captured group into an attribute without safeUrl.
+export function renderMarkdown(md: string): string {
+  let html = escapeHtml(md)
+    // Code blocks — content is already escaped by the pass above.
     .replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-      return `<pre style="background:var(--bg-elevated);padding:12px;border-radius:6px;overflow-x:auto;border:1px solid var(--border)"><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`;
+      return `<pre style="background:var(--bg-elevated);padding:12px;border-radius:6px;overflow-x:auto;border:1px solid var(--border)"><code class="language-${lang}">${code.trim()}</code></pre>`;
     })
     // Inline code
     .replace(/`([^`]+)`/g, '<code style="background:var(--bg-elevated);padding:2px 6px;border-radius:3px;font-size:0.9em">$1</code>')
@@ -53,8 +69,12 @@ function renderMarkdown(md: string): string {
     .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:var(--accent)">$1</a>')
+    // Links — the label is already escaped; the target is scheme-checked.
+    .replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      (_m, label: string, href: string) =>
+        `<a href="${safeUrl(href)}" rel="noopener noreferrer" style="color:var(--accent)">${label}</a>`
+    )
     // Unordered lists
     .replace(/^[-*] (.+)$/gm, '<li style="margin:2px 0">$1</li>')
     // Horizontal rule
@@ -73,7 +93,8 @@ function escapeHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 interface PreviewPanelProps {
@@ -462,7 +483,11 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
               border: "none",
               backgroundColor: "#fff",
             }}
-            sandbox="allow-scripts allow-same-origin"
+            // allow-scripts alone. Adding allow-same-origin alongside it is a
+            // documented no-op: a srcdoc frame inherits the embedder's origin,
+            // so together the two tokens let the framed page reach window.parent
+            // and remove its own sandbox attribute.
+            sandbox="allow-scripts"
             title="HTML Preview"
           />
         )}
