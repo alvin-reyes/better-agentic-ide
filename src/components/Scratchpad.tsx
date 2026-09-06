@@ -291,6 +291,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [chainRunning, setChainRunning] = useState(false);
   const [chainStep, setChainStep] = useState(0);
   const [chainTotal, setChainTotal] = useState(0);
@@ -365,18 +366,39 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     };
 
     recognition.onerror = (event) => {
-      console.warn("Speech recognition error:", event.error);
+      // Surface the failure. This used to be a console.warn, which meant voice
+      // dictation failed with no signal at all in a packaged build, where the
+      // console is unreachable.
+      const reasons: Record<string, string> = {
+        "not-allowed": "Microphone access denied. Grant it in System Settings › Privacy & Security › Microphone.",
+        "service-not-allowed": "Speech recognition was refused by the system. The app may be missing its microphone usage entitlement.",
+        "audio-capture": "No microphone found.",
+        network: "Speech recognition needs a network connection.",
+        aborted: "Dictation stopped.",
+        "no-speech": "No speech detected.",
+      };
+      setVoiceError(reasons[event.error] ?? `Speech recognition failed: ${event.error}`);
       setIsListening(false);
       recognitionRef.current = null;
     };
 
     recognition.onstart = () => {
       setIsListening(true);
+      setVoiceError(null);
       finalTranscript = "";
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (err) {
+      // start() throws synchronously on some failures, which onerror never sees.
+      setVoiceError(`Could not start dictation: ${err instanceof Error ? err.message : String(err)}`);
+      setIsListening(false);
+      recognitionRef.current = null;
+    }
+    // `text` stays in the deps: startText above reads it, so dropping it would
+    // rebuild dictation from a stale base.
   }, [isListening, speechAvailable, text]);
 
   useEffect(() => () => recognitionRef.current?.abort(), []);
@@ -1333,6 +1355,22 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               </svg>
               {isListening ? "Listening..." : "Voice"}
             </button>
+          )}
+          {voiceError && (
+            <span
+              role="alert"
+              title={voiceError}
+              style={{
+                fontSize: "11px",
+                color: "var(--red)",
+                maxWidth: "320px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {voiceError}
+            </span>
           )}
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
