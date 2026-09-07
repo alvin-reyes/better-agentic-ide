@@ -40,7 +40,8 @@ interface TabStore {
   tabs: Tab[];
   activeTabId: string;
 
-  addTab: (name?: string, initialCwd?: string) => void;
+  /** Returns the new tab's id, like every other add*Tab. */
+  addTab: (name?: string, initialCwd?: string) => string;
   addOrchestratorTab: (sessionId: string) => string;
   addBrowserTab: (url?: string) => string;
   addFleetTab: () => string;
@@ -61,6 +62,13 @@ interface TabStore {
   focusPrevPane: (tabId: string) => void;
   getActivePane: () => Pane | null;
   getActivePtyId: () => number | null;
+  /**
+   * The active pane of a *named* tab, which is not necessarily the focused one.
+   * Anything that creates a tab and then waits for its PTY must use this: the
+   * user can focus a different tab while the wait is in flight, and reading the
+   * globally active pane would then act on their terminal instead.
+   */
+  getTabActivePane: (tabId: string) => Pane | null;
 }
 
 let paneCounter = 0;
@@ -207,6 +215,7 @@ export const useTabStore = create<TabStore>((set, get) => {
         tabs: [...s.tabs, tab],
         activeTabId: tab.id,
       }));
+      return tab.id;
     },
 
     addOrchestratorTab: (sessionId) => {
@@ -473,6 +482,12 @@ export const useTabStore = create<TabStore>((set, get) => {
     getActivePtyId: () => {
       const pane = get().getActivePane();
       return pane?.ptyId ?? null;
+    },
+
+    getTabActivePane: (tabId) => {
+      const tab = get().tabs.find((t) => t.id === tabId);
+      if (!tab) return null;
+      return findPane(tab.root, tab.activePaneId);
     },
   };
 });
