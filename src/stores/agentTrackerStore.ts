@@ -7,6 +7,7 @@ export interface AgentSession {
   agentName: string;
   agentIcon: string;
   provider: string;
+  roleId: string;
   startTime: number;
   endTime: number | null;
   status: "running" | "completed" | "cancelled";
@@ -15,7 +16,7 @@ export interface AgentSession {
 interface AgentTrackerStore {
   sessions: AgentSession[];
 
-  startSession: (paneId: string, agentName: string, agentIcon: string, provider: string) => void;
+  startSession: (paneId: string, agentName: string, agentIcon: string, provider: string, roleId: string) => void;
   endSession: (paneId: string) => void;
   cancelSession: (paneId: string) => void;
   getActiveSession: (paneId: string) => AgentSession | undefined;
@@ -49,7 +50,7 @@ const initialSessions = loadSessions();
 export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
   sessions: initialSessions,
 
-  startSession: (paneId, agentName, agentIcon, provider) => {
+  startSession: (paneId, agentName, agentIcon, provider, roleId) => {
     // End any existing session for this pane
     const existing = get().sessions.find((s) => s.paneId === paneId && s.status === "running");
     if (existing) {
@@ -61,6 +62,7 @@ export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
       agentName,
       agentIcon,
       provider,
+      roleId,
       startTime: Date.now(),
       endTime: null,
       status: "running",
