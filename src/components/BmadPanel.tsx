@@ -1,8 +1,8 @@
 import { BMAD_PHASES } from "../data/bmadPhases";
 
+// The persona buttons that needed a PTY and a cwd now live in AgentPicker's
+// "Roles" group, so this panel only shows the phase list and needs neither.
 interface Props {
-  ptyId: number | null;
-  cwd: string | null;
   onClose: () => void;
 }
 
