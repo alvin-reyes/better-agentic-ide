@@ -40,7 +40,9 @@ export function buildLaunchCommand(
       return { kind: "command", command: `gemini -i "$(cat ${path})"` };
 
     case "ollama": {
-      const model = opts.ollamaModel || "deepseek-r1";
+      // ollamaModel is free text (see SettingsPanel.tsx), so it must be quoted
+      // exactly like rolePath — it is just as user-controlled.
+      const model = shellQuote(opts.ollamaModel || "deepseek-r1");
       return { kind: "command", command: `ollama run ${model} --system "$(cat ${path})"` };
     }
 
