@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AGENT_PROFILES, AGENT_CATEGORIES, PROVIDERS, type AgentProfile, type Provider } from "../data/agentProfiles";
+import { AGENT_PROFILES, AGENT_CATEGORIES, PROVIDERS, type Provider } from "../data/agentProfiles";
 import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -8,6 +8,12 @@ import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { runInNewTabPane, writePty } from "../lib/terminalCommands";
 import { hasActiveProcess } from "../hooks/useTerminal";
 import { usePaneCwd } from "../stores/paneMetaStore";
+import { getRole } from "../data/roles";
+import { getDomain } from "../data/domains";
+import { composeRoleMarkdown } from "../lib/agentComposition";
+import { buildLaunchCommand } from "../lib/agentCommand";
+import { specFromCurated, rolePathFor } from "../lib/agentSpec";
+import { CURATED_AGENTS } from "../data/curatedAgents";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Backend: "#3fb950",
@@ -49,6 +55,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [continuousMode, setContinuousMode] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const [installedProviders, setInstalledProviders] = useState<Set<Provider>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -121,20 +128,33 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     if (el) el.scrollIntoView({ block: "nearest" });
   }, [selectedIndex, suggestedAgent, filtered]);
 
-  const buildCommand = useCallback((profile: AgentProfile) => {
-    let cmd = profile.providers[activeProvider];
-    if (activeProvider === "ollama") {
-      const settings = useSettingsStore.getState();
-      const model = settings.ollamaModel || "deepseek-r1";
-      // Extract system prompt from the __OLLAMA__ placeholder
-      const systemPrompt = cmd.startsWith("__OLLAMA__") ? cmd.slice("__OLLAMA__".length) : cmd;
-      const escaped = systemPrompt.replace(/"/g, '\\"');
-      cmd = `ollama run ${model} --system "${escaped}"`;
+  // Compose the role definition, write it to disk, and build the provider
+  // command that reads it. Returns null after reporting why it could not.
+  const buildCommand = useCallback(async (agentId: string) => {
+    const spec = specFromCurated(agentId, activeProvider);
+    if (!spec) return null;
+    const role = getRole(spec.roleId);
+    if (!role) return null;
+    const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
+
+    const rolePath = rolePathFor(spec);
+    try {
+      await invoke("write_text_file", { path: rolePath, content: composeRoleMarkdown(role, domain) });
+    } catch (err) {
+      setLaunchError(`Could not write the role file: ${err}`);
+      return null;
     }
-    if (continuousMode && activeProvider === "claude") {
-      cmd = cmd.replace(/^claude /, "claude --dangerously-skip-permissions ");
+
+    const settings = useSettingsStore.getState();
+    const result = buildLaunchCommand(spec.provider, rolePath, {
+      continuous: continuousMode,
+      ollamaModel: settings.ollamaModel,
+    });
+    if (result.kind === "unsupported") {
+      setLaunchError(result.reason);
+      return null;
     }
-    return cmd;
+    return { command: result.command, spec };
   }, [activeProvider, continuousMode]);
 
   // Picking an agent asks where to run it: this terminal or a new tab.
@@ -142,7 +162,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   const [target, setTarget] = useState<"current" | "new">("current");
   const currentPtyId = getActivePtyId();
 
-  const launchAgent = useCallback((profile: AgentProfile) => {
+  const launchAgent = useCallback((agentId: string) => {
+    const profile = AGENT_PROFILES.find((p) => p.id === agentId);
+    if (!profile) return;
     const pane = getActivePane();
     // A terminal already running something can't take a new agent.
     setTarget(currentPtyId === null || (pane && hasActiveProcess(pane.id)) ? "new" : "current");
@@ -150,7 +172,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   }, [currentPtyId, getActivePane]);
 
   const runAgent = useCallback(async (profile: AgentProfile, where: "current" | "new") => {
-    const cmd = buildCommand(profile);
+    // Built before the tab is created: a role file that cannot be written, or
+    // a provider that cannot take one, should not leave an empty tab behind.
+    const built = await buildCommand(profile.id);
+    if (!built) return;
+    const cmd = built.command;
+
     const ptyId = getActivePtyId();
     let paneId: string | null = null;
     if (where === "new" || ptyId === null) {
@@ -170,9 +197,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
         paneId,
         profile.name,
         profile.icon,
-        activeProvider,
+        built.spec.provider,
+        built.spec.roleId,
       );
     }
+
+    setLaunchError(null);
 
     // The last provider used becomes the default.
     if (activeProvider !== defaultProvider) {
@@ -204,7 +234,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       setSelectedIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter" && filtered[selectedIndex]) {
       e.preventDefault();
-      launchAgent(filtered[selectedIndex]);
+      launchAgent(filtered[selectedIndex].id);
     } else if (e.key === "Tab") {
       e.preventDefault();
       const providerIds = PROVIDERS.map((p) => p.id);
@@ -355,6 +385,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             </div>
           </div>
         </div>
+
+        {launchError && (
+          <div role="alert" style={{ padding: "6px 12px", fontSize: "11px", color: "var(--red)" }}>
+            {launchError}
+          </div>
+        )}
 
         {/* Continuous mode toggle */}
         <div
@@ -540,7 +576,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                         : "2px solid transparent",
                   }}
                   onMouseEnter={() => setSelectedIndex(i)}
-                  onClick={() => launchAgent(profile)}
+                  onClick={() => launchAgent(profile.id)}
                 >
                   <div
                     style={{

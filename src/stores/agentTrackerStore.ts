@@ -8,6 +8,7 @@ export interface AgentSession {
   agentName: string;
   agentIcon: string;
   provider: string;
+  roleId: string;
   startTime: number;
   endTime: number | null;
   status: "running" | "completed" | "cancelled";
@@ -16,7 +17,7 @@ export interface AgentSession {
 interface AgentTrackerStore {
   sessions: AgentSession[];
 
-  startSession: (paneId: string, agentName: string, agentIcon: string, provider: string) => void;
+  startSession: (paneId: string, agentName: string, agentIcon: string, provider: string, roleId: string) => void;
   endSession: (paneId: string) => void;
   getActiveSession: (paneId: string) => AgentSession | undefined;
   clearHistory: () => void;
@@ -38,13 +39,14 @@ function persistSessions(sessions: AgentSession[]) {
 export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
   sessions: loadSessions(),
 
-  startSession: (paneId, agentName, agentIcon, provider) => {
+  startSession: (paneId, agentName, agentIcon, provider, roleId) => {
     if (get().getActiveSession(paneId)) get().endSession(paneId);
     const session: AgentSession = {
       paneId,
       agentName,
       agentIcon,
       provider,
+      roleId,
       startTime: Date.now(),
       endTime: null,
       status: "running",
