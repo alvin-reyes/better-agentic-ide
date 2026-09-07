@@ -1,3 +1,5 @@
+import { getDomain, type Domain } from "./domains";
+
 export interface CuratedAgent {
   id: string; // the legacy profile id, preserved
   name: string; // the legacy display name, preserved
@@ -7,6 +9,8 @@ export interface CuratedAgent {
   roleId: string;
   domainId?: string;
 }
+
+export type AgentCategory = Domain["category"];
 
 export const CURATED_AGENTS: CuratedAgent[] = [
   // Backend
@@ -215,3 +219,25 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     domainId: "tech-strategy",
   },
 ];
+
+export const AGENT_CATEGORIES: AgentCategory[] = ["Backend", "Frontend", "DevOps", "Testing", "General"];
+
+export interface CatalogAgent extends CuratedAgent {
+  category: AgentCategory;
+  keywords: string[];
+}
+
+// general-docs and general-architect have no domainId — their role (technical-writer,
+// architect) already covers the whole job with no narrower domain to point at. In the
+// legacy AGENT_PROFILES both were category "General", so that is the fallback here too.
+const FALLBACK_CATEGORY: AgentCategory = "General";
+
+/** CURATED_AGENTS enriched with the category and keywords their domain (if any) supplies. */
+export const AGENT_CATALOG: CatalogAgent[] = CURATED_AGENTS.map((agent) => {
+  const domain = agent.domainId ? getDomain(agent.domainId) : undefined;
+  return {
+    ...agent,
+    category: domain?.category ?? FALLBACK_CATEGORY,
+    keywords: domain?.keywords ?? [],
+  };
+});
