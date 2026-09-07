@@ -10,7 +10,7 @@ export type LaunchResult =
   | { kind: "unsupported"; reason: string };
 
 /** Single-quote for POSIX shells, escaping any embedded single quote. */
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
