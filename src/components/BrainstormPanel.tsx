@@ -5,6 +5,7 @@ import { marked } from "marked";
 import mermaid from "mermaid";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { shellQuote } from "../lib/agentCommand";
 
 // Configure marked for safe rendering
 marked.setOptions({
@@ -175,7 +176,11 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
   }, [writeToPty]);
 
   const launchOllamaChat = useCallback(async () => {
-    await writeToPty(`ollama run ${ollamaModel}`);
+    // ollamaModel is free text from Settings, persisted to localStorage. It is
+    // interpolated into a command the PTY executes, so it is quoted exactly as
+    // buildLaunchCommand quotes it — a model name with a space would otherwise
+    // split into two arguments, and one with a `;` would run as its own command.
+    await writeToPty(`ollama run ${shellQuote(ollamaModel)}`);
     setOllamaLaunched(true);
   }, [writeToPty, ollamaModel]);
 
