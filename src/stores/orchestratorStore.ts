@@ -35,6 +35,14 @@ export interface OrchestratorSession {
   createdAt: number;
   status: "planning" | "executing" | "completed";
   projectDir?: string;
+  /**
+   * Transient dispatch-failure message, shown as a banner in OrchestratorTab.
+   * Lives in the store (not component state) because addTab() during dispatch
+   * makes App.tsx unmount/remount OrchestratorTab before a failure can be
+   * known — component state set after that point lands on a detached fiber
+   * and is lost. Not persisted (see persistSessions).
+   */
+  dispatchError?: string | null;
 }
 
 interface OrchestratorStore {
@@ -48,6 +56,7 @@ interface OrchestratorStore {
   updateTaskStatus: (sessionId: string, taskId: string, status: OrchestratorTask["status"], paneId?: string, tabId?: string) => void;
   setSessionStatus: (sessionId: string, status: OrchestratorSession["status"]) => void;
   setProjectDir: (sessionId: string, projectDir: string) => void;
+  setDispatchError: (sessionId: string, message: string | null) => void;
   getActiveSession: () => OrchestratorSession | undefined;
   getDispatchableTasks: (sessionId: string) => OrchestratorTask[];
   deleteSession: (id: string) => void;
@@ -63,7 +72,9 @@ function loadSessions(): OrchestratorSession[] {
 }
 
 function persistSessions(sessions: OrchestratorSession[]) {
-  const trimmed = sessions.slice(-20);
+  // dispatchError is transient dispatch-UI state, not durable session data —
+  // never persist a stale failure message that would resurface on next launch.
+  const trimmed = sessions.slice(-20).map(({ dispatchError: _dispatchError, ...rest }) => rest);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
 }
 
@@ -168,6 +179,20 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
         s.id === sessionId ? { ...s, projectDir } : s
       );
       persistSessions(updated);
+      return { sessions: updated };
+    });
+  },
+
+  setDispatchError: (sessionId, message) => {
+    set((state) => {
+      const updated = state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, dispatchError: message } : s
+      );
+      // No persistSessions() call: this is transient UI state (see the
+      // dispatchError doc comment on OrchestratorSession), and persisting it
+      // on every keystroke of a dispatch attempt would also mean every other
+      // session field gets re-written to localStorage that much more often
+      // for no benefit.
       return { sessions: updated };
     });
   },
