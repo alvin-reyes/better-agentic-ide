@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Provider } from "../data/agentProfiles";
+import type { Provider } from "../lib/agentCommand";
 
 export interface ThemeColors {
   bgPrimary: string;

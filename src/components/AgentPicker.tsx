@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AGENT_PROFILES, AGENT_CATEGORIES, PROVIDERS, type Provider } from "../data/agentProfiles";
 import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -8,9 +7,10 @@ import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
 import { composeRoleMarkdown } from "../lib/agentComposition";
-import { buildLaunchCommand } from "../lib/agentCommand";
+import { buildLaunchCommand, type Provider } from "../lib/agentCommand";
 import { specFromCurated, rolePathFor } from "../lib/agentSpec";
-import { CURATED_AGENTS } from "../data/curatedAgents";
+import { AGENT_CATALOG, AGENT_CATEGORIES } from "../data/curatedAgents";
+import { PROVIDERS } from "../data/providers";
 
 interface AgentPickerProps {
   onClose: () => void;
@@ -64,7 +64,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
 
   // Filter agent list
   const filtered = useMemo(() => {
-    let profiles = AGENT_PROFILES;
+    let profiles = AGENT_CATALOG;
     if (activeCategory) {
       profiles = profiles.filter((p) => p.category === activeCategory);
     }
@@ -137,7 +137,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
     const activePane = getActivePane();
-    const curated = CURATED_AGENTS.find((a) => a.id === curatedId);
+    const curated = AGENT_CATALOG.find((a) => a.id === curatedId);
     if (activePane && curated) {
       useAgentTrackerStore.getState().startSession(
         activePane.id,
@@ -536,8 +536,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
           ) : (
             filtered.map((profile, i) => {
               const isSuggested = suggestedAgent?.id === profile.id;
-              const curated = CURATED_AGENTS.find((a) => a.id === profile.id);
-              const role = curated ? getRole(curated.roleId) : undefined;
+              const role = getRole(profile.roleId);
               const isSelected = i === selectedIndex;
               return (
                 <div
