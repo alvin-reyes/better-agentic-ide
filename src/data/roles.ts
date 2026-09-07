@@ -4,7 +4,16 @@ export interface Role {
   title: string;
   /** Markdown. What this role is accountable for and how it works. */
   mission: string;
-  /** Artifact globs this role owns. Data, not prose, so it can be enforced later. */
+  /**
+   * Artifact globs this role is steward of. Data, not prose, so it can be enforced later.
+   *
+   * These declare stewardship, not exclusive ownership — globs may and do overlap by
+   * design. Overlap resolves to the most specific matching glob for a given path, the
+   * same precedence rule CODEOWNERS and .gitignore use. For example: `docs/prd.md`
+   * (product-manager) beats `docs/**` (technical-writer), so the Product Manager owns
+   * the PRD and the Technical Writer owns the rest of docs; `**\/*.test.*` (qa) beats
+   * `src/**` (dev), so QA owns a colocated test file and Dev owns the surrounding source.
+   */
   owns: string[];
   /** Markdown. What is explicitly NOT this role's, plus anti-patterns. */
   boundaries: string;
