@@ -423,11 +423,7 @@ export default function App() {
           </Suspense>
         )}
         {bmadOpen && (
-          <BmadPanel
-            ptyId={useTabStore.getState().getActivePtyId()}
-            cwd={activeCwd}
-            onClose={() => setBmadOpen(false)}
-          />
+          <BmadPanel onClose={() => setBmadOpen(false)} />
         )}
         {recordingPlayerOpen && (
           <RecordingPlayer onClose={() => setRecordingPlayerOpen(false)} />
