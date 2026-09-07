@@ -3,6 +3,7 @@ import { useOrchestratorStore, type OrchestratorTask, type ChatImage, type Orche
 import { useTabStore } from "../stores/tabStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { AGENT_PROFILES } from "../data/agentProfiles";
+import { specFromCurated } from "../lib/agentSpec";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
@@ -201,11 +202,13 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
     if (activePane) {
+      const roleId = specFromCurated(profile.id, "claude")?.roleId ?? profile.id;
       useAgentTrackerStore.getState().startSession(
         activePane.id,
         task.title,
         profile.icon,
         "claude",
+        roleId,
       );
       updateTaskStatus(sessionId, task.id, "running", activePane.id, agentTabId);
     }
