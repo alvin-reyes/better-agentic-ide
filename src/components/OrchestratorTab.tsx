@@ -6,7 +6,8 @@ import { AGENT_CATALOG } from "../data/curatedAgents";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
 import { composeRoleMarkdown } from "../lib/agentComposition";
-import { specFromCurated } from "../lib/agentSpec";
+import { specFromCurated, rolePathFor } from "../lib/agentSpec";
+import { buildLaunchCommand, shellQuote } from "../lib/agentCommand";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
@@ -240,16 +241,31 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const activePane = useTabStore.getState().getActivePane();
     const agentTabId = useTabStore.getState().activeTabId;
 
-    // Build the claude command — agent reads SPEC.md for full context. The
-    // composed role markdown travels as a single-quoted shell argument here,
-    // unlike the interactive launch path in AgentPicker, which writes it to a
-    // file. It is left unescaped: the whole prompt is escaped exactly once
-    // below, and escaping it here too would double the quoting.
-    const systemPrompt = composeRoleMarkdown(role, domain).trim();
+    // Write the composed role definition to disk and launch against it via
+    // --append-system-prompt-file — the same file-based mechanism AgentPicker
+    // uses (Tasks 4-5), so the (potentially large, apostrophe-laden) role
+    // markdown never has to cross a shell-quoting boundary. Only the short,
+    // user-authored task description still travels as a shell argument, and
+    // it is quoted with the same shellQuote every other provider argument
+    // already goes through — not a second, ad hoc escaper.
+    const rolePath = rolePathFor(spec);
+    const markdown = composeRoleMarkdown(role, domain);
+    try {
+      await invoke("write_text_file", { path: rolePath, content: markdown });
+    } catch (err) {
+      console.error(`Could not write the role file: ${err}`);
+      return;
+    }
+
+    const launch = buildLaunchCommand(spec.provider, rolePath);
+    if (launch.kind === "unsupported") {
+      console.warn(`Cannot dispatch via ${spec.provider}: ${launch.reason}`);
+      return;
+    }
+
     const specRef = projectDir ? " Read SPEC.md for the full project specification and context." : "";
-    // One single-quoted shell argument: close, escape and reopen around each quote.
-    const prompt = `${systemPrompt}${specRef} Your task: ${task.description}`.replace(/'/g, "'\\''");
-    const cmd = `claude -p '${prompt}'`;
+    const taskPrompt = `${specRef} Your task: ${task.description}`;
+    const cmd = `${launch.command} -p ${shellQuote(taskPrompt)}`;
     await writePty(ptyId, cmd + "\r").catch(() => {});
 
     if (activePane) {
