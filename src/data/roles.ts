@@ -8,11 +8,18 @@ export interface Role {
    * Artifact globs this role is steward of. Data, not prose, so it can be enforced later.
    *
    * These declare stewardship, not exclusive ownership — globs may and do overlap by
-   * design. Overlap resolves to the most specific matching glob for a given path, the
-   * same precedence rule CODEOWNERS and .gitignore use. For example: `docs/prd.md`
-   * (product-manager) beats `docs/**` (technical-writer), so the Product Manager owns
-   * the PRD and the Technical Writer owns the rest of docs; `**\/*.test.*` (qa) beats
-   * `src/**` (dev), so QA owns a colocated test file and Dev owns the surrounding source.
+   * design. The intent is that overlap resolves to the most specific matching glob for
+   * a given path. For example: `docs/prd.md` (product-manager) beats `docs/**`
+   * (technical-writer), so the Product Manager owns the PRD and the Technical Writer
+   * owns the rest of docs; `**\/*.test.*` (qa) beats `src/**` (dev), so QA owns a
+   * colocated test file and Dev owns the surrounding source.
+   *
+   * "Most specific" is not yet a defined metric here, and two globs can be
+   * incomparable under any obvious one — `docs/**` and `**\/*.test.*` both match
+   * `docs/guide.test.md`, and neither is a subset of the other. Settling that
+   * tie-break belongs to the enforcement subsystem, which is the first thing that
+   * will actually have to decide. Nothing in this subsystem reads `owns` for
+   * anything but display and delivery.
    */
   owns: string[];
   /** Markdown. What is explicitly NOT this role's, plus anti-patterns. */
