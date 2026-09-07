@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Provider } from "../data/agentProfiles";
+import type { Provider } from "../lib/agentCommand";
 import { readJson } from "../lib/storage";
 
 export interface ThemeColors {

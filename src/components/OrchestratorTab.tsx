@@ -2,7 +2,10 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useOrchestratorStore, type OrchestratorTask, type ChatImage, type OrchestratorSession } from "../stores/orchestratorStore";
 import { useTabStore } from "../stores/tabStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
-import { AGENT_PROFILES } from "../data/agentProfiles";
+import { AGENT_CATALOG } from "../data/curatedAgents";
+import { getRole } from "../data/roles";
+import { getDomain } from "../data/domains";
+import { composeRoleMarkdown } from "../lib/agentComposition";
 import { specFromCurated } from "../lib/agentSpec";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
@@ -30,7 +33,7 @@ function buildSpec(session: OrchestratorSession, tasks: OrchestratorTask[]): str
   lines.push("");
   for (let i = 0; i < tasks.length; i++) {
     const t = tasks[i];
-    const profile = AGENT_PROFILES.find((p) => p.id === t.agentProfileId);
+    const profile = AGENT_CATALOG.find((a) => a.id === t.agentProfileId);
     lines.push(`### Task ${i + 1}: ${t.title}`);
     lines.push("");
     lines.push(`- **Agent:** ${profile?.name ?? t.agentProfileId}`);
@@ -211,11 +214,14 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   }, [sendMessage]);
 
   const dispatchTask = useCallback(async (task: OrchestratorTask, projectDir?: string) => {
-    const profile = AGENT_PROFILES.find((p) => p.id === task.agentProfileId);
-    if (!profile) {
+    const profile = AGENT_CATALOG.find((a) => a.id === task.agentProfileId);
+    const spec = profile ? specFromCurated(profile.id, "claude") : undefined;
+    const role = spec ? getRole(spec.roleId) : undefined;
+    if (!profile || !spec || !role) {
       console.warn(`Agent profile not found: ${task.agentProfileId}`);
       return;
     }
+    const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
 
     // Remember the orchestrator tab so we can switch back
     const orchTabId = useTabStore.getState().activeTabId;
@@ -234,8 +240,12 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const activePane = useTabStore.getState().getActivePane();
     const agentTabId = useTabStore.getState().activeTabId;
 
-    // Build the claude command — agent reads SPEC.md for full context
-    const systemPrompt = profile.providers.claude.replace(/^claude\s+"?/, "").replace(/"$/, "");
+    // Build the claude command — agent reads SPEC.md for full context. The
+    // composed role markdown travels as a single-quoted shell argument here,
+    // unlike the interactive launch path in AgentPicker, which writes it to a
+    // file. It is left unescaped: the whole prompt is escaped exactly once
+    // below, and escaping it here too would double the quoting.
+    const systemPrompt = composeRoleMarkdown(role, domain).trim();
     const specRef = projectDir ? " Read SPEC.md for the full project specification and context." : "";
     // One single-quoted shell argument: close, escape and reopen around each quote.
     const prompt = `${systemPrompt}${specRef} Your task: ${task.description}`.replace(/'/g, "'\\''");
@@ -243,13 +253,12 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     await writePty(ptyId, cmd + "\r").catch(() => {});
 
     if (activePane) {
-      const roleId = specFromCurated(profile.id, "claude")?.roleId ?? profile.id;
       useAgentTrackerStore.getState().startSession(
         activePane.id,
         task.title,
         profile.icon,
         "claude",
-        roleId,
+        spec.roleId,
       );
       updateTaskStatus(sessionId, task.id, "running", activePane.id, agentTabId);
     }
@@ -489,7 +498,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
           )}
 
           {session.tasks.map((task) => {
-            const profile = AGENT_PROFILES.find((p) => p.id === task.agentProfileId);
+            const profile = AGENT_CATALOG.find((a) => a.id === task.agentProfileId);
             const isExpanded = expandedTaskId === task.id;
             return (
               <div

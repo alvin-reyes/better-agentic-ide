@@ -1,5 +1,4 @@
-import { writePty } from "../lib/terminalCommands";
-import { BMAD_PERSONAS, BMAD_PHASES } from "../data/bmadPersonas";
+import { BMAD_PHASES } from "../data/bmadPhases";
 
 interface Props {
   ptyId: number | null;
@@ -7,17 +6,12 @@ interface Props {
   onClose: () => void;
 }
 
-export default function BmadPanel({ ptyId, onClose }: Props) {
-  const launch = async (command: string) => {
-    if (ptyId == null) return;
-    await writePty(ptyId, command + "\n").catch(() => {});
-  };
-
+export default function BmadPanel({ onClose }: Props) {
   return (
     <div className="bmad-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bmad-panel">
         <div className="bmad-panel__header">
-          <span>BMAD Personas</span>
+          <span>BMAD Phases</span>
           <button className="bmad-panel__close" onClick={onClose}>✕</button>
         </div>
         <div className="bmad-panel__phases">
@@ -25,20 +19,6 @@ export default function BmadPanel({ ptyId, onClose }: Props) {
             <span key={p} className="bmad-phase">{p}</span>
           ))}
         </div>
-        <ul className="bmad-panel__personas">
-          {BMAD_PERSONAS.map((persona) => (
-            <li key={persona.id} className="bmad-persona">
-              <span className="bmad-persona__title">{persona.title}</span>
-              <button
-                className="bmad-persona__launch"
-                disabled={ptyId == null}
-                onClick={() => launch(persona.command)}
-              >
-                Launch
-              </button>
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   );

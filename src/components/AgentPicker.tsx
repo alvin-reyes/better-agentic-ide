@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AGENT_PROFILES, AGENT_CATEGORIES, PROVIDERS, type Provider } from "../data/agentProfiles";
 import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -11,9 +10,10 @@ import { usePaneCwd } from "../stores/paneMetaStore";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
 import { composeRoleMarkdown } from "../lib/agentComposition";
-import { buildLaunchCommand } from "../lib/agentCommand";
+import { buildLaunchCommand, type Provider } from "../lib/agentCommand";
 import { specFromCurated, rolePathFor } from "../lib/agentSpec";
-import { CURATED_AGENTS } from "../data/curatedAgents";
+import { AGENT_CATALOG, AGENT_CATEGORIES, type CatalogAgent } from "../data/curatedAgents";
+import { PROVIDERS } from "../data/providers";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Backend: "#3fb950",
@@ -92,7 +92,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   );
 
   const filtered = useMemo(() => {
-    let profiles = AGENT_PROFILES;
+    let profiles = AGENT_CATALOG;
     if (activeCategory) {
       profiles = profiles.filter((p) => p.category === activeCategory);
     }
@@ -158,12 +158,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   }, [activeProvider, continuousMode]);
 
   // Picking an agent asks where to run it: this terminal or a new tab.
-  const [choice, setChoice] = useState<AgentProfile | null>(null);
+  const [choice, setChoice] = useState<CatalogAgent | null>(null);
   const [target, setTarget] = useState<"current" | "new">("current");
   const currentPtyId = getActivePtyId();
 
   const launchAgent = useCallback((agentId: string) => {
-    const profile = AGENT_PROFILES.find((p) => p.id === agentId);
+    const profile = AGENT_CATALOG.find((p) => p.id === agentId);
     if (!profile) return;
     const pane = getActivePane();
     // A terminal already running something can't take a new agent.
@@ -171,7 +171,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     setChoice(profile);
   }, [currentPtyId, getActivePane]);
 
-  const runAgent = useCallback(async (profile: AgentProfile, where: "current" | "new") => {
+  const runAgent = useCallback(async (profile: CatalogAgent, where: "current" | "new") => {
     // Built before the tab is created: a role file that cannot be written, or
     // a provider that cannot take one, should not leave an empty tab behind.
     const built = await buildCommand(profile.id);
@@ -559,8 +559,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
           ) : (
             filtered.map((profile, i) => {
               const isSuggested = suggestedAgent?.id === profile.id;
-              const curated = CURATED_AGENTS.find((a) => a.id === profile.id);
-              const role = curated ? getRole(curated.roleId) : undefined;
+              const role = getRole(profile.roleId);
               const isSelected = i === selectedIndex;
               return (
                 <div
