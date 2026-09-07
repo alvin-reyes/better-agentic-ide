@@ -6,7 +6,7 @@ import { AGENT_CATALOG } from "../data/curatedAgents";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
 import { composeRoleMarkdown } from "../lib/agentComposition";
-import { specFromCurated, rolePathFor } from "../lib/agentSpec";
+import { specFromCurated, rolePathFor, ensureRoleDir } from "../lib/agentSpec";
 import { buildLaunchCommand, shellQuote } from "../lib/agentCommand";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
@@ -178,34 +178,32 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     return () => window.removeEventListener("orchestrator-send", handler);
   }, [sendMessage]);
 
-  const dispatchTask = useCallback(async (task: OrchestratorTask, projectDir?: string) => {
+  /**
+   * Dispatch one task into a fresh terminal tab.
+   *
+   * Returns a failure message, or null on success. It never touches
+   * `dispatchError` itself: `dispatchAll` runs this in a loop, and if each
+   * call cleared the banner then a task that failed would have its error
+   * wiped by the next task half a second later, leaving it "pending" with no
+   * visible sign it ever ran. The callers below own the banner instead.
+   */
+  const dispatchTask = useCallback(async (task: OrchestratorTask, projectDir?: string): Promise<string | null> => {
     const profile = AGENT_CATALOG.find((a) => a.id === task.agentProfileId);
     const spec = profile ? specFromCurated(profile.id, "claude") : undefined;
     const role = spec ? getRole(spec.roleId) : undefined;
     if (!profile || !spec || !role) {
-      console.warn(`Agent profile not found: ${task.agentProfileId}`);
-      return;
+      return `No agent profile "${task.agentProfileId}" for task "${task.title}".`;
     }
     const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
-
-    setDispatchError(sessionId, null);
 
     // Remember the orchestrator tab so we can switch back
     const orchTabId = useTabStore.getState().activeTabId;
 
-    addTab(`Agent: ${task.title}`, projectDir);
-
-    // Wait for the new tab's PTY to initialize (retry up to 3s)
-    let ptyId: number | null = null;
-    for (let i = 0; i < 6; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      ptyId = useTabStore.getState().getActivePtyId();
-      if (ptyId !== null) break;
-    }
-    if (ptyId === null) return;
-
-    const activePane = useTabStore.getState().getActivePane();
-    const agentTabId = useTabStore.getState().activeTabId;
+    // addTab returns the id of the tab it created. Recovering it afterwards
+    // from activeTabId would be wrong: the user can click another tab during
+    // the PTY wait below, and abortDispatch would then close *their* tab and
+    // destroy its live process.
+    const agentTabId = addTab(`Agent: ${task.title}`, projectDir);
 
     // If anything below fails, the tab we just created and focused has no
     // process and no purpose. Close it, return focus to the orchestrator
@@ -213,11 +211,47 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     // focused terminal with the only explanation in devtools, and the task
     // (still "pending", since we never got as far as marking it "running")
     // just sits there with no visible sign dispatch ever ran.
-    const abortDispatch = (message: string) => {
+    const abortDispatch = (message: string): string => {
       useTabStore.getState().closeTab(agentTabId);
       useTabStore.getState().setActiveTab(orchTabId);
-      setDispatchError(sessionId, message);
+      return message;
     };
+
+    // Wait for the new tab's PTY to initialize (retry up to 3s). Read that
+    // tab's own pane, not the focused one, for the same reason as above.
+    let ptyId: number | null = null;
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      ptyId = useTabStore.getState().getTabActivePane(agentTabId)?.ptyId ?? null;
+      if (ptyId !== null) break;
+    }
+    if (ptyId === null) {
+      return abortDispatch(`The terminal for "${task.title}" never started. Nothing was dispatched.`);
+    }
+
+    const agentPane = useTabStore.getState().getTabActivePane(agentTabId);
+
+    // Resolve ~/.ade/roles to an absolute path first. The path is single-quoted
+    // into the command below, and single quotes suppress tilde expansion, so a
+    // "~/..." path would make `--append-system-prompt-file` point at nothing.
+    let roleDir: string;
+    try {
+      roleDir = await ensureRoleDir();
+    } catch (err) {
+      return abortDispatch(`Could not create the role directory for "${task.title}": ${err}`);
+    }
+    const rolePath = rolePathFor(spec, roleDir);
+
+    const launch = buildLaunchCommand(spec.provider, rolePath);
+    if (launch.kind === "unsupported") {
+      // Currently unreachable: dispatchTask always resolves spec.provider to
+      // "claude" (see specFromCurated above). Kept because buildLaunchCommand
+      // returns this shape for any provider without a verified role-delivery
+      // mechanism, and dispatchTask should not assume a command comes back.
+      // Checked before the write below so an unlaunchable provider leaves no
+      // orphaned role file behind.
+      return abortDispatch(`Cannot dispatch "${task.title}" via ${spec.provider}: ${launch.reason}`);
+    }
 
     // Write the composed role definition to disk and launch against it via
     // --append-system-prompt-file — the same file-based mechanism AgentPicker
@@ -226,51 +260,52 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     // user-authored task description still travels as a shell argument, and
     // it is quoted with the same shellQuote every other provider argument
     // already goes through — not a second, ad hoc escaper.
-    const rolePath = rolePathFor(spec);
     const markdown = composeRoleMarkdown(role, domain);
     try {
       await invoke("write_text_file", { path: rolePath, content: markdown });
     } catch (err) {
-      abortDispatch(`Could not write the role file for "${task.title}": ${err}`);
-      return;
+      return abortDispatch(`Could not write the role file for "${task.title}": ${err}`);
     }
 
-    const launch = buildLaunchCommand(spec.provider, rolePath);
-    if (launch.kind === "unsupported") {
-      // Currently unreachable: dispatchTask always resolves spec.provider to
-      // "claude" (see specFromCurated above). Kept because buildLaunchCommand
-      // returns this shape for any provider without a verified role-delivery
-      // mechanism, and dispatchTask should not assume a command comes back.
-      abortDispatch(`Cannot dispatch "${task.title}" via ${spec.provider}: ${launch.reason}`);
-      return;
-    }
-
-    const specRef = projectDir ? " Read SPEC.md for the full project specification and context." : "";
-    const taskPrompt = `${specRef} Your task: ${task.description}`;
+    const specRef = projectDir ? "Read SPEC.md for the full project specification and context. " : "";
+    const taskPrompt = `${specRef}Your task: ${task.description}`;
     const cmd = `${launch.command} -p ${shellQuote(taskPrompt)}`;
     const data = Array.from(new TextEncoder().encode(cmd + "\r"));
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
-    if (activePane) {
+    if (agentPane) {
       useAgentTrackerStore.getState().startSession(
-        activePane.id,
+        agentPane.id,
         task.title,
         profile.icon,
         "claude",
         spec.roleId,
       );
-      updateTaskStatus(sessionId, task.id, "running", activePane.id, agentTabId);
+      updateTaskStatus(sessionId, task.id, "running", agentPane.id, agentTabId);
     }
 
     // Switch back to orchestrator tab so dispatch can continue
     useTabStore.getState().setActiveTab(orchTabId);
 
     setSessionStatus(sessionId, "executing");
-  }, [sessionId, addTab, updateTaskStatus, setSessionStatus, setDispatchError]);
+    return null;
+  }, [sessionId, addTab, updateTaskStatus, setSessionStatus]);
+
+  /** Dispatch a single task from its own button, reporting any failure. */
+  const dispatchOne = useCallback(async (task: OrchestratorTask, projectDir?: string) => {
+    setDispatchError(sessionId, null);
+    const failure = await dispatchTask(task, projectDir);
+    if (failure) setDispatchError(sessionId, failure);
+  }, [sessionId, dispatchTask, setDispatchError]);
 
   const dispatchAll = useCallback(async () => {
     const tasks = getDispatchableTasks(sessionId);
     if (tasks.length === 0) return;
+
+    // Cleared once, here — not per task. Failures accumulate below so the
+    // first task's failure is still on screen after the last task runs.
+    setDispatchError(sessionId, null);
+    const failures: string[] = [];
 
     // Use the project dir that was created when tasks were first generated
     let projectDir = session?.projectDir;
@@ -285,15 +320,19 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
         const spec = buildSpec(session!, session!.tasks);
         await invoke("write_text_file", { path: `${projectDir}/SPEC.md`, content: spec });
       } catch (err) {
-        console.error("Failed to create project folder:", err);
+        setDispatchError(sessionId, `Could not create the project folder: ${err}`);
         return;
       }
     }
 
     for (const task of tasks) {
-      await dispatchTask(task, projectDir);
+      const failure = await dispatchTask(task, projectDir);
+      if (failure) {
+        failures.push(failure);
+        setDispatchError(sessionId, failures.join("\n"));
+      }
     }
-  }, [sessionId, session, getDispatchableTasks, dispatchTask, setProjectDir]);
+  }, [sessionId, session, getDispatchableTasks, dispatchTask, setProjectDir, setDispatchError]);
 
   // Drag-to-resize the task panel
   const dragCleanupRef = useRef<(() => void) | null>(null);
@@ -545,6 +584,8 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
               color: "#ef4444",
               backgroundColor: "rgba(239,68,68,0.08)",
               borderBottom: "1px solid rgba(239,68,68,0.2)",
+              // dispatchAll joins accumulated failures with newlines.
+              whiteSpace: "pre-wrap",
             }}
           >
             {dispatchError}
@@ -677,7 +718,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            dispatchTask(task, session?.projectDir);
+                            dispatchOne(task, session?.projectDir);
                           }}
                           style={{
                             padding: "4px 12px",
