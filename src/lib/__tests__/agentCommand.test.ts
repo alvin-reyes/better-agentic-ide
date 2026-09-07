@@ -32,8 +32,18 @@ describe("buildLaunchCommand", () => {
     const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3" });
     expect(result.kind).toBe("command");
     if (result.kind !== "command") return;
-    expect(result.command.includes("ollama run llama3")).toBe(true);
+    expect(result.command.includes("ollama run 'llama3'")).toBe(true);
     expect(result.command.includes("--system")).toBe(true);
+  });
+
+  it("quotes the ollama model so shell metacharacters cannot escape it", () => {
+    const malicious = "llama3; echo pwned";
+    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: malicious });
+    if (result.kind !== "command") throw new Error("expected a command");
+    // The metacharacters must land inside a quoted token right after `run `,
+    // never as bare shell syntax where the `;` could terminate the command.
+    expect(result.command.includes(`run '${malicious}'`)).toBe(true);
+    expect(result.command.includes(`run ${malicious}`)).toBe(false);
   });
 
   it("defaults the ollama model", () => {
@@ -50,10 +60,14 @@ describe("buildLaunchCommand", () => {
   });
 
   it("never emits a raw newline, which would submit a partial command", () => {
+    const rolePathWithNewline = "~/.ade/roles/architect\nsecurity.md";
     for (const provider of ["claude", "gemini", "ollama"] as const) {
-      const result = buildLaunchCommand(provider, PATH);
+      const result = buildLaunchCommand(provider, rolePathWithNewline);
       if (result.kind !== "command") continue;
-      expect(result.command.includes("\n"), `${provider} emitted a newline`).toBe(false);
+      // shellQuote does not strip or escape newlines — single quotes preserve
+      // them literally — so this pins that the newline still round-trips
+      // inside the quoted token rather than asserting something vacuous.
+      expect(result.command.includes(`'${rolePathWithNewline}'`), `${provider} did not quote the newline-bearing path correctly`).toBe(true);
     }
   });
 
