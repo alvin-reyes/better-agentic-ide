@@ -30,4 +30,20 @@ describe("rolePathFor", () => {
     const path = rolePathFor({ roleId: "architect", provider: "claude" });
     expect(path).toBe("~/.ade/roles/architect.md");
   });
+
+  it("builds an absolute path inside an expanded directory", () => {
+    // What the launch paths actually pass: the directory create_directory
+    // returned, already tilde-expanded, so the quoted path in the shell
+    // command points at a file that exists.
+    const path = rolePathFor(
+      { roleId: "architect", domainId: "security", provider: "claude" },
+      "/Users/x/.ade/roles",
+    );
+    expect(path).toBe("/Users/x/.ade/roles/architect-security.md");
+  });
+
+  it("does not double the separator when the directory has a trailing slash", () => {
+    const path = rolePathFor({ roleId: "dev", provider: "claude" }, "/Users/x/.ade/roles/");
+    expect(path).toBe("/Users/x/.ade/roles/dev.md");
+  });
 });
