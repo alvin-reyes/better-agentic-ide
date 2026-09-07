@@ -8,7 +8,12 @@ export interface AgentSession {
   agentName: string;
   agentIcon: string;
   provider: string;
-  roleId: string;
+  /**
+   * Optional because `loadSessions` parses localStorage written before roles
+   * existed, where this key is simply absent. Declaring it required would make
+   * every restored pre-branch session lie about its shape.
+   */
+  roleId?: string;
   startTime: number;
   endTime: number | null;
   status: "running" | "completed" | "cancelled";
