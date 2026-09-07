@@ -36,6 +36,14 @@ export interface OrchestratorSession {
   createdAt: number;
   status: "planning" | "executing" | "completed";
   projectDir?: string;
+  /**
+   * Transient dispatch-failure message, shown as a banner in OrchestratorTab.
+   * Lives in the store (not component state) because addTab() during dispatch
+   * makes App.tsx unmount/remount OrchestratorTab before a failure can be
+   * known — component state set after that point lands on a detached fiber
+   * and is lost. Not persisted (see persistSessions).
+   */
+  dispatchError?: string | null;
 }
 
 interface OrchestratorStore {
@@ -46,13 +54,18 @@ interface OrchestratorStore {
   updateTaskStatus: (sessionId: string, taskId: string, status: OrchestratorTask["status"], paneId?: string, tabId?: string) => void;
   setSessionStatus: (sessionId: string, status: OrchestratorSession["status"]) => void;
   setProjectDir: (sessionId: string, projectDir: string) => void;
+  setDispatchError: (sessionId: string, message: string | null) => void;
+  getActiveSession: () => OrchestratorSession | undefined;
   getDispatchableTasks: (sessionId: string) => OrchestratorTask[];
 }
 
 const MAX_SESSIONS = 20;
 
 function persistSessions(sessions: OrchestratorSession[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(-MAX_SESSIONS)));
+  // dispatchError is transient dispatch-UI state, not durable session data —
+  // never persist a stale failure message that would resurface on next launch.
+  const trimmed = sessions.slice(-MAX_SESSIONS).map(({ dispatchError: _dispatchError, ...rest }) => rest);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
 }
 
 let taskCounter = 0;
@@ -121,6 +134,22 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => {
     setSessionStatus: (sessionId, status) => updateSession(sessionId, (s) => ({ ...s, status })),
 
     setProjectDir: (sessionId, projectDir) => updateSession(sessionId, (s) => ({ ...s, projectDir })),
+
+    // Deliberately bypasses updateSession: that persists, and this must not.
+    // dispatchError is transient UI state (see its doc comment on
+    // OrchestratorSession) — it lives in the store only so it survives
+    // OrchestratorTab's remount, not so it survives a restart.
+    setDispatchError: (sessionId, message) =>
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId ? { ...s, dispatchError: message } : s,
+        ),
+      })),
+
+    getActiveSession: () => {
+      const { sessions, activeSessionId } = get();
+      return sessions.find((s) => s.id === activeSessionId);
+    },
 
     getDispatchableTasks: (sessionId) => {
       const session = get().sessions.find((s) => s.id === sessionId);

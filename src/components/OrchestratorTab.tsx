@@ -109,14 +109,18 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   const updateTaskStatus = useOrchestratorStore((s) => s.updateTaskStatus);
   const setSessionStatus = useOrchestratorStore((s) => s.setSessionStatus);
   const setProjectDir = useOrchestratorStore((s) => s.setProjectDir);
+  const setDispatchError = useOrchestratorStore((s) => s.setDispatchError);
   const getDispatchableTasks = useOrchestratorStore((s) => s.getDispatchableTasks);
+  // Read from the store, not component state: addTab() below causes App.tsx
+  // to unmount this component before a dispatch failure can be known, so
+  // component state set afterwards would be lost. The store survives it.
+  const dispatchError = session?.dispatchError ?? null;
   const { addTab } = useTabStore();
 
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -225,7 +229,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     }
     const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
 
-    setDispatchError(null);
+    setDispatchError(sessionId, null);
 
     // Remember the orchestrator tab so we can switch back
     const orchTabId = useTabStore.getState().activeTabId;
@@ -253,7 +257,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const abortDispatch = (message: string) => {
       useTabStore.getState().closeTab(agentTabId);
       useTabStore.getState().setActiveTab(orchTabId);
-      setDispatchError(message);
+      setDispatchError(sessionId, message);
     };
 
     // Write the composed role definition to disk and launch against it via
