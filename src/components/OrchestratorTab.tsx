@@ -69,6 +69,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   const [streamingText, setStreamingText] = useState("");
   const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -183,6 +184,8 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     }
     const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
 
+    setDispatchError(null);
+
     // Remember the orchestrator tab so we can switch back
     const orchTabId = useTabStore.getState().activeTabId;
 
@@ -200,6 +203,18 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const activePane = useTabStore.getState().getActivePane();
     const agentTabId = useTabStore.getState().activeTabId;
 
+    // If anything below fails, the tab we just created and focused has no
+    // process and no purpose. Close it, return focus to the orchestrator
+    // tab, and surface why — otherwise the user is left staring at a blank
+    // focused terminal with the only explanation in devtools, and the task
+    // (still "pending", since we never got as far as marking it "running")
+    // just sits there with no visible sign dispatch ever ran.
+    const abortDispatch = (message: string) => {
+      useTabStore.getState().closeTab(agentTabId);
+      useTabStore.getState().setActiveTab(orchTabId);
+      setDispatchError(message);
+    };
+
     // Write the composed role definition to disk and launch against it via
     // --append-system-prompt-file — the same file-based mechanism AgentPicker
     // uses (Tasks 4-5), so the (potentially large, apostrophe-laden) role
@@ -212,13 +227,17 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     try {
       await invoke("write_text_file", { path: rolePath, content: markdown });
     } catch (err) {
-      console.error(`Could not write the role file: ${err}`);
+      abortDispatch(`Could not write the role file for "${task.title}": ${err}`);
       return;
     }
 
     const launch = buildLaunchCommand(spec.provider, rolePath);
     if (launch.kind === "unsupported") {
-      console.warn(`Cannot dispatch via ${spec.provider}: ${launch.reason}`);
+      // Currently unreachable: dispatchTask always resolves spec.provider to
+      // "claude" (see specFromCurated above). Kept because buildLaunchCommand
+      // returns this shape for any provider without a verified role-delivery
+      // mechanism, and dispatchTask should not assume a command comes back.
+      abortDispatch(`Cannot dispatch "${task.title}" via ${spec.provider}: ${launch.reason}`);
       return;
     }
 
@@ -243,7 +262,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     useTabStore.getState().setActiveTab(orchTabId);
 
     setSessionStatus(sessionId, "executing");
-  }, [sessionId, addTab, updateTaskStatus, setSessionStatus]);
+  }, [sessionId, addTab, updateTaskStatus, setSessionStatus, setDispatchError]);
 
   const dispatchAll = useCallback(async () => {
     const tasks = getDispatchableTasks(sessionId);
@@ -512,6 +531,21 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
             </button>
           )}
         </div>
+
+        {dispatchError && (
+          <div
+            role="alert"
+            style={{
+              padding: "8px 16px",
+              fontSize: "11px",
+              color: "#ef4444",
+              backgroundColor: "rgba(239,68,68,0.08)",
+              borderBottom: "1px solid rgba(239,68,68,0.2)",
+            }}
+          >
+            {dispatchError}
+          </div>
+        )}
 
         <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
           {session.tasks.length === 0 && (
