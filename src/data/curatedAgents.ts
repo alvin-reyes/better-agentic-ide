@@ -8,6 +8,14 @@ export interface CuratedAgent {
   description: string;
   roleId: string;
   domainId?: string;
+  /**
+   * Routing keywords, when the domain's are not the right ones — which in
+   * practice means the agents that have no domain at all. Without this an
+   * agent is unroutable: `routeTask` scores only against keywords, so a
+   * domainless agent could never win, and "write a readme for the project"
+   * matched nothing at all.
+   */
+  keywords?: string[];
 }
 
 export type AgentCategory = Domain["category"];
@@ -164,6 +172,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     color: "#ff7b72",
     description: "API docs, READMEs, architecture docs, and inline comments",
     roleId: "technical-writer",
+    keywords: ["docs", "readme", "documentation", "comment", "api doc", "guide", "tutorial", "adr"],
   },
   {
     id: "general-interview",
@@ -208,6 +217,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     color: "#ff7b72",
     description: "System design, architecture decisions, scalability patterns",
     roleId: "architect",
+    keywords: ["architecture", "system design", "microservice", "monolith", "scalability", "pattern", "distributed"],
   },
   {
     id: "general-cofounder",
@@ -230,14 +240,19 @@ export interface CatalogAgent extends CuratedAgent {
 // general-docs and general-architect have no domainId — their role (technical-writer,
 // architect) already covers the whole job with no narrower domain to point at. In the
 // legacy AGENT_PROFILES both were category "General", so that is the fallback here too.
+// Their routing keywords have no domain to come from either, so they carry their own.
 const FALLBACK_CATEGORY: AgentCategory = "General";
 
-/** CURATED_AGENTS enriched with the category and keywords their domain (if any) supplies. */
+/**
+ * CURATED_AGENTS enriched with the category and keywords their domain supplies.
+ * An explicit `keywords` on the agent wins, which is the only way a domainless
+ * agent can be routed to at all.
+ */
 export const AGENT_CATALOG: CatalogAgent[] = CURATED_AGENTS.map((agent) => {
   const domain = agent.domainId ? getDomain(agent.domainId) : undefined;
   return {
     ...agent,
     category: domain?.category ?? FALLBACK_CATEGORY,
-    keywords: domain?.keywords ?? [],
+    keywords: agent.keywords ?? domain?.keywords ?? [],
   };
 });
