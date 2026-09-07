@@ -531,6 +531,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
           ) : (
             filtered.map((profile, i) => {
               const isSuggested = suggestedAgent?.id === profile.id;
+              const curated = CURATED_AGENTS.find((a) => a.id === profile.id);
+              const role = curated ? getRole(curated.roleId) : undefined;
+              const isSelected = i === selectedIndex;
               return (
                 <div
                   key={profile.id}
@@ -541,9 +544,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                     padding: "10px 16px",
                     cursor: "pointer",
                     backgroundColor:
-                      i === selectedIndex ? "var(--accent-subtle)" : "transparent",
+                      isSelected ? "var(--accent-subtle)" : "transparent",
                     borderLeft:
-                      i === selectedIndex
+                      isSelected
                         ? `2px solid ${profile.color}`
                         : "2px solid transparent",
                   }}
@@ -582,10 +585,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                         style={{
                           fontSize: "13px",
                           fontWeight: 600,
-                          color:
-                            i === selectedIndex
-                              ? "var(--text-primary)"
-                              : "var(--text-secondary)",
+                          color: isSelected
+                            ? "var(--text-primary)"
+                            : "var(--text-secondary)",
                         }}
                       >
                         {profile.name}
@@ -603,6 +605,21 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                       >
                         {profile.category}
                       </span>
+                      {role && (
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            fontWeight: 600,
+                            fontFamily: "monospace",
+                            color: "var(--text-muted)",
+                            border: "1px solid var(--border)",
+                            padding: "1px 5px",
+                            borderRadius: "3px",
+                          }}
+                        >
+                          {role.title}
+                        </span>
+                      )}
                       {isSuggested && (
                         <span
                           style={{
@@ -630,6 +647,38 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                     >
                       {profile.description}
                     </span>
+                    {isSelected && role && (
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "var(--text-muted)",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {role.owns.length > 0 ? (
+                          <>
+                            Declares ownership of{" "}
+                            {role.owns.map((glob, idx) => (
+                              <span key={glob}>
+                                {idx > 0 && ", "}
+                                <code
+                                  style={{
+                                    fontFamily: "monospace",
+                                    backgroundColor: "var(--bg-tertiary)",
+                                    padding: "1px 4px",
+                                    borderRadius: "3px",
+                                  }}
+                                >
+                                  {glob}
+                                </code>
+                              </span>
+                            ))}
+                          </>
+                        ) : (
+                          "No file ownership declared — advisory role."
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
