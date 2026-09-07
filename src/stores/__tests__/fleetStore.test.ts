@@ -5,7 +5,7 @@ import type { AgentSession } from "../agentTrackerStore";
 
 function session(over: Partial<AgentSession> = {}): AgentSession {
   return {
-    paneId: "p1", agentName: "claude", agentIcon: "🤖", provider: "claude",
+    paneId: "p1", agentName: "claude", agentIcon: "🤖", provider: "claude", roleId: "dev",
     startTime: 1000, endTime: null, status: "running",
     estimatedInputTokens: 0, estimatedOutputTokens: 0, ...over,
   };
