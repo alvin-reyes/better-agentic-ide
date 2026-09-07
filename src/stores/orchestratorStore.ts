@@ -69,6 +69,10 @@ function persistSessions(sessions: OrchestratorSession[]) {
 }
 
 let taskCounter = 0;
+// Date.now() alone collides for two sessions created in the same millisecond,
+// and every lookup here is a `sessions.find(s => s.id === ...)` that would then
+// silently resolve to the wrong session.
+let sessionCounter = 0;
 
 export const useOrchestratorStore = create<OrchestratorStore>((set, get) => {
   const updateSession = (id: string, fn: (s: OrchestratorSession) => OrchestratorSession) =>
@@ -82,7 +86,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => {
     sessions: readJson<OrchestratorSession[]>(STORAGE_KEY, []),
 
     createSession: (name) => {
-      const id = `orch-${Date.now()}`;
+      const id = `orch-${Date.now()}-${++sessionCounter}`;
       const session: OrchestratorSession = {
         id,
         name,
