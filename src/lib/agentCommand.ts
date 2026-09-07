@@ -20,6 +20,12 @@ export function shellQuote(value: string): string {
  * The role definition is ~2KB of markdown, so it travels as a file path rather
  * than as an argument. Each provider needs a different mechanism; the
  * differences are real and are not papered over.
+ *
+ * `rolePath` must already be absolute. It is single-quoted here so spaces and
+ * metacharacters cannot split or escape the argument, and single quotes also
+ * suppress tilde expansion — a `~/...` path would quietly resolve to nothing
+ * and the agent would launch with no role definition at all. Callers get an
+ * absolute path from `ensureRoleDir()` in agentSpec.ts.
  */
 export function buildLaunchCommand(
   provider: Provider,
@@ -55,4 +61,15 @@ export function buildLaunchCommand(
           "silently at launch.",
       };
   }
+}
+
+/**
+ * Whether a provider has a verified role-delivery mechanism.
+ *
+ * Derived from `buildLaunchCommand` rather than kept as a second list, so the
+ * picker's "unavailable" marking cannot drift from what launching actually
+ * does. The path argument is irrelevant to the outcome.
+ */
+export function supportsRoleDelivery(provider: Provider): boolean {
+  return buildLaunchCommand(provider, "/dev/null").kind === "command";
 }
