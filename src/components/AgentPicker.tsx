@@ -10,9 +10,16 @@ import { usePaneCwd } from "../stores/paneMetaStore";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
 import { composeRoleMarkdown } from "../lib/agentComposition";
-import { buildLaunchCommand, type Provider } from "../lib/agentCommand";
-import { specFromCurated, rolePathFor } from "../lib/agentSpec";
-import { AGENT_CATALOG, AGENT_CATEGORIES, type CatalogAgent } from "../data/curatedAgents";
+import { buildLaunchCommand, supportsRoleDelivery, type Provider } from "../lib/agentCommand";
+import { ensureRoleDir, rolePathFor, type AgentSpec } from "../lib/agentSpec";
+import { AGENT_CATEGORIES } from "../data/curatedAgents";
+import {
+  CURATED_ITEMS,
+  PICKER_ITEMS,
+  ROLE_ITEMS,
+  ROLES_FILTER,
+  type PickerItem,
+} from "../data/pickerItems";
 import { PROVIDERS } from "../data/providers";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -22,6 +29,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   Testing: "#d29922",
   Web3: "#f0883e",
   Architects: "#a371f7",
+  // The bare-roles pill is deliberately neutral, not a category colour.
+  [ROLES_FILTER]: "#8b949e",
 };
 
 const categoryPillStyle = (active: boolean, color: string, activeBg = color + "20"): React.CSSProperties => ({
@@ -91,26 +100,31 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     [query],
   );
 
+  // Filter the list. Curated pairs and bare roles are searched together, so
+  // "architect" reaches both the Auth Architect pair and the Architect role.
   const filtered = useMemo(() => {
-    let profiles = AGENT_CATALOG;
-    if (activeCategory) {
-      profiles = profiles.filter((p) => p.category === activeCategory);
-    }
+    let items: PickerItem[];
+    if (activeCategory === ROLES_FILTER) items = ROLE_ITEMS;
+    else if (activeCategory) items = CURATED_ITEMS.filter((p) => p.badge === activeCategory);
+    else items = PICKER_ITEMS;
+
     if (query) {
       // A suggestion goes first, followed by every agent (in the active category) instead of a text match.
       if (suggestedAgent) {
-        const rest = profiles.filter((p) => p.id !== suggestedAgent.id);
-        return [suggestedAgent, ...rest];
+        // Put the suggestion first, then the rest of the active category.
+        const suggestedItem = CURATED_ITEMS.find((p) => p.id === suggestedAgent.id);
+        const rest = items.filter((p) => p.id !== suggestedAgent.id);
+        return suggestedItem ? [suggestedItem, ...rest] : rest;
       }
       const q = query.toLowerCase();
-      profiles = profiles.filter(
+      items = items.filter(
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.description.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q),
+          p.badge.toLowerCase().includes(q),
       );
     }
-    return profiles;
+    return items;
   }, [query, activeCategory, suggestedAgent]);
 
   useEffect(() => {
@@ -128,23 +142,33 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     if (el) el.scrollIntoView({ block: "nearest" });
   }, [selectedIndex, suggestedAgent, filtered]);
 
-  // Compose the role definition, write it to disk, and build the provider
-  // command that reads it. Returns null after reporting why it could not.
-  const buildCommand = useCallback(async (agentId: string) => {
-    const spec = specFromCurated(agentId, activeProvider);
-    if (!spec) return null;
+  /**
+   * Compose a spec's role markdown, write it, and build the provider command
+   * that reads it. Shared by the curated pairs and the bare roles — a bare
+   * role is just a spec with no domain. Returns null after reporting why.
+   */
+  const buildCommand = useCallback(async (spec: AgentSpec) => {
+    // Clear first: an error from a previous attempt (a failed Codex launch,
+    // say) must not outlive the attempt that replaces it.
+    setLaunchError(null);
+
     const role = getRole(spec.roleId);
     if (!role) return null;
     const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
 
-    const rolePath = rolePathFor(spec);
+    // Resolve ~/.ade/roles to an absolute path before it reaches a shell.
+    let roleDir: string;
     try {
-      await invoke("write_text_file", { path: rolePath, content: composeRoleMarkdown(role, domain) });
+      roleDir = await ensureRoleDir();
     } catch (err) {
-      setLaunchError(`Could not write the role file: ${err}`);
+      setLaunchError(`Could not create the role directory: ${err}`);
       return null;
     }
+    const rolePath = rolePathFor(spec, roleDir);
 
+    // Build the command before writing anything. A provider without a verified
+    // role-delivery mechanism can never launch, so writing its role file first
+    // would leave a file on disk that nothing will ever read.
     const settings = useSettingsStore.getState();
     const result = buildLaunchCommand(spec.provider, rolePath, {
       continuous: continuousMode,
@@ -154,27 +178,35 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       setLaunchError(result.reason);
       return null;
     }
-    return { command: result.command, spec };
-  }, [activeProvider, continuousMode]);
+
+    try {
+      await invoke("write_text_file", { path: rolePath, content: composeRoleMarkdown(role, domain) });
+    } catch (err) {
+      setLaunchError(`Could not write the role file: ${err}`);
+      return null;
+    }
+
+    return { command: result.command };
+  }, [continuousMode]);
 
   // Picking an agent asks where to run it: this terminal or a new tab.
-  const [choice, setChoice] = useState<CatalogAgent | null>(null);
+  const [choice, setChoice] = useState<PickerItem | null>(null);
   const [target, setTarget] = useState<"current" | "new">("current");
   const currentPtyId = getActivePtyId();
 
-  const launchAgent = useCallback((agentId: string) => {
-    const profile = AGENT_CATALOG.find((p) => p.id === agentId);
-    if (!profile) return;
+  const launchItem = useCallback((item: PickerItem) => {
     const pane = getActivePane();
     // A terminal already running something can't take a new agent.
     setTarget(currentPtyId === null || (pane && hasActiveProcess(pane.id)) ? "new" : "current");
-    setChoice(profile);
+    setChoice(item);
   }, [currentPtyId, getActivePane]);
 
-  const runAgent = useCallback(async (profile: CatalogAgent, where: "current" | "new") => {
+  const runAgent = useCallback(async (item: PickerItem, where: "current" | "new") => {
+    const spec: AgentSpec = { roleId: item.roleId, domainId: item.domainId, provider: activeProvider };
+
     // Built before the tab is created: a role file that cannot be written, or
     // a provider that cannot take one, should not leave an empty tab behind.
-    const built = await buildCommand(profile.id);
+    const built = await buildCommand(spec);
     if (!built) return;
     const cmd = built.command;
 
@@ -185,7 +217,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       const cwd = from ? usePaneCwd.getState().cwds[from.id] ?? from.initialCwd ?? undefined : undefined;
       onClose();
       // Runs in the new tab's own shell, even if you switch tabs meanwhile.
-      paneId = await runInNewTabPane(profile.name, cwd, cmd);
+      paneId = await runInNewTabPane(item.name, cwd, cmd);
       if (!paneId) return;
     } else {
       await writePty(ptyId, cmd + "\r").catch(() => {});
@@ -195,14 +227,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     if (paneId) {
       useAgentTrackerStore.getState().startSession(
         paneId,
-        profile.name,
-        profile.icon,
-        built.spec.provider,
-        built.spec.roleId,
+        item.name,
+        item.icon,
+        spec.provider,
+        spec.roleId,
       );
     }
-
-    setLaunchError(null);
 
     // The last provider used becomes the default.
     if (activeProvider !== defaultProvider) {
@@ -234,7 +264,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       setSelectedIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter" && filtered[selectedIndex]) {
       e.preventDefault();
-      launchAgent(filtered[selectedIndex].id);
+      launchItem(filtered[selectedIndex]);
     } else if (e.key === "Tab") {
       e.preventDefault();
       const providerIds = PROVIDERS.map((p) => p.id);
@@ -335,11 +365,18 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
               {PROVIDERS.map((p) => {
                 const isActive = activeProvider === p.id;
                 const isInstalled = installedProviders.has(p.id);
+                // A provider with no verified role-delivery mechanism can never
+                // launch an agent, whether or not its CLI is installed. Say so
+                // in the row rather than letting the user find out at launch.
+                const canDeliverRole = supportsRoleDelivery(p.id);
+                const title = !canDeliverRole
+                  ? `${p.name} (unavailable \u2014 no verified way to pass a role definition)`
+                  : isInstalled ? p.name : `${p.name} (not installed)`;
                 return (
                   <button
                     key={p.id}
                     onClick={() => setActiveProvider(p.id)}
-                    title={isInstalled ? p.name : `${p.name} (not installed)`}
+                    title={title}
                     style={{
                       padding: "3px 10px",
                       borderRadius: "12px",
@@ -349,7 +386,8 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                       backgroundColor: isActive ? p.color + "20" : "transparent",
                       color: isActive ? p.color : "var(--text-muted)",
                       cursor: "pointer",
-                      opacity: isInstalled ? 1 : 0.4,
+                      opacity: canDeliverRole && isInstalled ? 1 : 0.4,
+                      textDecoration: canDeliverRole ? "none" : "line-through",
                       display: "flex",
                       alignItems: "center",
                       gap: "4px",
@@ -357,6 +395,11 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                   >
                     {isActive && <span style={{ fontSize: "8px" }}>{"\u25CF"}</span>}
                     {p.name}
+                    {!canDeliverRole && (
+                      <span style={{ fontSize: "8px", fontWeight: 700, letterSpacing: "0.04em" }}>
+                        UNAVAILABLE
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -370,7 +413,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
               >
                 All
               </button>
-              {AGENT_CATEGORIES.map((cat) => {
+              {[...AGENT_CATEGORIES, ROLES_FILTER].map((cat) => {
                 const isActive = activeCategory === cat;
                 return (
                   <button
@@ -578,7 +621,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                         : "2px solid transparent",
                   }}
                   onMouseEnter={() => setSelectedIndex(i)}
-                  onClick={() => launchAgent(profile.id)}
+                  onClick={() => launchItem(profile)}
                 >
                   <div
                     style={{
@@ -620,9 +663,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                         {profile.name}
                       </span>
                       <span style={categoryBadgeStyle(profile.color)}>
-                        {profile.category}
+                        {profile.badge}
                       </span>
-                      {role && (
+                      {role && profile.group === "agent" && (
                         <span
                           style={{
                             fontSize: "9px",
