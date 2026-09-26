@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor as monacoEditor } from "monaco-editor";
+import "./monacoSetup";
 
 const EXT_TO_LANGUAGE: Record<string, string> = {
   ts: "typescript", tsx: "typescript",
