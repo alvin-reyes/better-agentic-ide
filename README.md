@@ -46,20 +46,14 @@ Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [x
 - **Continuous mode** — Autonomous agent execution with `--dangerously-skip-permissions` (with safety disclaimer)
 - **Each agent gets its own named tab** — organized workflow with color-coded categories
 
-### Brainstorm Mode
-- **Claude Brainstorm** — Launch Claude with superpowers brainstorming skill (`Cmd+B`)
-- **Live Markdown Preview** — Watch `.md` files update in real-time with native filesystem watcher
-- **Activity feed** — See file create/modify/remove events as they happen
-- **Resizable panel** — Drag to resize the brainstorm panel (280px–900px)
-
 ### Preview Panel
 - **Multi-format preview** — View HTML, images, PDF, and markdown files in a side panel
 - **Live auto-refresh** — Files update automatically when saved (native filesystem watcher)
 - **Resizable** — Drag the panel edge to resize (280px–900px)
-- **Toggle** with `Cmd+B` — opens alongside your terminal
+- **Toggle** with `Cmd+Shift+B` — opens alongside your terminal
 
-### Agent Dashboard & Cost Tracker
-- **Agent Dashboard** (`Cmd+.`) — bird's-eye view of all running agents with live status (WORKING/IDLE/DONE)
+### Fleet View & Cost Tracker
+- **Fleet view** (`Cmd+.`) — live timeline of the Claude Code sub-agents running in the active tab's working directory, with running count and total cost; expand it into a full tab for a detail pane and range control
 - **Session tracking** — duration, estimated token usage, and cost per session
 - **Cost estimation** — per-provider rates for Claude, Codex, and Gemini
 - **Notifications** — system notification + in-app toast when an agent finishes a task
@@ -84,19 +78,23 @@ Every action has a keyboard shortcut. No mouse required.
 | `Cmd+R` | Rename active tab |
 | `Cmd+D` | Split pane horizontally |
 | `Cmd+Shift+D` | Split pane vertically |
+| `Cmd+Shift+W` | Close active pane |
+| `Cmd+←` / `Cmd+→` | Move between panes |
+| `Cmd+Shift+Enter` | Zoom / unzoom pane (scratchpad closed) |
 | `Cmd+J` | Toggle scratchpad / cycle focus |
 | `Cmd+Enter` | Send scratchpad to terminal |
-| `Cmd+Shift+Enter` | Copy scratchpad to clipboard |
+| `Cmd+Shift+Enter` | Copy scratchpad to clipboard (scratchpad open) |
 | `Cmd+S` | Save scratchpad as note |
 | `Cmd+E` | Send Enter to terminal |
-| `Cmd+B` | Toggle preview panel |
+| `Cmd+B` | Toggle file browser |
+| `Cmd+Shift+B` | Toggle preview panel |
 | `Cmd+Shift+A` | Launch AI agent picker |
-| `Cmd+.` | Agent dashboard |
+| `Cmd+Shift+O` | Open orchestrator |
+| `Cmd+.` | Fleet view |
 | `Cmd+P` | Command palette |
 | `Cmd+F` | Search in terminal |
-| `Cmd+Shift+Enter` | Zoom / unzoom pane |
 | `Cmd+,` | Open settings |
-| `Escape` | Switch focus to terminal |
+| `Escape` | Close open panels and focus terminal |
 
 ## Install
 
@@ -132,6 +130,8 @@ Download the latest installer from the [Releases page](https://github.com/alvin-
 npm install
 npm run tauri dev     # development
 npm run tauri build   # production
+npm test              # frontend unit tests (Vitest)
+(cd src-tauri && cargo test)  # backend unit tests
 ```
 
 ## Architecture
@@ -143,7 +143,9 @@ better-terminal/
 │   │   ├── main.rs         App entry point
 │   │   ├── lib.rs          Tauri command registration
 │   │   ├── pty.rs          PTY management (portable-pty + Channel API)
-│   │   └── watcher.rs      Native filesystem watcher (notify crate)
+│   │   ├── watcher.rs      Native filesystem watcher (notify crate)
+│   │   ├── subagent.rs     Claude Code sub-agent transcript watcher (fleet view)
+│   │   └── bmad.rs         BMAD scaffolding & status
 │   └── Cargo.toml
 ├── src/                    React frontend
 │   ├── components/
@@ -151,9 +153,9 @@ better-terminal/
 │   │   ├── TerminalPane.tsx  xterm.js wrapper
 │   │   ├── PaneContainer.tsx Split pane layout (react-resizable-panels)
 │   │   ├── Scratchpad.tsx  Thoughts panel with history & notes
-│   │   ├── BrainstormPanel.tsx Claude brainstorm + live markdown preview
 │   │   ├── AgentPicker.tsx AI agent launcher (20+ profiles, 5 categories)
-│   │   ├── AgentDashboard.tsx Agent monitoring & cost tracker
+│   │   ├── fleet/          Fleet view (panel, tab, timeline, summary)
+│   │   ├── FileBrowser.tsx File tree side panel
 │   │   ├── PreviewPanel.tsx Multi-format file preview (HTML, images, PDF, markdown)
 │   │   ├── CommandPalette.tsx Cmd+P command palette
 │   │   ├── SettingsPanel.tsx Theme, font, workspace settings
@@ -161,7 +163,8 @@ better-terminal/
 │   ├── stores/
 │   │   ├── tabStore.ts     Tab & pane state (Zustand)
 │   │   ├── settingsStore.ts Theme, font, workspace persistence
-│   │   └── agentTrackerStore.ts Agent session & cost tracking
+│   │   ├── agentTrackerStore.ts Agent session & cost tracking
+│   │   └── fleetStore.ts   Sub-agent fleet state
 │   ├── hooks/
 │   │   ├── useTerminal.ts  Terminal lifecycle & PTY bridge
 │   │   └── useKeybindings.ts Global keyboard shortcuts

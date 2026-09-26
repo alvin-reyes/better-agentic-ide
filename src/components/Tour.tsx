@@ -40,9 +40,9 @@ const steps: TourStep[] = [
     position: "bottom",
   },
   {
-    title: "Brainstorm Mode",
-    body: "Press Cmd+B to open a live markdown preview panel on the right. Select any .md file to watch it update in real time as your AI writes specs.",
-    keys: "⌘B",
+    title: "Live Preview",
+    body: "Press Cmd+Shift+B to open the preview panel on the right. Select any .md file to watch it update in real time as your AI writes specs.",
+    keys: "⇧⌘B",
     position: "bottom-right",
   },
   {
