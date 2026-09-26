@@ -1,4 +1,4 @@
-// Sub-agent transcript parsing — filled in by later tasks.
+// Sub-agent transcript parsing and live watching for the fleet view.
 
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
