@@ -31,12 +31,15 @@ npm run tauri dev
 │   ├── src/
 │   │   ├── lib.rs       Command registration
 │   │   ├── pty.rs       PTY management
-│   │   └── watcher.rs   Filesystem watcher
+│   │   ├── watcher.rs   Filesystem watcher
+│   │   ├── subagent.rs  Sub-agent transcript watcher (fleet view)
+│   │   └── bmad.rs      BMAD scaffolding
 │   └── Cargo.toml
 ├── src/                 React frontend
-│   ├── components/      UI components
+│   ├── components/      UI components (viewer/, editor/, fleet/)
 │   ├── data/            Agent profiles, static data
-│   ├── hooks/           Custom hooks (terminal, keybindings)
+│   ├── hooks/           Custom hooks (terminal, keybindings, fleet data)
+│   ├── lib/             Pure helpers (viewer dispatch, sanitizing)
 │   └── stores/          Zustand state stores
 ├── docs/                Website (GitHub Pages)
 └── package.json

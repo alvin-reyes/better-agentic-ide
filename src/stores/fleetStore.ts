@@ -149,14 +149,82 @@ export function buildLanes(
   return [...agentLanes, ...subLanes].sort((a, b) => a.startTime - b.startTime);
 }
 
+/** Which terminals a fleet view covers. */
+export type FleetScope = "active" | "all";
+
+/** A terminal tab with the fleet lanes that belong to it. */
+export interface FleetGroup {
+  /** null for the catch-all group of lanes whose terminal is gone. */
+  tabId: string | null;
+  tabName: string;
+  cwds: string[];
+  lanes: FleetLane[];
+  runningCount: number;
+  costCents: number;
+}
+
+export interface TerminalTabInfo {
+  id: string;
+  name: string;
+  paneIds: string[];
+}
+
+/**
+ * Split lanes into one group per terminal tab, in tab order.
+ *
+ * Agent lanes (and sub-agents already attached to a parent) carry their tabId.
+ * An unattached sub-agent goes to the first terminal tab working in its cwd —
+ * the transcript records no pane, so when two tabs share a folder the first
+ * one is as good a guess as any. Lanes whose terminal has closed land in a
+ * trailing "Closed terminals" group so their cost isn't silently dropped.
+ * Every terminal tab gets a group, even with no lanes, so idle terminals show.
+ */
+export function groupLanesByTerminal(
+  lanes: FleetLane[],
+  terminalTabs: TerminalTabInfo[],
+  paneMeta: Record<string, PaneMeta>,
+): FleetGroup[] {
+  const groups: FleetGroup[] = terminalTabs.map((t) => {
+    const cwds: string[] = [];
+    for (const id of t.paneIds) {
+      const cwd = paneMeta[id]?.cwd;
+      if (cwd && !cwds.includes(cwd)) cwds.push(cwd);
+    }
+    return { tabId: t.id, tabName: t.name, cwds, lanes: [], runningCount: 0, costCents: 0 };
+  });
+  const byTab = new Map(groups.map((g) => [g.tabId, g]));
+  const orphans: FleetGroup = {
+    tabId: null, tabName: "Closed terminals", cwds: [], lanes: [], runningCount: 0, costCents: 0,
+  };
+
+  for (const lane of lanes) {
+    let group = lane.tabId ? byTab.get(lane.tabId) : undefined;
+    if (!group && lane.kind === "subagent" && lane.cwd) {
+      group = groups.find((g) => g.cwds.includes(lane.cwd as string));
+    }
+    const target = group ?? orphans;
+    target.lanes.push(lane);
+    if (lane.status === "running") target.runningCount += 1;
+    target.costCents += lane.costCents ?? 0;
+  }
+
+  return orphans.lanes.length > 0 ? [...groups, orphans] : groups;
+}
+
 interface FleetStore {
   subagents: SubagentRecord[];
+  scope: FleetScope;
+  setScope: (scope: FleetScope) => void;
   applyEvent: (ev: SubagentEvent, cwd: string) => void;
+  /** Drop the records of one watched folder once nothing watches it. */
+  removeCwd: (cwd: string) => void;
   reset: () => void;
 }
 
 export const useFleetStore = create<FleetStore>((set) => ({
   subagents: [],
+  scope: "active",
+  setScope: (scope) => set({ scope }),
   applyEvent: (ev, cwd) =>
     set((state) => {
       if (ev.kind === "Spawn") {
@@ -185,5 +253,7 @@ export const useFleetStore = create<FleetStore>((set) => ({
         ),
       };
     }),
+  removeCwd: (cwd) =>
+    set((state) => ({ subagents: state.subagents.filter((s) => s.cwd !== cwd) })),
   reset: () => set({ subagents: [] }),
 }));
