@@ -137,12 +137,12 @@ Grab the installer for your platform from the [latest release](https://github.co
 | `Cmd+D` | Split pane horizontally |
 | `Cmd+Shift+D` | Split pane vertically |
 | `Cmd+Shift+W` | Close active pane |
-| `Cmd+←` / `Cmd+→` | Move between panes |
-| `Cmd+Shift+Enter` | Zoom / unzoom pane (scratchpad closed) |
+| `Cmd+←` / `Cmd+→` | Move between panes (outside the scratchpad) |
+| `Cmd+Shift+Enter` | Zoom / unzoom pane (outside the scratchpad) |
 | `Cmd+F` | Search in terminal |
 | `Cmd+J` | Toggle scratchpad / cycle focus |
 | `Cmd+Enter` | Send scratchpad to terminal |
-| `Cmd+Shift+Enter` | Copy scratchpad (scratchpad open) |
+| `Cmd+Shift+Enter` | Copy scratchpad (while typing in it) |
 | `Cmd+S` | Save scratchpad as note / save file in the editor |
 | `Cmd+E` | Send Enter to terminal |
 | `Cmd+B` | Toggle file browser |

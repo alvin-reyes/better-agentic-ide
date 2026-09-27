@@ -50,6 +50,10 @@ export function useKeybindings(actions: KeybindingActions) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
+      // Where the keystroke happened. Shortcuts that clash with editing text
+      // (copy, cursor-to-line-start/end) belong to the scratchpad only while
+      // you're typing in it; elsewhere they act on panes.
+      const inScratchpad = e.target instanceof Element && !!e.target.closest("[data-scratchpad]");
       const shift = e.shiftKey;
       const alt = e.altKey;
 
@@ -124,8 +128,8 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+Shift+Enter: Copy scratchpad to clipboard
-      if (meta && shift && !alt && e.key === "Enter" && actions.isScratchpadOpen) {
+      // Cmd+Shift+Enter: Copy scratchpad to clipboard (while typing in it)
+      if (meta && shift && !alt && e.key === "Enter" && actions.isScratchpadOpen && inScratchpad) {
         e.preventDefault();
         actions.copyScratchpad();
         return;
@@ -207,8 +211,8 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+Shift+Enter: Zoom/unzoom pane
-      if (meta && shift && !alt && e.key === "Enter" && !actions.isScratchpadOpen) {
+      // Cmd+Shift+Enter: Zoom/unzoom pane (anywhere but the scratchpad)
+      if (meta && shift && !alt && e.key === "Enter" && !inScratchpad) {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("toggle-zoom-pane"));
         return;
@@ -226,8 +230,10 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+Arrow Left/Right: Navigate between panes (when scratchpad is closed)
-      if (meta && !shift && !alt && (e.key === "ArrowLeft" || e.key === "ArrowRight") && !actions.isScratchpadOpen) {
+      // Cmd+Arrow Left/Right: Navigate between panes (anywhere but the
+      // scratchpad, where they move the cursor). Previously they only worked
+      // with the scratchpad closed, and it is open by default.
+      if (meta && !shift && !alt && (e.key === "ArrowLeft" || e.key === "ArrowRight") && !inScratchpad) {
         e.preventDefault();
         if (e.key === "ArrowRight") {
           focusNextPane(activeTabId);
