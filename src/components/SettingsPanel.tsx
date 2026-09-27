@@ -1,6 +1,7 @@
 import { useSettingsStore, themePresets, applyThemeToDOM, type ThemeColors } from "../stores/settingsStore";
 import { useTabStore } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
+import SyncSettings from "./SyncSettings";
 
 const colorLabels: { key: keyof ThemeColors; label: string; group: string }[] = [
   { key: "bgPrimary", label: "Background", group: "UI" },
@@ -133,11 +134,12 @@ export default function SettingsPanel() {
   if (!store.showSettings) return null;
 
   const activeTheme = store.getActiveTheme();
-  const tabs: { id: "theme" | "terminal" | "workspace" | "ai"; label: string }[] = [
+  const tabs: { id: "theme" | "terminal" | "workspace" | "ai" | "sync"; label: string }[] = [
     { id: "theme", label: "Themes" },
     { id: "terminal", label: "Terminal" },
     { id: "workspace", label: "Workspace" },
     { id: "ai", label: "AI API" },
+    { id: "sync", label: "Sync" },
   ];
 
   const commitRename = () => {
@@ -768,6 +770,8 @@ export default function SettingsPanel() {
           )}
 
           {/* AI API Tab */}
+          {store.settingsTab === "sync" && <SyncSettings />}
+
           {store.settingsTab === "ai" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               {/* Orchestrator Provider */}

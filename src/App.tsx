@@ -23,6 +23,7 @@ const BmadPanel = lazy(() => import("./components/BmadPanel"));
 import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { flushNow } from "./lib/persistence";
+import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
 import { useKeybindings } from "./hooks/useKeybindings";
@@ -100,6 +101,8 @@ export default function App() {
       try {
         await saveSession();
         await flushNow();
+        // Push this machine's latest state; don't hold the window open long.
+        await Promise.race([syncNow(false), new Promise((r) => setTimeout(r, 4000))]);
       } catch {
         // Save failed, still close
       }

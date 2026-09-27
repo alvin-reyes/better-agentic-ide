@@ -298,11 +298,11 @@ interface Settings {
 
 interface SettingsStore extends Settings {
   showSettings: boolean;
-  settingsTab: "theme" | "terminal" | "workspace" | "ai";
+  settingsTab: "theme" | "terminal" | "workspace" | "ai" | "sync";
   workspaces: WorkspacePreset[];
 
   setShowSettings: (show: boolean) => void;
-  setSettingsTab: (tab: "theme" | "terminal" | "workspace" | "ai") => void;
+  setSettingsTab: (tab: "theme" | "terminal" | "workspace" | "ai" | "sync") => void;
   setTheme: (id: string) => void;
   setCustomColor: (key: keyof ThemeColors, value: string) => void;
   clearCustomColors: () => void;

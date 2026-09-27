@@ -2,6 +2,7 @@ mod bmad;
 mod pty;
 mod state;
 mod subagent;
+mod sync;
 mod watcher;
 
 #[derive(serde::Serialize)]
@@ -366,6 +367,10 @@ pub fn run() {
             state::state_list_snapshots,
             state::state_restore_snapshot,
             state::state_dir_path,
+            sync::sync_get_config,
+            sync::sync_set_config,
+            sync::sync_now,
+            sync::claude_mem_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

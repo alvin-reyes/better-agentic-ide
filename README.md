@@ -107,6 +107,14 @@ Grab the installer for your platform from the [latest release](https://github.co
 ### Browser Tab
 - **Open Browser Tab** from the command palette to view a local dev server (defaults to `http://localhost:3000`) inside ADE
 
+### Auto-save, Restore & Sync
+- **Auto-save** — tabs, splits, each terminal's folder and scrollback, open file tabs, the unsent scratchpad draft, notes, prompt history, settings, workspaces and orchestrator history are written to disk within a second of changing. A crash or force-quit brings everything back.
+- **Snapshots** — taken at startup and every 10 minutes (newest 20 kept); restore one from *Settings → Sync*.
+- **Sync between machines** — point *Settings → Sync* at a private git repo you own. Settings, notes, prompt history, workspaces and orchestrator history are shared (newest change wins); each machine's session is kept under its own device name. Changes from other machines apply when ADE starts; local changes are pushed every 3 minutes and on close.
+- **Claude memory** — optionally syncs `~/.claude/CLAUDE.md` and your custom commands, agents and skills. If a file was edited on two machines, your copy is kept and the other version is saved next to it as `*.sync-conflict`.
+- **Secrets stay local** — API keys are stripped before anything is written to the sync repo.
+- **claude-mem** — detected and left to claude-mem's own Cloud Sync: its live SQLite database can't be safely copied between machines.
+
 ### Theming & Settings
 - **8 built-in themes** — GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark
 - **Fonts** — size (10–24px), family (JetBrains Mono, SF Mono, Fira Code, Cascadia Code, …), line height
@@ -178,6 +186,8 @@ better-agentic-ide/
 │       ├── pty.rs             PTY management (portable-pty + Channel API)
 │       ├── watcher.rs         Native filesystem watcher (notify)
 │       ├── subagent.rs        Claude Code sub-agent transcript watcher (fleet view)
+│       ├── state.rs           Durable app state on disk (atomic writes, snapshots)
+│       ├── sync.rs            Git-backed sync of state and Claude memory
 │       └── bmad.rs            BMAD scaffolding and status
 ├── src/                       React frontend
 │   ├── components/
@@ -195,7 +205,7 @@ better-agentic-ide/
 │   │   └── CommandPalette.tsx, SettingsPanel.tsx, ShortcutsBar.tsx, Tour.tsx
 │   ├── stores/                Zustand stores (tabs, settings, fleet, agents, orchestrator, BMAD)
 │   ├── hooks/                 Terminal lifecycle, keybindings, fleet data, recording
-│   ├── lib/                   Viewer dispatch, HTML sanitizing, Mermaid config, Anthropic client
+│   ├── lib/                   Auto-save and sync clients, viewer dispatch, sanitizing, Mermaid, Anthropic
 │   └── data/                  Agent profiles, task router, BMAD personas
 └── .github/workflows/         CI and release builds
 ```
@@ -206,7 +216,7 @@ better-agentic-ide/
 - **Tauri Channel API** — PTY output and watcher events stream over `Channel`s
 - **One watcher per folder** — the fleet view refcounts a sub-agent watcher per terminal folder, so several views share them
 - **Sanitize before render** — the webview can reach Tauri IPC, so markdown and documents from any repo go through DOMPurify and Mermaid's strict mode
-- **localStorage persistence** — settings, themes, notes, history, workspaces and recordings persist across sessions
+- **Disk is the source of truth** — stores keep using localStorage, but it is hydrated from `<app data>/state` before the app loads and every change is mirrored back to disk, so state survives crashes, profile resets and can be synced
 
 ## Tech Stack
 
