@@ -296,7 +296,8 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                   cat === "Backend" ? "#3fb950" :
                   cat === "Frontend" ? "#58a6ff" :
                   cat === "DevOps" ? "#bc8cff" :
-                  cat === "Testing" ? "#d29922" : "#ff7b72";
+                  cat === "Testing" ? "#d29922" :
+                  cat === "Web3" ? "#f0883e" : "#ff7b72";
                 return (
                   <button
                     key={cat}

@@ -8,6 +8,8 @@
   url: /guide/files/
 - title: Agents & fleet
   url: /guide/agents/
+- title: Smart contracts
+  url: /guide/contracts/
 - title: Auto-save & sync
   url: /guide/sync/
 - title: Keyboard shortcuts

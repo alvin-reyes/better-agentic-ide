@@ -42,6 +42,7 @@ On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux and Windows**, they use <
 | Agent picker | {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} |
 | Fleet view | {% include key.html mac="⌘." other="Ctrl+Shift+." %} |
 | Orchestrator | {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} |
+| Smart contracts panel | {% include key.html mac="⌘⇧K" other="Ctrl+Alt+Shift+K" %} |
 | Settings | {% include key.html mac="⌘," other="Ctrl+Shift+," %} |
 | Close panels and focus the terminal | <kbd>Esc</kbd> |
 

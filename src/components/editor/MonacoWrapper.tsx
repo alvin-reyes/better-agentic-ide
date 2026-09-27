@@ -22,6 +22,7 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   txt: "plaintext", log: "plaintext", csv: "plaintext",
   env: "plaintext", lock: "json", conf: "plaintext", cfg: "plaintext",
   proto: "protobuf",
+  sol: "sol", vy: "python", move: "rust", cairo: "rust",
 };
 
 function detectLanguage(filePath: string): string {
