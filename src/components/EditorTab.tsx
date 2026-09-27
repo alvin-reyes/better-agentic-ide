@@ -223,7 +223,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
         <div style={{ flex: 1, minHeight: 0 }}>
           {rendered ? (
             // Renders the live buffer, so unsaved Source edits show up here too.
-            kind === "markdown" ? <MarkdownView content={content} /> : <HtmlView content={content} />
+            kind === "markdown" ? <MarkdownView content={content} filePath={filePath} /> : <HtmlView content={content} />
           ) : (
             <MonacoWrapper
               filePath={filePath}

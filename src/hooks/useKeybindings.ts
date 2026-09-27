@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
+import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
 
 interface KeybindingActions {
   toggleScratchpad: () => void;
@@ -49,196 +50,86 @@ export function useKeybindings(actions: KeybindingActions) {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      const shift = e.shiftKey;
-      const alt = e.altKey;
-
-      // Cmd+P: Command palette
-      if (meta && !shift && !alt && e.key === "p") {
+      const is = (id: ShortcutId) => matches(e, SHORTCUTS[id]);
+      const run = (fn: () => void) => {
         e.preventDefault();
-        actions.toggleCommandPalette();
-        return;
-      }
-
-      // Cmd+,: Open settings
-      if (meta && !shift && !alt && e.key === ",") {
-        e.preventDefault();
-        const s = useSettingsStore.getState();
-        s.setShowSettings(!s.showSettings);
-        return;
-      }
-
-      // Cmd+R: Rename active tab (dispatches event to TabBar's inline rename)
-      if (meta && !shift && !alt && e.key === "r") {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("rename-active-tab"));
-        return;
-      }
-
-      // Cmd+Shift+A: Open agent picker
-      if (meta && shift && !alt && (e.key === "a" || e.key === "A")) {
-        e.preventDefault();
-        actions.toggleAgentPicker();
-        return;
-      }
-
-      // Cmd+Shift+B: Toggle preview panel
-      if (meta && shift && !alt && (e.key === "b" || e.key === "B")) {
-        e.preventDefault();
-        actions.togglePreview();
-        return;
-      }
-
-      // Cmd+B: Toggle file browser
-      if (meta && !shift && !alt && e.key === "b") {
-        e.preventDefault();
-        actions.toggleFileBrowser();
-        return;
-      }
-
-      // Cmd+.: Toggle fleet panel
-      if (meta && !shift && !alt && e.key === ".") {
-        e.preventDefault();
-        actions.toggleFleet();
-        return;
-      }
-
-      // Cmd+Shift+O: Open Orchestrator
-      if (meta && shift && !alt && (e.key === "o" || e.key === "O")) {
-        e.preventDefault();
-        actions.openOrchestrator();
-        return;
-      }
-
-      // Cmd+J: Toggle scratchpad
-      if (meta && !shift && !alt && e.key === "j") {
-        e.preventDefault();
-        actions.toggleScratchpad();
-        return;
-      }
-
-      // Cmd+Enter: Send scratchpad to terminal
-      if (meta && !shift && !alt && e.key === "Enter" && actions.isScratchpadOpen) {
-        e.preventDefault();
-        actions.sendScratchpad();
-        return;
-      }
-
-      // Cmd+Shift+Enter: Copy scratchpad to clipboard
-      if (meta && shift && !alt && e.key === "Enter" && actions.isScratchpadOpen) {
-        e.preventDefault();
-        actions.copyScratchpad();
-        return;
-      }
-
-      // Cmd+S: Save scratchpad as note — but not while typing in the code
-      // editor, where Cmd+S is Monaco's "save file".
+        fn();
+      };
+      // Where the keystroke happened. Shortcuts that clash with editing text
+      // (copy, caret moves) belong to the scratchpad or text field while
+      // you're typing in it; elsewhere they act on panes.
+      const inScratchpad = e.target instanceof Element && !!e.target.closest("[data-scratchpad]");
+      // A text field other than the terminal's own input.
+      const inTextField =
+        e.target instanceof HTMLElement &&
+        !e.target.classList.contains("xterm-helper-textarea") &&
+        (e.target.matches("input, textarea, select") || e.target.isContentEditable);
       const inEditor = e.target instanceof Element && !!e.target.closest(".monaco-editor");
-      if (meta && !shift && !alt && e.key === "s" && actions.isScratchpadOpen && !inEditor) {
-        e.preventDefault();
-        actions.saveNoteScratchpad();
-        return;
+      const activeTab = tabs.find((t) => t.id === activeTabId);
+      const activeIdx = tabs.findIndex((t) => t.id === activeTabId);
+
+      if (is("palette")) return run(actions.toggleCommandPalette);
+      if (is("settings")) {
+        return run(() => {
+          const s = useSettingsStore.getState();
+          s.setShowSettings(!s.showSettings);
+        });
+      }
+      // Rename dispatches to TabBar's inline rename.
+      if (is("renameTab")) return run(() => window.dispatchEvent(new CustomEvent("rename-active-tab")));
+      if (is("agentPicker")) return run(actions.toggleAgentPicker);
+      if (is("preview")) return run(actions.togglePreview);
+      if (is("fileBrowser")) return run(actions.toggleFileBrowser);
+      if (is("fleet")) return run(actions.toggleFleet);
+      if (is("orchestrator")) return run(actions.openOrchestrator);
+      if (is("scratchpad")) return run(actions.toggleScratchpad);
+      if (is("send") && actions.isScratchpadOpen) return run(actions.sendScratchpad);
+      // ⌘⇧↵ copies while typing in the scratchpad and zooms the pane elsewhere.
+      if (is("copy") && actions.isScratchpadOpen && inScratchpad) return run(actions.copyScratchpad);
+      // Not while typing in the code editor, where ⌘S is Monaco's "save file".
+      if (is("saveNote") && actions.isScratchpadOpen && !inEditor) return run(actions.saveNoteScratchpad);
+      if (is("newTab")) return run(() => addTab());
+      if (is("sendEnter")) return run(actions.sendEnterToTerminal);
+      if (is("closePane")) {
+        return run(() => {
+          if (activeTab) actions.requestClosePane(activeTabId, activeTab.activePaneId);
+        });
+      }
+      if (is("closeTab")) return run(() => actions.requestCloseTab(activeTabId));
+
+      const n = tabNumber(e);
+      if (n !== null) {
+        return run(() => {
+          if (n <= tabs.length) setActiveTab(tabs[n - 1].id);
+        });
+      }
+      const step = is("prevTab") ? -1 : is("nextTab") ? 1 : pageTab(e);
+      if (step !== null) {
+        return run(() => {
+          const next = tabs[activeIdx + step];
+          if (next) setActiveTab(next.id);
+        });
       }
 
-      // Cmd+T: New tab
-      if (meta && !shift && !alt && e.key === "t") {
-        e.preventDefault();
-        addTab();
-        return;
-      }
-
-      // Cmd+E: Send Enter to terminal
-      if (meta && !shift && !alt && e.key === "e") {
-        e.preventDefault();
-        actions.sendEnterToTerminal();
-        return;
-      }
-
-      // Cmd+Shift+W: Close active split pane (with confirmation if process running)
-      if (meta && shift && !alt && (e.key === "w" || e.key === "W")) {
-        e.preventDefault();
-        const tab = tabs.find((t) => t.id === activeTabId);
-        if (tab) actions.requestClosePane(activeTabId, tab.activePaneId);
-        return;
-      }
-
-      // Cmd+W: Close tab (with confirmation if process running)
-      if (meta && !shift && !alt && e.key === "w") {
-        e.preventDefault();
-        actions.requestCloseTab(activeTabId);
-        return;
-      }
-
-      // Cmd+1-9: Switch to tab
-      if (meta && !shift && !alt && e.key >= "1" && e.key <= "9") {
-        e.preventDefault();
-        const idx = parseInt(e.key) - 1;
-        if (idx < tabs.length) {
-          setActiveTab(tabs[idx].id);
-        }
-        return;
-      }
-
-      // Cmd+Shift+[: Previous tab
-      if (meta && shift && !alt && e.key === "[") {
-        e.preventDefault();
-        const idx = tabs.findIndex((t) => t.id === activeTabId);
-        if (idx > 0) setActiveTab(tabs[idx - 1].id);
-        return;
-      }
-
-      // Cmd+Shift+]: Next tab
-      if (meta && shift && !alt && e.key === "]") {
-        e.preventDefault();
-        const idx = tabs.findIndex((t) => t.id === activeTabId);
-        if (idx < tabs.length - 1) setActiveTab(tabs[idx + 1].id);
-        return;
-      }
-
-      // Cmd+D: Split horizontally
-      if (meta && !shift && !alt && e.key === "d") {
-        e.preventDefault();
-        const tab = tabs.find((t) => t.id === activeTabId);
-        if (tab) {
-          getPtyCwd(tab.activePaneId).then((cwd) => {
-            splitPane(activeTabId, tab.activePaneId, "horizontal", cwd);
+      if (is("splitHorizontal") || is("splitVertical")) {
+        const direction = is("splitHorizontal") ? "horizontal" : "vertical";
+        return run(() => {
+          if (!activeTab) return;
+          getPtyCwd(activeTab.activePaneId).then((cwd) => {
+            splitPane(activeTabId, activeTab.activePaneId, direction, cwd);
           });
-        }
-        return;
+        });
       }
-
-      // Cmd+Shift+Enter: Zoom/unzoom pane
-      if (meta && shift && !alt && e.key === "Enter" && !actions.isScratchpadOpen) {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("toggle-zoom-pane"));
-        return;
+      if (is("zoomPane") && !inScratchpad && !inTextField) {
+        return run(() => window.dispatchEvent(new CustomEvent("toggle-zoom-pane")));
       }
-
-      // Cmd+Shift+D: Split vertically
-      if (meta && shift && !alt && e.key === "D") {
-        e.preventDefault();
-        const tab = tabs.find((t) => t.id === activeTabId);
-        if (tab) {
-          getPtyCwd(tab.activePaneId).then((cwd) => {
-            splitPane(activeTabId, tab.activePaneId, "vertical", cwd);
-          });
-        }
-        return;
-      }
-
-      // Cmd+Arrow Left/Right: Navigate between panes (when scratchpad is closed)
-      if (meta && !shift && !alt && (e.key === "ArrowLeft" || e.key === "ArrowRight") && !actions.isScratchpadOpen) {
-        e.preventDefault();
-        if (e.key === "ArrowRight") {
-          focusNextPane(activeTabId);
-        } else {
-          focusPrevPane(activeTabId);
-        }
-        return;
+      // Pane navigation, except where the arrows move a caret.
+      if ((is("paneLeft") || is("paneRight")) && !inScratchpad && !inTextField) {
+        return run(() => (is("paneRight") ? focusNextPane(activeTabId) : focusPrevPane(activeTabId)));
       }
 
       // Escape: Close open panels (settings > scratchpad) and focus terminal
-      if (!meta && !shift && !alt && e.key === "Escape") {
+      if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.key === "Escape") {
         const settings = useSettingsStore.getState();
         if (settings.showSettings) {
           settings.setShowSettings(false);
@@ -250,7 +141,6 @@ export function useKeybindings(actions: KeybindingActions) {
         // Always try to focus the terminal
         const xtermEl = document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
         xtermEl?.focus();
-        return;
       }
     };
 

@@ -332,6 +332,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button
+              role="switch"
+              aria-checked={continuousMode}
+              aria-label="Continuous mode"
               onClick={() => {
                 if (!continuousMode) {
                   setShowDisclaimer(true);

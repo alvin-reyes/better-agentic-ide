@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
+import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { useFileBrowserStore, type TreeNode, type FileEntry } from "../stores/fileBrowserStore";
 import { useTabStore } from "../stores/tabStore";
@@ -351,6 +352,8 @@ export default function FileBrowser() {
         </button>
         <button
           onClick={() => toggle()}
+          title={`Close file browser (${shortcutLabel("fileBrowser")})`}
+          aria-label="Close file browser"
           style={{
             background: "none",
             border: "none",

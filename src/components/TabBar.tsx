@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { shortcutLabel } from "../lib/shortcuts";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isPaneActive } from "../hooks/useTerminal";
@@ -256,7 +257,7 @@ export default function TabBar() {
           e.currentTarget.style.color = "var(--text-secondary)";
         }}
         onClick={() => addTab()}
-        title="New tab (⌘T)"
+        title={`New tab (${shortcutLabel("newTab")})`}
       >
         +
       </button>
@@ -283,7 +284,7 @@ export default function TabBar() {
           e.currentTarget.style.color = "var(--text-muted)";
         }}
         onClick={() => useSettingsStore.getState().setShowSettings(true)}
-        title="Settings (⌘,)"
+        title={`Settings (${shortcutLabel("settings")})`}
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
           <path d="M6.5 1.5L6.1 3.1C5.7 3.3 5.3 3.5 5 3.8L3.4 3.3L1.9 5.9L3.2 7C3.2 7.3 3.2 7.7 3.2 8L1.9 9.1L3.4 11.7L5 11.2C5.3 11.5 5.7 11.7 6.1 11.9L6.5 13.5H9.5L9.9 11.9C10.3 11.7 10.7 11.5 11 11.2L12.6 11.7L14.1 9.1L12.8 8C12.8 7.7 12.8 7.3 12.8 7L14.1 5.9L12.6 3.3L11 3.8C10.7 3.5 10.3 3.3 9.9 3.1L9.5 1.5H6.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>

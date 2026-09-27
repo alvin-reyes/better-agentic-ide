@@ -22,6 +22,9 @@ const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
 const BmadPanel = lazy(() => import("./components/BmadPanel"));
 import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
+import { flushNow } from "./lib/persistence";
+import { listenForFileOpens } from "./lib/openFile";
+import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
 import { useKeybindings } from "./hooks/useKeybindings";
@@ -31,6 +34,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /** How often the active terminal's folder is re-read to follow `cd`. */
 const CWD_POLL_MS = 3000;
+/** Session auto-save: after a tab/pane change, and periodically. */
+const SESSION_SAVE_DEBOUNCE_MS = 2000;
+const SESSION_SAVE_INTERVAL_MS = 20000;
 
 export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
@@ -73,6 +79,20 @@ export default function App() {
     loadSession();
   }, []);
 
+  // Auto-save the session (tabs, splits, folders, scrollback) instead of only
+  // on window close, so a crash or force-quit doesn't lose it: shortly after
+  // any tab/pane change, and every 20 s to pick up `cd` and new output.
+  const tabsForSave = useTabStore((s) => s.tabs);
+  const activeTabIdForSave = useTabStore((s) => s.activeTabId);
+  useEffect(() => {
+    const id = window.setTimeout(() => { void saveSession().catch(() => {}); }, SESSION_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [tabsForSave, activeTabIdForSave]);
+  useEffect(() => {
+    const id = window.setInterval(() => { void saveSession().catch(() => {}); }, SESSION_SAVE_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
   // Save session on window close and clean up global resources
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -81,6 +101,9 @@ export default function App() {
       stopIdlePolling();
       try {
         await saveSession();
+        await flushNow();
+        // Push this machine's latest state; don't hold the window open long.
+        await Promise.race([syncNow(false), new Promise((r) => setTimeout(r, 4000))]);
       } catch {
         // Save failed, still close
       }
@@ -118,6 +141,12 @@ export default function App() {
     };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
+  }, []);
+
+  // Files clicked in detached windows' terminals open here.
+  useEffect(() => {
+    const unlisten = listenForFileOpens().catch(() => null);
+    return () => { void unlisten.then((fn) => fn?.()); };
   }, []);
 
   // Listen for agent completion notifications (in-app toast)

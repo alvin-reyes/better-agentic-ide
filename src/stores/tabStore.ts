@@ -469,6 +469,9 @@ interface SavedTab {
   type?: string;
   root: unknown; // serialized PaneNode tree
   activePaneId: string;
+  editorFilePath?: string;
+  browserUrl?: string;
+  orchestratorSessionId?: string;
 }
 
 interface SavedSession {
@@ -518,21 +521,34 @@ async function saveSession(): Promise<void> {
   const { serializeTerminalBuffer, getPtyCwd } = await import("../hooks/useTerminal");
   const state = useTabStore.getState();
 
-  // Only save terminal tabs, not orchestrator or browser tabs
-  const terminalTabs = state.tabs.filter((t) => !t.type || t.type === "terminal");
-
   const savedTabs: SavedTab[] = [];
-  for (const tab of terminalTabs) {
+  for (const tab of state.tabs) {
+    if (tab.type && tab.type !== "terminal") {
+      // Non-terminal tabs have no shell to capture: save what reopens them.
+      savedTabs.push({
+        id: tab.id,
+        name: tab.name,
+        type: tab.type,
+        root: { type: "pane", pane: { id: tab.activePaneId } },
+        activePaneId: tab.activePaneId,
+        editorFilePath: tab.editorFilePath,
+        browserUrl: tab.browserUrl,
+        orchestratorSessionId: tab.orchestratorSessionId,
+      });
+      continue;
+    }
     const panes = findAllPanes(tab.root);
     const paneData = new Map<string, SavedPane>();
 
     for (const pane of panes) {
+      // Only panes that have been shown have a live terminal. A restored tab
+      // that hasn't been opened yet keeps what it was restored with.
       const buffer = serializeTerminalBuffer(pane.id);
       const cwd = await getPtyCwd(pane.id);
       paneData.set(pane.id, {
         id: pane.id,
-        serializedBuffer: buffer || undefined,
-        savedCwd: cwd || undefined,
+        serializedBuffer: buffer || pane.serializedBuffer || undefined,
+        savedCwd: cwd || pane.savedCwd || pane.initialCwd || undefined,
       });
     }
 
@@ -550,6 +566,11 @@ async function saveSession(): Promise<void> {
     activeTabId: state.activeTabId,
     savedAt: Date.now(),
   };
+  if (savedTabs.length === 0) {
+    // Every tab was closed: don't bring the old ones back next launch.
+    localStorage.removeItem(SESSION_KEY);
+    return;
+  }
 
   let json = JSON.stringify(session);
 
@@ -585,27 +606,33 @@ function loadSession(): boolean {
     if (!session.tabs || session.tabs.length === 0) return false;
 
     // Restore tabs
-    const restoredTabs: Tab[] = session.tabs.map((saved) => {
-      const root = deserializePaneNode(saved.root);
-      const allPanes = findAllPanes(root);
-      return {
-        id: newTabId(),
-        name: saved.name,
-        type: (saved.type as Tab["type"]) || undefined,
-        root,
-        activePaneId: allPanes[0]?.id || "",
-      };
-    });
+    const kept = session.tabs.filter((saved) => saved.type !== "editor" || saved.editorFilePath);
+    const restoredTabs: Tab[] = kept.map((saved) => {
+        const root = deserializePaneNode(saved.root);
+        const allPanes = findAllPanes(root);
+        return {
+          id: newTabId(),
+          name: saved.name,
+          type: (saved.type as Tab["type"]) || undefined,
+          root,
+          activePaneId: allPanes[0]?.id || "",
+          editorFilePath: saved.editorFilePath,
+          browserUrl: saved.browserUrl,
+          orchestratorSessionId: saved.orchestratorSessionId,
+        };
+      });
 
     if (restoredTabs.length > 0) {
+      // Index into the kept tabs, which restoredTabs mirrors one-to-one.
+      const activeIdx = kept.findIndex((t) => t.id === session.activeTabId);
       useTabStore.setState({
         tabs: restoredTabs,
-        activeTabId: restoredTabs[0].id,
+        activeTabId: restoredTabs[Math.max(0, activeIdx)]?.id ?? restoredTabs[0].id,
       });
     }
 
-    // Clear saved session after restoring
-    localStorage.removeItem(SESSION_KEY);
+    // The saved session is kept: auto-save overwrites it as the session
+    // changes, and a crash before the next save must still restore something.
     return true;
   } catch {
     localStorage.removeItem(SESSION_KEY);

@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
+
+const M = modLabel();
 
 const TOUR_DONE_KEY = "better-terminal-tour-done";
 
@@ -17,38 +20,38 @@ const steps: TourStep[] = [
   },
   {
     title: "Tabs",
-    body: "Create new tabs with Cmd+T. Switch between them with Cmd+1-9. Double-click or Cmd+R to rename a tab.",
-    keys: "⌘T  ⌘1-9  ⌘R",
+    body: `Create new tabs with ${L("newTab")}. Switch between them with ${M}1-9. Double-click or ${L("renameTab")} to rename a tab.`,
+    keys: `${L("newTab")}  ${M}1-9  ${L("renameTab")}`,
     position: "top-left",
   },
   {
     title: "Split Panes",
-    body: "Split the current pane horizontally with Cmd+D or vertically with Cmd+Shift+D. Your terminal sessions persist across splits.",
-    keys: "⌘D  ⇧⌘D",
+    body: `Split the current pane horizontally with ${L("splitHorizontal")} or vertically with ${L("splitVertical")}. Your terminal sessions persist across splits.`,
+    keys: `${L("splitHorizontal")}  ${L("splitVertical")}`,
     position: "center",
   },
   {
     title: "Thoughts Scratchpad",
-    body: "Press Cmd+J to open the scratchpad. Type your thoughts, then Cmd+Enter to send them directly to the active terminal. Save prompts as notes with Cmd+S.",
-    keys: "⌘J  ⌘↵  ⌘S",
+    body: `Press ${L("scratchpad")} to open the scratchpad. Type your thoughts, then ${L("send")} to send them directly to the active terminal. Save prompts as notes with ${L("saveNote")}.`,
+    keys: `${L("scratchpad")}  ${L("send")}  ${L("saveNote")}`,
     position: "bottom",
   },
   {
     title: "Focus Switching",
-    body: "Cmd+J cycles focus between scratchpad and terminal. Press Escape to quickly jump back to the terminal. Use Cmd+E to send Enter when an AI agent asks a question.",
-    keys: "⌘J  Esc  ⌘E",
+    body: `${L("scratchpad")} cycles focus between scratchpad and terminal. Press Escape to quickly jump back to the terminal. Use ${L("sendEnter")} to send Enter when an AI agent asks a question.`,
+    keys: `${L("scratchpad")}  Esc  ${L("sendEnter")}`,
     position: "bottom",
   },
   {
     title: "Live Preview",
-    body: "Press Cmd+Shift+B to open the preview panel on the right. Select any .md file to watch it update in real time as your AI writes specs.",
-    keys: "⇧⌘B",
+    body: `Press ${L("preview")} to open the preview panel on the right, or click a file path in the terminal. Markdown, HTML, PDF and images update live as your AI writes them.`,
+    keys: L("preview"),
     position: "bottom-right",
   },
   {
     title: "Themes & Settings",
-    body: "Press Cmd+, to open settings. Choose from 8 themes, adjust font size, font family, cursor style, and save workspace layouts.",
-    keys: "⌘,",
+    body: `Press ${L("settings")} to open settings. Choose from 8 themes, adjust font size, font family, cursor style, and save workspace layouts.`,
+    keys: L("settings"),
     position: "center",
   },
   {
