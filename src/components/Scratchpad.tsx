@@ -663,6 +663,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
 
   return (
     <div
+      data-scratchpad
       style={{
         backgroundColor: "var(--bg-secondary)",
         borderTop: "1px solid var(--border)",
