@@ -41,6 +41,11 @@ interface MonacoWrapperProps {
 export default function MonacoWrapper({ filePath, content, onChange, onSave }: MonacoWrapperProps) {
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const language = detectLanguage(filePath);
+  // The save action is registered once, on mount. Calling onSave directly
+  // from it would keep the first render's closure, whose `content` is the
+  // file as opened, so Cmd+S rewrote the original text and dropped every edit.
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
 
   const handleMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
@@ -48,10 +53,10 @@ export default function MonacoWrapper({ filePath, content, onChange, onSave }: M
       id: "save-file",
       label: "Save File",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-      run: () => onSave(),
+      run: () => onSaveRef.current(),
     });
     editor.focus();
-  }, [onSave]);
+  }, []);
 
   useEffect(() => {
     const editor = editorRef.current;
