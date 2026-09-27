@@ -1,29 +1,34 @@
 import { useState } from "react";
+import { IS_MAC, modLabel, shortcutLabel } from "../lib/shortcuts";
 
+const L = shortcutLabel;
+const MOD = modLabel();
+
+// Labels follow the platform: ⌘ on macOS, Ctrl+Shift on Linux and Windows.
 const shortcuts = [
-  { keys: "⌘ T", action: "New tab" },
-  { keys: "⌘ W", action: "Close tab" },
-  { keys: "⌘ 1-9", action: "Switch tab" },
-  { keys: "⌘ ⇧ [/]", action: "Prev/next tab" },
-  { keys: "⌘ D", action: "Split horiz" },
-  { keys: "⌘ ⇧ D", action: "Split vert" },
-  { keys: "⌘ ⇧ W", action: "Close pane" },
-  { keys: "⌘ ←→", action: "Switch pane" },
-  { keys: "⌘ R", action: "Rename tab" },
-  { keys: "⇧⌘ A", action: "Agents" },
-  { keys: "⌘ B", action: "Files" },
-  { keys: "⇧ ⌘ B", action: "Preview" },
-  { keys: "⌘ .", action: "Fleet" },
-  { keys: "⌘ J", action: "Scratchpad" },
-  { keys: "⌘ ↵", action: "Send to term" },
-  { keys: "⌘ S", action: "Save note" },
-  { keys: "⌘ E", action: "Send Enter ↵" },
-  { keys: "⇧ ⌘ ↵", action: "Copy text" },
-  { keys: "⌘ P", action: "Commands" },
-  { keys: "⌘ F", action: "Find" },
-  { keys: "⇧⌘ ↵", action: "Zoom pane" },
-  { keys: "⌘ ,", action: "Settings" },
-  { keys: "⇧ ⌘ O", action: "Orchestrator" },
+  { keys: L("newTab"), action: "New tab" },
+  { keys: L("closeTab"), action: "Close tab" },
+  { keys: `${MOD}1-9`, action: "Switch tab" },
+  { keys: `${modLabel(true)}[ / ]`, action: "Prev/next tab" },
+  { keys: L("splitHorizontal"), action: "Split horiz" },
+  { keys: L("splitVertical"), action: "Split vert" },
+  { keys: L("closePane"), action: "Close pane" },
+  { keys: IS_MAC ? "⌘←→" : "Ctrl+Shift+Left/Right", action: "Switch pane" },
+  { keys: L("renameTab"), action: "Rename tab" },
+  { keys: L("agentPicker"), action: "Agents" },
+  { keys: L("fileBrowser"), action: "Files" },
+  { keys: L("preview"), action: "Preview" },
+  { keys: L("fleet"), action: "Fleet" },
+  { keys: L("scratchpad"), action: "Scratchpad" },
+  { keys: L("send"), action: "Send to term" },
+  { keys: L("saveNote"), action: "Save note" },
+  { keys: L("sendEnter"), action: "Send Enter ↵" },
+  { keys: L("copy"), action: "Copy text" },
+  { keys: L("palette"), action: "Commands" },
+  { keys: L("find"), action: "Find" },
+  { keys: L("zoomPane"), action: "Zoom pane" },
+  { keys: L("settings"), action: "Settings" },
+  { keys: L("orchestrator"), action: "Orchestrator" },
   { keys: "Esc", action: "Close panel" },
 ];
 
@@ -76,7 +81,7 @@ export default function ShortcutsBar() {
 
       {!collapsed && shortcuts.map((s) => (
         <div
-          key={s.keys}
+          key={s.action}
           style={{
             display: "flex",
             alignItems: "center",

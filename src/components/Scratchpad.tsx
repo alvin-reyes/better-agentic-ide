@@ -1,4 +1,9 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { IS_MAC, SHORTCUTS, keyName, matches, shortcutLabel } from "../lib/shortcuts";
+
+// In the scratchpad plain Ctrl+Enter / Ctrl+S work on every platform.
+const SEND_KEY = IS_MAC ? "⌘↵" : "Ctrl+Enter";
+const SAVE_KEY = IS_MAC ? "⌘S" : "Ctrl+S";
 import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
@@ -807,7 +812,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
-            ⌘↵ send &nbsp; ⌘S save &nbsp; esc close
+            {SEND_KEY} send &nbsp; {SAVE_KEY} save &nbsp; esc close
           </span>
           <button
             onClick={() => setIsOpen(false)}
@@ -919,7 +924,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
         >
           {notes.length === 0 ? (
             <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic" }}>
-              No notes saved yet. Press ⌘S to save the current text as a note.
+              No notes saved yet. Press {SAVE_KEY} to save the current text as a note.
             </div>
           ) : (
             notes.map((note) => (
@@ -1049,8 +1054,12 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            const meta = e.metaKey || e.ctrlKey;
-            // Escape: switch focus to terminal (don't close scratchpad)
+            // Linux/Windows: plain Ctrl+Enter and Ctrl+S work here too. The
+            // Ctrl+Shift forms exist because the terminal needs plain Ctrl;
+            // in this text box nothing else wants them.
+            const plainCtrl = (key: string) =>
+              !IS_MAC && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && keyName(e.nativeEvent) === key;
+            // Escape: switch focus to terminal
             if (e.key === "Escape") {
               e.preventDefault();
               // Blur the textarea — focus will return to terminal
@@ -1059,8 +1068,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               const xtermEl = document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
               xtermEl?.focus();
             }
-            // Cmd+Enter: send to terminal (or run chain)
-            if (meta && !e.shiftKey && e.key === "Enter") {
+            // ⌘↵: send to terminal (or run chain)
+            if (matches(e.nativeEvent, SHORTCUTS.send) || plainCtrl("Enter")) {
               e.preventDefault();
               e.stopPropagation(); // prevent global handler from firing too
               if (isChain) {
@@ -1069,20 +1078,20 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
                 send();
               }
             }
-            // Cmd+Shift+Enter: copy to clipboard
-            if (meta && e.shiftKey && e.key === "Enter") {
+            // ⌘⇧↵: copy to clipboard
+            if (matches(e.nativeEvent, SHORTCUTS.copy)) {
               e.preventDefault();
               e.stopPropagation();
               copy();
             }
-            // Cmd+E: send Enter to terminal
-            if (meta && !e.shiftKey && e.key === "e") {
+            // ⌘E: send Enter to terminal
+            if (matches(e.nativeEvent, SHORTCUTS.sendEnter)) {
               e.preventDefault();
               e.stopPropagation();
               sendEnter();
             }
-            // Cmd+S: save as note
-            if (meta && !e.shiftKey && e.key === "s") {
+            // ⌘S: save as note
+            if (matches(e.nativeEvent, SHORTCUTS.saveNote) || plainCtrl("s")) {
               e.preventDefault();
               e.stopPropagation();
               saveNote();
@@ -1092,7 +1101,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
           onPaste={handlePaste}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          placeholder="Type your thoughts here... ⌘+Enter to send to terminal. Use --- to chain multiple prompts."
+          placeholder={`Type your thoughts here... ${SEND_KEY} to send to terminal. Use --- to chain multiple prompts.`}
           style={{
             flex: 1,
             resize: "none",
@@ -1342,10 +1351,10 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
                 e.currentTarget.style.color = "var(--text-secondary)";
               }
             }}
-            title="Save as note (⌘S)"
+            title={`Save as note (${SAVE_KEY})`}
           >
             {savedFlash ? "Saved!" : "Save"}
-            <kbd style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>⌘S</kbd>
+            <kbd style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>{SAVE_KEY}</kbd>
           </button>
           <button
             onClick={sendEnter}
@@ -1370,10 +1379,10 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
               e.currentTarget.style.color = "var(--text-secondary)";
             }}
-            title="Send Enter to terminal (⌘E)"
+            title={`Send Enter to terminal (${shortcutLabel("sendEnter")})`}
           >
             Send ↵
-            <kbd style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>⌘E</kbd>
+            <kbd style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>{shortcutLabel("sendEnter")}</kbd>
           </button>
           {speechAvailable && (
             <button

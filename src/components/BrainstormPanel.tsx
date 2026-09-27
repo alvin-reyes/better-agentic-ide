@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import mermaid from "mermaid";
@@ -408,7 +409,7 @@ export default function BrainstormPanel({ onClose, initialFile }: BrainstormPane
           </span>
         )}
         <span style={{ fontSize: "10px", color: "var(--text-muted)", fontFamily: "monospace" }}>
-          ⌘B close
+          {shortcutLabel("fileBrowser")} close
         </span>
         <button
           onClick={onClose}

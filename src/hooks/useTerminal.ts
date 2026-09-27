@@ -3,6 +3,9 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { registerFileLinks } from "../lib/terminalFileLinks";
+import { isAppShortcut, shortcutLabel } from "../lib/shortcuts";
+import { openFileFromTerminal } from "../lib/openFile";
 import { SearchAddon } from "@xterm/addon-search";
 import { ImageAddon } from "@xterm/addon-image";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -10,10 +13,6 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
-
-// File path regex for terminal link detection — module-scoped to avoid per-instance recreation
-const PREVIEW_EXTS = "md|markdown|txt|html|htm|json|yaml|yml|toml|ts|tsx|js|jsx|py|rs|go|css|scss|sh|rb|java|c|cpp|h|swift|kt|png|jpg|jpeg|gif|svg|webp|bmp|ico|pdf";
-const filePathRegex = new RegExp(`(?:^|[\\s\`'"(])((?:\\/|~\\/|\\.\\/)?[^\\s\`'"()]+\\.(?:${PREVIEW_EXTS}))\\b`, "gi");
 
 interface PtyEvent {
   type: "output" | "exit" | "error";
@@ -190,6 +189,7 @@ async function createReattachedInstance(
   term.loadAddon(serializeAddon);
 
   term.open(wrapper);
+  registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal);
 
   try {
     const webglAddon = new WebglAddon();
@@ -233,18 +233,9 @@ async function createReattachedInstance(
   }
 
   // Let app-level shortcuts pass through
-  term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-    const meta = e.metaKey || e.ctrlKey;
-    if (!meta) return true;
-    const passthrough = [
-      "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", ".", "b",
-      "a", "A", "o", "O", "Enter", "[", "]", "{", "}", "B",
-      "ArrowLeft", "ArrowRight",
-      "1", "2", "3", "4", "5", "6", "7", "8", "9",
-    ];
-    if (passthrough.includes(e.key)) return false;
-    return true;
-  });
+  // App shortcuts pass through to the window's handler; every other key,
+  // including plain Ctrl combos, goes to the shell.
+  term.attachCustomKeyEventHandler((e: KeyboardEvent) => !isAppShortcut(e));
 
   // Keyboard input -> PTY
   term.onData((data: string) => {
@@ -332,51 +323,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 
   term.open(wrapper);
 
-  // Register link provider for file paths — click to open in preview panel
-  // Matches: /absolute/path.ext, ~/path.ext, ./relative.ext, docs/file.ext
-  // Excludes URLs (handled by WebLinksAddon)
-  term.registerLinkProvider({
-    provideLinks(lineNumber, callback) {
-      const line = term.buffer.active.getLine(lineNumber - 1);
-      if (!line) { callback(undefined); return; }
-      const text = line.translateToString(true);
-      const links: Array<{
-        range: { start: { x: number; y: number }; end: { x: number; y: number } };
-        text: string;
-        decorations: { underline: boolean; pointerCursor: boolean };
-        activate: (_event: MouseEvent, text: string) => void;
-      }> = [];
-
-      let match;
-      filePathRegex.lastIndex = 0;
-      while ((match = filePathRegex.exec(text)) !== null) {
-        const path = match[1];
-        // Skip URLs — let WebLinksAddon handle those
-        if (/^https?:\/\/|^file:\/\//.test(path) || text.slice(Math.max(0, match.index - 8), match.index + match[0].length).includes("://")) {
-          continue;
-        }
-        const startX = match.index + (match[0].length - path.length) + 1;
-        links.push({
-          range: {
-            start: { x: startX, y: lineNumber },
-            end: { x: startX + path.length - 1, y: lineNumber },
-          },
-          text: path,
-          decorations: { underline: true, pointerCursor: true },
-          activate: (_event: MouseEvent, linkText: string) => {
-            getPtyCwd(paneId).then((cwd) => {
-              let resolved = linkText;
-              if (cwd && !linkText.startsWith("/") && !linkText.startsWith("~")) {
-                resolved = `${cwd}/${linkText.replace(/^\.\//, "")}`;
-              }
-              window.dispatchEvent(new CustomEvent("open-preview", { detail: { path: resolved } }));
-            });
-          },
-        });
-      }
-      callback(links.length > 0 ? links : undefined);
-    },
-  });
+  registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal);
 
   try {
     const webglAddon = new WebglAddon();
@@ -412,7 +359,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     term.writeln(`${skin}     ██  ▀  ▀  ██     ${accent}██║  ██║██████╔╝███████╗${reset}`);
     term.writeln(`${skin}      ██ ╺━╸ ██      ${accent}╚═╝  ╚═╝╚═════╝ ╚══════╝${reset}`);
     term.writeln(`${skin}       ██▄▄▄██       ${dim}Agentic Development Environment${reset}`);
-    term.writeln(`${shirt}      ▄███████▄      ${dim}v${__APP_VERSION__}  ${green}⌘P${dim} cmds ${green}⌘J${dim} scratchpad ${green}⌘⇧A${dim} agents${reset}`);
+    term.writeln(`${shirt}      ▄███████▄      ${dim}v${__APP_VERSION__}  ${green}${shortcutLabel("palette")}${dim} cmds ${green}${shortcutLabel("scratchpad")}${dim} scratchpad ${green}${shortcutLabel("agentPicker")}${dim} agents${reset}`);
     term.writeln("");
   }
 
@@ -449,21 +396,9 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
   }
 
   // Let app-level shortcuts pass through to the window handler
-  term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-    const meta = e.metaKey || e.ctrlKey;
-    if (!meta) return true;
-    // Pass Cmd+<key> shortcuts to the app (not consumed by xterm)
-    const passthrough = [
-      "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", ".", "b",
-      "a", "A",  // Agent picker (Cmd+Shift+A)
-      "o", "O",  // Orchestrator (Cmd+Shift+O)
-      "Enter", "[", "]", "{", "}", "B",
-      "ArrowLeft", "ArrowRight",  // Pane navigation
-      "1", "2", "3", "4", "5", "6", "7", "8", "9",
-    ];
-    if (passthrough.includes(e.key)) return false;
-    return true;
-  });
+  // App shortcuts pass through to the window's handler; every other key,
+  // including plain Ctrl combos, goes to the shell.
+  term.attachCustomKeyEventHandler((e: KeyboardEvent) => !isAppShortcut(e));
 
   // Keyboard input -> PTY
   term.onData((data: string) => {

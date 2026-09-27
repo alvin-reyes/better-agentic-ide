@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from "react";
+import { SHORTCUTS, matches } from "../lib/shortcuts";
 import { useTerminal, getPtyCwd } from "../hooks/useTerminal";
 import { getSearchAddon } from "../hooks/useTerminal";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
@@ -75,12 +76,11 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     return () => { mounted = false; clearInterval(interval); };
   }, [paneId]);
 
-  // Listen for Cmd+F to open search — only attach when this pane is active
+  // Listen for ⌘F (Ctrl+Shift+F on Linux/Windows) to open search — only attach when this pane is active
   useEffect(() => {
     if (!isActive) return;
     const handler = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (meta && !e.shiftKey && !e.altKey && e.key === "f") {
+      if (matches(e, SHORTCUTS.find)) {
         e.preventDefault();
         setShowSearch(true);
       }

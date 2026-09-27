@@ -23,6 +23,7 @@ const BmadPanel = lazy(() => import("./components/BmadPanel"));
 import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { flushNow } from "./lib/persistence";
+import { listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
@@ -140,6 +141,12 @@ export default function App() {
     };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
+  }, []);
+
+  // Files clicked in detached windows' terminals open here.
+  useEffect(() => {
+    const unlisten = listenForFileOpens().catch(() => null);
+    return () => { void unlisten.then((fn) => fn?.()); };
   }, []);
 
   // Listen for agent completion notifications (in-app toast)

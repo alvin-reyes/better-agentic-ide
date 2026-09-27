@@ -4,6 +4,7 @@ import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import { useTabStore } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import type { Tab } from "./stores/tabStore";
+import { SHORTCUTS, matches } from "./lib/shortcuts";
 
 interface DetachedAppProps {
   tab: Tab;
@@ -47,16 +48,10 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
   // Keyboard shortcuts for detached window
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return;
-
-      // Cmd+J: toggle scratchpad
-      if (e.key === "j") {
+      if (matches(e, SHORTCUTS.scratchpad)) {
         e.preventDefault();
         toggleScratchpad();
-      }
-      // Cmd+Enter: send scratchpad
-      if (e.key === "Enter" && scratchpadRef.current?.isOpen) {
+      } else if (matches(e, SHORTCUTS.send) && scratchpadRef.current?.isOpen) {
         e.preventDefault();
         scratchpadRef.current?.send();
       }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import MarkdownView from "./viewer/MarkdownView";
 
@@ -297,7 +298,7 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
         </button>
         <button
           onClick={onClose}
-          title="Close preview (⌘⇧B)"
+          title={`Close preview (${shortcutLabel("preview")})`}
           aria-label="Close preview"
           style={{
             background: "none",
