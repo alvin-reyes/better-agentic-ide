@@ -1,14 +1,10 @@
-mod pty;
+// Prevents an extra console window on Windows in release builds.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// All commands, plugins and state are registered in lib.rs. This file used
+// to build its own Builder with only the four PTY commands, so the shipped
+// binary lacked file reading, the file browser, watchers, the fleet
+// sub-agent watcher and BMAD ("Command ... not found" at runtime).
 fn main() {
-    tauri::Builder::default()
-        .manage(pty::PtyManager::new())
-        .invoke_handler(tauri::generate_handler![
-            pty::create_pty,
-            pty::write_pty,
-            pty::resize_pty,
-            pty::kill_pty,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    better_terminal_lib::run()
 }
