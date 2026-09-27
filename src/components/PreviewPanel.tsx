@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import MarkdownView from "./viewer/MarkdownView";
 
 interface WatchEvent {
   type: "changed" | "created" | "removed" | "error";
@@ -33,47 +34,6 @@ function getMimeType(filePath: string): string {
     pdf: "application/pdf",
   };
   return mimes[ext] ?? "application/octet-stream";
-}
-
-// Minimal markdown-to-HTML renderer (no dependencies)
-function renderMarkdown(md: string): string {
-  let html = md
-    // Code blocks
-    .replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-      return `<pre style="background:var(--bg-elevated);padding:12px;border-radius:6px;overflow-x:auto;border:1px solid var(--border)"><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`;
-    })
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code style="background:var(--bg-elevated);padding:2px 6px;border-radius:3px;font-size:0.9em">$1</code>')
-    // Headers
-    .replace(/^#### (.+)$/gm, '<h4 style="margin:16px 0 8px;font-size:14px;font-weight:600;color:var(--text-primary)">$1</h4>')
-    .replace(/^### (.+)$/gm, '<h3 style="margin:20px 0 8px;font-size:16px;font-weight:600;color:var(--text-primary)">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 style="margin:24px 0 8px;font-size:18px;font-weight:700;color:var(--text-primary)">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 style="margin:24px 0 12px;font-size:22px;font-weight:700;color:var(--text-primary)">$1</h1>')
-    // Bold & italic
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:var(--accent)">$1</a>')
-    // Unordered lists
-    .replace(/^[-*] (.+)$/gm, '<li style="margin:2px 0">$1</li>')
-    // Horizontal rule
-    .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>')
-    // Paragraphs (blank line separated)
-    .replace(/\n\n/g, '</p><p style="margin:8px 0;line-height:1.7">');
-
-  // Wrap consecutive <li> in <ul>
-  html = html.replace(/((?:<li[^>]*>.*?<\/li>\s*)+)/g, '<ul style="padding-left:20px;margin:8px 0">$1</ul>');
-
-  return `<p style="margin:8px 0;line-height:1.7">${html}</p>`;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 interface PreviewPanelProps {
@@ -464,7 +424,9 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
               border: "none",
               backgroundColor: "#fff",
             }}
-            sandbox="allow-scripts allow-same-origin"
+            // Scripts run, but in an opaque origin: with allow-same-origin a
+            // srcdoc page shares the app's origin and can reach Tauri IPC.
+            sandbox="allow-scripts"
             title="HTML Preview"
           />
         )}
@@ -505,18 +467,9 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
         )}
 
         {mode === "markdown" && (
-          <div
-            style={{
-              padding: "20px 24px",
-              fontSize: "14px",
-              color: "var(--text-secondary)",
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-              lineHeight: 1.7,
-              overflowY: "auto",
-              height: "100%",
-            }}
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
-          />
+          // The same sanitized renderer as file tabs: raw HTML in a README
+          // must not run with access to the app.
+          <MarkdownView content={content} filePath={filePath} />
         )}
 
         {mode === "none" && filePath && (
