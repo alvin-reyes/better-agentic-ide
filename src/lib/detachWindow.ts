@@ -5,7 +5,7 @@ import type { Tab } from "../stores/tabStore";
 interface SerializedTab {
   id: string;
   name: string;
-  type?: "terminal" | "orchestrator" | "browser" | "editor" | "fleet";
+  type?: Tab["type"];
   root: Tab["root"];
   activePaneId: string;
 }

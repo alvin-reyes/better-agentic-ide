@@ -110,6 +110,7 @@ Grab the installer for your platform from the [latest release](https://github.co
 ### Smart Contracts
 - **Contracts panel** (`Cmd+Shift+K`) — detects Foundry, Hardhat or Anchor from the terminal's folder and lists the installed tools, your contract sources and compiled ABIs
 - **One-click actions** — build, test (with traces, gas report, coverage, gas snapshot), format, and Slither/Aderyn analysis run in the terminal from the project root; Anvil, a Hardhat node or `solana-test-validator` starts in its own tab
+- **Workbench** — a tab per Foundry project to compile with clickable errors, run each test function on its own (gas, fuzz runs, failure reason, traces), and deploy to and call contracts on Anvil, with events and custom-error reverts decoded against the ABI
 - **Safe deploys** — deploy commands for each `script/*.s.sol` or Ignition module are typed but not run, and use Foundry keystore accounts; ADE never handles private keys
 - **ABI viewer** — compiled artifacts open as read/write functions, events and errors with their selectors (keccak-256, click to copy); Anchor IDLs show instructions and accounts
 - **Web3 agents** — Smart Contract Engineer, Smart Contract Auditor, Gas Optimizer and Solana/Anchor Engineer in the agent picker
@@ -195,7 +196,17 @@ CI runs the typecheck, frontend tests, a production build and the Rust tests on 
 
 Release builds are signed and notarized automatically once all of these repository secrets exist (until then macOS builds are unsigned): `APPLE_CERTIFICATE` (base64 of the Developer ID Application `.p12`: `openssl base64 -A -in cert.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (e.g. `Developer ID Application: Name (TEAMID)`), `APPLE_ID`, `APPLE_PASSWORD` (an app-specific password) and `APPLE_TEAM_ID`.
 
-`packaging/homebrew/better-terminal.rb` is the draft for [homebrew/cask](https://github.com/Homebrew/homebrew-cask). It can be submitted once releases are signed and notarized and the repository meets Homebrew's notability bar (75 stars, 30 forks or 30 watchers).
+`packaging/homebrew/better-terminal.rb` is the draft for [homebrew/cask](https://github.com/Homebrew/homebrew-cask). Until it's accepted, the [alvin-reyes/tap](https://github.com/alvin-reyes/homebrew-tap) cask above is the way to install with Homebrew. Where things stand against Homebrew's [acceptance policy](https://docs.brew.sh/Package-Acceptance-Policy) and [cask rules](https://docs.brew.sh/Acceptable-Casks):
+
+| Requirement | Status |
+|---|---|
+| Stable, versioned releases | ✅ |
+| Repository at least 30 days old | ✅ |
+| Runs natively on Apple Silicon (no Rosetta) | ✅ |
+| Signed and notarized, passes Gatekeeper | ⏳ needs the Apple secrets above |
+| Notability: **75 stars, 30 forks or 30 watchers** if a user submits it; **225 stars, 90 forks or 90 watchers** if we submit it ourselves | ⏳ |
+
+Once releases are signed and one notability threshold is met, submit the draft cask pointing at the signed release.
 
 ## Architecture
 
