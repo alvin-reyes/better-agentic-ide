@@ -196,7 +196,17 @@ CI runs the typecheck, frontend tests, a production build and the Rust tests on 
 
 Release builds are signed and notarized automatically once all of these repository secrets exist (until then macOS builds are unsigned): `APPLE_CERTIFICATE` (base64 of the Developer ID Application `.p12`: `openssl base64 -A -in cert.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (e.g. `Developer ID Application: Name (TEAMID)`), `APPLE_ID`, `APPLE_PASSWORD` (an app-specific password) and `APPLE_TEAM_ID`.
 
-`packaging/homebrew/better-terminal.rb` is the draft for [homebrew/cask](https://github.com/Homebrew/homebrew-cask). It can be submitted once releases are signed and notarized and the repository meets Homebrew's notability bar (75 stars, 30 forks or 30 watchers).
+`packaging/homebrew/better-terminal.rb` is the draft for [homebrew/cask](https://github.com/Homebrew/homebrew-cask). Until it's accepted, the [alvin-reyes/tap](https://github.com/alvin-reyes/homebrew-tap) cask above is the way to install with Homebrew. Where things stand against Homebrew's [acceptance policy](https://docs.brew.sh/Package-Acceptance-Policy) and [cask rules](https://docs.brew.sh/Acceptable-Casks):
+
+| Requirement | Status |
+|---|---|
+| Stable, versioned releases | ✅ |
+| Repository at least 30 days old | ✅ |
+| Runs natively on Apple Silicon (no Rosetta) | ✅ |
+| Signed and notarized, passes Gatekeeper | ⏳ needs the Apple secrets above |
+| Notability: **75 stars, 30 forks or 30 watchers** if a user submits it; **225 stars, 90 forks or 90 watchers** if we submit it ourselves | ⏳ |
+
+Once releases are signed and one notability threshold is met, submit the draft cask pointing at the signed release.
 
 ## Architecture
 
