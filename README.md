@@ -164,7 +164,7 @@ CI runs the typecheck, frontend tests, a production build and the Rust tests on 
 ### Releasing
 
 1. Bump `version` in `src-tauri/tauri.conf.json` and merge to `main`.
-2. Push a tag: `git tag v<version> && git push origin v<version>`. The *Build & Release Installers* workflow builds macOS (ARM + Intel), Windows and Linux installers and attaches them to a GitHub release.
+2. Push a tag (`git tag v<version> && git push origin v<version>`), or run *Build & Release Installers* from the Actions tab with the tag as input. The workflow builds macOS (ARM + Intel), Windows and Linux installers and attaches them to a GitHub release.
 3. Update the Homebrew cask in [alvin-reyes/homebrew-tap](https://github.com/alvin-reyes/homebrew-tap) (`Casks/ade.rb`): set `version` and the two `sha256` values for the new `.dmg` files.
 
 ## Architecture
