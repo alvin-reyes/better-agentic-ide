@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import {
   parseBuild, parseTestList, parseTestResults, testArgs, parseArtifact, callSignature,
-  parseCallOutput, decodeRevert, decodeLogs, decodeWord, etherHint, constructorOf, isDeployable,
+  parseCallOutput, decodeRevert, decodeLogs, decodeWord, etherHint, constructorOf, isDeployable, firstJson,
 } from "../contractBench";
 import type { AbiItem } from "../contracts";
 
@@ -41,6 +41,9 @@ describe("tests", () => {
     expect(ok).toMatchObject({ contract: "VaultTest", ok: true, gas: 44241 });
     const bad = r.find((t) => t.test === "testFuzz_Deposit")!;
     expect(bad).toMatchObject({ ok: false, reason: "assertion failed: 1 != 2", runs: 12, gas: 44291, logs: ["amount 1"] });
+  });
+  it("skips spinner lines and trailing text around the JSON", () => {
+    expect(firstJson("[\u280a] Compiling...\n" + LIST + "\nRan 2 suites")).toEqual(JSON.parse(LIST));
   });
   it("runs exactly one test or one contract", () => {
     expect(testArgs({ contract: "VaultTest", test: "test_A" })).toEqual(["test", "--json", "--match-contract", "^VaultTest$", "--match-test", "^test_A\\("]);
