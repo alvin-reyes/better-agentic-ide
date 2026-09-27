@@ -1,0 +1,37 @@
+---
+layout: default
+body_class: guide-page
+---
+{% assign pages = site.data.guide %}
+<div class="wrap guide">
+  <aside class="guide-nav" aria-label="Guide">
+    <details open>
+      <summary>Guide</summary>
+      <ol>
+        {% for item in pages %}
+        <li><a href="{{ item.url | relative_url }}"{% if page.url == item.url %} aria-current="page"{% endif %}>{{ item.title }}</a></li>
+        {% endfor %}
+      </ol>
+    </details>
+    <div class="platform-switch" role="group" aria-label="Show shortcuts for">
+      <span>Shortcuts for</span>
+      <button type="button" data-platform="mac">macOS</button>
+      <button type="button" data-platform="other">Linux / Windows</button>
+    </div>
+  </aside>
+  <article class="guide-body prose">
+    <h1>{{ page.title }}</h1>
+    {% if page.lead %}<p class="lead">{{ page.lead }}</p>{% endif %}
+    {{ content }}
+    {% for item in pages %}
+      {% if item.url == page.url %}
+        {% assign i = forloop.index0 %}
+      {% endif %}
+    {% endfor %}
+    <nav class="pager" aria-label="Next and previous">
+      {% assign p = i | minus: 1 %}{% if i > 0 %}{% assign prev = pages[p] %}<a class="prev" href="{{ prev.url | relative_url }}"><span>Previous</span>{{ prev.title }}</a>{% else %}<span></span>{% endif %}
+      {% assign n = i | plus: 1 %}{% if n < pages.size %}{% assign next = pages[n] %}<a class="next" href="{{ next.url | relative_url }}"><span>Next</span>{{ next.title }}</a>{% endif %}
+    </nav>
+    <p class="edit"><a href="{{ site.repo }}/edit/main/docs/{{ page.path }}">Edit this page on GitHub</a></p>
+  </article>
+</div>

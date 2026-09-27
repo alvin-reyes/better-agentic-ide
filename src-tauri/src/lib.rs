@@ -1,4 +1,5 @@
 mod bmad;
+mod contracts;
 mod pty;
 mod state;
 mod subagent;
@@ -68,12 +69,30 @@ fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
 
 #[tauri::command]
 fn check_command_exists(command: String) -> Result<String, String> {
+    find_command(&command)
+}
+
+/// Path of an installed CLI, looking in common install folders first and then
+/// a login shell's PATH (apps started from the Dock don't inherit it).
+pub(crate) fn find_command(command: &str) -> Result<String, String> {
+    // The name is passed to `which` through a shell below, and it comes from
+    // the webview: allow only plain command names.
+    let valid = !command.is_empty()
+        && command.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        && !command.starts_with('.');
+    if !valid {
+        return Err(format!("invalid command name: {:?}", command));
+    }
     // Get home directory — try multiple methods for Finder-launched apps
     let home = get_home_dir();
 
     let search_dirs = [
         format!("{}/.local/bin", home),
         format!("{}/.cargo/bin", home),
+        // Smart contract toolchains install into their own folders.
+        format!("{}/.foundry/bin", home),
+        format!("{}/.avm/bin", home),
+        format!("{}/.local/share/solana/install/active_release/bin", home),
         format!("{}/bin", home),
         format!("{}/.nvm/versions/node/*/bin", home),
         "/usr/local/bin".to_string(),
@@ -378,6 +397,8 @@ pub fn run() {
             read_file,
             read_file_base64,
             resolve_file_paths,
+            contracts::contracts_detect,
+            contracts::contracts_tools,
             list_md_files,
             list_directory,
             bmad::bmad_status,
@@ -424,5 +445,14 @@ mod tests {
         assert!(got[5].is_some(), "~ expands to home");
         // Relative paths need a folder to resolve against.
         assert_eq!(resolve_existing_files(&["docs/plan.md".into()], None, &cwd)[0], None);
+    }
+
+    #[test]
+    fn command_lookup_rejects_shell_syntax() {
+        for bad in ["ls; touch /tmp/ade-pwned", "$(id)", "a b", "../bin/sh", "", ".hidden"] {
+            assert!(find_command(bad).is_err(), "{bad:?}");
+        }
+        assert!(!std::path::Path::new("/tmp/ade-pwned").exists());
+        assert!(find_command("sh").is_ok());
     }
 }

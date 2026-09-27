@@ -240,7 +240,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
           />
 
           {/* Provider selector + Category pills */}
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
             {/* Provider buttons */}
             <div style={{ display: "flex", gap: "4px" }}>
               {PROVIDERS.map((p) => {
@@ -273,8 +273,8 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
               })}
             </div>
 
-            {/* Category pills */}
-            <div style={{ display: "flex", gap: "4px" }}>
+            {/* Category pills: wrap, so every category stays reachable */}
+            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
               <button
                 onClick={() => setActiveCategory(null)}
                 style={{
@@ -296,7 +296,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                   cat === "Backend" ? "#3fb950" :
                   cat === "Frontend" ? "#58a6ff" :
                   cat === "DevOps" ? "#bc8cff" :
-                  cat === "Testing" ? "#d29922" : "#ff7b72";
+                  cat === "Testing" ? "#d29922" :
+                  cat === "Web3" ? "#f0883e" :
+                  cat === "Architects" ? "#a371f7" : "#ff7b72";
                 return (
                   <button
                     key={cat}

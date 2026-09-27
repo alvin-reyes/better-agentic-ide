@@ -1,15 +1,32 @@
-# GitHub Pages builds this directory as a Jekyll site (the published page is
-# index.html). Everything else here is internal engineering documentation that
-# was only ever swept into the build by accident — nothing on the site links to
-# it.
-#
-# Leaving it in the build also breaks deploys: these documents embed React code
-# samples containing JSX like `style={{ ... }}`, and Jekyll's Liquid parser
-# reads `{{` as the start of a template variable, then fails with
-# "Variable '{{ ...' was not properly terminated".
-#
-# Excluding these directories fixes that permanently, rather than needing
-# {% raw %} fences hand-added to every future plan.
+# GitHub Pages builds this folder with Jekyll: the landing page (index.html)
+# and the user guide (guide/*.md) share the layouts in _layouts/.
+title: ADE
+tagline: The terminal built for AI coding agents
+description: >-
+  ADE is a desktop terminal for running Claude Code and other AI coding
+  agents: split panes, a prompt scratchpad, clickable files, a live fleet view
+  of every agent, and state that follows you between machines.
+url: https://alvin-reyes.github.io
+baseurl: /better-agentic-ide
+repo: https://github.com/alvin-reyes/better-agentic-ide
+
+permalink: pretty
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  syntax_highlighter_opts:
+    disable: true
+
+defaults:
+  - scope:
+      path: guide
+    values:
+      layout: guide
+
+# Internal engineering docs live here too. They aren't part of the site, and
+# their React snippets contain `{{`, which Jekyll's Liquid parser rejects.
 exclude:
   - plans/
   - superpowers/
+  - bmad-vendoring.md

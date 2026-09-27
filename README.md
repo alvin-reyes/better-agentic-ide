@@ -14,6 +14,8 @@
 <p align="center">A desktop terminal built for running AI coding agents. Split panes, a prompt scratchpad, a file viewer, and a live fleet view of every agent across every terminal — all keyboard-first.</p>
 
 <p align="center">
+  <a href="https://alvin-reyes.github.io/better-agentic-ide/"><strong>Website</strong></a> ·
+  <a href="https://alvin-reyes.github.io/better-agentic-ide/guide/"><strong>User guide</strong></a> ·
   <a href="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml"><img src="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
@@ -82,7 +84,8 @@ Grab the installer for your platform from the [latest release](https://github.co
 - Also opens when you click a file path in the terminal
 
 ### AI Agents
-- **Agent picker** (`Cmd+Shift+A`) — 23 pre-configured agent profiles across Backend, Frontend, DevOps, Testing and General (debugging, code review, docs, architecture, git, brainstorming and more)
+- **Agent picker** (`Cmd+Shift+A`) — 37 pre-configured agent profiles across Backend, Frontend, DevOps, Testing, Web3, Architects and General (debugging, code review, docs, architecture, git, contract auditing and more)
+- **Architects to brainstorm with** — AI Agent, RAG & Knowledge, Workflow Automation, LLMOps, AI Automation Strategist, DeFi Protocol, Tokenomics, Smart Contract Systems, Web3 Infrastructure, Cross-chain & L2, and AI x Web3. They ask questions, compare options, draw Mermaid diagrams and record decisions as ADRs in `docs/adr/` instead of writing code
 - **Task routing** — describe a task and the picker suggests the best-matching agent
 - **Providers** — Claude Code, Codex, Gemini CLI or Ollama
 - **Continuous mode** — autonomous runs with `--dangerously-skip-permissions` (with a safety warning)
@@ -103,6 +106,14 @@ Grab the installer for your platform from the [latest release](https://github.co
 ### BMAD Method
 - **One-click setup** — ADE offers to install a bundled, pinned copy of [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) into a project (`.bmad-core/` plus Claude Code commands); nothing is downloaded and existing files are never overwritten
 - **Persona panel** — launch the Analyst, PM, UX Expert, Architect, Product Owner, Scrum Master, Developer or QA persona in the active terminal
+
+### Smart Contracts
+- **Contracts panel** (`Cmd+Shift+K`) — detects Foundry, Hardhat or Anchor from the terminal's folder and lists the installed tools, your contract sources and compiled ABIs
+- **One-click actions** — build, test (with traces, gas report, coverage, gas snapshot), format, and Slither/Aderyn analysis run in the terminal from the project root; Anvil, a Hardhat node or `solana-test-validator` starts in its own tab
+- **Safe deploys** — deploy commands for each `script/*.s.sol` or Ignition module are typed but not run, and use Foundry keystore accounts; ADE never handles private keys
+- **ABI viewer** — compiled artifacts open as read/write functions, events and errors with their selectors (keccak-256, click to copy); Anchor IDLs show instructions and accounts
+- **Web3 agents** — Smart Contract Engineer, Smart Contract Auditor, Gas Optimizer and Solana/Anchor Engineer in the agent picker
+- Solidity syntax highlighting; compiler error locations are clickable
 
 ### Browser Tab
 - **Open Browser Tab** from the command palette to view a local dev server (defaults to `http://localhost:3000`) inside ADE
@@ -150,6 +161,7 @@ On Linux and Windows, app shortcuts use `Ctrl+Shift` where macOS uses `⌘`, and
 | `⌘⇧A` | `Ctrl+Alt+Shift+A` | AI agent picker |
 | `⌘.` | `Ctrl+Shift+.` | Fleet view |
 | `⌘⇧O` | `Ctrl+Alt+Shift+O` | Orchestrator |
+| `⌘⇧K` | `Ctrl+Alt+Shift+K` | Smart contracts panel |
 | `⌘,` | `Ctrl+Shift+,` | Settings |
 | `Esc` | `Esc` | Close open panels and focus the terminal |
 
