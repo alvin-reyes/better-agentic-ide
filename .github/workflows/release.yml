@@ -4,10 +4,21 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual run from the Actions tab: creates the tag on the selected branch's
+  # head, so a release doesn't need a local tag push.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create and release, e.g. v0.14.0 (must match the version in src-tauri/tauri.conf.json)'
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+env:
+  # A tag push releases that tag; a manual run releases the tag it was given.
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   create-release:
@@ -15,12 +26,26 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.id }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check tag matches app version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$RELEASE_TAG" != "v$VERSION" ]; then
+            echo "::error::Tag $RELEASE_TAG does not match tauri.conf.json version $VERSION (expected v$VERSION)"
+            exit 1
+          fi
+
       - name: Create GitHub Release
         id: create
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: 'ADE ${{ github.ref_name }}'
+          tag_name: ${{ env.RELEASE_TAG }}
+          # For a manual run the tag doesn't exist yet; create it on the commit being built.
+          target_commitish: ${{ github.sha }}
+          name: 'ADE ${{ env.RELEASE_TAG }}'
           body: |
             ## Downloads
 
@@ -122,7 +147,7 @@ jobs:
           FOUND=0
           while IFS= read -r -d '' FILE; do
             echo "Uploading: $FILE"
-            gh release upload "${{ github.ref_name }}" "$FILE" --clobber
+            gh release upload "$RELEASE_TAG" "$FILE" --clobber
             FOUND=1
           done < <(find "$BUNDLE_DIR" -type f \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.exe" \) -print0 2>/dev/null)
 
