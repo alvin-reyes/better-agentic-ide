@@ -94,6 +94,18 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         onClose();
       }},
       { id: "bmad-toggle", label: "BMAD: Toggle panel", category: "BMAD", action: () => { window.dispatchEvent(new CustomEvent("toggle-bmad")); onClose(); } },
+      { id: "contracts-panel", label: "Contracts: Open panel", shortcut: L("contracts"), category: "Contracts", action: () => { window.dispatchEvent(new CustomEvent("toggle-contracts")); onClose(); } },
+      ...([
+        ["build", "Contracts: Build"],
+        ["test", "Contracts: Test"],
+        ["gas", "Contracts: Test with gas report"],
+        ["coverage", "Contracts: Coverage"],
+        ["slither", "Contracts: Analyze with Slither"],
+        ["node", "Contracts: Start local chain"],
+      ] as const).map(([id, label]) => ({
+        id: `contracts-${id}`, label, category: "Contracts",
+        action: () => { window.dispatchEvent(new CustomEvent("contracts-run", { detail: { id } })); onClose(); },
+      })),
       { id: "orchestrator", label: "Open Orchestrator", shortcut: L("orchestrator"), category: "Panels", action: () => {
         import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
           const sessionId = useOrchestratorStore.getState().createSession("New Project");
@@ -220,6 +232,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       case "Themes": return "#d29922";
       case "Recording": return "#ff7b72";
       case "BMAD": return "#2dd4bf";
+      case "Contracts": return "#f0883e";
       default: return "var(--text-muted)";
     }
   };

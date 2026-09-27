@@ -8,7 +8,7 @@ description: ADE's agent picker, fleet view, orchestrator, BMAD personas and bro
 
 Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to launch an agent in a new, color-coded tab.
 
-- **22 profiles** across Backend, Frontend, DevOps, Testing and General — API Builder, Database Engineer, Debugger, Code Reviewer, Docs Writer and more. Each starts the agent with a role prompt.
+- **26 profiles** across Backend, Frontend, DevOps, Testing, Web3 and General — API Builder, Database Engineer, Smart Contract Auditor, Debugger, Code Reviewer, Docs Writer and more. Each starts the agent with a role prompt. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 ones.
 - **Describe a task** in the search box and the picker suggests the best match.
 - **Provider** — switch between Claude Code, Codex, Gemini CLI and Ollama with <kbd>Tab</kbd>.
 - **Continuous mode** runs the agent without permission prompts (Claude Code's `--dangerously-skip-permissions`). ADE asks you to confirm first; use it only in projects you trust.

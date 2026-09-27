@@ -46,6 +46,7 @@ export const SHORTCUTS = {
   agentPicker: { key: "a", shift: true },
   fleet: { key: "." },
   orchestrator: { key: "o", shift: true },
+  contracts: { key: "k", shift: true },
 } satisfies Record<string, Combo>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;
