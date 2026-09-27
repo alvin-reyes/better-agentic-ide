@@ -76,6 +76,11 @@ export default function ContractsPanel({ cwd, onClose }: Props) {
         <div className="contracts-panel__header">
           <h2>Contracts</h2>
           {kinds.map((k) => <span key={k} className="contracts-chip" data-kind={k}>{LABELS[k]}</span>)}
+          {project && kinds.includes("foundry") && (
+            <button className="contracts-action" onClick={() => { useTabStore.getState().addContractsTab(project.root); onClose(); }} title="Compile, run single tests, deploy and call on a local chain">
+              Open workbench
+            </button>
+          )}
           <span className="contracts-panel__root" title={project?.root}>{project?.root ?? cwd ?? ""}</span>
           <button className="contracts-panel__close" onClick={onClose} aria-label="Close contracts panel" title="Close (Esc)">✕</button>
         </div>
