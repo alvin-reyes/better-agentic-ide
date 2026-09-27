@@ -298,10 +298,17 @@ const FORBIDDEN_FLAGS: &[&str] = &[
 /// eth_* methods the workbench may call through `cast rpc`.
 const RPC_METHODS: &[&str] = &["eth_accounts", "eth_chainId", "eth_blockNumber"];
 
+/// `http(s)/ws://127.0.0.1:<port>` or `localhost:<port>`, optionally with a path.
+/// The authority after the host must be only a port: "http://127.0.0.1:8545@evil.com"
+/// starts with a local prefix but its host is evil.com (userinfo 127.0.0.1:8545).
 fn is_local_url(url: &str) -> bool {
     ["http://127.0.0.1:", "http://localhost:", "ws://127.0.0.1:", "ws://localhost:"]
         .iter()
-        .any(|p| url.starts_with(p))
+        .filter_map(|p| url.strip_prefix(p))
+        .any(|rest| {
+            let port = rest.split(['/', '?', '#']).next().unwrap_or("");
+            !port.is_empty() && port.chars().all(|c| c.is_ascii_digit())
+        })
 }
 
 /// Why a command is refused, or None if it may run.
@@ -327,7 +334,7 @@ pub fn check_exec(program: &str, args: &[String]) -> Option<String> {
             }
         }
     }
-    if program == "cast" && sub != "chain-id" {
+    if program == "cast" {
         // Every cast call must name its node explicitly, and it must be local:
         // without --rpc-url cast falls back to ETH_RPC_URL, which could be mainnet.
         if !args.iter().any(|a| a == "--rpc-url" || a.starts_with("--rpc-url=")) {
@@ -339,9 +346,6 @@ pub fn check_exec(program: &str, args: &[String]) -> Option<String> {
         if sub == "rpc" && !args.get(1).is_some_and(|m| RPC_METHODS.contains(&m.as_str())) {
             return Some("that RPC method is not allowed".into());
         }
-    }
-    if program == "cast" && sub == "chain-id" && !args.iter().any(|a| a == "--rpc-url") {
-        return Some("cast needs an explicit local --rpc-url".into());
     }
     None
 }
@@ -371,18 +375,20 @@ pub fn contracts_exec(root: String, program: String, args: Vec<String>, timeout_
         .map_err(|e| e.to_string())?;
 
     // Read both pipes on threads so a chatty build can't fill one and stall.
-    let mut out_pipe = child.stdout.take();
-    let mut err_pipe = child.stderr.take();
-    let out_t = std::thread::spawn(move || {
-        let mut s = String::new();
-        if let Some(p) = out_pipe.as_mut() { let _ = std::io::Read::read_to_string(p, &mut s); }
-        s
-    });
-    let err_t = std::thread::spawn(move || {
-        let mut s = String::new();
-        if let Some(p) = err_pipe.as_mut() { let _ = std::io::Read::read_to_string(p, &mut s); }
-        s
-    });
+    // Results come back over channels rather than join(): a grandchild the
+    // tool started (solc, an --ffi script) can outlive it and hold the pipe
+    // open, and waiting for EOF then would never return.
+    fn reader<R: std::io::Read + Send + 'static>(pipe: Option<R>) -> std::sync::mpsc::Receiver<String> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut s = String::new();
+            if let Some(mut p) = pipe { let _ = p.read_to_string(&mut s); }
+            let _ = tx.send(s);
+        });
+        rx
+    }
+    let out_rx = reader(child.stdout.take());
+    let err_rx = reader(child.stderr.take());
     let limit = std::time::Duration::from_secs(timeout_secs.unwrap_or(300).clamp(1, 1800));
     let started = std::time::Instant::now();
     let mut timed_out = false;
@@ -397,10 +403,11 @@ pub fn contracts_exec(root: String, program: String, args: Vec<String>, timeout_
             None => std::thread::sleep(std::time::Duration::from_millis(50)),
         }
     };
+    let grace = std::time::Duration::from_secs(5);
     Ok(ExecResult {
         code: status.and_then(|s| s.code()),
-        stdout: out_t.join().unwrap_or_default(),
-        stderr: err_t.join().unwrap_or_default(),
+        stdout: out_rx.recv_timeout(grace).unwrap_or_default(),
+        stderr: err_rx.recv_timeout(grace).unwrap_or_default(),
         timed_out,
     })
 }
@@ -523,6 +530,9 @@ mod tests {
             ("cast", v(&["send", "--from", "0x1", "--rpc-url", local, "0xabc", "f()"])),
             ("cast", v(&["call", "0xabc", "f()"])),
             ("cast", v(&["rpc", "anvil_setBalance", "0x1", "0x1", "--rpc-url", local])),
+            ("cast", v(&["call", "0xabc", "f()", "--rpc-url", "http://127.0.0.1:8545@mainnet.infura.io"])),
+            ("cast", v(&["call", "0xabc", "f()", "--rpc-url=http://localhost:8545@evil.example"])),
+            ("cast", v(&["chain-id", "--rpc-url", "http://127.0.0.1:"])),
             ("cast", v(&["wallet", "new"])),
         ] {
             assert!(check_exec(prog, &args).is_some(), "{prog} {args:?} was allowed");

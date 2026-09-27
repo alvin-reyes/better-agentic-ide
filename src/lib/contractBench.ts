@@ -1,11 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { selector, signature, type AbiItem, type AbiParam } from "./contracts";
+import { canonicalType, selector, signature, type AbiItem } from "./contracts";
 
-/**
- * The contracts workbench: compile, run individual tests, and deploy to and
- * call contracts on a local chain. Parsing is kept pure (and tested); the
- * `run*` helpers call forge/cast through the guarded `contracts_exec`.
- */
+/** Parsing for the contracts workbench; `exec` runs forge/cast via the guarded `contracts_exec`. */
 
 export const LOCAL_RPC = "http://127.0.0.1:8545";
 
@@ -20,15 +16,23 @@ export function exec(root: string, program: "forge" | "cast", args: string[], ti
   return invoke<ExecResult>("contracts_exec", { root, program, args, timeoutSecs: timeoutSecs ?? null });
 }
 
-/** The first JSON value in a tool's output (forge may print progress first). */
+/**
+ * The first JSON value in a tool's output. Forge may print progress first,
+ * and its spinner lines ("[⠊] Compiling…") start with "[" too, so try each
+ * line that starts with a bracket, ignoring any text after the value.
+ */
 export function firstJson<T>(text: string): T | null {
-  const i = text.search(/[[{]/);
-  if (i < 0) return null;
-  try {
-    return JSON.parse(text.slice(i)) as T;
-  } catch {
-    return null;
+  const starts = /^[ \t]*[[{]/gm;
+  for (let m, tries = 0; (m = starts.exec(text)) && tries < 20; tries++) {
+    const rest = text.slice(m.index).trimStart();
+    const end = rest.lastIndexOf(rest[0] === "{" ? "}" : "]");
+    for (const candidate of [rest, rest.slice(0, end + 1)]) {
+      try {
+        return JSON.parse(candidate) as T;
+      } catch { /* try the next candidate */ }
+    }
   }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,13 +171,8 @@ export function constructorOf(abi: AbiItem[]): AbiItem | undefined {
 
 /** "name(types)(outputs)" — cast decodes the result when outputs are given. */
 export function callSignature(item: AbiItem): string {
-  const outs = (item.outputs ?? []).map((o) => canonical(o)).join(",");
+  const outs = (item.outputs ?? []).map(canonicalType).join(",");
   return `${signature(item)}(${outs})`;
-}
-
-function canonical(p: AbiParam): string {
-  if (p.type.startsWith("tuple")) return `(${(p.components ?? []).map(canonical).join(",")})${p.type.slice(5)}`;
-  return p.type;
 }
 
 /** cast's --value: a bare number is wei; "1ether", "0.5 ether", "2gwei" also work. */

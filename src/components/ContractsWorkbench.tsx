@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ContractsProject, AbiItem } from "../lib/contracts";
-import { formatParams, groupAbi } from "../lib/contracts";
+import { formatParams, groupAbi, signature } from "../lib/contracts";
 import {
   LOCAL_RPC, exec, parseBuild, parseTestList, parseTestResults, testArgs, parseArtifact, isDeployable,
   constructorOf, callSignature, parseCallOutput, decodeRevert, decodeLogs, etherHint, normalizeValue,
@@ -10,11 +10,7 @@ import {
 import { runInNewTab } from "../lib/terminalCommands";
 import { useTabStore } from "../stores/tabStore";
 
-/**
- * A Remix-style bench for a Foundry project: compile with inline errors, run
- * any single test and see its result, and deploy to / call contracts on a
- * local chain (Anvil) using its unlocked dev accounts — no private keys.
- */
+/** Compile, run single tests, and deploy/call on Anvil for one Foundry project. */
 
 interface Instance {
   id: string;
@@ -72,7 +68,6 @@ export default function ContractsWorkbench({ root }: { root: string }) {
     saved.set(root, { view, results, compile, filter, instances });
   }, [root, view, results, compile, filter, instances]);
 
-  // ---- project + compile + test list ----
   const refreshList = useCallback(async () => {
     const r = await exec(root, "forge", ["test", "--list", "--json"], 600).catch(() => null);
     if (r) setSuites(parseTestList(r.stdout));
@@ -119,7 +114,6 @@ export default function ContractsWorkbench({ root }: { root: string }) {
     });
   }, [detect, refreshList]);
 
-  // ---- tests ----
   const runTests = useCallback(async (filterBy: { contract?: string; test?: string }) => {
     const targets = suites
       .filter((s) => !filterBy.contract || s.contract === filterBy.contract)
@@ -142,13 +136,15 @@ export default function ContractsWorkbench({ root }: { root: string }) {
       });
       const failed = parsed.find((t) => !t.ok);
       if (failed) setExpanded(key(failed.contract, failed.test));
+    } catch (e) {
+      setCompile({ ok: false, errors: [{ severity: "error", message: "Tests did not run", detail: String(e) }], at: Date.now() });
     } finally {
       setRunning(new Set());
     }
   }, [root, suites]);
 
   const traces = (contract: string, test: string) => {
-    void runInNewTab(`trace ${test}`, root, `forge test --match-contract '^${contract}$' --match-test '^${test}$' -vvvv`);
+    void runInNewTab(`trace ${test}`, root, `forge test --match-contract '^${contract}$' --match-test '^${test}\\(' -vvvv`);
   };
 
   const summary = useMemo(() => {
@@ -156,14 +152,34 @@ export default function ContractsWorkbench({ root }: { root: string }) {
     return { passed: all.filter((r) => r.ok).length, failed: all.filter((r) => !r.ok).length };
   }, [results]);
 
-  // ---- local chain ----
+  const instancesRef = useRef(instances);
+  instancesRef.current = instances;
+  // Last block number seen, to notice a restarted chain between polls.
+  const lastBlock = useRef<number | null>(null);
+
   const checkChain = useCallback(async () => {
     const r = await exec(root, "cast", ["chain-id", "--rpc-url", LOCAL_RPC], 4).catch(() => null);
     const id = r && r.code === 0 ? Number(r.stdout.trim()) : null;
-    setChain((prev) => {
-      if (prev !== null && id === null) setInstances([]); // chain stopped: deployments are gone
-      return id;
-    });
+    setChain(id);
+    if (id === null) {
+      if (lastBlock.current !== null) setInstances([]); // chain stopped: deployments are gone
+      lastBlock.current = null;
+    } else {
+      // A chain seen for the first time (e.g. after reopening this tab), or one
+      // whose height went backwards (restarted between polls), may not hold
+      // the saved deployments: keep only instances that still have code.
+      const b = await exec(root, "cast", ["block-number", "--rpc-url", LOCAL_RPC], 4).catch(() => null);
+      const n = b && b.code === 0 ? Number(b.stdout.trim()) : null;
+      const fresh = n !== null && (lastBlock.current === null || n < lastBlock.current);
+      if (n !== null) lastBlock.current = n;
+      if (fresh && instancesRef.current.length > 0) {
+        const live = await Promise.all(instancesRef.current.map(async (inst) => {
+          const c = await exec(root, "cast", ["code", inst.address, "--rpc-url", LOCAL_RPC], 4).catch(() => null);
+          return c && c.code === 0 && c.stdout.trim() !== "0x" ? inst.id : null;
+        }));
+        setInstances((prev) => prev.filter((x) => live.includes(x.id)));
+      }
+    }
     if (id !== null && accounts.length === 0) {
       const a = await exec(root, "cast", ["rpc", "eth_accounts", "--rpc-url", LOCAL_RPC], 4).catch(() => null);
       try {
@@ -202,13 +218,17 @@ export default function ContractsWorkbench({ root }: { root: string }) {
       const args = ["send", "--unlocked", "--from", from, "--rpc-url", LOCAL_RPC, "--json"];
       if (ctorValue.trim()) args.push("--value", normalizeValue(ctorValue));
       args.push("--create", artifact.bytecode);
-      if (ctor && (ctor.inputs ?? []).length) args.push(`constructor(${(ctor.inputs ?? []).map((i) => i.type).join(",")})`, ...ctorArgs);
+      if (ctor && (ctor.inputs ?? []).length) args.push(signature({ ...ctor, name: "constructor" }), ...ctorArgs);
       const r = await exec(root, "cast", args, 120);
       if (r.code !== 0) {
         setDeployMsg({ ok: false, text: [decodeRevert(r.stderr || r.stdout, artifact.abi)] });
         return;
       }
       const receipt = JSON.parse(r.stdout);
+      if (receipt.status !== "0x1" || !receipt.contractAddress) {
+        setDeployMsg({ ok: false, text: [`Deploying ${artifact.name} reverted · tx ${String(receipt.transactionHash ?? "").slice(0, 10)}…`] });
+        return;
+      }
       const inst: Instance = {
         id: `${receipt.contractAddress}-${Date.now()}`,
         name: artifact.name,
@@ -227,7 +247,6 @@ export default function ContractsWorkbench({ root }: { root: string }) {
 
   const openFile = (rel: string) => useTabStore.getState().addEditorTab(rel.startsWith("/") ? rel : `${root}/${rel}`);
 
-  // ---- render ----
   if (project === undefined) return <div className="bench-empty">Loading project…</div>;
   if (project === null) return <div className="bench-empty">No Foundry, Hardhat or Anchor project at {root}.</div>;
 
@@ -411,7 +430,7 @@ function InstanceCard({ root, inst, from, onRemove }: { root: string; inst: Inst
       } else {
         const a = ["send", "--unlocked", "--from", from, "--rpc-url", LOCAL_RPC, "--json"];
         if (values[id]?.trim()) a.push("--value", normalizeValue(values[id]));
-        a.push(inst.address, `${fn.name}(${(fn.inputs ?? []).map((p) => p.type).join(",")})`, ...args);
+        a.push(inst.address, signature(fn), ...args);
         r = await exec(root, "cast", a, 120);
         if (r.code !== 0) {
           setOut((o) => ({ ...o, [id]: { ok: false, text: [decodeRevert(r.stderr || r.stdout, inst.abi)] } }));
