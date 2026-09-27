@@ -1,5 +1,6 @@
 mod bmad;
 mod pty;
+mod state;
 mod subagent;
 mod watcher;
 
@@ -359,6 +360,12 @@ pub fn run() {
             bmad::scaffold_bmad,
             subagent::watch_subagents,
             subagent::unwatch_subagents,
+            state::state_read_all,
+            state::state_write,
+            state::state_snapshot,
+            state::state_list_snapshots,
+            state::state_restore_snapshot,
+            state::state_dir_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -43,6 +43,16 @@ export interface ScratchpadHandle {
 
 const HISTORY_KEY = "better-terminal-prompt-history";
 const NOTES_KEY = "better-terminal-saved-notes";
+/** Unsent scratchpad text, so a draft survives restarts and crashes. */
+const DRAFT_KEY = "ade-scratchpad-draft";
+
+function loadDraft(): string {
+  try {
+    return localStorage.getItem(DRAFT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 interface SavedNote {
   id: string;
@@ -144,10 +154,23 @@ interface PastedImage {
 
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(loadDraft);
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(false);
   const [history, setHistory] = useState<string[]>(loadHistory);
+
+  // Persist the draft (debounced); auto-save mirrors it to disk.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      try {
+        if (text) localStorage.setItem(DRAFT_KEY, text);
+        else localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // Storage full: the draft just isn't persisted.
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [text]);
   const [showHistory, setShowHistory] = useState(false);
   const [notes, setNotes] = useState<SavedNote[]>(loadNotes);
   const [showNotes, setShowNotes] = useState(false);
