@@ -26,8 +26,10 @@ export type PaneNode = SplitNode | SplitContainer;
 export interface Tab {
   id: string;
   name: string;
-  type?: "terminal" | "orchestrator" | "browser" | "editor" | "fleet";
+  type?: "terminal" | "orchestrator" | "browser" | "editor" | "fleet" | "contracts";
   orchestratorSessionId?: string;
+  /** Project root of a contracts workbench tab. */
+  contractsRoot?: string;
   browserUrl?: string;
   editorFilePath?: string;
   root: PaneNode;
@@ -42,6 +44,7 @@ interface TabStore {
   addOrchestratorTab: (sessionId: string) => string;
   addBrowserTab: (url?: string) => string;
   addFleetTab: () => string;
+  addContractsTab: (root: string) => string;
   addEditorTab: (filePath: string) => string;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
@@ -262,6 +265,27 @@ export const useTabStore = create<TabStore>((set, get) => {
       return id;
     },
 
+    addContractsTab: (root) => {
+      // One workbench per project; focus it if it's already open.
+      const existing = get().tabs.find((t) => t.type === "contracts" && t.contractsRoot === root);
+      if (existing) {
+        set({ activeTabId: existing.id });
+        return existing.id;
+      }
+      const id = newTabId();
+      const pane = createDefaultPane();
+      const tab: Tab = {
+        id,
+        name: `\u2B21 ${root.split("/").pop() || "contracts"}`,
+        type: "contracts",
+        contractsRoot: root,
+        root: { type: "pane", pane },
+        activePaneId: pane.id,
+      };
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: id }));
+      return id;
+    },
+
     addEditorTab: (filePath) => {
       const existing = get().tabs.find(
         (t) => t.type === "editor" && t.editorFilePath === filePath,
@@ -472,6 +496,7 @@ interface SavedTab {
   editorFilePath?: string;
   browserUrl?: string;
   orchestratorSessionId?: string;
+  contractsRoot?: string;
 }
 
 interface SavedSession {
@@ -534,6 +559,7 @@ async function saveSession(): Promise<void> {
         editorFilePath: tab.editorFilePath,
         browserUrl: tab.browserUrl,
         orchestratorSessionId: tab.orchestratorSessionId,
+        contractsRoot: tab.contractsRoot,
       });
       continue;
     }
@@ -606,7 +632,9 @@ function loadSession(): boolean {
     if (!session.tabs || session.tabs.length === 0) return false;
 
     // Restore tabs
-    const kept = session.tabs.filter((saved) => saved.type !== "editor" || saved.editorFilePath);
+    const kept = session.tabs.filter(
+      (saved) => (saved.type !== "editor" || saved.editorFilePath) && (saved.type !== "contracts" || saved.contractsRoot),
+    );
     const restoredTabs: Tab[] = kept.map((saved) => {
         const root = deserializePaneNode(saved.root);
         const allPanes = findAllPanes(root);
@@ -619,6 +647,7 @@ function loadSession(): boolean {
           editorFilePath: saved.editorFilePath,
           browserUrl: saved.browserUrl,
           orchestratorSessionId: saved.orchestratorSessionId,
+          contractsRoot: saved.contractsRoot,
         };
       });
 

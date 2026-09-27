@@ -36,6 +36,34 @@ Dependencies (`lib/`, `node_modules/`), tests and scripts are left out of the li
 
 The command palette has quick versions too: *Contracts: Build*, *Contracts: Test*, *Contracts: Test with gas report*, *Contracts: Coverage*, *Contracts: Analyze with Slither* and *Contracts: Start local chain*.
 
+## Workbench
+
+For Foundry projects, **Open workbench** in the panel (or *Contracts: Open workbench* in the command palette) opens a tab for the project where you can compile, run tests one at a time, and deploy to and call contracts on a local chain without typing commands.
+
+### Compile and test
+
+- **Compile** runs `forge build`. Errors and warnings are listed inline, and each `file:line:col` opens the file.
+- Every test function is listed under its test contract. **▶ Run** runs just that test, **Run N** runs one contract's tests, and **Run all** runs them all. Filter by name at the top.
+- Each test shows pass or fail, its gas (the median for fuzz tests) and its fuzz runs. A failing test shows its reason, the counterexample and any `console.log` output.
+- **Traces** reruns one test with `-vvvv` in a new terminal tab.
+
+![Workbench tests view listing each test with gas, fuzz runs and Run and Traces buttons]({{ '/assets/img/bench-tests.webp' | relative_url }})
+
+### Deploy and call on a local chain
+
+The **Deploy & call** view works against Anvil at `http://127.0.0.1:8545`. **Start Anvil** starts it in its own tab.
+
+1. Pick an Anvil account, a contract and its constructor arguments (plus a value if the constructor is `payable`), then **Deploy**.
+2. Each deployed contract lists its functions. Blue buttons are reads (`cast call`) and orange ones are writes (`cast send`).
+3. Values accept wei or units such as `3ether` and `2gwei`. Large numbers get an ETH hint.
+4. Writes show the transaction status, its gas and its events decoded against the ABI. Reverts are decoded too: custom errors are shown with their argument names, along with `Error(string)` and panics such as arithmetic overflow.
+
+![Deploy and call view: Vault deployed on Anvil, a read returning 5 ETH, a deposit with its Deposited event, and a withdraw reverting with InsufficientBalance]({{ '/assets/img/bench-deploy.webp' | relative_url }})
+
+The workbench keeps each project's results and deployed contracts while you switch tabs.
+
+**Local chain only.** The workbench sends transactions only to `127.0.0.1` or `localhost`, and only from Anvil's unlocked accounts. It rejects private keys, mnemonics, keystores, hardware wallets and `--broadcast`, and it never runs forge or cast through a shell. Deploys to real networks go through [Deploying safely](#deploying-safely).
+
 ## Deploying safely
 
 Deploy actions **type the command into the terminal without running it**, so you can check the network and account and then press <kbd>Enter</kbd>:

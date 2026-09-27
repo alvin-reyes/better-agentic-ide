@@ -399,6 +399,7 @@ pub fn run() {
             resolve_file_paths,
             contracts::contracts_detect,
             contracts::contracts_tools,
+            contracts::contracts_exec,
             list_md_files,
             list_directory,
             bmad::bmad_status,

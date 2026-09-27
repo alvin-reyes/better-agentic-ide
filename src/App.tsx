@@ -21,6 +21,7 @@ const FleetPanel = lazy(() => import("./components/fleet/FleetPanel"));
 const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
 const BmadPanel = lazy(() => import("./components/BmadPanel"));
 const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
+const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { flushNow } from "./lib/persistence";
@@ -205,9 +206,19 @@ export default function App() {
       );
     };
     window.addEventListener("contracts-run", onRun);
+    const onWorkbench = () => {
+      const cwd = activeCwdRef.current;
+      if (!cwd) return;
+      void invoke<{ root: string } | null>("contracts_detect", { path: cwd }).then((p) => {
+        if (p) useTabStore.getState().addContractsTab(p.root);
+        else window.dispatchEvent(new CustomEvent("agent-notification", { detail: { title: "Contracts", body: "No Foundry, Hardhat or Anchor project in this terminal's folder." } }));
+      }).catch(() => {});
+    };
+    window.addEventListener("contracts-workbench", onWorkbench);
     return () => {
       window.removeEventListener("toggle-contracts", toggleContracts);
       window.removeEventListener("contracts-run", onRun);
+      window.removeEventListener("contracts-workbench", onWorkbench);
     };
   }, [toggleContracts]);
 
@@ -446,6 +457,10 @@ export default function App() {
                   : activeTab.type === "fleet"
                     ? <Suspense fallback={null}>
                         <FleetTab activeCwd={activeCwd} />
+                      </Suspense>
+                    : activeTab.type === "contracts" && activeTab.contractsRoot
+                    ? <Suspense fallback={null}>
+                        <ContractsWorkbench key={activeTab.contractsRoot} root={activeTab.contractsRoot} />
                       </Suspense>
                     : zoomedPane
                     ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
