@@ -14,6 +14,8 @@
 <p align="center">A desktop terminal built for running AI coding agents. Split panes, a prompt scratchpad, a file viewer, and a live fleet view of every agent across every terminal — all keyboard-first.</p>
 
 <p align="center">
+  <a href="https://alvin-reyes.github.io/better-agentic-ide/"><strong>Website</strong></a> ·
+  <a href="https://alvin-reyes.github.io/better-agentic-ide/guide/"><strong>User guide</strong></a> ·
   <a href="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml"><img src="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
@@ -82,7 +84,7 @@ Grab the installer for your platform from the [latest release](https://github.co
 - Also opens when you click a file path in the terminal
 
 ### AI Agents
-- **Agent picker** (`Cmd+Shift+A`) — 23 pre-configured agent profiles across Backend, Frontend, DevOps, Testing and General (debugging, code review, docs, architecture, git, brainstorming and more)
+- **Agent picker** (`Cmd+Shift+A`) — 22 pre-configured agent profiles across Backend, Frontend, DevOps, Testing and General (debugging, code review, docs, architecture, git, brainstorming and more)
 - **Task routing** — describe a task and the picker suggests the best-matching agent
 - **Providers** — Claude Code, Codex, Gemini CLI or Ollama
 - **Continuous mode** — autonomous runs with `--dangerously-skip-permissions` (with a safety warning)
