@@ -1,0 +1,72 @@
+---
+title: Getting started
+lead: Install ADE, open your first project and run an agent in a few minutes.
+description: Install ADE on macOS, Windows or Linux and run your first AI coding agent.
+---
+
+## Install
+
+### macOS
+
+The quickest way is [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask alvin-reyes/tap/ade
+```
+
+Upgrade later with `brew upgrade --cask ade`. The cask clears the quarantine flag, so macOS won't block the first launch.
+
+You can also download the `.dmg` from the [latest release]({{ site.repo }}/releases/latest): `aarch64` for Apple Silicon, `x64` for Intel Macs. If macOS says the app "is damaged" after a manual install, see [Troubleshooting]({{ '/guide/troubleshooting/' | relative_url }}#macos-says-the-app-is-damaged).
+
+### Windows
+
+Download the `.msi` (or `-setup.exe`) from the [latest release]({{ site.repo }}/releases/latest) and run it. Windows 10 and 11 on x64 are supported.
+
+### Linux
+
+Download the `.deb` for Debian and Ubuntu, or the portable `.AppImage`, from the [latest release]({{ site.repo }}/releases/latest):
+
+```bash
+sudo apt install ./Better.Terminal_*_amd64.deb
+# or
+chmod +x Better.Terminal_*.AppImage && ./Better.Terminal_*.AppImage
+```
+
+### Build from source
+
+You need Node.js 18+, Rust (stable) and, on Linux, the [Tauri system libraries](https://v2.tauri.app/start/prerequisites/).
+
+```bash
+git clone {{ site.repo }}.git
+cd better-agentic-ide
+npm install
+npm run tauri build     # installers land in src-tauri/target/release/bundle
+```
+
+Use `npm run tauri dev` for a hot-reloading development build.
+
+## Install an agent
+
+ADE works with any command-line agent. The agent picker has presets for:
+
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — `npm install -g @anthropic-ai/claude-code`
+- **Codex**, **Gemini CLI** and **Ollama** (local models)
+
+The fleet view reads Claude Code's own transcripts, so Claude Code gets the most out of ADE.
+
+## First launch
+
+1. ADE opens with one terminal in your home folder and a short tour. Skip it or step through it; it won't show again.
+2. `cd` into a project. The file browser, the fleet view and the clickable file links all follow the terminal's current folder.
+3. Start an agent: type `claude`, or press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to open the agent picker and choose a profile.
+4. Open the scratchpad with {% include key.html mac="⌘J" other="Ctrl+Shift+J" %}, write your prompt, and send it with {% include key.html mac="⌘↵" other="Ctrl+Enter" %}.
+5. When the agent writes a file, click its path in the terminal to see it.
+
+> Shortcuts on this site follow your platform. Switch between macOS and Linux/Windows with the buttons in the sidebar.
+
+## Where to go next
+
+- [Terminal]({{ '/guide/terminal/' | relative_url }}) — tabs, panes, search and clickable files
+- [Scratchpad]({{ '/guide/scratchpad/' | relative_url }}) — prompt chaining, history and voice
+- [Auto-save & sync]({{ '/guide/sync/' | relative_url }}) — keep your setup on every machine
+- [Keyboard shortcuts]({{ '/guide/shortcuts/' | relative_url }}) — the full list

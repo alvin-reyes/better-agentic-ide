@@ -1,0 +1,18 @@
+- title: Getting started
+  url: /guide/
+- title: Terminal
+  url: /guide/terminal/
+- title: Scratchpad
+  url: /guide/scratchpad/
+- title: Files & preview
+  url: /guide/files/
+- title: Agents & fleet
+  url: /guide/agents/
+- title: Auto-save & sync
+  url: /guide/sync/
+- title: Keyboard shortcuts
+  url: /guide/shortcuts/
+- title: Settings
+  url: /guide/settings/
+- title: Troubleshooting
+  url: /guide/troubleshooting/

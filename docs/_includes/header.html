@@ -1,0 +1,18 @@
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="{{ '/' | relative_url }}">
+      <img src="{{ '/assets/img/logo-192.webp' | relative_url }}" alt="" width="28" height="28">
+      <span>ADE</span>
+    </a>
+    <button class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="site-nav">
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <nav id="site-nav" class="site-nav">
+      <a href="{{ '/#features' | relative_url }}">Features</a>
+      <a href="{{ '/guide/' | relative_url }}"{% if page.url contains '/guide/' %} aria-current="page"{% endif %}>Guide</a>
+      <a href="{{ '/guide/shortcuts/' | relative_url }}">Shortcuts</a>
+      <a href="{{ site.repo }}">GitHub</a>
+      <a class="btn btn-small btn-primary" href="{{ '/#install' | relative_url }}">Download</a>
+    </nav>
+  </div>
+</header>
