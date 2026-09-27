@@ -175,6 +175,19 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
       <div class="frame"><img src="{{ img }}abi.webp" width="1440" height="900" loading="lazy" alt="ABI viewer for a Vault contract showing functions, events and errors with selectors"></div>
     </div>
 
+    <div class="feature">
+      <div class="feature-copy">
+        <h3>Test each function. Call it on a local chain.</h3>
+        <p>The workbench gives each Foundry project its own tab. Compile with clickable errors, then run a single test, one contract's tests or all of them, and see gas, fuzz runs and the failure reason. Start Anvil, deploy with constructor arguments, and call any function.</p>
+        <ul class="checks">
+          <li><strong>▶ Run</strong> on every test, and <strong>Traces</strong> for a <code>-vvvv</code> rerun</li>
+          <li><strong>Events and reverts decoded</strong>, including custom errors with argument names</li>
+          <li><strong>Local only</strong>: Anvil's unlocked accounts, with no keys and no broadcasting</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="{{ img }}bench-deploy.webp" width="1440" height="615" loading="lazy" alt="Workbench deploy and call view: a Vault on Anvil, a read returning 5 ETH, a deposit with its decoded event and a withdraw reverting with InsufficientBalance"></div>
+    </div>
+
     <div class="matrix-wrap" style="margin-top:28px">
       <table class="matrix">
         <thead><tr><th></th><th>Foundry</th><th>Hardhat</th><th>Anchor (Solana)</th></tr></thead>
@@ -184,6 +197,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
           <tr><td>Analyze</td><td>Slither, Aderyn</td><td>Slither</td><td>—</td></tr>
           <tr><td>Local chain</td><td>Anvil</td><td>Hardhat node</td><td>solana-test-validator</td></tr>
           <tr><td>Deploy</td><td>each <code>script/*.s.sol</code></td><td>each Ignition module</td><td><code>anchor deploy</code></td></tr>
+          <tr><td>Workbench</td><td>per-test runs, deploy &amp; call on Anvil</td><td>—</td><td>—</td></tr>
           <tr><td>Interface</td><td>ABI + selectors</td><td>ABI + selectors</td><td>IDL</td></tr>
         </tbody>
       </table>

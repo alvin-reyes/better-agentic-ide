@@ -271,6 +271,140 @@ pub fn contracts_tools(tools: Vec<String>) -> Vec<ToolStatus> {
         .collect()
 }
 
+// ---------------------------------------------------------------------------
+// Workbench: run forge/cast in the project and return their output.
+//
+// The webview drives this, so the command is checked here rather than trusted:
+// only the subcommands the workbench needs, nothing that broadcasts to a real
+// network or touches keys, and RPC only to a node on this machine.
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecResult {
+    pub code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub timed_out: bool,
+}
+
+const FORGE_SUBCOMMANDS: &[&str] = &["build", "test"];
+const CAST_SUBCOMMANDS: &[&str] = &["call", "send", "chain-id", "block-number", "balance", "code", "rpc"];
+/// Flags that would reach real funds or real networks.
+const FORBIDDEN_FLAGS: &[&str] = &[
+    "--private-key", "--private-keys", "--mnemonic", "--mnemonics", "--keystore", "--keystores",
+    "--account", "--accounts", "--ledger", "--trezor", "--aws", "--gcp", "--interactive", "-i",
+    "--broadcast", "--fork-url", "-f", "--etherscan-api-key", "--verify",
+];
+/// eth_* methods the workbench may call through `cast rpc`.
+const RPC_METHODS: &[&str] = &["eth_accounts", "eth_chainId", "eth_blockNumber"];
+
+fn is_local_url(url: &str) -> bool {
+    ["http://127.0.0.1:", "http://localhost:", "ws://127.0.0.1:", "ws://localhost:"]
+        .iter()
+        .any(|p| url.starts_with(p))
+}
+
+/// Why a command is refused, or None if it may run.
+pub fn check_exec(program: &str, args: &[String]) -> Option<String> {
+    let sub = args.first().map(String::as_str).unwrap_or("");
+    let allowed = match program {
+        "forge" => FORGE_SUBCOMMANDS,
+        "cast" => CAST_SUBCOMMANDS,
+        _ => return Some(format!("{program} is not allowed")),
+    };
+    if !allowed.contains(&sub) {
+        return Some(format!("{program} {sub} is not allowed"));
+    }
+    for (i, a) in args.iter().enumerate() {
+        let flag = a.split('=').next().unwrap_or(a);
+        if FORBIDDEN_FLAGS.contains(&flag) {
+            return Some(format!("{flag} is not allowed"));
+        }
+        if flag == "--rpc-url" || flag == "-r" {
+            let url = a.split_once('=').map(|(_, v)| v.to_string()).or_else(|| args.get(i + 1).cloned()).unwrap_or_default();
+            if !is_local_url(&url) {
+                return Some("only a local node (127.0.0.1 or localhost) is allowed".into());
+            }
+        }
+    }
+    if program == "cast" && sub != "chain-id" {
+        // Every cast call must name its node explicitly, and it must be local:
+        // without --rpc-url cast falls back to ETH_RPC_URL, which could be mainnet.
+        if !args.iter().any(|a| a == "--rpc-url" || a.starts_with("--rpc-url=")) {
+            return Some("cast needs an explicit local --rpc-url".into());
+        }
+        if sub == "send" && !args.iter().any(|a| a == "--unlocked") {
+            return Some("cast send must use an unlocked local account (--unlocked --from)".into());
+        }
+        if sub == "rpc" && !args.get(1).is_some_and(|m| RPC_METHODS.contains(&m.as_str())) {
+            return Some("that RPC method is not allowed".into());
+        }
+    }
+    if program == "cast" && sub == "chain-id" && !args.iter().any(|a| a == "--rpc-url") {
+        return Some("cast needs an explicit local --rpc-url".into());
+    }
+    None
+}
+
+/// Run `forge` or `cast` in a contract project and capture its output.
+#[tauri::command(async)]
+pub fn contracts_exec(root: String, program: String, args: Vec<String>, timeout_secs: Option<u64>) -> Result<ExecResult, String> {
+    let root = Path::new(&root);
+    if find_root(root).as_deref() != Some(root) {
+        return Err("not a contract project root".into());
+    }
+    if let Some(why) = check_exec(&program, &args) {
+        return Err(why);
+    }
+    let bin = crate::find_command(&program)?;
+    let mut child = std::process::Command::new(bin)
+        .args(&args)
+        .current_dir(root)
+        .env("NO_COLOR", "1")
+        .env("FOUNDRY_DISABLE_NIGHTLY_WARNING", "1")
+        .env_remove("ETH_RPC_URL")
+        .env_remove("ETH_FROM")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    // Read both pipes on threads so a chatty build can't fill one and stall.
+    let mut out_pipe = child.stdout.take();
+    let mut err_pipe = child.stderr.take();
+    let out_t = std::thread::spawn(move || {
+        let mut s = String::new();
+        if let Some(p) = out_pipe.as_mut() { let _ = std::io::Read::read_to_string(p, &mut s); }
+        s
+    });
+    let err_t = std::thread::spawn(move || {
+        let mut s = String::new();
+        if let Some(p) = err_pipe.as_mut() { let _ = std::io::Read::read_to_string(p, &mut s); }
+        s
+    });
+    let limit = std::time::Duration::from_secs(timeout_secs.unwrap_or(300).clamp(1, 1800));
+    let started = std::time::Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(s) => break Some(s),
+            None if started.elapsed() > limit => {
+                let _ = child.kill();
+                timed_out = true;
+                break child.wait().ok();
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    };
+    Ok(ExecResult {
+        code: status.and_then(|s| s.code()),
+        stdout: out_t.join().unwrap_or_default(),
+        stderr: err_t.join().unwrap_or_default(),
+        timed_out,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,5 +488,50 @@ mod tests {
     fn tool_names_are_validated() {
         let r = contracts_tools(vec!["forge; rm -rf ~".into(), "definitely-not-installed-xyz".into()]);
         assert!(r.iter().all(|t| t.version.is_none()));
+    }
+
+    fn v(a: &[&str]) -> Vec<String> { a.iter().map(|s| s.to_string()).collect() }
+
+    #[test]
+    fn exec_guard_allows_the_workbench_commands() {
+        let local = "http://127.0.0.1:8545";
+        for (prog, args) in [
+            ("forge", v(&["build", "--json"])),
+            ("forge", v(&["test", "--json", "--match-test", "test_X"])),
+            ("cast", v(&["chain-id", "--rpc-url", local])),
+            ("cast", v(&["rpc", "eth_accounts", "--rpc-url", local])),
+            ("cast", v(&["call", "0xabc", "f()(uint256)", "--rpc-url", local])),
+            ("cast", v(&["send", "--unlocked", "--from", "0x1", "--rpc-url", local, "--json", "0xabc", "f()"])),
+            ("cast", v(&["send", "--unlocked", "--from", "0x1", "--rpc-url=http://localhost:8545", "--create", "0x60"])),
+        ] {
+            assert_eq!(check_exec(prog, &args), None, "{prog} {args:?}");
+        }
+    }
+
+    #[test]
+    fn exec_guard_blocks_keys_real_networks_and_other_commands() {
+        let local = "http://127.0.0.1:8545";
+        for (prog, args) in [
+            ("sh", v(&["-c", "id"])),
+            ("forge", v(&["script", "script/Deploy.s.sol"])),
+            ("forge", v(&["create", "src/A.sol:A"])),
+            ("forge", v(&["test", "--fork-url", "https://eth.llamarpc.com"])),
+            ("cast", v(&["send", "--private-key", "0x01", "--rpc-url", local, "0xabc", "f()"])),
+            ("cast", v(&["send", "--account", "deployer", "--rpc-url", local, "0xabc", "f()"])),
+            ("cast", v(&["send", "--unlocked", "--from", "0x1", "--rpc-url", "https://mainnet.infura.io/v3/x", "0xabc", "f()"])),
+            ("cast", v(&["send", "--unlocked", "--from", "0x1", "0xabc", "f()"])),
+            ("cast", v(&["send", "--from", "0x1", "--rpc-url", local, "0xabc", "f()"])),
+            ("cast", v(&["call", "0xabc", "f()"])),
+            ("cast", v(&["rpc", "anvil_setBalance", "0x1", "0x1", "--rpc-url", local])),
+            ("cast", v(&["wallet", "new"])),
+        ] {
+            assert!(check_exec(prog, &args).is_some(), "{prog} {args:?} was allowed");
+        }
+    }
+
+    #[test]
+    fn exec_needs_a_project_root() {
+        let d = tmp("exec");
+        assert!(contracts_exec(d.to_string_lossy().into(), "forge".into(), v(&["build"]), None).is_err());
     }
 }

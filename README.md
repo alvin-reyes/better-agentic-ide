@@ -110,6 +110,7 @@ Grab the installer for your platform from the [latest release](https://github.co
 ### Smart Contracts
 - **Contracts panel** (`Cmd+Shift+K`) — detects Foundry, Hardhat or Anchor from the terminal's folder and lists the installed tools, your contract sources and compiled ABIs
 - **One-click actions** — build, test (with traces, gas report, coverage, gas snapshot), format, and Slither/Aderyn analysis run in the terminal from the project root; Anvil, a Hardhat node or `solana-test-validator` starts in its own tab
+- **Workbench** — a tab per Foundry project to compile with clickable errors, run each test function on its own (gas, fuzz runs, failure reason, traces), and deploy to and call contracts on Anvil, with events and custom-error reverts decoded against the ABI
 - **Safe deploys** — deploy commands for each `script/*.s.sol` or Ignition module are typed but not run, and use Foundry keystore accounts; ADE never handles private keys
 - **ABI viewer** — compiled artifacts open as read/write functions, events and errors with their selectors (keccak-256, click to copy); Anchor IDLs show instructions and accounts
 - **Web3 agents** — Smart Contract Engineer, Smart Contract Auditor, Gas Optimizer and Solana/Anchor Engineer in the agent picker
