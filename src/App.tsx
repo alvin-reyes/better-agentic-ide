@@ -29,6 +29,9 @@ import { hasActiveProcess, stopIdlePolling } from "./hooks/useTerminal";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+/** How often the active terminal's folder is re-read to follow `cd`. */
+const CWD_POLL_MS = 3000;
+
 export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -163,13 +166,23 @@ export default function App() {
   // the state of every pane on the first render. Depending on the PTY id makes
   // this re-run the moment create_pty lands, which is the only recovery path in
   // a single-pane layout.
+  //
+  // It is also re-read every few seconds: a `cd` inside the terminal changes the
+  // folder without any React state changing, and the BMAD banner and the
+  // "This terminal" fleet view would otherwise keep using the old folder.
+  // (The file browser polls on its own for the same reason.)
   useEffect(() => {
     const paneId = activeTab?.activePaneId;
     if (!paneId) return;
     if (activeTab?.type && activeTab.type !== "terminal") return;
-    import("./hooks/useTerminal").then(({ getPtyCwd }) => {
-      getPtyCwd(paneId).then((cwd) => { if (cwd) setActiveCwd(cwd); }).catch(() => {});
-    });
+    let cancelled = false;
+    const resolve = () =>
+      import("./hooks/useTerminal").then(({ getPtyCwd }) =>
+        getPtyCwd(paneId).then((cwd) => { if (cwd && !cancelled) setActiveCwd(cwd); }),
+      ).catch(() => {});
+    resolve();
+    const id = window.setInterval(resolve, CWD_POLL_MS);
+    return () => { cancelled = true; window.clearInterval(id); };
   }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
 
   // Resolve bannerCwd independently of panel state — allows the BMAD init banner
@@ -180,9 +193,17 @@ export default function App() {
       setBannerCwd(null);
       return;
     }
-    import("./hooks/useTerminal").then(({ getPtyCwd }) => {
-      getPtyCwd(paneId).then((cwd) => setBannerCwd(cwd)).catch(() => setBannerCwd(null));
-    });
+    let cancelled = false;
+    const resolve = () =>
+      import("./hooks/useTerminal").then(({ getPtyCwd }) =>
+        getPtyCwd(paneId)
+          .then((cwd) => { if (!cancelled) setBannerCwd(cwd); })
+          .catch(() => { if (!cancelled) setBannerCwd(null); }),
+      );
+    resolve();
+    // Polled for the same reason as activeCwd: follow `cd` in the terminal.
+    const id = window.setInterval(resolve, CWD_POLL_MS);
+    return () => { cancelled = true; window.clearInterval(id); };
     // activePtyId: same cold-start problem as the activeCwd effect above.
   }, [activeTab?.activePaneId, activePtyId]);
 
