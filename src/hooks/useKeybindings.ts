@@ -183,8 +183,9 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+Shift+[: Previous tab
-      if (meta && shift && !alt && e.key === "[") {
+      // Cmd+Shift+[: Previous tab. With Shift held most layouts report "{"
+      // rather than "[", so match either.
+      if (meta && shift && !alt && (e.key === "[" || e.key === "{")) {
         e.preventDefault();
         const idx = tabs.findIndex((t) => t.id === activeTabId);
         if (idx > 0) setActiveTab(tabs[idx - 1].id);
@@ -192,7 +193,7 @@ export function useKeybindings(actions: KeybindingActions) {
       }
 
       // Cmd+Shift+]: Next tab
-      if (meta && shift && !alt && e.key === "]") {
+      if (meta && shift && !alt && (e.key === "]" || e.key === "}")) {
         e.preventDefault();
         const idx = tabs.findIndex((t) => t.id === activeTabId);
         if (idx < tabs.length - 1) setActiveTab(tabs[idx + 1].id);

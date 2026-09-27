@@ -122,13 +122,17 @@ export default function SettingsPanel() {
   }, [renameTabId]);
 
   useEffect(() => {
+    // Capture phase: the terminal keeps focus while settings are open and
+    // xterm stops Escape from bubbling, so a bubble listener never saw it.
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && useSettingsStore.getState().showSettings) {
+        e.preventDefault();
+        e.stopPropagation();
         store.setShowSettings(false);
       }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
   }, [store]);
 
   if (!store.showSettings) return null;
@@ -193,6 +197,8 @@ export default function SettingsPanel() {
           </span>
           <button
             onClick={() => store.setShowSettings(false)}
+            title="Close (Esc)"
+            aria-label="Close settings"
             style={{
               background: "none",
               border: "none",
