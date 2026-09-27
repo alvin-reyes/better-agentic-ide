@@ -77,7 +77,7 @@ Grab the installer for your platform from the [latest release](https://github.co
 - Rendered markdown and documents are sanitized before display, so a malicious README can't run code
 
 ### Preview Panel
-- **Side-by-side preview** (`Cmd+Shift+B`) of HTML, images, PDF and markdown next to your terminal
+- **Side-by-side preview** (`Cmd+Shift+B`) of HTML, images, PDF and markdown next to your terminal. Click any file path a command or agent prints (`Write(docs/plan.md)`, `./report.pdf`) to open it
 - **Live refresh** — updates on save through a native filesystem watcher; handy for watching an agent write a spec
 - Also opens when you click a file path in the terminal
 
@@ -107,6 +107,14 @@ Grab the installer for your platform from the [latest release](https://github.co
 ### Browser Tab
 - **Open Browser Tab** from the command palette to view a local dev server (defaults to `http://localhost:3000`) inside ADE
 
+### Auto-save, Restore & Sync
+- **Auto-save** — tabs, splits, each terminal's folder and scrollback, open file tabs, the unsent scratchpad draft, notes, prompt history, settings, workspaces and orchestrator history are written to disk within a second of changing. A crash or force-quit brings everything back.
+- **Snapshots** — taken at startup and every 10 minutes (newest 20 kept); restore one from *Settings → Sync*.
+- **Sync between machines** — point *Settings → Sync* at a private git repo you own. Settings, notes, prompt history, workspaces and orchestrator history are shared (newest change wins); each machine's session is kept under its own device name. Changes from other machines apply when ADE starts; local changes are pushed every 3 minutes and on close.
+- **Claude memory** — optionally syncs `~/.claude/CLAUDE.md` and your custom commands, agents and skills. If a file was edited on two machines, your copy is kept and the other version is saved next to it as `*.sync-conflict`.
+- **Secrets stay local** — API keys are stripped before anything is written to the sync repo.
+- **claude-mem** — detected and left to claude-mem's own Cloud Sync: its live SQLite database can't be safely copied between machines.
+
 ### Theming & Settings
 - **8 built-in themes** — GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark
 - **Fonts** — size (10–24px), family (JetBrains Mono, SF Mono, Fira Code, Cascadia Code, …), line height
@@ -116,34 +124,38 @@ Grab the installer for your platform from the [latest release](https://github.co
 
 ## Keyboard Shortcuts
 
-`Cmd` is `Ctrl` on Windows and Linux.
+On Linux and Windows, app shortcuts use `Ctrl+Shift` where macOS uses `⌘`, and `Ctrl+Alt+Shift` where macOS uses `⌘⇧`. Plain `Ctrl` keys always go to the terminal, so `Ctrl+D`, `Ctrl+R`, `Ctrl+W`, `Ctrl+E`, `Ctrl+P` and the rest keep working in your shell. On macOS, `Ctrl` keys go to the terminal too.
 
-| Shortcut | Action |
-|---|---|
-| `Cmd+P` | Command palette |
-| `Cmd+T` | New tab |
-| `Cmd+W` | Close tab |
-| `Cmd+1-9` | Switch to tab N |
-| `Cmd+Shift+[` / `]` | Previous / next tab |
-| `Cmd+R` | Rename active tab |
-| `Cmd+D` | Split pane horizontally |
-| `Cmd+Shift+D` | Split pane vertically |
-| `Cmd+Shift+W` | Close active pane |
-| `Cmd+←` / `Cmd+→` | Move between panes |
-| `Cmd+Shift+Enter` | Zoom / unzoom pane (scratchpad closed) |
-| `Cmd+F` | Search in terminal |
-| `Cmd+J` | Toggle scratchpad / cycle focus |
-| `Cmd+Enter` | Send scratchpad to terminal |
-| `Cmd+Shift+Enter` | Copy scratchpad (scratchpad open) |
-| `Cmd+S` | Save scratchpad as note / save file in the editor |
-| `Cmd+E` | Send Enter to terminal |
-| `Cmd+B` | Toggle file browser |
-| `Cmd+Shift+B` | Toggle preview panel |
-| `Cmd+Shift+A` | AI agent picker |
-| `Cmd+.` | Fleet view |
-| `Cmd+Shift+O` | Orchestrator |
-| `Cmd+,` | Settings |
-| `Escape` | Close open panels and focus the terminal |
+| macOS | Linux / Windows | Action |
+|---|---|---|
+| `⌘P` | `Ctrl+Shift+P` | Command palette |
+| `⌘T` | `Ctrl+Shift+T` | New tab |
+| `⌘W` | `Ctrl+Shift+W` | Close tab |
+| `⌘1-9` | `Ctrl+Shift+1-9` | Switch to tab N |
+| `⌘⇧[` / `⌘⇧]` | `Ctrl+PageUp` / `Ctrl+PageDown` (or `Ctrl+Alt+Shift+[` / `]`) | Previous / next tab |
+| `⌘R` | `Ctrl+Shift+R` | Rename active tab |
+| `⌘D` | `Ctrl+Shift+D` | Split pane horizontally |
+| `⌘⇧D` | `Ctrl+Alt+Shift+D` | Split pane vertically |
+| `⌘⇧W` | `Ctrl+Alt+Shift+W` | Close active pane |
+| `⌘←` / `⌘→` | `Ctrl+Shift+Left` / `Right` | Move between panes (outside text fields) |
+| `⌘⇧↵` | `Ctrl+Alt+Shift+Enter` | Zoom / unzoom pane (outside the scratchpad) |
+| `⌘F` | `Ctrl+Shift+F` | Search in terminal |
+| `⌘J` | `Ctrl+Shift+J` | Toggle scratchpad / cycle focus |
+| `⌘↵` | `Ctrl+Shift+Enter` (or `Ctrl+Enter` in the scratchpad) | Send scratchpad to terminal |
+| `⌘⇧↵` | `Ctrl+Alt+Shift+Enter` | Copy scratchpad (while typing in it) |
+| `⌘S` | `Ctrl+Shift+S` (or `Ctrl+S` in the scratchpad) | Save scratchpad as note |
+| `⌘E` | `Ctrl+Shift+E` | Send Enter to terminal |
+| `⌘B` | `Ctrl+Shift+B` | Toggle file browser |
+| `⌘⇧B` | `Ctrl+Alt+Shift+B` | Toggle preview panel |
+| `⌘⇧A` | `Ctrl+Alt+Shift+A` | AI agent picker |
+| `⌘.` | `Ctrl+Shift+.` | Fleet view |
+| `⌘⇧O` | `Ctrl+Alt+Shift+O` | Orchestrator |
+| `⌘,` | `Ctrl+Shift+,` | Settings |
+| `Esc` | `Esc` | Close open panels and focus the terminal |
+
+The code editor keeps its usual `⌘S` / `Ctrl+S` to save the file.
+
+**Clickable files:** any file path printed in a terminal, such as `Write(docs/plan.md)`, `./out/report.pdf` or `src/App.tsx:42`, is a link once the file exists. Relative paths resolve against the terminal's current folder. Markdown, HTML, PDFs and images open in the preview panel beside the terminal; other files open in a tab.
 
 ## Development
 
@@ -165,7 +177,13 @@ CI runs the typecheck, frontend tests, a production build and the Rust tests on 
 
 1. Bump `version` in `src-tauri/tauri.conf.json` and merge to `main`.
 2. Push a tag (`git tag v<version> && git push origin v<version>`), or run *Build & Release Installers* from the Actions tab with the tag as input. The workflow builds macOS (ARM + Intel), Windows and Linux installers and attaches them to a GitHub release.
-3. Update the Homebrew cask in [alvin-reyes/homebrew-tap](https://github.com/alvin-reyes/homebrew-tap) (`Casks/ade.rb`): set `version` and the two `sha256` values for the new `.dmg` files.
+3. Update the Homebrew cask in [alvin-reyes/homebrew-tap](https://github.com/alvin-reyes/homebrew-tap): `scripts/update-homebrew-cask.sh <version> ../homebrew-tap/Casks/ade.rb`, then commit and push the tap.
+
+### macOS signing and the official Homebrew listing
+
+Release builds are signed and notarized automatically once all of these repository secrets exist (until then macOS builds are unsigned): `APPLE_CERTIFICATE` (base64 of the Developer ID Application `.p12`: `openssl base64 -A -in cert.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (e.g. `Developer ID Application: Name (TEAMID)`), `APPLE_ID`, `APPLE_PASSWORD` (an app-specific password) and `APPLE_TEAM_ID`.
+
+`packaging/homebrew/better-terminal.rb` is the draft for [homebrew/cask](https://github.com/Homebrew/homebrew-cask). It can be submitted once releases are signed and notarized and the repository meets Homebrew's notability bar (75 stars, 30 forks or 30 watchers).
 
 ## Architecture
 
@@ -178,6 +196,8 @@ better-agentic-ide/
 │       ├── pty.rs             PTY management (portable-pty + Channel API)
 │       ├── watcher.rs         Native filesystem watcher (notify)
 │       ├── subagent.rs        Claude Code sub-agent transcript watcher (fleet view)
+│       ├── state.rs           Durable app state on disk (atomic writes, snapshots)
+│       ├── sync.rs            Git-backed sync of state and Claude memory
 │       └── bmad.rs            BMAD scaffolding and status
 ├── src/                       React frontend
 │   ├── components/
@@ -195,7 +215,7 @@ better-agentic-ide/
 │   │   └── CommandPalette.tsx, SettingsPanel.tsx, ShortcutsBar.tsx, Tour.tsx
 │   ├── stores/                Zustand stores (tabs, settings, fleet, agents, orchestrator, BMAD)
 │   ├── hooks/                 Terminal lifecycle, keybindings, fleet data, recording
-│   ├── lib/                   Viewer dispatch, HTML sanitizing, Mermaid config, Anthropic client
+│   ├── lib/                   Auto-save and sync clients, viewer dispatch, sanitizing, Mermaid, Anthropic
 │   └── data/                  Agent profiles, task router, BMAD personas
 └── .github/workflows/         CI and release builds
 ```
@@ -206,7 +226,7 @@ better-agentic-ide/
 - **Tauri Channel API** — PTY output and watcher events stream over `Channel`s
 - **One watcher per folder** — the fleet view refcounts a sub-agent watcher per terminal folder, so several views share them
 - **Sanitize before render** — the webview can reach Tauri IPC, so markdown and documents from any repo go through DOMPurify and Mermaid's strict mode
-- **localStorage persistence** — settings, themes, notes, history, workspaces and recordings persist across sessions
+- **Disk is the source of truth** — stores keep using localStorage, but it is hydrated from `<app data>/state` before the app loads and every change is mirrored back to disk, so state survives crashes, profile resets and can be synced
 
 ## Tech Stack
 

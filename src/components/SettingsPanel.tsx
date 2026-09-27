@@ -1,6 +1,8 @@
 import { useSettingsStore, themePresets, applyThemeToDOM, type ThemeColors } from "../stores/settingsStore";
+import { shortcutLabel } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
+import SyncSettings from "./SyncSettings";
 
 const colorLabels: { key: keyof ThemeColors; label: string; group: string }[] = [
   { key: "bgPrimary", label: "Background", group: "UI" },
@@ -121,23 +123,28 @@ export default function SettingsPanel() {
   }, [renameTabId]);
 
   useEffect(() => {
+    // Capture phase: the terminal keeps focus while settings are open and
+    // xterm stops Escape from bubbling, so a bubble listener never saw it.
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && useSettingsStore.getState().showSettings) {
+        e.preventDefault();
+        e.stopPropagation();
         store.setShowSettings(false);
       }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
   }, [store]);
 
   if (!store.showSettings) return null;
 
   const activeTheme = store.getActiveTheme();
-  const tabs: { id: "theme" | "terminal" | "workspace" | "ai"; label: string }[] = [
+  const tabs: { id: "theme" | "terminal" | "workspace" | "ai" | "sync"; label: string }[] = [
     { id: "theme", label: "Themes" },
     { id: "terminal", label: "Terminal" },
     { id: "workspace", label: "Workspace" },
     { id: "ai", label: "AI API" },
+    { id: "sync", label: "Sync" },
   ];
 
   const commitRename = () => {
@@ -191,6 +198,8 @@ export default function SettingsPanel() {
           </span>
           <button
             onClick={() => store.setShowSettings(false)}
+            title="Close (Esc)"
+            aria-label="Close settings"
             style={{
               background: "none",
               border: "none",
@@ -608,7 +617,7 @@ export default function SettingsPanel() {
                   ))}
                 </div>
                 <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
-                  Tip: Double-click a tab name to rename it. Or use ⌘R to rename the active tab.
+                  Tip: Double-click a tab name to rename it. Or use {shortcutLabel("renameTab")} to rename the active tab.
                 </div>
               </div>
 
@@ -768,6 +777,8 @@ export default function SettingsPanel() {
           )}
 
           {/* AI API Tab */}
+          {store.settingsTab === "sync" && <SyncSettings />}
+
           {store.settingsTab === "ai" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               {/* Orchestrator Provider */}
@@ -925,7 +936,7 @@ export default function SettingsPanel() {
                       onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
                     />
                     <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
-                      Used for both Agent CLI (Cmd+Shift+A) and Orchestrator when Ollama is selected.
+                      Used for both Agent CLI ({shortcutLabel("agentPicker")}) and Orchestrator when Ollama is selected.
                     </p>
                   </div>
 

@@ -29,6 +29,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # A manual run builds the branch it was started from. If the tag already
+      # exists on another commit, the uploaded installers wouldn't match it.
+      - name: Check an existing tag points at this commit
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git fetch -q --tags origin
+          if TAG_SHA=$(git rev-parse -q --verify "refs/tags/$RELEASE_TAG^{commit}"); then
+            if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::Tag $RELEASE_TAG already exists at $TAG_SHA, but this run would build $GITHUB_SHA. Start the run from the tag, or use a new version."
+              exit 1
+            fi
+          fi
+
       - name: Check tag matches app version
         shell: bash
         run: |
@@ -87,6 +101,10 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     name: Build (${{ matrix.label }})
+    env:
+      # Signing turns on only once the Apple secrets exist; until then macOS
+      # builds stay unsigned exactly as before.
+      MAC_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
 
     steps:
       - name: Checkout
@@ -125,6 +143,20 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
+        if: ${{ !(startsWith(matrix.platform, 'macos') && env.MAC_SIGNING == 'true') }}
+        run: npx tauri build --target ${{ matrix.target }}
+
+      # Signed with the Developer ID certificate and notarized by Apple, so the
+      # app passes Gatekeeper without `xattr -cr` (required by homebrew/cask).
+      - name: Build, sign and notarize Tauri app (macOS)
+        if: ${{ startsWith(matrix.platform, 'macos') && env.MAC_SIGNING == 'true' }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx tauri build --target ${{ matrix.target }}
 
       - name: List bundle output (debug)
