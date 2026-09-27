@@ -1,0 +1,22 @@
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="{{ '/' | relative_url }}">
+      <img src="{{ '/assets/img/logo-192.webp' | relative_url }}" alt="" width="30" height="30">
+      <span>ADE</span>
+    </a>
+    <nav id="site-nav" class="site-nav">
+      <a href="{{ '/#agents' | relative_url }}">Agents</a>
+      <a href="{{ '/#contracts' | relative_url }}">Smart contracts</a>
+      <a href="{{ '/guide/' | relative_url }}"{% if page.url contains '/guide/' %} aria-current="page"{% endif %}>Guide</a>
+      <a href="{{ site.repo }}">GitHub</a>
+      <a class="btn btn-small btn-primary" href="{{ '/#install' | relative_url }}">Download</a>
+    </nav>
+    <button class="icon-btn theme-toggle" type="button" aria-label="Switch between light and dark">
+      <svg class="moon" width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.5A7 7 0 017.5 3.5a7 7 0 109 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <svg class="sun" width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <button class="icon-btn nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav">
+      <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</header>

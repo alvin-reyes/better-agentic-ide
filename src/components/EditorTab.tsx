@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTabStore } from "../stores/tabStore";
 import MonacoWrapper from "./editor/MonacoWrapper";
@@ -7,6 +7,8 @@ import DiagramChat from "./editor/DiagramChat";
 import BinaryView from "./viewer/BinaryView";
 import MarkdownView from "./viewer/MarkdownView";
 import HtmlView from "./viewer/HtmlView";
+import AbiView from "./viewer/AbiView";
+import { parseAbi, parseIdl } from "../lib/contracts";
 import { toolbarButton, toolbarStyle } from "./viewer/shared";
 import { viewerKind, isBinaryKind, hasRenderedView } from "../lib/viewerKind";
 
@@ -38,6 +40,16 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
   const dragRef = useRef<{ type: "horizontal" | "vertical"; startPos: number; startVal: number } | null>(null);
 
   const isDirty = content !== savedContent;
+
+  // Compiled contract artifacts (Foundry/Hardhat ABIs, Anchor IDLs) are JSON:
+  // show their interface, with Source for the raw file.
+  const contractInterface = useMemo(() => {
+    if (kind !== "text" || !/\.json$/i.test(filePath) || !content) return null;
+    const abi = parseAbi(content);
+    if (abi) return { abi, idl: null };
+    const idl = parseIdl(content);
+    return idl ? { abi: null, idl } : null;
+  }, [kind, filePath, content]);
 
   useEffect(() => {
     const fileName = filePath.split("/").pop() || "untitled";
@@ -187,10 +199,11 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
   }
 
   if (!isDiagram) {
-    const rendered = hasRenderedView(kind) && !showSource;
+    const hasView = hasRenderedView(kind) || !!contractInterface;
+    const rendered = hasView && !showSource;
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        {hasRenderedView(kind) && (
+        {hasView && (
           <div style={toolbarStyle}>
             {(["Rendered", "Source"] as const).map((label) => {
               const on = (label === "Source") === showSource;
@@ -204,7 +217,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
                     color: on ? "var(--accent)" : "var(--text-muted)",
                   }}
                 >
-                  {label}
+                  {label === "Rendered" && contractInterface ? (contractInterface.abi ? "ABI" : "IDL") : label}
                 </button>
               );
             })}
@@ -223,7 +236,8 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
         <div style={{ flex: 1, minHeight: 0 }}>
           {rendered ? (
             // Renders the live buffer, so unsaved Source edits show up here too.
-            kind === "markdown" ? <MarkdownView content={content} filePath={filePath} /> : <HtmlView content={content} />
+            contractInterface ? <AbiView abi={contractInterface.abi} idl={contractInterface.idl} />
+            : kind === "markdown" ? <MarkdownView content={content} filePath={filePath} /> : <HtmlView content={content} />
           ) : (
             <MonacoWrapper
               filePath={filePath}

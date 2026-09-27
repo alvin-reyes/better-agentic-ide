@@ -1,1189 +1,351 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ADE — Agentic Development Environment</title>
-  <meta name="description" content="Modern desktop terminal with smart tabs, split panes, thoughts scratchpad, and deep theming. Built for developers who work with agentic AI in the CLI.">
-  <meta property="og:title" content="ADE">
-  <meta property="og:description" content="A modern desktop terminal built for agentic AI development. Smart tabs, split panes, agent dashboard, cost tracking, voice dictation, prompt chaining, live preview, and 8 themes.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://alvin-reyes.github.io/better-agentic-ide/">
-  <meta property="og:image" content="https://alvin-reyes.github.io/better-agentic-ide/ade_logo.png">
-  <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" type="image/jpeg" href="ade_logo.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #0d1117;
-      --bg-card: #161b22;
-      --bg-code: #1c2128;
-      --bg-elevated: #21262d;
-      --text: #e6edf3;
-      --text-dim: #8b949e;
-      --text-muted: #484f58;
-      --accent: #58a6ff;
-      --purple: #bc8cff;
-      --green: #3fb950;
-      --yellow: #d29922;
-      --red: #ff7b72;
-      --border: rgba(240, 246, 252, 0.1);
-      --border-strong: rgba(240, 246, 252, 0.15);
-      --radius: 12px;
-    }
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    .container {
-      max-width: 1000px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
-
-    /* Nav */
-    nav {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 100;
-      background: rgba(13, 17, 23, 0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .nav-brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 700;
-      font-size: 15px;
-      color: var(--text);
-      text-decoration: none;
-    }
-
-    .nav-brand:hover { text-decoration: none; }
-
-    .nav-links {
-      display: flex;
-      gap: 24px;
-      align-items: center;
-    }
-
-    .nav-links a {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-dim);
-      text-decoration: none;
-    }
-
-    .nav-links a:hover { color: var(--text); text-decoration: none; }
-
-    .nav-links .btn-nav {
-      padding: 6px 16px;
-      border-radius: 6px;
-      background: var(--accent);
-      color: #fff;
-      font-weight: 600;
-    }
-
-    .nav-links .btn-nav:hover { filter: brightness(1.15); }
-
-    /* Hero */
-    .hero {
-      text-align: center;
-      padding: 140px 24px 80px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .hero::before {
-      content: "";
-      position: absolute;
-      top: -200px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 800px;
-      height: 600px;
-      background: radial-gradient(ellipse, rgba(88, 166, 255, 0.08) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 16px;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      background: var(--bg-card);
-      font-size: 13px;
-      color: var(--text-dim);
-      margin-bottom: 28px;
-    }
-
-    .hero-badge span { color: var(--green); font-weight: 600; }
-
-    .hero h1 {
-      font-size: clamp(40px, 6vw, 68px);
-      font-weight: 800;
-      letter-spacing: -0.04em;
-      line-height: 1.08;
-      margin-bottom: 24px;
-    }
-
-    .hero h1 .accent { color: var(--accent); }
-
-    .hero .subtitle {
-      font-size: 20px;
-      color: var(--text-dim);
-      max-width: 600px;
-      margin: 0 auto 40px;
-      line-height: 1.5;
-    }
-
-    .hero-buttons {
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 48px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 14px 28px;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      text-decoration: none;
-      transition: all 0.15s ease;
-      border: none;
-      cursor: pointer;
-    }
-
-    .btn:hover { text-decoration: none; }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { filter: brightness(1.15); }
-    .btn-secondary { background: var(--bg-card); color: var(--text); border: 1px solid var(--border-strong); }
-    .btn-secondary:hover { background: var(--bg-elevated); }
-
-    /* Terminal mockup */
-    .mockup {
-      max-width: 800px;
-      margin: 0 auto;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid var(--border-strong);
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.03);
-    }
-
-    .mockup-bar {
-      background: var(--bg-card);
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .mockup-dot { width: 12px; height: 12px; border-radius: 50%; }
-
-    .mockup-tabs {
-      display: flex;
-      gap: 4px;
-      margin-left: 16px;
-    }
-
-    .mockup-tab {
-      padding: 4px 14px;
-      border-radius: 6px 6px 0 0;
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-muted);
-    }
-
-    .mockup-tab.active { background: var(--bg); color: var(--text); }
-
-    .mockup-body {
-      background: var(--bg);
-      padding: 20px;
-      font-family: "JetBrains Mono", monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      min-height: 220px;
-    }
-
-    .mockup-body .prompt { color: var(--green); }
-    .mockup-body .cmd { color: var(--text); }
-    .mockup-body .output { color: var(--text-dim); }
-    .mockup-body .accent-text { color: var(--accent); }
-    .mockup-body .cursor { display: inline-block; width: 2px; height: 16px; background: var(--accent); animation: blink 1s infinite; vertical-align: text-bottom; }
-
-    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-
-    .mockup-scratchpad {
-      background: var(--bg-card);
-      border-top: 1px solid var(--border);
-      padding: 12px 16px;
-      font-family: "JetBrains Mono", monospace;
-      font-size: 12px;
-    }
-
-    .mockup-scratchpad .label {
-      font-size: 11px;
-      color: var(--accent);
-      font-weight: 600;
-      margin-bottom: 6px;
-      font-family: "Inter", sans-serif;
-    }
-
-    .mockup-scratchpad .note { color: var(--text-dim); }
-
-    /* Why section */
-    .why {
-      padding: 100px 24px;
-    }
-
-    .why h2 {
-      text-align: center;
-      font-size: 36px;
-      font-weight: 800;
-      margin-bottom: 16px;
-      letter-spacing: -0.03em;
-    }
-
-    .why .subtitle {
-      text-align: center;
-      color: var(--text-dim);
-      max-width: 640px;
-      margin: 0 auto 60px;
-      font-size: 16px;
-    }
-
-    .why-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-    }
-
-    @media (max-width: 768px) {
-      .why-grid { grid-template-columns: 1fr; }
-    }
-
-    .why-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px;
-      transition: border-color 0.2s, transform 0.2s;
-    }
-
-    .why-card:hover { border-color: var(--accent); transform: translateY(-3px); }
-
-    .why-card .icon {
-      width: 44px;
-      height: 44px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 16px;
-      font-size: 22px;
-    }
-
-    .why-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
-    .why-card p { font-size: 14px; color: var(--text-dim); line-height: 1.55; }
-
-    /* Features */
-    .features {
-      padding: 80px 24px;
-      background: var(--bg-card);
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .features h2 {
-      text-align: center;
-      font-size: 36px;
-      font-weight: 800;
-      margin-bottom: 16px;
-      letter-spacing: -0.03em;
-    }
-
-    .features .subtitle {
-      text-align: center;
-      color: var(--text-dim);
-      margin-bottom: 60px;
-      font-size: 16px;
-    }
-
-    .feature-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 40px;
-      align-items: center;
-      margin-bottom: 80px;
-    }
-
-    .feature-row:last-child { margin-bottom: 0; }
-    .feature-row.reverse { direction: rtl; }
-    .feature-row.reverse > * { direction: ltr; }
-
-    @media (max-width: 768px) {
-      .feature-row, .feature-row.reverse { grid-template-columns: 1fr; direction: ltr; }
-    }
-
-    .feature-text .tag {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 12px;
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 4px;
-    }
-
-    .feature-text h3 { font-size: 24px; font-weight: 700; margin-bottom: 12px; letter-spacing: -0.02em; }
-    .feature-text p { font-size: 15px; color: var(--text-dim); line-height: 1.6; }
-    .feature-text ul { margin-top: 12px; padding-left: 0; list-style: none; }
-    .feature-text li { font-size: 14px; color: var(--text-dim); padding: 4px 0; display: flex; align-items: center; gap: 8px; }
-    .feature-text li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-
-    .feature-visual {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-      font-family: "JetBrains Mono", monospace;
-      font-size: 12px;
-    }
-
-    /* Shortcuts */
-    .shortcuts { padding: 80px 24px; }
-
-    .shortcuts h2 {
-      text-align: center;
-      font-size: 36px;
-      font-weight: 800;
-      margin-bottom: 16px;
-      letter-spacing: -0.03em;
-    }
-
-    .shortcuts .subtitle {
-      text-align: center;
-      color: var(--text-dim);
-      margin-bottom: 48px;
-      font-size: 16px;
-    }
-
-    .shortcut-categories {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 24px;
-    }
-
-    .shortcut-category h3 {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 10px;
-      padding-left: 4px;
-    }
-
-    .shortcut-list {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .shortcut-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      border-radius: 8px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-    }
-
-    .shortcut-item span { font-size: 13px; color: var(--text-dim); }
-
-    .shortcut-item kbd {
-      font-family: "JetBrains Mono", monospace;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--accent);
-      background: var(--bg-code);
-      padding: 3px 8px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-    }
-
-    /* Themes */
-    .themes { padding: 80px 24px; background: var(--bg-card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-    .themes h2 { text-align: center; font-size: 36px; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.03em; }
-    .themes .subtitle { text-align: center; color: var(--text-dim); margin-bottom: 48px; font-size: 16px; }
-
-    .theme-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-    }
-
-    .theme-card {
-      border-radius: 10px;
-      padding: 20px;
-      border: 1px solid var(--border);
-      transition: transform 0.2s, border-color 0.2s;
-    }
-
-    .theme-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.2); }
-    .theme-dots { display: flex; gap: 5px; margin-bottom: 14px; }
-    .theme-dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); }
-    .theme-name { font-size: 14px; font-weight: 600; }
-
-    /* Getting started */
-    .getting-started { padding: 80px 24px; }
-    .getting-started h2 { text-align: center; font-size: 36px; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.03em; }
-    .getting-started .subtitle { text-align: center; color: var(--text-dim); margin-bottom: 48px; font-size: 16px; }
-
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-    }
-
-    @media (max-width: 768px) { .steps { grid-template-columns: 1fr; } }
-
-    .step {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px;
-    }
-
-    .step-number {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      background: var(--accent);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 14px;
-      margin-bottom: 16px;
-    }
-
-    .step h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-    .step p { font-size: 14px; color: var(--text-dim); line-height: 1.5; }
-
-    .step code {
-      display: block;
-      margin-top: 12px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px 14px;
-      font-family: "JetBrains Mono", monospace;
-      font-size: 12px;
-      color: var(--text);
-      overflow-x: auto;
-    }
-
-    /* Tech */
-    .tech { padding: 80px 24px; text-align: center; background: var(--bg-card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-    .tech h2 { font-size: 36px; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.03em; }
-    .tech .subtitle { color: var(--text-dim); margin-bottom: 40px; font-size: 16px; }
-
-    .tech-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
-
-    .tech-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 20px;
-      border-radius: 20px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text);
-      transition: border-color 0.15s;
-    }
-
-    .tech-pill:hover { border-color: var(--accent); }
-
-    /* CTA */
-    .cta {
-      padding: 100px 24px;
-      text-align: center;
-    }
-
-    .cta h2 { font-size: 36px; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.03em; }
-    .cta p { color: var(--text-dim); margin-bottom: 32px; font-size: 16px; }
-
-    /* Footer */
-    footer {
-      text-align: center;
-      padding: 40px 24px;
-      color: var(--text-muted);
-      font-size: 13px;
-      border-top: 1px solid var(--border);
-    }
-
-    footer .links {
-      display: flex;
-      gap: 24px;
-      justify-content: center;
-      margin-bottom: 16px;
-    }
-
-    footer a { color: var(--text-dim); text-decoration: none; }
-    footer a:hover { color: var(--accent); text-decoration: none; }
-  </style>
-</head>
-<body>
-
-  <!-- Nav -->
-  <nav>
-    <a href="#" class="nav-brand">
-      ADE
-    </a>
-    <div class="nav-links">
-      <a href="#features">Features</a>
-      <a href="#agents">AI Agents</a>
-      <a href="#dashboard">Dashboard</a>
-      <a href="#themes">Themes</a>
-      <a href="#shortcuts">Shortcuts</a>
-      <a href="https://github.com/alvin-reyes/better-agentic-ide">GitHub</a>
-      <a href="#sponsor" style="color: #db61a2;">Sponsor</a>
-      <a href="https://github.com/alvin-reyes/better-agentic-ide/releases" class="btn-nav">Download</a>
+---
+layout: default
+body_class: home
+description: ADE is a desktop terminal for building with AI coding agents — Claude Code, Codex, Gemini — with first-class tooling for Solidity and Solana smart contracts.
+---
+{% assign img = '/assets/img/' | relative_url %}
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-copy">
+      <a class="pill" href="{{ '/guide/contracts/' | relative_url }}"><b>NEW</b> Smart contract tooling for Foundry, Hardhat and Anchor →</a>
+      <h1>Build with AI agents.<br>Ship <em>contracts</em> with confidence.</h1>
+      <p class="sub">ADE is a desktop terminal made for agent-driven development. Run Claude Code, Codex and Gemini side by side, see every file they write, and take Solidity and Solana projects from first test to reviewed deploy — all from the keyboard.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">
+          <svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0l-4-4m4 4l4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Download <span data-latest-version></span>
+        </a>
+        <a class="btn btn-ghost" href="{{ '/guide/' | relative_url }}">Read the guide</a>
+      </div>
+      <p class="hero-meta">macOS · Windows · Linux &nbsp;—&nbsp; <code>brew install --cask alvin-reyes/tap/ade</code></p>
     </div>
-  </nav>
+    <figure class="shot">
+      <div class="shot-bar"><i></i><i></i><i></i><span>ADE — acme-api</span></div>
+      <img src="{{ img }}hero.webp" width="1440" height="900" alt="ADE with two terminal panes running git log and the test suite, a rendered markdown plan in the preview panel, and a prompt drafted in the scratchpad">
+    </figure>
+  </div>
+</section>
 
-  <!-- Hero -->
-  <section class="hero">
-    <div class="hero-badge">
-      <span>v0.15.0</span> Open Source &middot; Tauri + React
+<section class="logos" aria-label="Works with">
+  <div class="wrap">
+    Works with the agents and toolchains you already use
+    <ul>
+      <li>Claude Code</li><li>Codex</li><li>Gemini CLI</li><li>Ollama</li>
+      <li class="sep" aria-hidden="true">/</li>
+      <li>Foundry</li><li>Hardhat</li><li>Anchor</li>
+    </ul>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">One app, two jobs</span>
+      <h2>Everything around the agent. Everything around the contract.</h2>
+      <p>A real terminal first — with the tools you'd otherwise keep switching windows for.</p>
     </div>
-    <h1><span class="accent">Agentic Development Environment</span></h1>
-    <p class="subtitle">A modern terminal built for AI-powered development. Smart tabs, split panes, 20+ AI agent profiles, agent dashboard with cost tracking, voice dictation, prompt chaining, live preview, and 8 built-in themes. Keyboard-first design for developers who work with Claude Code, Codex, Gemini CLI, and any agentic tool.</p>
-    <div class="hero-buttons">
-      <a href="https://github.com/alvin-reyes/better-agentic-ide/releases" class="btn btn-primary">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V10M8 10L5 7M8 10L11 7M3 12H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Download
+    <div class="tracks">
+      <a class="track" href="#agents" style="color:inherit;text-decoration:none">
+        <span class="kicker">For agent work</span>
+        <h3>Direct, watch and review your agents</h3>
+        <p>Draft prompts properly, run several agents at once, open any file they write with a click, and follow every sub-agent on a live timeline.</p>
+        <ul class="checks">
+          <li><strong>Scratchpad</strong> with history, chaining and voice</li>
+          <li><strong>Clickable files</strong> and a live preview</li>
+          <li><strong>Fleet view</strong> of every agent and sub-agent</li>
+        </ul>
       </a>
-      <a href="https://github.com/alvin-reyes/better-agentic-ide" class="btn btn-secondary">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        View on GitHub
+      <a class="track" href="#contracts" style="color:inherit;text-decoration:none">
+        <span class="kicker">For smart contracts</span>
+        <h3>Test, audit and deploy without the busywork</h3>
+        <p>One key opens build, test, gas, coverage, Slither and a local chain for Foundry, Hardhat or Anchor — plus an ABI viewer and agents that know contract security.</p>
+        <ul class="checks">
+          <li><strong>One-click</strong> build, test and analysis</li>
+          <li><strong>Reviewed deploys</strong>, never a raw private key</li>
+          <li><strong>Auditor and gas agents</strong> that write PoC tests</li>
+        </ul>
       </a>
     </div>
+  </div>
+</section>
 
-    <!-- Terminal mockup -->
-    <div class="mockup container">
-      <div class="mockup-bar">
-        <div class="mockup-dot" style="background: #ff5f57;"></div>
-        <div class="mockup-dot" style="background: #febc2e;"></div>
-        <div class="mockup-dot" style="background: #28c840;"></div>
-        <div class="mockup-tabs">
-          <div class="mockup-tab active">Agent</div>
-          <div class="mockup-tab">API Server</div>
-          <div class="mockup-tab">Tests</div>
-        </div>
+<section class="section tint" id="agents">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Agent workflow</span>
+      <h2>Draft. Run. Review. Repeat.</h2>
+      <p>The loop you do a hundred times a day, without leaving the window.</p>
+    </div>
+
+    <div class="feature">
+      <div class="feature-copy">
+        <h3><span class="step">1</span>Draft the prompt before you send it</h3>
+        <p>A scratchpad under every terminal for long, careful prompts. Send with one key, reuse from history and notes, dictate by voice, or paste a screenshot — its path goes along with the prompt.</p>
+        <ul class="checks">
+          <li><strong>Prompt chaining</strong> — split with <code>---</code>; each step waits for the agent to go idle</li>
+          <li><strong>Send Enter</strong> to answer "Proceed?" without leaving the pad</li>
+          <li><strong>Your draft survives</strong> crashes and restarts</li>
+        </ul>
       </div>
-      <div class="mockup-body">
-        <div><span class="prompt">~</span> <span class="cmd">claude</span> &nbsp;<span style="color: var(--text-muted); font-size: 11px;">or codex, gemini, aider, goose...</span></div>
-        <div><span class="output">Starting agent session</span></div>
-        <div><span class="accent-text">?</span> <span class="output">What would you like to do?</span></div>
-        <div><span class="cmd">Add user authentication with JWT tokens and refresh flow</span><span class="cursor"></span></div>
-        <br>
-        <div><span class="output" style="color: var(--green);">Creating auth module...</span></div>
+      <div class="frame"><img src="{{ img }}scratchpad.webp" width="1440" height="430" loading="lazy" alt="The scratchpad under the terminals with a drafted prompt and Send to Terminal"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="feature-copy">
+        <h3><span class="step">2</span>Run agents side by side</h3>
+        <p>Split panes and named tabs, 37 agent profiles for backend, frontend, DevOps, testing and Web3, and an orchestrator that turns a conversation into tasks and dispatches each to its own terminal.</p>
+        <ul class="checks">
+          <li><strong>Agent picker</strong> suggests the right profile for a task</li>
+          <li><strong>11 architects</strong> for AI automation and Web3 to brainstorm with — they record decisions as ADRs</li>
+          <li><strong>Claude Code, Codex, Gemini CLI or Ollama</strong></li>
+          <li><strong>Notifications</strong> when an agent finishes</li>
+        </ul>
       </div>
-      <div class="mockup-scratchpad">
-        <div class="label">Thoughts (Cmd+J)</div>
-        <div class="note">implement login endpoint first, then add middleware for protected routes, use bcrypt for password hashing</div>
+      <div class="term" aria-label="Terminal example">
+        <div class="shot-bar"><i></i><i></i><i></i><span>claude — acme-api</span></div>
+        <div class="term-body"><span class="p">➜</span>  acme-api claude
+<span class="d">⏺</span> I'll add idempotency keys to the webhook handler.
+<span class="d">⏺</span> Write(<span class="l">src/webhooks.ts</span>)
+<span class="d">  ⎿  Wrote 48 lines</span>
+<span class="d">⏺</span> Write(<span class="l">tests/webhooks.test.mjs</span>)
+<span class="d">⏺</span> Bash(npm test)
+<span class="d">  ⎿  </span><span class="p">✔</span> ignores a repeated webhook id
+<span class="d">⏺</span> Updated <span class="l">docs/plan.md</span> — task 2 is done.</div>
       </div>
     </div>
-  </section>
 
-  <!-- Why -->
-  <section class="why" id="why">
-    <div class="container">
-      <h2>Why ADE?</h2>
-      <p class="subtitle">Standard terminals weren't built for working with AI agents. ADE is.</p>
-      <div class="why-grid">
-        <div class="why-card">
-          <div class="icon" style="background: rgba(88, 166, 255, 0.12);">
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M5.5 4L9.5 8L5.5 12" stroke="#58a6ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <h3>Compose before sending</h3>
-          <p>The scratchpad lets you draft complex prompts, review them, then inject directly into your AI CLI with Cmd+Enter. No more typos in critical prompts.</p>
+    <div class="feature">
+      <div class="feature-copy">
+        <h3><span class="step">3</span>Review what they wrote — with a click</h3>
+        <p>Every file path an agent prints becomes a link once the file exists. Documents open in a live preview beside the terminal; code opens in a tab.</p>
+        <ul class="checks">
+          <li><strong>Markdown</strong> with tables, images and Mermaid diagrams</li>
+          <li><strong>PDF, Word, images and HTML</strong> rendered in place</li>
+          <li><strong>Safe by default</strong> — rendered documents can't run code</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="{{ img }}viewer.webp" width="1440" height="900" loading="lazy" alt="A markdown plan rendered with a Mermaid flowchart and a task table, next to the file browser"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="feature-copy">
+        <h3><span class="step">4</span>See the whole fleet</h3>
+        <p>ADE follows Claude Code's own transcripts, so every sub-agent — Explore, Plan, reviewers — shows up on a timeline as it starts and finishes, per terminal or across all of them, with running counts and estimated cost.</p>
+        <ul class="checks">
+          <li><strong>Swimlanes</strong> for 5 min, 15 min, 1 hour or all time</li>
+          <li><strong>Jump</strong> straight to the pane an agent runs in</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with Explore, Plan, general-purpose and code-reviewer sub-agents"></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="contracts">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Smart contracts</span>
+      <h2>From <code style="font-size:.8em">forge init</code> to a reviewed deploy</h2>
+      <p>Open a Foundry, Hardhat or Anchor project and press <kbd class="key" data-mac="⌘⇧K" data-other="Ctrl+Alt+Shift+K">⌘⇧K</kbd>. ADE finds the project from any subfolder and puts the whole toolchain one click away.</p>
+    </div>
+
+    <div class="feature">
+      <div class="feature-copy">
+        <h3>Build, test, measure, analyze</h3>
+        <p>Actions run in your terminal from the project root, so you see real output and can stop anything. The local chain gets its own tab and keeps running while you work.</p>
+        <ul class="checks">
+          <li><strong>Tests</strong> with traces, gas report, coverage and snapshots</li>
+          <li><strong>Slither and Aderyn</strong> static analysis</li>
+          <li><strong>Anvil, Hardhat node or solana-test-validator</strong> in one click</li>
+          <li><strong>Solidity highlighting</strong> and clickable compiler errors</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="{{ img }}contracts-panel.webp" width="1440" height="900" loading="lazy" alt="The Contracts panel for a Foundry project: build, test, analyze, chain and deploy actions, installed tools, sources and ABIs"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="feature-copy">
+        <h3>Read an ABI like a spec</h3>
+        <p>Compiled artifacts open as read and write functions, events and errors — with the exact selectors and topic hashes the EVM uses. Click to copy one when you're decoding calldata or a revert. Anchor IDLs show instructions, accounts and error codes.</p>
+        <ul class="checks">
+          <li><strong>Only your contracts</strong> — forge-std and OpenZeppelin stay out of the list</li>
+          <li><strong>Filter</strong> by name; <strong>Source</strong> shows the raw JSON</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="{{ img }}abi.webp" width="1440" height="900" loading="lazy" alt="ABI viewer for a Vault contract showing functions, events and errors with selectors"></div>
+    </div>
+
+    <div class="matrix-wrap" style="margin-top:28px">
+      <table class="matrix">
+        <thead><tr><th></th><th>Foundry</th><th>Hardhat</th><th>Anchor (Solana)</th></tr></thead>
+        <tbody>
+          <tr><td>Detected by</td><td><code>foundry.toml</code></td><td><code>hardhat.config.*</code></td><td><code>Anchor.toml</code></td></tr>
+          <tr><td>Build &amp; test</td><td><code>forge build</code>, <code>forge test</code>, gas, coverage, snapshot</td><td><code>hardhat compile</code>, <code>hardhat test</code>, gas, coverage</td><td><code>anchor build</code>, <code>anchor test</code></td></tr>
+          <tr><td>Analyze</td><td>Slither, Aderyn</td><td>Slither</td><td>—</td></tr>
+          <tr><td>Local chain</td><td>Anvil</td><td>Hardhat node</td><td>solana-test-validator</td></tr>
+          <tr><td>Deploy</td><td>each <code>script/*.s.sol</code></td><td>each Ignition module</td><td><code>anchor deploy</code></td></tr>
+          <tr><td>Interface</td><td>ABI + selectors</td><td>ABI + selectors</td><td>IDL</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="contract-extras">
+      <div class="callout">
+        <div class="icon"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5l6 2.5v4.5c0 3.8-2.6 6.3-6 7.5-3.4-1.2-6-3.7-6-7.5V5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7.3 10l1.9 1.9 3.6-3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div style="min-width:0">
+          <h4>Deploys you review first</h4>
+          <p>Deploy actions type the command into the terminal and stop — you check the network and account, then press Enter. Foundry deploys use an encrypted keystore account; ADE never asks for, stores or syncs a private key.</p>
+          <pre>forge script script/Deploy.s.sol --rpc-url "$RPC_URL" --account deployer --broadcast</pre>
         </div>
-        <div class="why-card">
-          <div class="icon" style="background: rgba(63, 185, 80, 0.12);">
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M2 4H14M2 8H14M2 12H14" stroke="#3fb950" stroke-width="1.5" stroke-linecap="round"/></svg>
-          </div>
-          <h3>Multi-agent workflows</h3>
-          <p>Run Claude in one pane, your server in another, tests in a third. Named tabs and splits keep everything organized.</p>
-        </div>
-        <div class="why-card">
-          <div class="icon" style="background: rgba(188, 140, 255, 0.12);">
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M8 2V8L11 11" stroke="#bc8cff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="6" stroke="#bc8cff" stroke-width="1.5"/></svg>
-          </div>
-          <h3>Zero context switching</h3>
-          <p>Cmd+J to scratchpad, Cmd+Enter to send, Escape back to terminal. Your hands never leave the keyboard.</p>
-        </div>
+      </div>
+      <div class="card">
+        <div class="icon"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+        <h4>Agents that know contracts</h4>
+        <p><strong>Smart Contract Engineer</strong> works test-first with fuzz and invariant tests. <strong>Auditor</strong> reviews for reentrancy, access control, oracle and MEV risks and proves each finding with a Foundry test. <strong>Gas Optimizer</strong> measures every change. <strong>Solana/Anchor Engineer</strong> validates every account.</p>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Features -->
-  <section class="features" id="features">
-    <div class="container">
-      <h2>Features</h2>
-      <p class="subtitle">Everything you need for productive AI-assisted development.</p>
-
-      <!-- Feature 1: Scratchpad -->
-      <div class="feature-row">
-        <div class="feature-text">
-          <div class="tag" style="background: rgba(88, 166, 255, 0.12); color: var(--accent);">Scratchpad</div>
-          <h3>Think before you type</h3>
-          <p>Draft prompts in a dedicated panel, then send them to the active terminal with a single shortcut. Save frequently used prompts as notes for later.</p>
-          <ul>
-            <li style="--dot-color: var(--accent);"><span style="color: var(--accent);">Cmd+J</span> &mdash; toggle scratchpad &amp; cycle focus</li>
-            <li style="--dot-color: var(--green);"><span style="color: var(--green);">Cmd+Enter</span> &mdash; send to terminal</li>
-            <li style="--dot-color: var(--purple);"><span style="color: var(--purple);">Cmd+S</span> &mdash; save as reusable note</li>
-            <li style="--dot-color: var(--yellow);"><span style="color: var(--yellow);">Cmd+E</span> &mdash; send Enter to confirm prompts</li>
-          </ul>
-        </div>
-        <div class="feature-visual">
-          <div style="color: var(--accent); font-weight: 600; font-size: 11px; margin-bottom: 10px; font-family: Inter, sans-serif;">THOUGHTS</div>
-          <div style="color: var(--text-dim); margin-bottom: 8px;">refactor the auth module to use</div>
-          <div style="color: var(--text-dim); margin-bottom: 8px;">middleware pattern instead of</div>
-          <div style="color: var(--text-dim); margin-bottom: 16px;">inline checks<span style="display: inline-block; width: 2px; height: 14px; background: var(--accent); animation: blink 1s infinite; vertical-align: text-bottom; margin-left: 2px;"></span></div>
-          <div style="display: flex; gap: 8px;">
-            <span style="background: var(--accent); color: #fff; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-family: Inter, sans-serif; font-weight: 600;">Send to Terminal</span>
-            <span style="border: 1px solid var(--border); color: var(--text-dim); padding: 4px 12px; border-radius: 4px; font-size: 11px; font-family: Inter, sans-serif;">Save</span>
-            <span style="border: 1px solid var(--border); color: var(--text-dim); padding: 4px 12px; border-radius: 4px; font-size: 11px; font-family: Inter, sans-serif;">Copy</span>
-          </div>
-        </div>
+<section class="section tint">
+  <div class="wrap">
+    <div class="feature">
+      <div class="feature-copy">
+        <span class="kicker">Auto-save &amp; sync</span>
+        <h3>Close it, crash it, switch machines — nothing lost</h3>
+        <p>Tabs, splits, each terminal's folder and scrollback, open files and your unsent draft are saved to disk within a second. Point ADE at a private git repo and your settings, notes, prompt history and Claude memory follow you.</p>
+        <ul class="checks">
+          <li><strong>Snapshots</strong> every 10 minutes, restorable from Settings</li>
+          <li><strong>Syncs</strong> <code>CLAUDE.md</code> plus your commands, agents and skills</li>
+          <li><strong>Private by design</strong> — API keys and scrollback never leave the machine</li>
+        </ul>
       </div>
+      <div class="frame"><img src="{{ img }}sync.webp" width="1440" height="900" loading="lazy" alt="Settings, Sync tab: auto-save status, git remote, device name, Claude memory and local snapshots"></div>
+    </div>
+  </div>
+</section>
 
-      <!-- Feature 2: Tabs & Splits -->
-      <div class="feature-row reverse">
-        <div class="feature-text">
-          <div class="tag" style="background: rgba(63, 185, 80, 0.12); color: var(--green);">Organization</div>
-          <h3>Tabs and split panes</h3>
-          <p>Organize your workflow with named tabs and split panes. Terminals persist across splits without resetting your session.</p>
-          <ul>
-            <li><span style="color: var(--accent);">Cmd+T</span> &mdash; new tab</li>
-            <li><span style="color: var(--accent);">Cmd+R</span> &mdash; rename active tab</li>
-            <li><span style="color: var(--accent);">Cmd+D</span> &mdash; split horizontally</li>
-            <li><span style="color: var(--accent);">Cmd+1-9</span> &mdash; switch tabs instantly</li>
-          </ul>
-        </div>
-        <div class="feature-visual">
-          <div style="display: flex; gap: 6px; margin-bottom: 12px; font-family: Inter, sans-serif;">
-            <span style="background: var(--bg-card); padding: 4px 12px; border-radius: 4px 4px 0 0; font-size: 11px; color: var(--text); border: 1px solid var(--border);">1 Agent</span>
-            <span style="padding: 4px 12px; font-size: 11px; color: var(--text-muted);">2 API Server</span>
-            <span style="padding: 4px 12px; font-size: 11px; color: var(--text-muted);">3 Tests</span>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-            <div style="background: var(--bg-card); border: 1px solid var(--accent); border-radius: 6px; padding: 10px; font-size: 11px;">
-              <div style="color: var(--green); margin-bottom: 4px;">~/project</div>
-              <div style="color: var(--text-dim);">claude | codex | gemini</div>
-            </div>
-            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 11px;">
-              <div style="color: var(--green); margin-bottom: 4px;">~/project</div>
-              <div style="color: var(--text-dim);">npm run dev</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Feature 3: Settings -->
-      <div class="feature-row">
-        <div class="feature-text">
-          <div class="tag" style="background: rgba(188, 140, 255, 0.12); color: var(--purple);">Customization</div>
-          <h3>Make it yours</h3>
-          <p>8 built-in themes, 7 font families, adjustable font size, line height, cursor style, and full color overrides. Open settings with Cmd+,</p>
-          <ul>
-            <li>Font size from 10px to 24px</li>
-            <li>JetBrains Mono, SF Mono, Fira Code, and more</li>
-            <li>Bar, block, or underline cursor</li>
-            <li>Override any color with a picker</li>
-          </ul>
-        </div>
-        <div class="feature-visual">
-          <div style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">THEME</div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-            <div style="padding: 8px 10px; border-radius: 6px; background: #282a36; border: 1px solid var(--border); display: flex; align-items: center; gap: 6px;">
-              <div style="width: 10px; height: 10px; border-radius: 50%; background: #bd93f9;"></div>
-              <span style="font-size: 11px; color: #f8f8f2; font-family: Inter, sans-serif;">Dracula</span>
-            </div>
-            <div style="padding: 8px 10px; border-radius: 6px; background: #1e1e2e; border: 1px solid var(--border); display: flex; align-items: center; gap: 6px;">
-              <div style="width: 10px; height: 10px; border-radius: 50%; background: #89b4fa;"></div>
-              <span style="font-size: 11px; color: #cdd6f4; font-family: Inter, sans-serif;">Catppuccin</span>
-            </div>
-            <div style="padding: 8px 10px; border-radius: 6px; background: #1a1b26; border: 1px solid var(--border); display: flex; align-items: center; gap: 6px;">
-              <div style="width: 10px; height: 10px; border-radius: 50%; background: #7aa2f7;"></div>
-              <span style="font-size: 11px; color: #c0caf5; font-family: Inter, sans-serif;">Tokyo Night</span>
-            </div>
-            <div style="padding: 8px 10px; border-radius: 6px; background: #2e3440; border: 1px solid var(--border); display: flex; align-items: center; gap: 6px;">
-              <div style="width: 10px; height: 10px; border-radius: 50%; background: #88c0d0;"></div>
-              <span style="font-size: 11px; color: #eceff4; font-family: Inter, sans-serif;">Nord</span>
-            </div>
-          </div>
-        </div>
+<section class="section" id="shortcuts">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Keyboard-first</span>
+      <h2>Your hands stay on the keys</h2>
+      <p>On Linux and Windows, app shortcuts use <kbd class="key" data-mac="Ctrl+Shift" data-other="Ctrl+Shift">Ctrl+Shift</kbd>, so plain <kbd class="key" data-mac="Ctrl" data-other="Ctrl">Ctrl</kbd> keys stay with your shell.</p>
+    </div>
+    <div class="center">
+      <div class="platform-tabs" role="group" aria-label="Show shortcuts for">
+        <button type="button" data-platform="mac">macOS</button>
+        <button type="button" data-platform="other">Linux / Windows</button>
       </div>
     </div>
-  </section>
+    <div class="keys-grid">
+      <div>Scratchpad {% include key.html mac="⌘J" other="Ctrl+Shift+J" %}</div>
+      <div>Send to terminal {% include key.html mac="⌘↵" other="Ctrl+Enter" %}</div>
+      <div>Send Enter {% include key.html mac="⌘E" other="Ctrl+Shift+E" %}</div>
+      <div>Agent picker {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %}</div>
+      <div>Contracts {% include key.html mac="⌘⇧K" other="Ctrl+Alt+Shift+K" %}</div>
+      <div>Fleet view {% include key.html mac="⌘." other="Ctrl+Shift+." %}</div>
+      <div>Split pane {% include key.html mac="⌘D" other="Ctrl+Shift+D" %}</div>
+      <div>Zoom pane {% include key.html mac="⌘⇧↵" other="Ctrl+Alt+Shift+Enter" %}</div>
+      <div>Command palette {% include key.html mac="⌘P" other="Ctrl+Shift+P" %}</div>
+    </div>
+    <p class="center" style="margin-top:28px"><a href="{{ '/guide/shortcuts/' | relative_url }}">All keyboard shortcuts →</a></p>
+  </div>
+</section>
 
-  <!-- AI Agents -->
-  <section class="shortcuts" id="agents" style="background: var(--bg); border: none;">
-    <div class="container">
-      <h2>AI Agent Terminals</h2>
-      <p class="subtitle">Launch specialized AI agents in dedicated terminal tabs. 16 profiles across 5 categories.</p>
+<section class="section tint" id="themes">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Make it yours</span>
+      <h2>Eight themes, seven fonts, any color</h2>
+      <p>GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin, Solarized Dark, Tokyo Night and One Dark — plus per-color overrides and your choice of cursor.</p>
+    </div>
+    <div class="themes">
+      <figure><div class="frame"><img src="{{ img }}theme-dracula.webp" width="720" height="315" loading="lazy" alt="ADE in the Dracula theme"></div><figcaption>Dracula</figcaption></figure>
+      <figure><div class="frame"><img src="{{ img }}theme-nord.webp" width="720" height="315" loading="lazy" alt="ADE in the Nord theme"></div><figcaption>Nord</figcaption></figure>
+      <figure><div class="frame"><img src="{{ img }}theme-tokyo-night.webp" width="720" height="315" loading="lazy" alt="ADE in the Tokyo Night theme"></div><figcaption>Tokyo Night</figcaption></figure>
+      <figure><div class="frame"><img src="{{ img }}theme-catppuccin.webp" width="720" height="315" loading="lazy" alt="ADE in the Catppuccin theme"></div><figcaption>Catppuccin</figcaption></figure>
+    </div>
+  </div>
+</section>
 
-      <!-- Agent categories -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; max-width: 840px; margin: 0 auto 32px;">
-        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-            <span style="font-size: 11px; font-weight: 700; color: #3fb950; background: #3fb95020; padding: 2px 8px; border-radius: 4px;">Backend</span>
-          </div>
-          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">API Builder &bull; Database Engineer &bull; Auth Architect</div>
-        </div>
-        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-            <span style="font-size: 11px; font-weight: 700; color: #58a6ff; background: #58a6ff20; padding: 2px 8px; border-radius: 4px;">Frontend</span>
-          </div>
-          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">UI Builder &bull; Style Architect &bull; State Manager</div>
-        </div>
-        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-            <span style="font-size: 11px; font-weight: 700; color: #bc8cff; background: #bc8cff20; padding: 2px 8px; border-radius: 4px;">DevOps</span>
-          </div>
-          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">Container Ops &bull; CI/CD &bull; Infrastructure &bull; K8s</div>
-        </div>
-        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 16px;">
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-            <span style="font-size: 11px; font-weight: 700; color: #d29922; background: #d2992220; padding: 2px 8px; border-radius: 4px;">Testing</span>
-          </div>
-          <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">Unit Tester &bull; E2E Tester &bull; Perf Tester</div>
-        </div>
+<section class="section" id="install">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Install</span>
+      <h2>Get ADE</h2>
+      <p>Free and open source. Latest release: <strong data-latest-version>on GitHub</strong>.</p>
+    </div>
+    <div class="install">
+      <div class="card">
+        <h4>macOS</h4>
+        <p>With Homebrew:</p>
+        <div class="copy"><pre>brew install --cask alvin-reyes/tap/ade</pre></div>
+        <p style="margin-top:14px">Or the disk image:</p>
+        <p class="files"><a href="{{ site.repo }}/releases/latest" data-download="mac-arm">Apple Silicon (.dmg)</a> · <a href="{{ site.repo }}/releases/latest" data-download="mac-intel">Intel (.dmg)</a></p>
       </div>
-
-      <div class="shortcut-categories" style="max-width: 700px; margin: 0 auto;">
-        <div class="shortcut-category">
-          <h3>How it works</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item"><span>Open agent picker</span><kbd>&#8984;&#8679;A</kbd></div>
-            <div class="shortcut-item"><span>Search and filter by category</span><span style="color: var(--accent); font-size: 12px;">16 agents</span></div>
-            <div class="shortcut-item"><span>Each agent opens in a new named tab</span><span style="color: var(--green); font-size: 12px;">isolated</span></div>
-            <div class="shortcut-item"><span>Continuous mode (autonomous execution)</span><span style="color: var(--red); font-size: 12px;">optional</span></div>
-          </div>
-        </div>
+      <div class="card">
+        <h4>Windows</h4>
+        <p>Windows 10 and 11, x64.</p>
+        <p><a class="btn btn-ghost btn-small" href="{{ site.repo }}/releases/latest" data-download="windows">Download installer (.msi)</a></p>
+        <p class="files">A <code>-setup.exe</code> is on the <a href="{{ site.repo }}/releases/latest">release page</a> too.</p>
+      </div>
+      <div class="card">
+        <h4>Linux</h4>
+        <p>Debian/Ubuntu package or a portable AppImage, x64.</p>
+        <p class="files"><a href="{{ site.repo }}/releases/latest" data-download="deb">.deb package</a> · <a href="{{ site.repo }}/releases/latest" data-download="appimage">.AppImage</a></p>
+        <p class="files">Or <a href="{{ '/guide/' | relative_url }}#build-from-source">build from source</a>.</p>
       </div>
     </div>
-  </section>
+    <p class="center" style="color:var(--text-3);margin-top:22px;font-size:15px">Agents: install <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, Codex, Gemini CLI or Ollama. Contracts: <a href="https://getfoundry.sh">Foundry</a>, Hardhat or <a href="https://www.anchor-lang.com">Anchor</a> — see <a href="{{ '/guide/contracts/' | relative_url }}#installing-the-tools">installing the tools</a>.</p>
+  </div>
+</section>
 
-  <!-- Brainstorm -->
-  <section class="shortcuts" id="brainstorm" style="background: var(--bg); border: none;">
-    <div class="container">
-      <h2>Brainstorm Mode</h2>
-      <p class="subtitle">Live spec preview side-by-side with your terminal. Watch your AI agent write — review in real time.</p>
+<section class="section tint" id="faq">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">FAQ</span>
+      <h2>Questions, answered</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Is ADE free?</summary>
+        <p>Yes. It's open source under the MIT license. You bring your own agents — Claude Code, Codex and Gemini use your own accounts, and Ollama runs models locally.</p>
+      </details>
+      <details>
+        <summary>Do I need Claude Code?</summary>
+        <p>No — ADE is a full terminal and works with any CLI. Claude Code gets the most out of it, because the fleet view reads Claude Code's transcripts to show sub-agents.</p>
+      </details>
+      <details>
+        <summary>Does ADE ever see my private keys?</summary>
+        <p>No. Deploy actions only type a command for you to review, and Foundry deploys use an encrypted keystore account. ADE doesn't ask for, store or sync keys. Your Anthropic API key (used only by the orchestrator) stays on your machine and is stripped before anything syncs.</p>
+      </details>
+      <details>
+        <summary>Which smart contract toolchains are supported?</summary>
+        <p>Foundry and Hardhat for EVM chains, and Anchor for Solana. ADE detects the project from <code>foundry.toml</code>, <code>hardhat.config.*</code> or <code>Anchor.toml</code>, and picks up Slither and Aderyn if they're installed.</p>
+      </details>
+      <details>
+        <summary>What gets synced between my machines?</summary>
+        <p>Only what you choose, to a private git repo you own: settings, notes, prompt history, workspaces and orchestrator history, plus (optionally) your Claude memory. Each machine's terminal session stays on that machine, and scrollback is never pushed.</p>
+      </details>
+      <details>
+        <summary>Which platforms does it run on?</summary>
+        <p>macOS (Apple Silicon and Intel), Windows 10 and 11, and Linux (.deb or AppImage). It's a native Tauri app, so it's a small download with low memory use.</p>
+      </details>
+    </div>
+  </div>
+</section>
 
-      <!-- Brainstorm mockup -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-strong); box-shadow: 0 24px 80px rgba(0,0,0,0.4); max-width: 840px; margin: 0 auto 48px;">
-        <!-- Left: Terminal -->
-        <div style="background: var(--bg); border-right: 1px solid var(--border);">
-          <div style="padding: 8px 12px; background: var(--bg-card); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px;">
-            <div style="width: 8px; height: 8px; border-radius: 50%; background: #ff5f57;"></div>
-            <div style="width: 8px; height: 8px; border-radius: 50%; background: #febc2e;"></div>
-            <div style="width: 8px; height: 8px; border-radius: 50%; background: #28c840;"></div>
-            <span style="margin-left: 8px; font-size: 11px; color: var(--text-muted);">Terminal</span>
-          </div>
-          <div style="padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; min-height: 240px; line-height: 1.6;">
-            <div><span style="color: #3fb950;">~</span> <span>claude</span> <span style="color: var(--text-muted); font-size: 10px;">| codex | gemini</span></div>
-            <div style="color: var(--text-dim);">Agent session started</div>
-            <div style="margin-top: 8px;"><span style="color: #58a6ff;">?</span> <span style="color: var(--text-dim);">What do you want to build?</span></div>
-            <div style="margin-top: 4px;">Design an auth system with JWT</div>
-            <div style="margin-top: 8px; color: #3fb950;">Writing spec to docs/auth-design.md...</div>
-            <div style="color: var(--text-dim); margin-top: 4px;">Added: JWT token flow</div>
-            <div style="color: var(--text-dim);">Added: Refresh token rotation</div>
-            <div style="color: var(--text-dim);">Added: Middleware guards<span style="display: inline-block; width: 2px; height: 13px; background: #58a6ff; animation: blink 1s infinite; vertical-align: text-bottom; margin-left: 2px;"></span></div>
-          </div>
-        </div>
-        <!-- Right: Brainstorm panel -->
-        <div style="background: var(--bg);">
-          <div style="padding: 8px 12px; background: var(--bg-card); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <div style="width: 8px; height: 8px; border-radius: 50%; background: #58a6ff; opacity: 0.6;"></div>
-              <span style="font-size: 11px; font-weight: 600; color: var(--text);">Brainstorm</span>
-              <span style="font-size: 10px; color: var(--text-dim); background: var(--bg-code); padding: 1px 6px; border-radius: 3px; font-family: monospace;">auth-design.md</span>
-            </div>
-            <span style="font-size: 10px; color: var(--text-muted); font-family: monospace;">live</span>
-          </div>
-          <div style="padding: 16px; font-size: 13px; line-height: 1.7; min-height: 240px;">
-            <div style="font-size: 18px; font-weight: 700; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border);">Auth System Design</div>
-            <div style="font-size: 15px; font-weight: 600; margin: 12px 0 6px; color: var(--text);">JWT Token Flow</div>
-            <div style="font-size: 12px; color: var(--text-dim);">User authenticates with credentials. Server returns an access token (15 min) and refresh token (7 days).</div>
-            <div style="font-size: 15px; font-weight: 600; margin: 12px 0 6px; color: var(--text);">Refresh Rotation</div>
-            <div style="font-size: 12px; color: var(--text-dim);">Each refresh issues a new pair. Old refresh tokens are <span style="color: #58a6ff; background: var(--bg-code); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 11px;">invalidated</span> to prevent reuse.</div>
-            <div style="margin: 10px 0; padding: 8px 12px; background: var(--bg-card); border-radius: 6px; border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim);">
-              <span style="color: #bc8cff;">POST</span> /api/auth/login<br>
-              <span style="color: #bc8cff;">POST</span> /api/auth/refresh
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="shortcut-categories" style="max-width: 700px; margin: 0 auto;">
-        <div class="shortcut-category">
-          <h3>How it works</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item"><span>Toggle brainstorm panel</span><kbd>&#8984;B</kbd></div>
-            <div class="shortcut-item"><span>Select any .md file to preview</span><span style="color: var(--accent); font-size: 12px;">file picker</span></div>
-            <div class="shortcut-item"><span>Native filesystem watcher — instant updates</span><span style="color: var(--green); font-size: 12px;">real-time</span></div>
-            <div class="shortcut-item"><span>Full markdown rendering</span><span style="color: var(--text-dim); font-size: 12px;">GFM support</span></div>
-          </div>
-        </div>
-        <div class="shortcut-category">
-          <h3>Use cases</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item"><span>Review specs while Claude writes them</span></div>
-            <div class="shortcut-item"><span>Follow along with design docs</span></div>
-            <div class="shortcut-item"><span>Monitor generated READMEs</span></div>
-            <div class="shortcut-item"><span>Read implementation plans</span></div>
-          </div>
-        </div>
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <h2>Give your agents a better home</h2>
+      <p>Open source, MIT licensed, and built in the open.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="{{ '/guide/' | relative_url }}">Get started</a>
+        <a class="btn btn-ghost" href="{{ site.repo }}">Star on GitHub</a>
+        <a class="btn btn-ghost" href="https://github.com/sponsors/alvin-reyes">Sponsor</a>
       </div>
     </div>
-  </section>
-
-  <!-- Agent Dashboard -->
-  <section class="features" id="dashboard">
-    <div class="container">
-      <h2>Agent Dashboard</h2>
-      <p class="subtitle">Monitor all your AI agents from one place. Track sessions, costs, and token usage in real time.</p>
-
-      <div class="feature-row">
-        <div class="feature-text">
-          <div class="tag" style="background: rgba(234, 179, 8, 0.12); color: var(--yellow);">Monitoring</div>
-          <h3>Real-time agent tracking</h3>
-          <p>See every running agent at a glance. Live status indicators show when agents are actively working or idle. Get notified when they finish.</p>
-          <ul>
-            <li><span style="color: var(--accent);">Cmd+.</span> &mdash; open agent dashboard</li>
-            <li><span style="color: var(--green);">WORKING / IDLE / DONE</span> &mdash; live status badges</li>
-            <li><span style="color: var(--purple);">Cost estimation</span> &mdash; per-provider token rates</li>
-            <li><span style="color: var(--yellow);">Notifications</span> &mdash; system + in-app alerts</li>
-          </ul>
-        </div>
-        <div class="feature-visual">
-          <div style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">AGENT DASHBOARD</div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; margin-bottom: 14px;">
-            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
-              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Active</div>
-              <div style="font-size: 16px; font-weight: 700; color: #22c55e; font-family: monospace;">2</div>
-            </div>
-            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
-              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Today</div>
-              <div style="font-size: 16px; font-weight: 700; color: var(--accent); font-family: monospace;">5</div>
-            </div>
-            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
-              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Time</div>
-              <div style="font-size: 16px; font-weight: 700; color: #a855f7; font-family: monospace;">42m</div>
-            </div>
-            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center;">
-              <div style="font-size: 9px; color: var(--text-muted); margin-bottom: 2px;">Cost</div>
-              <div style="font-size: 16px; font-weight: 700; color: #eab308; font-family: monospace;">$1.24</div>
-            </div>
-          </div>
-          <div style="background: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.2); border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-            <span style="font-size: 16px;">&#x1f916;</span>
-            <div style="flex: 1;">
-              <div style="font-size: 12px; font-weight: 600; color: var(--text);">Claude Code <span style="font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,0.2); color: #22c55e;">WORKING</span></div>
-              <div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">claude &bull; 3m 24s &bull; 4.2k tokens &bull; $0.18</div>
-            </div>
-          </div>
-          <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 16px;">&#x1f50d;</span>
-            <div style="flex: 1;">
-              <div style="font-size: 12px; font-weight: 600; color: var(--text);">Code Review <span style="font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: rgba(168,85,247,0.15); color: #a855f7;">DONE</span></div>
-              <div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">claude &bull; 1m 52s &bull; 2.8k tokens &bull; $0.12</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Voice & Prompt Chaining -->
-      <div class="feature-row reverse">
-        <div class="feature-text">
-          <div class="tag" style="background: rgba(239, 68, 68, 0.12); color: var(--red);">Voice & Chains</div>
-          <h3>Voice dictation & prompt chaining</h3>
-          <p>Dictate prompts hands-free with the built-in microphone, or chain multiple prompts together with <code style="background: var(--bg-code); padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent);">---</code> separators. Each step waits for the agent to finish before sending the next.</p>
-          <ul>
-            <li><span style="color: #ef4444;">Voice dictation</span> &mdash; Web Speech API with live transcription</li>
-            <li><span style="color: var(--accent);">Prompt chaining</span> &mdash; multi-step workflows with <code style="background: var(--bg-code); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 11px;">---</code></li>
-            <li><span style="color: var(--green);">Auto-wait</span> &mdash; detects when agent is idle before next step</li>
-            <li><span style="color: var(--purple);">3 templates</span> &mdash; Design Session, Code Review, Debug Chain</li>
-          </ul>
-        </div>
-        <div class="feature-visual">
-          <div style="font-family: Inter, sans-serif; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">PROMPT CHAIN</div>
-          <div style="color: var(--text-dim); margin-bottom: 6px; font-size: 12px;">Analyze the auth module for security issues</div>
-          <div style="color: var(--text-muted); margin: 8px 0; font-weight: 600; letter-spacing: 2px; text-align: center; font-size: 11px;">- - -</div>
-          <div style="color: var(--text-dim); margin-bottom: 6px; font-size: 12px;">Fix the top 3 vulnerabilities you found</div>
-          <div style="color: var(--text-muted); margin: 8px 0; font-weight: 600; letter-spacing: 2px; text-align: center; font-size: 11px;">- - -</div>
-          <div style="color: var(--text-dim); margin-bottom: 12px; font-size: 12px;">Write tests for the security fixes</div>
-          <div style="display: flex; align-items: center; gap: 8px; margin-top: 14px;">
-            <div style="flex: 1; height: 4px; background: var(--bg-card); border-radius: 2px; overflow: hidden;">
-              <div style="width: 66%; height: 100%; background: var(--accent); border-radius: 2px;"></div>
-            </div>
-            <span style="font-size: 11px; color: var(--accent); font-family: monospace; font-weight: 600;">Step 2/3</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Preview Panel -->
-      <div class="feature-row">
-        <div class="feature-text">
-          <div class="tag" style="background: rgba(88, 166, 255, 0.12); color: var(--accent);">Preview</div>
-          <h3>Live file preview</h3>
-          <p>Preview HTML, images, PDFs, and markdown files in a side panel that auto-refreshes when files change. Watch your agent's output render in real time.</p>
-          <ul>
-            <li><span style="color: var(--accent);">Cmd+B</span> &mdash; toggle preview panel</li>
-            <li><span style="color: var(--green);">Auto-refresh</span> &mdash; native filesystem watcher</li>
-            <li><span style="color: var(--purple);">Multi-format</span> &mdash; HTML, images, PDF, markdown</li>
-            <li><span style="color: var(--yellow);">Resizable</span> &mdash; drag to resize (280px–900px)</li>
-          </ul>
-        </div>
-        <div class="feature-visual">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: 0.6;"></div>
-              <span style="font-size: 11px; font-weight: 600; color: var(--text); font-family: Inter, sans-serif;">Preview</span>
-            </div>
-            <span style="font-size: 10px; color: var(--green); font-family: monospace;">auto-refresh on</span>
-          </div>
-          <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
-            <div style="font-size: 16px; font-weight: 700; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border);">API Documentation</div>
-            <div style="font-size: 14px; font-weight: 600; margin: 8px 0 4px; color: var(--text);">Authentication</div>
-            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 8px;">All endpoints require a Bearer token in the Authorization header.</div>
-            <div style="background: var(--bg); padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px;">
-              <span style="color: #bc8cff;">GET</span> <span style="color: var(--text-dim);">/api/users</span><br>
-              <span style="color: #3fb950;">POST</span> <span style="color: var(--text-dim);">/api/auth/login</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Shortcuts -->
-  <section class="shortcuts" id="shortcuts">
-    <div class="container">
-      <h2>Keyboard-first</h2>
-      <p class="subtitle">Every action has a shortcut. Your hands never leave the keyboard.</p>
-      <div class="shortcut-categories">
-        <div class="shortcut-category">
-          <h3>Tabs</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item"><span>New tab</span><kbd>&#8984;T</kbd></div>
-            <div class="shortcut-item"><span>Close tab</span><kbd>&#8984;W</kbd></div>
-            <div class="shortcut-item"><span>Switch tab</span><kbd>&#8984;1-9</kbd></div>
-            <div class="shortcut-item"><span>Prev / next</span><kbd>&#8984;&#8679;[ ]</kbd></div>
-            <div class="shortcut-item"><span>Rename tab</span><kbd>&#8984;R</kbd></div>
-          </div>
-        </div>
-        <div class="shortcut-category">
-          <h3>Panes</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item"><span>Split horizontal</span><kbd>&#8984;D</kbd></div>
-            <div class="shortcut-item"><span>Split vertical</span><kbd>&#8984;&#8679;D</kbd></div>
-          </div>
-        </div>
-        <div class="shortcut-category">
-          <h3>Scratchpad</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item"><span>Toggle / focus</span><kbd>&#8984;J</kbd></div>
-            <div class="shortcut-item"><span>Send to terminal</span><kbd>&#8984;&#9166;</kbd></div>
-            <div class="shortcut-item"><span>Copy to clipboard</span><kbd>&#8984;&#8679;&#9166;</kbd></div>
-            <div class="shortcut-item"><span>Save as note</span><kbd>&#8984;S</kbd></div>
-            <div class="shortcut-item"><span>Send Enter</span><kbd>&#8984;E</kbd></div>
-            <div class="shortcut-item"><span>Focus terminal</span><kbd>Esc</kbd></div>
-          </div>
-        </div>
-        <div class="shortcut-category">
-          <h3>App</h3>
-          <div class="shortcut-list">
-            <div class="shortcut-item"><span>Preview panel</span><kbd>&#8984;B</kbd></div>
-            <div class="shortcut-item"><span>AI agent picker</span><kbd>&#8984;&#8679;A</kbd></div>
-            <div class="shortcut-item"><span>Agent dashboard</span><kbd>&#8984;.</kbd></div>
-            <div class="shortcut-item"><span>Command palette</span><kbd>&#8984;P</kbd></div>
-            <div class="shortcut-item"><span>Zoom / unzoom pane</span><kbd>&#8984;&#8679;&#9166;</kbd></div>
-            <div class="shortcut-item"><span>Settings</span><kbd>&#8984;,</kbd></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Themes -->
-  <section class="themes" id="themes">
-    <div class="container">
-      <h2>Pick your vibe</h2>
-      <p class="subtitle">8 built-in themes with full color customization.</p>
-      <div class="theme-grid">
-        <div class="theme-card" style="background: #0d1117;"><div class="theme-dots"><div class="theme-dot" style="background: #58a6ff;"></div><div class="theme-dot" style="background: #ff7b72;"></div><div class="theme-dot" style="background: #3fb950;"></div><div class="theme-dot" style="background: #d29922;"></div></div><div class="theme-name" style="color: #e6edf3;">GitHub Dark</div></div>
-        <div class="theme-card" style="background: #282a36;"><div class="theme-dots"><div class="theme-dot" style="background: #bd93f9;"></div><div class="theme-dot" style="background: #ff5555;"></div><div class="theme-dot" style="background: #50fa7b;"></div><div class="theme-dot" style="background: #f1fa8c;"></div></div><div class="theme-name" style="color: #f8f8f2;">Dracula</div></div>
-        <div class="theme-card" style="background: #2d2a2e;"><div class="theme-dots"><div class="theme-dot" style="background: #ffd866;"></div><div class="theme-dot" style="background: #ff6188;"></div><div class="theme-dot" style="background: #a9dc76;"></div><div class="theme-dot" style="background: #fc9867;"></div></div><div class="theme-name" style="color: #fcfcfa;">Monokai Pro</div></div>
-        <div class="theme-card" style="background: #2e3440;"><div class="theme-dots"><div class="theme-dot" style="background: #88c0d0;"></div><div class="theme-dot" style="background: #bf616a;"></div><div class="theme-dot" style="background: #a3be8c;"></div><div class="theme-dot" style="background: #ebcb8b;"></div></div><div class="theme-name" style="color: #eceff4;">Nord</div></div>
-        <div class="theme-card" style="background: #1e1e2e;"><div class="theme-dots"><div class="theme-dot" style="background: #89b4fa;"></div><div class="theme-dot" style="background: #f38ba8;"></div><div class="theme-dot" style="background: #a6e3a1;"></div><div class="theme-dot" style="background: #f9e2af;"></div></div><div class="theme-name" style="color: #cdd6f4;">Catppuccin</div></div>
-        <div class="theme-card" style="background: #002b36;"><div class="theme-dots"><div class="theme-dot" style="background: #268bd2;"></div><div class="theme-dot" style="background: #dc322f;"></div><div class="theme-dot" style="background: #859900;"></div><div class="theme-dot" style="background: #b58900;"></div></div><div class="theme-name" style="color: #fdf6e3;">Solarized Dark</div></div>
-        <div class="theme-card" style="background: #1a1b26;"><div class="theme-dots"><div class="theme-dot" style="background: #7aa2f7;"></div><div class="theme-dot" style="background: #f7768e;"></div><div class="theme-dot" style="background: #9ece6a;"></div><div class="theme-dot" style="background: #e0af68;"></div></div><div class="theme-name" style="color: #c0caf5;">Tokyo Night</div></div>
-        <div class="theme-card" style="background: #282c34;"><div class="theme-dots"><div class="theme-dot" style="background: #61afef;"></div><div class="theme-dot" style="background: #e06c75;"></div><div class="theme-dot" style="background: #98c379;"></div><div class="theme-dot" style="background: #e5c07b;"></div></div><div class="theme-name" style="color: #abb2bf;">One Dark</div></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Getting Started -->
-  <section class="getting-started" id="install">
-    <div class="container">
-      <h2>Install</h2>
-      <p class="subtitle">One command with Homebrew, or download the installer.</p>
-      <div class="steps">
-        <div class="step">
-          <div class="step-number">🍺</div>
-          <h3>Homebrew (recommended)</h3>
-          <p>No Gatekeeper warnings. Handles everything automatically.</p>
-          <code>brew install --cask alvin-reyes/tap/ade</code>
-        </div>
-        <div class="step">
-          <div class="step-number">📦</div>
-          <h3>Download installer</h3>
-          <p>macOS (.dmg), Windows (.msi / .exe), Linux (.deb / .AppImage).</p>
-          <code><a href="https://github.com/alvin-reyes/better-agentic-ide/releases" style="color: var(--accent); text-decoration: none;">Download from GitHub Releases →</a></code>
-        </div>
-        <div class="step">
-          <div class="step-number">🔧</div>
-          <h3>Build from source</h3>
-          <p>Requires <a href="https://rustup.rs/">Rust</a> and Node.js 18+. Works with any CLI-based AI agent.</p>
-          <code>git clone https://github.com/alvin-reyes/better-agentic-ide.git<br>cd better-agentic-ide && npm install<br>npm run tauri dev</code>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Tech -->
-  <section class="tech">
-    <div class="container">
-      <h2>Built with modern tools</h2>
-      <p class="subtitle">A native desktop app, not an Electron wrapper.</p>
-      <div class="tech-grid">
-        <div class="tech-pill">Tauri v2</div>
-        <div class="tech-pill">Rust</div>
-        <div class="tech-pill">React 19</div>
-        <div class="tech-pill">TypeScript</div>
-        <div class="tech-pill">xterm.js</div>
-        <div class="tech-pill">WebGL</div>
-        <div class="tech-pill">Zustand</div>
-        <div class="tech-pill">Tailwind CSS</div>
-        <div class="tech-pill">portable-pty</div>
-        <div class="tech-pill">Any CLI Agent</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Sponsor -->
-  <section class="cta" id="sponsor" style="padding-bottom: 40px;">
-    <div class="container">
-      <h2>Support ADE</h2>
-      <p>ADE is open source and free forever. If it saves you time, consider sponsoring to keep development going.</p>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; max-width: 720px; margin: 0 auto 36px;">
-        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; text-align: center;">
-          <div style="font-size: 24px; margin-bottom: 8px;">&#9829;</div>
-          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">Supporter</h3>
-          <div style="color: var(--accent); font-size: 20px; font-weight: 700; margin-bottom: 8px;">$5<span style="font-size: 13px; color: var(--text-dim); font-weight: 400;">/mo</span></div>
-          <p style="color: var(--text-dim); font-size: 13px; line-height: 1.5;">Name in README. Early access to new features.</p>
-        </div>
-        <div style="background: var(--bg-card); border: 1px solid var(--accent); border-radius: var(--radius); padding: 24px; text-align: center; position: relative;">
-          <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--bg); font-size: 10px; font-weight: 700; padding: 2px 10px; border-radius: 10px; text-transform: uppercase;">Popular</div>
-          <div style="font-size: 24px; margin-bottom: 8px;">&#9733;</div>
-          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">Backer</h3>
-          <div style="color: var(--accent); font-size: 20px; font-weight: 700; margin-bottom: 8px;">$15<span style="font-size: 13px; color: var(--text-dim); font-weight: 400;">/mo</span></div>
-          <p style="color: var(--text-dim); font-size: 13px; line-height: 1.5;">Logo on README + website. Priority feature requests.</p>
-        </div>
-        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; text-align: center;">
-          <div style="font-size: 24px; margin-bottom: 8px;">&#9830;</div>
-          <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">Sponsor</h3>
-          <div style="color: var(--accent); font-size: 20px; font-weight: 700; margin-bottom: 8px;">$50<span style="font-size: 13px; color: var(--text-dim); font-weight: 400;">/mo</span></div>
-          <p style="color: var(--text-dim); font-size: 13px; line-height: 1.5;">Logo on website + splash screen. Direct support channel.</p>
-        </div>
-      </div>
-      <div class="hero-buttons">
-        <a href="https://github.com/sponsors/alvin-reyes" class="btn btn-primary" style="background: linear-gradient(135deg, #db61a2, #bc4a8c);">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M7.655 14.916v-.001h-.002l-.006-.003-.018-.01a7.643 7.643 0 01-.245-.144 15.504 15.504 0 01-2.654-2.078C3.044 11.03 1 8.5 1 5.5 1 3.015 3.015 1 5.5 1c1.075 0 2.049.38 2.814 1.012A4.475 4.475 0 0111.5 1C13.985 1 16 3.015 16 5.5c0 3-2.044 5.53-3.73 7.18a15.504 15.504 0 01-2.654 2.078 9.22 9.22 0 01-.245.144l-.018.01-.006.003h-.002L8.66 14.5l-.005.416z"/></svg>
-          Sponsor on GitHub
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA -->
-  <section class="cta" style="padding-top: 40px;">
-    <div class="container">
-      <h2>Ready to try it?</h2>
-      <p>Open source, free forever. Contributions welcome.</p>
-      <div class="hero-buttons">
-        <a href="https://github.com/alvin-reyes/better-agentic-ide/releases" class="btn btn-primary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V10M8 10L5 7M8 10L11 7M3 12H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Download
-        </a>
-        <a href="https://github.com/alvin-reyes/better-agentic-ide" class="btn btn-secondary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-          Star on GitHub
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer>
-    <div class="links">
-      <a href="https://github.com/alvin-reyes/better-agentic-ide">GitHub</a>
-      <a href="https://github.com/alvin-reyes/better-agentic-ide/releases">Releases</a>
-      <a href="https://github.com/alvin-reyes/better-agentic-ide/issues">Issues</a>
-      <a href="https://github.com/sponsors/alvin-reyes" style="color: #db61a2;">Sponsor</a>
-      <a href="https://github.com/alvin-reyes/better-agentic-ide/blob/main/LICENSE">License</a>
-    </div>
-    <p>ADE is open source under the ISC license. Built by <a href="https://github.com/alvin-reyes">alvin-reyes</a>.</p>
-  </footer>
-
-</body>
-</html>
+  </div>
+</section>

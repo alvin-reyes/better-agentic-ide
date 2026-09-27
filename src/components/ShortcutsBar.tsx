@@ -29,6 +29,7 @@ const shortcuts = [
   { keys: L("zoomPane"), action: "Zoom pane" },
   { keys: L("settings"), action: "Settings" },
   { keys: L("orchestrator"), action: "Orchestrator" },
+  { keys: L("contracts"), action: "Contracts" },
   { keys: "Esc", action: "Close panel" },
 ];
 

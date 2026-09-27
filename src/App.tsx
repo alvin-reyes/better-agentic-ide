@@ -20,6 +20,7 @@ const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
 const FleetPanel = lazy(() => import("./components/fleet/FleetPanel"));
 const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
 const BmadPanel = lazy(() => import("./components/BmadPanel"));
+const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
 import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { flushNow } from "./lib/persistence";
@@ -46,7 +47,11 @@ export default function App() {
   const [pendingPreviewPath, setPendingPreviewPath] = useState<string | null>(null);
   const [fleetOpen, setFleetOpen] = useState(false);
   const [bmadOpen, setBmadOpen] = useState(false);
+  const [contractsOpen, setContractsOpen] = useState(false);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
+  // For event handlers registered once.
+  const activeCwdRef = useRef<string | null>(null);
+  activeCwdRef.current = activeCwd;
   const [bannerCwd, setBannerCwd] = useState<string | null>(null);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
@@ -185,6 +190,26 @@ export default function App() {
     window.addEventListener("toggle-bmad", handler);
     return () => window.removeEventListener("toggle-bmad", handler);
   }, []);
+
+  // Smart contracts: the panel, and quick actions from the command palette.
+  const toggleContracts = useCallback(() => setContractsOpen((prev) => !prev), []);
+  useEffect(() => {
+    window.addEventListener("toggle-contracts", toggleContracts);
+    const onRun = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id;
+      if (!id) return;
+      void import("./lib/contractRunner").then(({ runContractActionById }) =>
+        runContractActionById(id, activeCwdRef.current).then((err) => {
+          if (err) window.dispatchEvent(new CustomEvent("agent-notification", { detail: { title: "Contracts", body: err } }));
+        }),
+      );
+    };
+    window.addEventListener("contracts-run", onRun);
+    return () => {
+      window.removeEventListener("toggle-contracts", toggleContracts);
+      window.removeEventListener("contracts-run", onRun);
+    };
+  }, [toggleContracts]);
 
   // Resolve the active terminal's cwd eagerly. Non-terminal tabs (fleet, editor,
   // browser, orchestrator) have no PTY, so keep the last resolved value rather
@@ -389,6 +414,7 @@ export default function App() {
     toggleFleet,
     toggleFileBrowser,
     openOrchestrator,
+    toggleContracts,
     requestCloseTab,
     requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
@@ -478,6 +504,9 @@ export default function App() {
             cwd={activeCwd}
             onClose={() => setBmadOpen(false)}
           />
+        )}
+        {contractsOpen && (
+          <ContractsPanel cwd={activeCwd} onClose={() => setContractsOpen(false)} />
         )}
         {recordingPlayerOpen && (
           <RecordingPlayer onClose={() => setRecordingPlayerOpen(false)} />
