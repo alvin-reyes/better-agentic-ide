@@ -17,6 +17,19 @@
     });
   }
 
+  // --- Light / dark ---------------------------------------------------------
+  var themeBtn = document.querySelector(".theme-toggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var root = document.documentElement;
+      var current = root.getAttribute("data-theme") ||
+        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var next = current === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("ade-site-theme", next); } catch (e) { /* private mode */ }
+    });
+  }
+
   // --- Shortcuts: macOS keys or Linux/Windows keys --------------------------
   var KEY = "ade-site-platform";
   function readPlatform() {

@@ -1,6 +1,6 @@
 ---
 title: Getting started
-lead: Install ADE, open your first project and run an agent in a few minutes.
+lead: Install ADE, open your first project and run an agent — or build and test a smart contract — in a few minutes.
 description: Install ADE on macOS, Windows or Linux and run your first AI coding agent.
 ---
 
@@ -66,6 +66,7 @@ The fleet view reads Claude Code's own transcripts, so Claude Code gets the most
 
 ## Where to go next
 
+- [Smart contracts]({{ '/guide/contracts/' | relative_url }}) — Foundry, Hardhat and Anchor tooling
 - [Terminal]({{ '/guide/terminal/' | relative_url }}) — tabs, panes, search and clickable files
 - [Scratchpad]({{ '/guide/scratchpad/' | relative_url }}) — prompt chaining, history and voice
 - [Auto-save & sync]({{ '/guide/sync/' | relative_url }}) — keep your setup on every machine
