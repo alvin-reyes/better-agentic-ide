@@ -45,12 +45,15 @@ export function setSyncConfig(config: SyncConfig): Promise<void> {
  * and ~/.claude, so it is only passed at startup, before the stores load; while
  * the app runs, imported values would be overwritten by in-memory state.
  */
-export function syncNow(applyRemote = false): Promise<SyncReport | null> {
+export function syncNow(applyRemote = false, importDeadlineMs?: number): Promise<SyncReport | null> {
   if (running) return running;
   running = (async () => {
     try {
       await flushNow();
-      const report = await invoke<SyncReport | null>("sync_now", { applyRemote });
+      const report = await invoke<SyncReport | null>("sync_now", {
+        applyRemote,
+        importDeadlineMs: importDeadlineMs ?? null,
+      });
       lastReport = report ?? lastReport;
       lastError = null;
       return report;
@@ -74,8 +77,13 @@ export async function syncBeforeLaunch(): Promise<void> {
     return; // Not running under Tauri.
   }
   if (!config) return;
+  // The race can't cancel the sync, so tell the backend when we stop waiting:
+  // a sync still running then skips its import, which would otherwise land
+  // after the stores loaded and be overwritten by them. A small margin keeps
+  // an import from finishing just as hydrate reads the files.
+  const deadline = Date.now() + STARTUP_SYNC_TIMEOUT_MS - 500;
   await Promise.race([
-    syncNow(true),
+    syncNow(true, deadline),
     new Promise((resolve) => window.setTimeout(resolve, STARTUP_SYNC_TIMEOUT_MS)),
   ]);
 }

@@ -10,21 +10,25 @@ import { syncBeforeLaunch, startPeriodicSync } from "./lib/sync";
 const App = lazy(() => import("./App"));
 const DetachedApp = lazy(() => import("./DetachedApp"));
 
-function Root() {
-  const params = new URLSearchParams(window.location.search);
-  const detachedParam = params.get("detached");
+/** The tab a detached window shows, or null for the main window. */
+function detachedTab(): unknown | null {
+  const param = new URLSearchParams(window.location.search).get("detached");
+  if (!param) return null;
+  try {
+    return JSON.parse(decodeURIComponent(param));
+  } catch {
+    return null; // Unparseable: treat it as the main window.
+  }
+}
 
-  if (detachedParam) {
-    try {
-      const tab = JSON.parse(decodeURIComponent(detachedParam));
-      return (
-        <Suspense fallback={null}>
-          <DetachedApp tab={tab} />
-        </Suspense>
-      );
-    } catch {
-      // Fall through to normal app if parsing fails
-    }
+function Root() {
+  const tab = detachedTab();
+  if (tab) {
+    return (
+      <Suspense fallback={null}>
+        <DetachedApp tab={tab as never} />
+      </Suspense>
+    );
   }
 
   return (
@@ -35,10 +39,15 @@ function Root() {
 }
 
 async function boot() {
-  const detached = new URLSearchParams(window.location.search).has("detached");
-  // Only the main window owns the saved state. Restore it from disk before the
-  // stores read localStorage, then mirror every later change back to disk.
-  if (!detached) {
+  const detached = detachedTab() !== null;
+  // Only the main window restores and syncs the saved state. Restore it from
+  // disk before the stores read localStorage, then mirror every later change
+  // back to disk.
+  if (detached) {
+    // localStorage is shared, but each window has its own Storage prototype:
+    // mirror this window's writes (notes, prompt history) too.
+    startAutoSave({ snapshots: false });
+  } else {
     // Pull other machines' changes first (bounded wait), so they are part of
     // what gets restored.
     await syncBeforeLaunch();

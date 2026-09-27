@@ -351,6 +351,8 @@ export default function FileBrowser() {
         </button>
         <button
           onClick={() => toggle()}
+          title="Close file browser (⌘B)"
+          aria-label="Close file browser"
           style={{
             background: "none",
             border: "none",

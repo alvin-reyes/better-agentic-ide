@@ -8,6 +8,7 @@ import {
   type SyncConfig,
   type SyncReport,
 } from "../lib/sync";
+import { flushNow, suspendAutoSave } from "../lib/persistence";
 
 interface ClaudeMemStatus {
   installed: boolean;
@@ -85,8 +86,12 @@ export default function SyncSettings() {
   const restore = async (name: string) => {
     if (!window.confirm("Restore this snapshot? The current state is snapshotted first, and the snapshot applies the next time ADE starts.")) return;
     try {
+      // Write pending changes so the pre-restore snapshot has them, then stop
+      // auto-save so this window can't overwrite the restored files.
+      await flushNow();
+      suspendAutoSave();
       await invoke("state_restore_snapshot", { name });
-      setRestoreMsg("Snapshot restored. Restart ADE to load it.");
+      setRestoreMsg("Snapshot restored. Auto-save is paused until you restart ADE, which loads it.");
       invoke<string[]>("state_list_snapshots").then(setSnapshots).catch(() => {});
     } catch (e) {
       setRestoreMsg(`Restore failed: ${e}`);

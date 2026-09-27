@@ -19,6 +19,14 @@ use tauri::Manager;
 
 const MAX_SNAPSHOTS: usize = 20;
 
+/// Recordings can be large and are never edited, so snapshots leave them out
+/// (and a restore keeps the current ones).
+const UNSNAPSHOTTED_PREFIX: &str = "ade-rec-";
+
+fn is_snapshotted(file_name: &str) -> bool {
+    !file_name.starts_with(UNSNAPSHOTTED_PREFIX)
+}
+
 /// Encode a key into a filesystem-safe file stem. Keys are ASCII identifiers
 /// in practice (`ade-session`, `better-terminal-settings`, `ade-rec-<id>`),
 /// but anything outside [A-Za-z0-9_-] is percent-encoded so no key can escape
@@ -55,11 +63,16 @@ pub fn decode_key(stem: &str) -> Option<String> {
 /// Write `contents` to `path` so a crash mid-write never leaves a torn file:
 /// write a sibling temp file, fsync it, then rename over the target.
 pub fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
+    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let dir = path.parent().ok_or_else(|| std::io::Error::other("no parent dir"))?;
     fs::create_dir_all(dir)?;
+    // Unique per writer: auto-save and a sync import may write the same key
+    // at the same time, and must not share (and tear) one temp file.
     let tmp = dir.join(format!(
-        ".{}.tmp",
-        path.file_name().and_then(|n| n.to_str()).unwrap_or("state")
+        ".{}.{}-{}.tmp",
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("state"),
+        std::process::id(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     {
         let mut f = fs::File::create(&tmp)?;
@@ -116,7 +129,9 @@ pub fn snapshot(state_dir: &Path, name: &str, keep: usize) -> std::io::Result<Pa
             let p = entry.path();
             if p.is_file() {
                 if let Some(n) = p.file_name() {
-                    fs::copy(&p, dest.join(n))?;
+                    if is_snapshotted(&n.to_string_lossy()) {
+                        fs::copy(&p, dest.join(n))?;
+                    }
                 }
             }
         }
@@ -148,26 +163,49 @@ fn prune_snapshots(snap_dir: &Path, keep: usize) -> std::io::Result<()> {
 
 /// Replace kv/ with the contents of a snapshot. The current kv/ is
 /// snapshotted first so a restore can itself be undone.
+///
+/// Only names of existing snapshots are accepted (they come from the webview),
+/// and the new kv/ is built beside the old one and swapped in, so a failure
+/// part way never leaves kv/ empty.
 pub fn restore_snapshot(state_dir: &Path, name: &str, now_ms: u128) -> std::io::Result<()> {
-    if name.contains('/') || name.contains('\\') || name.contains("..") {
-        return Err(std::io::Error::other("invalid snapshot name"));
-    }
-    let src = state_dir.join("snapshots").join(name);
-    if !src.is_dir() {
+    let snap_dir = state_dir.join("snapshots");
+    let valid = !name.is_empty() && name.bytes().all(|b| b.is_ascii_digit());
+    if !valid || !list_snapshots(&snap_dir).iter().any(|n| n == name) {
         return Err(std::io::Error::other("snapshot not found"));
     }
+    let src = snap_dir.join(name);
     snapshot(state_dir, &format!("{}", now_ms), MAX_SNAPSHOTS + 1)?;
+
     let kv = state_dir.join("kv");
-    if kv.exists() {
-        fs::remove_dir_all(&kv)?;
-    }
-    fs::create_dir_all(&kv)?;
+    let staged = state_dir.join(format!(".kv-restore-{}", now_ms));
+    let _ = fs::remove_dir_all(&staged);
+    fs::create_dir_all(&staged)?;
     for entry in fs::read_dir(&src)?.flatten() {
         let p = entry.path();
-        if let Some(n) = p.file_name() {
-            fs::copy(&p, kv.join(n))?;
+        if let (true, Some(n)) = (p.is_file(), p.file_name()) {
+            fs::copy(&p, staged.join(n))?;
         }
     }
+    // Recordings aren't in snapshots: carry the current ones over.
+    if let Ok(entries) = fs::read_dir(&kv) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if let (true, Some(n)) = (p.is_file(), p.file_name()) {
+                if !is_snapshotted(&n.to_string_lossy()) {
+                    fs::copy(&p, staged.join(n))?;
+                }
+            }
+        }
+    }
+    let old = state_dir.join(format!(".kv-old-{}", now_ms));
+    if kv.exists() {
+        fs::rename(&kv, &old)?;
+    }
+    if let Err(e) = fs::rename(&staged, &kv) {
+        let _ = fs::rename(&old, &kv);
+        return Err(e);
+    }
+    let _ = fs::remove_dir_all(&old);
     Ok(())
 }
 
@@ -185,29 +223,29 @@ pub fn state_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("no app data dir: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn state_read_all(app: tauri::AppHandle) -> Result<HashMap<String, String>, String> {
     Ok(read_all(&state_dir(&app)?.join("kv")))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn state_write(app: tauri::AppHandle, entries: HashMap<String, Option<String>>) -> Result<(), String> {
     write_batch(&state_dir(&app)?.join("kv"), &entries).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn state_snapshot(app: tauri::AppHandle) -> Result<String, String> {
     let name = format!("{}", now_ms());
     snapshot(&state_dir(&app)?, &name, MAX_SNAPSHOTS).map_err(|e| e.to_string())?;
     Ok(name)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn state_list_snapshots(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     Ok(list_snapshots(&state_dir(&app)?.join("snapshots")))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn state_restore_snapshot(app: tauri::AppHandle, name: String) -> Result<(), String> {
     restore_snapshot(&state_dir(&app)?, &name, now_ms()).map_err(|e| e.to_string())
 }
@@ -298,5 +336,38 @@ mod tests {
         // The pre-restore state was kept as a snapshot.
         assert!(list_snapshots(&dir.join("snapshots")).contains(&"2000".to_string()));
         assert!(restore_snapshot(&dir, "../etc", 3000).is_err());
+    }
+
+    #[test]
+    fn restore_rejects_names_that_are_not_snapshots_and_keeps_kv() {
+        let dir = tmp("badname");
+        let kv = dir.join("kv");
+        let mut batch = HashMap::new();
+        batch.insert("k".to_string(), Some("v".to_string()));
+        write_batch(&kv, &batch).unwrap();
+        snapshot(&dir, "1000", 5).unwrap();
+        for bad in ["", ".", "..", "9999", "C:", "1000/..", "/tmp"] {
+            assert!(restore_snapshot(&dir, bad, 2000).is_err(), "{bad:?} accepted");
+            assert_eq!(read_all(&kv).get("k").map(String::as_str), Some("v"), "{bad:?} touched kv");
+        }
+    }
+
+    #[test]
+    fn recordings_are_not_snapshotted_but_survive_a_restore() {
+        let dir = tmp("rec");
+        let kv = dir.join("kv");
+        let mut batch = HashMap::new();
+        batch.insert("k".to_string(), Some("old".to_string()));
+        batch.insert("ade-rec-1".to_string(), Some("frames".to_string()));
+        write_batch(&kv, &batch).unwrap();
+        snapshot(&dir, "1000", 5).unwrap();
+        assert!(!dir.join("snapshots/1000/ade-rec-1.json").exists());
+
+        batch.insert("k".to_string(), Some("new".to_string()));
+        write_batch(&kv, &batch).unwrap();
+        restore_snapshot(&dir, "1000", 2000).unwrap();
+        let all = read_all(&kv);
+        assert_eq!(all.get("k").map(String::as_str), Some("old"));
+        assert_eq!(all.get("ade-rec-1").map(String::as_str), Some("frames"));
     }
 }

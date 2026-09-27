@@ -59,7 +59,9 @@ pub fn create_pty(
     let mut cmd = CommandBuilder::new(&shell);
     cmd.arg("-l");
 
-    if let Some(dir) = cwd {
+    // A restored tab's folder may have been deleted since: start in $HOME
+    // rather than failing to spawn the shell.
+    if let Some(dir) = cwd.filter(|d| std::path::Path::new(d).is_dir()) {
         cmd.cwd(dir);
     } else if let Ok(home) = std::env::var("HOME") {
         cmd.cwd(home);

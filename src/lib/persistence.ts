@@ -41,6 +41,7 @@ export function isPersistedKey(key: string): boolean {
 }
 
 const FLUSH_DELAY_MS = 800;
+const RETRY_DELAY_MS = 5000;
 const SNAPSHOT_EVERY_MS = 10 * 60 * 1000;
 
 type Batch = Record<string, string | null>;
@@ -48,25 +49,31 @@ type Batch = Record<string, string | null>;
 let pending: Batch = {};
 let flushTimer: number | null = null;
 let started = false;
+let suspended = false;
+let original: { setItem: Storage["setItem"]; removeItem: Storage["removeItem"] } | null = null;
 
 async function flush(): Promise<void> {
   if (flushTimer !== null) {
     window.clearTimeout(flushTimer);
     flushTimer = null;
   }
+  if (suspended) return;
   const batch = pending;
   pending = {};
   if (Object.keys(batch).length === 0) return;
   try {
     await invoke("state_write", { entries: batch });
   } catch (err) {
-    // Put the batch back (newer queued values win) and retry on the next write.
+    // Put the batch back (newer queued values win) and retry shortly, so a
+    // failed write is not left waiting for the next change.
     pending = { ...batch, ...pending };
     console.warn("auto-save failed", err);
+    if (flushTimer === null) flushTimer = window.setTimeout(() => void flush(), RETRY_DELAY_MS);
   }
 }
 
 function queue(key: string, value: string | null) {
+  if (suspended) return;
   pending[key] = value;
   if (flushTimer !== null) window.clearTimeout(flushTimer);
   flushTimer = window.setTimeout(() => void flush(), FLUSH_DELAY_MS);
@@ -108,16 +115,18 @@ export async function hydrateFromDisk(): Promise<number> {
 
 /**
  * Mirror every write to a persisted key onto disk. Also takes a snapshot on
- * start and every 10 minutes, and flushes when the window is hidden or closed.
- * Safe to call more than once.
+ * start and every 10 minutes (unless `snapshots` is false, as in detached
+ * windows), and flushes when the window is hidden or closed. Safe to call more
+ * than once.
  */
-export function startAutoSave(): void {
+export function startAutoSave({ snapshots = true }: { snapshots?: boolean } = {}): void {
   if (started) return;
   started = true;
 
   const proto = Object.getPrototypeOf(localStorage) as Storage;
   const origSet = proto.setItem;
   const origRemove = proto.removeItem;
+  original = { setItem: origSet, removeItem: origRemove };
   proto.setItem = function (this: Storage, key: string, value: string) {
     origSet.call(this, key, value);
     if (this === localStorage && isPersistedKey(key)) queue(key, String(value));
@@ -127,9 +136,11 @@ export function startAutoSave(): void {
     if (this === localStorage && isPersistedKey(key)) queue(key, null);
   };
 
-  const snapshot = () => invoke("state_snapshot").catch(() => {});
-  void snapshot();
-  window.setInterval(snapshot, SNAPSHOT_EVERY_MS);
+  if (snapshots) {
+    const snapshot = () => invoke("state_snapshot").catch(() => {});
+    void snapshot();
+    window.setInterval(snapshot, SNAPSHOT_EVERY_MS);
+  }
 
   window.addEventListener("beforeunload", () => void flush());
   document.addEventListener("visibilitychange", () => {
@@ -142,10 +153,33 @@ export function flushNow(): Promise<void> {
   return flush();
 }
 
-/** Test seam. */
+/**
+ * Stop writing to disk for the rest of this run. Used after a snapshot is
+ * restored: the restored files must not be overwritten by the running app's
+ * state before the restart that loads them.
+ */
+export function suspendAutoSave(): void {
+  suspended = true;
+  pending = {};
+  if (flushTimer !== null) window.clearTimeout(flushTimer);
+  flushTimer = null;
+}
+
+export function isAutoSaveSuspended(): boolean {
+  return suspended;
+}
+
+/** Test seam: undo startAutoSave() completely, including the wrapper. */
 export function __resetForTests() {
   pending = {};
   if (flushTimer !== null) window.clearTimeout(flushTimer);
   flushTimer = null;
   started = false;
+  suspended = false;
+  if (original) {
+    const proto = Object.getPrototypeOf(localStorage) as Storage;
+    proto.setItem = original.setItem;
+    proto.removeItem = original.removeItem;
+    original = null;
+  }
 }

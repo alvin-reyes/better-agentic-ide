@@ -807,10 +807,12 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
-            ⌘↵ send &nbsp; ⌘S save &nbsp; ⌘←→ panels &nbsp; esc close
+            ⌘↵ send &nbsp; ⌘S save &nbsp; esc close
           </span>
           <button
             onClick={() => setIsOpen(false)}
+            title="Close scratchpad"
+            aria-label="Close scratchpad"
             style={{
               background: "none",
               border: "none",

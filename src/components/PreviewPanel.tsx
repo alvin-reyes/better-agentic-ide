@@ -337,6 +337,8 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
         </button>
         <button
           onClick={onClose}
+          title="Close preview (⌘⇧B)"
+          aria-label="Close preview"
           style={{
             background: "none",
             border: "none",

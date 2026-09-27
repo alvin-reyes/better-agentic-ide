@@ -64,6 +64,38 @@ fn strip_secrets(value: &str) -> String {
     }
 }
 
+/// Fields of the terminal session left out of the repo: scrollback can hold
+/// anything a command printed (tokens from `env`, `cat .env`, CLI logins).
+const SESSION_LOCAL_FIELDS: &[&str] = &["serializedBuffer"];
+
+fn strip_fields_deep(v: &mut serde_json::Value, fields: &[&str]) {
+    match v {
+        serde_json::Value::Object(map) => {
+            for f in fields {
+                map.remove(*f);
+            }
+            map.values_mut().for_each(|c| strip_fields_deep(c, fields));
+        }
+        serde_json::Value::Array(items) => items.iter_mut().for_each(|c| strip_fields_deep(c, fields)),
+        _ => {}
+    }
+}
+
+/// The value of `key` as written to the repo.
+fn value_for_repo(key: &str, raw: &str) -> String {
+    let value = strip_secrets(raw);
+    if key != "ade-session" {
+        return value;
+    }
+    match serde_json::from_str::<serde_json::Value>(&value) {
+        Ok(mut v) => {
+            strip_fields_deep(&mut v, SESSION_LOCAL_FIELDS);
+            v.to_string()
+        }
+        Err(_) => value,
+    }
+}
+
 /// Put this machine's secret fields back into a value pulled from the repo.
 fn restore_secrets(remote: &str, local: Option<&str>) -> String {
     let (Ok(serde_json::Value::Object(mut r)), Some(Ok(serde_json::Value::Object(l)))) = (
@@ -168,6 +200,9 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(repo)
+        // The remote comes from the webview: never let it run commands
+        // through the ext:: or fd:: transports.
+        .args(["-c", "protocol.ext.allow=never", "-c", "protocol.fd.allow=never", "-c", "core.quotePath=false"])
         .args(args)
         // Never block on an interactive credential or host-key prompt.
         .env("GIT_TERMINAL_PROMPT", "0")
@@ -185,8 +220,21 @@ fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Reject remotes that git would treat as an option or a command transport.
+pub fn validate_remote(remote: &str) -> Result<(), String> {
+    let r = remote.trim();
+    if r.is_empty() {
+        return Ok(()); // Sync off.
+    }
+    if r.starts_with('-') || r.contains("::") || r.chars().any(|c| c.is_control()) {
+        return Err("Unsupported git remote. Use an https://, ssh:// or git@host:path URL.".into());
+    }
+    Ok(())
+}
+
 /// Make sure `repo` is a checkout of `remote`. An empty remote is initialised.
 pub fn ensure_repo(repo: &Path, remote: &str) -> Result<(), String> {
+    validate_remote(remote)?;
     if repo.join(".git").is_dir() {
         let current = git(repo, &["remote", "get-url", "origin"]).unwrap_or_default();
         if current.trim() != remote {
@@ -199,6 +247,9 @@ pub fn ensure_repo(repo: &Path, remote: &str) -> Result<(), String> {
     git(repo, &["remote", "add", "origin", remote])?;
     git(repo, &["config", "user.name", "ADE sync"])?;
     git(repo, &["config", "user.email", "ade-sync@localhost"])?;
+    // Byte-for-byte files on every OS, or Windows checkouts would look like
+    // edits to every memory file.
+    git(repo, &["config", "core.autocrlf", "false"])?;
     // Pick up existing history if the remote has any.
     if git(repo, &["fetch", "-q", "origin"]).is_ok()
         && git(repo, &["rev-parse", "--verify", "-q", "origin/main"]).is_ok()
@@ -225,7 +276,7 @@ fn export_state(paths: &Paths, device: &str) -> Result<(), String> {
         for key in keys {
             let local = paths.kv.join(format!("{}.json", state::encode_key(key)));
             let Ok(raw) = fs::read_to_string(&local) else { continue };
-            let value = strip_secrets(&raw);
+            let value = value_for_repo(key, &raw);
             let local_at = mtime_ms(&local);
             let target = key_path(&paths.repo, dir, key);
             let write = match read_wrapped(&target) {
@@ -275,8 +326,12 @@ fn local_memory_files(claude: &Path) -> Vec<String> {
             if name.starts_with('.') || name.ends_with(".sync-conflict") {
                 continue;
             }
-            if p.is_dir() {
+            let Ok(ft) = e.file_type() else { continue };
+            if ft.is_dir() {
                 walk(root, &p, out);
+            } else if ft.is_symlink() && p.is_dir() {
+                // Symlinked directories can loop or point at unrelated trees.
+                continue;
             } else if fs::metadata(&p).map(|m| m.len() <= MAX_MEMORY_FILE_BYTES).unwrap_or(false) {
                 if let Ok(rel) = p.strip_prefix(root) {
                     out.push(rel.to_string_lossy().replace('\\', "/"));
@@ -297,7 +352,11 @@ fn repo_memory_files(repo: &Path) -> Vec<String> {
         let Ok(rd) = fs::read_dir(dir) else { return };
         for e in rd.flatten() {
             let p = e.path();
-            if p.is_dir() {
+            let Ok(ft) = e.file_type() else { continue };
+            if ft.is_symlink() {
+                continue; // Never follow links someone committed to the repo.
+            }
+            if ft.is_dir() {
                 walk(root, &p, out);
             } else if let Ok(rel) = p.strip_prefix(root) {
                 out.push(rel.to_string_lossy().replace('\\', "/"));
@@ -382,11 +441,12 @@ fn reconcile_memory(
 }
 
 /// Resolve merge conflicts in wrapped state files by keeping the newer write.
-/// Anything else that conflicts keeps our side.
-fn resolve_conflicts(repo: &Path) -> Result<Vec<String>, String> {
-    let list = git(repo, &["diff", "--name-only", "--diff-filter=U"])?;
+/// Memory files keep our side in the repo, and the other machine's version is
+/// written beside the local file as "<name>.sync-conflict" so it isn't lost.
+fn resolve_conflicts(repo: &Path, claude_home: Option<&Path>) -> Result<Vec<String>, String> {
+    let list = git(repo, &["diff", "--name-only", "-z", "--diff-filter=U"])?;
     let mut resolved = Vec::new();
-    for path in list.lines().filter(|l| !l.is_empty()) {
+    for path in list.split('\0').filter(|l| !l.is_empty()) {
         let ours = git(repo, &["show", &format!(":2:{}", path)]).ok();
         let theirs = git(repo, &["show", &format!(":3:{}", path)]).ok();
         let pick = match (
@@ -394,7 +454,18 @@ fn resolve_conflicts(repo: &Path) -> Result<Vec<String>, String> {
             theirs.as_deref().and_then(|s| serde_json::from_str::<Wrapped>(s).ok()),
         ) {
             (Some(o), Some(t)) => if t.updated_at > o.updated_at { theirs } else { ours },
-            _ => ours.or(theirs),
+            _ => {
+                if let (Some(claude), Some(rel), Some(t)) =
+                    (claude_home, path.strip_prefix("memory/claude/"), theirs.as_deref())
+                {
+                    let side = claude.join(format!("{}.sync-conflict", rel));
+                    if let Some(parent) = side.parent() {
+                        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    fs::write(&side, t).map_err(|e| e.to_string())?;
+                }
+                ours.or(theirs)
+            }
         };
         if let Some(content) = pick {
             fs::write(repo.join(path), content).map_err(|e| e.to_string())?;
@@ -413,7 +484,7 @@ fn load_sync_state(p: &Path) -> SyncState {
 }
 
 /// Fetch and merge origin/main, resolving state-file conflicts by time.
-fn pull(repo: &Path, report: &mut SyncReport) -> Result<(), String> {
+fn pull(repo: &Path, claude_home: Option<&Path>, report: &mut SyncReport) -> Result<(), String> {
     let has_remote_main = git(repo, &["fetch", "-q", "origin"]).is_ok()
         && git(repo, &["rev-parse", "--verify", "-q", "origin/main"]).is_ok();
     if !has_remote_main {
@@ -424,8 +495,15 @@ fn pull(repo: &Path, report: &mut SyncReport) -> Result<(), String> {
         git(repo, &["reset", "-q", "--hard", "origin/main"])?;
         return Ok(());
     }
-    if git(repo, &["merge", "-q", "--no-edit", "origin/main"]).is_err() {
-        report.conflicts.extend(resolve_conflicts(repo)?);
+    // Unrelated histories happen when the first sync ran offline (a local
+    // root commit) or the remote was changed to one with its own history.
+    if let Err(e) = git(repo, &["merge", "-q", "--no-edit", "--allow-unrelated-histories", "origin/main"]) {
+        let resolved = resolve_conflicts(repo, claude_home)?;
+        if resolved.is_empty() {
+            let _ = git(repo, &["merge", "--abort"]);
+            return Err(e);
+        }
+        report.conflicts.extend(resolved);
     }
     Ok(())
 }
@@ -441,8 +519,16 @@ fn ahead_of_remote(repo: &Path) -> bool {
 }
 
 /// One full sync. `apply_remote` imports other machines' changes into local
-/// state and ~/.claude; the app passes true only before its stores load.
-pub fn run_sync(paths: &Paths, config: &SyncConfig, apply_remote: bool) -> Result<SyncReport, String> {
+/// state and ~/.claude; the app passes true only before its stores load, with
+/// `import_deadline_ms` set to when it stops waiting. Past the deadline the
+/// app has loaded, and an import would be overwritten by its in-memory state,
+/// so the import is skipped (the next launch applies it).
+pub fn run_sync(
+    paths: &Paths,
+    config: &SyncConfig,
+    apply_remote: bool,
+    import_deadline_ms: Option<u64>,
+) -> Result<SyncReport, String> {
     ensure_repo(&paths.repo, &config.remote)?;
     let mut st = load_sync_state(&paths.sync_state);
     let mut report = SyncReport::default();
@@ -450,7 +536,7 @@ pub fn run_sync(paths: &Paths, config: &SyncConfig, apply_remote: bool) -> Resul
     // Bring in other machines' commits first, so the export below compares
     // local edits against the current remote instead of letting git's merge
     // pick a side for files both machines changed.
-    pull(&paths.repo, &mut report)?;
+    pull(&paths.repo, paths.claude_home.as_deref(), &mut report)?;
 
     export_state(paths, &config.device)?;
     if config.include_claude_memory {
@@ -467,13 +553,14 @@ pub fn run_sync(paths: &Paths, config: &SyncConfig, apply_remote: bool) -> Resul
     if ahead_of_remote(&paths.repo) {
         // Another machine may have pushed in between: merge once and retry.
         if git(&paths.repo, &["push", "-q", "-u", "origin", "main"]).is_err() {
-            pull(&paths.repo, &mut report)?;
+            pull(&paths.repo, paths.claude_home.as_deref(), &mut report)?;
             git(&paths.repo, &["push", "-q", "-u", "origin", "main"])?;
         }
         report.pushed = true;
     }
 
-    if apply_remote {
+    let in_time = import_deadline_ms.map_or(true, |d| now_ms() <= d);
+    if apply_remote && in_time {
         report.imported_keys = import_state(paths)?;
         if config.include_claude_memory {
             if let Some(claude) = &paths.claude_home {
@@ -529,16 +616,28 @@ pub fn sync_set_config(app: tauri::AppHandle, config: SyncConfig) -> Result<(), 
         }
         return Ok(());
     }
+    validate_remote(&config.remote)?;
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     state::atomic_write(&cfg, &json).map_err(|e| e.to_string())
 }
 
+/// One sync at a time: two runs would race on the git index and on
+/// sync-state.json (the memory merge base).
+static SYNC_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Run a sync. Returns None when sync isn't configured.
 #[tauri::command]
-pub async fn sync_now(app: tauri::AppHandle, apply_remote: bool) -> Result<Option<SyncReport>, String> {
+pub async fn sync_now(
+    app: tauri::AppHandle,
+    apply_remote: bool,
+    import_deadline_ms: Option<u64>,
+) -> Result<Option<SyncReport>, String> {
     let (paths, cfg) = app_paths(&app)?;
     let Some(config) = load_config(&cfg) else { return Ok(None) };
-    tauri::async_runtime::spawn_blocking(move || run_sync(&paths, &config, apply_remote))
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = SYNC_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        run_sync(&paths, &config, apply_remote, import_deadline_ms)
+    })
         .await
         .map_err(|e| e.to_string())?
         .map(Some)
@@ -621,9 +720,9 @@ mod tests {
         let (b, cb) = machine(&root, "desktop");
         set(&a, "better-terminal-settings", "{\"theme\":\"nord\"}");
         set(&a, "ade-session", "{\"tabs\":[\"a\"]}");
-        run_sync(&a, &ca, false).unwrap();
+        run_sync(&a, &ca, false, None).unwrap();
 
-        let r = run_sync(&b, &cb, true).unwrap();
+        let r = run_sync(&b, &cb, true, None).unwrap();
         assert_eq!(get(&b, "better-terminal-settings").as_deref(), Some("{\"theme\":\"nord\"}"));
         assert!(r.imported_keys.contains(&"better-terminal-settings".to_string()));
         // The laptop's session is stored under its own device, not applied here.
@@ -638,15 +737,15 @@ mod tests {
         let (a, ca) = machine(&root, "a");
         let (b, cb) = machine(&root, "b");
         set(&a, "better-terminal-saved-notes", "[\"old\"]");
-        run_sync(&a, &ca, false).unwrap();
-        run_sync(&b, &cb, true).unwrap();
+        run_sync(&a, &ca, false, None).unwrap();
+        run_sync(&b, &cb, true, None).unwrap();
 
         set(&a, "better-terminal-saved-notes", "[\"from a\"]");
         std::thread::sleep(std::time::Duration::from_millis(20));
         set(&b, "better-terminal-saved-notes", "[\"from b, newer\"]");
-        run_sync(&a, &ca, false).unwrap();
-        run_sync(&b, &cb, true).unwrap(); // conflicting commit, resolved by time
-        run_sync(&a, &ca, true).unwrap();
+        run_sync(&a, &ca, false, None).unwrap();
+        run_sync(&b, &cb, true, None).unwrap(); // conflicting commit, resolved by time
+        run_sync(&a, &ca, true, None).unwrap();
         assert_eq!(get(&a, "better-terminal-saved-notes").as_deref(), Some("[\"from b, newer\"]"));
         assert_eq!(get(&b, "better-terminal-saved-notes").as_deref(), Some("[\"from b, newer\"]"));
     }
@@ -661,32 +760,32 @@ mod tests {
         fs::write(ca_home.join("CLAUDE.md"), "rules v1").unwrap();
         fs::create_dir_all(ca_home.join("commands")).unwrap();
         fs::write(ca_home.join("commands/review.md"), "review prompt").unwrap();
-        run_sync(&a, &ca, true).unwrap();
-        let r = run_sync(&b, &cb, true).unwrap();
+        run_sync(&a, &ca, true, None).unwrap();
+        let r = run_sync(&b, &cb, true, None).unwrap();
         assert_eq!(fs::read_to_string(cb_home.join("CLAUDE.md")).unwrap(), "rules v1");
         assert_eq!(fs::read_to_string(cb_home.join("commands/review.md")).unwrap(), "review prompt");
         assert!(r.imported_memory.contains(&"CLAUDE.md".to_string()));
 
         // One side edits: the other picks it up.
         fs::write(cb_home.join("CLAUDE.md"), "rules v2 from b").unwrap();
-        run_sync(&b, &cb, true).unwrap();
-        run_sync(&a, &ca, true).unwrap();
+        run_sync(&b, &cb, true, None).unwrap();
+        run_sync(&a, &ca, true, None).unwrap();
         assert_eq!(fs::read_to_string(ca_home.join("CLAUDE.md")).unwrap(), "rules v2 from b");
 
         // Both edit: local copy kept, the other side's copy saved beside it.
         fs::write(ca_home.join("CLAUDE.md"), "a edit").unwrap();
         fs::write(cb_home.join("CLAUDE.md"), "b edit").unwrap();
-        run_sync(&a, &ca, true).unwrap();
-        let r = run_sync(&b, &cb, true).unwrap();
+        run_sync(&a, &ca, true, None).unwrap();
+        let r = run_sync(&b, &cb, true, None).unwrap();
         assert_eq!(fs::read_to_string(cb_home.join("CLAUDE.md")).unwrap(), "b edit");
         assert_eq!(fs::read_to_string(cb_home.join("CLAUDE.md.sync-conflict")).unwrap(), "a edit");
         assert!(r.conflicts.iter().any(|c| c == "CLAUDE.md"));
 
         // After the conflict has been surfaced, the local copy wins next time
         // and the conflict isn't reported again.
-        let r = run_sync(&b, &cb, true).unwrap();
+        let r = run_sync(&b, &cb, true, None).unwrap();
         assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
-        run_sync(&a, &ca, true).unwrap();
+        run_sync(&a, &ca, true, None).unwrap();
         assert_eq!(fs::read_to_string(ca_home.join("CLAUDE.md")).unwrap(), "b edit");
     }
 
@@ -695,8 +794,8 @@ mod tests {
         let root = setup();
         let (a, ca) = machine(&root, "a");
         set(&a, "better-terminal-settings", "{}");
-        assert!(run_sync(&a, &ca, false).unwrap().pushed);
-        assert!(!run_sync(&a, &ca, false).unwrap().pushed);
+        assert!(run_sync(&a, &ca, false, None).unwrap().pushed);
+        assert!(!run_sync(&a, &ca, false, None).unwrap().pushed);
     }
 
     #[test]
@@ -705,20 +804,89 @@ mod tests {
         let (a, ca) = machine(&root, "a");
         let (b, cb) = machine(&root, "b");
         set(&b, "better-terminal-settings", "{\"theme\":\"old\",\"anthropicApiKey\":\"sk-b-secret\"}");
-        run_sync(&b, &cb, false).unwrap();
+        run_sync(&b, &cb, false, None).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(20));
         set(&a, "better-terminal-settings", "{\"theme\":\"nord\",\"anthropicApiKey\":\"sk-a-secret\"}");
-        run_sync(&a, &ca, false).unwrap();
+        run_sync(&a, &ca, false, None).unwrap();
 
         let repo_copy = fs::read_to_string(key_path(&a.repo, "shared", "better-terminal-settings")).unwrap();
         assert!(!repo_copy.contains("sk-a-secret") && !repo_copy.contains("sk-b-secret"), "{repo_copy}");
         let log = Command::new("git").arg("-C").arg(&a.repo).args(["log", "-p", "--all"]).output().unwrap();
         assert!(!String::from_utf8_lossy(&log.stdout).contains("sk-"), "secret in git history");
 
-        run_sync(&b, &cb, true).unwrap();
+        run_sync(&b, &cb, true, None).unwrap();
         let v: serde_json::Value = serde_json::from_str(&get(&b, "better-terminal-settings").unwrap()).unwrap();
         assert_eq!(v["theme"], "nord");
         assert_eq!(v["anthropicApiKey"], "sk-b-secret");
+    }
+
+    #[test]
+    fn scrollback_never_reaches_the_repo() {
+        let root = setup();
+        let (a, ca) = machine(&root, "a");
+        set(&a, "ade-session", "{\"tabs\":[{\"root\":{\"type\":\"pane\",\"pane\":{\"id\":\"p1\",\"savedCwd\":\"/work\",\"serializedBuffer\":\"TOKEN=sk-live-123\"}}}]}");
+        run_sync(&a, &ca, false, None).unwrap();
+        let copy = fs::read_to_string(key_path(&a.repo, "devices/a", "ade-session")).unwrap();
+        assert!(copy.contains("/work") && !copy.contains("sk-live-123"), "{copy}");
+        // The local session keeps its scrollback.
+        assert!(get(&a, "ade-session").unwrap().contains("sk-live-123"));
+    }
+
+    #[test]
+    fn first_sync_offline_then_online_merges_unrelated_histories() {
+        let root = setup();
+        let (a, ca) = machine(&root, "a");
+        let (b, cb) = machine(&root, "b");
+        set(&b, "better-terminal-saved-notes", "[\"from b\"]");
+        run_sync(&b, &cb, false, None).unwrap();
+
+        // A's first sync can't reach the remote: it commits a root of its own.
+        let offline = SyncConfig { remote: root.join("missing.git").to_string_lossy().into(), ..ca.clone() };
+        set(&a, "better-terminal-workspaces", "[\"ws a\"]");
+        assert!(run_sync(&a, &offline, false, None).is_err());
+        // Back online: histories are unrelated, and sync must still work.
+        run_sync(&a, &ca, true, None).unwrap();
+        assert_eq!(get(&a, "better-terminal-saved-notes").as_deref(), Some("[\"from b\"]"));
+        run_sync(&b, &cb, true, None).unwrap();
+        assert_eq!(get(&b, "better-terminal-workspaces").as_deref(), Some("[\"ws a\"]"));
+    }
+
+    #[test]
+    fn import_is_skipped_after_the_deadline() {
+        let root = setup();
+        let (a, ca) = machine(&root, "a");
+        let (b, cb) = machine(&root, "b");
+        set(&a, "better-terminal-settings", "{\"theme\":\"nord\"}");
+        run_sync(&a, &ca, false, None).unwrap();
+        let r = run_sync(&b, &cb, true, Some(1)).unwrap();
+        assert!(r.imported_keys.is_empty());
+        assert!(get(&b, "better-terminal-settings").is_none());
+        run_sync(&b, &cb, true, Some(u64::MAX)).unwrap();
+        assert!(get(&b, "better-terminal-settings").is_some());
+    }
+
+    #[test]
+    fn remotes_that_git_would_run_are_rejected() {
+        for bad in ["-uhelp", "ext::sh -c touch% /tmp/pwned", "fd::17", "https://x\n-evil"] {
+            assert!(validate_remote(bad).is_err(), "{bad:?}");
+        }
+        for ok in ["", "git@github.com:me/ade-sync.git", "https://github.com/me/s.git", "ssh://git@host/x.git", "/srv/sync.git"] {
+            assert!(validate_remote(ok).is_ok(), "{ok:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_memory_dirs_are_not_followed() {
+        let root = setup();
+        let (a, ca) = machine(&root, "a");
+        let claude = a.claude_home.clone().unwrap();
+        fs::create_dir_all(claude.join("skills/real")).unwrap();
+        fs::write(claude.join("skills/real/SKILL.md"), "skill").unwrap();
+        std::os::unix::fs::symlink(&claude, claude.join("skills/loop")).unwrap();
+        run_sync(&a, &ca, false, None).unwrap();
+        assert!(a.repo.join("memory/claude/skills/real/SKILL.md").exists());
+        assert!(!a.repo.join("memory/claude/skills/loop").exists());
     }
 
     #[test]

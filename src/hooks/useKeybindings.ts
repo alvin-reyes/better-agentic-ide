@@ -54,6 +54,12 @@ export function useKeybindings(actions: KeybindingActions) {
       // (copy, cursor-to-line-start/end) belong to the scratchpad only while
       // you're typing in it; elsewhere they act on panes.
       const inScratchpad = e.target instanceof Element && !!e.target.closest("[data-scratchpad]");
+      // A text field other than the terminal's own input, where Cmd/Ctrl+arrows
+      // move the caret.
+      const inTextField =
+        e.target instanceof HTMLElement &&
+        !e.target.classList.contains("xterm-helper-textarea") &&
+        (e.target.matches("input, textarea, select") || e.target.isContentEditable);
       const shift = e.shiftKey;
       const alt = e.altKey;
 
@@ -213,7 +219,7 @@ export function useKeybindings(actions: KeybindingActions) {
       }
 
       // Cmd+Shift+Enter: Zoom/unzoom pane (anywhere but the scratchpad)
-      if (meta && shift && !alt && e.key === "Enter" && !inScratchpad) {
+      if (meta && shift && !alt && e.key === "Enter" && !inScratchpad && !inTextField) {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("toggle-zoom-pane"));
         return;
@@ -234,7 +240,7 @@ export function useKeybindings(actions: KeybindingActions) {
       // Cmd+Arrow Left/Right: Navigate between panes (anywhere but the
       // scratchpad, where they move the cursor). Previously they only worked
       // with the scratchpad closed, and it is open by default.
-      if (meta && !shift && !alt && (e.key === "ArrowLeft" || e.key === "ArrowRight") && !inScratchpad) {
+      if (meta && !shift && !alt && (e.key === "ArrowLeft" || e.key === "ArrowRight") && !inScratchpad && !inTextField) {
         e.preventDefault();
         if (e.key === "ArrowRight") {
           focusNextPane(activeTabId);
