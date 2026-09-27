@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { marked } from "marked";
 import { ensureMermaid } from "../../lib/mermaidConfig";
 import { sanitizeHtml } from "../../lib/sanitizeHtml";
+import { markdownToHtml } from "../../lib/markdown";
 import { dirname, headingSlug, isAbsoluteUrl, isExternalUrl, resolveDocPath } from "../../lib/docLinks";
 import { imageMime } from "../../lib/viewerKind";
 import { useTabStore } from "../../stores/tabStore";
@@ -27,7 +27,7 @@ export default function MarkdownView({ content, filePath }: { content: string; f
     const el = ref.current;
     if (!el) return;
     let cancelled = false;
-    el.innerHTML = sanitizeHtml(marked.parse(content, { async: false }) as string);
+    el.innerHTML = sanitizeHtml(markdownToHtml(content));
 
     // Heading ids, so "#section" links have somewhere to go. Prefixed like
     // GitHub's, so an id can't shadow a global (window.<id>).

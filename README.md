@@ -77,7 +77,7 @@ Grab the installer for your platform from the [latest release](https://github.co
 - Rendered markdown and documents are sanitized before display, so a malicious README can't run code
 
 ### Preview Panel
-- **Side-by-side preview** (`Cmd+Shift+B`) of HTML, images, PDF and markdown next to your terminal
+- **Side-by-side preview** (`Cmd+Shift+B`) of HTML, images, PDF and markdown next to your terminal. Click any file path a command or agent prints (`Write(docs/plan.md)`, `./report.pdf`) to open it
 - **Live refresh** — updates on save through a native filesystem watcher; handy for watching an agent write a spec
 - Also opens when you click a file path in the terminal
 
@@ -124,34 +124,38 @@ Grab the installer for your platform from the [latest release](https://github.co
 
 ## Keyboard Shortcuts
 
-`Cmd` is `Ctrl` on Windows and Linux.
+On Linux and Windows, app shortcuts use `Ctrl+Shift` where macOS uses `⌘`, and `Ctrl+Alt+Shift` where macOS uses `⌘⇧`. Plain `Ctrl` keys always go to the terminal, so `Ctrl+D`, `Ctrl+R`, `Ctrl+W`, `Ctrl+E`, `Ctrl+P` and the rest keep working in your shell. On macOS, `Ctrl` keys go to the terminal too.
 
-| Shortcut | Action |
-|---|---|
-| `Cmd+P` | Command palette |
-| `Cmd+T` | New tab |
-| `Cmd+W` | Close tab |
-| `Cmd+1-9` | Switch to tab N |
-| `Cmd+Shift+[` / `]` | Previous / next tab |
-| `Cmd+R` | Rename active tab |
-| `Cmd+D` | Split pane horizontally |
-| `Cmd+Shift+D` | Split pane vertically |
-| `Cmd+Shift+W` | Close active pane |
-| `Cmd+←` / `Cmd+→` | Move between panes (outside the scratchpad) |
-| `Cmd+Shift+Enter` | Zoom / unzoom pane (outside the scratchpad) |
-| `Cmd+F` | Search in terminal |
-| `Cmd+J` | Toggle scratchpad / cycle focus |
-| `Cmd+Enter` | Send scratchpad to terminal |
-| `Cmd+Shift+Enter` | Copy scratchpad (while typing in it) |
-| `Cmd+S` | Save scratchpad as note / save file in the editor |
-| `Cmd+E` | Send Enter to terminal |
-| `Cmd+B` | Toggle file browser |
-| `Cmd+Shift+B` | Toggle preview panel |
-| `Cmd+Shift+A` | AI agent picker |
-| `Cmd+.` | Fleet view |
-| `Cmd+Shift+O` | Orchestrator |
-| `Cmd+,` | Settings |
-| `Escape` | Close open panels and focus the terminal |
+| macOS | Linux / Windows | Action |
+|---|---|---|
+| `⌘P` | `Ctrl+Shift+P` | Command palette |
+| `⌘T` | `Ctrl+Shift+T` | New tab |
+| `⌘W` | `Ctrl+Shift+W` | Close tab |
+| `⌘1-9` | `Ctrl+Shift+1-9` | Switch to tab N |
+| `⌘⇧[` / `⌘⇧]` | `Ctrl+PageUp` / `Ctrl+PageDown` (or `Ctrl+Alt+Shift+[` / `]`) | Previous / next tab |
+| `⌘R` | `Ctrl+Shift+R` | Rename active tab |
+| `⌘D` | `Ctrl+Shift+D` | Split pane horizontally |
+| `⌘⇧D` | `Ctrl+Alt+Shift+D` | Split pane vertically |
+| `⌘⇧W` | `Ctrl+Alt+Shift+W` | Close active pane |
+| `⌘←` / `⌘→` | `Ctrl+Shift+Left` / `Right` | Move between panes (outside text fields) |
+| `⌘⇧↵` | `Ctrl+Alt+Shift+Enter` | Zoom / unzoom pane (outside the scratchpad) |
+| `⌘F` | `Ctrl+Shift+F` | Search in terminal |
+| `⌘J` | `Ctrl+Shift+J` | Toggle scratchpad / cycle focus |
+| `⌘↵` | `Ctrl+Shift+Enter` (or `Ctrl+Enter` in the scratchpad) | Send scratchpad to terminal |
+| `⌘⇧↵` | `Ctrl+Alt+Shift+Enter` | Copy scratchpad (while typing in it) |
+| `⌘S` | `Ctrl+Shift+S` (or `Ctrl+S` in the scratchpad) | Save scratchpad as note |
+| `⌘E` | `Ctrl+Shift+E` | Send Enter to terminal |
+| `⌘B` | `Ctrl+Shift+B` | Toggle file browser |
+| `⌘⇧B` | `Ctrl+Alt+Shift+B` | Toggle preview panel |
+| `⌘⇧A` | `Ctrl+Alt+Shift+A` | AI agent picker |
+| `⌘.` | `Ctrl+Shift+.` | Fleet view |
+| `⌘⇧O` | `Ctrl+Alt+Shift+O` | Orchestrator |
+| `⌘,` | `Ctrl+Shift+,` | Settings |
+| `Esc` | `Esc` | Close open panels and focus the terminal |
+
+The code editor keeps its usual `⌘S` / `Ctrl+S` to save the file.
+
+**Clickable files:** any file path printed in a terminal, such as `Write(docs/plan.md)`, `./out/report.pdf` or `src/App.tsx:42`, is a link once the file exists. Relative paths resolve against the terminal's current folder. Markdown, HTML, PDFs and images open in the preview panel beside the terminal; other files open in a tab.
 
 ## Development
 

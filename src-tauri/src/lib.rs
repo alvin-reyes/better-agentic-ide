@@ -119,6 +119,28 @@ fn check_command_exists(command: String) -> Result<String, String> {
     Err(format!("{} not found in {} or PATH", command, home))
 }
 
+/// Resolve paths printed in a terminal to existing files, so only real files
+/// become clickable. Relative paths resolve against `cwd` (the pane's folder).
+/// Returns the absolute path for each input that is a regular file.
+fn resolve_existing_files(paths: &[String], cwd: Option<&str>, home: &str) -> Vec<Option<String>> {
+    paths
+        .iter()
+        .take(64)
+        .map(|p| {
+            let expanded = if p == "~" || p.starts_with("~/") { p.replacen('~', home, 1) } else { p.clone() };
+            let path = std::path::PathBuf::from(&expanded);
+            let full = if path.is_absolute() { path } else { std::path::Path::new(cwd?).join(path) };
+            let meta = std::fs::metadata(&full).ok()?;
+            meta.is_file().then(|| full.to_string_lossy().into_owned())
+        })
+        .collect()
+}
+
+#[tauri::command(async)]
+fn resolve_file_paths(paths: Vec<String>, cwd: Option<String>) -> Vec<Option<String>> {
+    resolve_existing_files(&paths, cwd.as_deref(), &get_home_dir())
+}
+
 fn get_home_dir() -> String {
     // 1. Try HOME env var
     if let Ok(home) = std::env::var("HOME") {
@@ -355,6 +377,7 @@ pub fn run() {
             save_temp_image,
             read_file,
             read_file_base64,
+            resolve_file_paths,
             list_md_files,
             list_directory,
             bmad::bmad_status,
@@ -374,4 +397,32 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_only_existing_files() {
+        let dir = std::env::temp_dir().join(format!("ade-links-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("docs")).unwrap();
+        std::fs::write(dir.join("docs/plan.md"), "x").unwrap();
+        let cwd = dir.to_string_lossy().to_string();
+        let abs = dir.join("docs/plan.md").to_string_lossy().to_string();
+        let got = resolve_existing_files(
+            &["docs/plan.md".into(), "./docs/plan.md".into(), abs.clone(), "docs".into(), "missing.md".into(), "~/docs/plan.md".into()],
+            Some(&cwd),
+            &cwd,
+        );
+        let want_rel = dir.join("docs/plan.md").to_string_lossy().to_string();
+        assert_eq!(got[0].as_deref(), Some(want_rel.as_str()));
+        assert!(got[1].is_some());
+        assert_eq!(got[2].as_deref(), Some(abs.as_str()));
+        assert_eq!(got[3], None, "directories are not links");
+        assert_eq!(got[4], None);
+        assert!(got[5].is_some(), "~ expands to home");
+        // Relative paths need a folder to resolve against.
+        assert_eq!(resolve_existing_files(&["docs/plan.md".into()], None, &cwd)[0], None);
+    }
 }

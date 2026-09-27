@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useFleetStore } from "../stores/fleetStore";
@@ -30,11 +31,11 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
   const items = useMemo<PaletteItem[]>(() => {
     const actions: PaletteItem[] = [
       // Tab actions
-      { id: "new-tab", label: "New Tab", shortcut: "Cmd+T", category: "Tabs", action: () => { addTab(); onClose(); } },
-      { id: "close-tab", label: "Close Tab", shortcut: "Cmd+W", category: "Tabs", action: () => { useTabStore.getState().closeTab(activeTabId); onClose(); } },
-      { id: "rename-tab", label: "Rename Tab", shortcut: "Cmd+R", category: "Tabs", action: () => { window.dispatchEvent(new CustomEvent("rename-active-tab")); onClose(); } },
+      { id: "new-tab", label: "New Tab", shortcut: L("newTab"), category: "Tabs", action: () => { addTab(); onClose(); } },
+      { id: "close-tab", label: "Close Tab", shortcut: L("closeTab"), category: "Tabs", action: () => { useTabStore.getState().closeTab(activeTabId); onClose(); } },
+      { id: "rename-tab", label: "Rename Tab", shortcut: L("renameTab"), category: "Tabs", action: () => { window.dispatchEvent(new CustomEvent("rename-active-tab")); onClose(); } },
       // Split actions
-      { id: "split-h", label: "Split Horizontally", shortcut: "Cmd+D", category: "Panes", action: () => {
+      { id: "split-h", label: "Split Horizontally", shortcut: L("splitHorizontal"), category: "Panes", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);
         if (tab) {
           import("../hooks/useTerminal").then(({ getPtyCwd }) => {
@@ -45,7 +46,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         }
         onClose();
       }},
-      { id: "split-v", label: "Split Vertically", shortcut: "Cmd+Shift+D", category: "Panes", action: () => {
+      { id: "split-v", label: "Split Vertically", shortcut: L("splitVertical"), category: "Panes", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);
         if (tab) {
           import("../hooks/useTerminal").then(({ getPtyCwd }) => {
@@ -56,21 +57,21 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         }
         onClose();
       }},
-      { id: "close-pane", label: "Close Pane", shortcut: "Cmd+Shift+W", category: "Panes", action: () => {
+      { id: "close-pane", label: "Close Pane", shortcut: L("closePane"), category: "Panes", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);
         if (tab) useTabStore.getState().closePane(activeTabId, tab.activePaneId);
         onClose();
       }},
-      { id: "zoom-pane", label: "Zoom / Unzoom Pane", shortcut: "Cmd+Shift+Enter", category: "Panes", action: () => {
+      { id: "zoom-pane", label: "Zoom / Unzoom Pane", shortcut: L("zoomPane"), category: "Panes", action: () => {
         window.dispatchEvent(new CustomEvent("toggle-zoom-pane"));
         onClose();
       }},
       // Panels
-      { id: "scratchpad", label: "Toggle Scratchpad", shortcut: "Cmd+J", category: "Panels", action: () => { onToggleScratchpad(); onClose(); } },
-      { id: "agents", label: "Launch AI Agent", shortcut: "Cmd+Shift+A", category: "Panels", action: () => { onOpenAgentPicker(); } },
-      { id: "file-browser", label: "Toggle File Browser", shortcut: "Cmd+B", category: "Panels", action: () => { onToggleFileBrowser?.(); onClose(); } },
-      { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+Shift+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
-      { id: "fleet", label: "Fleet: Toggle panel", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-fleet")); onClose(); } },
+      { id: "scratchpad", label: "Toggle Scratchpad", shortcut: L("scratchpad"), category: "Panels", action: () => { onToggleScratchpad(); onClose(); } },
+      { id: "agents", label: "Launch AI Agent", shortcut: L("agentPicker"), category: "Panels", action: () => { onOpenAgentPicker(); } },
+      { id: "file-browser", label: "Toggle File Browser", shortcut: L("fileBrowser"), category: "Panels", action: () => { onToggleFileBrowser?.(); onClose(); } },
+      { id: "preview", label: "Toggle Preview Panel", shortcut: L("preview"), category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
+      { id: "fleet", label: "Fleet: Toggle panel", shortcut: L("fleet"), category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-fleet")); onClose(); } },
       { id: "fleet-all", label: "Fleet: All terminals", category: "Panels", action: () => {
         useFleetStore.getState().setScope("all");
         const existing = useTabStore.getState().tabs.find((t) => t.type === "fleet");
@@ -93,7 +94,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         onClose();
       }},
       { id: "bmad-toggle", label: "BMAD: Toggle panel", category: "BMAD", action: () => { window.dispatchEvent(new CustomEvent("toggle-bmad")); onClose(); } },
-      { id: "orchestrator", label: "Open Orchestrator", shortcut: "Cmd+Shift+O", category: "Panels", action: () => {
+      { id: "orchestrator", label: "Open Orchestrator", shortcut: L("orchestrator"), category: "Panels", action: () => {
         import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
           const sessionId = useOrchestratorStore.getState().createSession("New Project");
           import("../stores/tabStore").then(({ useTabStore }) => {
@@ -106,8 +107,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         useTabStore.getState().addBrowserTab();
         onClose();
       }},
-      { id: "settings", label: "Open Settings", shortcut: "Cmd+,", category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
-      { id: "search", label: "Search in Terminal", shortcut: "Cmd+F", category: "Panels", action: () => { onClose(); } },
+      { id: "settings", label: "Open Settings", shortcut: L("settings"), category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
+      { id: "search", label: "Search in Terminal", shortcut: L("find"), category: "Panels", action: () => { onClose(); } },
       // Recording commands
       { id: "rec-start", label: "Start Recording", category: "Recording", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);
@@ -161,7 +162,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       actions.push({
         id: `switch-tab-${tab.id}`,
         label: `Switch to: ${tab.name}`,
-        shortcut: idx < 9 ? `Cmd+${idx + 1}` : undefined,
+        shortcut: idx < 9 ? `${modLabel()}${idx + 1}` : undefined,
         category: "Tabs",
         action: () => { setActiveTab(tab.id); onClose(); },
       });
