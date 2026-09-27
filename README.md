@@ -84,7 +84,8 @@ Grab the installer for your platform from the [latest release](https://github.co
 - Also opens when you click a file path in the terminal
 
 ### AI Agents
-- **Agent picker** (`Cmd+Shift+A`) — 26 pre-configured agent profiles across Backend, Frontend, DevOps, Testing, Web3 and General (debugging, code review, docs, architecture, git, contract auditing and more)
+- **Agent picker** (`Cmd+Shift+A`) — 37 pre-configured agent profiles across Backend, Frontend, DevOps, Testing, Web3, Architects and General (debugging, code review, docs, architecture, git, contract auditing and more)
+- **Architects to brainstorm with** — AI Agent, RAG & Knowledge, Workflow Automation, LLMOps, AI Automation Strategist, DeFi Protocol, Tokenomics, Smart Contract Systems, Web3 Infrastructure, Cross-chain & L2, and AI x Web3. They ask questions, compare options, draw Mermaid diagrams and record decisions as ADRs in `docs/adr/` instead of writing code
 - **Task routing** — describe a task and the picker suggests the best-matching agent
 - **Providers** — Claude Code, Codex, Gemini CLI or Ollama
 - **Continuous mode** — autonomous runs with `--dangerously-skip-permissions` (with a safety warning)
