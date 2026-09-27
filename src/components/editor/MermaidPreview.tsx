@@ -1,21 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import mermaid from "mermaid";
+import { ensureMermaid } from "../../lib/mermaidConfig";
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "dark",
-  themeVariables: {
-    primaryColor: "#58a6ff",
-    primaryTextColor: "#e6edf3",
-    primaryBorderColor: "#30363d",
-    lineColor: "#8b949e",
-    secondaryColor: "#161b22",
-    tertiaryColor: "#21262d",
-    fontFamily: "Inter, sans-serif",
-    fontSize: "14px",
-  },
-  securityLevel: "loose",
-});
+const mermaid = ensureMermaid();
 
 interface MermaidPreviewProps {
   code: string;

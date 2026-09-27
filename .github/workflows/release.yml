@@ -36,8 +36,8 @@ jobs:
             brew tap alvin-reyes/tap
             brew install --cask ade
             ```
-
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.2.0...${{ github.ref_name }}
+          # Appends "What's Changed" and a Full Changelog link to the previous tag.
+          generate_release_notes: true
           draft: false
           prerelease: false
 
