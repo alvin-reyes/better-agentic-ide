@@ -131,8 +131,10 @@ export function useKeybindings(actions: KeybindingActions) {
         return;
       }
 
-      // Cmd+S: Save scratchpad as note
-      if (meta && !shift && !alt && e.key === "s" && actions.isScratchpadOpen) {
+      // Cmd+S: Save scratchpad as note — but not while typing in the code
+      // editor, where Cmd+S is Monaco's "save file".
+      const inEditor = e.target instanceof Element && !!e.target.closest(".monaco-editor");
+      if (meta && !shift && !alt && e.key === "s" && actions.isScratchpadOpen && !inEditor) {
         e.preventDefault();
         actions.saveNoteScratchpad();
         return;
