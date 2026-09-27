@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import FleetTimeline from "./FleetTimeline";
 import FleetSummary from "./FleetSummary";
+import FleetGroups from "./FleetGroups";
+import FleetScopeToggle from "./FleetScopeToggle";
 import { useFleetData } from "../../hooks/useFleetData";
 import { useTabStore } from "../../stores/tabStore";
 import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
@@ -18,7 +20,8 @@ interface FleetTabProps {
 }
 
 export default function FleetTab({ activeCwd }: FleetTabProps) {
-  const { lanes, totalCostCents, runningCount } = useFleetData(activeCwd);
+  const scope = useFleetStore((s) => s.scope);
+  const { lanes, groups, totalCostCents, runningCount } = useFleetData(activeCwd, scope);
   const clearHistory = useAgentTrackerStore((s) => s.clearHistory);
   const setActiveTab = useTabStore((s) => s.setActiveTab);
   const setActivePaneInTab = useTabStore((s) => s.setActivePaneInTab);
@@ -61,6 +64,7 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
         padding: "8px 14px", borderBottom: "1px solid var(--border)", flexShrink: 0,
       }}>
         <b style={{ fontSize: "13px", color: "var(--text-primary)" }}>Fleet</b>
+        <FleetScopeToggle />
         <div style={{ flex: 1 }}>
           <FleetSummary runningCount={runningCount} doneCount={doneCount} totalCostCents={totalCostCents} />
         </div>
@@ -97,7 +101,17 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: "10px 14px", minHeight: 0 }}>
-        <FleetTimeline lanes={visible} from={from} to={now} onSelect={jumpToPane} />
+        {scope === "all" ? (
+          <FleetGroups
+            groups={groups}
+            from={from}
+            to={now}
+            onSelect={jumpToPane}
+            onOpenTab={(tabId) => setActiveTab(tabId)}
+          />
+        ) : (
+          <FleetTimeline lanes={visible} from={from} to={now} onSelect={jumpToPane} />
+        )}
       </div>
 
       {selected && (

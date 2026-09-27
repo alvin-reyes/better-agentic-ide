@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useFleetStore } from "../stores/fleetStore";
 
 interface PaletteItem {
   id: string;
@@ -70,6 +71,13 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "file-browser", label: "Toggle File Browser", shortcut: "Cmd+B", category: "Panels", action: () => { onToggleFileBrowser?.(); onClose(); } },
       { id: "preview", label: "Toggle Preview Panel", shortcut: "Cmd+Shift+B", category: "Panels", action: () => { onTogglePreview?.(); onClose(); } },
       { id: "fleet", label: "Fleet: Toggle panel", shortcut: "Cmd+.", category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-fleet")); onClose(); } },
+      { id: "fleet-all", label: "Fleet: All terminals", category: "Panels", action: () => {
+        useFleetStore.getState().setScope("all");
+        const existing = useTabStore.getState().tabs.find((t) => t.type === "fleet");
+        if (existing) useTabStore.getState().setActiveTab(existing.id);
+        else useTabStore.getState().addFleetTab();
+        onClose();
+      } },
       { id: "fleet-tab", label: "Fleet: Open tab", category: "Panels", action: () => { useTabStore.getState().addFleetTab(); onClose(); } },
       { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
         const tab = tabs.find(t => t.id === activeTabId);

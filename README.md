@@ -11,66 +11,116 @@
   <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Works_with-Claude_Code-F97316?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code"></a>
 </p>
 
-<p align="center">A modern desktop terminal built for agentic AI development. Keyboard-first design with smart tab management, split panes, a thoughts scratchpad, and deep customization.</p>
+<p align="center">A desktop terminal built for running AI coding agents. Split panes, a prompt scratchpad, a file viewer, and a live fleet view of every agent across every terminal — all keyboard-first.</p>
+
+<p align="center">
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml"><img src="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
 Built with [Tauri v2](https://v2.tauri.app/) (Rust) + React 19 + TypeScript + [xterm.js](https://xtermjs.org/) + Zustand.
+
+## Install
+
+### Homebrew (macOS)
+
+```bash
+brew install --cask alvin-reyes/tap/ade
+```
+
+Upgrade with `brew upgrade --cask ade`. The cask clears the quarantine flag, so there's no Gatekeeper prompt.
+
+### Download
+
+Grab the installer for your platform from the [latest release](https://github.com/alvin-reyes/better-agentic-ide/releases/latest):
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `Better.Terminal_<version>_aarch64.dmg` |
+| macOS (Intel) | `Better.Terminal_<version>_x64.dmg` |
+| Windows | `.msi` or `-setup.exe` |
+| Linux | `.deb` or `.AppImage` |
+
+> **macOS manual install:** if macOS says the app "is damaged", run `xattr -cr "/Applications/Better Terminal.app"`.
+
+### Requirements
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) for the AI agent features (`npm install -g @anthropic-ai/claude-code`). Codex, Gemini CLI and Ollama are also supported by the agent picker.
 
 ## Features
 
 ### Terminal
-- **Named tabs** — Create, rename (`Cmd+R` or double-click), and switch tabs with `Cmd+1-9`
-- **Split panes** — Split horizontally (`Cmd+D`) or vertically (`Cmd+Shift+D`), resize by dragging
-- **Persistent sessions** — Terminals survive splits and tab switches without resetting
+- **Named tabs** — create (`Cmd+T`), rename (`Cmd+R` or double-click), switch (`Cmd+1-9`, `Cmd+Shift+[` / `]`)
+- **Split panes** — horizontal (`Cmd+D`) or vertical (`Cmd+Shift+D`), drag to resize, zoom one pane (`Cmd+Shift+Enter`), move between panes (`Cmd+←/→`)
+- **Persistent sessions** — terminals survive splits and tab switches
+- **Search** (`Cmd+F`) — incremental search with case-sensitive, whole-word and regex toggles; `Enter` / `Shift+Enter` step through matches
+- **Detach to window** — right-click a tab → *Move to New Window*; the processes keep running
+- **Recording & playback** — the `REC` button on a pane records its output; replay from *View Recordings* in the command palette at 1×/2×/4×
 
 ### Thoughts Scratchpad
-- **Toggle** with `Cmd+J` — intelligent focus cycling between scratchpad and terminal
-- **Send to terminal** with `Cmd+Enter` — injects text directly into the active PTY
-- **Copy** with `Cmd+Shift+Enter` — copies to clipboard
-- **Save as note** with `Cmd+S` — persists prompts for reuse
-- **Prompt history** — all sent prompts are saved and searchable
-- **Send Enter** with `Cmd+E` — send a bare Enter to the terminal (confirm prompts without switching focus)
-- **Voice dictation** — microphone button for hands-free brainstorming (Web Speech API)
-- **Prompt chaining** — separate prompts with `---` to run multi-step chains sequentially, waiting for agent completion between steps
+- **Toggle** with `Cmd+J` — cycles focus between the scratchpad and the terminal
+- **Send to terminal** with `Cmd+Enter`; **send a bare Enter** with `Cmd+E` to answer agent prompts without switching focus
+- **Copy** with `Cmd+Shift+Enter`, **save as note** with `Cmd+S`
+- **Prompt history & templates** — every sent prompt is saved and searchable
+- **Prompt chaining** — separate prompts with `---` to run them in sequence, waiting for the agent to finish between steps
+- **Voice dictation** — microphone button (Web Speech API)
 
-### Theming & Customization
-- **8 built-in themes** — GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark
-- **Adjustable font size** — 10px to 24px with quick presets
-- **Font family selection** — JetBrains Mono, SF Mono, Fira Code, Cascadia Code, and more
-- **Custom colors** — override any UI or terminal color with a color picker
-- **Cursor settings** — bar, block, or underline with optional blink
-- **Line height & scrollback** — fine-tune terminal density
-
-### AI Agent Terminals
-- **20+ pre-configured agent profiles** — Launch specialized AI agents with `Cmd+Shift+A`
-- **5 categories** — Backend (API, DB, Auth), Frontend (UI, CSS, State), DevOps (Docker, CI/CD, Infra, K8s), Testing (Unit, E2E, Perf), General (Debug, Review, Docs, Interview Coach, LinkedIn Tech Leader)
-- **Continuous mode** — Autonomous agent execution with `--dangerously-skip-permissions` (with safety disclaimer)
-- **Each agent gets its own named tab** — organized workflow with color-coded categories
+### Files
+- **File browser** (`Cmd+B`) — a tree of the active terminal's folder that follows `cd` and refreshes when files change; `.*` toggles hidden files
+- **File viewer** — click any file to open it in a tab that picks the right view:
+  - **PDF** — page through and zoom (rendered with pdf.js, so it works on Linux too)
+  - **Word (.docx)** — a readable rendering of the document
+  - **Images** — PNG, JPEG, GIF, SVG, WebP, BMP, ICO
+  - **Markdown** — rendered, including ```` ```mermaid ```` diagrams, with a *Source* toggle for editing
+  - **HTML** — static render (no scripts) with a *Source* toggle
+  - **Everything else** — the Monaco code editor with syntax highlighting; `Cmd+S` saves
+- **Mermaid diagrams** — `.mmd` files open with a live diagram preview and a chat box that edits the diagram through a local Ollama model
+- Rendered markdown and documents are sanitized before display, so a malicious README can't run code
 
 ### Preview Panel
-- **Multi-format preview** — View HTML, images, PDF, and markdown files in a side panel
-- **Live auto-refresh** — Files update automatically when saved (native filesystem watcher)
-- **Resizable** — Drag the panel edge to resize (280px–900px)
-- **Toggle** with `Cmd+Shift+B` — opens alongside your terminal
+- **Side-by-side preview** (`Cmd+Shift+B`) of HTML, images, PDF and markdown next to your terminal
+- **Live refresh** — updates on save through a native filesystem watcher; handy for watching an agent write a spec
+- Also opens when you click a file path in the terminal
 
-### Fleet View & Cost Tracker
-- **Fleet view** (`Cmd+.`) — live timeline of the Claude Code sub-agents running in the active tab's working directory, with running count and total cost; expand it into a full tab for a detail pane and range control
-- **Session tracking** — duration, estimated token usage, and cost per session
-- **Cost estimation** — per-provider rates for Claude, Codex, and Gemini
-- **Notifications** — system notification + in-app toast when an agent finishes a task
-- **Session history** — review past sessions with token and cost breakdowns (persisted in localStorage)
+### AI Agents
+- **Agent picker** (`Cmd+Shift+A`) — 23 pre-configured agent profiles across Backend, Frontend, DevOps, Testing and General (debugging, code review, docs, architecture, git, brainstorming and more)
+- **Task routing** — describe a task and the picker suggests the best-matching agent
+- **Providers** — Claude Code, Codex, Gemini CLI or Ollama
+- **Continuous mode** — autonomous runs with `--dangerously-skip-permissions` (with a safety warning)
+- Each agent gets its own named, color-coded tab
 
-### Workspace Management
-- **Save workspaces** — snapshot your current tab layout with names
-- **Restore workspaces** — reload saved configurations instantly
-- **Tab renaming** — name tabs to organize your workflow
+### Fleet View
+- **One terminal or all of them** — `Cmd+.` opens the fleet panel; toggle between *This terminal* and *All terminals*. *Fleet: All terminals* in the command palette opens it as a full tab.
+- **All terminals** — a section per terminal tab showing its folder, its agents and the Claude Code sub-agents they spawned, with running count and cost per terminal; *Go to tab* jumps straight there
+- **Timeline** — swimlanes of every agent and sub-agent over the last 5 min / 15 min / 1 h / all time; click an agent to jump to its pane
+- **Cost tracking** — estimated tokens and cost per session for Claude, Codex and Gemini, plus session history
+- **Notifications** — a system notification and in-app toast when an agent finishes
 
-### Keyboard-First
-Every action has a keyboard shortcut. No mouse required.
+### Orchestrator
+- **Plan with an AI, then dispatch** (`Cmd+Shift+O`) — chat through a project in the Orchestrator tab (type in the scratchpad), and it breaks the work into tasks with an agent profile, priority and dependencies
+- **Dispatch** a task, or *Dispatch All* ready tasks, each into its own terminal running `claude` with the task and a generated `SPEC.md`
+- Uses the Anthropic API (key in *Settings → AI API*) or a local Ollama model
+
+### BMAD Method
+- **One-click setup** — ADE offers to install a bundled, pinned copy of [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) into a project (`.bmad-core/` plus Claude Code commands); nothing is downloaded and existing files are never overwritten
+- **Persona panel** — launch the Analyst, PM, UX Expert, Architect, Product Owner, Scrum Master, Developer or QA persona in the active terminal
+
+### Browser Tab
+- **Open Browser Tab** from the command palette to view a local dev server (defaults to `http://localhost:3000`) inside ADE
+
+### Theming & Settings
+- **8 built-in themes** — GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark
+- **Fonts** — size (10–24px), family (JetBrains Mono, SF Mono, Fira Code, Cascadia Code, …), line height
+- **Custom colors** — override any UI or terminal color
+- **Cursor** — bar, block or underline, optional blink; configurable scrollback
+- **Workspaces** — save and restore tab layouts by name
 
 ## Keyboard Shortcuts
 
+`Cmd` is `Ctrl` on Windows and Linux.
+
 | Shortcut | Action |
 |---|---|
+| `Cmd+P` | Command palette |
 | `Cmd+T` | New tab |
 | `Cmd+W` | Close tab |
 | `Cmd+1-9` | Switch to tab N |
@@ -81,115 +131,98 @@ Every action has a keyboard shortcut. No mouse required.
 | `Cmd+Shift+W` | Close active pane |
 | `Cmd+←` / `Cmd+→` | Move between panes |
 | `Cmd+Shift+Enter` | Zoom / unzoom pane (scratchpad closed) |
+| `Cmd+F` | Search in terminal |
 | `Cmd+J` | Toggle scratchpad / cycle focus |
 | `Cmd+Enter` | Send scratchpad to terminal |
-| `Cmd+Shift+Enter` | Copy scratchpad to clipboard (scratchpad open) |
-| `Cmd+S` | Save scratchpad as note |
+| `Cmd+Shift+Enter` | Copy scratchpad (scratchpad open) |
+| `Cmd+S` | Save scratchpad as note / save file in the editor |
 | `Cmd+E` | Send Enter to terminal |
 | `Cmd+B` | Toggle file browser |
 | `Cmd+Shift+B` | Toggle preview panel |
-| `Cmd+Shift+A` | Launch AI agent picker |
-| `Cmd+Shift+O` | Open orchestrator |
+| `Cmd+Shift+A` | AI agent picker |
 | `Cmd+.` | Fleet view |
-| `Cmd+P` | Command palette |
-| `Cmd+F` | Search in terminal |
-| `Cmd+,` | Open settings |
-| `Escape` | Close open panels and focus terminal |
+| `Cmd+Shift+O` | Orchestrator |
+| `Cmd+,` | Settings |
+| `Escape` | Close open panels and focus the terminal |
 
-## Install
-
-### Homebrew (recommended)
+## Development
 
 ```bash
-brew install --cask alvin-reyes/tap/ade
-```
-
-No Gatekeeper warnings — Homebrew handles code quarantine automatically.
-
-### Manual Download
-
-Download the latest installer from the [Releases page](https://github.com/alvin-reyes/better-agentic-ide/releases):
-
-| Platform | File |
-|----------|------|
-| macOS (Apple Silicon) | `.dmg` |
-| macOS (Intel) | `.dmg` |
-| Windows | `.msi` / `.exe` |
-| Linux | `.deb` / `.AppImage` |
-
-> **macOS manual install:** If you see "app is damaged", run: `xattr -cr /Applications/Better\ Terminal.app`
-
-### Prerequisites
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — required for AI agent features (`npm install -g @anthropic-ai/claude-code`)
-
-### Build from Source
-
-```bash
-# Prerequisites: Node.js 18+, Rust (stable)
+# Prerequisites: Node.js 18+, Rust (stable); on Linux also the Tauri system libraries:
+# https://v2.tauri.app/start/prerequisites/
 npm install
-npm run tauri dev     # development
-npm run tauri build   # production
-npm test              # frontend unit tests (Vitest)
-(cd src-tauri && cargo test)  # backend unit tests
+npm run tauri dev       # run the app with hot reload
+npm run tauri build     # build installers for your platform
+
+npm test                # frontend unit tests (Vitest)
+npx tsc --noEmit        # typecheck
+(cd src-tauri && cargo test)   # backend unit tests
 ```
+
+CI runs the typecheck, frontend tests, a production build and the Rust tests on every pull request.
+
+### Releasing
+
+1. Bump `version` in `src-tauri/tauri.conf.json` and merge to `main`.
+2. Push a tag: `git tag v<version> && git push origin v<version>`. The *Build & Release Installers* workflow builds macOS (ARM + Intel), Windows and Linux installers and attaches them to a GitHub release.
+3. Update the Homebrew cask in [alvin-reyes/homebrew-tap](https://github.com/alvin-reyes/homebrew-tap) (`Casks/ade.rb`): set `version` and the two `sha256` values for the new `.dmg` files.
 
 ## Architecture
 
 ```
-better-terminal/
-├── src-tauri/              Rust backend
-│   ├── src/
-│   │   ├── main.rs         App entry point
-│   │   ├── lib.rs          Tauri command registration
-│   │   ├── pty.rs          PTY management (portable-pty + Channel API)
-│   │   ├── watcher.rs      Native filesystem watcher (notify crate)
-│   │   ├── subagent.rs     Claude Code sub-agent transcript watcher (fleet view)
-│   │   └── bmad.rs         BMAD scaffolding & status
-│   └── Cargo.toml
-├── src/                    React frontend
+better-agentic-ide/
+├── src-tauri/                 Rust backend
+│   └── src/
+│       ├── main.rs            App entry point
+│       ├── lib.rs             Tauri command registration, file commands
+│       ├── pty.rs             PTY management (portable-pty + Channel API)
+│       ├── watcher.rs         Native filesystem watcher (notify)
+│       ├── subagent.rs        Claude Code sub-agent transcript watcher (fleet view)
+│       └── bmad.rs            BMAD scaffolding and status
+├── src/                       React frontend
 │   ├── components/
-│   │   ├── TabBar.tsx      Tab management with settings gear
-│   │   ├── TerminalPane.tsx  xterm.js wrapper
-│   │   ├── PaneContainer.tsx Split pane layout (react-resizable-panels)
-│   │   ├── Scratchpad.tsx  Thoughts panel with history & notes
-│   │   ├── AgentPicker.tsx AI agent launcher (20+ profiles, 5 categories)
-│   │   ├── fleet/          Fleet view (panel, tab, timeline, summary)
-│   │   ├── FileBrowser.tsx File tree side panel
-│   │   ├── PreviewPanel.tsx Multi-format file preview (HTML, images, PDF, markdown)
-│   │   ├── CommandPalette.tsx Cmd+P command palette
-│   │   ├── SettingsPanel.tsx Theme, font, workspace settings
-│   │   └── ShortcutsBar.tsx  Keyboard shortcut reference
-│   ├── stores/
-│   │   ├── tabStore.ts     Tab & pane state (Zustand)
-│   │   ├── settingsStore.ts Theme, font, workspace persistence
-│   │   ├── agentTrackerStore.ts Agent session & cost tracking
-│   │   └── fleetStore.ts   Sub-agent fleet state
-│   ├── hooks/
-│   │   ├── useTerminal.ts  Terminal lifecycle & PTY bridge
-│   │   └── useKeybindings.ts Global keyboard shortcuts
-│   └── index.css           CSS variables & base styles
-└── package.json
+│   │   ├── TabBar.tsx, PaneContainer.tsx, TerminalPane.tsx    Tabs, splits, xterm.js panes
+│   │   ├── Scratchpad.tsx     Thoughts panel, history, notes, chaining
+│   │   ├── FileBrowser.tsx    File tree side panel
+│   │   ├── EditorTab.tsx      File tab: picks a viewer or the editor
+│   │   ├── viewer/            PDF, .docx, image, markdown and HTML viewers
+│   │   ├── editor/            Monaco wrapper, Mermaid preview, diagram chat
+│   │   ├── fleet/             Fleet panel, tab, per-terminal groups, timeline
+│   │   ├── PreviewPanel.tsx   Side-by-side live preview
+│   │   ├── AgentPicker.tsx    Agent launcher and task routing
+│   │   ├── OrchestratorTab.tsx, BmadPanel.tsx, BrowserTab.tsx
+│   │   ├── RecordingControls.tsx, RecordingPlayer.tsx, TerminalSearch.tsx
+│   │   └── CommandPalette.tsx, SettingsPanel.tsx, ShortcutsBar.tsx, Tour.tsx
+│   ├── stores/                Zustand stores (tabs, settings, fleet, agents, orchestrator, BMAD)
+│   ├── hooks/                 Terminal lifecycle, keybindings, fleet data, recording
+│   ├── lib/                   Viewer dispatch, HTML sanitizing, Mermaid config, Anthropic client
+│   └── data/                  Agent profiles, task router, BMAD personas
+└── .github/workflows/         CI and release builds
 ```
 
-### Key Design Decisions
+### Key design decisions
 
-- **Global terminal instance map** — Terminal instances live outside React in a `Map<string, TerminalInstance>` so they survive component remounts during splits
-- **Tauri Channel API** — PTY output streams via `Channel<PtyEvent>` for reliable real-time data delivery
-- **Carriage return (`\r`)** — PTY Enter simulation uses `\r`, not `\n`
-- **localStorage persistence** — Settings, themes, notes, history, and workspaces persist across sessions
+- **Global terminal instance map** — terminal instances live outside React in a `Map` so they survive remounts during splits
+- **Tauri Channel API** — PTY output and watcher events stream over `Channel`s
+- **One watcher per folder** — the fleet view refcounts a sub-agent watcher per terminal folder, so several views share them
+- **Sanitize before render** — the webview can reach Tauri IPC, so markdown and documents from any repo go through DOMPurify and Mermaid's strict mode
+- **localStorage persistence** — settings, themes, notes, history, workspaces and recordings persist across sessions
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Desktop framework | Tauri v2 |
-| Backend | Rust + portable-pty + notify (fs watcher) |
+| Backend | Rust + portable-pty + notify |
 | Frontend | React 19 + TypeScript |
 | Terminal | xterm.js + WebGL addon |
+| Editor & viewers | Monaco, pdf.js, mammoth, marked, Mermaid |
 | State | Zustand |
 | Styling | Tailwind CSS v4 + CSS variables |
-| Layout | react-resizable-panels |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
