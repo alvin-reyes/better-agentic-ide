@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import { hydrateFromDisk, startAutoSave } from "./lib/persistence";
 import { syncBeforeLaunch, startPeriodicSync } from "./lib/sync";
+import { installLinkGuard } from "./lib/docLinks";
 
 // App (and the stores it imports) is loaded only after hydrateFromDisk():
 // several stores read localStorage when their module is first evaluated, so a
@@ -39,6 +40,8 @@ function Root() {
 }
 
 async function boot() {
+  // Links in rendered documents must never navigate the app window itself.
+  installLinkGuard();
   const detached = detachedTab() !== null;
   // Only the main window restores and syncs the saved state. Restore it from
   // disk before the stores read localStorage, then mirror every later change

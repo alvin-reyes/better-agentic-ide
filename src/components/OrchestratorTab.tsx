@@ -6,6 +6,7 @@ import { AGENT_PROFILES } from "../data/agentProfiles";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
+import { sanitizeHtml } from "../lib/sanitizeHtml";
 import mermaid from "mermaid";
 
 function buildSpec(session: OrchestratorSession, tasks: OrchestratorTask[]): string {
@@ -76,7 +77,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     if (!session) return parsed;
     for (const msg of session.messages) {
       if (msg.role === "assistant") {
-        parsed[msg.id] = marked.parse(msg.content) as string;
+        parsed[msg.id] = sanitizeHtml(marked.parse(msg.content) as string);
       }
     }
     return parsed;
@@ -85,7 +86,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   // Parse streaming text as markdown
   const streamingHtml = useMemo(() => {
     if (!streamingText) return "";
-    return marked.parse(streamingText) as string;
+    return sanitizeHtml(marked.parse(streamingText) as string);
   }, [streamingText]);
 
   useEffect(() => {
@@ -401,7 +402,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                     color: "var(--text-primary)",
                     border: "1px solid var(--border)",
                   }}
-                  dangerouslySetInnerHTML={{ __html: parsedMessages[msg.id] ?? msg.content }}
+                  dangerouslySetInnerHTML={{ __html: parsedMessages[msg.id] ?? sanitizeHtml(msg.content) }}
                 />
               )}
               <span style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px", padding: "0 4px" }}>
