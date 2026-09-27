@@ -21,8 +21,6 @@ cask "better-terminal" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :catalina"
-
   app "Better Terminal.app"
 
   zap trash: [

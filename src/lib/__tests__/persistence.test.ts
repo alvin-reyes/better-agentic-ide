@@ -8,6 +8,7 @@ import {
   hydrateFromDisk,
   startAutoSave,
   flushNow,
+  suspendAutoSave,
   __resetForTests,
 } from "../persistence";
 
@@ -91,5 +92,26 @@ describe("startAutoSave", () => {
   it("still behaves as normal localStorage", () => {
     localStorage.setItem("ade-session", "v");
     expect(localStorage.getItem("ade-session")).toBe("v");
+  });
+
+  it("writes nothing once suspended (after a snapshot restore)", async () => {
+    localStorage.setItem("ade-session", "queued before");
+    suspendAutoSave();
+    localStorage.setItem("ade-session", "after");
+    await flushNow();
+    expect(invoke.mock.calls.filter((c) => c[0] === "state_write")).toHaveLength(0);
+    expect(localStorage.getItem("ade-session")).toBe("after");
+  });
+
+  it("reset removes the wrapper, so restarting doesn't stack a second one", async () => {
+    const proto = Object.getPrototypeOf(localStorage) as Storage;
+    const wrapped = proto.setItem;
+    __resetForTests();
+    expect(proto.setItem).not.toBe(wrapped);
+    startAutoSave();
+    localStorage.setItem("ade-session", "once");
+    await flushNow();
+    const writes = invoke.mock.calls.filter((c) => c[0] === "state_write");
+    expect(writes).toEqual([["state_write", { entries: { "ade-session": "once" } }]]);
   });
 });

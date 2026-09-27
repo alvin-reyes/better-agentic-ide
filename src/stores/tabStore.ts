@@ -541,12 +541,14 @@ async function saveSession(): Promise<void> {
     const paneData = new Map<string, SavedPane>();
 
     for (const pane of panes) {
+      // Only panes that have been shown have a live terminal. A restored tab
+      // that hasn't been opened yet keeps what it was restored with.
       const buffer = serializeTerminalBuffer(pane.id);
       const cwd = await getPtyCwd(pane.id);
       paneData.set(pane.id, {
         id: pane.id,
-        serializedBuffer: buffer || undefined,
-        savedCwd: cwd || undefined,
+        serializedBuffer: buffer || pane.serializedBuffer || undefined,
+        savedCwd: cwd || pane.savedCwd || pane.initialCwd || undefined,
       });
     }
 
@@ -564,7 +566,11 @@ async function saveSession(): Promise<void> {
     activeTabId: state.activeTabId,
     savedAt: Date.now(),
   };
-  if (savedTabs.length === 0) return;
+  if (savedTabs.length === 0) {
+    // Every tab was closed: don't bring the old ones back next launch.
+    localStorage.removeItem(SESSION_KEY);
+    return;
+  }
 
   let json = JSON.stringify(session);
 
@@ -600,9 +606,8 @@ function loadSession(): boolean {
     if (!session.tabs || session.tabs.length === 0) return false;
 
     // Restore tabs
-    const restoredTabs: Tab[] = session.tabs
-      .filter((saved) => saved.type !== "editor" || saved.editorFilePath)
-      .map((saved) => {
+    const kept = session.tabs.filter((saved) => saved.type !== "editor" || saved.editorFilePath);
+    const restoredTabs: Tab[] = kept.map((saved) => {
         const root = deserializePaneNode(saved.root);
         const allPanes = findAllPanes(root);
         return {
@@ -618,7 +623,8 @@ function loadSession(): boolean {
       });
 
     if (restoredTabs.length > 0) {
-      const activeIdx = session.tabs.findIndex((t) => t.id === session.activeTabId);
+      // Index into the kept tabs, which restoredTabs mirrors one-to-one.
+      const activeIdx = kept.findIndex((t) => t.id === session.activeTabId);
       useTabStore.setState({
         tabs: restoredTabs,
         activeTabId: restoredTabs[Math.max(0, activeIdx)]?.id ?? restoredTabs[0].id,

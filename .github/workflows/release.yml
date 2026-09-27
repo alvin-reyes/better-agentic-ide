@@ -29,6 +29,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # A manual run builds the branch it was started from. If the tag already
+      # exists on another commit, the uploaded installers wouldn't match it.
+      - name: Check an existing tag points at this commit
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git fetch -q --tags origin
+          if TAG_SHA=$(git rev-parse -q --verify "refs/tags/$RELEASE_TAG^{commit}"); then
+            if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::Tag $RELEASE_TAG already exists at $TAG_SHA, but this run would build $GITHUB_SHA. Start the run from the tag, or use a new version."
+              exit 1
+            fi
+          fi
+
       - name: Check tag matches app version
         shell: bash
         run: |
@@ -90,7 +104,7 @@ jobs:
     env:
       # Signing turns on only once the Apple secrets exist; until then macOS
       # builds stay unsigned exactly as before.
-      MAC_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID != '' }}
+      MAC_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
 
     steps:
       - name: Checkout
@@ -140,7 +154,6 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
