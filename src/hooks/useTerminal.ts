@@ -238,7 +238,7 @@ async function createReattachedInstance(
     if (!meta) return true;
     const passthrough = [
       "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", ".", "b",
-      "a", "A", "o", "O", "Enter", "[", "]",
+      "a", "A", "o", "O", "Enter", "[", "]", "{", "}", "B",
       "ArrowLeft", "ArrowRight",
       "1", "2", "3", "4", "5", "6", "7", "8", "9",
     ];
@@ -457,7 +457,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
       "t", "w", "W", "j", "p", "d", "D", "r", "e", "f", ",", ".", "b",
       "a", "A",  // Agent picker (Cmd+Shift+A)
       "o", "O",  // Orchestrator (Cmd+Shift+O)
-      "Enter", "[", "]",
+      "Enter", "[", "]", "{", "}", "B",
       "ArrowLeft", "ArrowRight",  // Pane navigation
       "1", "2", "3", "4", "5", "6", "7", "8", "9",
     ];
