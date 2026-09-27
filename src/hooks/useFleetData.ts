@@ -4,9 +4,13 @@ import {
   useFleetStore,
   buildLanes,
   buildPaneMeta,
+  groupLanesByTerminal,
   type SubagentEvent,
   type PaneInfo,
   type FleetLane,
+  type FleetGroup,
+  type FleetScope,
+  type TerminalTabInfo,
 } from "../stores/fleetStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
@@ -14,31 +18,28 @@ import { useTabStore, findAllPanes } from "../stores/tabStore";
 // ---------------------------------------------------------------------------
 // Watcher ownership
 //
-// The spec requires "one watcher regardless of open views", but this hook runs
-// once per mounted fleet view (the modal and the tab can both be up at once).
-// Ownership therefore lives at module scope behind a refcount rather than in
-// the hook: the Rust watcher starts on 0 -> 1, stops on 1 -> 0, and is torn down
-// and restarted only when the cwd actually changes. The store is reset only on a
-// real cwd change, so a second view mounting no longer wipes the records the
-// first one already received.
+// Several fleet views can be mounted at once (the modal and the tab), and the
+// all-terminals view watches every terminal's folder. Ownership therefore lives
+// at module scope as one refcounted Rust watcher per cwd: a watcher starts on
+// its first holder and stops on its last release. When a folder loses its last
+// holder its records are dropped; re-acquiring replays the backfill, which
+// `applyEvent` dedupes by id, so records survive closing and reopening a view.
 // ---------------------------------------------------------------------------
 
-let watchCwd: string | null = null;
-let watchRefs = 0;
-let watchHandle: Promise<number | null> | null = null;
-
-function startWatch(cwd: string) {
-  const channel = new Channel<SubagentEvent>();
-  channel.onmessage = (ev) => useFleetStore.getState().applyEvent(ev, cwd);
-  watchHandle = invoke<number>("watch_subagents", { cwd, onEvent: channel }).catch(
-    () => null,
-  );
+interface Watch {
+  refs: number;
+  handle: Promise<number | null>;
 }
 
-function stopWatch() {
-  const handle = watchHandle;
-  watchHandle = null;
-  if (!handle) return;
+const watches = new Map<string, Watch>();
+
+function startWatch(cwd: string): Promise<number | null> {
+  const channel = new Channel<SubagentEvent>();
+  channel.onmessage = (ev) => useFleetStore.getState().applyEvent(ev, cwd);
+  return invoke<number>("watch_subagents", { cwd, onEvent: channel }).catch(() => null);
+}
+
+function stopWatch(handle: Promise<number | null>) {
   handle
     .then((id) => {
       if (id !== null) invoke("unwatch_subagents", { id }).catch(() => {});
@@ -49,52 +50,80 @@ function stopWatch() {
 /**
  * Register interest in the sub-agent watcher for `cwd`. Returns a release
  * function; the watcher lives as long as at least one holder has not released.
- * Re-acquiring the same cwd after the count hits zero replays the backfill,
- * which `applyEvent` dedupes by id — so records survive closing and reopening a
- * view.
  */
 export function acquireWatch(cwd: string): () => void {
-  const cwdChanged = watchCwd !== cwd;
-  if (cwdChanged) {
-    stopWatch(); // no-op when nothing is running
-    useFleetStore.getState().reset();
-    watchCwd = cwd;
+  let watch = watches.get(cwd);
+  if (!watch) {
+    watch = { refs: 0, handle: startWatch(cwd) };
+    watches.set(cwd, watch);
   }
-  if (cwdChanged || watchRefs === 0) startWatch(cwd);
-  watchRefs += 1;
+  watch.refs += 1;
 
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    watchRefs -= 1;
-    if (watchRefs === 0) stopWatch();
+    const current = watches.get(cwd);
+    if (!current) return;
+    current.refs -= 1;
+    if (current.refs === 0) {
+      watches.delete(cwd);
+      stopWatch(current.handle);
+      useFleetStore.getState().removeCwd(cwd);
+    }
   };
 }
 
 /** Test seam: drop all watcher state between cases. */
 export function __resetWatchForTests() {
-  watchCwd = null;
-  watchRefs = 0;
-  watchHandle = null;
+  watches.clear();
 }
 
-export function useFleetData(activeCwd: string | null): {
+/**
+ * Hold watchers for exactly `cwds`, diffing on change so a folder present in
+ * both the old and new set keeps its watcher (and records) instead of being
+ * torn down and backfilled again.
+ */
+function useWatchedCwds(cwds: string[]) {
+  const key = [...new Set(cwds)].sort().join("\n");
+  const held = useRef(new Map<string, () => void>());
+
+  useEffect(() => {
+    const want = new Set(key ? key.split("\n") : []);
+    for (const cwd of want) {
+      if (!held.current.has(cwd)) held.current.set(cwd, acquireWatch(cwd));
+    }
+    for (const [cwd, release] of held.current) {
+      if (!want.has(cwd)) {
+        release();
+        held.current.delete(cwd);
+      }
+    }
+  }, [key]);
+
+  useEffect(() => {
+    const map = held.current;
+    return () => {
+      for (const release of map.values()) release();
+      map.clear();
+    };
+  }, []);
+}
+
+/**
+ * Fleet lanes for a view. `scope` "active" covers the active terminal's folder;
+ * "all" watches every open terminal's folder and also returns `groups`, one
+ * per terminal tab.
+ */
+export function useFleetData(activeCwd: string | null, scope: FleetScope = "active"): {
   lanes: FleetLane[];
+  groups: FleetGroup[];
   totalCostCents: number;
   runningCount: number;
 } {
-  const subagents = useFleetStore((s) => s.subagents);
+  const allSubagents = useFleetStore((s) => s.subagents);
   const sessions = useAgentTrackerStore((s) => s.sessions);
   const tabs = useTabStore((s) => s.tabs);
-
-  useEffect(() => {
-    if (!activeCwd) {
-      useFleetStore.getState().reset();
-      return;
-    }
-    return acquireWatch(activeCwd);
-  }, [activeCwd]);
 
   const panes = useMemo<PaneInfo[]>(() => {
     const out: PaneInfo[] = [];
@@ -161,9 +190,44 @@ export function useFleetData(activeCwd: string | null): {
 
   const paneMeta = useMemo(() => buildPaneMeta(panes, liveCwds), [panes, liveCwds]);
 
+  // Only terminal tabs run agents; the other tab types carry a placeholder pane.
+  const terminalTabs = useMemo<TerminalTabInfo[]>(
+    () =>
+      tabs
+        .filter((t) => !t.type || t.type === "terminal")
+        .map((t) => ({ id: t.id, name: t.name, paneIds: findAllPanes(t.root).map((p) => p.id) })),
+    [tabs],
+  );
+
+  const watchedCwds = useMemo(() => {
+    if (scope === "active") return activeCwd ? [activeCwd] : [];
+    const out = new Set<string>();
+    if (activeCwd) out.add(activeCwd);
+    for (const t of terminalTabs) {
+      for (const id of t.paneIds) {
+        const cwd = paneMeta[id]?.cwd;
+        if (cwd) out.add(cwd);
+      }
+    }
+    return [...out];
+  }, [scope, activeCwd, terminalTabs, paneMeta]);
+
+  useWatchedCwds(watchedCwds);
+
+  // The store is shared by every mounted view, so keep only this view's folders.
+  const subagents = useMemo(() => {
+    const watched = new Set(watchedCwds);
+    return allSubagents.filter((s) => watched.has(s.cwd));
+  }, [allSubagents, watchedCwds]);
+
   const lanes = useMemo(
     () => buildLanes(sessions, subagents, paneMeta),
     [sessions, subagents, paneMeta],
+  );
+
+  const groups = useMemo(
+    () => (scope === "all" ? groupLanesByTerminal(lanes, terminalTabs, paneMeta) : []),
+    [scope, lanes, terminalTabs, paneMeta],
   );
 
   const totalCostCents = useMemo(
@@ -175,5 +239,5 @@ export function useFleetData(activeCwd: string | null): {
     [lanes],
   );
 
-  return { lanes, totalCostCents, runningCount };
+  return { lanes, groups, totalCostCents, runningCount };
 }

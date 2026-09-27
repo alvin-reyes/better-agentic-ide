@@ -83,17 +83,32 @@ describe("acquireWatch", () => {
     b();
   });
 
-  it("restarts and resets on an actual cwd change", async () => {
+  it("runs one watcher per distinct cwd at the same time", async () => {
     const a = acquireWatch("/proj");
+    const b = acquireWatch("/other");
     useFleetStore.getState().applyEvent(spawn, "/proj");
+    useFleetStore.getState().applyEvent({ ...spawn, id: "s2" }, "/other");
     await flush();
 
-    const b = acquireWatch("/other");
-    await flush();
-    expect(useFleetStore.getState().subagents).toHaveLength(0);
-    expect(calls("watch_subagents")).toHaveLength(2);
-    expect(calls("unwatch_subagents")).toHaveLength(1);
+    expect(calls("watch_subagents").map((c) => (c[1] as { cwd: string }).cwd))
+      .toEqual(["/proj", "/other"]);
+    expect(calls("unwatch_subagents")).toHaveLength(0);
+    expect(useFleetStore.getState().subagents).toHaveLength(2);
     a();
+    b();
+  });
+
+  it("releasing a cwd stops only its watcher and drops only its records", async () => {
+    const a = acquireWatch("/proj");
+    const b = acquireWatch("/other");
+    useFleetStore.getState().applyEvent(spawn, "/proj");
+    useFleetStore.getState().applyEvent({ ...spawn, id: "s2" }, "/other");
+    await flush();
+
+    a();
+    await flush();
+    expect(calls("unwatch_subagents")).toHaveLength(1);
+    expect(useFleetStore.getState().subagents.map((s) => s.cwd)).toEqual(["/other"]);
     b();
   });
 

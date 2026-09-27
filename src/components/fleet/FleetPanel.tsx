@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import FleetTimeline from "./FleetTimeline";
 import FleetSummary from "./FleetSummary";
+import FleetGroups from "./FleetGroups";
+import FleetScopeToggle from "./FleetScopeToggle";
 import { useFleetData } from "../../hooks/useFleetData";
+import { useFleetStore } from "../../stores/fleetStore";
 
 const MODAL_RANGE_MS = 15 * 60 * 1000;
 
@@ -12,7 +15,8 @@ interface FleetPanelProps {
 }
 
 export default function FleetPanel({ activeCwd, onClose, onExpand }: FleetPanelProps) {
-  const { lanes, totalCostCents, runningCount } = useFleetData(activeCwd);
+  const scope = useFleetStore((s) => s.scope);
+  const { lanes, groups, totalCostCents, runningCount } = useFleetData(activeCwd, scope);
   const [now, setNow] = useState(() => Date.now());
 
   // Advance the live edge only while something is running.
@@ -39,7 +43,12 @@ export default function FleetPanel({ activeCwd, onClose, onExpand }: FleetPanelP
     >
       <div className="subagent-panel" role="dialog" aria-modal="true" aria-labelledby="fleet-panel-title">
         <div className="subagent-panel__header">
-          <span id="fleet-panel-title">Fleet{activeCwd ? "" : " (no active terminal)"}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span id="fleet-panel-title">
+              Fleet{activeCwd || scope === "all" ? "" : " (no active terminal)"}
+            </span>
+            <FleetScopeToggle />
+          </div>
           {/* Both buttons live in one flex box so the header's space-between puts
               the title left and the controls right, instead of centring "↗". */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -64,7 +73,13 @@ export default function FleetPanel({ activeCwd, onClose, onExpand }: FleetPanelP
             explicit scroll container here, lanes past 70vh are silently clipped. */}
         <div style={{ padding: "8px 12px", overflowY: "auto", minHeight: 0 }}>
           <FleetSummary runningCount={runningCount} doneCount={doneCount} totalCostCents={totalCostCents} />
-          <FleetTimeline lanes={visible} from={from} to={now} />
+          {scope === "all" ? (
+            <div style={{ marginTop: "8px" }}>
+              <FleetGroups groups={groups} from={from} to={now} />
+            </div>
+          ) : (
+            <FleetTimeline lanes={visible} from={from} to={now} />
+          )}
         </div>
       </div>
     </div>

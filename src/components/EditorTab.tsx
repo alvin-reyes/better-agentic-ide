@@ -4,6 +4,11 @@ import { useTabStore } from "../stores/tabStore";
 import MonacoWrapper from "./editor/MonacoWrapper";
 import MermaidPreview from "./editor/MermaidPreview";
 import DiagramChat from "./editor/DiagramChat";
+import BinaryView from "./viewer/BinaryView";
+import MarkdownView from "./viewer/MarkdownView";
+import HtmlView from "./viewer/HtmlView";
+import { toolbarButton, toolbarStyle } from "./viewer/shared";
+import { viewerKind, isBinaryKind, hasRenderedView } from "../lib/viewerKind";
 
 interface EditorTabProps {
   tabId: string;
@@ -21,6 +26,11 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isDiagram = isMermaidFile(filePath);
+  const kind = viewerKind(filePath);
+  const binary = isBinaryKind(kind);
+  // Markdown and HTML open rendered; Source switches to the editable text.
+  const [showSource, setShowSource] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const renameTab = useTabStore((s) => s.renameTab);
 
   const [leftWidth, setLeftWidth] = useState(50);
@@ -40,8 +50,13 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
+    // PDFs, .docx and images aren't text: BinaryView reads their bytes itself.
+    if (binary) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     invoke<string>("read_file", { path: filePath })
       .then((text) => {
@@ -57,7 +72,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
       });
 
     return () => { cancelled = true; };
-  }, [filePath]);
+  }, [filePath, binary]);
 
   const save = useCallback(async () => {
     try {
@@ -153,9 +168,49 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
     );
   }
 
-  if (!isDiagram) {
+  if (binary) {
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <div style={toolbarStyle}>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {filePath}
+          </span>
+          <button style={toolbarButton} onClick={() => setReloadKey((k) => k + 1)} title="Reload from disk">
+            Reload
+          </button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <BinaryView path={filePath} reloadKey={reloadKey} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isDiagram) {
+    const rendered = hasRenderedView(kind) && !showSource;
+    return (
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        {hasRenderedView(kind) && (
+          <div style={toolbarStyle}>
+            {(["Rendered", "Source"] as const).map((label) => {
+              const on = (label === "Source") === showSource;
+              return (
+                <button
+                  key={label}
+                  onClick={() => setShowSource(label === "Source")}
+                  style={{
+                    ...toolbarButton,
+                    borderColor: on ? "var(--accent)" : "var(--border)",
+                    color: on ? "var(--accent)" : "var(--text-muted)",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            {isDirty && <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>● unsaved</span>}
+          </div>
+        )}
         {error && (
           <div style={{
             padding: "4px 12px", backgroundColor: "rgba(239,68,68,0.1)",
@@ -165,13 +220,18 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
             {error}
           </div>
         )}
-        <div style={{ flex: 1 }}>
-          <MonacoWrapper
-            filePath={filePath}
-            content={content}
-            onChange={setContent}
-            onSave={save}
-          />
+        <div style={{ flex: 1, minHeight: 0 }}>
+          {rendered ? (
+            // Renders the live buffer, so unsaved Source edits show up here too.
+            kind === "markdown" ? <MarkdownView content={content} /> : <HtmlView content={content} />
+          ) : (
+            <MonacoWrapper
+              filePath={filePath}
+              content={content}
+              onChange={setContent}
+              onSave={save}
+            />
+          )}
         </div>
       </div>
     );
