@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { buildLanes, buildPaneMeta, useFleetStore,
+import { buildLanes, buildPaneMeta, useFleetStore, withUsage,
          type SubagentRecord, type PaneMeta, type PaneInfo } from "../fleetStore";
 import type { AgentSession } from "../agentTrackerStore";
+import type { SessionUsage } from "../../lib/tokenUsage";
 
 function session(over: Partial<AgentSession> = {}): AgentSession {
   return {
     paneId: "p1", agentName: "claude", agentIcon: "🤖", provider: "claude",
-    startTime: 1000, endTime: null, status: "running",
-    estimatedInputTokens: 0, estimatedOutputTokens: 0, ...over,
+    startTime: 1000, endTime: null, status: "running", ...over,
   };
 }
 function sub(over: Partial<SubagentRecord> = {}): SubagentRecord {
@@ -50,16 +50,9 @@ describe("buildLanes", () => {
     expect(lanes.find((l) => l.kind === "subagent")!.parentId).toBeNull();
   });
 
-  it("carries cost and tokens on agent lanes only", () => {
-    const s = session({ status: "completed", endTime: 5000,
-                        estimatedInputTokens: 1_000_000, estimatedOutputTokens: 1_000_000 });
-    const lanes = buildLanes([s], [sub()], meta);
-    const agent = lanes.find((l) => l.kind === "agent")!;
-    const child = lanes.find((l) => l.kind === "subagent")!;
-    expect(agent.tokens).toEqual({ input: 1_000_000, output: 1_000_000 });
-    expect(agent.costCents).toBeCloseTo(1800, 0); // 300 in + 1500 out per 1M
-    expect(child.costCents).toBeNull();
-    expect(child.tokens).toBeNull();
+  it("leaves cost empty until real usage is attached", () => {
+    const lanes = buildLanes([session()], [sub()], meta);
+    expect(lanes.every((l) => l.costCents === null && l.tokens === null)).toBe(true);
   });
 
   it("sorts lanes by start time", () => {
@@ -136,5 +129,33 @@ describe("useFleetStore", () => {
     useFleetStore.getState().applyEvent(
       { kind: "Complete", id: "nope", finished_at: "2026-08-07T05:31:00.000Z" }, "/proj");
     expect(useFleetStore.getState().subagents).toHaveLength(0);
+  });
+});
+
+describe("withUsage", () => {
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const usage = (id: string, firstAt: number, output = 1_000_000): SessionUsage => ({
+    id, cwd: "/proj", title: null, firstAt: iso(firstAt), lastAt: iso(firstAt), subagentRequests: 0,
+    contextTokens: 0, peakContextTokens: 0, model: "claude-sonnet-5", compactions: 0,
+    models: [{ model: "claude-sonnet-5", requests: 1, input: 1000, output, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 9000 }],
+  });
+
+  it("puts a session's real cost on the lane it started in", () => {
+    const lanes = buildLanes([session({ startTime: 10_000, endTime: 50_000, status: "completed" })], [], meta);
+    const [lane] = withUsage(lanes, { "/proj": [usage("a", 12_000), usage("later", 90_000)] });
+    // Sonnet 5: $10 per 1M output, $2 per 1M input, cache reads at 0.1x.
+    expect(lane.costCents).toBeCloseTo((10 + 1000 * 2e-6 + 9000 * 0.2e-6) * 100, 3);
+    expect(lane.tokens).toEqual({ input: 10_000, output: 1_000_000 });
+  });
+
+  it("skips sessions it can't pin to one lane, and other providers", () => {
+    const twoPanes: Record<string, PaneMeta> = {
+      p1: { tabId: "t1", tabName: "ide", cwd: "/proj" },
+      p2: { tabId: "t1", tabName: "ide", cwd: "/proj" },
+    };
+    const overlapping = buildLanes([session({ paneId: "p1" }), session({ paneId: "p2" })], [], twoPanes);
+    expect(withUsage(overlapping, { "/proj": [usage("a", 2000)] }).every((l) => l.costCents === null)).toBe(true);
+    const codex = buildLanes([session({ provider: "codex" })], [], meta);
+    expect(withUsage(codex, { "/proj": [usage("a", 2000)] })[0].costCents).toBeNull();
   });
 });

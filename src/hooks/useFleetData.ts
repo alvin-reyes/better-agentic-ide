@@ -3,6 +3,7 @@ import { invoke, Channel } from "@tauri-apps/api/core";
 import {
   useFleetStore,
   buildLanes,
+  withUsage,
   buildPaneMeta,
   groupLanesByTerminal,
   type SubagentEvent,
@@ -14,6 +15,7 @@ import {
 } from "../stores/fleetStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
+import type { SessionUsage, UsageReport } from "../lib/tokenUsage";
 
 // ---------------------------------------------------------------------------
 // Watcher ownership
@@ -220,10 +222,12 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
     return allSubagents.filter((s) => watched.has(s.cwd));
   }, [allSubagents, watchedCwds]);
 
-  const lanes = useMemo(
+  const baseLanes = useMemo(
     () => buildLanes(sessions, subagents, paneMeta),
     [sessions, subagents, paneMeta],
   );
+  const usage = useLaneUsage(baseLanes);
+  const lanes = useMemo(() => withUsage(baseLanes, usage), [baseLanes, usage]);
 
   const groups = useMemo(
     () => (scope === "all" ? groupLanesByTerminal(lanes, terminalTabs, paneMeta) : []),
@@ -240,4 +244,48 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
   );
 
   return { lanes, groups, totalCostCents, runningCount };
+}
+
+const USAGE_REFRESH_MS = 20_000;
+
+/**
+ * Claude Code sessions per folder since the earliest Claude lane there started,
+ * refreshed while any of them is running.
+ */
+function useLaneUsage(lanes: FleetLane[]): Record<string, SessionUsage[]> {
+  const [usage, setUsage] = useState<Record<string, SessionUsage[]>>({});
+  const since = new Map<string, number>();
+  let running = false;
+  for (const l of lanes) {
+    if (l.kind !== "agent" || l.provider !== "claude" || !l.cwd) continue;
+    since.set(l.cwd, Math.min(since.get(l.cwd) ?? Infinity, l.startTime));
+    if (l.status === "running") running = true;
+  }
+  const key = [...since].map(([cwd, t]) => `${cwd}@${t}`).sort().join("\n") + (running ? "|live" : "");
+
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    const load = () => {
+      Promise.all(
+        [...since].map(([cwd, t]) =>
+          invoke<UsageReport>("token_usage", { cwd, since: new Date(t - 60_000).toISOString(), until: null })
+            .then((r) => [cwd, r.sessions] as const)
+            .catch(() => [cwd, []] as const),
+        ),
+      ).then((entries) => {
+        if (!cancelled) setUsage(Object.fromEntries(entries));
+      });
+    };
+    load();
+    const timer = running ? setInterval(load, USAGE_REFRESH_MS) : undefined;
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+    // `since` and `running` are captured in `key`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return usage;
 }
