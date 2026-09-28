@@ -46,10 +46,10 @@ Describe the problem in the picker's search box — "tokenomics for a governance
 
 Claude Code agents spawn sub-agents — Explore, Plan, code reviewers — that normally run out of sight. ADE reads Claude Code's transcripts and shows each one as it starts and finishes.
 
-- {% include key.html mac="⌘." other="Ctrl+Shift+." %} opens the fleet panel for the active terminal. Switch to **All terminals** to see every terminal at once, each with its folder, running count and estimated cost; *Go to tab* jumps there.
+- {% include key.html mac="⌘." other="Ctrl+Shift+." %} opens the fleet panel for the active terminal. Switch to **All terminals** to see every terminal at once, each with its folder, running count and cost; *Go to tab* jumps there.
 - *Fleet: All terminals* in the command palette opens the same view as a full tab.
 - The **timeline** shows swimlanes for the last 5 minutes, 15 minutes, hour or all time. Click an agent to jump to its pane.
-- **Cost** is estimated from token counts for Claude, Codex and Gemini sessions.
+- **Cost** is real: Claude agents' token usage comes from Claude Code's transcripts and is priced at API list prices (see [Tokens & cost]({{ '/guide/tokens/' | relative_url }})). If two agents run in the same folder at the same time, their usage can't be told apart and is left out. Codex, Gemini and Ollama sessions show no cost.
 
 ![Fleet timeline with sub-agents]({{ '/assets/img/fleet.webp' | relative_url }})
 

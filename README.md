@@ -95,7 +95,7 @@ Grab the installer for your platform from the [latest release](https://github.co
 - **One terminal or all of them** — `Cmd+.` opens the fleet panel; toggle between *This terminal* and *All terminals*. *Fleet: All terminals* in the command palette opens it as a full tab.
 - **All terminals** — a section per terminal tab showing its folder, its agents and the Claude Code sub-agents they spawned, with running count and cost per terminal; *Go to tab* jumps straight there
 - **Timeline** — swimlanes of every agent and sub-agent over the last 5 min / 15 min / 1 h / all time; click an agent to jump to its pane
-- **Cost tracking** — estimated tokens and cost per session for Claude, Codex and Gemini, plus session history
+- **Cost tracking** — real tokens and cost for Claude agents, read from Claude Code's transcripts (see the Tokens panel), plus session history
 - **Notifications** — a system notification and in-app toast when an agent finishes
 
 ### Orchestrator
@@ -115,6 +115,12 @@ Grab the installer for your platform from the [latest release](https://github.co
 - **ABI viewer** — compiled artifacts open as read/write functions, events and errors with their selectors (keccak-256, click to copy); Anchor IDLs show instructions and accounts
 - **Web3 agents** — Smart Contract Engineer, Smart Contract Auditor, Gas Optimizer and Solana/Anchor Engineer in the agent picker
 - Solidity syntax highlighting; compiler error locations are clickable
+
+### Tokens & Cost
+- **Tokens panel** (`Cmd+Shift+G`) — real usage and cost from Claude Code transcripts (sub-agents included) for this folder or all projects: spend at API prices, what prompt caching saved, the cache hit rate, and usage by model
+- **Context meters** — how full each session's context is; one click sends `/compact` to the agent
+- **Savings tips** from your own usage: large contexts, low cache hit rates, sub-agents on the top-tier model, long outputs, big `CLAUDE.md` files and many MCP servers
+- **Context diet** — finds `node_modules`, build output and large lockfiles in the project and adds read-deny rules to `.claude/settings.json`
 
 ### Browser Tab
 - **Open Browser Tab** from the command palette to view a local dev server (defaults to `http://localhost:3000`) inside ADE
@@ -163,6 +169,7 @@ On Linux and Windows, app shortcuts use `Ctrl+Shift` where macOS uses `⌘`, and
 | `⌘.` | `Ctrl+Shift+.` | Fleet view |
 | `⌘⇧O` | `Ctrl+Alt+Shift+O` | Orchestrator |
 | `⌘⇧K` | `Ctrl+Alt+Shift+K` | Smart contracts panel |
+| `⌘⇧G` | `Ctrl+Alt+Shift+G` | Tokens panel |
 | `⌘,` | `Ctrl+Shift+,` | Settings |
 | `Esc` | `Esc` | Close open panels and focus the terminal |
 
