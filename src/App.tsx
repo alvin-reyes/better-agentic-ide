@@ -21,6 +21,7 @@ const FleetPanel = lazy(() => import("./components/fleet/FleetPanel"));
 const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
 const BmadPanel = lazy(() => import("./components/BmadPanel"));
 const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
+const TokensPanel = lazy(() => import("./components/TokensPanel"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 import BmadInitBanner from "./components/BmadInitBanner";
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
@@ -49,6 +50,7 @@ export default function App() {
   const [fleetOpen, setFleetOpen] = useState(false);
   const [bmadOpen, setBmadOpen] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
+  const [tokensOpen, setTokensOpen] = useState(false);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   // For event handlers registered once.
   const activeCwdRef = useRef<string | null>(null);
@@ -191,6 +193,12 @@ export default function App() {
     window.addEventListener("toggle-bmad", handler);
     return () => window.removeEventListener("toggle-bmad", handler);
   }, []);
+
+  const toggleTokens = useCallback(() => setTokensOpen((prev) => !prev), []);
+  useEffect(() => {
+    window.addEventListener("toggle-tokens", toggleTokens);
+    return () => window.removeEventListener("toggle-tokens", toggleTokens);
+  }, [toggleTokens]);
 
   // Smart contracts: the panel, and quick actions from the command palette.
   const toggleContracts = useCallback(() => setContractsOpen((prev) => !prev), []);
@@ -426,6 +434,7 @@ export default function App() {
     toggleFileBrowser,
     openOrchestrator,
     toggleContracts,
+    toggleTokens,
     requestCloseTab,
     requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
@@ -523,6 +532,7 @@ export default function App() {
         {contractsOpen && (
           <ContractsPanel cwd={activeCwd} onClose={() => setContractsOpen(false)} />
         )}
+        {tokensOpen && <TokensPanel cwd={activeCwd} onClose={() => setTokensOpen(false)} />}
         {recordingPlayerOpen && (
           <RecordingPlayer onClose={() => setRecordingPlayerOpen(false)} />
         )}

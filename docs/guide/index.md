@@ -67,6 +67,7 @@ The fleet view reads Claude Code's own transcripts, so Claude Code gets the most
 ## Where to go next
 
 - [Smart contracts]({{ '/guide/contracts/' | relative_url }}) — Foundry, Hardhat and Anchor tooling
+- [Tokens & cost]({{ '/guide/tokens/' | relative_url }}) — what sessions cost and how to spend less
 - [Terminal]({{ '/guide/terminal/' | relative_url }}) — tabs, panes, search and clickable files
 - [Scratchpad]({{ '/guide/scratchpad/' | relative_url }}) — prompt chaining, history and voice
 - [Auto-save & sync]({{ '/guide/sync/' | relative_url }}) — keep your setup on every machine
