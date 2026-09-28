@@ -10,6 +10,8 @@
   url: /guide/agents/
 - title: Smart contracts
   url: /guide/contracts/
+- title: Tokens & cost
+  url: /guide/tokens/
 - title: Auto-save & sync
   url: /guide/sync/
 - title: Keyboard shortcuts
