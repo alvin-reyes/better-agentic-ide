@@ -30,6 +30,7 @@ const shortcuts = [
   { keys: L("settings"), action: "Settings" },
   { keys: L("orchestrator"), action: "Orchestrator" },
   { keys: L("contracts"), action: "Contracts" },
+  { keys: L("tokens"), action: "Tokens" },
   { keys: "Esc", action: "Close panel" },
 ];
 

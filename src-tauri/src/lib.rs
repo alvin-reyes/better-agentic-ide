@@ -4,6 +4,7 @@ mod pty;
 mod state;
 mod subagent;
 mod sync;
+mod usage;
 mod watcher;
 
 #[derive(serde::Serialize)]
@@ -400,6 +401,9 @@ pub fn run() {
             contracts::contracts_detect,
             contracts::contracts_tools,
             contracts::contracts_exec,
+            usage::token_usage,
+            usage::context_audit,
+            usage::context_deny,
             list_md_files,
             list_directory,
             bmad::bmad_status,
