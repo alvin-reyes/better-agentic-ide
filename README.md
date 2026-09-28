@@ -95,7 +95,7 @@ Grab the installer for your platform from the [latest release](https://github.co
 - **One terminal or all of them** — `Cmd+.` opens the fleet panel; toggle between *This terminal* and *All terminals*. *Fleet: All terminals* in the command palette opens it as a full tab.
 - **All terminals** — a section per terminal tab showing its folder, its agents and the Claude Code sub-agents they spawned, with running count and cost per terminal; *Go to tab* jumps straight there
 - **Timeline** — swimlanes of every agent and sub-agent over the last 5 min / 15 min / 1 h / all time; click an agent to jump to its pane
-- **Cost tracking** — estimated tokens and cost per session for Claude, Codex and Gemini, plus session history
+- **Cost tracking** — real tokens and cost for Claude agents, read from Claude Code's transcripts (see the Tokens panel), plus session history
 - **Notifications** — a system notification and in-app toast when an agent finishes
 
 ### Orchestrator

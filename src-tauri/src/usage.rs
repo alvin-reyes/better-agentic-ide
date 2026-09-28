@@ -158,7 +158,14 @@ struct Scan {
     requests: u64,
 }
 
-fn scan_file(path: &Path, since: Option<&str>) -> Option<Scan> {
+/// Responses counted: at or after `since` and at or before `until` (ISO-8601).
+#[derive(Clone, Copy, Default)]
+struct Window<'a> {
+    since: Option<&'a str>,
+    until: Option<&'a str>,
+}
+
+fn scan_file(path: &Path, w: Window) -> Option<Scan> {
     let file = std::fs::File::open(path).ok()?;
     let mut seen = HashSet::new();
     let mut s = Scan {
@@ -193,9 +200,9 @@ fn scan_file(path: &Path, since: Option<&str>) -> Option<Scan> {
         s.last_context = context;
         s.peak_context = s.peak_context.max(context);
         s.last_model = Some(e.model.clone());
-        if let (Some(since), Some(ts)) = (since, e.timestamp.as_deref()) {
+        if let Some(ts) = e.timestamp.as_deref() {
             // ISO-8601 UTC timestamps compare correctly as text.
-            if ts < since {
+            if w.since.is_some_and(|x| ts < x) || w.until.is_some_and(|x| ts > x) {
                 continue;
             }
         }
@@ -230,7 +237,7 @@ fn modified_since(path: &Path, cutoff: Option<SystemTime>) -> bool {
 }
 
 /// Sessions in one Claude Code project folder, newest activity first.
-fn scan_project(dir: &Path, since: Option<&str>, cutoff: Option<SystemTime>, files: &mut usize) -> Vec<SessionUsage> {
+fn scan_project(dir: &Path, w: Window, cutoff: Option<SystemTime>, files: &mut usize) -> Vec<SessionUsage> {
     let mut out = Vec::new();
     for main in jsonl_in(dir) {
         let id = main.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
@@ -239,13 +246,13 @@ fn scan_project(dir: &Path, since: Option<&str>, cutoff: Option<SystemTime>, fil
             continue;
         }
         *files += 1;
-        let Some(m) = scan_file(&main, since) else { continue };
+        let Some(m) = scan_file(&main, w) else { continue };
         let mut by_model = m.by_model;
         let mut sub_requests = 0;
         let mut last_at = m.last_at.clone();
         for p in subs {
             *files += 1;
-            if let Some(s) = scan_file(&p, since) {
+            if let Some(s) = scan_file(&p, w) {
                 sub_requests += s.requests;
                 for (k, u) in s.by_model {
                     by_model.entry(k).or_insert_with(|| ModelUsage { model: u.model.clone(), ..Default::default() }).add(&u);
@@ -280,9 +287,9 @@ fn claude_dir() -> Option<PathBuf> {
 }
 
 /// Usage for the Claude Code sessions run in `cwd` (or every project when
-/// `cwd` is None), counting responses at or after `since` (ISO-8601).
+/// `cwd` is None), counting responses between `since` and `until` (ISO-8601).
 #[tauri::command(async)]
-pub fn token_usage(cwd: Option<String>, since: Option<String>) -> Result<UsageReport, String> {
+pub fn token_usage(cwd: Option<String>, since: Option<String>, until: Option<String>) -> Result<UsageReport, String> {
     let home = std::env::var_os("HOME").map(PathBuf::from).ok_or("HOME is not set")?;
     let cutoff = since.as_deref().and_then(iso_to_system_time);
     let mut report = UsageReport::default();
@@ -293,7 +300,7 @@ pub fn token_usage(cwd: Option<String>, since: Option<String>) -> Result<UsageRe
             .unwrap_or_default(),
     };
     for d in dirs {
-        report.sessions.extend(scan_project(&d, since.as_deref(), cutoff, &mut report.files_scanned));
+        report.sessions.extend(scan_project(&d, Window { since: since.as_deref(), until: until.as_deref() }, cutoff, &mut report.files_scanned));
     }
     report.sessions.sort_by(|a, b| b.last_at.cmp(&a.last_at));
     Ok(report)
@@ -547,7 +554,7 @@ mod tests {
         std::fs::create_dir_all(d.join("sess").join("subagents")).unwrap();
         std::fs::write(d.join("sess").join("subagents").join("agent-1.jsonl"), SUB).unwrap();
         let mut files = 0;
-        let s = &scan_project(&d, None, None, &mut files)[0];
+        let s = &scan_project(&d, Window::default(), None, &mut files)[0];
         assert_eq!(files, 2);
         assert_eq!(s.title.as_deref(), Some("Add a token savings panel"));
         assert_eq!(s.cwd.as_deref(), Some("/p"));
@@ -568,11 +575,15 @@ mod tests {
         let d = tmp("since");
         std::fs::write(d.join("s.jsonl"), [A1, A2].join("\n")).unwrap();
         let mut files = 0;
-        let s = &scan_project(&d, Some("2026-09-28T00:00:00.000Z"), None, &mut files)[0];
+        let w = Window { since: Some("2026-09-28T00:00:00.000Z"), until: None };
+        let s = &scan_project(&d, w, None, &mut files)[0];
         assert_eq!(s.models[0].requests, 1);
         assert_eq!(s.models[0].output, 80);
         // The context size is the latest request's, whatever the window.
         assert_eq!(s.context_tokens, 6203);
+        let w = Window { since: None, until: Some("2026-09-27T23:59:59.999Z") };
+        let s = &scan_project(&d, w, None, &mut files)[0];
+        assert_eq!((s.models[0].requests, s.models[0].output), (1, 50));
     }
 
     #[test]
