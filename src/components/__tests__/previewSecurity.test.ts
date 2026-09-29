@@ -1,7 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { renderMarkdown } from "../PreviewPanel";
+import { sanitizeHtml } from "../../lib/sanitizeHtml";
+import { markdownToHtml } from "../../lib/markdown";
+
+/**
+ * The pipeline PreviewPanel actually ships: MarkdownView renders every
+ * document as sanitizeHtml(markdownToHtml(...)). PreviewPanel's own
+ * hand-rolled escaper was retired in favour of it, so the invariants below
+ * are asserted against the renderer that reaches the DOM.
+ */
+function render(md: string): string {
+  return sanitizeHtml(markdownToHtml(md));
+}
 
 /**
  * The preview panel renders untrusted files — agent output, a README from a
@@ -37,86 +48,89 @@ function eventHandlerAttributes(host: HTMLElement): string[] {
   return found;
 }
 
-describe("renderMarkdown escapes untrusted input", () => {
-  it("neutralizes a raw img onerror payload", () => {
-    const host = parse(renderMarkdown('<img src=x onerror="alert(1)">'));
-    expect(host.querySelector("img")).toBe(null);
+describe("the preview renderer neutralizes untrusted input", () => {
+  it("strips an img onerror payload but may keep the image", () => {
+    const host = parse(render('<img src=x onerror="alert(1)">'));
+    expect(eventHandlerAttributes(host)).toEqual([]);
+    expect(host.querySelector("img")?.getAttribute("onerror") ?? null).toBe(null);
+  });
+
+  it("strips an svg onload payload", () => {
+    const host = parse(render("<svg onload=alert(1)></svg>"));
     expect(eventHandlerAttributes(host)).toEqual([]);
   });
 
-  it("neutralizes a raw svg onload payload", () => {
-    const host = parse(renderMarkdown("<svg onload=alert(1)></svg>"));
-    expect(host.querySelector("svg")).toBe(null);
-    expect(eventHandlerAttributes(host)).toEqual([]);
-  });
-
-  it("neutralizes a script tag", () => {
-    const html = renderMarkdown("<script>alert(1)</script>");
-    expect(html.includes("<script")).toBe(false);
+  it("removes a script tag", () => {
+    const host = parse(render("<script>alert(1)</script>"));
+    expect(host.querySelector("script")).toBe(null);
   });
 
   it("closes attribute breakout through a link target", () => {
-    const host = parse(renderMarkdown('[click](" onmouseover="alert(1))'));
+    const host = parse(render('[click](" onmouseover="alert(1))'));
     expect(eventHandlerAttributes(host)).toEqual([]);
   });
 
   it("closes attribute breakout through a link label", () => {
-    const host = parse(
-      renderMarkdown("[<img src=x onerror=alert(1)>](https://example.com)")
-    );
-    expect(host.querySelector("img")).toBe(null);
+    const host = parse(render("[<img src=x onerror=alert(1)>](https://example.com)"));
     expect(eventHandlerAttributes(host)).toEqual([]);
   });
 
   it("refuses a javascript: URL", () => {
-    const html = renderMarkdown("[click](javascript:alert(1))");
-    expect(html.toLowerCase().includes("javascript:")).toBe(false);
+    const host = parse(render("[click](javascript:alert(1))"));
+    const hrefs = Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href") ?? "");
+    expect(hrefs.some((h) => /^\s*javascript:/i.test(h))).toBe(false);
   });
 
-  it("refuses a data: URL", () => {
-    const html = renderMarkdown("[click](data:text/html,<script>alert(1)</script>)");
-    expect(html.toLowerCase().includes("data:text/html")).toBe(false);
+  it("refuses a data: URL that carries markup", () => {
+    const host = parse(render("[click](data:text/html,<script>alert(1)</script>)"));
+    const hrefs = Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href") ?? "");
+    expect(hrefs.some((h) => /^\s*data:text\/html/i.test(h))).toBe(false);
+    expect(host.querySelector("script")).toBe(null);
   });
 
-  it("escapes the single quote, which attribute payloads use", () => {
-    const html = renderMarkdown("it's <b>bold</b>");
-    expect(html.includes("<b>")).toBe(false);
-    expect(html.includes("&#39;")).toBe(true);
+  it("does not emit raw HTML from inside inline code", () => {
+    const host = parse(render("`<b>not bold</b>`"));
+    const code = host.querySelector("code");
+    expect(code?.querySelector("b") ?? null).toBe(null);
+    expect(code?.textContent).toContain("<b>not bold</b>");
   });
 
-  it("escapes raw HTML inside inline code rather than emitting it", () => {
-    const html = renderMarkdown("`<b>not bold</b>`");
-    expect(html.includes("<b>")).toBe(false);
-    expect(html.includes("&lt;b&gt;")).toBe(true);
+  it("does not emit raw HTML from inside a fenced block", () => {
+    const host = parse(render("```\n<b>x</b>\n```"));
+    const code = host.querySelector("pre code");
+    expect(code?.querySelector("b") ?? null).toBe(null);
+    expect(code?.textContent).toContain("<b>x</b>");
   });
 
-  it("escapes fenced code content exactly once", () => {
-    const html = renderMarkdown("```\n<b>x</b>\n```");
-    expect(html.includes("&lt;b&gt;")).toBe(true);
-    expect(html.includes("&amp;lt;")).toBe(false);
+  it("drops embedding tags that could load remote content", () => {
+    const host = parse(render('<iframe src="https://evil.test"></iframe><object data="x"></object>'));
+    expect(host.querySelector("iframe")).toBe(null);
+    expect(host.querySelector("object")).toBe(null);
   });
 });
 
-describe("renderMarkdown still renders markdown", () => {
+describe("the preview renderer still renders markdown", () => {
   it("renders bold, italic and headings", () => {
-    expect(renderMarkdown("**bold**").includes("<strong>bold</strong>")).toBe(true);
-    expect(renderMarkdown("*italic*").includes("<em>italic</em>")).toBe(true);
-    expect(renderMarkdown("# Title").includes("<h1")).toBe(true);
+    expect(parse(render("**bold**")).querySelector("strong")?.textContent).toBe("bold");
+    expect(parse(render("*italic*")).querySelector("em")?.textContent).toBe("italic");
+    expect(parse(render("# Title")).querySelector("h1")?.textContent).toBe("Title");
   });
 
   it("renders an http link with its href intact", () => {
-    const html = renderMarkdown("[Example](https://example.com/a?b=1)");
-    expect(html.includes('href="https://example.com/a?b=1"')).toBe(true);
-    expect(html.includes(">Example</a>")).toBe(true);
+    const a = parse(render("[Example](https://example.com/a?b=1)")).querySelector("a");
+    expect(a?.getAttribute("href")).toBe("https://example.com/a?b=1");
+    expect(a?.textContent).toBe("Example");
   });
 
   it("renders a relative link", () => {
-    expect(renderMarkdown("[doc](./README.md)").includes('href="./README.md"')).toBe(true);
+    const a = parse(render("[doc](./README.md)")).querySelector("a");
+    expect(a?.getAttribute("href")).toBe("./README.md");
   });
 
   it("renders list items and code fences", () => {
-    expect(renderMarkdown("- one\n- two").includes("<li")).toBe(true);
-    expect(renderMarkdown("```js\nconst a = 1;\n```").includes("language-js")).toBe(true);
+    expect(parse(render("- one\n- two")).querySelectorAll("li").length).toBe(2);
+    const code = parse(render("```js\nconst a = 1;\n```")).querySelector("pre code");
+    expect(code?.className).toContain("language-js");
   });
 });
 
