@@ -269,7 +269,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [sent, setSent] = useState(false);
   const tokens = useMemo(() => estimateTokens(text), [text]);
   // A long or noisy paste that compacting would shrink: offered, never applied silently.
-  const [pasteOffer, setPasteOffer] = useState<{ original: string; result: CompactResult } | null>(null);
+  const [pasteOffer, setPasteOffer] = useState<{ original: string; at: number; result: CompactResult } | null>(null);
   // Drop the offer once the pasted text is gone (sent, cleared or edited away).
   useEffect(() => {
     if (pasteOffer && !text.includes(pasteOffer.original)) setPasteOffer(null);
@@ -492,7 +492,12 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     const pasted = clipboardData.getData("text/plain");
     if (estimateTokens(pasted) >= COMPACT_MIN_TOKENS || /\x1b\[|\r(?!\n)/.test(pasted)) {
       const result = compactText(pasted);
-      setPasteOffer(result.after <= result.before * 0.8 ? { original: pasted, result } : null);
+      if (result.after > result.before * 0.8) return;
+      // The textarea stores line breaks as \n; match what it will hold.
+      const original = pasted.replace(/\r\n?/g, "\n");
+      const at = (e.currentTarget as HTMLTextAreaElement).selectionStart;
+      // Offer once the browser has inserted the paste and onChange has run.
+      setTimeout(() => setPasteOffer({ original, at, result }), 0);
     }
   }, [saveImageBlob, pasteImageFromClipboard]);
 
@@ -969,8 +974,12 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             <button
               className="compact-offer__apply"
               onClick={() => {
-                const { original, result } = pasteOffer;
-                setText((t) => (t.includes(original) ? t.replace(original, result.text) : t));
+                const { original, at, result } = pasteOffer;
+                setText((t) => {
+                  // Where it was pasted; failing that (the draft was edited), its first copy.
+                  const i = t.startsWith(original, at) ? at : t.indexOf(original);
+                  return i < 0 ? t : t.slice(0, i) + result.text + t.slice(i + original.length);
+                });
                 setPasteOffer(null);
               }}
             >

@@ -130,7 +130,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
     <div class="feature flip">
       <div class="feature-copy">
         <h3><span class="step">4</span>See the whole fleet</h3>
-        <p>ADE follows Claude Code's own transcripts, so every sub-agent — Explore, Plan, reviewers — shows up on a timeline as it starts and finishes, per terminal or across all of them, with running counts and estimated cost.</p>
+        <p>ADE follows Claude Code's own transcripts, so every sub-agent — Explore, Plan, reviewers — shows up on a timeline as it starts and finishes, per terminal or across all of them, with running counts and real cost from Claude Code's usage records.</p>
         <ul class="checks">
           <li><strong>Swimlanes</strong> for 5 min, 15 min, 1 hour or all time</li>
           <li><strong>Jump</strong> straight to the pane an agent runs in</li>
@@ -138,6 +138,38 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
       </div>
       <div class="frame"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with Explore, Plan, general-purpose and code-reviewer sub-agents"></div>
     </div>
+  </div>
+</section>
+
+<section class="section" id="tokens">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Tokens &amp; cost</span>
+      <h2>Know what your agents cost. Spend less of it.</h2>
+      <p>ADE reads the usage Claude Code records for every request, prices it by model, and turns what it finds into savings you can apply in a click.</p>
+    </div>
+
+    <div class="feature">
+      <div class="feature-copy">
+        <h3>Real numbers, not estimates</h3>
+        <p>Open the Tokens panel with {% include key.html mac="⌘⇧G" other="Ctrl+Alt+Shift+G" %} to see spend at API prices, what prompt caching saved, the cache hit rate and usage by model. Every session gets a context meter, for this folder or all projects.</p>
+        <ul class="checks">
+          <li><strong>Context guard</strong> warns when a session passes 60% of its window and types <code>/compact</code> for you to send</li>
+          <li><strong>Compact paste</strong> shrinks noisy logs before they reach the agent: colors, progress bars and repeats go, errors stay</li>
+          <li><strong>One-click Claude Code settings</strong>: cap Bash output, run sub-agents on Haiku, compact earlier, plan with <code>opusplan</code></li>
+          <li><strong>Context diet</strong> keeps agents out of <code>node_modules</code>, build output and lockfiles</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, tips, sessions with context meters and usage by model"></div>
+    </div>
+
+    <div class="savings" role="list" aria-label="Savings measured on one real Claude Code session">
+      <div role="listitem"><b>−64%</b><span>sub-agent cost with the Haiku preset ($12.77 → $4.56)</span></div>
+      <div role="listitem"><b>6,500 → 26</b><span>tokens for a noisy 900-line install log after compact paste</span></div>
+      <div role="listitem"><b>~5,500</b><span>fewer tokens per long command with the 8,000-character Bash cap</span></div>
+      <div role="listitem"><b>98%</b><span>of prompt tokens served from cache, shown so you can keep it there</span></div>
+    </div>
+    <p class="savings-note">Measured on one real session of about 1,000 requests at Opus 5.5 API prices. Your numbers depend on how you work, and the Tokens panel shows your own.</p>
   </div>
 </section>
 

@@ -1,27 +1,34 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
-import { useTabStore } from "../stores/tabStore";
-import { contextShare, overThreshold, fmtTokens, type UsageReport } from "../lib/tokenUsage";
-import { sendToActiveTerminal } from "../lib/terminalCommands";
-import { hasActiveProcess, isPaneActive } from "./useTerminal";
+import { contextWindow, fmtTokens } from "../lib/tokenUsage";
 
 const CHECK_EVERY_MS = 30_000;
 
 export interface GuardToast {
   title: string;
   body: string;
+  /** Typed into the active terminal for review; never run. */
   action?: { label: string; command: string };
 }
 
+interface LatestContext {
+  sessionId: string;
+  model: string;
+  contextTokens: number;
+  at: string | null;
+}
+
 /**
- * Watch the active terminal's Claude Code session and act once its context
- * passes the threshold: offer /compact, or send it when the agent is idle.
- * Each session is handled once until its context drops back below.
+ * Watch the newest Claude Code session in the active terminal's folder and
+ * warn once its context passes the threshold. Each session warns once until
+ * its context drops back below. Compacting is left to the user (or to Claude
+ * Code's own auto-compact setting): the transcript can't say which terminal
+ * a session runs in, or whether it's waiting on a prompt.
  */
 export function useContextGuard(cwd: string | null, notify: (t: GuardToast) => void) {
   const guard = useSettingsStore((s) => s.contextGuard);
-  const handled = useRef(new Set<string>());
+  const warned = useRef(new Set<string>());
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
 
@@ -30,31 +37,20 @@ export function useContextGuard(cwd: string | null, notify: (t: GuardToast) => v
     let cancelled = false;
 
     const check = async () => {
-      const since = new Date(Date.now() - 6 * 3600_000).toISOString();
-      const report = await invoke<UsageReport>("token_usage", { cwd, since }).catch(() => null);
-      if (cancelled || !report) return;
-      const latest = report.sessions[0];
-      const over = overThreshold(report.sessions, guard.threshold);
-      if (!over) {
+      const latest = await invoke<LatestContext | null>("latest_context", { cwd }).catch(() => null);
+      if (cancelled || !latest) return;
+      const share = latest.contextTokens / contextWindow(latest.model);
+      if (share < guard.threshold) {
         // Compacted or cleared: warn again next time it fills up.
-        if (latest) handled.current.delete(latest.id);
+        warned.current.delete(latest.sessionId);
         return;
       }
-      if (handled.current.has(over.id)) return;
-      handled.current.add(over.id);
-
-      const pct = Math.round(contextShare(over) * 100);
-      const size = fmtTokens(over.contextTokens);
-      const pane = useTabStore.getState().getActivePane();
-      const idleAgent = pane && !isPaneActive(pane.id) && hasActiveProcess(pane.id) === "Claude";
-      if (guard.autoCompact && idleAgent && (await sendToActiveTerminal("/compact", true))) {
-        notifyRef.current({ title: "Context compacted", body: `The session had reached ${pct}% of its window (${size} tokens), so ADE sent /compact.` });
-        return;
-      }
+      if (warned.current.has(latest.sessionId)) return;
+      warned.current.add(latest.sessionId);
       notifyRef.current({
-        title: `Context at ${pct}%`,
-        body: `Every turn resends ${size} tokens. /compact summarizes the conversation and keeps going.`,
-        action: { label: "Send /compact", command: "/compact" },
+        title: `Context at ${Math.round(share * 100)}%`,
+        body: `The Claude session in this folder resends ${fmtTokens(latest.contextTokens)} tokens every turn. /compact summarizes it and keeps going.`,
+        action: { label: "Type /compact", command: "/compact" },
       });
     };
 
@@ -64,5 +60,5 @@ export function useContextGuard(cwd: string | null, notify: (t: GuardToast) => v
       cancelled = true;
       clearInterval(timer);
     };
-  }, [cwd, guard.enabled, guard.threshold, guard.autoCompact]);
+  }, [cwd, guard.enabled, guard.threshold]);
 }

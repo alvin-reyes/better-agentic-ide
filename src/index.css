@@ -573,7 +573,6 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .token-count[data-level="high"] { color: #f85149; }
 .tokens-guard { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; color: var(--text-secondary); }
 .tokens-guard label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.tokens-guard label:last-child { flex-basis: 100%; }
 .tokens-guard select, .tokens-presets select { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 3px 6px; font-size: 12px; }
 .tokens-presets { display: grid; gap: 8px; }
 .tokens-presets label { display: flex; align-items: center; gap: 12px; font-size: 12px; }

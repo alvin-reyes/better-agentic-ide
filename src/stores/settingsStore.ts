@@ -298,11 +298,10 @@ interface Settings {
   contextGuard: ContextGuard;
 }
 
-/** Warn (or send /compact) when a Claude session's context passes `threshold` of its window. */
+/** Warn when a Claude session's context passes `threshold` of its window. */
 export interface ContextGuard {
   enabled: boolean;
   threshold: number;
-  autoCompact: boolean;
 }
 
 interface SettingsStore extends Settings {
@@ -357,7 +356,7 @@ const defaults: Settings = {
   ollamaEndpoint: "http://localhost:11434",
   ollamaModel: "deepseek-r1",
   orchestratorProvider: "anthropic",
-  contextGuard: { enabled: true, threshold: 0.6, autoCompact: false },
+  contextGuard: { enabled: true, threshold: 0.6 },
 };
 
 const initial: Settings = { ...defaults, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) };

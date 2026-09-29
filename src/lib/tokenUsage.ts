@@ -150,18 +150,6 @@ export function contextShare(s: SessionUsage): number {
   return s.contextTokens / contextWindow(s.model);
 }
 
-/** Sessions quiet for longer than this are finished, not worth a warning. */
-const ACTIVE_WITHIN_MS = 15 * 60_000;
-
-/**
- * The latest session, if it's still active and its context has reached
- * `threshold` of the model's window.
- */
-export function overThreshold(sessions: SessionUsage[], threshold: number, now = Date.now()): SessionUsage | null {
-  const s = sessions[0];
-  if (!s?.lastAt || now - Date.parse(s.lastAt) > ACTIVE_WITHIN_MS) return null;
-  return contextShare(s) >= threshold ? s : null;
-}
 
 // ---------------------------------------------------------------------------
 // Tips

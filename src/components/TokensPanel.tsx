@@ -20,9 +20,10 @@ interface ContextAudit {
   mcpServers: string[];
   denyRules: string[];
   presets: Record<string, string>;
+  presetValues: Record<string, string[]>;
 }
 
-/** Documented Claude Code settings ADE can write; "" means Claude Code's default. */
+/** Documented Claude Code settings ADE can write; "" removes the setting. The backend decides which values are allowed. */
 const PRESETS: { key: string; label: string; help: string; options: [string, string][] }[] = [
   {
     key: "env.BASH_MAX_OUTPUT_LENGTH",
@@ -46,7 +47,7 @@ const PRESETS: { key: string; label: string; help: string; options: [string, str
     key: "model",
     label: "Default model",
     help: "opusplan plans with Opus, then switches to Sonnet to write the code.",
-    options: [["", "Unchanged"], ["opusplan", "opusplan"], ["sonnet", "Sonnet"]],
+    options: [["", "Not set"], ["opusplan", "opusplan"], ["sonnet", "Sonnet"]],
   },
 ];
 
@@ -118,7 +119,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
   const tips = useMemo(() => tipsFor(sessions, audit), [sessions, audit]);
 
   const sendCommand = async (command: string) => {
-    if (await sendToActiveTerminal(command, true)) onClose();
+    if (await sendToActiveTerminal(command, false)) onClose();
     else setNote("No active terminal to send it to.");
   };
 
@@ -129,7 +130,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
     if (!audit) return;
     try {
       await invoke("context_presets", { root: audit.root, changes: { [key]: value || null } });
-      setNote("Saved to .claude/settings.json. New Claude Code sessions in this project use it.");
+      setNote("Saved to .claude/settings.local.json. New Claude Code sessions in this project use it.");
       loadAudit();
     } catch (e) {
       setNote(String(e));
@@ -198,8 +199,8 @@ export default function TokensPanel({ cwd, onClose }: Props) {
                       <p>{tip.detail}</p>
                     </div>
                     {tip.command && (
-                      <button className="contracts-action" onClick={() => sendCommand(tip.command!)} title="Sends it to the agent in the active terminal">
-                        Send {tip.command}
+                      <button className="contracts-action" onClick={() => sendCommand(tip.command!)} title="Types it in the active terminal; press Enter to run it">
+                        Type {tip.command}
                       </button>
                     )}
                   </li>
@@ -348,21 +349,12 @@ export default function TokensPanel({ cwd, onClose }: Props) {
                 {[0.4, 0.5, 0.6, 0.7, 0.8].map((v) => <option key={v} value={String(v)}>{Math.round(v * 100)}%</option>)}
               </select>
               <span>of its context window</span>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={guard.autoCompact}
-                  disabled={!guard.enabled}
-                  onChange={(e) => setGuard({ autoCompact: e.target.checked })}
-                />
-                Send /compact automatically when the agent is idle
-              </label>
             </div>
           </div>
 
           {audit && (
             <div className="contracts-section">
-              <h3>Claude Code settings <small>.claude/settings.json</small></h3>
+              <h3>Claude Code settings <small>.claude/settings.local.json</small></h3>
               <div className="tokens-presets">
                 {PRESETS.map((p) => (
                   <label key={p.key}>
@@ -371,15 +363,18 @@ export default function TokensPanel({ cwd, onClose }: Props) {
                       <small>{p.help}</small>
                     </span>
                     <select aria-label={p.label} value={audit.presets[p.key] ?? ""} onChange={(e) => void setPreset(p.key, e.target.value)}>
-                      {p.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      {p.options
+                        .filter(([v]) => v === "" || audit.presetValues[p.key]?.includes(v))
+                        .map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      {/* A value set by hand stays selected; choosing it again changes nothing. */}
                       {audit.presets[p.key] && !p.options.some(([v]) => v === audit.presets[p.key]) && (
-                        <option value={audit.presets[p.key]} disabled>{audit.presets[p.key]} (set elsewhere)</option>
+                        <option value={audit.presets[p.key]}>{audit.presets[p.key]} (set by hand)</option>
                       )}
                     </select>
                   </label>
                 ))}
               </div>
-              <p className="contracts-note">These are project settings: commit the file to share them with your team, or leave it out of git to keep them to yourself.</p>
+              <p className="contracts-note">Saved to your personal project settings, which Claude Code keeps out of git, so your teammates' models don't change.</p>
             </div>
           )}
 

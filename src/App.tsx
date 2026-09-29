@@ -524,7 +524,10 @@ export default function App() {
             <button
               className="contracts-action"
               style={{ marginTop: 8 }}
-              onClick={() => void sendToActiveTerminal(toast.action!.command, true)}
+              onClick={() => {
+                void sendToActiveTerminal(toast.action!.command, false);
+                setToast(null);
+              }}
             >
               {toast.action.label}
             </button>

@@ -121,8 +121,8 @@ Grab the installer for your platform from the [latest release](https://github.co
 - **Context meters** — how full each session's context is; one click sends `/compact` to the agent
 - **Savings tips** from your own usage: large contexts, low cache hit rates, sub-agents on the top-tier model, long outputs, big `CLAUDE.md` files and many MCP servers
 - **Context diet** — finds `node_modules`, build output and large lockfiles in the project and adds read-deny rules to `.claude/settings.json`
-- **Context guard** — warns when the active Claude session's context passes a threshold (60% by default) with a one-click `/compact`, or sends it when the agent is idle
-- **Claude Code settings** — set a Bash output cap, a cheaper sub-agent model, an earlier auto-compact and `opusplan` in `.claude/settings.json`, one documented setting at a time
+- **Context guard** — warns when the newest Claude session in the active terminal's folder passes a threshold of its context window (60% by default) and types `/compact` for you to send
+- **Claude Code settings** — set a Bash output cap, a cheaper sub-agent model, an earlier auto-compact and `opusplan` in your personal `.claude/settings.local.json`, one documented setting at a time
 - **Compact paste** — long or noisy logs pasted into the scratchpad can be compacted (colors, progress bars and repeats removed, long middles trimmed to errors), with a live token count in the footer
 
 ### Browser Tab

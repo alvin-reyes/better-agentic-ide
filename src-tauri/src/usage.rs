@@ -7,7 +7,7 @@
 // message id. Prices are applied in the frontend.
 
 use std::collections::{BTreeMap, HashSet};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -275,6 +275,59 @@ fn scan_project(dir: &Path, w: Window, cutoff: Option<SystemTime>, files: &mut u
     out
 }
 
+/// The latest request of the newest Claude Code session in a folder.
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LatestContext {
+    pub session_id: String,
+    pub model: String,
+    pub context_tokens: u64,
+    pub at: Option<String>,
+}
+
+/// Enough of a transcript's end to hold its last few responses.
+const TAIL_BYTES: u64 = 512 * 1024;
+
+/// The last request in the newest main transcript in `dir`, if the file was
+/// written within `active_within`. Reads only the file's tail, so it's cheap
+/// enough to poll.
+fn latest_in(dir: &Path, active_within: Duration) -> Option<LatestContext> {
+    let (path, mtime) = jsonl_in(dir)
+        .into_iter()
+        .filter_map(|p| Some((std::fs::metadata(&p).ok()?.modified().ok()?, p)))
+        .max()
+        .map(|(m, p)| (p, m))?;
+    if SystemTime::now().duration_since(mtime).unwrap_or_default() > active_within {
+        return None;
+    }
+    let mut f = std::fs::File::open(&path).ok()?;
+    let len = f.metadata().ok()?.len();
+    f.seek(SeekFrom::Start(len.saturating_sub(TAIL_BYTES))).ok()?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).ok()?;
+    let text = String::from_utf8_lossy(&buf);
+    // The first line may be cut off by the seek; it just fails to parse.
+    let (v, e) = text.lines().rev().find_map(|line| {
+        let v: Value = serde_json::from_str(line).ok()?;
+        let e = parse_entry(&v)?;
+        Some((v, e))
+    })?;
+    let u = &e.usage;
+    Some(LatestContext {
+        session_id: path.file_stem()?.to_string_lossy().into_owned(),
+        model: u.model.clone(),
+        context_tokens: u.input + u.cache_write_5m + u.cache_write_1h + u.cache_read,
+        at: v.get("timestamp").and_then(|t| t.as_str()).map(String::from),
+    })
+}
+
+/// The context size of the Claude Code session active in `cwd` in the last 15 minutes.
+#[tauri::command(async)]
+pub fn latest_context(cwd: String) -> Option<LatestContext> {
+    let home = crate::env_home()?;
+    latest_in(&claude_project_path(&home, &cwd), Duration::from_secs(15 * 60))
+}
+
 /// Usage for the Claude Code sessions run in `cwd` (or every project when
 /// `cwd` is None), counting responses between `since` and `until` (ISO-8601).
 #[tauri::command(async)]
@@ -344,8 +397,10 @@ pub struct ContextAudit {
     pub heavy: Vec<HeavyPath>,
     pub mcp_servers: Vec<String>,
     pub deny_rules: Vec<String>,
-    /// Current values of the token-saving presets in .claude/settings.json.
+    /// Current values of the token-saving presets in .claude/settings.local.json.
     pub presets: BTreeMap<String, String>,
+    /// The values ADE may write for each preset.
+    pub preset_values: BTreeMap<String, Vec<String>>,
 }
 
 /// Generated, vendored or bulky paths agents rarely need to read.
@@ -453,7 +508,7 @@ pub fn audit(root: &Path, claude_home: Option<&Path>) -> ContextAudit {
         .and_then(|v| v.get("mcpServers").and_then(|s| s.as_object()).map(|o| o.keys().cloned().collect()))
         .unwrap_or_default();
 
-    let presets = read_json::<Value>(&settings_path(root))
+    let presets = read_json::<Value>(&local_settings_path(root))
         .map(|v| {
             PRESETS
                 .iter()
@@ -461,7 +516,8 @@ pub fn audit(root: &Path, claude_home: Option<&Path>) -> ContextAudit {
                 .collect()
         })
         .unwrap_or_default();
-    ContextAudit { root: root.to_string_lossy().into_owned(), memory_files, heavy, mcp_servers, deny_rules, presets }
+    let preset_values = PRESETS.iter().map(|(k, vals)| (k.to_string(), vals.iter().map(|v| v.to_string()).collect())).collect();
+    ContextAudit { root: root.to_string_lossy().into_owned(), memory_files, heavy, mcp_servers, deny_rules, presets, preset_values }
 }
 
 fn project_folder(root: String) -> Result<PathBuf, String> {
@@ -490,7 +546,8 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
     if let Some(bad) = rules.iter().find(|r| !valid_rule(r)) {
         return Err(format!("refusing unexpected rule {bad}"));
     }
-    let mut v = load_settings(root)?;
+    let path = settings_path(root);
+    let mut v = load_settings(&path)?;
     let obj = v.as_object_mut().ok_or("settings.json is not a JSON object")?;
     let perms = obj.entry("permissions").or_insert_with(|| Value::Object(Default::default()));
     let perms = perms.as_object_mut().ok_or("permissions is not an object")?;
@@ -504,25 +561,28 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
         }
     }
     if !added.is_empty() {
-        save_settings(root, &v)?;
+        save_settings(&path, &v)?;
     }
     Ok(added)
 }
 
-/// The project's .claude/settings.json, or an empty object when there is none.
-fn load_settings(root: &Path) -> Result<Value, String> {
-    let path = settings_path(root);
+/// Personal settings Claude Code keeps out of git; presets are a personal choice.
+fn local_settings_path(root: &Path) -> PathBuf {
+    root.join(".claude").join("settings.local.json")
+}
+
+/// A Claude Code settings file, or an empty object when there is none.
+fn load_settings(path: &Path) -> Result<Value, String> {
     if !path.exists() {
         return Ok(Value::Object(Default::default()));
     }
-    read_json::<Value>(&path).ok_or_else(|| format!("{} is not valid JSON; fix it first", path.display()))
+    read_json::<Value>(path).ok_or_else(|| format!("{} is not valid JSON; fix it first", path.display()))
 }
 
-fn save_settings(root: &Path, v: &Value) -> Result<(), String> {
-    let path = settings_path(root);
+fn save_settings(path: &Path, v: &Value) -> Result<(), String> {
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let text = serde_json::to_string_pretty(v).map_err(|e| e.to_string())? + "\n";
-    std::fs::write(&path, text).map_err(|e| e.to_string())
+    std::fs::write(path, text).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -547,7 +607,7 @@ fn preset_get(v: &Value, key: &str) -> Option<String> {
     }
 }
 
-/// Set (Some) or remove (None) presets in the project's .claude/settings.json,
+/// Set (Some) or remove (None) presets in the project's .claude/settings.local.json,
 /// keeping everything else. Only the keys and values in PRESETS are accepted.
 pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) -> Result<(), String> {
     for (key, value) in changes {
@@ -558,8 +618,9 @@ pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) ->
             }
         }
     }
-    let mut v = load_settings(root)?;
-    let obj = v.as_object_mut().ok_or("settings.json is not a JSON object")?;
+    let path = local_settings_path(root);
+    let mut v = load_settings(&path)?;
+    let obj = v.as_object_mut().ok_or("settings.local.json is not a JSON object")?;
     for (key, value) in changes {
         let (map, name) = match key.strip_prefix("env.") {
             Some(name) => {
@@ -581,7 +642,31 @@ pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) ->
     if obj.get("env").and_then(|e| e.as_object()).is_some_and(|e| e.is_empty()) {
         obj.remove("env");
     }
-    save_settings(root, &v)
+    save_settings(&path, &v)?;
+    keep_out_of_git(root);
+    Ok(())
+}
+
+/// Claude Code ignores settings.local.json in git only when it creates the file
+/// itself; do the same when ADE creates it, in the repo's local exclude list.
+fn keep_out_of_git(root: &Path) {
+    const LINE: &str = ".claude/settings.local.json";
+    let info = root.join(".git").join("info");
+    if !root.join(".git").is_dir() {
+        return;
+    }
+    let listed = |p: PathBuf| std::fs::read_to_string(p).is_ok_and(|t| t.lines().any(|l| l.trim().trim_start_matches('/') == LINE || l.trim() == "settings.local.json"));
+    if listed(root.join(".gitignore")) || listed(root.join(".claude").join(".gitignore")) || listed(info.join("exclude")) {
+        return;
+    }
+    let _ = std::fs::create_dir_all(&info);
+    let mut text = std::fs::read_to_string(info.join("exclude")).unwrap_or_default();
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(LINE);
+    text.push('\n');
+    let _ = std::fs::write(info.join("exclude"), text);
 }
 
 #[tauri::command(async)]
@@ -638,6 +723,20 @@ mod tests {
         assert_eq!(s.context_tokens, 3 + 200 + 6000);
         assert_eq!(s.peak_context_tokens, 6203);
         assert_eq!(s.last_at.as_deref(), Some("2026-09-28T10:00:05.000Z"));
+    }
+
+    #[test]
+    fn latest_reads_the_newest_transcripts_last_request() {
+        let d = tmp("latest");
+        std::fs::write(d.join("old.jsonl"), A1).unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        let big = format!("{}\n{}\n{A2}\n{{\"type\":\"user\"}}\n", "x".repeat(700 * 1024), A1);
+        std::fs::write(d.join("new.jsonl"), big).unwrap();
+        let l = latest_in(&d, Duration::from_secs(60)).unwrap();
+        assert_eq!(l.session_id, "new");
+        assert_eq!(l.context_tokens, 3 + 200 + 6000);
+        assert_eq!(l.at.as_deref(), Some("2026-09-28T10:00:00.000Z"));
+        assert!(latest_in(&d, Duration::ZERO).is_none(), "stale sessions are ignored");
     }
 
     #[test]
@@ -710,7 +809,8 @@ mod tests {
     fn presets_set_and_remove_documented_settings_only() {
         let d = tmp("presets");
         std::fs::create_dir_all(d.join(".claude")).unwrap();
-        std::fs::write(d.join(".claude").join("settings.json"), r#"{"env":{"FOO":"1"},"permissions":{"deny":["Read(./dist/**)"]}}"#).unwrap();
+        std::fs::write(local_settings_path(&d), r#"{"env":{"FOO":"1"},"permissions":{"deny":["Read(./dist/**)"]}}"#).unwrap();
+        std::fs::write(settings_path(&d), r#"{"model":"opus"}"#).unwrap();
         let set: BTreeMap<String, Option<String>> = [
             ("env.BASH_MAX_OUTPUT_LENGTH".to_string(), Some("8000".to_string())),
             ("env.CLAUDE_CODE_SUBAGENT_MODEL".to_string(), Some("haiku".to_string())),
@@ -718,17 +818,20 @@ mod tests {
         ]
         .into();
         apply_presets(&d, &set).unwrap();
-        let v = read_json::<Value>(&settings_path(&d)).unwrap();
+        let v = read_json::<Value>(&local_settings_path(&d)).unwrap();
         assert_eq!(v["env"]["BASH_MAX_OUTPUT_LENGTH"], "8000");
         assert_eq!(v["env"]["FOO"], "1");
         assert_eq!(v["model"], "opusplan");
         assert_eq!(v["permissions"]["deny"][0], "Read(./dist/**)");
+        // The shared settings.json is left alone.
+        assert_eq!(read_json::<Value>(&settings_path(&d)).unwrap(), serde_json::json!({ "model": "opus" }));
+        assert_eq!(audit(&d, None).preset_values["model"], vec!["sonnet", "opusplan"]);
         assert_eq!(audit(&d, None).presets.get("env.CLAUDE_CODE_SUBAGENT_MODEL").map(String::as_str), Some("haiku"));
 
         let unset: BTreeMap<String, Option<String>> =
             [("model".to_string(), None), ("env.BASH_MAX_OUTPUT_LENGTH".to_string(), None), ("env.CLAUDE_CODE_SUBAGENT_MODEL".to_string(), None)].into();
         apply_presets(&d, &unset).unwrap();
-        let v = read_json::<Value>(&settings_path(&d)).unwrap();
+        let v = read_json::<Value>(&local_settings_path(&d)).unwrap();
         assert!(v.get("model").is_none());
         assert_eq!(v["env"], serde_json::json!({ "FOO": "1" }));
 
@@ -737,7 +840,19 @@ mod tests {
             let bad: BTreeMap<String, Option<String>> = [(k.to_string(), Some(val.to_string()))].into();
             assert!(apply_presets(&d, &bad).is_err(), "{k}={val}");
         }
-        assert_eq!(read_json::<Value>(&settings_path(&d)).unwrap()["env"], serde_json::json!({ "FOO": "1" }));
+        assert_eq!(read_json::<Value>(&local_settings_path(&d)).unwrap()["env"], serde_json::json!({ "FOO": "1" }));
+    }
+
+    #[test]
+    fn presets_file_is_kept_out_of_git() {
+        let d = tmp("presets_git");
+        std::fs::create_dir_all(d.join(".git").join("info")).unwrap();
+        std::fs::write(d.join(".git").join("info").join("exclude"), "# local\n*.swp").unwrap();
+        let set: BTreeMap<String, Option<String>> = [("model".to_string(), Some("sonnet".to_string()))].into();
+        apply_presets(&d, &set).unwrap();
+        apply_presets(&d, &set).unwrap();
+        let ex = std::fs::read_to_string(d.join(".git").join("info").join("exclude")).unwrap();
+        assert_eq!(ex, "# local\n*.swp\n.claude/settings.local.json\n");
     }
 
     #[test]

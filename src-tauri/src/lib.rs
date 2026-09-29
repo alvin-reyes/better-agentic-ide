@@ -383,6 +383,7 @@ pub fn run() {
             usage::context_audit,
             usage::context_deny,
             usage::context_presets,
+            usage::latest_context,
             list_md_files,
             list_directory,
             bmad::bmad_status,

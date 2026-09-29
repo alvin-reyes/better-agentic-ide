@@ -50,16 +50,13 @@ Tick the paths to exclude and click **Add read-deny rules**. ADE adds rules such
 
 ## Context guard
 
-ADE watches the Claude Code session in the active terminal. Once its context passes a threshold, you get a notification with a **Send /compact** button. The default threshold is 60% of the model's window. The guard fires once per session and fires again only after the context has dropped back below the threshold.
+ADE watches the newest Claude Code session in the active terminal's folder. Once its context passes a threshold, you get a notification. The default threshold is 60% of the model's window. **Type /compact** puts the command on the terminal's prompt for you to check and send with <kbd>Enter</kbd>. The guard fires once per session and fires again only after the context has dropped back below the threshold. Change the threshold (40–80%) or turn the guard off in the Tokens panel.
 
-In the Tokens panel you can:
-
-- change the threshold (40–80%) or turn the guard off;
-- have ADE send `/compact` itself, but only when the agent is idle, so it never interrupts a running turn.
+ADE never presses Enter for you. It can't tell which terminal a session runs in, or whether Claude is waiting on a permission prompt, where an Enter would approve it. To compact automatically, use Claude Code's own **Auto-compact at** setting below.
 
 ## Claude Code settings
 
-The panel can set a few documented Claude Code settings in the project's `.claude/settings.json`. Each one is a separate choice, and picking the default removes the setting again:
+The panel can set a few documented Claude Code settings for you in the project's `.claude/settings.local.json`. Claude Code keeps that file out of git, so your choices don't change your teammates' models. Each one is a separate choice, and **Not set** removes the setting again:
 
 | Setting | Choices | What it does |
 |---|---|---|
@@ -68,7 +65,7 @@ The panel can set a few documented Claude Code settings in the project's `.claud
 | Auto-compact at (`CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE`) | 80%, 70% or 60% | How full the context gets before Claude Code compacts it |
 | Default model (`model`) | `opusplan` or Sonnet | `opusplan` plans with Opus, then writes code with Sonnet |
 
-ADE only writes these keys, with these values, and keeps everything else in the file. Commit `.claude/settings.json` to share the settings with your team, or keep it out of git to keep them to yourself.
+ADE only writes these keys, with these values, and keeps everything else in the file. If ADE creates the file, it adds it to the repository's local ignore list (`.git/info/exclude`), just as Claude Code does. To share a setting with your team, copy it into `.claude/settings.json`.
 
 ## In the scratchpad
 
