@@ -47,3 +47,7 @@ History and notes are part of what [sync]({{ '/guide/sync/' | relative_url }}) s
 
 - **Paste or drop a screenshot** into the scratchpad. ADE saves it to a temporary file and includes its path when you send, so the agent can open the image.
 - **Voice dictation** — click the microphone button and speak; the text appears in the scratchpad.
+
+## Token count and compact paste
+
+The footer shows roughly how many tokens your prompt is. Paste a long or noisy log and ADE offers to compact it before you send it. See [Tokens & cost]({{ '/guide/tokens/' | relative_url }}#in-the-scratchpad).

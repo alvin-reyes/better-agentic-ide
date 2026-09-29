@@ -295,6 +295,14 @@ interface Settings {
   ollamaEndpoint: string;
   ollamaModel: string;
   orchestratorProvider: "anthropic" | "ollama";
+  contextGuard: ContextGuard;
+}
+
+/** Warn (or send /compact) when a Claude session's context passes `threshold` of its window. */
+export interface ContextGuard {
+  enabled: boolean;
+  threshold: number;
+  autoCompact: boolean;
 }
 
 interface SettingsStore extends Settings {
@@ -319,6 +327,7 @@ interface SettingsStore extends Settings {
   setOllamaEndpoint: (endpoint: string) => void;
   setOllamaModel: (model: string) => void;
   setOrchestratorProvider: (provider: "anthropic" | "ollama") => void;
+  setContextGuard: (patch: Partial<ContextGuard>) => void;
   getActiveTheme: () => ThemeColors;
 
   saveWorkspace: (name: string, tabs: { name: string; splits: "none" | "horizontal" | "vertical" }[]) => void;
@@ -348,6 +357,7 @@ const defaults: Settings = {
   ollamaEndpoint: "http://localhost:11434",
   ollamaModel: "deepseek-r1",
   orchestratorProvider: "anthropic",
+  contextGuard: { enabled: true, threshold: 0.6, autoCompact: false },
 };
 
 const initial: Settings = { ...defaults, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) };
@@ -393,6 +403,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setOllamaEndpoint: (ollamaEndpoint) => save({ ollamaEndpoint }),
     setOllamaModel: (ollamaModel) => save({ ollamaModel }),
     setOrchestratorProvider: (orchestratorProvider) => save({ orchestratorProvider }),
+    setContextGuard: (patch) => save({ contextGuard: { ...get().contextGuard, ...patch } }),
 
     getActiveTheme: () => {
       const s = get();

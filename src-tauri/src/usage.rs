@@ -344,6 +344,8 @@ pub struct ContextAudit {
     pub heavy: Vec<HeavyPath>,
     pub mcp_servers: Vec<String>,
     pub deny_rules: Vec<String>,
+    /// Current values of the token-saving presets in .claude/settings.json.
+    pub presets: BTreeMap<String, String>,
 }
 
 /// Generated, vendored or bulky paths agents rarely need to read.
@@ -451,7 +453,15 @@ pub fn audit(root: &Path, claude_home: Option<&Path>) -> ContextAudit {
         .and_then(|v| v.get("mcpServers").and_then(|s| s.as_object()).map(|o| o.keys().cloned().collect()))
         .unwrap_or_default();
 
-    ContextAudit { root: root.to_string_lossy().into_owned(), memory_files, heavy, mcp_servers, deny_rules }
+    let presets = read_json::<Value>(&settings_path(root))
+        .map(|v| {
+            PRESETS
+                .iter()
+                .filter_map(|(key, _)| preset_get(&v, key).map(|x| (key.to_string(), x)))
+                .collect()
+        })
+        .unwrap_or_default();
+    ContextAudit { root: root.to_string_lossy().into_owned(), memory_files, heavy, mcp_servers, deny_rules, presets }
 }
 
 fn project_folder(root: String) -> Result<PathBuf, String> {
@@ -480,12 +490,7 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
     if let Some(bad) = rules.iter().find(|r| !valid_rule(r)) {
         return Err(format!("refusing unexpected rule {bad}"));
     }
-    let path = settings_path(root);
-    let mut v = if path.exists() {
-        read_json::<Value>(&path).ok_or_else(|| format!("{} is not valid JSON; fix it first", path.display()))?
-    } else {
-        Value::Object(Default::default())
-    };
+    let mut v = load_settings(root)?;
     let obj = v.as_object_mut().ok_or("settings.json is not a JSON object")?;
     let perms = obj.entry("permissions").or_insert_with(|| Value::Object(Default::default()));
     let perms = perms.as_object_mut().ok_or("permissions is not an object")?;
@@ -498,13 +503,91 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
             added.push(r.clone());
         }
     }
-    if added.is_empty() {
-        return Ok(added);
+    if !added.is_empty() {
+        save_settings(root, &v)?;
     }
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-    let text = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())? + "\n";
-    std::fs::write(&path, text).map_err(|e| e.to_string())?;
     Ok(added)
+}
+
+/// The project's .claude/settings.json, or an empty object when there is none.
+fn load_settings(root: &Path) -> Result<Value, String> {
+    let path = settings_path(root);
+    if !path.exists() {
+        return Ok(Value::Object(Default::default()));
+    }
+    read_json::<Value>(&path).ok_or_else(|| format!("{} is not valid JSON; fix it first", path.display()))
+}
+
+fn save_settings(root: &Path, v: &Value) -> Result<(), String> {
+    let path = settings_path(root);
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(v).map_err(|e| e.to_string())? + "\n";
+    std::fs::write(&path, text).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Token-saving presets: documented Claude Code settings, each with the only
+// values ADE will write. "model" is top-level; "env.X" goes under "env".
+const PRESETS: &[(&str, &[&str])] = &[
+    ("env.BASH_MAX_OUTPUT_LENGTH", &["8000", "15000"]),
+    ("env.CLAUDE_CODE_SUBAGENT_MODEL", &["haiku", "sonnet"]),
+    ("env.CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE", &["60", "70", "80"]),
+    ("model", &["sonnet", "opusplan"]),
+];
+
+fn preset_get(v: &Value, key: &str) -> Option<String> {
+    let found = match key.strip_prefix("env.") {
+        Some(name) => v.get("env")?.get(name)?,
+        None => v.get(key)?,
+    };
+    match found {
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+/// Set (Some) or remove (None) presets in the project's .claude/settings.json,
+/// keeping everything else. Only the keys and values in PRESETS are accepted.
+pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) -> Result<(), String> {
+    for (key, value) in changes {
+        let allowed = PRESETS.iter().find(|(k, _)| k == key).ok_or_else(|| format!("unknown setting {key}"))?.1;
+        if let Some(v) = value {
+            if !allowed.contains(&v.as_str()) {
+                return Err(format!("unsupported value {v:?} for {key}"));
+            }
+        }
+    }
+    let mut v = load_settings(root)?;
+    let obj = v.as_object_mut().ok_or("settings.json is not a JSON object")?;
+    for (key, value) in changes {
+        let (map, name) = match key.strip_prefix("env.") {
+            Some(name) => {
+                let env = obj.entry("env").or_insert_with(|| Value::Object(Default::default()));
+                (env.as_object_mut().ok_or("env is not an object")?, name)
+            }
+            None => (&mut *obj, key.as_str()),
+        };
+        match value {
+            Some(val) => {
+                map.insert(name.to_string(), Value::String(val.clone()));
+            }
+            None => {
+                map.remove(name);
+            }
+        }
+    }
+    // Don't leave an empty "env" behind.
+    if obj.get("env").and_then(|e| e.as_object()).is_some_and(|e| e.is_empty()) {
+        obj.remove("env");
+    }
+    save_settings(root, &v)
+}
+
+#[tauri::command(async)]
+pub fn context_presets(root: String, changes: BTreeMap<String, Option<String>>) -> Result<(), String> {
+    let root = project_folder(root)?;
+    apply_presets(&root, &changes)
 }
 
 #[tauri::command(async)]
@@ -621,6 +704,40 @@ mod tests {
         let e = tmp("deny_new");
         add_deny_rules(&e, &["Read(./target/**)".into()]).unwrap();
         assert_eq!(read_json::<Value>(&e.join(".claude").join("settings.json")).unwrap()["permissions"]["deny"][0], "Read(./target/**)");
+    }
+
+    #[test]
+    fn presets_set_and_remove_documented_settings_only() {
+        let d = tmp("presets");
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        std::fs::write(d.join(".claude").join("settings.json"), r#"{"env":{"FOO":"1"},"permissions":{"deny":["Read(./dist/**)"]}}"#).unwrap();
+        let set: BTreeMap<String, Option<String>> = [
+            ("env.BASH_MAX_OUTPUT_LENGTH".to_string(), Some("8000".to_string())),
+            ("env.CLAUDE_CODE_SUBAGENT_MODEL".to_string(), Some("haiku".to_string())),
+            ("model".to_string(), Some("opusplan".to_string())),
+        ]
+        .into();
+        apply_presets(&d, &set).unwrap();
+        let v = read_json::<Value>(&settings_path(&d)).unwrap();
+        assert_eq!(v["env"]["BASH_MAX_OUTPUT_LENGTH"], "8000");
+        assert_eq!(v["env"]["FOO"], "1");
+        assert_eq!(v["model"], "opusplan");
+        assert_eq!(v["permissions"]["deny"][0], "Read(./dist/**)");
+        assert_eq!(audit(&d, None).presets.get("env.CLAUDE_CODE_SUBAGENT_MODEL").map(String::as_str), Some("haiku"));
+
+        let unset: BTreeMap<String, Option<String>> =
+            [("model".to_string(), None), ("env.BASH_MAX_OUTPUT_LENGTH".to_string(), None), ("env.CLAUDE_CODE_SUBAGENT_MODEL".to_string(), None)].into();
+        apply_presets(&d, &unset).unwrap();
+        let v = read_json::<Value>(&settings_path(&d)).unwrap();
+        assert!(v.get("model").is_none());
+        assert_eq!(v["env"], serde_json::json!({ "FOO": "1" }));
+
+        // Anything else is refused and nothing is written.
+        for (k, val) in [("env.ANTHROPIC_API_KEY", "x"), ("model", "claude-opus-4-1"), ("env.BASH_MAX_OUTPUT_LENGTH", "999999")] {
+            let bad: BTreeMap<String, Option<String>> = [(k.to_string(), Some(val.to_string()))].into();
+            assert!(apply_presets(&d, &bad).is_err(), "{k}={val}");
+        }
+        assert_eq!(read_json::<Value>(&settings_path(&d)).unwrap()["env"], serde_json::json!({ "FOO": "1" }));
     }
 
     #[test]

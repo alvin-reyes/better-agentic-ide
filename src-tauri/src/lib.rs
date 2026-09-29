@@ -382,6 +382,7 @@ pub fn run() {
             usage::token_usage,
             usage::context_audit,
             usage::context_deny,
+            usage::context_presets,
             list_md_files,
             list_directory,
             bmad::bmad_status,

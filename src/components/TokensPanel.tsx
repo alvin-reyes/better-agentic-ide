@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  contextShare, contextWindow, costOf, fmtBytes, fmtTokens, fmtUsd, modelLabel, sessionCost, sumModels,
+  contextShare, contextWindow, costOf, fmtBytes, fmtInt, fmtTokens, fmtUsd, modelLabel, sessionCost, sumModels,
   tipsFor, tokensForBytes, totals, type UsageReport,
 } from "../lib/tokenUsage";
 import { sendToActiveTerminal } from "../lib/terminalCommands";
 import { useEscapeToClose } from "./useEscapeToClose";
+import { useSettingsStore } from "../stores/settingsStore";
 
 interface Props {
   cwd: string | null;
@@ -18,7 +19,36 @@ interface ContextAudit {
   heavy: { path: string; isDir: boolean; bytes: number; rule: string; denied: boolean }[];
   mcpServers: string[];
   denyRules: string[];
+  presets: Record<string, string>;
 }
+
+/** Documented Claude Code settings ADE can write; "" means Claude Code's default. */
+const PRESETS: { key: string; label: string; help: string; options: [string, string][] }[] = [
+  {
+    key: "env.BASH_MAX_OUTPUT_LENGTH",
+    label: "Bash output sent to the model",
+    help: "Long command output is cut to this many characters before the agent reads it.",
+    options: [["", "Default (30,000 chars)"], ["15000", "15,000 chars"], ["8000", "8,000 chars"]],
+  },
+  {
+    key: "env.CLAUDE_CODE_SUBAGENT_MODEL",
+    label: "Sub-agent model",
+    help: "Model for sub-agents that don't name one. Searching and reading rarely need the top tier.",
+    options: [["", "Same as the session"], ["sonnet", "Sonnet"], ["haiku", "Haiku"]],
+  },
+  {
+    key: "env.CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE",
+    label: "Auto-compact at",
+    help: "How full the context gets before Claude Code compacts it on its own.",
+    options: [["", "Default"], ["80", "80%"], ["70", "70%"], ["60", "60%"]],
+  },
+  {
+    key: "model",
+    label: "Default model",
+    help: "opusplan plans with Opus, then switches to Sonnet to write the code.",
+    options: [["", "Unchanged"], ["opusplan", "opusplan"], ["sonnet", "Sonnet"]],
+  },
+];
 
 const RANGES = [
   { id: "1", label: "Today", days: 1 },
@@ -92,6 +122,20 @@ export default function TokensPanel({ cwd, onClose }: Props) {
     else setNote("No active terminal to send it to.");
   };
 
+  const guard = useSettingsStore((st) => st.contextGuard);
+  const setGuard = useSettingsStore((st) => st.setContextGuard);
+
+  const setPreset = async (key: string, value: string) => {
+    if (!audit) return;
+    try {
+      await invoke("context_presets", { root: audit.root, changes: { [key]: value || null } });
+      setNote("Saved to .claude/settings.json. New Claude Code sessions in this project use it.");
+      loadAudit();
+    } catch (e) {
+      setNote(String(e));
+    }
+  };
+
   const addDenies = async () => {
     if (!audit) return;
     try {
@@ -133,7 +177,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
               <div><b>{fmtUsd(t.cost)}</b><span>spent at API prices</span></div>
               <div className="good"><b>{fmtUsd(t.cacheSavings)}</b><span>saved by prompt caching</span></div>
               <div><b>{Math.round(t.cacheHitRate * 100)}%</b><span>of prompt tokens from cache</span></div>
-              <div><b>{fmtTokens(t.inputTokens)} / {fmtTokens(t.outputTokens)}</b><span>in / out over {t.requests.toLocaleString()} requests</span></div>
+              <div><b>{fmtTokens(t.inputTokens)} / {fmtTokens(t.outputTokens)}</b><span>in / out over {fmtInt(t.requests)} requests</span></div>
             </div>
           )}
           {report && sessions.length === 0 && (
@@ -185,7 +229,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
                         </td>
                         <td>{s.model ? modelLabel(s.model) : ""}</td>
                         <td>
-                          <div className="tokens-meter" data-level={share >= 0.75 ? "high" : share >= 0.5 ? "medium" : "ok"} title={`${s.contextTokens.toLocaleString()} of ${contextWindow(s.model).toLocaleString()} tokens`}>
+                          <div className="tokens-meter" data-level={share >= 0.75 ? "high" : share >= 0.5 ? "medium" : "ok"} title={`${fmtInt(s.contextTokens)} of ${fmtInt(contextWindow(s.model))} tokens`}>
                             <i style={{ width: `${Math.min(100, share * 100)}%` }} />
                           </div>
                           <small>{fmtTokens(s.contextTokens)} · {Math.round(share * 100)}%</small>
@@ -210,7 +254,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
                     return (
                       <tr key={u.model}>
                         <td title={u.model}>{modelLabel(u.model)}</td>
-                        <td className="num">{u.requests.toLocaleString()}</td>
+                        <td className="num">{fmtInt(u.requests)}</td>
                         <td className="num">{fmtTokens(u.input)}</td>
                         <td className="num">{fmtTokens(u.cacheWrite5m + u.cacheWrite1h)}</td>
                         <td className="num">{fmtTokens(u.cacheRead)}</td>
@@ -285,6 +329,57 @@ export default function TokensPanel({ cwd, onClose }: Props) {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          <div className="contracts-section">
+            <h3>Context guard</h3>
+            <div className="tokens-guard">
+              <label>
+                <input type="checkbox" checked={guard.enabled} onChange={(e) => setGuard({ enabled: e.target.checked })} />
+                Warn when the active terminal's Claude session passes
+              </label>
+              <select
+                aria-label="Context guard threshold"
+                value={String(guard.threshold)}
+                disabled={!guard.enabled}
+                onChange={(e) => setGuard({ threshold: Number(e.target.value) })}
+              >
+                {[0.4, 0.5, 0.6, 0.7, 0.8].map((v) => <option key={v} value={String(v)}>{Math.round(v * 100)}%</option>)}
+              </select>
+              <span>of its context window</span>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={guard.autoCompact}
+                  disabled={!guard.enabled}
+                  onChange={(e) => setGuard({ autoCompact: e.target.checked })}
+                />
+                Send /compact automatically when the agent is idle
+              </label>
+            </div>
+          </div>
+
+          {audit && (
+            <div className="contracts-section">
+              <h3>Claude Code settings <small>.claude/settings.json</small></h3>
+              <div className="tokens-presets">
+                {PRESETS.map((p) => (
+                  <label key={p.key}>
+                    <span>
+                      <b>{p.label}</b>
+                      <small>{p.help}</small>
+                    </span>
+                    <select aria-label={p.label} value={audit.presets[p.key] ?? ""} onChange={(e) => void setPreset(p.key, e.target.value)}>
+                      {p.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      {audit.presets[p.key] && !p.options.some(([v]) => v === audit.presets[p.key]) && (
+                        <option value={audit.presets[p.key]} disabled>{audit.presets[p.key]} (set elsewhere)</option>
+                      )}
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <p className="contracts-note">These are project settings: commit the file to share them with your team, or leave it out of git to keep them to yourself.</p>
             </div>
           )}
 

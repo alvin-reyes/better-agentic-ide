@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  costOf, uncachedCostOf, totals, contextWindow, tipsFor, modelLabel, fmtTokens, fmtUsd, sumModels,
+  costOf, uncachedCostOf, overThreshold, totals, contextWindow, tipsFor, modelLabel, fmtTokens, fmtUsd, fmtInt, sumModels,
   type ModelUsage, type SessionUsage,
 } from "../tokenUsage";
 
@@ -84,5 +84,18 @@ describe("formatting", () => {
     expect(fmtUsd(0.0421)).toBe("$0.042");
     expect(fmtUsd(12.5)).toBe("$12.50");
     expect(fmtUsd(1256.4)).toBe("$1,256");
+    expect(fmtInt(6517)).toBe("6,517");
+    expect(fmtInt(1234567)).toBe("1,234,567");
+  });
+});
+
+describe("context guard", () => {
+  const now = Date.parse("2026-09-29T12:00:00Z");
+  it("flags an active session past the threshold only", () => {
+    const active = session({ lastAt: "2026-09-29T11:55:00Z", contextTokens: 650_000 });
+    expect(overThreshold([active], 0.6, now)?.id).toBe("s");
+    expect(overThreshold([active], 0.7, now)).toBeNull();
+    expect(overThreshold([{ ...active, lastAt: "2026-09-29T11:00:00Z" }], 0.6, now)).toBeNull();
+    expect(overThreshold([], 0.6, now)).toBeNull();
   });
 });

@@ -6,7 +6,8 @@ import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
 import BmadInitBanner from "./components/BmadInitBanner";
-import { writePty } from "./lib/terminalCommands";
+import { writePty, sendToActiveTerminal } from "./lib/terminalCommands";
+import { useContextGuard, type GuardToast } from "./hooks/useContextGuard";
 
 // Lazy-load heavy components for faster startup
 const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
@@ -59,7 +60,7 @@ export default function App() {
   activeCwdRef.current = activeCwd;
   const [bannerCwd, setBannerCwd] = useState<string | null>(null);
   const [zoomedPane, setZoomedPane] = useState(false);
-  const [toast, setToast] = useState<{ title: string; body: string } | null>(null);
+  const [toast, setToast] = useState<GuardToast | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
   const fileBrowserOpen = useFileBrowserStore((s) => s.isOpen);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -142,21 +143,24 @@ export default function App() {
     return () => { void unlisten.then((fn) => fn?.()); };
   }, []);
 
+  const toastTimer = useRef<number | null>(null);
+  const showToast = useCallback((t: GuardToast) => {
+    setToast(t);
+    if (toastTimer.current !== null) clearTimeout(toastTimer.current);
+    // Leave time to click an action.
+    toastTimer.current = window.setTimeout(() => setToast(null), t.action ? 15000 : 4000);
+  }, []);
+  useContextGuard(activeCwd, showToast);
+
   // Agent completion notifications, shown as an in-app toast.
   useEffect(() => {
-    let timeoutId: number | null = null;
     const handler = (e: Event) => {
       const { title, body } = (e as CustomEvent).detail;
-      setToast({ title, body });
-      if (timeoutId !== null) clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(() => setToast(null), 4000);
+      showToast({ title, body });
     };
     window.addEventListener("agent-notification", handler);
-    return () => {
-      window.removeEventListener("agent-notification", handler);
-      if (timeoutId !== null) clearTimeout(timeoutId);
-    };
-  }, []);
+    return () => window.removeEventListener("agent-notification", handler);
+  }, [showToast]);
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
@@ -516,6 +520,15 @@ export default function App() {
           <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
             {toast.body}
           </div>
+          {toast.action && (
+            <button
+              className="contracts-action"
+              style={{ marginTop: 8 }}
+              onClick={() => void sendToActiveTerminal(toast.action!.command, true)}
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       )}
     </div>

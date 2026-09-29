@@ -1,13 +1,17 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
 import { IS_MAC, SHORTCUTS, keyName, matches, shortcutLabel } from "../lib/shortcuts";
 import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
 import { isPaneActive } from "../hooks/useTerminal";
 import { writePty } from "../lib/terminalCommands";
+import { compactText, estimateTokens, type CompactResult } from "../lib/compactText";
+import { fmtInt } from "../lib/tokenUsage";
 
 // In the scratchpad plain Ctrl+Enter / Ctrl+S work on every platform.
 const SEND_KEY = IS_MAC ? "⌘↵" : "Ctrl+Enter";
+/** Pastes smaller than this aren't worth offering to compact unless they carry escape codes. */
+const COMPACT_MIN_TOKENS = 500;
 const SAVE_KEY = IS_MAC ? "⌘S" : "Ctrl+S";
 
 // Web Speech API types
@@ -263,6 +267,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [text, setText] = useState(loadDraft);
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(false);
+  const tokens = useMemo(() => estimateTokens(text), [text]);
+  // A long or noisy paste that compacting would shrink: offered, never applied silently.
+  const [pasteOffer, setPasteOffer] = useState<{ original: string; result: CompactResult } | null>(null);
+  // Drop the offer once the pasted text is gone (sent, cleared or edited away).
+  useEffect(() => {
+    if (pasteOffer && !text.includes(pasteOffer.original)) setPasteOffer(null);
+  }, [text, pasteOffer]);
   const [history, setHistory] = useState<string[]>(loadHistory);
   const [notes, setNotes] = useState<SavedNote[]>(loadNotes);
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -475,6 +486,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     if (!clipboardData?.types?.includes("text/plain")) {
       e.preventDefault();
       await pasteImageFromClipboard();
+      return;
+    }
+
+    const pasted = clipboardData.getData("text/plain");
+    if (estimateTokens(pasted) >= COMPACT_MIN_TOKENS || /\x1b\[|\r(?!\n)/.test(pasted)) {
+      const result = compactText(pasted);
+      setPasteOffer(result.after <= result.before * 0.8 ? { original: pasted, result } : null);
     }
   }, [saveImageBlob, pasteImageFromClipboard]);
 
@@ -941,6 +959,26 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
 
       {/* Body */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "8px 12px", gap: "8px", minHeight: 0 }}>
+        {pasteOffer && (
+          <div className="compact-offer" role="status">
+            <span>
+              Pasted about {fmtInt(pasteOffer.result.before)} tokens. Compacted: about{" "}
+              <b>{fmtInt(pasteOffer.result.after)}</b> (colors, progress bars and repeated lines removed
+              {pasteOffer.result.text.includes("lines omitted") ? ", long middle trimmed to errors and warnings" : ""}).
+            </span>
+            <button
+              className="compact-offer__apply"
+              onClick={() => {
+                const { original, result } = pasteOffer;
+                setText((t) => (t.includes(original) ? t.replace(original, result.text) : t));
+                setPasteOffer(null);
+              }}
+            >
+              Compact paste
+            </button>
+            <button className="compact-offer__dismiss" onClick={() => setPasteOffer(null)} aria-label="Keep the paste as is">Keep</button>
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           value={text}
@@ -1277,7 +1315,11 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
                 ● REC
               </span>
             )}
-            {text.length > 0 ? `${text.length} chars` : ""}
+            {text.length > 0 && (
+              <span className="token-count" data-level={tokens >= 20_000 ? "high" : tokens >= 4_000 ? "medium" : "ok"} title="Rough estimate: about 4 characters per token">
+                ~{fmtInt(tokens)} tokens · {fmtInt(text.length)} chars
+              </span>
+            )}
           </span>
         </div>
       </div>

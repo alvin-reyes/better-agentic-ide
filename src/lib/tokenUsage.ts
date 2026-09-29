@@ -150,6 +150,19 @@ export function contextShare(s: SessionUsage): number {
   return s.contextTokens / contextWindow(s.model);
 }
 
+/** Sessions quiet for longer than this are finished, not worth a warning. */
+const ACTIVE_WITHIN_MS = 15 * 60_000;
+
+/**
+ * The latest session, if it's still active and its context has reached
+ * `threshold` of the model's window.
+ */
+export function overThreshold(sessions: SessionUsage[], threshold: number, now = Date.now()): SessionUsage | null {
+  const s = sessions[0];
+  if (!s?.lastAt || now - Date.parse(s.lastAt) > ACTIVE_WITHIN_MS) return null;
+  return contextShare(s) >= threshold ? s : null;
+}
+
 // ---------------------------------------------------------------------------
 // Tips
 
@@ -264,8 +277,13 @@ export function fmtTokens(n: number): string {
   return String(n);
 }
 
+/** 12345 → "12,345" (WebKitGTK's toLocaleString doesn't group digits). */
+export function fmtInt(n: number): string {
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+$)/g, ",");
+}
+
 export function fmtUsd(n: number): string {
-  if (n >= 100) return `$${String(Math.round(n)).replace(/\B(?=(\d{3})+$)/g, ",")}`;
+  if (n >= 100) return `$${fmtInt(n)}`;
   if (n >= 1) return `$${n.toFixed(2)}`;
   return `$${n.toFixed(3)}`;
 }

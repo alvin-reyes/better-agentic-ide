@@ -47,3 +47,30 @@ For the active terminal's folder, the panel lists:
 - **Generated and dependency paths an agent could wander into:** `node_modules`, `dist`, `build`, `out`, `target`, `.next`, `coverage`, `vendor`, virtualenvs, and large lockfiles.
 
 Tick the paths to exclude and click **Add read-deny rules**. ADE adds rules such as `Read(./node_modules/**)` to `permissions.deny` in `.claude/settings.json` and keeps everything else in the file. Claude Code's file tools then skip those paths, so a stray search can't pull in thousands of tokens. New sessions pick the rules up. Paths that are already denied are marked.
+
+## Context guard
+
+ADE watches the Claude Code session in the active terminal. Once its context passes a threshold, you get a notification with a **Send /compact** button. The default threshold is 60% of the model's window. The guard fires once per session and fires again only after the context has dropped back below the threshold.
+
+In the Tokens panel you can:
+
+- change the threshold (40–80%) or turn the guard off;
+- have ADE send `/compact` itself, but only when the agent is idle, so it never interrupts a running turn.
+
+## Claude Code settings
+
+The panel can set a few documented Claude Code settings in the project's `.claude/settings.json`. Each one is a separate choice, and picking the default removes the setting again:
+
+| Setting | Choices | What it does |
+|---|---|---|
+| Bash output sent to the model (`BASH_MAX_OUTPUT_LENGTH`) | 15,000 or 8,000 characters (default 30,000) | Cuts long command output before the agent reads it |
+| Sub-agent model (`CLAUDE_CODE_SUBAGENT_MODEL`) | Sonnet or Haiku | Model for sub-agents that don't name one |
+| Auto-compact at (`CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE`) | 80%, 70% or 60% | How full the context gets before Claude Code compacts it |
+| Default model (`model`) | `opusplan` or Sonnet | `opusplan` plans with Opus, then writes code with Sonnet |
+
+ADE only writes these keys, with these values, and keeps everything else in the file. Commit `.claude/settings.json` to share the settings with your team, or keep it out of git to keep them to yourself.
+
+## In the scratchpad
+
+- The footer shows a rough token count for what you're about to send. It turns amber above 4,000 tokens and red above 20,000.
+- When you paste a long or noisy log, ADE offers to **compact the paste**. It strips colors, keeps only the final state of progress bars, merges repeated lines, and trims a very long middle down to its errors and warnings. You see the token count before and after, and nothing changes unless you click.
