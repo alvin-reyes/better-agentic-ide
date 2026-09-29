@@ -150,8 +150,8 @@ describe("AgentPicker", () => {
     expect(screen.getByText("Product Manager")).toBeTruthy();
     expect(screen.getByText("Product Owner")).toBeTruthy();
     expect(screen.getByText("Scrum Master")).toBeTruthy();
-    // 12 roles, one row each.
-    expect(screen.getByText(/^12 agents/)).toBeTruthy();
+    // 13 roles, one row each.
+    expect(screen.getByText(/^13 agents/)).toBeTruthy();
   });
 
   it("launches a bare role with no domain", async () => {

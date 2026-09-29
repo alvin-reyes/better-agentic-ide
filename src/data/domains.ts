@@ -1,7 +1,7 @@
 export interface Domain {
   id: string;
   title: string;
-  category: "Backend" | "Frontend" | "DevOps" | "Testing" | "General";
+  category: "Backend" | "Frontend" | "DevOps" | "Testing" | "General" | "Web3" | "Architects";
   focus: string;
   keywords: string[];
 }
@@ -167,6 +167,126 @@ export const DOMAINS: Domain[] = [
       "Product-engineering tradeoffs, technology bets, roadmap prioritization, scaling strategies (both technical and organizational), team structure, build-vs-buy decisions, and architecture decisions. Ask probing questions before giving advice. Challenge assumptions constructively. Provide decision frameworks (weighted scoring, RICE, opportunity cost analysis) rather than just opinions. Think about second-order effects and long-term implications. Be direct and opinionated but acknowledge uncertainty.",
     keywords: ["strategy", "roadmap", "tradeoff", "build vs buy", "prioritize", "architecture decision", "tech stack", "scaling", "hiring", "product", "vision", "cto", "cofounder"],
   },
+  {
+    id: "solidity",
+    title: "Solidity & EVM",
+    category: "Web3",
+    focus:
+      "Write and test Solidity contracts with Foundry, test-first. Use OpenZeppelin where it fits, follow checks-effects-interactions, prefer custom errors and events, and keep storage layouts upgrade-safe. Every change ships with unit tests plus fuzz or invariant tests, with forge build and forge test run and green. Never hardcode private keys or RPC URLs — deploy scripts read them from the environment or a Foundry keystore account.",
+    keywords: ["solidity", "contract", "smart contract", "foundry", "forge", "hardhat", "erc20", "erc721", "erc1155", "evm", "token", "nft", "upgradeable", "proxy", "web3"],
+  },
+  {
+    id: "contract-audit",
+    title: "Contract Security Audit",
+    category: "Web3",
+    focus:
+      "Review contracts for reentrancy, access-control mistakes, unchecked external calls, oracle and price manipulation, front-running and MEV exposure, signature replay, integer and rounding issues, denial of service, upgradeability and storage collisions, and centralization risk. Run slither or aderyn when installed. Each finding carries a severity, the exact file and line, an explanation, a Foundry proof-of-concept test that demonstrates it, and a fix.",
+    keywords: ["audit", "security review", "vulnerability", "reentrancy", "exploit", "slither", "aderyn", "access control", "oracle", "mev", "front-running", "invariant"],
+  },
+  {
+    id: "gas-optimization",
+    title: "Gas Optimization",
+    category: "Web3",
+    focus:
+      "Cut gas with measured changes only. Start from forge snapshot and forge test --gas-report, then apply storage packing, cached storage reads, calldata instead of memory, unchecked arithmetic where overflow is impossible, custom errors, and immutable or constant values. One change at a time, all tests still passing, with before-and-after gas reported per function. Never trade safety or readability for a tiny saving.",
+    keywords: ["gas", "optimize gas", "gas report", "storage packing", "calldata", "snapshot"],
+  },
+  {
+    id: "solana",
+    title: "Solana & Anchor",
+    category: "Web3",
+    focus:
+      "Build Solana programs with the Anchor framework. Design account structures and PDAs deliberately, validate every account with Anchor constraints, check signers and owners, handle rent and account sizes, and use checked math. Write TypeScript tests with anchor test for each instruction, including failure cases, and explain any CPI and its security assumptions. Never commit keypairs — use the Solana CLI config for wallets.",
+    keywords: ["solana", "anchor", "program", "pda", "cpi", "spl", "rust program", "lamports"],
+  },
+  {
+    id: "ai-agents",
+    title: "AI Agent Systems",
+    category: "Architects",
+    focus:
+      "When an agent is the right tool at all, single versus multi-agent designs, orchestration patterns (router, planner-executor, supervisor, pipeline), tool and MCP server design, memory and state, context management, human-in-the-loop checkpoints, guardrails and permissions, failure recovery, evaluation strategy, and cost and latency budgets.",
+    keywords: ["agent architecture", "multi-agent", "multi agent", "agentic", "mcp", "tool use", "orchestration", "planner", "agent memory", "subagent"],
+  },
+  {
+    id: "rag",
+    title: "Retrieval & Knowledge",
+    category: "Architects",
+    focus:
+      "Data sources and ingestion, parsing and chunking strategy, embedding and index choices (vector, keyword, hybrid), reranking, metadata filters and permissions, freshness and re-indexing, citation and grounding, long-context versus retrieval trade-offs, and how to measure retrieval quality and answer quality.",
+    keywords: ["rag", "retrieval", "embedding", "vector", "knowledge base", "semantic search", "chunking", "rerank", "pgvector", "pinecone"],
+  },
+  {
+    id: "workflow-automation",
+    title: "Workflow Automation",
+    category: "Architects",
+    focus:
+      "Map the business process first, then where AI adds value versus plain rules. Triggers and event sources, choosing between no-code tools like n8n or Zapier, durable workflow engines like Temporal, and custom queues. Idempotency, retries and dead letters, human approval steps, secrets and access, observability, and a migration path as volume grows.",
+    keywords: ["automation", "automate", "workflow", "n8n", "zapier", "make.com", "temporal", "integration", "webhook", "pipeline", "business process", "rpa"],
+  },
+  {
+    id: "llmops",
+    title: "LLMOps & AI Platform",
+    category: "Architects",
+    focus:
+      "Model selection and routing, prompt and version management, offline and online evaluation, tracing and observability, caching and batching, rate limits and fallbacks, cost controls and budgets, safety and PII handling, data retention, and how the platform supports many teams shipping AI features.",
+    keywords: ["llmops", "model routing", "evals", "evaluation", "observability", "prompt management", "guardrails", "llm cost", "latency", "fine-tune", "fine tuning"],
+  },
+  {
+    id: "ai-strategy",
+    title: "AI Automation Strategy",
+    category: "Architects",
+    focus:
+      "Finding the highest-value processes to automate, estimating ROI and payback, build versus buy versus partner, data readiness, risk and compliance, pilot design with clear success metrics, rollout and change management, and the team and skills needed. Be concrete with numbers and state your assumptions.",
+    keywords: ["ai strategy", "roi", "what to automate", "what should we automate", "automate first", "worth automating", "opportunity", "use case", "build or buy", "adoption", "business case"],
+  },
+  {
+    id: "defi",
+    title: "DeFi Protocol Design",
+    category: "Architects",
+    focus:
+      "The core mechanism and its invariants, pricing and oracle design, liquidation and bad-debt handling, risk parameters, fees and incentives, composability with other protocols, economic and flash-loan attack surfaces, MEV exposure, governance and upgrade control, and what must be proven or audited before launch.",
+    keywords: ["defi", "protocol design", "amm", "lending", "liquidation", "yield", "stablecoin", "derivatives", "perps", "mechanism design", "oracle design"],
+  },
+  {
+    id: "tokenomics",
+    title: "Tokenomics",
+    category: "Architects",
+    focus:
+      "Why the token needs to exist at all, utility and value accrual, supply, emissions and vesting schedules, staking and reward design, governance power and capture risks, treasury management, sybil resistance for airdrops, simulation of scenarios over time, and regulatory red flags to raise with counsel.",
+    keywords: ["tokenomics", "token design", "emissions", "vesting", "governance token", "staking rewards", "airdrop", "token utility", "treasury"],
+  },
+  {
+    id: "contract-systems",
+    title: "Contract System Design",
+    category: "Architects",
+    focus:
+      "How to split the system into contracts and modules, upgradeability options (immutable, UUPS, transparent proxy, diamond, migration) and who controls them, roles and access control, pausing and emergency paths, storage layout, external call and trust boundaries, gas and deployment costs, testing and invariant strategy, and making the code easy to audit.",
+    keywords: ["contract architecture", "upgradeability", "upgradeable", "uups", "diamond", "proxy pattern", "access control design", "modular contracts", "audit readiness"],
+  },
+  {
+    id: "web3-infra",
+    title: "Web3 Infrastructure",
+    category: "Architects",
+    focus:
+      "Indexing (subgraphs, custom indexers, event pipelines), RPC providers and redundancy, reorg handling, wallets and account abstraction including paymasters and session keys, key management and signing services, relayers and off-chain workers, caching and APIs for the frontend, monitoring and alerting, and reliability during chain congestion.",
+    keywords: ["indexer", "subgraph", "rpc", "account abstraction", "erc-4337", "smart wallet", "key management", "relayer", "off-chain", "web3 backend", "event indexing"],
+  },
+  {
+    id: "crosschain",
+    title: "Cross-chain & Layer 2",
+    category: "Architects",
+    focus:
+      "Choosing chains and rollups for the use case, native bridges versus messaging protocols and their trust assumptions, message ordering and failure handling, liquidity fragmentation, deployment and address management across chains, finality and reorg risk, and what an attacker gains by compromising each component.",
+    keywords: ["cross-chain", "crosschain", "bridge", "layer 2", "l2", "rollup", "interoperability", "chain selection", "multichain", "appchain"],
+  },
+  {
+    id: "ai-web3",
+    title: "AI x Web3",
+    category: "Architects",
+    focus:
+      "How agents get wallets (smart accounts, MPC, custodial), limiting what an agent can do with funds (session keys, spend limits, allowlists, time locks, human co-signing), intents versus direct transactions, verifying agent actions, agent-to-agent and pay-per-use payments, prompt-injection risks that lead to asset loss, monitoring and kill switches, and the legal questions to raise.",
+    keywords: ["onchain agent", "agent wallet", "ai agent wallet", "autonomous agent", "intents", "agent payments", "ai and crypto", "ai x web3", "session key"],
+  }
 ];
 
 export function getDomain(id: string): Domain | undefined {
