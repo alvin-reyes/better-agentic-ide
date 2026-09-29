@@ -262,5 +262,5 @@ fn get_foreground_pid(shell_pid: u32) -> Option<u32> {
     stdout
         .lines()
         .filter_map(|line| line.trim().parse::<u32>().ok())
-        .last()
+        .next_back()
 }

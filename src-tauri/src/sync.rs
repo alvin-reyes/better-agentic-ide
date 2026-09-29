@@ -559,7 +559,7 @@ pub fn run_sync(
         report.pushed = true;
     }
 
-    let in_time = import_deadline_ms.map_or(true, |d| now_ms() <= d);
+    let in_time = import_deadline_ms.is_none_or(|d| now_ms() <= d);
     if apply_remote && in_time {
         report.imported_keys = import_state(paths)?;
         if config.include_claude_memory {

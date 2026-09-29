@@ -18,7 +18,7 @@ import { invoke } from "@tauri-apps/api/core";
  */
 
 /** Exact keys that are persisted. */
-export const PERSISTED_KEYS = new Set([
+const PERSISTED_KEYS = new Set([
   "ade-session", // tabs, splits, folders, scrollback
   "ade-scratchpad-draft", // unsent scratchpad text
   "better-terminal-settings", // theme, fonts, AI settings
@@ -34,7 +34,7 @@ export const PERSISTED_KEYS = new Set([
 ]);
 
 /** Key prefixes that are persisted (one key per recording). */
-export const PERSISTED_PREFIXES = ["ade-rec-"];
+const PERSISTED_PREFIXES = ["ade-rec-"];
 
 export function isPersistedKey(key: string): boolean {
   return PERSISTED_KEYS.has(key) || PERSISTED_PREFIXES.some((p) => key.startsWith(p));
@@ -163,10 +163,6 @@ export function suspendAutoSave(): void {
   pending = {};
   if (flushTimer !== null) window.clearTimeout(flushTimer);
   flushTimer = null;
-}
-
-export function isAutoSaveSuspended(): boolean {
-  return suspended;
 }
 
 /** Test seam: undo startAutoSave() completely, including the wrapper. */
