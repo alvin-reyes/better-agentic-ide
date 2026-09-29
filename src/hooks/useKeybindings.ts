@@ -1,6 +1,12 @@
 import { useEffect } from "react";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+
+type SettingsState = ReturnType<typeof useSettingsStore.getState>;
+
+/** The settings a live terminal picks up from refreshAllTerminals(). */
+const terminalSettingsKey = (s: SettingsState) =>
+  JSON.stringify([s.themeId, s.customColors, s.fontSize, s.fontFamily, s.lineHeight, s.cursorStyle, s.cursorBlink, s.scrollback]);
 import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
 import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
 
@@ -25,29 +31,17 @@ interface KeybindingActions {
 }
 
 export function useKeybindings(actions: KeybindingActions) {
-  const { addTab, setActiveTab, renameTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId } =
-    useTabStore();
+  const { addTab, setActiveTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId } = useTabStore();
 
-  // Watch for settings changes and refresh terminals
   useEffect(() => {
-    let prev = JSON.stringify(useSettingsStore.getState());
-    const unsub = useSettingsStore.subscribe((state) => {
-      const next = JSON.stringify({
-        themeId: state.themeId,
-        customColors: state.customColors,
-        fontSize: state.fontSize,
-        fontFamily: state.fontFamily,
-        lineHeight: state.lineHeight,
-        cursorStyle: state.cursorStyle,
-        cursorBlink: state.cursorBlink,
-        scrollback: state.scrollback,
-      });
+    let prev = terminalSettingsKey(useSettingsStore.getState());
+    return useSettingsStore.subscribe((state) => {
+      const next = terminalSettingsKey(state);
       if (next !== prev) {
         prev = next;
         refreshAllTerminals();
       }
     });
-    return unsub;
   }, []);
 
   useEffect(() => {
@@ -132,7 +126,7 @@ export function useKeybindings(actions: KeybindingActions) {
         return run(() => (is("paneRight") ? focusNextPane(activeTabId) : focusPrevPane(activeTabId)));
       }
 
-      // Escape: Close open panels (settings > scratchpad) and focus terminal
+      // Escape closes settings, else the scratchpad, and focuses the terminal.
       if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.key === "Escape") {
         const settings = useSettingsStore.getState();
         if (settings.showSettings) {
@@ -142,13 +136,11 @@ export function useKeybindings(actions: KeybindingActions) {
         if (actions.isScratchpadOpen) {
           actions.closeScratchpad();
         }
-        // Always try to focus the terminal
-        const xtermEl = document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
-        xtermEl?.focus();
+        document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")?.focus();
       }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [actions, addTab, setActiveTab, renameTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId]);
+  }, [actions, addTab, setActiveTab, splitPane, focusNextPane, focusPrevPane, tabs, activeTabId]);
 }

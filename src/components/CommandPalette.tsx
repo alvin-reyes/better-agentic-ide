@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
-import { useSettingsStore } from "../stores/settingsStore";
+import { useSettingsStore, themePresets, applyThemeToDOM } from "../stores/settingsStore";
 import { useFleetStore } from "../stores/fleetStore";
 
 interface PaletteItem {
@@ -11,6 +11,18 @@ interface PaletteItem {
   category: string;
   action: () => void;
 }
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Tabs: "#58a6ff",
+  Panes: "#3fb950",
+  Panels: "#bc8cff",
+  Themes: "#d29922",
+  Recording: "#ff7b72",
+  BMAD: "#2dd4bf",
+  Contracts: "#f0883e",
+};
+
+const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? "var(--text-muted)";
 
 interface CommandPaletteProps {
   onClose: () => void;
@@ -29,37 +41,27 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
   const { tabs, activeTabId, addTab, setActiveTab } = useTabStore();
 
   const items = useMemo<PaletteItem[]>(() => {
+    const activeTab = tabs.find((t) => t.id === activeTabId);
+    const split = (direction: "horizontal" | "vertical") => {
+      if (activeTab) {
+        import("../hooks/useTerminal").then(({ getPtyCwd }) => {
+          getPtyCwd(activeTab.activePaneId).then((cwd) => {
+            useTabStore.getState().splitPane(activeTabId, activeTab.activePaneId, direction, cwd);
+          });
+        });
+      }
+      onClose();
+    };
     const actions: PaletteItem[] = [
       // Tab actions
       { id: "new-tab", label: "New Tab", shortcut: L("newTab"), category: "Tabs", action: () => { addTab(); onClose(); } },
       { id: "close-tab", label: "Close Tab", shortcut: L("closeTab"), category: "Tabs", action: () => { useTabStore.getState().closeTab(activeTabId); onClose(); } },
       { id: "rename-tab", label: "Rename Tab", shortcut: L("renameTab"), category: "Tabs", action: () => { window.dispatchEvent(new CustomEvent("rename-active-tab")); onClose(); } },
       // Split actions
-      { id: "split-h", label: "Split Horizontally", shortcut: L("splitHorizontal"), category: "Panes", action: () => {
-        const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) {
-          import("../hooks/useTerminal").then(({ getPtyCwd }) => {
-            getPtyCwd(tab.activePaneId).then((cwd) => {
-              useTabStore.getState().splitPane(activeTabId, tab.activePaneId, "horizontal", cwd);
-            });
-          });
-        }
-        onClose();
-      }},
-      { id: "split-v", label: "Split Vertically", shortcut: L("splitVertical"), category: "Panes", action: () => {
-        const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) {
-          import("../hooks/useTerminal").then(({ getPtyCwd }) => {
-            getPtyCwd(tab.activePaneId).then((cwd) => {
-              useTabStore.getState().splitPane(activeTabId, tab.activePaneId, "vertical", cwd);
-            });
-          });
-        }
-        onClose();
-      }},
+      { id: "split-h", label: "Split Horizontally", shortcut: L("splitHorizontal"), category: "Panes", action: () => split("horizontal") },
+      { id: "split-v", label: "Split Vertically", shortcut: L("splitVertical"), category: "Panes", action: () => split("vertical") },
       { id: "close-pane", label: "Close Pane", shortcut: L("closePane"), category: "Panes", action: () => {
-        const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) useTabStore.getState().closePane(activeTabId, tab.activePaneId);
+        if (activeTab) useTabStore.getState().closePane(activeTabId, activeTab.activePaneId);
         onClose();
       }},
       { id: "zoom-pane", label: "Zoom / Unzoom Pane", shortcut: L("zoomPane"), category: "Panes", action: () => {
@@ -81,10 +83,9 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       } },
       { id: "fleet-tab", label: "Fleet: Open tab", category: "Panels", action: () => { useTabStore.getState().addFleetTab(); onClose(); } },
       { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
-        const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) {
+        if (activeTab) {
           import("../hooks/useTerminal").then(({ getPtyCwd }) => {
-            getPtyCwd(tab.activePaneId).then((cwd) => {
+            getPtyCwd(activeTab.activePaneId).then((cwd) => {
               import("@tauri-apps/api/core").then(({ invoke }) => {
                 invoke("scaffold_bmad", { path: cwd }).catch(() => {});
               });
@@ -111,9 +112,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "orchestrator", label: "Open Orchestrator", shortcut: L("orchestrator"), category: "Panels", action: () => {
         import("../stores/orchestratorStore").then(({ useOrchestratorStore }) => {
           const sessionId = useOrchestratorStore.getState().createSession("New Project");
-          import("../stores/tabStore").then(({ useTabStore }) => {
-            useTabStore.getState().addOrchestratorTab(sessionId);
-          });
+          useTabStore.getState().addOrchestratorTab(sessionId);
         });
         onClose();
       }},
@@ -123,21 +122,18 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       }},
       { id: "settings", label: "Open Settings", shortcut: L("settings"), category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
       { id: "search", label: "Search in Terminal", shortcut: L("find"), category: "Panels", action: () => { onClose(); } },
-      // Recording commands
       { id: "rec-start", label: "Start Recording", category: "Recording", action: () => {
-        const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) {
+        if (activeTab) {
           import("../hooks/useTerminalRecording").then(({ useRecordingStore }) => {
-            useRecordingStore.getState().startRecording(tab.activePaneId);
+            useRecordingStore.getState().startRecording(activeTab.activePaneId);
           });
         }
         onClose();
       }},
       { id: "rec-stop", label: "Stop Recording", category: "Recording", action: () => {
-        const tab = tabs.find(t => t.id === activeTabId);
-        if (tab) {
+        if (activeTab) {
           import("../hooks/useTerminalRecording").then(({ useRecordingStore }) => {
-            useRecordingStore.getState().stopRecording(tab.activePaneId);
+            useRecordingStore.getState().stopRecording(activeTab.activePaneId);
           });
         }
         onClose();
@@ -146,32 +142,18 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         onOpenRecordings?.();
         onClose();
       }},
-      // Theme shortcuts
-      ...[
-        { id: "github-dark", name: "GitHub Dark" },
-        { id: "dracula", name: "Dracula" },
-        { id: "monokai", name: "Monokai Pro" },
-        { id: "nord", name: "Nord" },
-        { id: "catppuccin", name: "Catppuccin Mocha" },
-        { id: "solarized-dark", name: "Solarized Dark" },
-        { id: "tokyo-night", name: "Tokyo Night" },
-        { id: "one-dark", name: "One Dark" },
-      ].map((theme) => ({
+      ...themePresets.map((theme) => ({
         id: `theme-${theme.id}`,
         label: `Theme: ${theme.name}`,
         category: "Themes",
         action: () => {
-          const s = useSettingsStore.getState();
-          s.setTheme(theme.id);
-          import("../stores/settingsStore").then(({ applyThemeToDOM }) => {
-            applyThemeToDOM(useSettingsStore.getState().getActiveTheme());
-          });
+          useSettingsStore.getState().setTheme(theme.id);
+          applyThemeToDOM(useSettingsStore.getState().getActiveTheme());
           onClose();
         },
       })),
     ];
 
-    // Add tab switching
     tabs.forEach((tab, idx) => {
       actions.push({
         id: `switch-tab-${tab.id}`,
@@ -183,7 +165,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     });
 
     return actions;
-  }, [tabs, activeTabId, addTab, setActiveTab, onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onToggleFileBrowser]);
+  }, [tabs, activeTabId, addTab, setActiveTab, onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onToggleFileBrowser, onOpenRecordings]);
 
   const filtered = useMemo(() => {
     if (!query) return items;
@@ -203,7 +185,6 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     inputRef.current?.focus();
   }, []);
 
-  // Scroll selected item into view
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
@@ -223,19 +204,6 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     } else if (e.key === "Enter" && filtered[selectedIndex]) {
       e.preventDefault();
       filtered[selectedIndex].action();
-    }
-  };
-
-  const categoryColor = (cat: string) => {
-    switch (cat) {
-      case "Tabs": return "#58a6ff";
-      case "Panes": return "#3fb950";
-      case "Panels": return "#bc8cff";
-      case "Themes": return "#d29922";
-      case "Recording": return "#ff7b72";
-      case "BMAD": return "#2dd4bf";
-      case "Contracts": return "#f0883e";
-      default: return "var(--text-muted)";
     }
   };
 

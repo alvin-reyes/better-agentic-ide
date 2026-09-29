@@ -11,7 +11,7 @@ import { ImageAddon } from "@xterm/addon-image";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 
 interface PtyEvent {
@@ -42,13 +42,17 @@ const NOTIFY_COOLDOWN = 10000; // Don't spam — 10s between notifications per p
 const lastNotified = new Map<string, number>();
 const idleCheckInFlight = new Set<string>(); // Guard against concurrent imports per pane
 
+function forgetPane(paneId: string) {
+  lastActivity.delete(paneId);
+  wasActive.delete(paneId);
+  lastNotified.delete(paneId);
+  idleCheckInFlight.delete(paneId);
+}
+
 function checkIdleTransition(paneId: string) {
-  // Skip if pane was destroyed while interval was pending
+  // The pane was destroyed while the interval was pending.
   if (!instances.has(paneId)) {
-    lastActivity.delete(paneId);
-    wasActive.delete(paneId);
-    lastNotified.delete(paneId);
-    idleCheckInFlight.delete(paneId);
+    forgetPane(paneId);
     return;
   }
 
@@ -116,14 +120,12 @@ const idleCheckInterval = setInterval(() => {
   });
 }, 2000);
 
-// Allow cleanup if needed (e.g. in tests or app teardown)
 export function stopIdlePolling() {
   clearInterval(idleCheckInterval);
 }
 
 function markActivity(paneId: string) {
   lastActivity.set(paneId, Date.now());
-  // Mark as active immediately
   wasActive.set(paneId, true);
 }
 
@@ -135,125 +137,103 @@ function isPaneActive(paneId: string): boolean {
 
 function destroyInstance(paneId: string) {
   const inst = instances.get(paneId);
-  if (!inst) return;
-  if (inst.ptyId !== null) {
-    invoke("kill_pty", { id: inst.ptyId });
-  }
-  inst.term.dispose();
-  inst.wrapper.remove();
-  instances.delete(paneId);
-  // Clean up per-pane tracking state to prevent memory leaks
-  lastActivity.delete(paneId);
-  wasActive.delete(paneId);
-  lastNotified.delete(paneId);
-  idleCheckInFlight.delete(paneId);
+  if (inst?.ptyId != null) invoke("kill_pty", { id: inst.ptyId });
+  detachInstance(paneId);
 }
 
-// Like destroyInstance but does NOT kill the PTY — used when detaching a tab to a new window
+// Like destroyInstance but keeps the PTY running (the tab moves to a new window).
 function detachInstance(paneId: string) {
   const inst = instances.get(paneId);
   if (!inst) return;
   inst.term.dispose();
   inst.wrapper.remove();
   instances.delete(paneId);
-  lastActivity.delete(paneId);
-  wasActive.delete(paneId);
-  lastNotified.delete(paneId);
-  idleCheckInFlight.delete(paneId);
+  forgetPane(paneId);
 }
 
-// Create a terminal instance that reattaches to an existing PTY (for detached windows)
-async function createReattachedInstance(
-  paneId: string,
-  ptyId: number,
-  setPtyId: (paneId: string, ptyId: number) => void,
-): Promise<TerminalInstance> {
+/** An xterm with its addons, rendered into a detached wrapper div that lives outside React. */
+function openTerminal(paneId: string) {
   const wrapper = document.createElement("div");
   wrapper.style.width = "100%";
   wrapper.style.height = "100%";
 
   const term = new Terminal(getTerminalOptions());
-
   const fitAddon = new FitAddon();
-  term.loadAddon(fitAddon);
-
   const searchAddon = new SearchAddon();
-  term.loadAddon(searchAddon);
-
-  const webLinksAddon = new WebLinksAddon((_event, uri) => {
-    openUrl(uri).catch(() => {});
-  });
-  term.loadAddon(webLinksAddon);
-
   const serializeAddon = new SerializeAddon();
+  term.loadAddon(fitAddon);
+  term.loadAddon(searchAddon);
   term.loadAddon(serializeAddon);
+  term.loadAddon(new WebLinksAddon((_event, uri) => {
+    openUrl(uri).catch(() => {});
+  }));
 
   term.open(wrapper);
   registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal);
 
   try {
-    const webglAddon = new WebglAddon();
-    term.loadAddon(webglAddon);
+    term.loadAddon(new WebglAddon());
   } catch {
     // Canvas fallback
   }
-
   try {
-    const imageAddon = new ImageAddon({ sixelSupport: true, iipSupport: true });
-    term.loadAddon(imageAddon);
+    term.loadAddon(new ImageAddon({ sixelSupport: true, iipSupport: true }));
   } catch {
     // Image rendering not available
   }
 
-  const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId, wrapper };
-  instances.set(paneId, inst);
+  return { term, fitAddon, searchAddon, serializeAddon, wrapper };
+}
 
-  // Set up PTY channel for reattached stream
+/** Channel that streams a PTY's output into `term`. */
+function ptyChannel(paneId: string, term: Terminal): Channel<PtyEvent> {
   const onEvent = new Channel<PtyEvent>();
-  onEvent.onmessage = (event: PtyEvent) => {
+  onEvent.onmessage = (event) => {
     if (event.type === "output" && event.data) {
       const bytes = new Uint8Array(event.data);
       term.write(bytes);
       markActivity(paneId);
-      const tap = getRecordingTap();
-      if (tap) tap(paneId, bytes);
+      recordingTap?.(paneId, bytes);
     } else if (event.type === "exit") {
       term.writeln("\r\n\x1b[38;5;241m[Process exited]\x1b[0m");
     } else if (event.type === "error") {
       term.writeln(`\r\n\x1b[31m[Error: ${event.message}]\x1b[0m`);
     }
   };
+  return onEvent;
+}
+
+/** Keys and resizes go to the PTY; app shortcuts pass through to the window's handler. */
+function wireInput(inst: TerminalInstance) {
+  // Every other key, including plain Ctrl combos, goes to the shell.
+  inst.term.attachCustomKeyEventHandler((e) => !isAppShortcut(e));
+  inst.term.onData((data) => {
+    if (inst.ptyId !== null) {
+      invoke("write_pty", { id: inst.ptyId, data: Array.from(new TextEncoder().encode(data)) });
+    }
+  });
+  inst.term.onResize(({ cols, rows }) => {
+    if (inst.ptyId !== null) invoke("resize_pty", { id: inst.ptyId, rows, cols });
+  });
+}
+
+// A terminal for a PTY that already runs (a tab moved to a detached window).
+async function createReattachedInstance(
+  paneId: string,
+  ptyId: number,
+  setPtyId: (paneId: string, ptyId: number) => void,
+): Promise<TerminalInstance> {
+  const inst: TerminalInstance = { ...openTerminal(paneId), ptyId };
+  instances.set(paneId, inst);
 
   try {
-    await invoke("reattach_pty", { id: ptyId, onEvent });
-    inst.ptyId = ptyId;
+    await invoke("reattach_pty", { id: ptyId, onEvent: ptyChannel(paneId, inst.term) });
     setPtyId(paneId, ptyId);
   } catch (err) {
-    term.writeln(`\x1b[31mFailed to reattach to PTY: ${err}\x1b[0m`);
+    inst.term.writeln(`\x1b[31mFailed to reattach to PTY: ${err}\x1b[0m`);
   }
 
-  // Let app-level shortcuts pass through
-  // App shortcuts pass through to the window's handler; every other key,
-  // including plain Ctrl combos, goes to the shell.
-  term.attachCustomKeyEventHandler((e: KeyboardEvent) => !isAppShortcut(e));
-
-  // Keyboard input -> PTY
-  term.onData((data: string) => {
-    if (inst.ptyId !== null) {
-      invoke("write_pty", {
-        id: inst.ptyId,
-        data: Array.from(new TextEncoder().encode(data)),
-      });
-    }
-  });
-
-  // Resize -> PTY
-  term.onResize(({ cols, rows }) => {
-    if (inst.ptyId !== null) {
-      invoke("resize_pty", { id: inst.ptyId, rows, cols });
-    }
-  });
-
+  wireInput(inst);
   return inst;
 }
 
@@ -300,44 +280,7 @@ function getTerminalOptions() {
 }
 
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null, serializedBuffer?: string): Promise<TerminalInstance> {
-  // Create a wrapper div that xterm renders into — lives outside React
-  const wrapper = document.createElement("div");
-  wrapper.style.width = "100%";
-  wrapper.style.height = "100%";
-
-  const term = new Terminal(getTerminalOptions());
-
-  const fitAddon = new FitAddon();
-  term.loadAddon(fitAddon);
-
-  const searchAddon = new SearchAddon();
-  term.loadAddon(searchAddon);
-
-  const serializeAddon = new SerializeAddon();
-  term.loadAddon(serializeAddon);
-
-  const webLinksAddon = new WebLinksAddon((_event, uri) => {
-    openUrl(uri).catch(() => {});
-  });
-  term.loadAddon(webLinksAddon);
-
-  term.open(wrapper);
-
-  registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal);
-
-  try {
-    const webglAddon = new WebglAddon();
-    term.loadAddon(webglAddon);
-  } catch {
-    // Canvas fallback
-  }
-
-  try {
-    const imageAddon = new ImageAddon({ sixelSupport: true, iipSupport: true });
-    term.loadAddon(imageAddon);
-  } catch {
-    // Image rendering not available
-  }
+  const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
 
   // Restore serialized buffer or show splash
   if (serializedBuffer) {
@@ -366,28 +309,12 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
   const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };
   instances.set(paneId, inst);
 
-  // Set up PTY channel
-  const onEvent = new Channel<PtyEvent>();
-  onEvent.onmessage = (event: PtyEvent) => {
-    if (event.type === "output" && event.data) {
-      const bytes = new Uint8Array(event.data);
-      term.write(bytes);
-      markActivity(paneId);
-      const tap = getRecordingTap();
-      if (tap) tap(paneId, bytes);
-    } else if (event.type === "exit") {
-      term.writeln("\r\n\x1b[38;5;241m[Process exited]\x1b[0m");
-    } else if (event.type === "error") {
-      term.writeln(`\r\n\x1b[31m[Error: ${event.message}]\x1b[0m`);
-    }
-  };
-
   try {
     const ptyId = await invoke<number>("create_pty", {
       rows: term.rows || 24,
       cols: term.cols || 80,
       cwd: initialCwd || null,
-      onEvent,
+      onEvent: ptyChannel(paneId, term),
     });
     inst.ptyId = ptyId;
     setPtyId(paneId, ptyId);
@@ -395,28 +322,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     term.writeln(`\x1b[31mFailed to start shell: ${err}\x1b[0m`);
   }
 
-  // Let app-level shortcuts pass through to the window handler
-  // App shortcuts pass through to the window's handler; every other key,
-  // including plain Ctrl combos, goes to the shell.
-  term.attachCustomKeyEventHandler((e: KeyboardEvent) => !isAppShortcut(e));
-
-  // Keyboard input -> PTY
-  term.onData((data: string) => {
-    if (inst.ptyId !== null) {
-      invoke("write_pty", {
-        id: inst.ptyId,
-        data: Array.from(new TextEncoder().encode(data)),
-      });
-    }
-  });
-
-  // Resize -> PTY
-  term.onResize(({ cols, rows }) => {
-    if (inst.ptyId !== null) {
-      invoke("resize_pty", { id: inst.ptyId, rows, cols });
-    }
-  });
-
+  wireInput(inst);
   return inst;
 }
 
@@ -450,16 +356,9 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       // Get or create the terminal instance
       let inst = instances.get(paneId);
       if (!inst) {
-        // Check if pane has an initialCwd or existing ptyId (e.g. from split or reattach)
-        const panes = useTabStore.getState().tabs.flatMap((t) => {
-          const findPanes = (node: import("../stores/tabStore").PaneNode): import("../stores/tabStore").Pane[] => {
-            if (node.type === "pane") return [node.pane];
-            return node.children.flatMap(findPanes);
-          };
-          return findPanes(t.root);
-        });
-        const pane = panes.find((p) => p.id === paneId);
-        // If the pane already has a ptyId, reattach instead of creating new
+        // A pane with a ptyId already has a shell (a detached window's tab):
+        // reattach to it instead of starting a new one.
+        const pane = useTabStore.getState().tabs.flatMap((t) => findAllPanes(t.root)).find((p) => p.id === paneId);
         if (pane?.ptyId) {
           inst = await createReattachedInstance(paneId, pane.ptyId, setPtyId);
         } else {
@@ -565,16 +464,12 @@ function serializeTerminalBuffer(paneId: string): string | null {
   }
 }
 
-// Recording tap: allow external hooks to intercept PTY output
+// Lets the recorder see PTY output.
 type RecordingTap = (paneId: string, data: Uint8Array) => void;
 let recordingTap: RecordingTap | null = null;
 
 function setRecordingTap(tap: RecordingTap | null) {
   recordingTap = tap;
-}
-
-function getRecordingTap(): RecordingTap | null {
-  return recordingTap;
 }
 
 // Get terminal dimensions
@@ -584,5 +479,4 @@ function getTerminalDimensions(paneId: string): { cols: number; rows: number } |
   return { cols: inst.term.cols, rows: inst.term.rows };
 }
 
-// Export for cleanup when tabs are closed
 export { destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };
