@@ -281,11 +281,9 @@ function getTerminalOptions() {
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null, serializedBuffer?: string): Promise<TerminalInstance> {
   const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
 
-  // Restore serialized buffer or show splash
   if (serializedBuffer) {
     term.write(serializedBuffer);
   } else {
-    // Show ASCII splash with portrait logo
     const skin = "\x1b[38;5;180m";
     const hair = "\x1b[38;5;236m";
     const shirt = "\x1b[38;5;67m";
@@ -399,7 +397,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
   return { termRef };
 }
 
-// Update all terminal instances with new settings (theme, font, etc.)
+// Apply changed settings (theme, font, ...) to every open terminal.
 function refreshAllTerminals() {
   const opts = getTerminalOptions();
   instances.forEach((inst) => {
@@ -414,12 +412,10 @@ function refreshAllTerminals() {
   });
 }
 
-// Get the SearchAddon for a given pane
 function getSearchAddon(paneId: string): SearchAddon | null {
   return instances.get(paneId)?.searchAddon ?? null;
 }
 
-// Get CWD for a PTY instance
 async function getPtyCwd(paneId: string): Promise<string | null> {
   const inst = instances.get(paneId);
   if (!inst || inst.ptyId === null) return null;
@@ -430,21 +426,16 @@ async function getPtyCwd(paneId: string): Promise<string | null> {
   }
 }
 
-// Check if a pane's terminal has an active Claude session by scanning recent buffer lines
+// "Claude" when the last 50 lines of a pane look like a running Claude session.
 function hasActiveProcess(paneId: string): string | null {
   const inst = instances.get(paneId);
   if (!inst) return null;
   const buf = inst.term.buffer.active;
-  const totalLines = buf.length;
-  // Scan the last 50 lines for signs of an active Claude session
-  const startLine = Math.max(0, totalLines - 50);
-  for (let i = totalLines - 1; i >= startLine; i--) {
+  for (let i = buf.length - 1; i >= Math.max(0, buf.length - 50); i--) {
     const line = buf.getLine(i)?.translateToString(true) ?? "";
-    // Skip empty lines
     if (!line.trim()) continue;
-    // If we see "[Process exited]" or a shell prompt ending with $ or %, it's idle
     if (/\[Process exited\]/.test(line)) return null;
-    // Detect active Claude indicators
+    // A line mentioning claude that isn't a shell prompt ($ or %).
     if (/claude/.test(line.toLowerCase()) && !/\$\s*$/.test(line) && !/%\s*$/.test(line)) {
       return "Claude";
     }
@@ -452,7 +443,7 @@ function hasActiveProcess(paneId: string): string | null {
   return null;
 }
 
-// Serialize all terminal buffers for session persistence
+// Scrollback as escape sequences, for session persistence.
 function serializeTerminalBuffer(paneId: string): string | null {
   const inst = instances.get(paneId);
   if (!inst) return null;
@@ -471,7 +462,6 @@ function setRecordingTap(tap: RecordingTap | null) {
   recordingTap = tap;
 }
 
-// Get terminal dimensions
 function getTerminalDimensions(paneId: string): { cols: number; rows: number } | null {
   const inst = instances.get(paneId);
   if (!inst) return null;

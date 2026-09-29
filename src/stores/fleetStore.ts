@@ -256,6 +256,12 @@ interface FleetStore {
   reset: () => void;
 }
 
+/** A transcript timestamp in ms; now when it's missing or unreadable. */
+function parseTime(iso: string | null | undefined): number {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(t) ? Date.now() : t;
+}
+
 export const useFleetStore = create<FleetStore>((set) => ({
   subagents: [],
   scope: "active",
@@ -264,7 +270,7 @@ export const useFleetStore = create<FleetStore>((set) => ({
     set((state) => {
       if (ev.kind === "Spawn") {
         if (state.subagents.some((s) => s.id === ev.id)) return state;
-        const startTime = ev.started_at ? Date.parse(ev.started_at) : Date.now();
+        const startTime = parseTime(ev.started_at);
         return {
           subagents: [
             ...state.subagents,
@@ -281,7 +287,7 @@ export const useFleetStore = create<FleetStore>((set) => ({
         };
       }
       if (!state.subagents.some((s) => s.id === ev.id)) return state;
-      const endTime = ev.finished_at ? Date.parse(ev.finished_at) : Date.now();
+      const endTime = parseTime(ev.finished_at);
       return {
         subagents: state.subagents.map((s) =>
           s.id === ev.id ? { ...s, endTime } : s,

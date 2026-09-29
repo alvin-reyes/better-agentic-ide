@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import { sanitizeHtml } from "../lib/sanitizeHtml";
 import mermaid from "mermaid";
+import { writePty } from "../lib/terminalCommands";
 
 function buildSpec(session: OrchestratorSession, tasks: OrchestratorTask[]): string {
   const lines: string[] = [];
@@ -233,12 +234,12 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const agentTabId = useTabStore.getState().activeTabId;
 
     // Build the claude command — agent reads SPEC.md for full context
-    const escapedDesc = task.description.replace(/'/g, "'\\''");
     const systemPrompt = profile.providers.claude.replace(/^claude\s+"?/, "").replace(/"$/, "");
     const specRef = projectDir ? " Read SPEC.md for the full project specification and context." : "";
-    const cmd = `claude -p '${systemPrompt}${specRef} Your task: ${escapedDesc}'`;
-    const data = Array.from(new TextEncoder().encode(cmd + "\r"));
-    await invoke("write_pty", { id: ptyId, data }).catch(() => {});
+    // One single-quoted shell argument: close, escape and reopen around each quote.
+    const prompt = `${systemPrompt}${specRef} Your task: ${task.description}`.replace(/'/g, "'\\''");
+    const cmd = `claude -p '${prompt}'`;
+    await writePty(ptyId, cmd + "\r").catch(() => {});
 
     if (activePane) {
       useAgentTrackerStore.getState().startSession(

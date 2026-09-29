@@ -138,14 +138,7 @@ function FileTreeNode({ node, depth, showHidden }: { node: TreeNode; depth: numb
 
 // Shorten a path for display
 function shortenPath(p: string): string {
-  const home = "/Users/";
-  if (p.startsWith(home)) {
-    const rest = p.slice(home.length);
-    const slashIdx = rest.indexOf("/");
-    if (slashIdx !== -1) return "~" + rest.slice(slashIdx);
-    return "~";
-  }
-  return p;
+  return p.replace(/^\/(Users|home)\/[^/]+/, "~");
 }
 
 export default function FileBrowser() {

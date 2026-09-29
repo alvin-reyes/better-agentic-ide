@@ -20,9 +20,7 @@ const PANE_COLORS = [
 
 // Format CWD: replace home dir with ~, show last 3 segments as breadcrumb
 function formatCwd(path: string): string {
-  let display = path;
-  const homeMatch = display.match(/^\/Users\/[^/]+/);
-  if (homeMatch) display = display.replace(homeMatch[0], "~");
+  const display = path.replace(/^\/(Users|home)\/[^/]+/, "~");
   const parts = display.split("/").filter(Boolean);
   if (parts.length <= 3) return parts.join(" / ");
   return "... / " + parts.slice(-3).join(" / ");
@@ -80,8 +78,13 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
         setShowSearch(true);
       }
     };
+    const open = () => setShowSearch(true);
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("open-terminal-search", open);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("open-terminal-search", open);
+    };
   }, [isActive]);
 
   return (

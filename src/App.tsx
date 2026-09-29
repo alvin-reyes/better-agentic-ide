@@ -6,6 +6,7 @@ import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
 import BmadInitBanner from "./components/BmadInitBanner";
+import { writePty } from "./lib/terminalCommands";
 
 // Lazy-load heavy components for faster startup
 const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
@@ -287,8 +288,7 @@ export default function App() {
   const sendEnterToTerminal = useCallback(() => {
     const ptyId = getActivePtyId();
     if (ptyId === null) return;
-    const data = Array.from(new TextEncoder().encode("\r"));
-    invoke("write_pty", { id: ptyId, data }).catch(() => {});
+    writePty(ptyId, "\r").catch(() => {});
   }, [getActivePtyId]);
 
   const openOrchestrator = useCallback(() => {

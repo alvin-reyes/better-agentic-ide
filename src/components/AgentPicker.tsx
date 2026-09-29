@@ -5,6 +5,7 @@ import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
+import { writePty } from "../lib/terminalCommands";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Backend: "#3fb950",
@@ -135,8 +136,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       cmd = cmd.replace(/^claude /, "claude --dangerously-skip-permissions ");
     }
 
-    const data = Array.from(new TextEncoder().encode(cmd + "\r"));
-    await invoke("write_pty", { id: ptyId, data }).catch(() => {});
+    await writePty(ptyId, cmd + "\r").catch(() => {});
 
     const activePane = getActivePane();
     if (activePane) {

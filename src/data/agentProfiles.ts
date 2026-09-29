@@ -343,10 +343,8 @@ export const AGENT_PROFILES: AgentProfile[] = [
     description: "Systematic debugging, root cause analysis, and bug fixing",
     keywords: ["debug", "bug", "fix", "error", "crash", "issue", "broken", "wrong", "fail", "exception", "stack trace"],
     providers: {
+      ...makeProviders("You are a systematic debugging specialist. Help me identify and fix bugs through root cause analysis, log inspection, and methodical testing. Focus on reproducing the issue first, then fixing it."),
       claude: 'claude "/skill superpowers:systematic-debugging"',
-      codex: 'codex "You are a systematic debugging specialist. Help me identify and fix bugs through root cause analysis, log inspection, and methodical testing. Focus on reproducing the issue first, then fixing it."',
-      gemini: 'gemini "You are a systematic debugging specialist. Help me identify and fix bugs through root cause analysis, log inspection, and methodical testing. Focus on reproducing the issue first, then fixing it."',
-      ollama: '__OLLAMA__You are a systematic debugging specialist. Help me identify and fix bugs through root cause analysis, log inspection, and methodical testing. Focus on reproducing the issue first, then fixing it.',
     },
   },
   {

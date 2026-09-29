@@ -1,30 +1,24 @@
+import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import type { Tab } from "../stores/tabStore";
 
-interface SerializedTab {
-  id: string;
-  name: string;
-  type?: Tab["type"];
-  root: Tab["root"];
-  activePaneId: string;
-}
+type SerializedTab = Pick<Tab, "id" | "name" | "type" | "root" | "activePaneId">;
 
 export async function detachTabToWindow(tabId: string) {
   const store = useTabStore.getState();
   const tab = store.tabs.find((t) => t.id === tabId);
   if (!tab) return;
 
-  // If this is the only tab, add a new default tab first
+  // The main window must keep a tab.
   if (store.tabs.length <= 1) {
     store.addTab();
   }
 
-  // Detach the tab (removes from store, disposes xterm instances, keeps PTY alive)
+  // Disposes the xterm instances but keeps the PTYs alive for the new window.
   const detachedTab = store.detachTab(tabId);
   if (!detachedTab) return;
 
-  // Serialize tab data for the new window
   const serialized: SerializedTab = {
     id: detachedTab.id,
     name: detachedTab.name,
@@ -45,15 +39,9 @@ export async function detachTabToWindow(tabId: string) {
     decorations: true,
   });
 
-  // When the detached window closes, kill the PTY processes
   webview.once("tauri://destroyed", () => {
-    const panes = findAllPanes(detachedTab.root);
-    for (const pane of panes) {
-      if (pane.ptyId !== null) {
-        import("@tauri-apps/api/core").then(({ invoke }) => {
-          invoke("kill_pty", { id: pane.ptyId });
-        });
-      }
+    for (const pane of findAllPanes(detachedTab.root)) {
+      if (pane.ptyId !== null) invoke("kill_pty", { id: pane.ptyId });
     }
   });
 }
