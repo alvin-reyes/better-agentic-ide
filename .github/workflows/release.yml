@@ -102,6 +102,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     name: Build (${{ matrix.label }})
     env:
+      # vite build needs more than Node's default ~2 GB heap on the macOS runners.
+      NODE_OPTIONS: --max-old-space-size=6144
       # Signing turns on only once the Apple secrets exist; until then macOS
       # builds stay unsigned exactly as before.
       MAC_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
