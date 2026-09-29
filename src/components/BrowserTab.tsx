@@ -12,7 +12,6 @@ export default function BrowserTab({ tabId, initialUrl }: BrowserTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const navigate = useCallback((newUrl: string) => {
     let normalized = newUrl.trim();
@@ -24,7 +23,6 @@ export default function BrowserTab({ tabId, initialUrl }: BrowserTabProps) {
     setInputValue(normalized);
     setLoading(true);
     setError(null);
-    // Update tab name to show hostname
     try {
       const hostname = new URL(normalized).host;
       useTabStore.getState().renameTab(tabId, hostname);
@@ -41,7 +39,7 @@ export default function BrowserTab({ tabId, initialUrl }: BrowserTabProps) {
   const refresh = useCallback(() => {
     setLoading(true);
     setError(null);
-    // Force iframe reload by toggling src
+    // Reassigning src reloads the iframe even when the URL is unchanged.
     const iframe = iframeRef.current;
     if (iframe) {
       iframe.src = url;
@@ -111,7 +109,6 @@ export default function BrowserTab({ tabId, initialUrl }: BrowserTabProps) {
           </svg>
         </button>
         <input
-          ref={inputRef}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder="http://localhost:3000"
@@ -202,7 +199,6 @@ export default function BrowserTab({ tabId, initialUrl }: BrowserTabProps) {
         </div>
       )}
 
-      {/* iframe */}
       {!error && (
         <iframe
           ref={iframeRef}

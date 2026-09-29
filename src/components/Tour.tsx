@@ -9,8 +9,15 @@ interface TourStep {
   title: string;
   body: string;
   keys?: string;
-  position: "center" | "top-left" | "top-right" | "bottom" | "bottom-right";
+  position: keyof typeof POSITIONS;
 }
+
+const POSITIONS = {
+  center: { top: "50%", left: "50%", transform: "translate(-50%, -50%)" },
+  "top-left": { top: "60px", left: "100px" },
+  bottom: { bottom: "240px", left: "50%", transform: "translateX(-50%)" },
+  "bottom-right": { bottom: "240px", right: "40px" },
+} satisfies Record<string, React.CSSProperties>;
 
 const steps: TourStep[] = [
   {
@@ -67,10 +74,7 @@ export default function Tour() {
 
   useEffect(() => {
     try {
-      const done = localStorage.getItem(TOUR_DONE_KEY);
-      if (!done) {
-        setVisible(true);
-      }
+      if (!localStorage.getItem(TOUR_DONE_KEY)) setVisible(true);
     } catch {
       // localStorage may be unavailable; skip tour
     }
@@ -104,26 +108,6 @@ export default function Tour() {
     if (step > 0) setStep(step - 1);
   };
 
-  // Determine position styles
-  let posStyle: React.CSSProperties = {};
-  switch (current.position) {
-    case "center":
-      posStyle = { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
-      break;
-    case "top-left":
-      posStyle = { top: "60px", left: "100px" };
-      break;
-    case "top-right":
-      posStyle = { top: "60px", right: "40px" };
-      break;
-    case "bottom":
-      posStyle = { bottom: "240px", left: "50%", transform: "translateX(-50%)" };
-      break;
-    case "bottom-right":
-      posStyle = { bottom: "240px", right: "40px" };
-      break;
-  }
-
   return (
     <div
       style={{
@@ -139,7 +123,7 @@ export default function Tour() {
       <div
         style={{
           position: "absolute",
-          ...posStyle,
+          ...POSITIONS[current.position],
           width: "420px",
           backgroundColor: "var(--bg-secondary)",
           border: "1px solid var(--border-strong)",
@@ -163,7 +147,6 @@ export default function Tour() {
 
         {/* Content */}
         <div style={{ padding: "24px" }}>
-          {/* Logo on welcome step */}
           {step === 0 && (
             <div style={{ textAlign: "center", marginBottom: "16px" }}>
               <img
@@ -296,13 +279,4 @@ export default function Tour() {
       </div>
     </div>
   );
-}
-
-// Export a function to reset the tour (for settings or manual trigger)
-export function resetTour() {
-  try {
-    localStorage.removeItem(TOUR_DONE_KEY);
-  } catch {
-    // localStorage may be unavailable
-  }
 }

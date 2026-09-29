@@ -1,7 +1,8 @@
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 use tauri::ipc::Channel;
 
 #[derive(Clone, serde::Serialize)]
@@ -17,20 +18,16 @@ pub enum WatchEvent {
     Error { message: String },
 }
 
-struct WatcherEntry {
-    _watcher: RecommendedWatcher,
-}
-
 pub struct WatcherManager {
-    watchers: Arc<Mutex<HashMap<u32, WatcherEntry>>>,
-    next_id: Arc<Mutex<u32>>,
+    watchers: Mutex<HashMap<u32, RecommendedWatcher>>,
+    next_id: AtomicU32,
 }
 
 impl WatcherManager {
     pub fn new() -> Self {
         Self {
-            watchers: Arc::new(Mutex::new(HashMap::new())),
-            next_id: Arc::new(Mutex::new(1)),
+            watchers: Mutex::new(HashMap::new()),
+            next_id: AtomicU32::new(1),
         }
     }
 }
@@ -47,61 +44,35 @@ pub fn watch_directory(
         return Err(format!("Not a directory: {}", dir));
     }
 
-    let ext_set: Vec<String> = extensions.iter().map(|e| e.to_lowercase()).collect();
-    let channel = on_event.clone();
+    let extensions: Vec<String> = extensions.iter().map(|e| e.to_lowercase()).collect();
+    let wanted = move |p: &PathBuf| {
+        extensions.is_empty()
+            || p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| extensions.contains(&e.to_lowercase()))
+    };
 
     let mut watcher = RecommendedWatcher::new(
         move |res: Result<notify::Event, notify::Error>| {
-            match res {
-                Ok(event) => {
-                    let paths: Vec<&PathBuf> = event
-                        .paths
-                        .iter()
-                        .filter(|p| {
-                            if ext_set.is_empty() {
-                                return true;
-                            }
-                            p.extension()
-                                .and_then(|e| e.to_str())
-                                .map(|e| ext_set.contains(&e.to_lowercase()))
-                                .unwrap_or(false)
-                        })
-                        .collect();
-
-                    if paths.is_empty() {
-                        return;
-                    }
-
-                    for path in paths {
-                        let path_str = path.to_string_lossy().to_string();
-                        match event.kind {
-                            EventKind::Create(_) => {
-                                let _ = channel.send(WatchEvent::Created {
-                                    path: path_str,
-                                });
-                            }
-                            EventKind::Modify(_) => {
-                                let content = std::fs::read_to_string(path)
-                                    .unwrap_or_default();
-                                let _ = channel.send(WatchEvent::Changed {
-                                    path: path_str,
-                                    content,
-                                });
-                            }
-                            EventKind::Remove(_) => {
-                                let _ = channel.send(WatchEvent::Removed {
-                                    path: path_str,
-                                });
-                            }
-                            _ => {}
-                        }
-                    }
-                }
+            let event = match res {
+                Ok(event) => event,
                 Err(e) => {
-                    let _ = channel.send(WatchEvent::Error {
-                        message: e.to_string(),
-                    });
+                    let _ = on_event.send(WatchEvent::Error { message: e.to_string() });
+                    return;
                 }
+            };
+            for path in event.paths.iter().filter(|p| wanted(p)) {
+                let path_str = path.to_string_lossy().to_string();
+                let ev = match event.kind {
+                    EventKind::Create(_) => WatchEvent::Created { path: path_str },
+                    EventKind::Modify(_) => WatchEvent::Changed {
+                        content: std::fs::read_to_string(path).unwrap_or_default(),
+                        path: path_str,
+                    },
+                    EventKind::Remove(_) => WatchEvent::Removed { path: path_str },
+                    _ => continue,
+                };
+                let _ = on_event.send(ev);
             }
         },
         Config::default(),
@@ -112,18 +83,8 @@ pub fn watch_directory(
         .watch(&watch_path, RecursiveMode::Recursive)
         .map_err(|e| format!("Failed to watch {}: {}", dir, e))?;
 
-    let id = {
-        let mut next = state.next_id.lock().unwrap();
-        let id = *next;
-        *next += 1;
-        id
-    };
-
-    {
-        let mut watchers = state.watchers.lock().unwrap();
-        watchers.insert(id, WatcherEntry { _watcher: watcher });
-    }
-
+    let id = state.next_id.fetch_add(1, Ordering::Relaxed);
+    state.watchers.lock().unwrap().insert(id, watcher);
     Ok(id)
 }
 
@@ -132,7 +93,6 @@ pub fn unwatch_directory(
     state: tauri::State<'_, WatcherManager>,
     id: u32,
 ) -> Result<(), String> {
-    let mut watchers = state.watchers.lock().unwrap();
-    watchers.remove(&id);
+    state.watchers.lock().unwrap().remove(&id);
     Ok(())
 }

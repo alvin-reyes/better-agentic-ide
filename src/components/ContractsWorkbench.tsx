@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ContractsProject, AbiItem } from "../lib/contracts";
-import { formatParams, groupAbi, signature } from "../lib/contracts";
+import { formatParams, groupAbi, signature, type ContractsProject, type AbiItem } from "../lib/contracts";
 import {
   LOCAL_RPC, exec, parseBuild, parseTestList, parseTestResults, testArgs, parseArtifact, isDeployable,
   constructorOf, callSignature, parseCallOutput, decodeRevert, decodeLogs, etherHint, normalizeValue,
@@ -9,8 +8,6 @@ import {
 } from "../lib/contractBench";
 import { runInNewTab } from "../lib/terminalCommands";
 import { useTabStore } from "../stores/tabStore";
-
-/** Compile, run single tests, and deploy/call on Anvil for one Foundry project. */
 
 interface Instance {
   id: string;
@@ -38,13 +35,14 @@ const saved = new Map<string, Saved>();
 const savedFor = (root: string): Saved =>
   saved.get(root) ?? { view: "tests", results: {}, compile: null, filter: "", instances: [] };
 
+/** Compile, run single tests, and deploy/call on Anvil for one Foundry project. */
 export default function ContractsWorkbench({ root }: { root: string }) {
   const [project, setProject] = useState<ContractsProject | null | undefined>(undefined);
   const initial = savedFor(root);
   const [view, setView] = useState<"tests" | "deploy">(initial.view);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const [compile, setCompile] = useState<{ ok: boolean; errors: CompileError[]; at: number } | null>(initial.compile);
+  const [compile, setCompile] = useState<Saved["compile"]>(initial.compile);
   const [suites, setSuites] = useState<TestSuite[]>([]);
   const [results, setResults] = useState<Record<string, TestResult>>(initial.results);
   const [running, setRunning] = useState<Set<string>>(new Set());

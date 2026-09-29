@@ -5,6 +5,7 @@ import {
   tipsFor, tokensForBytes, totals, type UsageReport,
 } from "../lib/tokenUsage";
 import { sendToActiveTerminal } from "../lib/terminalCommands";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 interface Props {
   cwd: string | null;
@@ -79,17 +80,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
 
   useEffect(loadAudit, [loadAudit]);
 
-  // Capture phase: the terminal keeps focus and xterm stops Escape bubbling.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  useEscapeToClose(onClose);
 
   const sessions = report?.sessions ?? [];
   const models = useMemo(() => sumModels(sessions.flatMap((s) => s.models)).sort((a, b) => (costOf(b) ?? 0) - (costOf(a) ?? 0)), [sessions]);

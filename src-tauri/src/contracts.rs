@@ -271,7 +271,6 @@ pub fn contracts_tools(tools: Vec<String>) -> Vec<ToolStatus> {
         .collect()
 }
 
-// ---------------------------------------------------------------------------
 // Workbench: run forge/cast in the project and return their output.
 //
 // The webview drives this, so the command is checked here rather than trusted:

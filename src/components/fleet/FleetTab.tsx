@@ -83,8 +83,8 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
           </button>
         ))}
         <button
-          // The timeline is a merge of two stores; clearing only the agent one
-          // left orphaned sub-agent bars behind.
+          // The timeline merges two stores; clearing only the agent one would
+          // leave orphaned sub-agent bars.
           onClick={() => {
             clearHistory();
             useFleetStore.getState().reset();

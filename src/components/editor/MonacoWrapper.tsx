@@ -44,7 +44,7 @@ export default function MonacoWrapper({ filePath, content, onChange, onSave }: M
   const language = detectLanguage(filePath);
   // The save action is registered once, on mount. Calling onSave directly
   // from it would keep the first render's closure, whose `content` is the
-  // file as opened, so Cmd+S rewrote the original text and dropped every edit.
+  // file as opened, so Cmd+S would drop every edit.
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
 

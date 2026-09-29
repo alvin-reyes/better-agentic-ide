@@ -1,6 +1,7 @@
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
 
@@ -13,14 +14,14 @@ pub struct PtyInstance {
 
 pub struct PtyManager {
     instances: Arc<Mutex<HashMap<u32, PtyInstance>>>,
-    next_id: Arc<Mutex<u32>>,
+    next_id: AtomicU32,
 }
 
 impl PtyManager {
     pub fn new() -> Self {
         Self {
             instances: Arc::new(Mutex::new(HashMap::new())),
-            next_id: Arc::new(Mutex::new(1)),
+            next_id: AtomicU32::new(1),
         }
     }
 }
@@ -68,17 +69,10 @@ pub fn create_pty(
     }
 
     cmd.env("TERM", "xterm-256color");
-    if let Ok(home) = std::env::var("HOME") {
-        cmd.env("HOME", home);
-    }
-    if let Ok(user) = std::env::var("USER") {
-        cmd.env("USER", user);
-    }
-    if let Ok(path) = std::env::var("PATH") {
-        cmd.env("PATH", path);
-    }
-    if let Ok(lang) = std::env::var("LANG") {
-        cmd.env("LANG", lang);
+    for var in ["HOME", "USER", "PATH", "LANG"] {
+        if let Ok(value) = std::env::var(var) {
+            cmd.env(var, value);
+        }
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| format!("spawn failed: {}", e))?;
@@ -88,25 +82,16 @@ pub fn create_pty(
     let writer = pair.master.take_writer().map_err(|e| format!("take_writer failed: {}", e))?;
     let mut reader = pair.master.try_clone_reader().map_err(|e| format!("clone_reader failed: {}", e))?;
 
-    let id = {
-        let mut next = state.next_id.lock().unwrap();
-        let id = *next;
-        *next += 1;
-        id
-    };
-
-    {
-        let mut instances = state.instances.lock().unwrap();
-        instances.insert(
-            id,
-            PtyInstance {
-                writer,
-                _child: child,
-                master: pair.master,
-                pid: child_pid,
-            },
-        );
-    }
+    let id = state.next_id.fetch_add(1, Ordering::Relaxed);
+    state.instances.lock().unwrap().insert(
+        id,
+        PtyInstance {
+            writer,
+            _child: child,
+            master: pair.master,
+            pid: child_pid,
+        },
+    );
 
     let instances_ref = state.instances.clone();
     std::thread::spawn(move || {
@@ -127,8 +112,7 @@ pub fn create_pty(
                 }
             }
         }
-        let mut instances = instances_ref.lock().unwrap();
-        instances.remove(&id);
+        instances_ref.lock().unwrap().remove(&id);
         let _ = on_event.send(PtyEvent::Exit {});
     });
 
@@ -212,19 +196,19 @@ pub fn reattach_pty(
 
 #[tauri::command]
 pub fn kill_pty(state: tauri::State<'_, PtyManager>, id: u32) -> Result<(), String> {
-    let mut instances = state.instances.lock().unwrap();
-    instances.remove(&id);
+    state.instances.lock().unwrap().remove(&id);
     Ok(())
 }
 
 #[tauri::command]
 pub fn get_pty_cwd(state: tauri::State<'_, PtyManager>, id: u32) -> Result<String, String> {
-    let instances = state.instances.lock().unwrap();
-    let instance = instances.get(&id).ok_or("PTY not found")?;
-    let pid = instance.pid.ok_or("No PID")?;
+    let pid = {
+        let instances = state.instances.lock().unwrap();
+        instances.get(&id).ok_or("PTY not found")?.pid.ok_or("No PID")?
+    };
 
-    // On macOS, use lsof to get the CWD of the foreground process group
-    // First try to find the foreground child process, fall back to shell PID
+    // The folder of the command running in the shell (e.g. after its own cd),
+    // else the shell's.
     let fg_pid = get_foreground_pid(pid).unwrap_or(pid);
 
     let output = std::process::Command::new("/usr/bin/lsof")
@@ -245,9 +229,8 @@ pub fn get_pty_cwd(state: tauri::State<'_, PtyManager>, id: u32) -> Result<Strin
     Err("CWD not found in lsof output".to_string())
 }
 
-/// Get the foreground process of a shell by finding its child processes
+/// The shell's most recently spawned child, taken as its foreground process.
 fn get_foreground_pid(shell_pid: u32) -> Option<u32> {
-    // Use pgrep to find child processes of the shell
     let output = std::process::Command::new("/usr/bin/pgrep")
         .args(["-P", &shell_pid.to_string()])
         .output()
@@ -257,9 +240,7 @@ fn get_foreground_pid(shell_pid: u32) -> Option<u32> {
         return None;
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // Get the last child (most recently spawned foreground process)
-    stdout
+    String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| line.trim().parse::<u32>().ok())
         .next_back()

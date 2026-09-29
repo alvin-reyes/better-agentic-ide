@@ -4,12 +4,20 @@ import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isPaneActive } from "../hooks/useTerminal";
 
+// App owns closing, so it can confirm first (unsaved editor, live process).
+function requestCloseTab(tabId: string) {
+  window.dispatchEvent(new CustomEvent("request-close-tab", { detail: { tabId } }));
+}
+
+interface MenuItem {
+  label: string;
+  action: () => void;
+  danger?: boolean;
+}
+
 export default function TabBar() {
   const { tabs, activeTabId, setActiveTab, addTab, renameTab, reorderTabs } =
     useTabStore();
-  const requestCloseTab = (tabId: string) => {
-    window.dispatchEvent(new CustomEvent("request-close-tab", { detail: { tabId } }));
-  };
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -19,7 +27,7 @@ export default function TabBar() {
   const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Poll activity state every second
+  // Tabs with a pane producing output, polled every second.
   useEffect(() => {
     const check = () => {
       const active = new Set<string>();
@@ -48,6 +56,7 @@ export default function TabBar() {
     setEditValue(currentName);
   };
 
+  // Unsaved-changes dot for editor tabs.
   useEffect(() => {
     const handler = (e: Event) => {
       const { tabId, isDirty } = (e as CustomEvent).detail;
@@ -62,7 +71,7 @@ export default function TabBar() {
     return () => window.removeEventListener("editor-dirty-change", handler);
   }, []);
 
-  // Listen for rename-tab custom event (triggered by Cmd+R keybinding)
+  // Fired by the rename-tab keybinding.
   useEffect(() => {
     const handler = () => {
       const tab = tabs.find((t) => t.id === activeTabId);
@@ -78,6 +87,14 @@ export default function TabBar() {
     }
     setEditingId(null);
   };
+
+  const menuTab = contextMenu ? tabs.find((t) => t.id === contextMenu.tabId) : undefined;
+  const menuItems: MenuItem[] = contextMenu ? [
+    { label: "Rename", action: () => { if (menuTab) startRename(menuTab.id, menuTab.name); } },
+    { label: "Duplicate", action: () => { if (menuTab) addTab(menuTab.name + " (copy)"); } },
+    { label: "Move to New Window", action: () => { import("../lib/detachWindow").then(({ detachTabToWindow }) => { detachTabToWindow(contextMenu.tabId); }); } },
+    { label: "Close", action: () => { if (tabs.length > 1) requestCloseTab(contextMenu.tabId); }, danger: true },
+  ] : [];
 
   return (
     <div
@@ -158,19 +175,10 @@ export default function TabBar() {
             )}
             {/* Tab type icon */}
             {tab.type === "editor" ? (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-                <path
-                  d="M4 1.5H10L13.5 5V13.5C13.5 14.05 13.05 14.5 12.5 14.5H4C3.45 14.5 3 14.05 3 13.5V2.5C3 1.95 3.45 1.5 4 1.5Z"
-                  stroke={isActive ? "#58a6ff" : "currentColor"}
-                  strokeWidth="1"
-                  fill="none"
-                />
-                <path
-                  d="M10 1.5V5H13.5"
-                  stroke={isActive ? "#58a6ff" : "currentColor"}
-                  strokeWidth="1"
-                  fill="none"
-                />
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}
+                stroke={isActive ? "#58a6ff" : "currentColor"} strokeWidth="1">
+                <path d="M4 1.5H10L13.5 5V13.5C13.5 14.05 13.05 14.5 12.5 14.5H4C3.45 14.5 3 14.05 3 13.5V2.5C3 1.95 3.45 1.5 4 1.5Z" />
+                <path d="M10 1.5V5H13.5" />
               </svg>
             ) : (
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ opacity: isActive ? 0.9 : 0.4, flexShrink: 0 }}>
@@ -314,12 +322,7 @@ export default function TabBar() {
               minWidth: "160px",
             }}
           >
-            {[
-              { label: "Rename", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) startRename(t.id, t.name); } },
-              { label: "Duplicate", action: () => { const t = tabs.find(t => t.id === contextMenu.tabId); if (t) addTab(t.name + " (copy)"); } },
-              { label: "Move to New Window", action: () => { import("../lib/detachWindow").then(({ detachTabToWindow }) => { detachTabToWindow(contextMenu.tabId); }); } },
-              { label: "Close", action: () => { if (tabs.length > 1) requestCloseTab(contextMenu.tabId); }, danger: true },
-            ].map((item) => (
+            {menuItems.map((item) => (
               <button
                 key={item.label}
                 onClick={() => { item.action(); setContextMenu(null); }}
@@ -330,18 +333,18 @@ export default function TabBar() {
                   padding: "6px 14px",
                   fontSize: "12px",
                   fontWeight: 500,
-                  color: (item as { danger?: boolean }).danger ? "#ff7b72" : "var(--text-secondary)",
+                  color: item.danger ? "#ff7b72" : "var(--text-secondary)",
                   backgroundColor: "transparent",
                   border: "none",
                   cursor: "pointer",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
-                  if (!(item as { danger?: boolean }).danger) e.currentTarget.style.color = "var(--text-primary)";
+                  if (!item.danger) e.currentTarget.style.color = "var(--text-primary)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = "transparent";
-                  e.currentTarget.style.color = (item as { danger?: boolean }).danger ? "#ff7b72" : "var(--text-secondary)";
+                  e.currentTarget.style.color = item.danger ? "#ff7b72" : "var(--text-secondary)";
                 }}
               >
                 {item.label}

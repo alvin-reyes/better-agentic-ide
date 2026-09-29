@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Provider } from "../data/agentProfiles";
+import { readJson } from "../lib/storage";
 
 export interface ThemeColors {
   bgPrimary: string;
@@ -324,26 +325,8 @@ interface SettingsStore extends Settings {
   deleteWorkspace: (id: string) => void;
 }
 
-function loadSettings(): Partial<Settings> {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
 function persistSettings(s: Settings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-}
-
-function loadWorkspaces(): WorkspacePreset[] {
-  try {
-    const raw = localStorage.getItem(WORKSPACES_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
 }
 
 function persistWorkspaces(w: WorkspacePreset[]) {
@@ -359,132 +342,77 @@ const defaults: Settings = {
   cursorStyle: "bar",
   cursorBlink: true,
   scrollback: 10000,
-  defaultProvider: "claude" as Provider,
+  defaultProvider: "claude",
   anthropicApiKey: "",
   orchestratorModel: "claude-opus-4-20250514",
   ollamaEndpoint: "http://localhost:11434",
   ollamaModel: "deepseek-r1",
-  orchestratorProvider: "anthropic" as const,
+  orchestratorProvider: "anthropic",
 };
 
-const saved = loadSettings();
-const initial: Settings = { ...defaults, ...saved };
+const initial: Settings = { ...defaults, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) };
 
-export const useSettingsStore = create<SettingsStore>((set, get) => ({
-  ...initial,
-  showSettings: false,
-  settingsTab: "theme",
-  workspaces: loadWorkspaces(),
-
-  setShowSettings: (show) => set({ showSettings: show }),
-  setSettingsTab: (tab) => set({ settingsTab: tab }),
-
-  setTheme: (id) => {
-    set({ themeId: id, customColors: null });
-    const s = get();
-    persistSettings(s);
+export const useSettingsStore = create<SettingsStore>((set, get) => {
+  const save = (patch: Partial<Settings>) => {
+    set(patch);
+    persistSettings(get());
+  };
+  const saveTheme = (patch: Partial<Settings>) => {
+    save(patch);
     applyThemeToDOM(get().getActiveTheme());
-  },
+  };
 
-  setCustomColor: (key, value) => {
-    set((s) => ({
-      customColors: { ...(s.customColors || {}), [key]: value },
-    }));
-    const s = get();
-    persistSettings(s);
-    applyThemeToDOM(get().getActiveTheme());
-  },
+  return {
+    ...initial,
+    showSettings: false,
+    settingsTab: "theme",
+    workspaces: readJson<WorkspacePreset[]>(WORKSPACES_KEY, []),
 
-  clearCustomColors: () => {
-    set({ customColors: null });
-    const s = get();
-    persistSettings(s);
-    applyThemeToDOM(get().getActiveTheme());
-  },
+    setShowSettings: (show) => set({ showSettings: show }),
+    setSettingsTab: (tab) => set({ settingsTab: tab }),
 
-  setFontSize: (fontSize) => {
-    set({ fontSize });
-    persistSettings(get());
-  },
+    setTheme: (id) => saveTheme({ themeId: id, customColors: null }),
+    setCustomColor: (key, value) => saveTheme({ customColors: { ...get().customColors, [key]: value } }),
+    clearCustomColors: () => saveTheme({ customColors: null }),
 
-  setFontFamily: (fontFamily) => {
-    set({ fontFamily });
-    persistSettings(get());
-  },
+    setFontSize: (fontSize) => save({ fontSize }),
+    setFontFamily: (fontFamily) => save({ fontFamily }),
+    setLineHeight: (lineHeight) => save({ lineHeight }),
+    setCursorStyle: (cursorStyle) => save({ cursorStyle }),
+    setCursorBlink: (cursorBlink) => save({ cursorBlink }),
+    setScrollback: (scrollback) => save({ scrollback }),
+    setDefaultProvider: (defaultProvider) => save({ defaultProvider }),
+    setAnthropicApiKey: (anthropicApiKey) => save({ anthropicApiKey }),
+    setOrchestratorModel: (orchestratorModel) => save({ orchestratorModel }),
+    setOllamaEndpoint: (ollamaEndpoint) => save({ ollamaEndpoint }),
+    setOllamaModel: (ollamaModel) => save({ ollamaModel }),
+    setOrchestratorProvider: (orchestratorProvider) => save({ orchestratorProvider }),
 
-  setLineHeight: (lineHeight) => {
-    set({ lineHeight });
-    persistSettings(get());
-  },
+    getActiveTheme: () => {
+      const s = get();
+      const preset = themePresets.find((t) => t.id === s.themeId) || themePresets[0];
+      return s.customColors ? { ...preset.colors, ...s.customColors } : preset.colors;
+    },
 
-  setCursorStyle: (cursorStyle) => {
-    set({ cursorStyle });
-    persistSettings(get());
-  },
+    saveWorkspace: (name, tabs) => {
+      const ws: WorkspacePreset = {
+        id: Date.now().toString(36),
+        name,
+        tabs,
+        savedAt: Date.now(),
+      };
+      const updated = [ws, ...get().workspaces];
+      set({ workspaces: updated });
+      persistWorkspaces(updated);
+    },
 
-  setCursorBlink: (cursorBlink) => {
-    set({ cursorBlink });
-    persistSettings(get());
-  },
-
-  setScrollback: (scrollback) => {
-    set({ scrollback });
-    persistSettings(get());
-  },
-
-  setDefaultProvider: (defaultProvider) => {
-    set({ defaultProvider });
-    persistSettings(get());
-  },
-
-  setAnthropicApiKey: (key) => {
-    set({ anthropicApiKey: key });
-    persistSettings(get());
-  },
-  setOrchestratorModel: (model) => {
-    set({ orchestratorModel: model });
-    persistSettings(get());
-  },
-  setOllamaEndpoint: (endpoint) => {
-    set({ ollamaEndpoint: endpoint });
-    persistSettings(get());
-  },
-  setOllamaModel: (model) => {
-    set({ ollamaModel: model });
-    persistSettings(get());
-  },
-  setOrchestratorProvider: (provider) => {
-    set({ orchestratorProvider: provider });
-    persistSettings(get());
-  },
-
-  getActiveTheme: () => {
-    const s = get();
-    const preset = themePresets.find((t) => t.id === s.themeId) || themePresets[0];
-    if (s.customColors) {
-      return { ...preset.colors, ...s.customColors };
-    }
-    return preset.colors;
-  },
-
-  saveWorkspace: (name, tabs) => {
-    const ws: WorkspacePreset = {
-      id: Date.now().toString(36),
-      name,
-      tabs,
-      savedAt: Date.now(),
-    };
-    const updated = [ws, ...get().workspaces];
-    set({ workspaces: updated });
-    persistWorkspaces(updated);
-  },
-
-  deleteWorkspace: (id) => {
-    const updated = get().workspaces.filter((w) => w.id !== id);
-    set({ workspaces: updated });
-    persistWorkspaces(updated);
-  },
-}));
+    deleteWorkspace: (id) => {
+      const updated = get().workspaces.filter((w) => w.id !== id);
+      set({ workspaces: updated });
+      persistWorkspaces(updated);
+    },
+  };
+});
 
 export function applyThemeToDOM(colors: ThemeColors) {
   const root = document.documentElement;

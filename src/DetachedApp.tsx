@@ -14,7 +14,7 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [isReady, setIsReady] = useState(false);
 
-  // Initialize the tab store with just this one tab
+  // This window's tab store holds only the detached tab.
   useEffect(() => {
     useTabStore.setState({
       tabs: [tab],
@@ -23,7 +23,6 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
     setIsReady(true);
   }, [tab]);
 
-  // Apply theme
   useEffect(() => {
     const colors = useSettingsStore.getState().getActiveTheme();
     applyThemeToDOM(colors);
@@ -45,7 +44,6 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
     }
   }, []);
 
-  // Keyboard shortcuts for detached window
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (matches(e, SHORTCUTS.scratchpad)) {

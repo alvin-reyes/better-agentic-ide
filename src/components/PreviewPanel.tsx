@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import MarkdownView from "./viewer/MarkdownView";
+import { imageMime } from "../lib/viewerKind";
 
 interface WatchEvent {
   type: "changed" | "created" | "removed" | "error";
@@ -21,22 +22,6 @@ function detectMode(filePath: string): PreviewMode {
   return "none";
 }
 
-function getMimeType(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-  const mimes: Record<string, string> = {
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    gif: "image/gif",
-    svg: "image/svg+xml",
-    webp: "image/webp",
-    bmp: "image/bmp",
-    ico: "image/x-icon",
-    pdf: "application/pdf",
-  };
-  return mimes[ext] ?? "application/octet-stream";
-}
-
 interface PreviewPanelProps {
   onClose: () => void;
   initialPath?: string | null;
@@ -53,12 +38,8 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const initialPathConsumedRef = useRef(false);
-  const dragRef = useRef(false);
-  const dragStartXRef = useRef(0);
-  const dragStartWidthRef = useRef(480);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load a file for preview
   const loadFile = useCallback(async (path: string) => {
     if (!path.trim()) return;
     const resolved = path.trim();
@@ -69,13 +50,9 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
     try {
       if (fileMode === "image" || fileMode === "pdf") {
         const base64 = await invoke<string>("read_file_base64", { path: resolved });
-        const mime = getMimeType(resolved);
+        const mime = fileMode === "pdf" ? "application/pdf" : imageMime(resolved);
         setDataUrl(`data:${mime};base64,${base64}`);
         setContent("");
-      } else if (fileMode === "html" || fileMode === "markdown") {
-        const text = await invoke<string>("read_file", { path: resolved });
-        setContent(text);
-        setDataUrl("");
       } else {
         const text = await invoke<string>("read_file", { path: resolved });
         setContent(text);
@@ -162,32 +139,26 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    dragRef.current = true;
-    dragStartXRef.current = e.clientX;
-    dragStartWidthRef.current = width;
+    const startX = e.clientX;
+    const startWidth = width;
 
     const cleanup = () => {
-      dragRef.current = false;
       document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("mouseup", cleanup);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       dragCleanupRef.current = null;
     };
 
     const onMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const delta = dragStartXRef.current - ev.clientX;
-      setWidth(Math.min(900, Math.max(280, dragStartWidthRef.current + delta)));
+      setWidth(Math.min(900, Math.max(280, startWidth + startX - ev.clientX)));
     };
-
-    const onUp = () => cleanup();
 
     dragCleanupRef.current = cleanup;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    document.addEventListener("mouseup", cleanup);
   }, [width]);
 
   const handleOpen = () => {
