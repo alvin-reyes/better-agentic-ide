@@ -126,7 +126,7 @@ export function useKeybindings(actions: KeybindingActions) {
         return run(() => (is("paneRight") ? focusNextPane(activeTabId) : focusPrevPane(activeTabId)));
       }
 
-      // Escape closes settings, else the scratchpad, and focuses the terminal.
+      // Escape closes settings; otherwise it closes the scratchpad and focuses the terminal.
       if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.key === "Escape") {
         const settings = useSettingsStore.getState();
         if (settings.showSettings) {

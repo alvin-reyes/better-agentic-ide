@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "../lib/terminalFileLinks";
 import { isAppShortcut, shortcutLabel } from "../lib/shortcuts";
 import { openFileFromTerminal } from "../lib/openFile";
+import { writePty } from "../lib/terminalCommands";
 import { SearchAddon } from "@xterm/addon-search";
 import { ImageAddon } from "@xterm/addon-image";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -208,9 +209,7 @@ function wireInput(inst: TerminalInstance) {
   // Every other key, including plain Ctrl combos, goes to the shell.
   inst.term.attachCustomKeyEventHandler((e) => !isAppShortcut(e));
   inst.term.onData((data) => {
-    if (inst.ptyId !== null) {
-      invoke("write_pty", { id: inst.ptyId, data: Array.from(new TextEncoder().encode(data)) });
-    }
+    if (inst.ptyId !== null) writePty(inst.ptyId, data);
   });
   inst.term.onResize(({ cols, rows }) => {
     if (inst.ptyId !== null) invoke("resize_pty", { id: inst.ptyId, rows, cols });

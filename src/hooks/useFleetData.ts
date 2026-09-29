@@ -130,7 +130,6 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
   const panes = useMemo<PaneInfo[]>(() => {
     const out: PaneInfo[] = [];
     for (const tab of tabs) {
-      // findAllPanes is already exported from tabStore — do not reimplement it.
       for (const pane of findAllPanes(tab.root)) {
         out.push({
           paneId: pane.id,
@@ -153,9 +152,8 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
   panesRef.current = panes;
 
   // Resolve pane cwds from the live PTY — the same source `activeCwd` (and hence
-  // every sub-agent record's cwd) comes from. Reading them off the tab store
-  // instead would compare a stored-or-missing cwd against a live one, which is
-  // why sub-agents never nested under their parent.
+  // every sub-agent record's cwd) comes from, so sub-agents nest under their
+  // parent. A cwd off the tab store may be stale or missing.
   useEffect(() => {
     let cancelled = false;
     const entries = panesRef.current;
