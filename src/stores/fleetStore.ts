@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { AgentSession } from "./agentTrackerStore";
-import { sessionCost, type SessionUsage } from "../lib/tokenUsage";
+import { promptTokens, sessionCost, type SessionUsage } from "../lib/tokenUsage";
 
 export type SubagentEvent =
   | { kind: "Spawn"; id: string; agent_type: string; description: string;
@@ -39,9 +39,8 @@ export interface PaneInfo {
  * `liveCwds` holds cwds read from the running PTY (`get_pty_cwd`) — the *same*
  * source the sub-agent watcher's cwd comes from, so an agent lane and the
  * sub-agents spawned inside it compare equal in `buildLanes`. The stored
- * `fallbackCwd` is only a stand-in for panes with no live PTY yet: panes created
- * in this run carry no cwd at all (`createDefaultPane` sets none), which is what
- * previously left every agent lane with `cwd: null` and every sub-agent orphaned.
+ * `fallbackCwd` is only a stand-in for panes with no live PTY yet; panes created
+ * in this run carry no stored cwd at all.
  */
 export function buildPaneMeta(
   panes: PaneInfo[],
@@ -150,6 +149,9 @@ export function buildLanes(
   return [...agentLanes, ...subLanes].sort((a, b) => a.startTime - b.startTime);
 }
 
+// A few seconds of slack: the agent's first response lands after launch.
+const USAGE_SLACK_MS = 5_000;
+
 /**
  * Put real cost and tokens on Claude agent lanes, from the Claude Code
  * sessions (`token_usage`) run in each lane's folder.
@@ -165,13 +167,12 @@ export function withUsage(lanes: FleetLane[], sessionsByCwd: Record<string, Sess
     for (const s of sessions) {
       const t = s.firstAt ? Date.parse(s.firstAt) : NaN;
       if (Number.isNaN(t)) continue;
-      // A few seconds of slack: the agent's first response lands after launch.
       const owners = claude.filter((l) => l.cwd === cwd && l.startTime - USAGE_SLACK_MS <= t && (l.endTime === null || t <= l.endTime));
       if (owners.length !== 1) continue;
       const acc = totals.get(owners[0].id) ?? { cost: 0, input: 0, output: 0 };
       acc.cost += sessionCost(s) * 100;
       for (const m of s.models) {
-        acc.input += m.input + m.cacheWrite5m + m.cacheWrite1h + m.cacheRead;
+        acc.input += promptTokens(m);
         acc.output += m.output;
       }
       totals.set(owners[0].id, acc);
@@ -182,8 +183,6 @@ export function withUsage(lanes: FleetLane[], sessionsByCwd: Record<string, Sess
     return u ? { ...l, costCents: u.cost, tokens: { input: u.input, output: u.output } } : l;
   });
 }
-
-const USAGE_SLACK_MS = 5_000;
 
 /** Which terminals a fleet view covers. */
 export type FleetScope = "active" | "all";
@@ -236,7 +235,7 @@ export function groupLanesByTerminal(
   for (const lane of lanes) {
     let group = lane.tabId ? byTab.get(lane.tabId) : undefined;
     if (!group && lane.kind === "subagent" && lane.cwd) {
-      group = groups.find((g) => g.cwds.includes(lane.cwd as string));
+      group = groups.find((g) => g.cwds.includes(lane.cwd!));
     }
     const target = group ?? orphans;
     target.lanes.push(lane);

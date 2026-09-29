@@ -84,11 +84,16 @@ export function costOf(u: ModelUsage): number | null {
   );
 }
 
+/** All prompt tokens: fresh input plus cache writes and reads. */
+export function promptTokens(u: ModelUsage): number {
+  return u.input + u.cacheWrite5m + u.cacheWrite1h + u.cacheRead;
+}
+
 /** What the same requests would have cost with no prompt caching at all. */
 export function uncachedCostOf(u: ModelUsage): number | null {
   const p = priceOf(u.model);
   if (!p) return null;
-  return ((u.input + u.cacheWrite5m + u.cacheWrite1h + u.cacheRead) * p.input + u.output * p.output) / M;
+  return (promptTokens(u) * p.input + u.output * p.output) / M;
 }
 
 export function sumModels(list: ModelUsage[]): ModelUsage[] {
@@ -129,7 +134,7 @@ export function totals(models: ModelUsage[]): Totals {
       cost += c;
       uncached += n;
     }
-    input += u.input + u.cacheWrite5m + u.cacheWrite1h + u.cacheRead;
+    input += promptTokens(u);
     read += u.cacheRead;
     output += u.output;
     requests += u.requests;
