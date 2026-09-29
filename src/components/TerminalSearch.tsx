@@ -8,7 +8,7 @@ interface TerminalSearchProps {
 
 export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchProps) {
   const [query, setQuery] = useState("");
-  const [matchCount, setMatchCount] = useState<number | null>(null);
+  const [noMatch, setNoMatch] = useState(false);
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [regex, setRegex] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
@@ -24,30 +24,17 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
     const q = searchQuery ?? query;
     if (!q) {
       searchAddon.clearDecorations();
-      setMatchCount(null);
+      setNoMatch(false);
       return;
     }
     const opts = { caseSensitive, regex, wholeWord };
-    let found: boolean;
-    if (direction === "next") {
-      found = searchAddon.findNext(q, opts);
-    } else {
-      found = searchAddon.findPrevious(q, opts);
-    }
-    setMatchCount(found ? -1 : 0); // -1 means "found at least one"
+    const found = direction === "next" ? searchAddon.findNext(q, opts) : searchAddon.findPrevious(q, opts);
+    setNoMatch(!found);
   }, [searchAddon, query, caseSensitive, regex, wholeWord]);
 
   const handleChange = (value: string) => {
     setQuery(value);
-    if (!searchAddon) return;
-    if (!value) {
-      searchAddon.clearDecorations();
-      setMatchCount(null);
-      return;
-    }
-    const opts = { caseSensitive, regex, wholeWord };
-    const found = searchAddon.findNext(value, opts);
-    setMatchCount(found ? -1 : 0);
+    doSearch("next", value);
   };
 
   const handleClose = () => {
@@ -68,14 +55,11 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
     }
   };
 
-  // Re-search when options change
-  const searchOnOptionsChange = useCallback(() => {
+  // Re-search when options change. doSearch also changes with the query, so
+  // this runs after every keystroke too.
+  useEffect(() => {
     if (query) doSearch("next", query);
   }, [query, doSearch]);
-
-  useEffect(() => {
-    searchOnOptionsChange();
-  }, [caseSensitive, regex, wholeWord, searchOnOptionsChange]);
 
   const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
     background: active ? "var(--accent-subtle)" : "none",
@@ -91,6 +75,17 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
     minWidth: "22px",
     textAlign: "center" as const,
   });
+
+  const navBtnStyle: React.CSSProperties = {
+    background: "none",
+    border: "none",
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+    padding: "2px",
+    borderRadius: "4px",
+    display: "flex",
+    alignItems: "center",
+  };
 
   return (
     <div
@@ -132,8 +127,8 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
 
       {/* Match indicator */}
       {query && (
-        <span style={{ fontSize: "10px", color: matchCount === 0 ? "var(--text-muted)" : "var(--text-secondary)", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-          {matchCount === 0 ? "No matches" : "Found"}
+        <span style={{ fontSize: "10px", color: noMatch ? "var(--text-muted)" : "var(--text-secondary)", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+          {noMatch ? "No matches" : "Found"}
         </span>
       )}
 
@@ -163,16 +158,7 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
       {/* Nav buttons */}
       <button
         onClick={() => doSearch("prev")}
-        style={{
-          background: "none",
-          border: "none",
-          color: "var(--text-secondary)",
-          cursor: "pointer",
-          padding: "2px",
-          borderRadius: "4px",
-          display: "flex",
-          alignItems: "center",
-        }}
+        style={navBtnStyle}
         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-elevated)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
         title="Previous match (Shift+Enter)"
@@ -183,16 +169,7 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
       </button>
       <button
         onClick={() => doSearch("next")}
-        style={{
-          background: "none",
-          border: "none",
-          color: "var(--text-secondary)",
-          cursor: "pointer",
-          padding: "2px",
-          borderRadius: "4px",
-          display: "flex",
-          alignItems: "center",
-        }}
+        style={navBtnStyle}
         onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-elevated)"; }}
         onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
         title="Next match (Enter)"

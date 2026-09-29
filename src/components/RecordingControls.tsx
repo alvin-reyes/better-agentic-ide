@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useRecordingStore } from "../hooks/useTerminalRecording";
 
+export function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+}
+
 interface RecordingControlsProps {
   paneId: string;
 }
@@ -10,7 +15,6 @@ export default function RecordingControls({ paneId }: RecordingControlsProps) {
   const recording = isRecording(paneId);
   const [elapsed, setElapsed] = useState(0);
 
-  // Update elapsed time while recording
   useEffect(() => {
     if (!recording) {
       setElapsed(0);
@@ -24,13 +28,6 @@ export default function RecordingControls({ paneId }: RecordingControlsProps) {
     }, 1000);
     return () => clearInterval(interval);
   }, [recording, paneId]);
-
-  const formatTime = (ms: number) => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, "0")}`;
-  };
 
   const handleToggle = () => {
     if (recording) {
@@ -69,7 +66,7 @@ export default function RecordingControls({ paneId }: RecordingControlsProps) {
           animation: recording ? "recording-pulse 1s infinite" : "none",
         }}
       />
-      {recording ? formatTime(elapsed) : "REC"}
+      {recording ? formatDuration(elapsed) : "REC"}
       <style>{`
         @keyframes recording-pulse {
           0%, 100% { opacity: 1; }

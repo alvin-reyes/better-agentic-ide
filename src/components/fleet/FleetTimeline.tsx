@@ -28,10 +28,9 @@ function geometry(lane: FleetLane, from: number, to: number) {
 }
 
 /**
- * Order lanes so each sub-agent follows its parent. A sub-agent whose
- * `parentId` names a lane not present in `lanes` is treated the same as an
- * unattached (`parentId === null`) sub-agent — dropping it would be silent
- * data loss for any caller that passes a filtered subset of lanes.
+ * Order lanes so each sub-agent follows its parent. A sub-agent whose parent
+ * isn't in `lanes` (callers pass filtered subsets) goes last, like an
+ * unattached one, rather than being dropped.
  */
 function ordered(lanes: FleetLane[]): FleetLane[] {
   const parents = lanes.filter((l) => l.kind === "agent");
@@ -98,42 +97,42 @@ export default function FleetTimeline({ lanes, from, to, onSelect }: FleetTimeli
             </div>
           )}
           {group.lanes.map((lane) => {
-        const { left, width } = geometry(lane, from, to);
-        const isSub = lane.kind === "subagent";
-        return (
-          <div
-            key={lane.id}
-            data-testid="lane-row"
-            data-kind={lane.kind}
-            style={{ display: "flex", alignItems: "center", gap: "8px" }}
-          >
-            <div style={{
-              width: "120px", flexShrink: 0, paddingLeft: isSub ? "14px" : 0,
-              fontSize: isSub ? "10px" : "11px",
-              color: isSub ? "var(--text-muted)" : "var(--text-secondary)",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }} title={lane.detail || lane.label}>
-              {isSub ? `↳ ${lane.label}` : lane.label}
-            </div>
-            <div style={{
-              flex: 1, height: isSub ? "9px" : "14px",
-              backgroundColor: "var(--bg-primary)", borderRadius: "3px", position: "relative",
-            }}>
+            const { left, width } = geometry(lane, from, to);
+            const isSub = lane.kind === "subagent";
+            return (
               <div
-                data-testid="lane-bar"
-                data-lane-id={lane.id}
-                onClick={() => onSelect?.(lane)}
-                title={`${lane.label}${lane.detail ? ` — ${lane.detail}` : ""}`}
-                style={{
-                  position: "absolute", top: 0, bottom: 0, left, width,
-                  backgroundColor: isSub ? "#a855f7" : STATUS_COLOR[lane.status],
-                  opacity: lane.status === "completed" ? 0.55 : 0.85,
-                  borderRadius: "3px", cursor: onSelect ? "pointer" : "default",
-                }}
-              />
-            </div>
-          </div>
-        );
+                key={lane.id}
+                data-testid="lane-row"
+                data-kind={lane.kind}
+                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+              >
+                <div style={{
+                  width: "120px", flexShrink: 0, paddingLeft: isSub ? "14px" : 0,
+                  fontSize: isSub ? "10px" : "11px",
+                  color: isSub ? "var(--text-muted)" : "var(--text-secondary)",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }} title={lane.detail || lane.label}>
+                  {isSub ? `↳ ${lane.label}` : lane.label}
+                </div>
+                <div style={{
+                  flex: 1, height: isSub ? "9px" : "14px",
+                  backgroundColor: "var(--bg-primary)", borderRadius: "3px", position: "relative",
+                }}>
+                  <div
+                    data-testid="lane-bar"
+                    data-lane-id={lane.id}
+                    onClick={() => onSelect?.(lane)}
+                    title={`${lane.label}${lane.detail ? ` — ${lane.detail}` : ""}`}
+                    style={{
+                      position: "absolute", top: 0, bottom: 0, left, width,
+                      backgroundColor: isSub ? "#a855f7" : STATUS_COLOR[lane.status],
+                      opacity: lane.status === "completed" ? 0.55 : 0.85,
+                      borderRadius: "3px", cursor: onSelect ? "pointer" : "default",
+                    }}
+                  />
+                </div>
+              </div>
+            );
           })}
         </div>
       ))}

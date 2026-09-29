@@ -25,6 +25,39 @@ const colorLabels: { key: keyof ThemeColors; label: string; group: string }[] = 
   { key: "termCyan", label: "Cyan", group: "Terminal" },
 ];
 
+const SETTINGS_TABS: { id: "theme" | "terminal" | "workspace" | "ai" | "sync"; label: string }[] = [
+  { id: "theme", label: "Themes" },
+  { id: "terminal", label: "Terminal" },
+  { id: "workspace", label: "Workspace" },
+  { id: "ai", label: "AI API" },
+  { id: "sync", label: "Sync" },
+];
+
+const SECTION_LABEL_STYLE: React.CSSProperties = {
+  fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em",
+};
+
+const MONO_INPUT_STYLE: React.CSSProperties = {
+  width: "100%",
+  backgroundColor: "var(--bg-primary)",
+  border: "1px solid var(--border)",
+  borderRadius: "6px",
+  padding: "8px 12px",
+  fontSize: "13px",
+  color: "var(--text-primary)",
+  fontFamily: "monospace",
+  outline: "none",
+};
+
+const inputFocus = {
+  onFocus: (e: React.FocusEvent<HTMLInputElement>) => { e.currentTarget.style.borderColor = "var(--accent)"; },
+  onBlur: (e: React.FocusEvent<HTMLInputElement>) => { e.currentTarget.style.borderColor = "var(--border)"; },
+};
+
+const COMMAND_STYLE: React.CSSProperties = {
+  fontSize: "10px", backgroundColor: "var(--bg-tertiary)", padding: "4px 8px", borderRadius: "4px", color: "var(--text-secondary)", fontFamily: "monospace",
+};
+
 const fontFamilies = [
   { value: '"JetBrains Mono", "SF Mono", "Fira Code", monospace', label: "JetBrains Mono" },
   { value: '"SF Mono", "Menlo", monospace', label: "SF Mono" },
@@ -36,7 +69,7 @@ const fontFamilies = [
 ];
 
 function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
-  const [status, setStatus] = useState<"checking" | "running" | "not_running" | "error">("checking");
+  const [status, setStatus] = useState<"checking" | "running" | "not_running">("checking");
 
   useEffect(() => {
     let cancelled = false;
@@ -78,10 +111,10 @@ function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
         Install Ollama to use local AI models for free. After installing, run <code style={{ fontSize: "10px", backgroundColor: "var(--bg-tertiary)", padding: "1px 4px", borderRadius: "3px" }}>ollama serve</code> then pull a model:
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "8px" }}>
-        <code style={{ fontSize: "10px", backgroundColor: "var(--bg-tertiary)", padding: "4px 8px", borderRadius: "4px", color: "var(--text-secondary)", fontFamily: "monospace" }}>
+        <code style={COMMAND_STYLE}>
           curl -fsSL https://ollama.com/install.sh | sh
         </code>
-        <code style={{ fontSize: "10px", backgroundColor: "var(--bg-tertiary)", padding: "4px 8px", borderRadius: "4px", color: "var(--text-secondary)", fontFamily: "monospace" }}>
+        <code style={COMMAND_STYLE}>
           ollama pull deepseek-r1
         </code>
       </div>
@@ -91,7 +124,6 @@ function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
         rel="noopener noreferrer"
         onClick={(e) => {
           e.preventDefault();
-          // Use Tauri opener plugin
           import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl("https://ollama.com/download")).catch(() => {});
         }}
         style={{ fontSize: "11px", color: "var(--accent)", textDecoration: "underline", cursor: "pointer" }}
@@ -105,7 +137,6 @@ function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
 export default function SettingsPanel() {
   const store = useSettingsStore();
   const tabStore = useTabStore();
-  const panelRef = useRef<HTMLDivElement>(null);
   const [workspaceName, setWorkspaceName] = useState("");
   const [renameTabId, setRenameTabId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -126,26 +157,37 @@ export default function SettingsPanel() {
     // Capture phase: the terminal keeps focus while settings are open and
     // xterm stops Escape from bubbling, so a bubble listener never saw it.
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && useSettingsStore.getState().showSettings) {
+      const settings = useSettingsStore.getState();
+      if (e.key === "Escape" && settings.showSettings) {
         e.preventDefault();
         e.stopPropagation();
-        store.setShowSettings(false);
+        settings.setShowSettings(false);
       }
     };
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [store]);
+  }, []);
 
   if (!store.showSettings) return null;
 
   const activeTheme = store.getActiveTheme();
-  const tabs: { id: "theme" | "terminal" | "workspace" | "ai" | "sync"; label: string }[] = [
-    { id: "theme", label: "Themes" },
-    { id: "terminal", label: "Terminal" },
-    { id: "workspace", label: "Workspace" },
-    { id: "ai", label: "AI API" },
-    { id: "sync", label: "Sync" },
-  ];
+
+  const startRename = (tab: { id: string; name: string }) => {
+    setRenameTabId(tab.id);
+    setRenameValue(tab.name);
+  };
+
+  const saveCurrentWorkspace = () => {
+    if (!workspaceName.trim()) return;
+    store.saveWorkspace(
+      workspaceName.trim(),
+      tabStore.tabs.map((t) => ({
+        name: t.name,
+        splits: t.root.type === "split" ? t.root.direction : "none",
+      }))
+    );
+    setWorkspaceName("");
+  };
 
   const commitRename = () => {
     if (renameTabId && renameValue.trim()) {
@@ -170,7 +212,6 @@ export default function SettingsPanel() {
       }}
     >
       <div
-        ref={panelRef}
         style={{
           backgroundColor: "var(--bg-secondary)",
           border: "1px solid var(--border-strong)",
@@ -234,7 +275,7 @@ export default function SettingsPanel() {
             padding: "0 20px",
           }}
         >
-          {tabs.map((tab) => (
+          {SETTINGS_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => store.setSettingsTab(tab.id)}
@@ -269,7 +310,7 @@ export default function SettingsPanel() {
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               {/* Theme presets */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Theme
                 </label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "8px" }}>
@@ -312,7 +353,7 @@ export default function SettingsPanel() {
               {/* Color customization */}
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <label style={SECTION_LABEL_STYLE}>
                     Customize Colors
                   </label>
                   {store.customColors && (
@@ -390,7 +431,7 @@ export default function SettingsPanel() {
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               {/* Font Size */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Font Size: {store.fontSize}px
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "8px" }}>
@@ -427,7 +468,7 @@ export default function SettingsPanel() {
 
               {/* Font Family */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Font Family
                 </label>
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "8px" }}>
@@ -460,7 +501,7 @@ export default function SettingsPanel() {
 
               {/* Line Height */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Line Height: {store.lineHeight.toFixed(2)}
                 </label>
                 <input
@@ -476,7 +517,7 @@ export default function SettingsPanel() {
 
               {/* Cursor */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Cursor
                 </label>
                 <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
@@ -513,7 +554,7 @@ export default function SettingsPanel() {
 
               {/* Scrollback */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Scrollback: {store.scrollback.toLocaleString()} lines
                 </label>
                 <input
@@ -534,7 +575,7 @@ export default function SettingsPanel() {
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               {/* Current tabs / rename */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Open Tabs
                 </label>
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "8px" }}>
@@ -578,20 +619,14 @@ export default function SettingsPanel() {
                       ) : (
                         <span
                           style={{ flex: 1, fontSize: "12px", color: "var(--text-primary)", cursor: "pointer" }}
-                          onClick={() => {
-                            setRenameTabId(tab.id);
-                            setRenameValue(tab.name);
-                          }}
+                          onClick={() => startRename(tab)}
                           title="Click to rename"
                         >
                           {tab.name}
                         </span>
                       )}
                       <button
-                        onClick={() => {
-                          setRenameTabId(tab.id);
-                          setRenameValue(tab.name);
-                        }}
+                        onClick={() => startRename(tab)}
                         style={{
                           background: "none",
                           border: "none",
@@ -623,7 +658,7 @@ export default function SettingsPanel() {
 
               {/* Save workspace */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Save Current Workspace
                 </label>
                 <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
@@ -631,16 +666,7 @@ export default function SettingsPanel() {
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && workspaceName.trim()) {
-                        store.saveWorkspace(
-                          workspaceName.trim(),
-                          tabStore.tabs.map((t) => ({
-                            name: t.name,
-                            splits: t.root.type === "split" ? t.root.direction : "none",
-                          }))
-                        );
-                        setWorkspaceName("");
-                      }
+                      if (e.key === "Enter") saveCurrentWorkspace();
                     }}
                     placeholder="Workspace name..."
                     style={{
@@ -653,21 +679,10 @@ export default function SettingsPanel() {
                       color: "var(--text-primary)",
                       outline: "none",
                     }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                    {...inputFocus}
                   />
                   <button
-                    onClick={() => {
-                      if (!workspaceName.trim()) return;
-                      store.saveWorkspace(
-                        workspaceName.trim(),
-                        tabStore.tabs.map((t) => ({
-                          name: t.name,
-                          splits: t.root.type === "split" ? t.root.direction : "none",
-                        }))
-                      );
-                      setWorkspaceName("");
-                    }}
+                    onClick={saveCurrentWorkspace}
                     style={{
                       padding: "6px 16px",
                       borderRadius: "var(--radius-sm)",
@@ -688,7 +703,7 @@ export default function SettingsPanel() {
 
               {/* Saved workspaces */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Saved Workspaces
                 </label>
                 {store.workspaces.length === 0 ? (
@@ -721,10 +736,8 @@ export default function SettingsPanel() {
                         </span>
                         <button
                           onClick={() => {
-                            // Restore workspace: create tabs matching the saved config
-                            ws.tabs.forEach((t) => {
-                              tabStore.addTab(t.name);
-                            });
+                            // Only tab names are restored; saved splits are not applied.
+                            ws.tabs.forEach((t) => tabStore.addTab(t.name));
                             store.setShowSettings(false);
                           }}
                           style={{
@@ -776,14 +789,14 @@ export default function SettingsPanel() {
             </div>
           )}
 
-          {/* AI API Tab */}
           {store.settingsTab === "sync" && <SyncSettings />}
 
+          {/* AI API Tab */}
           {store.settingsTab === "ai" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               {/* Orchestrator Provider */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={SECTION_LABEL_STYLE}>
                   Orchestrator Provider
                 </label>
                 <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
@@ -817,11 +830,11 @@ export default function SettingsPanel() {
                 </p>
               </div>
 
-              {/* Anthropic section — show when anthropic is selected */}
+              {/* Anthropic section */}
               {store.orchestratorProvider === "anthropic" && (
                 <>
                   <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <label style={SECTION_LABEL_STYLE}>
                       Anthropic API Key
                     </label>
                     <input
@@ -829,20 +842,8 @@ export default function SettingsPanel() {
                       value={store.anthropicApiKey}
                       onChange={(e) => store.setAnthropicApiKey(e.target.value)}
                       placeholder="sk-ant-..."
-                      style={{
-                        width: "100%",
-                        backgroundColor: "var(--bg-primary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "6px",
-                        padding: "8px 12px",
-                        fontSize: "13px",
-                        color: "var(--text-primary)",
-                        fontFamily: "monospace",
-                        marginTop: "8px",
-                        outline: "none",
-                      }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                      style={{ ...MONO_INPUT_STYLE, marginTop: "8px" }}
+                      {...inputFocus}
                     />
                     <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
                       Required for Orchestrator Mode. Get your key at console.anthropic.com
@@ -850,7 +851,7 @@ export default function SettingsPanel() {
                   </div>
 
                   <div>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <label style={SECTION_LABEL_STYLE}>
                       Model
                     </label>
                     <select
@@ -878,7 +879,7 @@ export default function SettingsPanel() {
               {/* Ollama section — always shown (used for both agent CLI and orchestrator) */}
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <label style={SECTION_LABEL_STYLE}>
                     Ollama Configuration
                   </label>
                   <span style={{ fontSize: "10px", padding: "1px 6px", borderRadius: "4px", backgroundColor: "#3fb95020", color: "#3fb950", fontWeight: 600 }}>
@@ -896,19 +897,8 @@ export default function SettingsPanel() {
                       value={store.ollamaEndpoint}
                       onChange={(e) => store.setOllamaEndpoint(e.target.value)}
                       placeholder="http://localhost:11434"
-                      style={{
-                        width: "100%",
-                        backgroundColor: "var(--bg-primary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "6px",
-                        padding: "8px 12px",
-                        fontSize: "13px",
-                        color: "var(--text-primary)",
-                        fontFamily: "monospace",
-                        outline: "none",
-                      }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                      style={MONO_INPUT_STYLE}
+                      {...inputFocus}
                     />
                   </div>
 
@@ -921,19 +911,8 @@ export default function SettingsPanel() {
                       value={store.ollamaModel}
                       onChange={(e) => store.setOllamaModel(e.target.value)}
                       placeholder="deepseek-r1, llama3.2, qwen2.5-coder..."
-                      style={{
-                        width: "100%",
-                        backgroundColor: "var(--bg-primary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "6px",
-                        padding: "8px 12px",
-                        fontSize: "13px",
-                        color: "var(--text-primary)",
-                        fontFamily: "monospace",
-                        outline: "none",
-                      }}
-                      onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                      style={MONO_INPUT_STYLE}
+                      {...inputFocus}
                     />
                     <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
                       Used for both Agent CLI ({shortcutLabel("agentPicker")}) and Orchestrator when Ollama is selected.

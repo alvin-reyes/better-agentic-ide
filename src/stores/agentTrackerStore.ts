@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { readJson } from "../lib/storage";
 
 const STORAGE_KEY = "better-terminal-agent-tracker";
 
@@ -17,45 +18,28 @@ interface AgentTrackerStore {
 
   startSession: (paneId: string, agentName: string, agentIcon: string, provider: string) => void;
   endSession: (paneId: string) => void;
-  cancelSession: (paneId: string) => void;
   getActiveSession: (paneId: string) => AgentSession | undefined;
-  getActiveSessions: () => AgentSession[];
-  getSessionHistory: () => AgentSession[];
   clearHistory: () => void;
 }
 
+// Sessions still "running" were cut off when the app last quit.
 function loadSessions(): AgentSession[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const sessions = JSON.parse(raw) as AgentSession[];
-    // Mark any "running" sessions from previous app launch as cancelled
-    return sessions.map((s) =>
-      s.status === "running" ? { ...s, status: "cancelled" as const, endTime: s.startTime + 1000 } : s
-    );
-  } catch {
-    return [];
-  }
+  return readJson<AgentSession[]>(STORAGE_KEY, []).map((s) =>
+    s.status === "running" ? { ...s, status: "cancelled" as const, endTime: s.startTime + 1000 } : s
+  );
 }
+
+const MAX_SESSIONS = 200;
 
 function persistSessions(sessions: AgentSession[]) {
-  // Keep last 200 sessions
-  const trimmed = sessions.slice(-200);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(-MAX_SESSIONS)));
 }
 
-const initialSessions = loadSessions();
-
 export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
-  sessions: initialSessions,
+  sessions: loadSessions(),
 
   startSession: (paneId, agentName, agentIcon, provider) => {
-    // End any existing session for this pane
-    const existing = get().sessions.find((s) => s.paneId === paneId && s.status === "running");
-    if (existing) {
-      get().endSession(paneId);
-    }
-
+    if (get().getActiveSession(paneId)) get().endSession(paneId);
     const session: AgentSession = {
       paneId,
       agentName,
@@ -65,51 +49,23 @@ export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
       endTime: null,
       status: "running",
     };
-
     set((state) => {
-      const updated = [...state.sessions, session].slice(-200);
-      persistSessions(updated);
-      return { sessions: updated };
+      const sessions = [...state.sessions, session].slice(-MAX_SESSIONS);
+      persistSessions(sessions);
+      return { sessions };
     });
   },
 
-  endSession: (paneId) => {
+  endSession: (paneId) =>
     set((state) => {
-      const updated = state.sessions.map((s) => {
-        if (s.paneId === paneId && s.status === "running") {
-          return { ...s, status: "completed" as const, endTime: Date.now() };
-        }
-        return s;
-      });
-      persistSessions(updated);
-      return { sessions: updated };
-    });
-  },
+      const sessions = state.sessions.map((s) =>
+        s.paneId === paneId && s.status === "running" ? { ...s, status: "completed" as const, endTime: Date.now() } : s,
+      );
+      persistSessions(sessions);
+      return { sessions };
+    }),
 
-  cancelSession: (paneId) => {
-    set((state) => {
-      const updated = state.sessions.map((s) => {
-        if (s.paneId === paneId && s.status === "running") {
-          return { ...s, status: "cancelled" as const, endTime: Date.now() };
-        }
-        return s;
-      });
-      persistSessions(updated);
-      return { sessions: updated };
-    });
-  },
-
-  getActiveSession: (paneId) => {
-    return get().sessions.find((s) => s.paneId === paneId && s.status === "running");
-  },
-
-  getActiveSessions: () => {
-    return get().sessions.filter((s) => s.status === "running");
-  },
-
-  getSessionHistory: () => {
-    return get().sessions.filter((s) => s.status !== "running").slice(-50).reverse();
-  },
+  getActiveSession: (paneId) => get().sessions.find((s) => s.paneId === paneId && s.status === "running"),
 
   clearHistory: () => {
     const active = get().sessions.filter((s) => s.status === "running");
@@ -117,4 +73,3 @@ export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
     set({ sessions: active });
   },
 }));
-

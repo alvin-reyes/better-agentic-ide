@@ -5,6 +5,7 @@ import TerminalPane from "./components/TerminalPane";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
+import BmadInitBanner from "./components/BmadInitBanner";
 
 // Lazy-load heavy components for faster startup
 const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
@@ -23,7 +24,7 @@ const BmadPanel = lazy(() => import("./components/BmadPanel"));
 const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
 const TokensPanel = lazy(() => import("./components/TokensPanel"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
-import BmadInitBanner from "./components/BmadInitBanner";
+
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { flushNow } from "./lib/persistence";
 import { listenForFileOpens } from "./lib/openFile";
@@ -76,26 +77,18 @@ export default function App() {
     return findAllPanes(tab.root).find((p) => p.id === tab.activePaneId)?.ptyId ?? null;
   });
 
-  // Apply saved theme on startup
   useEffect(() => {
-    const colors = useSettingsStore.getState().getActiveTheme();
-    applyThemeToDOM(colors);
-  }, []);
-
-  // Restore session on startup
-  useEffect(() => {
+    applyThemeToDOM(useSettingsStore.getState().getActiveTheme());
     loadSession();
   }, []);
 
   // Auto-save the session (tabs, splits, folders, scrollback) instead of only
   // on window close, so a crash or force-quit doesn't lose it: shortly after
   // any tab/pane change, and every 20 s to pick up `cd` and new output.
-  const tabsForSave = useTabStore((s) => s.tabs);
-  const activeTabIdForSave = useTabStore((s) => s.activeTabId);
   useEffect(() => {
     const id = window.setTimeout(() => { void saveSession().catch(() => {}); }, SESSION_SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [tabsForSave, activeTabIdForSave]);
+  }, [tabs, activeTabId]);
   useEffect(() => {
     const id = window.setInterval(() => { void saveSession().catch(() => {}); }, SESSION_SAVE_INTERVAL_MS);
     return () => window.clearInterval(id);
@@ -123,24 +116,15 @@ export default function App() {
     };
   }, []);
 
-  // Listen for pane zoom toggle
-  useEffect(() => {
-    const handler = () => setZoomedPane((prev) => !prev);
-    window.addEventListener("toggle-zoom-pane", handler);
-    return () => window.removeEventListener("toggle-zoom-pane", handler);
-  }, []);
-
-  // Listen for preview open events (from terminal links, file browser, etc.)
+  // From terminal links, the file browser, etc.
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.path) {
-        // Only store pending path when panel is closed — if already open,
-        // PreviewPanel's own event listener handles it directly
+      const path = (e as CustomEvent).detail?.path;
+      if (path) {
+        // Only stash the path when the panel is closed; an open PreviewPanel
+        // handles the event itself.
         setPreviewOpen((wasOpen) => {
-          if (!wasOpen && detail.path) {
-            setPendingPreviewPath(detail.path);
-          }
+          if (!wasOpen) setPendingPreviewPath(path);
           return true;
         });
       } else {
@@ -157,7 +141,7 @@ export default function App() {
     return () => { void unlisten.then((fn) => fn?.()); };
   }, []);
 
-  // Listen for agent completion notifications (in-app toast)
+  // Agent completion notifications, shown as an in-app toast.
   useEffect(() => {
     let timeoutId: number | null = null;
     const handler = (e: Event) => {
@@ -173,37 +157,33 @@ export default function App() {
     };
   }, []);
 
-  // Request notification permission on startup
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
   }, []);
 
-  // Listen for fleet panel toggle
-  useEffect(() => {
-    const handler = () => setFleetOpen((prev) => !prev);
-    window.addEventListener("toggle-fleet", handler);
-    return () => window.removeEventListener("toggle-fleet", handler);
-  }, []);
-
-  // Listen for BMAD panel toggle from command palette
-  useEffect(() => {
-    const handler = () => setBmadOpen((prev) => !prev);
-    window.addEventListener("toggle-bmad", handler);
-    return () => window.removeEventListener("toggle-bmad", handler);
-  }, []);
-
+  const toggleFleet = useCallback(() => setFleetOpen((prev) => !prev), []);
   const toggleTokens = useCallback(() => setTokensOpen((prev) => !prev), []);
-  useEffect(() => {
-    window.addEventListener("toggle-tokens", toggleTokens);
-    return () => window.removeEventListener("toggle-tokens", toggleTokens);
-  }, [toggleTokens]);
-
-  // Smart contracts: the panel, and quick actions from the command palette.
   const toggleContracts = useCallback(() => setContractsOpen((prev) => !prev), []);
+
+  // Panel toggles dispatched as window events (command palette, other panels).
   useEffect(() => {
-    window.addEventListener("toggle-contracts", toggleContracts);
+    const toggleZoom = () => setZoomedPane((prev) => !prev);
+    const toggleBmad = () => setBmadOpen((prev) => !prev);
+    const toggles: [string, () => void][] = [
+      ["toggle-zoom-pane", toggleZoom],
+      ["toggle-fleet", toggleFleet],
+      ["toggle-bmad", toggleBmad],
+      ["toggle-tokens", toggleTokens],
+      ["toggle-contracts", toggleContracts],
+    ];
+    for (const [name, fn] of toggles) window.addEventListener(name, fn);
+    return () => { for (const [name, fn] of toggles) window.removeEventListener(name, fn); };
+  }, [toggleFleet, toggleTokens, toggleContracts]);
+
+  // Contract quick actions from the command palette.
+  useEffect(() => {
     const onRun = (e: Event) => {
       const id = (e as CustomEvent<{ id: string }>).detail?.id;
       if (!id) return;
@@ -224,11 +204,10 @@ export default function App() {
     };
     window.addEventListener("contracts-workbench", onWorkbench);
     return () => {
-      window.removeEventListener("toggle-contracts", toggleContracts);
       window.removeEventListener("contracts-run", onRun);
       window.removeEventListener("contracts-workbench", onWorkbench);
     };
-  }, [toggleContracts]);
+  }, []);
 
   // Resolve the active terminal's cwd eagerly. Non-terminal tabs (fleet, editor,
   // browser, orchestrator) have no PTY, so keep the last resolved value rather
@@ -280,9 +259,7 @@ export default function App() {
     // activePtyId: same cold-start problem as the activeCwd effect above.
   }, [activeTab?.activePaneId, activePtyId]);
 
-  const toggleCommandPalette = useCallback(() => {
-    setPaletteOpen((prev) => !prev);
-  }, []);
+  const toggleCommandPalette = useCallback(() => setPaletteOpen((prev) => !prev), []);
 
   const toggleScratchpad = useCallback(() => {
     const sp = scratchpadRef.current;
@@ -299,33 +276,13 @@ export default function App() {
     }
   }, []);
 
-  const toggleAgentPicker = useCallback(() => {
-    setAgentPickerOpen((prev) => !prev);
-  }, []);
-
-  const togglePreview = useCallback(() => {
-    setPreviewOpen((prev) => !prev);
-  }, []);
-
-  const toggleFleet = useCallback(() => {
-    setFleetOpen((prev) => !prev);
-  }, []);
-
-  const toggleFileBrowser = useCallback(() => {
-    useFileBrowserStore.getState().toggle();
-  }, []);
-
-  const sendScratchpad = useCallback(() => {
-    scratchpadRef.current?.send();
-  }, []);
-
-  const copyScratchpad = useCallback(() => {
-    scratchpadRef.current?.copy();
-  }, []);
-
-  const saveNoteScratchpad = useCallback(() => {
-    scratchpadRef.current?.saveNote();
-  }, []);
+  const toggleAgentPicker = useCallback(() => setAgentPickerOpen((prev) => !prev), []);
+  const togglePreview = useCallback(() => setPreviewOpen((prev) => !prev), []);
+  const toggleFileBrowser = useCallback(() => useFileBrowserStore.getState().toggle(), []);
+  const sendScratchpad = useCallback(() => scratchpadRef.current?.send(), []);
+  const copyScratchpad = useCallback(() => scratchpadRef.current?.copy(), []);
+  const saveNoteScratchpad = useCallback(() => scratchpadRef.current?.saveNote(), []);
+  const closeScratchpad = useCallback(() => scratchpadRef.current?.close(), []);
 
   const sendEnterToTerminal = useCallback(() => {
     const ptyId = getActivePtyId();
@@ -334,10 +291,6 @@ export default function App() {
     invoke("write_pty", { id: ptyId, data }).catch(() => {});
   }, [getActivePtyId]);
 
-  const closeScratchpad = useCallback(() => {
-    scratchpadRef.current?.close();
-  }, []);
-
   const openOrchestrator = useCallback(() => {
     import("./stores/orchestratorStore").then(({ useOrchestratorStore }) => {
       const sessionId = useOrchestratorStore.getState().createSession("New Project");
@@ -345,12 +298,11 @@ export default function App() {
     });
   }, []);
 
-  // Guarded close: check for active Claude processes before closing
+  // Guarded close: confirm before discarding unsaved edits or killing a live process.
   const requestCloseTab = useCallback((tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
     if (!tab) return;
 
-    // Check for unsaved editor changes
     if (tab.type === "editor") {
       const checkDirty = new Promise<boolean>((resolve) => {
         const responseHandler = (ev: Event) => {
@@ -366,17 +318,13 @@ export default function App() {
       });
 
       checkDirty.then((isDirty) => {
-        if (isDirty) {
-          const confirmed = confirm("This file has unsaved changes. Close anyway?");
-          if (!confirmed) return;
-        }
-        useTabStore.getState().closeTab(tabId);
+        if (isDirty && !confirm("This file has unsaved changes. Close anyway?")) return;
+        closeTab(tabId);
       });
       return;
     }
 
-    const allPanes = findAllPanes(tab.root);
-    const activeProcesses = allPanes
+    const activeProcesses = findAllPanes(tab.root)
       .map((p) => hasActiveProcess(p.id))
       .filter((name): name is string => name !== null);
 
@@ -410,7 +358,7 @@ export default function App() {
     }
   }, [closePane]);
 
-  // Listen for tab close requests from TabBar (X button / context menu)
+  // Tab close requests from TabBar (X button / context menu).
   useEffect(() => {
     const handler = (e: Event) => {
       const { tabId } = (e as CustomEvent).detail;
@@ -524,7 +472,7 @@ export default function App() {
         )}
         {bmadOpen && (
           <BmadPanel
-            ptyId={useTabStore.getState().getActivePtyId()}
+            ptyId={getActivePtyId()}
             cwd={activeCwd}
             onClose={() => setBmadOpen(false)}
           />
@@ -545,7 +493,6 @@ export default function App() {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
-      {/* Toast notification */}
       {toast && (
         <div
           style={{

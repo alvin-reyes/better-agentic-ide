@@ -17,35 +17,45 @@ struct FileEntry {
     is_hidden: bool,
 }
 
+/// `~` or `~/...` with `home` substituted; other paths are returned as is.
+fn expand_tilde(path: &str, home: &str) -> String {
+    match path.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => format!("{home}{rest}"),
+        _ => path.to_string(),
+    }
+}
+
+/// Like `expand_tilde`, looking up the home folder only when it is needed.
+fn expand_home(path: &str) -> String {
+    if path.starts_with('~') {
+        expand_tilde(path, &get_home_dir())
+    } else {
+        path.to_string()
+    }
+}
+
+/// $HOME as the environment has it, without `get_home_dir`'s fallbacks.
+pub(crate) fn env_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
+}
+
+const LIST_SKIP_NAMES: &[&str] = &[
+    "node_modules", ".git", "target", "dist", ".DS_Store", "__pycache__", ".next", ".cache",
+];
+
 #[tauri::command]
 fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
-    let resolved = if path.starts_with("~/") {
-        let home = get_home_dir();
-        path.replacen("~", &home, 1)
-    } else if path == "~" {
-        get_home_dir()
-    } else {
-        path.clone()
-    };
-
-    let skip_names: std::collections::HashSet<&str> = [
-        "node_modules", ".git", "target", "dist", ".DS_Store",
-        "__pycache__", ".next", ".cache",
-    ].iter().copied().collect();
-
+    let resolved = expand_home(&path);
     let entries = std::fs::read_dir(&resolved)
         .map_err(|e| format!("Failed to read directory {}: {}", resolved, e))?;
 
     let mut files: Vec<FileEntry> = Vec::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if skip_names.contains(name.as_str()) {
+        if LIST_SKIP_NAMES.contains(&name.as_str()) {
             continue;
         }
-        let meta = match entry.metadata() {
-            Ok(m) => m,
-            Err(_) => continue, // skip unreadable entries
-        };
+        let Ok(meta) = entry.metadata() else { continue };
         let entry_path = entry.path();
         let extension = entry_path.extension().map(|e| e.to_string_lossy().to_string());
         let is_hidden = name.starts_with('.');
@@ -59,7 +69,7 @@ fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
         });
     }
 
-    // Sort: directories first, then alphabetical (case-insensitive)
+    // Directories first, then case-insensitive by name.
     files.sort_by(|a, b| {
         b.is_dir.cmp(&a.is_dir)
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
@@ -84,7 +94,6 @@ pub(crate) fn find_command(command: &str) -> Result<String, String> {
     if !valid {
         return Err(format!("invalid command name: {:?}", command));
     }
-    // Get home directory — try multiple methods for Finder-launched apps
     let home = get_home_dir();
 
     let search_dirs = [
@@ -102,7 +111,6 @@ pub(crate) fn find_command(command: &str) -> Result<String, String> {
         "/bin".to_string(),
     ];
 
-    // Check each directory directly for the binary
     for dir in &search_dirs {
         if dir.contains('*') {
             if let Ok(entries) = glob::glob(&format!("{}/{}", dir, command)) {
@@ -120,19 +128,17 @@ pub(crate) fn find_command(command: &str) -> Result<String, String> {
         }
     }
 
-    // Fallback: use zsh login shell (macOS default) to resolve PATH
-    for shell in &["/bin/zsh", "/bin/bash", "/bin/sh"] {
-        let shell_check = std::process::Command::new(shell)
+    for shell in ["/bin/zsh", "/bin/bash", "/bin/sh"] {
+        let Ok(output) = std::process::Command::new(shell)
             .args(["-lc", &format!("which {}", command)])
             .env("HOME", &home)
-            .output();
-        if let Ok(output) = shell_check {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    return Ok(path);
-                }
-            }
+            .output()
+        else {
+            continue;
+        };
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if output.status.success() && !path.is_empty() {
+            return Ok(path);
         }
     }
 
@@ -147,8 +153,7 @@ fn resolve_existing_files(paths: &[String], cwd: Option<&str>, home: &str) -> Ve
         .iter()
         .take(64)
         .map(|p| {
-            let expanded = if p == "~" || p.starts_with("~/") { p.replacen('~', home, 1) } else { p.clone() };
-            let path = std::path::PathBuf::from(&expanded);
+            let path = std::path::PathBuf::from(expand_tilde(p, home));
             let full = if path.is_absolute() { path } else { std::path::Path::new(cwd?).join(path) };
             let meta = std::fs::metadata(&full).ok()?;
             meta.is_file().then(|| full.to_string_lossy().into_owned())
@@ -218,37 +223,24 @@ fn whoami() -> String {
 
 #[tauri::command]
 fn check_claude_plugin(plugin_name: String) -> Result<bool, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
-    let path = format!("{}/.claude/plugins/installed_plugins.json", home);
-    let content = std::fs::read_to_string(&path)
+    let home = env_home().ok_or("HOME not set")?;
+    let content = std::fs::read_to_string(home.join(".claude/plugins/installed_plugins.json"))
         .map_err(|_| "No installed plugins file".to_string())?;
     Ok(content.contains(&plugin_name))
 }
 
 #[tauri::command]
 fn write_text_file(path: String, content: String) -> Result<(), String> {
-    let expanded = if path.starts_with('~') {
-        let home = get_home_dir();
-        path.replacen("~", &home, 1)
-    } else {
-        path.clone()
-    };
-    // Ensure parent dir exists
+    let expanded = expand_home(&path);
     if let Some(parent) = std::path::Path::new(&expanded).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent dir: {}", e))?;
     }
-    std::fs::write(&expanded, content).map_err(|e| format!("Failed to write file: {}", e))?;
-    Ok(())
+    std::fs::write(&expanded, content).map_err(|e| format!("Failed to write file: {}", e))
 }
 
 #[tauri::command]
 fn create_directory(path: String) -> Result<String, String> {
-    let expanded = if path.starts_with('~') {
-        let home = get_home_dir();
-        path.replacen("~", &home, 1)
-    } else {
-        path.clone()
-    };
+    let expanded = expand_home(&path);
     std::fs::create_dir_all(&expanded).map_err(|e| format!("Failed to create dir: {}", e))?;
     Ok(expanded)
 }
@@ -257,16 +249,10 @@ fn create_directory(path: String) -> Result<String, String> {
 fn save_temp_image(base64_data: String, extension: String) -> Result<String, String> {
     use std::io::Write;
 
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = format!("{}/.ade/images", home);
+    let home = env_home().unwrap_or_else(|| "/tmp".into());
+    let dir = format!("{}/.ade/images", home.to_string_lossy());
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let filename = format!("paste-{}.{}", timestamp, extension);
-    let path = format!("{}/{}", dir, filename);
+    let path = format!("{}/paste-{}.{}", dir, state::now_ms(), extension);
 
     let bytes = base64_decode(&base64_data)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
@@ -279,10 +265,9 @@ fn save_temp_image(base64_data: String, extension: String) -> Result<String, Str
     Ok(path)
 }
 
+const BASE64_TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
 fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
-    // Simple base64 decoder
-    let table: Vec<u8> = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-        .to_vec();
     let mut output = Vec::new();
     let mut buf: u32 = 0;
     let mut bits: u32 = 0;
@@ -291,7 +276,7 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
         if byte == b'=' || byte == b'\n' || byte == b'\r' || byte == b' ' {
             continue;
         }
-        let val = table.iter().position(|&b| b == byte)
+        let val = BASE64_TABLE.iter().position(|&b| b == byte)
             .ok_or_else(|| format!("Invalid base64 char: {}", byte as char))? as u32;
         buf = (buf << 6) | val;
         bits += 6;
@@ -306,16 +291,10 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 fn read_file_base64(path: String) -> Result<String, String> {
-    let resolved = if path.starts_with("~/") {
-        let home = get_home_dir();
-        path.replacen("~", &home, 1)
-    } else {
-        path.clone()
-    };
+    let resolved = expand_home(&path);
     let bytes = std::fs::read(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
-    // Simple base64 encode
-    let table = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::new();
+    let table = BASE64_TABLE;
+    let mut result = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
@@ -339,12 +318,7 @@ fn read_file_base64(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    let resolved = if path.starts_with("~/") {
-        let home = get_home_dir();
-        path.replacen("~", &home, 1)
-    } else {
-        path.clone()
-    };
+    let resolved = expand_home(&path);
     std::fs::read_to_string(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))
 }
 
@@ -450,6 +424,14 @@ mod tests {
         assert!(got[5].is_some(), "~ expands to home");
         // Relative paths need a folder to resolve against.
         assert_eq!(resolve_existing_files(&["docs/plan.md".into()], None, &cwd)[0], None);
+    }
+
+    #[test]
+    fn tilde_expands_only_as_home_prefix() {
+        assert_eq!(expand_tilde("~", "/h"), "/h");
+        assert_eq!(expand_tilde("~/a/b", "/h"), "/h/a/b");
+        assert_eq!(expand_tilde("~user/a", "/h"), "~user/a");
+        assert_eq!(expand_tilde("/a/~/b", "/h"), "/a/~/b");
     }
 
     #[test]

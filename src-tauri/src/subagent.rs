@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
@@ -27,18 +29,14 @@ pub enum SubagentEvent {
 
 pub fn parse_line(line: &str) -> Vec<SubagentEvent> {
     let mut out = Vec::new();
-    let v: serde_json::Value = match serde_json::from_str(line) {
-        Ok(v) => v,
-        Err(_) => return out,
-    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return out };
     // Transcript lines carry a top-level ISO-8601 timestamp. Metadata lines do not.
     let ts = v
         .get("timestamp")
         .and_then(|t| t.as_str())
         .map(|s| s.to_string());
-    let content = match v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_array()) {
-        Some(c) => c,
-        None => return out,
+    let Some(content) = v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_array()) else {
+        return out;
     };
     for block in content {
         let btype = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -101,64 +99,50 @@ pub fn claude_project_path(home: &Path, cwd: &str) -> PathBuf {
         .join(encode_project_dir(cwd))
 }
 
+/// `.jsonl` transcripts in `project_dir` with their modification times.
+fn transcripts(project_dir: &Path) -> Vec<(SystemTime, PathBuf)> {
+    let Ok(rd) = std::fs::read_dir(project_dir) else { return Vec::new() };
+    rd.flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                return None;
+            }
+            let mtime = entry.metadata().and_then(|m| m.modified()).ok()?;
+            Some((mtime, path))
+        })
+        .collect()
+}
+
 pub fn newest_transcript(project_dir: &Path) -> Option<PathBuf> {
-    let mut newest: Option<(std::time::SystemTime, PathBuf)> = None;
-    for entry in std::fs::read_dir(project_dir).ok()?.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-            continue;
-        }
-        let Ok(mtime) = entry.metadata().and_then(|m| m.modified()) else { continue; };
-        if newest.as_ref().is_none_or(|(t, _)| mtime > *t) {
-            newest = Some((mtime, path));
-        }
-    }
-    newest.map(|(_, p)| p)
+    transcripts(project_dir).into_iter().max_by_key(|(t, _)| *t).map(|(_, p)| p)
 }
 
 /// The `n` most recently modified `.jsonl` transcripts, oldest first so
 /// replayed events arrive in chronological order.
 pub fn recent_transcripts(project_dir: &Path, n: usize) -> Vec<PathBuf> {
-    let Ok(rd) = std::fs::read_dir(project_dir) else {
-        return Vec::new();
-    };
-    let mut entries: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
-    for entry in rd.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-            continue;
-        }
-        let Ok(mtime) = entry.metadata().and_then(|m| m.modified()) else { continue; };
-        entries.push((mtime, path));
-    }
+    let mut entries = transcripts(project_dir);
     entries.sort_by_key(|(t, _)| *t);
     let start = entries.len().saturating_sub(n);
-    entries[start..].iter().map(|(_, p)| p.clone()).collect()
-}
-
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
+    entries.drain(start..).map(|(_, p)| p).collect()
 }
 
 pub struct SubagentWatcherManager {
-    watchers: Arc<Mutex<HashMap<u32, RecommendedWatcher>>>,
-    next_id: Arc<Mutex<u32>>,
+    watchers: Mutex<HashMap<u32, RecommendedWatcher>>,
+    next_id: AtomicU32,
 }
 
 impl SubagentWatcherManager {
     pub fn new() -> Self {
         Self {
-            watchers: Arc::new(Mutex::new(HashMap::new())),
-            next_id: Arc::new(Mutex::new(1)),
+            watchers: Mutex::new(HashMap::new()),
+            next_id: AtomicU32::new(1),
         }
     }
 }
 
 fn emit_from_offset(path: &Path, from: u64, channel: &Channel<SubagentEvent>) -> u64 {
-    let mut file = match std::fs::File::open(path) {
-        Ok(f) => f,
-        Err(_) => return from,
-    };
+    let Ok(mut file) = std::fs::File::open(path) else { return from };
     let len = file.metadata().map(|m| m.len()).unwrap_or(0);
     if len < from {
         // File truncated/rotated — restart from beginning.
@@ -191,21 +175,15 @@ pub fn watch_subagents(
     cwd: String,
     on_event: Channel<SubagentEvent>,
 ) -> Result<u32, String> {
-    let home = home_dir().ok_or("no HOME")?;
+    let home = crate::env_home().ok_or("no HOME")?;
     let project_dir = claude_project_path(&home, &cwd);
-    // Replay the 3 most recent transcripts oldest-first, then tail the newest.
-    // Only the newest file gets a live cursor; older ones are history.
+    // Replay the 3 most recent transcripts oldest-first, then tail the newest:
+    // the cursor ends at the end of the last (newest) one replayed.
     let mut offset: u64 = 0;
-    let history = recent_transcripts(&project_dir, 3);
-    let newest = history.last().cloned();
-    for path in &history {
-        let consumed = emit_from_offset(path, 0, &on_event);
-        if Some(path) == newest.as_ref() {
-            offset = consumed;
-        }
+    for path in recent_transcripts(&project_dir, 3) {
+        offset = emit_from_offset(&path, 0, &on_event);
     }
     let watch_dir = project_dir.clone();
-    let channel = on_event.clone();
     let cursor = Arc::new(Mutex::new(offset));
 
     let mut watcher = RecommendedWatcher::new(
@@ -214,7 +192,7 @@ pub fn watch_subagents(
                 if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                     if let Some(path) = newest_transcript(&watch_dir) {
                         let mut cur = cursor.lock().unwrap();
-                        *cur = emit_from_offset(&path, *cur, &channel);
+                        *cur = emit_from_offset(&path, *cur, &on_event);
                     }
                 }
             }
@@ -229,12 +207,7 @@ pub fn watch_subagents(
         .watch(&project_dir, RecursiveMode::NonRecursive)
         .map_err(|e| e.to_string())?;
 
-    let id = {
-        let mut next = state.next_id.lock().unwrap();
-        let id = *next;
-        *next += 1;
-        id
-    };
+    let id = state.next_id.fetch_add(1, Ordering::Relaxed);
     state.watchers.lock().unwrap().insert(id, watcher);
     Ok(id)
 }

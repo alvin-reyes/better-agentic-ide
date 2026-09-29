@@ -7,6 +7,7 @@ import {
 import { sendToActiveTerminal } from "../lib/terminalCommands";
 import { runContractAction } from "../lib/contractRunner";
 import { useTabStore } from "../stores/tabStore";
+import { useEscapeToClose } from "./useEscapeToClose";
 
 interface Props {
   cwd: string | null;
@@ -45,17 +46,7 @@ export default function ContractsPanel({ cwd, onClose }: Props) {
     invoke<ToolStatus[]>("contracts_tools", { tools: names }).then(setTools).catch(() => setTools([]));
   }, [kinds]);
 
-  // Capture phase: the terminal keeps focus and xterm stops Escape bubbling.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  useEscapeToClose(onClose);
 
   const installed = (name?: string) => !name || tools.length === 0 || tools.some((t) => t.name === name && t.version);
 

@@ -1,7 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { SHORTCUTS, matches } from "../lib/shortcuts";
-import { useTerminal, getPtyCwd } from "../hooks/useTerminal";
-import { getSearchAddon } from "../hooks/useTerminal";
+import { useTerminal, getPtyCwd, getSearchAddon } from "../hooks/useTerminal";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import TerminalSearch from "./TerminalSearch";
 import RecordingControls from "./RecordingControls";
@@ -22,10 +21,8 @@ const PANE_COLORS = [
 // Format CWD: replace home dir with ~, show last 3 segments as breadcrumb
 function formatCwd(path: string): string {
   let display = path;
-  // Replace /Users/<name> with ~
   const homeMatch = display.match(/^\/Users\/[^/]+/);
   if (homeMatch) display = display.replace(homeMatch[0], "~");
-  // Split into segments and show breadcrumb style
   const parts = display.split("/").filter(Boolean);
   if (parts.length <= 3) return parts.join(" / ");
   return "... / " + parts.slice(-3).join(" / ");
@@ -44,7 +41,6 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [cwd, setCwd] = useState<string | null>(null);
 
-  // Get pane color based on index within the tab
   const allPanes = activeTab ? findAllPanes(activeTab.root) : [];
   const paneIndex = allPanes.findIndex((p) => p.id === paneId);
   const paneColor = PANE_COLORS[paneIndex % PANE_COLORS.length];
@@ -64,7 +60,6 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     }
   }, [isActive, termRef]);
 
-  // Poll CWD every 3 seconds
   useEffect(() => {
     let mounted = true;
     const poll = async () => {

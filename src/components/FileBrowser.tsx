@@ -157,11 +157,6 @@ export default function FileBrowser() {
   const { tabs, activeTabId } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  const dragRef = useRef(false);
-  const dragStartXRef = useRef(0);
-  const dragStartWidthRef = useRef(240);
-
-
   // CWD sync: poll active terminal's CWD every 3s
   useEffect(() => {
     if (!activeTab || activeTab.type === "orchestrator") {
@@ -239,32 +234,26 @@ export default function FileBrowser() {
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    dragRef.current = true;
-    dragStartXRef.current = e.clientX;
-    dragStartWidthRef.current = width;
+    const startX = e.clientX;
+    const startWidth = width;
 
     const cleanup = () => {
-      dragRef.current = false;
       document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("mouseup", cleanup);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       dragCleanupRef.current = null;
     };
 
     const onMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const delta = ev.clientX - dragStartXRef.current;
-      setWidth(Math.min(500, Math.max(180, dragStartWidthRef.current + delta)));
+      setWidth(Math.min(500, Math.max(180, startWidth + ev.clientX - startX)));
     };
-
-    const onUp = () => cleanup();
 
     dragCleanupRef.current = cleanup;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    document.addEventListener("mouseup", cleanup);
   }, [width, setWidth]);
 
   const isOrchestratorTab = activeTab?.type === "orchestrator";
@@ -393,7 +382,7 @@ export default function FileBrowser() {
 
       {/* Tree content */}
       <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingTop: "2px" }}>
-        {isOrchestratorTab ? (
+        {isOrchestratorTab || (tree.length === 0 && !rootPath) ? (
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -406,7 +395,7 @@ export default function FileBrowser() {
           }}>
             No terminal active
           </div>
-        ) : tree.length === 0 && rootPath ? (
+        ) : tree.length === 0 ? (
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -416,19 +405,6 @@ export default function FileBrowser() {
             fontSize: "11px",
           }}>
             Loading...
-          </div>
-        ) : tree.length === 0 ? (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            padding: "24px",
-            color: "var(--text-muted)",
-            fontSize: "12px",
-            textAlign: "center",
-          }}>
-            No terminal active
           </div>
         ) : (
           tree.map((node) => (

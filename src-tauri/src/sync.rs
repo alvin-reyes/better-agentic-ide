@@ -30,7 +30,7 @@ use std::time::UNIX_EPOCH;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-use crate::state;
+use crate::state::{self, now_ms, read_json};
 
 /// State keys shared by every machine.
 pub const SHARED_KEYS: &[&str] = &[
@@ -162,13 +162,6 @@ pub struct Paths {
     pub claude_home: Option<PathBuf>,
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 fn mtime_ms(p: &Path) -> u64 {
     fs::metadata(p)
         .and_then(|m| m.modified())
@@ -261,11 +254,7 @@ pub fn ensure_repo(repo: &Path, remote: &str) -> Result<(), String> {
 }
 
 fn key_path(repo: &Path, dir: &str, key: &str) -> PathBuf {
-    repo.join(dir).join(format!("{}.json", state::encode_key(key)))
-}
-
-fn read_wrapped(p: &Path) -> Option<Wrapped> {
-    serde_json::from_str(&fs::read_to_string(p).ok()?).ok()
+    state::kv_path(&repo.join(dir), key)
 }
 
 /// Export local state keys into the repo when they are newer than the repo copy.
@@ -274,12 +263,12 @@ fn export_state(paths: &Paths, device: &str) -> Result<(), String> {
     let groups: [(&[&str], &str); 2] = [(SHARED_KEYS, "shared"), (DEVICE_KEYS, dev_dir.as_str())];
     for (keys, dir) in groups {
         for key in keys {
-            let local = paths.kv.join(format!("{}.json", state::encode_key(key)));
+            let local = state::kv_path(&paths.kv, key);
             let Ok(raw) = fs::read_to_string(&local) else { continue };
             let value = value_for_repo(key, &raw);
             let local_at = mtime_ms(&local);
             let target = key_path(&paths.repo, dir, key);
-            let write = match read_wrapped(&target) {
+            let write = match read_json::<Wrapped>(&target) {
                 None => true,
                 Some(w) => w.value != value && local_at > w.updated_at,
             };
@@ -298,8 +287,8 @@ fn import_state(paths: &Paths) -> Result<Vec<String>, String> {
     let mut imported = Vec::new();
     let mut batch = HashMap::new();
     for key in SHARED_KEYS {
-        let Some(w) = read_wrapped(&key_path(&paths.repo, "shared", key)) else { continue };
-        let local = paths.kv.join(format!("{}.json", state::encode_key(key)));
+        let Some(w) = read_json::<Wrapped>(&key_path(&paths.repo, "shared", key)) else { continue };
+        let local = state::kv_path(&paths.kv, key);
         let local_raw = fs::read_to_string(&local).ok();
         let differs = local_raw.as_deref().map(|v| strip_secrets(v) != w.value).unwrap_or(true);
         if differs && (!local.exists() || w.updated_at > mtime_ms(&local)) {
@@ -479,10 +468,6 @@ fn resolve_conflicts(repo: &Path, claude_home: Option<&Path>) -> Result<Vec<Stri
     Ok(resolved)
 }
 
-fn load_sync_state(p: &Path) -> SyncState {
-    fs::read_to_string(p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
-}
-
 /// Fetch and merge origin/main, resolving state-file conflicts by time.
 fn pull(repo: &Path, claude_home: Option<&Path>, report: &mut SyncReport) -> Result<(), String> {
     let has_remote_main = git(repo, &["fetch", "-q", "origin"]).is_ok()
@@ -530,7 +515,7 @@ pub fn run_sync(
     import_deadline_ms: Option<u64>,
 ) -> Result<SyncReport, String> {
     ensure_repo(&paths.repo, &config.remote)?;
-    let mut st = load_sync_state(&paths.sync_state);
+    let mut st: SyncState = read_json(&paths.sync_state).unwrap_or_default();
     let mut report = SyncReport::default();
 
     // Bring in other machines' commits first, so the export below compares
@@ -580,8 +565,6 @@ pub fn run_sync(
     Ok(report)
 }
 
-// ----- Tauri commands -------------------------------------------------------
-
 fn app_paths(app: &tauri::AppHandle) -> Result<(Paths, PathBuf), String> {
     let data = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let claude_home = app.path().home_dir().ok().map(|h| h.join(".claude"));
@@ -596,14 +579,10 @@ fn app_paths(app: &tauri::AppHandle) -> Result<(Paths, PathBuf), String> {
     ))
 }
 
-fn load_config(p: &Path) -> Option<SyncConfig> {
-    serde_json::from_str(&fs::read_to_string(p).ok()?).ok()
-}
-
 #[tauri::command]
 pub fn sync_get_config(app: tauri::AppHandle) -> Result<Option<SyncConfig>, String> {
     let (_, cfg) = app_paths(&app)?;
-    Ok(load_config(&cfg))
+    Ok(read_json(&cfg))
 }
 
 /// Save the sync settings. An empty remote turns sync off.
@@ -633,7 +612,7 @@ pub async fn sync_now(
     import_deadline_ms: Option<u64>,
 ) -> Result<Option<SyncReport>, String> {
     let (paths, cfg) = app_paths(&app)?;
-    let Some(config) = load_config(&cfg) else { return Ok(None) };
+    let Some(config) = read_json::<SyncConfig>(&cfg) else { return Ok(None) };
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = SYNC_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         run_sync(&paths, &config, apply_remote, import_deadline_ms)

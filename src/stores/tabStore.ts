@@ -68,8 +68,10 @@ const newPaneId = () => `pane-${++paneCounter}`;
 let tabCounter = 0;
 const newTabId = () => `tab-${++tabCounter}`;
 
-function createDefaultPane(): Pane {
-  return { id: newPaneId(), ptyId: null };
+function createDefaultPane(initialCwd?: string | null): Pane {
+  const pane: Pane = { id: newPaneId(), ptyId: null };
+  if (initialCwd) pane.initialCwd = initialCwd;
+  return pane;
 }
 
 function findPane(node: PaneNode, paneId: string): Pane | null {
@@ -130,8 +132,7 @@ function splitPaneInNode(
 ): { node: PaneNode; newPaneId: string | null } {
   if (node.type === "pane") {
     if (node.pane.id === paneId) {
-      const newPane = createDefaultPane();
-      if (initialCwd) newPane.initialCwd = initialCwd;
+      const newPane = createDefaultPane(initialCwd);
       return {
         node: {
           type: "split",
@@ -144,8 +145,8 @@ function splitPaneInNode(
     return { node, newPaneId: null };
   }
 
-  // If this container matches the split direction and the target pane is a direct child,
-  // enforce the max split limit by adding to this container instead of nesting
+  // Splitting a direct child along this container's direction adds a sibling
+  // instead of nesting, so the per-direction limit can be enforced.
   if (node.direction === direction) {
     const childIdx = node.children.findIndex(
       (c) => c.type === "pane" && c.pane.id === paneId,
@@ -154,8 +155,7 @@ function splitPaneInNode(
       if (node.children.length >= MAX_SPLITS_PER_DIRECTION) {
         return { node, newPaneId: null }; // limit reached
       }
-      const newPane = createDefaultPane();
-      if (initialCwd) newPane.initialCwd = initialCwd;
+      const newPane = createDefaultPane(initialCwd);
       const newChildren = [...node.children];
       newChildren.splice(childIdx + 1, 0, { type: "pane", pane: newPane });
       return {
@@ -179,9 +179,39 @@ function splitPaneInNode(
   return { node: { ...node, children: newChildren }, newPaneId: foundNewPaneId };
 }
 
+/** The tab to activate when the active one at `idx` is removed from `tabs`. */
+function neighbourTabId(tabs: Tab[], idx: number): string {
+  return tabs[Math.min(idx, tabs.length - 1)].id;
+}
+
 export const useTabStore = create<TabStore>((set, get) => {
   const initialPane = createDefaultPane();
   const initialTabId = newTabId();
+
+  /** Append a tab and activate it. Non-terminal tabs carry a placeholder pane. */
+  const openTab = (fields: Omit<Tab, "id" | "root" | "activePaneId">, pane = createDefaultPane()): string => {
+    const tab: Tab = { ...fields, id: newTabId(), root: { type: "pane", pane }, activePaneId: pane.id };
+    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+    return tab.id;
+  };
+
+  const focusExisting = (match: (t: Tab) => boolean): string | undefined => {
+    const existing = get().tabs.find(match);
+    if (existing) set({ activeTabId: existing.id });
+    return existing?.id;
+  };
+
+  const focusPaneBy = (tabId: string, step: 1 | -1) => {
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const allPanes = findAllPanes(tab.root);
+    if (allPanes.length <= 1) return;
+    const idx = allPanes.findIndex((p) => p.id === tab.activePaneId);
+    const next = allPanes[(idx + step + allPanes.length) % allPanes.length];
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, activePaneId: next.id } : t)),
+    }));
+  };
 
   return {
     tabs: [
@@ -195,143 +225,41 @@ export const useTabStore = create<TabStore>((set, get) => {
     activeTabId: initialTabId,
 
     addTab: (name, initialCwd) => {
-      const pane = createDefaultPane();
-      if (initialCwd) pane.initialCwd = initialCwd;
-      const tab: Tab = {
-        id: newTabId(),
-        name: name || "Terminal",
-        root: { type: "pane", pane },
-        activePaneId: pane.id,
-      };
-      set((s) => ({
-        tabs: [...s.tabs, tab],
-        activeTabId: tab.id,
-      }));
+      openTab({ name: name || "Terminal" }, createDefaultPane(initialCwd));
     },
 
-    addOrchestratorTab: (sessionId) => {
-      const id = newTabId();
-      const pane = createDefaultPane();
-      const tab: Tab = {
-        id,
-        name: "Orchestrator",
-        type: "orchestrator",
-        orchestratorSessionId: sessionId,
-        root: { type: "pane", pane },
-        activePaneId: pane.id,
-      };
-      set((s) => ({
-        tabs: [...s.tabs, tab],
-        activeTabId: id,
-      }));
-      return id;
-    },
+    addOrchestratorTab: (sessionId) =>
+      openTab({ name: "Orchestrator", type: "orchestrator", orchestratorSessionId: sessionId }),
 
-    addBrowserTab: (url) => {
-      const id = newTabId();
-      const pane = createDefaultPane();
-      const tab: Tab = {
-        id,
-        name: "Browser",
-        type: "browser",
-        browserUrl: url || "http://localhost:3000",
-        root: { type: "pane", pane },
-        activePaneId: pane.id,
-      };
-      set((s) => ({
-        tabs: [...s.tabs, tab],
-        activeTabId: id,
-      }));
-      return id;
-    },
+    addBrowserTab: (url) =>
+      openTab({ name: "Browser", type: "browser", browserUrl: url || "http://localhost:3000" }),
 
-    addFleetTab: () => {
-      // Only ever one fleet tab; focus it if it already exists.
-      const existing = get().tabs.find((t) => t.type === "fleet");
-      if (existing) {
-        set({ activeTabId: existing.id });
-        return existing.id;
-      }
-      const id = newTabId();
-      const pane = createDefaultPane();
-      const tab: Tab = {
-        id,
-        name: "Fleet",
-        type: "fleet",
-        root: { type: "pane", pane },
-        activePaneId: pane.id,
-      };
-      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: id }));
-      return id;
-    },
+    // Fleet, a project's contracts workbench and a file's editor are opened
+    // once; asking again focuses the existing tab.
+    addFleetTab: () =>
+      focusExisting((t) => t.type === "fleet") ?? openTab({ name: "Fleet", type: "fleet" }),
 
-    addContractsTab: (root) => {
-      // One workbench per project; focus it if it's already open.
-      const existing = get().tabs.find((t) => t.type === "contracts" && t.contractsRoot === root);
-      if (existing) {
-        set({ activeTabId: existing.id });
-        return existing.id;
-      }
-      const id = newTabId();
-      const pane = createDefaultPane();
-      const tab: Tab = {
-        id,
-        name: `\u2B21 ${root.split("/").pop() || "contracts"}`,
-        type: "contracts",
-        contractsRoot: root,
-        root: { type: "pane", pane },
-        activePaneId: pane.id,
-      };
-      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: id }));
-      return id;
-    },
+    addContractsTab: (root) =>
+      focusExisting((t) => t.type === "contracts" && t.contractsRoot === root) ??
+      openTab({ name: `\u2B21 ${root.split("/").pop() || "contracts"}`, type: "contracts", contractsRoot: root }),
 
-    addEditorTab: (filePath) => {
-      const existing = get().tabs.find(
-        (t) => t.type === "editor" && t.editorFilePath === filePath,
-      );
-      if (existing) {
-        set({ activeTabId: existing.id });
-        return existing.id;
-      }
-      const id = newTabId();
-      const pane = createDefaultPane();
-      const fileName = filePath.split("/").pop() || filePath;
-      const tab: Tab = {
-        id,
-        name: fileName,
-        type: "editor",
-        editorFilePath: filePath,
-        root: { type: "pane", pane },
-        activePaneId: pane.id,
-      };
-      set((s) => ({
-        tabs: [...s.tabs, tab],
-        activeTabId: id,
-      }));
-      return id;
-    },
+    addEditorTab: (filePath) =>
+      focusExisting((t) => t.type === "editor" && t.editorFilePath === filePath) ??
+      openTab({ name: filePath.split("/").pop() || filePath, type: "editor", editorFilePath: filePath }),
 
     closeTab: (id) => {
       const state = get();
       if (state.tabs.length <= 1) return;
       const tab = state.tabs.find((t) => t.id === id);
-      // Destroy all PTY instances for panes in this tab
       if (tab) {
-        const panes = findAllPanes(tab.root);
-        for (const pane of panes) {
-          // Lazy import to avoid circular deps — destroyInstance is called async
-          import("../hooks/useTerminal").then(({ destroyInstance }) => {
-            destroyInstance(pane.id);
-          });
-        }
+        // Imported lazily: useTerminal imports this store.
+        import("../hooks/useTerminal").then(({ destroyInstance }) => {
+          for (const pane of findAllPanes(tab.root)) destroyInstance(pane.id);
+        });
       }
       const idx = state.tabs.findIndex((t) => t.id === id);
       const newTabs = state.tabs.filter((t) => t.id !== id);
-      const newActive =
-        state.activeTabId === id
-          ? newTabs[Math.min(idx, newTabs.length - 1)].id
-          : state.activeTabId;
+      const newActive = state.activeTabId === id ? neighbourTabId(newTabs, idx) : state.activeTabId;
       set({ tabs: newTabs, activeTabId: newActive });
     },
 
@@ -376,19 +304,11 @@ export const useTabStore = create<TabStore>((set, get) => {
       const state = get();
       const tab = state.tabs.find((t) => t.id === tabId);
       if (!tab) return;
-      const allPanes = findAllPanes(tab.root);
-      if (allPanes.length <= 1) return; // don't close the last pane
-      // Destroy the terminal instance
-      import("../hooks/useTerminal").then(({ destroyInstance }) => {
-        destroyInstance(paneId);
-      });
+      if (findAllPanes(tab.root).length <= 1) return; // don't close the last pane
+      import("../hooks/useTerminal").then(({ destroyInstance }) => destroyInstance(paneId));
       const newRoot = removePaneFromNode(tab.root, paneId);
       if (!newRoot) return;
-      // Pick a new active pane if the closed one was active
-      const remainingPanes = findAllPanes(newRoot);
-      const newActive = tab.activePaneId === paneId
-        ? remainingPanes[0].id
-        : tab.activePaneId;
+      const newActive = tab.activePaneId === paneId ? findAllPanes(newRoot)[0].id : tab.activePaneId;
       set((s) => ({
         tabs: s.tabs.map((t) =>
           t.id === tabId ? { ...t, root: newRoot, activePaneId: newActive } : t,
@@ -410,58 +330,23 @@ export const useTabStore = create<TabStore>((set, get) => {
       const tab = state.tabs.find((t) => t.id === id);
       if (!tab) return null;
 
-      // Detach all xterm instances (dispose xterm without killing PTY)
-      const panes = findAllPanes(tab.root);
-      for (const pane of panes) {
-        import("../hooks/useTerminal").then(({ detachInstance }) => {
-          detachInstance(pane.id);
-        });
-      }
+      // Dispose the xterm instances but keep the PTYs running for the new window.
+      import("../hooks/useTerminal").then(({ detachInstance }) => {
+        for (const pane of findAllPanes(tab.root)) detachInstance(pane.id);
+      });
 
-      // Remove tab from store
       const idx = state.tabs.findIndex((t) => t.id === id);
       const newTabs = state.tabs.filter((t) => t.id !== id);
-
-      // If this was the last tab, don't remove it (caller should add a new tab first)
+      // The last tab stays (the caller adds a new tab first).
       if (newTabs.length === 0) return null;
 
-      const newActive =
-        state.activeTabId === id
-          ? newTabs[Math.min(idx, newTabs.length - 1)].id
-          : state.activeTabId;
+      const newActive = state.activeTabId === id ? neighbourTabId(newTabs, idx) : state.activeTabId;
       set({ tabs: newTabs, activeTabId: newActive });
       return tab;
     },
 
-    focusNextPane: (tabId) => {
-      const state = get();
-      const tab = state.tabs.find((t) => t.id === tabId);
-      if (!tab) return;
-      const allPanes = findAllPanes(tab.root);
-      if (allPanes.length <= 1) return;
-      const idx = allPanes.findIndex((p) => p.id === tab.activePaneId);
-      const next = (idx + 1) % allPanes.length;
-      set((s) => ({
-        tabs: s.tabs.map((t) =>
-          t.id === tabId ? { ...t, activePaneId: allPanes[next].id } : t,
-        ),
-      }));
-    },
-
-    focusPrevPane: (tabId) => {
-      const state = get();
-      const tab = state.tabs.find((t) => t.id === tabId);
-      if (!tab) return;
-      const allPanes = findAllPanes(tab.root);
-      if (allPanes.length <= 1) return;
-      const idx = allPanes.findIndex((p) => p.id === tab.activePaneId);
-      const prev = (idx - 1 + allPanes.length) % allPanes.length;
-      set((s) => ({
-        tabs: s.tabs.map((t) =>
-          t.id === tabId ? { ...t, activePaneId: allPanes[prev].id } : t,
-        ),
-      }));
-    },
+    focusNextPane: (tabId) => focusPaneBy(tabId, 1),
+    focusPrevPane: (tabId) => focusPaneBy(tabId, -1),
 
     getActivePane: () => {
       const state = get();
@@ -470,10 +355,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       return findPane(tab.root, tab.activePaneId);
     },
 
-    getActivePtyId: () => {
-      const pane = get().getActivePane();
-      return pane?.ptyId ?? null;
-    },
+    getActivePtyId: () => get().getActivePane()?.ptyId ?? null,
   };
 });
 
@@ -526,14 +408,14 @@ function serializePaneNode(node: PaneNode, paneData: Map<string, SavedPane>): un
 
 function deserializePaneNode(data: any): PaneNode {
   if (data.type === "pane") {
-    const pane: Pane & { serializedBuffer?: string; savedCwd?: string } = {
-      id: newPaneId(), // Generate fresh pane IDs
+    const pane: Pane = {
+      id: newPaneId(),
       ptyId: null,
       initialCwd: data.pane.savedCwd || null,
       serializedBuffer: data.pane.serializedBuffer,
       savedCwd: data.pane.savedCwd,
     };
-    return { type: "pane", pane: pane as Pane };
+    return { type: "pane", pane };
   }
   return {
     type: "split",
@@ -587,20 +469,20 @@ async function saveSession(): Promise<void> {
     });
   }
 
-  const session: SavedSession = {
-    tabs: savedTabs,
-    activeTabId: state.activeTabId,
-    savedAt: Date.now(),
-  };
   if (savedTabs.length === 0) {
     // Every tab was closed: don't bring the old ones back next launch.
     localStorage.removeItem(SESSION_KEY);
     return;
   }
+  const session: SavedSession = {
+    tabs: savedTabs,
+    activeTabId: state.activeTabId,
+    savedAt: Date.now(),
+  };
 
   let json = JSON.stringify(session);
 
-  // If over size limit, truncate scrollback data
+  // Over the limit: keep only the tail of each pane's scrollback.
   if (json.length > MAX_SESSION_SIZE) {
     for (const tab of session.tabs) {
       const truncateNode = (node: any) => {
@@ -618,7 +500,7 @@ async function saveSession(): Promise<void> {
   try {
     localStorage.setItem(SESSION_KEY, json);
   } catch {
-    // Storage full — clear and retry with minimal data
+    // Storage full: drop the stale session rather than restore an old one.
     localStorage.removeItem(SESSION_KEY);
   }
 }
@@ -631,32 +513,31 @@ function loadSession(): boolean {
     const session: SavedSession = JSON.parse(json);
     if (!session.tabs || session.tabs.length === 0) return false;
 
-    // Restore tabs
+    // Editor and contracts tabs are useless without their path.
     const kept = session.tabs.filter(
       (saved) => (saved.type !== "editor" || saved.editorFilePath) && (saved.type !== "contracts" || saved.contractsRoot),
     );
     const restoredTabs: Tab[] = kept.map((saved) => {
-        const root = deserializePaneNode(saved.root);
-        const allPanes = findAllPanes(root);
-        return {
-          id: newTabId(),
-          name: saved.name,
-          type: (saved.type as Tab["type"]) || undefined,
-          root,
-          activePaneId: allPanes[0]?.id || "",
-          editorFilePath: saved.editorFilePath,
-          browserUrl: saved.browserUrl,
-          orchestratorSessionId: saved.orchestratorSessionId,
-          contractsRoot: saved.contractsRoot,
-        };
-      });
+      const root = deserializePaneNode(saved.root);
+      return {
+        id: newTabId(),
+        name: saved.name,
+        type: (saved.type as Tab["type"]) || undefined,
+        root,
+        activePaneId: findAllPanes(root)[0]?.id || "",
+        editorFilePath: saved.editorFilePath,
+        browserUrl: saved.browserUrl,
+        orchestratorSessionId: saved.orchestratorSessionId,
+        contractsRoot: saved.contractsRoot,
+      };
+    });
 
     if (restoredTabs.length > 0) {
       // Index into the kept tabs, which restoredTabs mirrors one-to-one.
       const activeIdx = kept.findIndex((t) => t.id === session.activeTabId);
       useTabStore.setState({
         tabs: restoredTabs,
-        activeTabId: restoredTabs[Math.max(0, activeIdx)]?.id ?? restoredTabs[0].id,
+        activeTabId: restoredTabs[Math.max(0, activeIdx)].id,
       });
     }
 

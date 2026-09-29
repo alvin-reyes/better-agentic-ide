@@ -1,10 +1,7 @@
 import { create } from "zustand";
+import { readJson } from "../lib/storage";
 
 const KEY = "ade-bmad-dismissed";
-
-function load(): string[] {
-  try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; }
-}
 
 interface BmadStore {
   dismissedPaths: string[];
@@ -13,7 +10,7 @@ interface BmadStore {
 }
 
 export const useBmadStore = create<BmadStore>((set, get) => ({
-  dismissedPaths: load(),
+  dismissedPaths: readJson<string[]>(KEY, []),
   dismiss: (path) =>
     set((state) => {
       if (state.dismissedPaths.includes(path)) return state;

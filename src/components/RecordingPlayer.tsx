@@ -4,25 +4,11 @@ import { FitAddon } from "@xterm/addon-fit";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { TerminalRecording } from "../hooks/useTerminalRecording";
 import { useRecordingStore } from "../hooks/useTerminalRecording";
+import { base64ToBytes } from "./viewer/shared";
+import { formatDuration } from "./RecordingControls";
 
 interface RecordingPlayerProps {
   onClose: () => void;
-}
-
-function fromBase64(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function formatDuration(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
 export default function RecordingPlayer({ onClose }: RecordingPlayerProps) {
@@ -33,7 +19,6 @@ export default function RecordingPlayer({ onClose }: RecordingPlayerProps) {
   const [progress, setProgress] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
   const timeoutsRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -47,7 +32,6 @@ export default function RecordingPlayer({ onClose }: RecordingPlayerProps) {
     setProgress(0);
   }, []);
 
-  // Create terminal when a recording is selected
   useEffect(() => {
     if (!selected || !containerRef.current) return;
 
@@ -76,7 +60,6 @@ export default function RecordingPlayer({ onClose }: RecordingPlayerProps) {
     fitAddon.fit();
 
     termRef.current = term;
-    fitAddonRef.current = fitAddon;
 
     return () => {
       stopPlayback();
@@ -102,13 +85,12 @@ export default function RecordingPlayer({ onClose }: RecordingPlayerProps) {
       const delay = event.t / speed;
 
       const id = window.setTimeout(() => {
-        term.write(fromBase64(event.d));
+        term.write(base64ToBytes(event.d));
         setProgress(event.t / totalDuration);
       }, delay);
       ids.push(id);
     }
 
-    // End playback
     const endId = window.setTimeout(() => {
       setPlaying(false);
       setProgress(1);
@@ -118,7 +100,6 @@ export default function RecordingPlayer({ onClose }: RecordingPlayerProps) {
     timeoutsRef.current = ids;
   }, [selected, speed, stopPlayback]);
 
-  // List view when no recording is selected
   if (!selected) {
     return (
       <div
@@ -234,7 +215,6 @@ export default function RecordingPlayer({ onClose }: RecordingPlayerProps) {
     );
   }
 
-  // Player view
   return (
     <div
       style={{

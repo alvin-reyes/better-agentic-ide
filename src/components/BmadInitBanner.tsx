@@ -5,11 +5,7 @@ import { useBmadStore } from "../stores/bmadStore";
 interface BmadStatus { installed: boolean; version: string | null; }
 interface Props { cwd: string; onInitialized: () => void; }
 
-/**
- * Returns true if `path` looks like a user home directory.
- * We intentionally do NOT use import.meta.env.HOME (undefined in browser/Vite).
- * Regex covers /Users/<name> (macOS) and /home/<name> (Linux), with optional trailing slash.
- */
+/** Whether `path` is a home directory (/Users/<name> or /home/<name>); no HOME env in the webview. */
 function isHome(path: string): boolean {
   return /^\/Users\/[^/]+\/?$|^\/home\/[^/]+\/?$/.test(path);
 }

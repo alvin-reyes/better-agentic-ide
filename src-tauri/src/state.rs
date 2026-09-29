@@ -82,6 +82,16 @@ pub fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
     fs::rename(&tmp, path)
 }
 
+/// The file that holds `key` in a kv/ directory.
+pub fn kv_path(kv_dir: &Path, key: &str) -> PathBuf {
+    kv_dir.join(format!("{}.json", encode_key(key)))
+}
+
+/// A JSON file parsed as `T`, or None if it is missing or doesn't parse.
+pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
+    serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
+}
+
 pub fn read_all(kv_dir: &Path) -> HashMap<String, String> {
     let mut out = HashMap::new();
     let Ok(entries) = fs::read_dir(kv_dir) else { return out };
@@ -106,7 +116,7 @@ pub fn read_all(kv_dir: &Path) -> HashMap<String, String> {
 pub fn write_batch(kv_dir: &Path, entries: &HashMap<String, Option<String>>) -> std::io::Result<()> {
     fs::create_dir_all(kv_dir)?;
     for (key, value) in entries {
-        let path = kv_dir.join(format!("{}.json", encode_key(key)));
+        let path = kv_path(kv_dir, key);
         match value {
             Some(v) => atomic_write(&path, v)?,
             None => {
@@ -167,14 +177,14 @@ fn prune_snapshots(snap_dir: &Path, keep: usize) -> std::io::Result<()> {
 /// Only names of existing snapshots are accepted (they come from the webview),
 /// and the new kv/ is built beside the old one and swapped in, so a failure
 /// part way never leaves kv/ empty.
-pub fn restore_snapshot(state_dir: &Path, name: &str, now_ms: u128) -> std::io::Result<()> {
+pub fn restore_snapshot(state_dir: &Path, name: &str, now_ms: u64) -> std::io::Result<()> {
     let snap_dir = state_dir.join("snapshots");
     let valid = !name.is_empty() && name.bytes().all(|b| b.is_ascii_digit());
     if !valid || !list_snapshots(&snap_dir).iter().any(|n| n == name) {
         return Err(std::io::Error::other("snapshot not found"));
     }
     let src = snap_dir.join(name);
-    snapshot(state_dir, &format!("{}", now_ms), MAX_SNAPSHOTS + 1)?;
+    snapshot(state_dir, &now_ms.to_string(), MAX_SNAPSHOTS + 1)?;
 
     let kv = state_dir.join("kv");
     let staged = state_dir.join(format!(".kv-restore-{}", now_ms));
@@ -209,10 +219,10 @@ pub fn restore_snapshot(state_dir: &Path, name: &str, now_ms: u128) -> std::io::
     Ok(())
 }
 
-fn now_ms() -> u128 {
+pub(crate) fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
+        .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
 
@@ -235,7 +245,7 @@ pub fn state_write(app: tauri::AppHandle, entries: HashMap<String, Option<String
 
 #[tauri::command(async)]
 pub fn state_snapshot(app: tauri::AppHandle) -> Result<String, String> {
-    let name = format!("{}", now_ms());
+    let name = now_ms().to_string();
     snapshot(&state_dir(&app)?, &name, MAX_SNAPSHOTS).map_err(|e| e.to_string())?;
     Ok(name)
 }

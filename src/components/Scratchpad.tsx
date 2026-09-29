@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { IS_MAC, SHORTCUTS, keyName, matches, shortcutLabel } from "../lib/shortcuts";
-
-// In the scratchpad plain Ctrl+Enter / Ctrl+S work on every platform.
-const SEND_KEY = IS_MAC ? "⌘↵" : "Ctrl+Enter";
-const SAVE_KEY = IS_MAC ? "⌘S" : "Ctrl+S";
 import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
 import { isPaneActive } from "../hooks/useTerminal";
+
+// In the scratchpad plain Ctrl+Enter / Ctrl+S work on every platform.
+const SEND_KEY = IS_MAC ? "⌘↵" : "Ctrl+Enter";
+const SAVE_KEY = IS_MAC ? "⌘S" : "Ctrl+S";
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -91,6 +91,21 @@ function persistNotes(notes: SavedNote[]) {
   localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 }
 
+function newId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/** Show a confirmation state (e.g. "Copied!") briefly. */
+function flash(set: (on: boolean) => void) {
+  set(true);
+  setTimeout(() => set(false), 1500);
+}
+
+/** Prompts separated by a `---` line run one after another. */
+function splitChain(text: string): string[] {
+  return text.split(/\n---\n/).filter((s) => s.trim());
+}
+
 const MIN_HEIGHT = 120;
 const MAX_HEIGHT = 600;
 const DEFAULT_HEIGHT = 200;
@@ -157,29 +172,99 @@ interface PastedImage {
   tempPath: string;  // saved file path for CLI consumption
 }
 
+type Panel = "history" | "notes" | "templates";
+
+const headerToggleStyle = (active: boolean): React.CSSProperties => ({
+  background: active ? "var(--accent-subtle)" : "none",
+  border: "1px solid var(--border)",
+  color: active ? "var(--accent)" : "var(--text-muted)",
+  cursor: "pointer",
+  padding: "2px 8px",
+  borderRadius: "var(--radius-sm)",
+  fontSize: "11px",
+  fontWeight: 500,
+  display: "flex",
+  alignItems: "center",
+  gap: "4px",
+});
+
+const LIST_PANEL_STYLE: React.CSSProperties = {
+  borderBottom: "1px solid var(--border)",
+  maxHeight: "140px",
+  overflowY: "auto",
+  flexShrink: 0,
+};
+
+const LIST_EMPTY_STYLE: React.CSSProperties = {
+  padding: "12px 16px", fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic",
+};
+
+const LIST_ROW_STYLE: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "6px 16px",
+  borderBottom: "1px solid var(--border)",
+  cursor: "pointer",
+  fontSize: "12px",
+  color: "var(--text-secondary)",
+};
+
+const LIST_ROW_TEXT_STYLE: React.CSSProperties = {
+  flex: 1, fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+};
+
+const ROW_DELETE_STYLE: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "var(--text-muted)",
+  cursor: "pointer",
+  padding: "2px 4px",
+  borderRadius: "3px",
+  fontSize: "10px",
+  flexShrink: 0,
+};
+
+const KBD_STYLE: React.CSSProperties = { fontSize: "10px", opacity: 0.5, fontFamily: "monospace" };
+
+const rowHover = {
+  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.backgroundColor = "var(--bg-tertiary)"; },
+  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { e.currentTarget.style.backgroundColor = "transparent"; },
+};
+
+const rowDeleteHover = {
+  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.style.backgroundColor = "var(--bg-surface)";
+    e.currentTarget.style.color = "var(--text-primary)";
+  },
+  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+    e.currentTarget.style.backgroundColor = "transparent";
+    e.currentTarget.style.color = "var(--text-muted)";
+  },
+};
+
+/** Hover for the secondary action buttons; skipped while `busy` shows a flash state. */
+const secondaryHover = (busy = false) => ({
+  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+    if (busy) return;
+    e.currentTarget.style.backgroundColor = "var(--bg-surface)";
+    e.currentTarget.style.color = "var(--text-primary)";
+  },
+  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+    if (busy) return;
+    e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+    e.currentTarget.style.color = "var(--text-secondary)";
+  },
+});
+
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
   const [text, setText] = useState(loadDraft);
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(false);
   const [history, setHistory] = useState<string[]>(loadHistory);
-
-  // Persist the draft (debounced); auto-save mirrors it to disk.
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      try {
-        if (text) localStorage.setItem(DRAFT_KEY, text);
-        else localStorage.removeItem(DRAFT_KEY);
-      } catch {
-        // Storage full: the draft just isn't persisted.
-      }
-    }, 400);
-    return () => window.clearTimeout(id);
-  }, [text]);
-  const [showHistory, setShowHistory] = useState(false);
   const [notes, setNotes] = useState<SavedNote[]>(loadNotes);
-  const [showNotes, setShowNotes] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [panel, setPanel] = useState<Panel | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [pastedImages, setPastedImages] = useState<PastedImage[]>([]);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
@@ -196,7 +281,21 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const mountedRef = useRef(false);
   const getActivePtyId = useTabStore((s) => s.getActivePtyId);
 
-  // Check if Speech Recognition is available
+  // Persist the draft (debounced); auto-save mirrors it to disk.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      try {
+        if (text) localStorage.setItem(DRAFT_KEY, text);
+        else localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // Storage full: the draft just isn't persisted.
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [text]);
+
+  const togglePanel = (p: Panel) => setPanel((cur) => (cur === p ? null : p));
+
   const speechAvailable = typeof window !== "undefined" && (
     "SpeechRecognition" in window || "webkitSpeechRecognition" in window
   );
@@ -231,15 +330,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       // Append finalized text + show interim preview
       setText((prev) => {
         const base = prev.endsWith("\n") || prev === "" ? prev : prev + " ";
-        const finalized = finalTranscript;
-        return base + finalized + (interim ? interim : "");
+        return base + finalTranscript + interim;
       });
     };
 
     recognition.onend = () => {
       setIsListening(false);
       recognitionRef.current = null;
-      // Clean up: commit any final transcript
       if (finalTranscript.trim()) {
         setText((prev) => prev.trimEnd() + " ");
       }
@@ -260,14 +357,9 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     recognition.start();
   }, [isListening, speechAvailable]);
 
-  // Cleanup speech recognition on unmount
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.abort();
-    };
-  }, []);
+  useEffect(() => () => recognitionRef.current?.abort(), []);
 
-  // Drag-to-resize handler — also handle blur/visibility to clean up interrupted drags
+  // Drag-to-resize; blur/visibilitychange also end the drag so an interrupted one doesn't stick.
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     draggingRef.current = true;
@@ -287,10 +379,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     const onMove = (ev: MouseEvent) => {
       if (!draggingRef.current) return;
       const delta = startYRef.current - ev.clientY;
-      const newHeight = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeightRef.current + delta));
-      setHeight(newHeight);
+      setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, startHeightRef.current + delta)));
     };
-
     const onUp = () => cleanup();
 
     document.body.style.cursor = "row-resize";
@@ -301,9 +391,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     document.addEventListener("visibilitychange", cleanup);
   }, [height]);
 
-  const toggle = useCallback(() => {
-    setIsOpen((prev) => !prev);
-  }, []);
+  const toggle = useCallback(() => setIsOpen((prev) => !prev), []);
 
   const sendEnter = useCallback(async () => {
     const ptyId = getActivePtyId();
@@ -312,22 +400,19 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
   }, [getActivePtyId]);
 
-  // Save image from base64 data
   const saveImageFromBase64 = useCallback(async (base64: string, ext: string = "png") => {
     try {
       const tempPath = await invoke<string>("save_temp_image", {
         base64Data: base64,
         extension: ext,
       });
-      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       const dataUrl = `data:image/${ext};base64,${base64}`;
-      setPastedImages((prev) => [...prev, { id, dataUrl, tempPath }]);
+      setPastedImages((prev) => [...prev, { id: newId(), dataUrl, tempPath }]);
     } catch (err) {
       console.error("Failed to save image:", err);
     }
   }, []);
 
-  // Save image from a File/Blob (drag-and-drop)
   const saveImageBlob = useCallback(async (blob: File | Blob) => {
     const reader = new FileReader();
     reader.onload = async () => {
@@ -339,39 +424,31 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     reader.readAsDataURL(blob);
   }, [saveImageFromBase64]);
 
-  // Paste from clipboard using Tauri clipboard plugin
+  // Tauri clipboard plugin: covers macOS screenshots and other system copies.
   const pasteImageFromClipboard = useCallback(async () => {
     try {
       const img = await readImage();
-      // readImage returns an Image object with rgba() and size()
       const rgba = await img.rgba();
       const width = (img as unknown as { width: number }).width;
       const height = (img as unknown as { height: number }).height;
 
-      // Convert RGBA to PNG using canvas
+      // RGBA -> PNG via canvas
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return false;
-
-      const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
-      ctx.putImageData(imageData, 0, 0);
-
-      const dataUrl = canvas.toDataURL("image/png");
-      const base64 = dataUrl.split(",")[1];
-      await saveImageFromBase64(base64, "png");
-      return true;
+      if (!ctx) return;
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+      await saveImageFromBase64(canvas.toDataURL("image/png").split(",")[1], "png");
     } catch {
-      // No image in clipboard — that's fine
-      return false;
+      // No image in the clipboard.
     }
   }, [saveImageFromBase64]);
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const clipboardData = e.clipboardData;
 
-    // First try standard web clipboard (for files dragged/pasted from browser)
+    // Web clipboard first (files pasted from a browser).
     if (clipboardData?.files && clipboardData.files.length > 0) {
       for (const file of Array.from(clipboardData.files)) {
         if (file.type.startsWith("image/")) {
@@ -394,20 +471,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       }
     }
 
-    // Fallback: use Tauri clipboard plugin (handles macOS screenshots, system copies)
-    // Only try if the paste event didn't have text content
-    const hasText = clipboardData?.types?.includes("text/plain");
-    if (!hasText) {
+    // Fall back to the native clipboard only when the paste carries no text.
+    if (!clipboardData?.types?.includes("text/plain")) {
       e.preventDefault();
-      const success = await pasteImageFromClipboard();
-      if (!success) {
-        // No image found anywhere — let the default paste behavior happen
-        // (but we already prevented default, so nothing happens)
-      }
+      await pasteImageFromClipboard();
     }
   }, [saveImageBlob, pasteImageFromClipboard]);
 
-  // Handle drag-and-drop of image files
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -429,8 +499,14 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     setPastedImages((prev) => prev.filter((img) => img.id !== id));
   }, []);
 
+  const addToHistory = useCallback((entry: string) => {
+    const newHistory = [entry, ...history.filter((h) => h !== entry)];
+    setHistory(newHistory);
+    saveHistory(newHistory);
+  }, [history]);
+
   const send = useCallback(async () => {
-    // Check if active tab is an orchestrator tab — route to orchestrator chat
+    // An orchestrator tab gets the text in its chat instead of a terminal.
     const tabState = useTabStore.getState();
     const activeTab = tabState.tabs.find((t) => t.id === tabState.activeTabId);
     if (activeTab?.type === "orchestrator" && (text.trim() || pastedImages.length > 0)) {
@@ -442,13 +518,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
           : "image/png") as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
       }));
       window.dispatchEvent(new CustomEvent("orchestrator-send", { detail: { text: text.trim(), images } }));
-      if (text.trim()) {
-        const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
-        setHistory(newHistory);
-        saveHistory(newHistory);
-      }
-      setSent(true);
-      setTimeout(() => setSent(false), 1500);
+      if (text.trim()) addToHistory(text.trim());
+      flash(setSent);
       setText("");
       setPastedImages([]);
       return;
@@ -459,25 +530,23 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       console.warn("No active PTY to send to");
       return;
     }
-    // If empty and no images, just send Enter to the terminal
+    // Nothing to send: just press Enter in the terminal.
     if (!text.trim() && pastedImages.length === 0) {
       await sendEnter();
       return;
     }
 
-    // Build the command — if images are attached, include them as file paths
+    // Attached images go after the text as file paths for the CLI to read.
     let fullText = text;
     if (pastedImages.length > 0) {
       const imagePaths = pastedImages.map((img) => img.tempPath).join(" ");
-      // Prepend image paths for Claude to read
       fullText = fullText.trim()
         ? `${fullText.trim()} ${imagePaths}`
         : imagePaths;
     }
 
-    // Append \r (carriage return) to simulate pressing Enter in the terminal
-    const textWithNewline = fullText + "\r";
-    const data = Array.from(new TextEncoder().encode(textWithNewline));
+    // \r presses Enter in the terminal.
+    const data = Array.from(new TextEncoder().encode(fullText + "\r"));
     try {
       await invoke("write_pty", { id: ptyId, data });
     } catch (err) {
@@ -485,35 +554,27 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       return;
     }
 
-    // Save to history (text only, not image paths)
-    if (text.trim()) {
-      const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
-      setHistory(newHistory);
-      saveHistory(newHistory);
-    }
-
-    setSent(true);
-    setTimeout(() => setSent(false), 1500);
+    // History keeps the text only, not image paths.
+    if (text.trim()) addToHistory(text.trim());
+    flash(setSent);
     setText("");
     setPastedImages([]);
-  }, [text, pastedImages, getActivePtyId, history, sendEnter]);
+  }, [text, pastedImages, getActivePtyId, addToHistory, sendEnter]);
 
-  // Detect if text contains chain separators
-  const chainSteps = text.split(/\n---\n/).filter((s) => s.trim());
+  const chainSteps = splitChain(text);
   const isChain = chainSteps.length > 1;
 
   const sendChain = useCallback(async () => {
     const ptyId = getActivePtyId();
     if (ptyId === null) return;
 
-    const steps = text.split(/\n---\n/).filter((s) => s.trim());
+    const steps = splitChain(text);
     if (steps.length <= 1) {
-      // Not a chain — use normal send
       send();
       return;
     }
 
-    // Get the active pane ID for activity polling
+    // Polled for activity between steps.
     const activePane = useTabStore.getState().getActivePane();
     if (!activePane) return;
 
@@ -522,39 +583,29 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     setChainStep(0);
     chainCancelledRef.current = false;
 
-    // Save the full chain to history
-    if (text.trim()) {
-      const newHistory = [text.trim(), ...history.filter((h) => h !== text.trim())];
-      setHistory(newHistory);
-      saveHistory(newHistory);
-    }
+    addToHistory(text.trim());
 
     for (let i = 0; i < steps.length; i++) {
       if (chainCancelledRef.current) break;
 
       setChainStep(i + 1);
-      const step = steps[i].trim();
-
-      // Send the step
-      const stepData = Array.from(new TextEncoder().encode(step + "\r"));
+      const stepData = Array.from(new TextEncoder().encode(steps[i].trim() + "\r"));
       try {
         await invoke("write_pty", { id: ptyId, data: stepData });
       } catch {
         break;
       }
 
-      // Wait for the agent to finish processing (if not last step)
+      // Before the next step, wait for the agent to finish: give output a
+      // moment to start, then poll until the pane goes idle (~10 min cap).
       if (i < steps.length - 1 && !chainCancelledRef.current) {
-        // First wait a moment for output to start
         await new Promise((r) => setTimeout(r, 2000));
-
-        // Then poll until the pane is idle (no output for 3s)
         let idleChecks = 0;
-        const maxWait = 600; // 10 minutes max (600 * 1s)
+        const maxWait = 600;
         while (idleChecks < maxWait && !chainCancelledRef.current) {
           await new Promise((r) => setTimeout(r, 1000));
           if (!isPaneActive(activePane.id)) {
-            // Pane idle — wait one more second to be safe
+            // Confirm it stays idle.
             await new Promise((r) => setTimeout(r, 1500));
             if (!isPaneActive(activePane.id)) {
               break;
@@ -570,10 +621,9 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     setChainTotal(0);
     if (!chainCancelledRef.current) {
       setText("");
-      setSent(true);
-      setTimeout(() => setSent(false), 1500);
+      flash(setSent);
     }
-  }, [text, getActivePtyId, history, send]);
+  }, [text, getActivePtyId, addToHistory, send]);
 
   const cancelChain = useCallback(() => {
     chainCancelledRef.current = true;
@@ -585,22 +635,16 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const copy = useCallback(async () => {
     if (!text.trim()) return;
     await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    flash(setCopied);
   }, [text]);
 
   const saveNote = useCallback(() => {
     if (!text.trim()) return;
-    const note: SavedNote = {
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      text: text.trim(),
-      createdAt: Date.now(),
-    };
+    const note: SavedNote = { id: newId(), text: text.trim(), createdAt: Date.now() };
     const updated = [note, ...notes];
     setNotes(updated);
     persistNotes(updated);
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1500);
+    flash(setSavedFlash);
   }, [text, notes]);
 
   const deleteNote = (id: string) => {
@@ -609,25 +653,16 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     persistNotes(updated);
   };
 
-  const loadNote = (note: SavedNote) => {
-    setText(note.text);
-    setShowNotes(false);
+  /** Put text in the box (from history, a note or a template) and close the panel. */
+  const loadText = (value: string) => {
+    setText(value);
+    setPanel(null);
     textareaRef.current?.focus();
   };
 
-  const focus = useCallback(() => {
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, []);
-
-  const close = useCallback(() => {
-    setIsOpen(false);
-  }, []);
-
-  const isFocused = useCallback(() => {
-    return document.activeElement === textareaRef.current;
-  }, []);
+  const focus = useCallback(() => textareaRef.current?.focus(), []);
+  const close = useCallback(() => setIsOpen(false), []);
+  const isFocused = useCallback(() => document.activeElement === textareaRef.current, []);
 
   useImperativeHandle(ref, () => ({
     toggle,
@@ -640,14 +675,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     get isOpen() { return isOpen; },
   }), [toggle, send, copy, focus, close, saveNote, isFocused, isOpen]);
 
+  // Focus on reopen, but not on the initial mount.
   useEffect(() => {
     if (!mountedRef.current) {
       mountedRef.current = true;
       return;
     }
-    if (isOpen && textareaRef.current) {
-      textareaRef.current.focus();
-    }
+    if (isOpen) textareaRef.current?.focus();
   }, [isOpen]);
 
   const deleteHistoryItem = (idx: number) => {
@@ -656,15 +690,9 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     saveHistory(newHistory);
   };
 
-  const useHistoryItem = (item: string) => {
-    setText(item);
-    setShowHistory(false);
-    textareaRef.current?.focus();
-  };
-
   if (!isOpen) return null;
 
-  const effectiveHeight = (showHistory || showNotes || showTemplates) ? Math.max(height, 320) : height;
+  const effectiveHeight = panel ? Math.max(height, 320) : height;
 
   return (
     <div
@@ -727,25 +755,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             Thoughts
           </span>
           <button
-            onClick={() => { setShowHistory(!showHistory); if (showNotes) setShowNotes(false); if (showTemplates) setShowTemplates(false); }}
-            style={{
-              background: showHistory ? "var(--accent-subtle)" : "none",
-              border: "1px solid var(--border)",
-              color: showHistory ? "var(--accent)" : "var(--text-muted)",
-              cursor: "pointer",
-              padding: "2px 8px",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "11px",
-              fontWeight: 500,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
+            onClick={() => togglePanel("history")}
+            style={headerToggleStyle(panel === "history")}
             onMouseEnter={(e) => {
-              if (!showHistory) e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+              if (panel !== "history") e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
             }}
             onMouseLeave={(e) => {
-              if (!showHistory) e.currentTarget.style.backgroundColor = "transparent";
+              if (panel !== "history") e.currentTarget.style.backgroundColor = "transparent";
             }}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -755,25 +771,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             History ({history.length})
           </button>
           <button
-            onClick={() => { setShowNotes(!showNotes); if (showHistory) setShowHistory(false); if (showTemplates) setShowTemplates(false); }}
-            style={{
-              background: showNotes ? "var(--accent-subtle)" : "none",
-              border: "1px solid var(--border)",
-              color: showNotes ? "var(--accent)" : "var(--text-muted)",
-              cursor: "pointer",
-              padding: "2px 8px",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "11px",
-              fontWeight: 500,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
+            onClick={() => togglePanel("notes")}
+            style={headerToggleStyle(panel === "notes")}
             onMouseEnter={(e) => {
-              if (!showNotes) e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+              if (panel !== "notes") e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
             }}
             onMouseLeave={(e) => {
-              if (!showNotes) e.currentTarget.style.backgroundColor = "transparent";
+              if (panel !== "notes") e.currentTarget.style.backgroundColor = "transparent";
             }}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -783,25 +787,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             Notes ({notes.length})
           </button>
           <button
-            onClick={() => { setShowTemplates(!showTemplates); if (showHistory) setShowHistory(false); if (showNotes) setShowNotes(false); }}
-            style={{
-              background: showTemplates ? "var(--accent-subtle)" : "none",
-              border: "1px solid var(--border)",
-              color: showTemplates ? "var(--accent)" : "var(--text-muted)",
-              cursor: "pointer",
-              padding: "2px 8px",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "11px",
-              fontWeight: 500,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
+            onClick={() => togglePanel("templates")}
+            style={headerToggleStyle(panel === "templates")}
             onMouseEnter={(e) => {
-              if (!showTemplates) e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
+              if (panel !== "templates") e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
             }}
             onMouseLeave={(e) => {
-              if (!showTemplates) e.currentTarget.style.backgroundColor = "transparent";
+              if (panel !== "templates") e.currentTarget.style.backgroundColor = "transparent";
             }}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -844,65 +836,22 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
         </div>
       </div>
 
-      {/* History panel */}
-      {showHistory && (
-        <div
-          style={{
-            borderBottom: "1px solid var(--border)",
-            maxHeight: "140px",
-            overflowY: "auto",
-            flexShrink: 0,
-          }}
-        >
+      {panel === "history" && (
+        <div style={LIST_PANEL_STYLE}>
           {history.length === 0 ? (
-            <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic" }}>
+            <div style={LIST_EMPTY_STYLE}>
               No prompts saved yet. Sent prompts will appear here.
             </div>
           ) : (
             history.map((item, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "6px 16px",
-                  borderBottom: "1px solid var(--border)",
-                  cursor: "pointer",
-                  fontSize: "12px",
-                  color: "var(--text-secondary)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-                onClick={() => useHistoryItem(item)}
-              >
-                <span style={{ flex: 1, fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div key={idx} style={LIST_ROW_STYLE} {...rowHover} onClick={() => loadText(item)}>
+                <span style={LIST_ROW_TEXT_STYLE}>
                   {item}
                 </span>
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteHistoryItem(idx); }}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    padding: "2px 4px",
-                    borderRadius: "3px",
-                    fontSize: "10px",
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--bg-surface)";
-                    e.currentTarget.style.color = "var(--text-primary)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                  }}
+                  style={ROW_DELETE_STYLE}
+                  {...rowDeleteHover}
                 >
                   ×
                 </button>
@@ -912,46 +861,19 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
         </div>
       )}
 
-      {/* Notes panel */}
-      {showNotes && (
-        <div
-          style={{
-            borderBottom: "1px solid var(--border)",
-            maxHeight: "140px",
-            overflowY: "auto",
-            flexShrink: 0,
-          }}
-        >
+      {panel === "notes" && (
+        <div style={LIST_PANEL_STYLE}>
           {notes.length === 0 ? (
-            <div style={{ padding: "12px 16px", fontSize: "12px", color: "var(--text-muted)", fontStyle: "italic" }}>
+            <div style={LIST_EMPTY_STYLE}>
               No notes saved yet. Press {SAVE_KEY} to save the current text as a note.
             </div>
           ) : (
             notes.map((note) => (
-              <div
-                key={note.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "6px 16px",
-                  borderBottom: "1px solid var(--border)",
-                  cursor: "pointer",
-                  fontSize: "12px",
-                  color: "var(--text-secondary)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-                onClick={() => loadNote(note)}
-              >
+              <div key={note.id} style={LIST_ROW_STYLE} {...rowHover} onClick={() => loadText(note.text)}>
                 <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}>
                   <path d="M4 2H12C12.5523 2 13 2.44772 13 3V13C13 13.5523 12.5523 14 12 14H4C3.44772 14 3 13.5523 3 13V3C3 2.44772 3.44772 2 4 2Z" stroke="currentColor" strokeWidth="1.5"/>
                 </svg>
-                <span style={{ flex: 1, fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <span style={LIST_ROW_TEXT_STYLE}>
                   {note.text}
                 </span>
                 <span style={{ fontSize: "10px", color: "var(--text-muted)", flexShrink: 0, opacity: 0.5 }}>
@@ -959,24 +881,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
                 </span>
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    padding: "2px 4px",
-                    borderRadius: "3px",
-                    fontSize: "10px",
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "var(--bg-surface)";
-                    e.currentTarget.style.color = "var(--text-primary)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    e.currentTarget.style.color = "var(--text-muted)";
-                  }}
+                  style={ROW_DELETE_STYLE}
+                  {...rowDeleteHover}
                 >
                   ×
                 </button>
@@ -986,25 +892,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
         </div>
       )}
 
-      {/* Templates panel */}
-      {showTemplates && (
-        <div
-          style={{
-            borderBottom: "1px solid var(--border)",
-            maxHeight: "160px",
-            overflowY: "auto",
-            flexShrink: 0,
-          }}
-        >
+      {panel === "templates" && (
+        <div style={{ ...LIST_PANEL_STYLE, maxHeight: "160px" }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 12px" }}>
             {PROMPT_TEMPLATES.map((tmpl) => (
               <button
                 key={tmpl.name}
-                onClick={() => {
-                  setText(tmpl.prompt);
-                  setShowTemplates(false);
-                  textareaRef.current?.focus();
-                }}
+                onClick={() => loadText(tmpl.prompt)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1059,12 +953,10 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             // in this text box nothing else wants them.
             const plainCtrl = (key: string) =>
               !IS_MAC && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && keyName(e.nativeEvent) === key;
-            // Escape: switch focus to terminal
+            // Escape: hand focus back to the terminal
             if (e.key === "Escape") {
               e.preventDefault();
-              // Blur the textarea — focus will return to terminal
               textareaRef.current?.blur();
-              // Find and focus the active terminal
               const xtermEl = document.querySelector(".xterm-helper-textarea") as HTMLTextAreaElement | null;
               xtermEl?.focus();
             }
@@ -1072,11 +964,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
             if (matches(e.nativeEvent, SHORTCUTS.send) || plainCtrl("Enter")) {
               e.preventDefault();
               e.stopPropagation(); // prevent global handler from firing too
-              if (isChain) {
-                sendChain();
-              } else {
-                send();
-              }
+              if (isChain) sendChain();
+              else send();
             }
             // ⌘⇧↵: copy to clipboard
             if (matches(e.nativeEvent, SHORTCUTS.copy)) {
@@ -1309,18 +1198,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               backgroundColor: copied ? "var(--green-subtle)" : "var(--bg-elevated)",
               color: copied ? "var(--green)" : "var(--text-secondary)",
             }}
-            onMouseEnter={(e) => {
-              if (!copied) {
-                e.currentTarget.style.backgroundColor = "var(--bg-surface)";
-                e.currentTarget.style.color = "var(--text-primary)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!copied) {
-                e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
-                e.currentTarget.style.color = "var(--text-secondary)";
-              }
-            }}
+            {...secondaryHover(copied)}
           >
             {copied ? "Copied!" : "Copy"}
           </button>
@@ -1339,22 +1217,11 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               alignItems: "center",
               gap: "4px",
             }}
-            onMouseEnter={(e) => {
-              if (!savedFlash) {
-                e.currentTarget.style.backgroundColor = "var(--bg-surface)";
-                e.currentTarget.style.color = "var(--text-primary)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!savedFlash) {
-                e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
-                e.currentTarget.style.color = "var(--text-secondary)";
-              }
-            }}
+            {...secondaryHover(savedFlash)}
             title={`Save as note (${SAVE_KEY})`}
           >
             {savedFlash ? "Saved!" : "Save"}
-            <kbd style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>{SAVE_KEY}</kbd>
+            <kbd style={KBD_STYLE}>{SAVE_KEY}</kbd>
           </button>
           <button
             onClick={sendEnter}
@@ -1371,18 +1238,11 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               alignItems: "center",
               gap: "4px",
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--bg-surface)";
-              e.currentTarget.style.color = "var(--text-primary)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
-              e.currentTarget.style.color = "var(--text-secondary)";
-            }}
+            {...secondaryHover()}
             title={`Send Enter to terminal (${shortcutLabel("sendEnter")})`}
           >
             Send ↵
-            <kbd style={{ fontSize: "10px", opacity: 0.5, fontFamily: "monospace" }}>{shortcutLabel("sendEnter")}</kbd>
+            <kbd style={KBD_STYLE}>{shortcutLabel("sendEnter")}</kbd>
           </button>
           {speechAvailable && (
             <button
@@ -1401,18 +1261,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
                 gap: "4px",
                 animation: isListening ? "voice-pulse 1.5s ease-in-out infinite" : "none",
               }}
-              onMouseEnter={(e) => {
-                if (!isListening) {
-                  e.currentTarget.style.backgroundColor = "var(--bg-surface)";
-                  e.currentTarget.style.color = "var(--text-primary)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isListening) {
-                  e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
-                  e.currentTarget.style.color = "var(--text-secondary)";
-                }
-              }}
+              {...secondaryHover(isListening)}
               title={isListening ? "Stop listening" : "Start voice dictation"}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">

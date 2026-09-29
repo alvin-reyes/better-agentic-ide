@@ -14,6 +14,7 @@ use std::time::{Duration, SystemTime};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::state::read_json;
 use crate::subagent::claude_project_path;
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
@@ -29,6 +30,14 @@ pub struct ModelUsage {
 }
 
 impl ModelUsage {
+    /// Add `u` to its model's entry in `by_model`.
+    fn tally(by_model: &mut BTreeMap<String, ModelUsage>, u: &ModelUsage) {
+        by_model
+            .entry(u.model.clone())
+            .or_insert_with(|| ModelUsage { model: u.model.clone(), ..Default::default() })
+            .add(u);
+    }
+
     fn add(&mut self, o: &ModelUsage) {
         self.requests += o.requests;
         self.input += o.input;
@@ -65,10 +74,8 @@ pub struct UsageReport {
 }
 
 /// One assistant response's usage, as a line of a transcript reports it.
-#[derive(Debug, PartialEq)]
 struct Entry {
     id: String,
-    model: String,
     timestamp: Option<String>,
     usage: ModelUsage,
 }
@@ -102,7 +109,6 @@ fn parse_entry(v: &Value) -> Option<Entry> {
     };
     Some(Entry {
         id,
-        model: model.to_string(),
         timestamp: v.get("timestamp").and_then(|t| t.as_str()).map(String::from),
         usage: ModelUsage {
             model: model.to_string(),
@@ -145,6 +151,7 @@ fn is_compaction(v: &Value) -> bool {
         || v.get("subtype").and_then(|x| x.as_str()) == Some("compact_boundary")
 }
 
+#[derive(Default)]
 struct Scan {
     by_model: BTreeMap<String, ModelUsage>,
     first_at: Option<String>,
@@ -168,18 +175,7 @@ struct Window<'a> {
 fn scan_file(path: &Path, w: Window) -> Option<Scan> {
     let file = std::fs::File::open(path).ok()?;
     let mut seen = HashSet::new();
-    let mut s = Scan {
-        by_model: BTreeMap::new(),
-        first_at: None,
-        last_at: None,
-        last_context: 0,
-        peak_context: 0,
-        last_model: None,
-        title: None,
-        cwd: None,
-        compactions: 0,
-        requests: 0,
-    };
+    let mut s = Scan::default();
     for line in BufReader::new(file).lines() {
         let Ok(line) = line else { continue };
         let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
@@ -199,7 +195,7 @@ fn scan_file(path: &Path, w: Window) -> Option<Scan> {
         let context = e.usage.input + e.usage.cache_write_5m + e.usage.cache_write_1h + e.usage.cache_read;
         s.last_context = context;
         s.peak_context = s.peak_context.max(context);
-        s.last_model = Some(e.model.clone());
+        s.last_model = Some(e.usage.model.clone());
         if let Some(ts) = e.timestamp.as_deref() {
             // ISO-8601 UTC timestamps compare correctly as text.
             if w.since.is_some_and(|x| ts < x) || w.until.is_some_and(|x| ts > x) {
@@ -213,10 +209,7 @@ fn scan_file(path: &Path, w: Window) -> Option<Scan> {
             s.last_at = e.timestamp.clone();
         }
         s.requests += 1;
-        s.by_model
-            .entry(e.model.clone())
-            .or_insert_with(|| ModelUsage { model: e.model.clone(), ..Default::default() })
-            .add(&e.usage);
+        ModelUsage::tally(&mut s.by_model, &e.usage);
     }
     Some(s)
 }
@@ -254,8 +247,8 @@ fn scan_project(dir: &Path, w: Window, cutoff: Option<SystemTime>, files: &mut u
             *files += 1;
             if let Some(s) = scan_file(&p, w) {
                 sub_requests += s.requests;
-                for (k, u) in s.by_model {
-                    by_model.entry(k).or_insert_with(|| ModelUsage { model: u.model.clone(), ..Default::default() }).add(&u);
+                for u in s.by_model.values() {
+                    ModelUsage::tally(&mut by_model, u);
                 }
                 if s.last_at > last_at {
                     last_at = s.last_at;
@@ -282,16 +275,13 @@ fn scan_project(dir: &Path, w: Window, cutoff: Option<SystemTime>, files: &mut u
     out
 }
 
-fn claude_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".claude"))
-}
-
 /// Usage for the Claude Code sessions run in `cwd` (or every project when
 /// `cwd` is None), counting responses between `since` and `until` (ISO-8601).
 #[tauri::command(async)]
 pub fn token_usage(cwd: Option<String>, since: Option<String>, until: Option<String>) -> Result<UsageReport, String> {
-    let home = std::env::var_os("HOME").map(PathBuf::from).ok_or("HOME is not set")?;
+    let home = crate::env_home().ok_or("HOME is not set")?;
     let cutoff = since.as_deref().and_then(iso_to_system_time);
+    let window = Window { since: since.as_deref(), until: until.as_deref() };
     let mut report = UsageReport::default();
     let dirs: Vec<PathBuf> = match &cwd {
         Some(c) => vec![claude_project_path(&home, c)],
@@ -300,7 +290,7 @@ pub fn token_usage(cwd: Option<String>, since: Option<String>, until: Option<Str
             .unwrap_or_default(),
     };
     for d in dirs {
-        report.sessions.extend(scan_project(&d, Window { since: since.as_deref(), until: until.as_deref() }, cutoff, &mut report.files_scanned));
+        report.sessions.extend(scan_project(&d, window, cutoff, &mut report.files_scanned));
     }
     report.sessions.sort_by(|a, b| b.last_at.cmp(&a.last_at));
     Ok(report)
@@ -325,7 +315,6 @@ fn iso_to_system_time(s: &str) -> Option<SystemTime> {
     Some(SystemTime::UNIX_EPOCH + Duration::from_secs(days as u64 * 86_400))
 }
 
-// ---------------------------------------------------------------------------
 // Context diet: what a Claude Code session in this project loads or may read.
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -404,14 +393,10 @@ fn settings_path(root: &Path) -> PathBuf {
     root.join(".claude").join("settings.json")
 }
 
-fn read_json(path: &Path) -> Option<Value> {
-    serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
-}
-
 fn existing_denies(root: &Path) -> Vec<String> {
     let mut out = Vec::new();
     for p in [settings_path(root), root.join(".claude").join("settings.local.json")] {
-        if let Some(v) = read_json(&p) {
+        if let Some(v) = read_json::<Value>(&p) {
             if let Some(arr) = v.pointer("/permissions/deny").and_then(|d| d.as_array()) {
                 out.extend(arr.iter().filter_map(|x| x.as_str()).map(String::from));
             }
@@ -462,20 +447,25 @@ pub fn audit(root: &Path, claude_home: Option<&Path>) -> ContextAudit {
     }
     heavy.sort_by(|a, b| b.bytes.cmp(&a.bytes));
 
-    let mcp_servers = read_json(&root.join(".mcp.json"))
+    let mcp_servers = read_json::<Value>(&root.join(".mcp.json"))
         .and_then(|v| v.get("mcpServers").and_then(|s| s.as_object()).map(|o| o.keys().cloned().collect()))
         .unwrap_or_default();
 
     ContextAudit { root: root.to_string_lossy().into_owned(), memory_files, heavy, mcp_servers, deny_rules }
 }
 
-#[tauri::command(async)]
-pub fn context_audit(root: String) -> Result<ContextAudit, String> {
-    let root = PathBuf::from(&root);
+fn project_folder(root: String) -> Result<PathBuf, String> {
+    let root = PathBuf::from(root);
     if !root.is_dir() {
         return Err(format!("{} is not a folder", root.display()));
     }
-    Ok(audit(&root, claude_dir().as_deref()))
+    Ok(root)
+}
+
+#[tauri::command(async)]
+pub fn context_audit(root: String) -> Result<ContextAudit, String> {
+    let root = project_folder(root)?;
+    Ok(audit(&root, crate::env_home().map(|h| h.join(".claude")).as_deref()))
 }
 
 /// Only the rules the audit proposes: `Read(./<name>)` or `Read(./<name>/**)`
@@ -492,7 +482,7 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
     }
     let path = settings_path(root);
     let mut v = if path.exists() {
-        read_json(&path).ok_or_else(|| format!("{} is not valid JSON; fix it first", path.display()))?
+        read_json::<Value>(&path).ok_or_else(|| format!("{} is not valid JSON; fix it first", path.display()))?
     } else {
         Value::Object(Default::default())
     };
@@ -519,10 +509,7 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
 
 #[tauri::command(async)]
 pub fn context_deny(root: String, rules: Vec<String>) -> Result<Vec<String>, String> {
-    let root = PathBuf::from(&root);
-    if !root.is_dir() {
-        return Err(format!("{} is not a folder", root.display()));
-    }
+    let root = project_folder(root)?;
     add_deny_rules(&root, &rules)
 }
 
@@ -626,14 +613,14 @@ mod tests {
         .unwrap();
         let added = add_deny_rules(&d, &["Read(./dist/**)".into(), "Read(./node_modules/**)".into()]).unwrap();
         assert_eq!(added, vec!["Read(./node_modules/**)"]);
-        let v = read_json(&d.join(".claude").join("settings.json")).unwrap();
+        let v = read_json::<Value>(&d.join(".claude").join("settings.json")).unwrap();
         assert_eq!(v["model"], "sonnet");
         assert_eq!(v["permissions"]["allow"][0], "Bash(npm test)");
         assert_eq!(v["permissions"]["deny"].as_array().unwrap().len(), 2);
         // A fresh project gets the file created.
         let e = tmp("deny_new");
         add_deny_rules(&e, &["Read(./target/**)".into()]).unwrap();
-        assert_eq!(read_json(&e.join(".claude").join("settings.json")).unwrap()["permissions"]["deny"][0], "Read(./target/**)");
+        assert_eq!(read_json::<Value>(&e.join(".claude").join("settings.json")).unwrap()["permissions"]["deny"][0], "Read(./target/**)");
     }
 
     #[test]

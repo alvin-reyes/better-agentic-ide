@@ -1,5 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { useSettingsStore } from "../stores/settingsStore";
+import type { ChatImage } from "../stores/orchestratorStore";
+import { AGENT_PROFILES } from "../data/agentProfiles";
+
+const PROFILE_IDS = AGENT_PROFILES.map((p) => p.id);
 
 const CREATE_TASKS_TOOL = {
   name: "create_tasks" as const,
@@ -16,14 +20,7 @@ const CREATE_TASKS_TOOL = {
             description: { type: "string" as const, description: "Detailed task description including acceptance criteria for the agent to execute" },
             agentProfile: {
               type: "string" as const,
-              enum: [
-                "backend-api", "backend-db", "backend-auth",
-                "frontend-ui", "frontend-css", "frontend-state",
-                "test-unit", "test-e2e", "test-perf",
-                "general-debug", "general-review", "general-docs", "general-architect",
-                "devops-docker", "devops-ci", "devops-infra", "devops-k8s",
-                "general-git", "general-brainstorm", "general-cofounder",
-              ],
+              enum: PROFILE_IDS,
               description: "Which agent profile should handle this task",
             },
             priority: { type: "number" as const, minimum: 1, maximum: 5, description: "1 = highest priority" },
@@ -61,7 +58,7 @@ When you and the user have agreed on a solid plan, output the tasks as a JSON co
 }
 \`\`\`
 
-Available agent profiles: backend-api, backend-db, backend-auth, frontend-ui, frontend-css, frontend-state, test-unit, test-e2e, test-perf, general-debug, general-review, general-docs, general-architect, general-git, general-brainstorm, general-cofounder, devops-docker, devops-ci, devops-infra, devops-k8s.
+Available agent profiles: ${PROFILE_IDS.join(", ")}.
 
 Do NOT output tasks until the user confirms the plan. Ask first.`;
 
@@ -77,33 +74,9 @@ When you and the user have agreed on a solid plan, call the create_tasks tool to
 - Dependencies listed if a task requires another to finish first
 
 Available agent profiles:
-- backend-api: REST/GraphQL API endpoints, routing, middleware
-- backend-db: Database schema, migrations, queries, ORM setup
-- backend-auth: Authentication, authorization, JWT, OAuth
-- frontend-ui: React components, pages, layouts
-- frontend-css: CSS, Tailwind, responsive design, animations
-- frontend-state: State management, data flow, caching
-- test-unit: Unit tests, mocking, test utilities
-- test-e2e: End-to-end tests, integration tests
-- test-perf: Performance testing, benchmarks
-- general-debug: Bug investigation, root cause analysis, fixes
-- general-review: Code review, refactoring, best practices
-- general-docs: Documentation, READMEs, API docs
-- general-architect: System design, architecture decisions
-- general-git: Git workflows, branching, merging
-- general-brainstorm: Brainstorming, ideation, planning
-- general-cofounder: Strategic CTO — roadmap, build-vs-buy, scaling, architecture decisions
-- devops-docker: Docker, containerization
-- devops-ci: CI/CD pipelines
-- devops-infra: Infrastructure, deployment
-- devops-k8s: Kubernetes orchestration
+${AGENT_PROFILES.map((p) => `- ${p.id}: ${p.description}`).join("\n")}
 
 Do NOT call create_tasks until the user confirms the plan. Ask first.`;
-
-export interface ChatImage {
-  dataUrl: string;
-  mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
-}
 
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -111,15 +84,17 @@ export interface ChatTurn {
   images?: ChatImage[];
 }
 
-export interface StreamCallbacks {
+interface PlannedTask {
+  title: string;
+  description: string;
+  agentProfile: string;
+  priority: number;
+  dependencies?: string[];
+}
+
+interface StreamCallbacks {
   onText: (text: string) => void;
-  onTasksCreated: (tasks: Array<{
-    title: string;
-    description: string;
-    agentProfile: string;
-    priority: number;
-    dependencies?: string[];
-  }>) => void | Promise<void>;
+  onTasksCreated: (tasks: PlannedTask[]) => void | Promise<void>;
   onDone: (fullText: string) => void;
   onError: (error: string) => void;
 }
@@ -185,7 +160,6 @@ export async function sendOrchestratorMessage(
 ) {
   const settings = useSettingsStore.getState();
 
-  // Route to Ollama if selected
   if (settings.orchestratorProvider === "ollama") {
     return sendOllamaOrchestratorMessage(history, callbacks);
   }
@@ -207,18 +181,13 @@ export async function sendOrchestratorMessage(
       tools: [CREATE_TASKS_TOOL],
       messages: history.map((m) => {
         if (m.role === "user" && m.images && m.images.length > 0) {
-          type MediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
           const content: Array<
             | { type: "text"; text: string }
-            | { type: "image"; source: { type: "base64"; media_type: MediaType; data: string } }
-          > = [];
-          for (const img of m.images) {
-            const base64 = img.dataUrl.split(",")[1];
-            content.push({
-              type: "image",
-              source: { type: "base64", media_type: img.mediaType as MediaType, data: base64 },
-            });
-          }
+            | { type: "image"; source: { type: "base64"; media_type: ChatImage["mediaType"]; data: string } }
+          > = m.images.map((img) => ({
+            type: "image",
+            source: { type: "base64", media_type: img.mediaType, data: img.dataUrl.split(",")[1] },
+          }));
           if (m.content.trim()) {
             content.push({ type: "text", text: m.content });
           }
@@ -235,13 +204,7 @@ export async function sendOrchestratorMessage(
         fullText += block.text;
         callbacks.onText(block.text);
       } else if (block.type === "tool_use" && block.name === "create_tasks") {
-        const input = block.input as { tasks: Array<{
-          title: string;
-          description: string;
-          agentProfile: string;
-          priority: number;
-          dependencies?: string[];
-        }> };
+        const input = block.input as { tasks: PlannedTask[] };
         await callbacks.onTasksCreated(input.tasks);
         fullText += `\n\n[Created ${input.tasks.length} tasks]`;
       }

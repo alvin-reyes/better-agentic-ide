@@ -6,6 +6,36 @@ import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 
+const CATEGORY_COLORS: Record<string, string> = {
+  Backend: "#3fb950",
+  Frontend: "#58a6ff",
+  DevOps: "#bc8cff",
+  Testing: "#d29922",
+  Web3: "#f0883e",
+  Architects: "#a371f7",
+};
+
+const categoryPillStyle = (active: boolean, color: string, activeBg = color + "20"): React.CSSProperties => ({
+  padding: "3px 8px",
+  borderRadius: "12px",
+  fontSize: "10px",
+  fontWeight: 600,
+  border: `1px solid ${active ? color : "var(--border)"}`,
+  backgroundColor: active ? activeBg : "transparent",
+  color: active ? color : "var(--text-muted)",
+  cursor: "pointer",
+});
+
+const categoryBadgeStyle = (color: string): React.CSSProperties => ({
+  fontSize: "9px",
+  fontWeight: 700,
+  fontFamily: "monospace",
+  color,
+  backgroundColor: color + "20",
+  padding: "1px 5px",
+  borderRadius: "3px",
+});
+
 interface AgentPickerProps {
   onClose: () => void;
 }
@@ -38,33 +68,27 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
         }
       }
       setInstalledProviders(installed);
-      // If current default isn't installed, switch to first installed
       if (!installed.has(defaultProvider) && installed.size > 0) {
-        const first = [...installed][0];
-        setActiveProvider(first);
+        setActiveProvider([...installed][0]);
       }
     };
     detect();
   }, [defaultProvider]);
 
-  // Task routing
-  const routeResult = useMemo(() => {
-    if (!isTaskDescription(query)) return null;
-    return routeTask(query);
-  }, [query]);
+  // A query that reads like a task description gets a suggested agent.
+  const suggestedAgent = useMemo(
+    () => (isTaskDescription(query) ? routeTask(query)?.agent ?? null : null),
+    [query],
+  );
 
-  const suggestedAgent = routeResult?.agent ?? null;
-
-  // Filter agent list
   const filtered = useMemo(() => {
     let profiles = AGENT_PROFILES;
     if (activeCategory) {
       profiles = profiles.filter((p) => p.category === activeCategory);
     }
     if (query) {
-      // If it's a task description with a suggestion, show all but prioritize suggestion
+      // A suggestion goes first, followed by every agent (in the active category) instead of a text match.
       if (suggestedAgent) {
-        // Put suggested agent first, then rest filtered by category if active
         const rest = profiles.filter((p) => p.id !== suggestedAgent.id);
         return [suggestedAgent, ...rest];
       }
@@ -114,7 +138,6 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     const data = Array.from(new TextEncoder().encode(cmd + "\r"));
     await invoke("write_pty", { id: ptyId, data }).catch(() => {});
 
-    // Track agent session
     const activePane = getActivePane();
     if (activePane) {
       useAgentTrackerStore.getState().startSession(
@@ -125,7 +148,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       );
     }
 
-    // Save selected provider as default
+    // The last provider used becomes the default.
     if (activeProvider !== defaultProvider) {
       setDefaultProvider(activeProvider);
     }
@@ -146,7 +169,6 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       e.preventDefault();
       launchAgent(filtered[selectedIndex]);
     } else if (e.key === "Tab") {
-      // Tab cycles through providers
       e.preventDefault();
       const providerIds = PROVIDERS.map((p) => p.id);
       const idx = providerIds.indexOf(activeProvider);
@@ -277,42 +299,17 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
               <button
                 onClick={() => setActiveCategory(null)}
-                style={{
-                  padding: "3px 8px",
-                  borderRadius: "12px",
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  border: "1px solid " + (!activeCategory ? "var(--accent)" : "var(--border)"),
-                  backgroundColor: !activeCategory ? "var(--accent-subtle)" : "transparent",
-                  color: !activeCategory ? "var(--accent)" : "var(--text-muted)",
-                  cursor: "pointer",
-                }}
+                style={categoryPillStyle(!activeCategory, "var(--accent)", "var(--accent-subtle)")}
               >
                 All
               </button>
               {AGENT_CATEGORIES.map((cat) => {
                 const isActive = activeCategory === cat;
-                const catColor =
-                  cat === "Backend" ? "#3fb950" :
-                  cat === "Frontend" ? "#58a6ff" :
-                  cat === "DevOps" ? "#bc8cff" :
-                  cat === "Testing" ? "#d29922" :
-                  cat === "Web3" ? "#f0883e" :
-                  cat === "Architects" ? "#a371f7" : "#ff7b72";
                 return (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(isActive ? null : cat)}
-                    style={{
-                      padding: "3px 8px",
-                      borderRadius: "12px",
-                      fontSize: "10px",
-                      fontWeight: 600,
-                      border: `1px solid ${isActive ? catColor : "var(--border)"}`,
-                      backgroundColor: isActive ? catColor + "20" : "transparent",
-                      color: isActive ? catColor : "var(--text-muted)",
-                      cursor: "pointer",
-                    }}
+                    style={categoryPillStyle(isActive, CATEGORY_COLORS[cat] ?? "#ff7b72")}
                   >
                     {cat}
                   </button>
@@ -337,13 +334,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
               role="switch"
               aria-checked={continuousMode}
               aria-label="Continuous mode"
-              onClick={() => {
-                if (!continuousMode) {
-                  setShowDisclaimer(true);
-                } else {
-                  setContinuousMode(false);
-                }
-              }}
+              onClick={() => (continuousMode ? setContinuousMode(false) : setShowDisclaimer(true))}
               style={{
                 width: "32px",
                 height: "18px",
@@ -470,17 +461,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>
               {suggestedAgent.name}
             </span>
-            <span
-              style={{
-                fontSize: "9px",
-                fontWeight: 700,
-                fontFamily: "monospace",
-                color: suggestedAgent.color,
-                backgroundColor: suggestedAgent.color + "20",
-                padding: "1px 5px",
-                borderRadius: "3px",
-              }}
-            >
+            <span style={categoryBadgeStyle(suggestedAgent.color)}>
               {suggestedAgent.category}
             </span>
             <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "auto" }}>
@@ -564,17 +545,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                       >
                         {profile.name}
                       </span>
-                      <span
-                        style={{
-                          fontSize: "9px",
-                          fontWeight: 700,
-                          fontFamily: "monospace",
-                          color: profile.color,
-                          backgroundColor: profile.color + "20",
-                          padding: "1px 5px",
-                          borderRadius: "3px",
-                        }}
-                      >
+                      <span style={categoryBadgeStyle(profile.color)}>
                         {profile.category}
                       </span>
                       {isSuggested && (

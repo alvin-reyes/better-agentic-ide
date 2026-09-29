@@ -43,6 +43,51 @@ function buildSpec(session: OrchestratorSession, tasks: OrchestratorTask[]): str
   return lines.join("\n");
 }
 
+/** Creates a fresh ~/.ade/orchestrator/<name>-<ts> folder and returns its resolved path. */
+function createProjectDir(sessionName: string | undefined): Promise<string> {
+  const slug = (sessionName || "project").replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
+  return invoke<string>("create_directory", { path: `~/.ade/orchestrator/${slug}-${Date.now().toString(36)}` });
+}
+
+function formatElapsed(startTime: number): string {
+  const seconds = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+const STATUS_COLOR: Record<OrchestratorTask["status"], string> = {
+  pending: "var(--text-muted)",
+  running: "#22c55e",
+  completed: "#a855f7",
+  failed: "#ef4444",
+};
+
+const STATUS_LABEL: Record<OrchestratorTask["status"], string> = {
+  pending: "PENDING",
+  running: "RUNNING",
+  completed: "DONE",
+  failed: "FAILED",
+};
+
+const ASSISTANT_BUBBLE_STYLE: React.CSSProperties = {
+  maxWidth: "85%",
+  padding: "10px 14px",
+  borderRadius: "12px",
+  fontSize: "13px",
+  lineHeight: 1.6,
+  backgroundColor: "var(--bg-secondary)",
+  color: "var(--text-primary)",
+  border: "1px solid var(--border)",
+};
+
+const META_CHIP_STYLE: React.CSSProperties = {
+  padding: "2px 6px",
+  borderRadius: "3px",
+  backgroundColor: "var(--bg-primary)",
+  color: "var(--text-secondary)",
+};
+
 interface OrchestratorTabProps {
   sessionId: string;
 }
@@ -109,6 +154,12 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     setStreaming(true);
     setStreamingText("");
 
+    const finish = (reply: string) => {
+      addMessage(sessionId, "assistant", reply);
+      setStreaming(false);
+      setStreamingText("");
+    };
+
     const history: ChatTurn[] = [
       ...session.messages.map((m) => ({ role: m.role, content: m.content, images: m.images })),
       { role: "user" as const, content: userText, images },
@@ -119,21 +170,17 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
         setStreamingText((prev) => prev + text);
       },
       onTasksCreated: async (tasks) => {
-        const mappedTasks = tasks.map((t) => ({
+        setTasks(sessionId, tasks.map((t) => ({
           title: t.title,
           description: t.description,
           agentProfileId: t.agentProfile,
           priority: t.priority,
           dependencies: t.dependencies ?? [],
-        }));
-        setTasks(sessionId, mappedTasks);
+        })));
 
-        // Create project folder and write SPEC.md immediately
-        const sessionName = (session?.name || "project").replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
-        const ts = Date.now().toString(36);
-        const folderPath = `~/.ade/orchestrator/${sessionName}-${ts}`;
+        // Create the project folder and write SPEC.md right away.
         try {
-          const dir = await invoke<string>("create_directory", { path: folderPath });
+          const dir = await createProjectDir(session.name);
           setProjectDir(sessionId, dir);
 
           // Build spec from the store (setTasks is synchronous so store is already updated)
@@ -146,18 +193,10 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
           console.error("Failed to create project folder:", err);
         }
       },
-      onDone: (fullText) => {
-        addMessage(sessionId, "assistant", fullText);
-        setStreaming(false);
-        setStreamingText("");
-      },
-      onError: (error) => {
-        addMessage(sessionId, "assistant", `Error: ${error}`);
-        setStreaming(false);
-        setStreamingText("");
-      },
+      onDone: finish,
+      onError: (error) => finish(`Error: ${error}`),
     });
-  }, [streaming, session, sessionId, addMessage, setTasks]);
+  }, [streaming, session, sessionId, addMessage, setTasks, setProjectDir]);
 
   // Listen for messages from the Scratchpad
   useEffect(() => {
@@ -221,15 +260,11 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const tasks = getDispatchableTasks(sessionId);
     if (tasks.length === 0) return;
 
-    // Use the project dir that was created when tasks were first generated
+    // Normally created when the tasks were generated; create it now if that failed.
     let projectDir = session?.projectDir;
-
-    // Fallback: create folder now if it doesn't exist yet
     if (!projectDir) {
-      const sessionName = (session?.name || "project").replace(/[^a-zA-Z0-9-_]/g, "-").toLowerCase();
-      const timestamp = Date.now().toString(36);
       try {
-        projectDir = await invoke<string>("create_directory", { path: `~/.ade/orchestrator/${sessionName}-${timestamp}` });
+        projectDir = await createProjectDir(session?.name);
         setProjectDir(sessionId, projectDir);
         const spec = buildSpec(session!, session!.tasks);
         await invoke("write_text_file", { path: `${projectDir}/SPEC.md`, content: spec });
@@ -284,7 +319,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     window.addEventListener("blur", cleanup);
   }, [panelWidth]);
 
-  // Poll agent sessions for live elapsed time
+  // Re-render every second while a task runs, for the live elapsed time.
   const [, forceUpdate] = useState(0);
   useEffect(() => {
     if (!session?.tasks.some((t) => t.status === "running")) return;
@@ -293,31 +328,6 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
   }, [session?.tasks]);
 
   if (!session) return null;
-
-  const formatElapsed = (startTime: number) => {
-    const seconds = Math.floor((Date.now() - startTime) / 1000);
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return m > 0 ? `${m}m ${s}s` : `${s}s`;
-  };
-
-  const statusColor = (status: OrchestratorTask["status"]) => {
-    switch (status) {
-      case "pending": return "var(--text-muted)";
-      case "running": return "#22c55e";
-      case "completed": return "#a855f7";
-      case "failed": return "#ef4444";
-    }
-  };
-
-  const statusLabel = (status: OrchestratorTask["status"]) => {
-    switch (status) {
-      case "pending": return "PENDING";
-      case "running": return "RUNNING";
-      case "completed": return "DONE";
-      case "failed": return "FAILED";
-    }
-  };
 
   return (
     <div style={{ display: "flex", height: "100%", backgroundColor: "var(--bg-primary)" }}>
@@ -392,16 +402,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
               ) : (
                 <div
                   className="markdown-body"
-                  style={{
-                    maxWidth: "85%",
-                    padding: "10px 14px",
-                    borderRadius: "12px",
-                    fontSize: "13px",
-                    lineHeight: 1.6,
-                    backgroundColor: "var(--bg-secondary)",
-                    color: "var(--text-primary)",
-                    border: "1px solid var(--border)",
-                  }}
+                  style={ASSISTANT_BUBBLE_STYLE}
                   dangerouslySetInnerHTML={{ __html: parsedMessages[msg.id] ?? sanitizeHtml(msg.content) }}
                 />
               )}
@@ -415,16 +416,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
             <div style={{ marginBottom: "16px", display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <div
                 className="markdown-body"
-                style={{
-                  maxWidth: "85%",
-                  padding: "10px 14px",
-                  borderRadius: "12px",
-                  fontSize: "13px",
-                  lineHeight: 1.6,
-                  backgroundColor: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--border)",
-                }}
+                style={ASSISTANT_BUBBLE_STYLE}
                 dangerouslySetInnerHTML={{ __html: streamingHtml }}
               />
             </div>
@@ -466,7 +458,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
           <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
             Tasks ({session.tasks.length})
           </span>
-          {session.tasks.length > 0 && session.tasks.some((t) => t.status === "pending") && (
+          {session.tasks.some((t) => t.status === "pending") && (
             <button
               onClick={dispatchAll}
               style={{
@@ -519,10 +511,10 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                     fontWeight: 700,
                     padding: "1px 5px",
                     borderRadius: "3px",
-                    backgroundColor: statusColor(task.status) + "20",
-                    color: statusColor(task.status),
+                    backgroundColor: STATUS_COLOR[task.status] + "20",
+                    color: STATUS_COLOR[task.status],
                   }}>
-                    {statusLabel(task.status)}
+                    {STATUS_LABEL[task.status]}
                   </span>
                 </div>
 
@@ -539,29 +531,14 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                     </p>
 
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", fontSize: "10px", fontFamily: "monospace" }}>
-                      <span style={{
-                        padding: "2px 6px",
-                        borderRadius: "3px",
-                        backgroundColor: "var(--bg-primary)",
-                        color: "var(--text-secondary)",
-                      }}>
+                      <span style={META_CHIP_STYLE}>
                         Agent: {profile?.name ?? task.agentProfileId}
                       </span>
-                      <span style={{
-                        padding: "2px 6px",
-                        borderRadius: "3px",
-                        backgroundColor: "var(--bg-primary)",
-                        color: "var(--text-secondary)",
-                      }}>
+                      <span style={META_CHIP_STYLE}>
                         Priority: {task.priority}
                       </span>
                       {task.dependencies.length > 0 && (
-                        <span style={{
-                          padding: "2px 6px",
-                          borderRadius: "3px",
-                          backgroundColor: "var(--bg-primary)",
-                          color: "var(--text-secondary)",
-                        }}>
+                        <span style={META_CHIP_STYLE}>
                           Depends: {task.dependencies.join(", ")}
                         </span>
                       )}
@@ -611,7 +588,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            dispatchTask(task, session?.projectDir);
+                            dispatchTask(task, session.projectDir);
                           }}
                           style={{
                             padding: "4px 12px",

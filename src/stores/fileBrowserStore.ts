@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { readJson } from "../lib/storage";
 
 export interface FileEntry {
   name: string;
@@ -35,21 +36,21 @@ interface FileBrowserStore {
   refreshTree: () => Promise<void>;
 }
 
-function loadPersistedState() {
-  try {
-    const raw = localStorage.getItem("ade-file-browser");
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {};
+const STORAGE_KEY = "ade-file-browser";
+
+interface PersistedState {
+  isOpen: boolean;
+  width: number;
+  showHidden: boolean;
 }
 
-function persistState(state: { isOpen: boolean; width: number; showHidden: boolean }) {
+function persistState({ isOpen, width, showHidden }: PersistedState) {
   try {
-    localStorage.setItem("ade-file-browser", JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ isOpen, width, showHidden }));
   } catch {}
 }
 
-// Convert snake_case Rust response to camelCase
+// The backend sends snake_case fields.
 function mapEntry(raw: Record<string, unknown>): FileEntry {
   return {
     name: raw.name as string,
@@ -60,6 +61,13 @@ function mapEntry(raw: Record<string, unknown>): FileEntry {
     isHidden: raw.is_hidden as boolean,
   };
 }
+
+const toNode = (entry: FileEntry, isExpanded = false): TreeNode => ({
+  entry,
+  children: null,
+  isExpanded,
+  isLoading: false,
+});
 
 function findAndUpdate(
   nodes: TreeNode[],
@@ -75,7 +83,7 @@ function findAndUpdate(
   });
 }
 
-// Collect all expanded directory paths
+// Pre-order, so a parent is re-expanded before its children.
 function getExpandedPaths(nodes: TreeNode[]): string[] {
   const paths: string[] = [];
   for (const node of nodes) {
@@ -87,7 +95,7 @@ function getExpandedPaths(nodes: TreeNode[]): string[] {
   return paths;
 }
 
-const persisted = loadPersistedState();
+const persisted = readJson<Partial<PersistedState>>(STORAGE_KEY, {});
 
 export const useFileBrowserStore = create<FileBrowserStore>((set, get) => ({
   isOpen: persisted.isOpen ?? false,
@@ -96,41 +104,28 @@ export const useFileBrowserStore = create<FileBrowserStore>((set, get) => ({
   tree: [],
   showHidden: persisted.showHidden ?? false,
 
-  toggle: () => {
-    const next = !get().isOpen;
-    set({ isOpen: next });
-    persistState({ isOpen: next, width: get().width, showHidden: get().showHidden });
-  },
+  toggle: () => get().setOpen(!get().isOpen),
 
   setOpen: (open) => {
     set({ isOpen: open });
-    persistState({ isOpen: open, width: get().width, showHidden: get().showHidden });
+    persistState(get());
   },
 
   setWidth: (width) => {
     set({ width });
-    persistState({ isOpen: get().isOpen, width, showHidden: get().showHidden });
+    persistState(get());
   },
 
   setRootPath: (path) => {
     set({ rootPath: path, tree: [] });
     if (path) {
-      get().loadDirectory(path).then((entries) => {
-        set({
-          tree: entries.map((e) => ({
-            entry: e,
-            children: null,
-            isExpanded: false,
-            isLoading: false,
-          })),
-        });
-      });
+      get().loadDirectory(path).then((entries) => set({ tree: entries.map((e) => toNode(e)) }));
     }
   },
 
   setShowHidden: (show) => {
     set({ showHidden: show });
-    persistState({ isOpen: get().isOpen, width: get().width, showHidden: show });
+    persistState(get());
   },
 
   loadDirectory: async (path) => {
@@ -143,7 +138,6 @@ export const useFileBrowserStore = create<FileBrowserStore>((set, get) => ({
   },
 
   expandNode: async (path) => {
-    // Mark as loading
     set({
       tree: findAndUpdate(get().tree, path, (node) => ({
         ...node,
@@ -157,12 +151,7 @@ export const useFileBrowserStore = create<FileBrowserStore>((set, get) => ({
         ...node,
         isLoading: false,
         isExpanded: true,
-        children: entries.map((e) => ({
-          entry: e,
-          children: null,
-          isExpanded: false,
-          isLoading: false,
-        })),
+        children: entries.map((e) => toNode(e)),
       })),
     });
   },
@@ -181,30 +170,15 @@ export const useFileBrowserStore = create<FileBrowserStore>((set, get) => ({
     const { rootPath, tree, loadDirectory } = get();
     if (!rootPath) return;
 
-    // Get all expanded paths before refresh
     const expandedPaths = new Set(getExpandedPaths(tree));
+    let newTree = (await loadDirectory(rootPath)).map((e) => toNode(e));
 
-    // Reload root
-    const rootEntries = await loadDirectory(rootPath);
-    let newTree: TreeNode[] = rootEntries.map((e) => ({
-      entry: e,
-      children: null,
-      isExpanded: false,
-      isLoading: false,
-    }));
-
-    // Re-expand previously expanded dirs
     for (const expPath of expandedPaths) {
       const entries = await loadDirectory(expPath);
       newTree = findAndUpdate(newTree, expPath, (node) => ({
         ...node,
         isExpanded: true,
-        children: entries.map((e) => ({
-          entry: e,
-          children: null,
-          isExpanded: expandedPaths.has(e.path),
-          isLoading: false,
-        })),
+        children: entries.map((e) => toNode(e, expandedPaths.has(e.path))),
       }));
     }
 

@@ -37,7 +37,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
 
   const [leftWidth, setLeftWidth] = useState(50);
   const [chatHeight, setChatHeight] = useState(35);
-  const dragRef = useRef<{ type: "horizontal" | "vertical"; startPos: number; startVal: number } | null>(null);
+  const dragRef = useRef<"horizontal" | "vertical" | null>(null);
 
   const isDirty = content !== savedContent;
 
@@ -95,11 +95,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
     }
   }, [filePath, content]);
 
-  const handleCodeGenerated = useCallback((code: string) => {
-    setContent(code);
-  }, []);
-
-  // Respond to dirty check queries for close confirmation
+  // Answers the close-confirmation dirty check.
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -117,7 +113,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!dragRef.current) return;
-      if (dragRef.current.type === "horizontal") {
+      if (dragRef.current === "horizontal") {
         const container = document.getElementById(`editor-container-${tabId}`);
         if (!container) return;
         const rect = container.getBoundingClientRect();
@@ -148,11 +144,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
 
   const startDrag = (type: "horizontal" | "vertical", e: React.MouseEvent) => {
     e.preventDefault();
-    dragRef.current = {
-      type,
-      startPos: type === "horizontal" ? e.clientX : e.clientY,
-      startVal: type === "horizontal" ? leftWidth : chatHeight,
-    };
+    dragRef.current = type;
     document.body.style.cursor = type === "horizontal" ? "col-resize" : "row-resize";
     document.body.style.userSelect = "none";
   };
@@ -285,7 +277,7 @@ export default function EditorTab({ tabId, filePath }: EditorTabProps) {
         />
 
         <div style={{ height: `${chatHeight}%`, minHeight: 0 }}>
-          <DiagramChat currentCode={content} onCodeGenerated={handleCodeGenerated} />
+          <DiagramChat currentCode={content} onCodeGenerated={setContent} />
         </div>
       </div>
 
