@@ -14,6 +14,18 @@ const LEGACY_IDS = [
   "general-architect", "general-cofounder",
 ];
 
+/**
+ * The Web3 and Architect agents upstream added to agentProfiles.ts before it
+ * was retired. They were ported onto the role/domain model rather than lost
+ * with the file, so they are pinned here the same way the legacy ids are.
+ */
+const PORTED_IDS = [
+  "web3-solidity", "web3-auditor", "web3-gas", "web3-solana",
+  "arch-ai-agents", "arch-rag", "arch-automation", "arch-llmops",
+  "arch-ai-strategy", "arch-defi", "arch-tokenomics",
+  "arch-contract-systems", "arch-web3-infra", "arch-crosschain", "arch-ai-web3",
+];
+
 describe("curated agents", () => {
   it("still resolves every legacy profile id", () => {
     const ids = CURATED_AGENTS.map((a) => a.id);
@@ -22,8 +34,20 @@ describe("curated agents", () => {
     }
   });
 
-  it("has exactly 22 curated agents", () => {
-    expect(CURATED_AGENTS.length).toBe(22);
+  it("has exactly 37 curated agents", () => {
+    expect(CURATED_AGENTS.length).toBe(37);
+  });
+
+  it("still resolves every Web3 and Architect id the legacy profiles carried", () => {
+    const ids = CURATED_AGENTS.map((a) => a.id);
+    for (const legacy of PORTED_IDS) {
+      expect(ids.includes(legacy), `ported id "${legacy}" disappeared`).toBe(true);
+    }
+  });
+
+  it("gives every curated agent a unique id", () => {
+    const ids = CURATED_AGENTS.map((a) => a.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("points every curated agent at a real role", () => {

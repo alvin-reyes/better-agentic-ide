@@ -4,11 +4,11 @@ import { ROLES, getRole } from "../roles";
 const EXPECTED_IDS = [
   "analyst", "product-manager", "ux-expert", "architect", "product-owner",
   "scrum-master", "dev", "qa", "devops", "adversarial-reviewer",
-  "technical-writer", "advisor",
+  "technical-writer", "advisor", "brainstorming-architect",
 ];
 
 describe("ROLES", () => {
-  it("defines exactly the twelve expected roles", () => {
+  it("defines exactly the thirteen expected roles", () => {
     expect(ROLES.map((r) => r.id).sort()).toEqual([...EXPECTED_IDS].sort());
   });
 
