@@ -121,7 +121,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         onClose();
       }},
       { id: "settings", label: "Open Settings", shortcut: L("settings"), category: "Panels", action: () => { useSettingsStore.getState().setShowSettings(true); onClose(); } },
-      { id: "search", label: "Search in Terminal", shortcut: L("find"), category: "Panels", action: () => { onClose(); } },
+      { id: "search", label: "Search in Terminal", shortcut: L("find"), category: "Panels", action: () => { onClose(); window.dispatchEvent(new CustomEvent("open-terminal-search")); } },
       { id: "rec-start", label: "Start Recording", category: "Recording", action: () => {
         if (activeTab) {
           import("../hooks/useTerminalRecording").then(({ useRecordingStore }) => {

@@ -1,14 +1,14 @@
 import { useEffect } from "react";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
+import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
 
 type SettingsState = ReturnType<typeof useSettingsStore.getState>;
 
 /** The settings a live terminal picks up from refreshAllTerminals(). */
 const terminalSettingsKey = (s: SettingsState) =>
   JSON.stringify([s.themeId, s.customColors, s.fontSize, s.fontFamily, s.lineHeight, s.cursorStyle, s.cursorBlink, s.scrollback]);
-import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
-import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
 
 interface KeybindingActions {
   toggleScratchpad: () => void;

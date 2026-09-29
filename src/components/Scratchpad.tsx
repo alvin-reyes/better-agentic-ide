@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
 import { isPaneActive } from "../hooks/useTerminal";
+import { writePty } from "../lib/terminalCommands";
 
 // In the scratchpad plain Ctrl+Enter / Ctrl+S work on every platform.
 const SEND_KEY = IS_MAC ? "⌘↵" : "Ctrl+Enter";
@@ -315,6 +316,10 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
+    // Rebuild from the text as it was when dictation started: each result
+    // carries the whole transcript so far, so appending to the current text
+    // would repeat it.
+    const startText = text === "" || text.endsWith("\n") ? text : text + " ";
     let finalTranscript = "";
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -327,11 +332,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
           interim = transcript;
         }
       }
-      // Append finalized text + show interim preview
-      setText((prev) => {
-        const base = prev.endsWith("\n") || prev === "" ? prev : prev + " ";
-        return base + finalTranscript + interim;
-      });
+      setText(startText + finalTranscript + interim);
     };
 
     recognition.onend = () => {
@@ -355,7 +356,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [isListening, speechAvailable]);
+  }, [isListening, speechAvailable, text]);
 
   useEffect(() => () => recognitionRef.current?.abort(), []);
 
@@ -396,8 +397,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const sendEnter = useCallback(async () => {
     const ptyId = getActivePtyId();
     if (ptyId === null) return;
-    const data = Array.from(new TextEncoder().encode("\r"));
-    await invoke("write_pty", { id: ptyId, data }).catch(() => {});
+    await writePty(ptyId, "\r").catch(() => {});
   }, [getActivePtyId]);
 
   const saveImageFromBase64 = useCallback(async (base64: string, ext: string = "png") => {
@@ -418,7 +418,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     reader.onload = async () => {
       const dataUrl = reader.result as string;
       const base64 = dataUrl.split(",")[1];
-      const ext = blob.type?.split("/")[1]?.replace("jpeg", "jpg") || "png";
+      const ext = blob.type?.split("/")[1]?.replace("jpeg", "jpg").replace("svg+xml", "svg") || "png";
       await saveImageFromBase64(base64, ext);
     };
     reader.readAsDataURL(blob);
@@ -546,9 +546,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     }
 
     // \r presses Enter in the terminal.
-    const data = Array.from(new TextEncoder().encode(fullText + "\r"));
     try {
-      await invoke("write_pty", { id: ptyId, data });
+      await writePty(ptyId, fullText + "\r");
     } catch (err) {
       console.error("write_pty failed:", err);
       return;
@@ -589,9 +588,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       if (chainCancelledRef.current) break;
 
       setChainStep(i + 1);
-      const stepData = Array.from(new TextEncoder().encode(steps[i].trim() + "\r"));
       try {
-        await invoke("write_pty", { id: ptyId, data: stepData });
+        await writePty(ptyId, steps[i].trim() + "\r");
       } catch {
         break;
       }

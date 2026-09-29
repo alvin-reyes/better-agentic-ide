@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { writePty } from "../lib/terminalCommands";
 import { BMAD_PERSONAS, BMAD_PHASES } from "../data/bmadPersonas";
 
 interface Props {
@@ -10,8 +10,7 @@ interface Props {
 export default function BmadPanel({ ptyId, onClose }: Props) {
   const launch = async (command: string) => {
     if (ptyId == null) return;
-    const data = Array.from(new TextEncoder().encode(command + "\n"));
-    await invoke("write_pty", { id: ptyId, data }).catch(() => {});
+    await writePty(ptyId, command + "\n").catch(() => {});
   };
 
   return (

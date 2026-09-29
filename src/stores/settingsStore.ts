@@ -344,13 +344,19 @@ const defaults: Settings = {
   scrollback: 10000,
   defaultProvider: "claude",
   anthropicApiKey: "",
-  orchestratorModel: "claude-opus-4-20250514",
+  orchestratorModel: "claude-opus-5",
   ollamaEndpoint: "http://localhost:11434",
   ollamaModel: "deepseek-r1",
   orchestratorProvider: "anthropic",
 };
 
 const initial: Settings = { ...defaults, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) };
+// Models the settings picker no longer offers move to their current equivalent.
+const RETIRED_MODELS: Record<string, string> = {
+  "claude-opus-4-20250514": "claude-opus-5",
+  "claude-sonnet-4-20250514": "claude-sonnet-5",
+};
+initial.orchestratorModel = RETIRED_MODELS[initial.orchestratorModel] ?? initial.orchestratorModel;
 
 export const useSettingsStore = create<SettingsStore>((set, get) => {
   const save = (patch: Partial<Settings>) => {

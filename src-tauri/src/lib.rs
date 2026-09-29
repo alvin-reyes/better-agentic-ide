@@ -249,6 +249,10 @@ fn create_directory(path: String) -> Result<String, String> {
 fn save_temp_image(base64_data: String, extension: String) -> Result<String, String> {
     use std::io::Write;
 
+    // The extension becomes part of the file name: keep it a plain extension.
+    if extension.is_empty() || extension.len() > 10 || !extension.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(format!("Unsupported image extension: {extension:?}"));
+    }
     let home = env_home().unwrap_or_else(|| "/tmp".into());
     let dir = format!("{}/.ade/images", home.to_string_lossy());
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
@@ -401,6 +405,13 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn temp_image_rejects_path_like_extensions() {
+        for ext in ["../../evil", "png/x", "", "p.ng", "averyverylongext"] {
+            assert!(save_temp_image("aGk=".into(), ext.into()).is_err(), "{ext}");
+        }
+    }
+
     use super::*;
 
     #[test]

@@ -32,10 +32,6 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
     setNoMatch(!found);
   }, [searchAddon, query, caseSensitive, regex, wholeWord]);
 
-  const handleChange = (value: string) => {
-    setQuery(value);
-    doSearch("next", value);
-  };
 
   const handleClose = () => {
     searchAddon?.clearDecorations();
@@ -55,11 +51,10 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
     }
   };
 
-  // Re-search when options change. doSearch also changes with the query, so
-  // this runs after every keystroke too.
+  // Search as you type and when an option changes (doSearch changes with both).
   useEffect(() => {
-    if (query) doSearch("next", query);
-  }, [query, doSearch]);
+    doSearch("next");
+  }, [doSearch]);
 
   const toggleBtnStyle = (active: boolean): React.CSSProperties => ({
     background: active ? "var(--accent-subtle)" : "none",
@@ -107,7 +102,7 @@ export default function TerminalSearch({ searchAddon, onClose }: TerminalSearchP
       <input
         ref={inputRef}
         value={query}
-        onChange={(e) => handleChange(e.target.value)}
+        onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Search..."
         style={{

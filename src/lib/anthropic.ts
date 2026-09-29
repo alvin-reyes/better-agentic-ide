@@ -175,7 +175,7 @@ export async function sendOrchestratorMessage(
 
   try {
     const response = await client.messages.create({
-      model: settings.orchestratorModel || "claude-opus-4-20250514",
+      model: settings.orchestratorModel || "claude-opus-5",
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: [CREATE_TASKS_TOOL],
@@ -196,6 +196,12 @@ export async function sendOrchestratorMessage(
         return { role: m.role, content: m.content };
       }),
     });
+
+    // Safety classifiers can decline a request; the reply is then empty.
+    if ((response.stop_reason as string) === "refusal") {
+      callbacks.onError("Claude declined this request. Try rephrasing it, or pick another model in Settings → AI API.");
+      return;
+    }
 
     let fullText = "";
 

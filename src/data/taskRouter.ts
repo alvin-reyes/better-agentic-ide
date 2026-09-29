@@ -7,11 +7,12 @@ interface RouteResult {
 
 /**
  * Route a task description to the best-matching agent profile.
- * Uses keyword matching against each agent's keywords array.
- * Returns the top match or null if no keywords match (< 1 score).
+ * Scores keyword hits (multi-word keywords count double) and returns the
+ * best match, or null when nothing matches.
  */
 export function routeTask(input: string): RouteResult | null {
-  const words = input.toLowerCase().split(/\s+/);
+  const text = input.toLowerCase();
+  const words = text.split(/\s+/);
   let best: RouteResult | null = null;
 
   for (const profile of AGENT_PROFILES) {
@@ -19,9 +20,9 @@ export function routeTask(input: string): RouteResult | null {
     for (const keyword of profile.keywords) {
       // Support multi-word keywords (e.g. "system design")
       if (keyword.includes(" ")) {
-        if (input.toLowerCase().includes(keyword)) score += 2;
+        if (text.includes(keyword)) score += 2;
       } else {
-        if (words.some((w) => w === keyword || w.startsWith(keyword))) score += 1;
+        if (words.some((w) => w.startsWith(keyword))) score += 1;
       }
     }
     if (score > 0 && (!best || score > best.score)) {

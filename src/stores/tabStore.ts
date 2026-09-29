@@ -500,8 +500,18 @@ async function saveSession(): Promise<void> {
   try {
     localStorage.setItem(SESSION_KEY, json);
   } catch {
-    // Storage full: drop the stale session rather than restore an old one.
-    localStorage.removeItem(SESSION_KEY);
+    // Storage full: keep the tabs, splits and folders without scrollback, and
+    // only as a last resort drop the stale session rather than restore an old one.
+    const stripBuffers = (node: any) => {
+      if (node.type === "pane") delete node.pane.serializedBuffer;
+      else node.children?.forEach(stripBuffers);
+    };
+    session.tabs.forEach((t) => stripBuffers(t.root));
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch {
+      localStorage.removeItem(SESSION_KEY);
+    }
   }
 }
 
