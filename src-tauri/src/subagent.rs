@@ -109,7 +109,7 @@ pub fn newest_transcript(project_dir: &Path) -> Option<PathBuf> {
             continue;
         }
         let Ok(mtime) = entry.metadata().and_then(|m| m.modified()) else { continue; };
-        if newest.as_ref().map_or(true, |(t, _)| mtime > *t) {
+        if newest.as_ref().is_none_or(|(t, _)| mtime > *t) {
             newest = Some((mtime, path));
         }
     }

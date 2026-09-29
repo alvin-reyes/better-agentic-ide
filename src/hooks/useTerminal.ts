@@ -565,13 +565,6 @@ function serializeTerminalBuffer(paneId: string): string | null {
   }
 }
 
-// Write pre-serialized content into a terminal (used during session restore)
-function writeSerializedBuffer(paneId: string, content: string) {
-  const inst = instances.get(paneId);
-  if (!inst) return;
-  inst.term.write(content);
-}
-
 // Recording tap: allow external hooks to intercept PTY output
 type RecordingTap = (paneId: string, data: Uint8Array) => void;
 let recordingTap: RecordingTap | null = null;
@@ -592,4 +585,4 @@ function getTerminalDimensions(paneId: string): { cols: number; rows: number } |
 }
 
 // Export for cleanup when tabs are closed
-export { destroyInstance, detachInstance, createReattachedInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, writeSerializedBuffer, setRecordingTap, getRecordingTap, getTerminalDimensions };
+export { destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };

@@ -58,7 +58,7 @@ const PRICES: [RegExp, Price][] = [
   [/haiku/, { input: 0.25, output: 1.25, read: 0.1, context: 200_000 }],
 ];
 
-export function priceOf(model: string): Price | null {
+function priceOf(model: string): Price | null {
   return PRICES.find(([re]) => re.test(model))?.[1] ?? null;
 }
 
