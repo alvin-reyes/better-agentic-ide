@@ -567,6 +567,19 @@ export default function SettingsPanel() {
                   style={{ width: "100%", marginTop: "8px", accentColor: "var(--accent)" }}
                 />
               </div>
+
+              {/* Shortcut bar */}
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={store.showShortcutBar}
+                  onChange={(e) => store.setShowShortcutBar(e.target.checked)}
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Show the shortcut bar at the bottom of the window (all shortcuts: {shortcutLabel("shortcuts")})
+                </span>
+              </label>
             </div>
           )}
 

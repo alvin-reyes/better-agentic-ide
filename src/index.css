@@ -586,3 +586,18 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
   background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%; background-size: 4px 4px; background-repeat: no-repeat;
 }
 .tokens-guard select option, .tokens-presets select option { background: var(--bg-secondary); color: var(--text-primary); }
+
+/* ---- Keyboard shortcuts ---- */
+.tabbar-icon-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; border: none; cursor: pointer; }
+.tabbar-icon-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.shortcuts-panel { width: min(860px, 94vw); }
+.shortcuts-search { flex: 1; min-width: 0; max-width: 320px; margin-left: auto; padding: 5px 9px; border-radius: var(--radius-sm); background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); font-size: 12px; outline: none; }
+.shortcuts-search:focus { border-color: var(--accent); }
+.shortcuts-groups { columns: 2 320px; column-gap: 28px; }
+.shortcuts-groups section { break-inside: avoid; margin-bottom: 18px; }
+.shortcuts-groups h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.shortcuts-groups ul { list-style: none; margin: 0; padding: 0; }
+.shortcuts-groups li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--text-secondary); }
+.shortcuts-groups kbd { font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+.shortcuts-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-muted); }
+.shortcuts-footer label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-secondary); }

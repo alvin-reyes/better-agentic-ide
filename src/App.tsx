@@ -25,6 +25,7 @@ const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
 const BmadPanel = lazy(() => import("./components/BmadPanel"));
 const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
 const TokensPanel = lazy(() => import("./components/TokensPanel"));
+const ShortcutsOverlay = lazy(() => import("./components/ShortcutsOverlay"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
@@ -54,6 +55,8 @@ export default function App() {
   const [bmadOpen, setBmadOpen] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const showShortcutBar = useSettingsStore((s) => s.showShortcutBar);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   // For event handlers registered once.
   const activeCwdRef = useRef<string | null>(null);
@@ -170,6 +173,7 @@ export default function App() {
 
   const toggleFleet = useCallback(() => setFleetOpen((prev) => !prev), []);
   const toggleTokens = useCallback(() => setTokensOpen((prev) => !prev), []);
+  const toggleShortcuts = useCallback(() => setShortcutsOpen((prev) => !prev), []);
   const toggleContracts = useCallback(() => setContractsOpen((prev) => !prev), []);
 
   // Panel toggles dispatched as window events (command palette, other panels).
@@ -181,11 +185,12 @@ export default function App() {
       ["toggle-fleet", toggleFleet],
       ["toggle-bmad", toggleBmad],
       ["toggle-tokens", toggleTokens],
+      ["toggle-shortcuts", toggleShortcuts],
       ["toggle-contracts", toggleContracts],
     ];
     for (const [name, fn] of toggles) window.addEventListener(name, fn);
     return () => { for (const [name, fn] of toggles) window.removeEventListener(name, fn); };
-  }, [toggleFleet, toggleTokens, toggleContracts]);
+  }, [toggleFleet, toggleTokens, toggleShortcuts, toggleContracts]);
 
   // Contract quick actions from the command palette.
   useEffect(() => {
@@ -387,6 +392,7 @@ export default function App() {
     openOrchestrator,
     toggleContracts,
     toggleTokens,
+    toggleShortcuts,
     requestCloseTab,
     requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
@@ -445,7 +451,7 @@ export default function App() {
         />
       )}
       <Scratchpad ref={scratchpadRef} />
-      <ShortcutsBar />
+      {showShortcutBar && <ShortcutsBar />}
       <Suspense fallback={null}>
         <SettingsPanel />
         <Tour />
@@ -485,6 +491,7 @@ export default function App() {
           <ContractsPanel cwd={activeCwd} onClose={() => setContractsOpen(false)} />
         )}
         {tokensOpen && <TokensPanel cwd={activeCwd} onClose={() => setTokensOpen(false)} />}
+        {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
         {recordingPlayerOpen && (
           <RecordingPlayer onClose={() => setRecordingPlayerOpen(false)} />
         )}

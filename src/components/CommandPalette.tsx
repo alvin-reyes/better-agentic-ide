@@ -95,6 +95,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         onClose();
       }},
       { id: "bmad-toggle", label: "BMAD: Toggle panel", category: "BMAD", action: () => { window.dispatchEvent(new CustomEvent("toggle-bmad")); onClose(); } },
+      { id: "shortcuts", label: "Help: Keyboard shortcuts", shortcut: L("shortcuts"), category: "Help", action: () => { window.dispatchEvent(new CustomEvent("toggle-shortcuts")); onClose(); } },
       { id: "tokens-panel", label: "Tokens: Usage, cost and ways to save", shortcut: L("tokens"), category: "Tokens", action: () => { window.dispatchEvent(new CustomEvent("toggle-tokens")); onClose(); } },
       { id: "contracts-workbench", label: "Contracts: Open workbench (tests, deploy & call)", category: "Contracts", action: () => { window.dispatchEvent(new CustomEvent("contracts-workbench")); onClose(); } },
       { id: "contracts-panel", label: "Contracts: Open panel", shortcut: L("contracts"), category: "Contracts", action: () => { window.dispatchEvent(new CustomEvent("toggle-contracts")); onClose(); } },

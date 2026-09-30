@@ -296,6 +296,7 @@ interface Settings {
   ollamaModel: string;
   orchestratorProvider: "anthropic" | "ollama";
   contextGuard: ContextGuard;
+  showShortcutBar: boolean;
 }
 
 /** Warn when a Claude session's context passes `threshold` of its window. */
@@ -327,6 +328,7 @@ interface SettingsStore extends Settings {
   setOllamaModel: (model: string) => void;
   setOrchestratorProvider: (provider: "anthropic" | "ollama") => void;
   setContextGuard: (patch: Partial<ContextGuard>) => void;
+  setShowShortcutBar: (show: boolean) => void;
   getActiveTheme: () => ThemeColors;
 
   saveWorkspace: (name: string, tabs: { name: string; splits: "none" | "horizontal" | "vertical" }[]) => void;
@@ -357,6 +359,8 @@ const defaults: Settings = {
   ollamaModel: "deepseek-r1",
   orchestratorProvider: "anthropic",
   contextGuard: { enabled: true, threshold: 0.6 },
+  // The full list is a keystroke away (the shortcuts overlay); the bar is opt-in.
+  showShortcutBar: false,
 };
 
 const initial: Settings = { ...defaults, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) };
@@ -403,6 +407,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setOllamaModel: (ollamaModel) => save({ ollamaModel }),
     setOrchestratorProvider: (orchestratorProvider) => save({ orchestratorProvider }),
     setContextGuard: (patch) => save({ contextGuard: { ...get().contextGuard, ...patch } }),
+    setShowShortcutBar: (showShortcutBar) => save({ showShortcutBar }),
 
     getActiveTheme: () => {
       const s = get();

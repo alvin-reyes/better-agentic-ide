@@ -47,3 +47,25 @@ describe("keyName", () => {
     expect(keyName({ code: "", key: "Escape" })).toBe("Escape");
   });
 });
+
+describe("keyboard shortcuts list", () => {
+  it("opens with ⌘/ and Ctrl+Shift+/ (which the key reports as ?)", () => {
+    expect(matches(ev("Slash", { meta: true }, "/"), SHORTCUTS.shortcuts, true)).toBe(true);
+    expect(matches(ev("Slash", { ctrl: true, shift: true }, "?"), SHORTCUTS.shortcuts, false)).toBe(true);
+    expect(shortcutLabel("shortcuts", false)).toBe("Ctrl+Shift+/");
+  });
+
+  it("lists every shortcut, with no combo used twice", async () => {
+    const { ALL_SHORTCUTS } = await import("../shortcutList");
+    const listed = new Set(ALL_SHORTCUTS.map((s) => s.keys));
+    for (const id of Object.keys(SHORTCUTS) as (keyof typeof SHORTCUTS)[]) {
+      if (["paneLeft", "paneRight", "prevTab", "nextTab"].includes(id)) continue; // shown as combined rows
+      expect(listed.has(shortcutLabel(id)), id).toBe(true);
+    }
+    // ⌘⇧↵ copies in the scratchpad and zooms the pane elsewhere, on purpose.
+    const combos = Object.entries(SHORTCUTS)
+      .filter(([id]) => id !== "copy")
+      .map(([, c]) => `${c.key}:${"shift" in c ? c.shift : false}`);
+    expect(new Set(combos).size).toBe(combos.length);
+  });
+});

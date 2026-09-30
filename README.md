@@ -173,6 +173,7 @@ On Linux and Windows, app shortcuts use `Ctrl+Shift` where macOS uses `⌘`, and
 | `⌘⇧O` | `Ctrl+Alt+Shift+O` | Orchestrator |
 | `⌘⇧K` | `Ctrl+Alt+Shift+K` | Smart contracts panel |
 | `⌘⇧G` | `Ctrl+Alt+Shift+G` | Tokens panel |
+| `⌘/` | `Ctrl+Shift+/` | All keyboard shortcuts (grouped, searchable) |
 | `⌘,` | `Ctrl+Shift+,` | Settings |
 | `Esc` | `Esc` | Close open panels and focus the terminal |
 

@@ -25,6 +25,7 @@ interface KeybindingActions {
   openOrchestrator: () => void;
   toggleContracts: () => void;
   toggleTokens: () => void;
+  toggleShortcuts: () => void;
   requestCloseTab: (tabId: string) => void;
   requestClosePane: (tabId: string, paneId: string) => void;
   isScratchpadOpen: boolean;
@@ -80,6 +81,7 @@ export function useKeybindings(actions: KeybindingActions) {
       if (is("orchestrator")) return run(actions.openOrchestrator);
       if (is("contracts")) return run(actions.toggleContracts);
       if (is("tokens")) return run(actions.toggleTokens);
+      if (is("shortcuts")) return run(actions.toggleShortcuts);
       if (is("scratchpad")) return run(actions.toggleScratchpad);
       if (is("send") && actions.isScratchpadOpen) return run(actions.sendScratchpad);
       // ⌘⇧↵ copies while typing in the scratchpad and zooms the pane elsewhere.

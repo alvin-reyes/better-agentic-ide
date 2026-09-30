@@ -1,38 +1,6 @@
 import { useState } from "react";
-import { IS_MAC, modLabel, shortcutLabel } from "../lib/shortcuts";
+import { ALL_SHORTCUTS } from "../lib/shortcutList";
 
-const L = shortcutLabel;
-const MOD = modLabel();
-
-// Labels follow the platform: ⌘ on macOS, Ctrl+Shift on Linux and Windows.
-const shortcuts = [
-  { keys: L("newTab"), action: "New tab" },
-  { keys: L("closeTab"), action: "Close tab" },
-  { keys: `${MOD}1-9`, action: "Switch tab" },
-  { keys: `${modLabel(true)}[ / ]`, action: "Prev/next tab" },
-  { keys: L("splitHorizontal"), action: "Split horiz" },
-  { keys: L("splitVertical"), action: "Split vert" },
-  { keys: L("closePane"), action: "Close pane" },
-  { keys: IS_MAC ? "⌘←→" : "Ctrl+Shift+Left/Right", action: "Switch pane" },
-  { keys: L("renameTab"), action: "Rename tab" },
-  { keys: L("agentPicker"), action: "Agents" },
-  { keys: L("fileBrowser"), action: "Files" },
-  { keys: L("preview"), action: "Preview" },
-  { keys: L("fleet"), action: "Fleet" },
-  { keys: L("scratchpad"), action: "Scratchpad" },
-  { keys: L("send"), action: "Send to term" },
-  { keys: L("saveNote"), action: "Save note" },
-  { keys: L("sendEnter"), action: "Send Enter ↵" },
-  { keys: L("copy"), action: "Copy text" },
-  { keys: L("palette"), action: "Commands" },
-  { keys: L("find"), action: "Find" },
-  { keys: L("zoomPane"), action: "Zoom pane" },
-  { keys: L("settings"), action: "Settings" },
-  { keys: L("orchestrator"), action: "Orchestrator" },
-  { keys: L("contracts"), action: "Contracts" },
-  { keys: L("tokens"), action: "Tokens" },
-  { keys: "Esc", action: "Close panel" },
-];
 
 export default function ShortcutsBar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -81,9 +49,9 @@ export default function ShortcutsBar() {
         Shortcuts
       </button>
 
-      {!collapsed && shortcuts.map((s) => (
+      {!collapsed && ALL_SHORTCUTS.map((s) => (
         <div
-          key={s.action}
+          key={s.short}
           style={{
             display: "flex",
             alignItems: "center",
@@ -104,7 +72,7 @@ export default function ShortcutsBar() {
           >
             {s.keys}
           </kbd>
-          <span style={{ color: "var(--text-secondary)", fontSize: "10px" }}>{s.action}</span>
+          <span style={{ color: "var(--text-secondary)", fontSize: "10px" }}>{s.short}</span>
         </div>
       ))}
     </div>

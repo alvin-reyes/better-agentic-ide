@@ -6,6 +6,8 @@ description: All ADE keyboard shortcuts for macOS, Linux and Windows.
 
 On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux and Windows**, they use <kbd>Ctrl+Shift</kbd> where macOS uses <kbd>⌘</kbd>, and <kbd>Ctrl+Alt+Shift</kbd> where macOS uses <kbd>⌘⇧</kbd>. Plain <kbd>Ctrl</kbd> keys are never taken by the app, so <kbd>Ctrl+C</kbd>, <kbd>Ctrl+D</kbd>, <kbd>Ctrl+R</kbd>, <kbd>Ctrl+W</kbd> and the rest keep working in your shell.
 
+**See them all in the app:** press {% include key.html mac="⌘/" other="Ctrl+Shift+/" %} or click the keyboard icon at the top right. The list is grouped and searchable, and every command is also in the command palette with its shortcut. If you'd like a strip of shortcuts along the bottom of the window, turn on **Show the shortcut bar** in that list or in *Settings → Terminal*.
+
 ## Tabs and panes
 
 | Action | Shortcut |
@@ -44,6 +46,7 @@ On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux and Windows**, they use <
 | Orchestrator | {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} |
 | Smart contracts panel | {% include key.html mac="⌘⇧K" other="Ctrl+Alt+Shift+K" %} |
 | Tokens panel | {% include key.html mac="⌘⇧G" other="Ctrl+Alt+Shift+G" %} |
+| Keyboard shortcuts | {% include key.html mac="⌘/" other="Ctrl+Shift+/" %} |
 | Settings | {% include key.html mac="⌘," other="Ctrl+Shift+," %} |
 | Close panels and focus the terminal | <kbd>Esc</kbd> |
 

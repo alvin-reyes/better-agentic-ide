@@ -272,6 +272,18 @@ export default function TabBar() {
 
       <div style={{ flex: 1 }} />
 
+      <button
+        className="tabbar-icon-btn"
+        onClick={() => window.dispatchEvent(new CustomEvent("toggle-shortcuts"))}
+        title={`Keyboard shortcuts (${shortcutLabel("shortcuts")})`}
+        aria-label="Keyboard shortcuts"
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1.5" y="4" width="13" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M4 6.8h.01M6.3 6.8h.01M8.6 6.8h.01M10.9 6.8h.01M4 9.6h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </button>
+
       {/* Settings button */}
       <button
         className="flex items-center justify-center cursor-pointer"

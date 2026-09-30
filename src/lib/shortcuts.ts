@@ -48,6 +48,7 @@ export const SHORTCUTS = {
   orchestrator: { key: "o", shift: true },
   contracts: { key: "k", shift: true },
   tokens: { key: "g", shift: true },
+  shortcuts: { key: "/" },
 } satisfies Record<string, Combo>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;
@@ -55,6 +56,7 @@ export type ShortcutId = keyof typeof SHORTCUTS;
 const CODE_NAMES: Record<string, string> = {
   Comma: ",",
   Period: ".",
+  Slash: "/",
   BracketLeft: "[",
   BracketRight: "]",
   Enter: "Enter",

@@ -63,7 +63,7 @@ const steps: TourStep[] = [
   },
   {
     title: "You're all set!",
-    body: "Every action has a keyboard shortcut — check the bar at the bottom for a quick reference. Happy building!",
+    body: `Every action has a keyboard shortcut. Press ${L("shortcuts")} anytime to see them all, or click the keyboard icon at the top right. Happy building!`,
     position: "center",
   },
 ];
