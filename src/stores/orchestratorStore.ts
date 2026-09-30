@@ -55,7 +55,6 @@ interface OrchestratorStore {
   setSessionStatus: (sessionId: string, status: OrchestratorSession["status"]) => void;
   setProjectDir: (sessionId: string, projectDir: string) => void;
   setDispatchError: (sessionId: string, message: string | null) => void;
-  getActiveSession: () => OrchestratorSession | undefined;
   getDispatchableTasks: (sessionId: string) => OrchestratorTask[];
 }
 
@@ -149,11 +148,6 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => {
           s.id === sessionId ? { ...s, dispatchError: message } : s,
         ),
       })),
-
-    getActiveSession: () => {
-      const { sessions, activeSessionId } = get();
-      return sessions.find((s) => s.id === activeSessionId);
-    },
 
     getDispatchableTasks: (sessionId) => {
       const session = get().sessions.find((s) => s.id === sessionId);
