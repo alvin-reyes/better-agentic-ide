@@ -35,6 +35,5 @@ body_class: guide-page
       {% assign p = i | minus: 1 %}{% if i > 0 %}{% assign prev = pages[p] %}<a class="prev" href="{{ prev.url | relative_url }}"><span>Previous</span>{{ prev.title }}</a>{% else %}<span></span>{% endif %}
       {% assign n = i | plus: 1 %}{% if n < pages.size %}{% assign next = pages[n] %}<a class="next" href="{{ next.url | relative_url }}"><span>Next</span>{{ next.title }}</a>{% endif %}
     </nav>
-    <p class="edit"><a href="{{ site.repo }}/edit/main/docs/{{ page.path }}">Edit this page on GitHub</a></p>
   </article>
 </div>

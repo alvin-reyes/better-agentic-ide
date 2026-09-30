@@ -1,0 +1,46 @@
+# Pricing tiers shown on the landing page (#pricing).
+# Licensing is honor system: there is no key check in the app.
+#
+# Fields:
+#   name      tier name
+#   price     display price, e.g. "$49"
+#   period    small text after the price, e.g. "/ year", "one-time", "per seat / year" (optional)
+#   blurb     one line under the name
+#   features  short bullet list
+#   cta       button label
+#   url       "buy" uses site.buy_url, "aracademy" uses site.aracademy_url, or any full URL
+#   featured  true highlights the card (use on one tier)
+
+- name: Personal
+  price: "$—"  # TODO: set price
+  period: ""   # TODO: set billing period, e.g. "one-time" or "/ year"
+  blurb: For one developer building with AI agents.
+  features:  # TODO: review wording against the final license terms
+    - Every feature, including fleet view, tokens panel and the contract workbench
+    - macOS, Windows and Linux
+    - Updates while your license is active
+  cta: Buy Personal
+  url: buy
+
+- name: Team
+  price: "$—"  # TODO: set price
+  period: per seat  # TODO: confirm billing period, e.g. "per seat / year"
+  blurb: For teams standardising on one agent workflow.
+  features:  # TODO: review wording against the final license terms
+    - Everything in Personal
+    - One license per person on the team
+    - Shared agent profiles and settings through your own git repo
+  cta: Buy for your team
+  url: buy
+  featured: true
+
+- name: aracademy training
+  price: Included
+  period: with the course
+  blurb: Every aracademy AI agent training participant gets ADE.
+  features:  # TODO: confirm what the training includes
+    - ADE license included with the training
+    - The same setup used in every lesson
+    - Learn agent workflows hands-on, inside ADE
+  cta: See the training
+  url: aracademy

@@ -6,13 +6,12 @@
       {% if page.url contains '/guide/' %}<small>Guide</small>{% endif %}
     </a>
     <nav id="site-nav" class="site-nav" aria-label="Main">
-      <a href="{{ '/#features' | relative_url }}" class="nav-hide">Features</a>
-      <a href="{{ '/#agents' | relative_url }}">Agents</a>
-      <a href="{{ '/#tokens' | relative_url }}">Tokens</a>
-      <a href="{{ '/#contracts' | relative_url }}">Smart contracts</a>
+      <a href="{{ '/#features' | relative_url }}">Features</a>
+      <a href="{{ '/#pricing' | relative_url }}">Pricing</a>
+      <a href="{{ '/#training' | relative_url }}">Training</a>
       <a href="{{ '/guide/' | relative_url }}"{% if page.url contains '/guide/' %} aria-current="page"{% endif %}>Guide</a>
-      <a href="{{ site.repo }}">GitHub</a>
-      <a class="btn btn-small btn-primary" href="{{ '/#install' | relative_url }}">Download</a>
+      {% include buy-url.html %}
+      <a class="btn btn-small btn-primary" href="{{ buy }}">Buy</a>
     </nav>
     <button class="icon-btn theme-toggle" type="button" aria-label="Switch between light and dark">
       <svg class="moon" width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.5A7 7 0 017.5 3.5a7 7 0 109 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>

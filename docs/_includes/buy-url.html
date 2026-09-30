@@ -1,0 +1,2 @@
+{%- comment -%}Sets `buy` to site.buy_url: a full URL as-is, or an on-site path/anchor made relative to the site.{%- endcomment -%}
+{%- if site.buy_url contains '://' -%}{%- assign buy = site.buy_url -%}{%- else -%}{%- assign buy = site.buy_url | prepend: '/' | replace: '//', '/' | relative_url -%}{%- endif -%}

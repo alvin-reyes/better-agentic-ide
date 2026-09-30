@@ -1,22 +1,23 @@
 ---
 layout: default
 body_class: home
-description: ADE is a desktop terminal for building with AI coding agents — Claude Code, Codex, Gemini — with first-class tooling for Solidity and Solana smart contracts.
+description: ADE is the desktop terminal for building AI agents. Run Claude Code, Codex and Gemini side by side, see what every agent costs, and ship smart contracts from one app.
 ---
 {% assign img = '/assets/img/' | relative_url %}
+{% include buy-url.html %}
 <section class="hero">
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="{{ '/guide/contracts/' | relative_url }}"><b>NEW</b><span>Smart contract tooling for Foundry, Hardhat and Anchor →</span></a>
-      <h1>Build with AI agents.<br><span class="grad-text">Ship contracts with confidence.</span></h1>
-      <p class="sub">ADE is a desktop terminal made for agent-driven development. Run Claude Code, Codex and Gemini side by side, see every file they write, and take Solidity and Solana projects from first test to reviewed deploy — all from the keyboard.</p>
+      <a class="pill" href="#new"><b>NEW</b><span>MCP library &amp; Secrets vault →</span></a>
+      <h1>The terminal for <span class="grad-text">building AI&nbsp;agents.</span></h1>
+      <p class="sub">Run Claude Code, Codex and Gemini side by side, draft every prompt properly, and see exactly what each agent costs — in one fast desktop app.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">
+        <a class="btn btn-primary" href="{{ buy }}">Buy a license</a>
+        <a class="btn btn-ghost" href="{{ site.repo }}/releases/latest" data-download="auto">
           <svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0l-4-4m4 4l4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Download <span data-latest-version></span>
+          Download free trial <span class="ver" data-latest-version></span>
         </a>
-        <a class="btn btn-ghost" href="{{ '/guide/' | relative_url }}">Read the guide <span class="arrow" aria-hidden="true">→</span></a>
       </div>
       <p class="hero-meta"><span>macOS · Windows · Linux</span> <code>brew install --cask alvin-reyes/tap/ade</code></p>
     </div>
@@ -31,374 +32,77 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
   </div>
 </section>
 
-<section class="logos" aria-label="Works with">
-  <div class="wrap">
-    Works with the agents and toolchains you already use
-    <ul>
-      <li>Claude Code</li><li>Codex</li><li>Gemini CLI</li><li>Ollama</li>
-      <li class="sep" aria-hidden="true">/</li>
-      <li>Foundry</li><li>Hardhat</li><li>Anchor</li>
-    </ul>
-  </div>
-</section>
-
 <section class="section" id="features">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">One app, two jobs</span>
-      <h2>Everything around the agent. Everything around the contract.</h2>
-      <p>A real terminal first — with the tools you'd otherwise keep switching windows for.</p>
+      <span class="kicker">Features</span>
+      <h2>Everything around the agent, in one window.</h2>
     </div>
 
-    <div class="bento">
-      <a class="bento-card span-3 feat" href="#agents">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5"/><path d="M6 8l2.5 2L6 12M10.5 12.5h3.5"/></svg></span>
-        <h3>Direct, watch and review your agents</h3>
-        <p>Draft prompts properly, run several agents at once, open any file they write with a click, and follow every sub-agent on a live timeline.</p>
-        <ul class="checks">
-          <li><strong>Scratchpad</strong> with history, chaining and voice</li>
-          <li><strong>Clickable files</strong> and a live preview</li>
-          <li><strong>Fleet view</strong> of every agent and sub-agent</li>
-        </ul>
-        <div class="bento-media"><img src="{{ img }}agents.webp" width="1440" height="900" loading="lazy" alt="The agent picker listing API Builder, Database Engineer, Auth Architect and other agent profiles"></div>
-      </a>
-      <a class="bento-card span-3 feat" href="#contracts">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6.5 3h7l3.5 7-3.5 7h-7L3 10z"/><path d="M8 10l1.5 1.5L12.5 8.5" stroke-linecap="round"/></svg></span>
-        <h3>Test, audit and deploy without the busywork</h3>
-        <p>One key opens build, test, gas, coverage, Slither and a local chain for Foundry, Hardhat or Anchor — plus an ABI viewer and agents that know contract security.</p>
-        <ul class="checks">
-          <li><strong>One-click</strong> build, test and analysis</li>
-          <li><strong>Reviewed deploys</strong>, never a raw private key</li>
-          <li><strong>Auditor and gas agents</strong> that write PoC tests</li>
-        </ul>
-        <div class="bento-media"><img src="{{ img }}contracts-panel.webp" width="1440" height="900" loading="lazy" alt="The Contracts panel for a Foundry project with build, test, analyze, chain and deploy actions"></div>
-      </a>
+    <div class="feat-grid">
+      <article class="feat-card">
+        <div class="feat-media"><img src="{{ img }}agents.webp" width="1440" height="900" loading="lazy" alt="The agent picker listing API Builder, Database Engineer, Auth Architect and other agent profiles"></div>
+        <h3>Agents side by side, and the whole fleet</h3>
+        <p>Split panes for Claude Code, Codex and Gemini, 37 ready agent profiles, and a live timeline of every sub-agent with its real cost.</p>
+      </article>
+      <article class="feat-card">
+        <div class="feat-media bottom"><img src="{{ img }}scratchpad.webp" width="1440" height="430" loading="lazy" alt="The scratchpad under the terminals with a drafted prompt and Send to Terminal"></div>
+        <h3>A scratchpad for prompts</h3>
+        <p>Draft long prompts under every terminal, send with one key, chain steps, and reuse from history. Drafts survive crashes.</p>
+      </article>
+      <article class="feat-card">
+        <div class="feat-media"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, sessions with context meters and usage by model"></div>
+        <h3>Know the cost, spend less</h3>
+        <p>Spend at API prices, cache savings and a context meter per session — plus one-click token savers like compact paste and context guard.</p>
+      </article>
+      <article class="feat-card">
+        <div class="feat-media"><img src="{{ img }}bench-deploy.webp" width="1440" height="615" loading="lazy" alt="Workbench deploy and call view: a Vault on Anvil with decoded events and reverts"></div>
+        <h3>Smart-contract workbench</h3>
+        <p>Build, test, analyze and call Foundry, Hardhat and Anchor projects from one panel. Deploys are typed for you to review — never a raw private key.</p>
+      </article>
+    </div>
 
-      <a class="bento-card span-4" href="#agents">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h7M6 10h9M9 15h8"/></svg></span>
-        <h3>Every sub-agent on a live timeline</h3>
-        <p>Explore, Plan and reviewers show up as they start and finish — per terminal or across all of them, with running counts and real cost from Claude Code's usage records.</p>
-        <div class="bento-media wide"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with Explore, Plan, general-purpose and code-reviewer sub-agents"></div>
-      </a>
-      <a class="bento-card" href="#tokens">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 16.5h14M5.5 13.5V10M10 13.5V5.5M14.5 13.5V8"/></svg></span>
-        <h3>Know what agents cost</h3>
-        <p>Spend at API prices, what prompt caching saved, and a context meter for every session — then savings you apply in a click.</p>
-        <div class="bento-stat"><b>98%</b><span>of prompt tokens served from cache in one measured session</span></div>
-      </a>
-
-      <a class="bento-card" href="#agents">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h12M4 8.5h12M4 12.5h7"/><path d="M13.5 12l2 2-2 2"/></svg></span>
-        <h3>Prompts, drafted properly</h3>
-        <p>A scratchpad under every terminal with history, notes, voice and prompt chaining. Your draft survives crashes and restarts.</p>
-      </a>
-      <a class="bento-card" href="#agents">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5H6a1.5 1.5 0 00-1.5 1.5v12A1.5 1.5 0 006 17.5h8a1.5 1.5 0 001.5-1.5V6.5z"/><path d="M11.5 2.5v4h4M7.5 10.5h5M7.5 13.5h3"/></svg></span>
-        <h3>Click any file an agent writes</h3>
-        <p>Paths become links. Markdown with Mermaid, PDF, Word, images and HTML open in a live preview — rendered documents can't run code.</p>
-      </a>
-      <a class="bento-card" href="#contracts">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 2.5l6 2.5v4.5c0 3.8-2.6 6.3-6 7.5-3.4-1.2-6-3.7-6-7.5V5z"/><path d="M7.3 10l1.9 1.9 3.6-3.8" stroke-linecap="round"/></svg></span>
-        <h3>Deploys you review first</h3>
-        <p>Deploy actions type the command and stop for you to check. ADE never asks for, stores or syncs a private key.</p>
-      </a>
-
-      <a class="bento-card" href="#sync">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 00-11-2.5M4 12a6 6 0 0011 2.5"/><path d="M5 2.5v3h3M15 17.5v-3h-3"/></svg></span>
-        <h3>Close it, crash it — nothing lost</h3>
-        <p>Tabs, splits, scrollback and drafts saved within a second. Settings, notes and Claude memory follow you through your own private git repo.</p>
-      </a>
-      <a class="bento-card" href="#agents">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="5" r="2"/><circle cx="4.5" cy="15" r="2"/><circle cx="15.5" cy="15" r="2"/><path d="M9 6.8L5.5 13.2M11 6.8l3.5 6.4M6.5 15h7"/></svg></span>
-        <h3>37 agent profiles</h3>
-        <p>Backend, frontend, DevOps, testing and Web3 — plus 11 architects to brainstorm with. Run them on Claude Code, Codex, Gemini CLI or Ollama.</p>
-      </a>
-      <a class="bento-card" href="#shortcuts">
-        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="5" width="15" height="10" rx="2"/><path d="M5.5 8h1M9.5 8h1M13.5 8h1M6.5 12h7"/></svg></span>
-        <h3>Keyboard-first, your colors</h3>
-        <p>Scratchpad, contracts, tokens and fleet are each one shortcut away. Eight themes, seven fonts, per-color overrides and your choice of cursor.</p>
-      </a>
+    <div class="new-strip" id="new">
+      <span class="badge">New</span>
+      <p><strong>MCP library</strong> — curated MCP servers for Claude Code, added in one click. <strong>Secrets vault</strong> — API keys kept in your OS keychain and injected into terminals and MCP servers, never synced.</p>
     </div>
   </div>
 </section>
 
-<section class="section tint" id="agents">
+<section class="section tint" id="pricing">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">Agent workflow</span>
-      <h2>Draft. Run. Review. Repeat.</h2>
-      <p>The loop you do a hundred times a day, without leaving the window.</p>
+      <span class="kicker">Pricing</span>
+      <h2>Try it free. If you keep using it, buy a license.</h2>
+      <p>Licensing is on the honor system: no license keys, no DRM, no phoning home. The full app is the trial.</p>
     </div>
-
-    <div class="feature">
-      <div class="feature-copy">
-        <h3><span class="step">1</span>Draft the prompt before you send it</h3>
-        <p>A scratchpad under every terminal for long, careful prompts. Send with one key, reuse from history and notes, dictate by voice, or paste a screenshot — its path goes along with the prompt.</p>
+    <div class="pricing">
+      {% for tier in site.data.pricing %}
+      {% if tier.url == 'buy' %}{% assign tier_url = buy %}{% elsif tier.url == 'aracademy' %}{% assign tier_url = site.aracademy_url %}{% else %}{% assign tier_url = tier.url %}{% endif %}
+      <article class="price-card{% if tier.featured %} featured{% endif %}">
+        <h3>{{ tier.name }}</h3>
+        <p class="blurb">{{ tier.blurb }}</p>
+        <p class="price"><b>{{ tier.price }}</b>{% if tier.period and tier.period != '' %} <span>{{ tier.period }}</span>{% endif %}</p>
         <ul class="checks">
-          <li><strong>Prompt chaining</strong> — split with <code>---</code>; each step waits for the agent to go idle</li>
-          <li><strong>Send Enter</strong> to answer "Proceed?" without leaving the pad</li>
-          <li><strong>Your draft survives</strong> crashes and restarts</li>
+          {% for f in tier.features %}<li>{{ f }}</li>{% endfor %}
         </ul>
-      </div>
-      <div class="frame"><img src="{{ img }}scratchpad.webp" width="1440" height="430" loading="lazy" alt="The scratchpad under the terminals with a drafted prompt and Send to Terminal"></div>
-    </div>
-
-    <div class="feature flip">
-      <div class="feature-copy">
-        <h3><span class="step">2</span>Run agents side by side</h3>
-        <p>Split panes and named tabs, 37 agent profiles for backend, frontend, DevOps, testing and Web3, and an orchestrator that turns a conversation into tasks and dispatches each to its own terminal.</p>
-        <ul class="checks">
-          <li><strong>Agent picker</strong> suggests the right profile for a task</li>
-          <li><strong>11 architects</strong> for AI automation and Web3 to brainstorm with — they record decisions as ADRs</li>
-          <li><strong>Claude Code, Codex, Gemini CLI or Ollama</strong></li>
-          <li><strong>Notifications</strong> when an agent finishes</li>
-        </ul>
-      </div>
-      <div class="term" aria-label="Terminal example"><div class="term-inner">
-        <div class="shot-bar"><i></i><i></i><i></i><span>claude — acme-api</span></div>
-        <div class="term-body"><span class="p">➜</span>  acme-api claude
-<span class="d">⏺</span> I'll add idempotency keys to the webhook handler.
-<span class="d">⏺</span> Write(<span class="l">src/webhooks.ts</span>)
-<span class="d">  ⎿  Wrote 48 lines</span>
-<span class="d">⏺</span> Write(<span class="l">tests/webhooks.test.mjs</span>)
-<span class="d">⏺</span> Bash(npm test)
-<span class="d">  ⎿  </span><span class="p">✔</span> ignores a repeated webhook id
-<span class="d">⏺</span> Updated <span class="l">docs/plan.md</span> — task 2 is done.</div>
-      </div></div>
-    </div>
-
-    <div class="feature">
-      <div class="feature-copy">
-        <h3><span class="step">3</span>Review what they wrote — with a click</h3>
-        <p>Every file path an agent prints becomes a link once the file exists. Documents open in a live preview beside the terminal; code opens in a tab.</p>
-        <ul class="checks">
-          <li><strong>Markdown</strong> with tables, images and Mermaid diagrams</li>
-          <li><strong>PDF, Word, images and HTML</strong> rendered in place</li>
-          <li><strong>Safe by default</strong> — rendered documents can't run code</li>
-        </ul>
-      </div>
-      <div class="frame"><img src="{{ img }}viewer.webp" width="1440" height="900" loading="lazy" alt="A markdown plan rendered with a Mermaid flowchart and a task table, next to the file browser"></div>
-    </div>
-
-    <div class="feature flip">
-      <div class="feature-copy">
-        <h3><span class="step">4</span>See the whole fleet</h3>
-        <p>ADE follows Claude Code's own transcripts, so every sub-agent — Explore, Plan, reviewers — shows up on a timeline as it starts and finishes, per terminal or across all of them, with running counts and real cost from Claude Code's usage records.</p>
-        <ul class="checks">
-          <li><strong>Swimlanes</strong> for 5 min, 15 min, 1 hour or all time</li>
-          <li><strong>Jump</strong> straight to the pane an agent runs in</li>
-        </ul>
-      </div>
-      <div class="frame"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with Explore, Plan, general-purpose and code-reviewer sub-agents"></div>
+        <a class="btn {% if tier.featured %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ tier_url }}">{{ tier.cta }}</a>
+      </article>
+      {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="section" id="tokens">
+<section class="section" id="training">
   <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Tokens &amp; cost</span>
-      <h2>Know what your agents cost. Spend less of it.</h2>
-      <p>ADE reads the usage Claude Code records for every request, prices it by model, and turns what it finds into savings you can apply in a click.</p>
-    </div>
-
-    <div class="feature">
-      <div class="feature-copy">
-        <h3>Real numbers, not estimates</h3>
-        <p>Open the Tokens panel with {% include key.html mac="⌘⇧G" other="Ctrl+Alt+Shift+G" %} to see spend at API prices, what prompt caching saved, the cache hit rate and usage by model. Every session gets a context meter, for this folder or all projects.</p>
-        <ul class="checks">
-          <li><strong>Context guard</strong> warns when a session passes 60% of its window and types <code>/compact</code> for you to send</li>
-          <li><strong>Compact paste</strong> shrinks noisy logs before they reach the agent: colors, progress bars and repeats go, errors stay</li>
-          <li><strong>One-click Claude Code settings</strong>: cap Bash output, run sub-agents on Sonnet, compact earlier, plan with <code>opusplan</code></li>
-          <li><strong>Context diet</strong> keeps agents out of <code>node_modules</code>, build output and lockfiles</li>
-        </ul>
+    <div class="training">
+      <div>
+        <span class="kicker">aracademy</span>
+        <h2>The tool behind aracademy's AI agent training</h2>
+        <p>ADE is the environment used throughout aracademy's training on building AI agents. Learn the workflow in the course, keep using the same tool on real projects.</p>
       </div>
-      <div class="frame glow"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, tips, sessions with context meters and usage by model"></div>
+      <a class="btn btn-primary" href="{{ site.aracademy_url }}">Explore the training <span class="arrow" aria-hidden="true">→</span></a>
     </div>
-
-    <div class="savings" role="list" aria-label="Savings measured on one real Claude Code session">
-      <div role="listitem"><b>−29%</b><span>sub-agent cost on Sonnet ($12.77 → $9.12), or −64% with Haiku for agents that only search and read</span></div>
-      <div role="listitem"><b>6,500 → 26</b><span>tokens for a noisy 900-line install log after compact paste</span></div>
-      <div role="listitem"><b>~5,500</b><span>fewer tokens per long command with the 8,000-character Bash cap</span></div>
-      <div role="listitem"><b>98%</b><span>of prompt tokens served from cache, shown so you can keep it there</span></div>
-    </div>
-    <p class="savings-note">Measured on one real session of about 1,000 requests at Opus 5.5 API prices. Your numbers depend on how you work, and the Tokens panel shows your own.</p>
-  </div>
-</section>
-
-<section class="section" id="contracts">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Smart contracts</span>
-      <h2>From <code class="h-code">forge init</code> to a reviewed deploy</h2>
-      <p>Open a Foundry, Hardhat or Anchor project and press <kbd class="key" data-mac="⌘⇧K" data-other="Ctrl+Alt+Shift+K">⌘⇧K</kbd>. ADE finds the project from any subfolder and puts the whole toolchain one click away.</p>
-    </div>
-
-    <div class="feature">
-      <div class="feature-copy">
-        <h3>Build, test, measure, analyze</h3>
-        <p>Actions run in your terminal from the project root, so you see real output and can stop anything. The local chain gets its own tab and keeps running while you work.</p>
-        <ul class="checks">
-          <li><strong>Tests</strong> with traces, gas report, coverage and snapshots</li>
-          <li><strong>Slither and Aderyn</strong> static analysis</li>
-          <li><strong>Anvil, Hardhat node or solana-test-validator</strong> in one click</li>
-          <li><strong>Solidity highlighting</strong> and clickable compiler errors</li>
-        </ul>
-      </div>
-      <div class="frame"><img src="{{ img }}contracts-panel.webp" width="1440" height="900" loading="lazy" alt="The Contracts panel for a Foundry project: build, test, analyze, chain and deploy actions, installed tools, sources and ABIs"></div>
-    </div>
-
-    <div class="feature flip">
-      <div class="feature-copy">
-        <h3>Read an ABI like a spec</h3>
-        <p>Compiled artifacts open as read and write functions, events and errors — with the exact selectors and topic hashes the EVM uses. Click to copy one when you're decoding calldata or a revert. Anchor IDLs show instructions, accounts and error codes.</p>
-        <ul class="checks">
-          <li><strong>Only your contracts</strong> — forge-std and OpenZeppelin stay out of the list</li>
-          <li><strong>Filter</strong> by name; <strong>Source</strong> shows the raw JSON</li>
-        </ul>
-      </div>
-      <div class="frame"><img src="{{ img }}abi.webp" width="1440" height="900" loading="lazy" alt="ABI viewer for a Vault contract showing functions, events and errors with selectors"></div>
-    </div>
-
-    <div class="feature">
-      <div class="feature-copy">
-        <h3>Test each function. Call it on a local chain.</h3>
-        <p>The workbench gives each Foundry project its own tab. Compile with clickable errors, then run a single test, one contract's tests or all of them, and see gas, fuzz runs and the failure reason. Start Anvil, deploy with constructor arguments, and call any function.</p>
-        <ul class="checks">
-          <li><strong>▶ Run</strong> on every test, and <strong>Traces</strong> for a <code>-vvvv</code> rerun</li>
-          <li><strong>Events and reverts decoded</strong>, including custom errors with argument names</li>
-          <li><strong>Local only</strong>: Anvil's unlocked accounts, with no keys and no broadcasting</li>
-        </ul>
-      </div>
-      <div class="frame"><img src="{{ img }}bench-deploy.webp" width="1440" height="615" loading="lazy" alt="Workbench deploy and call view: a Vault on Anvil, a read returning 5 ETH, a deposit with its decoded event and a withdraw reverting with InsufficientBalance"></div>
-    </div>
-
-    <div class="matrix-wrap">
-      <table class="matrix">
-        <thead><tr><th></th><th>Foundry</th><th>Hardhat</th><th>Anchor (Solana)</th></tr></thead>
-        <tbody>
-          <tr><td>Detected by</td><td><code>foundry.toml</code></td><td><code>hardhat.config.*</code></td><td><code>Anchor.toml</code></td></tr>
-          <tr><td>Build &amp; test</td><td><code>forge build</code>, <code>forge test</code>, gas, coverage, snapshot</td><td><code>hardhat compile</code>, <code>hardhat test</code>, gas, coverage</td><td><code>anchor build</code>, <code>anchor test</code></td></tr>
-          <tr><td>Analyze</td><td>Slither, Aderyn</td><td>Slither</td><td>—</td></tr>
-          <tr><td>Local chain</td><td>Anvil</td><td>Hardhat node</td><td>solana-test-validator</td></tr>
-          <tr><td>Deploy</td><td>each <code>script/*.s.sol</code></td><td>each Ignition module</td><td><code>anchor deploy</code></td></tr>
-          <tr><td>Workbench</td><td>per-test runs, deploy &amp; call on Anvil</td><td>—</td><td>—</td></tr>
-          <tr><td>Interface</td><td>ABI + selectors</td><td>ABI + selectors</td><td>IDL</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="contract-extras">
-      <div class="callout">
-        <div class="glyph"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5l6 2.5v4.5c0 3.8-2.6 6.3-6 7.5-3.4-1.2-6-3.7-6-7.5V5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7.3 10l1.9 1.9 3.6-3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div>
-          <h4>Deploys you review first</h4>
-          <p>Deploy actions type the command into the terminal and stop — you check the network and account, then press Enter. Foundry deploys use an encrypted keystore account; ADE never asks for, stores or syncs a private key.</p>
-          <pre>forge script script/Deploy.s.sol --rpc-url "$RPC_URL" --account deployer --broadcast</pre>
-        </div>
-      </div>
-      <div class="card">
-        <div class="glyph"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
-        <h4>Agents that know contracts</h4>
-        <p><strong>Smart Contract Engineer</strong> works test-first with fuzz and invariant tests. <strong>Auditor</strong> reviews for reentrancy, access control, oracle and MEV risks and proves each finding with a Foundry test. <strong>Gas Optimizer</strong> measures every change. <strong>Solana/Anchor Engineer</strong> validates every account.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="section tint" id="sync">
-  <div class="wrap">
-    <div class="feature">
-      <div class="feature-copy">
-        <span class="kicker">Auto-save &amp; sync</span>
-        <h3>Close it, crash it, switch machines — nothing lost</h3>
-        <p>Tabs, splits, each terminal's folder and scrollback, open files and your unsent draft are saved to disk within a second. Point ADE at a private git repo and your settings, notes, prompt history and Claude memory follow you.</p>
-        <ul class="checks">
-          <li><strong>Snapshots</strong> every 10 minutes, restorable from Settings</li>
-          <li><strong>Syncs</strong> <code>CLAUDE.md</code> plus your commands, agents and skills</li>
-          <li><strong>Private by design</strong> — API keys and scrollback never leave the machine</li>
-        </ul>
-      </div>
-      <div class="frame"><img src="{{ img }}sync.webp" width="1440" height="900" loading="lazy" alt="Settings, Sync tab: auto-save status, git remote, device name, Claude memory and local snapshots"></div>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="shortcuts">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Keyboard-first</span>
-      <h2>Your hands stay on the keys</h2>
-      <p>On Linux and Windows, app shortcuts use <kbd class="key" data-mac="Ctrl+Shift" data-other="Ctrl+Shift">Ctrl+Shift</kbd>, so plain <kbd class="key" data-mac="Ctrl" data-other="Ctrl">Ctrl</kbd> keys stay with your shell.</p>
-    </div>
-    <div class="center">
-      <div class="platform-tabs" role="group" aria-label="Show shortcuts for">
-        <button type="button" data-platform="mac">macOS</button>
-        <button type="button" data-platform="other">Linux / Windows</button>
-      </div>
-    </div>
-    <div class="keys-grid">
-      <div>Scratchpad {% include key.html mac="⌘J" other="Ctrl+Shift+J" %}</div>
-      <div>Send to terminal {% include key.html mac="⌘↵" other="Ctrl+Enter" %}</div>
-      <div>Send Enter {% include key.html mac="⌘E" other="Ctrl+Shift+E" %}</div>
-      <div>Agent picker {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %}</div>
-      <div>Contracts {% include key.html mac="⌘⇧K" other="Ctrl+Alt+Shift+K" %}</div>
-      <div>Tokens {% include key.html mac="⌘⇧G" other="Ctrl+Alt+Shift+G" %}</div>
-      <div>Fleet view {% include key.html mac="⌘." other="Ctrl+Shift+." %}</div>
-      <div>Split pane {% include key.html mac="⌘D" other="Ctrl+Shift+D" %}</div>
-      <div>Zoom pane {% include key.html mac="⌘⇧↵" other="Ctrl+Alt+Shift+Enter" %}</div>
-      <div>Command palette {% include key.html mac="⌘P" other="Ctrl+Shift+P" %}</div>
-      <div>All shortcuts {% include key.html mac="⌘/" other="Ctrl+Shift+/" %}</div>
-    </div>
-    <p class="center" style="margin-top:32px"><a class="more-link" href="{{ '/guide/shortcuts/' | relative_url }}">All keyboard shortcuts <span aria-hidden="true">→</span></a></p>
-  </div>
-</section>
-
-<section class="section tint" id="themes">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Make it yours</span>
-      <h2>Eight themes, seven fonts, any color</h2>
-      <p>GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin, Solarized Dark, Tokyo Night and One Dark — plus per-color overrides and your choice of cursor.</p>
-    </div>
-    <div class="themes">
-      <figure><div class="frame"><img src="{{ img }}theme-dracula.webp" width="720" height="315" loading="lazy" alt="ADE in the Dracula theme"></div><figcaption>Dracula</figcaption></figure>
-      <figure><div class="frame"><img src="{{ img }}theme-nord.webp" width="720" height="315" loading="lazy" alt="ADE in the Nord theme"></div><figcaption>Nord</figcaption></figure>
-      <figure><div class="frame"><img src="{{ img }}theme-tokyo-night.webp" width="720" height="315" loading="lazy" alt="ADE in the Tokyo Night theme"></div><figcaption>Tokyo Night</figcaption></figure>
-      <figure><div class="frame"><img src="{{ img }}theme-catppuccin.webp" width="720" height="315" loading="lazy" alt="ADE in the Catppuccin theme"></div><figcaption>Catppuccin</figcaption></figure>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="install">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">Install</span>
-      <h2>Get ADE</h2>
-      <p>Free and open source. Latest release: <strong data-latest-version>on GitHub</strong>.</p>
-    </div>
-    <div class="install">
-      <div class="card">
-        <h4>macOS</h4>
-        <p>With Homebrew:</p>
-        <div class="copy"><pre>brew install --cask alvin-reyes/tap/ade</pre></div>
-        <p>Or the disk image:</p>
-        <p class="files"><a href="{{ site.repo }}/releases/latest" data-download="mac-arm">Apple Silicon (.dmg)</a> · <a href="{{ site.repo }}/releases/latest" data-download="mac-intel">Intel (.dmg)</a></p>
-      </div>
-      <div class="card">
-        <h4>Windows</h4>
-        <p>Windows 10 and 11, x64.</p>
-        <p><a class="btn btn-ghost btn-small" href="{{ site.repo }}/releases/latest" data-download="windows">Download installer (.msi)</a></p>
-        <p class="files">A <code>-setup.exe</code> is on the <a href="{{ site.repo }}/releases/latest">release page</a> too.</p>
-      </div>
-      <div class="card">
-        <h4>Linux</h4>
-        <p>Debian/Ubuntu package or a portable AppImage, x64.</p>
-        <p class="files"><a href="{{ site.repo }}/releases/latest" data-download="deb">.deb package</a> · <a href="{{ site.repo }}/releases/latest" data-download="appimage">.AppImage</a></p>
-        <p class="files">Or <a href="{{ '/guide/' | relative_url }}#build-from-source">build from source</a>.</p>
-      </div>
-    </div>
-    <p class="center install-note">Agents: install <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, Codex, Gemini CLI or Ollama. Contracts: <a href="https://getfoundry.sh">Foundry</a>, Hardhat or <a href="https://www.anchor-lang.com">Anchor</a> — see <a href="{{ '/guide/contracts/' | relative_url }}#installing-the-tools">installing the tools</a>.</p>
   </div>
 </section>
 
@@ -410,28 +114,24 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
     </div>
     <div class="faq">
       <details>
-        <summary>Is ADE free?</summary>
-        <p>Yes. It's open source under the MIT license. You bring your own agents — Claude Code, Codex and Gemini use your own accounts, and Ollama runs models locally.</p>
+        <summary>Is there a free trial?</summary>
+        <p>Yes. <a href="{{ site.repo }}/releases/latest" data-download="auto">Download ADE</a> and use every feature for free while you evaluate it. There's no time bomb and nothing is locked.</p>
       </details>
       <details>
-        <summary>Do I need Claude Code?</summary>
-        <p>No — ADE is a full terminal and works with any CLI. Claude Code gets the most out of it, because the fleet view reads Claude Code's transcripts to show sub-agents.</p>
+        <summary>How does licensing work?</summary>
+        <p>It's on the honor system. There are no license keys and no DRM. If you keep using ADE after trying it, <a href="{{ buy }}">buy a license</a> for each person who uses it.</p>
       </details>
       <details>
-        <summary>Does ADE ever see my private keys?</summary>
-        <p>No. Deploy actions only type a command for you to review, and Foundry deploys use an encrypted keystore account. ADE doesn't ask for, store or sync keys. Your Anthropic API key (used only by the orchestrator) stays on your machine and is stripped before anything syncs.</p>
+        <summary>Which agents does it support?</summary>
+        <p>Claude Code, Codex and Gemini CLI, plus local models through Ollama. ADE is a full terminal, so any CLI agent runs in it. Claude Code gets the most out of the fleet view and tokens panel, which read its usage records.</p>
       </details>
       <details>
-        <summary>Which smart contract toolchains are supported?</summary>
-        <p>Foundry and Hardhat for EVM chains, and Anchor for Solana. ADE detects the project from <code>foundry.toml</code>, <code>hardhat.config.*</code> or <code>Anchor.toml</code>, and picks up Slither and Aderyn if they're installed.</p>
-      </details>
-      <details>
-        <summary>What gets synced between my machines?</summary>
-        <p>Only what you choose, to a private git repo you own: settings, notes, prompt history, workspaces and orchestrator history, plus (optionally) your Claude memory. Each machine's terminal session stays on that machine, and scrollback is never pushed.</p>
+        <summary>Does it store my keys?</summary>
+        <p>API keys stay on your machine and are never synced. ADE never asks for, stores or handles private keys: deploy commands are typed for you to review and use Foundry's encrypted keystore.</p>
       </details>
       <details>
         <summary>Which platforms does it run on?</summary>
-        <p>macOS (Apple Silicon and Intel), Windows 10 and 11, and Linux (.deb or AppImage). It's a native Tauri app, so it's a small download with low memory use.</p>
+        <p>macOS (<a href="{{ site.repo }}/releases/latest" data-download="mac-arm">Apple Silicon</a> and <a href="{{ site.repo }}/releases/latest" data-download="mac-intel">Intel</a>), <a href="{{ site.repo }}/releases/latest" data-download="windows">Windows 10 and 11</a>, and Linux (<a href="{{ site.repo }}/releases/latest" data-download="deb">.deb</a> or <a href="{{ site.repo }}/releases/latest" data-download="appimage">AppImage</a>). On macOS you can also run <code>brew install --cask alvin-reyes/tap/ade</code>.</p>
       </details>
     </div>
   </div>
@@ -441,12 +141,11 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
   <div class="wrap">
     <div class="cta-band">
       <img src="{{ img }}logo.svg" width="60" height="60" alt="">
-      <h2>Give your agents a better home</h2>
-      <p>Open source, MIT licensed, and built in the open.</p>
+      <h2>Build your next agent in ADE</h2>
+      <p>Download the free trial today. Buy a license when it earns its place.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="{{ '/guide/' | relative_url }}">Get started</a>
-        <a class="btn btn-ghost" href="{{ site.repo }}">Star on GitHub</a>
-        <a class="btn btn-ghost" href="https://github.com/sponsors/alvin-reyes">Sponsor</a>
+        <a class="btn btn-primary" href="{{ buy }}">Buy a license</a>
+        <a class="btn btn-ghost" href="{{ site.repo }}/releases/latest" data-download="auto">Download free trial</a>
       </div>
     </div>
   </div>

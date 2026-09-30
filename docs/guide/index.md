@@ -32,19 +32,6 @@ sudo apt install ./Better.Terminal_*_amd64.deb
 chmod +x Better.Terminal_*.AppImage && ./Better.Terminal_*.AppImage
 ```
 
-### Build from source
-
-You need Node.js 18+, Rust (stable) and, on Linux, the [Tauri system libraries](https://v2.tauri.app/start/prerequisites/).
-
-```bash
-git clone {{ site.repo }}.git
-cd better-agentic-ide
-npm install
-npm run tauri build     # installers land in src-tauri/target/release/bundle
-```
-
-Use `npm run tauri dev` for a hot-reloading development build.
-
 ## Install an agent
 
 ADE works with any command-line agent. The agent picker has presets for:

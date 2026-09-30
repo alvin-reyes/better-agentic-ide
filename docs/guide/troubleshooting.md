@@ -44,4 +44,4 @@ Quit ADE and move its data folder aside (see the paths in [Auto-save & sync]({{ 
 
 ## Report a bug
 
-Open an issue on [GitHub]({{ site.repo }}/issues) with your OS, the ADE version (shown in the terminal's welcome banner) and the steps to reproduce.
+Contact support through the [website]({{ '/' | relative_url }}) with your OS, the ADE version and the steps to reproduce.

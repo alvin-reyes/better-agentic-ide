@@ -1,3 +1,4 @@
+{% include buy-url.html %}
 <footer class="site-footer">
   <div class="wrap footer-inner">
     <div class="footer-brand">
@@ -5,14 +6,15 @@
         <img src="{{ '/assets/img/logo.svg' | relative_url }}" alt="" width="28" height="28">
         <span>ADE</span>
       </a>
-      <p>Agentic Development Environment. A desktop terminal for AI coding agents and smart contracts.</p>
+      <p>Agentic Development Environment. The terminal for building AI agents.</p>
     </div>
     <div class="footer-cols">
       <div>
         <h4>Product</h4>
         <a href="{{ '/#features' | relative_url }}">Features</a>
-        <a href="{{ '/#install' | relative_url }}">Download</a>
-        <a href="{{ site.repo }}/releases">Releases</a>
+        <a href="{{ '/#pricing' | relative_url }}">Pricing</a>
+        <a href="{{ buy }}">Buy a license</a>
+        <a href="{{ site.repo }}/releases/latest">Download</a>
       </div>
       <div>
         <h4>Guide</h4>
@@ -21,12 +23,11 @@
         <a href="{{ '/guide/troubleshooting/' | relative_url }}">Troubleshooting</a>
       </div>
       <div>
-        <h4>Project</h4>
-        <a href="{{ site.repo }}">Source code</a>
-        <a href="{{ site.repo }}/issues">Report a bug</a>
-        <a href="https://github.com/sponsors/alvin-reyes">Sponsor</a>
+        <h4>Learn</h4>
+        <a href="{{ '/#training' | relative_url }}">aracademy training</a>
+        <a href="{{ '/#faq' | relative_url }}">FAQ</a>
       </div>
     </div>
   </div>
-  <div class="wrap"><div class="footer-note"><span>Open source under the MIT license.</span><span>Built with Tauri, React and xterm.js.</span></div></div>
+  <div class="wrap"><div class="footer-note"><span>© 2025–2026 Alvin Reyes. All rights reserved.</span><span>Commercial software · honor-system licensing</span></div></div>
 </footer>

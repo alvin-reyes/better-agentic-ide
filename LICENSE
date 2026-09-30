@@ -1,15 +1,38 @@
-ISC License
+Note: ADE versions released before this license change remain under the ISC license they shipped with.
 
-Copyright (c) 2025-2026 Alvin Reyes
+ADE (Agentic Development Environment) — Commercial License
 
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
+Copyright (c) 2025-2026 Alvin Reyes. All rights reserved.
 
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
-REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
-AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
-INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
-LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
-OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-PERFORMANCE OF THIS SOFTWARE.
+1. License to use. ADE is commercial software. You may download and use ADE
+   free of charge for a reasonable evaluation period. Continued use after
+   evaluation requires a paid license for each person who uses it, purchased
+   through https://alvin-reyes.github.io/better-agentic-ide/#pricing or
+   included with an authorised aracademy training. Licensing currently works
+   on the honor system; the absence of technical enforcement does not grant
+   any additional rights.
+
+2. Restrictions. Without prior written permission from Alvin Reyes, you may
+   not: (a) redistribute, sublicense, rent, lease or resell ADE or any part of
+   it; (b) modify, adapt, translate or create derivative works of ADE;
+   (c) reverse engineer, decompile or disassemble ADE, except to the extent
+   applicable law expressly permits this despite this restriction; or
+   (d) remove or alter any copyright or proprietary notices.
+
+3. Ownership. ADE is licensed, not sold. Alvin Reyes retains all right, title
+   and interest in ADE, including all intellectual property rights.
+
+4. No warranty. ADE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+
+5. Limitation of liability. TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT
+   SHALL ALVIN REYES BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+   CONSEQUENTIAL OR PUNITIVE DAMAGES, OR ANY LOSS OF DATA, PROFITS OR REVENUE,
+   ARISING OUT OF OR IN CONNECTION WITH ADE OR ITS USE. TOTAL LIABILITY FOR ANY
+   CLAIM SHALL NOT EXCEED THE AMOUNT YOU PAID FOR YOUR LICENSE.
+
+6. Termination. This license ends automatically if you breach it. On
+   termination you must stop using ADE and delete all copies.
+
+Third-party components included with ADE are licensed under their own terms.

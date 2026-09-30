@@ -1,5 +1,5 @@
-// ADE website: mobile nav, light/dark toggle, platform-aware shortcuts, copy
-// buttons, reveal-on-scroll, and the latest release version and download links.
+// ADE website: mobile nav, light/dark toggle, platform-aware shortcuts,
+// copy buttons, reveal-on-scroll, and the latest release version and download links.
 (function () {
   "use strict";
 
@@ -75,9 +75,7 @@
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce || !("IntersectionObserver" in window)) return;
     var sel = [
-      ".section-head", ".bento-card", ".feature", ".savings", ".savings-note", ".matrix-wrap",
-      ".contract-extras > *", ".keys-grid", ".platform-tabs", ".themes figure", ".install .card",
-      ".faq", ".cta-band", ".logos ul"
+      ".section-head", ".feat-card", ".new-strip", ".price-card", ".training", ".faq", ".cta-band"
     ].join(",");
     var els = Array.prototype.slice.call(document.querySelectorAll(sel));
     if (!els.length) return;
