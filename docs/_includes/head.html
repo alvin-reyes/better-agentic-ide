@@ -17,6 +17,7 @@
   // Apply a saved light/dark choice before first paint (no flash).
   try { var t = localStorage.getItem("ade-site-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
 </script>
+<link rel="icon" type="image/svg+xml" href="{{ '/assets/img/logo.svg' | relative_url }}">
 <link rel="icon" type="image/png" href="{{ '/assets/img/favicon.png' | relative_url }}">
 <link rel="apple-touch-icon" href="{{ '/assets/img/logo-192.png' | relative_url }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">

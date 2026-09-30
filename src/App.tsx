@@ -7,6 +7,7 @@ import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
 import BmadInitBanner from "./components/BmadInitBanner";
 import { writePty, sendToActiveTerminal } from "./lib/terminalCommands";
+import { hideSplash } from "./lib/splash";
 import { useContextGuard, type GuardToast } from "./hooks/useContextGuard";
 
 // Lazy-load heavy components for faster startup
@@ -81,6 +82,9 @@ export default function App() {
     if (!tab) return null;
     return findAllPanes(tab.root).find((p) => p.id === tab.activePaneId)?.ptyId ?? null;
   });
+
+  // The first render is on screen: fade out the launch splash.
+  useEffect(() => hideSplash(), []);
 
   useEffect(() => {
     applyThemeToDOM(useSettingsStore.getState().getActiveTheme());

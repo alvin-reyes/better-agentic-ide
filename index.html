@@ -4,8 +4,53 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Better Terminal</title>
+    <!-- Inline so the splash paints before any script loads. -->
+    <style>
+      html, body { margin: 0; background: #0b0c0f; }
+      #splash {
+        position: fixed; inset: 0; z-index: 99999; display: grid; place-items: center;
+        background: radial-gradient(ellipse at 50% 42%, #1a1b21 0%, #0b0c0f 62%);
+        pointer-events: none; transition: opacity .32s ease;
+      }
+      #splash.splash--out { opacity: 0; }
+      #splash .splash-inner { display: grid; justify-items: center; gap: 18px; }
+      #splash svg { width: 104px; height: 104px; filter: drop-shadow(0 18px 40px rgba(139, 92, 246, .22)); animation: splash-in .5s cubic-bezier(.2, .8, .2, 1) both; }
+      #splash .edge { stroke-dasharray: 90; stroke-dashoffset: 90; animation: splash-draw .6s .15s cubic-bezier(.6, 0, .2, 1) forwards; }
+      #splash .caret { stroke-dasharray: 24; stroke-dashoffset: 24; animation: splash-draw .3s .45s ease-out forwards; }
+      #splash .node { transform-origin: 52px 32px; transform: scale(0); animation: splash-pop .3s .7s cubic-bezier(.3, 1.6, .5, 1) forwards; }
+      #splash .cursor { opacity: 0; animation: splash-blink 1s .75s steps(1) infinite; }
+      #splash .word { font: 600 15px/1 -apple-system, "Segoe UI", Inter, system-ui, sans-serif; letter-spacing: .32em; color: #8d8b86; opacity: 0; animation: splash-fade .4s .5s ease forwards; }
+      @keyframes splash-in { from { opacity: 0; transform: scale(.86); } }
+      @keyframes splash-draw { to { stroke-dashoffset: 0; } }
+      @keyframes splash-pop { to { transform: scale(1); } }
+      @keyframes splash-blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+      @keyframes splash-fade { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        #splash *, #splash svg { animation: none !important; }
+        #splash .edge, #splash .caret { stroke-dashoffset: 0; }
+        #splash .node { transform: none; }
+        #splash .cursor, #splash .word { opacity: 1; }
+      }
+    </style>
   </head>
   <body>
+    <div id="splash" aria-hidden="true">
+      <div class="splash-inner">
+        <svg viewBox="0 0 64 64">
+          <defs>
+            <linearGradient id="splash-tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#24262d" /><stop offset="1" stop-color="#0b0c0f" /></linearGradient>
+            <linearGradient id="splash-edge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff8a3d" /><stop offset="1" stop-color="#a78bfa" /></linearGradient>
+          </defs>
+          <rect width="64" height="64" rx="15" fill="url(#splash-tile)" stroke="rgba(255,255,255,.06)" />
+          <path d="M22 13.5 L42 13.5 L52 32 L42 50.5 L22 50.5 L12 32 Z" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="3" />
+          <path class="edge" d="M22 13.5 L42 13.5 L52 32 L42 50.5 L22 50.5" fill="none" stroke="url(#splash-edge)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+          <path class="caret" d="M24 25 L32 32 L24 39" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round" />
+          <rect class="cursor" x="34" y="36" width="9" height="4.2" rx="2.1" fill="#fff" />
+          <circle class="node" cx="52" cy="32" r="4.6" fill="#fff" />
+        </svg>
+        <div class="word">ADE</div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

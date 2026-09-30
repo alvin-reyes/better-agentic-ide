@@ -4,6 +4,7 @@ import "./index.css";
 import { hydrateFromDisk, startAutoSave } from "./lib/persistence";
 import { syncBeforeLaunch, startPeriodicSync } from "./lib/sync";
 import { installLinkGuard } from "./lib/docLinks";
+import { hideSplash } from "./lib/splash";
 
 // App (and the stores it imports) is loaded only after hydrateFromDisk():
 // several stores read localStorage when their module is first evaluated, so a
@@ -47,6 +48,8 @@ async function boot() {
   // disk before the stores read localStorage, then mirror every later change
   // back to disk.
   if (detached) {
+    // A detached tab opens instantly; the splash is for launching the app.
+    hideSplash(true);
     // localStorage is shared, but each window has its own Storage prototype:
     // mirror this window's writes (notes, prompt history) too.
     startAutoSave({ snapshots: false });
