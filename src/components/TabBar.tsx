@@ -3,6 +3,8 @@ import { shortcutLabel } from "../lib/shortcuts";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isPaneActive } from "../hooks/useTerminal";
+import { usePaneCwd, baseName } from "../stores/paneMetaStore";
+import { DEFAULT_NAME, TAB_COLORS, groupRuns, projectColor, tabCwd, tabLabel, tabProject } from "../lib/tabDisplay";
 
 // App owns closing, so it can confirm first (unsaved editor, live process).
 function requestCloseTab(tabId: string) {
@@ -13,11 +15,32 @@ interface MenuItem {
   label: string;
   action: () => void;
   danger?: boolean;
+  disabled?: boolean;
+  /** A divider above this item. */
+  separated?: boolean;
 }
 
 export default function TabBar() {
-  const { tabs, activeTabId, setActiveTab, addTab, renameTab, reorderTabs } =
+  const { tabs, activeTabId, setActiveTab, addTab, renameTab, reorderTabs, setTabColor, sortTabsBy, reopenClosedTab, closedTabs } =
     useTabStore();
+  const { cwds, projects, attention, collapsedGroups, toggleGroup, clearAttention } = usePaneCwd();
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  // Looking at a tab clears its "finished while you were away" dot.
+  useEffect(() => clearAttention(activeTabId), [activeTabId, clearAttention]);
+
+  // Keep the active tab in view when the strip scrolls.
+  useEffect(() => {
+    stripRef.current?.querySelector<HTMLElement>(`[data-tab-id="${activeTabId}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeTabId, tabs.length]);
+
+  const info = tabs.map((t) => {
+    const cwd = tabCwd(t, cwds);
+    return { cwd, label: tabLabel(t, cwd), project: tabProject(t, cwds, projects) };
+  });
+  const groups = groupRuns(info.map((i) => i.project));
+  const groupStartingAt = new Map(groups.map((g) => [g.start, g]));
+  const groupOf = (idx: number) => groups.find((g) => idx >= g.start && idx <= g.end);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -89,11 +112,18 @@ export default function TabBar() {
   };
 
   const menuTab = contextMenu ? tabs.find((t) => t.id === contextMenu.tabId) : undefined;
+  const menuIdx = contextMenu ? tabs.findIndex((t) => t.id === contextMenu.tabId) : -1;
+  const closeMany = (tabIds: string[]) => window.dispatchEvent(new CustomEvent("request-close-tabs", { detail: { tabIds } }));
+  const projectKey = (t: (typeof tabs)[number]) => tabProject(t, cwds, projects) ?? `~${t.id}`;
   const menuItems: MenuItem[] = contextMenu ? [
     { label: "Rename", action: () => { if (menuTab) startRename(menuTab.id, menuTab.name); } },
-    { label: "Duplicate", action: () => { if (menuTab) addTab(menuTab.name + " (copy)"); } },
+    { label: "Duplicate", action: () => { if (menuTab) addTab(DEFAULT_NAME.test(menuTab.name) ? menuTab.name : menuTab.name + " (copy)", info[menuIdx]?.cwd ?? undefined); } },
     { label: "Move to New Window", action: () => { import("../lib/detachWindow").then(({ detachTabToWindow }) => { detachTabToWindow(contextMenu.tabId); }); } },
-    { label: "Close", action: () => { if (tabs.length > 1) requestCloseTab(contextMenu.tabId); }, danger: true },
+    { label: "Sort Tabs by Project", action: () => sortTabsBy(projectKey), separated: true },
+    { label: "Reopen Closed Tab", action: reopenClosedTab, disabled: closedTabs.length === 0 },
+    { label: "Close Others", action: () => closeMany(tabs.filter((t) => t.id !== contextMenu.tabId).map((t) => t.id)), disabled: tabs.length < 2, separated: true },
+    { label: "Close Tabs to the Right", action: () => closeMany(tabs.slice(menuIdx + 1).map((t) => t.id)), disabled: menuIdx === tabs.length - 1 },
+    { label: "Close", action: () => { if (tabs.length > 1) requestCloseTab(contextMenu.tabId); }, danger: true, disabled: tabs.length < 2 },
   ] : [];
 
   return (
@@ -110,11 +140,33 @@ export default function TabBar() {
       }}
       data-tauri-drag-region
     >
+      <div className="tabbar-strip" ref={stripRef} data-tauri-drag-region>
       {tabs.map((tab, idx) => {
         const isActive = tab.id === activeTabId;
-        return (
+        const group = groupOf(idx);
+        const chip = groupStartingAt.get(idx);
+        const collapsed = group ? collapsedGroups[group.project] : false;
+        const { cwd, label } = info[idx];
+        const chipEl = chip && (
+          <button
+            key={`group-${chip.project}-${idx}`}
+            className="tab-group-chip"
+            style={{ ["--group-color" as string]: projectColor(chip.project) }}
+            onClick={() => toggleGroup(chip.project)}
+            title={`${chip.project}: ${chip.end - chip.start + 1} tabs. Click to ${collapsedGroups[chip.project] ? "expand" : "collapse"}.`}
+            aria-expanded={!collapsedGroups[chip.project]}
+          >
+            {baseName(chip.project)}
+            {collapsedGroups[chip.project] && <span>{chip.end - chip.start + 1}</span>}
+          </button>
+        );
+        // A collapsed group still shows its active tab.
+        if (collapsed && !isActive) return chipEl || null;
+        return [chipEl, (
           <div
             key={tab.id}
+            data-tab-id={tab.id}
+            title={cwd ? `${tab.name} — ${cwd}` : tab.name}
             className="flex items-center gap-1.5 cursor-pointer text-[13px] relative group"
             draggable={editingId !== tab.id}
             onDragStart={(e) => {
@@ -146,6 +198,8 @@ export default function TabBar() {
               opacity: dragIndex === idx ? 0.5 : 1,
               borderLeft: dragOverIndex === idx && dragIndex !== null && dragIndex > idx ? "2px solid var(--accent)" : "2px solid transparent",
               borderRight: dragOverIndex === idx && dragIndex !== null && dragIndex < idx ? "2px solid var(--accent)" : "2px solid transparent",
+              boxShadow: tab.color ? `inset 0 2px 0 ${tab.color}` : undefined,
+              flexShrink: 0,
             }}
             onMouseEnter={(e) => {
               if (!isActive) e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
@@ -160,6 +214,10 @@ export default function TabBar() {
               setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
             }}
           >
+            {/* Finished while you were in another tab */}
+            {attention[tab.id] && !isActive && !activeTabs.has(tab.id) && (
+              <span className="tab-attention" title="New output finished while you were away" />
+            )}
             {/* Activity indicator */}
             {activeTabs.has(tab.id) && !isActive && (
               <div
@@ -202,7 +260,7 @@ export default function TabBar() {
                 style={{ color: "var(--text-primary)" }}
               />
             ) : (
-              <span className="truncate max-w-[120px]">{tab.name}</span>
+              <span className="truncate max-w-[140px]">{label}</span>
             )}
 
             {tab.type === "editor" && dirtyTabs.has(tab.id) && (
@@ -240,8 +298,9 @@ export default function TabBar() {
               </button>
             )}
           </div>
-        );
+        )];
       })}
+      </div>
 
       {/* New tab button */}
       <button
@@ -268,6 +327,17 @@ export default function TabBar() {
         title={`New tab (${shortcutLabel("newTab")})`}
       >
         +
+      </button>
+
+      <button
+        className="tabbar-icon-btn"
+        onClick={() => window.dispatchEvent(new CustomEvent("toggle-tab-switcher"))}
+        title={`Go to tab (${shortcutLabel("tabSwitcher")})`}
+        aria-label="Go to tab"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3.5 6l4.5 4.5L12.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
 
       <div style={{ flex: 1 }} />
@@ -334,9 +404,31 @@ export default function TabBar() {
               minWidth: "160px",
             }}
           >
+            <div className="tab-menu-colors" role="group" aria-label="Tab color">
+              <button
+                className="tab-menu-swatch"
+                data-none
+                title="No color"
+                aria-label="No color"
+                aria-pressed={!menuTab?.color}
+                onClick={() => { setTabColor(contextMenu.tabId, undefined); setContextMenu(null); }}
+              />
+              {TAB_COLORS.map((c) => (
+                <button
+                  key={c.value}
+                  className="tab-menu-swatch"
+                  title={c.name}
+                  aria-label={c.name}
+                  aria-pressed={menuTab?.color === c.value}
+                  style={{ background: c.value }}
+                  onClick={() => { setTabColor(contextMenu.tabId, c.value); setContextMenu(null); }}
+                />
+              ))}
+            </div>
             {menuItems.map((item) => (
               <button
                 key={item.label}
+                disabled={item.disabled}
                 onClick={() => { item.action(); setContextMenu(null); }}
                 style={{
                   display: "block",
@@ -348,9 +440,14 @@ export default function TabBar() {
                   color: item.danger ? "#ff7b72" : "var(--text-secondary)",
                   backgroundColor: "transparent",
                   border: "none",
-                  cursor: "pointer",
+                  borderTop: item.separated ? "1px solid var(--border)" : "none",
+                  marginTop: item.separated ? "4px" : 0,
+                  paddingTop: item.separated ? "9px" : "6px",
+                  cursor: item.disabled ? "default" : "pointer",
+                  opacity: item.disabled ? 0.4 : 1,
                 }}
                 onMouseEnter={(e) => {
+                  if (item.disabled) return;
                   e.currentTarget.style.backgroundColor = "var(--bg-elevated)";
                   if (!item.danger) e.currentTarget.style.color = "var(--text-primary)";
                 }}

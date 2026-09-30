@@ -2,6 +2,8 @@ import { useRef, useCallback, useState, useEffect } from "react";
 import { SHORTCUTS, matches } from "../lib/shortcuts";
 import { useTerminal, getPtyCwd, getSearchAddon } from "../hooks/useTerminal";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { usePaneCwd } from "../stores/paneMetaStore";
+import { invoke } from "@tauri-apps/api/core";
 import TerminalSearch from "./TerminalSearch";
 import RecordingControls from "./RecordingControls";
 import "@xterm/xterm/css/xterm.css";
@@ -62,7 +64,14 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     let mounted = true;
     const poll = async () => {
       const path = await getPtyCwd(paneId);
-      if (mounted && path) setCwd(path);
+      if (!mounted || !path) return;
+      setCwd(path);
+      // The tab bar shows each tab's folder and groups tabs by project.
+      const meta = usePaneCwd.getState();
+      meta.setCwd(paneId, path);
+      if (!meta.projects[path]) {
+        invoke<string>("project_root", { path }).then((root) => usePaneCwd.getState().setProject(path, root)).catch(() => {});
+      }
     };
     poll();
     const interval = setInterval(poll, 3000);

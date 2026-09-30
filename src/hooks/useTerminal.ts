@@ -66,6 +66,12 @@ function checkIdleTransition(paneId: string) {
 
   // Transition: was active → now idle
   if (prevActive && !active) {
+    // Output finished in a tab you aren't looking at: flag it in the tab bar.
+    const { tabs, activeTabId } = useTabStore.getState();
+    const owner = tabs.find((t) => findAllPanes(t.root).some((p) => p.id === paneId));
+    if (owner && owner.id !== activeTabId) {
+      void import("../stores/paneMetaStore").then(({ usePaneCwd }) => usePaneCwd.getState().markAttention(owner.id));
+    }
     const lastNotify = lastNotified.get(paneId) ?? 0;
     if (Date.now() - lastNotify < NOTIFY_COOLDOWN) return;
     if (idleCheckInFlight.has(paneId)) return; // Prevent concurrent imports
@@ -278,29 +284,67 @@ function getTerminalOptions() {
   };
 }
 
+// The launch banner: the hex-caret mark (a Web3 block whose right half is the
+// prompt caret, with an agent at its tip) beside "ADE", in the brand gradient.
+const ORANGE = [255, 138, 61];
+const VIOLET = [167, 139, 250];
+const rgb = (c: number[]) => `\x1b[38;2;${c[0]};${c[1]};${c[2]}m`;
+const mix = (t: number) => ORANGE.map((o, i) => Math.round(o + (VIOLET[i] - o) * t));
+
+/** Color each character of `text` along the orange→violet gradient; spaces stay plain. */
+function gradient(text: string, from = 0, to = 1): string {
+  const chars = [...text];
+  return chars.map((ch, i) => (ch === " " ? ch : rgb(mix(from + ((to - from) * i) / Math.max(1, chars.length - 1))) + ch)).join("");
+}
+
+function bannerLines(): string[] {
+  const white = "\x1b[1;38;2;255;255;255m";
+  const dim = "\x1b[38;5;239m";
+  const faint = "\x1b[38;5;237m";
+  const green = "\x1b[38;5;114m";
+  const reset = "\x1b[0m";
+  const word = [
+    " █████╗ ██████╗ ███████╗",
+    "██╔══██╗██╔══██╗██╔════╝",
+    "███████║██║  ██║█████╗  ",
+    "██╔══██║██║  ██║██╔══╝  ",
+    "██║  ██║██████╔╝███████╗",
+    "╚═╝  ╚═╝╚═════╝ ╚══════╝",
+  ].map((l) => gradient(l));
+  // Left edges faint, top/bottom and right edges in the gradient, caret and cursor white.
+  const mark = [
+    `    ${gradient("▁▁▁▁▁▁▁▁▁", 0, 0.55)}    `,
+    `   ${faint}╱${reset}         ${rgb(mix(0.6))}╲${reset}   `,
+    `  ${faint}╱${reset}  ${white}╲${reset}         ${rgb(mix(0.75))}╲${reset}  `,
+    ` ${faint}╱${reset}    ${white}╲${reset}         ${white}●${reset} `,
+    ` ${faint}╲${reset}    ${white}╱${reset} ${white}▂▂▂${reset}     ${rgb(mix(0.75))}╱${reset} `,
+    `  ${faint}╲${reset}  ${white}╱${reset}         ${rgb(mix(0.6))}╱${reset}  `,
+    `   ${faint}╲${reset}${gradient("▔▔▔▔▔▔▔▔▔", 0, 0.55)}${rgb(mix(0.6))}╱${reset}   `,
+  ];
+  const right = [
+    ...word,
+    `${dim}Agentic Development Environment${reset}`,
+    `${dim}v${__APP_VERSION__}  ${green}${shortcutLabel("palette")}${dim} cmds  ${green}${shortcutLabel("scratchpad")}${dim} scratchpad  ${green}${shortcutLabel("shortcuts")}${dim} shortcuts${reset}`,
+  ];
+  // Pad by visible width so the lettering lines up whatever the escape codes.
+  const width = (l: string) => [...l.replace(/\x1b\[[0-9;]*m/g, "")].length;
+  const markWidth = Math.max(...mark.map(width));
+  const lines = [""];
+  for (let i = 0; i < right.length; i++) {
+    const m = mark[i] ?? "";
+    lines.push(`${m}${" ".repeat(markWidth - width(m))}${reset}   ${right[i]}${reset}`);
+  }
+  lines.push("");
+  return lines;
+}
+
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null, serializedBuffer?: string): Promise<TerminalInstance> {
   const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
 
   if (serializedBuffer) {
     term.write(serializedBuffer);
   } else {
-    const skin = "\x1b[38;5;180m";
-    const hair = "\x1b[38;5;236m";
-    const shirt = "\x1b[38;5;67m";
-    const dim = "\x1b[38;5;239m";
-    const accent = "\x1b[38;5;75m";
-    const green = "\x1b[38;5;114m";
-    const reset = "\x1b[0m";
-    term.writeln("");
-    term.writeln(`${hair}        ▄▄███▄▄        ${accent} █████╗ ██████╗ ███████╗${reset}`);
-    term.writeln(`${hair}      ▄█${skin}████████${hair}█▄      ${accent}██╔══██╗██╔══██╗██╔════╝${reset}`);
-    term.writeln(`${hair}     █${skin}██████████${hair}██     ${accent}███████║██║  ██║█████╗${reset}`);
-    term.writeln(`${skin}     ██▄${hair}▀▀${skin}██${hair}▀▀${skin}▄██     ${accent}██╔══██║██║  ██║██╔══╝${reset}`);
-    term.writeln(`${skin}     ██  ▀  ▀  ██     ${accent}██║  ██║██████╔╝███████╗${reset}`);
-    term.writeln(`${skin}      ██ ╺━╸ ██      ${accent}╚═╝  ╚═╝╚═════╝ ╚══════╝${reset}`);
-    term.writeln(`${skin}       ██▄▄▄██       ${dim}Agentic Development Environment${reset}`);
-    term.writeln(`${shirt}      ▄███████▄      ${dim}v${__APP_VERSION__}  ${green}${shortcutLabel("palette")}${dim} cmds ${green}${shortcutLabel("scratchpad")}${dim} scratchpad ${green}${shortcutLabel("agentPicker")}${dim} agents${reset}`);
-    term.writeln("");
+    for (const line of bannerLines()) term.writeln(line);
   }
 
   const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };

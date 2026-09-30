@@ -27,6 +27,7 @@ const BmadPanel = lazy(() => import("./components/BmadPanel"));
 const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
 const TokensPanel = lazy(() => import("./components/TokensPanel"));
 const ShortcutsOverlay = lazy(() => import("./components/ShortcutsOverlay"));
+const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
@@ -57,6 +58,7 @@ export default function App() {
   const [contractsOpen, setContractsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const showShortcutBar = useSettingsStore((s) => s.showShortcutBar);
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   // For event handlers registered once.
@@ -178,6 +180,7 @@ export default function App() {
   const toggleFleet = useCallback(() => setFleetOpen((prev) => !prev), []);
   const toggleTokens = useCallback(() => setTokensOpen((prev) => !prev), []);
   const toggleShortcuts = useCallback(() => setShortcutsOpen((prev) => !prev), []);
+  const toggleTabSwitcher = useCallback(() => setSwitcherOpen((prev) => !prev), []);
   const toggleContracts = useCallback(() => setContractsOpen((prev) => !prev), []);
 
   // Panel toggles dispatched as window events (command palette, other panels).
@@ -190,11 +193,12 @@ export default function App() {
       ["toggle-bmad", toggleBmad],
       ["toggle-tokens", toggleTokens],
       ["toggle-shortcuts", toggleShortcuts],
+      ["toggle-tab-switcher", toggleTabSwitcher],
       ["toggle-contracts", toggleContracts],
     ];
     for (const [name, fn] of toggles) window.addEventListener(name, fn);
     return () => { for (const [name, fn] of toggles) window.removeEventListener(name, fn); };
-  }, [toggleFleet, toggleTokens, toggleShortcuts, toggleContracts]);
+  }, [toggleFleet, toggleTokens, toggleShortcuts, toggleTabSwitcher, toggleContracts]);
 
   // Contract quick actions from the command palette.
   useEffect(() => {
@@ -378,8 +382,25 @@ export default function App() {
       requestCloseTab(tabId);
     };
     window.addEventListener("request-close-tab", handler);
-    return () => window.removeEventListener("request-close-tab", handler);
-  }, [requestCloseTab]);
+    // Close others / to the right: one confirmation for all of them.
+    const closeMany = (e: Event) => {
+      const ids: string[] = (e as CustomEvent).detail?.tabIds ?? [];
+      const targets = tabs.filter((t) => ids.includes(t.id));
+      const live = targets.filter((t) => findAllPanes(t.root).some((p) => hasActiveProcess(p.id) !== null));
+      const close = () => { for (const t of targets) closeTab(t.id); setConfirmDialog(null); };
+      if (live.length === 0) close();
+      else setConfirmDialog({
+        title: "Active process running",
+        message: `${live.length} of these ${targets.length} tabs have a live session. Closing them will terminate it. Close ${targets.length} tabs?`,
+        onConfirm: close,
+      });
+    };
+    window.addEventListener("request-close-tabs", closeMany);
+    return () => {
+      window.removeEventListener("request-close-tab", handler);
+      window.removeEventListener("request-close-tabs", closeMany);
+    };
+  }, [requestCloseTab, tabs, closeTab]);
 
   useKeybindings({
     toggleScratchpad,
@@ -397,6 +418,7 @@ export default function App() {
     toggleContracts,
     toggleTokens,
     toggleShortcuts,
+    toggleTabSwitcher,
     requestCloseTab,
     requestClosePane,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
@@ -496,6 +518,7 @@ export default function App() {
         )}
         {tokensOpen && <TokensPanel cwd={activeCwd} onClose={() => setTokensOpen(false)} />}
         {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
+        {switcherOpen && <TabSwitcher onClose={() => setSwitcherOpen(false)} />}
         {recordingPlayerOpen && (
           <RecordingPlayer onClose={() => setRecordingPlayerOpen(false)} />
         )}

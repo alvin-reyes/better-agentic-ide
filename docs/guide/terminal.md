@@ -10,11 +10,21 @@ description: Tabs, split panes, search, detached windows, recordings and clickab
 |---|---|
 | New tab | {% include key.html mac="⌘T" other="Ctrl+Shift+T" %} |
 | Close tab | {% include key.html mac="⌘W" other="Ctrl+Shift+W" %} |
+| Reopen closed tab | {% include key.html mac="⌘⇧T" other="Ctrl+Alt+Shift+T" %} |
+| Go to tab (search) | {% include key.html mac="⌘K" other="Ctrl+Shift+K" %} or the ⌄ button after + |
 | Go to tab 1–9 | {% include key.html mac="⌘1 … ⌘9" other="Ctrl+Shift+1 … 9" %} |
 | Previous / next tab | {% include key.html mac="⌘⇧[ / ⌘⇧]" other="Ctrl+PageUp / Ctrl+PageDown" %} |
 | Rename tab | {% include key.html mac="⌘R" other="Ctrl+Shift+R" %} or double-click the name |
 
 Drag tabs to reorder them. A tab whose terminal is busy shows an activity pulse; closing it asks for confirmation.
+
+**Telling tabs apart:** a terminal tab you haven't renamed shows its current folder, and hovering shows the full path. Right-click a tab to give it a color. A dot appears on a tab whose output finished while you were looking at another one.
+
+**Projects:** neighbouring tabs in the same git project get a project chip in front of them. Click the chip to collapse the group into one tab, and again to expand it. *Sort Tabs by Project* (right-click menu) brings each project's tabs together.
+
+**Finding a tab:** {% include key.html mac="⌘K" other="Ctrl+Shift+K" %} opens *Go to tab*. Type part of a tab's name, folder or project, then press Enter. It also shows which tabs are working and which finished.
+
+**Closing and reopening:** the right-click menu has *Close Others* and *Close Tabs to the Right*, which ask once if anything is still running. {% include key.html mac="⌘⇧T" other="Ctrl+Alt+Shift+T" %} reopens the last closed terminal tab in the same folder, with its name and color. It reopens the folder, not the process that was running.
 
 **Move to a new window:** right-click a tab and choose *Move to New Window*. The shell and anything running in it keep going.
 

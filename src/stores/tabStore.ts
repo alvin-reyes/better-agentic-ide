@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { usePaneCwd } from "./paneMetaStore";
 
 export type SplitDirection = "horizontal" | "vertical";
 
@@ -32,13 +33,26 @@ export interface Tab {
   contractsRoot?: string;
   browserUrl?: string;
   editorFilePath?: string;
+  /** Accent chosen from the tab's context menu. */
+  color?: string;
   root: PaneNode;
   activePaneId: string;
 }
 
+/** What reopening a closed terminal tab brings back. */
+export interface ClosedTab {
+  name: string;
+  cwd: string | null;
+  color?: string;
+}
+
+const MAX_CLOSED = 20;
+
 interface TabStore {
   tabs: Tab[];
   activeTabId: string;
+  /** Most recently closed terminal tabs, newest last. */
+  closedTabs: ClosedTab[];
 
   addTab: (name?: string, initialCwd?: string) => void;
   addOrchestratorTab: (sessionId: string) => string;
@@ -49,6 +63,11 @@ interface TabStore {
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
+  setTabColor: (id: string, color: string | undefined) => void;
+  /** Reopen the most recently closed terminal tab in its folder. */
+  reopenClosedTab: () => void;
+  /** Stable-sort tabs so each project's tabs sit together. */
+  sortTabsBy: (key: (tab: Tab) => string) => void;
 
   setActivePaneInTab: (tabId: string, paneId: string) => void;
   setPtyId: (paneId: string, ptyId: number) => void;
@@ -223,6 +242,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       },
     ],
     activeTabId: initialTabId,
+    closedTabs: [],
 
     addTab: (name, initialCwd) => {
       openTab({ name: name || "Terminal" }, createDefaultPane(initialCwd));
@@ -251,6 +271,12 @@ export const useTabStore = create<TabStore>((set, get) => {
       const state = get();
       if (state.tabs.length <= 1) return;
       const tab = state.tabs.find((t) => t.id === id);
+      if (tab && (!tab.type || tab.type === "terminal")) {
+        const pane = findAllPanes(tab.root).find((p) => p.id === tab.activePaneId) ?? findAllPanes(tab.root)[0];
+        const cwd = (pane && usePaneCwd.getState().cwds[pane.id]) || pane?.savedCwd || pane?.initialCwd || null;
+        const closed = [...state.closedTabs, { name: tab.name, cwd, color: tab.color }].slice(-MAX_CLOSED);
+        set({ closedTabs: closed });
+      }
       if (tab) {
         // Imported lazily: useTerminal imports this store.
         import("../hooks/useTerminal").then(({ destroyInstance }) => {
@@ -269,6 +295,31 @@ export const useTabStore = create<TabStore>((set, get) => {
       set((s) => ({
         tabs: s.tabs.map((t) => (t.id === id ? { ...t, name } : t)),
       })),
+
+    setTabColor: (id, color) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.id === id ? { ...t, color } : t)),
+      })),
+
+    reopenClosedTab: () => {
+      const closed = get().closedTabs;
+      const last = closed[closed.length - 1];
+      if (!last) return;
+      set({ closedTabs: closed.slice(0, -1) });
+      openTab({ name: last.name, color: last.color }, createDefaultPane(last.cwd ?? undefined));
+    },
+
+    sortTabsBy: (key) =>
+      set((s) => {
+        // Groups keep the order of their first tab; tabs keep their order within a group.
+        const firstSeen = new Map<string, number>();
+        s.tabs.forEach((t, i) => { const k = key(t); if (!firstSeen.has(k)) firstSeen.set(k, i); });
+        const tabs = s.tabs
+          .map((t, i) => ({ t, i, g: firstSeen.get(key(t))! }))
+          .sort((a, b) => a.g - b.g || a.i - b.i)
+          .map((x) => x.t);
+        return { tabs };
+      }),
 
     setActivePaneInTab: (tabId, paneId) =>
       set((s) => ({
@@ -379,6 +430,7 @@ interface SavedTab {
   browserUrl?: string;
   orchestratorSessionId?: string;
   contractsRoot?: string;
+  color?: string;
 }
 
 interface SavedSession {
@@ -442,6 +494,7 @@ async function saveSession(): Promise<void> {
         browserUrl: tab.browserUrl,
         orchestratorSessionId: tab.orchestratorSessionId,
         contractsRoot: tab.contractsRoot,
+        color: tab.color,
       });
       continue;
     }
@@ -466,6 +519,7 @@ async function saveSession(): Promise<void> {
       type: tab.type,
       root: serializePaneNode(tab.root, paneData),
       activePaneId: tab.activePaneId,
+      color: tab.color,
     });
   }
 
@@ -539,6 +593,7 @@ function loadSession(): boolean {
         browserUrl: saved.browserUrl,
         orchestratorSessionId: saved.orchestratorSessionId,
         contractsRoot: saved.contractsRoot,
+        color: saved.color,
       };
     });
 

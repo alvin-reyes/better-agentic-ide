@@ -95,6 +95,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         onClose();
       }},
       { id: "bmad-toggle", label: "BMAD: Toggle panel", category: "BMAD", action: () => { window.dispatchEvent(new CustomEvent("toggle-bmad")); onClose(); } },
+      { id: "tab-switcher", label: "Tabs: Go to tab", shortcut: L("tabSwitcher"), category: "Tabs", action: () => { onClose(); window.dispatchEvent(new CustomEvent("toggle-tab-switcher")); } },
+      { id: "tab-reopen", label: "Tabs: Reopen closed tab", shortcut: L("reopenTab"), category: "Tabs", action: () => { onClose(); useTabStore.getState().reopenClosedTab(); } },
       { id: "shortcuts", label: "Help: Keyboard shortcuts", shortcut: L("shortcuts"), category: "Help", action: () => { window.dispatchEvent(new CustomEvent("toggle-shortcuts")); onClose(); } },
       { id: "tokens-panel", label: "Tokens: Usage, cost and ways to save", shortcut: L("tokens"), category: "Tokens", action: () => { window.dispatchEvent(new CustomEvent("toggle-tokens")); onClose(); } },
       { id: "contracts-workbench", label: "Contracts: Open workbench (tests, deploy & call)", category: "Contracts", action: () => { window.dispatchEvent(new CustomEvent("contracts-workbench")); onClose(); } },

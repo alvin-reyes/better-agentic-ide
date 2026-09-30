@@ -49,6 +49,8 @@ export const SHORTCUTS = {
   contracts: { key: "k", shift: true },
   tokens: { key: "g", shift: true },
   shortcuts: { key: "/" },
+  tabSwitcher: { key: "k" },
+  reopenTab: { key: "t", shift: true },
 } satisfies Record<string, Combo>;
 
 export type ShortcutId = keyof typeof SHORTCUTS;

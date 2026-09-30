@@ -14,6 +14,8 @@ On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux and Windows**, they use <
 |---|---|
 | New tab | {% include key.html mac="⌘T" other="Ctrl+Shift+T" %} |
 | Close tab | {% include key.html mac="⌘W" other="Ctrl+Shift+W" %} |
+| Reopen closed tab | {% include key.html mac="⌘⇧T" other="Ctrl+Alt+Shift+T" %} |
+| Go to tab (search) | {% include key.html mac="⌘K" other="Ctrl+Shift+K" %} |
 | Go to tab 1–9 | {% include key.html mac="⌘1 … ⌘9" other="Ctrl+Shift+1 … 9" %} |
 | Previous / next tab | {% include key.html mac="⌘⇧[ / ⌘⇧]" other="Ctrl+PageUp / Ctrl+PageDown" %} |
 | Rename tab | {% include key.html mac="⌘R" other="Ctrl+Shift+R" %} |

@@ -601,3 +601,33 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .shortcuts-groups kbd { font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
 .shortcuts-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-muted); }
 .shortcuts-footer label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-secondary); }
+
+/* Tab bar: scrolling strip, project groups, attention dots, color menu */
+.tabbar-strip { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; height: 100%; }
+.tabbar-strip::-webkit-scrollbar { display: none; }
+.tab-group-chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; margin-left: 4px; border-radius: 11px; border: 1px solid color-mix(in srgb, var(--group-color) 45%, transparent); background: color-mix(in srgb, var(--group-color) 14%, transparent); color: var(--group-color); font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.tab-group-chip:hover { background: color-mix(in srgb, var(--group-color) 24%, transparent); }
+.tab-group-chip[aria-expanded="false"] { opacity: .85; }
+.tab-attention { width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #ff8a3d); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #ff8a3d) 25%, transparent); flex-shrink: 0; }
+.tab-menu-colors { display: flex; gap: 6px; padding: 6px 12px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.tab-menu-swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(255,255,255,.15); cursor: pointer; padding: 0; }
+.tab-menu-swatch[data-none] { background: linear-gradient(135deg, transparent 45%, #ff7b72 45%, #ff7b72 55%, transparent 55%), var(--bg-tertiary); }
+.tab-menu-swatch[aria-pressed="true"] { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.tab-menu-swatch:hover { transform: scale(1.15); }
+
+/* Go to tab */
+.tab-switcher { width: min(620px, 92vw); max-height: 70vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.tab-switcher__search { padding: 12px 14px; font-size: 14px; background: transparent; color: var(--text-primary); border: none; border-bottom: 1px solid var(--border); outline: none; }
+.tab-switcher__list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+.tab-switcher__list li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; color: var(--text-secondary); min-width: 0; }
+.tab-switcher__list li[aria-selected="true"] { background: var(--bg-elevated); color: var(--text-primary); }
+.tab-switcher__list li[data-active] .tab-switcher__name { color: var(--accent, #ff8a3d); }
+.tab-switcher__color { width: 4px; height: 16px; border-radius: 2px; flex-shrink: 0; }
+.tab-switcher__num { width: 18px; text-align: right; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.tab-switcher__name { font-weight: 500; white-space: nowrap; flex-shrink: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.tab-switcher__path { flex: 1; min-width: 0; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.tab-switcher__project { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--bg-tertiary); color: var(--text-secondary); flex-shrink: 0; }
+.tab-switcher__status { font-size: 10px; padding: 1px 6px; border-radius: 8px; flex-shrink: 0; }
+.tab-switcher__status[data-state="busy"] { background: rgba(88,166,255,.15); color: #58a6ff; }
+.tab-switcher__status[data-state="done"] { background: rgba(255,138,61,.15); color: #ff8a3d; }
+.tab-switcher__empty { color: var(--text-muted); cursor: default !important; justify-content: center; }

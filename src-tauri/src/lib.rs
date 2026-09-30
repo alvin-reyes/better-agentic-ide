@@ -148,6 +148,20 @@ pub(crate) fn find_command(command: &str) -> Result<String, String> {
 /// Resolve paths printed in a terminal to existing files, so only real files
 /// become clickable. Relative paths resolve against `cwd` (the pane's folder).
 /// Returns the absolute path for each input that is a regular file.
+/// The project a folder belongs to: its nearest ancestor holding `.git`
+/// (a directory, or a file for worktrees), or the folder itself.
+fn project_root_of(path: &std::path::Path) -> std::path::PathBuf {
+    path.ancestors()
+        .find(|p| p.join(".git").exists())
+        .unwrap_or(path)
+        .to_path_buf()
+}
+
+#[tauri::command(async)]
+fn project_root(path: String) -> String {
+    project_root_of(std::path::Path::new(&path)).to_string_lossy().into_owned()
+}
+
 fn resolve_existing_files(paths: &[String], cwd: Option<&str>, home: &str) -> Vec<Option<String>> {
     paths
         .iter()
@@ -376,6 +390,7 @@ pub fn run() {
             read_file,
             read_file_base64,
             resolve_file_paths,
+            project_root,
             contracts::contracts_detect,
             contracts::contracts_tools,
             contracts::contracts_exec,
@@ -407,6 +422,17 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn project_root_is_the_nearest_git_ancestor() {
+        let d = std::env::temp_dir().join(format!("ade_projroot_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("repo").join(".git")).unwrap();
+        std::fs::create_dir_all(d.join("repo").join("src").join("deep")).unwrap();
+        std::fs::create_dir_all(d.join("loose")).unwrap();
+        assert_eq!(project_root_of(&d.join("repo").join("src").join("deep")), d.join("repo"));
+        assert_eq!(project_root_of(&d.join("loose")), d.join("loose"));
+    }
+
     #[test]
     fn temp_image_rejects_path_like_extensions() {
         for ext in ["../../evil", "png/x", "", "p.ng", "averyverylongext"] {

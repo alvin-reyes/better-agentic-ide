@@ -16,6 +16,8 @@ export const SHORTCUT_GROUPS: { group: string; items: ShortcutItem[] }[] = [
     items: [
       { keys: L("newTab"), action: "New tab", short: "New tab" },
       { keys: L("closeTab"), action: "Close tab", short: "Close tab" },
+      { keys: L("reopenTab"), action: "Reopen closed tab", short: "Reopen tab" },
+      { keys: L("tabSwitcher"), action: "Go to tab (search by name or folder)", short: "Go to tab" },
       { keys: `${MOD}1-9`, action: "Switch tab", short: "Switch tab" },
       { keys: `${modLabel(true)}[ / ]`, action: "Previous / next tab", short: "Prev/next tab" },
       { keys: L("renameTab"), action: "Rename tab", short: "Rename tab" },
