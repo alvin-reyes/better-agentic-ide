@@ -5,7 +5,7 @@
  * all use the same content.
  */
 
-import { AGENT_PROFILES } from "../data/agentProfiles";
+import { AGENT_CATALOG } from "../data/curatedAgents";
 import { agentMarkdown, rolePrompt } from "./pluginContent";
 
 export interface MethodologyFile {
@@ -270,7 +270,7 @@ export interface AgentEntry {
 }
 
 const hasRolePrompt = (id: string) => {
-  const p = AGENT_PROFILES.find((x) => x.id === id);
+  const p = AGENT_CATALOG.find((x) => x.id === id);
   if (!p) return false;
   try {
     rolePrompt(p);
@@ -281,12 +281,13 @@ const hasRolePrompt = (id: string) => {
 };
 
 /**
- * Every agent a project can have: the core roles, then the picker's profiles
- * as sub-agents (architects excluded: they're interactive, see the ADE plugin).
+ * Every agent a project can have: the core roles, then the picker's curated
+ * agents as sub-agents (architects excluded: they're interactive, see the ADE
+ * plugin).
  */
 export function agentCatalog(): AgentEntry[] {
   const core: AgentEntry[] = ROLES.map((r) => ({ id: r.name, title: r.title, description: r.description, group: "Core", file: roleFile(r) }));
-  const profiles: AgentEntry[] = AGENT_PROFILES.filter((p) => p.category !== "Architects" && hasRolePrompt(p.id)).map((p) => ({
+  const profiles: AgentEntry[] = AGENT_CATALOG.filter((p) => p.category !== "Architects" && hasRolePrompt(p.id)).map((p) => ({
     id: p.id,
     title: p.name,
     description: p.description,

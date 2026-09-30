@@ -50,6 +50,25 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     domainId: "security",
   },
 
+  {
+    id: "backend-go",
+    name: "Senior Go Engineer",
+    icon: "Go",
+    color: "#3fb950",
+    description: "Idiomatic Go services and tools: clear packages, context-aware concurrency, table-driven tests",
+    roleId: "dev",
+    domainId: "go",
+  },
+  {
+    id: "backend-rust",
+    name: "Senior Rust Engineer",
+    icon: "RS",
+    color: "#3fb950",
+    description: "Safe, fast Rust: clear ownership, typed errors, no stray unwraps, clippy-clean with tests",
+    roleId: "dev",
+    domainId: "rust",
+  },
+
   // Frontend
   {
     id: "frontend-ui",
@@ -267,6 +286,16 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     domainId: "solana",
   },
 
+  {
+    id: "web3-devops",
+    name: "Web3 DevOps Engineer",
+    icon: "OPS",
+    color: "#f0883e",
+    description: "Contract CI, local chains, RPC and node infrastructure, reviewed deploy pipelines and monitoring",
+    roleId: "devops",
+    domainId: "web3-devops",
+  },
+
   // Architects — brainstorming partners, not implementers
   {
     id: "arch-ai-agents",
@@ -367,6 +396,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     roleId: "brainstorming-architect",
     domainId: "ai-web3",
   },
+
 ];
 
 export const AGENT_CATEGORIES: AgentCategory[] = ["Backend", "Frontend", "DevOps", "Testing", "General", "Web3", "Architects"];

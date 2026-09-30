@@ -286,6 +286,30 @@ export const DOMAINS: Domain[] = [
     focus:
       "How agents get wallets (smart accounts, MPC, custodial), limiting what an agent can do with funds (session keys, spend limits, allowlists, time locks, human co-signing), intents versus direct transactions, verifying agent actions, agent-to-agent and pay-per-use payments, prompt-injection risks that lead to asset loss, monitoring and kill switches, and the legal questions to raise.",
     keywords: ["onchain agent", "agent wallet", "ai agent wallet", "autonomous agent", "intents", "agent payments", "ai and crypto", "ai x web3", "session key"],
+  },
+  {
+    id: "go",
+    title: "Go",
+    category: "Backend",
+    focus:
+      "Idiomatic, simple Go: small packages with clear boundaries, errors wrapped with context and handled where they occur, context.Context passed through every blocking call, and goroutines that always have an owner and a way to stop. Prefer the standard library. Write table-driven tests, run go vet, go test -race ./... and staticcheck when installed, and fix what they report. Explain any concurrency added and why it is safe.",
+    keywords: ["go", "golang", "goroutine", "channel", "grpc", "go service", "go module", "cosmos", "geth"],
+  },
+  {
+    id: "rust",
+    title: "Rust",
+    category: "Backend",
+    focus:
+      "Model the domain with types, keep ownership and lifetimes simple, and return typed errors with thiserror or anyhow at the edges. Never unwrap or expect outside tests without a comment explaining why it cannot fail. Avoid unsafe unless required, documenting every invariant when it is used. Write unit and integration tests, then run cargo fmt, cargo clippy -- -D warnings and cargo test, and fix what they report.",
+    keywords: ["rust", "cargo", "tokio", "async rust", "borrow checker", "lifetimes", "crate", "wasm", "substrate"],
+  },
+  {
+    id: "web3-devops",
+    title: "Web3 DevOps",
+    category: "Web3",
+    focus:
+      "Put forge build, forge test (or anchor test) and static analysis such as slither in CI, blocking merges when they fail. Script local chains (anvil, solana-test-validator) for tests, and make deployments reproducible: pinned compiler versions, verified contracts, recorded addresses per network. Real-network deploys go through a reviewed script signing with a hardware wallet, keystore account or multisig — never a private key in code, CI secrets or logs. Set up RPC redundancy, alerting on contract events, and a written rollback or pause plan.",
+    keywords: ["web3 devops", "rpc", "node", "anvil", "devnet", "testnet", "deploy pipeline", "ci", "keystore", "multisig", "monitoring", "indexer"],
   }
 ];
 

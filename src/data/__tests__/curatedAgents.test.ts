@@ -24,6 +24,7 @@ const PORTED_IDS = [
   "arch-ai-agents", "arch-rag", "arch-automation", "arch-llmops",
   "arch-ai-strategy", "arch-defi", "arch-tokenomics",
   "arch-contract-systems", "arch-web3-infra", "arch-crosschain", "arch-ai-web3",
+  "backend-go", "backend-rust", "web3-devops",
 ];
 
 describe("curated agents", () => {
@@ -34,8 +35,8 @@ describe("curated agents", () => {
     }
   });
 
-  it("has exactly 37 curated agents", () => {
-    expect(CURATED_AGENTS.length).toBe(37);
+  it("has exactly 40 curated agents", () => {
+    expect(CURATED_AGENTS.length).toBe(40);
   });
 
   it("still resolves every Web3 and Architect id the legacy profiles carried", () => {
