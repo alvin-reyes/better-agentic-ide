@@ -49,10 +49,14 @@ The fleet view reads Claude Code's own transcripts, so Claude Code gets the most
 4. Open the scratchpad with {% include key.html mac="⌘J" other="Ctrl+Shift+J" %}, write your prompt, and send it with {% include key.html mac="⌘↵" other="Ctrl+Enter" %}.
 5. When the agent writes a file, click its path in the terminal to see it.
 
+The first time you open a project, ADE sets it up for agents: BMAD, the ADE methodology and a team of Claude Code sub-agents, adding only files that are missing. See [Project setup]({{ '/guide/project-setup/' | relative_url }}).
+
 > Shortcuts on this site follow your platform. Switch between macOS and Linux/Windows with the buttons in the sidebar.
 
 ## Where to go next
 
+- [Project setup]({{ '/guide/project-setup/' | relative_url }}) — BMAD, the methodology and agents in every project
+- [Agents & fleet]({{ '/guide/agents/' | relative_url }}) — the agent picker and fleet view
 - [Smart contracts]({{ '/guide/contracts/' | relative_url }}) — Foundry, Hardhat and Anchor tooling
 - [Tokens & cost]({{ '/guide/tokens/' | relative_url }}) — what sessions cost and how to spend less
 - [Terminal]({{ '/guide/terminal/' | relative_url }}) — tabs, panes, search and clickable files

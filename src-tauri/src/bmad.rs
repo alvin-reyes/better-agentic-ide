@@ -61,7 +61,7 @@ pub fn install(res_root: &Path, project: &Path, report: &mut ScaffoldReport) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scaffold_bmad(app: tauri::AppHandle, path: String) -> Result<ScaffoldReport, String> {
     let project = Path::new(&path);
     if !project.is_dir() {
@@ -83,7 +83,7 @@ pub fn read_status(project: &Path) -> BmadStatus {
     BmadStatus { installed: true, version }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bmad_status(path: String) -> BmadStatus {
     read_status(Path::new(&path))
 }

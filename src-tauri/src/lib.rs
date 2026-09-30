@@ -47,7 +47,7 @@ const LIST_SKIP_NAMES: &[&str] = &[
     "node_modules", ".git", "target", "dist", ".DS_Store", "__pycache__", ".next", ".cache",
 ];
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
     let resolved = expand_home(&path);
     let entries = std::fs::read_dir(&resolved)
@@ -82,7 +82,7 @@ fn list_directory(path: String) -> Result<Vec<FileEntry>, String> {
     Ok(files)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn check_command_exists(command: String) -> Result<String, String> {
     find_command(&command)
 }
@@ -239,7 +239,7 @@ fn whoami() -> String {
         .unwrap_or_default()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn check_claude_plugin(plugin_name: String) -> Result<bool, String> {
     let home = env_home().ok_or("HOME not set")?;
     let content = std::fs::read_to_string(home.join(".claude/plugins/installed_plugins.json"))
@@ -247,7 +247,7 @@ fn check_claude_plugin(plugin_name: String) -> Result<bool, String> {
     Ok(content.contains(&plugin_name))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn write_text_file(path: String, content: String) -> Result<(), String> {
     let expanded = expand_home(&path);
     if let Some(parent) = std::path::Path::new(&expanded).parent() {
@@ -256,14 +256,14 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&expanded, content).map_err(|e| format!("Failed to write file: {}", e))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn create_directory(path: String) -> Result<String, String> {
     let expanded = expand_home(&path);
     std::fs::create_dir_all(&expanded).map_err(|e| format!("Failed to create dir: {}", e))?;
     Ok(expanded)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_temp_image(base64_data: String, extension: String) -> Result<String, String> {
     use std::io::Write;
 
@@ -311,7 +311,7 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     Ok(output)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_file_base64(path: String) -> Result<String, String> {
     let resolved = expand_home(&path);
     let bytes = std::fs::read(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
@@ -338,13 +338,13 @@ fn read_file_base64(path: String) -> Result<String, String> {
     Ok(result)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn read_file(path: String) -> Result<String, String> {
     let resolved = expand_home(&path);
     std::fs::read_to_string(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_md_files(dir: String) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
     fn walk(dir: &std::path::Path, files: &mut Vec<String>, depth: u32) {

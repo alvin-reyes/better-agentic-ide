@@ -37,7 +37,7 @@ pub enum PtyEvent {
     Error { message: String },
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_pty(
     app: tauri::AppHandle,
     state: tauri::State<'_, PtyManager>,
@@ -205,19 +205,63 @@ pub fn kill_pty(state: tauri::State<'_, PtyManager>, id: u32) -> Result<(), Stri
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_pty_cwd(state: tauri::State<'_, PtyManager>, id: u32) -> Result<String, String> {
-    let pid = {
+    // The foreground process group (tcgetpgrp on the pty) is what's running in
+    // the terminal: the shell, or a command that did its own cd.
+    let (shell, fg) = {
         let instances = state.instances.lock().unwrap();
-        instances.get(&id).ok_or("PTY not found")?.pid.ok_or("No PID")?
+        let inst = instances.get(&id).ok_or("PTY not found")?;
+        let shell = inst.pid.ok_or("No PID")?;
+        let fg = inst.master.process_group_leader().filter(|p| *p > 0).map(|p| p as u32);
+        (shell, fg)
     };
+    // Polled every few seconds for every pane: answer from the OS directly
+    // (no child processes), falling back to lsof where that isn't available.
+    for pid in fg.into_iter().chain(std::iter::once(shell)) {
+        if let Some(dir) = cwd_of(pid) {
+            return Ok(dir);
+        }
+    }
+    let pid = fg.or_else(|| get_foreground_pid(shell)).unwrap_or(shell);
+    cwd_with_lsof(pid)
+}
 
-    // The folder of the command running in the shell (e.g. after its own cd),
-    // else the shell's.
-    let fg_pid = get_foreground_pid(pid).unwrap_or(pid);
+#[cfg(target_os = "linux")]
+fn cwd_of(pid: u32) -> Option<String> {
+    std::fs::read_link(format!("/proc/{pid}/cwd")).ok().map(|p| p.to_string_lossy().into_owned())
+}
 
+#[cfg(target_os = "macos")]
+fn cwd_of(pid: u32) -> Option<String> {
+    // proc_pidinfo(PROC_PIDVNODEPATHINFO) fills a proc_vnodepathinfo: two
+    // vnode_info_path records (cwd, then root), each a 152-byte vnode_info
+    // followed by a MAXPATHLEN (1024) path.
+    unsafe extern "C" {
+        fn proc_pidinfo(pid: i32, flavor: i32, arg: u64, buffer: *mut std::ffi::c_void, buffersize: i32) -> i32;
+    }
+    const PROC_PIDVNODEPATHINFO: i32 = 9;
+    const VNODE_INFO: usize = 152;
+    const MAXPATHLEN: usize = 1024;
+    let mut buf = vec![0u8; 2 * (VNODE_INFO + MAXPATHLEN)];
+    let n = unsafe { proc_pidinfo(pid as i32, PROC_PIDVNODEPATHINFO, 0, buf.as_mut_ptr().cast(), buf.len() as i32) };
+    if n <= 0 || n as usize != buf.len() {
+        return None;
+    }
+    let path = &buf[VNODE_INFO..VNODE_INFO + MAXPATHLEN];
+    let end = path.iter().position(|&b| b == 0)?;
+    let dir = std::str::from_utf8(&path[..end]).ok()?;
+    (!dir.is_empty()).then(|| dir.to_string())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn cwd_of(_pid: u32) -> Option<String> {
+    None
+}
+
+fn cwd_with_lsof(pid: u32) -> Result<String, String> {
     let output = std::process::Command::new("/usr/bin/lsof")
-        .args(["-a", "-d", "cwd", "-p", &fg_pid.to_string(), "-Fn"])
+        .args(["-a", "-d", "cwd", "-p", &pid.to_string(), "-Fn"])
         .output()
         .map_err(|e| format!("lsof failed: {}", e))?;
 

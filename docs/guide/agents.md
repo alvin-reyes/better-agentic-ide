@@ -4,13 +4,16 @@ lead: Launch agents from profiles, watch every agent and sub-agent on one timeli
 description: ADE's agent picker, fleet view, orchestrator, BMAD personas and browser tab.
 ---
 
+Every project ADE opens is also set up with BMAD, the ADE methodology and Claude Code sub-agents for its roles and stack. See [Project setup]({{ '/guide/project-setup/' | relative_url }}).
+
 ## Agent picker
 
 Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an agent. When you choose one, ADE asks where to run it: **this terminal** (<kbd>C</kbd>) or a **new tab** in the same folder (<kbd>N</kbd>). If the current terminal is already running something, *New tab* is preselected.
 
-- **37 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General — API Builder, Database Engineer, Smart Contract Auditor, Debugger, Code Reviewer, Docs Writer and more. Each starts the agent with a role prompt. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
+- **40 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General — API Builder, Database Engineer, Senior Go Engineer, Senior Rust Engineer, Smart Contract Auditor, Web3 DevOps Engineer, Debugger, Code Reviewer, Docs Writer and more. Each starts the agent with a role prompt. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
 - **Describe a task** in the search box and the picker suggests the best match.
 - **Provider** — switch between Claude Code, Codex, Gemini CLI and Ollama with <kbd>Tab</kbd>.
+- **Senior Go Engineer** writes idiomatic Go with table-driven tests and runs `go vet` and `go test -race`. **Senior Rust Engineer** models the domain with types, avoids stray `unwrap`s and runs `cargo fmt`, `cargo clippy` and `cargo test`. Both are also added to Go and Rust projects as sub-agents.
 - **Continuous mode** runs the agent without permission prompts (Claude Code's `--dangerously-skip-permissions`). ADE asks you to confirm first; use it only in projects you trust.
 
 ![The agent picker]({{ '/assets/img/agents.webp' | relative_url }})
@@ -62,7 +65,7 @@ Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an O
 
 ## BMAD personas
 
-When you open a project without [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD), ADE offers to install it. The bundled, pinned copy goes into `.bmad-core/` along with Claude Code commands; nothing is downloaded and existing files are never overwritten.
+[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). The bundled, pinned copy goes into `.bmad-core/` along with Claude Code commands; nothing is downloaded and existing files are never overwritten.
 
 The BMAD panel then launches the Analyst, PM, UX Expert, Architect, Product Owner, Scrum Master, Developer or QA persona in the active terminal.
 

@@ -579,14 +579,14 @@ fn app_paths(app: &tauri::AppHandle) -> Result<(Paths, PathBuf), String> {
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sync_get_config(app: tauri::AppHandle) -> Result<Option<SyncConfig>, String> {
     let (_, cfg) = app_paths(&app)?;
     Ok(read_json(&cfg))
 }
 
 /// Save the sync settings. An empty remote turns sync off.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sync_set_config(app: tauri::AppHandle, config: SyncConfig) -> Result<(), String> {
     let (_, cfg) = app_paths(&app)?;
     if config.remote.trim().is_empty() {
@@ -631,7 +631,7 @@ pub struct ClaudeMemStatus {
 
 /// Whether claude-mem is installed. Its database is synced by claude-mem's
 /// own cloud sync, never by ADE.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn claude_mem_status(app: tauri::AppHandle) -> ClaudeMemStatus {
     let dir = std::env::var("CLAUDE_MEM_DATA_DIR")
         .map(PathBuf::from)

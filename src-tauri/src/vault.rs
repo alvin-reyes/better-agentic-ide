@@ -86,7 +86,7 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_list(app: AppHandle) -> Result<Vec<SecretMeta>, String> {
     Ok(read_index(&index_path(&app)?))
 }

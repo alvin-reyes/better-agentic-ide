@@ -109,8 +109,11 @@ The agent picker ({% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %})
 | Smart Contract Auditor | Reviews for reentrancy, access control, oracle manipulation, MEV, signature replay, upgrade risks and more; runs Slither or Aderyn; writes a Foundry proof-of-concept for each finding without changing your code |
 | Gas Optimizer | Measures with `forge snapshot` and the gas report, applies one change at a time and reports before/after gas |
 | Solana / Anchor Engineer | Anchor programs with careful account validation, PDAs and CPIs, plus TypeScript tests |
+| Web3 DevOps Engineer | Contract CI, scripted local chains, RPC redundancy and monitoring, and reviewed deploy scripts that sign with a keystore account, hardware wallet or multisig |
 
 Describing a task — "audit the vault for reentrancy", "write an ERC-20 with fuzz tests" — suggests the right one.
+
+You don't have to start them by hand. When ADE opens a Foundry or Hardhat project, [project setup]({{ '/guide/project-setup/' | relative_url }}) adds the engineer, auditor, gas optimizer and Web3 DevOps engineer to `.claude/agents/`, so Claude Code can delegate to them; Anchor projects get the Solana/Anchor engineer, auditor, Web3 DevOps engineer and senior Rust engineer. The DeFi, tokenomics, contract systems, Web3 infrastructure, cross-chain and AI x Web3 architects are in the picker's [Architects]({{ '/guide/agents/' | relative_url }}#architects) category.
 
 ## Installing the tools
 

@@ -286,6 +286,20 @@ code { font-size: .9em; }
 .feat-media.bottom img { object-position: left bottom; }
 .feat-card h3 { font-size: 21px; line-height: 1.25; letter-spacing: -0.025em; margin: 0 18px 8px; }
 .feat-card p { color: var(--text-2); margin: 0 18px; font-size: 15.5px; line-height: 1.6; }
+.pillar + .pillar { margin-top: 88px; }
+.pillar-head { display: flex; align-items: flex-start; gap: 18px; max-width: 820px; margin: 0 0 32px; }
+.pillar-num { flex: none; margin-top: 8px; font: 600 13px/1 var(--mono); letter-spacing: .08em; color: #fff; background: linear-gradient(90deg, #c2410c, #7c3aed); padding: 7px 9px; border-radius: 999px; }
+.pillar-head h2 { font-size: clamp(28px, 3.4vw, 40px); line-height: 1.1; letter-spacing: -0.035em; margin: 0 0 10px; }
+.pillar-head p { color: var(--text-2); font-size: 17px; line-height: 1.6; margin: 0; text-wrap: pretty; }
+.feat-card.wide { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 8px 26px; align-items: center; padding: 8px 8px 8px; }
+.feat-card.wide .feat-media { margin-bottom: 0; }
+.feat-card.wide .feat-text { padding: 18px 18px 18px 0; }
+.feat-card.wide .feat-text h3, .feat-card.wide .feat-text p { margin-left: 0; margin-right: 0; }
+.feat-card.wide .feat-text p + p { margin-top: 10px; }
+.feat-media.tree pre { margin: 0; padding: 22px 22px; font: 13px/1.7 var(--mono); color: #d7d8de; white-space: pre; overflow-x: auto; }
+.feat-media.tree .c { color: #7b7d88; }
+.feat-media.tree .h { color: #ffb27a; }
+.feat-card .more { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 15px; }
 .new-strip {
   display: flex; align-items: flex-start; gap: 14px; margin-top: 16px; padding: 18px 22px; border-radius: 16px;
   border: 1px solid transparent;
@@ -540,6 +554,11 @@ pre {
   .section-head p { font-size: 17px; }
   .cta-band { padding: 64px 22px; border-radius: 22px; }
   .feat-grid { grid-template-columns: minmax(0, 1fr); }
+  .feat-card.wide { grid-template-columns: minmax(0, 1fr); padding-bottom: 8px; }
+  .feat-card.wide .feat-text { padding: 14px 18px 18px; }
+  .feat-media.tree pre { font-size: 11.5px; padding: 16px; }
+  .pillar + .pillar { margin-top: 64px; }
+  .pillar-head { gap: 12px; }
   .feat-media img { height: 190px; }
   .training { padding: 26px 22px; }
   .new-strip { flex-direction: column; gap: 10px; padding: 16px 18px; }

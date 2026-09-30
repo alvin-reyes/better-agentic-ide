@@ -9,7 +9,7 @@ description: ADE is the desktop terminal for building products with AI. Run Clau
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="#new"><b>NEW</b><span>Anti-slop, MCP library &amp; Secrets vault →</span></a>
+      <a class="pill" href="#new"><b>NEW</b><span>Project setup: BMAD, methodology and agents →</span></a>
       <h1>Ship faster with <span class="grad-text">ten agents at&nbsp;once.</span></h1>
       <p class="sub">ADE is the terminal for building products with AI. Run Claude Code, Codex and Gemini in parallel tabs, follow every agent and what it costs in one fleet view, and draft every prompt properly.</p>
       <div class="hero-cta">
@@ -36,35 +36,99 @@ description: ADE is the desktop terminal for building products with AI. Run Clau
   <div class="wrap">
     <div class="section-head">
       <span class="kicker">Features</span>
-      <h2>Everything around the agent, in one window.</h2>
+      <h2>AI agents and blockchain tooling, in one window.</h2>
+      <p>ADE is built around two pillars: running AI coding agents well, and the tooling smart-contract engineers need every day.</p>
     </div>
 
-    <div class="feat-grid">
-      <article class="feat-card">
-        <div class="feat-media"><img src="{{ img }}agents.webp" width="1440" height="900" loading="lazy" alt="The agent picker listing API Builder, Database Engineer, Auth Architect and other agent profiles"></div>
-        <h3>Ten agents at once, one fleet view</h3>
-        <p>Run Claude Code, Codex and Gemini in parallel tabs and split panes, start any of 37 agent profiles in a new tab, and follow every agent and sub-agent on one live timeline with its real cost.</p>
-      </article>
-      <article class="feat-card">
-        <div class="feat-media bottom"><img src="{{ img }}scratchpad.webp" width="1440" height="430" loading="lazy" alt="The scratchpad under the terminals with a drafted prompt and Send to Terminal"></div>
-        <h3>A scratchpad for prompts</h3>
-        <p>Draft long prompts under every terminal, send with one key, chain steps, and reuse from history. Drafts survive crashes.</p>
-      </article>
-      <article class="feat-card">
-        <div class="feat-media"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, sessions with context meters and usage by model"></div>
-        <h3>Know the cost, spend less</h3>
-        <p>Spend at API prices, cache savings and a context meter per session — plus one-click token savers like compact paste and context guard.</p>
-      </article>
-      <article class="feat-card">
-        <div class="feat-media"><img src="{{ img }}bench-deploy.webp" width="1440" height="615" loading="lazy" alt="Workbench deploy and call view: a Vault on Anvil with decoded events and reverts"></div>
-        <h3>Smart-contract workbench</h3>
-        <p>Build, test, analyze and call Foundry, Hardhat and Anchor projects from one panel. Deploys are typed for you to review — never a raw private key.</p>
-      </article>
+    <div class="pillar" id="ai-agents">
+      <div class="pillar-head">
+        <span class="pillar-num">01</span>
+        <div>
+          <h2>AI Agents</h2>
+          <p>Run Claude Code, Codex, Gemini or any CLI agent side by side. Every project you open is set up for them, and you see what each one costs.</p>
+        </div>
+      </div>
+
+      <div class="feat-grid">
+        <article class="feat-card wide">
+          <div class="feat-media tree" aria-hidden="true"><pre><span class="c"># added once, only files that are missing</span>
+CLAUDE.md            <span class="c"># loads .ade/rules.md</span>
+llms.txt
+.ade/rules.md        <span class="c"># Plan → Approve → Shard → Build → Verify</span>
+.ade/context/        <span class="c"># shared contracts + decisions (ADRs)</span>
+.ade/session.md      <span class="c"># session journal</span>
+.bmad-core/          <span class="c"># BMAD and the /BMad commands</span>
+.claude/agents/
+  product-manager.md  architect.md  designer.md
+  scrum-master.md  developer.md  qa.md
+  devops.md  adversarial-reviewer.md
+  <span class="h">+ agents for your stack</span></pre></div>
+          <div class="feat-text">
+            <h3>Every project, set up for agents</h3>
+            <p>Open or create a project and ADE sets it up once: BMAD, the ADE methodology ("verified, not vibed": a story is Done only when the agreed verification command passes), and eight core roles as Claude Code sub-agents, from product manager to adversarial reviewer.</p>
+            <p>It adds agents for your stack too: Solidity or Solana engineers and auditors for Web3 projects, a senior Go or Rust engineer for Go and Rust. Only missing files are written, and one click undoes it.</p>
+            <a class="more" href="{{ '/guide/project-setup/' | relative_url }}">How project setup works <span aria-hidden="true">→</span></a>
+          </div>
+        </article>
+        <article class="feat-card">
+          <div class="feat-media"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with swimlanes for each agent and sub-agent"></div>
+          <h3>Ten agents at once, one fleet view</h3>
+          <p>Run agents in parallel tabs and split panes and follow every agent and sub-agent on one live timeline, with its real cost from Claude Code's usage records.</p>
+        </article>
+        <article class="feat-card">
+          <div class="feat-media"><img src="{{ img }}agents.webp" width="1440" height="900" loading="lazy" alt="The agent picker listing API Builder, Database Engineer, Auth Architect and other agent profiles"></div>
+          <h3>40 agent profiles</h3>
+          <p>Backend (including senior Go and Rust engineers), Frontend, DevOps, Testing, Web3, Architects and General. Pick one and run it in this terminal or a new tab.</p>
+        </article>
+        <article class="feat-card">
+          <div class="feat-media bottom"><img src="{{ img }}scratchpad.webp" width="1440" height="430" loading="lazy" alt="The scratchpad under the terminals with a drafted prompt and Send to Terminal"></div>
+          <h3>A scratchpad for prompts</h3>
+          <p>Draft long prompts under every terminal with prompt tips and de-slop, send with one key, chain steps and reuse from history. Drafts survive crashes.</p>
+        </article>
+        <article class="feat-card">
+          <div class="feat-media"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, sessions with context meters and usage by model"></div>
+          <h3>Know the cost, spend less</h3>
+          <p>Spend at API prices, cache savings and a context meter per session, plus one-click token savers like compact paste and context guard.</p>
+        </article>
+      </div>
+    </div>
+
+    <div class="pillar" id="blockchain">
+      <div class="pillar-head">
+        <span class="pillar-num">02</span>
+        <div>
+          <h2>Blockchain Engineering Tooling</h2>
+          <p>Build, test, analyze and deploy Foundry, Hardhat and Anchor projects from one panel, with agents that know contract security. ADE never handles, stores or syncs private keys.</p>
+        </div>
+      </div>
+
+      <div class="feat-grid">
+        <article class="feat-card">
+          <div class="feat-media"><img src="{{ img }}contracts-panel.webp" width="1440" height="900" loading="lazy" alt="The Contracts panel for a Foundry project with build, test, analyze and local chain actions"></div>
+          <h3>One key for the whole toolchain</h3>
+          <p>Build, test, gas report, coverage, Slither and Aderyn analysis, and a local chain in its own tab, for Foundry, Hardhat and Anchor projects.</p>
+        </article>
+        <article class="feat-card">
+          <div class="feat-media"><img src="{{ img }}bench-tests.webp" width="1440" height="615" loading="lazy" alt="Workbench tests view listing each test with gas, fuzz runs and Run and Traces buttons"></div>
+          <h3>A workbench for tests</h3>
+          <p>Run Foundry tests one at a time and see each one's gas, fuzz runs, counterexamples and logs. Deploy and call contracts on Anvil without typing commands.</p>
+        </article>
+        <article class="feat-card">
+          <div class="feat-media"><img src="{{ img }}bench-deploy.webp" width="1440" height="615" loading="lazy" alt="Workbench deploy and call view: a Vault on Anvil with decoded events and reverts"></div>
+          <h3>Reviewed deploys, readable ABIs</h3>
+          <p>Real-network deploy commands are typed into the terminal for you to review, never run for you. The ABI viewer shows functions, events and errors with their selectors.</p>
+        </article>
+        <article class="feat-card">
+          <div class="feat-media"><img src="{{ img }}architects.webp" width="680" height="620" loading="lazy" alt="The Architects category in the agent picker"></div>
+          <h3>Web3 agents and architects</h3>
+          <p>A Solidity engineer that tests first, an auditor that writes proof-of-concept tests, a gas optimizer, a Solana/Anchor engineer and a Web3 DevOps engineer, plus DeFi, tokenomics and cross-chain architects to think with.</p>
+        </article>
+      </div>
     </div>
 
     <div class="new-strip" id="new">
       <span class="badge">New</span>
-      <p><strong>MCP library</strong> — curated MCP servers for Claude Code, added in one click. <strong>Secrets vault</strong> — API keys kept in your OS keychain and injected into terminals and MCP servers, never synced. <strong>Anti-slop</strong> — a Claude Code plugin that stops agents shipping stubs, debug leftovers and AI-sounding prose, plus a slop check on your changes.</p>
+      <p><strong>Project setup</strong> — BMAD, the ADE methodology and the right agents in every project you open. <strong>Anti-slop</strong> — a Claude Code plugin that stops agents shipping stubs, debug leftovers and AI-sounding prose, plus a slop check on your changes. <strong>MCP library &amp; Secrets vault</strong> — curated MCP servers for Claude Code in one click, with API keys kept in your OS keychain and never synced.</p>
     </div>
   </div>
 </section>
