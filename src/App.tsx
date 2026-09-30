@@ -61,7 +61,7 @@ export default function App() {
   const [contractsOpen, setContractsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
   const [newTabOpen, setNewTabOpen] = useState(false);
-  const [integrations, setIntegrations] = useState<"mcp" | "secrets" | null>(null);
+  const [integrations, setIntegrations] = useState<"mcp" | "secrets" | "antislop" | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const showShortcutBar = useSettingsStore((s) => s.showShortcutBar);
@@ -201,6 +201,7 @@ export default function App() {
       ["toggle-tokens", toggleTokens],
       ["toggle-integrations", toggleIntegrations],
       ["open-secrets", () => setIntegrations("secrets")],
+      ["open-antislop", () => setIntegrations("antislop")],
       ["request-new-tab", () => setNewTabOpen(true)],
       ["toggle-shortcuts", toggleShortcuts],
       ["toggle-tab-switcher", toggleTabSwitcher],

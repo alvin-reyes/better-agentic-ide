@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue, forwardRef, useImperativeHandle } from "react";
 import { IS_MAC, SHORTCUTS, keyName, matches, shortcutLabel } from "../lib/shortcuts";
 import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
@@ -7,6 +7,8 @@ import { isPaneActive } from "../hooks/useTerminal";
 import { writePty } from "../lib/terminalCommands";
 import { compactText, estimateTokens, type CompactResult } from "../lib/compactText";
 import { fmtInt } from "../lib/tokenUsage";
+import { lintPrompt } from "../lib/promptLint";
+import { deslop } from "../lib/deslop";
 
 // In the scratchpad plain Ctrl+Enter / Ctrl+S work on every platform.
 const SEND_KEY = IS_MAC ? "⌘↵" : "Ctrl+Enter";
@@ -268,6 +270,14 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(false);
   const tokens = useMemo(() => estimateTokens(text), [text]);
+  // Prompt tips and the local de-slop, on the text as it settles.
+  const settled = useDeferredValue(text);
+  const hints = useMemo(() => lintPrompt(settled), [settled]);
+  const [hintsHidden, setHintsHidden] = useState(false);
+  useEffect(() => { if (!text) setHintsHidden(false); }, [text]);
+  const cleaned = useMemo(() => deslop(settled), [settled]);
+  // Undo lasts while the text is still what de-slop produced.
+  const [undo, setUndo] = useState<{ before: string; after: string } | null>(null);
   // A long or noisy paste that compacting would shrink: offered, never applied silently.
   const [pasteOffer, setPasteOffer] = useState<{ original: string; at: number; result: CompactResult } | null>(null);
   // Drop the offer once the pasted text is gone (sent, cleared or edited away).
@@ -964,6 +974,13 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
 
       {/* Body */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "8px 12px", gap: "8px", minHeight: 0 }}>
+        {hints.length > 0 && !hintsHidden && !pasteOffer && (
+          <div className="prompt-hints" role="note" aria-label="Prompt tips">
+            <span className="prompt-hints__label">Tip</span>
+            <span>{hints.slice(0, 2).map((h) => h.message).join(" ")}</span>
+            <button onClick={() => setHintsHidden(true)} aria-label="Hide prompt tips" title="Hide tips for this draft">✕</button>
+          </div>
+        )}
         {pasteOffer && (
           <div className="compact-offer" role="status">
             <span>
@@ -1323,6 +1340,19 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
               <span style={{ color: "#ef4444", marginRight: "8px" }}>
                 ● REC
               </span>
+            )}
+            {undo && undo.after === text ? (
+              <button className="deslop-btn" onClick={() => { setText(undo.before); setUndo(null); }} title="Put the text back as it was">
+                Undo de-slop
+              </button>
+            ) : cleaned.changes > 0 && settled === text && (
+              <button
+                className="deslop-btn"
+                onClick={() => { setUndo({ before: text, after: cleaned.text }); setText(cleaned.text); }}
+                title="Swap AI-sounding words for plain ones and drop filler phrases. For a full rewrite, ask the agent: /ade:deslop"
+              >
+                De-slop ({cleaned.changes})
+              </button>
             )}
             {text.length > 0 && (
               <span className="token-count" data-level={tokens >= 20_000 ? "high" : tokens >= 4_000 ? "medium" : "ok"} title="Rough estimate: about 4 characters per token">

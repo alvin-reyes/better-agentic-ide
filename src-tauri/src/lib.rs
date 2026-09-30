@@ -1,3 +1,4 @@
+mod antislop;
 mod bmad;
 mod contracts;
 mod mcp;
@@ -424,6 +425,8 @@ pub fn run() {
             mcp::mcp_list,
             mcp::mcp_install,
             mcp::mcp_remove,
+            antislop::slop_diff,
+            antislop::ade_plugin_marketplace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

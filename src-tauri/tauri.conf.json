@@ -37,6 +37,9 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "resources": ["resources/bmad/**/*"]
+    "resources": {
+      "resources/bmad/": "resources/bmad/",
+      "../claude-plugin/": "claude-plugin/"
+    }
   }
 }

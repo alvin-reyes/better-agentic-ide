@@ -691,3 +691,20 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .agent-where__opt:disabled { opacity: .4; cursor: not-allowed; }
 .agent-where__opt kbd { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--text-muted); }
 .agent-where__back { margin-left: auto; background: none; border: 0; font-size: 11px; color: var(--text-muted); cursor: pointer; }
+
+/* Anti-slop */
+.antislop-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.antislop-list code { font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.slop-findings { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.slop-findings ul { list-style: none; margin: 4px 0 0; padding: 0; }
+.slop-findings ul li { display: flex; gap: 10px; align-items: baseline; font-size: 12px; padding: 3px 0; min-width: 0; }
+.slop-file { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--text-primary); }
+.slop-line { width: 36px; flex-shrink: 0; text-align: right; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.slop-msg { flex-shrink: 0; color: #e3b341; }
+.slop-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--text-muted); }
+.prompt-hints { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-secondary); padding: 5px 10px; border-radius: 6px; background: rgba(167,139,250,.08); border: 1px solid rgba(167,139,250,.22); }
+.prompt-hints__label { font-weight: 600; color: #a78bfa; text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
+.prompt-hints span:nth-child(2) { flex: 1; min-width: 0; }
+.prompt-hints button { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 11px; }
+.deslop-btn { margin-right: 10px; font-size: 11px; padding: 2px 8px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-secondary); cursor: pointer; }
+.deslop-btn:hover { color: var(--text-primary); border-color: #a78bfa; }

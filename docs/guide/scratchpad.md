@@ -51,3 +51,7 @@ History and notes are part of what [sync]({{ '/guide/sync/' | relative_url }}) s
 ## Token count and compact paste
 
 The footer shows roughly how many tokens your prompt is. Paste a long or noisy log and ADE offers to compact it before you send it. See [Tokens & cost]({{ '/guide/tokens/' | relative_url }}#in-the-scratchpad).
+
+## Prompt tips and de-slop
+
+A vague draft gets a tip, such as naming the file to change or saying how to tell it's done. **De-slop** swaps AI-sounding words in your draft for plain ones. See [Anti-slop]({{ '/guide/anti-slop/' | relative_url }}#in-the-scratchpad).

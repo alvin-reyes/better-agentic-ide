@@ -100,6 +100,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "tab-reopen", label: "Tabs: Reopen closed tab", shortcut: L("reopenTab"), category: "Tabs", action: () => { onClose(); useTabStore.getState().reopenClosedTab(); } },
       { id: "shortcuts", label: "Help: Keyboard shortcuts", shortcut: L("shortcuts"), category: "Help", action: () => { window.dispatchEvent(new CustomEvent("toggle-shortcuts")); onClose(); } },
       { id: "mcp-library", label: "MCP: Library of servers for Claude Code", shortcut: L("integrations"), category: "Integrations", action: () => { window.dispatchEvent(new CustomEvent("toggle-integrations")); onClose(); } },
+      { id: "anti-slop", label: "Anti-slop: Check changes and the ADE plugin", category: "Integrations", action: () => { window.dispatchEvent(new CustomEvent("open-antislop")); onClose(); } },
       { id: "secrets-vault", label: "Secrets: Vault (system keychain)", category: "Integrations", action: () => { window.dispatchEvent(new CustomEvent("open-secrets")); onClose(); } },
       { id: "tokens-panel", label: "Tokens: Usage, cost and ways to save", shortcut: L("tokens"), category: "Tokens", action: () => { window.dispatchEvent(new CustomEvent("toggle-tokens")); onClose(); } },
       { id: "contracts-workbench", label: "Contracts: Open workbench (tests, deploy & call)", category: "Contracts", action: () => { window.dispatchEvent(new CustomEvent("contracts-workbench")); onClose(); } },

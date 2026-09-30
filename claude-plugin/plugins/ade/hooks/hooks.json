@@ -1,0 +1,16 @@
+{
+  "description": "Before Claude finishes, check the lines it added for slop and send findings back once.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/slop-check.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

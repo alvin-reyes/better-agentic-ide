@@ -1,0 +1,14 @@
+# Slop patterns, shared by the plugin's Stop hook (scripts/slop-check.sh, awk) and ADE's
+# "Check changes" (src/lib/slopCheck.ts). One rule per line, tab-separated:
+#   id <TAB> scope <TAB> pattern <TAB> message
+# scope: code (not docs), docs (.md .mdx .txt .rst), all.
+# pattern: POSIX ERE, matched against the lowercased added line. Write it in
+# lowercase, use [[:space:]] for whitespace, and no \b (macOS awk has none).
+todo	code	(^|[^a-z])(todo|fixme|xxx)([^a-z]|$)	Unfinished-work marker (TODO/FIXME)
+stub	code	(implement (this|me|here)|your (code|logic) here|placeholder (implementation|logic)|not implemented yet|\.\.\. ?rest of (the )?(code|file|implementation))	Stub or placeholder instead of real code
+debug	code	(console\.(log|debug)\(|^[[:space:]]*debugger;)	Debug output left in
+commented-js	code	^[[:space:]]*//[[:space:]]*(const|let|var|import|export|return|await) .*[;{(=]$	Commented-out code
+commented-py	code	^[[:space:]]*#[[:space:]]*(import [a-z_.]+|from [a-z_.]+ import .+)$	Commented-out code
+narration	code	^[[:space:]]*(//|#|\*)[[:space:]]*(this|the following) (function|method|code|line|block|class|component|hook) (is used to|will|handles|is responsible for)	Comment narrates what the code plainly does
+ai-words	docs	(^|[^a-z])(delve|delves|delving|seamless|seamlessly|leverage|leverages|leveraging|utilize|utilizes|utilizing|robust|game[- ]changer|cutting[- ]edge|supercharge|embark|tapestry|testament to|in today's|it's worth noting|it is worth noting|elevate your|unlock the power)([^a-z]|$)	AI-sounding wording
+emoji-heading	docs	^#+ .*(🚀|✨|🔥|💡|🎯|⚡|🌟|✅)	Emoji in a heading

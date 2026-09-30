@@ -1,0 +1,13 @@
+{
+  "name": "ade",
+  "owner": { "name": "Alvin Reyes" },
+  "description": "Claude Code plugins from ADE, the terminal for building AI agents.",
+  "plugins": [
+    {
+      "name": "ade",
+      "source": "./plugins/ade",
+      "category": "development",
+      "tags": ["anti-slop", "code-quality", "web3", "architecture"]
+    }
+  ]
+}

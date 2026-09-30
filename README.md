@@ -23,6 +23,7 @@ ADE is a desktop app for macOS, Windows and Linux built for agent-driven develop
 - **Smart-contract workbench** — build, test, analyze, deploy and call Foundry, Hardhat and Anchor projects. ADE never handles private keys.
 - **Clickable files and live preview** — Markdown with Mermaid, PDF, Word, images and HTML open beside the terminal.
 - **Auto-save and sync** — sessions restore after a crash; settings, notes and Claude memory sync through your own private git repo.
+- **Anti-slop** — the ADE plugin for Claude Code (anti-slop rules, a slop check before Claude finishes, `/ade:deslop`, Web3 and architect agents), a slop check on your uncommitted changes, and prompt tips and de-slop in the scratchpad.
 - **New:** an **MCP library** of curated one-click MCP servers for Claude Code, and a **Secrets vault** that keeps API keys in your OS keychain and injects them into terminals and MCP servers, never synced.
 
 ## Install

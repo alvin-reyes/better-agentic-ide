@@ -1,0 +1,8 @@
+{
+  "name": "ade",
+  "displayName": "ADE",
+  "version": "1.0.0",
+  "description": "Anti-slop rules and a slop check for agent changes, a writing de-slopper, and ADE's Web3 and architect sub-agents.",
+  "author": { "name": "Alvin Reyes" },
+  "keywords": ["anti-slop", "code-quality", "web3", "smart-contracts", "architecture"]
+}
