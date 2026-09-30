@@ -1,11 +1,11 @@
 <footer class="site-footer">
   <div class="wrap footer-inner">
     <div class="footer-brand">
-      <img src="{{ '/assets/img/logo-192.webp' | relative_url }}" alt="" width="36" height="36">
-      <div>
-        <strong>ADE</strong>
-        <span>Agentic Development Environment</span>
-      </div>
+      <a class="brand" href="{{ '/' | relative_url }}" aria-label="ADE home">
+        <img src="{{ '/assets/img/logo.svg' | relative_url }}" alt="" width="28" height="28">
+        <span>ADE</span>
+      </a>
+      <p>Agentic Development Environment. A desktop terminal for AI coding agents and smart contracts.</p>
     </div>
     <div class="footer-cols">
       <div>
@@ -28,5 +28,5 @@
       </div>
     </div>
   </div>
-  <div class="wrap footer-note">Open source under the MIT license. Built with Tauri, React and xterm.js.</div>
+  <div class="wrap"><div class="footer-note"><span>Open source under the MIT license.</span><span>Built with Tauri, React and xterm.js.</span></div></div>
 </footer>

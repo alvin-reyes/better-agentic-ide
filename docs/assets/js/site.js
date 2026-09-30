@@ -1,5 +1,5 @@
-// ADE website: mobile nav, platform-aware shortcuts, copy buttons, and the
-// latest release version and download links.
+// ADE website: mobile nav, light/dark toggle, platform-aware shortcuts, copy
+// buttons, reveal-on-scroll, and the latest release version and download links.
 (function () {
   "use strict";
 
@@ -66,6 +66,39 @@
     });
     box.appendChild(btn);
   });
+
+  // --- Reveal on scroll --------------------------------------------------------
+  // Content is fully visible without JS. Only when IntersectionObserver exists
+  // and the visitor hasn't asked for reduced motion do below-the-fold blocks
+  // start hidden and fade/slide up as they enter the viewport.
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || !("IntersectionObserver" in window)) return;
+    var sel = [
+      ".section-head", ".bento-card", ".feature", ".savings", ".savings-note", ".matrix-wrap",
+      ".contract-extras > *", ".keys-grid", ".platform-tabs", ".themes figure", ".install .card",
+      ".faq", ".cta-band", ".logos ul"
+    ].join(",");
+    var els = Array.prototype.slice.call(document.querySelectorAll(sel));
+    if (!els.length) return;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); }
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    els.forEach(function (el) {
+      // Anything already on screen stays put, so nothing flashes on load.
+      if (el.getBoundingClientRect().top < vh) return;
+      // Stagger siblings in a grid slightly.
+      var i = 0, n = el;
+      while ((n = n.previousElementSibling) && i < 6) if (n.matches(sel)) i++;
+      if (i) el.style.setProperty("--reveal-delay", (i * 0.06).toFixed(2) + "s");
+      el.classList.add("reveal");
+      io.observe(el);
+    });
+    document.documentElement.classList.add("reveal-on");
+  })();
 
   // --- Latest release: version label and direct download links ---------------
   var versionEls = document.querySelectorAll("[data-latest-version]");

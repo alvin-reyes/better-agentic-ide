@@ -7,21 +7,26 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
 <section class="hero">
   <div class="wrap">
     <div class="hero-copy">
-      <a class="pill" href="{{ '/guide/contracts/' | relative_url }}"><b>NEW</b> Smart contract tooling for Foundry, Hardhat and Anchor →</a>
-      <h1>Build with AI agents.<br>Ship <em>contracts</em> with confidence.</h1>
+      <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
+      <a class="pill" href="{{ '/guide/contracts/' | relative_url }}"><b>NEW</b><span>Smart contract tooling for Foundry, Hardhat and Anchor →</span></a>
+      <h1>Build with AI agents.<br><span class="grad-text">Ship contracts with confidence.</span></h1>
       <p class="sub">ADE is a desktop terminal made for agent-driven development. Run Claude Code, Codex and Gemini side by side, see every file they write, and take Solidity and Solana projects from first test to reviewed deploy — all from the keyboard.</p>
       <div class="hero-cta">
         <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">
           <svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0l-4-4m4 4l4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Download <span data-latest-version></span>
         </a>
-        <a class="btn btn-ghost" href="{{ '/guide/' | relative_url }}">Read the guide</a>
+        <a class="btn btn-ghost" href="{{ '/guide/' | relative_url }}">Read the guide <span class="arrow" aria-hidden="true">→</span></a>
       </div>
-      <p class="hero-meta">macOS · Windows · Linux &nbsp;—&nbsp; <code>brew install --cask alvin-reyes/tap/ade</code></p>
+      <p class="hero-meta"><span>macOS · Windows · Linux</span> <code>brew install --cask alvin-reyes/tap/ade</code></p>
     </div>
-    <figure class="shot">
-      <div class="shot-bar"><i></i><i></i><i></i><span>ADE — acme-api</span></div>
-      <img src="{{ img }}hero.webp" width="1440" height="900" alt="ADE with two terminal panes running git log and the test suite, a rendered markdown plan in the preview panel, and a prompt drafted in the scratchpad">
+    <figure class="hero-visual">
+      <div class="window">
+        <div class="window-inner">
+          <div class="shot-bar"><i></i><i></i><i></i><span>ADE — acme-api</span></div>
+          <img src="{{ img }}hero.webp" width="1440" height="900" fetchpriority="high" alt="ADE with two terminal panes running git log and the test suite, a rendered markdown plan in the preview panel, and a prompt drafted in the scratchpad">
+        </div>
+      </div>
     </figure>
   </div>
 </section>
@@ -37,16 +42,17 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="features">
   <div class="wrap">
     <div class="section-head">
       <span class="kicker">One app, two jobs</span>
       <h2>Everything around the agent. Everything around the contract.</h2>
       <p>A real terminal first — with the tools you'd otherwise keep switching windows for.</p>
     </div>
-    <div class="tracks">
-      <a class="track" href="#agents" style="color:inherit;text-decoration:none">
-        <span class="kicker">For agent work</span>
+
+    <div class="bento">
+      <a class="bento-card span-3 feat" href="#agents">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5"/><path d="M6 8l2.5 2L6 12M10.5 12.5h3.5"/></svg></span>
         <h3>Direct, watch and review your agents</h3>
         <p>Draft prompts properly, run several agents at once, open any file they write with a click, and follow every sub-agent on a live timeline.</p>
         <ul class="checks">
@@ -54,9 +60,10 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
           <li><strong>Clickable files</strong> and a live preview</li>
           <li><strong>Fleet view</strong> of every agent and sub-agent</li>
         </ul>
+        <div class="bento-media"><img src="{{ img }}agents.webp" width="1440" height="900" loading="lazy" alt="The agent picker listing API Builder, Database Engineer, Auth Architect and other agent profiles"></div>
       </a>
-      <a class="track" href="#contracts" style="color:inherit;text-decoration:none">
-        <span class="kicker">For smart contracts</span>
+      <a class="bento-card span-3 feat" href="#contracts">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6.5 3h7l3.5 7-3.5 7h-7L3 10z"/><path d="M8 10l1.5 1.5L12.5 8.5" stroke-linecap="round"/></svg></span>
         <h3>Test, audit and deploy without the busywork</h3>
         <p>One key opens build, test, gas, coverage, Slither and a local chain for Foundry, Hardhat or Anchor — plus an ABI viewer and agents that know contract security.</p>
         <ul class="checks">
@@ -64,6 +71,52 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
           <li><strong>Reviewed deploys</strong>, never a raw private key</li>
           <li><strong>Auditor and gas agents</strong> that write PoC tests</li>
         </ul>
+        <div class="bento-media"><img src="{{ img }}contracts-panel.webp" width="1440" height="900" loading="lazy" alt="The Contracts panel for a Foundry project with build, test, analyze, chain and deploy actions"></div>
+      </a>
+
+      <a class="bento-card span-4" href="#agents">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h7M6 10h9M9 15h8"/></svg></span>
+        <h3>Every sub-agent on a live timeline</h3>
+        <p>Explore, Plan and reviewers show up as they start and finish — per terminal or across all of them, with running counts and real cost from Claude Code's usage records.</p>
+        <div class="bento-media wide"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with Explore, Plan, general-purpose and code-reviewer sub-agents"></div>
+      </a>
+      <a class="bento-card" href="#tokens">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 16.5h14M5.5 13.5V10M10 13.5V5.5M14.5 13.5V8"/></svg></span>
+        <h3>Know what agents cost</h3>
+        <p>Spend at API prices, what prompt caching saved, and a context meter for every session — then savings you apply in a click.</p>
+        <div class="bento-stat"><b>98%</b><span>of prompt tokens served from cache in one measured session</span></div>
+      </a>
+
+      <a class="bento-card" href="#agents">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h12M4 8.5h12M4 12.5h7"/><path d="M13.5 12l2 2-2 2"/></svg></span>
+        <h3>Prompts, drafted properly</h3>
+        <p>A scratchpad under every terminal with history, notes, voice and prompt chaining. Your draft survives crashes and restarts.</p>
+      </a>
+      <a class="bento-card" href="#agents">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5H6a1.5 1.5 0 00-1.5 1.5v12A1.5 1.5 0 006 17.5h8a1.5 1.5 0 001.5-1.5V6.5z"/><path d="M11.5 2.5v4h4M7.5 10.5h5M7.5 13.5h3"/></svg></span>
+        <h3>Click any file an agent writes</h3>
+        <p>Paths become links. Markdown with Mermaid, PDF, Word, images and HTML open in a live preview — rendered documents can't run code.</p>
+      </a>
+      <a class="bento-card" href="#contracts">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 2.5l6 2.5v4.5c0 3.8-2.6 6.3-6 7.5-3.4-1.2-6-3.7-6-7.5V5z"/><path d="M7.3 10l1.9 1.9 3.6-3.8" stroke-linecap="round"/></svg></span>
+        <h3>Deploys you review first</h3>
+        <p>Deploy actions type the command and stop for you to check. ADE never asks for, stores or syncs a private key.</p>
+      </a>
+
+      <a class="bento-card" href="#sync">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 00-11-2.5M4 12a6 6 0 0011 2.5"/><path d="M5 2.5v3h3M15 17.5v-3h-3"/></svg></span>
+        <h3>Close it, crash it — nothing lost</h3>
+        <p>Tabs, splits, scrollback and drafts saved within a second. Settings, notes and Claude memory follow you through your own private git repo.</p>
+      </a>
+      <a class="bento-card" href="#agents">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="5" r="2"/><circle cx="4.5" cy="15" r="2"/><circle cx="15.5" cy="15" r="2"/><path d="M9 6.8L5.5 13.2M11 6.8l3.5 6.4M6.5 15h7"/></svg></span>
+        <h3>37 agent profiles</h3>
+        <p>Backend, frontend, DevOps, testing and Web3 — plus 11 architects to brainstorm with. Run them on Claude Code, Codex, Gemini CLI or Ollama.</p>
+      </a>
+      <a class="bento-card" href="#shortcuts">
+        <span class="glyph"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="5" width="15" height="10" rx="2"/><path d="M5.5 8h1M9.5 8h1M13.5 8h1M6.5 12h7"/></svg></span>
+        <h3>Keyboard-first, your colors</h3>
+        <p>Scratchpad, contracts, tokens and fleet are each one shortcut away. Eight themes, seven fonts, per-color overrides and your choice of cursor.</p>
       </a>
     </div>
   </div>
@@ -101,7 +154,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
           <li><strong>Notifications</strong> when an agent finishes</li>
         </ul>
       </div>
-      <div class="term" aria-label="Terminal example">
+      <div class="term" aria-label="Terminal example"><div class="term-inner">
         <div class="shot-bar"><i></i><i></i><i></i><span>claude — acme-api</span></div>
         <div class="term-body"><span class="p">➜</span>  acme-api claude
 <span class="d">⏺</span> I'll add idempotency keys to the webhook handler.
@@ -111,7 +164,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
 <span class="d">⏺</span> Bash(npm test)
 <span class="d">  ⎿  </span><span class="p">✔</span> ignores a repeated webhook id
 <span class="d">⏺</span> Updated <span class="l">docs/plan.md</span> — task 2 is done.</div>
-      </div>
+      </div></div>
     </div>
 
     <div class="feature">
@@ -160,7 +213,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
           <li><strong>Context diet</strong> keeps agents out of <code>node_modules</code>, build output and lockfiles</li>
         </ul>
       </div>
-      <div class="frame"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, tips, sessions with context meters and usage by model"></div>
+      <div class="frame glow"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, tips, sessions with context meters and usage by model"></div>
     </div>
 
     <div class="savings" role="list" aria-label="Savings measured on one real Claude Code session">
@@ -177,7 +230,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
   <div class="wrap">
     <div class="section-head">
       <span class="kicker">Smart contracts</span>
-      <h2>From <code style="font-size:.8em">forge init</code> to a reviewed deploy</h2>
+      <h2>From <code class="h-code">forge init</code> to a reviewed deploy</h2>
       <p>Open a Foundry, Hardhat or Anchor project and press <kbd class="key" data-mac="⌘⇧K" data-other="Ctrl+Alt+Shift+K">⌘⇧K</kbd>. ADE finds the project from any subfolder and puts the whole toolchain one click away.</p>
     </div>
 
@@ -220,7 +273,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
       <div class="frame"><img src="{{ img }}bench-deploy.webp" width="1440" height="615" loading="lazy" alt="Workbench deploy and call view: a Vault on Anvil, a read returning 5 ETH, a deposit with its decoded event and a withdraw reverting with InsufficientBalance"></div>
     </div>
 
-    <div class="matrix-wrap" style="margin-top:28px">
+    <div class="matrix-wrap">
       <table class="matrix">
         <thead><tr><th></th><th>Foundry</th><th>Hardhat</th><th>Anchor (Solana)</th></tr></thead>
         <tbody>
@@ -237,15 +290,15 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
 
     <div class="contract-extras">
       <div class="callout">
-        <div class="icon"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5l6 2.5v4.5c0 3.8-2.6 6.3-6 7.5-3.4-1.2-6-3.7-6-7.5V5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7.3 10l1.9 1.9 3.6-3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div style="min-width:0">
+        <div class="glyph"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5l6 2.5v4.5c0 3.8-2.6 6.3-6 7.5-3.4-1.2-6-3.7-6-7.5V5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7.3 10l1.9 1.9 3.6-3.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div>
           <h4>Deploys you review first</h4>
           <p>Deploy actions type the command into the terminal and stop — you check the network and account, then press Enter. Foundry deploys use an encrypted keystore account; ADE never asks for, stores or syncs a private key.</p>
           <pre>forge script script/Deploy.s.sol --rpc-url "$RPC_URL" --account deployer --broadcast</pre>
         </div>
       </div>
       <div class="card">
-        <div class="icon"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+        <div class="glyph"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M13 13l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
         <h4>Agents that know contracts</h4>
         <p><strong>Smart Contract Engineer</strong> works test-first with fuzz and invariant tests. <strong>Auditor</strong> reviews for reentrancy, access control, oracle and MEV risks and proves each finding with a Foundry test. <strong>Gas Optimizer</strong> measures every change. <strong>Solana/Anchor Engineer</strong> validates every account.</p>
       </div>
@@ -253,7 +306,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
   </div>
 </section>
 
-<section class="section tint">
+<section class="section tint" id="sync">
   <div class="wrap">
     <div class="feature">
       <div class="feature-copy">
@@ -297,7 +350,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
       <div>Command palette {% include key.html mac="⌘P" other="Ctrl+Shift+P" %}</div>
       <div>All shortcuts {% include key.html mac="⌘/" other="Ctrl+Shift+/" %}</div>
     </div>
-    <p class="center" style="margin-top:28px"><a href="{{ '/guide/shortcuts/' | relative_url }}">All keyboard shortcuts →</a></p>
+    <p class="center" style="margin-top:32px"><a class="more-link" href="{{ '/guide/shortcuts/' | relative_url }}">All keyboard shortcuts <span aria-hidden="true">→</span></a></p>
   </div>
 </section>
 
@@ -329,7 +382,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
         <h4>macOS</h4>
         <p>With Homebrew:</p>
         <div class="copy"><pre>brew install --cask alvin-reyes/tap/ade</pre></div>
-        <p style="margin-top:14px">Or the disk image:</p>
+        <p>Or the disk image:</p>
         <p class="files"><a href="{{ site.repo }}/releases/latest" data-download="mac-arm">Apple Silicon (.dmg)</a> · <a href="{{ site.repo }}/releases/latest" data-download="mac-intel">Intel (.dmg)</a></p>
       </div>
       <div class="card">
@@ -345,7 +398,7 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
         <p class="files">Or <a href="{{ '/guide/' | relative_url }}#build-from-source">build from source</a>.</p>
       </div>
     </div>
-    <p class="center" style="color:var(--text-3);margin-top:22px;font-size:15px">Agents: install <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, Codex, Gemini CLI or Ollama. Contracts: <a href="https://getfoundry.sh">Foundry</a>, Hardhat or <a href="https://www.anchor-lang.com">Anchor</a> — see <a href="{{ '/guide/contracts/' | relative_url }}#installing-the-tools">installing the tools</a>.</p>
+    <p class="center install-note">Agents: install <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, Codex, Gemini CLI or Ollama. Contracts: <a href="https://getfoundry.sh">Foundry</a>, Hardhat or <a href="https://www.anchor-lang.com">Anchor</a> — see <a href="{{ '/guide/contracts/' | relative_url }}#installing-the-tools">installing the tools</a>.</p>
   </div>
 </section>
 
@@ -384,9 +437,10 @@ description: ADE is a desktop terminal for building with AI coding agents — Cl
   </div>
 </section>
 
-<section class="section">
+<section class="section cta-section">
   <div class="wrap">
     <div class="cta-band">
+      <img src="{{ img }}logo.svg" width="60" height="60" alt="">
       <h2>Give your agents a better home</h2>
       <p>Open source, MIT licensed, and built in the open.</p>
       <div class="hero-cta">

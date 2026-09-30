@@ -15,11 +15,14 @@ body_class: guide-page
     </details>
     <div class="platform-switch" role="group" aria-label="Show shortcuts for">
       <span>Shortcuts for</span>
-      <button type="button" data-platform="mac">macOS</button>
-      <button type="button" data-platform="other">Linux / Windows</button>
+      <div>
+        <button type="button" data-platform="mac">macOS</button>
+        <button type="button" data-platform="other">Linux / Windows</button>
+      </div>
     </div>
   </aside>
   <article class="guide-body prose">
+    <span class="kicker guide-kicker">Guide</span>
     <h1>{{ page.title }}</h1>
     {% if page.lead %}<p class="lead">{{ page.lead }}</p>{% endif %}
     {{ content }}
