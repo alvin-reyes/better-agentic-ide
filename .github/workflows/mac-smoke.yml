@@ -5,6 +5,11 @@ name: macOS smoke test
 # any macOS crash report, CPU and memory, and a stack sample of the running app.
 on:
   workflow_dispatch:
+  # Manual runs need the workflow on the default branch; until then, a change
+  # to this file on the feature branch runs it.
+  push:
+    branches: [claude/token-savers]
+    paths: [.github/workflows/mac-smoke.yml]
 
 permissions:
   contents: read
