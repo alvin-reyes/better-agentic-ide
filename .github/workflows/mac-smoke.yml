@@ -1,0 +1,81 @@
+name: macOS smoke test
+
+# Builds the app on a real Mac, runs it for a couple of minutes, types into the
+# terminal, and reports whether it stays up: its stdout/stderr, ADE's crash log,
+# any macOS crash report, CPU and memory, and a stack sample of the running app.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: macos-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Build
+        run: |
+          npm ci
+          npx tauri build --no-bundle
+
+      - name: Run the app
+        run: |
+          set +e
+          BIN=src-tauri/target/release/better-terminal
+          rm -f ~/Library/Logs/ADE/ade.log /tmp/ade-smoke.txt
+          "$BIN" > app.out 2>&1 &
+          PID=$!
+          echo "PID $PID"
+          sleep 25
+          echo "=== alive after 25s: $(kill -0 $PID 2>/dev/null && echo yes || echo NO)"
+          screencapture -x shot-25s.png
+          # Type into the terminal (needs accessibility, which runners may not grant).
+          osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $PID) to true" \
+                    -e 'delay 1' \
+                    -e 'tell application "System Events" to keystroke "echo smoke-ok > /tmp/ade-smoke.txt"' \
+                    -e 'tell application "System Events" to key code 36' 2>&1
+          sleep 6
+          echo "=== typed command reached the shell: $(cat /tmp/ade-smoke.txt 2>/dev/null || echo NO)"
+          screencapture -x shot-typed.png
+          echo "=== CPU / memory"
+          ps -o pid,%cpu,%mem,rss,etime,command -p $PID 2>&1
+          ps -ax -o pid,ppid,%cpu,rss,command | grep -iE "better-terminal|WebContent|zsh -l" | grep -v grep
+          echo "=== stack sample (3 s)"
+          sample $PID 3 -mayDie 2>&1 | head -150
+          sleep 90
+          echo "=== alive after ~2 min: $(kill -0 $PID 2>/dev/null && echo yes || echo NO)"
+          ps -o pid,%cpu,%mem,rss,etime -p $PID 2>&1
+          screencapture -x shot-end.png
+          echo "=== app stdout/stderr (tail)"
+          tail -80 app.out
+          echo "=== ~/Library/Logs/ADE/ade.log"
+          cat ~/Library/Logs/ADE/ade.log 2>&1 | tail -80
+          echo "=== crash reports"
+          ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head -5
+          F=$(ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i better | head -1)
+          [ -n "$F" ] && head -120 ~/Library/Logs/DiagnosticReports/"$F"
+          kill $PID 2>/dev/null
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-smoke
+          path: |
+            shot-*.png
+            app.out
