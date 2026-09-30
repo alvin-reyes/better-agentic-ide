@@ -213,7 +213,10 @@ pub fn get_pty_cwd(state: tauri::State<'_, PtyManager>, id: u32) -> Result<Strin
         let instances = state.instances.lock().unwrap();
         let inst = instances.get(&id).ok_or("PTY not found")?;
         let shell = inst.pid.ok_or("No PID")?;
+        #[cfg(unix)]
         let fg = inst.master.process_group_leader().filter(|p| *p > 0).map(|p| p as u32);
+        #[cfg(not(unix))]
+        let fg: Option<u32> = None;
         (shell, fg)
     };
     // Polled every few seconds for every pane: answer from the OS directly
