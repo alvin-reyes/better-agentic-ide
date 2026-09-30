@@ -1,6 +1,7 @@
 mod antislop;
 mod bmad;
 mod contracts;
+mod crashlog;
 mod mcp;
 mod projectsetup;
 mod pty;
@@ -371,6 +372,7 @@ fn list_md_files(dir: String) -> Result<Vec<String>, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    crashlog::install_panic_hook();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -433,6 +435,8 @@ pub fn run() {
             projectsetup::project_setup_undo,
             projectsetup::project_git_init,
             projectsetup::project_agent_remove,
+            crashlog::log_error,
+            crashlog::crash_log_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

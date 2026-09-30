@@ -717,3 +717,9 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .agent-list__main b { font-size: 13px; font-weight: 500; display: inline-flex; gap: 6px; align-items: center; }
 .agent-list__main small { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcp-tag[data-stack] { background: rgba(255,90,31,.14); color: #ff8a3d; }
+
+/* Shown instead of a blank window when the interface fails to render */
+.crash-screen { position: fixed; inset: 0; z-index: 100000; overflow: auto; padding: 48px; background: var(--bg-primary, #0b0c0f); color: var(--text-primary, #f4f3ee); font-size: 14px; }
+.crash-screen h1 { margin: 0 0 8px; font-size: 20px; }
+.crash-screen pre { white-space: pre-wrap; font-size: 12px; padding: 12px; border-radius: 8px; background: rgba(255,255,255,.05); color: #ff9b91; max-height: 50vh; overflow: auto; }
+.crash-screen button { margin-top: 12px; padding: 8px 16px; border-radius: 6px; border: 0; background: #f4f3ee; color: #0b0c0f; font-weight: 600; cursor: pointer; }

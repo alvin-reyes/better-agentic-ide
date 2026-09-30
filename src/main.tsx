@@ -5,6 +5,14 @@ import { hydrateFromDisk, startAutoSave } from "./lib/persistence";
 import { syncBeforeLaunch, startPeriodicSync } from "./lib/sync";
 import { installLinkGuard } from "./lib/docLinks";
 import { hideSplash } from "./lib/splash";
+import { invoke } from "@tauri-apps/api/core";
+import ErrorBoundary from "./components/ErrorBoundary";
+
+// Uncaught errors go to the crash log (~/Library/Logs/ADE/ade.log on macOS).
+const logError = (message: string) => { void invoke("log_error", { message }).catch(() => {}); };
+window.addEventListener("error", (e) => logError(`error: ${e.message} at ${e.filename}:${e.lineno}:${e.colno}\n${e.error?.stack ?? ""}`));
+window.addEventListener("unhandledrejection", (e) => logError(`unhandled rejection: ${e.reason?.stack ?? String(e.reason)}`));
+logError(`start: ADE v${__APP_VERSION__} ${navigator.userAgent}`);
 
 // App (and the stores it imports) is loaded only after hydrateFromDisk():
 // several stores read localStorage when their module is first evaluated, so a
@@ -34,9 +42,11 @@ function Root() {
   }
 
   return (
-    <Suspense fallback={null}>
-      <App />
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={null}>
+        <App />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
