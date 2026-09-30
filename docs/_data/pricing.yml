@@ -17,7 +17,7 @@
   blurb: For one developer building products with AI.
   features:  # TODO: review wording against the final license terms
     - Every feature, including fleet view, tokens panel and the contract workbench
-    - macOS and Linux
+    - macOS and Linux (Windows support soon)
     - Updates while your license is active
   cta: Buy Personal
   url: buy

@@ -4,7 +4,8 @@ import { useSettingsStore } from "../stores/settingsStore";
 import type { GuardToast } from "./useContextGuard";
 import { STACK_LABELS } from "../lib/projectMethodology";
 import {
-  addStackAgents, isComplete, isSetupCandidate, setUpProject, setupStatus, summarize, undoSetup, wasSetUp, type SetupResult,
+  addStackAgents, isComplete, isSettingUp, isSetupCandidate, setUpProject, setupDeclined, setupStatus, summarize, undoSetup, wasSetUp,
+  type SetupResult,
 } from "../lib/projectSetup";
 
 const nameOf = (root: string) => root.split(/[\\/]/).filter(Boolean).pop() ?? root;
@@ -35,7 +36,9 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
     let cancelled = false;
     (async () => {
       const root = await invoke<string>("project_root", { path: cwd }).catch(() => null);
-      if (!root || cancelled || !isSetupCandidate(root)) return;
+      // Skip projects whose setup the user undid, and ones being set up right
+      // now (the new-tab dialog starts its own and reports it).
+      if (!root || cancelled || !isSetupCandidate(root) || setupDeclined(root) || isSettingUp(root)) return;
       const status = await setupStatus(root).catch(() => null);
       if (!status || cancelled) return;
       if (wasSetUp(root)) {

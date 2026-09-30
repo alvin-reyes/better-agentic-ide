@@ -28,8 +28,16 @@ fn cache() -> &'static Mutex<Option<HashMap<String, String>>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
-/// Environment-variable style: `OPENAI_API_KEY`, `GITHUB_TOKEN`.
+/// Variables a terminal needs to work; a secret must not replace them.
+const RESERVED: &[&str] = &[
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "PWD", "OLDPWD", "TMPDIR", "SHLVL", "EDITOR", "VISUAL",
+];
+
+/// Environment-variable style: `OPENAI_API_KEY`, `GITHUB_TOKEN`; not a system variable.
 pub fn valid_name(name: &str) -> bool {
+    if RESERVED.contains(&name) || name.starts_with("LC_") || name.starts_with("LD_") || name.starts_with("DYLD_") {
+        return false;
+    }
     let mut chars = name.chars();
     matches!(chars.next(), Some(c) if c.is_ascii_uppercase() || c == '_')
         && chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
@@ -79,12 +87,7 @@ fn keychain_error(e: keyring::Error) -> String {
     }
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
+use crate::state::now_ms;
 
 #[tauri::command(async)]
 pub fn vault_list(app: AppHandle) -> Result<Vec<SecretMeta>, String> {
@@ -94,7 +97,7 @@ pub fn vault_list(app: AppHandle) -> Result<Vec<SecretMeta>, String> {
 #[tauri::command(async)]
 pub fn vault_set(app: AppHandle, name: String, value: String, note: Option<String>) -> Result<(), String> {
     if !valid_name(&name) {
-        return Err("Use capitals, digits and underscores, like GITHUB_TOKEN.".into());
+        return Err("Use capitals, digits and underscores, like GITHUB_TOKEN, and not a system variable such as PATH or HOME.".into());
     }
     if value.is_empty() {
         return Err("The value is empty.".into());
@@ -127,21 +130,26 @@ pub fn vault_delete(app: AppHandle, name: String) -> Result<(), String> {
 }
 
 /// Every stored secret, for a new terminal's environment. Secrets that can't
-/// be read (keychain locked or missing) are skipped.
+/// be read (keychain locked or missing) are skipped, and read again for the
+/// next terminal: only a complete read is cached.
 pub fn env_for_terminals(app: &AppHandle) -> HashMap<String, String> {
     let mut guard = cache().lock().unwrap();
-    if guard.is_none() {
-        let names = index_path(app).map(|p| read_index(&p)).unwrap_or_default();
-        let map = names
-            .into_iter()
-            .filter_map(|m| {
-                let value = entry(&m.name).ok()?.get_password().ok()?;
-                Some((m.name, value))
-            })
-            .collect();
-        *guard = Some(map);
+    if let Some(map) = guard.as_ref() {
+        return map.clone();
     }
-    guard.clone().unwrap_or_default()
+    let names = index_path(app).map(|p| read_index(&p)).unwrap_or_default();
+    let total = names.len();
+    let map: HashMap<String, String> = names
+        .into_iter()
+        .filter_map(|m| {
+            let value = entry(&m.name).ok()?.get_password().ok()?;
+            Some((m.name, value))
+        })
+        .collect();
+    if map.len() == total {
+        *guard = Some(map.clone());
+    }
+    map
 }
 
 #[cfg(test)]
@@ -153,7 +161,7 @@ mod tests {
         for ok in ["GITHUB_TOKEN", "_X", "A1"] {
             assert!(valid_name(ok), "{ok}");
         }
-        for bad in ["", "github", "1ABC", "A-B", "A B", "A=B"] {
+        for bad in ["", "github", "1ABC", "A-B", "A B", "A=B", "PATH", "HOME", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "LC_ALL"] {
             assert!(!valid_name(bad), "{bad}");
         }
     }

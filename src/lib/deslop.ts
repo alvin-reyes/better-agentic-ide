@@ -15,12 +15,18 @@ const DROP: RegExp[] = [
 ];
 
 const SWAP: [RegExp, string][] = [
-  [/\bdelv(?:e|ing) into\b/gi, "look into"],
+  [/\bdelving into\b/gi, "looking into"],
+  [/\bdelve into\b/gi, "look into"],
   [/\bdelves into\b/gi, "looks into"],
-  [/\butiliz(?:e|ing)\b/gi, "use"],
+  [/\bdelved into\b/gi, "looked into"],
+  [/\butilizing\b/gi, "using"],
+  [/\butilize\b/gi, "use"],
   [/\butilizes\b/gi, "uses"],
-  [/\bleverag(?:e|ing)\b/gi, "use"],
+  [/\butilized\b/gi, "used"],
+  [/\bleveraging\b/gi, "using"],
+  [/\bleverage\b/gi, "use"],
   [/\bleverages\b/gi, "uses"],
+  [/\bleveraged\b/gi, "used"],
   [/\bseamlessly\b/gi, "smoothly"],
   [/\bseamless\b/gi, "smooth"],
   [/\bcutting[- ]edge\b/gi, "new"],

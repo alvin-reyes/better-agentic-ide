@@ -76,3 +76,11 @@ describe("deslop", () => {
     expect(deslop(text).changes).toBe(1);
   });
 });
+
+describe("deslop verb forms", () => {
+  it("keeps -ing, -s and -ed forms grammatical", () => {
+    expect(deslop("By leveraging caching we cut costs.").text).toBe("By using caching we cut costs.");
+    expect(deslop("We are delving into the logs.").text).toBe("We are looking into the logs.");
+    expect(deslop("It utilized the cache and leverages it.").text).toBe("It used the cache and uses it.");
+  });
+});

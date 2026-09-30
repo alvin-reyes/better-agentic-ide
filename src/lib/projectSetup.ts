@@ -32,6 +32,31 @@ export interface SetupResult {
 
 const DONE_KEY = "ade-project-setup-done";
 const REMOVED_KEY = "ade-project-agents-removed";
+const DECLINED_KEY = "ade-project-setup-declined";
+
+function readList(key: string): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? "[]");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeList(key: string, root: string, on: boolean) {
+  const list = readList(key).filter((r) => r !== root);
+  if (on) list.push(root);
+  try {
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch {
+    // Storage blocked: the choice lasts for this session only.
+  }
+}
+
+/** The user undid setup here: automatic setup leaves this project alone. */
+export function setupDeclined(root: string): boolean {
+  return readList(DECLINED_KEY).includes(root);
+}
 
 const baseName = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
 
@@ -107,13 +132,31 @@ export function isComplete(s: SetupStatus): boolean {
   return s.missing.length === 0 && !s.needsImport && s.bmadInstalled;
 }
 
-/** Set up a project: BMAD, methodology, the core roles and its stack's agents. Safe to run again. */
-export async function setUpProject(root: string, stacks?: Stack[]): Promise<SetupResult> {
-  const detected = stacks ?? (await setupStatus(root)).stacks;
-  const files = withoutRemoved(root, methodologyFiles(baseName(root), detected));
-  const report = await apply(root, files);
-  markSetUp(root, true);
-  return { root, report, files, stacks: detected };
+const inFlight = new Map<string, Promise<SetupResult>>();
+
+/** A setup for this project is running right now. */
+export function isSettingUp(root: string): boolean {
+  return inFlight.has(root);
+}
+
+/**
+ * Set up a project: BMAD, methodology, the core roles and its stack's agents.
+ * Safe to run again; a setup already running for the project is shared.
+ * Running it by hand clears an earlier Undo.
+ */
+export function setUpProject(root: string, stacks?: Stack[]): Promise<SetupResult> {
+  const running = inFlight.get(root);
+  if (running) return running;
+  const job = (async () => {
+    const detected = stacks ?? (await setupStatus(root)).stacks;
+    const files = withoutRemoved(root, methodologyFiles(baseName(root), detected));
+    const report = await apply(root, files);
+    markSetUp(root, true);
+    writeList(DECLINED_KEY, root, false);
+    return { root, report, files, stacks: detected };
+  })().finally(() => inFlight.delete(root));
+  inFlight.set(root, job);
+  return job;
 }
 
 /** Agents for stacks a set-up project has gained since (e.g. a new foundry.toml). */
@@ -143,7 +186,10 @@ export async function undoSetup(r: SetupResult): Promise<number> {
     files: r.files,
     import: r.report.appendedImport ? CLAUDE_MD_IMPORT : null,
   });
-  markSetUp(r.root, false);
+  // Stays "set up" so it isn't redone, and declined so stack agents aren't
+  // added either. "Set up now" in Integrations > Agents undoes this.
+  markSetUp(r.root, true);
+  writeList(DECLINED_KEY, r.root, true);
   return removed;
 }
 

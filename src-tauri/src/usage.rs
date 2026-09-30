@@ -306,12 +306,21 @@ fn latest_in(dir: &Path, active_within: Duration) -> Option<LatestContext> {
     let mut buf = Vec::new();
     f.read_to_end(&mut buf).ok()?;
     let text = String::from_utf8_lossy(&buf);
-    // The first line may be cut off by the seek; it just fails to parse.
-    let (v, e) = text.lines().rev().find_map(|line| {
-        let v: Value = serde_json::from_str(line).ok()?;
-        let e = parse_entry(&v)?;
-        Some((v, e))
-    })?;
+    // Newest first. The first line may be cut off by the seek; it just fails
+    // to parse. A compaction newer than the last response means the context
+    // was just reset: report nothing until Claude answers again.
+    let mut latest = None;
+    for line in text.lines().rev() {
+        let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+        if is_compaction(&v) {
+            return None;
+        }
+        if let Some(e) = parse_entry(&v) {
+            latest = Some((v, e));
+            break;
+        }
+    }
+    let (v, e) = latest?;
     let u = &e.usage;
     Some(LatestContext {
         session_id: path.file_stem()?.to_string_lossy().into_owned(),
@@ -582,7 +591,7 @@ fn load_settings(path: &Path) -> Result<Value, String> {
 fn save_settings(path: &Path, v: &Value) -> Result<(), String> {
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let text = serde_json::to_string_pretty(v).map_err(|e| e.to_string())? + "\n";
-    std::fs::write(path, text).map_err(|e| e.to_string())
+    crate::state::atomic_write(path, &text).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -650,23 +659,35 @@ pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) ->
 /// Claude Code ignores settings.local.json in git only when it creates the file
 /// itself; do the same when ADE creates it, in the repo's local exclude list.
 fn keep_out_of_git(root: &Path) {
-    const LINE: &str = ".claude/settings.local.json";
-    let info = root.join(".git").join("info");
-    if !root.join(".git").is_dir() {
-        return;
+    // Ask git, so this works from a subfolder of the repo and in worktrees
+    // (where .git is a file).
+    let file = root.join(".claude").join("settings.local.json");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git").arg("-C").arg(root).args(args).output().ok().filter(|o| o.status.success())
+    };
+    if git(&["check-ignore", "-q", &file.to_string_lossy()]).is_some() {
+        return; // Already ignored (or excluded).
     }
-    let listed = |p: PathBuf| std::fs::read_to_string(p).is_ok_and(|t| t.lines().any(|l| l.trim().trim_start_matches('/') == LINE || l.trim() == "settings.local.json"));
-    if listed(root.join(".gitignore")) || listed(root.join(".claude").join(".gitignore")) || listed(info.join("exclude")) {
+    let Some(top) = git(&["rev-parse", "--show-toplevel"]).map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim())) else {
+        return; // Not a git repository.
+    };
+    let Some(exclude) = git(&["rev-parse", "--git-path", "info/exclude"]).map(|o| root.join(String::from_utf8_lossy(&o.stdout).trim())) else {
         return;
+    };
+    let top = top.canonicalize().unwrap_or(top);
+    let here = root.canonicalize().unwrap_or_else(|_| root.to_path_buf()).join(".claude").join("settings.local.json");
+    let Ok(rel) = here.strip_prefix(&top) else { return };
+    let line = format!("/{}", rel.to_string_lossy().replace('\\', "/"));
+    if let Some(dir) = exclude.parent() {
+        let _ = std::fs::create_dir_all(dir);
     }
-    let _ = std::fs::create_dir_all(&info);
-    let mut text = std::fs::read_to_string(info.join("exclude")).unwrap_or_default();
+    let mut text = std::fs::read_to_string(&exclude).unwrap_or_default();
     if !text.is_empty() && !text.ends_with('\n') {
         text.push('\n');
     }
-    text.push_str(LINE);
+    text.push_str(&line);
     text.push('\n');
-    let _ = std::fs::write(info.join("exclude"), text);
+    let _ = crate::state::atomic_write(&exclude, &text);
 }
 
 #[tauri::command(async)]
@@ -846,13 +867,23 @@ mod tests {
     #[test]
     fn presets_file_is_kept_out_of_git() {
         let d = tmp("presets_git");
-        std::fs::create_dir_all(d.join(".git").join("info")).unwrap();
+        let git = |dir: &Path, args: &[&str]| std::process::Command::new("git").arg("-C").arg(dir).args(args).output().unwrap();
+        git(&d, &["init", "-q"]);
         std::fs::write(d.join(".git").join("info").join("exclude"), "# local\n*.swp").unwrap();
         let set: BTreeMap<String, Option<String>> = [("model".to_string(), Some("sonnet".to_string()))].into();
         apply_presets(&d, &set).unwrap();
         apply_presets(&d, &set).unwrap();
+        // From a subfolder of the repo too.
+        let sub = d.join("packages").join("api");
+        std::fs::create_dir_all(&sub).unwrap();
+        apply_presets(&sub, &set).unwrap();
+        apply_presets(&sub, &set).unwrap();
         let ex = std::fs::read_to_string(d.join(".git").join("info").join("exclude")).unwrap();
-        assert_eq!(ex, "# local\n*.swp\n.claude/settings.local.json\n");
+        assert_eq!(ex, "# local\n*.swp\n/.claude/settings.local.json\n/packages/api/.claude/settings.local.json\n");
+        for dir in [&d, &sub] {
+            let out = git(dir, &["check-ignore", "-q", ".claude/settings.local.json"]);
+            assert!(out.status.success(), "{dir:?} not ignored");
+        }
     }
 
     #[test]
@@ -864,5 +895,21 @@ mod tests {
         std::fs::write(d.join(".claude").join("settings.json"), "{ not json").unwrap();
         assert!(add_deny_rules(&d, &["Read(./dist/**)".into()]).is_err());
         assert_eq!(std::fs::read_to_string(d.join(".claude").join("settings.json")).unwrap(), "{ not json");
+    }
+
+    #[test]
+    fn latest_context_resets_after_compaction() {
+        let d = tmp("latest_compact");
+        let usage = |id: &str, read: u64| format!(
+            r#"{{"type":"assistant","timestamp":"2026-01-01T00:00:00Z","message":{{"id":"{id}","model":"claude-sonnet-5","usage":{{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":{read},"output_tokens":1}}}}}}"#
+        );
+        let f = d.join("s.jsonl");
+        std::fs::write(&f, format!("{}\n", usage("a", 150_000))).unwrap();
+        assert_eq!(latest_in(&d, Duration::from_secs(60)).unwrap().context_tokens, 150_000);
+        let boundary = r#"{"type":"system","subtype":"compact_boundary"}"#;
+        std::fs::write(&f, format!("{}\n{}\n", usage("a", 150_000), boundary)).unwrap();
+        assert!(latest_in(&d, Duration::from_secs(60)).is_none(), "context reset by /compact");
+        std::fs::write(&f, format!("{}\n{}\n{}\n", usage("a", 150_000), boundary, usage("b", 20_000))).unwrap();
+        assert_eq!(latest_in(&d, Duration::from_secs(60)).unwrap().context_tokens, 20_000);
     }
 }

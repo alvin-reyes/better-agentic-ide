@@ -5,7 +5,7 @@ import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
-import { writePty } from "../lib/terminalCommands";
+import { runInNewTabPane, writePty } from "../lib/terminalCommands";
 import { hasActiveProcess } from "../hooks/useTerminal";
 import { usePaneCwd } from "../stores/paneMetaStore";
 
@@ -151,27 +151,23 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
 
   const runAgent = useCallback(async (profile: AgentProfile, where: "current" | "new") => {
     const cmd = buildCommand(profile);
-    let ptyId = getActivePtyId();
+    const ptyId = getActivePtyId();
+    let paneId: string | null = null;
     if (where === "new" || ptyId === null) {
       const from = getActivePane();
       const cwd = from ? usePaneCwd.getState().cwds[from.id] ?? from.initialCwd ?? undefined : undefined;
-      useTabStore.getState().addTab(profile.name, cwd);
       onClose();
-      // The new tab's shell starts asynchronously.
-      ptyId = null;
-      for (let i = 0; i < 80 && ptyId === null; i++) {
-        await new Promise((r) => setTimeout(r, 100));
-        ptyId = useTabStore.getState().getActivePtyId();
-      }
-      if (ptyId === null) return;
+      // Runs in the new tab's own shell, even if you switch tabs meanwhile.
+      paneId = await runInNewTabPane(profile.name, cwd, cmd);
+      if (!paneId) return;
+    } else {
+      await writePty(ptyId, cmd + "\r").catch(() => {});
+      paneId = getActivePane()?.id ?? null;
     }
 
-    await writePty(ptyId, cmd + "\r").catch(() => {});
-
-    const activePane = useTabStore.getState().getActivePane();
-    if (activePane) {
+    if (paneId) {
       useAgentTrackerStore.getState().startSession(
-        activePane.id,
+        paneId,
         profile.name,
         profile.icon,
         activeProvider,

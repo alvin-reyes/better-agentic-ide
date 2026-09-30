@@ -54,7 +54,8 @@ interface TabStore {
   /** Most recently closed terminal tabs, newest last. */
   closedTabs: ClosedTab[];
 
-  addTab: (name?: string, initialCwd?: string) => void;
+  /** Opens a terminal tab; returns its id. */
+  addTab: (name?: string, initialCwd?: string) => string;
   addOrchestratorTab: (sessionId: string) => string;
   addBrowserTab: (url?: string) => string;
   addFleetTab: () => string;
@@ -244,9 +245,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     activeTabId: initialTabId,
     closedTabs: [],
 
-    addTab: (name, initialCwd) => {
-      openTab({ name: name || "Terminal" }, createDefaultPane(initialCwd));
-    },
+    addTab: (name, initialCwd) => openTab({ name: name || "Terminal" }, createDefaultPane(initialCwd)),
 
     addOrchestratorTab: (sessionId) =>
       openTab({ name: "Orchestrator", type: "orchestrator", orchestratorSessionId: sessionId }),

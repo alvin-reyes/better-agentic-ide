@@ -159,6 +159,10 @@ pub fn project_setup_apply(
     full: bool,
 ) -> Result<SetupReport, String> {
     let dir = project(&root)?;
+    // One setup at a time: two at once could both see CLAUDE.md without the
+    // import and append it twice.
+    static APPLY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
     // A full setup also loads the methodology from CLAUDE.md and installs BMAD;
     // adding agents on their own touches nothing else.
     let bmad = if full { crate::bmad::resource_root(&app).ok() } else { None };

@@ -1,8 +1,11 @@
 import { useEffect } from "react";
 import { focusActiveTerminal } from "./useTerminal";
 
-/** Nothing else has the keyboard: the page itself does. */
-const idle = () => document.activeElement === document.body || document.activeElement === null;
+/** A dialog or panel is open over the terminal: keys belong to it. */
+const overlayOpen = () => !!document.querySelector('[role="dialog"], [aria-modal="true"], .contracts-panel-overlay');
+
+/** Nothing else has the keyboard (the page itself does), and nothing is open on top. */
+const idle = () => (document.activeElement === document.body || document.activeElement === null) && !overlayOpen();
 
 /**
  * Keep typing going to the terminal. Focus falls back to the page when the

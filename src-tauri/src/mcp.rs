@@ -26,7 +26,7 @@ fn servers(config: &Map<String, Value>) -> Map<String, Value> {
 
 fn write_config(path: &Path, config: &Map<String, Value>) -> Result<(), String> {
     let text = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    std::fs::write(path, text + "\n").map_err(|e| e.to_string())
+    crate::state::atomic_write(path, &(text + "\n")).map_err(|e| e.to_string())
 }
 
 fn valid_server_name(name: &str) -> bool {

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
-import { isSetupCandidate, setUpProject } from "./projectSetup";
+import { isSetupCandidate, setUpProject, setupDeclined } from "./projectSetup";
 import { useTabStore } from "../stores/tabStore";
 
 const KEY = "ade-recent-projects";
@@ -45,7 +45,7 @@ export function forgetProject(path: string) {
 export function openProjectTab(path: string) {
   rememberProject(path);
   useTabStore.getState().addTab(undefined, path);
-  if (!useSettingsStore.getState().autoProjectSetup || !isSetupCandidate(path)) return;
+  if (!useSettingsStore.getState().autoProjectSetup || !isSetupCandidate(path) || setupDeclined(path)) return;
   setUpProject(path)
     .then((result) => window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result })))
     .catch(() => {});

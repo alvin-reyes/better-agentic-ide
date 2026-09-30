@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { checkDiff, fixPrompt, type SlopFinding } from "../lib/slopCheck";
-import { sendToActiveTerminal, writePty } from "../lib/terminalCommands";
-import { useTabStore } from "../stores/tabStore";
+import { runInNewTab, sendToActiveTerminal } from "../lib/terminalCommands";
 
 interface Props {
   root: string | null;
@@ -12,20 +11,6 @@ interface Props {
 
 const PLUGIN_ID = "ade@ade";
 const errText = (e: unknown) => String((e as { message?: string })?.message ?? e);
-
-/** Type a command into a new tab in `cwd` once its shell is up, and run it. */
-async function runInNewTab(name: string, cwd: string | undefined, command: string) {
-  const store = useTabStore.getState();
-  store.addTab(name, cwd);
-  for (let i = 0; i < 80; i++) {
-    const ptyId = useTabStore.getState().getActivePtyId();
-    if (ptyId !== null) {
-      await writePty(ptyId, command + "\r");
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-}
 
 /** The ADE Claude Code plugin, and the slop check on a project's changes. */
 export default function AntiSlopTab({ root, onNotice, onError }: Props) {
@@ -46,7 +31,10 @@ export default function AntiSlopTab({ root, onNotice, onError }: Props) {
       const cmd = update
         ? `claude plugin marketplace update ade; claude plugin update ${PLUGIN_ID}`
         : `claude plugin marketplace add ${q}; claude plugin install ${PLUGIN_ID} --scope user`;
-      await runInNewTab("ADE plugin", root ?? undefined, cmd);
+      if (!(await runInNewTab("ADE plugin", root ?? undefined, cmd))) {
+        onError("The new terminal didn't start, so the plugin command wasn't run. Try again.");
+        return;
+      }
       onNotice(update ? "Updating the ADE plugin in a new tab." : "Installing the ADE plugin in a new tab. Restart Claude Code sessions to load it.");
       window.setTimeout(refresh, 8000);
     } catch (e) {

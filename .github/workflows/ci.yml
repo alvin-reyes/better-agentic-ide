@@ -75,3 +75,27 @@ jobs:
       - name: Tests
         working-directory: src-tauri
         run: cargo test --locked
+
+  backend-macos:
+    name: Backend on macOS (cargo test)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Create placeholder frontend dist
+        run: |
+          DIST=$(node -p "require('./src-tauri/tauri.conf.json').build.frontendDist")
+          mkdir -p "src-tauri/$DIST"
+
+      - name: Tests
+        working-directory: src-tauri
+        run: cargo test --locked

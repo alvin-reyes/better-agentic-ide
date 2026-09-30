@@ -219,8 +219,13 @@ pub fn get_pty_cwd(state: tauri::State<'_, PtyManager>, id: u32) -> Result<Strin
         let fg: Option<u32> = None;
         (shell, fg)
     };
-    // Polled every few seconds for every pane: answer from the OS directly
-    // (no child processes), falling back to lsof where that isn't available.
+    pty_cwd(shell, fg)
+}
+
+/// The folder of the foreground process, else the shell's. Polled every few
+/// seconds for every pane: answer from the OS directly (no child processes),
+/// falling back to lsof where that isn't available.
+fn pty_cwd(shell: u32, fg: Option<u32>) -> Result<String, String> {
     for pid in fg.into_iter().chain(std::iter::once(shell)) {
         if let Some(dir) = cwd_of(pid) {
             return Ok(dir);
@@ -296,4 +301,39 @@ fn get_foreground_pid(shell_pid: u32) -> Option<u32> {
         .lines()
         .filter_map(|line| line.trim().parse::<u32>().ok())
         .next_back()
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    /// A real shell in a pty, in a temp folder: the folder lookup (proc_pidinfo
+    /// on macOS, /proc on Linux) finds it, with and without the foreground
+    /// process group.
+    #[test]
+    fn finds_the_folder_of_a_shell_in_a_pty() {
+        let dir = std::env::temp_dir().join(format!("ade-pty-cwd-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let want = dir.canonicalize().unwrap().to_string_lossy().into_owned();
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.args(["-c", "sleep 5"]);
+        cmd.cwd(&dir);
+        let mut child = pair.slave.spawn_command(cmd).unwrap();
+        let pid = child.process_id().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        assert_eq!(cwd_of(pid).as_deref(), Some(want.as_str()), "cwd_of");
+        let fg = pair.master.process_group_leader().filter(|p| *p > 0).map(|p| p as u32);
+        assert!(fg.is_some(), "foreground process group");
+        assert_eq!(pty_cwd(pid, fg).unwrap(), want);
+        assert_eq!(pty_cwd(pid, None).unwrap(), want);
+        // A pid that doesn't exist: no crash, just no answer.
+        assert!(cwd_of(u32::MAX / 2).is_none());
+
+        child.kill().ok();
+        std::fs::remove_dir_all(dir).ok();
+    }
 }
