@@ -1,3 +1,4 @@
+import { requestNewTab } from "../lib/newTab";
 import { useEffect } from "react";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -25,6 +26,7 @@ interface KeybindingActions {
   openOrchestrator: () => void;
   toggleContracts: () => void;
   toggleTokens: () => void;
+  toggleIntegrations: () => void;
   toggleShortcuts: () => void;
   toggleTabSwitcher: () => void;
   requestCloseTab: (tabId: string) => void;
@@ -82,6 +84,7 @@ export function useKeybindings(actions: KeybindingActions) {
       if (is("orchestrator")) return run(actions.openOrchestrator);
       if (is("contracts")) return run(actions.toggleContracts);
       if (is("tokens")) return run(actions.toggleTokens);
+      if (is("integrations")) return run(actions.toggleIntegrations);
       if (is("shortcuts")) return run(actions.toggleShortcuts);
       if (is("tabSwitcher")) return run(actions.toggleTabSwitcher);
       if (is("reopenTab")) return run(() => useTabStore.getState().reopenClosedTab());
@@ -91,7 +94,7 @@ export function useKeybindings(actions: KeybindingActions) {
       if (is("copy") && actions.isScratchpadOpen && inScratchpad) return run(actions.copyScratchpad);
       // Not while typing in the code editor, where ⌘S is Monaco's "save file".
       if (is("saveNote") && actions.isScratchpadOpen && !inEditor) return run(actions.saveNoteScratchpad);
-      if (is("newTab")) return run(() => addTab());
+      if (is("newTab")) return run(requestNewTab);
       if (is("sendEnter")) return run(actions.sendEnterToTerminal);
       if (is("closePane")) {
         return run(() => {

@@ -10,6 +10,7 @@
     "core:window:allow-destroy",
     "core:webview:allow-create-webview-window",
     "opener:default",
-    "clipboard-manager:default"
+    "clipboard-manager:default",
+    "dialog:allow-open"
   ]
 }

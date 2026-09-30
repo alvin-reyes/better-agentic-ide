@@ -6,6 +6,8 @@ import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { writePty } from "../lib/terminalCommands";
+import { hasActiveProcess } from "../hooks/useTerminal";
+import { usePaneCwd } from "../stores/paneMetaStore";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Backend: "#3fb950",
@@ -119,10 +121,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     if (el) el.scrollIntoView({ block: "nearest" });
   }, [selectedIndex, suggestedAgent, filtered]);
 
-  const launchAgent = useCallback(async (profile: AgentProfile) => {
-    const ptyId = getActivePtyId();
-    if (ptyId === null) return;
-
+  const buildCommand = useCallback((profile: AgentProfile) => {
     let cmd = profile.providers[activeProvider];
     if (activeProvider === "ollama") {
       const settings = useSettingsStore.getState();
@@ -135,10 +134,41 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     if (continuousMode && activeProvider === "claude") {
       cmd = cmd.replace(/^claude /, "claude --dangerously-skip-permissions ");
     }
+    return cmd;
+  }, [activeProvider, continuousMode]);
+
+  // Picking an agent asks where to run it: this terminal or a new tab.
+  const [choice, setChoice] = useState<AgentProfile | null>(null);
+  const [target, setTarget] = useState<"current" | "new">("current");
+  const currentPtyId = getActivePtyId();
+
+  const launchAgent = useCallback((profile: AgentProfile) => {
+    const pane = getActivePane();
+    // A terminal already running something can't take a new agent.
+    setTarget(currentPtyId === null || (pane && hasActiveProcess(pane.id)) ? "new" : "current");
+    setChoice(profile);
+  }, [currentPtyId, getActivePane]);
+
+  const runAgent = useCallback(async (profile: AgentProfile, where: "current" | "new") => {
+    const cmd = buildCommand(profile);
+    let ptyId = getActivePtyId();
+    if (where === "new" || ptyId === null) {
+      const from = getActivePane();
+      const cwd = from ? usePaneCwd.getState().cwds[from.id] ?? from.initialCwd ?? undefined : undefined;
+      useTabStore.getState().addTab(profile.name, cwd);
+      onClose();
+      // The new tab's shell starts asynchronously.
+      ptyId = null;
+      for (let i = 0; i < 80 && ptyId === null; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        ptyId = useTabStore.getState().getActivePtyId();
+      }
+      if (ptyId === null) return;
+    }
 
     await writePty(ptyId, cmd + "\r").catch(() => {});
 
-    const activePane = getActivePane();
+    const activePane = useTabStore.getState().getActivePane();
     if (activePane) {
       useAgentTrackerStore.getState().startSession(
         activePane.id,
@@ -154,9 +184,20 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     }
 
     onClose();
-  }, [getActivePtyId, getActivePane, onClose, continuousMode, activeProvider, defaultProvider, setDefaultProvider]);
+  }, [buildCommand, getActivePtyId, getActivePane, onClose, activeProvider, defaultProvider, setDefaultProvider]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (choice) {
+      e.preventDefault();
+      const k = e.key.toLowerCase();
+      if (e.key === "Escape") setChoice(null);
+      else if (["arrowleft", "arrowright", "arrowup", "arrowdown", "tab"].includes(k)) {
+        if (currentPtyId !== null) setTarget((t) => (t === "current" ? "new" : "current"));
+      } else if (e.key === "Enter") runAgent(choice, target);
+      else if (k === "c" && currentPtyId !== null) runAgent(choice, "current");
+      else if (k === "n") runAgent(choice, "new");
+      return;
+    }
     if (e.key === "Escape") {
       onClose();
     } else if (e.key === "ArrowDown") {
@@ -581,6 +622,32 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             })
           )}
         </div>
+
+        {choice && (
+          <div className="agent-where" role="group" aria-label={`Where to run ${choice.name}`}>
+            <span className="agent-where__title">
+              Run <b style={{ color: choice.color }}>{choice.name}</b> in
+            </span>
+            <button
+              className="agent-where__opt"
+              aria-pressed={target === "current"}
+              disabled={currentPtyId === null}
+              onMouseEnter={() => setTarget("current")}
+              onClick={() => runAgent(choice, "current")}
+            >
+              This terminal <kbd>C</kbd>
+            </button>
+            <button
+              className="agent-where__opt"
+              aria-pressed={target === "new"}
+              onMouseEnter={() => setTarget("new")}
+              onClick={() => runAgent(choice, "new")}
+            >
+              New tab <kbd>N</kbd>
+            </button>
+            <button className="agent-where__back" onClick={() => { setChoice(null); inputRef.current?.focus(); }}>Back (Esc)</button>
+          </div>
+        )}
 
         {/* Footer */}
         <div

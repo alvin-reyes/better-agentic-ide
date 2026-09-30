@@ -580,6 +580,18 @@ export default function SettingsPanel() {
                   Show the shortcut bar at the bottom of the window (all shortcuts: {shortcutLabel("shortcuts")})
                 </span>
               </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={store.askOnNewTab}
+                  onChange={(e) => store.setAskOnNewTab(e.target.checked)}
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Ask whether a new tab is a plain terminal or a project
+                </span>
+              </label>
             </div>
           )}
 

@@ -1,10 +1,12 @@
 mod bmad;
 mod contracts;
+mod mcp;
 mod pty;
 mod state;
 mod subagent;
 mod sync;
 mod usage;
+mod vault;
 mod watcher;
 
 #[derive(serde::Serialize)]
@@ -370,6 +372,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(pty::PtyManager::new())
         .manage(watcher::WatcherManager::new())
         .manage(subagent::SubagentWatcherManager::new())
@@ -415,6 +418,12 @@ pub fn run() {
             sync::sync_set_config,
             sync::sync_now,
             sync::claude_mem_status,
+            vault::vault_list,
+            vault::vault_set,
+            vault::vault_delete,
+            mcp::mcp_list,
+            mcp::mcp_install,
+            mcp::mcp_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

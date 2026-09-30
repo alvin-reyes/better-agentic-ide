@@ -1,3 +1,4 @@
+import { requestNewTab } from "../lib/newTab";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
@@ -54,7 +55,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     };
     const actions: PaletteItem[] = [
       // Tab actions
-      { id: "new-tab", label: "New Tab", shortcut: L("newTab"), category: "Tabs", action: () => { addTab(); onClose(); } },
+      { id: "new-tab", label: "New Tab", shortcut: L("newTab"), category: "Tabs", action: () => { onClose(); requestNewTab(); } },
       { id: "close-tab", label: "Close Tab", shortcut: L("closeTab"), category: "Tabs", action: () => { useTabStore.getState().closeTab(activeTabId); onClose(); } },
       { id: "rename-tab", label: "Rename Tab", shortcut: L("renameTab"), category: "Tabs", action: () => { window.dispatchEvent(new CustomEvent("rename-active-tab")); onClose(); } },
       // Split actions
@@ -98,6 +99,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "tab-switcher", label: "Tabs: Go to tab", shortcut: L("tabSwitcher"), category: "Tabs", action: () => { onClose(); window.dispatchEvent(new CustomEvent("toggle-tab-switcher")); } },
       { id: "tab-reopen", label: "Tabs: Reopen closed tab", shortcut: L("reopenTab"), category: "Tabs", action: () => { onClose(); useTabStore.getState().reopenClosedTab(); } },
       { id: "shortcuts", label: "Help: Keyboard shortcuts", shortcut: L("shortcuts"), category: "Help", action: () => { window.dispatchEvent(new CustomEvent("toggle-shortcuts")); onClose(); } },
+      { id: "mcp-library", label: "MCP: Library of servers for Claude Code", shortcut: L("integrations"), category: "Integrations", action: () => { window.dispatchEvent(new CustomEvent("toggle-integrations")); onClose(); } },
+      { id: "secrets-vault", label: "Secrets: Vault (system keychain)", category: "Integrations", action: () => { window.dispatchEvent(new CustomEvent("open-secrets")); onClose(); } },
       { id: "tokens-panel", label: "Tokens: Usage, cost and ways to save", shortcut: L("tokens"), category: "Tokens", action: () => { window.dispatchEvent(new CustomEvent("toggle-tokens")); onClose(); } },
       { id: "contracts-workbench", label: "Contracts: Open workbench (tests, deploy & call)", category: "Contracts", action: () => { window.dispatchEvent(new CustomEvent("contracts-workbench")); onClose(); } },
       { id: "contracts-panel", label: "Contracts: Open panel", shortcut: L("contracts"), category: "Contracts", action: () => { window.dispatchEvent(new CustomEvent("toggle-contracts")); onClose(); } },

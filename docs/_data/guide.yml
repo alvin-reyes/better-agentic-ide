@@ -10,6 +10,8 @@
   url: /guide/agents/
 - title: Smart contracts
   url: /guide/contracts/
+- title: MCP & secrets
+  url: /guide/integrations/
 - title: Tokens & cost
   url: /guide/tokens/
 - title: Auto-save & sync

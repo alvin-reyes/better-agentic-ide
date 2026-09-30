@@ -6,7 +6,7 @@ description: ADE's agent picker, fleet view, orchestrator, BMAD personas and bro
 
 ## Agent picker
 
-Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to launch an agent in a new, color-coded tab.
+Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an agent. When you choose one, ADE asks where to run it: **this terminal** (<kbd>C</kbd>) or a **new tab** in the same folder (<kbd>N</kbd>). If the current terminal is already running something, *New tab* is preselected.
 
 - **37 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General — API Builder, Database Engineer, Smart Contract Auditor, Debugger, Code Reviewer, Docs Writer and more. Each starts the agent with a role prompt. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
 - **Describe a task** in the search box and the picker suggests the best match.

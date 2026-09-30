@@ -631,3 +631,63 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .tab-switcher__status[data-state="busy"] { background: rgba(88,166,255,.15); color: #58a6ff; }
 .tab-switcher__status[data-state="done"] { background: rgba(255,138,61,.15); color: #ff8a3d; }
 .tab-switcher__empty { color: var(--text-muted); cursor: default !important; justify-content: center; }
+
+/* Integrations: MCP library and secrets vault */
+.integrations-panel { width: min(900px, 94vw); }
+.integrations-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.integrations-toolbar .shortcuts-search { margin-left: 0; max-width: 240px; }
+.integrations-msg { font-size: 12px; padding: 8px 12px; border-radius: 6px; background: rgba(63,185,80,.1); border: 1px solid rgba(63,185,80,.3); color: var(--text-primary); }
+.integrations-msg[data-kind="error"] { background: rgba(255,123,114,.1); border-color: rgba(255,123,114,.35); }
+.integrations-h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 0 0 8px; }
+.integrations-foot { font-size: 11px; color: var(--text-muted); line-height: 1.6; margin: 0; }
+.integrations-foot code, .mcp-secret code, .vault-list code { font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.mcp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mcp-card { display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); }
+.mcp-card[data-installed] { border-color: color-mix(in srgb, #a78bfa 45%, var(--border)); }
+.mcp-card__main { flex: 1; min-width: 0; }
+.mcp-card__main p { margin: 4px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.mcp-card__title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+.mcp-tag { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: var(--bg-tertiary); color: var(--text-secondary); }
+.mcp-tag[data-warn] { background: rgba(227,179,65,.15); color: #e3b341; }
+.mcp-secret { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; color: #e3b341; }
+.mcp-secret[data-ok] { color: #3fb950; }
+.mcp-card__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.mcp-installed { font-size: 11px; color: #a78bfa; }
+.ig-btn { font-size: 12px; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer; }
+.ig-btn[data-primary] { background: linear-gradient(90deg, #ff8a3d, #a78bfa); border-color: transparent; color: #0b0c0f; font-weight: 600; }
+.ig-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ig-link { background: none; border: 0; padding: 0; font-size: 11px; color: var(--accent, #58a6ff); cursor: pointer; text-decoration: none; }
+.ig-link:hover { text-decoration: underline; }
+.ig-link[data-danger] { color: #ff7b72; }
+.vault-form { display: grid; grid-template-columns: 1.3fr 1.3fr 1fr auto; gap: 8px; }
+.vault-form input { min-width: 0; padding: 6px 9px; border-radius: 6px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); font-size: 12px; outline: none; }
+.vault-form input:focus { border-color: var(--accent); }
+.vault-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.vault-list li { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.vault-list li small { flex: 1; min-width: 0; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-dots { color: var(--text-muted); letter-spacing: .1em; }
+@media (max-width: 720px) { .vault-form { grid-template-columns: 1fr; } }
+
+/* New tab: terminal or project */
+.new-tab-dialog { width: min(520px, 92vw); outline: none; }
+.new-tab-list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+.new-tab-list li { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 8px; cursor: pointer; }
+.new-tab-list li[aria-selected="true"] { background: var(--bg-elevated); }
+.new-tab-list li.new-tab-heading { cursor: default; padding: 10px 10px 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.new-tab-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; background: var(--bg-tertiary); color: #ff8a3d; font-family: "JetBrains Mono", monospace; font-size: 12px; flex-shrink: 0; }
+.new-tab-main { flex: 1; min-width: 0; display: grid; }
+.new-tab-main b { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.new-tab-main small { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.new-tab-list kbd { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+.new-tab-forget { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 11px; opacity: 0; }
+.new-tab-list li:hover .new-tab-forget { opacity: 1; }
+.new-tab-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); cursor: pointer; }
+
+/* Agent picker: where to run */
+.agent-where { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--bg-tertiary); }
+.agent-where__title { font-size: 12px; color: var(--text-secondary); margin-right: 4px; }
+.agent-where__opt { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; }
+.agent-where__opt[aria-pressed="true"] { border-color: #a78bfa; color: var(--text-primary); box-shadow: 0 0 0 1px #a78bfa inset; }
+.agent-where__opt:disabled { opacity: .4; cursor: not-allowed; }
+.agent-where__opt kbd { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--text-muted); }
+.agent-where__back { margin-left: auto; background: none; border: 0; font-size: 11px; color: var(--text-muted); cursor: pointer; }

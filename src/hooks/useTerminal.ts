@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "../lib/terminalFileLinks";
-import { isAppShortcut, shortcutLabel } from "../lib/shortcuts";
+import { isAppShortcut } from "../lib/shortcuts";
 import { openFileFromTerminal } from "../lib/openFile";
 import { writePty } from "../lib/terminalCommands";
 import { SearchAddon } from "@xterm/addon-search";
@@ -284,68 +284,10 @@ function getTerminalOptions() {
   };
 }
 
-// The launch banner: the hex-caret mark (a Web3 block whose right half is the
-// prompt caret, with an agent at its tip) beside "ADE", in the brand gradient.
-const ORANGE = [255, 138, 61];
-const VIOLET = [167, 139, 250];
-const rgb = (c: number[]) => `\x1b[38;2;${c[0]};${c[1]};${c[2]}m`;
-const mix = (t: number) => ORANGE.map((o, i) => Math.round(o + (VIOLET[i] - o) * t));
-
-/** Color each character of `text` along the orange→violet gradient; spaces stay plain. */
-function gradient(text: string, from = 0, to = 1): string {
-  const chars = [...text];
-  return chars.map((ch, i) => (ch === " " ? ch : rgb(mix(from + ((to - from) * i) / Math.max(1, chars.length - 1))) + ch)).join("");
-}
-
-function bannerLines(): string[] {
-  const white = "\x1b[1;38;2;255;255;255m";
-  const dim = "\x1b[38;5;239m";
-  const faint = "\x1b[38;5;237m";
-  const green = "\x1b[38;5;114m";
-  const reset = "\x1b[0m";
-  const word = [
-    " █████╗ ██████╗ ███████╗",
-    "██╔══██╗██╔══██╗██╔════╝",
-    "███████║██║  ██║█████╗  ",
-    "██╔══██║██║  ██║██╔══╝  ",
-    "██║  ██║██████╔╝███████╗",
-    "╚═╝  ╚═╝╚═════╝ ╚══════╝",
-  ].map((l) => gradient(l));
-  // Left edges faint, top/bottom and right edges in the gradient, caret and cursor white.
-  const mark = [
-    `    ${gradient("▁▁▁▁▁▁▁▁▁", 0, 0.55)}    `,
-    `   ${faint}╱${reset}         ${rgb(mix(0.6))}╲${reset}   `,
-    `  ${faint}╱${reset}  ${white}╲${reset}         ${rgb(mix(0.75))}╲${reset}  `,
-    ` ${faint}╱${reset}    ${white}╲${reset}         ${white}●${reset} `,
-    ` ${faint}╲${reset}    ${white}╱${reset} ${white}▂▂▂${reset}     ${rgb(mix(0.75))}╱${reset} `,
-    `  ${faint}╲${reset}  ${white}╱${reset}         ${rgb(mix(0.6))}╱${reset}  `,
-    `   ${faint}╲${reset}${gradient("▔▔▔▔▔▔▔▔▔", 0, 0.55)}${rgb(mix(0.6))}╱${reset}   `,
-  ];
-  const right = [
-    ...word,
-    `${dim}Agentic Development Environment${reset}`,
-    `${dim}v${__APP_VERSION__}  ${green}${shortcutLabel("palette")}${dim} cmds  ${green}${shortcutLabel("scratchpad")}${dim} scratchpad  ${green}${shortcutLabel("shortcuts")}${dim} shortcuts${reset}`,
-  ];
-  // Pad by visible width so the lettering lines up whatever the escape codes.
-  const width = (l: string) => [...l.replace(/\x1b\[[0-9;]*m/g, "")].length;
-  const markWidth = Math.max(...mark.map(width));
-  const lines = [""];
-  for (let i = 0; i < right.length; i++) {
-    const m = mark[i] ?? "";
-    lines.push(`${m}${" ".repeat(markWidth - width(m))}${reset}   ${right[i]}${reset}`);
-  }
-  lines.push("");
-  return lines;
-}
-
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null, serializedBuffer?: string): Promise<TerminalInstance> {
   const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
 
-  if (serializedBuffer) {
-    term.write(serializedBuffer);
-  } else {
-    for (const line of bannerLines()) term.writeln(line);
-  }
+  if (serializedBuffer) term.write(serializedBuffer);
 
   const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };
   instances.set(paneId, inst);
@@ -512,4 +454,14 @@ function getTerminalDimensions(paneId: string): { cols: number; rows: number } |
   return { cols: inst.term.cols, rows: inst.term.rows };
 }
 
-export { destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };
+/** Focus the active tab's active pane, when it's a terminal. */
+function focusActiveTerminal(): boolean {
+  const { tabs, activeTabId } = useTabStore.getState();
+  const tab = tabs.find((t) => t.id === activeTabId);
+  const inst = tab ? instances.get(tab.activePaneId) : undefined;
+  if (!inst) return false;
+  inst.term.focus();
+  return true;
+}
+
+export { focusActiveTerminal, destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };

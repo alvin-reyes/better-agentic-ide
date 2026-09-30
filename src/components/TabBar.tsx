@@ -1,3 +1,4 @@
+import { requestNewTab } from "../lib/newTab";
 import { useState, useRef, useEffect } from "react";
 import { shortcutLabel } from "../lib/shortcuts";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
@@ -323,7 +324,7 @@ export default function TabBar() {
           e.currentTarget.style.backgroundColor = "transparent";
           e.currentTarget.style.color = "var(--text-secondary)";
         }}
-        onClick={() => addTab()}
+        onClick={requestNewTab}
         title={`New tab (${shortcutLabel("newTab")})`}
       >
         +

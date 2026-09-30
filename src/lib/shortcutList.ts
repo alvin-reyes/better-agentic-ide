@@ -56,6 +56,7 @@ export const SHORTCUT_GROUPS: { group: string; items: ShortcutItem[] }[] = [
       { keys: L("preview"), action: "Preview panel", short: "Preview" },
       { keys: L("contracts"), action: "Contracts panel", short: "Contracts" },
       { keys: L("tokens"), action: "Tokens panel", short: "Tokens" },
+      { keys: L("integrations"), action: "MCP library and secrets", short: "MCP" },
       { keys: L("settings"), action: "Settings", short: "Settings" },
       { keys: "Esc", action: "Close panel / back to terminal", short: "Close panel" },
     ],

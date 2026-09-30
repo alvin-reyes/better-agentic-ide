@@ -6,6 +6,8 @@ description: Tabs, split panes, search, detached windows, recordings and clickab
 
 ## Tabs
 
+**New tab: terminal or project?** A new tab first asks where to start. Press <kbd>T</kbd> for a plain terminal in your home folder, <kbd>O</kbd> to pick a project folder, or <kbd>1</kbd>–<kbd>9</kbd> for a recent project. The shell starts in that folder. To skip the question, tick *Don't ask again* in the dialog; turn it back on in *Settings → Terminal*.
+
 | Action | Shortcut |
 |---|---|
 | New tab | {% include key.html mac="⌘T" other="Ctrl+Shift+T" %} |

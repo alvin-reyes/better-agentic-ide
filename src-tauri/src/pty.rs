@@ -39,6 +39,7 @@ pub enum PtyEvent {
 
 #[tauri::command]
 pub fn create_pty(
+    app: tauri::AppHandle,
     state: tauri::State<'_, PtyManager>,
     rows: u16,
     cols: u16,
@@ -73,6 +74,10 @@ pub fn create_pty(
         if let Ok(value) = std::env::var(var) {
             cmd.env(var, value);
         }
+    }
+    // Vault secrets, so agents and MCP servers started here can use them.
+    for (name, value) in crate::vault::env_for_terminals(&app) {
+        cmd.env(name, value);
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| format!("spawn failed: {}", e))?;

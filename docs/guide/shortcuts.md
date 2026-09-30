@@ -47,6 +47,7 @@ On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux and Windows**, they use <
 | Fleet view | {% include key.html mac="⌘." other="Ctrl+Shift+." %} |
 | Orchestrator | {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} |
 | Smart contracts panel | {% include key.html mac="⌘⇧K" other="Ctrl+Alt+Shift+K" %} |
+| MCP library and secrets | {% include key.html mac="⌘⇧I" other="Ctrl+Alt+Shift+I" %} |
 | Tokens panel | {% include key.html mac="⌘⇧G" other="Ctrl+Alt+Shift+G" %} |
 | Keyboard shortcuts | {% include key.html mac="⌘/" other="Ctrl+Shift+/" %} |
 | Settings | {% include key.html mac="⌘," other="Ctrl+Shift+," %} |

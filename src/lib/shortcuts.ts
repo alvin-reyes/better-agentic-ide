@@ -48,6 +48,7 @@ export const SHORTCUTS = {
   orchestrator: { key: "o", shift: true },
   contracts: { key: "k", shift: true },
   tokens: { key: "g", shift: true },
+  integrations: { key: "i", shift: true },
   shortcuts: { key: "/" },
   tabSwitcher: { key: "k" },
   reopenTab: { key: "t", shift: true },

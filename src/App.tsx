@@ -8,6 +8,7 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import BmadInitBanner from "./components/BmadInitBanner";
 import { writePty, sendToActiveTerminal } from "./lib/terminalCommands";
 import { hideSplash } from "./lib/splash";
+import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
 import { useContextGuard, type GuardToast } from "./hooks/useContextGuard";
 
 // Lazy-load heavy components for faster startup
@@ -26,6 +27,8 @@ const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
 const BmadPanel = lazy(() => import("./components/BmadPanel"));
 const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
 const TokensPanel = lazy(() => import("./components/TokensPanel"));
+const IntegrationsPanel = lazy(() => import("./components/IntegrationsPanel"));
+const NewTabDialog = lazy(() => import("./components/NewTabDialog"));
 const ShortcutsOverlay = lazy(() => import("./components/ShortcutsOverlay"));
 const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
@@ -57,6 +60,8 @@ export default function App() {
   const [bmadOpen, setBmadOpen] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
+  const [newTabOpen, setNewTabOpen] = useState(false);
+  const [integrations, setIntegrations] = useState<"mcp" | "secrets" | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const showShortcutBar = useSettingsStore((s) => s.showShortcutBar);
@@ -160,6 +165,7 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), t.action ? 15000 : 4000);
   }, []);
   useContextGuard(activeCwd, showToast);
+  useTerminalFocusGuard();
 
   // Agent completion notifications, shown as an in-app toast.
   useEffect(() => {
@@ -179,6 +185,7 @@ export default function App() {
 
   const toggleFleet = useCallback(() => setFleetOpen((prev) => !prev), []);
   const toggleTokens = useCallback(() => setTokensOpen((prev) => !prev), []);
+  const toggleIntegrations = useCallback(() => setIntegrations((prev) => (prev ? null : "mcp")), []);
   const toggleShortcuts = useCallback(() => setShortcutsOpen((prev) => !prev), []);
   const toggleTabSwitcher = useCallback(() => setSwitcherOpen((prev) => !prev), []);
   const toggleContracts = useCallback(() => setContractsOpen((prev) => !prev), []);
@@ -192,13 +199,16 @@ export default function App() {
       ["toggle-fleet", toggleFleet],
       ["toggle-bmad", toggleBmad],
       ["toggle-tokens", toggleTokens],
+      ["toggle-integrations", toggleIntegrations],
+      ["open-secrets", () => setIntegrations("secrets")],
+      ["request-new-tab", () => setNewTabOpen(true)],
       ["toggle-shortcuts", toggleShortcuts],
       ["toggle-tab-switcher", toggleTabSwitcher],
       ["toggle-contracts", toggleContracts],
     ];
     for (const [name, fn] of toggles) window.addEventListener(name, fn);
     return () => { for (const [name, fn] of toggles) window.removeEventListener(name, fn); };
-  }, [toggleFleet, toggleTokens, toggleShortcuts, toggleTabSwitcher, toggleContracts]);
+  }, [toggleFleet, toggleTokens, toggleIntegrations, toggleShortcuts, toggleTabSwitcher, toggleContracts]);
 
   // Contract quick actions from the command palette.
   useEffect(() => {
@@ -417,6 +427,7 @@ export default function App() {
     openOrchestrator,
     toggleContracts,
     toggleTokens,
+    toggleIntegrations,
     toggleShortcuts,
     toggleTabSwitcher,
     requestCloseTab,
@@ -517,6 +528,8 @@ export default function App() {
           <ContractsPanel cwd={activeCwd} onClose={() => setContractsOpen(false)} />
         )}
         {tokensOpen && <TokensPanel cwd={activeCwd} onClose={() => setTokensOpen(false)} />}
+        {newTabOpen && <NewTabDialog onClose={() => setNewTabOpen(false)} />}
+        {integrations && <IntegrationsPanel cwd={activeCwd} initialTab={integrations} onClose={() => setIntegrations(null)} />}
         {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
         {switcherOpen && <TabSwitcher onClose={() => setSwitcherOpen(false)} />}
         {recordingPlayerOpen && (
