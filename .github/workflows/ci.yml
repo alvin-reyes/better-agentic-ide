@@ -17,6 +17,9 @@ jobs:
   frontend:
     name: Frontend (typecheck, test, build)
     runs-on: ubuntu-latest
+    env:
+      # vite build needs more than Node's default heap (Monaco, pdf.js, Mermaid).
+      NODE_OPTIONS: --max-old-space-size=6144
     steps:
       - name: Checkout
         uses: actions/checkout@v4
