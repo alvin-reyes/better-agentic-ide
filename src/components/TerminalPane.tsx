@@ -78,7 +78,7 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
     return () => { mounted = false; clearInterval(interval); };
   }, [paneId]);
 
-  // Listen for ⌘F (Ctrl+Shift+F on Linux/Windows) to open search — only attach when this pane is active
+  // Listen for ⌘F (Ctrl+Shift+F on Linux) to open search — only attach when this pane is active
   useEffect(() => {
     if (!isActive) return;
     const handler = (e: KeyboardEvent) => {

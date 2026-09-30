@@ -20,7 +20,7 @@ describe("macOS", () => {
   });
 });
 
-describe("Linux / Windows", () => {
+describe("Linux", () => {
   it("maps ⌘ to Ctrl+Shift and ⌘⇧ to Ctrl+Alt+Shift", () => {
     expect(matches(ev("KeyT", { ctrl: true, shift: true }, "T"), SHORTCUTS.newTab, false)).toBe(true);
     expect(matches(ev("KeyD", { ctrl: true, shift: true, alt: true }), SHORTCUTS.splitVertical, false)).toBe(true);

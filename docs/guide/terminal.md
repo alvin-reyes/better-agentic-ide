@@ -74,4 +74,4 @@ When an agent finishes in a terminal you aren't looking at, ADE shows a system n
 
 ## Your shell keys
 
-On **Linux and Windows**, app shortcuts use <kbd>Ctrl+Shift</kbd>, so plain <kbd>Ctrl</kbd> keys always reach your shell: <kbd>Ctrl+R</kbd> searches history, <kbd>Ctrl+W</kbd> deletes a word, <kbd>Ctrl+D</kbd> sends end-of-file. On **macOS**, app shortcuts use <kbd>⌘</kbd> and <kbd>Ctrl</kbd> is left entirely to the terminal.
+On **Linux**, app shortcuts use <kbd>Ctrl+Shift</kbd>, so plain <kbd>Ctrl</kbd> keys always reach your shell: <kbd>Ctrl+R</kbd> searches history, <kbd>Ctrl+W</kbd> deletes a word, <kbd>Ctrl+D</kbd> sends end-of-file. On **macOS**, app shortcuts use <kbd>⌘</kbd> and <kbd>Ctrl</kbd> is left entirely to the terminal.

@@ -1010,7 +1010,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            // Linux/Windows: plain Ctrl+Enter and Ctrl+S work here too. The
+            // Linux: plain Ctrl+Enter and Ctrl+S work here too. The
             // Ctrl+Shift forms exist because the terminal needs plain Ctrl;
             // in this text box nothing else wants them.
             const plainCtrl = (key: string) =>

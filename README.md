@@ -13,7 +13,7 @@
   <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><strong>Download</strong></a>
 </p>
 
-ADE is a desktop app for macOS, Windows and Linux built around two pillars: **AI agents** and **blockchain engineering tooling**. Run Claude Code, Codex and Gemini side by side, have every project set up for them, see exactly what each agent costs, and take smart contracts from first test to reviewed deploy, all from the keyboard.
+ADE is a desktop app for macOS and Linux built around two pillars: **AI agents** and **blockchain engineering tooling**. Run Claude Code, Codex and Gemini side by side, have every project set up for them, see exactly what each agent costs, and take smart contracts from first test to reviewed deploy, all from the keyboard.
 
 ## AI Agents
 
@@ -57,7 +57,7 @@ Only missing files are written, and the toast that lists them has Undo. Add or r
 brew install --cask alvin-reyes/tap/ade
 ```
 
-**Installers** — download from the [latest release](https://github.com/alvin-reyes/better-agentic-ide/releases/latest): `.dmg` for macOS (Apple Silicon and Intel), `.msi` or `-setup.exe` for Windows, `.deb` or `.AppImage` for Linux.
+**Installers** — download from the [latest release](https://github.com/alvin-reyes/better-agentic-ide/releases/latest): `.dmg` for macOS (Apple Silicon and Intel) and `.deb` or `.AppImage` for Linux.
 
 ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, Gemini CLI and Ollama. See the [user guide](https://alvin-reyes.github.io/better-agentic-ide/guide/) to get started.
 

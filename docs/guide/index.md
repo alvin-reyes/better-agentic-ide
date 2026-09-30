@@ -1,7 +1,7 @@
 ---
 title: Getting started
 lead: Install ADE, open your first project and run an agent — or build and test a smart contract — in a few minutes.
-description: Install ADE on macOS, Windows or Linux and run your first AI coding agent.
+description: Install ADE on macOS or Linux and run your first AI coding agent.
 ---
 
 ## Install
@@ -17,10 +17,6 @@ brew install --cask alvin-reyes/tap/ade
 Upgrade later with `brew upgrade --cask ade`. The cask clears the quarantine flag, so macOS won't block the first launch.
 
 You can also download the `.dmg` from the [latest release]({{ site.repo }}/releases/latest): `aarch64` for Apple Silicon, `x64` for Intel Macs. If macOS says the app "is damaged" after a manual install, see [Troubleshooting]({{ '/guide/troubleshooting/' | relative_url }}#macos-says-the-app-is-damaged).
-
-### Windows
-
-Download the `.msi` (or `-setup.exe`) from the [latest release]({{ site.repo }}/releases/latest) and run it. Windows 10 and 11 on x64 are supported.
 
 ### Linux
 
@@ -51,7 +47,7 @@ The fleet view reads Claude Code's own transcripts, so Claude Code gets the most
 
 The first time you open a project, ADE sets it up for agents: BMAD, the ADE methodology and a team of Claude Code sub-agents, adding only files that are missing. See [Project setup]({{ '/guide/project-setup/' | relative_url }}).
 
-> Shortcuts on this site follow your platform. Switch between macOS and Linux/Windows with the buttons in the sidebar.
+> Shortcuts on this site follow your platform. Switch between macOS and Linux with the buttons in the sidebar.
 
 ## Where to go next
 

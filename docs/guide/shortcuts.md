@@ -1,10 +1,10 @@
 ---
 title: Keyboard shortcuts
 lead: Every shortcut in ADE. Keys follow your platform — switch with the buttons in the sidebar.
-description: All ADE keyboard shortcuts for macOS, Linux and Windows.
+description: All ADE keyboard shortcuts for macOS and Linux.
 ---
 
-On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux and Windows**, they use <kbd>Ctrl+Shift</kbd> where macOS uses <kbd>⌘</kbd>, and <kbd>Ctrl+Alt+Shift</kbd> where macOS uses <kbd>⌘⇧</kbd>. Plain <kbd>Ctrl</kbd> keys are never taken by the app, so <kbd>Ctrl+C</kbd>, <kbd>Ctrl+D</kbd>, <kbd>Ctrl+R</kbd>, <kbd>Ctrl+W</kbd> and the rest keep working in your shell.
+On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux**, they use <kbd>Ctrl+Shift</kbd> where macOS uses <kbd>⌘</kbd>, and <kbd>Ctrl+Alt+Shift</kbd> where macOS uses <kbd>⌘⇧</kbd>. Plain <kbd>Ctrl</kbd> keys are never taken by the app, so <kbd>Ctrl+C</kbd>, <kbd>Ctrl+D</kbd>, <kbd>Ctrl+R</kbd>, <kbd>Ctrl+W</kbd> and the rest keep working in your shell.
 
 **See them all in the app:** press {% include key.html mac="⌘/" other="Ctrl+Shift+/" %} or click the keyboard icon at the top right. The list is grouped and searchable, and every command is also in the command palette with its shortcut. If you'd like a strip of shortcuts along the bottom of the window, turn on **Show the shortcut bar** in that list or in *Settings → Terminal*.
 

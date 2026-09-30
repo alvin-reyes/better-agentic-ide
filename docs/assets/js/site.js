@@ -5,7 +5,6 @@
 
   var REPO = "alvin-reyes/better-agentic-ide";
   var isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
-  var isWindows = /Win/i.test(navigator.platform || navigator.userAgent);
 
   // --- Mobile nav ---------------------------------------------------------
   var toggle = document.querySelector(".nav-toggle");
@@ -30,7 +29,7 @@
     });
   }
 
-  // --- Shortcuts: macOS keys or Linux/Windows keys --------------------------
+  // --- Shortcuts: macOS keys or Linux keys --------------------------
   var KEY = "ade-site-platform";
   function readPlatform() {
     try { return localStorage.getItem(KEY) || (isMac ? "mac" : "other"); } catch (e) { return isMac ? "mac" : "other"; }
@@ -116,13 +115,12 @@
       var links = {
         "mac-arm": find(/aarch64\.dmg$/),
         "mac-intel": find(/x64\.dmg$/),
-        "windows": find(/\.msi$/) || find(/setup\.exe$/),
         "deb": find(/\.deb$/),
         "appimage": find(/\.AppImage$/),
       };
       downloadEls.forEach(function (el) {
         var kind = el.getAttribute("data-download");
-        if (kind === "auto") kind = isMac ? "mac-arm" : isWindows ? "windows" : "appimage";
+        if (kind === "auto") kind = isMac ? "mac-arm" : "appimage";
         if (links[kind]) el.href = links[kind];
       });
     })

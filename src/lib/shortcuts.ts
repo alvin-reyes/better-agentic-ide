@@ -3,7 +3,7 @@
  * ⌘⇧ + key) and mapped per platform:
  *
  *   macOS           ⌘ key        ⌘⇧ key
- *   Linux/Windows   Ctrl+Shift   Ctrl+Alt+Shift
+ *   Linux           Ctrl+Shift   Ctrl+Alt+Shift
  *
  * Plain Ctrl never triggers an app shortcut on any platform: in a terminal
  * Ctrl+D, Ctrl+R, Ctrl+W, Ctrl+E, Ctrl+P, Ctrl+B, Ctrl+F and Ctrl+arrows
@@ -99,7 +99,7 @@ export function tabNumber(e: Mods, mac = IS_MAC): number | null {
   return /^[1-9]$/.test(k) && hasMods(e, false, mac) ? Number(k) : null;
 }
 
-/** Ctrl+PageUp / Ctrl+PageDown, the usual tab keys on Linux and Windows. */
+/** Ctrl+PageUp / Ctrl+PageDown, the usual tab keys on Linux. */
 export function pageTab(e: Mods, mac = IS_MAC): -1 | 1 | null {
   if (mac || !e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return null;
   const k = keyName(e);

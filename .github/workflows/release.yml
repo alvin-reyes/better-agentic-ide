@@ -67,7 +67,6 @@ jobs:
             |----------|------|-------------|
             | **macOS (Apple Silicon)** | `.dmg` | M1/M2/M3/M4 |
             | **macOS (Intel)** | `.dmg` | x86_64 |
-            | **Windows** | `.msi` / `.exe` | x64 |
             | **Linux** | `.deb` / `.AppImage` | x64 |
 
             ### Install via Homebrew (macOS)
@@ -95,9 +94,6 @@ jobs:
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             label: Linux-x64
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-            label: Windows-x64
 
     runs-on: ${{ matrix.platform }}
     name: Build (${{ matrix.label }})

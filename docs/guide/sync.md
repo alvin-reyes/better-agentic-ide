@@ -20,7 +20,6 @@ The files live in ADE's data folder, under `state/`:
 |---|---|
 | macOS | `~/Library/Application Support/com.betterterminal.dev` |
 | Linux | `~/.local/share/com.betterterminal.dev` |
-| Windows | `%APPDATA%\com.betterterminal.dev` |
 
 ## Snapshots
 

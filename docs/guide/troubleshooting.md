@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 lead: Fixes for the problems people run into most.
-description: Solutions to common ADE problems on macOS, Linux and Windows.
+description: Solutions to common ADE problems on macOS and Linux.
 ---
 
 ## macOS says the app is damaged
@@ -14,9 +14,9 @@ xattr -cr "/Applications/Better Terminal.app"
 
 Installing with Homebrew (`brew install --cask alvin-reyes/tap/ade`) does this for you.
 
-## A shortcut types into my shell instead (Linux/Windows)
+## A shortcut types into my shell instead (Linux)
 
-App shortcuts on Linux and Windows use <kbd>Ctrl+Shift</kbd> (and <kbd>Ctrl+Alt+Shift</kbd>), not plain <kbd>Ctrl</kbd>. For example, a new tab is <kbd>Ctrl+Shift+T</kbd>, while <kbd>Ctrl+T</kbd> goes to the shell. See [Keyboard shortcuts]({{ '/guide/shortcuts/' | relative_url }}).
+App shortcuts on Linux use <kbd>Ctrl+Shift</kbd> (and <kbd>Ctrl+Alt+Shift</kbd>), not plain <kbd>Ctrl</kbd>. For example, a new tab is <kbd>Ctrl+Shift+T</kbd>, while <kbd>Ctrl+T</kbd> goes to the shell. See [Keyboard shortcuts]({{ '/guide/shortcuts/' | relative_url }}).
 
 ## A file path in the terminal isn't clickable
 
