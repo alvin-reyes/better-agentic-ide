@@ -2,6 +2,7 @@ mod antislop;
 mod bmad;
 mod contracts;
 mod mcp;
+mod projectsetup;
 mod pty;
 mod state;
 mod subagent;
@@ -427,6 +428,11 @@ pub fn run() {
             mcp::mcp_remove,
             antislop::slop_diff,
             antislop::ade_plugin_marketplace,
+            projectsetup::project_setup_status,
+            projectsetup::project_setup_apply,
+            projectsetup::project_setup_undo,
+            projectsetup::project_git_init,
+            projectsetup::project_agent_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,10 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { MCP_CATALOG, MCP_CATEGORIES, envRefs, matchCatalog, type McpCategory, type McpEntry } from "../data/mcpCatalog";
 import { useEscapeToClose } from "./useEscapeToClose";
 import AntiSlopTab from "./AntiSlopTab";
+import AgentsTab from "./AgentsTab";
 
 interface Props {
   cwd: string | null;
-  initialTab?: "mcp" | "secrets" | "antislop";
+  initialTab?: "agents" | "mcp" | "secrets" | "antislop";
   onClose: () => void;
 }
 
@@ -22,7 +23,7 @@ const errText = (e: unknown) => String((e as { message?: string })?.message ?? e
 
 /** MCP library and secrets vault. */
 export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: Props) {
-  const [tab, setTab] = useState<"mcp" | "secrets" | "antislop">(initialTab);
+  const [tab, setTab] = useState<"agents" | "mcp" | "secrets" | "antislop">(initialTab);
   const [root, setRoot] = useState<string | null>(null);
   const [installed, setInstalled] = useState<Servers>({});
   const [secrets, setSecrets] = useState<SecretMeta[]>([]);
@@ -133,6 +134,7 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
         <div className="contracts-panel__header">
           <h2>Integrations</h2>
           <div className="tokens-seg" role="tablist" aria-label="Section">
+            <button role="tab" aria-selected={tab === "agents"} onClick={() => setTab("agents")}>Agents</button>
             <button role="tab" aria-selected={tab === "mcp"} onClick={() => setTab("mcp")}>MCP library</button>
             <button role="tab" aria-selected={tab === "secrets"} onClick={() => setTab("secrets")}>Secrets ({secrets.length})</button>
             <button role="tab" aria-selected={tab === "antislop"} onClick={() => setTab("antislop")}>Anti-slop</button>
@@ -279,6 +281,14 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
                 Values live in your system keychain and are never written to disk or synced. Each one is set as an environment variable in terminals opened after it's saved, which is how MCP servers and agents get them. Wallet private keys don't belong here: ADE never handles them.
               </p>
             </>
+          )}
+
+          {tab === "agents" && (
+            <AgentsTab
+              root={root}
+              onNotice={(t) => { setError(null); setNotice(t); }}
+              onError={setError}
+            />
           )}
 
           {tab === "antislop" && (

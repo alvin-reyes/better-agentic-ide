@@ -708,3 +708,12 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .prompt-hints button { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 11px; }
 .deslop-btn { margin-right: 10px; font-size: 11px; padding: 2px 8px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-secondary); cursor: pointer; }
 .deslop-btn:hover { color: var(--text-primary); border-color: #a78bfa; }
+
+/* Agents tab */
+.agent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.agent-list li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); }
+.agent-list li[data-installed] { border-color: color-mix(in srgb, #3fb950 40%, var(--border)); }
+.agent-list__main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.agent-list__main b { font-size: 13px; font-weight: 500; display: inline-flex; gap: 6px; align-items: center; }
+.agent-list__main small { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcp-tag[data-stack] { background: rgba(255,90,31,.14); color: #ff8a3d; }

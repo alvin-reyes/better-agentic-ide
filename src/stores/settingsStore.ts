@@ -299,6 +299,8 @@ interface Settings {
   showShortcutBar: boolean;
   /** Ask "terminal or project?" when opening a new tab. */
   askOnNewTab: boolean;
+  /** Set up every project (BMAD, methodology, agents) when it's opened. */
+  autoProjectSetup: boolean;
 }
 
 /** Warn when a Claude session's context passes `threshold` of its window. */
@@ -332,6 +334,7 @@ interface SettingsStore extends Settings {
   setContextGuard: (patch: Partial<ContextGuard>) => void;
   setShowShortcutBar: (show: boolean) => void;
   setAskOnNewTab: (ask: boolean) => void;
+  setAutoProjectSetup: (on: boolean) => void;
   getActiveTheme: () => ThemeColors;
 
   saveWorkspace: (name: string, tabs: { name: string; splits: "none" | "horizontal" | "vertical" }[]) => void;
@@ -365,6 +368,7 @@ const defaults: Settings = {
   // The full list is a keystroke away (the shortcuts overlay); the bar is opt-in.
   showShortcutBar: false,
   askOnNewTab: true,
+  autoProjectSetup: true,
 };
 
 const initial: Settings = { ...defaults, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) };
@@ -413,6 +417,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setContextGuard: (patch) => save({ contextGuard: { ...get().contextGuard, ...patch } }),
     setShowShortcutBar: (showShortcutBar) => save({ showShortcutBar }),
     setAskOnNewTab: (askOnNewTab) => save({ askOnNewTab }),
+    setAutoProjectSetup: (autoProjectSetup) => save({ autoProjectSetup }),
 
     getActiveTheme: () => {
       const s = get();

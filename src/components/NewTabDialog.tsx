@@ -3,7 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePaneCwd, baseName } from "../stores/paneMetaStore";
-import { forgetProject, openProjectTab, recentProjects } from "../lib/newTab";
+import { forgetProject, newProjectTab, openProjectTab, recentProjects } from "../lib/newTab";
 import { useEscapeToClose } from "./useEscapeToClose";
 
 const home = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, "~");
@@ -26,8 +26,9 @@ export default function NewTabDialog({ onClose }: { onClose: () => void }) {
     return [...recents, ...others].slice(0, 9);
   }, [recents, openProjects]);
 
-  // Row 0 is the plain terminal, row 1 the folder picker, then projects.
-  const rows = 2 + projects.length;
+  // Rows: plain terminal, new project, open project, then recent projects.
+  const FIXED = 3;
+  const rows = FIXED + projects.length;
 
   const plain = () => { addTab(); onClose(); };
   const project = (path: string) => { openProjectTab(path); onClose(); };
@@ -40,7 +41,19 @@ export default function NewTabDialog({ onClose }: { onClose: () => void }) {
       setError(String(e));
     }
   };
-  const choose = (i: number) => (i === 0 ? plain() : i === 1 ? browse() : project(projects[i - 2]));
+  const create = async () => {
+    setError(null);
+    try {
+      const picked = await open({ directory: true, multiple: false, title: "Choose or create a folder for the new project" });
+      if (typeof picked === "string") {
+        await newProjectTab(picked);
+        onClose();
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  const choose = (i: number) => (i === 0 ? plain() : i === 1 ? create() : i === 2 ? browse() : project(projects[i - FIXED]));
 
   return (
     <div className="contracts-panel-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -56,6 +69,7 @@ export default function NewTabDialog({ onClose }: { onClose: () => void }) {
           else if (e.key === "Enter") { e.preventDefault(); choose(cursor); }
           else if (e.key.toLowerCase() === "t" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); plain(); }
           else if (e.key.toLowerCase() === "o" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); browse(); }
+          else if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); create(); }
           else if (/^[1-9]$/.test(e.key) && projects[+e.key - 1]) { e.preventDefault(); project(projects[+e.key - 1]); }
         }}
       >
@@ -70,9 +84,14 @@ export default function NewTabDialog({ onClose }: { onClose: () => void }) {
             <span className="new-tab-main"><b>Terminal</b><small>A shell in your home folder</small></span>
             <kbd>T</kbd>
           </li>
-          <li role="option" aria-selected={cursor === 1} onMouseEnter={() => setCursor(1)} onClick={browse}>
+          <li role="option" aria-selected={cursor === 1} onMouseEnter={() => setCursor(1)} onClick={create}>
+            <span className="new-tab-icon" aria-hidden="true">+</span>
+            <span className="new-tab-main"><b>New project…</b><small>Pick or create a folder: git, BMAD, the methodology and all agents</small></span>
+            <kbd>N</kbd>
+          </li>
+          <li role="option" aria-selected={cursor === 2} onMouseEnter={() => setCursor(2)} onClick={browse}>
             <span className="new-tab-icon" aria-hidden="true">⌂</span>
-            <span className="new-tab-main"><b>Open project…</b><small>Pick a folder; the terminal starts there</small></span>
+            <span className="new-tab-main"><b>Open project…</b><small>An existing folder; ADE adds what's missing</small></span>
             <kbd>O</kbd>
           </li>
           {projects.length > 0 && <li className="new-tab-heading" aria-hidden="true">Recent projects</li>}
@@ -80,8 +99,8 @@ export default function NewTabDialog({ onClose }: { onClose: () => void }) {
             <li
               key={p}
               role="option"
-              aria-selected={cursor === i + 2}
-              onMouseEnter={() => setCursor(i + 2)}
+              aria-selected={cursor === i + FIXED}
+              onMouseEnter={() => setCursor(i + FIXED)}
               onClick={() => project(p)}
               title={p}
             >

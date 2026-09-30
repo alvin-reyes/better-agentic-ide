@@ -15,7 +15,7 @@ describe("ADE Claude Code plugin", () => {
 
   it("makes Web3 engineers agents and architects skills", () => {
     const files = generatedPluginFiles();
-    expect(files.filter((f) => f.path.startsWith("agents/"))).toHaveLength(AGENT_PROFILES.filter((p) => p.category === "Web3").length);
+    expect(files.filter((f) => f.path.startsWith("agents/"))).toHaveLength(AGENT_PROFILES.filter((p) => p.category === "Web3").length + 2);
     expect(files.filter((f) => f.path.startsWith("skills/"))).toHaveLength(AGENT_PROFILES.filter((p) => p.category === "Architects").length);
     for (const f of files) expect(f.content).toMatch(/^---\nname: [a-z0-9-]+\ndescription: ".+"\n/);
   });

@@ -5,7 +5,8 @@ import TerminalPane from "./components/TerminalPane";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
-import BmadInitBanner from "./components/BmadInitBanner";
+import { useProjectSetup, announceSetup } from "./hooks/useProjectSetup";
+import type { SetupResult } from "./lib/projectSetup";
 import { writePty, sendToActiveTerminal } from "./lib/terminalCommands";
 import { hideSplash } from "./lib/splash";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
@@ -61,7 +62,7 @@ export default function App() {
   const [contractsOpen, setContractsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
   const [newTabOpen, setNewTabOpen] = useState(false);
-  const [integrations, setIntegrations] = useState<"mcp" | "secrets" | "antislop" | null>(null);
+  const [integrations, setIntegrations] = useState<"agents" | "mcp" | "secrets" | "antislop" | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const showShortcutBar = useSettingsStore((s) => s.showShortcutBar);
@@ -69,7 +70,6 @@ export default function App() {
   // For event handlers registered once.
   const activeCwdRef = useRef<string | null>(null);
   activeCwdRef.current = activeCwd;
-  const [bannerCwd, setBannerCwd] = useState<string | null>(null);
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<GuardToast | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
@@ -165,6 +165,13 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), t.action ? 15000 : 4000);
   }, []);
   useContextGuard(activeCwd, showToast);
+  useProjectSetup(activeCwd, showToast);
+  // Setups run elsewhere (new-tab dialog, command palette) report here.
+  useEffect(() => {
+    const onSetup = (e: Event) => announceSetup((e as CustomEvent<SetupResult>).detail, showToast);
+    window.addEventListener("project-setup-done", onSetup);
+    return () => window.removeEventListener("project-setup-done", onSetup);
+  }, [showToast]);
   useTerminalFocusGuard();
 
   // Agent completion notifications, shown as an in-app toast.
@@ -202,6 +209,7 @@ export default function App() {
       ["toggle-integrations", toggleIntegrations],
       ["open-secrets", () => setIntegrations("secrets")],
       ["open-antislop", () => setIntegrations("antislop")],
+      ["open-agents", () => setIntegrations("agents")],
       ["request-new-tab", () => setNewTabOpen(true)],
       ["toggle-shortcuts", toggleShortcuts],
       ["toggle-tab-switcher", toggleTabSwitcher],
@@ -265,28 +273,6 @@ export default function App() {
     const id = window.setInterval(resolve, CWD_POLL_MS);
     return () => { cancelled = true; window.clearInterval(id); };
   }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
-
-  // Resolve bannerCwd independently of panel state — allows the BMAD init banner
-  // to appear whenever the active terminal changes, without requiring a panel open.
-  useEffect(() => {
-    const paneId = activeTab?.activePaneId;
-    if (!paneId) {
-      setBannerCwd(null);
-      return;
-    }
-    let cancelled = false;
-    const resolve = () =>
-      import("./hooks/useTerminal").then(({ getPtyCwd }) =>
-        getPtyCwd(paneId)
-          .then((cwd) => { if (!cancelled) setBannerCwd(cwd); })
-          .catch(() => { if (!cancelled) setBannerCwd(null); }),
-      );
-    resolve();
-    // Polled for the same reason as activeCwd: follow `cd` in the terminal.
-    const id = window.setInterval(resolve, CWD_POLL_MS);
-    return () => { cancelled = true; window.clearInterval(id); };
-    // activePtyId: same cold-start problem as the activeCwd effect above.
-  }, [activeTab?.activePaneId, activePtyId]);
 
   const toggleCommandPalette = useCallback(() => setPaletteOpen((prev) => !prev), []);
 
@@ -482,12 +468,6 @@ export default function App() {
           </Suspense>
         )}
       </div>
-      {bannerCwd && (
-        <BmadInitBanner
-          cwd={bannerCwd}
-          onInitialized={() => {}}
-        />
-      )}
       <Scratchpad ref={scratchpadRef} />
       {showShortcutBar && <ShortcutsBar />}
       <Suspense fallback={null}>
@@ -573,7 +553,9 @@ export default function App() {
               className="contracts-action"
               style={{ marginTop: 8 }}
               onClick={() => {
-                void sendToActiveTerminal(toast.action!.command, false);
+                const a = toast.action!;
+                if (a.run) a.run();
+                else if (a.command) void sendToActiveTerminal(a.command, false);
                 setToast(null);
               }}
             >

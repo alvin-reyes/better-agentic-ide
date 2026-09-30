@@ -83,6 +83,21 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         onClose();
       } },
       { id: "fleet-tab", label: "Fleet: Open tab", category: "Panels", action: () => { useTabStore.getState().addFleetTab(); onClose(); } },
+      { id: "project-agents", label: "Agents: Add or remove agents in this project", category: "Project", action: () => { window.dispatchEvent(new CustomEvent("open-agents")); onClose(); } },
+      { id: "project-setup", label: "Project: Set up BMAD, methodology and agents", category: "Project", action: () => {
+        onClose();
+        const cwd = useTabStore.getState().tabs.find((t) => t.id === activeTabId);
+        if (!cwd) return;
+        import("../hooks/useTerminal").then(({ getPtyCwd }) =>
+          getPtyCwd(cwd.activePaneId).then(async (dir) => {
+            const { invoke } = await import("@tauri-apps/api/core");
+            const { setUpProject } = await import("../lib/projectSetup");
+            const root = await invoke<string>("project_root", { path: dir });
+            const result = await setUpProject(root);
+            window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result }));
+          }),
+        ).catch(() => {});
+      } },
       { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
         if (activeTab) {
           import("../hooks/useTerminal").then(({ getPtyCwd }) => {

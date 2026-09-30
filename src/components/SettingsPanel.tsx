@@ -592,6 +592,18 @@ export default function SettingsPanel() {
                   Ask whether a new tab is a plain terminal or a project
                 </span>
               </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={store.autoProjectSetup}
+                  onChange={(e) => store.setAutoProjectSetup(e.target.checked)}
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Set up every project I open: BMAD, the ADE methodology and all agents (only missing files are added)
+                </span>
+              </label>
             </div>
           )}
 

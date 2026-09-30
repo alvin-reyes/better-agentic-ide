@@ -8,8 +8,8 @@ const CHECK_EVERY_MS = 30_000;
 export interface GuardToast {
   title: string;
   body: string;
-  /** Typed into the active terminal for review; never run. */
-  action?: { label: string; command: string };
+  /** A command typed into the active terminal for review (never run), or a callback. */
+  action?: { label: string; command?: string; run?: () => void };
 }
 
 interface LatestContext {

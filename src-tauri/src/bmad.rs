@@ -37,32 +37,38 @@ pub fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) {
     }
 }
 
+/// The bundled BMAD resources.
+pub fn resource_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .resolve("resources/bmad", tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("resource not found: {}", e))
+}
+
+/// Copy BMAD into a project: .bmad-core/ and the /BMad Claude Code commands.
+/// Existing files are left alone.
+pub fn install(res_root: &Path, project: &Path, report: &mut ScaffoldReport) {
+    copy_tree(&res_root.join("bmad-core"), &project.join(".bmad-core"), report);
+    let cmd_src = res_root.join("claude-commands").join("BMad");
+    if cmd_src.is_dir() {
+        copy_tree(&cmd_src, &project.join(".claude").join("commands").join("BMad"), report);
+    }
+    // VERSION marker for bmad_status.
+    if let Ok(v) = std::fs::read_to_string(res_root.join("VERSION")) {
+        let marker = project.join(".bmad-core").join("VERSION");
+        if !marker.exists() && std::fs::write(&marker, v).is_ok() {
+            report.created.push(marker.to_string_lossy().to_string());
+        }
+    }
+}
+
 #[tauri::command]
 pub fn scaffold_bmad(app: tauri::AppHandle, path: String) -> Result<ScaffoldReport, String> {
     let project = Path::new(&path);
     if !project.is_dir() {
         return Err(format!("Not a directory: {}", path));
     }
-    let res_root = app
-        .path()
-        .resolve("resources/bmad", tauri::path::BaseDirectory::Resource)
-        .map_err(|e| format!("resource not found: {}", e))?;
-
     let mut report = ScaffoldReport::default();
-    // .bmad-core/
-    copy_tree(&res_root.join("bmad-core"), &project.join(".bmad-core"), &mut report);
-    // Claude Code commands
-    let cmd_src = res_root.join("claude-commands").join("BMad");
-    if cmd_src.is_dir() {
-        copy_tree(&cmd_src, &project.join(".claude").join("commands").join("BMad"), &mut report);
-    }
-    // Write VERSION marker into .bmad-core for bmad_status.
-    if let Ok(v) = std::fs::read_to_string(res_root.join("VERSION")) {
-        let marker = project.join(".bmad-core").join("VERSION");
-        if !marker.exists() {
-            let _ = std::fs::write(&marker, v);
-        }
-    }
+    install(&resource_root(&app)?, project, &mut report);
     Ok(report)
 }
 

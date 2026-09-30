@@ -23,11 +23,16 @@ export function rolePrompt(profile: AgentProfile): string {
 
 const yaml = (s: string) => JSON.stringify(s);
 
+/** Engineers outside the Web3 category that also ship as sub-agents. */
+export const SUB_AGENT_IDS = new Set(["backend-go", "backend-rust"]);
+
+/** A profile as a Claude Code sub-agent file (frontmatter + role prompt). */
+export function agentMarkdown(p: AgentProfile): string {
+  return `---\nname: ${p.id}\ndescription: ${yaml(`${p.name}: ${p.description}. Use for ${p.keywords.slice(0, 6).join(", ")} work.`)}\n---\n\n${rolePrompt(p)}\n`;
+}
+
 function agentFile(p: AgentProfile): PluginFile {
-  return {
-    path: `agents/${p.id}.md`,
-    content: `---\nname: ${p.id}\ndescription: ${yaml(`${p.name}: ${p.description}. Use for ${p.keywords.slice(0, 6).join(", ")} work.`)}\n---\n\n${rolePrompt(p)}\n`,
-  };
+  return { path: `agents/${p.id}.md`, content: agentMarkdown(p) };
 }
 
 function architectSkill(p: AgentProfile): PluginFile {
@@ -41,7 +46,7 @@ function architectSkill(p: AgentProfile): PluginFile {
 
 export function generatedPluginFiles(profiles: AgentProfile[] = AGENT_PROFILES): PluginFile[] {
   return [
-    ...profiles.filter((p) => p.category === "Web3").map(agentFile),
+    ...profiles.filter((p) => SUB_AGENT_IDS.has(p.id) || p.category === "Web3").map(agentFile),
     ...profiles.filter((p) => p.category === "Architects").map(architectSkill),
   ];
 }
