@@ -4,7 +4,7 @@
 
 <h1 align="center">ADE — Agentic Development Environment</h1>
 
-<p align="center"><strong>The terminal for building AI agents.</strong></p>
+<p align="center"><strong>The terminal for building products with AI.</strong></p>
 
 <p align="center">
   <a href="https://alvin-reyes.github.io/better-agentic-ide/"><strong>Website</strong></a> ·
@@ -13,7 +13,7 @@
   <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><strong>Download</strong></a>
 </p>
 
-ADE is a desktop app for macOS, Windows and Linux built for agent-driven development. Run Claude Code, Codex and Gemini side by side, draft prompts properly, see exactly what every agent costs, and take smart contracts from first test to reviewed deploy, all from the keyboard.
+ADE is a desktop app for macOS, Windows and Linux for building products with AI coding agents. Run Claude Code, Codex and Gemini side by side, draft prompts properly, see exactly what every agent costs, and take smart contracts from first test to reviewed deploy, all from the keyboard.
 
 ## Features
 
@@ -44,7 +44,7 @@ ADE is commercial software. Try it free; if you keep using it, [buy a license](h
 
 ## aracademy
 
-ADE is the tool used in aracademy's AI agent training, and a license is included with the course. Details are on the [website](https://alvin-reyes.github.io/better-agentic-ide/#training).
+ADE is the tool used in aracademy's AI training, and a license is included with the course. Details are on the [website](https://alvin-reyes.github.io/better-agentic-ide/#training).
 
 ## Support
 

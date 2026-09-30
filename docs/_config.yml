@@ -1,9 +1,9 @@
 # GitHub Pages builds this folder with Jekyll: the landing page (index.html)
 # and the user guide (guide/*.md) share the layouts in _layouts/.
 title: ADE
-tagline: The terminal for building AI agents
+tagline: The terminal for building products with AI
 description: >-
-  ADE is the desktop terminal for building AI agents: run Claude Code, Codex
+  ADE is the desktop terminal for building products with AI: run Claude Code, Codex
   and Gemini side by side, draft prompts in a scratchpad, see what every agent
   costs, and ship smart contracts from one app.
 url: https://alvin-reyes.github.io
@@ -14,7 +14,7 @@ repo: https://github.com/alvin-reyes/better-agentic-ide
 # Where "Buy a license" goes. Until a checkout link exists it points at the
 # pricing section on the landing page.
 buy_url: "#pricing"  # TODO: set to the real checkout URL (Stripe, Lemon Squeezy, Gumroad, ...)
-# The aracademy AI agent training that ADE is part of.
+# The aracademy AI training that ADE is part of.
 aracademy_url: https://aracademy.example  # TODO: set the real aracademy URL
 
 permalink: pretty

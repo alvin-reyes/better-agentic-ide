@@ -14,7 +14,7 @@
 - name: Personal
   price: "$—"  # TODO: set price
   period: ""   # TODO: set billing period, e.g. "one-time" or "/ year"
-  blurb: For one developer building with AI agents.
+  blurb: For one developer building products with AI.
   features:  # TODO: review wording against the final license terms
     - Every feature, including fleet view, tokens panel and the contract workbench
     - macOS, Windows and Linux
@@ -37,7 +37,7 @@
 - name: aracademy training
   price: Included
   period: with the course
-  blurb: Every aracademy AI agent training participant gets ADE.
+  blurb: Every aracademy AI training participant gets ADE.
   features:  # TODO: confirm what the training includes
     - ADE license included with the training
     - The same setup used in every lesson
