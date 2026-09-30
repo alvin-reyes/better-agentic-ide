@@ -35,7 +35,7 @@ The panel suggests savings based on your own usage:
 
 - **A large context.** Send `/compact` to the agent in the active terminal with one click. `/compact` summarizes the conversation so far; `/clear` starts fresh for a new task.
 - **A low cache hit rate.** Long pauses let the cache expire, and changing `CLAUDE.md`, the model or MCP servers mid-session invalidates it.
-- **Sub-agents on the top-tier model.** Give search and reading agents `model: haiku` or `model: sonnet` in their `.claude/agents/*.md` frontmatter.
+- **Sub-agents on the top-tier model.** Set **Sub-agent model** to Sonnet (see below). For agents that only search and read, `model: haiku` in their `.claude/agents/*.md` frontmatter saves more.
 - **Long responses.** Output costs about five times as much as input, so ask for targeted edits instead of whole files.
 - **Large `CLAUDE.md` files and many MCP servers.** Both are part of every request.
 
@@ -61,7 +61,7 @@ The panel can set a few documented Claude Code settings for you in the project's
 | Setting | Choices | What it does |
 |---|---|---|
 | Bash output sent to the model (`BASH_MAX_OUTPUT_LENGTH`) | 15,000 or 8,000 characters (default 30,000) | Cuts long command output before the agent reads it |
-| Sub-agent model (`CLAUDE_CODE_SUBAGENT_MODEL`) | Sonnet or Haiku | Model for sub-agents that don't name one |
+| Sub-agent model (`CLAUDE_CODE_SUBAGENT_MODEL`) | Sonnet (recommended) or Haiku | Model for sub-agents that don't name one. Sonnet keeps the 1M context at a lower price; Haiku has a 200k window and is best kept to searching and reading |
 | Auto-compact at (`CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE`) | 80%, 70% or 60% | How full the context gets before Claude Code compacts it |
 | Default model (`model`) | `opusplan` or Sonnet | `opusplan` plans with Opus, then writes code with Sonnet |
 

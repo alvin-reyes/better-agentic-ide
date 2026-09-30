@@ -209,7 +209,7 @@ export function tipsFor(sessions: SessionUsage[], audit: AuditLike | null): Tip[
       id: "subagent-model",
       level: "info",
       title: `${subRequests} sub-agent requests ran on the top-tier model`,
-      detail: "Searching and reading don't need the biggest model. Set model: haiku or model: sonnet in those agents' .claude/agents/*.md frontmatter.",
+      detail: "Set Sub-agent model to Sonnet below: it costs less and keeps the 1M context. For agents that only search and read, model: haiku in their .claude/agents/*.md frontmatter saves more.",
     });
   }
 

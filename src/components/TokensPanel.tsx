@@ -34,8 +34,8 @@ const PRESETS: { key: string; label: string; help: string; options: [string, str
   {
     key: "env.CLAUDE_CODE_SUBAGENT_MODEL",
     label: "Sub-agent model",
-    help: "Model for sub-agents that don't name one. Searching and reading rarely need the top tier.",
-    options: [["", "Same as the session"], ["sonnet", "Sonnet"], ["haiku", "Haiku"]],
+    help: "Model for sub-agents that don't name one. Sonnet costs less and keeps the 1M context; Haiku is cheapest but best kept to searching and reading.",
+    options: [["", "Same as the session"], ["sonnet", "Sonnet (recommended)"], ["haiku", "Haiku (search and reading only)"]],
   },
   {
     key: "env.CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE",
