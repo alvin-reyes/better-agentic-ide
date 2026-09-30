@@ -71,9 +71,26 @@ function pill(label: string): HTMLElement {
 }
 
 /** Click a row by its visible name and let the async launch settle. */
+/**
+ * Pick an agent and run it in the current terminal.
+ *
+ * Picking a row no longer launches on its own: it asks where to run, and the
+ * launch happens on that answer. These tests assert on what reaches the PTY,
+ * so they take the "This terminal" branch — the equivalent of the old
+ * single-click behaviour.
+ */
 async function clickRow(name: string) {
+  // A failed launch leaves the prompt open so the attempt can be retried with
+  // a different provider — and its "Run <name> in" line repeats the name, so
+  // the row is only clicked when the prompt is not already up.
+  if (screen.queryByText(/This terminal/) === null) {
+    await act(async () => {
+      fireEvent.click(screen.getAllByText(name)[0]);
+      await flush();
+    });
+  }
   await act(async () => {
-    fireEvent.click(screen.getByText(name));
+    fireEvent.click(screen.getByText(/This terminal/));
     await flush();
   });
 }
