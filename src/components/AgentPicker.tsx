@@ -222,7 +222,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     // A terminal already running something can't take a new agent.
     setTarget(canUseCurrent() ? "current" : "new");
     setChoice(item);
-  }, [currentPtyId, getActivePane]);
+  }, [canUseCurrent]);
 
   const runAgent = useCallback(async (item: PickerItem, where: "current" | "new") => {
     const spec: AgentSpec = { roleId: item.roleId, domainId: item.domainId, provider: activeProvider };
