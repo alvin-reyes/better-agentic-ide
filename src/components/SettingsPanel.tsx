@@ -2,6 +2,7 @@ import { useSettingsStore, themePresets, applyThemeToDOM, type ThemeColors } fro
 import { shortcutLabel } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
+import { claimKeyboard } from "../lib/keyboardOwner";
 import SyncSettings from "./SyncSettings";
 
 const colorLabels: { key: keyof ThemeColors; label: string; group: string }[] = [
@@ -135,6 +136,9 @@ function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
 }
 
 export default function SettingsPanel() {
+  // Hold the keyboard while this panel is open, so a click on a
+  // non-focusable part of it does not send typing to the terminal behind.
+  useEffect(() => claimKeyboard("settings"), []);
   const store = useSettingsStore();
   const tabStore = useTabStore();
   const [workspaceName, setWorkspaceName] = useState("");

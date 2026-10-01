@@ -195,6 +195,25 @@ function enableGpuRenderer(term: Terminal) {
   }
 }
 
+/**
+ * Put `wrapper` in `container` as its only child, removing anything else.
+ *
+ * A previous instance's wrapper can still be here: the effect's cleanup only
+ * removes its own, and `attach()` is async, so a re-attach (a split, a tab
+ * switch, a remount) can land before the old one is gone. Two wrappers at
+ * height 100% stack inside a one-screen container, so the second renders
+ * entirely below the fold — and since it is the one that just called
+ * `term.focus()`, the terminal you can see is stale while the terminal taking
+ * your keystrokes is off-screen. Input works, the buffer fills, the screen
+ * looks dead.
+ */
+export function attachSolely(container: HTMLElement, wrapper: HTMLElement): void {
+  for (const child of Array.from(container.children)) {
+    if (child !== wrapper) child.remove();
+  }
+  if (wrapper.parentElement !== container) container.appendChild(wrapper);
+}
+
 /** An xterm with its addons, rendered into a detached wrapper div that lives outside React. */
 function openTerminal(paneId: string) {
   const wrapper = document.createElement("div");
@@ -332,6 +351,13 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
       cwd: initialCwd || null,
       onEvent: ptyChannel(paneId, term),
     });
+    // The pane can be closed while the shell is starting. destroyInstance ran
+    // with ptyId still null, so it had nothing to kill and the shell would
+    // outlive the app's knowledge of it — a stray zsh per closed-too-fast tab.
+    if (instances.get(paneId) !== inst) {
+      void invoke("kill_pty", { id: ptyId }).catch(() => {});
+      return inst;
+    }
     inst.ptyId = ptyId;
     setPtyId(paneId, ptyId);
   } catch (err) {
@@ -352,6 +378,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
 
     let resizeObserver: ResizeObserver | null = null;
 
+    let cancelled = false;
     const attach = async () => {
       // Wait for container to have layout
       await new Promise<void>((resolve) => {
@@ -382,8 +409,15 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
         }
       }
 
-      // Move the wrapper element into this container
-      container.appendChild(inst.wrapper);
+      // Two awaits happened above, so the pane may have been closed or had its
+      // instance replaced (detached to its own window, then reattached) while
+      // the shell was starting. This `inst` would then be a disposed one, and
+      // attachSolely would evict the live wrapper to seat it — the very bug it
+      // exists to prevent.
+      if (cancelled || instances.get(paneId) !== inst) return;
+
+      // Move the wrapper element into this container, as its ONLY child.
+      attachSolely(container, inst.wrapper);
       termRef.current = inst.term;
 
       // Fit to new container size
@@ -392,7 +426,6 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
         inst!.term.focus();
       });
 
-      // Watch for container resizes
       resizeObserver = new ResizeObserver(() => {
         requestAnimationFrame(() => inst!.fitAddon.fit());
       });
@@ -403,6 +436,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
 
     // On unmount: detach the wrapper (but DON'T destroy the terminal)
     return () => {
+      cancelled = true;
       resizeObserver?.disconnect();
       const inst = instances.get(paneId);
       if (inst && inst.wrapper.parentElement === container) {

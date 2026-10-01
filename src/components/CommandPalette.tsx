@@ -1,5 +1,6 @@
 import { requestNewTab } from "../lib/newTab";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { claimKeyboard } from "../lib/keyboardOwner";
 import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore, themePresets, applyThemeToDOM } from "../stores/settingsStore";
@@ -36,6 +37,9 @@ interface CommandPaletteProps {
 
 export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onToggleFileBrowser, onOpenRecordings }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
+  // Hold the keyboard while this panel is open, so a click on a
+  // non-focusable part of it does not send typing to the terminal behind.
+  useEffect(() => claimKeyboard("command-palette"), []);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -87,16 +91,25 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "project-setup", label: "Project: Set up BMAD, methodology and agents", category: "Project", action: () => {
         onClose();
         const cwd = useTabStore.getState().tabs.find((t) => t.id === activeTabId);
-        if (!cwd) return;
+        // Every failure below used to land in a bare .catch(() => {}): the
+        // palette closed and nothing happened at all — no setup, no event, no
+        // error. Say what went wrong instead.
+        const failed = (why: string) =>
+          window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why } }));
+        if (!cwd) return failed("No active tab to set up.");
         import("../hooks/useTerminal").then(({ getPtyCwd }) =>
           getPtyCwd(cwd.activePaneId).then(async (dir) => {
+            // getPtyCwd is null for any pane with no live shell — an
+            // orchestrator, editor, fleet or browser tab. project_root would
+            // then reject on its argument type and the failure would vanish.
+            if (!dir) return failed("This tab has no folder. Open a terminal in the project first.");
             const { invoke } = await import("@tauri-apps/api/core");
             const { setUpProject } = await import("../lib/projectSetup");
             const root = await invoke<string>("project_root", { path: dir });
             const result = await setUpProject(root);
             window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result }));
           }),
-        ).catch(() => {});
+        ).catch((err) => failed(`Project setup failed: ${err}`));
       } },
       { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
         if (activeTab) {

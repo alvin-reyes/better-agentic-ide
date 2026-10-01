@@ -257,8 +257,21 @@ export default function TabBar() {
                   if (e.key === "Enter") commitRename();
                   if (e.key === "Escape") setEditingId(null);
                 }}
-                className="bg-transparent border-none outline-none text-[13px] w-[80px]"
-                style={{ color: "var(--text-primary)" }}
+                className="text-[13px] w-[110px]"
+                style={{
+                  // Rename must look like an input. It used to be transparent
+                  // and borderless, so an accidental ⌘R (reload, in every other
+                  // app) put the tab into rename mode with nothing on screen to
+                  // show it: keystrokes went into the tab name and the terminal
+                  // looked dead.
+                  color: "var(--text-primary)",
+                  backgroundColor: "var(--bg-elevated)",
+                  border: "1px solid var(--accent)",
+                  borderRadius: "var(--radius-sm, 4px)",
+                  outline: "none",
+                  padding: "1px 5px",
+                }}
+                aria-label="Rename tab"
               />
             ) : (
               <span className="truncate max-w-[140px]">{label}</span>

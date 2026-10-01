@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { claimKeyboard } from "../lib/keyboardOwner";
 import { invoke } from "@tauri-apps/api/core";
 import { AGENT_PROFILES, AGENT_CATEGORIES, PROVIDERS, type AgentProfile, type Provider } from "../data/agentProfiles";
 import { routeTask, isTaskDescription } from "../data/taskRouter";
@@ -45,6 +46,9 @@ interface AgentPickerProps {
 
 export default function AgentPicker({ onClose }: AgentPickerProps) {
   const [query, setQuery] = useState("");
+  // Hold the keyboard while this panel is open, so a click on a
+  // non-focusable part of it does not send typing to the terminal behind.
+  useEffect(() => claimKeyboard("agent-picker"), []);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [continuousMode, setContinuousMode] = useState(false);
@@ -142,12 +146,23 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   const [target, setTarget] = useState<"current" | "new">("current");
   const currentPtyId = getActivePtyId();
 
-  const launchAgent = useCallback((profile: AgentProfile) => {
+  /**
+   * Whether "This terminal" is a real option. A pane already running something
+   * cannot take an agent: the launch command would be typed into that process's
+   * stdin and discarded, while the tracker still recorded a session, so the
+   * fleet showed an agent that was never started.
+   */
+  const canUseCurrent = useCallback(() => {
+    if (currentPtyId === null) return false;
     const pane = getActivePane();
-    // A terminal already running something can't take a new agent.
-    setTarget(currentPtyId === null || (pane && hasActiveProcess(pane.id)) ? "new" : "current");
-    setChoice(profile);
+    return !(pane && hasActiveProcess(pane.id));
   }, [currentPtyId, getActivePane]);
+
+  const launchAgent = useCallback((profile: AgentProfile) => {
+    // A terminal already running something can't take a new agent.
+    setTarget(canUseCurrent() ? "current" : "new");
+    setChoice(profile);
+  }, [canUseCurrent]);
 
   const runAgent = useCallback(async (profile: AgentProfile, where: "current" | "new") => {
     const cmd = buildCommand(profile);
@@ -188,9 +203,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       const k = e.key.toLowerCase();
       if (e.key === "Escape") setChoice(null);
       else if (["arrowleft", "arrowright", "arrowup", "arrowdown", "tab"].includes(k)) {
-        if (currentPtyId !== null) setTarget((t) => (t === "current" ? "new" : "current"));
+        if (canUseCurrent()) setTarget((t) => (t === "current" ? "new" : "current"));
       } else if (e.key === "Enter") runAgent(choice, target);
-      else if (k === "c" && currentPtyId !== null) runAgent(choice, "current");
+      else if (k === "c" && canUseCurrent()) runAgent(choice, "current");
       else if (k === "n") runAgent(choice, "new");
       return;
     }
@@ -627,7 +642,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             <button
               className="agent-where__opt"
               aria-pressed={target === "current"}
-              disabled={currentPtyId === null}
+              disabled={!canUseCurrent()}
               onMouseEnter={() => setTarget("current")}
               onClick={() => runAgent(choice, "current")}
             >
