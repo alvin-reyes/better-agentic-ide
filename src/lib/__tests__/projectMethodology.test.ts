@@ -8,7 +8,7 @@ describe("ADE methodology", () => {
       "product-manager", "architect", "designer", "scrum-master", "developer", "qa", "devops", "adversarial-reviewer",
     ]);
     for (const f of methodologyFiles("demo").filter((f) => f.path.startsWith(".claude/agents/"))) {
-      expect(f.content).toMatch(/^---\nname: [a-z-]+\ndescription: ".+"\n(tools: .+\n)?---\n/);
+      expect(f.content).toMatch(/^---\nname: [a-z-]+\ndescription: ".+"\n(tools: .+\n)?(model: .+\n)?---\n/);
     }
   });
 
@@ -55,6 +55,24 @@ describe("ADE methodology", () => {
     expect(qa).toMatch(/Verification/);
     expect(qa).toContain(".ade/session.md");
     expect(qa, "QA must not edit the code or tests it is judging").toMatch(/[Nn]ever edit code or tests/);
+  });
+
+  it("puts cheaper models only on roles that do not judge", () => {
+    const files = methodologyFiles("demo");
+    const role = (n: string) => ROLES.find((r) => r.name === n)!;
+    const agent = (n: string) => files.find((f) => f.path === `.claude/agents/${n}.md`)!.content;
+
+    // QA reads tests and runs a command; the sharding is mechanical.
+    expect(role("qa").model).toBe("sonnet");
+    expect(agent("qa")).toMatch(/^model: sonnet$/m);
+    expect(role("scrum-master").model).toBe("haiku");
+
+    // The reviewer's whole value is catching what everyone else missed. A
+    // weaker model rubber-stamps, and "default to BLOCK on any material flaw"
+    // is the guarantee the methodology rests on.
+    expect(role("adversarial-reviewer").model, "the reviewer must not be downgraded").toBeUndefined();
+    expect(agent("adversarial-reviewer")).not.toMatch(/^model:/m);
+    expect(role("architect").model, "the architect defines the verification command").toBeUndefined();
   });
 
   it("names an owner for every journal event", () => {
@@ -127,6 +145,6 @@ describe("agents by project type", () => {
     expect(c[0].group).toBe("Core");
     expect(c.some((a) => a.group === "Architects")).toBe(false);
     expect(new Set(c.map((a) => a.file.path)).size).toBe(c.length);
-    for (const a of c) expect(a.file.content).toMatch(/^---\nname: [a-z0-9-]+\ndescription: ".+"\n(tools: .+\n)?---\n/);
+    for (const a of c) expect(a.file.content).toMatch(/^---\nname: [a-z0-9-]+\ndescription: ".+"\n(tools: .+\n)?(model: .+\n)?---\n/);
   });
 });

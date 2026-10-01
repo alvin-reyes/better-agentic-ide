@@ -1,5 +1,6 @@
 import { requestNewTab } from "../lib/newTab";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { claimKeyboard } from "../lib/keyboardOwner";
 import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore, themePresets, applyThemeToDOM } from "../stores/settingsStore";
@@ -36,6 +37,9 @@ interface CommandPaletteProps {
 
 export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgentPicker, onTogglePreview, onToggleFileBrowser, onOpenRecordings }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
+  // Hold the keyboard while this panel is open, so a click on a
+  // non-focusable part of it does not send typing to the terminal behind.
+  useEffect(() => claimKeyboard("command-palette"), []);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);

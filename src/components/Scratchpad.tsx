@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue, forwardRef, useImperativeHandle } from "react";
+import { claimKeyboard } from "../lib/keyboardOwner";
 import { IS_MAC, SHORTCUTS, keyName, matches, shortcutLabel } from "../lib/shortcuts";
 import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
@@ -266,6 +267,9 @@ const secondaryHover = (busy = false) => ({
 
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
+  // Hold the keyboard while this panel is open, so a click on a
+  // non-focusable part of it does not send typing to the terminal behind.
+  useEffect(() => claimKeyboard("scratchpad"), []);
   const [text, setText] = useState(loadDraft);
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(false);

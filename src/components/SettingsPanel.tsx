@@ -2,6 +2,7 @@ import { useSettingsStore, themePresets, applyThemeToDOM, type ThemeColors } fro
 import { shortcutLabel } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
+import { claimKeyboard } from "../lib/keyboardOwner";
 import SyncSettings from "./SyncSettings";
 
 const colorLabels: { key: keyof ThemeColors; label: string; group: string }[] = [
@@ -70,6 +71,9 @@ const fontFamilies = [
 
 function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
   const [status, setStatus] = useState<"checking" | "running" | "not_running">("checking");
+  // Hold the keyboard while this panel is open, so a click on a
+  // non-focusable part of it does not send typing to the terminal behind.
+  useEffect(() => claimKeyboard("settings"), []);
 
   useEffect(() => {
     let cancelled = false;
