@@ -11,7 +11,7 @@ import { resolve } from "node:path";
  *
  * The field must therefore be visibly a field whenever it is on screen.
  */
-const TABBAR = readFileSync(resolve(__dirname, "../TabBar.tsx"), "utf8");
+const TABBAR = readFileSync(resolve(__dirname, "../src/components/TabBar.tsx"), "utf8");
 
 /** The rename <input> element's source, from `ref={inputRef}` to its close. */
 function renameInput(): string {
