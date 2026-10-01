@@ -19,6 +19,7 @@ ADE is a desktop app for macOS and Linux built around two pillars: **AI agents**
 
 - **Ten agents at once** — run Claude Code, Codex, Gemini or any CLI agent (Ollama for local models) in parallel tabs and split panes. The fleet view tracks every agent and sub-agent on a live timeline with its real cost, read from Claude Code's usage records.
 - **40 agent profiles** — Backend (including senior Go and Rust engineers), Frontend, DevOps, Testing, Web3, Architects and General. Pick one and run it in this terminal or a new tab.
+- **Roles on their own** — the picker also lists every core role unpaired, so Product Manager, Product Owner and Scrum Master are one keystroke away even though no profile covers them. A role brings its accountability and the files it owns; a profile narrows it to a domain.
 - **Project setup** — every project is set up for agents once, automatically. See [below](#project-setup).
 - **Prompt scratchpad** — draft long prompts under every terminal with prompt tips and de-slop, send with one key, chain steps and reuse from history. Drafts survive crashes.
 - **Tokens & cost** — spend at API prices, cache savings and context meters, plus one-click token savers (compact paste, context guard, context diet).
@@ -48,6 +49,7 @@ Only missing files are written, and the toast that lists them has Undo. Add or r
 
 - **Clickable files and live preview** — Markdown with Mermaid, PDF, Word, images and HTML open beside the terminal.
 - **Auto-save and sync** — sessions restore after a crash; settings, notes and Claude memory sync through your own private git repo.
+- **Precision** — the default theme, with eight more presets (GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark), per-colour overrides and a terminal palette that stays legible against the UI. The saved theme paints before the first frame, so a cold start never flashes the fallback.
 
 ## Install
 
