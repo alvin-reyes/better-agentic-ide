@@ -181,6 +181,15 @@ export default function TokensPanel({ cwd, onClose }: Props) {
               <div><b>{fmtTokens(t.inputTokens)} / {fmtTokens(t.outputTokens)}</b><span>in / out over {fmtInt(t.requests)} requests</span></div>
             </div>
           )}
+          {report && t.unpriced.length > 0 && (
+            // Spend on a model with no price here is left out of the total rather
+            // than guessed at. Say so, or the figure reads as complete when it
+            // is not: a router or local model can be the largest block of usage.
+            <p className="contracts-note">
+              Cost excludes {t.unpriced.length === 1 ? "one model with no published price" : `${t.unpriced.length} models with no published price`}:{" "}
+              {t.unpriced.join(", ")}. Their tokens and requests are counted above.
+            </p>
+          )}
           {report && sessions.length === 0 && (
             <div className="contracts-empty">
               No Claude Code usage {scope === "project" ? "for this folder " : ""}in this period.
