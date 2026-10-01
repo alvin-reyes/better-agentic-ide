@@ -78,7 +78,7 @@ export default function FleetPanel({ activeCwd, onClose, onExpand }: FleetPanelP
               <FleetGroups groups={groups} from={from} to={now} />
             </div>
           ) : (
-            <FleetTimeline lanes={visible} from={from} to={now} />
+            <FleetTimeline lanes={visible} from={from} to={now} cwd={activeCwd} />
           )}
         </div>
       </div>

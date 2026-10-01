@@ -95,3 +95,28 @@ describe("FleetTimeline", () => {
     expect(rows[0].getAttribute("data-kind")).toBe("subagent");
   });
 });
+
+/**
+ * "This terminal" scopes the fleet to the Claude Code sessions in the active
+ * terminal's folder — ADE watches ~/.claude/projects/<encoded cwd>/. A terminal
+ * sitting somewhere with no sessions (a home directory, say) therefore has
+ * nothing to show, which is correct but indistinguishable from a broken panel:
+ * the old message blamed the time range, so the folder being wrong never
+ * occurred to anyone reading it.
+ */
+describe("FleetTimeline empty state", () => {
+  it("names the folder it is scoped to", () => {
+    render(<FleetTimeline lanes={[]} from={0} to={1000} cwd="/Users/someone/Projects/widgets" />);
+    expect(screen.getByText(/widgets/)).toBeTruthy();
+  });
+
+  it("explains that the scope follows the terminal's folder", () => {
+    render(<FleetTimeline lanes={[]} from={0} to={1000} cwd="/Users/someone" />);
+    expect(screen.getByText(/All terminals/)).toBeTruthy();
+  });
+
+  it("falls back to a plain message when there is no folder", () => {
+    render(<FleetTimeline lanes={[]} from={0} to={1000} />);
+    expect(screen.getByText(/No agent activity/)).toBeTruthy();
+  });
+});
