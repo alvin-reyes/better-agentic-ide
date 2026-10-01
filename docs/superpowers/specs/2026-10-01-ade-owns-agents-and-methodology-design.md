@@ -252,6 +252,75 @@ YAML in a vendor folder trips it.
 - **ipfs** — a dependency on `kubo`, `helia`, `js-ipfs`, `ipfs-http-client` or
   `rust-ipfs` in `package.json`/`Cargo.toml`, or an `.ipfs/` directory
 
+## Fleets
+
+A **stack** is detected from the files on disk; a **fleet** is chosen. Both
+resolve to a set of agents, and they coexist: detection keeps working for what
+is knowable from a manifest, and a fleet covers what no file can tell you.
+
+Nothing in a repository says it is a chatbot, a voice product or an RWA
+platform. Those are intents. Asking the filesystem is the wrong question, so
+fleets are picked — at setup, or from a menu afterwards.
+
+### Fleets compose
+
+A project picks **one or more**; their agents are unioned and deduped. This is
+the rule that keeps the list finite:
+
+- *"voice and SMS AI"* is **not** a fleet. It is `voice` + `sms`.
+- `rwa` is `tokenization` + `smart-contracts` + a compliance lens.
+
+Without composition the set grows combinatorially — `voice+sms`,
+`voice+chatbot`, `voice+sms+chatbot` — and each copy drifts from the others.
+
+### The fleets
+
+| fleet | agents |
+|---|---|
+| `smart-contracts` | `web3-solidity`, `web3-auditor`, `web3-gas`, `arch-contract-systems` |
+| `web3` | `smart-contracts` + `web3-devops`, `arch-web3-infra` |
+| `ipfs` | `ipfs`, `ipfs-retrieval`, `web3-devops` |
+| `indexer` | `indexer`, `arch-web3-infra`, `backend-db`, `data-pipeline` |
+| `tokenization` | `tokenization`, `arch-tokenomics`, `web3-solidity`, `web3-auditor` |
+| `rwa` | `tokenization` + `smart-contracts` + `rwa-compliance` |
+| `data-migration` | `data-pipeline`, `data-quality`, `backend-db` |
+| `fullstack` | `frontend-ui`, `frontend-css`, `frontend-state`, `backend-api`, `backend-db`, `backend-auth`, `test-e2e` |
+| `rust` | `backend-rust`, `general-review` |
+| `go` | `backend-go`, `general-review` |
+| `chatbot` | `chatbot`, `arch-rag`, `arch-llmops` |
+| `voice` | `voice-ai`, `arch-llmops` |
+| `sms` | `sms-ai`, `arch-automation` |
+
+Every project still receives the core roles, so a fleet adds specialists — it
+never replaces the methodology.
+
+### Agents this needs
+
+Five are already specced under **Stack bundles** (`data-pipeline`,
+`data-quality`, `ipfs`, `ipfs-retrieval`, `k8s-security`). Five more:
+
+| id | name | role | focus |
+|---|---|---|---|
+| `chatbot` | Conversational Engineer | `dev` | turn-taking, state, handoff to a human, grounding, refusal and repair |
+| `voice-ai` | Voice Engineer | `dev` | STT/TTS, barge-in, latency budgets, endpointing, telephony audio |
+| `sms-ai` | Messaging Engineer | `dev` | delivery receipts, opt-out and compliance, segmentation, idempotent sends |
+| `indexer` | Chain Indexer Engineer | `dev` | event pipelines, reorg handling, backfills, cursor durability |
+| `tokenization` | Tokenization Engineer | `dev` | supply and transfer rules, allowlists, custody boundaries, upgrade control |
+| `rwa-compliance` | RWA Compliance Reviewer | `adversarial-reviewer` | transfer restrictions, jurisdiction, disclosure, what cannot be fixed in code |
+
+Catalog **40 → 50**. `rwa-compliance` is a reviewer rather than an engineer
+deliberately: the failure mode in real-world assets is shipping something
+legally wrong, not something technically broken.
+
+### Open
+
+- **Selection.** Where a fleet is chosen — the setup prompt, Integrations →
+  Agents, or a command — and whether the choice is recorded in `.ade/ade.json`
+  so a teammate inherits it.
+- **Overlap with detection.** When a repo detects `evm` and the user also picks
+  `web3`, the union is the same agents; no rule needed. It is worth confirming
+  nothing double-writes.
+
 ## Migration
 
 Setup writes only files that are missing, so an existing project keeps its old
