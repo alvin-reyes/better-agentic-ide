@@ -9,6 +9,7 @@ import { useProjectSetup, announceSetup } from "./hooks/useProjectSetup";
 import type { SetupResult } from "./lib/projectSetup";
 import { writePty, sendToActiveTerminal } from "./lib/terminalCommands";
 import { hideSplash } from "./lib/splash";
+import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
 import { useContextGuard, type GuardToast } from "./hooks/useContextGuard";
 
@@ -318,20 +319,7 @@ export default function App() {
     if (!tab) return;
 
     if (tab.type === "editor") {
-      const checkDirty = new Promise<boolean>((resolve) => {
-        const responseHandler = (ev: Event) => {
-          const detail = (ev as CustomEvent).detail;
-          if (detail.tabId === tabId) {
-            window.removeEventListener("editor-dirty-response", responseHandler);
-            resolve(detail.isDirty);
-          }
-        };
-        window.addEventListener("editor-dirty-response", responseHandler);
-        window.dispatchEvent(new CustomEvent("editor-dirty-check", { detail: { tabId } }));
-        setTimeout(() => resolve(false), 100);
-      });
-
-      checkDirty.then((isDirty) => {
+      editorDirty(tabId).then((isDirty) => {
         if (isDirty && !confirm("This file has unsaved changes. Close anyway?")) return;
         closeTab(tabId);
       });
@@ -385,11 +373,20 @@ export default function App() {
       const targets = tabs.filter((t) => ids.includes(t.id));
       const live = targets.filter((t) => findAllPanes(t.root).some((p) => hasActiveProcess(p.id) !== null));
       const close = () => { for (const t of targets) closeTab(t.id); setConfirmDialog(null); };
-      if (live.length === 0) close();
-      else setConfirmDialog({
-        title: "Active process running",
-        message: `${live.length} of these ${targets.length} tabs have a live session. Closing them will terminate it. Close ${targets.length} tabs?`,
+      // hasActiveProcess reads an xterm buffer, so it is null for every editor
+      // tab. Without asking them too, "Close others" discarded unsaved files
+      // with no prompt, while closing the same tab on its own warned.
+      void unsavedEditorTabs(targets).then((unsaved) => {
+      if (live.length === 0 && unsaved.length === 0) return close();
+      const parts = [
+        live.length > 0 && `${live.length} ${live.length === 1 ? "has" : "have"} a live session that will be terminated`,
+        unsaved.length > 0 && `${unsaved.length} ${unsaved.length === 1 ? "has" : "have"} unsaved changes that will be lost`,
+      ].filter(Boolean) as string[];
+      setConfirmDialog({
+        title: unsaved.length > 0 ? "Unsaved changes" : "Active process running",
+        message: `Of these ${targets.length} tabs, ${parts.join(", and ")}. Close ${targets.length} tabs?`,
         onConfirm: close,
+      });
       });
     };
     window.addEventListener("request-close-tabs", closeMany);
