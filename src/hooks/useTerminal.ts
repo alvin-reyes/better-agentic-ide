@@ -378,6 +378,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
 
     let resizeObserver: ResizeObserver | null = null;
 
+    let cancelled = false;
     const attach = async () => {
       // Wait for container to have layout
       await new Promise<void>((resolve) => {
@@ -408,6 +409,13 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
         }
       }
 
+      // Two awaits happened above, so the pane may have been closed or had its
+      // instance replaced (detached to its own window, then reattached) while
+      // the shell was starting. This `inst` would then be a disposed one, and
+      // attachSolely would evict the live wrapper to seat it — the very bug it
+      // exists to prevent.
+      if (cancelled || instances.get(paneId) !== inst) return;
+
       // Move the wrapper element into this container, as its ONLY child.
       attachSolely(container, inst.wrapper);
       termRef.current = inst.term;
@@ -418,17 +426,12 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
         inst!.term.focus();
       });
 
-
-      // attach() is async, so cleanup may already have run. Observing now would
-      // leave an observer nothing ever disconnects.
-      if (cancelled) return;
       resizeObserver = new ResizeObserver(() => {
         requestAnimationFrame(() => inst!.fitAddon.fit());
       });
       resizeObserver.observe(container);
     };
 
-    let cancelled = false;
     attach();
 
     // On unmount: detach the wrapper (but DON'T destroy the terminal)
