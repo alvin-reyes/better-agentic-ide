@@ -28,7 +28,7 @@ In rendered documents, links behave the way you'd expect: web links open in your
 
 ## Preview panel
 
-Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to open a preview beside the terminal, or click a document path in the terminal. It shows Markdown, HTML, PDFs and images, and refreshes whenever the file is saved — handy for watching an agent write a spec.
+Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to open a preview beside the terminal, or click a document path in the terminal. It shows Markdown, HTML, PDFs and images, and refreshes whenever the file is saved — handy for watching an agent write a spec. PDFs page and zoom here with the same viewer the file tab uses, so they render the same on macOS and Linux.
 
 HTML in the preview may run scripts, for pages that need them. They run isolated from the app.
 
