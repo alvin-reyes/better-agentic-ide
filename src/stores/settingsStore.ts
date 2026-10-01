@@ -297,6 +297,8 @@ interface Settings {
   orchestratorProvider: "anthropic" | "ollama";
   contextGuard: ContextGuard;
   showShortcutBar: boolean;
+  /** Draw terminals with WebGL (faster); off uses the DOM renderer. */
+  gpuRendering: boolean;
   /** Ask "terminal or project?" when opening a new tab. */
   askOnNewTab: boolean;
   /** Set up every project (BMAD, methodology, agents) when it's opened. */
@@ -335,6 +337,7 @@ interface SettingsStore extends Settings {
   setShowShortcutBar: (show: boolean) => void;
   setAskOnNewTab: (ask: boolean) => void;
   setAutoProjectSetup: (on: boolean) => void;
+  setGpuRendering: (on: boolean) => void;
   getActiveTheme: () => ThemeColors;
 
   saveWorkspace: (name: string, tabs: { name: string; splits: "none" | "horizontal" | "vertical" }[]) => void;
@@ -367,6 +370,7 @@ const defaults: Settings = {
   contextGuard: { enabled: true, threshold: 0.6 },
   // The full list is a keystroke away (the shortcuts overlay); the bar is opt-in.
   showShortcutBar: false,
+  gpuRendering: true,
   askOnNewTab: true,
   autoProjectSetup: true,
 };
@@ -418,6 +422,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setShowShortcutBar: (showShortcutBar) => save({ showShortcutBar }),
     setAskOnNewTab: (askOnNewTab) => save({ askOnNewTab }),
     setAutoProjectSetup: (autoProjectSetup) => save({ autoProjectSetup }),
+    setGpuRendering: (gpuRendering) => save({ gpuRendering }),
 
     getActiveTheme: () => {
       const s = get();

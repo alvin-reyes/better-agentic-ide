@@ -604,6 +604,18 @@ export default function SettingsPanel() {
                   Set up every project I open: BMAD, the ADE methodology and all agents (only missing files are added)
                 </span>
               </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={store.gpuRendering}
+                  onChange={(e) => store.setGpuRendering(e.target.checked)}
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  GPU rendering (WebGL). Turn it off if a terminal goes blank or loses its cursor. Applies to terminals opened after the change.
+                </span>
+              </label>
             </div>
           )}
 

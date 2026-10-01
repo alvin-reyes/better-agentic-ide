@@ -152,10 +152,47 @@ function destroyInstance(paneId: string) {
 function detachInstance(paneId: string) {
   const inst = instances.get(paneId);
   if (!inst) return;
+  releaseGpu(inst.term);
   inst.term.dispose();
   inst.wrapper.remove();
   instances.delete(paneId);
   forgetPane(paneId);
+}
+
+/**
+ * WebGL rendering, when it's on and available. Browsers cap WebGL contexts per
+ * page (WebKit drops the oldest past the cap), and a terminal whose context is
+ * lost stops drawing entirely: blank text, no cursor. So at most MAX_GPU
+ * terminals use WebGL, the rest use xterm's DOM renderer, and a terminal that
+ * loses its context switches to the DOM renderer and keeps going.
+ */
+const MAX_GPU = 8;
+const gpuTerminals = new Map<Terminal, WebglAddon>();
+
+function releaseGpu(term: Terminal) {
+  const addon = gpuTerminals.get(term);
+  if (!addon) return;
+  gpuTerminals.delete(term);
+  try {
+    addon.dispose();
+  } catch {
+    // Already gone with its context.
+  }
+}
+
+function enableGpuRenderer(term: Terminal) {
+  if (!useSettingsStore.getState().gpuRendering || gpuTerminals.size >= MAX_GPU) return;
+  try {
+    const addon = new WebglAddon();
+    addon.onContextLoss(() => {
+      releaseGpu(term);
+      term.refresh(0, term.rows - 1);
+    });
+    term.loadAddon(addon);
+    gpuTerminals.set(term, addon);
+  } catch {
+    // No WebGL here: the DOM renderer is already in place.
+  }
 }
 
 /** An xterm with its addons, rendered into a detached wrapper div that lives outside React. */
@@ -178,11 +215,7 @@ function openTerminal(paneId: string) {
   term.open(wrapper);
   registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal);
 
-  try {
-    term.loadAddon(new WebglAddon());
-  } catch {
-    // Canvas fallback
-  }
+  enableGpuRenderer(term);
   try {
     term.loadAddon(new ImageAddon({ sixelSupport: true, iipSupport: true }));
   } catch {
