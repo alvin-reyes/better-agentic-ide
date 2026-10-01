@@ -1,23 +1,24 @@
-import { AGENT_PROFILES, type AgentProfile } from "./agentProfiles";
+import { AGENT_CATALOG, type CatalogAgent } from "./curatedAgents";
 
 interface RouteResult {
-  agent: AgentProfile;
+  agent: CatalogAgent;
   score: number;
 }
 
 /**
- * Route a task description to the best-matching agent profile.
- * Scores keyword hits (multi-word keywords count double) and returns the
- * best match, or null when nothing matches.
+ * Route a task description to the best-matching curated agent.
+ * Scores keyword hits against each agent's domain keywords (multi-word
+ * keywords count double) and returns the best match, or null when nothing
+ * matches.
  */
 export function routeTask(input: string): RouteResult | null {
   const text = input.toLowerCase();
   const words = text.split(/\s+/);
   let best: RouteResult | null = null;
 
-  for (const profile of AGENT_PROFILES) {
+  for (const agent of AGENT_CATALOG) {
     let score = 0;
-    for (const keyword of profile.keywords) {
+    for (const keyword of agent.keywords) {
       // Support multi-word keywords (e.g. "system design")
       if (keyword.includes(" ")) {
         if (text.includes(keyword)) score += 2;
@@ -26,7 +27,7 @@ export function routeTask(input: string): RouteResult | null {
       }
     }
     if (score > 0 && (!best || score > best.score)) {
-      best = { agent: profile, score };
+      best = { agent, score };
     }
   }
 
@@ -46,10 +47,10 @@ export function isTaskDescription(input: string): boolean {
   // 2 words: check if it matches any agent name — if not, treat as task
   if (wordCount === 2) {
     const q = trimmed.toLowerCase();
-    const matchesAgent = AGENT_PROFILES.some(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.category.toLowerCase() === q,
+    const matchesAgent = AGENT_CATALOG.some(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        a.category.toLowerCase() === q,
     );
     return !matchesAgent;
   }

@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import MarkdownView from "./viewer/MarkdownView";
 import { imageMime } from "../lib/viewerKind";
+
+// pdf.js is heavy: load it only when a PDF is actually previewed.
+const PdfView = lazy(() => import("./viewer/PdfView"));
 
 interface WatchEvent {
   type: "changed" | "created" | "removed" | "error";
@@ -34,6 +37,8 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   const [mode, setMode] = useState<PreviewMode>("none");
   const [content, setContent] = useState("");
   const [dataUrl, setDataUrl] = useState("");
+  /** Base64 of a binary file, for viewers that want the bytes themselves. */
+  const [fileBytes, setFileBytes] = useState("");
   const [width, setWidth] = useState(480);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -50,13 +55,16 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
     try {
       if (fileMode === "image" || fileMode === "pdf") {
         const base64 = await invoke<string>("read_file_base64", { path: resolved });
-        const mime = fileMode === "pdf" ? "application/pdf" : imageMime(resolved);
-        setDataUrl(`data:${mime};base64,${base64}`);
+        setFileBytes(base64);
+        // Images render fine from a data: URL — img-src allows it. A PDF does
+        // not: frame-src forbids data:, so it goes to pdf.js below instead.
+        setDataUrl(fileMode === "image" ? `data:${imageMime(resolved)};base64,${base64}` : "");
         setContent("");
       } else {
         const text = await invoke<string>("read_file", { path: resolved });
         setContent(text);
         setDataUrl("");
+        setFileBytes("");
       }
       setLastUpdate(new Date());
     } catch (err) {
@@ -426,16 +434,14 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
           </div>
         )}
 
-        {mode === "pdf" && dataUrl && (
-          <iframe
-            src={dataUrl}
-            style={{
-              width: "100%",
-              height: "100%",
-              border: "none",
-            }}
-            title="PDF Preview"
-          />
+        {mode === "pdf" && fileBytes && (
+          // pdf.js, not an <iframe src="data:...">: frame-src is 'self', so a
+          // framed data: URL is blocked and the pane renders empty. This is
+          // also the viewer the file tab uses, and the only one that works on
+          // WebKitGTK, which ships no built-in PDF viewer.
+          <Suspense fallback={<div style={{ padding: "20px", color: "var(--text-muted)" }}>Loading viewer…</div>}>
+            <PdfView data={fileBytes} />
+          </Suspense>
         )}
 
         {mode === "markdown" && (

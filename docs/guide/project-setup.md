@@ -56,6 +56,8 @@ The agents are ordinary [Claude Code sub-agents](https://docs.anthropic.com/en/d
 - You can **ask by name**: "use the qa agent to verify story 3", "have the adversarial-reviewer look at the architecture".
 - **New sessions pick up changes.** A Claude Code session that was already running when you added or removed an agent keeps its old list; start a new one.
 
+These are not the same thing as the agents in ADE's own [picker]({{ '/guide/agents/' | relative_url }}#agent-picker). The files here are sub-agents **Claude Code delegates to on its own**, inside a session you are already running. The picker **starts a session**, with a role and a provider you choose. The names overlap because both describe the same jobs; if you already keep your own sub-agents in `.claude/agents/`, setup only adds what is missing and never replaces them.
+
 ## The methodology
 
 The ADE methodology is "verified, not vibed". Work flows in five steps:

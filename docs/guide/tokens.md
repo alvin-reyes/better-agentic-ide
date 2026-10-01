@@ -15,6 +15,7 @@ Claude Code records the exact token usage of every API response in its session t
 - **This folder** shows the sessions started in the active terminal's folder. **All projects** shows every project.
 - Choose **Today**, **7 days** or **30 days**.
 - Costs use Anthropic's API list prices for each model, counting fresh input, 5-minute and 1-hour cache writes, cache reads and output at their own rates. On a Pro or Max plan you don't pay per token, but the same tokens count toward your usage limits.
+- A model ADE has no published price for — a router, or a local model — is left out of the cost rather than guessed at, and named underneath the figures so you know it is partial. Its tokens and requests are still counted.
 
 At the top of the panel:
 

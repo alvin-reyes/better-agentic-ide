@@ -139,7 +139,9 @@ export function totals(models: ModelUsage[]): Totals {
     output += u.output;
     requests += u.requests;
   }
-  return { cost, cacheSavings: Math.max(0, uncached - cost), inputTokens: input, outputTokens: output, cacheHitRate: input ? read / input : 0, requests, unpriced };
+  // Deduped: the same model can arrive from several sessions, and this list is
+  // shown to the user.
+  return { cost, cacheSavings: Math.max(0, uncached - cost), inputTokens: input, outputTokens: output, cacheHitRate: input ? read / input : 0, requests, unpriced: [...new Set(unpriced)] };
 }
 
 export function sessionCost(s: SessionUsage): number {

@@ -110,7 +110,7 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
             onOpenTab={(tabId) => setActiveTab(tabId)}
           />
         ) : (
-          <FleetTimeline lanes={visible} from={from} to={now} onSelect={jumpToPane} />
+          <FleetTimeline lanes={visible} from={from} to={now} onSelect={jumpToPane} cwd={activeCwd} />
         )}
       </div>
 

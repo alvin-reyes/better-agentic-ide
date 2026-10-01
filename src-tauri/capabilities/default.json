@@ -8,6 +8,7 @@
     "core:default",
     "core:window:allow-create",
     "core:window:allow-destroy",
+    "core:window:allow-start-dragging",
     "core:webview:allow-create-webview-window",
     "opener:default",
     "clipboard-manager:default",

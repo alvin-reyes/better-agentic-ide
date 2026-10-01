@@ -5,6 +5,13 @@ interface FleetTimelineProps {
   from: number;
   to: number;
   onSelect?: (lane: FleetLane) => void;
+  /**
+   * The folder this view is scoped to, so an empty timeline can say which one.
+   * "This terminal" watches ~/.claude/projects/<encoded cwd>/, so a terminal in
+   * a folder with no Claude Code sessions legitimately has nothing to show —
+   * and without naming the folder that is indistinguishable from a bug.
+   */
+  cwd?: string | null;
 }
 
 const STATUS_COLOR: Record<FleetLane["status"], string> = {
@@ -66,14 +73,23 @@ function projectName(cwd: string | null): string {
   return cwd.split("/").filter(Boolean).pop() ?? cwd;
 }
 
-export default function FleetTimeline({ lanes, from, to, onSelect }: FleetTimelineProps) {
+export default function FleetTimeline({ lanes, from, to, onSelect, cwd }: FleetTimelineProps) {
   if (lanes.length === 0) {
     return (
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        height: "100%", minHeight: "120px", color: "var(--text-muted)", fontSize: "12px",
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: "6px", height: "100%", minHeight: "120px", padding: "0 16px",
+        color: "var(--text-muted)", fontSize: "12px", textAlign: "center",
       }}>
-        No agent activity in this range.
+        <span>
+          No agent activity{cwd ? <> in <b style={{ color: "var(--text-secondary)" }}>{projectName(cwd)}</b></> : null} in this range.
+        </span>
+        {cwd && (
+          <span style={{ fontSize: "11px" }}>
+            Agents appear here when Claude Code runs in this terminal&rsquo;s folder.
+            Switch to <b style={{ color: "var(--text-secondary)" }}>All terminals</b> to see every folder.
+          </span>
+        )}
       </div>
     );
   }

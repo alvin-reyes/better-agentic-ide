@@ -8,9 +8,11 @@ Open settings with {% include key.html mac="⌘," other="Ctrl+Shift+," %} or the
 
 ## Themes
 
-Eight built-in themes: GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night and One Dark. Each themes both the app and the terminal colors.
+Nine built-in themes. **Precision** is the default; the rest are GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night and One Dark. Each themes both the app and the terminal colors, and every terminal palette is checked to stay legible against the UI behind it.
 
 Under **Custom colors** you can override any UI or terminal color; *Reset to preset* removes your overrides.
+
+Your theme is painted before the first frame is drawn, so starting ADE never flashes a default palette on the way to yours.
 
 ![Theme settings]({{ '/assets/img/themes-settings.webp' | relative_url }})
 

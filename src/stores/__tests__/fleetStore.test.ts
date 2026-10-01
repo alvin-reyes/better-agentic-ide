@@ -6,7 +6,7 @@ import type { SessionUsage } from "../../lib/tokenUsage";
 
 function session(over: Partial<AgentSession> = {}): AgentSession {
   return {
-    paneId: "p1", agentName: "claude", agentIcon: "🤖", provider: "claude",
+    paneId: "p1", agentName: "claude", agentIcon: "🤖", provider: "claude", roleId: "dev",
     startTime: 1000, endTime: null, status: "running", ...over,
   };
 }

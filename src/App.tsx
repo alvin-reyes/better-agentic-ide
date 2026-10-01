@@ -502,11 +502,7 @@ export default function App() {
           </Suspense>
         )}
         {bmadOpen && (
-          <BmadPanel
-            ptyId={getActivePtyId()}
-            cwd={activeCwd}
-            onClose={() => setBmadOpen(false)}
-          />
+          <BmadPanel onClose={() => setBmadOpen(false)} />
         )}
         {contractsOpen && (
           <ContractsPanel cwd={activeCwd} onClose={() => setContractsOpen(false)} />

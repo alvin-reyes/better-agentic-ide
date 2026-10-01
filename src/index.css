@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #1c2128;
-  --bg-elevated: #21262d;
-  --bg-surface: #30363d;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted: #484f58;
-  --accent: #58a6ff;
-  --accent-subtle: rgba(88, 166, 255, 0.15);
-  --accent-hover: rgba(88, 166, 255, 0.25);
-  --green: #3fb950;
-  --green-subtle: rgba(63, 185, 80, 0.15);
-  --border: rgba(240, 246, 252, 0.1);
-  --border-strong: rgba(240, 246, 252, 0.15);
+  /* Colour fallbacks mirror the `precision-dark` preset in
+     src/stores/settingsStore.ts, which is the default theme. main.tsx
+     overwrites all of these on :root before first render; they exist so the
+     app degrades to the right palette rather than to a stale one if that
+     call ever fails. Keep the two in sync. */
+  --bg-primary: #0A0B0D;
+  --bg-secondary: #0F1013;
+  --bg-tertiary: #15171B;
+  --bg-elevated: #1B1E23;
+  --bg-surface: #262A31;
+  --text-primary: #E8EAED;
+  --text-secondary: #9BA1AC;
+  --text-muted: #5A616D;
+  --accent: #7C8FFF;
+  --accent-subtle: rgba(124, 143, 255, 0.15);
+  --accent-hover: rgba(124, 143, 255, 0.25);
+  --accent-solid: #4A5FE0;
+  --green: #4CC38A;
+  --green-subtle: rgba(76, 195, 138, 0.15);
+  --red: #F4756B;
+  --red-subtle: rgba(244, 117, 107, 0.15);
+  --yellow: #D9A441;
+  --yellow-subtle: rgba(217, 164, 65, 0.15);
+  --border: rgba(255, 255, 255, 0.055);
+  --border-strong: rgba(255, 255, 255, 0.10);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --radius: 8px;
-  --radius-sm: 6px;
-  --radius-lg: 12px;
+
+  /* Control heights — one place for the toolbar rhythm every primitive
+     aligns to: buttons, inputs and rows all sit on the same baseline. */
+  --control-h: 28px;
+  --control-h-sm: 22px;
+
+  /* Radius — tightened one step from 6/8/12 */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+
+  /* Type scale — 7 sizes, replacing 11 ad-hoc values */
+  --text-2xs: 10px;   /* uppercase micro-labels only */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+
+  --tracking-tight: -0.011em;
+  --tracking-micro: 0.06em;
+
+  /* Spacing — 4px base */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Elevation — static; black-alpha holds across every dark preset */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --elev-2: 0 2px 4px rgba(0, 0, 0, 0.30), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --elev-3: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.30);
+  --hairline-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --scrim: rgba(0, 0, 0, 0.55);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+
+  /* Typography */
+  --font-ui: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont,
+             "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
 }
 
 * {
@@ -35,7 +94,10 @@ html, body, #root {
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
+  font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "ss01" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 ::-webkit-scrollbar {
@@ -56,14 +118,30 @@ html, body, #root {
 }
 
 /* Smooth transitions */
-button, a, input, textarea {
-  transition: all 0.15s ease;
+button, a, input, textarea, select {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    filter var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Focus ring */
 :focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
@@ -285,55 +363,6 @@ button, a, input, textarea {
   background-color: var(--accent-subtle);
   padding: 3px 8px;
   border-radius: 3px;
-}
-
-.bmad-panel__personas {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 12px;
-  list-style: none;
-  margin: 0;
-}
-
-.bmad-persona {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background-color: var(--bg-tertiary);
-  margin-bottom: 4px;
-}
-
-.bmad-persona__title {
-  font-size: 13px;
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.bmad-persona__launch {
-  padding: 4px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background-color: var(--bg-surface);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.bmad-persona__launch:hover:not(:disabled) {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.bmad-persona__launch:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 /* Rendered documents in the file tab (markdown, .docx) */

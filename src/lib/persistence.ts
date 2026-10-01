@@ -28,9 +28,14 @@ const PERSISTED_KEYS = new Set([
   "better-terminal-orchestrator",
   "better-terminal-agent-tracker",
   "better-terminal-tour-done",
-  "ade-bmad-dismissed",
   "ade-file-browser",
   "ade-recordings-index",
+  "ade-recent-projects", // the New tab dialog's recent list
+  // Which projects are set up, which agents were removed, and which setups were
+  // undone. Lost, autoProjectSetup re-scaffolds a project someone cleaned out.
+  "ade-project-setup-done",
+  "ade-project-agents-removed",
+  "ade-project-setup-declined",
 ]);
 
 /** Key prefixes that are persisted (one key per recording). */

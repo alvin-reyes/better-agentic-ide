@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -16,6 +16,11 @@ export default function NewTabDialog({ onClose }: { onClose: () => void }) {
   const [recents, setRecents] = useState(recentProjects);
   const [cursor, setCursor] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // A stable ref callback: an inline arrow has a new identity every render, so
+  // React would re-run it after each keystroke and state change and pull focus
+  // back off whatever is inside — the "ask on new tab" checkbox, for one.
+  const focusOnMount = useCallback((el: HTMLDivElement | null) => el?.focus(), []);
   useEscapeToClose(onClose);
 
   // Remembered projects first, then ones open in other tabs.
@@ -62,7 +67,7 @@ export default function NewTabDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-label="New tab"
         tabIndex={-1}
-        ref={(el) => el?.focus()}
+        ref={focusOnMount}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => (c + 1) % rows); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => (c - 1 + rows) % rows); }

@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { ChatImage } from "../stores/orchestratorStore";
-import { AGENT_PROFILES } from "../data/agentProfiles";
+import { AGENT_CATALOG } from "../data/curatedAgents";
 
-const PROFILE_IDS = AGENT_PROFILES.map((p) => p.id);
+const PROFILE_IDS = AGENT_CATALOG.map((p) => p.id);
 
 const CREATE_TASKS_TOOL = {
   name: "create_tasks" as const,
@@ -74,7 +74,7 @@ When you and the user have agreed on a solid plan, call the create_tasks tool to
 - Dependencies listed if a task requires another to finish first
 
 Available agent profiles:
-${AGENT_PROFILES.map((p) => `- ${p.id}: ${p.description}`).join("\n")}
+${AGENT_CATALOG.map((p) => `- ${p.id}: ${p.description}`).join("\n")}
 
 Do NOT call create_tasks until the user confirms the plan. Ask first.`;
 
