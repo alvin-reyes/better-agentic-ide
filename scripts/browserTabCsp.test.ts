@@ -41,3 +41,24 @@ describe("CSP lets the Browser tab load a page", () => {
     for (const tag of ["iframe", "object", "embed"]) expect(san).toContain(`"${tag}"`);
   });
 });
+
+/**
+ * ollamaEndpoint is a free-text setting fetched straight from the webview.
+ * Pinning connect-src to localhost:11434 meant anyone pointing ADE at another
+ * port, or a GPU box on the LAN, had every request blocked by the app's own
+ * policy — surfacing as "Ollama is down" rather than a fixable setting.
+ *
+ * Widening it costs little here: script-src has no 'unsafe-inline' and the
+ * sanitizer strips scripts, so there is no injected code to exfiltrate with.
+ */
+describe("CSP lets a user-configured endpoint through", () => {
+  it("does not pin connect-src to one Ollama host", () => {
+    const connect = directive("connect-src");
+    expect(connect).toMatch(/\bhttp:/);
+    expect(connect).toMatch(/\bhttps:/);
+  });
+
+  it("still forbids inline script, which is what makes that safe", () => {
+    expect(directive("script-src")).not.toMatch(/unsafe-inline/);
+  });
+});
