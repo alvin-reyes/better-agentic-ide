@@ -1,7 +1,7 @@
 ---
 title: Agents & fleet
 lead: Launch agents from profiles, watch every agent and sub-agent on one timeline, and plan work with the orchestrator.
-description: ADE's agent picker, fleet view, orchestrator, BMAD personas and browser tab.
+description: ADE's agent picker, fleet view, orchestrator, BMAD and browser tab.
 ---
 
 Every project ADE opens is also set up with BMAD, the ADE methodology and Claude Code sub-agents for its roles and stack. See [Project setup]({{ '/guide/project-setup/' | relative_url }}).
@@ -52,7 +52,8 @@ Claude Code agents spawn sub-agents — Explore, Plan, code reviewers — that n
 
 - {% include key.html mac="⌘." other="Ctrl+Shift+." %} opens the fleet panel for the active terminal. Switch to **All terminals** to see every terminal at once, each with its folder, running count and cost; *Go to tab* jumps there.
 - *Fleet: All terminals* in the command palette opens the same view as a full tab.
-- The **timeline** shows swimlanes for the last 5 minutes, 15 minutes, hour or all time. Click an agent to jump to its pane.
+- The **timeline** shows swimlanes. In the fleet *tab* you choose the last 5 minutes, 15 minutes, hour or all time; the panel always shows the last 15 minutes. Click an agent to jump to its pane.
+- Seeing nothing? Agents are filed under the folder Claude Code was started in, so a terminal sitting somewhere else has none of its own — the empty timeline names the folder it is watching. Older runs need the tab's **all** range; anything past 15 minutes is outside the panel's window.
 - **Cost** is real: Claude agents' token usage comes from Claude Code's transcripts and is priced at API list prices (see [Tokens & cost]({{ '/guide/tokens/' | relative_url }})). If two agents run in the same folder at the same time, their usage can't be told apart and is left out. Codex, Gemini and Ollama sessions show no cost.
 
 ![Fleet timeline with sub-agents]({{ '/assets/img/fleet.webp' | relative_url }})
@@ -64,11 +65,13 @@ Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an O
 - **Dispatch** one task, or **Dispatch All** ready tasks. Each runs in its own terminal with `claude`, the task, and a generated `SPEC.md`.
 - The orchestrator uses the Anthropic API (add your key in *Settings → AI API*) or a local Ollama model.
 
-## BMAD personas
+## BMAD
 
-[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). The bundled, pinned copy goes into `.bmad-core/` along with Claude Code commands; nothing is downloaded and existing files are never overwritten.
+[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). The bundled, pinned copy goes into `.bmad-core/` along with the `/BMad` slash commands for Claude Code; nothing is downloaded and existing files are never overwritten.
 
-The BMAD panel then launches the Analyst, PM, UX Expert, Architect, Product Owner, Scrum Master, Developer or QA persona in the active terminal.
+The BMAD panel shows the method's two phases, **Planning** and **Dev cycle**, as a reminder of where a project is.
+
+The personas themselves are roles in the [agent picker](#agent-picker) — filter to **Roles** and you have Analyst, PM, UX Expert, Architect, Product Owner, Scrum Master, Developer and QA, each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
 
 ## Browser tab
 
