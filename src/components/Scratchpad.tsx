@@ -267,9 +267,11 @@ const secondaryHover = (busy = false) => ({
 
 const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   const [isOpen, setIsOpen] = useState(true);
-  // Hold the keyboard while this panel is open, so a click on a
-  // non-focusable part of it does not send typing to the terminal behind.
-  useEffect(() => claimKeyboard("scratchpad"), []);
+  // Hold the keyboard while the drawer is open, so a click on a non-focusable
+  // part of it does not send typing to the terminal behind. Collapsed, this
+  // component stays mounted and renders nothing, so the claim must be released
+  // or the guard would never hand the terminal back.
+  useEffect(() => (isOpen ? claimKeyboard("scratchpad") : undefined), [isOpen]);
   const [text, setText] = useState(loadDraft);
   const [copied, setCopied] = useState(false);
   const [sent, setSent] = useState(false);

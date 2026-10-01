@@ -71,9 +71,6 @@ const fontFamilies = [
 
 function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
   const [status, setStatus] = useState<"checking" | "running" | "not_running">("checking");
-  // Hold the keyboard while this panel is open, so a click on a
-  // non-focusable part of it does not send typing to the terminal behind.
-  useEffect(() => claimKeyboard("settings"), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +136,9 @@ function OllamaDownloadPrompt({ endpoint }: { endpoint: string }) {
 }
 
 export default function SettingsPanel() {
+  // Hold the keyboard while this panel is open, so a click on a
+  // non-focusable part of it does not send typing to the terminal behind.
+  useEffect(() => claimKeyboard("settings"), []);
   const store = useSettingsStore();
   const tabStore = useTabStore();
   const [workspaceName, setWorkspaceName] = useState("");
