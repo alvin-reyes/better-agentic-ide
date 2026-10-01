@@ -1,8 +1,13 @@
+import { modelTagFor } from "./agentComposition";
+
 export type Provider = "claude" | "codex" | "gemini" | "ollama";
 
 export interface LaunchOptions {
   continuous?: boolean;
   ollamaModel?: string;
+  /** Identifies the derived Ollama model, so a role keeps the same one. */
+  roleId?: string;
+  domainId?: string;
 }
 
 export type LaunchResult =
@@ -46,10 +51,16 @@ export function buildLaunchCommand(
       return { kind: "command", command: `gemini -i "$(cat ${path})"` };
 
     case "ollama": {
-      // ollamaModel is free text (see SettingsPanel.tsx), so it must be quoted
-      // exactly like rolePath — it is just as user-controlled.
-      const model = shellQuote(opts.ollamaModel || "deepseek-r1");
-      return { kind: "command", command: `ollama run ${model} --system "$(cat ${path})"` };
+      // `ollama run` has no system-prompt flag; the only way to start an
+      // interactive session with one is to derive a model whose Modelfile
+      // carries it. ollamaModel is free text from Settings, so it is quoted
+      // exactly like the path.
+      const raw = opts.ollamaModel || "deepseek-r1";
+      const tag = shellQuote(modelTagFor(opts.roleId ?? "role", opts.domainId, raw));
+      return {
+        kind: "command",
+        command: `ollama create ${tag} -f ${path} && ollama run ${tag}`,
+      };
     }
 
     case "codex":

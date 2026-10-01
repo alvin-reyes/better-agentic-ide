@@ -46,30 +46,36 @@ describe("buildLaunchCommand", () => {
     );
   });
 
-  it("emits ollama's exact command", () => {
-    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3" });
+  it("derives a model from the Modelfile and runs that", () => {
+    // `ollama run` has no system-prompt flag — verified against its own help,
+    // which lists MODEL [PROMPT] and nothing for a system prompt. The only way
+    // to start an interactive session with one is to derive a model.
+    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3", roleId: "architect", domainId: "security" });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toBe(
-      `ollama run 'llama3' --system "$(cat '/Users/x/.ade/roles/architect-security.md')"`
+      `ollama create 'ade-llama3-architect-security' -f '/Users/x/.ade/roles/architect-security.md' && ollama run 'ade-llama3-architect-security'`
     );
   });
 
-  it("quotes the ollama model so shell metacharacters cannot escape it", () => {
-    const malicious = "llama3; echo pwned";
-    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: malicious });
+  it("never emits a flag ollama does not have", () => {
+    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3" });
     if (result.kind !== "command") throw new Error("expected a command");
-    expect(result.command).toBe(
-      `ollama run 'llama3; echo pwned' --system ` +
-        `"$(cat '/Users/x/.ade/roles/architect-security.md')"`
-    );
+    expect(result.command).not.toMatch(/--system/);
+  });
+
+  it("keeps shell metacharacters in the model out of the command", () => {
+    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3; echo pwned" });
+    if (result.kind !== "command") throw new Error("expected a command");
+    // The model name only reaches the command through the derived tag, which is
+    // sanitised to [a-z0-9._-]; the raw name goes in the Modelfile, not a shell.
+    expect(result.command).not.toContain("echo pwned");
+    expect(result.command).toMatch(/^ollama create '[a-z0-9._-]+' -f /);
   });
 
   it("defaults the ollama model", () => {
     const result = buildLaunchCommand("ollama", PATH);
     if (result.kind !== "command") throw new Error("expected a command");
-    expect(result.command).toBe(
-      `ollama run 'deepseek-r1' --system "$(cat '/Users/x/.ade/roles/architect-security.md')"`
-    );
+    expect(result.command).toContain("ade-deepseek-r1-");
   });
 
   it("reports codex as unsupported rather than guessing", () => {

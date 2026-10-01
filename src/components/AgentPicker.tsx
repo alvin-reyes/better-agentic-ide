@@ -9,7 +9,7 @@ import { hasActiveProcess } from "../hooks/useTerminal";
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
-import { composeRoleMarkdown } from "../lib/agentComposition";
+import { composeRoleMarkdown, toModelfile } from "../lib/agentComposition";
 import { buildLaunchCommand, supportsRoleDelivery, type Provider } from "../lib/agentCommand";
 import { ensureRoleDir, rolePathFor, type AgentSpec } from "../lib/agentSpec";
 import { AGENT_CATEGORIES } from "../data/curatedAgents";
@@ -173,6 +173,8 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     const result = buildLaunchCommand(spec.provider, rolePath, {
       continuous: continuousMode,
       ollamaModel: settings.ollamaModel,
+      roleId: spec.roleId,
+      domainId: spec.domainId,
     });
     if (result.kind === "unsupported") {
       setLaunchError(result.reason);
@@ -180,7 +182,13 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     }
 
     try {
-      await invoke("write_text_file", { path: rolePath, content: composeRoleMarkdown(role, domain) });
+      // Ollama takes a system prompt only through a Modelfile, so the file we
+      // write is one; every other provider reads the role markdown directly.
+      const roleText = composeRoleMarkdown(role, domain);
+      const content = spec.provider === "ollama"
+        ? toModelfile(roleText, settings.ollamaModel || "deepseek-r1")
+        : roleText;
+      await invoke("write_text_file", { path: rolePath, content });
     } catch (err) {
       setLaunchError(`Could not write the role file: ${err}`);
       return null;
