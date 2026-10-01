@@ -351,6 +351,13 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
       cwd: initialCwd || null,
       onEvent: ptyChannel(paneId, term),
     });
+    // The pane can be closed while the shell is starting. destroyInstance ran
+    // with ptyId still null, so it had nothing to kill and the shell would
+    // outlive the app's knowledge of it — a stray zsh per closed-too-fast tab.
+    if (instances.get(paneId) !== inst) {
+      void invoke("kill_pty", { id: ptyId }).catch(() => {});
+      return inst;
+    }
     inst.ptyId = ptyId;
     setPtyId(paneId, ptyId);
   } catch (err) {
@@ -412,17 +419,21 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       });
 
 
-      // Watch for container resizes
+      // attach() is async, so cleanup may already have run. Observing now would
+      // leave an observer nothing ever disconnects.
+      if (cancelled) return;
       resizeObserver = new ResizeObserver(() => {
         requestAnimationFrame(() => inst!.fitAddon.fit());
       });
       resizeObserver.observe(container);
     };
 
+    let cancelled = false;
     attach();
 
     // On unmount: detach the wrapper (but DON'T destroy the terminal)
     return () => {
+      cancelled = true;
       resizeObserver?.disconnect();
       const inst = instances.get(paneId);
       if (inst && inst.wrapper.parentElement === container) {

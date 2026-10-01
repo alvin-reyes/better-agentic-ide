@@ -170,8 +170,14 @@ export default function App() {
   // Setups run elsewhere (new-tab dialog, command palette) report here.
   useEffect(() => {
     const onSetup = (e: Event) => announceSetup((e as CustomEvent<SetupResult>).detail, showToast);
+    const onSetupFailed = (e: Event) =>
+      showToast({ title: "Project setup", body: (e as CustomEvent<{ why: string }>).detail.why });
     window.addEventListener("project-setup-done", onSetup);
-    return () => window.removeEventListener("project-setup-done", onSetup);
+    window.addEventListener("project-setup-failed", onSetupFailed);
+    return () => {
+      window.removeEventListener("project-setup-done", onSetup);
+      window.removeEventListener("project-setup-failed", onSetupFailed);
+    };
   }, [showToast]);
   useTerminalFocusGuard();
 
