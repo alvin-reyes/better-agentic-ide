@@ -19,6 +19,7 @@ ADE is a desktop app for macOS and Linux built around two pillars: **AI agents**
 
 - **Ten agents at once** — run Claude Code, Codex, Gemini or any CLI agent (Ollama for local models) in parallel tabs and split panes. The fleet view tracks every agent and sub-agent on a live timeline with its real cost, read from Claude Code's usage records.
 - **40 agent profiles** — Backend (including senior Go and Rust engineers), Frontend, DevOps, Testing, Web3, Architects and General. Pick one and run it in this terminal or a new tab.
+- **Agents are platform-agnostic** — a profile composes one role definition in `~/.ade/roles/`, shared by every project, and each CLI gets it the way it actually accepts one: Claude Code through `--append-system-prompt-file`, Ollama (deepseek and other local models) through a generated Modelfile, Gemini as its opening prompt. Codex is listed but marked unavailable: it has no verified mechanism, and guessing one would fail silently at launch.
 - **Roles on their own** — the picker also lists every core role unpaired, so Product Manager, Product Owner and Scrum Master are one keystroke away even though no profile covers them. A role brings its accountability and the files it owns; a profile narrows it to a domain.
 - **Project setup** — every project is set up for agents once, automatically. See [below](#project-setup).
 - **Prompt scratchpad** — draft long prompts under every terminal with prompt tips and de-slop, send with one key, chain steps and reuse from history. Drafts survive crashes.
@@ -30,7 +31,7 @@ ADE is a desktop app for macOS and Linux built around two pillars: **AI agents**
 
 Every project ADE opens (New project, Open project, or any git repo a terminal enters) is set up once:
 
-- **BMAD** — `.bmad-core/` and the `/BMad` slash commands.
+- **BMAD**, imposed on every project — `.bmad-core/` with its tasks, checklists, templates, workflows and reference data, and the `/BMad:tasks:` slash commands. BMAD's own personas are deliberately not installed: eight of the ten are the same jobs as the ADE roles below, and a project with two architects and two QAs has two definitions of Done.
 - **The ADE methodology**, "verified, not vibed": Plan → Approve → Shard → Build → Verify. A story is Done only when the agreed verification command passes, and no agent certifies its own work. The rules live in `.ade/rules.md` and load from `CLAUDE.md` (an existing `CLAUDE.md` gets one import line and is never replaced), with a context store, a decision log (ADRs) and a session journal under `.ade/`, plus `llms.txt`.
 - **Eight core roles** as Claude Code sub-agents in `.claude/agents/`: product manager, architect, designer, scrum master, developer, QA, DevOps and adversarial reviewer.
 - **Agents for your stack** — Foundry or Hardhat: Solidity engineer, smart contract auditor, gas optimizer, Web3 DevOps engineer. Anchor/Solana: Solana/Anchor engineer, auditor, Web3 DevOps engineer, senior Rust engineer. `go.mod`: senior Go engineer. `Cargo.toml`: senior Rust engineer.
@@ -47,7 +48,8 @@ Only missing files are written, and the toast that lists them has Undo. Add or r
 
 ## Also in ADE
 
-- **Clickable files and live preview** — Markdown with Mermaid, PDF, Word, images and HTML open beside the terminal.
+- **Clickable files, live preview and an editor** — Markdown with Mermaid, PDF, Word, images and HTML open beside the terminal; a source file opens in a Monaco editor tab that saves back to disk, with a live diagram pane for `.mmd` files.
+- **Voice dictation** — talk into the scratchpad instead of typing a long prompt.
 - **Auto-save and sync** — sessions restore after a crash; settings, notes and Claude memory sync through your own private git repo.
 - **Precision** — the default theme, with eight more presets (GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark), per-colour overrides and a terminal palette that stays legible against the UI. The saved theme paints before the first frame, so a cold start never flashes the fallback.
 
