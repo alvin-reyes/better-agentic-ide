@@ -62,7 +62,7 @@ describe("architects brainstorm and record decisions instead of coding", () => {
       expect(role, `${agent.id} -> role ${agent.roleId}`).toBeTruthy();
       const md = composeRoleMarkdown(role!, agent.domainId ? getDomain(agent.domainId) : undefined);
       expect(md, agent.id).toContain("not coding");
-      expect(md, agent.id).toContain("docs/adr/");
+      expect(md, agent.id).toContain(".ade/context/decisions/");
       expect(md, agent.id).toContain("mermaid");
     }
   });

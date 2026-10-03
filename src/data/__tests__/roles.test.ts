@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { ROLES, getRole } from "../roles";
 
 const EXPECTED_IDS = [
-  "analyst", "product-manager", "ux-expert", "architect", "product-owner",
-  "scrum-master", "dev", "qa", "devops", "adversarial-reviewer",
+  "analyst", "product-manager", "designer", "architect", "product-owner",
+  "scrum-master", "developer", "qa", "devops", "adversarial-reviewer",
   "technical-writer", "advisor", "brainstorming-architect",
 ];
 
