@@ -35,8 +35,8 @@ describe("curated agents", () => {
     }
   });
 
-  it("has exactly 45 curated agents", () => {
-    expect(CURATED_AGENTS.length).toBe(45);
+  it("has exactly 47 curated agents", () => {
+    expect(CURATED_AGENTS.length).toBe(47);
   });
 
   it("still resolves every Web3 and Architect id the legacy profiles carried", () => {

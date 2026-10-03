@@ -6,7 +6,7 @@ import { CURATED_AGENTS } from "../curatedAgents";
 describe("picker items", () => {
   it("keeps every curated pair", () => {
     expect(CURATED_ITEMS.length).toBe(CURATED_AGENTS.length);
-    expect(CURATED_ITEMS.length).toBe(45);
+    expect(CURATED_ITEMS.length).toBe(47);
   });
 
   it("offers every role as a bare, domainless launch", () => {

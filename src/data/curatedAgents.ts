@@ -443,8 +443,25 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     roleId: "developer",
     domainId: "data-engineering",
   },
-];
-export const AGENT_CATEGORIES: AgentCategory[] = ["Backend", "Frontend", "DevOps", "Testing", "General", "Web3", "Architects"];
+  {
+    id: "agent-engineer",
+    name: "Agent Engineer",
+    icon: "AGT",
+    color: "#bc8cff",
+    description: "Build agent loops, tools and guardrails, with the eval harness written alongside",
+    roleId: "developer",
+    domainId: "agent-engineering",
+  },
+  {
+    id: "eval-engineer",
+    name: "Eval Engineer",
+    icon: "EVL",
+    color: "#f4756b",
+    description: "Define eval criteria and judge agent output against them, with the cases as evidence",
+    roleId: "qa",
+    domainId: "llm-eval",
+  },
+];export const AGENT_CATEGORIES: AgentCategory[] = ["Backend", "Frontend", "DevOps", "Testing", "General", "Web3", "Architects"];
 
 export interface CatalogAgent extends CuratedAgent {
   category: AgentCategory;
