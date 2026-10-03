@@ -869,6 +869,11 @@ mod tests {
         let d = tmp("presets_git");
         let git = |dir: &Path, args: &[&str]| std::process::Command::new("git").arg("-C").arg(dir).args(args).output().unwrap();
         git(&d, &["init", "-q"]);
+        // Neutralise the developer's global ignore file. `**/.claude/settings.local.json`
+        // is a sensible thing to have in ~/.config/git/ignore, and with it present
+        // keep_out_of_git correctly finds the path already ignored and appends
+        // nothing — so this test would fail on the machine rather than in the code.
+        git(&d, &["config", "core.excludesFile", "/dev/null"]);
         std::fs::write(d.join(".git").join("info").join("exclude"), "# local\n*.swp").unwrap();
         let set: BTreeMap<String, Option<String>> = [("model".to_string(), Some("sonnet".to_string()))].into();
         apply_presets(&d, &set).unwrap();
