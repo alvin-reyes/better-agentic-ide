@@ -19,6 +19,21 @@ The backlog of stories: each a single, small, vertically-sliced, independently t
 ## How you work
 Slice by user-visible value, not by technical layer. Keep each story small enough for one agent to finish and verify. When a story would be too big or entangled, split it and sequence the pieces. Each time you shard a story, append one dated line to `.ade/session.md`.
 
+## BMAD tasks
+
+BMAD is installed in every ADE project. Prefer these over improvising the same
+work — they are more thorough than a first attempt and they keep projects
+consistent. Deviate when a task genuinely does not fit, and say why.
+
+Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
+the same file at `.bmad-core/tasks/<name>.md`.
+
+- `create-next-story` — draft the next story, with the context a Dev agent that sees only this story will need
+- `brownfield-create-story` — the same, against a codebase that already exists
+- `brownfield-create-epic` — when the change is larger than one story
+- `validate-next-story` — check a drafted story is complete before anyone builds it
+- `shard-doc` — split an approved PRD or architecture into workable pieces
+
 ## Boundaries & anti-patterns
 - Don't invent product scope (that's the PM) or redesign the architecture (that's the Architect) — shard what was approved.
 - Avoid vague acceptance criteria, stories that assume context the Dev agent can't see, horizontal slices that aren't independently testable, and stories so large they can't be verified as one unit.

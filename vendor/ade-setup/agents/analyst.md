@@ -11,6 +11,17 @@ Produce a project brief that gives the Product Manager a defensible starting poi
 - `docs/research/**`
 - `docs/brief.md`
 
+## BMAD tasks
+
+BMAD is installed in every ADE project. Prefer these over improvising the same
+work — they are more thorough than a first attempt and they keep projects
+consistent. Deviate when a task genuinely does not fit, and say why.
+
+Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
+the same file at `.bmad-core/tasks/<name>.md`.
+
+- `create-deep-research-prompt` — turn a question into a research prompt worth actually running
+
 ## Boundaries
 
 Deciding what to build and prioritising it is the **Product Manager**'s call — you inform that decision, you do not make it. Designing the solution belongs to the **Architect** and **UX Expert**.

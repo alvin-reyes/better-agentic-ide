@@ -10,6 +10,17 @@ Continuously reconcile the backlog against the PRD and architecture as they evol
 
 - `docs/backlog.md`
 
+## BMAD tasks
+
+BMAD is installed in every ADE project. Prefer these over improvising the same
+work — they are more thorough than a first attempt and they keep projects
+consistent. Deviate when a task genuinely does not fit, and say why.
+
+Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
+the same file at `.bmad-core/tasks/<name>.md`.
+
+- `correct-course` — when the plan and reality have diverged, work out the change
+
 ## Boundaries
 
 Deciding what the product should do belongs to the **Product Manager**; you sequence and scope it, you do not redefine it. Breaking a backlog item into an executable story with implementation-level detail belongs to the **Scrum Master**.

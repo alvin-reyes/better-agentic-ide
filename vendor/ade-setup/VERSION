@@ -1,5 +1,5 @@
 repo: https://github.com/alvin-reyes/ade-setup
-ref: 85e1a4ae12775637394ba521b8407365fcedda15
+ref: 43d287c8d0899b38dbc8cc96cdf5c2b6d85c9f5c
 vendored: 2026-10-03
 
 The role definitions ADE ships, vendored and pinned the way .bmad-core is.

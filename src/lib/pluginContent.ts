@@ -27,7 +27,24 @@ export function rolePrompt(agent: CatalogAgent): string {
   const role = getRole(agent.roleId);
   if (!role) throw new Error(`Unknown role "${agent.roleId}" for ${agent.id}`);
   const domain = agent.domainId ? getDomain(agent.domainId) : undefined;
-  return composeRoleMarkdown(role, domain).trim();
+  return withoutBmadTasks(composeRoleMarkdown(role, domain)).trim();
+}
+
+/**
+ * Drop the "BMAD tasks" section from a definition bound for the plugin.
+ *
+ * Inside an ADE project BMAD is always installed, so pointing a role at
+ * `/BMad:tasks:apply-qa-fixes` is sound. The plugin is installed from the
+ * marketplace by people who may never have run ADE and have no `.bmad-core/`,
+ * and telling them to prefer a command that does not exist is worse than
+ * saying nothing: it reads as a capability they are failing to find.
+ */
+function withoutBmadTasks(body: string): string {
+  const start = body.search(/^## BMAD tasks$/m);
+  if (start < 0) return body;
+  const rest = body.slice(start + 1);
+  const next = rest.search(/^## /m);
+  return next < 0 ? body.slice(0, start) : body.slice(0, start) + rest.slice(next);
 }
 
 const yaml = (s: string) => JSON.stringify(s);

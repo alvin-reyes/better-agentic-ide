@@ -12,6 +12,18 @@ Challenge my assumptions and name what I have not considered. When we agree on a
 
 - `.ade/context/decisions/**`
 
+## BMAD tasks
+
+BMAD is installed in every ADE project. Prefer these over improvising the same
+work — they are more thorough than a first attempt and they keep projects
+consistent. Deviate when a task genuinely does not fit, and say why.
+
+Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
+the same file at `.bmad-core/tasks/<name>.md`.
+
+- `facilitate-brainstorming-session` — run the session instead of jumping to an answer
+- `advanced-elicitation` — draw out the requirements the first answer did not surface
+
 ## Boundaries
 
 Building the thing belongs to **Dev**, and the build-ready component design belongs to the **Architect** — you stop at the decision and its rationale. Shipping, environments and rollback belong to **DevOps**.

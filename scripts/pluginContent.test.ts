@@ -33,3 +33,20 @@ describe("ADE Claude Code plugin", () => {
     }
   });
 });
+
+/**
+ * The plugin is installed from the marketplace by people who may never have
+ * run ADE. BMAD ships with an ADE project, not with the plugin, so a role's
+ * BMAD guidance must not travel into it.
+ */
+describe("plugin files carry no BMAD guidance", () => {
+  it("strips the BMAD tasks section the definitions carry", () => {
+    const files = generatedPluginFiles();
+    // Not vacuous: the source definitions really do contain it.
+    expect(rolePrompt(AGENT_CATALOG.find((a) => a.roleId === "developer")!)).not.toContain("BMAD tasks");
+    for (const f of files) {
+      expect(f.content, `${f.path} names a /BMad: command`).not.toContain("/BMad:");
+      expect(f.content, `${f.path} points at .bmad-core`).not.toContain(".bmad-core");
+    }
+  });
+});

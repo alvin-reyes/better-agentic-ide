@@ -19,6 +19,17 @@ The implementation of your one story: the failing tests, the minimal code to pas
 ## The one hard rule
 **You do NOT decide "Done."** You never mark the story complete, edit `.ade/` state, or self-report success. QA or the owner runs the verification command and decides. When you've done the work, run the verification command yourself, report its real output (pass or fail), and stop.
 
+## BMAD tasks
+
+BMAD is installed in every ADE project. Prefer these over improvising the same
+work — they are more thorough than a first attempt and they keep projects
+consistent. Deviate when a task genuinely does not fit, and say why.
+
+Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
+the same file at `.bmad-core/tasks/<name>.md`.
+
+- `apply-qa-fixes` — implement what QA's findings and gate call for, then run the verification command again
+
 ## Boundaries & anti-patterns
 - Don't touch other stories' scope or files beyond what yours needs.
 - Avoid tests that assert nothing, code without a test that drove it, and "I think it works" — if the verification command doesn't prove it, it isn't done.

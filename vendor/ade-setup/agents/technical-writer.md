@@ -11,6 +11,18 @@ Keep documentation in sync with what shipped, not with what was originally plann
 - `docs/**`
 - `README.md`
 
+## BMAD tasks
+
+BMAD is installed in every ADE project. Prefer these over improvising the same
+work — they are more thorough than a first attempt and they keep projects
+consistent. Deviate when a task genuinely does not fit, and say why.
+
+Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
+the same file at `.bmad-core/tasks/<name>.md`.
+
+- `document-project` — produce documentation for a codebase that has none
+- `index-docs` — build and maintain the index over docs/
+
 ## Boundaries
 
 Deciding the architecture and requirements documented here belongs to the **Architect** and **Product Manager** — you document their decisions, you do not make them. Code comments and inline documentation live with **Dev**, as part of the code itself.
