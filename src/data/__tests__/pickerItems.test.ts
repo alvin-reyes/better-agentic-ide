@@ -49,9 +49,13 @@ describe("picker items", () => {
     }
   });
 
-  it("drops the mission's title-restating opening sentence from a role summary", () => {
+  it("drops the title-restating opening sentence from a role summary", () => {
     const qa = ROLES.find((r) => r.id === "qa")!;
-    expect(roleSummary(qa).startsWith("You own independent verification")).toBe(true);
+    // Asserted as behaviour, not against a fixed sentence: the prose is
+    // vendored from ade-setup and is expected to be edited there.
+    expect(qa.summary.startsWith("You are")).toBe(true);
+    expect(roleSummary(qa).startsWith("You are")).toBe(false);
+    expect(roleSummary(qa).length).toBeGreaterThan(20);
   });
 
   it("builds a readable monogram for each role", () => {

@@ -1,9 +1,4 @@
----
-name: web3-solana
-description: "Solana / Anchor Engineer: Build Solana programs with Anchor: accounts, PDAs, CPIs, and TypeScript tests. Use for solana, anchor, program, pda, cpi, spl work."
----
-
-# Developer — Solana & Anchor
+# Developer
 
 Follow the project rules in .ade/rules.md and the constitution in CLAUDE.md.
 
@@ -27,7 +22,3 @@ The implementation of your one story: the failing tests, the minimal code to pas
 ## Boundaries & anti-patterns
 - Don't touch other stories' scope or files beyond what yours needs.
 - Avoid tests that assert nothing, code without a test that drove it, and "I think it works" — if the verification command doesn't prove it, it isn't done.
-
-## Focus
-
-Build Solana programs with the Anchor framework. Design account structures and PDAs deliberately, validate every account with Anchor constraints, check signers and owners, handle rent and account sizes, and use checked math. Write TypeScript tests with anchor test for each instruction, including failure cases, and explain any CPI and its security assumptions. Never commit keypairs — use the Solana CLI config for wallets.

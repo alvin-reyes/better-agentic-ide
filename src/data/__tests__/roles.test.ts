@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ROLES, getRole } from "../roles";
+import { ROLES, ROLE_ORDER, getRole } from "../roles";
 
 const EXPECTED_IDS = [
   "analyst", "product-manager", "designer", "architect", "product-owner",
@@ -13,12 +13,41 @@ describe("ROLES", () => {
     expect(ROLES.map((r) => r.id).sort()).toEqual([...EXPECTED_IDS].sort());
   });
 
-  it("gives every role a non-empty title, mission and boundaries", () => {
+  it("parses a title, a summary and a boundaries section out of every definition", () => {
     for (const role of ROLES) {
       expect(role.title.length, `${role.id} title`).toBeGreaterThan(0);
-      expect(role.mission.length, `${role.id} mission`).toBeGreaterThan(80);
-      expect(role.boundaries.length, `${role.id} boundaries`).toBeGreaterThan(40);
+      // A parse that silently half-worked is the failure mode to catch: an
+      // empty summary or a body with no boundaries means the markdown drifted
+      // from the shape this module reads.
+      expect(role.summary.length, `${role.id} summary`).toBeGreaterThan(40);
+      expect(role.body, `${role.id} body`).toMatch(/^## (Boundaries|Anti-patterns)/m);
+      expect(role.body, `${role.id} what-you-own`).toContain("## What you own");
     }
+  });
+
+  it("carries the definition verbatim, with nothing recomposed", () => {
+    // The body is handed to a provider CLI as-is, so it must still contain the
+    // sections this module does not model.
+    const qa = getRole("qa")!;
+    expect(qa.body).toContain("## How you work");
+    expect(qa.body).toContain("Never edit code or tests");
+    const dev = getRole("developer")!;
+    expect(dev.body).toContain("## The one hard rule");
+  });
+
+  it("declares a display order that covers every vendored definition", () => {
+    // An id vendored but absent from ORDER still renders, at the end. This
+    // fails instead, so a new definition gets a deliberate position.
+    const ids = new Set(ROLES.map((r) => r.id));
+    expect([...ids].filter((id) => !ROLE_ORDER.includes(id))).toEqual([]);
+    expect(ROLE_ORDER.filter((id) => !ids.has(id))).toEqual([]);
+  });
+
+  it("puts the delivery flow before the advisory roles", () => {
+    const at = (id: string) => ROLES.findIndex((r) => r.id === id);
+    expect(at("analyst")).toBeLessThan(at("developer"));
+    expect(at("developer")).toBeLessThan(at("qa"));
+    expect(at("qa")).toBeLessThan(at("advisor"));
   });
 
   it("gives every delivery role at least one owned artifact", () => {

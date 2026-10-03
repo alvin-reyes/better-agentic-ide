@@ -39,7 +39,7 @@ const ROLE_COLOR = "#8b949e";
  * is displaying anyway, so it is dropped.
  */
 export function roleSummary(role: Role): string {
-  const firstParagraph = role.mission.split("\n\n")[0].replace(/\*\*/g, "");
+  const firstParagraph = role.summary;
   const withoutOpener = firstParagraph.replace(/^You are (the )?[^.]*\.\s*/, "");
   return withoutOpener || firstParagraph;
 }
