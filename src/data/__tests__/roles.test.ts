@@ -57,6 +57,26 @@ describe("ROLES", () => {
     }
   });
 
+  it("keeps the ownership overlaps the contract documents", () => {
+    // These are the worked examples in Role.owns: overlap is intentional and
+    // resolves by specificity. Narrowing either side of a pair leaves paths
+    // with no steward — which is exactly how technical-writer's docs/**
+    // catch-all was lost once, reverted here, and then silently restored to
+    // the narrow value when the catalog began parsing the vendored files.
+    expect(getRole("technical-writer")!.owns, "the docs catch-all").toContain("docs/**");
+    expect(getRole("product-manager")!.owns, "beats the catch-all").toContain("docs/prd.md");
+    expect(getRole("sre")!.owns, "beats the catch-all").toContain("docs/runbooks/**");
+  });
+
+  it("leaves test files unclaimed, on purpose", () => {
+    // The Developer authors them test-first; QA must not edit what it
+    // measures. A role declaring stewardship of tests contradicts both.
+    for (const role of ROLES) {
+      const claimed = role.owns.filter((g) => /(^|\/)tests?\/|\.test\./.test(g));
+      expect(claimed, `${role.id} claims test files`).toEqual([]);
+    }
+  });
+
   it("has unique ids", () => {
     expect(new Set(ROLES.map((r) => r.id)).size).toBe(ROLES.length);
   });

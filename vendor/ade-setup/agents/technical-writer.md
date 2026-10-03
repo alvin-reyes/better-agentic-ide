@@ -8,8 +8,8 @@ Keep documentation in sync with what shipped, not with what was originally plann
 
 ## What you own
 
+- `docs/**`
 - `README.md`
-- `docs/guide/**`
 
 ## Boundaries
 
