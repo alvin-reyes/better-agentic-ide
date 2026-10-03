@@ -397,8 +397,53 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     domainId: "ai-web3",
   },
 
+  // Company
+  {
+    id: "security-engineer",
+    name: "Security Engineer",
+    icon: "SEC",
+    color: "#f4756b",
+    description: "Threat-model the system and verify the attack paths are actually closed",
+    roleId: "security-engineer",
+    domainId: "security",
+  },
+  {
+    id: "sre-observability",
+    name: "Observability Engineer",
+    icon: "OBS",
+    color: "#d9a441",
+    description: "SLOs, instrumentation, and alerts that fire on user-visible harm",
+    roleId: "sre",
+    domainId: "observability",
+  },
+  {
+    id: "sre-incident",
+    name: "Incident Responder",
+    icon: "911",
+    color: "#f4756b",
+    description: "Drive a live outage to mitigation, then write the blameless postmortem",
+    roleId: "sre",
+    domainId: "incident-response",
+  },
+  {
+    id: "mobile-engineer",
+    name: "Mobile Engineer",
+    icon: "APP",
+    color: "#7c8fff",
+    description: "Build iOS, Android and React Native apps, offline and permissions included",
+    roleId: "developer",
+    domainId: "mobile",
+  },
+  {
+    id: "data-pipeline-engineer",
+    name: "Data Pipeline Engineer",
+    icon: "ETL",
+    color: "#4cc38a",
+    description: "Build ETL pipelines with schema contracts, idempotent reruns and quality checks",
+    roleId: "developer",
+    domainId: "data-engineering",
+  },
 ];
-
 export const AGENT_CATEGORIES: AgentCategory[] = ["Backend", "Frontend", "DevOps", "Testing", "General", "Web3", "Architects"];
 
 export interface CatalogAgent extends CuratedAgent {

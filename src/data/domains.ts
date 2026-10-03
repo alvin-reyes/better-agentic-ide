@@ -310,7 +310,39 @@ export const DOMAINS: Domain[] = [
     focus:
       "Put forge build, forge test (or anchor test) and static analysis such as slither in CI, blocking merges when they fail. Script local chains (anvil, solana-test-validator) for tests, and make deployments reproducible: pinned compiler versions, verified contracts, recorded addresses per network. Real-network deploys go through a reviewed script signing with a hardware wallet, keystore account or multisig — never a private key in code, CI secrets or logs. Set up RPC redundancy, alerting on contract events, and a written rollback or pause plan.",
     keywords: ["web3 devops", "rpc", "node", "anvil", "devnet", "testnet", "deploy pipeline", "ci", "keystore", "multisig", "monitoring", "indexer"],
-  }
+  },
+  {
+    id: "mobile",
+    title: "Mobile",
+    category: "Frontend",
+    focus:
+      "Build and debug iOS, Android and React Native apps: navigation, platform permissions, offline and poor-network behaviour, background work, push notifications, app-store build and release requirements. Treat the small screen, the interrupted session and the denied permission as the normal cases, not the edge ones.",
+    keywords: ["mobile", "ios", "android", "swift", "kotlin", "react native", "expo", "app store", "push notification"],
+  },
+  {
+    id: "data-engineering",
+    title: "Data Engineering",
+    category: "Backend",
+    focus:
+      "Build pipelines that move and reshape data: extraction, transformation, loading, scheduling and backfills. Make correctness checkable — schema contracts, idempotent reruns, row-count and freshness assertions — because a pipeline that fails loudly is cheaper than one that silently drops rows.",
+    keywords: ["etl", "elt", "pipeline", "warehouse", "airflow", "dbt", "spark", "backfill", "data quality", "schema"],
+  },
+  {
+    id: "observability",
+    title: "Observability",
+    category: "DevOps",
+    focus:
+      "Make a running system explain itself: structured logs, metrics, traces, and the dashboards and alerts built on them. Instrument for the question you will ask at 3am, alert on user-visible harm rather than on resource graphs, and make every alert link to the runbook that resolves it.",
+    keywords: ["observability", "metrics", "tracing", "logging", "prometheus", "grafana", "opentelemetry", "alert", "slo", "dashboard"],
+  },
+  {
+    id: "incident-response",
+    title: "Incident Response",
+    category: "DevOps",
+    focus:
+      "Drive a live incident: establish impact, mitigate before diagnosing, keep a timeline as you go, and communicate state in terms the business understands. Afterwards, write the blameless postmortem — contributing causes and the specific changes that make the class of failure less likely.",
+    keywords: ["incident", "outage", "oncall", "postmortem", "rollback", "mitigation", "severity", "pager", "downtime"],
+  },
 ];
 
 export function getDomain(id: string): Domain | undefined {

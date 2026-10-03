@@ -71,7 +71,7 @@ Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an O
 
 The BMAD panel shows the method's two phases, **Planning** and **Dev cycle**, as a reminder of where a project is.
 
-The personas themselves are roles in the [agent picker](#agent-picker) — filter to **Roles** and you have all thirteen — Analyst, Product Manager, UX Expert, Architect, Product Owner, Scrum Master, Dev, QA, DevOps, Adversarial Reviewer, Brainstorming Architect, Technical Writer and Advisor — each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
+The personas themselves are roles in the [agent picker](#agent-picker) — filter to **Roles** and you have all nineteen — Analyst, Product Manager, Designer, Architect, Product Owner, Scrum Master, Developer, QA, DevOps, Adversarial Reviewer, Security Engineer, SRE, Release Manager, Engineering Manager, Support Engineer, Solutions Engineer, Brainstorming Architect, Technical Writer and Advisor — each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
 
 ## Browser tab
 

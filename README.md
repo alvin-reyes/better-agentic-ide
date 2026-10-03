@@ -18,9 +18,9 @@ ADE is a desktop app for macOS and Linux built around two pillars: **AI agents**
 ## AI Agents
 
 - **Many agents at once** — run Claude Code, Codex, Gemini or any CLI agent in parallel tabs and split panes. The fleet view tracks every agent and sub-agent on a live timeline with its real cost.
-- **40 agent profiles** — Backend (including senior Go and Rust engineers), Frontend, DevOps, Testing, Web3, Architects and General. Pick one and run it in this terminal or a new tab.
+- **45 agent profiles** — Backend (including senior Go and Rust engineers), Frontend, Mobile, Data, DevOps, Testing, Security, Web3, Architects and General. Pick one and run it in this terminal or a new tab.
 - **One role, any CLI** — a profile composes one role definition in `~/.ade/roles/`, shared by every project; Claude Code, Gemini and Ollama (deepseek and other local models) each receive it the way they accept one. Codex is shown unavailable rather than guessing a flag that fails silently.
-- **Roles on their own** — the picker lists all thirteen roles unpaired, so Product Manager, Product Owner and Scrum Master are a keystroke away even though no profile covers them. A role brings accountability and the files it owns; a profile narrows it to a domain.
+- **A whole company, not just a delivery team** — nineteen roles cover the work end to end: analyst, product manager, designer, architect, product owner, scrum master, developer, QA, DevOps, adversarial reviewer, security engineer, SRE, release manager, engineering manager, support engineer, solutions engineer, technical writer and two advisory roles. The picker lists every one unpaired, so the roles no profile covers are still a keystroke away.
 - **Project setup** — every project is set up for agents once, automatically. See [below](#project-setup).
 - **Prompt scratchpad** — draft long prompts under every terminal with prompt tips and de-slop, send with one key, chain steps and reuse from history. Drafts survive crashes.
 - **Tokens & cost** — spend at API prices, cache savings and context meters, plus one-click token savers (compact paste, context guard, context diet).
