@@ -168,10 +168,15 @@ jobs:
 
       # The AppImage catalog (appimage.github.io) runs a conformance test and
       # rejected ADE with "FATAL: .DirIcon is missing". Every AppImage must carry
-      # a .DirIcon at its root; Tauri sources it from
-      # hicolor/256x256/apps/<binary>.png, and that path only exists if an icon
-      # is exactly 256px AND its filename has no @2x suffix (a 128x128@2x.png is
-      # installed to 256x256@2 instead, which does not satisfy it).
+      # a .DirIcon at its root.
+      #
+      # What was observed, rather than assumed: before 0.18.2 the icon tree had
+      # 32x32, 128x128, 256x256@2 and 512x512 but no plain 256x256 directory
+      # (a 128x128@2x.png is 256px, but the @2x suffix sends it to 256x256@2),
+      # and no .DirIcon was produced. Adding a 256x256.png with no @2x in its
+      # name created that directory and .DirIcon appeared. Note the .DirIcon the
+      # bundler then writes is the 512px icon, not the 256px one — so the 256x256
+      # entry is what makes it emit the file at all, not the source of its bytes.
       #
       # It fails silently — the AppImage still builds and runs — so this asserts
       # it rather than trusting the bundler.

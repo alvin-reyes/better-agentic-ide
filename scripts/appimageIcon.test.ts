@@ -7,12 +7,16 @@ import { resolve } from "node:path";
  *
  *   FATAL: .DirIcon is missing in /tmp/.mount_runtim…
  *
- * Every AppImage must carry a .DirIcon at its root. Tauri sources it from
- * hicolor/256x256/apps/<binary>.png, and Tauri derives that directory from an
- * icon's real pixel size, appending "@2" when the filename says @2x. So
- * 128x128@2x.png — which is 256px — installs to 256x256@2 and does NOT satisfy
- * it. A separate 256x256.png, with no @2x in the name, is what creates the
- * plain 256x256 directory.
+ * Every AppImage must carry a .DirIcon at its root. Tauri derives each hicolor
+ * directory from an icon's real pixel size, appending "@2" when the filename
+ * says @2x — so 128x128@2x.png, which is 256px, installs to 256x256@2 and the
+ * plain 256x256 directory never exists.
+ *
+ * Observed across 0.18.1 -> 0.18.2: with no plain 256x256 directory, no
+ * .DirIcon was produced; adding a 256x256.png (no @2x in the name) created the
+ * directory and .DirIcon appeared. The .DirIcon the bundler writes is actually
+ * the 512px icon, so this 256px entry is what makes it emit the file at all
+ * rather than being the file it copies.
  *
  * The release workflow asserts the built AppImage really contains .DirIcon;
  * this keeps the input that produces it from being dropped in the meantime.
