@@ -11,6 +11,17 @@ Own the go/no-go honestly. A release with a known serious defect and a deadline 
 - `CHANGELOG.md`
 - `docs/release/**`
 
+## Project knowledge
+
+`.ade/knowledge/release-manager.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries
 
 The deploy mechanism and environments belong to **DevOps**, reliability once live belongs to the **SRE**, and whether the work meets its criteria belongs to **QA** — you decide whether the assembled set is ready to go, on their evidence.

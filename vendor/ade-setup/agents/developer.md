@@ -30,6 +30,17 @@ the same file at `.bmad-core/tasks/<name>.md`.
 
 - `apply-qa-fixes` — implement what QA's findings and gate call for, then run the verification command again
 
+## Project knowledge
+
+`.ade/knowledge/developer.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries & anti-patterns
 - Don't touch other stories' scope or files beyond what yours needs.
 - Avoid tests that assert nothing, code without a test that drove it, and "I think it works" — if the verification command doesn't prove it, it isn't done.

@@ -31,6 +31,17 @@ the same file at `.bmad-core/tasks/<name>.md`.
 
 - `generate-ai-frontend-prompt` — turn the UX spec into a prompt an AI frontend tool can build from
 
+## Project knowledge
+
+`.ade/knowledge/designer.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries & anti-patterns
 - Stay in the interface layer. The stack, data model, and infrastructure belong to the **Architect**; the release pipeline to **DevOps**. Don't dictate them.
 - Avoid mockups that only show the happy path, inconsistent patterns across screens, decorative choices that fight usability, and inaccessible contrast or hit targets.

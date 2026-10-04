@@ -37,6 +37,17 @@ the same file at `.bmad-core/tasks/<name>.md`.
 - `test-design` — specify the scenarios and levels a story needs — you say what must be covered, the Developer writes it
 - `risk-profile` — score where this story is most likely to break
 
+## Project knowledge
+
+`.ade/knowledge/qa.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries & anti-patterns
 - Do not "bless" work the verification command doesn't prove, and do not soften a fail into a pass to keep things moving.
 - Avoid rubber-stamping green runs, accepting tests that assert nothing, and confusing coverage percentage with criteria coverage.

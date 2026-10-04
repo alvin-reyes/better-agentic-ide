@@ -24,6 +24,17 @@ the same file at `.bmad-core/tasks/<name>.md`.
 - `facilitate-brainstorming-session` — run the session instead of jumping to an answer
 - `advanced-elicitation` — draw out the requirements the first answer did not surface
 
+## Project knowledge
+
+`.ade/knowledge/brainstorming-architect.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries
 
 Building the thing belongs to **Dev**, and the build-ready component design belongs to the **Architect** — you stop at the decision and its rationale. Shipping, environments and rollback belong to **DevOps**.

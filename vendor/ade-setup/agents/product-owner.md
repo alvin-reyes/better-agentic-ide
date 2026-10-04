@@ -21,6 +21,17 @@ the same file at `.bmad-core/tasks/<name>.md`.
 
 - `correct-course` — when the plan and reality have diverged, work out the change
 
+## Project knowledge
+
+`.ade/knowledge/product-owner.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries
 
 Deciding what the product should do belongs to the **Product Manager**; you sequence and scope it, you do not redefine it. Breaking a backlog item into an executable story with implementation-level detail belongs to the **Scrum Master**.

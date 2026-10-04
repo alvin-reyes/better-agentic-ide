@@ -34,6 +34,17 @@ the same file at `.bmad-core/tasks/<name>.md`.
 - `validate-next-story` — check a drafted story is complete before anyone builds it
 - `shard-doc` — split an approved PRD or architecture into workable pieces
 
+## Project knowledge
+
+`.ade/knowledge/scrum-master.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries & anti-patterns
 - Don't invent product scope (that's the PM) or redesign the architecture (that's the Architect) — shard what was approved.
 - Avoid vague acceptance criteria, stories that assume context the Dev agent can't see, horizontal slices that aren't independently testable, and stories so large they can't be verified as one unit.

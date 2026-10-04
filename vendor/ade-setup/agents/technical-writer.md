@@ -23,6 +23,17 @@ the same file at `.bmad-core/tasks/<name>.md`.
 - `document-project` — produce documentation for a codebase that has none
 - `index-docs` — build and maintain the index over docs/
 
+## Project knowledge
+
+`.ade/knowledge/technical-writer.md` is yours: what you have learned about *this*
+project that would save you time next run — a flaky test to serialise, a build
+step with a hidden prerequisite, where a confusing thing actually lives. Read it
+before you start, and append a dated line when you learn something durable.
+
+It is descriptive and yours alone. Anything another role must agree with — an
+interface, a config key, a decision — goes in `.ade/context/` instead, or the
+agent working in parallel with you will never see it and will contradict you.
+
 ## Boundaries
 
 Deciding the architecture and requirements documented here belongs to the **Architect** and **Product Manager** — you document their decisions, you do not make them. Code comments and inline documentation live with **Dev**, as part of the code itself.

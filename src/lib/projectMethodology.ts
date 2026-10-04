@@ -7,6 +7,7 @@
 
 import { AGENT_CATALOG } from "../data/curatedAgents";
 import { agentMarkdown, rolePrompt } from "./pluginContent";
+import KNOWLEDGE_README from "../../vendor/ade-setup/templates/knowledge/README.md?raw";
 
 export interface MethodologyFile {
   /** Relative to the project root. */
@@ -347,6 +348,10 @@ export function methodologyFiles(projectName: string, stacks: Stack[] = []): Met
     { path: ".ade/context/README.md", content: CONTEXT_README },
     { path: ".ade/context/decisions/README.md", content: DECISIONS_README },
     { path: ".ade/session.md", content: SESSION_MD(projectName) },
+    // The knowledge store: what each role has learned about this project.
+    // Vendored from ade-setup rather than restated here, and scaffolded once —
+    // setup never overwrites, so a project's accumulated knowledge is safe.
+    { path: ".ade/knowledge/README.md", content: KNOWLEDGE_README },
     ...ROLES.map(roleFile),
     ...stackAgentFiles(stacks),
   ];

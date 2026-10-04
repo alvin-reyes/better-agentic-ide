@@ -73,3 +73,47 @@ describe("the catalog holds no prose of its own", () => {
     expect(ROLES_TS).not.toMatch(/owns: \[\s*"/);
   });
 });
+
+/**
+ * The knowledge store is the project's, the definitions are everyone's.
+ *
+ * `.ade/knowledge/<role>.md` holds what one role learned about one project.
+ * ade-setup holds who the agents are, shared by every project that uses it. A
+ * write in the wrong direction is the failure that matters: project A's
+ * specifics would ship into project B as if they were part of the role, and a
+ * re-vendor would then overwrite A's own knowledge with them.
+ */
+describe("project knowledge never flows back into the definitions", () => {
+  const AGENT_FILES = readdirSync(AGENTS).filter((f) => f.endsWith(".md"));
+
+  it("ships the template a project is scaffolded from", () => {
+    const tpl = join(VENDOR, "templates", "knowledge", "README.md");
+    expect(existsSync(tpl), "the knowledge template is not vendored").toBe(true);
+    const body = readFileSync(tpl, "utf8");
+    // The boundary is the whole point of the template; without it the store
+    // becomes a second, private context store that parallel agents cannot read.
+    expect(body).toContain(".ade/context/");
+    expect(body.toLowerCase()).toContain("committed");
+  });
+
+  it("every definition points at its own knowledge file, and only its own", () => {
+    for (const f of AGENT_FILES) {
+      const rid = f.replace(/\.md$/, "");
+      const body = readFileSync(join(AGENTS, f), "utf8");
+      const referenced = Array.from(body.matchAll(/\.ade\/knowledge\/([a-z-]+)\.md/g), (m) => m[1]);
+      expect(referenced, `${f} does not point at a knowledge file`).not.toEqual([]);
+      expect([...new Set(referenced)], `${f} points at another role's knowledge`).toEqual([rid]);
+    }
+  });
+
+  it("no definition carries project-specific knowledge", () => {
+    // A definition is written once and read by every project. Dated entries are
+    // the shape a knowledge file takes, so one appearing here means a knowledge
+    // write landed in the wrong file.
+    for (const f of AGENT_FILES) {
+      const body = readFileSync(join(AGENTS, f), "utf8");
+      const dated = body.match(/^-?\s*\d{4}-\d{2}-\d{2}\b/m);
+      expect(dated, `${f} contains a dated entry, which belongs in a project's store`).toBeNull();
+    }
+  });
+});
