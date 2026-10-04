@@ -417,7 +417,7 @@ const defaults: Settings = {
   themeId: "precision-dark",
   customColors: null,
   fontSize: 14,
-  fontFamily: '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", monospace',
+  fontFamily: '"JetBrains Mono Variable", "JetBrains Mono", "SF Mono", ui-monospace, monospace',
   lineHeight: 1.35,
   cursorStyle: "bar",
   cursorBlink: true,
@@ -436,7 +436,26 @@ const defaults: Settings = {
   autoProjectSetup: true,
 };
 
-const initial: Settings = { ...defaults, ...readJson<Partial<Settings>>(SETTINGS_KEY, {}) };
+/**
+ * The bundled mono font registers as "JetBrains Mono Variable", not
+ * "JetBrains Mono". Anyone who ran a build before it shipped has the old stack
+ * saved, which names only fonts that are not installed on a stock machine, so
+ * the terminal silently falls through to whatever `monospace` resolves to.
+ *
+ * Only the untouched old default is upgraded. A font the user actually chose is
+ * theirs and is left alone.
+ */
+const LEGACY_MONO = '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", monospace';
+
+function migrate(saved: Partial<Settings>): Partial<Settings> {
+  if (saved.fontFamily === LEGACY_MONO) {
+    const { fontFamily: _drop, ...rest } = saved;
+    return rest; // fall back to the current default
+  }
+  return saved;
+}
+
+const initial: Settings = { ...defaults, ...migrate(readJson<Partial<Settings>>(SETTINGS_KEY, {})) };
 // Models the settings picker no longer offers move to their current equivalent.
 const RETIRED_MODELS: Record<string, string> = {
   "claude-opus-4-20250514": "claude-opus-5",
