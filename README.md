@@ -96,7 +96,7 @@ Issues and pull requests are welcome, on the app and on [ade-setup](https://gith
 
 ## Used on real work
 
-ADE is the tool behind [ardata.tech](https://ardata.tech)'s projects — the agent fleet, the methodology and the contract tooling exist because client work needed them, not as a demo. It is also the tool used in aracademy's AI training, the same setup in every lesson.
+ADE is the tool behind [ardata.tech](https://ardata.tech)'s projects — the agent fleet, the methodology and the contract tooling exist because client work needed them, not as a demo. It is also the tool used in [ardata academy](https://ardata.academy)'s AI training, the same setup in every lesson.
 
 More on the [website](https://alvin-reyes.github.io/better-agentic-ide/#built-with).
 

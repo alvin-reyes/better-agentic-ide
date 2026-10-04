@@ -18,9 +18,7 @@ repo_url: https://github.com/alvin-reyes/better-agentic-ide
 ardata_url: https://ardata.tech
 
 # The aracademy AI training that ADE is part of.
-# TODO: set the real URL. Until then the training card links nowhere rather than
-# to aracademy.example, which does not resolve and shipped as a dead button.
-aracademy_url: ""
+aracademy_url: https://ardata.academy
 
 permalink: pretty
 markdown: kramdown
