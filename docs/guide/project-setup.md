@@ -8,10 +8,10 @@ description: How ADE sets up each project with BMAD, the "verified, not vibed" m
 
 The first time ADE opens a project, it adds whatever the project is missing:
 
-- **BMAD** — the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) in `.bmad-core/` (tasks, checklists, templates, workflows and reference data), plus the `/BMad:tasks:` slash commands for Claude Code. Its personas are not installed; the roles in `.claude/agents/` cover those jobs once.
-- **The ADE methodology** — the rules in `.ade/rules.md`, loaded from `CLAUDE.md`, plus a context store, a decision log and a session journal under `.ade/`, and an `llms.txt`. See [The methodology](#the-methodology) below.
+- **BMAD**: the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) in `.bmad-core/` (tasks, checklists, templates, workflows and reference data), plus the `/BMad:tasks:` slash commands for Claude Code. Its personas are not installed; the roles in `.claude/agents/` cover those jobs once.
+- **The ADE methodology**: the rules in `.ade/rules.md`, loaded from `CLAUDE.md`, plus a context store, a decision log and a session journal under `.ade/`, and an `llms.txt`. See [The methodology](#the-methodology) below.
 - **Eight core roles** as Claude Code sub-agents in `.claude/agents/`: product manager, architect, designer, scrum master, developer, QA, DevOps and adversarial reviewer.
-- **Agents for your stack** — see [By project type](#by-project-type).
+- **Agents for your stack**: see [By project type](#by-project-type).
 
 **Only missing files are written.** A file that already exists is left alone. If the project already has a `CLAUDE.md`, ADE adds one import line that loads `.ade/rules.md` and never replaces the file.
 
@@ -62,11 +62,11 @@ These are not the same thing as the agents in ADE's own [picker]({{ '/guide/agen
 
 The ADE methodology is "verified, not vibed". Work flows in five steps:
 
-1. **Plan** — the product manager writes the PRD, the architect the architecture (including the one **verification command**, such as `npm test` or `forge test`), the designer the UX spec and mockup, and DevOps the ops plan.
-2. **Approve** — you review and approve the plan. The adversarial reviewer tries to break each artifact first.
-3. **Shard** — the scrum master splits the plan into small, independently testable stories.
-4. **Build** — developer agents build one story each, test-first. Several can run in parallel.
-5. **Verify** — QA or you run the verification command. **A story is Done only when it passes.** No agent certifies its own work.
+1. **Plan**: the product manager writes the PRD, the architect the architecture (including the one **verification command**, such as `npm test` or `forge test`), the designer the UX spec and mockup, and DevOps the ops plan.
+2. **Approve**: you review and approve the plan. The adversarial reviewer tries to break each artifact first.
+3. **Shard**: the scrum master splits the plan into small, independently testable stories.
+4. **Build**: developer agents build one story each, test-first. Several can run in parallel.
+5. **Verify**: QA or you run the verification command. **A story is Done only when it passes.** No agent certifies its own work.
 
 ### File layout
 
@@ -85,6 +85,6 @@ docs/prd.md, docs/architecture.md, docs/ux-spec.md, docs/ops.md, docs/stories/
 
 ## Related
 
-- [Agents & fleet]({{ '/guide/agents/' | relative_url }}) — the agent picker and its 40 profiles
-- [Smart contracts]({{ '/guide/contracts/' | relative_url }}) — what the Web3 agents work with
-- [Anti-slop]({{ '/guide/anti-slop/' | relative_url }}) — the ADE plugin for Claude Code
+- [Agents & fleet]({{ '/guide/agents/' | relative_url }}): the agent picker and its 47 profiles
+- [Smart contracts]({{ '/guide/contracts/' | relative_url }}): what the Web3 agents work with
+- [Anti-slop]({{ '/guide/anti-slop/' | relative_url }}): the ADE plugin for Claude Code

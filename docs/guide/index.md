@@ -1,6 +1,6 @@
 ---
 title: Getting started
-lead: Install ADE, open your first project and run an agent — or build and test a smart contract — in a few minutes.
+lead: Install ADE, open your first project and run an agent (or build and test a smart contract) in a few minutes.
 description: Install ADE on macOS or Linux and run your first AI coding agent.
 ---
 
@@ -32,7 +32,7 @@ chmod +x Better.Terminal_*.AppImage && ./Better.Terminal_*.AppImage
 
 ADE works with any command-line agent. The agent picker has presets for:
 
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — `npm install -g @anthropic-ai/claude-code`
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)**: `npm install -g @anthropic-ai/claude-code`
 - **Codex**, **Gemini CLI** and **Ollama** (local models)
 
 The fleet view reads Claude Code's own transcripts, so Claude Code gets the most out of ADE.
@@ -51,11 +51,11 @@ The first time you open a project, ADE sets it up for agents: BMAD, the ADE meth
 
 ## Where to go next
 
-- [Project setup]({{ '/guide/project-setup/' | relative_url }}) — BMAD, the methodology and agents in every project
-- [Agents & fleet]({{ '/guide/agents/' | relative_url }}) — the agent picker and fleet view
-- [Smart contracts]({{ '/guide/contracts/' | relative_url }}) — Foundry, Hardhat and Anchor tooling
-- [Tokens & cost]({{ '/guide/tokens/' | relative_url }}) — what sessions cost and how to spend less
-- [Terminal]({{ '/guide/terminal/' | relative_url }}) — tabs, panes, search and clickable files
-- [Scratchpad]({{ '/guide/scratchpad/' | relative_url }}) — prompt chaining, history and voice
-- [Auto-save & sync]({{ '/guide/sync/' | relative_url }}) — keep your setup on every machine
-- [Keyboard shortcuts]({{ '/guide/shortcuts/' | relative_url }}) — the full list
+- [Project setup]({{ '/guide/project-setup/' | relative_url }}): BMAD, the methodology and agents in every project
+- [Agents & fleet]({{ '/guide/agents/' | relative_url }}): the agent picker and fleet view
+- [Smart contracts]({{ '/guide/contracts/' | relative_url }}): Foundry, Hardhat and Anchor tooling
+- [Tokens & cost]({{ '/guide/tokens/' | relative_url }}): what sessions cost and how to spend less
+- [Terminal]({{ '/guide/terminal/' | relative_url }}): tabs, panes, search and clickable files
+- [Scratchpad]({{ '/guide/scratchpad/' | relative_url }}): prompt chaining, history and voice
+- [Auto-save & sync]({{ '/guide/sync/' | relative_url }}): keep your setup on every machine
+- [Keyboard shortcuts]({{ '/guide/shortcuts/' | relative_url }}): the full list

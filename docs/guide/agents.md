@@ -10,10 +10,10 @@ Every project ADE opens is also set up with BMAD, the ADE methodology and Claude
 
 Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an agent. When you choose one, ADE asks where to run it: **this terminal** (<kbd>C</kbd>) or a **new tab** in the same folder (<kbd>N</kbd>). If the current terminal is already running something, *New tab* is preselected.
 
-- **40 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General — API Builder, Database Engineer, Senior Go Engineer, Senior Rust Engineer, Smart Contract Auditor, Web3 DevOps Engineer, Debugger, Code Reviewer, Docs Writer and more. Each pairs a **role** — what it is accountable for, the files it owns and the boundaries it works inside — with a **domain** that narrows it to one technical focus. ADE composes the pair into a role definition, writes it to a file and starts the provider against that file, so a long definition never has to survive shell quoting. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
-- **Roles** — the last pill filters the list down to the core roles on their own, with no domain. Product Manager, Product Owner and Scrum Master live only here, since no profile pairs with them.
+- **47 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General: API Builder, Database Engineer, Senior Go Engineer, Senior Rust Engineer, Smart Contract Auditor, Web3 DevOps Engineer, Debugger, Code Reviewer, Docs Writer and more. Each pairs a **role**: what it is accountable for, the files it owns and the boundaries it works inside, with a **domain** that narrows it to one technical focus. ADE composes the pair into a role definition, writes it to a file and starts the provider against that file, so a long definition never has to survive shell quoting. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
+- **Roles**: the last pill filters the list down to the core roles on their own, with no domain. Product Manager, Product Owner and Scrum Master live only here, since no profile pairs with them.
 - **Describe a task** in the search box and the picker suggests the best match.
-- **Provider** — switch between Claude Code, Codex, Gemini CLI and Ollama with <kbd>Tab</kbd>. Claude Code, Gemini and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch.
+- **Provider**: switch between Claude Code, Codex, Gemini CLI and Ollama with <kbd>Tab</kbd>. Claude Code, Gemini and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch.
 - **Senior Go Engineer** writes idiomatic Go with table-driven tests and runs `go vet` and `go test -race`. **Senior Rust Engineer** models the domain with types, avoids stray `unwrap`s and runs `cargo fmt`, `cargo clippy` and `cargo test`. Both are also added to Go and Rust projects as sub-agents.
 - **Continuous mode** runs the agent without permission prompts (Claude Code's `--dangerously-skip-permissions`). ADE asks you to confirm first; use it only in projects you trust.
 
@@ -44,16 +44,16 @@ The **Architects** category holds brainstorming partners for AI automation and W
 | **Cross-chain & L2 Architect** | Choosing chains and rollups, bridges and messaging protocols and their trust assumptions, finality, liquidity fragmentation |
 | **AI x Web3 Architect** | Agents that hold wallets: smart accounts, session keys and spend limits, intents, agent payments, prompt-injection risk to funds, kill switches |
 
-Describe the problem in the picker's search box — "tokenomics for a governance token with vesting", "RAG over our support docs" — and the matching architect is suggested.
+Describe the problem in the picker's search box ("tokenomics for a governance token with vesting", "RAG over our support docs") and the matching architect is suggested.
 
 ## Fleet view
 
-Claude Code agents spawn sub-agents — Explore, Plan, code reviewers — that normally run out of sight. ADE reads Claude Code's transcripts and shows each one as it starts and finishes.
+Claude Code agents spawn sub-agents (Explore, Plan, code reviewers) that normally run out of sight. ADE reads Claude Code's transcripts and shows each one as it starts and finishes.
 
 - {% include key.html mac="⌘." other="Ctrl+Shift+." %} opens the fleet panel for the active terminal. Switch to **All terminals** to see every terminal at once, each with its folder, running count and cost; *Go to tab* jumps there.
 - *Fleet: All terminals* in the command palette opens the same view as a full tab.
 - The **timeline** shows swimlanes. In the fleet *tab* you choose the last 5 minutes, 15 minutes, hour or all time; the panel always shows the last 15 minutes. Click an agent to jump to its pane.
-- Seeing nothing? Agents are filed under the folder Claude Code was started in, so a terminal sitting somewhere else has none of its own — the empty timeline names the folder it is watching. Older runs need the tab's **all** range; anything past 15 minutes is outside the panel's window.
+- Seeing nothing? Agents are filed under the folder Claude Code was started in, so a terminal sitting somewhere else has none of its own, the empty timeline names the folder it is watching. Older runs need the tab's **all** range; anything past 15 minutes is outside the panel's window.
 - **Cost** is real: Claude agents' token usage comes from Claude Code's transcripts and is priced at API list prices (see [Tokens & cost]({{ '/guide/tokens/' | relative_url }})). If two agents run in the same folder at the same time, their usage can't be told apart and is left out. Codex, Gemini and Ollama sessions show no cost.
 
 ![Fleet timeline with sub-agents]({{ '/assets/img/fleet.webp' | relative_url }})
@@ -71,7 +71,7 @@ Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an O
 
 The BMAD panel shows the method's two phases, **Planning** and **Dev cycle**, as a reminder of where a project is.
 
-The personas themselves are roles in the [agent picker](#agent-picker) — filter to **Roles** and you have all nineteen — Analyst, Product Manager, Designer, Architect, Product Owner, Scrum Master, Developer, QA, DevOps, Adversarial Reviewer, Security Engineer, SRE, Release Manager, Engineering Manager, Support Engineer, Solutions Engineer, Brainstorming Architect, Technical Writer and Advisor — each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
+The personas themselves are roles in the [agent picker](#agent-picker) (filter to **Roles** and you have all nineteen) Analyst, Product Manager, Designer, Architect, Product Owner, Scrum Master, Developer, QA, DevOps, Adversarial Reviewer, Security Engineer, SRE, Release Manager, Engineering Manager, Support Engineer, Solutions Engineer, Brainstorming Architect, Technical Writer and Advisor, each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
 
 ## Browser tab
 

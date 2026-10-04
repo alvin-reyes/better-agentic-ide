@@ -27,7 +27,7 @@ ADE takes a snapshot of your saved state at startup and every 10 minutes, and ke
 
 ## Sync between machines
 
-Sync uses a **private git repository you own** — an empty repo named `ade-sync` on GitHub or anywhere else works. ADE commits and pushes with your existing git credentials (SSH keys or a credential helper); it never asks for a password.
+Sync uses a **private git repository you own**: an empty repo named `ade-sync` on GitHub or anywhere else works. ADE commits and pushes with your existing git credentials (SSH keys or a credential helper); it never asks for a password.
 
 1. Create an empty private repository.
 2. In ADE, open *Settings → Sync* ({% include key.html mac="⌘," other="Ctrl+Shift+," %}).

@@ -19,10 +19,10 @@ Your theme is painted before the first frame is drawn, so starting ADE never fla
 ## Terminal
 
 - **Font size** from 10 to 24 px, with quick presets
-- **Font family** — JetBrains Mono, SF Mono, Fira Code, Cascadia Code, Source Code Pro, IBM Plex Mono or the system monospace font
+- **Font family**: JetBrains Mono, SF Mono, Fira Code, Cascadia Code, Source Code Pro, IBM Plex Mono or the system monospace font
 - **Line height**
-- **Cursor** — bar, block or underline, with optional blink
-- **Scrollback** — from 1,000 to 100,000 lines
+- **Cursor**: bar, block or underline, with optional blink
+- **Scrollback**: from 1,000 to 100,000 lines
 
 ## Workspace
 
@@ -32,8 +32,8 @@ Rename any open tab, and save the current set of tabs as a named workspace. **Lo
 
 The [orchestrator]({{ '/guide/agents/' | relative_url }}#orchestrator) needs a model:
 
-- **Anthropic** — paste an API key (`sk-ant-…`) and pick a model. The key stays on this machine; sync never copies it.
-- **Ollama (local)** — set the endpoint (default `http://localhost:11434`) and a model name such as `llama3.2` or `qwen2.5-coder`.
+- **Anthropic**: paste an API key (`sk-ant-…`) and pick a model. The key stays on this machine; sync never copies it.
+- **Ollama (local)**: set the endpoint (default `http://localhost:11434`) and a model name such as `llama3.2` or `qwen2.5-coder`.
 
 Agents you launch from the agent picker use their own CLI logins and don't need this.
 

@@ -1,18 +1,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% assign page_title = page.title | default: site.tagline %}
-<title>{% if page.url == "/" %}{{ site.title }} — {{ site.tagline }}{% else %}{{ page_title }} · {{ site.title }}{% endif %}</title>
+<title>{% if page.url == "/" %}{{ site.title }}: {{ site.tagline }}{% else %}{{ page_title }} · {{ site.title }}{% endif %}</title>
 <meta name="description" content="{{ page.description | default: site.description | strip_newlines | escape }}">
 <link rel="canonical" href="{{ page.url | absolute_url }}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="{{ site.title }}">
-<meta property="og:title" content="{% if page.url == '/' %}{{ site.title }} — {{ site.tagline }}{% else %}{{ page_title }} · {{ site.title }}{% endif %}">
+<meta property="og:title" content="{% if page.url == '/' %}{{ site.title }}: {{ site.tagline }}{% else %}{{ page_title }} · {{ site.title }}{% endif %}">
 <meta property="og:description" content="{{ page.description | default: site.description | strip_newlines | escape }}">
 <meta property="og:url" content="{{ page.url | absolute_url }}">
 <meta property="og:image" content="{{ '/assets/img/og.png' | absolute_url }}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="ADE — the terminal built for AI coding agents">
+<meta property="og:image:alt" content="ADE: the terminal built for AI coding agents">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#08090b" media="(prefers-color-scheme: dark)">

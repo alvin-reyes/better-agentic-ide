@@ -1,7 +1,7 @@
 ---
 title: Smart contracts
-lead: Build, test, analyze and deploy Solidity and Solana programs from one panel — with a local chain, readable ABIs and agents that know contract security.
-description: Foundry, Hardhat and Anchor support in ADE — one-click build and test, Slither and Aderyn, Anvil, safe deploys, an ABI viewer and Web3 agents.
+lead: Build, test, analyze and deploy Solidity and Solana programs from one panel, with a local chain, readable ABIs and agents that know contract security.
+description: Foundry, Hardhat and Anchor support in ADE, one-click build and test, Slither and Aderyn, Anvil, safe deploys, an ABI viewer and Web3 agents.
 ---
 
 Press {% include key.html mac="⌘⇧K" other="Ctrl+Alt+Shift+K" %} (or *Contracts: Open panel* in the command palette) in any terminal inside a contract project.
@@ -26,7 +26,7 @@ Dependencies (`lib/`, `node_modules/`), tests and scripts are left out of the li
 |---|---|---|---|
 | Build | `forge build`, `forge fmt` | `npx hardhat compile` | `anchor build`, `cargo fmt` |
 | Test | `forge test` (also `-vvv`), gas report, coverage, gas snapshot | `npx hardhat test`, gas report, coverage | `anchor test` |
-| Analyze | [Slither](https://github.com/crytic/slither), [Aderyn](https://github.com/Cyfrin/aderyn) | Slither | — |
+| Analyze | [Slither](https://github.com/crytic/slither), [Aderyn](https://github.com/Cyfrin/aderyn) | Slither | none |
 | Local chain | `anvil` | `npx hardhat node` | `solana-test-validator` |
 | Deploy | each `script/*.s.sol` | each Ignition module | `anchor deploy` to devnet |
 
@@ -72,7 +72,7 @@ Deploy actions **type the command into the terminal without running it**, so you
 forge script script/Deploy.s.sol --rpc-url "$RPC_URL" --account deployer --broadcast
 ```
 
-ADE never asks for, stores or syncs a private key. Foundry deploys use an encrypted keystore account — create one once with:
+ADE never asks for, stores or syncs a private key. Foundry deploys use an encrypted keystore account, create one once with:
 
 ```bash
 cast wallet import deployer --interactive
@@ -82,7 +82,7 @@ Set `RPC_URL` in your shell (or use a name from `[rpc_endpoints]` in `foundry.to
 
 ## ABI viewer
 
-Open any compiled artifact — from the panel's **ABIs** list, the file browser, or a path printed in the terminal — and it shows the contract's interface instead of raw JSON:
+Open any compiled artifact (from the panel's **ABIs** list, the file browser, or a path printed in the terminal) and it shows the contract's interface instead of raw JSON:
 
 - **Read** functions (view/pure) and **Write** functions, with inputs, outputs and `payable`
 - **Events** with their indexed parameters and topic hash
@@ -111,7 +111,7 @@ The agent picker ({% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %})
 | Solana / Anchor Engineer | Anchor programs with careful account validation, PDAs and CPIs, plus TypeScript tests |
 | Web3 DevOps Engineer | Contract CI, scripted local chains, RPC redundancy and monitoring, and reviewed deploy scripts that sign with a keystore account, hardware wallet or multisig |
 
-Describing a task — "audit the vault for reentrancy", "write an ERC-20 with fuzz tests" — suggests the right one.
+Describing a task ("audit the vault for reentrancy", "write an ERC-20 with fuzz tests") suggests the right one.
 
 You don't have to start them by hand. When ADE opens a Foundry or Hardhat project, [project setup]({{ '/guide/project-setup/' | relative_url }}) adds the engineer, auditor, gas optimizer and Web3 DevOps engineer to `.claude/agents/`, so Claude Code can delegate to them; Anchor projects get the Solana/Anchor engineer, auditor, Web3 DevOps engineer and senior Rust engineer. The DeFi, tokenomics, contract systems, Web3 infrastructure, cross-chain and AI x Web3 architects are in the picker's [Architects]({{ '/guide/agents/' | relative_url }}#architects) category.
 

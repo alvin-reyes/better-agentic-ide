@@ -1,6 +1,6 @@
 ---
 title: Keyboard shortcuts
-lead: Every shortcut in ADE. Keys follow your platform — switch with the buttons in the sidebar.
+lead: Every shortcut in ADE. Keys follow your platform, switch with the buttons in the sidebar.
 description: All ADE keyboard shortcuts for macOS and Linux.
 ---
 

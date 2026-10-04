@@ -34,9 +34,9 @@ sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0
 
 ## Sync fails
 
-- **"git push failed" / authentication errors** — ADE runs git non-interactively. Make sure `git push` to the repo works from a terminal without a password prompt: an SSH key in your agent, or a configured credential helper.
-- **"Unsupported git remote"** — use an `https://`, `ssh://` or `git@host:path` URL.
-- **A `.sync-conflict` file appeared** in `~/.claude` — the file was changed on two machines. Merge the two versions and delete the conflict file.
+- **"git push failed" / authentication errors**: ADE runs git non-interactively. Make sure `git push` to the repo works from a terminal without a password prompt: an SSH key in your agent, or a configured credential helper.
+- **"Unsupported git remote"**: use an `https://`, `ssh://` or `git@host:path` URL.
+- **A `.sync-conflict` file appeared** in `~/.claude`, the file was changed on two machines. Merge the two versions and delete the conflict file.
 
 ## Start over with a clean state
 

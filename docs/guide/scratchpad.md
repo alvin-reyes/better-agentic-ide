@@ -1,6 +1,6 @@
 ---
 title: Scratchpad
-lead: A place to write the prompt before you send it — with history, notes, chaining and voice.
+lead: A place to write the prompt before you send it, with history, notes, chaining and voice.
 description: Draft, send, chain and save prompts with ADE's scratchpad.
 ---
 
@@ -37,16 +37,16 @@ ADE sends the first step, waits until the terminal has been quiet for a few seco
 
 ## History, notes and templates
 
-- **History** — every prompt you send is saved and searchable. Click one to load it back.
-- **Notes** — save the current text with {% include key.html mac="⌘S" other="Ctrl+S" %} to keep it for later.
-- **Templates** — ready-made prompt starters for common tasks.
+- **History**: every prompt you send is saved and searchable. Click one to load it back.
+- **Notes**: save the current text with {% include key.html mac="⌘S" other="Ctrl+S" %} to keep it for later.
+- **Templates**: ready-made prompt starters for common tasks.
 
 History and notes are part of what [sync]({{ '/guide/sync/' | relative_url }}) shares between your machines.
 
 ## Images and voice
 
 - **Paste or drop a screenshot** into the scratchpad. ADE saves it to a temporary file and includes its path when you send, so the agent can open the image.
-- **Voice dictation** — click the microphone button and speak; the text appears in the scratchpad.
+- **Voice dictation**: click the microphone button and speak; the text appears in the scratchpad.
 
 ## Token count and compact paste
 

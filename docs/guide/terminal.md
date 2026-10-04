@@ -1,6 +1,6 @@
 ---
 title: Terminal
-lead: Tabs, split panes, search and clickable file paths — a full terminal with a real shell in every pane.
+lead: Tabs, split panes, search and clickable file paths, a full terminal with a real shell in every pane.
 description: Tabs, split panes, search, detached windows, recordings and clickable file paths in ADE.
 ---
 
