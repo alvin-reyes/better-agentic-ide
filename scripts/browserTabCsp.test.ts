@@ -84,9 +84,10 @@ describe("script-src admits no remote origin", () => {
 
   it("still forbids inline script, which is what the rest rests on", () => {
     expect(directive("script-src")).toContain("'self'");
-    // No inline script is what makes the remaining 'unsafe-eval' survivable —
-    // whether that one is still needed at all is tracked in previewSecurity.
     expect(directive("script-src")).not.toContain("'unsafe-inline'");
+    // And no eval either: Monaco was the only caller and it was shown not to
+    // need one. script-src is now 'self' and nothing else.
+    expect(directive("script-src")).not.toContain("'unsafe-eval'");
     expect(directive("style-src")).toContain("'unsafe-inline'");
   });
 });

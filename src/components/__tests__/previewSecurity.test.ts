@@ -187,10 +187,11 @@ describe("the webview has a content security policy", () => {
    * Monaco was still CDN-loaded and demanded the allowance stay. It follows the
    * import now.
    *
-   * 'unsafe-eval' has NOT been removed. It is the half that cannot be settled
-   * by reading the source: whether the bundled Monaco needs it depends on what
-   * the editor does at runtime, and nothing here opens one. Removing it needs a
-   * launched app with an editor tab open, not a greener test.
+   * 'unsafe-eval' is gone too, and that half was settled by running it rather
+   * than reading it: the bundled MonacoWrapper was mounted under this exact
+   * policy with 'unsafe-eval' removed, and it rendered, tokenised, and produced
+   * a TypeScript diagnostic from its language worker with no violation raised.
+   * The worker was the part in doubt — it is where a `new Function` would be.
    */
   it("keeps the CDN allowance tied to Monaco still being CDN-loaded", () => {
     const csp: string = TAURI_CONF.app?.security?.csp ?? "";
@@ -217,13 +218,10 @@ describe("the webview has a content security policy", () => {
         cspAllowsCdn,
         "Monaco is self-hosted, so cdn.jsdelivr.net has no reason to be in script-src."
       ).toBe(false);
-      // 'unsafe-eval' is the other half and is still present. Left asserted so
-      // the day it is removed this test turns red and gets read, rather than
-      // the claim drifting silently either way.
       expect(
         cspAllowsEval,
-        "if 'unsafe-eval' has been removed, verify an editor tab still opens, then update this test"
-      ).toBe(true);
+        "Monaco was shown to work without 'unsafe-eval'; putting it back needs a reason"
+      ).toBe(false);
     }
   });
 });
