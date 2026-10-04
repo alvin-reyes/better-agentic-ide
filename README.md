@@ -7,6 +7,15 @@
 <p align="center"><strong>The terminal for building products with AI.</strong></p>
 
 <p align="center">
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/alvin-reyes/better-agentic-ide/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/alvin-reyes/better-agentic-ide?label=release&color=7C8FFF"></a>
+  <a href="https://github.com/alvin-reyes/better-agentic-ide/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/alvin-reyes/better-agentic-ide/total?color=4CC38A"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-5A616D">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-commercial-D9A441"></a>
+  <a href="https://github.com/alvin-reyes/ade-setup/releases/latest"><img alt="ade-setup" src="https://img.shields.io/github/v/release/alvin-reyes/ade-setup?label=ade-setup&color=BC8CFF"></a>
+</p>
+
+<p align="center">
   <a href="https://alvin-reyes.github.io/better-agentic-ide/"><strong>Website</strong></a> ·
   <a href="https://alvin-reyes.github.io/better-agentic-ide/#pricing"><strong>Pricing</strong></a> ·
   <a href="https://alvin-reyes.github.io/better-agentic-ide/guide/"><strong>User guide</strong></a> ·
@@ -20,8 +29,9 @@ ADE is a desktop app for macOS and Linux built around two pillars: **AI agents**
 - **Many agents at once** — run Claude Code, Codex, Gemini or any CLI agent in parallel tabs and split panes. The fleet view tracks every agent and sub-agent on a live timeline with its real cost.
 - **47 agent profiles** — Backend (including senior Go and Rust engineers), Frontend, Mobile, Data, DevOps, Testing, Security, Web3, Architects and General. Pick one and run it in this terminal or a new tab.
 - **One role, any CLI** — a profile composes one role definition in `~/.ade/roles/`, shared by every project; Claude Code, Gemini and Ollama (deepseek and other local models) each receive it the way they accept one. Codex is shown unavailable rather than guessing a flag that fails silently.
-- **A whole company, not just a delivery team** — nineteen roles cover the work end to end: analyst, product manager, designer, architect, product owner, scrum master, developer, QA, DevOps, adversarial reviewer, security engineer, SRE, release manager, engineering manager, support engineer, solutions engineer, technical writer and two advisory roles. The picker lists every one unpaired, so the roles no profile covers are still a keystroke away.
+- **A whole company, not just a delivery team** — nineteen roles end to end, from analyst and product manager through developer and QA to security engineer, SRE, release manager, support and solutions engineering. The picker lists every one unpaired, so the roles no profile covers are still a keystroke away.
 - **Project setup** — every project is set up for agents once, automatically. See [below](#project-setup).
+- **The agents are a repo you can share** — every role definition lives in [ade-setup](https://github.com/alvin-reyes/ade-setup), versioned and released, and ADE ships a pinned copy. Improve a role there and it reaches your projects when you choose to update them, not on ADE's release schedule.
 - **Prompt scratchpad** — draft long prompts under every terminal with prompt tips and de-slop, send with one key, chain steps and reuse from history. Drafts survive crashes.
 - **Tokens & cost** — spend at API prices, cache savings and context meters, plus one-click token savers (compact paste, context guard, context diet).
 - **Anti-slop** — the ADE plugin for Claude Code (anti-slop skill, a slop check before Claude finishes, `/ade:deslop`, Web3/Go/Rust sub-agents and architect skills), plus a slop check on your uncommitted changes.
@@ -31,9 +41,10 @@ ADE is a desktop app for macOS and Linux built around two pillars: **AI agents**
 
 Every project ADE opens (New project, Open project, or any git repo a terminal enters) is set up once:
 
-- **BMAD**, on every project — `.bmad-core/` with its tasks, checklists, templates, workflows and data, plus the `/BMad:tasks:` slash commands. Its ten personas are not installed: eight are the same jobs as the roles below, and two definitions of Done is worse than one.
+- **BMAD**, on every project and actually used — `.bmad-core/` with its tasks, checklists, templates and workflows. Eight roles name the tasks that do their job instead of improvising: the Scrum Master shards with `create-next-story`, QA traces criteria with `trace-requirements`. Its ten personas are not installed.
 - **The ADE methodology**, "verified, not vibed": Plan → Approve → Shard → Build → Verify. A story is Done only when the agreed verification command passes, and no agent certifies its own work. The rules live in `.ade/rules.md`, loaded from `CLAUDE.md`, alongside a context store, a decision log and a session journal.
 - **Eight core roles** as Claude Code sub-agents in `.claude/agents/`: product manager, architect, designer, scrum master, developer, QA, DevOps and adversarial reviewer.
+- **A knowledge store the agents write to** — `.ade/knowledge/<role>.md`, committed with your repo. A role records what it learned here — a flaky suite to serialise, a build step with a hidden prerequisite — and reads it back next run instead of rediscovering it. An update never touches it.
 - **Agents for your stack**, detected from the project — Solidity and audit agents for Foundry or Hardhat, Anchor and Rust agents for Solana, a senior Go engineer for `go.mod`, a senior Rust engineer for `Cargo.toml`.
 
 Only missing files are written, and the toast that lists them has Undo. Add or remove agents any time in *Integrations → Agents*; turn automatic setup off in *Settings → Terminal*. See the [project setup guide](https://alvin-reyes.github.io/better-agentic-ide/guide/project-setup/).
