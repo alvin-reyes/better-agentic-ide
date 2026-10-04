@@ -219,13 +219,53 @@ case "${1:-}" in
   --manual)
     # Capture only: you drive ADE, this records and crops. Needs screen
     # recording; needs nothing else.
+    #
+    # Captures the frontmost ADE window's rect rather than the whole display,
+    # and refuses when more than one instance is running unless the one in
+    # front is the one you named in DEMO_PID. Two instances of the same app
+    # are indistinguishable by name, and filming the wrong one means filming
+    # whatever you actually work on.
     secs="${2:-20}"
     mkdir -p "$OUT"
+
+    # macOS pgrep has no -c; counting it wrong once meant the gate was skipped
+    # entirely and the wrong window got filmed.
+    n=$(pgrep -f "$PROC" 2>/dev/null | wc -l | tr -d " ")
+    n=${n:-0}
+    if [ "$n" -gt 1 ]; then
+      if [ -z "${DEMO_PID:-}" ]; then
+        warn "$n instances of $PROC are running and DEMO_PID is not set."
+        warn "  Find the demo's pid with: pgrep -lf $PROC"
+        die  "  Then: DEMO_PID=<pid> $0 --manual ${secs}"
+      fi
+      front=$(osascript -e "tell application \"System Events\" to return unix id of (first process whose frontmost is true)" 2>/dev/null)
+      if [ "$front" != "$DEMO_PID" ]; then
+        warn "frontmost pid is ${front:-unknown}, not DEMO_PID=$DEMO_PID"
+        die  "Bring the demo window to the front, then run this again."
+      fi
+      info "frontmost is the demo (pid $DEMO_PID)"
+    fi
+
+    # Capture only the window, so nothing else reaches disk even briefly.
+    rect=$(osascript <<'AX' 2>/dev/null
+tell application "System Events"
+  set p to first process whose frontmost is true
+  set w to window 1 of p
+  set pz to position of w
+  set sz to size of w
+  return (item 1 of pz as text) & "," & (item 2 of pz as text) & "," & (item 1 of sz as text) & "," & (item 2 of sz as text)
+end tell
+AX
+)
     say "Recording ${secs}s — drive ADE now"
-    warn "Everything on screen is captured."
+    if [ -n "$rect" ]; then info "window rect only: $rect"; else warn "no window rect — FULL SCREEN will be captured"; fi
     for i in 3 2 1; do printf "  %s...\r" "$i"; sleep 1; done; echo
     raw="$OUT/manual-$(date +%H%M%S).mov"
-    screencapture -v -V "$secs" -x "$raw" >/dev/null 2>&1
+    if [ -n "$rect" ]; then
+      screencapture -v -V "$secs" -x -R"$rect" "$raw" >/dev/null 2>&1
+    else
+      screencapture -v -V "$secs" -x "$raw" >/dev/null 2>&1
+    fi
     [ -s "$raw" ] && info "saved $(basename "$raw") ($(du -h "$raw" | cut -f1))" || die "nothing captured"
     exit 0 ;;
   --list)  shots | grep -vE '^(wait|key|---)' | awk -F'|' '{printf "  %-12s %3ss  %s\n", $1, $2, $3}'; exit 0 ;;
