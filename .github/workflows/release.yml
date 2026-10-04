@@ -166,6 +166,53 @@ jobs:
           find src-tauri/target/${{ matrix.target }}/release/bundle -type f 2>/dev/null || echo "No bundle directory found"
           echo "=== Done ==="
 
+      # The AppImage catalog (appimage.github.io) runs a conformance test and
+      # rejected ADE with "FATAL: .DirIcon is missing". Every AppImage must carry
+      # a .DirIcon at its root; Tauri sources it from
+      # hicolor/256x256/apps/<binary>.png, and that path only exists if an icon
+      # is exactly 256px AND its filename has no @2x suffix (a 128x128@2x.png is
+      # installed to 256x256@2 instead, which does not satisfy it).
+      #
+      # It fails silently — the AppImage still builds and runs — so this asserts
+      # it rather than trusting the bundler.
+      - name: AppImage must carry a .DirIcon
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE_DIR="$PWD/src-tauri/target/${{ matrix.target }}/release/bundle"
+          APP=$(find "$BUNDLE_DIR" -type f -name "*.AppImage" | head -1)
+          if [ -z "$APP" ]; then echo "::error::no AppImage was built"; exit 1; fi
+          echo "Checking $(basename "$APP")"
+          chmod +x "$APP"
+
+          WORK=$(mktemp -d)
+          # --appimage-extract needs no FUSE, so it works on a plain runner.
+          (cd "$WORK" && "$APP" --appimage-extract >/dev/null)
+          ROOT="$WORK/squashfs-root"
+
+          # -e follows symlinks, so a dangling .DirIcon link fails here too.
+          if [ ! -e "$ROOT/.DirIcon" ]; then
+            echo "::error::.DirIcon is missing — the AppImage catalog will reject this build"
+            echo "Icon tree that was shipped:"
+            find "$ROOT/usr/share/icons" -name "*.png" | sed "s|$ROOT/||" || true
+            exit 1
+          fi
+
+          # It must be a real image, not an empty file.
+          SIZE=$(wc -c < "$ROOT/.DirIcon")
+          if [ "$SIZE" -lt 100 ]; then
+            echo "::error::.DirIcon is only ${SIZE} bytes — not a usable icon"
+            exit 1
+          fi
+          if ! file -L "$ROOT/.DirIcon" | grep -qi "image\|PNG"; then
+            echo "::error::.DirIcon is not an image: $(file -L "$ROOT/.DirIcon")"
+            exit 1
+          fi
+
+          echo ".DirIcon present: ${SIZE} bytes, $(file -Lb "$ROOT/.DirIcon")"
+          rm -rf "$WORK"
+
       - name: Find and upload artifacts
         shell: bash
         env:
