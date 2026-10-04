@@ -33,9 +33,36 @@ const RESERVED: &[&str] = &[
     "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "PWD", "OLDPWD", "TMPDIR", "SHLVL", "EDITOR", "VISUAL",
 ];
 
+/// Variables that make a program run code of the setter's choosing.
+///
+/// Every secret is exported into every new terminal, so a name from this list
+/// turns the vault into a way to execute something on the next shell, git
+/// command or node process rather than a way to hold a token. The `LD_` and
+/// `DYLD_` prefixes below cover the dynamic linker; these cover the
+/// interpreters and tools a terminal actually runs.
+///
+/// None of this stops a determined user doing it to themselves — the point is
+/// that a vault entry should never be the mechanism, so that suggesting a name
+/// is never worth anything to someone else.
+const EXECUTES: &[&str] = &[
+    // Shells: sourced or evaluated before a command runs.
+    "BASH_ENV", "ENV", "PROMPT_COMMAND", "SHELLOPTS", "BASHOPTS", "PS4", "IFS",
+    // Git runs these as commands.
+    "GIT_SSH", "GIT_SSH_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_PAGER", "GIT_EDITOR", "GIT_PROXY_COMMAND",
+    // Interpreters: load a file or module before the program.
+    "NODE_OPTIONS", "PERL5OPT", "PERL5LIB", "PYTHONSTARTUP", "PYTHONPATH", "RUBYOPT",
+    // Pagers and viewers, run by many tools.
+    "PAGER", "MANPAGER", "LESSOPEN", "LESSCLOSE",
+];
+
 /// Environment-variable style: `OPENAI_API_KEY`, `GITHUB_TOKEN`; not a system variable.
 pub fn valid_name(name: &str) -> bool {
-    if RESERVED.contains(&name) || name.starts_with("LC_") || name.starts_with("LD_") || name.starts_with("DYLD_") {
+    if RESERVED.contains(&name)
+        || EXECUTES.contains(&name)
+        || name.starts_with("LC_")
+        || name.starts_with("LD_")
+        || name.starts_with("DYLD_")
+    {
         return false;
     }
     let mut chars = name.chars();
@@ -164,6 +191,23 @@ mod tests {
         for bad in ["", "github", "1ABC", "A-B", "A B", "A=B", "PATH", "HOME", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "LC_ALL"] {
             assert!(!valid_name(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn refuses_names_that_would_execute_something() {
+        // Every secret is exported into every new terminal, so these would turn
+        // a vault entry into a way to run code on the next shell or git command.
+        for bad in [
+            "BASH_ENV", "ENV", "PROMPT_COMMAND", "SHELLOPTS", "PS4", "IFS",
+            "GIT_SSH_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_PAGER",
+            "NODE_OPTIONS", "PERL5OPT", "PYTHONSTARTUP", "PYTHONPATH", "RUBYOPT",
+            "PAGER", "LESSOPEN",
+        ] {
+            assert!(!valid_name(bad), "{bad} should be refused");
+        }
+        // Still an ordinary token name that happens to start the same way.
+        assert!(valid_name("GIT_TOKEN"));
+        assert!(valid_name("NODE_AUTH_TOKEN"));
     }
 
     #[test]
