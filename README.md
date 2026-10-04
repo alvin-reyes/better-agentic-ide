@@ -11,13 +11,13 @@
   <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/alvin-reyes/better-agentic-ide?label=release&color=7C8FFF"></a>
   <a href="https://github.com/alvin-reyes/better-agentic-ide/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/alvin-reyes/better-agentic-ide/total?color=4CC38A"></a>
   <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-5A616D">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-commercial-D9A441"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-4CC38A"></a>
   <a href="https://github.com/alvin-reyes/ade-setup/releases/latest"><img alt="ade-setup" src="https://img.shields.io/github/v/release/alvin-reyes/ade-setup?label=ade-setup&color=BC8CFF"></a>
 </p>
 
 <p align="center">
   <a href="https://alvin-reyes.github.io/better-agentic-ide/"><strong>Website</strong></a> ·
-  <a href="https://alvin-reyes.github.io/better-agentic-ide/#pricing"><strong>Pricing</strong></a> ·
+  <a href="https://github.com/alvin-reyes/better-agentic-ide"><strong>Source</strong></a> ·
   <a href="https://alvin-reyes.github.io/better-agentic-ide/guide/"><strong>User guide</strong></a> ·
   <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><strong>Download</strong></a>
 </p>
@@ -88,16 +88,18 @@ brew install --cask alvin-reyes/tap/ade
 
 ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, Gemini CLI and Ollama. See the [user guide](https://alvin-reyes.github.io/better-agentic-ide/guide/) to get started.
 
-## Licensing
+## Licence
 
-ADE is commercial software. Try it free; if you keep using it, [buy a license](https://alvin-reyes.github.io/better-agentic-ide/#pricing). Licensing is on the honor system: there are no license keys and no DRM. See [LICENSE](LICENSE) for the terms.
+ADE is free and open source under the [MIT licence](LICENSE). Every feature, no account, no keys, no telemetry. Use it at work, fork it, ship your own build — no permission needed.
+
+Issues and pull requests are welcome, on the app and on [ade-setup](https://github.com/alvin-reyes/ade-setup), where the agent definitions live.
 
 ## aracademy
 
-ADE is the tool used in aracademy's AI training, and a license is included with the course. Details are on the [website](https://alvin-reyes.github.io/better-agentic-ide/#training).
+ADE is the tool used in aracademy's AI training — the same setup, in every lesson. Details are on the [website](https://alvin-reyes.github.io/better-agentic-ide/#training).
 
 ## Support
 
 For help, licensing and team purchases, get in touch via the [website](https://alvin-reyes.github.io/better-agentic-ide/). The [troubleshooting guide](https://alvin-reyes.github.io/better-agentic-ide/guide/troubleshooting/) covers common issues.
 
-© 2025–2026 Alvin Reyes. All rights reserved.
+© 2025–2026 Alvin Reyes · [MIT](LICENSE)

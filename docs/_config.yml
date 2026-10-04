@@ -11,9 +11,9 @@ baseurl: /better-agentic-ide
 # Installers are still published as GitHub Releases, so download links use this.
 repo: https://github.com/alvin-reyes/better-agentic-ide
 
-# Where "Buy a license" goes. Until a checkout link exists it points at the
-# pricing section on the landing page.
-buy_url: "#pricing"  # TODO: set to the real checkout URL (Stripe, Lemon Squeezy, Gumroad, ...)
+# Where the Download button points.
+download_url: https://github.com/alvin-reyes/better-agentic-ide/releases/latest
+repo_url: https://github.com/alvin-reyes/better-agentic-ide
 # The aracademy AI training that ADE is part of.
 aracademy_url: https://aracademy.example  # TODO: set the real aracademy URL
 

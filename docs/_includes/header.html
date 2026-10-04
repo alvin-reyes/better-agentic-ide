@@ -7,11 +7,10 @@
     </a>
     <nav id="site-nav" class="site-nav" aria-label="Main">
       <a href="{{ '/#features' | relative_url }}">Features</a>
-      <a href="{{ '/#pricing' | relative_url }}">Pricing</a>
+      <a href="https://github.com/alvin-reyes/better-agentic-ide">Source</a>
       <a href="{{ '/#training' | relative_url }}">Training</a>
       <a href="{{ '/guide/' | relative_url }}"{% if page.url contains '/guide/' %} aria-current="page"{% endif %}>Guide</a>
-      {% include buy-url.html %}
-      <a class="btn btn-small btn-primary" href="{{ buy }}">Buy</a>
+      <a class="btn btn-small btn-primary" href="{{ site.download_url }}">Download</a>
     </nav>
     <button class="icon-btn theme-toggle" type="button" aria-label="Switch between light and dark">
       <svg class="moon" width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.5A7 7 0 017.5 3.5a7 7 0 109 9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>

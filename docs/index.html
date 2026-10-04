@@ -4,7 +4,6 @@ body_class: home
 description: ADE is the desktop terminal for building products with AI. Run Claude Code, Codex and Gemini side by side, see what every agent costs, and ship smart contracts from one app.
 ---
 {% assign img = '/assets/img/' | relative_url %}
-{% include buy-url.html %}
 <section class="hero">
   <div class="wrap">
     <div class="hero-copy">
@@ -13,10 +12,10 @@ description: ADE is the desktop terminal for building products with AI. Run Clau
       <h1>Ship faster with <span class="grad-text">ten agents at&nbsp;once.</span></h1>
       <p class="sub">The terminal for building products with AI. Run Claude Code, Codex and Gemini in parallel and see what each costs.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="{{ buy }}">Buy a license</a>
-        <a class="btn btn-ghost" href="{{ site.repo }}/releases/latest" data-download="auto">
+        <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
+        <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">
           <svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0l-4-4m4 4l4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Download free trial <span class="ver" data-latest-version></span>
+          Download free <span class="ver" data-latest-version></span>
         </a>
       </div>
       <p class="hero-meta"><span>macOS · Linux · Windows support soon</span> <code>brew install --cask alvin-reyes/tap/ade</code></p>
@@ -133,26 +132,47 @@ llms.txt
   </div>
 </section>
 
-<section class="section tint" id="pricing">
+<section class="section tint" id="open-source">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">Pricing</span>
-      <h2>Try it free. If you keep using it, buy a license.</h2>
-      <p>Honor system: no keys, no DRM. The full app is the trial.</p>
+      <span class="kicker">Free and open source</span>
+      <h2>Every feature. No licence, no account, no telemetry.</h2>
+      <p>ADE is MIT licensed. Use it at work, fork it, ship your own build — no permission needed.</p>
     </div>
     <div class="pricing">
-      {% for tier in site.data.pricing %}
-      {% if tier.url == 'buy' %}{% assign tier_url = buy %}{% elsif tier.url == 'aracademy' %}{% assign tier_url = site.aracademy_url %}{% else %}{% assign tier_url = tier.url %}{% endif %}
-      <article class="price-card{% if tier.featured %} featured{% endif %}">
-        <h3>{{ tier.name }}</h3>
-        <p class="blurb">{{ tier.blurb }}</p>
-        <p class="price"><b>{{ tier.price }}</b>{% if tier.period and tier.period != '' %} <span>{{ tier.period }}</span>{% endif %}</p>
+      <article class="price-card featured">
+        <h3>The whole app</h3>
+        <p class="blurb">There is no paid tier, because there is only one tier.</p>
+        <p class="price"><b>Free</b> <span>forever</span></p>
         <ul class="checks">
-          {% for f in tier.features %}<li>{{ f }}</li>{% endfor %}
+          <li>Fleet view, tokens panel, scratchpad, editor and the contract workbench</li>
+          <li>macOS (Apple Silicon and Intel) and Linux</li>
+          <li>Your keys and secrets stay in your OS keychain, never synced to us</li>
         </ul>
-        <a class="btn {% if tier.featured %}btn-primary{% else %}btn-ghost{% endif %}" href="{{ tier_url }}">{{ tier.cta }}</a>
+        <a class="btn btn-primary" href="{{ site.download_url }}">Download ADE <span class="arrow" aria-hidden="true">→</span></a>
       </article>
-      {% endfor %}
+      <article class="price-card">
+        <h3>The source</h3>
+        <p class="blurb">Read it, change it, or lift the parts you want.</p>
+        <p class="price"><b>MIT</b> <span>licensed</span></p>
+        <ul class="checks">
+          <li>The whole app: Tauri and Rust backend, React frontend</li>
+          <li>Build it yourself and run your own version</li>
+          <li>Issues and pull requests welcome</li>
+        </ul>
+        <a class="btn btn-ghost" href="{{ site.repo_url }}">View on GitHub</a>
+      </article>
+      <article class="price-card">
+        <h3>The agents</h3>
+        <p class="blurb">The nineteen role definitions live in their own repo.</p>
+        <p class="price"><b>Yours</b> <span>to fork</span></p>
+        <ul class="checks">
+          <li>Edit a role once and use it across every project</li>
+          <li>Versioned and released, so a project can pin what it uses</li>
+          <li>Share a house style with your team</li>
+        </ul>
+        <a class="btn btn-ghost" href="https://github.com/alvin-reyes/ade-setup">Browse ade-setup</a>
+      </article>
     </div>
   </div>
 </section>
@@ -178,12 +198,12 @@ llms.txt
     </div>
     <div class="faq">
       <details>
-        <summary>Is there a free trial?</summary>
+        <summary>Is it really free?</summary>
         <p>Yes. <a href="{{ site.repo }}/releases/latest" data-download="auto">Download ADE</a>; nothing is locked.</p>
       </details>
       <details>
         <summary>How does licensing work?</summary>
-        <p>No keys or DRM. If you keep using it, <a href="{{ buy }}">buy a license</a> per person.</p>
+        <p>It does not. ADE is <a href="{{ site.repo }}/blob/main/LICENSE">MIT licensed</a>: no keys, no accounts, no seats to count. Use it at work, fork it, ship your own build.</p>
       </details>
       <details>
         <summary>Which agents does it support?</summary>
@@ -210,10 +230,10 @@ llms.txt
     <div class="cta-band">
       <img src="{{ img }}logo.svg" width="60" height="60" alt="">
       <h2>Build your next product in ADE</h2>
-      <p>Free to try. Buy a license when it earns its place.</p>
+      <p>Free and open source. Every feature, no account.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="{{ buy }}">Buy a license</a>
-        <a class="btn btn-ghost" href="{{ site.repo }}/releases/latest" data-download="auto">Download free trial</a>
+        <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">Download ADE</a>
+        <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
       </div>
     </div>
   </div>
