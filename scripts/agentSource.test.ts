@@ -117,3 +117,39 @@ describe("project knowledge never flows back into the definitions", () => {
     }
   });
 });
+
+/**
+ * Everything ADE imports out of vendor/ade-setup must be something
+ * sync:agents actually copies.
+ *
+ * The template was added by hand and the sync script still only knew about
+ * `agents/`, so re-vendoring a newer release would have left the template at
+ * whatever was there when it was added, while VERSION claimed it came from the
+ * pinned ref. A pin that describes only some of what it pinned is worse than no
+ * pin, because it is believed.
+ */
+describe("the sync script covers everything vendored", () => {
+  const SYNC = readFileSync(join(REPO, "scripts", "syncAgents.mjs"), "utf8");
+
+  it("lists every top-level directory that exists under vendor/ade-setup", () => {
+    const declared = /const VENDORED = \[([^\]]*)\]/.exec(SYNC)?.[1] ?? "";
+    expect(declared, "VENDORED not found in syncAgents.mjs").not.toBe("");
+    const names = Array.from(declared.matchAll(/"([^"]+)"/g), (m) => m[1]);
+
+    const present = readdirSync(VENDOR, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+
+    for (const dir of present) {
+      expect(names, `vendor/ade-setup/${dir} is not copied by sync:agents`).toContain(dir);
+    }
+  });
+
+  it("copies the template that project setup imports", () => {
+    // projectMethodology.ts imports this path directly, so a sync that skipped
+    // it would ship a stale knowledge store into every new project.
+    expect(existsSync(join(VENDOR, "templates", "knowledge", "README.md"))).toBe(true);
+    const setup = readFileSync(join(REPO, "src", "lib", "projectMethodology.ts"), "utf8");
+    expect(setup).toContain("vendor/ade-setup/templates/knowledge/README.md");
+  });
+});
