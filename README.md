@@ -26,7 +26,7 @@
   <img src="docs/assets/img/hero.webp" alt="ADE: two terminal panes running tests and git log, a live Markdown preview of the implementation plan, and the prompt scratchpad along the bottom" width="100%">
 </p>
 
-ADE is a desktop IDE for macOS and Linux built for working with coding agents. Run Claude Code, Codex, Gemini and local models side by side, have every project set up for them, and see exactly what each one costs. It goes furthest where the work is **AI and blockchain engineering**: nineteen roles that cover a whole company, and smart contracts from first test to reviewed deploy, all from the keyboard.
+ADE is a desktop IDE for macOS and Linux built around **Claude Code**, with Codex, Gemini and local models running alongside it. Every project gets a methodology and a team of agents, and you see exactly what each one costs. It goes furthest on serious engineering work: nineteen roles that cover a whole company, a verification gate that decides when a story is actually done, and smart contracts from first test to reviewed deploy.
 
 ## AI Agents
 

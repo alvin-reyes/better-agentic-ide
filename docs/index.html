@@ -10,7 +10,7 @@ description: ADE is the desktop terminal for building products with AI. Run Clau
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
       <a class="pill" href="#new"><b>NEW</b><span>Project setup: BMAD, methodology and agents →</span></a>
       <h1>Verified, <span class="grad-text">not&nbsp;vibed.</span></h1>
-      <p class="sub">The terminal for building products with AI. Run Claude Code, Codex, Gemini and local models side by side, with a methodology that decides when the work is actually done.</p>
+      <p class="sub">The terminal built around Claude Code, with Codex, Gemini and local models alongside it, and a methodology that decides when the work is actually done.</p>
       <div class="hero-cta">
         <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
         <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">
@@ -68,6 +68,10 @@ llms.txt
             
             <a class="more" href="{{ '/guide/project-setup/' | relative_url }}">How project setup works <span aria-hidden="true">→</span></a>
           </div>
+        </article>
+        <article class="feat-card text">
+          <h3>Claude Code, first class</h3>
+          <p>Every project gets sub-agents in <code>.claude/agents/</code> and a <code>CLAUDE.md</code> constitution. The fleet gives each sub-agent its own lane, spend is read from Claude Code's own transcripts, and ADE ships a plugin for it with 7 agents and 13 skills. The others run beside it; this is the one it is built around.</p>
         </article>
         <article class="feat-card">
           <div class="feat-media"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with swimlanes for each agent and sub-agent"></div>
@@ -284,7 +288,7 @@ llms.txt
       </details>
       <details>
         <summary>Which agents does it support?</summary>
-        <p>Claude Code, Codex, Gemini CLI, Ollama, or any CLI agent. Claude Code gets the most from the cost views.</p>
+        <p>Any CLI agent runs here, but ADE is built around <b>Claude Code</b> and goes deepest with it: sub-agents in <code>.claude/agents/</code>, a <code>CLAUDE.md</code> constitution, sub-agent lanes on the fleet timeline, and real spend read from its transcripts. Codex, Gemini and Ollama run side by side and show no cost, because they publish none.</p>
       </details>
       <details>
         <summary>How many agents can run at once?</summary>
