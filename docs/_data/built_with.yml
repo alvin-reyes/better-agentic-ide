@@ -71,3 +71,23 @@
   name: arena.stats
   url: https://arena-stats.ardata.tech
   blurb: "Leaderboards, rankings and match stats across every sport and registered athlete."
+
+- slug: codescan
+  name: "AR Code Scan"
+  url: https://codescan.ardata.tech
+  blurb: "Scans code from GitHub, Replit or Lovable for security holes and production readiness."
+
+- slug: savvy
+  name: "Savvy"
+  url: https://ai.citysavvyrealtors.com
+  blurb: "A real-estate assistant that answers on properties, neighbourhoods and market conditions."
+
+- slug: ipfsr
+  name: "IPFSR"
+  url: https://ipfsr.ardata.tech
+  blurb: "A pluggable IPFS datastore that replaces Kubo flatfs and replicates to Sia renterd."
+
+- slug: zipfs
+  name: "zipfs"
+  url: https://github.com/10d9e/zipfs
+  blurb: "IPFS implemented in Zig."
