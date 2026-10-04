@@ -626,3 +626,14 @@ pre {
 .built-foot { margin: 26px 0 0; text-align: center; color: var(--text-2); font-size: 14.5px; }
 
 @media (prefers-reduced-motion: reduce) { .built-card { transition: none; } .built-card:hover { transform: none; } }
+
+/* Text-led feature cards, for the methodology section. Principles are not
+   screenshots; giving them a media box would mean inventing one. The left rule
+   and the roomier type carry the weight the image usually does. */
+.feat-card.text { padding: 26px 24px 28px; border-left: 2px solid var(--line-3, var(--line-2)); }
+.feat-card.text h3 { margin: 0 0 10px; font-size: 19px; }
+.feat-card.text p { margin: 0; font-size: 15px; }
+.feat-card.text code {
+  font-family: var(--mono); font-size: .88em; padding: 1px 5px; border-radius: 4px;
+  background: var(--term-bg); border: 1px solid var(--line-2); color: var(--text);
+}
