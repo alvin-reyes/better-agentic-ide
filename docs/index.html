@@ -177,15 +177,29 @@ llms.txt
   </div>
 </section>
 
-<section class="section" id="training">
+<section class="section" id="built-with">
   <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Used on real work</span>
+      <h2>Not a demo. The tool its author ships with.</h2>
+    </div>
+    <div class="training">
+      <div>
+        <span class="kicker">ardata.tech</span>
+        <h2>The tool behind ardata's projects</h2>
+        <p>ADE is what ardata builds client work in — the agent fleet, the methodology and the contract tooling all exist because the work needed them.</p>
+      </div>
+      <a class="btn btn-primary" href="{{ site.ardata_url }}">Visit ardata.tech <span class="arrow" aria-hidden="true">→</span></a>
+    </div>
     <div class="training">
       <div>
         <span class="kicker">aracademy</span>
         <h2>The tool behind aracademy's AI training</h2>
         <p>Learn the workflow in aracademy's course, then use the same tool on real projects.</p>
       </div>
-      <a class="btn btn-primary" href="{{ site.aracademy_url }}">Explore the training <span class="arrow" aria-hidden="true">→</span></a>
+      {% if site.aracademy_url and site.aracademy_url != "" %}
+      <a class="btn btn-ghost" href="{{ site.aracademy_url }}">Explore the training <span class="arrow" aria-hidden="true">→</span></a>
+      {% endif %}
     </div>
   </div>
 </section>

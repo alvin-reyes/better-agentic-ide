@@ -14,8 +14,13 @@ repo: https://github.com/alvin-reyes/better-agentic-ide
 # Where the Download button points.
 download_url: https://github.com/alvin-reyes/better-agentic-ide/releases/latest
 repo_url: https://github.com/alvin-reyes/better-agentic-ide
+# The consultancy ADE is built for and used on.
+ardata_url: https://ardata.tech
+
 # The aracademy AI training that ADE is part of.
-aracademy_url: https://aracademy.example  # TODO: set the real aracademy URL
+# TODO: set the real URL. Until then the training card links nowhere rather than
+# to aracademy.example, which does not resolve and shipped as a dead button.
+aracademy_url: ""
 
 permalink: pretty
 markdown: kramdown

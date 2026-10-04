@@ -94,9 +94,11 @@ ADE is free and open source under the [MIT licence](LICENSE). Every feature, no 
 
 Issues and pull requests are welcome, on the app and on [ade-setup](https://github.com/alvin-reyes/ade-setup), where the agent definitions live.
 
-## aracademy
+## Used on real work
 
-ADE is the tool used in aracademy's AI training — the same setup, in every lesson. Details are on the [website](https://alvin-reyes.github.io/better-agentic-ide/#training).
+ADE is the tool behind [ardata.tech](https://ardata.tech)'s projects — the agent fleet, the methodology and the contract tooling exist because client work needed them, not as a demo. It is also the tool used in aracademy's AI training, the same setup in every lesson.
+
+More on the [website](https://alvin-reyes.github.io/better-agentic-ide/#built-with).
 
 ## Support
 
