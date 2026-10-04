@@ -197,7 +197,12 @@ describe("the webview has a content security policy", () => {
     const csp: string = TAURI_CONF.app?.security?.csp ?? "";
     const scriptSrc = /script-src([^;]*)/.exec(csp)?.[1] ?? "";
     const cspAllowsCdn = scriptSrc.includes("cdn.jsdelivr.net");
-    const cspAllowsEval = scriptSrc.includes("unsafe-eval");
+    // Match whole tokens, not substrings: 'wasm-unsafe-eval' contains the text
+    // "unsafe-eval" but is a strictly narrower grant — it allows WebAssembly to
+    // compile and still refuses eval() and new Function(). The terminal's image
+    // addon decodes sixel in wasm and needs it; see scripts/csp.test.ts.
+    const tokens = scriptSrc.trim().split(/\s+/);
+    const cspAllowsEval = tokens.includes("'unsafe-eval'");
 
     // Follow the import: the call lives in the module MonacoWrapper pulls in.
     const editorDir = resolve(REPO, "src/components/editor");
