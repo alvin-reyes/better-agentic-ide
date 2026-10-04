@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import AgentPicker from "../AgentPicker";
 import { useTabStore } from "../../stores/tabStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -210,13 +210,17 @@ describe("AgentPicker", () => {
       await flush();
     });
     await clickRow("Auth Architect");
-    expect(screen.queryByRole("alert")).toBeTruthy();
+    // waitFor, not a bare assertion: the launch awaits ensureRoleDir() and then
+    // write_text_file, and the helper's flush() drains a single macrotask tick.
+    // That is enough when the machine is idle and not when the suite runs in
+    // parallel, which made this the one test that reddened CI at random.
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeTruthy());
 
     await act(async () => {
       fireEvent.click(screen.getByText("Claude"));
       await flush();
     });
     await clickRow("Auth Architect");
-    expect(screen.queryByRole("alert")).toBe(null);
+    await waitFor(() => expect(screen.queryByRole("alert")).toBe(null));
   });
 });
