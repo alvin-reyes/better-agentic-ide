@@ -62,3 +62,31 @@ describe("CSP lets a user-configured endpoint through", () => {
     expect(directive("script-src")).not.toMatch(/unsafe-inline/);
   });
 });
+
+/**
+ * Monaco is the reason a CDN was ever allowed: @monaco-editor/react fetches it
+ * from cdn.jsdelivr.net unless told otherwise, and monacoSetup.ts tells it
+ * otherwise with `loader.config({ monaco })` at module scope — evaluated before
+ * the importing module's body, so no editor can mount before it runs.
+ *
+ * The URL constant still sits in the bundle, dead. The CSP allowance for it was
+ * not dead: it let any script from that origin execute in a webview that owns
+ * __TAURI_INTERNALS__, and through it create_pty.
+ */
+describe("script-src admits no remote origin", () => {
+  it("allows no http(s) origin to supply script, style or font", () => {
+    for (const name of ["script-src", "style-src", "font-src"]) {
+      const value = directive(name);
+      expect(value, `${name} is missing`).not.toBe("");
+      expect(value, `${name} admits a remote origin: ${value}`).not.toMatch(/https?:\/\//);
+    }
+  });
+
+  it("still permits what the app actually needs", () => {
+    // unsafe-eval is Monaco's workers; the sanitizer and CSP together are what
+    // make it safe, and inline script remains forbidden.
+    expect(directive("script-src")).toContain("'self'");
+    expect(directive("script-src")).not.toContain("'unsafe-inline'");
+    expect(directive("style-src")).toContain("'unsafe-inline'");
+  });
+});
