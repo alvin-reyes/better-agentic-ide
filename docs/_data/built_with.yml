@@ -1,0 +1,73 @@
+# Products shipped using ADE. Shown in the "Built with ADE" grid on the landing
+# page. Each image lives in assets/img/built/<slug>.jpg and came from the site's
+# own og:image, except where noted.
+#
+#   slug   image basename
+#   name   what it is called
+#   url    where it lives (checked: every one returns 200)
+#   blurb  one line, taken from the site's own description and tightened
+
+- slug: w3io
+  name: W3
+  url: https://w3.io
+  blurb: The operating system for autonomous finance: build and control agent-powered financial workflows.
+
+- slug: koneksi
+  name: KONEKSI
+  url: https://koneksi.co.kr
+  blurb: Distributed-storage disaster recovery for files and databases, with automatic backup and verified restores.
+
+- slug: datark
+  name: DatArk Managed
+  url: https://datark.koneksi.co.kr
+  blurb: Restores a real sample every month and publishes the verification report, rather than a backup-success log.
+
+- slug: delta
+  name: DeltaVault
+  url: https://delta.storage
+  blurb: Data disaster recovery that runs on-premises or in the cloud, complementing high availability.
+
+- slug: caiden
+  name: CAIDen
+  url: https://caiden.tech
+  blurb: AI agents for voice, SMS and chat, built and deployed per customer.
+
+- slug: henry
+  name: Healthway Front Desk
+  url: https://henry.caiden.tech
+  blurb: Answers patients on chat, Viber and the phone, and books their appointments.
+
+- slug: booked
+  name: Booked
+  url: https://booked.caiden.tech
+  blurb: One QR code across yard signs, reels, flyers and cards, turning every one of them into a booking.
+
+- slug: narralearn
+  name: NarraLearn
+  url: https://narralearn.caiden.tech
+  blurb: Turns a curriculum into a voice-narrated course with an AI tutor built in.
+
+- slug: crimson
+  name: Crimson Security
+  url: https://crimsonsecurityinc.ca
+  blurb: Canadian cybersecurity firm: compliance, penetration testing and monitoring.
+
+- slug: wodan
+  name: Wodan AI
+  url: https://wodan.ai
+  blurb: Zero-trust AI.
+
+- slug: goldfish
+  name: Goldfish (GGBR)
+  url: https://goldfishgold.com
+  blurb: A gold-backed token, over-collateralised beyond 100% by audited reserves.
+
+- slug: hoops
+  name: Hoop Culture
+  url: https://hoops.ardata.tech
+  blurb: Runs amateur basketball leagues, scoring games live by voice.
+
+- slug: arena
+  name: arena.stats
+  url: https://arena-stats.ardata.tech
+  blurb: Leaderboards, rankings and match stats across every sport and registered athlete.

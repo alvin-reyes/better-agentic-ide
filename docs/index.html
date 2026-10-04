@@ -208,6 +208,28 @@ llms.txt
   </div>
 </section>
 
+<section class="section" id="built-with-ade">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Shipped with it</span>
+      <h2>Products built using ADE</h2>
+      <p>Not a feature list. Things in production, built by the people who build ADE.</p>
+    </div>
+    <div class="built-grid">
+      {% for p in site.data.built_with %}
+      <a class="built-card" href="{{ p.url }}" target="_blank" rel="noopener">
+        <div class="built-shot"><img src="{{ img }}built/{{ p.slug }}.jpg" alt="{{ p.name }}" loading="lazy" width="760" height="400"></div>
+        <div class="built-body">
+          <h3>{{ p.name }} <span class="arrow" aria-hidden="true">&#8599;</span></h3>
+          <p>{{ p.blurb }}</p>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    <p class="built-foot">And hundreds of proofs of concept and pilot projects.</p>
+  </div>
+</section>
+
 <section class="section tint" id="faq">
   <div class="wrap">
     <div class="section-head">

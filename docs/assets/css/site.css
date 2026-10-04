@@ -599,3 +599,30 @@ pre {
 @media (max-width: 760px) {
   .partner-mark { width: 84px; height: 84px; border-radius: 16px; }
 }
+
+/* "Products built using ADE" — a card per shipped product.
+   Shots come from each site's own og:image, so they vary in aspect ratio and
+   subject; a fixed-ratio box with object-fit keeps the grid even without
+   distorting anyone's artwork. */
+.built-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+
+.built-card {
+  display: flex; flex-direction: column; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  overflow: hidden; box-shadow: var(--card-shadow);
+  transition: transform .18s ease, border-color .18s ease;
+}
+.built-card:hover { transform: translateY(-3px); border-color: var(--line-strong, var(--line)); }
+.built-card:focus-visible { outline: 2px solid var(--brand, currentColor); outline-offset: 3px; }
+
+.built-shot { aspect-ratio: 19 / 10; background: var(--bg-2, #111); overflow: hidden; }
+.built-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.built-body { padding: 15px 17px 18px; }
+.built-body h3 { margin: 0 0 6px; font-size: 16px; letter-spacing: -.01em; }
+.built-body h3 .arrow { font-size: 12px; opacity: .45; }
+.built-body p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+
+.built-foot { margin: 26px 0 0; text-align: center; color: var(--text-2); font-size: 14.5px; }
+
+@media (prefers-reduced-motion: reduce) { .built-card { transition: none; } .built-card:hover { transform: none; } }
