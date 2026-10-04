@@ -581,3 +581,21 @@ pre {
 /* Small page-specific bits */
 .cta-section { padding-top: 40px; }
 .prose td code, .prose th code { overflow-wrap: normal; white-space: nowrap; }
+
+/* Partner marks in the "Used on real work" cards.
+   ardata's wordmark is near-white, so it needs a dark ground to read on the
+   light theme; the academy's app icon carries its own orange tile and reads on
+   either. Both sit in a fixed-height box so two differently-shaped marks line
+   up without stretching. */
+.partner-mark {
+  flex: none; display: grid; place-items: center;
+  width: 108px; height: 108px; border-radius: 20px; overflow: hidden;
+}
+.partner-mark img { display: block; max-width: 76%; max-height: 76%; object-fit: contain; }
+.partner-mark--dark { background: #16181d; }
+.partner-mark--plain { background: transparent; }
+.partner-mark--plain img { max-width: 100%; max-height: 100%; border-radius: 20px; }
+
+@media (max-width: 760px) {
+  .partner-mark { width: 84px; height: 84px; border-radius: 16px; }
+}
