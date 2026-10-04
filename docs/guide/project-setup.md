@@ -8,7 +8,7 @@ description: How ADE sets up each project with BMAD, the "verified, not vibed" m
 
 The first time ADE opens a project, it adds whatever the project is missing:
 
-- **BMAD** — the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) in `.bmad-core/`, plus the `/BMad` slash commands for Claude Code.
+- **BMAD** — the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) in `.bmad-core/` (tasks, checklists, templates, workflows and reference data), plus the `/BMad:tasks:` slash commands for Claude Code. Its personas are not installed; the roles in `.claude/agents/` cover those jobs once.
 - **The ADE methodology** — the rules in `.ade/rules.md`, loaded from `CLAUDE.md`, plus a context store, a decision log and a session journal under `.ade/`, and an `llms.txt`. See [The methodology](#the-methodology) below.
 - **Eight core roles** as Claude Code sub-agents in `.claude/agents/`: product manager, architect, designer, scrum master, developer, QA, DevOps and adversarial reviewer.
 - **Agents for your stack** — see [By project type](#by-project-type).

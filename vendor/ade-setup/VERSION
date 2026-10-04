@@ -1,0 +1,9 @@
+repo: https://github.com/alvin-reyes/ade-setup
+release: v1.0.0
+ref: d6b6ca049ee97c1668294ef067b4dfe380f565d0
+vendored: 2026-10-04
+
+The role definitions ADE ships, vendored and pinned the way .bmad-core is.
+These markdown files are the source: src/data/roles.ts parses them and holds
+no prose of its own, so the two cannot drift. Run npm run sync:agents to
+re-vendor from the repo at a newer ref.

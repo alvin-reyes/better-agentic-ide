@@ -7,11 +7,12 @@ const architect = getRole("architect")!;
 const security = getDomain("security")!;
 
 describe("composeRoleMarkdown", () => {
-  it("includes the role title, mission and boundaries", () => {
+  it("hands over the definition verbatim", () => {
     const md = composeRoleMarkdown(architect);
     expect(md.includes(architect.title)).toBe(true);
-    expect(md.includes(architect.mission)).toBe(true);
-    expect(md.includes(architect.boundaries)).toBe(true);
+    // Verbatim, not rebuilt: a recomposition would drop the sections this
+    // codebase does not model.
+    expect(md).toBe(architect.body);
   });
 
   it("lists every owned artifact", () => {
@@ -33,7 +34,9 @@ describe("composeRoleMarkdown", () => {
 
   it("keeps the role's own text intact when a domain is added", () => {
     const withDomain = composeRoleMarkdown(architect, security);
-    expect(withDomain.includes(architect.boundaries)).toBe(true);
+    const boundaries = architect.body.slice(architect.body.search(/^## Boundaries/m));
+    expect(boundaries.length).toBeGreaterThan(40);
+    expect(withDomain.includes(boundaries.trimEnd())).toBe(true);
   });
 
   it("produces markdown headings, not a flat blob", () => {

@@ -28,7 +28,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "{}",
     color: "#3fb950",
     description: "Design and build REST/GraphQL APIs, routes, controllers, and middleware",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "backend-api",
   },
   {
@@ -37,7 +37,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "DB",
     color: "#3fb950",
     description: "Schema design, migrations, queries, and database optimization",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "database",
   },
   {
@@ -56,7 +56,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "Go",
     color: "#3fb950",
     description: "Idiomatic Go services and tools: clear packages, context-aware concurrency, table-driven tests",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "go",
   },
   {
@@ -65,7 +65,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "RS",
     color: "#3fb950",
     description: "Safe, fast Rust: clear ownership, typed errors, no stray unwraps, clippy-clean with tests",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "rust",
   },
 
@@ -76,7 +76,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "UI",
     color: "#58a6ff",
     description: "Build components, layouts, and interactive UI elements",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "frontend-ui",
   },
   {
@@ -85,7 +85,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "CS",
     color: "#58a6ff",
     description: "CSS, Tailwind, animations, responsive design, and theming",
-    roleId: "ux-expert",
+    roleId: "designer",
     domainId: "css",
   },
   {
@@ -94,7 +94,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "SM",
     color: "#58a6ff",
     description: "State management, data flow, hooks, and client-side architecture",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "state-management",
   },
 
@@ -172,7 +172,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "\u{1F41B}",
     color: "#ff7b72",
     description: "Systematic debugging, root cause analysis, and bug fixing",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "debugging",
   },
   {
@@ -217,7 +217,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "\u{1F500}",
     color: "#ff7b72",
     description: "Git workflows, rebasing, conflict resolution, and branch strategies",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "git",
   },
   {
@@ -255,7 +255,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "SOL",
     color: "#f0883e",
     description: "Write Solidity contracts and Foundry tests, fuzz and invariant tests, deploy scripts",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "solidity",
   },
   {
@@ -273,7 +273,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "GAS",
     color: "#f0883e",
     description: "Cut gas with measured changes: storage packing, calldata, unchecked math, caching",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "gas-optimization",
   },
   {
@@ -282,7 +282,7 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     icon: "\u{25CE}",
     color: "#f0883e",
     description: "Build Solana programs with Anchor: accounts, PDAs, CPIs, and TypeScript tests",
-    roleId: "dev",
+    roleId: "developer",
     domainId: "solana",
   },
 
@@ -397,9 +397,71 @@ export const CURATED_AGENTS: CuratedAgent[] = [
     domainId: "ai-web3",
   },
 
-];
-
-export const AGENT_CATEGORIES: AgentCategory[] = ["Backend", "Frontend", "DevOps", "Testing", "General", "Web3", "Architects"];
+  // Company
+  {
+    id: "security-engineer",
+    name: "Security Engineer",
+    icon: "SEC",
+    color: "#f4756b",
+    description: "Threat-model the system and verify the attack paths are actually closed",
+    roleId: "security-engineer",
+    domainId: "security",
+  },
+  {
+    id: "sre-observability",
+    name: "Observability Engineer",
+    icon: "OBS",
+    color: "#d9a441",
+    description: "SLOs, instrumentation, and alerts that fire on user-visible harm",
+    roleId: "sre",
+    domainId: "observability",
+  },
+  {
+    id: "sre-incident",
+    name: "Incident Responder",
+    icon: "911",
+    color: "#f4756b",
+    description: "Drive a live outage to mitigation, then write the blameless postmortem",
+    roleId: "sre",
+    domainId: "incident-response",
+  },
+  {
+    id: "mobile-engineer",
+    name: "Mobile Engineer",
+    icon: "APP",
+    color: "#7c8fff",
+    description: "Build iOS, Android and React Native apps, offline and permissions included",
+    roleId: "developer",
+    domainId: "mobile",
+  },
+  {
+    id: "data-pipeline-engineer",
+    name: "Data Pipeline Engineer",
+    icon: "ETL",
+    color: "#4cc38a",
+    description: "Build ETL pipelines with schema contracts, idempotent reruns and quality checks",
+    roleId: "developer",
+    domainId: "data-engineering",
+  },
+  {
+    id: "agent-engineer",
+    name: "Agent Engineer",
+    icon: "AGT",
+    color: "#bc8cff",
+    description: "Build agent loops, tools and guardrails, with the eval harness written alongside",
+    roleId: "developer",
+    domainId: "agent-engineering",
+  },
+  {
+    id: "eval-engineer",
+    name: "Eval Engineer",
+    icon: "EVL",
+    color: "#f4756b",
+    description: "Define eval criteria and judge agent output against them, with the cases as evidence",
+    roleId: "qa",
+    domainId: "llm-eval",
+  },
+];export const AGENT_CATEGORIES: AgentCategory[] = ["Backend", "Frontend", "DevOps", "Testing", "General", "Web3", "Architects"];
 
 export interface CatalogAgent extends CuratedAgent {
   category: AgentCategory;

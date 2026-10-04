@@ -310,9 +310,56 @@ export const DOMAINS: Domain[] = [
     focus:
       "Put forge build, forge test (or anchor test) and static analysis such as slither in CI, blocking merges when they fail. Script local chains (anvil, solana-test-validator) for tests, and make deployments reproducible: pinned compiler versions, verified contracts, recorded addresses per network. Real-network deploys go through a reviewed script signing with a hardware wallet, keystore account or multisig — never a private key in code, CI secrets or logs. Set up RPC redundancy, alerting on contract events, and a written rollback or pause plan.",
     keywords: ["web3 devops", "rpc", "node", "anvil", "devnet", "testnet", "deploy pipeline", "ci", "keystore", "multisig", "monitoring", "indexer"],
-  }
+  },
+  {
+    id: "mobile",
+    title: "Mobile",
+    category: "Frontend",
+    focus:
+      "Build and debug iOS, Android and React Native apps: navigation, platform permissions, offline and poor-network behaviour, background work, push notifications, app-store build and release requirements. Treat the small screen, the interrupted session and the denied permission as the normal cases, not the edge ones.",
+    keywords: ["mobile", "ios", "android", "swift", "kotlin", "react native", "expo", "app store", "push notification"],
+  },
+  {
+    id: "data-engineering",
+    title: "Data Engineering",
+    category: "Backend",
+    focus:
+      "Build pipelines that move and reshape data: extraction, transformation, loading, scheduling and backfills. Make correctness checkable — schema contracts, idempotent reruns, row-count and freshness assertions — because a pipeline that fails loudly is cheaper than one that silently drops rows.",
+    keywords: ["etl", "elt", "pipeline", "warehouse", "airflow", "dbt", "spark", "backfill", "data quality", "schema"],
+  },
+  {
+    id: "observability",
+    title: "Observability",
+    category: "DevOps",
+    focus:
+      "Make a running system explain itself: structured logs, metrics, traces, and the dashboards and alerts built on them. Instrument for the question you will ask at 3am, alert on user-visible harm rather than on resource graphs, and make every alert link to the runbook that resolves it.",
+    keywords: ["observability", "metrics", "tracing", "logging", "prometheus", "grafana", "opentelemetry", "alert", "slo", "dashboard"],
+  },
+  {
+    id: "incident-response",
+    title: "Incident Response",
+    category: "DevOps",
+    focus:
+      "Drive a live incident: establish impact, mitigate before diagnosing, keep a timeline as you go, and communicate state in terms the business understands. Afterwards, write the blameless postmortem — contributing causes and the specific changes that make the class of failure less likely.",
+    keywords: ["incident", "outage", "oncall", "postmortem", "rollback", "mitigation", "severity", "pager", "downtime"],
+  },
+  {
+    id: "agent-engineering",
+    title: "Agent Engineering",
+    category: "Backend",
+    focus:
+      "Build agentic systems: tool definitions and their schemas, the orchestration loop, context and memory handling, retries and timeouts, and the guardrails that stop a loop running away. Treat a tool call as an untrusted boundary — validate what goes in and what comes back. Write the eval harness alongside the agent, test-first, the same way any other behaviour is pinned down, because an agent with no eval is an agent nobody can change safely.",
+    keywords: ["agent", "tool use", "orchestration", "mcp", "function calling", "memory", "context window", "guardrail", "loop", "prompt"],
+  },
+  {
+    id: "llm-eval",
+    title: "LLM Evaluation",
+    category: "Testing",
+    focus:
+      "Decide whether an agent or model actually does its job. Turn each requirement into a graded eval case with a pass condition stated in advance, cover the failure modes a happy-path demo never reaches — refusals, hallucinated tool arguments, truncated context, adversarial input — and report pass rates with the cases behind them. A rise in average score is not evidence; a named case moving from fail to pass is. Non-determinism is the hard part: run enough samples to tell a real change from noise, and say which it was.",
+    keywords: ["eval", "evaluation", "benchmark", "llm judge", "golden set", "regression", "hallucination", "pass rate", "scoring", "non-determinism"],
+  },
 ];
-
 export function getDomain(id: string): Domain | undefined {
   return DOMAINS.find((d) => d.id === id);
 }

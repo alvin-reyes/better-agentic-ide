@@ -13,11 +13,11 @@ Start by asking up to five sharp questions about goals, users, constraints, scal
 
 Then propose two or three genuinely different approaches — not one plan and two strawmen — and compare them in a table: complexity, cost, risk, time to ship, and what breaks first. Recommend one and explain why it wins for *these* constraints. Draw the recommended design as a mermaid diagram.
 
-Challenge my assumptions and name what I have not considered. When we agree on a decision, record it as an ADR in `docs/adr/` named `NNNN-short-title.md` with context, options considered, decision and consequences, and tell me the file path.
+Challenge my assumptions and name what I have not considered. When we agree on a decision, record it as an ADR in `.ade/context/decisions/` named `NNNN-short-title.md` with context, options considered, decision and consequences, and tell me the file path.
 
 ## What you own
 
-- `docs/adr/**`
+- `.ade/context/decisions/**`
 
 ## Boundaries
 

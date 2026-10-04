@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { sanitizeHtml } from "../../lib/sanitizeHtml";
 import { markdownToHtml } from "../../lib/markdown";
@@ -174,15 +174,24 @@ describe("the webview has a content security policy", () => {
   });
 
   /**
-   * script-src currently carries 'unsafe-eval' and allows cdn.jsdelivr.net.
-   * Both exist for one reason: `@monaco-editor/react` is used with no
-   * `loader.config()`, so Monaco is fetched from jsDelivr at runtime and its
-   * AMD loader evaluates code. Neither is wanted.
+   * script-src carried 'unsafe-eval' and cdn.jsdelivr.net for one reason:
+   * `@monaco-editor/react` fetches Monaco from jsDelivr unless told otherwise,
+   * and its AMD loader evaluates code.
    *
-   * Self-hosting Monaco removes both, and also stops the app executing several
-   * megabytes of third-party JavaScript from a CDN and makes the editor work
-   * offline. This test documents the coupling so the CSP is tightened at the
-   * same time, rather than the allowance quietly outliving its cause.
+   * Monaco is self-hosted now — monacoSetup.ts calls `loader.config({ monaco })`
+   * at module scope, and MonacoWrapper imports it, so it runs before any editor
+   * can mount. The CDN allowance is gone with it.
+   *
+   * This test used to look for `loader.config(` in MonacoWrapper.tsx alone, so
+   * once the call moved into the module MonacoWrapper imports it concluded
+   * Monaco was still CDN-loaded and demanded the allowance stay. It follows the
+   * import now.
+   *
+   * 'unsafe-eval' is gone too, and that half was settled by running it rather
+   * than reading it: the bundled MonacoWrapper was mounted under this exact
+   * policy with 'unsafe-eval' removed, and it rendered, tokenised, and produced
+   * a TypeScript diagnostic from its language worker with no violation raised.
+   * The worker was the part in doubt — it is where a `new Function` would be.
    */
   it("keeps the CDN allowance tied to Monaco still being CDN-loaded", () => {
     const csp: string = TAURI_CONF.app?.security?.csp ?? "";
@@ -190,23 +199,29 @@ describe("the webview has a content security policy", () => {
     const cspAllowsCdn = scriptSrc.includes("cdn.jsdelivr.net");
     const cspAllowsEval = scriptSrc.includes("unsafe-eval");
 
-    const wrapper = readFileSync(
-      resolve(REPO, "src/components/editor/MonacoWrapper.tsx"),
-      "utf8"
-    );
-    const loaderConfigured =
-      /loader\.config\(/.test(wrapper) || /@monaco-editor\/loader/.test(wrapper);
-    const monacoIsCdnLoaded =
-      /@monaco-editor\/react/.test(wrapper) && !loaderConfigured;
+    // Follow the import: the call lives in the module MonacoWrapper pulls in.
+    const editorDir = resolve(REPO, "src/components/editor");
+    const sources = readdirSync(editorDir)
+      .filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"))
+      .map((f) => readFileSync(resolve(editorDir, f), "utf8"));
+    const loaderConfigured = sources.some((s) => /loader\.config\(/.test(s));
+    const usesMonaco = sources.some((s) => /@monaco-editor\/react/.test(s));
+    const monacoIsCdnLoaded = usesMonaco && !loaderConfigured;
 
-    if (!monacoIsCdnLoaded) {
-      expect(
-        cspAllowsCdn || cspAllowsEval,
-        "Monaco is self-hosted now, so drop 'unsafe-eval' and cdn.jsdelivr.net " +
-          "from script-src — they only existed to support the CDN loader."
-      ).toBe(false);
-    } else {
+    expect(loaderConfigured, "no loader.config() anywhere in src/components/editor").toBe(true);
+
+    if (monacoIsCdnLoaded) {
+      // Still CDN-loaded: the allowance has to stay or the editor cannot load.
       expect(cspAllowsCdn).toBe(true);
+    } else {
+      expect(
+        cspAllowsCdn,
+        "Monaco is self-hosted, so cdn.jsdelivr.net has no reason to be in script-src."
+      ).toBe(false);
+      expect(
+        cspAllowsEval,
+        "Monaco was shown to work without 'unsafe-eval'; putting it back needs a reason"
+      ).toBe(false);
     }
   });
 });

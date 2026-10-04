@@ -12,10 +12,10 @@ describe("ADE methodology", () => {
     }
   });
 
-  it("writes the rules, context store, decision log, journal, CLAUDE.md and llms.txt", () => {
+  it("writes the rules, context store, decision log, journal, knowledge store, CLAUDE.md and llms.txt", () => {
     const paths = methodologyFiles("demo").map((f) => f.path);
     expect(paths).toEqual(expect.arrayContaining([
-      "CLAUDE.md", "llms.txt", ".ade/rules.md", ".ade/context/README.md", ".ade/context/decisions/README.md", ".ade/session.md",
+      "CLAUDE.md", "llms.txt", ".ade/rules.md", ".ade/context/README.md", ".ade/context/decisions/README.md", ".ade/session.md", ".ade/knowledge/README.md",
     ]));
     expect(new Set(paths).size).toBe(paths.length);
   });

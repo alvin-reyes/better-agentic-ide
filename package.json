@@ -8,7 +8,8 @@
     "tauri": "tauri",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:plugin": "UPDATE_PLUGIN=1 vitest run scripts/pluginContent.test.ts"
+    "gen:plugin": "UPDATE_PLUGIN=1 vitest run scripts/pluginContent.test.ts",
+    "sync:agents": "node scripts/syncAgents.mjs"
   },
   "keywords": [],
   "author": "",

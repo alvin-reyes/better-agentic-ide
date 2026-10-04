@@ -13,7 +13,7 @@ Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an a
 - **40 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General — API Builder, Database Engineer, Senior Go Engineer, Senior Rust Engineer, Smart Contract Auditor, Web3 DevOps Engineer, Debugger, Code Reviewer, Docs Writer and more. Each pairs a **role** — what it is accountable for, the files it owns and the boundaries it works inside — with a **domain** that narrows it to one technical focus. ADE composes the pair into a role definition, writes it to a file and starts the provider against that file, so a long definition never has to survive shell quoting. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
 - **Roles** — the last pill filters the list down to the core roles on their own, with no domain. Product Manager, Product Owner and Scrum Master live only here, since no profile pairs with them.
 - **Describe a task** in the search box and the picker suggests the best match.
-- **Provider** — switch between Claude Code, Codex, Gemini CLI and Ollama with <kbd>Tab</kbd>.
+- **Provider** — switch between Claude Code, Codex, Gemini CLI and Ollama with <kbd>Tab</kbd>. Claude Code, Gemini and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch.
 - **Senior Go Engineer** writes idiomatic Go with table-driven tests and runs `go vet` and `go test -race`. **Senior Rust Engineer** models the domain with types, avoids stray `unwrap`s and runs `cargo fmt`, `cargo clippy` and `cargo test`. Both are also added to Go and Rust projects as sub-agents.
 - **Continuous mode** runs the agent without permission prompts (Claude Code's `--dangerously-skip-permissions`). ADE asks you to confirm first; use it only in projects you trust.
 
@@ -67,11 +67,11 @@ Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an O
 
 ## BMAD
 
-[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). The bundled, pinned copy goes into `.bmad-core/` along with the `/BMad` slash commands for Claude Code; nothing is downloaded and existing files are never overwritten.
+[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). The bundled, pinned copy goes into `.bmad-core/` along with the `/BMad:tasks:` slash commands for Claude Code; nothing is downloaded and existing files are never overwritten. BMAD's own ten personas are not installed: eight of them are the same jobs as the roles below, and a project carrying two architects and two QAs carries two definitions of Done.
 
 The BMAD panel shows the method's two phases, **Planning** and **Dev cycle**, as a reminder of where a project is.
 
-The personas themselves are roles in the [agent picker](#agent-picker) — filter to **Roles** and you have Analyst, PM, UX Expert, Architect, Product Owner, Scrum Master, Developer and QA, each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
+The personas themselves are roles in the [agent picker](#agent-picker) — filter to **Roles** and you have all nineteen — Analyst, Product Manager, Designer, Architect, Product Owner, Scrum Master, Developer, QA, DevOps, Adversarial Reviewer, Security Engineer, SRE, Release Manager, Engineering Manager, Support Engineer, Solutions Engineer, Brainstorming Architect, Technical Writer and Advisor — each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
 
 ## Browser tab
 

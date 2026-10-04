@@ -7,6 +7,7 @@
 
 import { AGENT_CATALOG } from "../data/curatedAgents";
 import { agentMarkdown, rolePrompt } from "./pluginContent";
+import KNOWLEDGE_README from "../../vendor/ade-setup/templates/knowledge/README.md?raw";
 
 export interface MethodologyFile {
   /** Relative to the project root. */
@@ -125,8 +126,10 @@ verification command passes**. No agent certifies its own work.
 ## Agents and commands
 - **Sub-agents** in \`.claude/agents/\`: product-manager, architect, designer, scrum-master,
   developer, qa, devops, adversarial-reviewer. Delegate to the one that owns the work.
-- **BMAD** personas and tasks: the \`/BMad:\` slash commands (\`.bmad-core/\`). These are
-  optional helpers you may run inside the flow. The ADE rules in \`.ade/rules.md\` always
+- **BMAD** tasks, checklists, templates and workflows: the \`/BMad:tasks:\` slash commands
+  (\`.bmad-core/\`). These are optional helpers you may run inside the flow. BMAD's own
+  personas are deliberately not installed — eight of them are the same jobs as the
+  sub-agents above, and two definitions of Done is worse than one. The ADE rules in \`.ade/rules.md\` always
   win: a BMAD task can **never override** the verification command, the Definition of
   Done, or anything in this file. Where they disagree, stop and surface the conflict.
 - \`adversarial-reviewer\` ships with a read-only tool allowlist on purpose: it
@@ -345,6 +348,10 @@ export function methodologyFiles(projectName: string, stacks: Stack[] = []): Met
     { path: ".ade/context/README.md", content: CONTEXT_README },
     { path: ".ade/context/decisions/README.md", content: DECISIONS_README },
     { path: ".ade/session.md", content: SESSION_MD(projectName) },
+    // The knowledge store: what each role has learned about this project.
+    // Vendored from ade-setup rather than restated here, and scaffolded once —
+    // setup never overwrites, so a project's accumulated knowledge is safe.
+    { path: ".ade/knowledge/README.md", content: KNOWLEDGE_README },
     ...ROLES.map(roleFile),
     ...stackAgentFiles(stacks),
   ];

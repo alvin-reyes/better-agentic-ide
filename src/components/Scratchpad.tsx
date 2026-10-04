@@ -323,6 +323,30 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     return () => window.clearTimeout(id);
   }, [text]);
 
+  // The debounce above means a quit or crash within 400ms of the last keystroke
+  // loses it. Flush on the way out: pagehide fires on quit and on a hidden
+  // window, and localStorage writes synchronously, so this is the last chance
+  // that actually runs.
+  const latestText = useRef(text);
+  latestText.current = text;
+  useEffect(() => {
+    const flush = () => {
+      try {
+        if (latestText.current) localStorage.setItem(DRAFT_KEY, latestText.current);
+        else localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // Storage full: the draft just isn't persisted.
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", flush);
+      flush();
+    };
+  }, []);
+
   const togglePanel = (p: Panel) => setPanel((cur) => (cur === p ? null : p));
 
   const speechAvailable = typeof window !== "undefined" && (
@@ -408,6 +432,16 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
   }, [isListening, speechAvailable, text]);
 
   useEffect(() => () => recognitionRef.current?.abort(), []);
+
+  // Closing the drawer unmounts nothing: the component returns null and stays
+  // mounted, so the unmount cleanup above never runs. Dictation would keep the
+  // microphone open with the only control to stop it hidden.
+  useEffect(() => {
+    if (!isOpen && isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    }
+  }, [isOpen, isListening]);
 
   // Drag-to-resize; blur/visibilitychange also end the drag so an interrupted one doesn't stick.
   const onDragStart = useCallback((e: React.MouseEvent) => {

@@ -112,16 +112,21 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         ).catch((err) => failed(`Project setup failed: ${err}`));
       } },
       { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
-        if (activeTab) {
-          import("../hooks/useTerminal").then(({ getPtyCwd }) => {
-            getPtyCwd(activeTab.activePaneId).then((cwd) => {
-              import("@tauri-apps/api/core").then(({ invoke }) => {
-                invoke("scaffold_bmad", { path: cwd }).catch(() => {});
-              });
-            });
-          });
-        }
         onClose();
+        // Same shape as project-setup above, and the same two holes: a null cwd
+        // for any pane with no live shell, and a bare .catch that threw the
+        // reason away. Pressing this on an editor or fleet tab did nothing at
+        // all, silently.
+        const failed = (why: string) =>
+          window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why } }));
+        if (!activeTab) return failed("No active tab to initialize.");
+        import("../hooks/useTerminal").then(({ getPtyCwd }) =>
+          getPtyCwd(activeTab.activePaneId).then(async (cwd) => {
+            if (!cwd) return failed("This tab has no folder. Open a terminal in the project first.");
+            const { invoke } = await import("@tauri-apps/api/core");
+            await invoke("scaffold_bmad", { path: cwd });
+          }),
+        ).catch((err) => failed(`BMAD setup failed: ${err}`));
       }},
       { id: "bmad-toggle", label: "BMAD: Toggle panel", category: "BMAD", action: () => { window.dispatchEvent(new CustomEvent("toggle-bmad")); onClose(); } },
       { id: "tab-switcher", label: "Tabs: Go to tab", shortcut: L("tabSwitcher"), category: "Tabs", action: () => { onClose(); window.dispatchEvent(new CustomEvent("toggle-tab-switcher")); } },

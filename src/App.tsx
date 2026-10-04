@@ -244,7 +244,11 @@ export default function App() {
       void invoke<{ root: string } | null>("contracts_detect", { path: cwd }).then((p) => {
         if (p) useTabStore.getState().addContractsTab(p.root);
         else window.dispatchEvent(new CustomEvent("agent-notification", { detail: { title: "Contracts", body: "No Foundry, Hardhat or Anchor project in this terminal's folder." } }));
-      }).catch(() => {});
+      }).catch((err) => window.dispatchEvent(new CustomEvent("agent-notification", {
+        // Without this the command looked like a no-op: the "no project here"
+        // branch notifies, but a thrown detect said nothing at all.
+        detail: { title: "Contracts", body: `Could not inspect this folder: ${err}` },
+      })));
     };
     window.addEventListener("contracts-workbench", onWorkbench);
     return () => {

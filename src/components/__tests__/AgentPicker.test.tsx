@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import AgentPicker from "../AgentPicker";
 import { useTabStore } from "../../stores/tabStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -158,17 +158,22 @@ describe("AgentPicker", () => {
     expect(tauri.ptyWrites[0].text.includes(tauri.fileWrites[0].path)).toBe(true);
   });
 
-  it("offers every role as a bare launch, including the three no curated pair covers", async () => {
+  it("offers every role as a bare launch, including those no curated pair covers", async () => {
     await renderPicker();
     fireEvent.click(pill("Roles"));
 
-    // These three are attached to no curated pair. Before the Roles group they
+    // These are attached to no curated pair. Before the Roles group they
     // could not be launched by any means once BmadPanel's buttons were removed.
     expect(screen.getByText("Product Manager")).toBeTruthy();
     expect(screen.getByText("Product Owner")).toBeTruthy();
     expect(screen.getByText("Scrum Master")).toBeTruthy();
-    // 13 roles, one row each.
-    expect(screen.getByText(/^13 agents/)).toBeTruthy();
+    // The company roles added for end-to-end coverage are bare too.
+    expect(screen.getByText("Release Manager")).toBeTruthy();
+    expect(screen.getByText("Engineering Manager")).toBeTruthy();
+    expect(screen.getByText("Support Engineer")).toBeTruthy();
+    expect(screen.getByText("Solutions Engineer")).toBeTruthy();
+    // 19 roles, one row each.
+    expect(screen.getByText(/^19 agents/)).toBeTruthy();
   });
 
   it("launches a bare role with no domain", async () => {
@@ -205,13 +210,17 @@ describe("AgentPicker", () => {
       await flush();
     });
     await clickRow("Auth Architect");
-    expect(screen.queryByRole("alert")).toBeTruthy();
+    // waitFor, not a bare assertion: the launch awaits ensureRoleDir() and then
+    // write_text_file, and the helper's flush() drains a single macrotask tick.
+    // That is enough when the machine is idle and not when the suite runs in
+    // parallel, which made this the one test that reddened CI at random.
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeTruthy());
 
     await act(async () => {
       fireEvent.click(screen.getByText("Claude"));
       await flush();
     });
     await clickRow("Auth Architect");
-    expect(screen.queryByRole("alert")).toBe(null);
+    await waitFor(() => expect(screen.queryByRole("alert")).toBe(null));
   });
 });

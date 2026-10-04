@@ -27,7 +27,29 @@ export function rolePrompt(agent: CatalogAgent): string {
   const role = getRole(agent.roleId);
   if (!role) throw new Error(`Unknown role "${agent.roleId}" for ${agent.id}`);
   const domain = agent.domainId ? getDomain(agent.domainId) : undefined;
-  return composeRoleMarkdown(role, domain).trim();
+  return withoutProjectSections(composeRoleMarkdown(role, domain)).trim();
+}
+
+/**
+ * Drop the sections that only make sense inside an ADE project.
+ *
+ * A definition tells its role to prefer `/BMad:tasks:apply-qa-fixes` and to
+ * read `.ade/knowledge/<role>.md`. Both are true in a project ADE set up, where
+ * BMAD is installed and the knowledge store exists. The plugin is installed
+ * from the marketplace by people who may never have run ADE and have neither,
+ * and pointing them at a command and a file that do not exist is worse than
+ * saying nothing: it reads as a capability they are failing to find.
+ */
+const PROJECT_SECTIONS = ["## BMAD tasks", "## Project knowledge"];
+
+function withoutProjectSections(body: string): string {
+  return PROJECT_SECTIONS.reduce((acc, heading) => {
+    const start = acc.indexOf(heading);
+    if (start < 0) return acc;
+    const rest = acc.slice(start + 1);
+    const next = rest.search(/^## /m);
+    return next < 0 ? acc.slice(0, start) : acc.slice(0, start) + rest.slice(next);
+  }, body);
 }
 
 const yaml = (s: string) => JSON.stringify(s);
