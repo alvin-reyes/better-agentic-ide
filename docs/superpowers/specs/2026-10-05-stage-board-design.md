@@ -105,6 +105,30 @@ workflow steps to bucket, so its steps are ADE's own.
 This matters because hardcoding five stages would drift from BMAD the moment a
 workflow changes, which is the failure this whole design exists to avoid.
 
+### The workflow ships its own diagram, and that diagram is the board
+
+Each workflow file carries a `flow_diagram` — a complete mermaid graph of the
+real sequence, including the decision branches (`Architecture suggests PRD
+changes?`, `QA found issues?`), the SM → Dev → QA loop, and the optional steps
+as dashed edges.
+
+The board **renders that graph and marks where the project actually is**,
+derived from which artifacts resolve on disk. It does not draw a picture of its
+own. Three consequences, all of them the point:
+
+- **The picture cannot lie about the method**, because it *is* the method's own
+  file. If BMAD changes the workflow, the board changes with it.
+- **The branches are visible.** A linear five-step rail would hide that the
+  workflow genuinely loops and genuinely forks; the shipped graph does not.
+- **Optional steps look optional.** `brainstorming`, `market research`,
+  `technical research` and the v0 prompt are dashed in the source and stay
+  dashed on the board, so skipping one is a visible choice rather than an
+  invisible omission.
+
+The five stages become a **coarse overlay** on that graph — a reading aid for
+"where are we", not a second model of the work. Where the two disagree, the
+workflow file wins.
+
 ### Two namespaces have to be mapped
 
 BMAD workflows name agents `analyst`, `pm`, `ux-expert`, `architect`, `po`,
