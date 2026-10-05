@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildLanes,
   groupLanesByProject,
+  groupLanesByRole,
   type FleetLane,
   type PaneMeta,
   type SubagentRecord,
@@ -103,5 +104,45 @@ describe("groupLanesByProject", () => {
   it("has no bucket for closed terminals, because a folder does not close", () => {
     const groups = groupLanesByProject([lane({ id: "a", cwd: "/repo/api", tabId: null })]);
     expect(groups.map((g) => g.name)).toEqual(["api"]);
+  });
+});
+
+
+describe("groupLanesByRole", () => {
+  it("groups by role, using the role's title as the name", () => {
+    const groups = groupLanesByRole([
+      lane({ id: "a", roleId: "developer", costCents: 100 }),
+      lane({ id: "b", roleId: "qa", costCents: 20 }),
+      lane({ id: "c", roleId: "developer", costCents: 5, status: "completed" }),
+    ]);
+    expect(groups.map((g) => g.name)).toEqual(["Developer", "QA"]);
+    expect(groups[0].costCents).toBe(105);
+    expect(groups[0].runningCount).toBe(1);
+  });
+
+  it("gathers lanes with no role into one trailing group", () => {
+    const groups = groupLanesByRole([
+      lane({ id: "a", roleId: null, costCents: 7 }),
+      lane({ id: "b", roleId: "qa" }),
+    ]);
+    expect(groups.map((g) => g.key)).toEqual(["qa", null]);
+    expect(groups[1].costCents).toBe(7);
+  });
+
+  it("falls back to the id when a role is not in the catalog", () => {
+    // A vendored role could be removed while sessions referencing it remain.
+    const groups = groupLanesByRole([lane({ id: "a", roleId: "retired-role" })]);
+    expect(groups[0].name).toBe("retired-role");
+  });
+});
+
+describe("every grouping returns the same shape", () => {
+  it("so one component can render all of them", () => {
+    const ls = [lane({ id: "a", cwd: "/repo/api", roleId: "qa", costCents: 10 })];
+    for (const g of [...groupLanesByProject(ls), ...groupLanesByRole(ls)]) {
+      expect(Object.keys(g).sort()).toEqual(
+        ["costCents", "detail", "key", "lanes", "name", "runningCount"],
+      );
+    }
   });
 });

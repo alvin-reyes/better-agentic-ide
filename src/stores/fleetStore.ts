@@ -89,6 +89,11 @@ function agentLaneId(s: AgentSession): string {
   return `agent:${s.paneId}:${s.startTime}`;
 }
 
+/** A sub-agent's type is a role id when it names one, and nothing when it does not. */
+function roleIdOf(agentType: string): string | null {
+  return ROLES.some((r) => r.id === agentType) ? agentType : null;
+}
+
 /**
  * Merge agent sessions and sub-agent records into a flat, time-sorted lane list.
  *
@@ -97,11 +102,6 @@ function agentLaneId(s: AgentSession): string {
  * directory the parent is genuinely unknown — we leave it unattached rather
  * than guess.
  */
-/** A sub-agent's type is a role id when it names one, and nothing when it does not. */
-function roleIdOf(agentType: string): string | null {
-  return ROLES.some((r) => r.id === agentType) ? agentType : null;
-}
-
 export function buildLanes(
   sessions: AgentSession[],
   subagents: SubagentRecord[],
@@ -203,6 +203,15 @@ export function withUsage(lanes: FleetLane[], sessionsByCwd: Record<string, Sess
 /** Which terminals a fleet view covers. */
 export type FleetScope = "active" | "all";
 
+/**
+ * How lanes are bucketed in the all-terminals view.
+ *
+ * Project is the default: a folder outlives the window the work ran in, which a
+ * terminal tab does not. Terminal remains available because it is occasionally
+ * what you want after splitting panes - it is simply no longer the default.
+ */
+export type FleetGrouping = "project" | "role" | "terminal";
+
 /** A terminal tab with the fleet lanes that belong to it. */
 export interface FleetGroup {
   /** null for the catch-all group of lanes whose terminal is gone. */
@@ -266,6 +275,8 @@ interface FleetStore {
   subagents: SubagentRecord[];
   scope: FleetScope;
   setScope: (scope: FleetScope) => void;
+  grouping: FleetGrouping;
+  setGrouping: (grouping: FleetGrouping) => void;
   applyEvent: (ev: SubagentEvent, cwd: string) => void;
   /** Drop the records of one watched folder once nothing watches it. */
   removeCwd: (cwd: string) => void;
@@ -282,6 +293,8 @@ export const useFleetStore = create<FleetStore>((set) => ({
   subagents: [],
   scope: "active",
   setScope: (scope) => set({ scope }),
+  grouping: "project",
+  setGrouping: (grouping) => set({ grouping }),
   applyEvent: (ev, cwd) =>
     set((state) => {
       if (ev.kind === "Spawn") {
@@ -316,14 +329,54 @@ export const useFleetStore = create<FleetStore>((set) => ({
 }));
 
 
-/** Lanes that ran in one project folder. */
-export interface ProjectGroup {
-  /** The folder, or null for lanes whose folder could not be determined. */
+/**
+ * Lanes bucketed by something that outlives a window.
+ *
+ * One shape for every grouping, so the view renders them identically and a new
+ * way to bucket lanes needs no component change.
+ */
+export interface LaneGroup {
+  /** The folder or role id; null for lanes that could not be attributed. */
   key: string | null;
   name: string;
+  /** Secondary line, e.g. the full path behind a folder's basename. */
+  detail: string;
   lanes: FleetLane[];
   runningCount: number;
   costCents: number;
+}
+
+function bucket(
+  lanes: FleetLane[],
+  keyOf: (l: FleetLane) => string | null,
+  nameOf: (key: string) => string,
+  detailOf: (key: string) => string,
+  unattributedName: string,
+): LaneGroup[] {
+  const byKey = new Map<string, LaneGroup>();
+  const unattributed: LaneGroup = {
+    key: null, name: unattributedName, detail: "", lanes: [], runningCount: 0, costCents: 0,
+  };
+
+  for (const lane of lanes) {
+    const key = keyOf(lane);
+    let group: LaneGroup;
+    if (key) {
+      group = byKey.get(key) ?? {
+        key, name: nameOf(key), detail: detailOf(key), lanes: [], runningCount: 0, costCents: 0,
+      };
+      byKey.set(key, group);
+    } else {
+      group = unattributed;
+    }
+    group.lanes.push(lane);
+    if (lane.status === "running") group.runningCount += 1;
+    group.costCents += lane.costCents ?? 0;
+  }
+
+  const groups = [...byKey.values()];
+  // The unattributed bucket trails the real ones: it is a remainder, not a peer.
+  return unattributed.lanes.length > 0 ? [...groups, unattributed] : groups;
 }
 
 /**
@@ -338,29 +391,29 @@ export interface ProjectGroup {
  * lanes go to a single trailing group rather than being dropped: showing cost
  * that cannot be attributed is better than losing it.
  */
-export function groupLanesByProject(lanes: FleetLane[]): ProjectGroup[] {
-  const byKey = new Map<string, ProjectGroup>();
-  const unattributed: ProjectGroup = {
-    key: null, name: "Unknown project", lanes: [], runningCount: 0, costCents: 0,
-  };
+export function groupLanesByProject(lanes: FleetLane[]): LaneGroup[] {
+  return bucket(
+    lanes,
+    (l) => l.cwd,
+    (cwd) => cwd.slice(cwd.lastIndexOf("/") + 1) || cwd,
+    (cwd) => cwd,
+    "Unknown project",
+  );
+}
 
-  for (const lane of lanes) {
-    let group: ProjectGroup;
-    if (lane.cwd) {
-      group = byKey.get(lane.cwd) ?? {
-        key: lane.cwd,
-        name: lane.cwd.slice(lane.cwd.lastIndexOf("/") + 1) || lane.cwd,
-        lanes: [], runningCount: 0, costCents: 0,
-      };
-      byKey.set(lane.cwd, group);
-    } else {
-      group = unattributed;
-    }
-    group.lanes.push(lane);
-    if (lane.status === "running") group.runningCount += 1;
-    group.costCents += lane.costCents ?? 0;
-  }
-
-  const groups = [...byKey.values()];
-  return unattributed.lanes.length > 0 ? [...groups, unattributed] : groups;
+/**
+ * Split lanes by which role ran them.
+ *
+ * Answers "what is QA costing me", which no grouping by window can. A lane with
+ * no role - a pre-roles session, or a sub-agent whose type is not one of the
+ * nineteen - is gathered rather than guessed at.
+ */
+export function groupLanesByRole(lanes: FleetLane[]): LaneGroup[] {
+  return bucket(
+    lanes,
+    (l) => l.roleId,
+    (id) => ROLES.find((r) => r.id === id)?.title ?? id,
+    () => "",
+    "No role recorded",
+  );
 }

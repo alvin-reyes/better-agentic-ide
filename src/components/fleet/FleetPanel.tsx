@@ -3,6 +3,7 @@ import FleetTimeline from "./FleetTimeline";
 import FleetSummary from "./FleetSummary";
 import FleetGroups from "./FleetGroups";
 import FleetScopeToggle from "./FleetScopeToggle";
+import FleetGroupingToggle from "./FleetGroupingToggle";
 import { useFleetData } from "../../hooks/useFleetData";
 import { useFleetStore } from "../../stores/fleetStore";
 
@@ -48,6 +49,7 @@ export default function FleetPanel({ activeCwd, onClose, onExpand }: FleetPanelP
               Fleet{activeCwd || scope === "all" ? "" : " (no active terminal)"}
             </span>
             <FleetScopeToggle />
+            {scope === "all" && <FleetGroupingToggle />}
           </div>
           {/* Both buttons live in one flex box so the header's space-between puts
               the title left and the controls right, instead of centring "↗". */}
