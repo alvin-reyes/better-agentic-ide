@@ -6,8 +6,8 @@ description: >-
   ADE is the desktop IDE built around Claude Code: run it alongside Codex, Gemini
   and local models, give every project a methodology and a team of agents, and see
   what each one actually costs.
-url: https://alvin-reyes.github.io
-baseurl: /better-agentic-ide
+url: https://ade.ardata.tech
+baseurl: ""
 # Installers are still published as GitHub Releases, so download links use this.
 repo: https://github.com/alvin-reyes/better-agentic-ide
 

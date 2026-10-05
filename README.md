@@ -16,9 +16,9 @@
 </p>
 
 <p align="center">
-  <a href="https://alvin-reyes.github.io/better-agentic-ide/"><strong>Website</strong></a> ·
+  <a href="https://ade.ardata.tech/"><strong>Website</strong></a> ·
   <a href="https://github.com/alvin-reyes/better-agentic-ide"><strong>Source</strong></a> ·
-  <a href="https://alvin-reyes.github.io/better-agentic-ide/guide/"><strong>User guide</strong></a> ·
+  <a href="https://ade.ardata.tech/guide/"><strong>User guide</strong></a> ·
   <a href="https://github.com/alvin-reyes/better-agentic-ide/releases/latest"><strong>Download</strong></a>
 </p>
 
@@ -55,7 +55,7 @@ Every project ADE opens (New project, Open project, or any git repo a terminal e
 - **A knowledge store the agents write to**: `.ade/knowledge/<role>.md`, committed with your repo. A role records what it learned here (a flaky suite to serialise, a build step with a hidden prerequisite) and reads it back next run instead of rediscovering it. An update never touches it.
 - **Agents for your stack**, detected from the project: Solidity and audit agents for Foundry or Hardhat, Anchor and Rust agents for Solana, a senior Go engineer for `go.mod`, a senior Rust engineer for `Cargo.toml`.
 
-Only missing files are written, and the toast that lists them has Undo. Add or remove agents any time in *Integrations → Agents*; turn automatic setup off in *Settings → Terminal*. See the [project setup guide](https://alvin-reyes.github.io/better-agentic-ide/guide/project-setup/).
+Only missing files are written, and the toast that lists them has Undo. Add or remove agents any time in *Integrations → Agents*; turn automatic setup off in *Settings → Terminal*. See the [project setup guide](https://ade.ardata.tech/guide/project-setup/).
 
 ## Blockchain Engineering Tooling
 
@@ -86,7 +86,7 @@ brew install --cask alvin-reyes/tap/ade
 
 **Installers**: download from the [latest release](https://github.com/alvin-reyes/better-agentic-ide/releases/latest): `.dmg` for macOS (Apple Silicon and Intel) and `.deb` or `.AppImage` for Linux.
 
-ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, Gemini CLI and Ollama. See the [user guide](https://alvin-reyes.github.io/better-agentic-ide/guide/) to get started.
+ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, Gemini CLI and Ollama. See the [user guide](https://ade.ardata.tech/guide/) to get started.
 
 ## Licence
 
@@ -98,10 +98,10 @@ Issues and pull requests are welcome, on the app and on [ade-setup](https://gith
 
 ADE is the tool behind [ardata.tech](https://ardata.tech)'s projects. The agent fleet, the methodology and the contract tooling exist because client work needed them, not as a demo. It is also the tool used in [ardata academy](https://ardata.academy)'s AI training, the same setup in every lesson.
 
-More on the [website](https://alvin-reyes.github.io/better-agentic-ide/#built-with).
+More on the [website](https://ade.ardata.tech/#built-with).
 
 ## Support
 
-For help, licensing and team purchases, get in touch via the [website](https://alvin-reyes.github.io/better-agentic-ide/). The [troubleshooting guide](https://alvin-reyes.github.io/better-agentic-ide/guide/troubleshooting/) covers common issues.
+For help, licensing and team purchases, get in touch via the [website](https://ade.ardata.tech/). The [troubleshooting guide](https://ade.ardata.tech/guide/troubleshooting/) covers common issues.
 
 © 2025–2026 Alvin Reyes · [MIT](LICENSE)
