@@ -50,11 +50,25 @@ Describe the problem in the picker's search box ("tokenomics for a governance to
 
 Claude Code agents spawn sub-agents (Explore, Plan, code reviewers) that normally run out of sight. ADE reads Claude Code's transcripts and shows each one as it starts and finishes.
 
-- {% include key.html mac="⌘." other="Ctrl+Shift+." %} opens the fleet panel for the active terminal. Switch to **All terminals** to see every terminal at once, each with its folder, running count and cost; *Go to tab* jumps there.
+- {% include key.html mac="⌘." other="Ctrl+Shift+." %} opens the fleet panel for the active terminal. Switch to **All terminals** to see every terminal at once.
 - *Fleet: All terminals* in the command palette opens the same view as a full tab.
 - The **timeline** shows swimlanes. In the fleet *tab* you choose the last 5 minutes, 15 minutes, hour or all time; the panel always shows the last 15 minutes. Click an agent to jump to its pane.
-- Seeing nothing? Agents are filed under the folder Claude Code was started in, so a terminal sitting somewhere else has none of its own, the empty timeline names the folder it is watching. Older runs need the tab's **all** range; anything past 15 minutes is outside the panel's window.
+
+### Grouping
+
+Across all terminals, the same lanes can be bucketed three ways. The data is identical in each; only the bucket changes.
+
+| Group by | One group per | Useful for |
+|---|---|---|
+| **Project** (default) | folder the agents ran in | what a piece of work cost, when it spans several terminals |
+| **Role** | role that ran them | which roles are busy, and where the spend goes |
+| **Terminal** | terminal tab they started in | finding the window something is running in |
+
+A project's work outlives the terminal it started in, which is why Project is the default: closing a tab doesn't scatter its history. **Go to tab** is offered only under *Terminal*, since that is the only grouping whose key is a tab.
+
+- Seeing nothing? Agents are filed under the folder Claude Code was started in, so a terminal sitting somewhere else has none of its own; the empty timeline names the folder it is watching. Older runs need the tab's **all** range; anything past 15 minutes is outside the panel's window.
 - **Cost** is real: Claude agents' token usage comes from Claude Code's transcripts and is priced at API list prices (see [Tokens & cost]({{ '/guide/tokens/' | relative_url }})). If two agents run in the same folder at the same time, their usage can't be told apart and is left out. Codex, Gemini and Ollama sessions show no cost.
+- A group whose lanes carry **no** cost shows a dash, not `$0.00`. A role that only ever runs as a sub-agent spends inside its parent's session, and claiming it cost nothing would be a false statement about money.
 
 ![Fleet timeline with sub-agents]({{ '/assets/img/fleet.webp' | relative_url }})
 

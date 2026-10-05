@@ -45,8 +45,8 @@ body:
     attributes:
       label: How did you install it?
       options:
+        - The install script (install.sh / install.ps1)
         - A release download (.dmg / .AppImage / .deb)
-        - Homebrew
         - Built from source
     validations:
       required: true

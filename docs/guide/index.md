@@ -6,6 +6,38 @@ description: Install ADE on macOS or Linux and run your first AI coding agent.
 
 ## Install
 
+### macOS and Linux
+
+One command installs either:
+
+```bash
+curl -fsSL https://ade.ardata.tech/install.sh | bash
+```
+
+It picks the build for your machine, checks it against the release's
+`SHA256SUMS` where the release publishes them, and installs to a
+user-writable location without calling sudo. Run it again to upgrade.
+`--dry-run` resolves and verifies the download, then stops before
+installing anything.
+
+- **macOS**: copies the app to `/Applications` and clears the quarantine
+  flag, so the first launch isn't blocked. Set `ADE_PREFIX` to install
+  somewhere else.
+- **Linux**: puts the AppImage in `~/.local/bin`. `--dir PATH` changes
+  where, and `--deb` installs the `.deb` with dpkg instead. `--deb` is
+  the one path that needs root; the script says so before it asks.
+
+Pass options after `-s --` when piping: `curl -fsSL … | bash -s -- --deb`.
+
+Builds are not notarised by Apple yet. If you install the `.dmg` by hand
+and macOS says the app "is damaged", see
+[Troubleshooting]({{ '/guide/troubleshooting/' | relative_url }}#macos-says-the-app-is-damaged).
+
+Every build is also on the [download page]({{ '/#downloads' | relative_url }})
+and the [latest release]({{ site.repo }}/releases/latest): `aarch64` for
+Apple Silicon, `x64` for Intel Macs, `.deb` for Debian and Ubuntu, and a
+portable `.AppImage` for any distro.
+
 ### Windows
 
 ```powershell
@@ -14,31 +46,6 @@ irm https://ade.ardata.tech/install.ps1 | iex
 
 Windows builds are not published yet, so this reports that and stops. It is
 ready for when they are: see [issue #22](https://github.com/alvin-reyes/better-agentic-ide/issues/22).
-
-### macOS
-
-The quickest way is the install script:
-
-```bash
-curl -fsSL https://ade.ardata.tech/install.sh | bash
-```
-
-It picks the build for your machine, verifies it against the release's
-`SHA256SUMS`, copies it to `/Applications`, and clears the quarantine flag so
-macOS won't block the first launch. Run it again to upgrade. Add `--dry-run` to
-see what it would do without changing anything.
-
-You can also download the `.dmg` from the [latest release]({{ site.repo }}/releases/latest): `aarch64` for Apple Silicon, `x64` for Intel Macs. If macOS says the app "is damaged" after a manual install, see [Troubleshooting]({{ '/guide/troubleshooting/' | relative_url }}#macos-says-the-app-is-damaged).
-
-### Linux
-
-Download the `.deb` for Debian and Ubuntu, or the portable `.AppImage`, from the [latest release]({{ site.repo }}/releases/latest):
-
-```bash
-sudo apt install ./Better.Terminal_*_amd64.deb
-# or
-chmod +x Better.Terminal_*.AppImage && ./Better.Terminal_*.AppImage
-```
 
 ## Install an agent
 

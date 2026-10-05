@@ -12,7 +12,11 @@ Builds downloaded directly from GitHub aren't notarized yet, so macOS quarantine
 xattr -cr "/Applications/Better Terminal.app"
 ```
 
-Installing with Homebrew (`brew install --cask alvin-reyes/tap/ade`) does this for you.
+The [install script]({{ '/guide/' | relative_url }}#macos-and-linux) does this for you:
+
+```bash
+curl -fsSL https://ade.ardata.tech/install.sh | bash
+```
 
 ## A shortcut types into my shell instead (Linux)
 
