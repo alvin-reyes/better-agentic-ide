@@ -61,3 +61,25 @@ describe("usedDefaults means the paths did not come from a config", () => {
     expect(parseBmadConfig("prd:\n  prdSharded: no\n").prdSharded).toBe(false);
   });
 });
+
+describe("the same newline defect, in the config parser", () => {
+  it("does not let an empty key swallow the next line", () => {
+    const p = parseBmadConfig("prd:\n  prdFile:\n  prdSharded: false\n");
+    expect(p.prdFile).toBe("docs/prd.md");
+    expect(p.prdSharded).toBe(false);
+  });
+
+  it("keeps a # that is inside quotes", () => {
+    expect(parseBmadConfig('prd:\n  prdFile: "docs/a#b/prd.md"\n').prdFile).toBe("docs/a#b/prd.md");
+  });
+
+  it("falls back rather than guessing false for an unrecognised boolean", () => {
+    // prdSharded defaults to true; `maybe` is not false, it is unreadable.
+    expect(parseBmadConfig("prd:\n  prdSharded: maybe\n").prdSharded).toBe(true);
+  });
+
+  it("says it used defaults when the config names no path at all", () => {
+    // markdownExploder/slashPrefix exist in the vendored file but set no path.
+    expect(parseBmadConfig("markdownExploder: true\nslashPrefix: BMad\n").usedDefaults).toBe(true);
+  });
+});

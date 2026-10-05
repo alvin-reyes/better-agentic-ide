@@ -91,13 +91,17 @@ describe("a brownfield project, which has no brief at all", () => {
   // first stage forever, with no way past it.
   const brownfield = {
     ...empty,
-    artifactExists: (p: string) => ["docs/prd", "docs/architecture", "docs/reviews"].includes(p),
+    // No docs/reviews: none of the six bundled workflows creates it, so a real
+    // brownfield project does not have one.
+    artifactExists: (p: string) => ["docs/prd", "docs/architecture"].includes(p),
   };
 
   it("does not hold the project at Brainstorming when the later work exists", () => {
     const b = buildBoard(brownfield);
     expect(b.stages.find((s) => s.id === "brainstorming")!.complete).toBe(true);
-    expect(b.currentStage).toBe("execution");
+    // Audit is next and genuinely undone - that is honest, unlike being stuck
+    // at a stage whose artifact BMAD never produces.
+    expect(b.currentStage).toBe("audit");
   });
 
   it("still shows the brief itself as absent, rather than pretending", () => {
@@ -137,5 +141,65 @@ describe("gates that match no story", () => {
       gates: [{ file: "docs/qa/gates/1.1-a.yml", yaml: gateYaml("1.1", "PASS") }],
     });
     expect(b.unmatchedGates).toEqual([]);
+  });
+});
+
+describe("completion does not run ahead of the stages before it", () => {
+  it("does not complete Execution while Audit is undone", () => {
+    // Otherwise the rail shows Execution and Review green with currentStage
+    // pointing back at Audit, and canAdvance is true for a stage not displayed.
+    const b = buildBoard({
+      ...empty,
+      artifactExists: (p: string) => ["docs/prd", "docs/architecture"].includes(p),
+      stories: [{ file: "docs/stories/1.1.a.md", markdown: storyMd("1.1", "Done") }],
+      gates: [{ file: "docs/qa/gates/1.1-a.yml", yaml: gateYaml("1.1", "PASS") }],
+    });
+    expect(b.stages.find((s) => s.id === "audit")!.complete).toBe(false);
+    expect(b.stages.find((s) => s.id === "execution")!.complete).toBe(false);
+    expect(b.currentStage).toBe("audit");
+  });
+
+  it("completes Execution once every earlier stage is done", () => {
+    const b = buildBoard({
+      ...empty,
+      artifactExists: () => true,
+      stories: [{ file: "docs/stories/1.1.a.md", markdown: storyMd("1.1", "Done") }],
+      gates: [{ file: "docs/qa/gates/1.1-a.yml", yaml: gateYaml("1.1", "PASS") }],
+    });
+    expect(b.stages.find((s) => s.id === "execution")!.complete).toBe(true);
+    expect(b.currentStage).toBe("review");
+  });
+
+  it("every complete stage comes before every incomplete one", () => {
+    const b = buildBoard({
+      ...empty,
+      artifactExists: (p: string) => ["docs/prd", "docs/architecture"].includes(p),
+      stories: [{ file: "docs/stories/1.1.a.md", markdown: storyMd("1.1", "Done") }],
+      gates: [{ file: "docs/qa/gates/1.1-a.yml", yaml: gateYaml("1.1", "PASS") }],
+    });
+    const firstIncomplete = b.stages.findIndex((s) => !s.complete);
+    expect(b.stages.slice(firstIncomplete).some((s) => s.complete)).toBe(false);
+  });
+});
+
+describe("a gate replaced by a newer one is superseded, not unmatched", () => {
+  const two = {
+    ...empty,
+    artifactExists: () => true,
+    stories: [{ file: "docs/stories/2.1.a.md", markdown: storyMd("2.1", "Done") }],
+    gates: [
+      { file: "docs/qa/gates/2.1-old.yml", yaml: `story: "2.1"\ngate: PASS\nupdated: "2026-01-01T00:00:00Z"\n` },
+      { file: "docs/qa/gates/2.1-new.yml", yaml: `story: "2.1"\ngate: FAIL\nupdated: "2026-06-01T00:00:00Z"\n` },
+    ],
+  };
+
+  it("does not call it unmatched, since its story plainly exists", () => {
+    const b = buildBoard(two);
+    expect(b.unmatchedGates).toEqual([]);
+    expect(b.supersededGates.map((g) => g.file)).toEqual(["docs/qa/gates/2.1-old.yml"]);
+  });
+
+  it("still uses the newer verdict for the story", () => {
+    expect(buildBoard(two).stories[0].state).toBe("claimed");
   });
 });

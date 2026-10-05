@@ -42,13 +42,20 @@ export interface BoardState {
   stories: StoryView[];
   stages: Stage[];
   /**
-   * Gates whose story id matches no story file.
-   *
-   * A gate is otherwise reachable only through the story it belongs to, so an
-   * orphan — a renamed story, or an unsubstituted `{epic}.{story}` placeholder —
-   * would be parsed and silently discarded along with its error.
+   * Gates whose story id matches no story file: a renamed story, or an
+   * unsubstituted `{epic}.{story}` placeholder. A gate is otherwise reachable
+   * only through the story it belongs to, so these would be parsed and silently
+   * discarded along with their errors.
    */
   unmatchedGates: Gate[];
+  /**
+   * Gates for a story that has a newer gate. Kept apart from the unmatched ones
+   * because the conditions differ and so does the remedy: an orphan means no
+   * story has that id, while this one has been replaced. Calling a superseded
+   * gate "unmatched" would claim its story does not exist while it sits in the
+   * list above.
+   */
+  supersededGates: Gate[];
   /** The first incomplete stage. */
   currentStage: StageId;
   usedDefaults: boolean;
@@ -82,25 +89,35 @@ export function buildBoard(input: {
   const anyLaterEvidence = (from: number) =>
     STAGES.slice(from + 1).some((s) => s.evidence.length > 0 && s.evidence.every(present));
 
-  const stages: Stage[] = STAGES.map((s, i) => ({
-    ...s,
-    complete:
+  /**
+   * Completion is monotonic: a stage cannot be complete while an earlier one is
+   * not. Judged independently, Execution went green on a project whose Audit was
+   * undone, so the rail showed finished work behind a currentStage pointing back
+   * at an earlier stage, and offered an advance from a stage it was not showing.
+   */
+  const stages: Stage[] = [];
+  for (const [i, s] of STAGES.entries()) {
+    const ownEvidence =
       s.id === "execution" || s.id === "review"
         ? done
         : (s.evidence.length > 0 && s.evidence.every(present)) ||
           // An optional stage is passed once the work after it has started: its
           // artifact is still reported absent, so skipping stays visible.
-          (s.optional && anyLaterEvidence(i)),
-  }));
+          (s.optional && anyLaterEvidence(i));
+    stages.push({ ...s, complete: ownEvidence && stages.every((p) => p.complete) });
+  }
 
-  const claimed = new Set(stories.map((v) => v.gate?.file).filter(Boolean));
+  const storyIds = new Set(stories.map((v) => v.story.id));
+  const cited = new Set(stories.map((v) => v.gate?.file).filter(Boolean));
+  const spare = gates.filter((g) => !cited.has(g.file));
 
   return {
     paths,
     artifacts,
     stories,
     stages,
-    unmatchedGates: gates.filter((g) => !claimed.has(g.file)),
+    unmatchedGates: spare.filter((g) => !storyIds.has(g.storyId)),
+    supersededGates: spare.filter((g) => storyIds.has(g.storyId)),
     currentStage: stages.find((s) => !s.complete)?.id ?? "review",
     usedDefaults: paths.usedDefaults,
   };

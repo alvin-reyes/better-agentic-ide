@@ -51,7 +51,14 @@ describe("workflow agent names map to ADE roles", () => {
     expect(unmapped, `unmapped workflow agents: ${unmapped.join(", ")}`).toEqual([]);
   });
 
-  it("checks more than one workflow, so a rename anywhere is caught", () => {
-    expect(files.length).toBeGreaterThanOrEqual(6);
+  it("the sweep above is not vacuous", () => {
+    // Asserting files.length only exercised readdirSync: it passed with
+    // bmadWorkflow.ts deleted. Assert what the sweep actually collected.
+    const all = new Set<string>();
+    for (const f of files) {
+      for (const a of workflowAgents(readFileSync(resolve(DIR, f), "utf8"))) all.add(a);
+    }
+    expect(all.size).toBeGreaterThanOrEqual(8);
+    expect([...all]).toEqual(expect.arrayContaining(["pm", "po", "sm", "ux-expert", "dev", "qa"]));
   });
 });

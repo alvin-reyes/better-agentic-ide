@@ -102,3 +102,72 @@ describe("gateFor with more than one gate for a story", () => {
     expect(gateFor("2.1", [newer, older])?.verdict).toBe("FAIL");
   });
 });
+
+describe("a key with an empty value", () => {
+  // `\s*` matches a newline, so `^key:\s*(.*)$` ran past the line end and
+  // captured the FOLLOWING line as the value.
+  it("does not swallow the next line as its value", () => {
+    expect(parseGate("g.yml", 'gate: PASS\nstatus_reason:\nreviewer: "Quinn"\n').reason).toBe("");
+    expect(parseGate("docs/qa/gates/4.2-x.yml", "story:\ngate: PASS\n").storyId).toBe("4.2");
+  });
+
+  it("reports an empty gate as missing, not as a bogus verdict", () => {
+    const g = parseGate("g.yml", 'gate:\nstatus_reason: "no decision yet"\n');
+    expect(g.verdict).toBeNull();
+    expect(g.error).not.toContain("status_reason");
+  });
+
+  it("falls back to the filename for an explicitly empty story id", () => {
+    expect(parseGate("docs/qa/gates/5.3-x.yml", 'story: ""\ngate: PASS\n').storyId).toBe("5.3");
+  });
+});
+
+describe("gateFor when timestamps cannot order the gates", () => {
+  const mk = (file: string, v: string, updated = "") =>
+    parseGate(file, `story: "2.1"\ngate: ${v}\n${updated ? `updated: "${updated}"\n` : ""}`);
+
+  it("does not let a stale PASS beat a current FAIL that has no timestamp", () => {
+    // Treating a missing timestamp as oldest makes the dangerous direction the
+    // default: believing a PASS is the failure that matters.
+    const fresh = mk("fresh.yml", "FAIL");
+    const stale = mk("stale.yml", "PASS", "2026-01-01T00:00:00Z");
+    expect(gateFor("2.1", [fresh, stale])?.verdict).toBe("FAIL");
+    expect(gateFor("2.1", [stale, fresh])?.verdict).toBe("FAIL");
+  });
+
+  it("is deterministic when neither carries a timestamp", () => {
+    const a = mk("a.yml", "PASS");
+    const b = mk("b.yml", "FAIL");
+    expect(gateFor("2.1", [a, b])?.verdict).toBe("FAIL");
+    expect(gateFor("2.1", [b, a])?.verdict).toBe("FAIL");
+  });
+
+  it("still prefers the newer when both are timestamped", () => {
+    const old = mk("old.yml", "FAIL", "2026-01-01T00:00:00Z");
+    const neu = mk("new.yml", "PASS", "2026-06-01T00:00:00Z");
+    expect(gateFor("2.1", [old, neu])?.verdict).toBe("PASS");
+  });
+});
+
+describe("the waiver scan stays inside the waiver block", () => {
+  it("is not triggered by an example elsewhere in the file", () => {
+    // qa-gate-tmpl.yaml ships a `when_waived: |` example containing an active
+    // waiver. A lazy scan to any later `active: true` matches it.
+    const yaml = `gate: "PASS" # PASS|CONCERNS|FAIL|WAIVED
+waiver:
+  active: false
+examples:
+  when_waived: |
+    waiver:
+      active: true
+      reason: "Accepted for MVP release"
+`;
+    const g = parseGate("g.yml", yaml);
+    expect(g.verdict).toBe("PASS");
+    expect(g.waived).toBe(false);
+  });
+
+  it("still sees a real block waiver", () => {
+    expect(parseGate("g.yml", "gate: WAIVED\nwaiver:\n  active: true\n  reason: 'MVP'\n").waived).toBe(true);
+  });
+});

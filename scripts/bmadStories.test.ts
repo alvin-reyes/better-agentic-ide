@@ -125,3 +125,45 @@ Vitest, under scripts/.
     expect(s.acceptanceCriteria.some((c) => c.includes("deeper heading"))).toBe(false);
   });
 });
+
+describe("a fenced code block inside a section", () => {
+  const withFence = `# Story 3.1: Retry policy
+
+## Status
+
+Draft
+
+## Acceptance Criteria
+
+1. First.
+
+\`\`\`sh
+# npm test -- retry
+\`\`\`
+
+2. Second.
+
+## Dev Notes
+
+Anything.
+`;
+
+  it("does not end the section at a # inside the fence", () => {
+    // ^#{1,6} matches a shell comment, so the section stopped early and the
+    // criteria after the block were silently dropped.
+    const s = parseStory("docs/stories/3.1.retry.md", withFence);
+    expect(s.acceptanceCriteria).toContain("First.");
+    expect(s.acceptanceCriteria).toContain("Second.");
+  });
+
+  it("does not turn the fence markers into criteria", () => {
+    const s = parseStory("a.md", withFence);
+    expect(s.acceptanceCriteria.some((c) => c.startsWith("```"))).toBe(false);
+    expect(s.acceptanceCriteria.some((c) => c.includes("npm test"))).toBe(false);
+  });
+
+  it("reads a checkbox task as its text, not as a checkbox", () => {
+    const s = parseStory("a.md", "## Acceptance Criteria\n\n- [ ] Retries three times\n");
+    expect(s.acceptanceCriteria).toEqual(["Retries three times"]);
+  });
+});

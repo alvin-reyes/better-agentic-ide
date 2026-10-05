@@ -35,31 +35,66 @@ export const BMAD_DEFAULTS: BmadPaths = {
   usedDefaults: false,
 };
 
-/** `key: value` at any indentation, ignoring comments and quotes. */
+/**
+ * `key: value` at any indentation.
+ *
+ * The comment is stripped after the quotes are located, not before: a path may
+ * legitimately contain `#`, and cutting at the first one turned
+ * `"docs/a#b/prd.md"` into `docs/a`. Same ordering defect as the gate parser.
+ */
 function scalars(yaml: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const raw of yaml.split("\n")) {
-    const line = raw.replace(/#.*$/, "");
-    const m = /^(\s*)([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    // [^\S\n] rather than \s: the latter matches the line break, so a key with
+    // no value captured the following line.
+    const m = /^(\s*)([A-Za-z_][\w-]*):[^\S\n]*(.*)$/.exec(raw);
     if (!m) continue;
-    const value = m[3].trim().replace(/^["']|["']$/g, "");
+
+    let value = m[3];
+    let quote: string | null = null;
+    for (let i = 0; i < value.length; i++) {
+      const c = value[i];
+      if (quote) {
+        if (c === quote) quote = null;
+      } else if (c === '"' || c === "'") {
+        quote = c;
+      } else if (c === "#") {
+        value = value.slice(0, i);
+        break;
+      }
+    }
+    value = value.trim().replace(/^(["'])(.*)\1$/, "$2");
     if (value) out.set(m[2], value);
   }
   return out;
 }
 
+/** The keys that actually name a path, for deciding whether a config said anything. */
+const PATH_KEYS = [
+  "qaLocation", "prdFile", "prdSharded", "prdShardedLocation",
+  "architectureFile", "architectureSharded", "architectureShardedLocation",
+  "devStoryLocation",
+];
+
 export function parseBmadConfig(yaml: string | null): BmadPaths {
   if (yaml === null) return { ...BMAD_DEFAULTS, usedDefaults: true };
   const s = scalars(yaml);
-  // An empty or comment-only file supplies nothing. Saying the paths came from
-  // a config when none of them did sends anyone debugging to the wrong file.
-  if (s.size === 0) return { ...BMAD_DEFAULTS, usedDefaults: true };
+  // A file that sets no path supplies nothing this cares about - the vendored
+  // config also carries markdownExploder, slashPrefix and devDebugLog. Claiming
+  // the paths came from a config when none of them did sends anyone debugging
+  // to the wrong file.
+  if (!PATH_KEYS.some((k) => s.has(k))) return { ...BMAD_DEFAULTS, usedDefaults: true };
   const str = (k: string, fallback: string) => s.get(k) ?? fallback;
   // YAML spells true as true/True/TRUE/yes/on; matching only the lowercase one
   // read `prdSharded: True` as false and looked for a PRD that is not there.
   const bool = (k: string, fallback: boolean) => {
     const v = s.get(k);
-    return v === undefined ? fallback : /^(true|yes|on)$/i.test(v);
+    if (v === undefined) return fallback;
+    if (/^(true|yes|on)$/i.test(v)) return true;
+    if (/^(false|no|off)$/i.test(v)) return false;
+    // Unreadable is not false: reading `prdSharded: maybe` as false sent the
+    // resolver looking for a single file that a sharded project does not have.
+    return fallback;
   };
   return {
     qaLocation: str("qaLocation", BMAD_DEFAULTS.qaLocation),

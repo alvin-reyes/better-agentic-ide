@@ -26,16 +26,45 @@ export interface Story {
   acceptanceCriteria: string[];
 }
 
+/**
+ * The body under a heading, up to the next heading.
+ *
+ * Fences are tracked because a `#` at the start of a line inside one is a shell
+ * comment, not a heading: ending the section there dropped every criterion
+ * after a code block and left the fence marker itself in the list.
+ */
 function section(md: string, heading: RegExp): string {
   const start = md.search(heading);
   if (start < 0) return "";
   const after = md.slice(start);
-  const rest = after.slice(after.indexOf("\n") + 1);
-  // Any heading ends the section. Capping at three let a #### inside Acceptance
-  // Criteria - which real Dev Notes and Testing sections carry - be read as a
-  // criterion.
-  const next = rest.search(/^#{1,6} /m);
-  return (next < 0 ? rest : rest.slice(0, next)).trim();
+  const lines = after.slice(after.indexOf("\n") + 1).split("\n");
+
+  const out: string[] = [];
+  let fence: string | null = null;
+  for (const line of lines) {
+    const open = /^\s*(```+|~~~+)/.exec(line);
+    if (fence) {
+      if (open && line.trim().startsWith(fence)) fence = null;
+      out.push(line);
+      continue;
+    }
+    if (open) {
+      fence = open[1];
+      out.push(line);
+      continue;
+    }
+    if (/^#{1,6} /.test(line)) break;
+    out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
+/** Strip a list marker and, if present, a task checkbox. */
+function itemText(line: string): string {
+  return line
+    .replace(/^\s*(?:[-*]|\d+\.)\s*/, "")
+    .replace(/^\[[ xX]\]\s*/, "")
+    .trim();
 }
 
 /** "2.4.refund-reversal.md" -> { id: "2.4", title: "Refund reversal" } */
@@ -54,9 +83,12 @@ export function parseStory(file: string, markdown: string): Story {
   const rawStatus = section(markdown, /^##\s+Status\s*$/m).split("\n")[0].trim();
   const matched = STORY_STATUSES.find((s) => s.toLowerCase() === rawStatus.toLowerCase());
 
-  const acceptanceCriteria = section(markdown, /^##\s+Acceptance Criteria\s*$/m)
+  // Fenced blocks are context for a criterion, not criteria themselves.
+  const criteriaBody = section(markdown, /^##\s+Acceptance Criteria\s*$/m);
+  const acceptanceCriteria = criteriaBody
+    .replace(/^\s*(```+|~~~+)[\s\S]*?^\s*\1.*$/gm, "")
     .split("\n")
-    .map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim())
+    .map(itemText)
     .filter(Boolean);
 
   return {
