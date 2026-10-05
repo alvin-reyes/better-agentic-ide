@@ -345,6 +345,9 @@ code { font-size: .9em; }
 .training h2 { font-size: clamp(26px, 3.2vw, 36px); line-height: 1.12; letter-spacing: -0.035em; margin: 14px 0 12px; text-wrap: balance; }
 .training p { margin: 0; color: var(--text-2); max-width: 600px; }
 .training .btn { flex: none; }
+/* Three of these stack in #built-with and `margin: 0 auto` left them butting
+   together. Only applies between siblings, so a lone panel is unaffected. */
+.training + .training { margin-top: 24px; }
 
 .checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 11px; }
 .checks li { position: relative; padding-left: 28px; color: var(--text-2); }
