@@ -13,7 +13,7 @@ description: ADE is the desktop IDE built around Claude Code, with Codex, Gemini
       <p class="sub">The terminal built around Claude Code, with Codex, Gemini and local models alongside it, and a methodology that decides when the work is actually done.</p>
       <div class="hero-cta">
         <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
-        <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">
+        <a class="btn btn-primary" href="#downloads" data-download="auto">
           <svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m0 0l-4-4m4 4l4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Download free <span class="ver" data-latest-version></span>
         </a>
@@ -197,6 +197,55 @@ llms.txt
   </div>
 </section>
 
+<section class="section" id="downloads">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Downloads</span>
+      <h2>Get ADE</h2>
+      <p>One command, or pick a build. The installer checks the download against the release's checksums and installs without sudo.</p>
+    </div>
+
+    <div class="dl-install">
+      <code id="install-cmd">curl -fsSL https://ade.ardata.tech/install.sh | bash</code>
+      <button class="btn btn-ghost btn-small" id="copy-install" type="button">Copy</button>
+    </div>
+    <p class="dl-note" id="install-note">macOS and Linux. On Windows, see below.</p>
+
+    <ul class="dl-grid" id="dl-grid" hidden>
+      <li data-dl="mac-arm">
+        <b>macOS</b><span>Apple Silicon</span>
+        <a class="btn btn-ghost btn-small" href="{{ site.download_url }}">.dmg</a>
+        <em></em>
+      </li>
+      <li data-dl="mac-intel">
+        <b>macOS</b><span>Intel</span>
+        <a class="btn btn-ghost btn-small" href="{{ site.download_url }}">.dmg</a>
+        <em></em>
+      </li>
+      <li data-dl="deb">
+        <b>Linux</b><span>Debian, Ubuntu</span>
+        <a class="btn btn-ghost btn-small" href="{{ site.download_url }}">.deb</a>
+        <em></em>
+      </li>
+      <li data-dl="appimage">
+        <b>Linux</b><span>AppImage, any distro</span>
+        <a class="btn btn-ghost btn-small" href="{{ site.download_url }}">.AppImage</a>
+        <em></em>
+      </li>
+      <li data-dl="windows" class="dl-soon">
+        <b>Windows</b><span>Not built yet</span>
+        <a class="btn btn-ghost btn-small" href="{{ site.repo }}/issues/22">Track it</a>
+        <em>&mdash;</em>
+      </li>
+    </ul>
+
+    <p class="dl-note">
+      Builds are not notarised by Apple yet, so the installer clears the quarantine flag and tells you it did.
+      Verify any download yourself against <a id="sums-link" href="{{ site.download_url }}">SHA256SUMS</a> on the release.
+    </p>
+  </div>
+</section>
+
 <section class="section tint" id="open-source">
   <div class="wrap">
     <div class="section-head">
@@ -219,7 +268,7 @@ llms.txt
           <li>macOS (Apple Silicon and Intel) and Linux</li>
           <li>Your keys and secrets stay in your OS keychain, never synced to us</li>
         </ul>
-        <a class="btn btn-primary" href="{{ site.download_url }}">Download ADE <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn btn-primary" href="#downloads">Download ADE <span class="arrow" aria-hidden="true">→</span></a>
       </article>
       <article class="price-card">
         <h3>The source</h3>
@@ -354,7 +403,7 @@ llms.txt
       <h2>Build your next product in ADE</h2>
       <p>Free and open source. Every feature, no account.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="{{ site.repo }}/releases/latest" data-download="auto">Download ADE</a>
+        <a class="btn btn-primary" href="#downloads">Download ADE</a>
         <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
       </div>
     </div>
@@ -384,5 +433,88 @@ llms.txt
         rows.forEach(function (r) { r.hidden = false; });
       })
       .catch(function () { /* leave them hidden */ });
+  })();
+</script>
+
+<script>
+  // Real download links, resolved from the release at load.
+  // Hardcoding asset URLs means they are wrong the next time a version ships;
+  // the grid stays hidden until the API answers, so a failed call shows the
+  // install command alone rather than dead links.
+  (function () {
+    var grid = document.getElementById("dl-grid");
+    if (!grid) return;
+
+    // Which asset each row wants, by filename suffix.
+    var WANT = {
+      "mac-arm": /aarch64\.dmg$/,
+      "mac-intel": /x64\.dmg$/,
+      "deb": /amd64\.deb$/,
+      "appimage": /amd64\.AppImage$/,
+    };
+
+    function mb(bytes) { return (bytes / 1048576).toFixed(0) + " MB"; }
+
+    // What this visitor is most likely to want. Platform detection from the UA
+    // is approximate: Apple Silicon is not reported, so a Mac is assumed to be
+    // Apple Silicon and the Intel build sits right beside it.
+    function guess() {
+      var p = navigator.platform || "";
+      var ua = navigator.userAgent || "";
+      if (/Win/i.test(p) || /Windows/i.test(ua)) return "windows";
+      if (/Mac/i.test(p) || /Mac OS X/i.test(ua)) {
+        return /Intel/i.test(ua) && !/ARM|Apple/i.test(ua) ? "mac-intel" : "mac-arm";
+      }
+      if (/Linux|X11/i.test(p) || /Linux/i.test(ua)) return "deb";
+      return null;
+    }
+
+    var mine = guess();
+    if (mine) {
+      var row = grid.querySelector('[data-dl="' + mine + '"]');
+      if (row) {
+        row.setAttribute("data-recommended", "");
+        grid.prepend(row);
+      }
+    }
+    if (mine === "windows") {
+      var note = document.getElementById("install-note");
+      if (note) note.textContent = "Windows builds are not available yet. macOS and Linux are.";
+    }
+
+    fetch("https://api.github.com/repos/alvin-reyes/better-agentic-ide/releases/latest")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (rel) {
+        var assets = rel.assets || [];
+        Object.keys(WANT).forEach(function (key) {
+          var asset = assets.filter(function (a) { return WANT[key].test(a.name); })[0];
+          var row = grid.querySelector('[data-dl="' + key + '"]');
+          if (!row || !asset) return;
+          var link = row.querySelector("a");
+          link.href = asset.browser_download_url;
+          link.setAttribute("download", "");
+          row.querySelector("em").textContent = mb(asset.size);
+        });
+
+        var sums = assets.filter(function (a) { return a.name === "SHA256SUMS"; })[0];
+        var sumsLink = document.getElementById("sums-link");
+        if (sums && sumsLink) sumsLink.href = sums.browser_download_url;
+
+        // Only now, when the links point somewhere real.
+        grid.hidden = false;
+      })
+      .catch(function () { /* leave the grid hidden; the install command still works */ });
+
+    var copy = document.getElementById("copy-install");
+    var cmd = document.getElementById("install-cmd");
+    if (copy && cmd && navigator.clipboard) {
+      copy.addEventListener("click", function () {
+        navigator.clipboard.writeText(cmd.textContent.trim()).then(function () {
+          var was = copy.textContent;
+          copy.textContent = "Copied";
+          setTimeout(function () { copy.textContent = was; }, 1600);
+        });
+      });
+    }
   })();
 </script>
