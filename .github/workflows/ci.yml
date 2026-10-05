@@ -106,6 +106,66 @@ jobs:
   # The PowerShell installer cannot be executed on a developer Mac: the only
   # PowerShell container images are amd64, and qemu crashes running them under
   # Rosetta. So a real Windows runner checks it instead of nobody checking it.
+  installer-linux:
+    name: Linux installer (shellcheck, real install)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shellcheck install.sh
+        run: shellcheck --severity=warning docs/install.sh
+
+      - name: Help and dry run
+        run: |
+          bash docs/install.sh --help | grep -q 'Install ADE' \
+            || { echo "::error::--help did not print usage"; exit 1; }
+          bash docs/install.sh --dry-run 2>&1 | tee /tmp/dry.txt
+          grep -q 'nothing was changed' /tmp/dry.txt \
+            || { echo "::error::--dry-run did not report that it changed nothing"; exit 1; }
+          test -e "$HOME/.local/bin/ade" \
+            && { echo "::error::--dry-run installed something"; exit 1; } || true
+
+      # The runner has sudo and is not root, which is the path a real user takes
+      # and the one the container tests cannot reach.
+      - name: Install the AppImage for real
+        run: |
+          bash docs/install.sh
+          BIN="$HOME/.local/bin/ade"
+          test -f "$BIN" || { echo "::error::no binary at $BIN"; exit 1; }
+          test -x "$BIN" || { echo "::error::$BIN is not executable"; exit 1; }
+          file -b "$BIN" | grep -q ELF || { echo "::error::$BIN is not an ELF binary"; exit 1; }
+          echo "installed $(stat -c%s "$BIN") bytes"
+
+      # Running it again must replace the install cleanly rather than append to
+      # it or fail on the existing file.
+      - name: Install again (upgrade path)
+        run: |
+          before=$(stat -c%s "$HOME/.local/bin/ade")
+          bash docs/install.sh
+          after=$(stat -c%s "$HOME/.local/bin/ade")
+          test "$before" = "$after" \
+            || { echo "::error::re-install changed the binary size ($before -> $after)"; exit 1; }
+          echo "re-install is idempotent"
+
+      - name: Install the .deb for real
+        run: |
+          bash docs/install.sh --deb
+          dpkg -s better-terminal >/dev/null \
+            || { echo "::error::better-terminal is not registered with dpkg"; exit 1; }
+          test -x /usr/bin/better-terminal \
+            || { echo "::error::/usr/bin/better-terminal missing or not executable"; exit 1; }
+          dpkg -s better-terminal | grep '^Version:'
+
+      - name: A version that does not exist fails cleanly
+        run: |
+          if bash docs/install.sh --version v0.0.0-nope --dry-run >/tmp/bad.txt 2>&1; then
+            echo "::error::a missing release should not exit 0"; exit 1
+          fi
+          cat /tmp/bad.txt
+          grep -qi 'no release\|not found\|404' /tmp/bad.txt \
+            || { echo "::error::error message does not say the release is missing"; exit 1; }
+
   installer-windows:
     name: Windows installer (parse, dry run)
     runs-on: windows-latest
