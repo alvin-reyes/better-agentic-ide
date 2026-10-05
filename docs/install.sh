@@ -11,6 +11,9 @@
 #   --dry-run          resolve and verify the download, then stop before installing
 #   --help             print this and exit
 #
+# Environment:
+#   ADE_PREFIX   macOS: install into this directory instead of /Applications
+#
 # It installs to a user-writable location and never calls sudo on its own. The
 # one exception is --deb, which cannot work without it, and which says so first.
 #
@@ -28,7 +31,7 @@ info() { printf "  %s\n" "$*"; }
 warn() { printf "  \033[33m%s\033[0m\n" "$*"; }
 die()  { printf "  \033[31m%s\033[0m\n" "$*" >&2; exit 1; }
 
-usage() { sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -78,7 +81,16 @@ else
   META_URL="$API/latest"
 fi
 
-META="$(curl -fsSL "$META_URL" 2>/dev/null)" || die "could not reach the GitHub release API"
+if ! META="$(curl -fsSL "$META_URL" 2>/dev/null)"; then
+  # A missing tag and an unreachable API both fail the same way, and telling
+  # someone the network is down when they simply typed a version that does not
+  # exist sends them looking in the wrong place. Ask for the latest release: if
+  # that answers, the API is fine and the tag is the problem.
+  if curl -fsSL "$API/latest" >/dev/null 2>&1; then
+    die "no release tagged ${VERSION:-latest}. See https://github.com/$REPO/releases"
+  fi
+  die "could not reach the GitHub release API. Check your connection, or download from https://github.com/$REPO/releases/latest"
+fi
 TAG="$(printf '%s' "$META" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 [ -n "$TAG" ] || die "no release found${VERSION:+ for $VERSION}"
 info "version:  $TAG"
@@ -143,8 +155,8 @@ case "$OS" in
     APP="$(find "$MOUNT" -maxdepth 1 -name '*.app' -print -quit)"
     [ -n "$APP" ] || die "no .app inside the disk image"
 
-    DEST="/Applications"
-    [ -w "$DEST" ] || DEST="$HOME/Applications"
+    DEST="${ADE_PREFIX:-/Applications}"
+    [ -n "${ADE_PREFIX:-}" ] || [ -w "$DEST" ] || DEST="$HOME/Applications"
     mkdir -p "$DEST"
     NAME="$(basename "$APP")"
 
