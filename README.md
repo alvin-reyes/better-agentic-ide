@@ -92,7 +92,7 @@ ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Co
 
 ADE is free and open source under the [MIT licence](LICENSE). Every feature, no account, no keys, no telemetry. Use it at work, fork it, ship your own build, no permission needed.
 
-Issues and pull requests are welcome, on the app and on [ade-setup](https://github.com/alvin-reyes/ade-setup), where the agent definitions live.
+Issues and pull requests are welcome, on the app and on [ade-setup](https://github.com/alvin-reyes/ade-setup), where the agent definitions live. [CONTRIBUTING.md](CONTRIBUTING.md) has the build steps, what CI checks, and a path in that needs no Rust: the nineteen roles are markdown.
 
 ## Used on real work
 
