@@ -35,7 +35,45 @@ that the stage actually happened.
 It invents no process. Every stage, role, artifact and status below already
 exists in the repo; this surfaces them and adds three gates.
 
-## The five stages
+## BMAD is the root
+
+Not a layer the board sits on top of. The structure below is BMAD's, taken
+from its own knowledge base, and everything else hangs off it.
+
+**The two-phase approach** is the top level, and ADE already encodes it as
+`BMAD_PHASES = ["Planning", "Dev cycle"]`. That constant is **promoted, not
+replaced**:
+
+- **Phase 1 — Planning.** Large-context document work: brief, PRD, UX spec,
+  architecture, then the PO validating all artifacts against its checklist.
+- **Phase 2 — Development.** Shard the documents, then run the loop.
+
+**The development loop** is BMAD's, verbatim:
+
+```
+1. SM Agent  → Creates next story from sharded docs
+2. You       → Review and approve story
+3. Dev Agent → Implements approved story
+4. QA Agent  → Reviews and refactors code
+5. You       → Verify completion
+6. Repeat until epic complete
+```
+
+### The gates are not additions
+
+Steps 2 and 5 of that loop are **already human steps in BMAD's own method**,
+and its knowledge base is explicit: *"Each status change requires user
+verification and approval before proceeding."*
+
+Today that is honour-system — nothing checks it, so nothing enforces it. The
+board does not invent the approve gate or the done gate. It makes two steps
+BMAD already specifies into things that actually happen, and refuses to show a
+story as Done when step 5 did not.
+
+This is the whole design in one sentence: **BMAD says a human approves and a
+human verifies; the board is where those two steps live.**
+
+## The five stages, as sub-arcs of the two phases
 
 | Stage | Roles spawned | Evidence |
 |---|---|---|
@@ -159,8 +197,9 @@ than accepting two names for one thing.
 - **`OrchestratorTab`** and `orchestratorStore` — superseded. Its chat is a
   second, bespoke agent channel; stage agents run in a real terminal pane
   through the same path `AgentPicker` already uses.
-- **`BmadPanel`** and `BMAD_PHASES` (`["Planning", "Dev cycle"]`) — the stage
-  rail replaces both.
+- **`BmadPanel`** — folds in. Its phase list stops being a static overlay and
+  becomes the board's own root. `BMAD_PHASES` is **kept and promoted**: the two
+  phases are the top level of the rail, with the workflow's steps inside them.
 - **`FleetTab` survives.** It shows the cross-project timeline, which is not
   tied to any single project's board.
 
