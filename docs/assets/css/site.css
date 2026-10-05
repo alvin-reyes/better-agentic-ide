@@ -652,3 +652,13 @@ pre {
   font-size: 20px; font-weight: 700; color: var(--text);
   font-variant-numeric: tabular-nums; letter-spacing: -.01em;
 }
+
+/* The hero copy is centred on small screens and left-aligned above them, so the
+   stats follow the same alignment rather than fighting it. */
+.repo-stats--hero {
+  justify-content: flex-start; gap: 6px 22px; margin: 20px 0 0;
+}
+.repo-stats--hero li { gap: 6px; font-size: 13.5px; color: var(--text-3); }
+.repo-stats--hero b { font-size: 15px; color: var(--text-2); }
+.repo-stats--hero svg { width: 15px; height: 15px; opacity: .6; flex: none; }
+@media (max-width: 900px) { .repo-stats--hero { justify-content: center; } }

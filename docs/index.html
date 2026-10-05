@@ -18,6 +18,20 @@ description: ADE is the desktop IDE built around Claude Code, with Codex, Gemini
           Download free <span class="ver" data-latest-version></span>
         </a>
       </div>
+      <ul class="repo-stats repo-stats--hero" data-repo-stats hidden>
+        <li>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.9 4 4.4.6-3.2 3.1.8 4.3L8 11.5l-3.9 2 .8-4.3L1.7 6.1l4.4-.6z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <b data-stat="stars">&mdash;</b> <span>stars</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v3a2 2 0 002 2h2a2 2 0 002-2v-3M8 8.5v4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="5" cy="2.8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="2.8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="13.2" r="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <b data-stat="forks">&mdash;</b> <span>forks</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.3 8S3.8 3.4 8 3.4 14.7 8 14.7 8 12.2 12.6 8 12.6 1.3 8 1.3 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          <b data-stat="watchers">&mdash;</b> <span>watching</span>
+        </li>
+      </ul>
       <p class="hero-meta"><span>macOS · Linux · Windows support soon</span> <code>brew install --cask alvin-reyes/tap/ade</code></p>
     </div>
     <figure class="hero-visual">
@@ -189,7 +203,7 @@ llms.txt
       <span class="kicker">Free and open source</span>
       <h2>Every feature. No licence, no account, no telemetry.</h2>
       <p>ADE is MIT licensed. Use it at work, fork it, ship your own build, no permission needed.</p>
-      <ul class="repo-stats" id="repo-stats" hidden>
+      <ul class="repo-stats" data-repo-stats hidden>
         <li><b data-stat="stars">&mdash;</b> <span>stars</span></li>
         <li><b data-stat="forks">&mdash;</b> <span>forks</span></li>
         <li><b data-stat="watchers">&mdash;</b> <span>watching</span></li>
@@ -352,8 +366,8 @@ llms.txt
   // page is wrong the day after it ships. If the call fails the row stays
   // hidden, because no number beats a stale one.
   (function () {
-    var el = document.getElementById("repo-stats");
-    if (!el) return;
+    var rows = document.querySelectorAll("[data-repo-stats]");
+    if (!rows.length) return;
     fetch("https://api.github.com/repos/alvin-reyes/better-agentic-ide")
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (d) {
@@ -363,12 +377,12 @@ llms.txt
         // subscribers_count is the Watch number GitHub shows. watchers_count is
         // a legacy alias for stargazers and would print the star count twice.
         var stats = { stars: d.stargazers_count, forks: d.forks_count, watchers: d.subscribers_count };
-        Object.keys(stats).forEach(function (k) {
-          var slot = el.querySelector('[data-stat="' + k + '"]');
-          if (slot && typeof stats[k] === "number") slot.textContent = fmt(stats[k]);
+        document.querySelectorAll("[data-stat]").forEach(function (slot) {
+          var v = stats[slot.getAttribute("data-stat")];
+          if (typeof v === "number") slot.textContent = fmt(v);
         });
-        el.hidden = false;
+        rows.forEach(function (r) { r.hidden = false; });
       })
-      .catch(function () { /* leave it hidden */ });
+      .catch(function () { /* leave them hidden */ });
   })();
 </script>
