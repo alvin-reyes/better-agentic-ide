@@ -91,3 +91,8 @@
   name: "zipfs"
   url: https://github.com/10d9e/zipfs
   blurb: "IPFS implemented in Zig."
+
+- slug: insync
+  name: "InSync"
+  url: https://insync-web-green.vercel.app
+  blurb: "A personalised affirmations app for iPhone, read back in a clone of your own voice."

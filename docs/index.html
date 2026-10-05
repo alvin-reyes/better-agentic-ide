@@ -189,6 +189,11 @@ llms.txt
       <span class="kicker">Free and open source</span>
       <h2>Every feature. No licence, no account, no telemetry.</h2>
       <p>ADE is MIT licensed. Use it at work, fork it, ship your own build, no permission needed.</p>
+      <ul class="repo-stats" id="repo-stats" hidden>
+        <li><b data-stat="stars">&mdash;</b> <span>stars</span></li>
+        <li><b data-stat="forks">&mdash;</b> <span>forks</span></li>
+        <li><b data-stat="watchers">&mdash;</b> <span>watching</span></li>
+      </ul>
     </div>
     <div class="pricing">
       <article class="price-card featured">
@@ -341,3 +346,29 @@ llms.txt
     </div>
   </div>
 </section>
+
+<script>
+  // Counts come from the API at load, never hardcoded: a number baked into the
+  // page is wrong the day after it ships. If the call fails the row stays
+  // hidden, because no number beats a stale one.
+  (function () {
+    var el = document.getElementById("repo-stats");
+    if (!el) return;
+    fetch("https://api.github.com/repos/alvin-reyes/better-agentic-ide")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (d) {
+        var fmt = function (v) {
+          return v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(v);
+        };
+        // subscribers_count is the Watch number GitHub shows. watchers_count is
+        // a legacy alias for stargazers and would print the star count twice.
+        var stats = { stars: d.stargazers_count, forks: d.forks_count, watchers: d.subscribers_count };
+        Object.keys(stats).forEach(function (k) {
+          var slot = el.querySelector('[data-stat="' + k + '"]');
+          if (slot && typeof stats[k] === "number") slot.textContent = fmt(stats[k]);
+        });
+        el.hidden = false;
+      })
+      .catch(function () { /* leave it hidden */ });
+  })();
+</script>

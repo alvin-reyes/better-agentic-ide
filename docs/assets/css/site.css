@@ -640,3 +640,15 @@ pre {
   font-family: var(--mono); font-size: .88em; padding: 1px 5px; border-radius: 4px;
   background: var(--term-bg); border: 1px solid var(--line-2); color: var(--text);
 }
+
+/* GitHub counts under the open-source heading. Filled at runtime and hidden
+   until then, so the page never shows a number that has gone stale. */
+.repo-stats {
+  list-style: none; margin: 22px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 30px;
+}
+.repo-stats li { display: flex; align-items: baseline; gap: 7px; color: var(--text-2); font-size: 14px; }
+.repo-stats b {
+  font-size: 20px; font-weight: 700; color: var(--text);
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+}
