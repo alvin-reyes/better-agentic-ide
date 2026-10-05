@@ -103,7 +103,7 @@ llms.txt
           <p>Every project gets sub-agents in <code>.claude/agents/</code> and a <code>CLAUDE.md</code> constitution. The fleet gives each sub-agent its own lane, spend is read from Claude Code's own transcripts, and ADE ships a plugin for it with 7 agents and 13 skills. The others run beside it; this is the one it is built around.</p>
         </article>
         <article class="feat-card">
-          <div class="feat-media"><img src="{{ img }}fleet.webp" width="1440" height="230" loading="lazy" alt="Fleet timeline with swimlanes for each agent and sub-agent"></div>
+          <div class="feat-media"><img src="{{ img }}fleet.webp" width="1440" height="351" loading="lazy" alt="The fleet grouped by project: three projects, each with its running count and spend, and a swimlane per agent with its sub-agents indented beneath it"></div>
           <h3>Every agent on one fleet view</h3>
           <p>Every agent and sub-agent on one live timeline, with its real cost.</p>
         </article>
@@ -135,6 +135,18 @@ llms.txt
       </div>
 
       <div class="feat-grid">
+        <article class="feat-card text feat-card--lead">
+          <span class="feat-eyebrow">The root of all of it</span>
+          <h3>BMAD, in every project and actually used</h3>
+          <p>Not a nod to a methodology. The pinned <a href="https://github.com/bmad-code-org/BMAD-METHOD">BMAD-METHOD</a>
+            goes into <code>.bmad-core/</code> in every project ADE opens: 21 tasks, 13 templates,
+            6 workflows, 6 checklists and 6 reference sets, plus 21 <code>/BMad:tasks:</code> commands
+            for Claude Code. Nothing is downloaded and nothing you already have is overwritten.</p>
+          <p>The roles name the ones that do their job, so the Scrum Master shards with
+            <code>create-next-story</code> and QA traces criteria with <code>trace-requirements</code>
+            instead of improvising both. Its two phases, Planning and Dev cycle, are the phases
+            ADE shows you, because they are the ones the work is actually in.</p>
+        </article>
         <article class="feat-card text">
           <h3>Done is a command, not an opinion</h3>
           <p>Every project agrees one verification command up front. A story is Done when it passes on that commit, with the output shown. Not when an agent says so.</p>
@@ -150,10 +162,6 @@ llms.txt
         <article class="feat-card text">
           <h3>Nineteen roles, each with boundaries</h3>
           <p>Analyst through security engineer, SRE and release manager. Each one states what it owns, what it must not touch, and whose job the rest is, so parallel agents stop contradicting each other.</p>
-        </article>
-        <article class="feat-card text">
-          <h3>BMAD in every project, and actually used</h3>
-          <p>75 files of tasks, checklists, templates and workflows. Eight roles name the ones that do their job, so the Scrum Master shards with <code>create-next-story</code> and QA traces criteria with <code>trace-requirements</code> instead of improvising both.</p>
         </article>
         <article class="feat-card text">
           <h3>What they learn stays in your repo</h3>

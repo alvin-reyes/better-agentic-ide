@@ -740,3 +740,21 @@ pre {
   .cred { padding: 6px 11px; }
   .cred-value { font-size: 12px; }
 }
+
+/* The lead card of a pillar: BMAD is the root the rest of the method sits on,
+   so it spans the grid and carries an accent edge rather than sitting as one
+   peer among four. */
+.feat-card--lead {
+  grid-column: 1 / -1;
+  border-color: var(--line-3);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+}
+/* .feat-card.text sets `p { margin: 0 }` with two classes, so these need the
+   same weight to land. Without it the two paragraphs ran together as one
+   block and the eyebrow sat 18px further in than the heading. */
+.feat-card.feat-card--lead .feat-eyebrow {
+  display: block; margin: 0 0 10px;
+  font: 600 10px/1 var(--mono); letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent-text);
+}
+.feat-card.feat-card--lead p + p { margin-top: 12px; }

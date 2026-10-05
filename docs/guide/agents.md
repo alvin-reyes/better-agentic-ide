@@ -70,7 +70,7 @@ A project's work outlives the terminal it started in, which is why Project is th
 - **Cost** is real: Claude agents' token usage comes from Claude Code's transcripts and is priced at API list prices (see [Tokens & cost]({{ '/guide/tokens/' | relative_url }})). If two agents run in the same folder at the same time, their usage can't be told apart and is left out. Codex, Gemini and Ollama sessions show no cost.
 - A group whose lanes carry **no** cost shows a dash, not `$0.00`. A role that only ever runs as a sub-agent spends inside its parent's session, and claiming it cost nothing would be a false statement about money.
 
-![Fleet timeline with sub-agents]({{ '/assets/img/fleet.webp' | relative_url }})
+![The fleet grouped by project, each group showing its running count, spend and a swimlane per agent with sub-agents indented]({{ '/assets/img/fleet.webp' | relative_url }})
 
 ## Orchestrator
 
