@@ -4,7 +4,7 @@ import { groupLanesByTerminal, type FleetLane, type PaneMeta } from "../fleetSto
 function lane(over: Partial<FleetLane>): FleetLane {
   return {
     id: "x", kind: "agent", parentId: null, tabId: null, tabName: null, paneId: null,
-    cwd: null, label: "l", detail: "", provider: null, model: null,
+    cwd: null, label: "l", detail: "", provider: null, model: null, roleId: null,
     startTime: 0, endTime: null, status: "running", costCents: null, tokens: null,
     ...over,
   };

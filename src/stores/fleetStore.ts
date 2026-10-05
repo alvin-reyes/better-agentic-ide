@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { ROLES } from "../data/roles";
 import type { AgentSession } from "./agentTrackerStore";
 import { promptTokens, sessionCost, type SessionUsage } from "../lib/tokenUsage";
 
@@ -69,6 +70,14 @@ export interface FleetLane {
   detail: string;
   provider: string | null;
   model: string | null;
+  /**
+   * Which of the nineteen roles this lane is, when it can be known.
+   *
+   * Null rather than guessed: sessions recorded before roles existed have no
+   * roleId, and Claude Code allows sub-agent names that are not roles at all.
+   * Attributing those to a role would put cost against work that never ran.
+   */
+  roleId: string | null;
   startTime: number;
   endTime: number | null;
   status: "running" | "completed" | "cancelled";
@@ -88,6 +97,11 @@ function agentLaneId(s: AgentSession): string {
  * directory the parent is genuinely unknown — we leave it unattached rather
  * than guess.
  */
+/** A sub-agent's type is a role id when it names one, and nothing when it does not. */
+function roleIdOf(agentType: string): string | null {
+  return ROLES.some((r) => r.id === agentType) ? agentType : null;
+}
+
 export function buildLanes(
   sessions: AgentSession[],
   subagents: SubagentRecord[],
@@ -107,6 +121,7 @@ export function buildLanes(
       detail: "",
       provider: s.provider,
       model: null,
+      roleId: s.roleId ?? null,
       startTime: s.startTime,
       endTime: s.endTime,
       status: s.status,
@@ -138,6 +153,7 @@ export function buildLanes(
       detail: s.description,
       provider: null,
       model: s.model,
+      roleId: roleIdOf(s.agentType),
       startTime: s.startTime,
       endTime: s.endTime,
       status: s.endTime === null ? "running" : "completed",
@@ -298,3 +314,53 @@ export const useFleetStore = create<FleetStore>((set) => ({
     set((state) => ({ subagents: state.subagents.filter((s) => s.cwd !== cwd) })),
   reset: () => set({ subagents: [] }),
 }));
+
+
+/** Lanes that ran in one project folder. */
+export interface ProjectGroup {
+  /** The folder, or null for lanes whose folder could not be determined. */
+  key: string | null;
+  name: string;
+  lanes: FleetLane[];
+  runningCount: number;
+  costCents: number;
+}
+
+/**
+ * Split lanes by the folder they ran in.
+ *
+ * A terminal tab is a window-management artifact: it changes when panes are
+ * rearranged and vanishes when the tab closes, which is why grouping by it
+ * needed a "Closed terminals" bucket to avoid dropping cost. A folder outlives
+ * both, and sub-agents already carried one.
+ *
+ * An agent lane takes its folder from pane metadata, which can be absent. Those
+ * lanes go to a single trailing group rather than being dropped: showing cost
+ * that cannot be attributed is better than losing it.
+ */
+export function groupLanesByProject(lanes: FleetLane[]): ProjectGroup[] {
+  const byKey = new Map<string, ProjectGroup>();
+  const unattributed: ProjectGroup = {
+    key: null, name: "Unknown project", lanes: [], runningCount: 0, costCents: 0,
+  };
+
+  for (const lane of lanes) {
+    let group: ProjectGroup;
+    if (lane.cwd) {
+      group = byKey.get(lane.cwd) ?? {
+        key: lane.cwd,
+        name: lane.cwd.slice(lane.cwd.lastIndexOf("/") + 1) || lane.cwd,
+        lanes: [], runningCount: 0, costCents: 0,
+      };
+      byKey.set(lane.cwd, group);
+    } else {
+      group = unattributed;
+    }
+    group.lanes.push(lane);
+    if (lane.status === "running") group.runningCount += 1;
+    group.costCents += lane.costCents ?? 0;
+  }
+
+  const groups = [...byKey.values()];
+  return unattributed.lanes.length > 0 ? [...groups, unattributed] : groups;
+}
