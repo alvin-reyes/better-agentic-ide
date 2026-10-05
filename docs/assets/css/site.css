@@ -691,9 +691,13 @@ pre {
 }
 /* The build this visitor's machine wants, found by the script. */
 .dl-grid li[data-recommended] { border-color: var(--line-3); }
-.dl-grid li[data-recommended] b::after {
-  content: "for you"; margin-left: 8px; font: 500 10px/1 var(--mono);
+/* On the description, not the OS name: the first column is a fixed 90px so
+   every row's name lines up, and "macOS" plus a badge does not fit in it —
+   the badge wrapped and made this one row taller than the rest. */
+.dl-grid li[data-recommended] span::after {
+  content: "for you"; margin-left: 10px; font: 500 10px/1 var(--mono);
   letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text);
+  white-space: nowrap;
 }
 .dl-soon { opacity: .55; }
 @media (max-width: 560px) {

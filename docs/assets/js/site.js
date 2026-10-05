@@ -100,7 +100,8 @@
   // --- Latest release: version label and direct download links ---------------
   var versionEls = document.querySelectorAll("[data-latest-version]");
   var downloadEls = document.querySelectorAll("[data-download]");
-  if (!versionEls.length && !downloadEls.length) return;
+  var grid = document.getElementById("dl-grid");
+  if (!versionEls.length && !downloadEls.length && !grid) return;
 
   fetch("https://api.github.com/repos/" + REPO + "/releases/latest", { headers: { Accept: "application/vnd.github+json" } })
     .then(function (r) { return r.ok ? r.json() : null; })
@@ -123,6 +124,56 @@
         if (kind === "auto") kind = isMac ? "mac-arm" : "appimage";
         if (links[kind]) el.href = links[kind];
       });
+
+      // The downloads grid draws on this same fetch. A size is worth showing
+      // because the AppImage is an order of magnitude larger than the rest.
+      if (!grid) return;
+      var sizeOf = function (re) {
+        for (var i = 0; i < assets.length; i++) if (re.test(assets[i].name)) return assets[i].size;
+        return null;
+      };
+      var sizes = {
+        "mac-arm": sizeOf(/aarch64\.dmg$/),
+        "mac-intel": sizeOf(/x64\.dmg$/),
+        "deb": sizeOf(/\.deb$/),
+        "appimage": sizeOf(/\.AppImage$/),
+      };
+      Object.keys(links).forEach(function (kind) {
+        var row = grid.querySelector('[data-dl="' + kind + '"]');
+        if (!row || !links[kind]) return;
+        var a = row.querySelector("a");
+        if (a) { a.href = links[kind]; a.setAttribute("download", ""); }
+        var em = row.querySelector("em");
+        if (em && sizes[kind]) em.textContent = Math.round(sizes[kind] / 1048576) + " MB";
+      });
+
+      // Releases cut before the checksums job existed carry no SHA256SUMS.
+      // Telling someone to verify against a file that is not there is worse
+      // than saying nothing, so the sentence is replaced rather than left
+      // pointing at the releases page. The installers say the same thing.
+      var sums = find(/SHA256SUMS$/);
+      var sumsLink = document.getElementById("sums-link");
+      var sumsNote = document.getElementById("sums-note");
+      if (sums && sumsLink) sumsLink.href = sums;
+      else if (sumsNote) sumsNote.textContent =
+        "This release publishes no SHA256SUMS, so the installer says so rather " +
+        "than claiming a check it cannot do. Checksums are published from the " +
+        "next release onward.";
+
+      // Put the build this machine wants first, and mark it. Apple Silicon is
+      // not reported by the user agent, so a Mac is assumed to be one and the
+      // Intel build sits directly beneath rather than being hidden.
+      var mine = isMac ? "mac-arm" : null;
+      var plat = navigator.platform || "";
+      if (!mine && /Win/i.test(plat)) mine = "windows";
+      else if (!mine && /Linux|X11/i.test(plat)) mine = "deb";
+      if (mine) {
+        var pick = grid.querySelector('[data-dl="' + mine + '"]');
+        if (pick) { pick.setAttribute("data-recommended", ""); grid.prepend(pick); }
+      }
+
+      // Only now, when the links point at real files.
+      grid.hidden = false;
     })
     .catch(function () { /* keep the links to the releases page */ });
 })();
