@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in ADE behaves differently from what you expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. The three things that make a bug fixable are
+        what you expected, what actually happened, and how to get back to it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you get instead?
+      placeholder: |
+        I expected the agent picker to open on ⌘⇧A.
+        Instead the terminal received the keystroke and nothing opened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, starting from a fresh launch if you can.
+      placeholder: |
+        1. Open a project
+        2. Split the pane with ⌘D
+        3. Press ⌘⇧A
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: ADE version
+      description: From the About window, or `src-tauri/tauri.conf.json` if you built it.
+      placeholder: "0.18.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - A release download (.dmg / .AppImage / .deb)
+        - Homebrew
+        - Built from source
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: |
+        If the app misbehaved rather than crashed, the log is often the only
+        place the real error appears. One shipped release logged a blocked
+        WebAssembly compile there and nowhere else, invisible in the UI.
+
+        macOS: `~/Library/Logs/ADE/ade.log`
+        Linux: `~/.local/share/ADE/logs/ade.log` or `$XDG_DATA_HOME`
+      render: shell
+    validations:
+      required: false

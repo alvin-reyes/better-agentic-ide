@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest something ADE should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The problem is more useful than the solution. If we understand what you
+        were trying to do, there may be a better answer than the one you had in
+        mind.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What were you trying to do, and what got in the way?
+      placeholder: |
+        I run four agents at once and cannot tell which one is burning tokens
+        until I open the Tokens panel and read every session.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What you have in mind
+      description: Optional. A rough shape is fine; it does not have to be designed.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+      description: Any workaround, however ugly. It usually says a lot about the real need.
+    validations:
+      required: false

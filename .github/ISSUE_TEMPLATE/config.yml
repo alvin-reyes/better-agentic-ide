@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/alvin-reyes/better-agentic-ide/blob/main/CONTRIBUTING.md#security
+    about: Please do not open a public issue. ADE runs shell processes and touches the OS keychain.
+  - name: Agent and role definitions
+    url: https://github.com/alvin-reyes/ade-setup/issues
+    about: The nineteen roles live in ade-setup. Report role behaviour there.
+  - name: Contributing guide
+    url: https://github.com/alvin-reyes/better-agentic-ide/blob/main/CONTRIBUTING.md
+    about: Build steps, what CI checks, and a path in that needs no Rust.
