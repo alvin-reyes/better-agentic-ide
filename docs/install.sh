@@ -182,8 +182,34 @@ case "$OS" in
   Linux)
     if [ "$FORMAT" = "deb" ]; then
       command -v dpkg >/dev/null || die "dpkg not found; use the AppImage instead"
-      warn "installing a .deb needs root; you will be asked for your password."
-      sudo dpkg -i "$FILE" || die "dpkg failed"
+
+      # Already root (containers, minimal images) often has no sudo at all, so
+      # calling it unconditionally fails with "sudo: command not found".
+      if [ "$(id -u)" -eq 0 ]; then
+        SUDO=""
+      elif command -v sudo >/dev/null; then
+        SUDO="sudo"
+        warn "installing a .deb needs root; you will be asked for your password."
+      else
+        die "installing a .deb needs root, and sudo is not available. Run this as root, or use the AppImage (drop --deb)."
+      fi
+
+      # dpkg -i does not resolve dependencies: on a missing one it leaves the
+      # package half-configured (dpkg -l shows iU) and the app will not start.
+      # apt-get install -f completes it, which is what a user would have to run
+      # by hand otherwise.
+      if ! $SUDO dpkg -i "$FILE"; then
+        warn "dpkg reported unmet dependencies; resolving them"
+        $SUDO apt-get update -qq || true
+        $SUDO apt-get install -f -y || die "could not resolve dependencies. Try the AppImage instead (drop --deb)."
+      fi
+
+      # Confirm it really is installed and configured, rather than trusting
+      # the exit code of the repair step.
+      if ! dpkg -s better-terminal 2>/dev/null | grep -q "^Status: install ok installed"; then
+        die "the package did not finish installing. Try the AppImage instead (drop --deb)."
+      fi
+
       bold "Done"
       info "run: better-terminal"
     else

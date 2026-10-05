@@ -102,3 +102,55 @@ jobs:
       - name: Tests
         working-directory: src-tauri
         run: cargo test --locked
+
+  # The PowerShell installer cannot be executed on a developer Mac: the only
+  # PowerShell container images are amd64, and qemu crashes running them under
+  # Rosetta. So a real Windows runner checks it instead of nobody checking it.
+  installer-windows:
+    name: Windows installer (parse, dry run)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse install.ps1
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "docs/install.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Host "::error::$_" }
+            exit 1
+          }
+          Write-Host "parsed cleanly"
+
+      - name: Lint install.ps1
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
+          $found = Invoke-ScriptAnalyzer -Path docs/install.ps1 -Severity Error,Warning
+          if ($found) {
+            $found | Format-Table -AutoSize | Out-String | Write-Host
+            Write-Host "::error::PSScriptAnalyzer reported $($found.Count) issue(s)"
+            exit 1
+          }
+          Write-Host "no errors or warnings"
+
+      # Runs it for real on Windows, short of installing. While no Windows build
+      # is published it must say so and exit non-zero; once one exists it must
+      # resolve the asset. Either is a pass, anything else is not — so this keeps
+      # working through the change rather than needing to be rewritten at it.
+      - name: Dry run against the live release
+        shell: pwsh
+        run: |
+          $out = & pwsh -NoProfile -File docs/install.ps1 -DryRun 2>&1 | Out-String
+          Write-Host $out
+          if ($out -match 'would install') {
+            Write-Host "resolved a Windows installer"
+          } elseif ($out -match 'no Windows installer') {
+            Write-Host "correctly reported that no Windows build is published yet"
+          } else {
+            Write-Host "::error::unexpected output from install.ps1"
+            exit 1
+          }

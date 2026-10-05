@@ -6,6 +6,15 @@ description: Install ADE on macOS or Linux and run your first AI coding agent.
 
 ## Install
 
+### Windows
+
+```powershell
+irm https://ade.ardata.tech/install.ps1 | iex
+```
+
+Windows builds are not published yet, so this reports that and stops. It is
+ready for when they are: see [issue #22](https://github.com/alvin-reyes/better-agentic-ide/issues/22).
+
 ### macOS
 
 The quickest way is the install script:
