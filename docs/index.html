@@ -437,84 +437,19 @@ llms.txt
 </script>
 
 <script>
-  // Real download links, resolved from the release at load.
-  // Hardcoding asset URLs means they are wrong the next time a version ships;
-  // the grid stays hidden until the API answers, so a failed call shows the
-  // install command alone rather than dead links.
+  // The downloads grid is filled by assets/js/site.js, which already fetches the
+  // release for the version label and the data-download links. This only wires
+  // the copy button, which is specific to this page.
   (function () {
-    var grid = document.getElementById("dl-grid");
-    if (!grid) return;
-
-    // Which asset each row wants, by filename suffix.
-    var WANT = {
-      "mac-arm": /aarch64\.dmg$/,
-      "mac-intel": /x64\.dmg$/,
-      "deb": /amd64\.deb$/,
-      "appimage": /amd64\.AppImage$/,
-    };
-
-    function mb(bytes) { return (bytes / 1048576).toFixed(0) + " MB"; }
-
-    // What this visitor is most likely to want. Platform detection from the UA
-    // is approximate: Apple Silicon is not reported, so a Mac is assumed to be
-    // Apple Silicon and the Intel build sits right beside it.
-    function guess() {
-      var p = navigator.platform || "";
-      var ua = navigator.userAgent || "";
-      if (/Win/i.test(p) || /Windows/i.test(ua)) return "windows";
-      if (/Mac/i.test(p) || /Mac OS X/i.test(ua)) {
-        return /Intel/i.test(ua) && !/ARM|Apple/i.test(ua) ? "mac-intel" : "mac-arm";
-      }
-      if (/Linux|X11/i.test(p) || /Linux/i.test(ua)) return "deb";
-      return null;
-    }
-
-    var mine = guess();
-    if (mine) {
-      var row = grid.querySelector('[data-dl="' + mine + '"]');
-      if (row) {
-        row.setAttribute("data-recommended", "");
-        grid.prepend(row);
-      }
-    }
-    if (mine === "windows") {
-      var note = document.getElementById("install-note");
-      if (note) note.textContent = "Windows builds are not available yet. macOS and Linux are.";
-    }
-
-    fetch("https://api.github.com/repos/alvin-reyes/better-agentic-ide/releases/latest")
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-      .then(function (rel) {
-        var assets = rel.assets || [];
-        Object.keys(WANT).forEach(function (key) {
-          var asset = assets.filter(function (a) { return WANT[key].test(a.name); })[0];
-          var row = grid.querySelector('[data-dl="' + key + '"]');
-          if (!row || !asset) return;
-          var link = row.querySelector("a");
-          link.href = asset.browser_download_url;
-          link.setAttribute("download", "");
-          row.querySelector("em").textContent = mb(asset.size);
-        });
-
-        var sums = assets.filter(function (a) { return a.name === "SHA256SUMS"; })[0];
-        var sumsLink = document.getElementById("sums-link");
-        if (sums && sumsLink) sumsLink.href = sums.browser_download_url;
-
-        // Only now, when the links point somewhere real.
-        grid.hidden = false;
-      })
-      .catch(function () { /* leave the grid hidden; the install command still works */ });
-
     var copy = document.getElementById("copy-install");
     var cmd = document.getElementById("install-cmd");
-    if (copy && cmd && navigator.clipboard) {
-      copy.addEventListener("click", function () {
-        navigator.clipboard.writeText(cmd.textContent.trim()).then(function () {
-          var was = copy.textContent;
-          copy.textContent = "Copied";
-          setTimeout(function () { copy.textContent = was; }, 1600);
-        });
+    if (!copy || !cmd || !navigator.clipboard) return;
+    copy.addEventListener("click", function () {
+      navigator.clipboard.writeText(cmd.textContent.trim()).then(function () {
+        var was = copy.textContent;
+        copy.textContent = "Copied";
+        setTimeout(function () { copy.textContent = was; }, 1600);
       });
-    }
+    });
   })();
 </script>

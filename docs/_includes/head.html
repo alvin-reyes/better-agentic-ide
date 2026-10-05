@@ -26,5 +26,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ '/assets/css/site.css' | relative_url }}">
-<script defer src="{{ '/assets/js/site.js' | relative_url }}"></script>
+<!-- site.time changes every build, so a deploy is never served from a stale
+     cache. Pages sends max-age=600 on this file with no fingerprint, which
+     meant a CSS change could be invisible for ten minutes after shipping. -->
+<link rel="stylesheet" href="{{ '/assets/css/site.css' | relative_url }}?v={{ site.time | date: '%s' }}">
+<script defer src="{{ '/assets/js/site.js' | relative_url }}?v={{ site.time | date: '%s' }}"></script>
