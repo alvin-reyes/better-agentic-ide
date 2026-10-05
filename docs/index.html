@@ -1,7 +1,7 @@
 ---
 layout: default
 body_class: home
-description: ADE is a desktop terminal where your coding agents work as a team of 19 roles — architect, developer, QA — under a methodology with a gate that decides when the work is actually done. Claude Code, Codex, Gemini and local models.
+description: ADE is a desktop terminal where your coding agents work as a team of 19 roles (architect, developer, QA and more) under a methodology with a gate that decides when the work is actually done. Claude Code, Codex, Gemini and local models.
 ---
 {% assign img = '/assets/img/' | relative_url %}
 <section class="hero">
@@ -9,8 +9,9 @@ description: ADE is a desktop terminal where your coding agents work as a team o
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
       <a class="pill" href="#new"><b>NEW</b><span>Project setup: BMAD, methodology and agents →</span></a>
+      <p class="hero-kicker">The IDE built for Claude Code developers and architects</p>
       <h1>Verified, <span class="grad-text">not&nbsp;vibed.</span></h1>
-      <p class="sub">A desktop terminal where your agents work as a team &mdash; architect, developer, QA &mdash; and nothing ships until the gate says it&rsquo;s done.</p>
+      <p class="sub">A desktop terminal where your agents work as a team of roles: architect, developer, QA. Nothing ships until the gate says it&rsquo;s done.</p>
       <div class="hero-cta">
         <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
         <a class="btn btn-primary" href="#downloads" data-download="auto">
@@ -30,6 +31,16 @@ description: ADE is a desktop terminal where your coding agents work as a team o
         <li>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.3 8S3.8 3.4 8 3.4 14.7 8 14.7 8 12.2 12.6 8 12.6 1.3 8 1.3 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
           <b data-stat="watchers">&mdash;</b> <span>watching</span>
+        </li>
+      </ul>
+      <ul class="creds" aria-label="Credentials">
+        <li class="cred cred--partner">
+          <span class="cred-label">Anthropic</span>
+          <span class="cred-value">Partner</span>
+        </li>
+        <li class="cred">
+          <span class="cred-label">Certified</span>
+          <span class="cred-value">Blockchain Developer &amp; Architect</span>
         </li>
       </ul>
       <p class="hero-meta"><span>macOS · Linux · Windows support soon</span> <code>curl -fsSL https://ade.ardata.tech/install.sh | bash</code></p>

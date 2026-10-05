@@ -704,3 +704,39 @@ pre {
   .dl-grid li { grid-template-columns: 1fr auto; row-gap: 4px; }
   .dl-grid span { grid-column: 1 / -1; }
 }
+
+/* Hero kicker: who the tool is for, above the headline it argues for. */
+.hero-kicker {
+  margin: 18px 0 0; font: 500 12.5px/1.4 var(--mono);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--text-3);
+}
+
+/* Credentials. The label/value split is what keeps these from reading as
+   decoration: the small line says who certifies, the larger one says what. */
+.creds {
+  list-style: none; padding: 0; margin: 20px 0 0;
+  display: flex; flex-wrap: wrap; gap: 10px;
+  justify-content: center;   /* the hero is centred, so a left-aligned row reads as a stray element */
+}
+.cred {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel);
+}
+.cred-label {
+  font: 600 9.5px/1 var(--mono); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text-3); flex: none;
+}
+.cred-value { font-size: 12.5px; font-weight: 500; color: var(--text-2); }
+.cred--partner { border-color: var(--line-3); }
+.cred--partner .cred-label { color: var(--accent-text); }
+.cred--partner .cred-value { color: var(--text); }
+/* The official badge art, once it is in place: sized to the pill, never
+   recoloured or redrawn. Partner marks have a required form. */
+.cred-mark { height: 16px; width: auto; flex: none; align-self: center; }
+
+@media (max-width: 560px) {
+  .creds { gap: 8px; }
+  .cred { padding: 6px 11px; }
+  .cred-value { font-size: 12px; }
+}
