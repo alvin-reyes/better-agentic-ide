@@ -78,11 +78,13 @@ Only missing files are written, and the toast that lists them has Undo. Add or r
 
 ## Install
 
-**Homebrew (macOS)**
-
 ```bash
-brew install --cask alvin-reyes/tap/ade
+curl -fsSL https://ade.ardata.tech/install.sh | bash
 ```
+
+Works on macOS (Apple Silicon and Intel) and Linux x86_64. It picks the right
+build, checks it against the release's `SHA256SUMS`, and installs without sudo.
+Pass `--dry-run` to see what it would do, or `--help` for the options.
 
 **Installers**: download from the [latest release](https://github.com/alvin-reyes/better-agentic-ide/releases/latest): `.dmg` for macOS (Apple Silicon and Intel) and `.deb` or `.AppImage` for Linux.
 

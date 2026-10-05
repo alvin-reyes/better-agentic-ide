@@ -69,11 +69,12 @@ jobs:
             | **macOS (Intel)** | `.dmg` | x86_64 |
             | **Linux** | `.deb` / `.AppImage` | x64 |
 
-            ### Install via Homebrew (macOS)
+            ### Install from the terminal
             ```bash
-            brew tap alvin-reyes/tap
-            brew install --cask ade
+            curl -fsSL https://ade.ardata.tech/install.sh | bash
             ```
+            Picks the right build for your machine, verifies it against
+            `SHA256SUMS`, and installs without sudo.
           # Appends "What's Changed" and a Full Changelog link to the previous tag.
           generate_release_notes: true
           draft: false
@@ -238,3 +239,39 @@ jobs:
             echo "::warning::No installer artifacts found in $BUNDLE_DIR"
           fi
 
+
+  # Publishes SHA256SUMS over the installers, so install.sh can verify what it
+  # downloaded instead of trusting HTTPS alone. Runs after every build job, as
+  # the sums must cover the whole set.
+  checksums:
+    name: Publish SHA256SUMS
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checksum every published installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          WORK=$(mktemp -d); cd "$WORK"
+
+          # Download what the build jobs actually uploaded, so the sums describe
+          # the released bytes rather than a local rebuild of them.
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.dmg' --pattern '*.AppImage' --pattern '*.deb' \
+            --pattern '*.msi' --pattern '*.exe' || true
+
+          shopt -s nullglob
+          files=(*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no installers found on $RELEASE_TAG to checksum"
+            exit 1
+          fi
+
+          sha256sum "${files[@]}" > SHA256SUMS
+          echo "Checksummed ${#files[@]} file(s):"
+          cat SHA256SUMS
+
+          gh release upload "$RELEASE_TAG" SHA256SUMS --clobber \
+            --repo "$GITHUB_REPOSITORY"

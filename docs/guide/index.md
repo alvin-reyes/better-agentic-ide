@@ -8,13 +8,16 @@ description: Install ADE on macOS or Linux and run your first AI coding agent.
 
 ### macOS
 
-The quickest way is [Homebrew](https://brew.sh):
+The quickest way is the install script:
 
 ```bash
-brew install --cask alvin-reyes/tap/ade
+curl -fsSL https://ade.ardata.tech/install.sh | bash
 ```
 
-Upgrade later with `brew upgrade --cask ade`. The cask clears the quarantine flag, so macOS won't block the first launch.
+It picks the build for your machine, verifies it against the release's
+`SHA256SUMS`, copies it to `/Applications`, and clears the quarantine flag so
+macOS won't block the first launch. Run it again to upgrade. Add `--dry-run` to
+see what it would do without changing anything.
 
 You can also download the `.dmg` from the [latest release]({{ site.repo }}/releases/latest): `aarch64` for Apple Silicon, `x64` for Intel Macs. If macOS says the app "is damaged" after a manual install, see [Troubleshooting]({{ '/guide/troubleshooting/' | relative_url }}#macos-says-the-app-is-damaged).
 
