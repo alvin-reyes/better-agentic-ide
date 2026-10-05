@@ -25,6 +25,10 @@
   irm https://ade.ardata.tech/install.ps1 -OutFile install.ps1
   .\install.ps1 -Version v0.18.2 -DryRun
 #>
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+  'PSAvoidUsingWriteHost', '',
+  Justification = 'An installer writes to the terminal for a person to read, in colour. Write-Output would put this on the pipeline, where it is not wanted.'
+)]
 [CmdletBinding()]
 param(
   [string]$Version,
@@ -44,7 +48,13 @@ function Write-Warn($m) { Write-Host "  $m" -ForegroundColor Yellow }
 function Stop-With($m)  { Write-Host "  $m" -ForegroundColor Red; exit 1 }
 
 # TLS 1.2 is not the default on older Windows PowerShell and GitHub requires it.
-try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+try {
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+} catch {
+  # Already the default on PowerShell 7, where this type may not be settable.
+  # Not fatal: if TLS really is unavailable the download fails with a clear error.
+  Write-Verbose "could not set TLS 1.2 explicitly: $_"
+}
 
 Write-Head 'ADE installer'
 
@@ -130,9 +140,9 @@ try {
   # --- install -------------------------------------------------------------
   Write-Head 'Installing'
   if ($file -like '*.msi') {
-    $args = @('/i', "`"$file`"")
-    if ($Quiet) { $args += @('/quiet', '/norestart') }
-    $p = Start-Process msiexec.exe -ArgumentList $args -Wait -PassThru
+    $msiArgs = @('/i', "`"$file`"")
+    if ($Quiet) { $msiArgs += @('/quiet', '/norestart') }
+    $p = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
     # 3010 is success-but-reboot-required, not a failure.
     if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
       Stop-With "the installer exited with code $($p.ExitCode)"
