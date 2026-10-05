@@ -202,6 +202,13 @@ than accepting two names for one thing.
   phases are the top level of the rail, with the workflow's steps inside them.
 - **`FleetTab` survives.** It shows the cross-project timeline, which is not
   tied to any single project's board.
+- **The scratchpad survives, and matters more.** It is mounted in `App.tsx`
+  above the tabs, so it is already present on every tab including this one.
+  Nothing needs doing to keep it — but it should not be treated as incidental
+  either: it holds the draft, it takes voice input, and `Send to Terminal` is
+  how a half-formed thought reaches the agent that is running. In a flow that
+  starts with brainstorming, that is the input, and the board must not grow
+  a second one beside it.
 
 ## Architecture
 
