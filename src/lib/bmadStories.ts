@@ -31,7 +31,10 @@ function section(md: string, heading: RegExp): string {
   if (start < 0) return "";
   const after = md.slice(start);
   const rest = after.slice(after.indexOf("\n") + 1);
-  const next = rest.search(/^#{1,3} /m);
+  // Any heading ends the section. Capping at three let a #### inside Acceptance
+  // Criteria - which real Dev Notes and Testing sections carry - be read as a
+  // criterion.
+  const next = rest.search(/^#{1,6} /m);
   return (next < 0 ? rest : rest.slice(0, next)).trim();
 }
 

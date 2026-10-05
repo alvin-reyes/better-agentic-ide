@@ -83,3 +83,59 @@ describe("canAdvance", () => {
     expect(canAdvance(b, "brainstorming")).toBe(true);
   });
 });
+
+describe("a brownfield project, which has no brief at all", () => {
+  // None of brownfield-fullstack, brownfield-service or brownfield-ui creates a
+  // brief of any kind, and brainstorming is an optional_steps entry even in the
+  // greenfield workflows. Requiring one wedges every brownfield project at the
+  // first stage forever, with no way past it.
+  const brownfield = {
+    ...empty,
+    artifactExists: (p: string) => ["docs/prd", "docs/architecture", "docs/reviews"].includes(p),
+  };
+
+  it("does not hold the project at Brainstorming when the later work exists", () => {
+    const b = buildBoard(brownfield);
+    expect(b.stages.find((s) => s.id === "brainstorming")!.complete).toBe(true);
+    expect(b.currentStage).toBe("execution");
+  });
+
+  it("still shows the brief itself as absent, rather than pretending", () => {
+    const b = buildBoard(brownfield);
+    expect(b.artifacts.find((a) => a.id === "brief")!.present).toBe(false);
+  });
+
+  it("holds an empty project at Brainstorming, since nothing has been done", () => {
+    expect(buildBoard(empty).currentStage).toBe("brainstorming");
+  });
+});
+
+describe("gates that match no story", () => {
+  it("are kept and reported rather than silently dropped", () => {
+    // A gate whose story: is an unsubstituted template placeholder, or one left
+    // behind when its story was renamed. The spec requires an unreadable gate to
+    // render as itself plus the error; reachable only via stories[i].gate, it
+    // could not render at all.
+    const b = buildBoard({
+      ...empty,
+      artifactExists: () => true,
+      stories: [{ file: "docs/stories/1.1.a.md", markdown: storyMd("1.1", "Draft") }],
+      gates: [
+        { file: "docs/qa/gates/9.9-orphan.yml", yaml: `story: "{epic}.{story}"\nreviewer: "Quinn"\n` },
+      ],
+    });
+    expect(b.unmatchedGates).toHaveLength(1);
+    expect(b.unmatchedGates[0].file).toContain("9.9-orphan");
+    expect(b.unmatchedGates[0].error).toMatch(/gate/i);
+  });
+
+  it("is empty when every gate belongs to a story", () => {
+    const b = buildBoard({
+      ...empty,
+      artifactExists: () => true,
+      stories: [{ file: "docs/stories/1.1.a.md", markdown: storyMd("1.1", "Done") }],
+      gates: [{ file: "docs/qa/gates/1.1-a.yml", yaml: gateYaml("1.1", "PASS") }],
+    });
+    expect(b.unmatchedGates).toEqual([]);
+  });
+});

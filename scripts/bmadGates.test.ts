@@ -56,3 +56,49 @@ describe("gateFor", () => {
     expect(gateFor("2.2", gates)).toBeUndefined();
   });
 });
+
+/**
+ * Fixtures below come from the files BMAD actually ships, not from prose.
+ * The hand-written ones above pass against a parser that misreads the real
+ * template, which is how a quoted-and-commented `gate:` line reached review.
+ */
+describe("the shapes BMAD actually ships", () => {
+  it("reads a quoted verdict that carries a trailing comment", () => {
+    // Verbatim shape of qa-gate-tmpl.yaml:15.
+    const g = parseGate("docs/qa/gates/2.1-x.yml", 'gate: "PASS" # PASS|CONCERNS|FAIL|WAIVED\n');
+    expect(g.verdict).toBe("PASS");
+    expect(g.error).toBeNull();
+  });
+
+  it("keeps a # that is inside the quotes, where it is content not a comment", () => {
+    const g = parseGate("g.yml", `gate: PASS\nstatus_reason: 'AC #3 lacks coverage'\n`);
+    expect(g.reason).toBe("AC #3 lacks coverage");
+  });
+
+  it("detects a block-style waiver, which is what tasks/qa-gate.md documents", () => {
+    const g = parseGate("g.yml", `gate: WAIVED\nwaiver:\n  active: true\n  reason: 'MVP release'\n`);
+    expect(g.waived).toBe(true);
+  });
+
+  it("still detects the inline waiver form", () => {
+    expect(parseGate("g.yml", "gate: WAIVED\nwaiver: { active: true }\n").waived).toBe(true);
+  });
+
+  it("does not call an inactive waiver waived", () => {
+    expect(parseGate("g.yml", "gate: PASS\nwaiver: { active: false }\n").waived).toBe(false);
+  });
+});
+
+describe("gateFor with more than one gate for a story", () => {
+  const older = parseGate("docs/qa/gates/2.1-old.yml",
+    `story: "2.1"\ngate: PASS\nupdated: "2026-01-01T00:00:00Z"\n`);
+  const newer = parseGate("docs/qa/gates/2.1-new.yml",
+    `story: "2.1"\ngate: FAIL\nupdated: "2026-06-01T00:00:00Z"\n`);
+
+  it("takes the most recently updated, whatever order they arrive in", () => {
+    // A renamed story leaves a stale gate beside the current one. Resolving by
+    // array position lets a superseded PASS outrank a later FAIL.
+    expect(gateFor("2.1", [older, newer])?.verdict).toBe("FAIL");
+    expect(gateFor("2.1", [newer, older])?.verdict).toBe("FAIL");
+  });
+});

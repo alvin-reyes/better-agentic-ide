@@ -51,10 +51,15 @@ function scalars(yaml: string): Map<string, string> {
 export function parseBmadConfig(yaml: string | null): BmadPaths {
   if (yaml === null) return { ...BMAD_DEFAULTS, usedDefaults: true };
   const s = scalars(yaml);
+  // An empty or comment-only file supplies nothing. Saying the paths came from
+  // a config when none of them did sends anyone debugging to the wrong file.
+  if (s.size === 0) return { ...BMAD_DEFAULTS, usedDefaults: true };
   const str = (k: string, fallback: string) => s.get(k) ?? fallback;
+  // YAML spells true as true/True/TRUE/yes/on; matching only the lowercase one
+  // read `prdSharded: True` as false and looked for a PRD that is not there.
   const bool = (k: string, fallback: boolean) => {
     const v = s.get(k);
-    return v === undefined ? fallback : v === "true";
+    return v === undefined ? fallback : /^(true|yes|on)$/i.test(v);
   };
   return {
     qaLocation: str("qaLocation", BMAD_DEFAULTS.qaLocation),

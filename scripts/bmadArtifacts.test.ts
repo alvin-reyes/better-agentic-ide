@@ -48,3 +48,41 @@ describe("resolveArtifacts", () => {
     expect(find(resolveArtifacts(custom, (p) => p === "spec/prd.md"), "prd").present).toBe(true);
   });
 });
+
+describe("the architecture filenames BMAD's workflows actually create", () => {
+  // grep "creates: .*architecture" across the six bundled workflows gives
+  // architecture.md, fullstack-architecture.md, front-end-architecture.md and
+  // brownfield-architecture.md. Looking only for the config spelling means
+  // Design never completes on a project BMAD itself built.
+  it.each([
+    "docs/fullstack-architecture.md",
+    "docs/front-end-architecture.md",
+    "docs/brownfield-architecture.md",
+  ])("resolves %s", (path) => {
+    const a = find(resolveArtifacts(paths, (p) => p === path), "architecture");
+    expect(a.present).toBe(true);
+    expect(a.path).toBe(path);
+    expect(a.isDirectory).toBe(false);
+  });
+
+  it("still prefers the sharded directory when it exists", () => {
+    const a = find(
+      resolveArtifacts(paths, (p) => ["docs/architecture", "docs/fullstack-architecture.md"].includes(p)),
+      "architecture",
+    );
+    expect(a.path).toBe("docs/architecture");
+    expect(a.isDirectory).toBe(true);
+  });
+});
+
+describe("isDirectory follows the path that resolved", () => {
+  it("is true for a sharded directory even when the config says unsharded", () => {
+    // The PO shards the PRD; nobody flips prdSharded. The directory is still
+    // a directory, and a UI that opens it as a file would fail.
+    const single = { ...paths, prdSharded: false };
+    const prd = find(resolveArtifacts(single, (p) => p === "docs/prd"), "prd");
+    expect(prd.present).toBe(true);
+    expect(prd.path).toBe("docs/prd");
+    expect(prd.isDirectory).toBe(true);
+  });
+});

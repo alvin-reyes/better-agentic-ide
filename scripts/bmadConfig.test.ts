@@ -45,3 +45,19 @@ describe("parseBmadConfig", () => {
     expect(gatesDir(parseBmadConfig("qa:\n  qaLocation: quality\n"))).toBe("quality/gates");
   });
 });
+
+describe("usedDefaults means the paths did not come from a config", () => {
+  it("is true for an empty or unreadable config, not only a missing one", () => {
+    // An empty file yields every default; reporting usedDefaults false would
+    // tell the user their config supplied paths it never mentioned.
+    expect(parseBmadConfig("").usedDefaults).toBe(true);
+    expect(parseBmadConfig("# only a comment\n").usedDefaults).toBe(true);
+  });
+
+  it("reads the YAML spellings of true, not just the lowercase one", () => {
+    // prdSharded: True and prdSharded: yes are valid YAML booleans.
+    expect(parseBmadConfig("prd:\n  prdSharded: True\n").prdSharded).toBe(true);
+    expect(parseBmadConfig("prd:\n  prdSharded: yes\n").prdSharded).toBe(true);
+    expect(parseBmadConfig("prd:\n  prdSharded: no\n").prdSharded).toBe(false);
+  });
+});
