@@ -7,7 +7,7 @@ import FleetGroupingToggle from "./FleetGroupingToggle";
 import { useFleetData } from "../../hooks/useFleetData";
 import { useTabStore } from "../../stores/tabStore";
 import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
-import { useFleetStore, type FleetLane } from "../../stores/fleetStore";
+import { groupKeyIsTabId, useFleetStore, type FleetLane } from "../../stores/fleetStore";
 
 const RANGES: { label: string; ms: number | null }[] = [
   { label: "5m", ms: 5 * 60 * 1000 },
@@ -110,7 +110,7 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
             from={from}
             to={now}
             onSelect={jumpToPane}
-            onOpenTab={grouping === "terminal" ? (tabId) => setActiveTab(tabId) : undefined}
+            onOpenTab={groupKeyIsTabId(grouping) ? (tabId) => setActiveTab(tabId) : undefined}
           />
         ) : (
           <FleetTimeline lanes={visible} from={from} to={now} onSelect={jumpToPane} cwd={activeCwd} />

@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { ROLES } from "../data/roles";
+import { ROLES, ROLE_ORDER } from "../data/roles";
+import { AGENT_CATALOG } from "../data/curatedAgents";
 import type { AgentSession } from "./agentTrackerStore";
 import { promptTokens, sessionCost, type SessionUsage } from "../lib/tokenUsage";
 
@@ -89,9 +90,23 @@ function agentLaneId(s: AgentSession): string {
   return `agent:${s.paneId}:${s.startTime}`;
 }
 
-/** A sub-agent's type is a role id when it names one, and nothing when it does not. */
+const ROLE_IDS = new Set(ROLES.map((r) => r.id));
+const CURATED_ROLE_BY_ID = new Map(AGENT_CATALOG.map((a) => [a.id, a.roleId]));
+
+/**
+ * The role behind a sub-agent's type, or null.
+ *
+ * ADE writes sub-agents two ways: the core roles by role id (`qa`), and the
+ * curated profiles by profile id (`backend-api`). Only one of the 47 profiles
+ * shares an id with a role, so matching role ids alone left the other 46
+ * unattributed even though each declares the role it is.
+ *
+ * Anything else - Claude Code's own `general-purpose`, `Explore` - stays null.
+ * Guessing would put cost against work that never ran.
+ */
 function roleIdOf(agentType: string): string | null {
-  return ROLES.some((r) => r.id === agentType) ? agentType : null;
+  if (ROLE_IDS.has(agentType)) return agentType;
+  return CURATED_ROLE_BY_ID.get(agentType) ?? null;
 }
 
 /**
@@ -116,7 +131,9 @@ export function buildLanes(
       tabId: meta?.tabId ?? null,
       tabName: meta?.tabName ?? null,
       paneId: s.paneId,
-      cwd: meta?.cwd ?? null,
+      // The live pane cwd is authoritative — an agent can cd mid-run — but it
+      // disappears with the pane, so the session's own folder is the fallback.
+      cwd: meta?.cwd ?? s.cwd ?? null,
       label: s.agentName,
       detail: "",
       provider: s.provider,
@@ -208,9 +225,20 @@ export type FleetScope = "active" | "all";
  *
  * Project is the default: a folder outlives the window the work ran in, which a
  * terminal tab does not. Terminal remains available because it is occasionally
- * what you want after splitting panes - it is simply no longer the default.
+ * what you want after splitting panes — it is simply no longer the default.
  */
 export type FleetGrouping = "project" | "role" | "terminal";
+
+/**
+ * Whether a group's key can be opened as a terminal tab.
+ *
+ * Only a terminal group's key is a tab id. Under project or role grouping it is
+ * a folder or a role id, and handing one to setActiveTab would select nothing.
+ * Exported so the decision has a test rather than living inline in a component.
+ */
+export function groupKeyIsTabId(grouping: FleetGrouping): boolean {
+  return grouping === "terminal";
+}
 
 /** A terminal tab with the fleet lanes that belong to it. */
 export interface FleetGroup {
@@ -339,23 +367,35 @@ export interface LaneGroup {
   /** The folder or role id; null for lanes that could not be attributed. */
   key: string | null;
   name: string;
-  /** Secondary line, e.g. the full path behind a folder's basename. */
-  detail: string;
   lanes: FleetLane[];
   runningCount: number;
   costCents: number;
+  /**
+   * Whether any lane in this group carries a cost at all.
+   *
+   * withUsage only ever attributes cost to top-level agent lanes: a sub-agent's
+   * spend is inside its parent's Claude Code session and cannot be separated
+   * out. A role that only ever runs as a sub-agent therefore sums to zero, and
+   * rendering that as "$0.00" states something false about money. False when
+   * there is nothing to report, so the view can say so instead.
+   */
+  costKnown: boolean;
+  /** The folders behind this group, unjoined so each can be shortened. */
+  paths: string[];
 }
 
 function bucket(
   lanes: FleetLane[],
   keyOf: (l: FleetLane) => string | null,
   nameOf: (key: string) => string,
-  detailOf: (key: string) => string,
+  /** The folder behind the key, when there is one; "" otherwise. */
+  pathOf: (key: string) => string,
   unattributedName: string,
 ): LaneGroup[] {
   const byKey = new Map<string, LaneGroup>();
   const unattributed: LaneGroup = {
-    key: null, name: unattributedName, detail: "", lanes: [], runningCount: 0, costCents: 0,
+    key: null, name: unattributedName, lanes: [],
+    runningCount: 0, costCents: 0, costKnown: false, paths: [],
   };
 
   for (const lane of lanes) {
@@ -363,7 +403,9 @@ function bucket(
     let group: LaneGroup;
     if (key) {
       group = byKey.get(key) ?? {
-        key, name: nameOf(key), detail: detailOf(key), lanes: [], runningCount: 0, costCents: 0,
+        key, name: nameOf(key), lanes: [],
+        runningCount: 0, costCents: 0, costKnown: false,
+        paths: pathOf(key) ? [pathOf(key)] : [],
       };
       byKey.set(key, group);
     } else {
@@ -371,7 +413,10 @@ function bucket(
     }
     group.lanes.push(lane);
     if (lane.status === "running") group.runningCount += 1;
-    group.costCents += lane.costCents ?? 0;
+    if (lane.costCents !== null) {
+      group.costCents += lane.costCents;
+      group.costKnown = true;
+    }
   }
 
   const groups = [...byKey.values()];
@@ -394,7 +439,9 @@ function bucket(
 export function groupLanesByProject(lanes: FleetLane[]): LaneGroup[] {
   return bucket(
     lanes,
-    (l) => l.cwd,
+    // A trailing slash would split one project in two, with separate totals:
+    // paneMeta mixes the live PTY cwd and a persisted one, which can disagree.
+    (l) => (l.cwd ? l.cwd.replace(/\/+$/, "") : null),
     (cwd) => cwd.slice(cwd.lastIndexOf("/") + 1) || cwd,
     (cwd) => cwd,
     "Unknown project",
@@ -405,15 +452,44 @@ export function groupLanesByProject(lanes: FleetLane[]): LaneGroup[] {
  * Split lanes by which role ran them.
  *
  * Answers "what is QA costing me", which no grouping by window can. A lane with
- * no role - a pre-roles session, or a sub-agent whose type is not one of the
- * nineteen - is gathered rather than guessed at.
+ * no role — a pre-roles session, or a sub-agent whose type is not one of the
+ * nineteen — is gathered rather than guessed at.
  */
 export function groupLanesByRole(lanes: FleetLane[]): LaneGroup[] {
-  return bucket(
+  const groups = bucket(
     lanes,
     (l) => l.roleId,
     (id) => ROLES.find((r) => r.id === id)?.title ?? id,
     () => "",
     "No role recorded",
   );
+  // ROLE_ORDER is the catalog's deliberate order — delivery flow, then the
+  // company roles, then the advisory ones. Insertion order would instead be
+  // "whichever ran first", which reshuffles as lanes come and go.
+  const rank = (g: LaneGroup) => {
+    if (g.key === null) return Number.MAX_SAFE_INTEGER;
+    const i = ROLE_ORDER.indexOf(g.key);
+    return i < 0 ? ROLE_ORDER.length : i;
+  };
+  return [...groups].sort((a, b) => rank(a) - rank(b));
+}
+
+
+/**
+ * Put the terminal grouping into the shared shape.
+ *
+ * groupLanesByTerminal keeps its own shape and its own tests, including the
+ * empty groups it emits so idle tabs still show. Folders stay unjoined so the
+ * view can shorten each one: joining first meant only the first was abbreviated.
+ */
+export function terminalGroupsToLaneGroups(groups: FleetGroup[]): LaneGroup[] {
+  return groups.map((g) => ({
+    key: g.tabId,
+    name: g.tabName,
+    paths: g.cwds,
+    lanes: g.lanes,
+    runningCount: g.runningCount,
+    costCents: g.costCents,
+    costKnown: g.lanes.some((l) => l.costCents !== null),
+  }));
 }

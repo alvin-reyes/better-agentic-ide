@@ -8,6 +8,7 @@ import {
   groupLanesByTerminal,
   groupLanesByProject,
   groupLanesByRole,
+  terminalGroupsToLaneGroups,
   type SubagentEvent,
   type PaneInfo,
   type FleetLane,
@@ -236,15 +237,8 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
     if (grouping === "project") return groupLanesByProject(lanes);
     if (grouping === "role") return groupLanesByRole(lanes);
     // Terminal grouping keeps its own shape, including the empty groups it emits
-    // for idle tabs; map it to the common one rather than changing that function.
-    return groupLanesByTerminal(lanes, terminalTabs, paneMeta).map((g) => ({
-      key: g.tabId,
-      name: g.tabName,
-      detail: g.cwds.join(", "),
-      lanes: g.lanes,
-      runningCount: g.runningCount,
-      costCents: g.costCents,
-    }));
+    // for idle tabs; the mapping is a named export so it has its own test.
+    return terminalGroupsToLaneGroups(groupLanesByTerminal(lanes, terminalTabs, paneMeta));
   }, [scope, grouping, lanes, terminalTabs, paneMeta]);
 
   const totalCostCents = useMemo(

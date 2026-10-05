@@ -26,7 +26,7 @@ function shortPath(path: string): string {
  */
 export default function FleetGroups({ groups, from, to, onSelect, onOpenTab }: FleetGroupsProps) {
   if (groups.length === 0) {
-    return <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>No terminals open.</div>;
+    return <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>No agents yet.</div>;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -39,15 +39,20 @@ export default function FleetGroups({ groups, from, to, onSelect, onOpenTab }: F
               fontSize: "11px", marginBottom: "6px", color: "var(--text-secondary)",
             }}>
               <b style={{ color: "var(--text-primary)", fontSize: "12px" }}>{g.name}</b>
-              {g.detail && (
+              {g.paths.length > 0 && (
                 <span style={{ opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {shortPath(g.detail)}
+                  {g.paths.map(shortPath).join(", ")}
                 </span>
               )}
               <span style={{ marginLeft: "auto", color: g.runningCount > 0 ? "#22c55e" : "var(--text-muted)" }}>
                 ● {g.runningCount} running
               </span>
-              <span style={{ opacity: 0.75 }}>${(g.costCents / 100).toFixed(2)}</span>
+              <span
+                style={{ opacity: 0.75 }}
+                title={g.costKnown ? undefined : "No cost recorded: a sub-agent's spend is inside its parent's session"}
+              >
+                {g.costKnown ? `$${(g.costCents / 100).toFixed(2)}` : "—"}
+              </span>
               {g.key && onOpenTab && (
                 <button
                   onClick={() => onOpenTab(g.key as string)}

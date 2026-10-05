@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useOrchestratorStore, type OrchestratorTask, type ChatImage, type OrchestratorSession } from "../stores/orchestratorStore";
 import { useTabStore } from "../stores/tabStore";
+import { usePaneCwd } from "../stores/paneMetaStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { AGENT_CATALOG } from "../data/curatedAgents";
 import { getRole } from "../data/roles";
@@ -320,6 +321,8 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
         profile.icon,
         "claude",
         spec.roleId,
+        // Recorded so the lane keeps its project after the pane closes.
+        usePaneCwd.getState().cwds[agentPane.id] ?? session?.projectDir ?? null,
       );
       updateTaskStatus(sessionId, task.id, "running", agentPane.id, agentTabId);
     }
