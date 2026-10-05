@@ -33,7 +33,7 @@ into the terminal, and renders the artifacts those roles produce as the evidence
 that the stage actually happened.
 
 It invents no process. Every stage, role, artifact and status below already
-exists in the repo; this surfaces them and adds two gates.
+exists in the repo; this surfaces them and adds three gates.
 
 ## The five stages
 
@@ -73,13 +73,62 @@ so, rather than reporting a project with no artifacts.
 
 Audit sits before Execution deliberately. It audits the **plan**, not the code:
 the adversarial reviewer and the security engineer attack the PRD and the
-architecture while changing them is still cheap. This is the one stage with no
-equivalent in BMAD's own phase list, and it is the reason the board is worth
-building rather than just reading `docs/` by hand.
+architecture while changing them is still cheap. None of BMAD's six workflows
+has this step — they go design → shard → build — and it is the reason the board
+is worth building rather than just reading the docs directory by hand.
 
-`docs/architecture.md` carries the **agreed verification command**, which the
+The architecture document carries the **agreed verification command**, which the
 architect owns. Every later gate depends on it, so Design cannot complete
 without one.
+
+### The sequence comes from a BMAD workflow, not from these five names
+
+`bmad-core/workflows/` ships six workflows — `greenfield-fullstack`,
+`greenfield-service`, `greenfield-ui` and three brownfield variants — and each
+already encodes the agent-to-artifact sequence. `greenfield-fullstack` begins:
+
+```yaml
+- agent: analyst     creates: project-brief.md
+- agent: pm          creates: prd.md
+- agent: ux-expert   creates: front-end-spec.md
+- agent: architect   creates: fullstack-architecture.md
+- agent: po          action: shard_documents
+- agent: sm          action: create_story
+```
+
+The five stages are a **human-facing grouping over these steps**, not a
+replacement for them. The board picks a workflow (a new project defaults to a
+greenfield variant; an existing codebase to brownfield), reads its steps, and
+buckets each into one of the five stages. Audit is the one stage with no
+workflow steps to bucket, so its steps are ADE's own.
+
+This matters because hardcoding five stages would drift from BMAD the moment a
+workflow changes, which is the failure this whole design exists to avoid.
+
+### Two namespaces have to be mapped
+
+BMAD workflows name agents `analyst`, `pm`, `ux-expert`, `architect`, `po`,
+`sm`, `dev`, `qa`. ADE's roles are `analyst`, `product-manager`, `designer`,
+`architect`, `product-owner`, `scrum-master`, `developer`, `qa`. The story
+template uses a third spelling again (`editors: [scrum-master, dev-agent]`).
+
+A single mapping table owns this translation, and a test asserts every agent
+named in every bundled workflow resolves to one of the nineteen roles. Without
+it a workflow step silently spawns nothing.
+
+### Artifact names conflict, and config wins
+
+ADE's roles declare they own `docs/brief.md` and `docs/architecture.md`.
+BMAD's greenfield-fullstack workflow creates `project-brief.md` and
+`fullstack-architecture.md`. A board looking only for ADE's names would report
+"missing" on a project BMAD itself built.
+
+`core-config.yaml` is the authority where it has an opinion
+(`prdFile`, `architectureFile`, `devStoryLocation`, `qaLocation`). For the
+artifacts it says nothing about — the brief, reviews, threat model, backlog —
+the board accepts **either** spelling and treats the stage as satisfied if
+either resolves. Reporting a stage incomplete because of a filename is worse
+than accepting two names for one thing.
 
 ## What it replaces
 
@@ -140,6 +189,24 @@ not enough: an agent can write a stub. A click alone is not enough: that is how
 a project reaches Execution with no PRD. Going back a stage is always allowed
 and never destroys anything.
 
+Execution is the exception, and needs a stronger test than the others. "The
+story directory exists" is satisfied by a single story, which would let a
+project advance with the backlog barely started. Execution is complete when
+**every story is at `Done` or `dropped`** — not when stories merely exist.
+
+### Stages are not strictly sequential once Execution starts
+
+Stories carry their own lifecycle — `Draft → Approved → InProgress → Review →
+Done` — and it runs *per story*, inside Execution. So the Review stage does not
+mean "all building has finished and reviewing now begins"; stories reach review
+individually while others are still being built.
+
+The board models this honestly: Execution and Review are a **loop**, not two
+steps. The Review stage shows the gate queue — every story sitting at `Review`
+waiting on a QA verdict — and the project leaves the loop only when Execution's
+completion test above passes. Presenting them as sequential would misdescribe
+how the work actually runs and would make the board wrong on day two.
+
 **Approve.** BMAD's own `Draft → Approved` transition on a story. Only a human
 click performs it, and nothing is dispatched to the fleet below `Approved`.
 
@@ -180,8 +247,14 @@ and watching the test fail:
 - nothing dispatches below `Approved`
 - `Done` requires a QA gate with `gate: PASS`; Status alone renders as claimed
 
-**One rule protects the stage machine**: a stage cannot be advanced while its
-evidence is absent.
+**Two rules protect the stage machine**: a stage cannot be advanced while its
+evidence is absent, and Execution cannot complete while any story is short of
+`Done` or `dropped`.
+
+**One rule protects the namespace mapping**: every agent named in every bundled
+BMAD workflow resolves to one of the nineteen ADE roles. This runs against the
+vendored workflow files, so a BMAD upgrade that renames an agent fails the build
+instead of silently spawning nothing.
 
 ## Non-goals
 
@@ -214,10 +287,21 @@ Assumed here, and worth correcting if wrong:
 
 ## Risks
 
-**`OrchestratorTab` removal is user-visible.** Anyone with sessions in
-`localStorage` loses that view. Those sessions were never in the repo and cannot
-be migrated into stories without inventing content, so the honest path is to
-remove the tab and say so in the release notes rather than fabricate a migration.
+**`OrchestratorTab` removal reaches further than the tab.** Ten files reference
+it or `orchestratorStore`, and `src/lib/anthropic.ts` is imported by that tab
+**alone**. Removing it therefore also retires the direct Anthropic SDK path and
+strands two settings users may have configured: `anthropicApiKey` and
+`orchestratorProvider`.
+
+That is mostly a gain — it removes a second agent channel, an API-key surface,
+and the `@anthropic-ai/sdk` dependency, leaving the CLI providers as the only
+way agents run. But it is a user-visible loss for anyone who set that key, and
+it must be in the release notes. Sessions in `localStorage` cannot be migrated
+into stories without inventing their content, so they are dropped rather than
+faked.
+
+Whether to retire the SDK path in the same change or leave it unused for a
+release is an open decision for the implementation plan.
 
 **The board is only as good as the artifacts.** If agents write thin PRDs, the
 board shows a green stage over a weak plan. The Audit stage is the mitigation,
