@@ -45,7 +45,10 @@ $Api  = "https://api.github.com/repos/$Repo/releases"
 function Write-Head($m) { Write-Host $m -ForegroundColor White }
 function Write-Info($m) { Write-Host "  $m" }
 function Write-Warn($m) { Write-Host "  $m" -ForegroundColor Yellow }
-function Stop-With($m)  { Write-Host "  $m" -ForegroundColor Red; exit 1 }
+# Prints the reason and exits 1. Named Write- rather than Stop- because Stop is
+# a state-changing verb in PowerShell and the analyser then expects
+# ShouldProcess support, which a message-and-exit helper has no use for.
+function Write-Fail($m) { Write-Host "  $m" -ForegroundColor Red; exit 1 }
 
 # TLS 1.2 is not the default on older Windows PowerShell and GitHub requires it.
 try {
@@ -63,7 +66,7 @@ $arch = $env:PROCESSOR_ARCHITECTURE
 switch ($arch) {
   'AMD64' { $archLabel = 'x64' }
   'ARM64' { $archLabel = 'arm64' }
-  default { Stop-With "unsupported architecture: $arch" }
+  default { Write-Fail "unsupported architecture: $arch" }
 }
 Write-Info "platform: Windows ($archLabel)"
 
@@ -77,9 +80,9 @@ try {
   # network is down when they mistyped a version sends them to the wrong place.
   try {
     Invoke-RestMethod -Uri "$Api/latest" -Headers @{ 'User-Agent' = 'ade-installer' } | Out-Null
-    Stop-With "no release tagged $Version. See https://github.com/$Repo/releases"
+    Write-Fail "no release tagged $Version. See https://github.com/$Repo/releases"
   } catch {
-    Stop-With "could not reach the GitHub release API. Download manually from https://github.com/$Repo/releases/latest"
+    Write-Fail "could not reach the GitHub release API. Download manually from https://github.com/$Repo/releases/latest"
   }
 }
 
@@ -94,7 +97,7 @@ if (-not $asset) {
 if (-not $asset) {
   Write-Warn "this release publishes no Windows installer."
   Write-Warn "Windows builds are not produced yet - see https://github.com/$Repo/issues/22."
-  Stop-With "Nothing to install. macOS and Linux are available today."
+  Write-Fail "Nothing to install. macOS and Linux are available today."
 }
 
 $sums = $meta.assets | Where-Object { $_.name -eq 'SHA256SUMS' } | Select-Object -First 1
@@ -118,11 +121,11 @@ try {
       $parts = $line.Trim() -split '\s+'
       if ($parts.Count -ge 2 -and $parts[-1] -eq $asset.name) { $want = $parts[0]; break }
     }
-    if (-not $want) { Stop-With "SHA256SUMS has no entry for $($asset.name)" }
+    if (-not $want) { Write-Fail "SHA256SUMS has no entry for $($asset.name)" }
 
     $have = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToLower()
     if ($have -ne $want.ToLower()) {
-      Stop-With "checksum mismatch - refusing to install. Expected $want, got $have"
+      Write-Fail "checksum mismatch - refusing to install. Expected $want, got $have"
     }
     Write-Info 'sha256 matches'
   } else {
@@ -145,12 +148,12 @@ try {
     $p = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
     # 3010 is success-but-reboot-required, not a failure.
     if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
-      Stop-With "the installer exited with code $($p.ExitCode)"
+      Write-Fail "the installer exited with code $($p.ExitCode)"
     }
     if ($p.ExitCode -eq 3010) { Write-Warn 'a restart is required to finish' }
   } else {
     $p = Start-Process $file -Wait -PassThru
-    if ($p.ExitCode -ne 0) { Stop-With "the installer exited with code $($p.ExitCode)" }
+    if ($p.ExitCode -ne 0) { Write-Fail "the installer exited with code $($p.ExitCode)" }
   }
 
   Write-Head 'Done'
