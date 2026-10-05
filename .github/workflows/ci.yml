@@ -146,10 +146,16 @@ jobs:
         run: |
           $out = & pwsh -NoProfile -File docs/install.ps1 -DryRun 2>&1 | Out-String
           Write-Host $out
+          # The script exits 1 on purpose while no Windows build exists, and the
+          # pwsh shell would propagate that as a job failure. The assertion below
+          # is what decides this step, so the inner exit code is deliberately
+          # discarded rather than inherited.
           if ($out -match 'would install') {
             Write-Host "resolved a Windows installer"
+            exit 0
           } elseif ($out -match 'no Windows installer') {
             Write-Host "correctly reported that no Windows build is published yet"
+            exit 0
           } else {
             Write-Host "::error::unexpected output from install.ps1"
             exit 1
