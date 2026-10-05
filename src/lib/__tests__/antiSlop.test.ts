@@ -84,3 +84,31 @@ describe("deslop verb forms", () => {
     expect(deslop("It utilized the cache and leverages it.").text).toBe("It used the cache and uses it.");
   });
 });
+
+describe("vendored BMAD is not judged by our rules", () => {
+  // src-tauri/resources/bmad/ is the copy this repo ships BMAD from, and
+  // .bmad-core/ is where it lands in a user's project. Both are BMAD's prose.
+  // Flagging it is noise: it is not ours to rewrite, and re-vendoring would
+  // restore the wording anyway.
+  it("skips the vendored source as well as the installed copy", () => {
+    const diff = [
+      "+++ b/src-tauri/resources/bmad/bmad-core/data/bmad-kb.md",
+      "@@ -1,0 +1,2 @@",
+      "+Leverage multiple agents for brainstorming.",
+      "+This enables seamless operation across environments.",
+      "+++ b/.bmad-core/data/bmad-kb.md",
+      "@@ -1,0 +1,1 @@",
+      "+A robust, seamless way to delve into it.",
+    ].join("\n");
+    expect(checkDiff(diff)).toEqual([]);
+  });
+
+  it("still flags the same wording in our own docs", () => {
+    const diff = [
+      "+++ b/docs/guide/something.md",
+      "@@ -1,0 +1,1 @@",
+      "+This enables seamless operation across environments.",
+    ].join("\n");
+    expect(checkDiff(diff).map((f) => f.rule)).toEqual(["ai-words"]);
+  });
+});

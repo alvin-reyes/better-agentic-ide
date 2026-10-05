@@ -37,7 +37,15 @@ export const SLOP_RULES = parseRules(RULES_TSV);
 
 const DOCS = /\.(md|mdx|txt|rst)$/;
 // .bmad-core is BMAD's scaffold, which ADE installs.
-const SKIP = [/(^|\/)(node_modules|vendor|dist|build|target|\.bmad-core)\//, /(\.lock|lock\.json|\.min\.js|\.snap)$/, /slop-patterns\.tsv$/];
+// `.bmad-core/` is where BMAD lands in a user's project; `resources/bmad/` is
+// the vendored copy this repo ships it from. Both are BMAD's prose, not ours,
+// and rewriting either is undone the next time it is re-vendored.
+const SKIP = [
+  /(^|\/)(node_modules|vendor|dist|build|target|\.bmad-core)\//,
+  /(^|\/)resources\/bmad\//,
+  /(\.lock|lock\.json|\.min\.js|\.snap)$/,
+  /slop-patterns\.tsv$/,
+];
 
 /** Findings in the added lines of a `git diff -U0` (plus new files as all-added). */
 export function checkDiff(diff: string, rules: SlopRule[] = SLOP_RULES): SlopFinding[] {

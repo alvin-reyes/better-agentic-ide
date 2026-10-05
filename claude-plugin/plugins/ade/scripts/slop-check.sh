@@ -46,7 +46,7 @@ findings=$(changes | awk -v rules="$rules" '
   /^\+\+\+ / {
     file = substr($0, 5); sub(/^b\//, "", file)
     docs = (file ~ /\.(md|mdx|txt|rst)$/)
-    skip = (file ~ /(^|\/)(node_modules|vendor|dist|build|target|\.bmad-core)\// || file ~ /(\.lock|lock\.json|\.min\.js|\.snap)$/ || file ~ /slop-patterns\.tsv$/)
+    skip = (file ~ /(^|\/)(node_modules|vendor|dist|build|target|\.bmad-core)\// || file ~ /(^|\/)resources\/bmad\// || file ~ /(\.lock|lock\.json|\.min\.js|\.snap)$/ || file ~ /slop-patterns\.tsv$/)
     next
   }
   /^\+/ {
