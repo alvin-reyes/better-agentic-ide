@@ -7,7 +7,7 @@ function lane(over: Partial<FleetLane> = {}): FleetLane {
   return {
     id: "agent:p1:1000", kind: "agent", parentId: null, tabId: "t1", tabName: "ide",
     paneId: "p1", cwd: "/proj", label: "claude", detail: "", provider: "claude",
-    model: null, startTime: 1000, endTime: 2000, status: "completed",
+    model: null, roleId: null, startTime: 1000, endTime: 2000, status: "completed",
     costCents: 10, tokens: { input: 1, output: 1 }, ...over,
   };
 }

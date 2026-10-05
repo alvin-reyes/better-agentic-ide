@@ -3,10 +3,11 @@ import FleetTimeline from "./FleetTimeline";
 import FleetSummary from "./FleetSummary";
 import FleetGroups from "./FleetGroups";
 import FleetScopeToggle from "./FleetScopeToggle";
+import FleetGroupingToggle from "./FleetGroupingToggle";
 import { useFleetData } from "../../hooks/useFleetData";
 import { useTabStore } from "../../stores/tabStore";
 import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
-import { useFleetStore, type FleetLane } from "../../stores/fleetStore";
+import { groupKeyIsTabId, useFleetStore, type FleetLane } from "../../stores/fleetStore";
 
 const RANGES: { label: string; ms: number | null }[] = [
   { label: "5m", ms: 5 * 60 * 1000 },
@@ -21,6 +22,7 @@ interface FleetTabProps {
 
 export default function FleetTab({ activeCwd }: FleetTabProps) {
   const scope = useFleetStore((s) => s.scope);
+  const grouping = useFleetStore((s) => s.grouping);
   const { lanes, groups, totalCostCents, runningCount } = useFleetData(activeCwd, scope);
   const clearHistory = useAgentTrackerStore((s) => s.clearHistory);
   const setActiveTab = useTabStore((s) => s.setActiveTab);
@@ -65,6 +67,7 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
       }}>
         <b style={{ fontSize: "13px", color: "var(--text-primary)" }}>Fleet</b>
         <FleetScopeToggle />
+        {scope === "all" && <FleetGroupingToggle />}
         <div style={{ flex: 1 }}>
           <FleetSummary runningCount={runningCount} doneCount={doneCount} totalCostCents={totalCostCents} />
         </div>
@@ -107,7 +110,7 @@ export default function FleetTab({ activeCwd }: FleetTabProps) {
             from={from}
             to={now}
             onSelect={jumpToPane}
-            onOpenTab={(tabId) => setActiveTab(tabId)}
+            onOpenTab={groupKeyIsTabId(grouping) ? (tabId) => setActiveTab(tabId) : undefined}
           />
         ) : (
           <FleetTimeline lanes={visible} from={from} to={now} onSelect={jumpToPane} cwd={activeCwd} />

@@ -6,10 +6,13 @@ import {
   withUsage,
   buildPaneMeta,
   groupLanesByTerminal,
+  groupLanesByProject,
+  groupLanesByRole,
+  terminalGroupsToLaneGroups,
   type SubagentEvent,
   type PaneInfo,
   type FleetLane,
-  type FleetGroup,
+  type LaneGroup,
   type FleetScope,
   type TerminalTabInfo,
 } from "../stores/fleetStore";
@@ -119,7 +122,7 @@ function useWatchedCwds(cwds: string[]) {
  */
 export function useFleetData(activeCwd: string | null, scope: FleetScope = "active"): {
   lanes: FleetLane[];
-  groups: FleetGroup[];
+  groups: LaneGroup[];
   totalCostCents: number;
   runningCount: number;
 } {
@@ -227,10 +230,16 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
   const usage = useLaneUsage(baseLanes);
   const lanes = useMemo(() => withUsage(baseLanes, usage), [baseLanes, usage]);
 
-  const groups = useMemo(
-    () => (scope === "all" ? groupLanesByTerminal(lanes, terminalTabs, paneMeta) : []),
-    [scope, lanes, terminalTabs, paneMeta],
-  );
+  const grouping = useFleetStore((s) => s.grouping);
+
+  const groups = useMemo<LaneGroup[]>(() => {
+    if (scope !== "all") return [];
+    if (grouping === "project") return groupLanesByProject(lanes);
+    if (grouping === "role") return groupLanesByRole(lanes);
+    // Terminal grouping keeps its own shape, including the empty groups it emits
+    // for idle tabs; the mapping is a named export so it has its own test.
+    return terminalGroupsToLaneGroups(groupLanesByTerminal(lanes, terminalTabs, paneMeta));
+  }, [scope, grouping, lanes, terminalTabs, paneMeta]);
 
   const totalCostCents = useMemo(
     () => lanes.reduce((sum, l) => sum + (l.costCents ?? 0), 0),

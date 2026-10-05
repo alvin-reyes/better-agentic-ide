@@ -14,6 +14,15 @@ export interface AgentSession {
    * every restored pre-branch session lie about its shape.
    */
   roleId?: string;
+  /**
+   * The folder the agent was launched in.
+   *
+   * paneMeta is rebuilt from the live tab tree, so a closed pane nulls a lane's
+   * tabId and cwd together. Recording it here is what lets the fleet keep
+   * attributing a finished run to its project. Optional for the same reason
+   * roleId is: sessions restored from older localStorage do not have it.
+   */
+  cwd?: string | null;
   startTime: number;
   endTime: number | null;
   status: "running" | "completed" | "cancelled";
@@ -22,7 +31,7 @@ export interface AgentSession {
 interface AgentTrackerStore {
   sessions: AgentSession[];
 
-  startSession: (paneId: string, agentName: string, agentIcon: string, provider: string, roleId: string) => void;
+  startSession: (paneId: string, agentName: string, agentIcon: string, provider: string, roleId: string, cwd?: string | null) => void;
   endSession: (paneId: string) => void;
   getActiveSession: (paneId: string) => AgentSession | undefined;
   clearHistory: () => void;
@@ -44,7 +53,7 @@ function persistSessions(sessions: AgentSession[]) {
 export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
   sessions: loadSessions(),
 
-  startSession: (paneId, agentName, agentIcon, provider, roleId) => {
+  startSession: (paneId, agentName, agentIcon, provider, roleId, cwd) => {
     if (get().getActiveSession(paneId)) get().endSession(paneId);
     const session: AgentSession = {
       paneId,
@@ -52,6 +61,7 @@ export const useAgentTrackerStore = create<AgentTrackerStore>((set, get) => ({
       agentIcon,
       provider,
       roleId,
+      cwd: cwd ?? null,
       startTime: Date.now(),
       endTime: null,
       status: "running",
