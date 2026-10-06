@@ -162,9 +162,135 @@ llms.txt
       </div>
     </div>
 
-    <div class="pillar" id="blockchain">
+          <div class="pillar" id="composition">
+        <div class="pillar-head">
+          <span class="pillar-num">03</span>
+          <div>
+            <h2>How an agent is composed</h2>
+            <p>A prompt that says &ldquo;you are a senior engineer&rdquo; is a costume. An agent here is two
+              things joined: a role that fixes what it is accountable for, and a domain that narrows
+              what it is working on. The role is the part that holds.</p>
+          </div>
+        </div>
+
+        <div class="compose">
+          <div class="compose-row">
+            <div class="compose-part">
+              <span class="compose-label">Role</span>
+              <b>19</b>
+              <p>What it is accountable for, the artifacts it owns, and what it must not touch.
+                QA may not edit the code it judges. The adversarial reviewer ships with a
+                read-only tool allowlist.</p>
+            </div>
+            <span class="compose-op" aria-hidden="true">&times;</span>
+            <div class="compose-part">
+              <span class="compose-label">Domain</span>
+              <b>44</b>
+              <p>One technical focus: Backend API, Database, CSS, Containers, CI/CD, Solidity.
+                It narrows what the agent knows. It never widens what the agent may do.</p>
+            </div>
+            <span class="compose-op" aria-hidden="true">=</span>
+            <div class="compose-part compose-part--out">
+              <span class="compose-label">Agent</span>
+              <b>47</b>
+              <p>Named pairings, ready to launch. <b>Developer &times; Backend API</b> is the API
+                Builder; <b>Developer &times; Database</b> is the Database Engineer. Same
+                accountability, different ground.</p>
+            </div>
+          </div>
+          <p class="compose-note">The role&rsquo;s definition is handed to the provider <b>verbatim</b>, not
+            rebuilt from parsed fields, because it carries sections ADE does not model and a
+            recomposition would silently drop them. The domain is appended as a Focus section
+            underneath. Boundaries survive the pairing by construction, not by convention.</p>
+        </div>
+
+        <div class="section-head section-head--tight">
+          <span class="kicker">The team</span>
+          <h2>Nineteen roles, and the only approval that counts</h2>
+          <p>Not a staffing metaphor. Each one is a definition with owned artifacts and stated
+            boundaries, so two agents working at once do not quietly edit the same file.</p>
+        </div>
+
+        <div class="org">
+          <div class="org-top">
+            <div class="org-node org-node--you"><b>You</b><span>nothing ships without this</span></div>
+          </div>
+          <div class="org-stem" aria-hidden="true"></div>
+          <div class="org-tier">
+            <span class="org-tier-label">Delivery</span>
+            <div class="org-nodes">
+            <div class="org-node"><b>Analyst</b><span>reads the problem</span></div>
+            <div class="org-node"><b>Product Manager</b><span>owns the PRD</span></div>
+            <div class="org-node"><b>Designer</b><span>owns the UX spec</span></div>
+            <div class="org-node"><b>Architect</b><span>names the verification command</span></div>
+            <div class="org-node"><b>Product Owner</b><span>accepts the work</span></div>
+            <div class="org-node"><b>Scrum Master</b><span>shards the plan</span></div>
+            <div class="org-node"><b>Developer</b><span>writes the test first</span></div>
+            <div class="org-node"><b>QA</b><span>judges, cannot edit</span></div>
+            <div class="org-node"><b>DevOps</b><span>owns the ops plan</span></div>
+            <div class="org-node"><b>Adversarial Reviewer</b><span>read-only, defaults to block</span></div>
+            </div>
+          </div>
+          <div class="org-tier">
+            <span class="org-tier-label">Around it</span>
+            <div class="org-nodes">
+            <div class="org-node"><b>Security Engineer</b><span>threat surface</span></div>
+            <div class="org-node"><b>Site Reliability Engineer</b><span>runbooks</span></div>
+            <div class="org-node"><b>Release Manager</b><span>what ships, when</span></div>
+            <div class="org-node"><b>Engineering Manager</b><span>load and sequencing</span></div>
+            <div class="org-node"><b>Support Engineer</b><span>what users hit</span></div>
+            <div class="org-node"><b>Solutions Engineer</b><span>what buyers need</span></div>
+            </div>
+          </div>
+          <div class="org-tier">
+            <span class="org-tier-label">Advisory</span>
+            <div class="org-nodes">
+            <div class="org-node"><b>Brainstorming Architect</b><span>shapes the idea</span></div>
+            <div class="org-node"><b>Technical Writer</b><span>owns the docs</span></div>
+            <div class="org-node"><b>Advisor</b><span>second opinion</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-head section-head--tight">
+          <span class="kicker">Execution</span>
+          <h2>Where each one acts</h2>
+          <p>Roles are not decoration. Each step of the flow has an owner, and the handoff between
+            them is the point: the agent that builds is never the agent that signs it off.</p>
+        </div>
+
+        <ol class="flow">
+          <li>
+            <span class="flow-step">Plan</span>
+            <p>The product manager writes the PRD. The architect writes the architecture and names
+              the <b>one verification command</b>. The designer writes the UX spec, DevOps the ops plan.</p>
+          </li>
+          <li>
+            <span class="flow-step">Approve</span>
+            <p>The adversarial reviewer attacks each artifact first, defaulting to block on any
+              material flaw. Then you approve. A reviewer that waves things through defeats the point.</p>
+          </li>
+          <li>
+            <span class="flow-step">Shard</span>
+            <p>The scrum master splits the plan into small, independently testable stories, so several
+              agents can work without colliding.</p>
+          </li>
+          <li>
+            <span class="flow-step">Build</span>
+            <p>Developer agents take one story each, test first. They run in parallel because each
+              role states what it owns, so two agents do not quietly edit the same artifact.</p>
+          </li>
+          <li>
+            <span class="flow-step">Verify</span>
+            <p>QA or you run the verification command on that commit, with the output shown. A story
+              is Done when it passes. Not when an agent says so.</p>
+          </li>
+        </ol>
+      </div>
+
+<div class="pillar" id="blockchain">
       <div class="pillar-head">
-        <span class="pillar-num">03</span>
+        <span class="pillar-num">04</span>
         <div>
           <h2>Agentic workflow and blockchain engineering</h2>
           <p>The two places unreviewed code costs the most. Architects for agent design, RAG and LLMOps sit beside Foundry, Hardhat and Anchor. Smart contracts run from first test to reviewed deploy, and ADE never touches private keys.</p>

@@ -636,9 +636,13 @@ pre {
 .feat-card.text { padding: 26px 24px 28px; border-left: 2px solid var(--line-3, var(--line-2)); }
 .feat-card.text h3 { margin: 0 0 10px; font-size: 19px; }
 .feat-card.text p { margin: 0; font-size: 15px; }
+/* --code-bg, not --term-bg. The terminal surface is deliberately dark in both
+   themes and has no light value, so pairing it with --text painted near-black
+   on near-black in light mode: a contrast ratio of 1.0. Every other code chip
+   on the site already uses --code-bg. */
 .feat-card.text code {
   font-family: var(--mono); font-size: .88em; padding: 1px 5px; border-radius: 4px;
-  background: var(--term-bg); border: 1px solid var(--line-2); color: var(--text);
+  background: var(--code-bg); border: 1px solid var(--line); color: var(--text);
 }
 
 /* GitHub counts under the open-source heading. Filled at runtime and hidden
@@ -758,3 +762,115 @@ pre {
   text-transform: uppercase; color: var(--accent-text);
 }
 .feat-card.feat-card--lead p + p { margin-top: 12px; }
+
+/* Composition: role x domain = agent. The operators are real information (the
+   pairing is literally a product of two sets), so they are typeset as operators
+   rather than drawn as decorative chevrons. */
+.compose {
+  border: 1px solid var(--line); border-radius: 20px;
+  background: var(--panel); padding: 26px 24px;
+}
+.compose-row {
+  display: grid; grid-template-columns: 1fr auto 1fr auto 1fr;
+  gap: 18px; align-items: start;
+}
+.compose-part { min-width: 0; }
+.compose-label {
+  display: block; font: 600 10px/1 var(--mono); letter-spacing: .12em;
+  text-transform: uppercase; color: var(--text-3); margin-bottom: 8px;
+}
+/* Direct child only: the count. A descendant selector also caught the inline
+   <b> inside the paragraph, which set "Developer x Backend API" at 34px. */
+.compose-part > b {
+  display: block; font-size: 34px; line-height: 1; letter-spacing: -0.03em;
+  color: var(--text); margin-bottom: 10px; font-variant-numeric: tabular-nums;
+}
+.compose-part p { color: var(--text-2); font-size: 14px; line-height: 1.6; margin: 0; }
+.compose-part--out > b { color: var(--accent-text); }
+.compose-op {
+  font: 400 22px/1 var(--mono); color: var(--text-3);
+  align-self: center; padding-top: 26px;
+}
+.compose-note {
+  margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--line);
+  color: var(--text-2); font-size: 14px; line-height: 1.65;
+}
+.compose-note b, .compose-part p b { color: var(--text); font-weight: 600; }
+
+.section-head--tight { margin-top: 56px; }
+
+/* The flow is a genuine sequence: each step hands an artifact to the next, so
+   it is numbered and ordered rather than laid out as peer cards. */
+.flow { list-style: none; counter-reset: flow; padding: 0; margin: 26px 0 0; display: grid; gap: 10px; }
+.flow li {
+  counter-increment: flow; display: grid; grid-template-columns: 112px 1fr;
+  gap: 18px; align-items: baseline; padding: 16px 20px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+}
+.flow li::before {
+  content: counter(flow, decimal-leading-zero);
+  grid-row: 1; font: 600 11px/1 var(--mono); color: var(--text-3);
+  letter-spacing: .08em; align-self: center;
+}
+.flow-step {
+  font-size: 15px; font-weight: 600; color: var(--text);
+  grid-column: 1; grid-row: 1; margin-left: 26px;
+}
+.flow li p { grid-column: 2; grid-row: 1; margin: 0; color: var(--text-2); font-size: 14.5px; line-height: 1.6; }
+
+@media (max-width: 820px) {
+  .compose-row { grid-template-columns: 1fr; gap: 14px; }
+  .compose-op { display: none; }
+  .flow li { grid-template-columns: 1fr; gap: 6px; }
+  .flow li p { grid-column: 1; grid-row: 2; }
+  .flow-step { margin-left: 26px; }
+}
+
+/* The org chart. Tiers are the order the catalog itself declares: the delivery
+   flow, the roles around it, then the advisory ones. You sit above all of it
+   because the methodology gives the approval to a person, not an agent. */
+.org { margin-top: 30px; display: flex; flex-direction: column; align-items: center; }
+.org-top { display: flex; justify-content: center; }
+.org-stem { width: 1px; height: 26px; background: linear-gradient(var(--line-3), var(--line)); }
+
+.org-tier { width: 100%; padding-top: 20px; }
+.org-tier + .org-tier { margin-top: 10px; }
+.org-tier-label {
+  display: block; text-align: center; margin-bottom: 14px;
+  font: 600 10px/1 var(--mono); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--text-3);
+}
+.org-nodes { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+.org-node {
+  flex: 0 1 190px; min-width: 0; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel);
+  transition: border-color .2s, transform .2s;
+}
+.org-node:hover { border-color: var(--line-3); transform: translateY(-2px); }
+.org-node b { display: block; font-size: 14px; color: var(--text); margin-bottom: 3px; }
+.org-node span { display: block; font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+
+.org-node--you {
+  flex-basis: 230px; text-align: center;
+  background: linear-gradient(var(--panel), var(--panel)) padding-box,
+              linear-gradient(90deg, rgba(255, 138, 61, 0.55), rgba(167, 139, 250, 0.6)) border-box;
+  border: 1px solid transparent;
+}
+.org-node--you b { font-size: 16px; }
+
+/* Connector from the stem down into the first tier, drawn once the tier is in
+   view. Pure decoration, so it is hidden from assistive tech and skipped
+   entirely when the visitor asks for reduced motion. */
+.org-tier { position: relative; }
+.org-tier::before {
+  content: ""; position: absolute; left: 50%; top: 0; width: 1px; height: 20px;
+  background: var(--line); transform: scaleY(0); transform-origin: top;
+}
+.reveal-on .org-tier.is-in::before { transform: scaleY(1); transition: transform .5s ease .1s; }
+@media (prefers-reduced-motion: reduce) { .org-tier::before { transform: scaleY(1); } }
+:root:not(.reveal-on) .org-tier::before { transform: scaleY(1); }
+
+@media (max-width: 560px) {
+  .org-node { flex-basis: 100%; }
+}

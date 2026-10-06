@@ -74,7 +74,10 @@
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce || !("IntersectionObserver" in window)) return;
     var sel = [
-      ".section-head", ".feat-card", ".new-strip", ".price-card", ".training", ".faq", ".cta-band"
+      ".section-head", ".feat-card", ".new-strip", ".price-card", ".training", ".faq", ".cta-band",
+      // The composition section joins the same mechanism rather than adding a
+      // second one, so reduced-motion and the no-JS fallback keep holding.
+      ".compose", ".flow li", ".org-node", ".org-tier"
     ].join(",");
     var els = Array.prototype.slice.call(document.querySelectorAll(sel));
     if (!els.length) return;
