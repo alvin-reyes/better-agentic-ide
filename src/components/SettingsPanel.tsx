@@ -4,6 +4,8 @@ import { useTabStore } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import SyncSettings from "./SyncSettings";
+import { PROVIDERS } from "../data/providers";
+import { supportsRoleDelivery } from "../lib/agentCommand";
 
 const colorLabels: { key: keyof ThemeColors; label: string; group: string }[] = [
   { key: "bgPrimary", label: "Background", group: "UI" },
@@ -847,6 +849,44 @@ export default function SettingsPanel() {
           {/* AI API Tab */}
           {store.settingsTab === "ai" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              {/* Default agent provider. The picker already persisted this as "the
+                  last provider used"; surfacing it makes it a choice rather than a side
+                  effect, which is what DeepSeek needs: it is the claude binary pointed
+                  at an Anthropic-compatible endpoint, picked once rather than per
+                  launch. Providers with no verified role delivery are left out, because
+                  choosing one as a default could never launch anything. */}
+              <div>
+                <label style={SECTION_LABEL_STYLE}>Default agent provider</label>
+                <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                  {PROVIDERS.filter((p) => supportsRoleDelivery(p.id)).map((p) => {
+                    const isActive = store.defaultProvider === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => store.setDefaultProvider(p.id)}
+                        style={{
+                          padding: "8px 20px",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          border: `1px solid ${isActive ? p.color : "var(--border)"}`,
+                          backgroundColor: isActive ? p.color + "20" : "var(--bg-tertiary)",
+                          color: isActive ? p.color : "var(--text-secondary)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
+                  Which provider the agent picker starts on. DeepSeek runs the claude CLI
+                  against DeepSeek&rsquo;s Anthropic-compatible endpoint, and needs
+                  DEEPSEEK_API_KEY in the secrets vault.
+                </p>
+              </div>
+
               {/* Orchestrator Provider */}
               <div>
                 <label style={SECTION_LABEL_STYLE}>

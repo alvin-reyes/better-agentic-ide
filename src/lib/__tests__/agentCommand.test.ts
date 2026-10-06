@@ -38,6 +38,53 @@ describe("buildLaunchCommand", () => {
     expect(cont.command.includes("--dangerously-skip-permissions")).toBe(true);
   });
 
+  /**
+   * DeepSeek publishes an Anthropic-compatible endpoint, so this is the claude
+   * binary with its base URL and model redirected. That is what makes it the
+   * one third-party provider with real role delivery: the flag is claude's own,
+   * already verified, rather than a convention guessed at from docs.
+   *
+   * The key is never interpolated. It is read from the environment the vault
+   * already populates, so it stays out of the command string, the shell
+   * history and the process arguments.
+   */
+  it("emits deepseek as claude redirected at the compatible endpoint", () => {
+    const result = buildLaunchCommand("deepseek", PATH);
+    if (result.kind !== "command") throw new Error("expected a command");
+    expect(result.command).toBe(
+      "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic " +
+        'ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" ' +
+        "ANTHROPIC_MODEL=deepseek-flash " +
+        "claude --append-system-prompt-file '/Users/x/.ade/roles/architect-security.md'"
+    );
+  });
+
+  it("never puts the deepseek key itself in the command", () => {
+    const result = buildLaunchCommand("deepseek", PATH);
+    if (result.kind !== "command") throw new Error("expected a command");
+    expect(result.command).toContain('"$DEEPSEEK_API_KEY"');
+    expect(result.command).not.toMatch(/sk-[a-zA-Z0-9]/);
+  });
+
+  /**
+   * Pinning the model matters for more than routing. ADE prices Claude Code
+   * transcripts by model name, and deepseek-* matches no price pattern, so the
+   * spend is correctly left out rather than charged at Anthropic's rates.
+   * Without this, claude would request claude-sonnet-*, DeepSeek would serve it,
+   * and the transcript would be priced as if Anthropic had.
+   */
+  it("pins the model so deepseek usage is not priced as anthropic", () => {
+    const result = buildLaunchCommand("deepseek", PATH);
+    if (result.kind !== "command") throw new Error("expected a command");
+    expect(result.command).toContain("ANTHROPIC_MODEL=deepseek-flash");
+  });
+
+  it("honours continuous mode for deepseek too", () => {
+    const result = buildLaunchCommand("deepseek", PATH, { continuous: true });
+    if (result.kind !== "command") throw new Error("expected a command");
+    expect(result.command).toContain("claude --dangerously-skip-permissions --append-system-prompt-file");
+  });
+
   it("emits gemini's exact command, piping the file it has no flag for", () => {
     const result = buildLaunchCommand("gemini", PATH);
     if (result.kind !== "command") throw new Error("expected a command");
@@ -118,6 +165,10 @@ describe("buildLaunchCommand", () => {
 });
 
 describe("supportsRoleDelivery", () => {
+  it("reports deepseek as supported, because it is claude underneath", () => {
+    expect(supportsRoleDelivery("deepseek")).toBe(true);
+  });
+
   it("is true exactly for the providers that produce a command", () => {
     expect(supportsRoleDelivery("claude")).toBe(true);
     expect(supportsRoleDelivery("gemini")).toBe(true);

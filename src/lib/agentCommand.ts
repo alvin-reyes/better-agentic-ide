@@ -1,6 +1,6 @@
 import { modelTagFor } from "./agentComposition";
 
-export type Provider = "claude" | "codex" | "gemini" | "ollama";
+export type Provider = "claude" | "codex" | "deepseek" | "gemini" | "ollama";
 
 export interface LaunchOptions {
   continuous?: boolean;
@@ -17,6 +17,16 @@ export type LaunchResult =
 /** Single-quote for POSIX shells, escaping any embedded single quote. */
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+export const DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
+/** Pinned so the transcript records a deepseek name; see the deepseek case. */
+export const DEEPSEEK_MODEL = "deepseek-flash";
+
+/** The claude invocation both the claude and deepseek providers launch. */
+function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
+  const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
+  return `claude${flags} --append-system-prompt-file ${quotedPath}`;
 }
 
 /**
@@ -41,8 +51,33 @@ export function buildLaunchCommand(
 
   switch (provider) {
     case "claude": {
-      const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
-      return { kind: "command", command: `claude${flags} --append-system-prompt-file ${path}` };
+      return { kind: "command", command: claudeCommand(path, opts) };
+    }
+
+    /**
+     * DeepSeek publishes an Anthropic-compatible endpoint, so this is the
+     * claude binary with its base URL and model redirected rather than a
+     * different CLI. That is why it has real role delivery where Codex does
+     * not: the flag is claude's own and already verified.
+     *
+     * The key is referenced, never interpolated. $DEEPSEEK_API_KEY is read
+     * from the environment the secrets vault already populates, so the value
+     * stays out of this string, the shell history and the process arguments.
+     *
+     * ANTHROPIC_MODEL is pinned for a second reason beyond routing: ADE prices
+     * Claude Code transcripts by model name, and `deepseek-*` matches none of
+     * the price patterns, so the spend is correctly excluded and named rather
+     * than charged at Anthropic's rates. Left unset, claude would ask for
+     * claude-sonnet-*, DeepSeek would serve it, and the transcript would be
+     * priced as though Anthropic had.
+     */
+    case "deepseek": {
+      const env = [
+        `ANTHROPIC_BASE_URL=${DEEPSEEK_BASE_URL}`,
+        `ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY"`,
+        `ANTHROPIC_MODEL=${DEEPSEEK_MODEL}`,
+      ].join(" ");
+      return { kind: "command", command: `${env} ${claudeCommand(path, opts)}` };
     }
 
     case "gemini":

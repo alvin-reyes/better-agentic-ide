@@ -30,6 +30,8 @@ Rename any open tab, and save the current set of tabs as a named workspace. **Lo
 
 ## AI API
 
+**Default agent provider** sets which provider the [agent picker]({{ '/guide/agents/' | relative_url }}#agent-picker) starts on. Providers with no verified way to accept a role are left out, since one could never launch an agent. **DeepSeek** runs the `claude` CLI against DeepSeek's Anthropic-compatible endpoint and needs `DEEPSEEK_API_KEY` in the [vault]({{ '/guide/integrations/' | relative_url }}#secrets-vault); see [DeepSeek]({{ '/guide/agents/' | relative_url }}#deepseek).
+
 The [orchestrator]({{ '/guide/agents/' | relative_url }}#orchestrator) needs a model:
 
 - **Anthropic**: paste an API key (`sk-ant-…`) and pick a model. The key stays on this machine; sync never copies it.

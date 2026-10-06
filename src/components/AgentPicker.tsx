@@ -21,7 +21,7 @@ import {
   ROLES_FILTER,
   type PickerItem,
 } from "../data/pickerItems";
-import { PROVIDERS } from "../data/providers";
+import { PROVIDERS, binaryFor } from "../data/providers";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Backend: "#3fb950",
@@ -84,7 +84,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       const installed = new Set<Provider>();
       for (const p of PROVIDERS) {
         try {
-          await invoke<string>("check_command_exists", { command: p.id });
+          await invoke<string>("check_command_exists", { command: binaryFor(p.id) });
           installed.add(p.id);
         } catch {
           // not installed

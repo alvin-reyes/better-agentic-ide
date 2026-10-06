@@ -13,11 +13,28 @@ Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an a
 - **47 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General: API Builder, Database Engineer, Senior Go Engineer, Senior Rust Engineer, Smart Contract Auditor, Web3 DevOps Engineer, Debugger, Code Reviewer, Docs Writer and more. Each pairs a **role**: what it is accountable for, the files it owns and the boundaries it works inside, with a **domain** that narrows it to one technical focus. ADE composes the pair into a role definition, writes it to a file and starts the provider against that file, so a long definition never has to survive shell quoting. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
 - **Roles**: the last pill filters the list down to the core roles on their own, with no domain. Product Manager, Product Owner and Scrum Master live only here, since no profile pairs with them.
 - **Describe a task** in the search box and the picker suggests the best match.
-- **Provider**: switch between Claude Code, Codex, Gemini CLI and Ollama with <kbd>Tab</kbd>. Claude Code, Gemini and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch.
+- **Provider**: switch between Claude Code, Codex, DeepSeek, Gemini CLI and Ollama with <kbd>Tab</kbd>. Claude Code, DeepSeek, Gemini and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch. Set the one the picker starts on in *Settings &rarr; AI API &rarr; Default agent provider*.
 - **Senior Go Engineer** writes idiomatic Go with table-driven tests and runs `go vet` and `go test -race`. **Senior Rust Engineer** models the domain with types, avoids stray `unwrap`s and runs `cargo fmt`, `cargo clippy` and `cargo test`. Both are also added to Go and Rust projects as sub-agents.
 - **Continuous mode** runs the agent without permission prompts (Claude Code's `--dangerously-skip-permissions`). ADE asks you to confirm first; use it only in projects you trust.
 
 ![The agent picker]({{ '/assets/img/agents.webp' | relative_url }})
+
+## DeepSeek
+
+DeepSeek publishes an [Anthropic-compatible endpoint](https://api-docs.deepseek.com/guides/anthropic_api), so ADE's DeepSeek provider is the `claude` CLI pointed at it rather than a separate tool. That is why it takes a composed role like Claude Code does: the mechanism is `--append-system-prompt-file`, the same verified flag.
+
+Launching it runs:
+
+```bash
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic \
+ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" \
+ANTHROPIC_MODEL=deepseek-flash \
+claude --append-system-prompt-file <role>
+```
+
+- **The key comes from the vault.** Store `DEEPSEEK_API_KEY` in [Secrets]({{ '/guide/integrations/' | relative_url }}#secrets-vault) and it reaches the terminal as an environment variable. The value never appears in the command, your shell history or the process list.
+- **Cost is not claimed.** `deepseek-flash` matches none of the Anthropic price patterns, so its tokens are counted but left out of the cost and named underneath the figures, rather than billed at Claude's rates. See [Tokens & cost]({{ '/guide/tokens/' | relative_url }}).
+- **Pinning the model is what keeps that honest.** If you set only the base URL and token by hand, `claude` still asks for `claude-sonnet-...`, DeepSeek serves it, and the transcript records the Claude name, which *would* be priced as Anthropic. ADE sets `ANTHROPIC_MODEL` for you; if you configure a terminal yourself, set it too.
 
 ## Architects
 
