@@ -3,6 +3,7 @@ import { shortcutLabel } from "../lib/shortcuts";
 import { useTabStore } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
+import { invoke } from "@tauri-apps/api/core";
 import SyncSettings from "./SyncSettings";
 import { PROVIDERS } from "../data/providers";
 import { supportsRoleDelivery } from "../lib/agentCommand";
@@ -142,6 +143,14 @@ export default function SettingsPanel() {
   // non-focusable part of it does not send typing to the terminal behind.
   useEffect(() => claimKeyboard("settings"), []);
   const store = useSettingsStore();
+  // "The key is the only thing you supply" is only true if the app says when
+  // it is missing. Names only; the value is never read here.
+  const [deepseekKey, setDeepseekKey] = useState(false);
+  useEffect(() => {
+    invoke<{ name: string }[]>("vault_list")
+      .then((s) => setDeepseekKey(s.some((x) => x.name === "DEEPSEEK_API_KEY")))
+      .catch(() => setDeepseekKey(false));
+  }, [store.settingsTab]);
   const tabStore = useTabStore();
   const [workspaceName, setWorkspaceName] = useState("");
   const [renameTabId, setRenameTabId] = useState<string | null>(null);
@@ -882,9 +891,19 @@ export default function SettingsPanel() {
                 </div>
                 <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
                   Which provider the agent picker starts on. DeepSeek runs the claude CLI
-                  against DeepSeek&rsquo;s Anthropic-compatible endpoint, and needs
-                  DEEPSEEK_API_KEY in the secrets vault.
+                  against DeepSeek&rsquo;s Anthropic-compatible endpoint. ADE sets the endpoint
+                  and every model tier for you, so the key is the only thing you supply.
                 </p>
+                {store.defaultProvider === "deepseek" && (
+                  <p style={{
+                    fontSize: "11px", marginTop: "6px",
+                    color: deepseekKey ? "var(--green)" : "var(--yellow)",
+                  }}>
+                    {deepseekKey
+                      ? "DEEPSEEK_API_KEY found in the vault."
+                      : "DEEPSEEK_API_KEY is not in the vault yet. Add it under Secrets, or agents will fail on their first request."}
+                  </p>
+                )}
               </div>
 
               {/* Orchestrator Provider */}

@@ -88,3 +88,60 @@ describe("formatting", () => {
     expect(fmtInt(1234567)).toBe("1,234,567");
   });
 });
+
+/**
+ * DeepSeek runs through the Anthropic-compatible endpoint, so its usage lands
+ * in the same Claude Code transcripts and would otherwise be counted but never
+ * costed. Its prices are published, so there is nothing to guess.
+ *
+ * The figures are DeepSeek's standard (peak) rate. Off-peak is half, and the
+ * window is 01:00-04:00 and 06:00-10:00 UTC on weekdays, but ModelUsage is
+ * aggregated per model with no timestamp, so there is nothing here to decide
+ * peak from. Pricing at the standard rate makes the figure an upper bound,
+ * which overstates an off-peak run rather than understating a peak one.
+ */
+describe("deepseek pricing", () => {
+  const usage = (model: string, over: Partial<ModelUsage> = {}): ModelUsage => ({
+    model, requests: 1, input: 0, output: 0,
+    cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0, ...over,
+  });
+
+  it("prices deepseek-v4-pro input at the standard rate", () => {
+    // 1M input tokens at $1.32/M
+    expect(costOf(usage("deepseek-v4-pro", { input: 1_000_000 }))).toBeCloseTo(1.32, 6);
+  });
+
+  it("prices deepseek-v4-pro output at the standard rate", () => {
+    expect(costOf(usage("deepseek-v4-pro", { output: 1_000_000 }))).toBeCloseTo(3.96, 6);
+  });
+
+  it("prices deepseek-flash lower than v4-pro", () => {
+    const pro = costOf(usage("deepseek-v4-pro", { input: 1_000_000 }))!;
+    const flash = costOf(usage("deepseek-flash", { input: 1_000_000 }))!;
+    expect(flash).toBeCloseTo(0.3, 6);
+    expect(flash).toBeLessThan(pro);
+  });
+
+  it("charges a cache read far less than a fresh input token", () => {
+    const fresh = costOf(usage("deepseek-v4-pro", { input: 1_000_000 }))!;
+    const cached = costOf(usage("deepseek-v4-pro", { cacheRead: 1_000_000 }))!;
+    expect(cached).toBeCloseTo(0.044, 6);
+    expect(cached).toBeLessThan(fresh / 10);
+  });
+
+  it("no longer reports deepseek as an unpriced model", () => {
+    expect(costOf(usage("deepseek-v4-pro", { input: 10 }))).not.toBeNull();
+    expect(costOf(usage("deepseek-flash", { input: 10 }))).not.toBeNull();
+  });
+
+  it("gives deepseek the 1M context window it publishes", () => {
+    expect(contextWindow("deepseek-v4-pro")).toBe(1_000_000);
+    expect(contextWindow("deepseek-flash")).toBe(1_000_000);
+  });
+
+  it("does not let a deepseek name collide with an anthropic price", () => {
+    const ds = costOf(usage("deepseek-v4-pro", { input: 1_000_000 }))!;
+    const opus = costOf(usage("claude-opus-4", { input: 1_000_000 }))!;
+    expect(ds).not.toBeCloseTo(opus, 6);
+  });
+});

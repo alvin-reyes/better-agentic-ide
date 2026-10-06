@@ -21,18 +21,18 @@ const u = (model: string, over: Partial<ModelUsage> = {}): ModelUsage => ({
 
 describe("totals() reports models it cannot price", () => {
   it("names an unpriced model", () => {
-    const t = totals([u("deepseek-v4-pro")]);
-    expect(t.unpriced).toContain("deepseek-v4-pro");
+    const t = totals([u("qwen2.5-coder:32b")]);
+    expect(t.unpriced).toContain("qwen2.5-coder:32b");
   });
 
   it("leaves unpriced usage out of the cost rather than guessing", () => {
     const priced = totals([u("claude-sonnet-5")]);
-    const mixed = totals([u("claude-sonnet-5"), u("deepseek-v4-pro")]);
+    const mixed = totals([u("claude-sonnet-5"), u("qwen2.5-coder:32b")]);
     expect(mixed.cost).toBeCloseTo(priced.cost, 10);
   });
 
   it("still counts unpriced tokens and requests, so volume is not lost too", () => {
-    const t = totals([u("deepseek-v4-pro", { requests: 7 })]);
+    const t = totals([u("qwen2.5-coder:32b", { requests: 7 })]);
     expect(t.requests).toBe(7);
     expect(t.inputTokens).toBe(1000);
     expect(t.outputTokens).toBe(500);
@@ -43,7 +43,7 @@ describe("totals() reports models it cannot price", () => {
   });
 
   it("does not repeat a model name", () => {
-    const t = totals([u("deepseek-v4-pro"), u("deepseek-v4-pro")]);
-    expect(t.unpriced.filter((m) => m === "deepseek-v4-pro").length).toBeLessThanOrEqual(1);
+    const t = totals([u("qwen2.5-coder:32b"), u("qwen2.5-coder:32b")]);
+    expect(t.unpriced.filter((m) => m === "qwen2.5-coder:32b").length).toBeLessThanOrEqual(1);
   });
 });

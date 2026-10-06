@@ -54,9 +54,52 @@ describe("buildLaunchCommand", () => {
     expect(result.command).toBe(
       "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic " +
         'ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" ' +
-        "ANTHROPIC_MODEL=deepseek-flash " +
+        "ANTHROPIC_MODEL=deepseek-v4-pro " +
+        "ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro " +
+        "ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro " +
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-pro " +
+        "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-pro " +
+        "CLAUDE_CODE_EFFORT_LEVEL=max " +
         "claude --append-system-prompt-file '/Users/x/.ade/roles/architect-security.md'"
     );
+  });
+
+  /**
+   * Every tier is redirected, not just the default. claude asks for an opus,
+   * sonnet or haiku model by name depending on the task and on sub-agent
+   * config; any tier left unmapped would be served by DeepSeek but recorded in
+   * the transcript under its Claude name, and then priced as Anthropic.
+   */
+  it("redirects every model tier, so no request escapes under a claude name", () => {
+    const result = buildLaunchCommand("deepseek", PATH);
+    if (result.kind !== "command") throw new Error("expected a command");
+    for (const key of [
+      "ANTHROPIC_MODEL",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL",
+      "ANTHROPIC_DEFAULT_SONNET_MODEL",
+      "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+      "CLAUDE_CODE_SUBAGENT_MODEL",
+    ]) {
+      expect(result.command).toContain(`${key}=deepseek-v4-pro`);
+    }
+  });
+
+  /**
+   * The model identifier carries no context-window suffix. DeepSeek's docs
+   * render "deepseek-v4-pro" in bold, and the escape sequence reads as a
+   * trailing "[1m]" when the page is scraped; pasting that through would send
+   * an identifier the API does not know.
+   */
+  it("uses the bare model identifier, with no [1m] suffix", () => {
+    const result = buildLaunchCommand("deepseek", PATH);
+    if (result.kind !== "command") throw new Error("expected a command");
+    expect(result.command).not.toContain("[1m]");
+  });
+
+  it("asks for maximum reasoning effort", () => {
+    const result = buildLaunchCommand("deepseek", PATH);
+    if (result.kind !== "command") throw new Error("expected a command");
+    expect(result.command).toContain("CLAUDE_CODE_EFFORT_LEVEL=max");
   });
 
   it("never puts the deepseek key itself in the command", () => {
@@ -76,7 +119,7 @@ describe("buildLaunchCommand", () => {
   it("pins the model so deepseek usage is not priced as anthropic", () => {
     const result = buildLaunchCommand("deepseek", PATH);
     if (result.kind !== "command") throw new Error("expected a command");
-    expect(result.command).toContain("ANTHROPIC_MODEL=deepseek-flash");
+    expect(result.command).toContain("ANTHROPIC_MODEL=deepseek-v4-pro");
   });
 
   it("honours continuous mode for deepseek too", () => {

@@ -20,8 +20,14 @@ export function shellQuote(value: string): string {
 }
 
 export const DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
-/** Pinned so the transcript records a deepseek name; see the deepseek case. */
-export const DEEPSEEK_MODEL = "deepseek-flash";
+/**
+ * The model every tier is mapped to.
+ *
+ * Bare, with no context-window suffix: DeepSeek's docs render the identifier
+ * in bold, and the escape sequence scrapes as a trailing "[1m]". Pasted
+ * through, that is an identifier the API does not know.
+ */
+export const DEEPSEEK_MODEL = "deepseek-v4-pro";
 
 /** The claude invocation both the claude and deepseek providers launch. */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
@@ -72,10 +78,19 @@ export function buildLaunchCommand(
      * priced as though Anthropic had.
      */
     case "deepseek": {
+      // Every tier, not just the default. claude picks an opus, sonnet or
+      // haiku model by name depending on the task and on sub-agent config, and
+      // any tier left unmapped would still be served by DeepSeek but recorded
+      // in the transcript under its Claude name, and then priced as Anthropic.
       const env = [
         `ANTHROPIC_BASE_URL=${DEEPSEEK_BASE_URL}`,
         `ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY"`,
         `ANTHROPIC_MODEL=${DEEPSEEK_MODEL}`,
+        `ANTHROPIC_DEFAULT_OPUS_MODEL=${DEEPSEEK_MODEL}`,
+        `ANTHROPIC_DEFAULT_SONNET_MODEL=${DEEPSEEK_MODEL}`,
+        `ANTHROPIC_DEFAULT_HAIKU_MODEL=${DEEPSEEK_MODEL}`,
+        `CLAUDE_CODE_SUBAGENT_MODEL=${DEEPSEEK_MODEL}`,
+        `CLAUDE_CODE_EFFORT_LEVEL=max`,
       ].join(" ");
       return { kind: "command", command: `${env} ${claudeCommand(path, opts)}` };
     }

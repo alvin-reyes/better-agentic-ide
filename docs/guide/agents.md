@@ -28,13 +28,20 @@ Launching it runs:
 ```bash
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic \
 ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" \
-ANTHROPIC_MODEL=deepseek-flash \
+ANTHROPIC_MODEL=deepseek-v4-pro \
+ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro \
+ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro \
+ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-pro \
+CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-pro \
+CLAUDE_CODE_EFFORT_LEVEL=max \
 claude --append-system-prompt-file <role>
 ```
 
+The model identifier carries no context-window suffix. DeepSeek's docs render it in bold, and the escape sequence reads as a trailing `[1m]` when the page is copied; pasted through, that is an identifier the API does not know.
+
 - **The key comes from the vault.** Store `DEEPSEEK_API_KEY` in [Secrets]({{ '/guide/integrations/' | relative_url }}#secrets-vault) and it reaches the terminal as an environment variable. The value never appears in the command, your shell history or the process list.
-- **Cost is not claimed.** `deepseek-flash` matches none of the Anthropic price patterns, so its tokens are counted but left out of the cost and named underneath the figures, rather than billed at Claude's rates. See [Tokens & cost]({{ '/guide/tokens/' | relative_url }}).
-- **Pinning the model is what keeps that honest.** If you set only the base URL and token by hand, `claude` still asks for `claude-sonnet-...`, DeepSeek serves it, and the transcript records the Claude name, which *would* be priced as Anthropic. ADE sets `ANTHROPIC_MODEL` for you; if you configure a terminal yourself, set it too.
+- **Cost is real.** DeepSeek publishes list prices, so its spend is costed like Claude's rather than left out. The figures are DeepSeek's **standard (peak)** rate; off-peak is half, over 01:00&ndash;04:00 and 06:00&ndash;10:00 UTC on weekdays. Usage is aggregated per model with no timestamp, so ADE cannot tell which rate applied and uses the standard one. **Your real bill may be up to half what ADE shows.** See [Tokens & cost]({{ '/guide/tokens/' | relative_url }}).
+- **Every tier is redirected, which is what keeps the figure honest.** `claude` asks for an opus, sonnet or haiku model by name depending on the task. Any tier left unmapped is still served by DeepSeek but recorded under its Claude name, and would then be priced at Anthropic's rates. ADE maps all of them; if you configure a terminal by hand, map them all too.
 
 ## Architects
 

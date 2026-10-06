@@ -44,6 +44,16 @@ interface Price {
 // Anthropic API list prices. Cache writes are 1.25x input (5-minute) or 2x
 // (1-hour) on every model; reads are 0.1x except where noted.
 const PRICES: [RegExp, Price][] = [
+  // DeepSeek, reached through its Anthropic-compatible endpoint, so its usage
+  // lands in the same transcripts. These are the published standard (peak)
+  // rates in USD per million tokens. Off-peak is half, over 01:00-04:00 and
+  // 06:00-10:00 UTC on weekdays, but ModelUsage is aggregated per model with
+  // no timestamp, so nothing here can tell which applied. The standard rate
+  // makes the figure an upper bound: it overstates an off-peak run rather than
+  // understating a peak one. `read` is the cache-hit price as a fraction of
+  // the cache-miss price, the same convention the Anthropic rows use.
+  [/deepseek-v4-pro/, { input: 1.32, output: 3.96, read: 0.044 / 1.32, context: 1_000_000 }],
+  [/deepseek-flash/, { input: 0.3, output: 1.2, read: 0.006 / 0.3, context: 1_000_000 }],
   [/fable-5-1|mythos-5-1/, { input: 10, output: 50, read: 0.025, context: 1_000_000 }],
   [/fable-5|mythos-5/, { input: 10, output: 50, read: 0.1, context: 1_000_000 }],
   [/opus-5-5/, { input: 4, output: 20, read: 0.05, context: 1_000_000 }],
