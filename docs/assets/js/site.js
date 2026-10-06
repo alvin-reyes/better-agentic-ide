@@ -180,3 +180,47 @@
     })
     .catch(function () { /* keep the links to the releases page */ });
 })();
+
+  // --- Repo stats and the install copy button --------------------------------
+  // Moved out of index.html so the page carries no inline script but the
+  // pre-paint theme setter, which lets the CSP name a single hash instead of
+  // allowing inline script wholesale.
+  // Counts come from the API at load, never hardcoded: a number baked into the
+    // page is wrong the day after it ships. If the call fails the row stays
+    // hidden, because no number beats a stale one.
+    (function () {
+      var rows = document.querySelectorAll("[data-repo-stats]");
+      if (!rows.length) return;
+      fetch("https://api.github.com/repos/alvin-reyes/better-agentic-ide")
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (d) {
+          var fmt = function (v) {
+            return v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(v);
+          };
+          // subscribers_count is the Watch number GitHub shows. watchers_count is
+          // a legacy alias for stargazers and would print the star count twice.
+          var stats = { stars: d.stargazers_count, forks: d.forks_count, watchers: d.subscribers_count };
+          document.querySelectorAll("[data-stat]").forEach(function (slot) {
+            var v = stats[slot.getAttribute("data-stat")];
+            if (typeof v === "number") slot.textContent = fmt(v);
+          });
+          rows.forEach(function (r) { r.hidden = false; });
+        })
+        .catch(function () { /* leave them hidden */ });
+    })();
+
+  // The downloads grid is filled by assets/js/site.js, which already fetches the
+    // release for the version label and the data-download links. This only wires
+    // the copy button, which is specific to this page.
+    (function () {
+      var copy = document.getElementById("copy-install");
+      var cmd = document.getElementById("install-cmd");
+      if (!copy || !cmd || !navigator.clipboard) return;
+      copy.addEventListener("click", function () {
+        navigator.clipboard.writeText(cmd.textContent.trim()).then(function () {
+          var was = copy.textContent;
+          copy.textContent = "Copied";
+          setTimeout(function () { copy.textContent = was; }, 1600);
+        });
+      });
+    })();

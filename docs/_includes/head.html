@@ -23,6 +23,13 @@
 <link rel="icon" type="image/svg+xml" href="{{ '/assets/img/logo.svg' | relative_url }}">
 <link rel="icon" type="image/png" href="{{ '/assets/img/favicon.png' | relative_url }}">
 <link rel="apple-touch-icon" href="{{ '/assets/img/logo-192.png' | relative_url }}">
+<!-- GitHub Pages cannot set response headers, so the policy rides in the
+     document. The one inline script is the pre-paint theme setter, named by
+     hash rather than allowed wholesale; scripts/siteCsp.test.ts fails if the
+     two drift. frame-ancestors is deliberately absent: it is ignored in a
+     meta policy and needs a real header, which Pages will not send. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-FsIZN6Mqzes8U6LwztrW72hqF7cLDnCGBES+X937vAQ='; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.github.com; base-uri 'self'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
