@@ -508,7 +508,7 @@ pre {
 .footer-brand .brand { margin-bottom: 14px; }
 .footer-brand p { color: var(--text-3); font-size: 14px; margin: 0; }
 .footer-cols { display: flex; gap: 72px; flex-wrap: wrap; }
-.footer-cols h4 { margin: 0 0 14px; font: 500 11.5px var(--mono); text-transform: uppercase; letter-spacing: .14em; color: var(--text-3); }
+.footer-cols h3 { margin: 0 0 14px; font: 500 11.5px var(--mono); text-transform: uppercase; letter-spacing: .14em; color: var(--text-3); }
 .footer-cols a { display: block; color: var(--text-2); font-size: 14.5px; padding: 4px 0; }
 .footer-cols a:hover { color: var(--text); text-decoration: none; }
 .footer-note { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--text-3); font-size: 13px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
