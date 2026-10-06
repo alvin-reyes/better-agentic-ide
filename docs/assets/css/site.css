@@ -735,9 +735,20 @@ pre {
 .cred--partner { border-color: var(--line-3); }
 .cred--partner .cred-label { color: var(--accent-text); }
 .cred--partner .cred-value { color: var(--text); }
-/* The official badge art, once it is in place: sized to the pill, never
-   recoloured or redrawn. Partner marks have a required form. */
-.cred-mark { height: 16px; width: auto; flex: none; align-self: center; }
+/* The Anthropic mark, the same asset ardata.tech carries. It ships black on
+   cream with no alpha, so it is given a tile rather than laid bare on the
+   pill, where the cream block would read as a rendering fault. Never
+   recoloured, never redrawn: partner marks have a required form. */
+.cred-mark {
+  width: 16px; height: 16px; flex: none; align-self: center;
+  border-radius: 4px; object-fit: contain;
+}
+
+/* The pill is a link now, so it needs the states a link needs. */
+a.cred { text-decoration: none; transition: border-color .15s, transform .15s; }
+a.cred:hover { border-color: var(--line-3); transform: translateY(-1px); }
+a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.creds li { display: flex; }
 
 @media (max-width: 560px) {
   .creds { gap: 8px; }
