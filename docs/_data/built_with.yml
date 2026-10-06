@@ -96,3 +96,12 @@
   name: "InSync"
   url: https://insync-web-green.vercel.app
   blurb: "A personalised affirmations app for iPhone, read back in a clone of your own voice."
+
+# Image is a screenshot of the site's own hero: its og:image is stock art from
+# the host's template, and the og:description is the template's placeholder
+# ("innovative solutions for your business needs"), so the blurb comes from the
+# capabilities the site actually lists.
+- slug: oneoverzero
+  name: "One Over Zero"
+  url: https://oneoverzero.com.ph/
+  blurb: "Mobile, web and e-commerce builds alongside data-centre fit-out, blockchain and security work, from Makati."
