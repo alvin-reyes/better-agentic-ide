@@ -888,3 +888,67 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
 @media (max-width: 560px) {
   .org-node { flex-basis: 100%; }
 }
+
+/* ---- The fleet, running ---------------------------------------------------
+   A depiction, not a screenshot: the real one is in the guide. It is built in
+   CSS rather than as a video or a GIF so it carries no weight, follows the
+   theme, and needs no script, which matters because the page's CSP admits
+   exactly one hashed inline script and nothing else.
+
+   Every bar shares one duration and differs only by delay, so the offsets
+   between lanes stay fixed for every loop instead of drifting apart. */
+.feat-media--live { padding: 20px 18px; background: var(--term-bg); }
+
+.fleetx { font: 400 12px/1.4 var(--mono); color: #e6e6ea; }
+.fleetx-head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding-bottom: 12px; margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.fleetx-head b { font-size: 12.5px; font-weight: 600; }
+.fleetx-path { color: #8b8f9a; }
+.fleetx-run { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: #8b8f9a; }
+.fleetx-run i {
+  width: 6px; height: 6px; border-radius: 50%; background: #3fb950;
+  animation: fleetx-pulse 2s ease-in-out infinite;
+}
+.fleetx-cost { color: #8b8f9a; font-variant-numeric: tabular-nums; }
+
+.fleetx-lanes { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.fleetx-lane { display: grid; grid-template-columns: 124px 1fr; gap: 12px; align-items: center; }
+.fleetx-lane--sub .fleetx-name { padding-left: 12px; color: #8b8f9a; }
+.fleetx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fleetx-track { position: relative; height: 10px; }
+.fleetx-bar {
+  position: absolute; top: 0; height: 100%;
+  left: var(--start); width: var(--w);
+  border-radius: 3px; background: #6e40c9;
+  transform-origin: left center;
+  transform: scaleX(0); opacity: 0;
+  animation: fleetx-grow 9s cubic-bezier(.2, .7, .2, 1) var(--d) infinite;
+}
+.fleetx-lane:not(.fleetx-lane--sub) .fleetx-bar { background: #3d444d; }
+.fleetx-lane.is-running .fleetx-bar { background: #3fb950; }
+
+@keyframes fleetx-grow {
+  0%   { transform: scaleX(0); opacity: 0; }
+  2%   { opacity: 1; }
+  26%  { transform: scaleX(1); }
+  88%  { transform: scaleX(1); opacity: 1; }
+  96%  { transform: scaleX(1); opacity: 0; }
+  100% { transform: scaleX(0); opacity: 0; }
+}
+@keyframes fleetx-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* Asked for less motion: show the finished state, animate nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .fleetx-bar { animation: none; transform: scaleX(1); opacity: 1; }
+  .fleetx-run i { animation: none; }
+}
+
+@media (max-width: 560px) {
+  .fleetx-lane { grid-template-columns: 92px 1fr; gap: 8px; }
+  .fleetx { font-size: 11px; }
+  .fleetx-path { display: none; }
+}

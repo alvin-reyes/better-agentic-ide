@@ -100,7 +100,42 @@ llms.txt
           <p>Every project gets sub-agents in <code>.claude/agents/</code> and a <code>CLAUDE.md</code> constitution. The fleet gives each sub-agent its own lane, spend is read from Claude Code's own transcripts, and ADE ships a plugin for it with 7 agents and 13 skills. The others run beside it; this is the one it is built around.</p>
         </article>
         <article class="feat-card">
-          <div class="feat-media"><img src="{{ img }}fleet.webp" width="1440" height="351" loading="lazy" alt="The fleet grouped by project: three projects, each with its running count and spend, and a swimlane per agent with its sub-agents indented beneath it"></div>
+          <div class="feat-media feat-media--live">
+            <div class="fleetx" role="img" aria-label="The fleet view: a developer agent running with Explore, Plan and Code reviewer sub-agents beneath it, then a QA agent still running, with a live count and spend for the project.">
+              <div class="fleetx-head">
+                <b>acme-api</b>
+                <span class="fleetx-path">~/code/acme-api</span>
+                <span class="fleetx-run"><i></i> 2 running</span>
+                <span class="fleetx-cost">$2.75</span>
+              </div>
+              <ul class="fleetx-lanes">
+                <li class="fleetx-lane" style="--start:2%;--w:64%;--d:0s">
+                  <span class="fleetx-name">developer</span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                </li>
+                <li class="fleetx-lane fleetx-lane--sub" style="--start:6%;--w:14%;--d:0.45s">
+                  <span class="fleetx-name">&#8627; Explore</span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                </li>
+                <li class="fleetx-lane fleetx-lane--sub" style="--start:22%;--w:16%;--d:0.9s">
+                  <span class="fleetx-name">&#8627; Plan</span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                </li>
+                <li class="fleetx-lane fleetx-lane--sub" style="--start:44%;--w:22%;--d:1.35s">
+                  <span class="fleetx-name">&#8627; Code reviewer</span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                </li>
+                <li class="fleetx-lane is-running" style="--start:70%;--w:28%;--d:1.8s">
+                  <span class="fleetx-name">qa</span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                </li>
+                <li class="fleetx-lane fleetx-lane--sub is-running" style="--start:76%;--w:18%;--d:2.25s">
+                  <span class="fleetx-name">&#8627; Explore</span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                </li>
+              </ul>
+            </div>
+          </div>
           <h3>Every agent on one fleet view</h3>
           <p>Every agent and sub-agent on one live timeline, with its real cost.</p>
         </article>
