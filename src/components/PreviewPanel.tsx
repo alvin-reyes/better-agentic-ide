@@ -3,6 +3,7 @@ import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import MarkdownView from "./viewer/MarkdownView";
 import { imageMime } from "../lib/viewerKind";
+import { useTabStore } from "../stores/tabStore";
 
 // pdf.js is heavy: load it only when a PDF is actually previewed.
 const PdfView = lazy(() => import("./viewer/PdfView"));
@@ -27,12 +28,18 @@ function detectMode(filePath: string): PreviewMode {
 
 interface PreviewPanelProps {
   onClose: () => void;
-  initialPath?: string | null;
-  onInitialPathConsumed?: () => void;
 }
 
-export default function PreviewPanel({ onClose, initialPath, onInitialPathConsumed }: PreviewPanelProps) {
-  const [filePath, setFilePath] = useState("");
+export default function PreviewPanel({ onClose }: PreviewPanelProps) {
+  /**
+   * The document belongs to the tab, not to this component. That is what makes
+   * it survive both a tab switch and the panel being closed, and it is why the
+   * initialPath prop this used to take is gone: whoever wants to preview
+   * something sets it on the tab and this follows.
+   */
+  const activeTabId = useTabStore((s) => s.activeTabId);
+  const filePath = useTabStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.previewPath ?? "");
+  const setPreviewPath = useTabStore((s) => s.setPreviewPath);
   const [inputPath, setInputPath] = useState("");
   const [mode, setMode] = useState<PreviewMode>("none");
   const [content, setContent] = useState("");
@@ -42,15 +49,19 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   const [width, setWidth] = useState(480);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const initialPathConsumedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const loadFile = useCallback(async (path: string) => {
+  /** Opening a document means setting it on the tab; the effect below loads it. */
+  const openFile = useCallback((path: string) => {
+    if (!path.trim()) return;
+    setPreviewPath(activeTabId, path.trim());
+  }, [activeTabId, setPreviewPath]);
+
+  const loadContent = useCallback(async (path: string) => {
     if (!path.trim()) return;
     const resolved = path.trim();
     const fileMode = detectMode(resolved);
     setMode(fileMode);
-    setFilePath(resolved);
 
     try {
       if (fileMode === "image" || fileMode === "pdf") {
@@ -73,16 +84,20 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
     }
   }, []);
 
-  // Load initial path on mount (from file browser click, etc.)
-  // Guarded with ref to prevent double-load in StrictMode
+  // Follow the active tab's document: on mount, when it changes, and when the
+  // user switches to a tab holding a different one.
   useEffect(() => {
-    if (initialPath && !initialPathConsumedRef.current) {
-      initialPathConsumedRef.current = true;
-      setInputPath(initialPath);
-      loadFile(initialPath);
-      onInitialPathConsumed?.();
+    if (filePath) {
+      setInputPath(filePath);
+      loadContent(filePath);
+    } else {
+      setInputPath("");
+      setMode("none");
+      setContent("");
+      setDataUrl("");
+      setFileBytes("");
     }
-  }, [initialPath, loadFile, onInitialPathConsumed]);
+  }, [filePath, loadContent]);
 
   // Set up file watcher for auto-refresh
   useEffect(() => {
@@ -101,7 +116,7 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
     channel.onmessage = (event) => {
       if (cancelled) return;
       if (event.type === "changed" && event.path === filePath) {
-        loadFile(filePath);
+        loadContent(filePath);
       }
     };
 
@@ -123,20 +138,8 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
         invoke("unwatch_directory", { id: watcherId }).catch(() => {});
       }
     };
-  }, [filePath, autoRefresh, loadFile]);
+  }, [filePath, autoRefresh, loadContent]);
 
-  // Listen for open-preview events from terminal links, file browser, etc.
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.path) {
-        setInputPath(detail.path);
-        loadFile(detail.path);
-      }
-    };
-    window.addEventListener("open-preview", handler);
-    return () => window.removeEventListener("open-preview", handler);
-  }, [loadFile]);
 
   // Drag to resize
   const dragCleanupRef = useRef<(() => void) | null>(null);
@@ -170,7 +173,7 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
   }, [width]);
 
   const handleOpen = () => {
-    loadFile(inputPath);
+    openFile(inputPath);
   };
 
   return (
@@ -258,7 +261,7 @@ export default function PreviewPanel({ onClose, initialPath, onInitialPathConsum
           {autoRefresh ? "LIVE" : "STATIC"}
         </button>
         <button
-          onClick={() => loadFile(filePath)}
+          onClick={() => loadContent(filePath)}
           style={{
             background: "none",
             border: "none",

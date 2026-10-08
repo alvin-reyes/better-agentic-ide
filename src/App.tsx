@@ -57,7 +57,6 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [pendingPreviewPath, setPendingPreviewPath] = useState<string | null>(null);
   const [fleetOpen, setFleetOpen] = useState(false);
   const [bmadOpen, setBmadOpen] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
@@ -133,20 +132,18 @@ export default function App() {
     };
   }, []);
 
-  // From terminal links, the file browser, etc.
+  // From terminal links, the file browser, etc. App owns this rather than the
+  // panel: a closed panel is unmounted, so it could never hear the event that
+  // is supposed to open it. The document goes on the active tab and the panel
+  // follows it.
   useEffect(() => {
     const handler = (e: Event) => {
       const path = (e as CustomEvent).detail?.path;
       if (path) {
-        // Only stash the path when the panel is closed; an open PreviewPanel
-        // handles the event itself.
-        setPreviewOpen((wasOpen) => {
-          if (!wasOpen) setPendingPreviewPath(path);
-          return true;
-        });
-      } else {
-        setPreviewOpen(true);
+        const { activeTabId, setPreviewPath } = useTabStore.getState();
+        setPreviewPath(activeTabId, path);
       }
+      setPreviewOpen(true);
     };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
@@ -468,9 +465,7 @@ export default function App() {
         {previewOpen && (
           <Suspense fallback={null}>
             <PreviewPanel
-              onClose={() => { setPreviewOpen(false); setPendingPreviewPath(null); }}
-              initialPath={pendingPreviewPath}
-              onInitialPathConsumed={() => setPendingPreviewPath(null)}
+              onClose={() => setPreviewOpen(false)}
             />
           </Suspense>
         )}

@@ -33,6 +33,15 @@ export interface Tab {
   contractsRoot?: string;
   browserUrl?: string;
   editorFilePath?: string;
+  /**
+   * The document this tab is previewing.
+   *
+   * Per tab, like browserUrl and editorFilePath, because the preview belongs to
+   * the work in the tab. It used to live in PreviewPanel's own state on a single
+   * instance mounted outside the tab tree, so every tab shared one document and
+   * closing the panel discarded it.
+   */
+  previewPath?: string | null;
   /** Accent chosen from the tab's context menu. */
   color?: string;
   root: PaneNode;
@@ -65,6 +74,7 @@ interface TabStore {
   setActiveTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
   setTabColor: (id: string, color: string | undefined) => void;
+  setPreviewPath: (id: string, path: string | null) => void;
   /** Reopen the most recently closed terminal tab in its folder. */
   reopenClosedTab: () => void;
   /** Stable-sort tabs so each project's tabs sit together. */
@@ -307,6 +317,11 @@ export const useTabStore = create<TabStore>((set, get) => {
         tabs: s.tabs.map((t) => (t.id === id ? { ...t, color } : t)),
       })),
 
+    setPreviewPath: (id, previewPath) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.id === id ? { ...t, previewPath } : t)),
+      })),
+
     reopenClosedTab: () => {
       const closed = get().closedTabs;
       const last = closed[closed.length - 1];
@@ -440,6 +455,7 @@ interface SavedTab {
   activePaneId: string;
   editorFilePath?: string;
   browserUrl?: string;
+  previewPath?: string | null;
   orchestratorSessionId?: string;
   contractsRoot?: string;
   color?: string;
@@ -603,6 +619,7 @@ function loadSession(): boolean {
         activePaneId: findAllPanes(root)[0]?.id || "",
         editorFilePath: saved.editorFilePath,
         browserUrl: saved.browserUrl,
+        previewPath: saved.previewPath,
         orchestratorSessionId: saved.orchestratorSessionId,
         contractsRoot: saved.contractsRoot,
         color: saved.color,
