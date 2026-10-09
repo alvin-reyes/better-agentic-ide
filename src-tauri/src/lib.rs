@@ -436,6 +436,7 @@ pub fn run() {
             sync::sync_now,
             sync::claude_mem_status,
             vault::vault_list,
+            vault::vault_get,
             vault::vault_set,
             vault::vault_delete,
             mcp::mcp_list,

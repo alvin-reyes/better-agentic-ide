@@ -5,7 +5,7 @@ tagline: The terminal for building products with AI
 description: >-
   ADE is a desktop terminal where your coding agents work as a team of 19 roles
   under a methodology with a gate that decides when the work is actually done.
-  Claude Code, Codex, Gemini and local models.
+  Claude Code, Codex and local models.
 url: https://ade.ardata.tech
 baseurl: ""
 # Installers are still published as GitHub Releases, so download links use this.

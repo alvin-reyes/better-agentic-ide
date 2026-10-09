@@ -35,6 +35,7 @@ Rename any open tab, and save the current set of tabs as a named workspace. **Lo
 The [orchestrator]({{ '/guide/agents/' | relative_url }}#orchestrator) needs a model:
 
 - **Anthropic**: paste an API key (`sk-ant-…`) and pick a model. The key stays on this machine; sync never copies it.
+- **DeepSeek**: calls DeepSeek's Anthropic-compatible endpoint with the `DEEPSEEK_API_KEY` already in the [vault]({{ '/guide/integrations/' | relative_url }}#secrets-vault), so there is no second key to enter.
 - **Ollama (local)**: set the endpoint (default `http://localhost:11434`) and a model name such as `llama3.2` or `qwen2.5-coder`.
 
 Agents you launch from the agent picker use their own CLI logins and don't need this.

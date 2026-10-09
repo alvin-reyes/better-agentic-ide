@@ -121,6 +121,24 @@ pub fn vault_list(app: AppHandle) -> Result<Vec<SecretMeta>, String> {
     Ok(read_index(&index_path(&app)?))
 }
 
+/// Read one secret's value for in-app use.
+///
+/// Terminals receive every secret as an environment variable, so the CLI
+/// providers never need a value here. The Orchestrator is different: it calls a
+/// provider's API from the frontend, where it needs the key itself. This is the
+/// read that makes a browser-side provider (DeepSeek) able to reuse the same
+/// `DEEPSEEK_API_KEY` a terminal agent already uses, instead of asking the user
+/// to enter the same secret twice.
+///
+/// It takes a specific name rather than listing the vault, so there is no
+/// list-then-read path that hands the whole vault to the webview. Nothing here
+/// persists a value to disk or to synced state — the keychain stays the only
+/// store, exactly as it is for the environment path.
+#[tauri::command(async)]
+pub fn vault_get(name: String) -> Result<String, String> {
+    entry(&name)?.get_password().map_err(keychain_error)
+}
+
 #[tauri::command(async)]
 pub fn vault_set(app: AppHandle, name: String, value: String, note: Option<String>) -> Result<(), String> {
     if !valid_name(&name) {

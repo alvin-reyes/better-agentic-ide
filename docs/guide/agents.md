@@ -13,7 +13,7 @@ Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an a
 - **47 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General: API Builder, Database Engineer, Senior Go Engineer, Senior Rust Engineer, Smart Contract Auditor, Web3 DevOps Engineer, Debugger, Code Reviewer, Docs Writer and more. Each pairs a **role**: what it is accountable for, the files it owns and the boundaries it works inside, with a **domain** that narrows it to one technical focus. ADE composes the pair into a role definition, writes it to a file and starts the provider against that file, so a long definition never has to survive shell quoting. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
 - **Roles**: the last pill filters the list down to the core roles on their own, with no domain. Product Manager, Product Owner and Scrum Master live only here, since no profile pairs with them.
 - **Describe a task** in the search box and the picker suggests the best match.
-- **Provider**: switch between Claude Code, Codex, DeepSeek, Gemini CLI and Ollama with <kbd>Tab</kbd>. Claude Code, DeepSeek, Gemini and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch. Set the one the picker starts on in *Settings &rarr; AI API &rarr; Default agent provider*.
+- **Provider**: switch between Claude Code, Codex, DeepSeek and Ollama with <kbd>Tab</kbd>. Claude Code, DeepSeek and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch. Set the one the picker starts on in *Settings &rarr; AI API &rarr; Default agent provider*.
 - **Senior Go Engineer** writes idiomatic Go with table-driven tests and runs `go vet` and `go test -race`. **Senior Rust Engineer** models the domain with types, avoids stray `unwrap`s and runs `cargo fmt`, `cargo clippy` and `cargo test`. Both are also added to Go and Rust projects as sub-agents.
 - **Continuous mode** runs the agent without permission prompts (Claude Code's `--dangerously-skip-permissions`). ADE asks you to confirm first; use it only in projects you trust.
 
@@ -91,7 +91,7 @@ Across all terminals, the same lanes can be bucketed three ways. The data is ide
 A project's work outlives the terminal it started in, which is why Project is the default: closing a tab doesn't scatter its history. **Go to tab** is offered only under *Terminal*, since that is the only grouping whose key is a tab.
 
 - Seeing nothing? Agents are filed under the folder Claude Code was started in, so a terminal sitting somewhere else has none of its own; the empty timeline names the folder it is watching. Older runs need the tab's **all** range; anything past 15 minutes is outside the panel's window.
-- **Cost** is real: Claude agents' token usage comes from Claude Code's transcripts and is priced at API list prices (see [Tokens & cost]({{ '/guide/tokens/' | relative_url }})). If two agents run in the same folder at the same time, their usage can't be told apart and is left out. Codex, Gemini and Ollama sessions show no cost.
+- **Cost** is real: Claude agents' token usage comes from Claude Code's transcripts and is priced at API list prices (see [Tokens & cost]({{ '/guide/tokens/' | relative_url }})). If two agents run in the same folder at the same time, their usage can't be told apart and is left out. Codex and Ollama sessions show no cost.
 - A group whose lanes carry **no** cost shows a dash, not `$0.00`. A role that only ever runs as a sub-agent spends inside its parent's session, and claiming it cost nothing would be a false statement about money.
 
 ![The fleet grouped by project, each group showing its running count, spend and a swimlane per agent with sub-agents indented]({{ '/assets/img/fleet.webp' | relative_url }})
@@ -101,7 +101,7 @@ A project's work outlives the terminal it started in, which is why Project is th
 Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an Orchestrator tab and talk through a project (type in the scratchpad). It breaks the work into tasks, each with an agent profile, a priority and its dependencies.
 
 - **Dispatch** one task, or **Dispatch All** ready tasks. Each runs in its own terminal with `claude`, the task, and a generated `SPEC.md`.
-- The orchestrator uses the Anthropic API (add your key in *Settings → AI API*) or a local Ollama model.
+- The orchestrator uses the Anthropic API, DeepSeek, or a local Ollama model — pick one in *Settings → AI API*. DeepSeek reuses the `DEEPSEEK_API_KEY` in [Secrets]({{ '/guide/integrations/' | relative_url }}#secrets-vault), so it needs no second key.
 
 ## BMAD
 

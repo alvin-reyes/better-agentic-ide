@@ -52,7 +52,7 @@ ready for when they are: see [issue #22](https://github.com/alvin-reyes/better-a
 ADE works with any command-line agent. The agent picker has presets for:
 
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)**: `npm install -g @anthropic-ai/claude-code`
-- **Codex**, **Gemini CLI** and **Ollama** (local models)
+- **Codex** and **Ollama** (local models)
 
 The fleet view reads Claude Code's own transcripts, so Claude Code gets the most out of ADE.
 

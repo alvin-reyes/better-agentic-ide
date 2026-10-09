@@ -914,6 +914,7 @@ export default function SettingsPanel() {
                 <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
                   {([
                     { id: "anthropic" as const, name: "Anthropic", color: "#d97706" },
+                    { id: "deepseek" as const, name: "DeepSeek", color: "#4d6bfe" },
                     { id: "ollama" as const, name: "Ollama (Local)", color: "#ffffff" },
                   ]).map((p) => {
                     const isActive = store.orchestratorProvider === p.id;
@@ -987,6 +988,22 @@ export default function SettingsPanel() {
                     </select>
                   </div>
                 </>
+              )}
+
+              {/* DeepSeek section — the key is reused from the vault, so there is
+                  no field to enter it twice. It powers the terminal agents and
+                  the Orchestrator from the one secret. */}
+              {store.orchestratorProvider === "deepseek" && (
+                <div>
+                  <p style={{
+                    fontSize: "11px", marginTop: "6px",
+                    color: deepseekKey ? "var(--green)" : "var(--yellow)",
+                  }}>
+                    {deepseekKey
+                      ? "DEEPSEEK_API_KEY found in the vault. The Orchestrator calls DeepSeek's Anthropic-compatible endpoint with it."
+                      : "DEEPSEEK_API_KEY is not in the vault yet. Add it under Settings → Secrets, or the Orchestrator will fail on its first request."}
+                  </p>
+                </div>
               )}
 
               {/* Ollama section — always shown (used for both agent CLI and orchestrator) */}

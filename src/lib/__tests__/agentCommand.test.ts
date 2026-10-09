@@ -128,14 +128,6 @@ describe("buildLaunchCommand", () => {
     expect(result.command).toContain("claude --dangerously-skip-permissions --append-system-prompt-file");
   });
 
-  it("emits gemini's exact command, piping the file it has no flag for", () => {
-    const result = buildLaunchCommand("gemini", PATH);
-    if (result.kind !== "command") throw new Error("expected a command");
-    expect(result.command).toBe(
-      `gemini -i "$(cat '/Users/x/.ade/roles/architect-security.md')"`
-    );
-  });
-
   it("derives a model from the Modelfile and runs that", () => {
     // `ollama run` has no system-prompt flag — verified against its own help,
     // which lists MODEL [PROMPT] and nothing for a system prompt. The only way
@@ -177,7 +169,7 @@ describe("buildLaunchCommand", () => {
 
   it("never emits a raw newline, which would submit a partial command", () => {
     const rolePathWithNewline = "/Users/x/.ade/roles/architect\nsecurity.md";
-    for (const provider of ["claude", "gemini", "ollama"] as const) {
+    for (const provider of ["claude", "ollama"] as const) {
       const result = buildLaunchCommand(provider, rolePathWithNewline);
       if (result.kind !== "command") continue;
       // shellQuote does not strip or escape newlines — single quotes preserve
@@ -189,7 +181,7 @@ describe("buildLaunchCommand", () => {
 
   it("single-quotes the path so spaces cannot split the argument", () => {
     const spaced = "/Users/x/.ade/roles/my role.md";
-    for (const provider of ["claude", "gemini", "ollama"] as const) {
+    for (const provider of ["claude", "ollama"] as const) {
       const result = buildLaunchCommand(provider, spaced);
       if (result.kind !== "command") continue;
       expect(result.command.includes(`'${spaced}'`), `${provider} left the path unquoted`).toBe(true);
@@ -199,7 +191,7 @@ describe("buildLaunchCommand", () => {
   it("never emits a tilde path, which single quotes would stop the shell expanding", () => {
     // The bug this pins: `cat '~/.ade/roles/x.md'` prints "No such file or
     // directory" and the agent launches with an empty role definition.
-    for (const provider of ["claude", "gemini", "ollama"] as const) {
+    for (const provider of ["claude", "ollama"] as const) {
       const result = buildLaunchCommand(provider, PATH);
       if (result.kind !== "command") continue;
       expect(result.command.includes("'~"), `${provider} quoted a tilde path`).toBe(false);
@@ -214,7 +206,6 @@ describe("supportsRoleDelivery", () => {
 
   it("is true exactly for the providers that produce a command", () => {
     expect(supportsRoleDelivery("claude")).toBe(true);
-    expect(supportsRoleDelivery("gemini")).toBe(true);
     expect(supportsRoleDelivery("ollama")).toBe(true);
     expect(supportsRoleDelivery("codex")).toBe(false);
   });

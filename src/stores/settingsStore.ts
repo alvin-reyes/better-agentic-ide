@@ -355,7 +355,7 @@ interface Settings {
   orchestratorModel: string;
   ollamaEndpoint: string;
   ollamaModel: string;
-  orchestratorProvider: "anthropic" | "ollama";
+  orchestratorProvider: "anthropic" | "deepseek" | "ollama";
   contextGuard: ContextGuard;
   showShortcutBar: boolean;
   /** Draw terminals with WebGL (faster); off uses the DOM renderer. */
@@ -393,7 +393,7 @@ interface SettingsStore extends Settings {
   setOrchestratorModel: (model: string) => void;
   setOllamaEndpoint: (endpoint: string) => void;
   setOllamaModel: (model: string) => void;
-  setOrchestratorProvider: (provider: "anthropic" | "ollama") => void;
+  setOrchestratorProvider: (provider: "anthropic" | "deepseek" | "ollama") => void;
   setContextGuard: (patch: Partial<ContextGuard>) => void;
   setShowShortcutBar: (show: boolean) => void;
   setAskOnNewTab: (ask: boolean) => void;
@@ -462,6 +462,10 @@ const RETIRED_MODELS: Record<string, string> = {
   "claude-sonnet-4-20250514": "claude-sonnet-5",
 };
 initial.orchestratorModel = RETIRED_MODELS[initial.orchestratorModel] ?? initial.orchestratorModel;
+// Gemini was removed as a provider; a saved default falls back to claude.
+if ((initial.defaultProvider as string) === "gemini") {
+  initial.defaultProvider = "claude";
+}
 
 export const useSettingsStore = create<SettingsStore>((set, get) => {
   const save = (patch: Partial<Settings>) => {

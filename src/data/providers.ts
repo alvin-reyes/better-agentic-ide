@@ -16,7 +16,6 @@ export const PROVIDERS: ProviderInfo[] = [
   { id: "claude", name: "Claude", color: "#d97706" },
   { id: "codex", name: "Codex", color: "#10b981" },
   { id: "deepseek", name: "DeepSeek", color: "#4d6bfe", binary: "claude" },
-  { id: "gemini", name: "Gemini", color: "#3b82f6" },
   { id: "ollama", name: "Ollama", color: "#ffffff" },
 ];
 

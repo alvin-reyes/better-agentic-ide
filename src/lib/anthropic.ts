@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { ChatImage } from "../stores/orchestratorStore";
 import { AGENT_CATALOG } from "../data/curatedAgents";
+import { DEEPSEEK_BASE_URL, DEEPSEEK_MODEL } from "./agentCommand";
 
 const PROFILE_IDS = AGENT_CATALOG.map((p) => p.id);
 
@@ -164,6 +166,27 @@ export async function sendOrchestratorMessage(
     return sendOllamaOrchestratorMessage(history, callbacks);
   }
 
+  if (settings.orchestratorProvider === "deepseek") {
+    // The key is the one a terminal agent already uses: it lives in the vault
+    // as $DEEPSEEK_API_KEY and is read here, never persisted to a setting or
+    // synced. Reusing it means picking DeepSeek for the Orchestrator needs no
+    // second copy of the secret.
+    let apiKey: string;
+    try {
+      apiKey = await invoke<string>("vault_get", { name: "DEEPSEEK_API_KEY" });
+    } catch {
+      callbacks.onError(
+        "DEEPSEEK_API_KEY is not in the vault. Add it under Settings → Secrets, or the Orchestrator will fail on its first request.",
+      );
+      return;
+    }
+    return sendAnthropicSdkMessage(history, callbacks, {
+      apiKey,
+      baseURL: DEEPSEEK_BASE_URL,
+      model: DEEPSEEK_MODEL,
+    });
+  }
+
   const apiKey = settings.anthropicApiKey;
 
   if (!apiKey) {
@@ -171,11 +194,31 @@ export async function sendOrchestratorMessage(
     return;
   }
 
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  return sendAnthropicSdkMessage(history, callbacks, {
+    apiKey,
+    model: settings.orchestratorModel || "claude-opus-5",
+  });
+}
+
+/**
+ * One Anthropic-SDK path serves both the Anthropic and DeepSeek providers:
+ * DeepSeek publishes an Anthropic-compatible endpoint, so the only differences
+ * are the base URL, the key, and the model — all supplied by the caller.
+ */
+async function sendAnthropicSdkMessage(
+  history: ChatTurn[],
+  callbacks: StreamCallbacks,
+  client: { apiKey: string; baseURL?: string; model: string },
+) {
+  const sdk = new Anthropic({
+    apiKey: client.apiKey,
+    baseURL: client.baseURL,
+    dangerouslyAllowBrowser: true,
+  });
 
   try {
-    const response = await client.messages.create({
-      model: settings.orchestratorModel || "claude-opus-5",
+    const response = await sdk.messages.create({
+      model: client.model,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: [CREATE_TASKS_TOOL],
@@ -199,7 +242,7 @@ export async function sendOrchestratorMessage(
 
     // Safety classifiers can decline a request; the reply is then empty.
     if ((response.stop_reason as string) === "refusal") {
-      callbacks.onError("Claude declined this request. Try rephrasing it, or pick another model in Settings → AI API.");
+      callbacks.onError("The model declined this request. Try rephrasing it, or pick another provider in Settings → AI API.");
       return;
     }
 

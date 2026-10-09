@@ -26,13 +26,13 @@
   <img src="docs/assets/img/hero.webp" alt="ADE: two terminal panes running tests and git log, a live Markdown preview of the implementation plan, and the prompt scratchpad along the bottom" width="100%">
 </p>
 
-ADE is a desktop IDE for macOS and Linux built around **Claude Code**, with Codex, Gemini and local models running alongside it. Every project gets a methodology and a team of agents, and you see exactly what each one costs. It goes furthest on serious engineering work: nineteen roles that cover a whole company, a verification gate that decides when a story is actually done, and smart contracts from first test to reviewed deploy.
+ADE is a desktop IDE for macOS and Linux built around **Claude Code**, with Codex and local models running alongside it. Every project gets a methodology and a team of agents, and you see exactly what each one costs. It goes furthest on serious engineering work: nineteen roles that cover a whole company, a verification gate that decides when a story is actually done, and smart contracts from first test to reviewed deploy.
 
 ## AI Agents
 
-- **Many agents at once**: run Claude Code, Codex, Gemini or any CLI agent in parallel tabs and split panes. The fleet view tracks every agent and sub-agent on a live timeline with its real cost.
+- **Many agents at once**: run Claude Code, Codex or any CLI agent in parallel tabs and split panes. The fleet view tracks every agent and sub-agent on a live timeline with its real cost.
 - **47 agent profiles**: Backend (including senior Go and Rust engineers), Frontend, Mobile, Data, DevOps, Testing, Security, Web3, Architects and General. Pick one and run it in this terminal or a new tab.
-- **One role, any CLI**: a profile composes one role definition in `~/.ade/roles/`, shared by every project; Claude Code, Gemini and Ollama (deepseek and other local models) each receive it the way they accept one. Codex is shown unavailable rather than guessing a flag that fails silently.
+- **One role, any CLI**: a profile composes one role definition in `~/.ade/roles/`, shared by every project; Claude Code and Ollama (deepseek and other local models) each receive it the way they accept one. Codex is shown unavailable rather than guessing a flag that fails silently.
 - **A whole company, not just a delivery team**: nineteen roles end to end, from analyst and product manager through developer and QA to security engineer, SRE, release manager, support and solutions engineering. The picker lists every one unpaired, so the roles no profile covers are still a keystroke away.
 - **Project setup**: every project is set up for agents once, automatically. See [below](#project-setup).
 - **The agents are a repo you can share**: every role definition lives in [ade-setup](https://github.com/alvin-reyes/ade-setup), versioned and released, and ADE ships a pinned copy. Improve a role there and it reaches your projects when you choose to update them, not on ADE's release schedule.
@@ -88,7 +88,7 @@ Pass `--dry-run` to see what it would do, or `--help` for the options.
 
 **Installers**: download from the [latest release](https://github.com/alvin-reyes/better-agentic-ide/releases/latest): `.dmg` for macOS (Apple Silicon and Intel) and `.deb` or `.AppImage` for Linux.
 
-ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, Gemini CLI and Ollama. See the [user guide](https://ade.ardata.tech/guide/) to get started.
+ADE works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex and Ollama. See the [user guide](https://ade.ardata.tech/guide/) to get started.
 
 ## Licence
 

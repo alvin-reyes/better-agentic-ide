@@ -41,7 +41,7 @@ describe("BMAD task references", () => {
   });
 
   it("gives the path for providers that have no slash commands", () => {
-    // /BMad:tasks: is Claude Code only. A gemini or ollama agent needs the file.
+    // /BMad:tasks: is Claude Code only. An ollama agent needs the file.
     for (const f of files) {
       const body = readFileSync(join(AGENTS, f), "utf8");
       if (!body.includes("## BMAD tasks")) continue;

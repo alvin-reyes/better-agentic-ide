@@ -1,6 +1,6 @@
 import { modelTagFor } from "./agentComposition";
 
-export type Provider = "claude" | "codex" | "deepseek" | "gemini" | "ollama";
+export type Provider = "claude" | "codex" | "deepseek" | "ollama";
 
 export interface LaunchOptions {
   continuous?: boolean;
@@ -94,11 +94,6 @@ export function buildLaunchCommand(
       ].join(" ");
       return { kind: "command", command: `${env} ${claudeCommand(path, opts)}` };
     }
-
-    case "gemini":
-      // gemini exposes only -p/--prompt and -i/--prompt-interactive; there is no
-      // system-prompt flag, so the role is piped in as the opening prompt.
-      return { kind: "command", command: `gemini -i "$(cat ${path})"` };
 
     case "ollama": {
       // `ollama run` has no system-prompt flag; the only way to start an
