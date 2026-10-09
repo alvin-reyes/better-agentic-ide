@@ -266,11 +266,63 @@ fn cwd_of(pid: u32) -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn cwd_of(_pid: u32) -> Option<String> {
-    None
+fn cwd_of(pid: u32) -> Option<String> {
+    cwd_via_sysinfo(pid)
+}
+
+/// A process's working directory, read through sysinfo.
+///
+/// This is the Windows path, where there is no /proc to read and no lsof to
+/// fall back on: the answer lives in the process's PEB and getting it means
+/// NtQueryInformationProcess plus ReadProcessMemory, which sysinfo already does
+/// correctly.
+///
+/// It is compiled on every platform rather than behind cfg(windows) so that it
+/// typechecks and can be tested on the machine this was written on, which
+/// cannot build for Windows. Linux and macOS do not call it: their native reads
+/// are a syscall rather than a process-table refresh.
+fn cwd_via_sysinfo(pid: u32) -> Option<String> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut sys = System::new();
+    let target = Pid::from_u32(pid);
+    // Refresh only the process asked about: the full table is thousands of
+    // entries and this is polled for every pane every few seconds.
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[target]),
+        true,
+        ProcessRefreshKind::nothing().with_cwd(sysinfo::UpdateKind::Always),
+    );
+    let dir = sys.process(target)?.cwd()?.to_string_lossy().into_owned();
+    (!dir.is_empty()).then_some(dir)
+}
+
+/// The shell's most recently spawned child, through sysinfo.
+///
+/// Compiled everywhere for the same reason as cwd_via_sysinfo. Unix keeps
+/// pgrep, which is one process rather than a table walk.
+fn foreground_pid_via_sysinfo(shell_pid: u32) -> Option<u32> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing(),
+    );
+    let parent = Pid::from_u32(shell_pid);
+    // Highest pid among the children, matching the Unix path's "most recently
+    // spawned child" rather than picking an arbitrary one.
+    sys.processes()
+        .values()
+        .filter(|p| p.parent() == Some(parent))
+        .map(|p| p.pid().as_u32())
+        .max()
 }
 
 fn cwd_with_lsof(pid: u32) -> Result<String, String> {
+    if crate::platform::IS_WINDOWS {
+        // No lsof. sysinfo already answered or there is no answer to give.
+        return cwd_via_sysinfo(pid).ok_or_else(|| "CWD not available".to_string());
+    }
     let output = std::process::Command::new("/usr/bin/lsof")
         .args(["-a", "-d", "cwd", "-p", &pid.to_string(), "-Fn"])
         .output()
@@ -291,6 +343,9 @@ fn cwd_with_lsof(pid: u32) -> Result<String, String> {
 
 /// The shell's most recently spawned child, taken as its foreground process.
 fn get_foreground_pid(shell_pid: u32) -> Option<u32> {
+    if crate::platform::IS_WINDOWS {
+        return foreground_pid_via_sysinfo(shell_pid);
+    }
     let output = std::process::Command::new("/usr/bin/pgrep")
         .args(["-P", &shell_pid.to_string()])
         .output()
@@ -304,6 +359,84 @@ fn get_foreground_pid(shell_pid: u32) -> Option<u32> {
         .lines()
         .filter_map(|line| line.trim().parse::<u32>().ok())
         .next_back()
+}
+
+/// The Windows cwd path, exercised here.
+///
+/// sysinfo is the Windows implementation, but it works on every platform, so
+/// these run on the machine the port was written on instead of only on a
+/// Windows runner. If sysinfo changes its API or stops reporting a cwd, this
+/// fails here rather than three pushes later in CI.
+#[cfg(test)]
+mod sysinfo_tests {
+    use super::*;
+
+    #[test]
+    fn reads_this_process_working_directory() {
+        let pid = std::process::id();
+        let dir = cwd_via_sysinfo(pid).expect("sysinfo should report our own cwd");
+        let expected = std::env::current_dir().unwrap();
+        assert_eq!(
+            std::path::Path::new(&dir).canonicalize().unwrap(),
+            expected.canonicalize().unwrap(),
+        );
+    }
+
+    #[test]
+    fn returns_none_for_a_pid_that_does_not_exist() {
+        // Above the default pid_max on Linux and well past macOS's range.
+        assert_eq!(cwd_via_sysinfo(4_294_967_000), None);
+    }
+
+    /// Asserts what is actually guaranteed. The suite runs tests in parallel
+    /// and several spawn children, so "the most recently spawned child" is
+    /// ambiguous from inside one test: an earlier version asserted the exact
+    /// pid and failed when another test's child happened to be newer. What the
+    /// caller relies on is that the answer is a real child of the shell.
+    #[test]
+    fn finds_a_child_of_this_process() {
+        // `sleep` does not exist on Windows, and this test has to pass on the
+        // runner that actually exercises the code it covers.
+        let mut cmd = if crate::platform::IS_WINDOWS {
+            let mut c = std::process::Command::new("cmd");
+            c.args(["/c", "timeout", "/t", "30", "/nobreak"]);
+            c
+        } else {
+            let mut c = std::process::Command::new("sleep");
+            c.arg("30");
+            c
+        };
+        let mut child = cmd.spawn().expect("spawn a child to look for");
+        std::thread::sleep(std::time::Duration::from_millis(250));
+
+        let found = foreground_pid_via_sysinfo(std::process::id());
+
+        // Look the parent up while the child is still alive. Killing it first
+        // leaves a reaped process that sysinfo reports no parent for, which an
+        // earlier version of this test read as a failure of the code.
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        let found = found.expect("a child was running, so one should be found");
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing(),
+        );
+        let parent = sys.process(Pid::from_u32(found)).and_then(|p| p.parent());
+
+        let _ = child.kill();
+        let _ = child.wait();
+        assert_eq!(
+            parent,
+            Some(Pid::from_u32(std::process::id())),
+            "returned pid {found} should be a child of this process",
+        );
+    }
+
+    #[test]
+    fn reports_no_child_for_a_process_that_has_none() {
+        assert_eq!(foreground_pid_via_sysinfo(4_294_967_000), None);
+    }
 }
 
 #[cfg(all(test, unix))]
