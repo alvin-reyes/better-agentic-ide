@@ -23,5 +23,7 @@ portable-pty = "0.9"
 notify = "7"
 glob = "0.3"
 tauri-plugin-clipboard-manager = "2.3.2"
-keyring = { version = "3", features = ["apple-native", "sync-secret-service", "crypto-rust"] }
+# windows-native is the Credential Manager backend; without it the vault
+# compiles on Windows and then fails at runtime with no store behind it.
+keyring = { version = "3", features = ["apple-native", "sync-secret-service", "crypto-rust", "windows-native"] }
 tauri-plugin-dialog = "2"

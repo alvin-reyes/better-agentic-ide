@@ -57,22 +57,25 @@ pub fn create_pty(
         })
         .map_err(|e| format!("openpty failed: {}", e))?;
 
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let (shell, shell_args) =
+        crate::platform::shell_from(crate::platform::IS_WINDOWS, |k| std::env::var(k).ok());
     let mut cmd = CommandBuilder::new(&shell);
-    cmd.arg("-l");
+    for arg in &shell_args {
+        cmd.arg(arg);
+    }
 
-    // A restored tab's folder may have been deleted since: start in $HOME
-    // rather than failing to spawn the shell.
+    // A restored tab's folder may have been deleted since: start in the home
+    // directory rather than failing to spawn the shell.
     if let Some(dir) = cwd.filter(|d| std::path::Path::new(d).is_dir()) {
         cmd.cwd(dir);
-    } else if let Ok(home) = std::env::var("HOME") {
+    } else if let Some(home) = crate::env_home() {
         cmd.cwd(home);
     }
 
     cmd.env("TERM", "xterm-256color");
-    for var in ["HOME", "USER", "PATH", "LANG"] {
+    for var in crate::platform::passthrough_vars(crate::platform::IS_WINDOWS) {
         if let Ok(value) = std::env::var(var) {
-            cmd.env(var, value);
+            cmd.env(*var, value);
         }
     }
     // Vault secrets, so agents and MCP servers started here can use them.

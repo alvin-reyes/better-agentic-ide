@@ -3,6 +3,7 @@ mod bmad;
 mod contracts;
 mod crashlog;
 mod mcp;
+mod platform;
 mod projectsetup;
 mod pty;
 mod state;
@@ -41,7 +42,7 @@ fn expand_home(path: &str) -> String {
 
 /// $HOME as the environment has it, without `get_home_dir`'s fallbacks.
 pub(crate) fn env_home() -> Option<std::path::PathBuf> {
-    std::env::var_os("HOME").map(std::path::PathBuf::from)
+    platform::home_from(platform::IS_WINDOWS, |k| std::env::var(k).ok())
 }
 
 const LIST_SKIP_NAMES: &[&str] = &[
@@ -131,6 +132,18 @@ pub(crate) fn find_command(command: &str) -> Result<String, String> {
                 return Ok(path);
             }
         }
+    }
+
+    // Windows has no login shell to ask and no `which`: where.exe takes the
+    // bare command name and prints every match, first one winning.
+    if platform::IS_WINDOWS {
+        if let Ok(output) = std::process::Command::new("where.exe").arg(command).output() {
+            let found = String::from_utf8_lossy(&output.stdout);
+            if let Some(first) = found.lines().map(str::trim).find(|l| !l.is_empty()) {
+                return Ok(first.to_string());
+            }
+        }
+        return Err(format!("{command} not found"));
     }
 
     for shell in ["/bin/zsh", "/bin/bash", "/bin/sh"] {

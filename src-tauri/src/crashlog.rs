@@ -8,7 +8,7 @@ use std::path::PathBuf;
 const MAX_BYTES: u64 = 1 << 20;
 
 pub fn log_path() -> Option<PathBuf> {
-    let home = PathBuf::from(std::env::var_os("HOME")?);
+    let home = crate::env_home()?;
     if cfg!(target_os = "macos") {
         Some(home.join("Library").join("Logs").join("ADE").join("ade.log"))
     } else {

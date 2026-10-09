@@ -106,6 +106,35 @@ jobs:
   # The PowerShell installer cannot be executed on a developer Mac: the only
   # PowerShell container images are amd64, and qemu crashes running them under
   # Rosetta. So a real Windows runner checks it instead of nobody checking it.
+  backend-windows:
+    name: Backend on Windows (compile + test)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # The Tauri build needs something at the dist path; the Rust side is what
+      # is being checked here, not the bundle.
+      - name: Create placeholder frontend dist
+        shell: bash
+        run: mkdir -p dist && echo "<!doctype html><title>ci</title>" > dist/index.html
+
+      - name: Check
+        working-directory: src-tauri
+        run: cargo check --locked
+
+      - name: Tests
+        working-directory: src-tauri
+        run: cargo test --locked
+
   installer-linux:
     name: Linux installer (shellcheck, real install)
     runs-on: ubuntu-latest
