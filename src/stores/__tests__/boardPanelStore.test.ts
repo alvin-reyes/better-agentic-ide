@@ -80,6 +80,7 @@ describe("boardPanelStore", () => {
     await flush();
     store.getState().show("/new");
     await flush();
+    expect(store.getState().loading).toBe(true);
     pending[0].resolve(empty()); // /old finishes late
     await flush();
     expect(store.getState().root).toBe("/new");
@@ -106,6 +107,16 @@ describe("boardPanelStore", () => {
     vi.useRealTimers();
     await flush();
     expect(deps.build).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the methodology when the first build fails", async () => {
+    const { deps, pending } = controlled();
+    const store = createBoardPanelStore(deps);
+    store.getState().show("/p");
+    await flush();
+    pending[0].reject(new Error("boom"));
+    await flush();
+    expect(store.getState()).toMatchObject({ methodology: "v4", board: null, error: "boom", loading: false });
   });
 
   it("clears everything when shown no project", async () => {

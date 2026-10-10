@@ -51,9 +51,10 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
           set({ methodology: null, board: null, stageFile: null, error: null });
           return;
         }
+        set({ methodology });
         const [board, stageFile] = await Promise.all([deps.build(root, methodology), deps.stageFile(root)]);
         if (get().root !== root) return;
-        set({ methodology, board, stageFile, error: null });
+        set({ board, stageFile, error: null });
       } catch (e) {
         if (get().root !== root) return;
         set({ error: e instanceof Error ? e.message : String(e) });
@@ -65,6 +66,7 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
     async function refresh(): Promise<void> {
       if (running) {
         queued = true;
+        if (get().root) set({ loading: true });
         return running;
       }
       running = (async () => {
@@ -91,7 +93,7 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
         if (timer) clearTimeout(timer);
         timer = null;
         if (root === get().root && get().board) return;
-        set({ root, methodology: null, board: null, stageFile: null, error: null, loading: false });
+        set({ root, methodology: null, board: null, stageFile: null, error: null, loading: !!root });
         if (root) void refresh();
       },
       refresh,
