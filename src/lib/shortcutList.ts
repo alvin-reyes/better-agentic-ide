@@ -54,6 +54,7 @@ export const SHORTCUT_GROUPS: { group: string; items: ShortcutItem[] }[] = [
       { keys: L("palette"), action: "Command palette", short: "Commands" },
       { keys: L("fileBrowser"), action: "File browser", short: "Files" },
       { keys: L("preview"), action: "Preview panel", short: "Preview" },
+      { keys: L("board"), action: "Stage board", short: "Board" },
       { keys: L("contracts"), action: "Contracts panel", short: "Contracts" },
       { keys: L("tokens"), action: "Tokens panel", short: "Tokens" },
       { keys: L("integrations"), action: "MCP library and secrets", short: "MCP" },

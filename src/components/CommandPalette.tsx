@@ -128,7 +128,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
           }),
         ).catch((err) => failed(`BMAD setup failed: ${err}`));
       }},
-      { id: "bmad-toggle", label: "BMAD: Toggle panel", category: "BMAD", action: () => { window.dispatchEvent(new CustomEvent("toggle-bmad")); onClose(); } },
+      { id: "board-toggle", label: "View: Toggle stage board", shortcut: L("board"), category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-board")); onClose(); } },
       { id: "tab-switcher", label: "Tabs: Go to tab", shortcut: L("tabSwitcher"), category: "Tabs", action: () => { onClose(); window.dispatchEvent(new CustomEvent("toggle-tab-switcher")); } },
       { id: "tab-reopen", label: "Tabs: Reopen closed tab", shortcut: L("reopenTab"), category: "Tabs", action: () => { onClose(); useTabStore.getState().reopenClosedTab(); } },
       { id: "shortcuts", label: "Help: Keyboard shortcuts", shortcut: L("shortcuts"), category: "Help", action: () => { window.dispatchEvent(new CustomEvent("toggle-shortcuts")); onClose(); } },
