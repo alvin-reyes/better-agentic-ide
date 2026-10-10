@@ -129,8 +129,11 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
           exitCode: 1,
         };
       }
-      // The render's stdout line, printed as the Python printed it.
-      return { stdout: await renderSkill(absoluteRoot(root), skill, set, fs), exitCode: 0 };
+      // The render's stdout line, printed as the Python printed it — and with
+      // the Python's exit code: `HALT: <reason>` is a refusal, exit 1, so a
+      // caller that checks the code rather than the line halts too.
+      const stdout = await renderSkill(absoluteRoot(root), skill, set, fs);
+      return { stdout, exitCode: stdout.startsWith("HALT:") ? 1 : 0 };
     }
 
     case "memlog":
