@@ -177,6 +177,29 @@ fn needs_install(methodology: Methodology, on_disk: Option<Methodology>, full: b
     full && on_disk != Some(methodology)
 }
 
+/// The resources a full setup installs from, or `None` when there is nothing to
+/// install. A v6 setup whose resources did not resolve is an error: reporting
+/// success while writing nothing would leave the project without skills, without
+/// `_bmad/` and without a marker — what install() itself refuses to do.
+fn install_source(
+    methodology: Methodology,
+    on_disk: Option<Methodology>,
+    full: bool,
+    resolve: impl FnOnce(Methodology) -> Option<PathBuf>,
+) -> Result<Option<PathBuf>, String> {
+    if !needs_install(methodology, on_disk, full) {
+        return Ok(None);
+    }
+    match resolve(methodology) {
+        Some(root) => Ok(Some(root)),
+        None if methodology == Methodology::V6 => {
+            Err("bmad v6 resources not found: cannot scaffold a v6 project without them".to_string())
+        }
+        // The v4 path predates this and leaves an unresolved root alone.
+        None => Ok(None),
+    }
+}
+
 #[tauri::command(async)]
 pub fn project_setup_apply(
     app: tauri::AppHandle,
@@ -196,14 +219,11 @@ pub fn project_setup_apply(
     let methodology = if methodology.trim().eq_ignore_ascii_case("v4") { Methodology::V4 } else { Methodology::V6 };
     // A full setup also loads the methodology from CLAUDE.md and installs the
     // project's methodology; adding agents on their own touches nothing else.
-    let src = if needs_install(methodology, crate::bmadv6::detect_on_disk(&dir), full) {
-        match methodology {
-            Methodology::V4 => crate::bmad::resource_root(&app).ok(),
-            Methodology::V6 => crate::bmadv6::resource_root(&app).ok(),
-        }
-    } else {
-        None
+    let root = |wanted| match wanted {
+        Methodology::V4 => crate::bmad::resource_root(&app).ok(),
+        Methodology::V6 => crate::bmadv6::resource_root(&app).ok(),
     };
+    let src = install_source(methodology, crate::bmadv6::detect_on_disk(&dir), full, root)?;
     apply(&dir, &files, full.then_some(import.as_str()), &marker, methodology, src.as_deref())
 }
 
@@ -378,6 +398,24 @@ mod tests {
         );
         std::fs::remove_dir_all(dir).ok();
         std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn a_full_v6_setup_without_resources_is_an_error() {
+        // An unresolvable root must not read as a setup that succeeded and wrote nothing.
+        let err = install_source(Methodology::V6, None, true, |_| None).unwrap_err();
+        assert!(err.contains("v6"), "{err}");
+        // With resources, the resolved root is what setup installs from.
+        let root = PathBuf::from("/tmp/bmad-v6");
+        assert_eq!(
+            install_source(Methodology::V6, None, true, |_| Some(root.clone())).unwrap(),
+            Some(root)
+        );
+        // Nothing to install: already on the methodology, or not a full setup.
+        assert_eq!(install_source(Methodology::V6, Some(Methodology::V6), true, |_| None).unwrap(), None);
+        assert_eq!(install_source(Methodology::V6, None, false, |_| None).unwrap(), None);
+        // The v4 path keeps its pre-existing behaviour: a miss is not fatal.
+        assert_eq!(install_source(Methodology::V4, None, true, |_| None).unwrap(), None);
     }
 
     #[test]
