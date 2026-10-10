@@ -582,81 +582,37 @@ git commit -m "feat(bmad-v6): port layered TOML config resolution"
 ### Task 4: Port the ticket tree (tickets.py + read_store.py)
 
 **Files:**
-- Create: `src/lib/bmadRuntime/tickets.ts`
-- Test: `src/lib/bmadRuntime/__tests__/tickets.test.ts`
-- Create: `src/lib/bmadRuntime/__tests__/goldens/tickets/*.json` (generated in Step 1)
+- Create: `src/lib/bmadRuntime/tickets.ts` (shipped, 1988 lines: one module, Python's own sections — constants, python value shapes, paths, fs probes, frontmatter, loading, views, store, the command line, read_store.py, entry)
+- Test: `src/lib/bmadRuntime/__tests__/tickets.test.ts` (18 tests)
+- Create: `src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts` — the `seedTicketTree` helper Tasks 5–6 import
+- Create: `src/lib/bmadRuntime/__tests__/goldens/tickets/*.json` + `*.exit` + `pull-leaf.md` + `mark-created-plan.md`, with `capture.sh` beside them
 
 **Interfaces:**
 - Consumes: `loadCentralConfig` (Task 3), `Fs`.
-- Produces: `export async function tickets(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` — dispatches `next`, `status`, `find`, `pull`, `mark`, `mirror` exactly as the Python CLI does, printing JSON to stdout. Resolves `--project-root`, the store location (`output_folder` + `active_initiative`), and the `after` dependency validation. Status transitions for `mark`: `draft → ready-for-dev → in-progress → in-review → built → done` (plus `blocked`/`dropped`), with `done` and `mark` refusal messages matching the Python strings.
+- Produces: `export async function tickets(argv: string[], fs: Fs, stdin?: string): Promise<{ stdout: string; exitCode: number }>` — dispatches `next`, `status`, `find`, `pull`, `mark`, `mirror` exactly as the Python CLI does, printing JSON to stdout; argv carrying no subcommand is `read_store.py`'s CLI (Task 6 routes `read_store` here), and `stdin` carries `mirror`'s JSON (left out, it is read from the process's own stdin). Resolves `--project-root` (accepted anywhere, which the plan's tests need and argparse does not allow), the store location (`output_folder` + `active_initiative`), and the `after` dependency validation. `mark <ref> <status>` sets the status in the ticket's plan, creating a frontmatter-only plan when there is none, with `--assignee`/`--blocked`; exit 0 ok, 1 a malformed tree, 2 a store refusal or a usage error.
 
-- [ ] **Step 1: Generate goldens from the real Python**
+- [x] **Step 1: Generate goldens from the real Python** — shipped as `src/lib/bmadRuntime/__tests__/goldens/tickets/capture.sh`, which reseeds `/tmp/golden-proj` per capture and records every command (the Ruling's capture-script rule). Run it from the worktree root; it is reproducible byte for byte. Thirteen goldens: `next-empty`, `next-unseeded-refusal`, `status-seeded`, `next-seeded`, `find-entry`, `pull` + `pull-leaf.md`, `find-pulled`, `mark-done`, `mark-created` + `mark-created-plan.md`, `after-missing-entry`, `tracker-store-refusal`, `read-store-tickets`, `read-store-starters`. Each capture also writes `<name>.exit`.
 
-```bash
-cd /tmp/golden-proj
-mkdir -p src/lib/bmadRuntime/__tests__/goldens/tickets
-uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj next > G.json 2>&1 || true
-cp G.json src/lib/bmadRuntime/__tests__/goldens/tickets/next-empty.json
-# Seed one initiative + one epic + one story via the real skill, then capture:
-uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj status > \
-  src/lib/bmadRuntime/__tests__/goldens/tickets/status-seeded.json
-uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj mark 1 done > \
-  src/lib/bmadRuntime/__tests__/goldens/tickets/mark-done.json
-```
+Three things the sketch's literal commands could not do, all recorded in `capture.sh`:
+- `next` must succeed for its golden: the tree is configured (`_bmad/config.toml` with `output_folder` and `active_initiative`) and the store folder exists with an empty `tickets.toml`. An unseeded tree is captured separately as `next-unseeded-refusal.json` (exit 1).
+- `mark 1 done` with no folder runs on the **active initiative**, where a bare numeric ref matches nothing (`no ticket matches '1'`): the golden is the refusal. The working `mark-done.json` names the epic folder: `mark <root>/_bmad-output/initiative-demo/epic-demo 1 done`.
+- The seed's leaf file is already pulled, so `pull` is captured on a second entry the seed adds (no leaf file, no plan, full criteria) — which also gives `mark-created` its ticket.
+- `capture.sh` copies `_bmad/scripts/config_utils.py` from the vendored tree: the Python loads it, the port does not. The capture project root is rewritten to `/p` on the way out, so the goldens are comparable with the memFs fixtures.
 
-(Seed by creating `_bmad-output/initiative-demo/tickets.toml` with one `[[epic]]` and `epic-demo/tickets.toml` with one `[[entry]]`, plus `story-demo.md` and `story-demo-plan.md` per the vendored `bmad-ticket/assets` templates. If a command refuses without more setup, capture the refusal JSON — it is a golden too.)
+- [x] **Step 2: Write the failing test**
 
-**Capture script rule (controller ruling, applies from this task on):** every golden capture must ALSO write the exact commands it ran — including the seed steps — into `src/lib/bmadRuntime/__tests__/goldens/<name>/capture.sh` and commit it beside the goldens, so a re-capture is reproducible without archaeology. The golden files alone never record their own inputs.
+`src/lib/bmadRuntime/__tests__/tickets.test.ts` starts as the plan wrote it — the two golden tests verbatim — and grew to 18: `next-seeded` (byte-for-byte), `find-entry`, `pull` + the leaf it writes, `find-pulled`, `mark-done` (and the plan it edits), `mark-created` (with its date moved to today), the tracker-store and unseeded refusals, `read_store`, two `mirror` cases, and CRLF/BOM preservation (verified against the Python before being pinned).
 
-- [ ] **Step 2: Write the failing test**
+The plan's third test could not pass as written: `pull --project-root /p 2` is an argparse refusal before any tree loads (the Python exits 2 with `unrecognized arguments: --project-root`, which the shipped port reproduces and asserts), so there is no `after` in its output. The after-validation the test names is exercised on the tree the Python refuses — an entry whose `after` names no entry — against `after-missing-entry.json`, and the brief's argv shape is asserted separately.
 
-`src/lib/bmadRuntime/__tests__/tickets.test.ts`:
-
-```ts
-import { describe, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tickets } from "../tickets";
-import { memFs } from "../fs";
-import { seedTicketTree } from "./fixtures/ticketTree";
-
-const golden = async (name: string) =>
-  JSON.parse(await readFile(join(__dirname, "goldens/tickets", name), "utf8"));
-
-describe("tickets port", () => {
-  it("matches Python on an empty project (next)", async () => {
-    const fs = memFs();
-    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
-    const r = await tickets(["next", "--project-root", "/p"], fs);
-    expect(r.exitCode).toBe(0);
-    expect(JSON.parse(r.stdout)).toEqual(await golden("next-empty.json"));
-  });
-
-  it("matches Python status on a seeded tree", async () => {
-    const fs = memFs();
-    await seedTicketTree(fs, "/p", { epics: [{ id: 1, slug: "demo" }], stories: [{ id: 1, slug: "demo", parent: "epic-demo" }] });
-    const r = await tickets(["status", "--project-root", "/p"], fs);
-    expect(JSON.parse(r.stdout)).toEqual(await golden("status-seeded.json"));
-  });
-
-  it("rejects an after-reference to a ticket that does not exist, like Python", async () => {
-    const fs = memFs();
-    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
-    const r = await tickets(["pull", "--project-root", "/p", "2"], fs);
-    expect(r.exitCode).not.toBe(0);
-    expect(r.stdout).toContain("after");
-  });
-});
-```
-
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/bmadRuntime/__tests__/tickets.test.ts`
-Expected: FAIL — `tickets.ts` not found.
+Expected: FAIL — `tickets.ts` not found. (Seen.)
 
-- [ ] **Step 4: Implement tickets.ts and its fixture builder**
+- [x] **Step 4: Implement tickets.ts and its fixture builder**
 
-First create `src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts` — the `seedTicketTree` helper used by this task's tests and Tasks 5–6:
+`src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts` is the plan's fixture plus one thing the sketch omitted: the epic's own container file `<dir>/epic-<slug>.md`. Without it `load_container` refuses every epic folder (`epic-demo: no epic-demo.md`), which the status golden would have failed on.
 
 ```ts
 import type { Fs } from "../../fs";
@@ -665,83 +621,56 @@ import type { Fs } from "../../fs";
  * requested epics/stories as [[epic]]/[[entry]] tables plus leaf and plan
  * files. Mirrors the vendored templates' shape. */
 export async function seedTicketTree(
-  fs: Fs, root: string,
-  spec: { epics: { id: number; slug: string }[]; stories: { id: string | number; slug: string; parent: string }[] },
+  fs: Fs,
+  root: string,
+  spec: {
+    epics: { id: number; slug: string }[];
+    stories: { id: string | number; slug: string; parent: string }[];
+  },
 ): Promise<void> {
   await fs.mkdir(`${root}/_bmad/custom`);
-  await fs.writeText(`${root}/_bmad/config.toml`, `[core]\nproject_name = "p"\noutput_folder = "${root}/_bmad-output"\nactive_initiative = "initiative-demo"\n`);
+  await fs.writeText(
+    `${root}/_bmad/config.toml`,
+    `[core]\nproject_name = "p"\noutput_folder = "${root}/_bmad-output"\nactive_initiative = "initiative-demo"\n`,
+  );
   const store = `${root}/_bmad-output/initiative-demo`;
   await fs.mkdir(store);
-  const epicsToml = spec.epics.map((e) => `[[epic]]\nid = ${e.id}\nslug = "${e.slug}"\ntitle = "Demo"\n`).join("\n");
+  const epicsToml = spec.epics
+    .map((e) => `[[epic]]\nid = ${e.id}\nslug = "${e.slug}"\ntitle = "Demo"\n`)
+    .join("\n");
   await fs.writeText(`${store}/tickets.toml`, epicsToml);
   for (const e of spec.epics) {
     const dir = `${store}/epic-${e.slug}`;
     await fs.mkdir(dir);
+    // Every epic folder carries its own container file: without <folder>.md the
+    // loader refuses it ("epic-demo: no epic-demo.md").
+    await fs.writeText(`${dir}/epic-${e.slug}.md`, `---\ntype: epic\n---\n# Demo\n`);
     const mine = spec.stories.filter((s) => s.parent === `epic-${e.slug}`);
-    await fs.writeText(`${dir}/tickets.toml`, mine.map((s) => `[[entry]]\nid = ${typeof s.id === "string" ? `"${s.id}"` : s.id}\ntype = "story"\ntitle = "Demo story"\n`).join("\n"));
+    await fs.writeText(
+      `${dir}/tickets.toml`,
+      mine.map((s) => `[[entry]]\nid = ${typeof s.id === "string" ? `"${s.id}"` : s.id}\ntype = "story"\ntitle = "Demo story"\n`).join("\n"),
+    );
     for (const s of mine) {
       const stem = `story-${s.id}`;
-      await fs.writeText(`${dir}/${stem}.md`, `---\nid: ${s.id}\ntype: story\ntitle: "Demo story"\nparent: epic-${e.slug}\n---\n# Demo story\n\n## Acceptance Criteria\n- AC1\n`);
+      await fs.writeText(
+        `${dir}/${stem}.md`,
+        `---\nid: ${s.id}\ntype: story\ntitle: "Demo story"\nparent: epic-${e.slug}\n---\n# Demo story\n\n## Acceptance Criteria\n- AC1\n`,
+      );
       await fs.writeText(`${dir}/${stem}-plan.md`, `---\nticket: ${s.id}\nstatus: draft\n---\n# Plan\n`);
     }
   }
 }
 ```
 
-Then implement `src/lib/bmadRuntime/tickets.ts`. Port `skills/bmad-ticket/scripts/tickets.py` (1473 lines) and `read_store.py` (124 lines) into one module. Structure:
+`src/lib/bmadRuntime/tickets.ts` is the port: the sketch's `storeRoot`/`readStore`/`planFor` shapes became the Python's own `tickets_root`/`load_tree`/`plan_path`, and the commands follow it line for line, including the quirks the goldens pin (a `[[epic]]` `slug` is looked up by slug, not by folder name, so the seed's `slug = "demo"` against folder `epic-demo` leaves `epic_ids` empty and rows `ref` their file names; a bare numeric ref matches nothing outside an epic folder; `state` prefers `tracker_status`).
 
-```ts
-import { parse as parseToml } from "smol-toml";
-import { loadCentralConfig } from "./config";
-import type { Fs } from "./fs";
+Four divergences, all at seams with earlier tasks or the Fs contract, are documented at the top of the module:
+- config comes from Task 3's `loadCentralConfig`, so a missing `_bmad/config.toml` refuses in different words than the Python's own `config_utils.py`;
+- output goes to `stdout` alone (the interface has one channel; the Python splits errors onto stderr);
+- `Fs` has no delete, so a `mirror` that rolls back cannot unlink a leaf it had just pulled (everything it edited is restored byte for byte);
+- argparse's usage line wraps to the terminal and is not reproduced (its error line is).
 
-/** One entry from an epic's tickets.toml [[entry]] table. */
-interface Entry { id: string | number; type: string; title: string; parent?: string; after?: (string | number)[]; risk?: string; /* ...rest per tickets-template.toml */ }
-
-/** One [[epic]] table from the initiative's tickets.toml. */
-interface EpicEntry { id: string | number; slug: string; title: string; after?: { epic: number; needs: string }[] }
-
-const STATUSES = ["draft", "ready-for-dev", "in-progress", "in-review", "built", "done", "blocked", "dropped"] as const;
-type Status = (typeof STATUSES)[number];
-
-async function storeRoot(projectRoot: string, fs: Fs): Promise<string> {
-  const cfg = await loadCentralConfig(projectRoot, fs);
-  const out = (cfg.core as any)?.output_folder ?? `${projectRoot}/_bmad-output`;
-  const init = (cfg.core as any)?.active_initiative ?? "";
-  return init ? `${out}/${init}` : out;
-}
-
-async function readStore(projectRoot: string, fs: Fs) {
-  // read_store.py port: find tickets.toml files under storeRoot, parse [[epic]]/[[entry]].
-  // Returns { epics: EpicEntry[], entries: Map<folder, Entry[]> } plus per-folder raw data.
-}
-
-/** Validate `after` references exist in build order — mirrors the Python errors verbatim. */
-function validateAfter(entries: Entry[], folder: string): string | null { /* ... */ }
-
-/** The leaf/plan join: status lives in <stem>-plan.md frontmatter `ticket` key. */
-async function planFor(stem: string, folder: string, fs: Fs): Promise<{ status?: Status; assignee?: string } | null> {
-  const p = `${folder}/${stem}-plan.md`;
-  if (!(await fs.exists(p))) return null;
-  const md = await fs.readText(p);
-  const fm = /^---\n([\s\S]*?)\n---/.exec(md)?.[1] ?? "";
-  const kv = (k: string) => new RegExp(`^${k}:\\s*(.+)$`, "m").exec(fm)?.[1]?.trim();
-  return { status: kv("status") as Status, assignee: kv("assignee") };
-}
-
-export async function tickets(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
-  const projectRoot = argv.includes("--project-root") ? argv[argv.indexOf("--project-root") + 1] : process.cwd();
-  const cmd = argv.find((a) => ["next", "status", "find", "pull", "mark", "mirror"].includes(a));
-  if (!cmd) return { stdout: "usage: tickets.py {next|status|find|pull|mark|mirror}", exitCode: 2 };
-  // Dispatch per command, printing the same JSON keys the Python prints.
-  // `mark <ref> <status>` writes the plan file's frontmatter `status:` line,
-  // preserving other keys, and validates the transition against STATUSES order.
-  // `pull <ref>` writes the leaf file from the [[entry]] + templates.
-  return { stdout: JSON.stringify({ /* command output */ }), exitCode: 0 };
-}
-```
-
-The full JSON shapes come from the goldens captured in Step 1 — the port is complete only when every golden passes.
+The full JSON shapes come from the goldens captured in Step 1 — the port is complete only when every golden passes. A throwaway differential harness (run once, not committed) also diffed 58 command cases against the Python on identical on-disk trees — exit codes, output bytes and the files both sides left behind — which is what caught the optional `<dir>` on `find`/`mark` and a `waiting_on: []` that the Python omits.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
