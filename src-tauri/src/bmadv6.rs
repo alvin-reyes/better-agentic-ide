@@ -130,10 +130,14 @@ pub fn install(src: &Path, dir: &Path, report: &mut ScaffoldReport) -> Result<()
     // Runtime bundle: the patched skills call `node {project-root}/_bmad/ade-runtime.mjs`.
     copy_file(&src.join("ade-runtime.mjs"), &dir.join("_bmad/ade-runtime.mjs"), report)?;
     fs::create_dir_all(dir.join("_bmad-output")).map_err(|e| e.to_string())?;
-    // Methodology marker
+    // Methodology marker: ADE's own file, not user content, so an explicit v6
+    // install is allowed to replace it. A marker left reading "v4" beside a v6
+    // tree is the mixed state that would keep every later detect_on_disk — and
+    // so setup's own methodology choice — on v4. Nothing else here is
+    // overwritten; everything else keeps the nothing-overwrites rule.
     let marker = dir.join(".ade/methodology");
     fs::create_dir_all(dir.join(".ade")).map_err(|e| e.to_string())?;
-    if marker.exists() {
+    if fs::read_to_string(&marker).map(|s| s.trim() == "v6").unwrap_or(false) {
         report.kept.push(marker);
     } else {
         fs::write(&marker, "v6\n").map_err(|e| e.to_string())?;
@@ -199,6 +203,41 @@ mod tests {
 
         assert_eq!(fs::read_to_string(dir.join("_bmad/config.toml")).unwrap(), "custom");
         assert!(!report.created.iter().any(|p| p.ends_with("config.toml")));
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&src).ok();
+    }
+
+    /// The ruled path "owner answers v6 over an actually-v4 project": the tree
+    /// becomes v6, so the marker must too. A v4 marker beside v6 skills is the
+    /// mixed state every later detection reads as v4.
+    #[test]
+    fn a_v6_install_over_a_v4_marker_flips_it() {
+        let dir = temp("bmadv6-flip");
+        fs::create_dir_all(dir.join(".ade")).unwrap();
+        fs::write(dir.join(".ade/methodology"), "v4\n").unwrap();
+        let src = fixture("bmadv6-flip-src");
+
+        let mut report = ScaffoldReport::default();
+        install(&src, &dir, &mut report).unwrap();
+
+        assert_eq!(fs::read_to_string(dir.join(".ade/methodology")).unwrap().trim(), "v6");
+        assert_eq!(detect_on_disk(&dir), Some(Methodology::V6));
+        assert!(
+            report.created.iter().any(|p| p.ends_with(".ade/methodology")),
+            "the flipped marker is setup's write: {:?}",
+            report.created
+        );
+        assert!(
+            !report.kept.iter().any(|p| p.ends_with(".ade/methodology")),
+            "the v4 marker is not kept"
+        );
+
+        // A second run finds a v6 marker: nothing to flip, so nothing kept
+        // against the nothing-overwrites rule either.
+        let mut again = ScaffoldReport::default();
+        install(&src, &dir, &mut again).unwrap();
+        assert!(again.created.is_empty(), "{:?}", again.created);
+        assert!(again.kept.iter().any(|p| p.ends_with(".ade/methodology")), "{:?}", again.kept);
         fs::remove_dir_all(&dir).ok();
         fs::remove_dir_all(&src).ok();
     }

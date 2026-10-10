@@ -175,10 +175,26 @@ pub fn apply(
 }
 
 /// Whether setup installs this methodology's resources: a full setup of a
-/// project that isn't on it yet. A project already on its methodology keeps
-/// the scaffold it has.
-fn needs_install(methodology: Methodology, on_disk: Option<Methodology>, full: bool) -> bool {
-    full && on_disk != Some(methodology)
+/// project that isn't on it yet, or one whose key files are missing — the
+/// spec's "a missing ade-runtime.mjs or skills folder in an older v6 project
+/// is fixed by setup's existing re-apply-missing-files pass".
+///
+/// A full v4 setup always re-applies v4's install, the way it did before the
+/// methodology choice landed: that install never overwrites and is idempotent,
+/// so re-running it is exactly what tops `.bmad-core/` (and the
+/// `.bmad-core/VERSION` marker bmad.rs writes) back up after files were lost.
+fn needs_install(methodology: Methodology, on_disk: Option<Methodology>, full: bool, dir: &Path) -> bool {
+    if !full {
+        return false;
+    }
+    match methodology {
+        Methodology::V4 => true,
+        Methodology::V6 => {
+            on_disk != Some(Methodology::V6)
+                || !dir.join("_bmad/ade-runtime.mjs").is_file()
+                || !dir.join(".claude/skills/bmad/SKILL.md").is_file()
+        }
+    }
 }
 
 /// The resources a full setup installs from, or `None` when there is nothing to
@@ -189,9 +205,10 @@ fn install_source(
     methodology: Methodology,
     on_disk: Option<Methodology>,
     full: bool,
+    dir: &Path,
     resolve: impl FnOnce(Methodology) -> Option<PathBuf>,
 ) -> Result<Option<PathBuf>, String> {
-    if !needs_install(methodology, on_disk, full) {
+    if !needs_install(methodology, on_disk, full, dir) {
         return Ok(None);
     }
     match resolve(methodology) {
@@ -227,7 +244,7 @@ pub fn project_setup_apply(
         Methodology::V4 => crate::bmad::resource_root(&app).ok(),
         Methodology::V6 => crate::bmadv6::resource_root(&app).ok(),
     };
-    let src = install_source(methodology, crate::bmadv6::detect_on_disk(&dir), full, root)?;
+    let src = install_source(methodology, crate::bmadv6::detect_on_disk(&dir), full, &dir, root)?;
     apply(&dir, &files, full.then_some(import.as_str()), &marker, methodology, src.as_deref())
 }
 
@@ -424,30 +441,86 @@ mod tests {
         std::fs::remove_dir_all(src).ok();
     }
 
+    /// The v6 key files a full setup must find on disk: the skills tree and the
+    /// runtime bundle every patched call site runs.
+    fn complete_v6_tree(dir: &Path) {
+        std::fs::create_dir_all(dir.join(".claude/skills/bmad")).unwrap();
+        std::fs::write(dir.join(".claude/skills/bmad/SKILL.md"), "hello").unwrap();
+        std::fs::create_dir_all(dir.join("_bmad")).unwrap();
+        std::fs::write(dir.join("_bmad/ade-runtime.mjs"), "// runtime").unwrap();
+    }
+
     #[test]
     fn a_full_v6_setup_without_resources_is_an_error() {
         // An unresolvable root must not read as a setup that succeeded and wrote nothing.
-        let err = install_source(Methodology::V6, None, true, |_| None).unwrap_err();
+        let dir = temp();
+        let err = install_source(Methodology::V6, None, true, &dir, |_| None).unwrap_err();
         assert!(err.contains("v6"), "{err}");
         // With resources, the resolved root is what setup installs from.
         let root = PathBuf::from("/tmp/bmad-v6");
         assert_eq!(
-            install_source(Methodology::V6, None, true, |_| Some(root.clone())).unwrap(),
+            install_source(Methodology::V6, None, true, &dir, |_| Some(root.clone())).unwrap(),
             Some(root)
         );
-        // Nothing to install: already on the methodology, or not a full setup.
-        assert_eq!(install_source(Methodology::V6, Some(Methodology::V6), true, |_| None).unwrap(), None);
-        assert_eq!(install_source(Methodology::V6, None, false, |_| None).unwrap(), None);
+        // A v6 project whose key files are gone is an install target too, so a
+        // miss there is this error, not a silent skip.
+        assert!(install_source(Methodology::V6, Some(Methodology::V6), true, &dir, |_| None).is_err());
+        // Nothing to install: already on the methodology with its key files
+        // present, or not a full setup.
+        complete_v6_tree(&dir);
+        assert_eq!(install_source(Methodology::V6, Some(Methodology::V6), true, &dir, |_| None).unwrap(), None);
+        assert_eq!(install_source(Methodology::V6, None, false, &dir, |_| None).unwrap(), None);
         // The v4 path keeps its pre-existing behaviour: a miss is not fatal.
-        assert_eq!(install_source(Methodology::V4, None, true, |_| None).unwrap(), None);
+        assert_eq!(install_source(Methodology::V4, None, true, &dir, |_| None).unwrap(), None);
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]
-    fn a_project_already_on_its_methodology_is_not_installed_again() {
-        assert!(!needs_install(Methodology::V6, Some(Methodology::V6), true), "v6 project asked for v6");
-        assert!(!needs_install(Methodology::V4, Some(Methodology::V4), true), "v4 project asked for v4");
-        assert!(needs_install(Methodology::V6, None, true), "a new project is scaffolded");
-        assert!(!needs_install(Methodology::V6, None, false), "adding agents is not a full setup");
-        assert!(needs_install(Methodology::V4, Some(Methodology::V6), true), "switching to v4 installs it");
+    fn an_intact_v6_project_is_not_re_scaffolded() {
+        let dir = temp();
+        complete_v6_tree(&dir);
+        assert!(!needs_install(Methodology::V6, Some(Methodology::V6), true, &dir), "v6 project asked for v6, tree intact");
+        assert!(needs_install(Methodology::V6, None, true, &dir), "a new project is scaffolded");
+        assert!(!needs_install(Methodology::V6, None, false, &dir), "adding agents is not a full setup");
+        assert!(needs_install(Methodology::V4, Some(Methodology::V6), true, &dir), "switching to v4 installs it");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// The re-apply promise: a deleted key file sets the install running again,
+    /// and the install is idempotent, so nothing that is there is disturbed.
+    #[test]
+    fn a_full_setup_repairs_the_key_files_a_project_lost() {
+        let dir = temp();
+        complete_v6_tree(&dir);
+        assert!(!needs_install(Methodology::V6, Some(Methodology::V6), true, &dir), "an intact v6 tree has nothing to install");
+
+        std::fs::remove_file(dir.join("_bmad/ade-runtime.mjs")).unwrap();
+        assert!(
+            needs_install(Methodology::V6, Some(Methodology::V6), true, &dir),
+            "a v6 project without _bmad/ade-runtime.mjs is repaired"
+        );
+        std::fs::write(dir.join("_bmad/ade-runtime.mjs"), "// runtime").unwrap();
+        std::fs::remove_file(dir.join(".claude/skills/bmad/SKILL.md")).unwrap();
+        assert!(
+            needs_install(Methodology::V6, Some(Methodology::V6), true, &dir),
+            "a v6 project without .claude/skills/bmad/SKILL.md is repaired"
+        );
+
+        // v4: a full setup always re-applies v4's idempotent install, so
+        // `.bmad-core/` — the `.bmad-core/VERSION` marker bmad.rs writes
+        // included — is topped back up.
+        let v4 = temp();
+        assert!(
+            needs_install(Methodology::V4, Some(Methodology::V4), true, &v4),
+            "no .bmad-core/VERSION: the v4 install is re-applied"
+        );
+        std::fs::create_dir_all(v4.join(".bmad-core")).unwrap();
+        std::fs::write(v4.join(".bmad-core/VERSION"), "v4.1\n").unwrap();
+        assert!(
+            needs_install(Methodology::V4, Some(Methodology::V4), true, &v4),
+            "an intact v4 tree is still topped up, as it was before the methodology choice"
+        );
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(v4).ok();
     }
 }
