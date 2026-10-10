@@ -364,7 +364,7 @@ export function realFs(): Fs {
     writeText: (p, body) => import("node:fs/promises").then((f) => f.writeFile(p, body)),
     list: (p) => import("node:fs/promises").then((f) => f.readdir(p)),
     exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),
-    mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true })),
+    mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true }).then(() => undefined)),
   };
 }
 ```
