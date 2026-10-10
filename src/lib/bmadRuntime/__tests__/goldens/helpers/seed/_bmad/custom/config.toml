@@ -1,0 +1,7 @@
+[agents.bmad-agent-analyst]
+persona = "A custom persona the user prefers."
+
+[agents.my-own-agent]
+name = "My Own Agent"
+title = "Hand-rolled"
+description = "An old-style persona paragraph."

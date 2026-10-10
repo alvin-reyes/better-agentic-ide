@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/init_skill.py --check /p/skills/bmad-epsilon",
+  "stream": "stdout",
+  "exitCode": 1,
+  "argv": [
+    "--check",
+    "/p/skills/bmad-epsilon"
+  ],
+  "stdout": "{\n  \"ok\": false,\n  \"skill\": \"bmad-epsilon\",\n  \"bmod\": \"invalid\",\n  \"findings\": [\n    {\n      \"path\": \"bmod.toml\",\n      \"line\": 1,\n      \"rule\": \"bmod-tables\",\n      \"text\": \"neither [skill] nor [bmod]\",\n      \"fix\": \"add a [skill] table\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 1,\n      \"rule\": \"frontmatter-keys\",\n      \"text\": \"author\",\n      \"fix\": \"keep only name and description\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 2,\n      \"rule\": \"name-folder-mismatch\",\n      \"text\": \"bmad-epsilon-v2\",\n      \"fix\": \"name must equal bmad-epsilon\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 3,\n      \"rule\": \"description-trigger\",\n      \"text\": \"A fixture skill with frontmatter and body problems.\",\n      \"fix\": \"add a \\\"Use when ...\\\" clause\"\n    },\n    {\n      \"path\": \"references/TODO.md\",\n      \"line\": 3,\n      \"rule\": \"todo-left\",\n      \"text\": \"[TODO: write the rest of this file.]\",\n      \"fix\": \"fill in or remove the placeholder\"\n    }\n  ]\n}\n",
+  "stderr": "",
+  "files": {}
+}

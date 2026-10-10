@@ -1,0 +1,6 @@
+num,category,method_name,description,output_pattern
+1,technical,Pre-mortem,Imagine the launch failed and work backwards to the causes,failure → causes → prevention
+2,technical,Inversion,Ask how to guarantee the opposite of the goal,goal → failure → truths
+3,experiential,User Shadowing,Follow a real user through the task without interrupting,observe → notes → surprises
+4,business,Business Model Canvas,Sketch the nine blocks on one page,blocks → unknowns → tests
+5,business,Jobs To Be Done,"Ask what job the user hired this for",job → alternatives → criterion

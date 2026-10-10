@@ -1,0 +1,13 @@
+{
+  "python": "uv run /p/skills/ghost-agent/scripts/wake.py --skill-root /p/skills/ghost-agent /p",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--skill-root",
+    "/p/skills/ghost-agent",
+    "/p"
+  ],
+  "stdout": "MODE: FIRST_BREATH\nNO SANCTUM at /p/_bmad/memory/ghost-agent\nThis is your one birth. Load references/first-breath.md and follow it.\n",
+  "stderr": "",
+  "files": {}
+}

@@ -1,0 +1,14 @@
+{
+  "python": "uv run /tmp/golden-proj/skills/bmad-brainstorming/scripts/brain.py --file /p/catalog/brain.csv show Not There",
+  "stream": "stderr",
+  "exitCode": 1,
+  "argv": [
+    "--file",
+    "/p/catalog/brain.csv",
+    "show",
+    "Not There"
+  ],
+  "stdout": "# not found: Not There\n",
+  "stderr": "# not found: Not There\n",
+  "files": {}
+}

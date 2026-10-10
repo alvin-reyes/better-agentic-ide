@@ -1,0 +1,11 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/process_template.py /p/recon/nope.tpl",
+  "stream": "stderr",
+  "exitCode": 2,
+  "argv": [
+    "/p/recon/nope.tpl"
+  ],
+  "stdout": "process_template: cannot read /p/recon/nope.tpl: [Errno 2] No such file or directory: '/p/recon/nope.tpl'\n",
+  "stderr": "process_template: cannot read /p/recon/nope.tpl: [Errno 2] No such file or directory: '/p/recon/nope.tpl'\n",
+  "files": {}
+}

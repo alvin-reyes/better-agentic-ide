@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-retrospective/scripts/git_evidence.py --repo /p/git-demo --range main~3..main --stories story-1-1,story-1-2",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--repo",
+    "/p/git-demo",
+    "--range",
+    "main~3..main",
+    "--stories",
+    "story-1-1,story-1-2"
+  ],
+  "stdout": "{\"range\": \"main~3..main\", \"commit_count\": 4, \"merge_count\": 1, \"merges_measured\": 1, \"commits\": [{\"sha\": \"0658fb916d09a3886a64a3258528dc3deb039207\", \"subject\": \"docs: drop the stale readme\", \"stories\": [], \"is_merge\": false}, {\"sha\": \"1593c1aaaf567414ec146421181257164030a572\", \"subject\": \"chore: add the diagram binary\", \"stories\": [], \"is_merge\": false}, {\"sha\": \"b3da2cc3db13fd3a92690e48b0972b31b40d29bc\", \"subject\": \"merge: bring the audit pass in (story-1-2)\", \"stories\": [\"story-1-2\"], \"is_merge\": true}, {\"sha\": \"7ad5497b3a892caed791e7da1dbd51dbba664c77\", \"subject\": \"feat(story-1-2): add the audit pass\", \"stories\": [\"story-1-2\"], \"is_merge\": false}], \"files\": [{\"path\": \"docs/README.md\", \"added\": 0, \"deleted\": 3, \"net\": -3, \"commit_count\": 1, \"binary_revisions\": 0}, {\"path\": \"docs/diagram.bin\", \"added\": 0, \"deleted\": 0, \"net\": 0, \"commit_count\": 1, \"binary_revisions\": 1}, {\"path\": \"src/audit.py\", \"added\": 2, \"deleted\": 0, \"net\": 2, \"commit_count\": 1, \"binary_revisions\": 0}], \"merge_files\": [{\"path\": \"src/audit.py\", \"added\": 2, \"deleted\": 0, \"net\": 2, \"commit_count\": 1, \"binary_revisions\": 0}], \"stories_supplied\": [\"story-1-1\", \"story-1-2\"]}",
+  "stderr": "",
+  "files": {}
+}

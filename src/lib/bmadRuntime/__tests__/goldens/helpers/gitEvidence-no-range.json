@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-retrospective/scripts/git_evidence.py --repo /p/git-demo",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--repo",
+    "/p/git-demo"
+  ],
+  "stdout": "{\"range\": null, \"note\": \"no range supplied\", \"commits\": [], \"files\": []}",
+  "stderr": "",
+  "files": {}
+}

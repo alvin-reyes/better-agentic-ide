@@ -1,0 +1,4 @@
+[
+  {"code": "tech", "category": "technical", "method_name": "Pre-mortem", "description": "Retuned pre-mortem.", "output_pattern": "oops → why"},
+  {"code": "new", "category": "wildcard", "method_name": "Coin Flip", "description": "Flip for the two finalists and argue the winner.", "output_pattern": "flip → argue"}
+]

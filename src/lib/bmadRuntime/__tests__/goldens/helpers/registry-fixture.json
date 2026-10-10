@@ -1,0 +1,14 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/registry.py --project-root /p --root /p/skills",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--project-root",
+    "/p",
+    "--root",
+    "/p/skills"
+  ],
+  "stdout": "{\n  \"project_root\": \"/p\",\n  \"bmad\": {\n    \"present\": true,\n    \"version\": null\n  },\n  \"skills_repo\": true,\n  \"records\": [\n    {\n      \"code\": \"demo\",\n      \"folder\": \"bmod-demo\",\n      \"path\": \"/p/skills/bmod-demo\",\n      \"scope\": \"project\",\n      \"version\": \"0.3.0\",\n      \"update_source\": \"github:sam/skills/bmod-demo\",\n      \"skills\": [\n        \"bmad-alpha\"\n      ],\n      \"has_help\": true,\n      \"has_roster\": true,\n      \"single_skill\": true,\n      \"prefix\": \"bmad-\"\n    }\n  ],\n  \"unregistered\": [\n    {\n      \"skill\": \"bmad-beta\",\n      \"path\": \"/p/skills/bmad-beta\"\n    }\n  ]\n}\n",
+  "stderr": "",
+  "files": {}
+}

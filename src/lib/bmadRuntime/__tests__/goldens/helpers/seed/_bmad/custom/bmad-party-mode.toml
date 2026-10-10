@@ -1,0 +1,23 @@
+[workflow]
+default_party = "writers-room"
+party_mode = "session"
+party_memory = false
+
+[[workflow.party_members]]
+code = "scribe"
+name = "The Scribe"
+title = "Keeper of the minutes"
+persona = "Writes everything down, argues nothing."
+
+[[workflow.party_members]]
+code = "bmad-agent-analyst"
+name = "Renamed Analyst"
+
+[[workflow.party_groups]]
+id = "writers-room"
+name = "The Writers' Room"
+scene = "A long table, cold coffee, a whiteboard nobody erased."
+# Members are codes and aliases; `analyst` reaches the installed agent through
+# its alias, `bmad-agent-analyst` through its code, and `nobody` resolves to
+# nothing.
+members = ["scribe", "analyst", "bmad-agent-analyst", "nobody"]

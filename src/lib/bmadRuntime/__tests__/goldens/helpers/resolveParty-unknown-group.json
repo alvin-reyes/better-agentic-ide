@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-party-mode/scripts/resolve_party.py --project-root /p --skill /p/skills/bmad-party-mode --party nope",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--project-root",
+    "/p",
+    "--skill",
+    "/p/skills/bmad-party-mode",
+    "--party",
+    "nope"
+  ],
+  "stdout": "{\n  \"error\": \"unknown_group\",\n  \"requested\": \"nope\",\n  \"available\": [\n    {\n      \"id\": \"demo-room\",\n      \"name\": \"The Demo Room\",\n      \"member_count\": 2\n    },\n    {\n      \"id\": \"code-review-crew\",\n      \"name\": \"Code Review Crew\",\n      \"member_count\": 5\n    },\n    {\n      \"id\": \"anti-consensus-club\",\n      \"name\": \"Anti-Consensus Club\",\n      \"member_count\": 4\n    },\n    {\n      \"id\": \"writers-room\",\n      \"name\": \"The Writers' Room\",\n      \"member_count\": 4\n    }\n  ]\n}\n",
+  "stderr": "",
+  "files": {}
+}

@@ -1,0 +1,6 @@
+category,technique_name,description,detail,provenance,good_for,audience
+creative,Yes And Building,"Never negate; each person opens with ""Yes, and..."" and adds to the last idea, stacking a chain",detail/yes-and.md,classic,novel|unstuck,group
+creative,Worst Possible Idea,"Invert the problem: design the most disastrous version, then mine it for what to avoid",,signature,unstuck,group
+deep,Five Whys,"Ask why five times, each answer becoming the next question",,classic,diagnosis|strategy,either
+wild,Random Word,"A random word becomes the seed; force a connection → then follow it",,playful,novel,group
+wild,Forced Analogy,"Borrow the structure of an unrelated domain and map it onto the problem",,,feature|novel,solo

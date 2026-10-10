@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-deep-recon/scripts/recon_kit.py citations /p/recon/dossier.md",
+  "stream": "stdout",
+  "exitCode": 1,
+  "argv": [
+    "citations",
+    "/p/recon/dossier.md"
+  ],
+  "stdout": "{\n  \"markers\": [\n    1,\n    2,\n    3\n  ],\n  \"appendix_rows\": [\n    1,\n    2,\n    4\n  ],\n  \"dangling_markers\": [\n    3\n  ],\n  \"orphaned_rows\": [\n    4\n  ],\n  \"ok\": false\n}\n",
+  "stderr": "",
+  "files": {}
+}

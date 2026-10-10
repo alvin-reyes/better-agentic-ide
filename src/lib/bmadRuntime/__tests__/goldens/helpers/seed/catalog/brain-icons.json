@@ -1,0 +1,8 @@
+{
+  "categories": {
+    "creative": {"hue": "#112233", "glyph": "<circle cx=\"22\" cy=\"22\" r=\"9\" fill=\"currentColor\"/>"}
+  },
+  "techniques": {
+    "Five Whys": "<path d=\"M12 22h20\" stroke=\"currentColor\" stroke-width=\"2\"/>"
+  }
+}

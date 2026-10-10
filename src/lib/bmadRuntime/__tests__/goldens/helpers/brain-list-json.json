@@ -1,0 +1,18 @@
+{
+  "python": "uv run /tmp/golden-proj/skills/bmad-brainstorming/scripts/brain.py --file /p/catalog/brain.csv --json list --category creative --category wild",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--file",
+    "/p/catalog/brain.csv",
+    "--json",
+    "list",
+    "--category",
+    "creative",
+    "--category",
+    "wild"
+  ],
+  "stdout": "[{\"category\": \"creative\", \"technique_name\": \"Yes And Building\", \"description\": \"Never negate; each person opens with \\\"Yes, and...\\\" and adds to the last idea, stacking a chain\"}, {\"category\": \"creative\", \"technique_name\": \"Worst Possible Idea\", \"description\": \"Invert the problem: design the most disastrous version, then mine it for what to avoid\"}, {\"category\": \"wild\", \"technique_name\": \"Random Word\", \"description\": \"A random word becomes the seed; force a connection \\u2192 then follow it\"}, {\"category\": \"wild\", \"technique_name\": \"Forced Analogy\", \"description\": \"Borrow the structure of an unrelated domain and map it onto the problem\"}]\n",
+  "stderr": "",
+  "files": {}
+}

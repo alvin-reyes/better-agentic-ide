@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-eval/scripts/run_triggers.py --skill-path /p/skills/bmad-alpha --queries /p/nope.json --output-dir /p/out/trig",
+  "stream": "stderr",
+  "exitCode": 2,
+  "argv": [
+    "--skill-path",
+    "/p/skills/bmad-alpha",
+    "--queries",
+    "/p/nope.json",
+    "--output-dir",
+    "/p/out/trig"
+  ],
+  "stdout": "queries file not found: /p/nope.json\n",
+  "stderr": "queries file not found: /p/nope.json\n",
+  "files": {}
+}

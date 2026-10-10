@@ -1,0 +1,4 @@
+[
+  {"query": "design a new onboarding flow for the app", "should_trigger": true},
+  {"query": "what is the capital of Peru", "should_trigger": false}
+]

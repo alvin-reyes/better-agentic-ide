@@ -1,0 +1,16 @@
+{
+  "python": "uv run /tmp/golden-proj/skills/bmad-brainstorming/scripts/brain.py --file /p/catalog/brain.csv show five whys Yes And Building Random Word",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--file",
+    "/p/catalog/brain.csv",
+    "show",
+    "five whys",
+    "Yes And Building",
+    "Random Word"
+  ],
+  "stdout": "## Five Whys  [deep]\nAsk why five times, each answer becoming the next question\n\n## Yes And Building  [creative]\nNever negate; each person opens with \"Yes, and...\" and adds to the last idea, stacking a chain\n\nAccept every offer before judging it. Say \"Yes, and\" out loud if it helps.\n\nThen build: each addition must use what the last person left.\n\n## Random Word  [wild]\nA random word becomes the seed; force a connection → then follow it\n",
+  "stderr": "",
+  "files": {}
+}

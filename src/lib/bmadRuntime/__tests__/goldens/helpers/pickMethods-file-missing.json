@@ -1,0 +1,13 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-advanced-elicitation/scripts/pick_methods.py --file /p/catalog/nope.csv categories",
+  "stream": "stderr",
+  "exitCode": 2,
+  "argv": [
+    "--file",
+    "/p/catalog/nope.csv",
+    "categories"
+  ],
+  "stdout": "error: method file not found: /p/catalog/nope.csv\n",
+  "stderr": "error: method file not found: /p/catalog/nope.csv\n",
+  "files": {}
+}

@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/init_skill.py --check /p/skills/bmad-alpha",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--check",
+    "/p/skills/bmad-alpha"
+  ],
+  "stdout": "{\n  \"ok\": true,\n  \"skill\": \"bmad-alpha\",\n  \"bmod\": \"ok\",\n  \"findings\": []\n}\n",
+  "stderr": "",
+  "files": {}
+}

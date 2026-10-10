@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-architecture/scripts/lint_spine.py --workspace /p/spine/nope",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--workspace",
+    "/p/spine/nope"
+  ],
+  "stdout": "{\n  \"ok\": false,\n  \"error\": \"/p/spine/nope/nope.md not found\",\n  \"findings\": [],\n  \"total_findings\": 0\n}\n",
+  "stderr": "",
+  "files": {}
+}

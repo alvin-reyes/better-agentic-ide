@@ -1,0 +1,15 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/process_template.py /p/recon/brief.md.tpl --var topic=Product direction --var research_type=market",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "/p/recon/brief.md.tpl",
+    "--var",
+    "topic=Product direction",
+    "--var",
+    "research_type=market"
+  ],
+  "stdout": "# Brief template\n\nTopic: Product direction\nType: market\n\nOwner: {user_name}\nFolder: {project-root}/research/{topic_slug}\n",
+  "stderr": "",
+  "files": {}
+}

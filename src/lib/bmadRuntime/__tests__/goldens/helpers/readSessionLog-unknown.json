@@ -1,0 +1,11 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/read_session_log.py /p/sessions/notes.txt",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "/p/sessions/notes.txt"
+  ],
+  "stdout": "{\n  \"sources\": [],\n  \"user_requests\": [],\n  \"tool_sequences\": [],\n  \"corrections\": [],\n  \"files_touched\": [],\n  \"skills_invoked\": []\n}\n",
+  "stderr": "read_session_log: skipping /p/sessions/notes.txt, unknown format\n",
+  "files": {}
+}

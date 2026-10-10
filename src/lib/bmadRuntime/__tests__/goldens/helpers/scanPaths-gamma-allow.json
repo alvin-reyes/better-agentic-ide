@@ -1,0 +1,15 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/scan_paths.py /p/skills/bmad-gamma --allow old-module-format --allow python-call",
+  "stream": "stdout",
+  "exitCode": 1,
+  "argv": [
+    "/p/skills/bmad-gamma",
+    "--allow",
+    "old-module-format",
+    "--allow",
+    "python-call"
+  ],
+  "stdout": "{\n  \"skill\": \"bmad-gamma\",\n  \"files_scanned\": 2,\n  \"findings\": [\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 8,\n      \"rule\": \"bare-script-call\",\n      \"text\": \"uv run scripts/report.py`\",\n      \"fix\": \"write `uv run {skill-root}/scripts/<name>.py`\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 10,\n      \"rule\": \"installed-path\",\n      \"text\": \"installed_path:\",\n      \"fix\": \"remove installed_path; use a path relative to this file\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 10,\n      \"rule\": \"installed-path\",\n      \"text\": \"{installed_path}\",\n      \"fix\": \"remove installed_path; use a path relative to this file\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 12,\n      \"rule\": \"absolute-path\",\n      \"text\": \"/Users/sam/reports/2026.md\",\n      \"fix\": \"use {project-root}, {skill-root} or a config value\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 12,\n      \"rule\": \"absolute-path\",\n      \"text\": \"~/notes/todo.md.\",\n      \"fix\": \"use {project-root}, {skill-root} or a config value\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 19,\n      \"rule\": \"bare-script-call\",\n      \"text\": \"uv run scripts/legacy.py\",\n      \"fix\": \"write `uv run {skill-root}/scripts/<name>.py`\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 23,\n      \"rule\": \"cross-skill-ref\",\n      \"text\": \".claude/skills/bmad-review/SKILL.md\",\n      \"fix\": \"do not reach into `bmad-review`; write \\\"invoke the `bmad-review` skill\\\"\"\n    },\n    {\n      \"path\": \"SKILL.md\",\n      \"line\": 25,\n      \"rule\": \"missing-file\",\n      \"text\": \"references/missing.md\",\n      \"fix\": \"fix the path or remove the dead reference\"\n    }\n  ]\n}\n",
+  "stderr": "",
+  "files": {}
+}

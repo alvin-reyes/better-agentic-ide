@@ -1,0 +1,15 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-advanced-elicitation/scripts/pick_methods.py --file /p/catalog/methods.csv list --category business",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--file",
+    "/p/catalog/methods.csv",
+    "list",
+    "--category",
+    "business"
+  ],
+  "stdout": "4\tbusiness\tBusiness Model Canvas\tSketch the nine blocks on one page\tblocks → unknowns → tests\n5\tbusiness\tJobs To Be Done\tAsk what job the user hired this for\tjob → alternatives → criterion\n",
+  "stderr": "",
+  "files": {}
+}

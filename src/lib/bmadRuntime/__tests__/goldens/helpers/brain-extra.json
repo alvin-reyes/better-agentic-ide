@@ -1,0 +1,17 @@
+{
+  "python": "uv run /tmp/golden-proj/skills/bmad-brainstorming/scripts/brain.py --skill-root /p/skills/bmad-brainstorming --file /p/catalog/brain.csv --extra /p/catalog/extra.json categories",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--skill-root",
+    "/p/skills/bmad-brainstorming",
+    "--file",
+    "/p/catalog/brain.csv",
+    "--extra",
+    "/p/catalog/extra.json",
+    "categories"
+  ],
+  "stdout": "creative\t3\ncustom\t1\nwild\t2\n",
+  "stderr": "",
+  "files": {}
+}

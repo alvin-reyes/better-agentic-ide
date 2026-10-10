@@ -1,0 +1,8 @@
+[bmod]
+code = "demo"
+version = "0.3.0"
+update_source = "github:sam/skills/bmod-demo"
+skills = ["bmad-alpha"]
+
+[skill]
+bmod = "bmod-is-not-here"

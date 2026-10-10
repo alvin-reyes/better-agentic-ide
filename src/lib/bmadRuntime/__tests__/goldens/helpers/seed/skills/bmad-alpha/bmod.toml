@@ -1,0 +1,3 @@
+[skill]
+bmod = "bmod-demo"
+source = "github:sam/skills"

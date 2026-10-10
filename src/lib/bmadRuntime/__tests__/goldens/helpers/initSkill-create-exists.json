@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/init_skill.py --name bmad-new --dest /p/out --shape agent",
+  "stream": "stdout",
+  "exitCode": 1,
+  "argv": [
+    "--name",
+    "bmad-new",
+    "--dest",
+    "/p/out",
+    "--shape",
+    "agent"
+  ],
+  "stdout": "{\"ok\": false, \"error\": \"/p/out/bmad-new already exists\"}\n",
+  "stderr": "",
+  "files": {}
+}

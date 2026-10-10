@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-advanced-elicitation/scripts/pick_methods.py --file /p/catalog/methods.csv --extra /p/catalog/extra-methods.json --json categories",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--file",
+    "/p/catalog/methods.csv",
+    "--extra",
+    "/p/catalog/extra-methods.json",
+    "--json",
+    "categories"
+  ],
+  "stdout": "[{\"category\": \"business\", \"count\": 2}, {\"category\": \"experiential\", \"count\": 1}, {\"category\": \"technical\", \"count\": 2}, {\"category\": \"wildcard\", \"count\": 1}]\n",
+  "stderr": "",
+  "files": {}
+}

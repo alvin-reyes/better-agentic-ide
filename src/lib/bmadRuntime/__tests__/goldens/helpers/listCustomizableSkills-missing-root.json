@@ -1,0 +1,14 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-customize/scripts/list_customizable_skills.py --project-root /p --skills-root /p/nowhere",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--project-root",
+    "/p",
+    "--skills-root",
+    "/p/nowhere"
+  ],
+  "stdout": "{\n  \"agents\": [],\n  \"custom_dir\": \"/p/_bmad/custom\",\n  \"errors\": [\n    \"skills root does not exist: /p/nowhere\"\n  ],\n  \"project_root\": \"/p\",\n  \"scanned_roots\": [],\n  \"workflows\": []\n}\n",
+  "stderr": "",
+  "files": {}
+}
