@@ -63,9 +63,30 @@ describe("patchBmadSkills", () => {
     expect(rewriteCallSite(patched)).toBe(patched);
   });
 
-  it("throws on an unrecognised uv run call site instead of shipping it unpatched", () => {
+  it("rewrites the flag-and-quote form the skill bootstraps use", () => {
+    const line = "`uv run --no-cache \"{project-root}/_bmad/scripts/render_skill.py\" --project-root \"{project-root}\" --skill \"{skill-root}\"`";
+    expect(rewriteCallSite(line)).toBe(
+      "`node {project-root}/_bmad/ade-runtime.mjs render_skill --project-root \"{project-root}\" --skill \"{skill-root}\"`",
+    );
+  });
+
+  it("rewrites module-path and skill-root call sites", () => {
+    expect(rewriteCallSite("`uv run {project-root}/_bmad/method/scripts/tickets.py --project-root {project-root} next`"))
+      .toBe("`node {project-root}/_bmad/ade-runtime.mjs tickets --project-root {project-root} next`");
+    expect(rewriteCallSite("`uv run {skill-root}/scripts/lint_spine.py --project-root {project-root}`"))
+      .toBe("`node {project-root}/_bmad/ade-runtime.mjs lint_spine --skill-root {skill-root} --project-root {project-root}`");
+  });
+
+  it("throws on a call site whose script has no TS port instead of shipping it unpatched", () => {
     expect(() => rewriteCallSite("`uv run {project-root}/_bmad/scripts/some_new_script.py --weird`"))
-      .toThrow(/unrecognised/);
+      .toThrow(/no TS port/);
+  });
+
+  it("leaves the allowlisted dev-tooling forms untouched", () => {
+    for (const line of [
+      "`uv run {skill-root}/scripts/count_tokens.py …`",
+      "`uv run pytest`",
+    ]) expect(rewriteCallSite(line)).toBe(line);
   });
 });
 ```
@@ -85,29 +106,44 @@ Expected: FAIL — `rewriteCallSite` is not exported.
  * vendored SKILL.md files to the ADE runtime. Idempotent, and it throws on any
  * call site it does not recognise — upstream churn must not ship unpatched.
  */
-const CALL = /uv run \{project-root\}\/_bmad\/scripts\/([\w.]+\.py)([\s\S]*?)(?=`|$)/g;
 
-/** The runtime scripts the TS port covers (spec: architecture section). The
- * pinned tree also invokes roster.py, knowledge.py and validate_manifests.py
- * from project roots — see Task 5b. */
+/** The runtime scripts the TS port covers. The pinned tree invokes the Task 5b
+ * trio (roster, knowledge, validate_manifests) and the Task 5c skill-root
+ * scripts in addition to the spec's eight. */
 const PORTED = new Set([
   "resolve_config.py", "resolve_customization.py", "config_utils.py",
   "tickets.py", "read_store.py", "render_skill.py", "memlog.py",
   "roster.py", "knowledge.py", "validate_manifests.py",
+  // Task 5c: skill-root helper scripts (see the plan task for the full list).
+  "recon_kit.py", "init_skill.py", "brain.py", "process_template.py",
+  "wake.py", "scan_scripts.py", "scan_paths.py", "resolve_party.py",
+  "go.py", "scan_legacy_module.py", "registry.py", "read_session_log.py",
+  "pick_methods.py", "list_customizable_skills.py", "lint_spine.py",
+  "resolve_personas.py", "run_triggers.py", "x.py",
 ]);
+
+/** Lines that legitimately keep `uv run`: dev tooling with external deps
+ * (tiktoken), eval tooling, and documentation prose. Anything else throws. */
+const ALLOWED_UV = [
+  "count_tokens.py", "prepass.py", "run_evals.py", "word_metrics.py",
+  "<name>.py", "uv run pytest",
+];
 
 export function rewriteCallSite(line: string): string {
   if (!line.includes("uv run")) return line;
-  const m = /_bmad\/scripts\/([\w.]+\.py)/.exec(line);
-  if (!m) throw new Error(`unrecognised uv run call site: ${line.slice(0, 120)}`);
-  const script = m[1];
+  // Real call sites take three shapes: `uv run --flags "{project-root}/_bmad/scripts/x.py"`,
+  // `uv run {project-root}/_bmad/<module>/scripts/x.py`, and
+  // `uv run {skill-root}/scripts/x.py`. Optional flags and quoting sit between
+  // `uv run` and the path.
+  const m = /(?:^|[^a-z])uv run(?:\s+(?:--?[\w-]+|"[^"]*"|'[^']*'))*\s+"?(\{project-root\}\/_bmad\/(?:\w+\/)?scripts\/([\w.]+\.py)|\{skill-root\}\/scripts\/([\w.]+\.py))"?/.exec(line);
+  if (!m) return line;
+  const script = m[2] ?? m[3];
+  if (ALLOWED_UV.includes(script)) return line;
   if (!PORTED.has(script)) {
     throw new Error(`no TS port for ${script}; call site cannot be patched: ${line.slice(0, 120)}`);
   }
-  return line.replace(
-    new RegExp(`uv run \\{project-root\\}\\/_bmad\\/scripts\\/${script.replace(".", "\\.")}`, "g"),
-    `node {project-root}/_bmad/ade-runtime.mjs ${script.replace(/\.py$/, "")}`,
-  );
+  const skillRoot = m[3] ? " --skill-root {skill-root}" : "";
+  return line.replace(m[0], `node {project-root}/_bmad/ade-runtime.mjs ${script.replace(/\.py$/, "")}${skillRoot}`);
 }
 
 if (process.argv[1]?.endsWith("patchBmadSkills.ts")) {
@@ -120,10 +156,24 @@ if (process.argv[1]?.endsWith("patchBmadSkills.ts")) {
   const walk = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
       e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".md") ? [join(dir, e.name)] : []);
-  for (const p of walk(root)) {
+  const files = walk(root);
+  for (const p of files) {
     const body = readFileSync(p, "utf8");
-    const next = body.replace(/`uv run \{project-root\}\/_bmad\/scripts\/[\s\S]*?`/g, rewriteCallSite);
+    // Rewrite every code-fenced call site; the matcher returns unmarked lines
+    // unchanged, and the post-pass below rejects any real `uv run` left over.
+    const next = body.replace(/`uv run[\s\S]*?`/g, rewriteCallSite);
     if (next !== body) writeFileSync(p, next);
+  }
+  /** Fail-loudly post-pass: any remaining `uv run` in any walked file must be
+   * on the allowlist or the patch cannot claim the tree ships Python-free. */
+  for (const p of files) {
+    const body = readFileSync(p, "utf8");
+    for (const line of body.split("\n")) {
+      if (!/\buv run\b/.test(line)) continue;
+      if (ALLOWED_UV.some((a) => line.includes(a))) continue;
+      console.error(`unpatched uv run in ${p}: ${line.trim().slice(0, 120)}`);
+      process.exit(1);
+    }
   }
 }
 ```
@@ -183,6 +233,14 @@ In `.github/workflows/ci.yml`, add a job after the frontend tests:
           git -C /tmp/bmad checkout --quiet "$SHA"
           diff -r --exclude="*.md" src-tauri/resources/bmad-v6/skills /tmp/bmad/skills
           echo "vendored tree matches $SHA"
+      - name: No unpatched uv run call sites in vendored markdown
+        run: |
+          if grep -rn "uv run" src-tauri/resources/bmad-v6/skills/ --include="*.md" \
+            | grep -v -e "count_tokens.py" -e "prepass.py" -e "run_evals.py" -e "word_metrics.py" \
+                     -e "<name>.py" -e "uv run pytest"; then
+            echo "unpatched uv run call site in vendored markdown" && exit 1
+          fi
+          echo "no unpatched call sites"
 ```
 
 - [ ] **Step 8: Commit**
@@ -792,6 +850,74 @@ git commit -m "feat(bmad-v6): port roster, knowledge and manifest validation"
 
 ---
 
+### Task 5c: Port the skill-root helper scripts
+
+**Files:**
+- Create: `src/lib/bmadRuntime/helpers.ts` (one module holding the small helper ports; a helper that grows past ~150 lines gets its own file)
+- Test: `src/lib/bmadRuntime/__tests__/helpers.test.ts`
+- Create: `src/lib/bmadRuntime/__tests__/goldens/helpers/*.json` (generated in Step 1)
+
+**Interfaces:**
+- Consumes: `Fs`, `loadCentralConfig` (Task 3), the Task 5b ports.
+- Produces: one export per ported script with the uniform shape `export async function <name>(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>`, named by the Python stem: `reconKit, initSkill, brain, processTemplate, wake, scanScripts, scanPaths, resolveParty, go, scanLegacyModule, registry, readSessionLog, pickMethods, listCustomizableSkills, lintSpine, resolvePersonas, runTriggers, x`. Skill-root invocations of `tickets.py`, `read_store.py`, `knowledge.py` route to the Task 4/5b ports (the `--skill-root` arg is accepted and, where the Python used it to locate files, honored; otherwise ignored). The Python sources live in the vendored tree — e.g. `skills/bmad-architecture/scripts/lint_spine.py`, `skills/bmad-deep-recon/scripts/recon_kit.py`.
+
+- [ ] **Step 1: Generate goldens from the real Python**
+
+For each of the 18 scripts, find its source in the vendored tree (`find src-tauri/resources/bmad-v6/skills -name "<name>.py" -path "*/scripts/*"`), find its call sites in the vendored markdown (`grep -rn "scripts/<name>.py" src-tauri/resources/bmad-v6/skills --include="*.md"`) to learn the argument shapes, then run the real Python against /tmp/golden-proj (seeded as in Task 3) and capture stdout+exit into `src/lib/bmadRuntime/__tests__/goldens/helpers/<name>-<shape>.json`. Where a script refuses without more setup, capture the refusal — it is a golden too. Scripts that are trivial (a few lines of string building) still get one golden each.
+
+- [ ] **Step 2: Write the failing tests**
+
+```ts
+import { describe, expect, it } from "vitest";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import * as helpers from "../helpers";
+import { memFs } from "../fs";
+import { seedTicketTree } from "./fixtures/ticketTree";
+
+describe("helper script ports", () => {
+  it("matches Python for every captured golden", async () => {
+    const dir = join(__dirname, "goldens/helpers");
+    for (const f of await readdir(dir)) {
+      const [name] = f.split("-");
+      const golden = JSON.parse(await readFile(join(dir, f), "utf8"));
+      const port = (helpers as Record<string, (argv: string[], fs: unknown) => Promise<{ stdout: string; exitCode: number }>>)[name];
+      expect(port, `no port named ${name}`).toBeDefined();
+      const fs = memFs();
+      await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+      const r = await port!(golden.argv, fs);
+      expect(r.exitCode, `${name} exit code`).toBe(golden.exitCode);
+      expect(r.stdout, `${name} stdout`).toBe(golden.stdout);
+    }
+  });
+});
+```
+
+(The golden files carry the `argv` used, so the test replays exactly what the Python saw.)
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/helpers.test.ts`
+Expected: FAIL — no ports yet.
+
+- [ ] **Step 4: Implement helpers.ts**
+
+Port each of the 18 scripts against its goldens — same discipline as Tasks 3–5b: the Python output is the contract, `Fs` for all file access, no external dependencies. Each port is small; group them in one module and split out any that grows past ~150 lines (it then keeps the same export shape in its own file and is re-exported from `helpers.ts`).
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/helpers.test.ts`
+Expected: PASS (one golden each).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/bmadRuntime/helpers.ts src/lib/bmadRuntime/__tests__/helpers.test.ts src/lib/bmadRuntime/__tests__/goldens/helpers
+git commit -m "feat(bmad-v6): port the skill-root helper scripts"
+```
+
+---
+
 ### Task 6: The ade-runtime.mjs CLI bundle
 
 **Files:**
@@ -898,8 +1024,13 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
       return knowledge(rest, fs);
     case "validate_manifests":
       return validateManifests(rest, fs);
-    default:
+    default: {
+      // Task 5c helper scripts dispatch by their Python stem.
+      const helpers = await import("./helpers");
+      const fn = (helpers as Record<string, (argv: string[], fs: Fs) => Promise<{ stdout: string; exitCode: number }>>)[script];
+      if (fn) return fn(rest, fs);
       return { stdout: `unknown runtime script: ${script}`, exitCode: 2 };
+    }
   }
 }
 
