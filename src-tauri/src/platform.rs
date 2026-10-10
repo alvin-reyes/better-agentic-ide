@@ -66,6 +66,27 @@ pub fn passthrough_vars(windows: bool) -> &'static [&'static str] {
     }
 }
 
+/// The locale to give a spawned Unix shell when the app has none.
+///
+/// A macOS app launched from Finder or the Dock has no LANG, and LANG is only
+/// passed through when the app has it. Bash without a UTF-8 locale reads each
+/// byte >= 0x80 typed into it as Alt+key (0xE2 is backward-word), so non-ASCII
+/// text typed into the terminal edits the line instead. Only when LANG, LC_ALL
+/// and LC_CTYPE are all unset or empty: a locale the user chose is kept.
+pub fn default_locale<F>(windows: bool, var: F) -> Option<(&'static str, &'static str)>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    if windows {
+        return None;
+    }
+    let set = |k: &str| var(k).is_some_and(|v| !v.is_empty());
+    if set("LANG") || set("LC_ALL") || set("LC_CTYPE") {
+        return None;
+    }
+    Some(("LANG", "en_US.UTF-8"))
+}
+
 /// How to ask the system where a command lives.
 pub fn which_command(windows: bool) -> (&'static str, &'static [&'static str]) {
     if windows { ("where.exe", &[]) } else { ("/bin/sh", &["-lc"]) }
@@ -146,6 +167,26 @@ mod tests {
         let w = passthrough_vars(true);
         assert!(w.contains(&"USERPROFILE"));
         assert!(!w.contains(&"HOME"));
+    }
+
+    /// A Finder- or Dock-launched macOS app has no LANG, and bash without a
+    /// UTF-8 locale reads each byte >= 0x80 typed into it as Alt+key.
+    #[test]
+    fn a_unix_shell_with_no_locale_gets_utf8() {
+        assert_eq!(default_locale(false, env(&[])), Some(("LANG", "en_US.UTF-8")));
+        assert_eq!(default_locale(false, env(&[("LANG", "")])), Some(("LANG", "en_US.UTF-8")));
+    }
+
+    #[test]
+    fn any_locale_the_user_set_is_left_alone() {
+        assert_eq!(default_locale(false, env(&[("LANG", "fr_FR.UTF-8")])), None);
+        assert_eq!(default_locale(false, env(&[("LC_ALL", "C")])), None);
+        assert_eq!(default_locale(false, env(&[("LC_CTYPE", "UTF-8")])), None);
+    }
+
+    #[test]
+    fn windows_gets_no_locale_default() {
+        assert_eq!(default_locale(true, env(&[])), None);
     }
 
     #[test]

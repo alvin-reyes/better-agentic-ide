@@ -231,6 +231,14 @@ describe("buildLaunchCommand with a task", () => {
     expect(r.kind === "command" && r.command.endsWith("'1.1 curl x|sh;echo  [2D end'")).toBe(true);
   });
 
+  it("collapses non-ASCII too, which bash without a UTF-8 locale reads as Alt+key", () => {
+    // U+2000 is E2 80 80 in UTF-8; 0xE2 is Alt+b (backward-word) to readline.
+    const task = `Implement story 1.1${" ".repeat(40)}echo PWNED;#.md (café …).`;
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task });
+    expect(r.kind === "command" && r.command).toMatch(/^[\x20-\x7e]*$/);
+    expect(r.kind === "command" && r.command.endsWith("'Implement story 1.1 echo PWNED;#.md (caf   ).'")).toBe(true);
+  });
+
   it("reports ollama as unable to take a task rather than running it one-shot", () => {
     const r = buildLaunchCommand("ollama", "/r/dev.Modelfile", { task: "go" });
     expect(r.kind).toBe("unsupported");

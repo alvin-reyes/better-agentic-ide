@@ -9,10 +9,11 @@ export interface LaunchOptions {
   roleId?: string;
   domainId?: string;
   /**
-   * The agent's opening task, sent as its first prompt. Every control
-   * character is collapsed to a space: the command is typed into an
-   * interactive shell, whose line editor acts on them even inside quotes (a
-   * newline submits early, ^U erases the opening quote, ESC starts an edit).
+   * The agent's opening task, sent as its first prompt. Anything outside
+   * printable ASCII is collapsed to a space: the command is typed into an
+   * interactive shell, whose line editor acts on it even inside quotes (a
+   * newline submits early, ^U erases the opening quote, ESC starts an edit,
+   * and without a UTF-8 locale bash reads a byte >= 0x80 as Alt+key).
    */
   task?: string;
 }
@@ -36,13 +37,18 @@ export const DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
  */
 export const DEEPSEEK_MODEL = "deepseek-v4-pro";
 
-/** C0 controls and DEL: everything a line editor might act on. */
-const CONTROL_CHARS = /[\x00-\x1f\x7f]+/g;
+/**
+ * Everything but printable ASCII: C0 controls and DEL, which a line editor
+ * acts on, and every non-ASCII character, whose UTF-8 bytes bash without a
+ * UTF-8 locale reads as Alt+key (0xE2 is Alt+b, backward-word).
+ */
+export const UNTYPEABLE = /[^\x20-\x7e]/;
+const UNTYPEABLE_RUNS = /[^\x20-\x7e]+/g;
 
 /** The claude invocation both the claude and deepseek providers launch. */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
-  const task = opts.task ? ` ${shellQuote(opts.task.replace(CONTROL_CHARS, " "))}` : "";
+  const task = opts.task ? ` ${shellQuote(opts.task.replace(UNTYPEABLE_RUNS, " "))}` : "";
   return `claude${flags} --append-system-prompt-file ${quotedPath}${task}`;
 }
 

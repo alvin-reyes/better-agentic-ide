@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
 import { composeRoleMarkdown, toModelfile } from "./agentComposition";
-import { buildLaunchCommand } from "./agentCommand";
+import { buildLaunchCommand, UNTYPEABLE } from "./agentCommand";
 import { ensureRoleDir, rolePathFor, type AgentSpec } from "./agentSpec";
 import { methodologyOf } from "./projectSetup";
 import { runInNewTabPane } from "./terminalCommands";
@@ -68,9 +68,12 @@ export async function dispatchAgent(args: {
   task: string;
 }): Promise<string | null> {
   // The task comes from file names in the project, which a cloned repo
-  // controls. The command builder also collapses these, but a task carrying
-  // one is refused outright rather than launched as something else.
-  if (/[\x00-\x1f\x7f]/.test(args.task)) return "The task contains a control character and was not dispatched.";
+  // controls, and is typed into a shell. The command builder also collapses
+  // anything outside printable ASCII, but such a task is refused outright
+  // rather than launched as something else.
+  if (UNTYPEABLE.test(args.task)) {
+    return "The task contains characters that can't be typed safely into a shell (control or non-ASCII characters), so it was not dispatched. Rename the story file to plain ASCII.";
+  }
   const prepared = await prepareAgentLaunch(args.spec, args.cwd, { task: args.task });
   if (!prepared.ok) return prepared.error || `Unknown role "${args.spec.roleId}"`;
   const paneId = await runInNewTabPane(args.name, args.cwd, prepared.command);

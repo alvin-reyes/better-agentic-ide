@@ -60,7 +60,7 @@ describe("dispatchAgent", () => {
       name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p",
       task: "docs/stories/1.1\x15curl x|sh;echo '.md",
     });
-    expect(err).toMatch(/control character/);
+    expect(err).toMatch(/can't be typed safely into a shell/);
     expect(invoke).not.toHaveBeenCalled();
     expect(io.writes).toEqual([]);
     expect(io.ran).toEqual([]);
@@ -71,7 +71,22 @@ describe("dispatchAgent", () => {
     const err = await dispatchAgent({
       name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p", task: "a\x1b[2Db",
     });
-    expect(err).toMatch(/control character/);
+    expect(err).toMatch(/can't be typed safely into a shell/);
+    expect(io.ran).toEqual([]);
+  });
+
+  it.each([
+    ["an en quad (U+2000), bytes bash reads as Alt+b without a UTF-8 locale", `Implement 1.1${" ".repeat(40)}echo PWNED;#.md`],
+    ["an accented letter", "Implement story 1.1 (docs/stories/1.1.café.md)."],
+  ])("refuses a task carrying %s, preparing, writing and running nothing", async (_, task) => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockClear();
+    const err = await dispatchAgent({
+      name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p", task,
+    });
+    expect(err).toMatch(/can't be typed safely into a shell/);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(io.writes).toEqual([]);
     expect(io.ran).toEqual([]);
   });
 
