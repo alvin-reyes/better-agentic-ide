@@ -490,7 +490,10 @@ export async function brain(argv: string[], fs: Fs): Promise<PortResult> {
       exitCode: 2,
     };
   }
-  const parent = outPath.slice(0, outPath.lastIndexOf("/"));
+  // A slashless `--out brain.html` has no folder to create: slicing before the
+  // last `/` would turn it into the junk folder `brain.htm`.
+  const cut = outPath.lastIndexOf("/");
+  const parent = cut > 0 ? outPath.slice(0, cut) : "";
   if (parent && !(await fs.exists(parent))) await fs.mkdir(parent);
   await fs.writeText(outPath, htmlDoc(await loadIcons(fs, iconDir), rows));
   return { stdout: `wrote ${outPath} (${rows.length} techniques, ${categories(rows).length} categories)\n`, exitCode: 0 };

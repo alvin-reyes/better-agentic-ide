@@ -4,9 +4,10 @@ import { mkdtemp, mkdir, rm, symlink, copyFile, cp, writeFile } from "node:fs/pr
 import { homedir, tmpdir } from "node:os";
 import { join, resolve as resolvePathNative } from "node:path";
 import { parse as parseToml } from "smol-toml";
+import { deepMerge } from "./config";
 import type { Fs } from "./fs";
 import { isDirectory, isFile, pyJson, resolvePath } from "./knowledge";
-import { splitFlag, usageError, type PortResult } from "./compat";
+import { absolutePath, splitFlag, usageError, type PortResult } from "./compat";
 import { pathDirname, toForwardSlashes } from "./paths";
 
 /**
@@ -97,20 +98,21 @@ async function resolveHarness(
   if (!(await isDirectory(fs, `${projectRoot}/_bmad`))) {
     return { harness: null, note: "BMad is not set up in this project; pass --harness" };
   }
-  // The project's override layers for this skill, merged team then personal.
-  let workflow: Record<string, unknown> = {};
+  // The project's override layers for this skill, merged team then personal —
+  // the same deep merge the project's resolver applies between them, so a
+  // personal `[workflow.harness] env` layers over the team's `command` instead
+  // of replacing the table it sits in.
+  let customization: Record<string, unknown> = {};
   for (const name of ["bmad-eval.toml", "bmad-eval.user.toml"]) {
     const path = `${projectRoot}/_bmad/custom/${name}`;
     if (!(await isFile(fs, path))) continue;
     try {
-      const data = parseToml(await fs.readText(path)) as Record<string, unknown>;
-      if (data.workflow !== undefined && data.workflow !== null && typeof data.workflow === "object") {
-        workflow = { ...workflow, ...(data.workflow as Record<string, unknown>) };
-      }
+      customization = deepMerge(customization, parseToml(await fs.readText(path)) as Record<string, unknown>);
     } catch {
       continue;
     }
   }
+  const workflow = (customization.workflow ?? {}) as Record<string, unknown>;
   const harness = workflow.harness;
   if (harness === null || harness === undefined || typeof harness !== "object" || !(harness as Record<string, unknown>).command) {
     return { harness: null, note: "no harness recorded in bmad-eval's customization" };
@@ -156,12 +158,17 @@ export function buildCaseEnv(
 export function contained(root: string, rel: string): string {
   const base = resolvePathNative(root);
   const target = resolvePathNative(base, rel);
+  if (!containedPath(base, target)) throw new Error(`path escapes the workspace: ${rel}`);
+  return target;
+}
+
+/** Whether `target` is `base` or under it, in the runtime's `/` spelling: the
+ * host's separators fold first, so Windows' `C:\root\sub` reads as inside
+ * `C:\root` instead of escaping the workspace on every nested path. */
+export function containedPath(base: string, target: string): boolean {
   const into = toForwardSlashes(base);
   const folded = toForwardSlashes(target);
-  if (folded !== into && !folded.startsWith(into.endsWith("/") ? into : `${into}/`)) {
-    throw new Error(`path escapes the workspace: ${rel}`);
-  }
-  return target;
+  return folded === into || folded.startsWith(into.endsWith("/") ? into : `${into}/`);
 }
 
 /** `make_home`: the fresh HOME, `home_files` brought over at the same paths. */
@@ -477,7 +484,9 @@ export async function runTriggers(argv: string[], fs: Fs): Promise<PortResult> {
   }
   if (!Array.isArray(queries)) return { stdout: "queries file must be a JSON list\n", exitCode: 2 };
 
-  const root = projectRoot !== null ? resolvePath(projectRoot) : await findProjectRoot(fs, resolvedSkill);
+  // `args.project_root.resolve()`, else found from the skill path: `.` is the
+  // folder the caller stands in, not an empty string.
+  const root = projectRoot !== null ? absolutePath(projectRoot) : await findProjectRoot(fs, resolvedSkill);
   let harness: Record<string, unknown> | null;
   let harnessNote: string;
   try {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memFs, realFs } from "../fs";
@@ -25,6 +25,40 @@ describe("realFs", () => {
       expect(await fs.exists(join(nested, "f.txt"))).toBe(false);
       expect(await fs.list(nested)).toEqual([]);
       await expect(fs.delete(join(nested, "f.txt"))).rejects.toThrow(/ENOENT/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("appends to a real file in place, creating a missing one", async () => {
+    // `appendFile`'s O_APPEND, which memlog's `append` needs so two processes
+    // appending at the same instant both land.
+    const fs = realFs();
+    const root = await mkdtemp(join(tmpdir(), "bmad-runtime-append-"));
+    try {
+      const log = join(root, "log.md");
+      await fs.writeText(log, "one\n");
+      await fs.append(log, "two\n");
+      await fs.append(log, "three\n");
+      expect(await fs.readText(log)).toBe("one\ntwo\nthree\n");
+      await fs.append(join(root, "missing.md"), "fresh\n");
+      expect(await fs.readText(join(root, "missing.md"))).toBe("fresh\n");
+      await expect(fs.append(join(root, "nodir", "x.md"), "x")).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("isSymlink tells a link from what it points at, and a missing path from both", async () => {
+    const fs = realFs();
+    const root = await mkdtemp(join(tmpdir(), "bmad-runtime-link-"));
+    try {
+      await fs.mkdir(join(root, "target"));
+      await symlink(join(root, "target"), join(root, "link"), "dir");
+      expect(await fs.isSymlink(join(root, "link"))).toBe(true);
+      expect(await fs.isSymlink(join(root, "target"))).toBe(false);
+      expect(await fs.isSymlink(join(root, "missing"))).toBe(false);
+      expect(await memFs().isSymlink("/anything")).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -106,6 +140,18 @@ describe("memFs", () => {
     await expect(fs.writeText("/p/a/f.txt", "f")).rejects.toThrow(/ENOENT/);
     await expect(fs.readText("/p/a/f.txt")).rejects.toThrow(/no such file/);
     await expect(fs.list("/p/a")).rejects.toThrow(/ENOENT/);
+  });
+
+  it("append adds at the end, creating a missing file like realFs", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/ws");
+    await fs.writeText("/p/ws/log.md", "one\n");
+    await fs.append("/p/ws/log.md", "two\n");
+    await fs.append("/p/ws/log.md", "three\n");
+    expect(await fs.readText("/p/ws/log.md")).toBe("one\ntwo\nthree\n");
+    await fs.append("/p/ws/missing.md", "fresh\n");
+    expect(await fs.readText("/p/ws/missing.md")).toBe("fresh\n");
+    await expect(fs.append("/p/nodir/x.md", "x")).rejects.toThrow(/ENOENT/);
   });
 
   it("delete removes a file and rejects like unlink", async () => {

@@ -297,6 +297,11 @@ export function loadYaml(text: string, file = "module.yaml"): unknown {
     return text.includes(":");
   };
 
+  /** A flow collection is a value, not a nested block: PyYAML reads
+   * `key: {a: 1}` and `- {a: 1}` as mapping entries, so only a block-style
+   * value (`key: a: b`) is the inline-mapping mistake the parser refuses. */
+  const isFlowValue = (rest: string): boolean => rest.startsWith("{") || rest.startsWith("[");
+
   const parseNode = (indent: number): unknown => {
     if (at >= lines.length) return null;
     if (lines[at].text.startsWith("- ") || lines[at].text === "-") return parseSequence(indent);
@@ -318,7 +323,7 @@ export function loadYaml(text: string, file = "module.yaml"): unknown {
         continue;
       }
       // `- key: value` opens a nested block mapping at the dash's content column.
-      if (isMappingLine({ ...line, text: rest })) items.push(parseMapping(indent + 2, [rest]));
+      if (isMappingLine({ ...line, text: rest }) && !isFlowValue(rest)) items.push(parseMapping(indent + 2, [rest]));
       else items.push(scalar(rest, line.number));
     }
     return items;
@@ -356,9 +361,9 @@ export function loadYaml(text: string, file = "module.yaml"): unknown {
         else map[key] = null;
         continue;
       }
-      if (isMappingLine({ indent, text: rest, number })) {
+      if (isMappingLine({ indent, text: rest, number }) && !isFlowValue(rest)) {
         // `key:\n  ...` written inline is not this dialect; refuse it loudly
-        // rather than guessing.
+        // rather than guessing. A flow value (`key: {a: 1}`) is not that case.
         fail(number, `a mapping value must start on its own line`);
       }
       map[key] = scalar(rest, number);
@@ -546,3 +551,12 @@ export function splitFlag(token: string): [string, string | null] {
   if (cut < 0) return [token, null];
   return [token.slice(0, cut), token.slice(cut + 1)];
 }
+
+/**
+ * A record lookup with Python's meaning: the Python reads `d[key]` / `key in d`,
+ * which see a dict's own entries only, while JavaScript's `key in d` walks the
+ * prototype chain — `"constructor" in d` is true for every plain object, and a
+ * `constructor` or `__proto__` name from project data (a roster code, a ticket
+ * slug, a frontmatter key) would collide with Object's own members.
+ */
+export const hasOwn = (record: object, key: string): boolean => Object.prototype.hasOwnProperty.call(record, key);

@@ -1,4 +1,5 @@
 import { parse as parseToml } from "smol-toml";
+import { hasOwn } from "./compat";
 import { loadCentralConfig } from "./config";
 import type { Fs } from "./fs";
 import {
@@ -443,7 +444,7 @@ async function loadFolder(folder: string, problems: string[], fs: Fs): Promise<R
       throw new TicketError(`${where}/${name}: frontmatter does not close`);
     }
     if (!(LEAF_TYPES as readonly unknown[]).includes(fm["type"])) {
-      if ("ticket" in fm) plans.push([name, fm]);
+      if (hasOwn(fm, "ticket")) plans.push([name, fm]);
       continue;
     }
     try {
@@ -520,12 +521,12 @@ function joinPlans(rows: Row[], plans: [string, Record<string, any>][], where: s
       problems.push(`${where}/${name}: ticket ${pyRepr(ticket)} names no entry or leaf file in ${where}; skipped`);
       continue;
     }
-    if ("plan" in row) {
+    if (hasOwn(row, "plan")) {
       throw new TicketError(`${where}/${row["plan"]} and ${name} are both plans for ticket ${pyRepr(ticket)}`);
     }
     const fields: Record<string, string> = {};
     for (const key of PLAN_FIELDS) fields[key] = pyStr(pyOr(fm[key] ?? "", ""));
-    if (!("assignee" in fm)) {
+    if (!hasOwn(fm, "assignee")) {
       // A tracker's assignee is mirrored into the leaf file; the builds' plans carry no assignee.
       fields["assignee"] = row["assignee"] ?? "";
     }
@@ -576,7 +577,7 @@ async function loadTree(folder: string, fs: Fs): Promise<Tree> {
   let scope: string | null;
   let initiative: string | null;
   let folders: string[] | null;
-  if (epics.length > 0 || "epic" in (await loadBreakdown(folder, fs))) {
+  if (epics.length > 0 || hasOwn(await loadBreakdown(folder, fs), "epic")) {
     scope = null;
     initiative = folder;
     folders = null;
@@ -601,12 +602,12 @@ async function loadTree(folder: string, fs: Fs): Promise<Tree> {
     return baseName(a) < baseName(b) ? -1 : baseName(a) > baseName(b) ? 1 : 0;
   });
   if (folders === null) folders = [...epics, folder];
-  const epicIds: Record<string, any> = {};
+  const epicIds: Record<string, any> = Object.create(null);
   for (const e of listed) {
     if (Object.values(epicIds).includes(e["id"])) {
       throw new TicketError(`${baseName(initiative!)}/${BREAKDOWN}: two epics with id ${e["id"]}`);
     }
-    if (e["slug"] in epicIds) {
+    if (hasOwn(epicIds, String(e["slug"]))) {
       throw new TicketError(`${baseName(initiative!)}/${BREAKDOWN}: two epics with slug ${e["slug"]}`);
     }
     epicIds[e["slug"]] = e["id"];
@@ -620,7 +621,7 @@ async function loadTree(folder: string, fs: Fs): Promise<Tree> {
     initiative,
     folders: Object.fromEntries(folders.map((f) => [baseName(f), f])),
     epicIds,
-    containers: {},
+    containers: Object.create(null),
     tickets,
     problems,
   };
@@ -671,7 +672,7 @@ function resolveRefs(tree: Tree): void {
     const keys: string[] = [];
     for (const ref of refs) {
       const text = pyStr(ref);
-      let key: string | null = "id" in t ? sibling(t, ref, where) : null;
+      let key: string | null = hasOwn(t, "id") ? sibling(t, ref, where) : null;
       const m = CROSS_RE.exec(text);
       const slug = m ? slugs.get(asId(m[1])) ?? null : null;
       if (key === null && slug) {
@@ -679,7 +680,7 @@ function resolveRefs(tree: Tree): void {
         if (!byKey.has(key)) throw new TicketError(`${where}: after ${pyRepr(ref)} names no entry in ${slug}`);
       }
       if (key === null && EPIC_RE.test(text)) {
-        if (!(text in containers)) throw new TicketError(`${where}: after ${pyRepr(ref)} names no epic in this initiative`);
+        if (!hasOwn(containers, text)) throw new TicketError(`${where}: after ${pyRepr(ref)} names no epic in this initiative`);
         key = text;
       }
       if (key === null) key = ids.get(text) ?? null;
@@ -832,7 +833,7 @@ function ref(key: string, epic: string | null, tree: Tree): string | number {
   if (!n) return slug;
   if (asId(n) === null) return key;
   if (slug === epic) return asId(n)!;
-  if (slug in tree.epicIds) return `${tree.epicIds[slug]}.${n}`;
+  if (hasOwn(tree.epicIds, slug)) return `${tree.epicIds[slug]}.${n}`;
   return key;
 }
 
@@ -844,7 +845,7 @@ async function declaredAfter(tree: Tree, fs: Fs): Promise<Declared> {
   const listed: Record<string, any>[] = (await loadBreakdown(tree.initiative, fs))["epic"] ?? [];
   const slugs = listed.map((e) => e["slug"]);
   const byId = new Map<any, string>(Object.entries(tree.epicIds).map(([slug, i]) => [i, slug]));
-  const out: Declared = {};
+  const out: Declared = Object.create(null);
   for (const e of listed) {
     out[e["slug"]] = [];
     for (const a of e["after"] ?? []) {
@@ -898,15 +899,15 @@ function crossEpicAfter(tree: Tree, declared: Declared): { undeclared_after: unk
   for (const [slug, c] of Object.entries(tree.containers)) {
     for (const b of c["after"]) {
       const needed = String(b).split("/")[0];
-      if (slug in declared && needed in declared) conflict(slug, needed);
+      if (hasOwn(declared, slug) && hasOwn(declared, needed)) conflict(slug, needed);
     }
   }
   for (const t of tree.tickets) {
-    if (!(t["epic"] in declared)) continue;
+    if (!hasOwn(declared, String(t["epic"]))) continue;
     const allowed = new Set(declared[t["epic"]].map((a) => a["epic"]));
     for (const b of t["after"]) {
       const needed = String(b).split("/")[0];
-      if (needed === t["epic"] || !(needed in declared)) continue;
+      if (needed === t["epic"] || !hasOwn(declared, needed)) continue;
       conflict(t["epic"], needed);
       if (!allowed.has(needed) && (tree.scope === null || tree.scope === t["epic"])) {
         undeclared.push({
@@ -924,7 +925,7 @@ function crossEpicAfter(tree: Tree, declared: Declared): { undeclared_after: unk
 /** What `find` resolves to this ticket in the folder the command ran on; never the title,
  * which can repeat across epics. */
 function rowRef(t: Row, tree: Tree): string | null {
-  if (t["id"] !== null && t["epic"] in tree.epicIds) return `${tree.epicIds[t["epic"]]}.${t["id"]}`;
+  if (t["id"] !== null && hasOwn(tree.epicIds, t["epic"])) return `${tree.epicIds[t["epic"]]}.${t["id"]}`;
   if (t["id"] !== null && t["epic"] === tree.scope) return pyStr(t["id"]);
   return t["file"];
 }

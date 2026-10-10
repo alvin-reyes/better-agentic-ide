@@ -1,4 +1,5 @@
 import { parse as parseToml } from "smol-toml";
+import { hasOwn } from "./compat";
 import { loadCentralConfig, resolveCustomization } from "./config";
 import type { Fs } from "./fs";
 import {
@@ -71,8 +72,8 @@ export async function collect(fs: Fs, roots: string[], projectRoot: string | nul
     }
   }
 
-  const members: Record<string, RosterEntry> = {};
-  const groups: Record<string, Record<string, unknown>> = {};
+  const members: Record<string, RosterEntry> = Object.create(null);
+  const groups: Record<string, Record<string, unknown>> = Object.create(null);
   const ordered = [...files.values()].sort(
     (a, b) => compareStrings(a.module.code, b.module.code) || compareStrings(a.path, b.path),
   );
@@ -86,7 +87,7 @@ export async function collect(fs: Fs, roots: string[], projectRoot: string | nul
     }
   }
 
-  const agents: Record<string, RosterEntry> = {};
+  const agents: Record<string, RosterEntry> = Object.create(null);
   for (const [code, member] of Object.entries(members)) if (member.installed) agents[code] = member;
   await applyCentralAgents(fs, agents, members, problems, projectRoot);
 
@@ -149,7 +150,7 @@ async function addMember(
     problems.push({ kind: "member", problem: `${module} ${path}: a member has no code` });
     return;
   }
-  if (code in members) {
+  if (hasOwn(members, code)) {
     problems.push({
       kind: "member",
       problem: `${module} ${path}: member ${pyRepr(code)} is already defined by ${members[code].module}`,
@@ -172,7 +173,7 @@ async function addMember(
       if (command) entry.install = command;
     }
   }
-  if (!("name" in entry)) entry.name = code;
+  if (!hasOwn(entry, "name")) entry.name = code;
   members[code] = entry;
 }
 
@@ -210,7 +211,7 @@ function addGroup(
     problems.push({ kind: "group", problem: `${module} ${path}: a group has no id` });
     return;
   }
-  if (id in groups) {
+  if (hasOwn(groups, id)) {
     problems.push({
       kind: "group",
       problem: `${module} ${path}: group ${pyRepr(id)} is already defined by ${groups[id].module}`,
@@ -243,21 +244,21 @@ async function applyCentralAgents(
   if (!isTable(configured)) return;
   for (const [code, info] of Object.entries(configured)) {
     if (!isTable(info) || members[code]?.installed === false) continue;
-    if (!(code in agents)) agents[code] = { code, source: "config" };
+    if (!hasOwn(agents, code)) agents[code] = { code, source: "config" };
     const entry = agents[code];
     const settled = new Set<string>();
     if (entry.source === "roster") {
       settled.add("module");
-      for (const field of AGENT_FIELDS) if (field in entry) settled.add(field);
+      for (const field of AGENT_FIELDS) if (hasOwn(entry, field)) settled.add(field);
     }
-    const hasPersona = "persona" in info;
+    const hasPersona = hasOwn(info, "persona");
     for (const [field, value] of Object.entries(info)) {
       if (settled.has(field)) continue;
       // Older installs recorded the persona paragraph as `description`.
       const target = field === "description" && !hasPersona ? "persona" : field;
       entry[target] = value;
     }
-    if (!("name" in entry)) entry.name = code;
+    if (!hasOwn(entry, "name")) entry.name = code;
   }
 }
 

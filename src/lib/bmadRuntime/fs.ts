@@ -4,10 +4,18 @@ import { splitPathRoot } from "./paths";
 export interface Fs {
   readText(p: string): Promise<string>;
   writeText(p: string, body: string): Promise<void>;
+  /** Add `body` at the end of the file in one OS append, creating the file when
+   * it is missing — `appendFile`'s O_APPEND, which is what keeps two processes
+   * appending at the same instant from losing one of the entries. */
+  append(p: string, body: string): Promise<void>;
   list(p: string): Promise<string[]>;
   exists(p: string): Promise<boolean>;
   mkdir(p: string): Promise<void>;
   delete(p: string): Promise<void>;
+  /** Whether the path itself is a symbolic link (not followed) — `Path.is_symlink()`.
+   * A recursive walk lists a linked directory but never descends into it, as
+   * Python's `rglob` does. A missing path is not a link. */
+  isSymlink(p: string): Promise<boolean>;
 }
 
 function withoutTrailingSlash(p: string): string {
@@ -51,6 +59,13 @@ export function memFs(): Fs {
       if (!isDirectory(parent)) throw new Error(`ENOENT: no such directory: ${parent}`);
       files.set(key, body);
     },
+    append: async (p, body) => {
+      const key = withoutTrailingSlash(p);
+      const parent = parentDirectory(key);
+      if (!isDirectory(parent)) throw new Error(`ENOENT: no such directory: ${parent}`);
+      // A missing file starts empty, the way `appendFile`'s open does.
+      files.set(key, (files.get(key) ?? "") + body);
+    },
     list: async (p) => {
       const dir = withoutTrailingSlash(p);
       if (!isDirectory(dir)) throw new Error(`ENOENT: no such directory: ${dir}`);
@@ -91,6 +106,8 @@ export function memFs(): Fs {
       }
       files.delete(key);
     },
+    // A memFs holds no symlinks.
+    isSymlink: async () => false,
   };
 }
 
@@ -106,10 +123,14 @@ export function realFs(): Fs {
   return {
     readText: (p) => import("node:fs/promises").then(async (f) => utf8.decode(await f.readFile(p))),
     writeText: (p, body) => import("node:fs/promises").then((f) => f.writeFile(p, body)),
+    // `appendFile` opens with O_APPEND: the write lands at the end of whatever
+    // is there when it runs, not at the length this process last saw.
+    append: (p, body) => import("node:fs/promises").then((f) => f.appendFile(p, body)),
     list: (p) => import("node:fs/promises").then((f) => f.readdir(p)),
     exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),
     // `mkdir` with `recursive: true` resolves to the first created path; discard it for Promise<void>.
     mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true }).then(() => undefined)),
     delete: (p) => import("node:fs/promises").then((f) => f.unlink(p)),
+    isSymlink: (p) => import("node:fs/promises").then((f) => f.lstat(p).then((st) => st.isSymbolicLink(), () => false)),
   };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { knowledge } from "../knowledge";
+import { knowledge, resolvePath } from "../knowledge";
 import { memFs, type Fs } from "../fs";
 
 /**
@@ -52,6 +52,13 @@ async function matches(name: string, fs: Fs): Promise<void> {
   expect(r.stdout, `${name} stdout`).toBe(expected.stdout);
 }
 
+describe("resolvePath", () => {
+  it("resolves . to the working directory like Path('.').resolve()", () => {
+    expect(resolvePath(".")).toBe(process.cwd().replace(/\\/g, "/"));
+    expect(resolvePath("a/..")).toBe(process.cwd().replace(/\\/g, "/"));
+  });
+});
+
 describe("knowledge port", () => {
   it("matches the Python for the --root shape the ecosystem call site writes", async () => {
     const expected = await golden("knowledge-root");
@@ -94,5 +101,16 @@ describe("knowledge port", () => {
     const r = await knowledge(["--content"], memFs());
     expect(r.exitCode).toBe(2);
     expect(r.stdout).toContain("--root");
+  });
+
+  /** `Path("roster").parent` is `Path(".")`: a slashless relative path names
+   * something in the working directory, and `/` would send the roots built from
+   * it across the filesystem root. */
+  it("parents a slashless relative path to the working directory", async () => {
+    const { dirname } = await import("../knowledge");
+    expect(dirname("roster")).toBe(".");
+    expect(dirname("a/b")).toBe("a");
+    expect(dirname("/a/b")).toBe("/a");
+    expect(dirname("/a")).toBe("/");
   });
 });

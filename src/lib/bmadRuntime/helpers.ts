@@ -158,7 +158,9 @@ const DATED_RE = /^(\d{4}-\d{2}-\d{2})/;
 const STATUS_RAW_RE = /^status:\s*raw\s*$/m;
 const RECENT_COUNT = 8;
 
-/** Every directory under `root`, recursively, sorted by path — `sorted(root.rglob("*"))` filtered to dirs. */
+/** Every directory under `root`, recursively, sorted by path — `sorted(root.rglob("*"))` filtered to dirs.
+ * A symlinked directory is listed (and kept in the output) but never walked
+ * into, as `rglob` does not descend into links. */
 async function directoriesUnder(fs: Fs, root: string): Promise<string[]> {
   const out: string[] = [];
   const walk = async (dir: string): Promise<void> => {
@@ -172,7 +174,7 @@ async function directoriesUnder(fs: Fs, root: string): Promise<string[]> {
       const path = `${dir}/${name}`;
       if (!(await isDirectory(fs, path))) continue;
       out.push(path);
-      await walk(path);
+      if (!(await fs.isSymlink(path))) await walk(path);
     }
   };
   await walk(root);

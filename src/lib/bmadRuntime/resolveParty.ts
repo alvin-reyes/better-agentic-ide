@@ -3,7 +3,7 @@ import { pyJson, resolvePath } from "./knowledge";
 import { parse as parseToml } from "smol-toml";
 import { collect as collectRoster } from "./roster";
 import { loadCentralConfig, resolveCustomization } from "./config";
-import { absolutePath, splitFlag, usageError, type PortResult } from "./compat";
+import { absolutePath, hasOwn, splitFlag, usageError, type PortResult } from "./compat";
 
 /**
  * Port of `skills/bmad-party-mode/scripts/resolve_party.py` — merge the
@@ -41,8 +41,8 @@ export async function loadRoster(
     const data = await collectRoster(fs, [root], projectRoot);
     const agents = (data.agents ?? {}) as Record<string, Entry>;
     const members = (data.members ?? {}) as Record<string, Entry>;
-    const guests: Record<string, Entry> = {};
-    for (const [code, member] of Object.entries(members)) if (!(code in agents)) guests[code] = member;
+    const guests: Record<string, Entry> = Object.create(null);
+    for (const [code, member] of Object.entries(members)) if (!hasOwn(agents, code)) guests[code] = member;
     const problems = (data.problems ?? [])
       .filter((problem) => isTable(problem) && typeof problem.problem === "string")
       .map((problem) => problem.problem as string)
@@ -106,7 +106,7 @@ export function buildCollective(
   partyMembers: unknown,
   guests: Record<string, Entry> | null = null,
 ): { collective: Record<string, Entry>; index: Map<string, string>; installedCodes: string[] } {
-  const collective: Record<string, Entry> = {};
+  const collective: Record<string, Entry> = Object.create(null);
   const index = new Map<string, string>();
   const installedCodes: string[] = [];
   const aliasOwner = new Map<string, string | null>();
@@ -191,7 +191,7 @@ export function resolveMembers(
       continue;
     }
     const code = index.get(token) ?? index.get(token.toLowerCase());
-    if (code && code in collective) resolved.push(collective[code]);
+    if (code && hasOwn(collective, code)) resolved.push(collective[code]);
     else unresolved.push(token);
   }
   return { resolved, unresolved };

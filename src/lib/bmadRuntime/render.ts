@@ -4,6 +4,7 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
 import { loadCentralConfig, resolveCustomization, deepMerge } from "./config";
 import type { Fs } from "./fs";
 import { isAbsolutePath } from "./paths";
+import { hasOwn } from "./compat";
 
 /**
  * Port of `skills/bmad/scripts/render_skill.py` at bda3c59. The Python is the
@@ -49,7 +50,7 @@ class UndefinedError extends RenderError {}
 const pyTypeName = (value: unknown): string => {
   if (typeof value === "boolean") return "bool";
   if (typeof value === "number") return Number.isInteger(value) ? "int" : "float";
-  if (typeof value === "string") return "str";
+  if (typeof value === "string" || value instanceof Text) return "str";
   if (Array.isArray(value)) return "list";
   if (value === null || value === undefined) return "NoneType";
   return "dict";
@@ -112,7 +113,7 @@ function leafPaths(table: Record<string, unknown>, prefix = ""): Set<string> {
 function declares(defaults: Record<string, unknown> | null, path: string): boolean {
   let node: unknown = defaults;
   for (const part of path.split(".")) {
-    if (!node || typeof node !== "object" || Array.isArray(node) || !(part in (node as Record<string, unknown>))) return false;
+    if (!node || typeof node !== "object" || Array.isArray(node) || !hasOwn(node as Record<string, unknown>, part)) return false;
     node = (node as Record<string, unknown>)[part];
   }
   return true;
@@ -122,7 +123,7 @@ function declares(defaults: Record<string, unknown> | null, path: string): boole
 function lookup(data: Record<string, unknown>, path: string, label: string): unknown {
   let current: unknown = data;
   for (const part of path.split(".")) {
-    if (!current || typeof current !== "object" || Array.isArray(current) || !(part in (current as Record<string, unknown>))) {
+    if (!current || typeof current !== "object" || Array.isArray(current) || !hasOwn(current as Record<string, unknown>, part)) {
       throw new RenderError(`missing ${label} \`${path}\``);
     }
     current = (current as Record<string, unknown>)[part];
@@ -157,6 +158,21 @@ async function readTomlLayer(path: string, fs: Fs): Promise<Record<string, unkno
   }
 }
 
+/** A decimal float literal (`2.0`, `1e3`); `0x1E` is an integer whose `E` is a digit. */
+const DECIMAL_FLOAT_RE = /^[+-]?\d[\d_]*(\.\d|[eE])/;
+
+/** smol-toml reads a default written `2.0` as the integer 2, so the check
+ * `--set` makes against an int default needs the source text: true only when
+ * every line assigning the path's leaf key writes an integer literal. When the
+ * spelling cannot be found the default is not known to be an int. */
+function defaultWrittenAsInt(source: string, path: string): boolean {
+  const leaf = path.split(".").pop() ?? path;
+  const escaped = leaf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const line = new RegExp(`^\\s*(?:${escaped}|"${escaped}"|'${escaped}')\\s*=\\s*([^#\\n]*)`, "gm");
+  const values = [...source.matchAll(line)].map((m) => m[1].trim());
+  return values.length > 0 && values.every((v) => /^[+-]?(\d[\d_]*|0x[\da-fA-F_]+|0o[0-7_]+|0b[01_]+)$/.test(v));
+}
+
 /** `_invocation_customization`: the `--set` assignments as one command layer.
  * A repeated or overlapping path is a caller mistake, not a precedence rule; a
  * string default takes the raw text so `--set workflow.route=full` is a route,
@@ -164,6 +180,7 @@ async function readTomlLayer(path: string, fs: Fs): Promise<Record<string, unkno
 function invocationCustomization(
   defaults: Record<string, unknown> | null,
   assignments: Record<string, string>,
+  defaultsSource = "",
 ): Record<string, unknown> {
   const commandLayer: Record<string, unknown> = {};
   const assigned: string[] = [];
@@ -179,6 +196,19 @@ function invocationCustomization(
     assigned.push(path);
     const fallback = lookup(defaults ?? {}, path, "customization parameter");
     const value = typeof fallback === "string" && !/^\s*["']/.test(raw) ? raw : tomlLiteral(raw, path);
+    // Python's `type(value) is not type(default)` tells an int from a float, and
+    // `--set` is where the port can still tell: TOML's `2.0` is a float, and an
+    // int default refuses it. (`tomlLiteral` alone cannot — both spellings parse
+    // to the number 2 in JavaScript.)
+    if (
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      Number.isInteger(fallback) &&
+      DECIMAL_FLOAT_RE.test(raw.trim()) &&
+      defaultWrittenAsInt(defaultsSource, path)
+    ) {
+      throw new RenderError(`customization.${path} must be int, got float`);
+    }
     let target = commandLayer;
     const parts = path.split(".");
     for (const part of parts.slice(0, -1)) {
@@ -271,7 +301,7 @@ function requireReviewLayers(value: unknown, label: string): ReviewLayer[] {
       name: requireString(source.name ?? id, `${itemLabel}.name`),
       instruction: requireString(source.instruction, `${itemLabel}.instruction`, true),
     };
-    if ("when" in source) layer.when = requireString(source.when, `${itemLabel}.when`);
+    if (hasOwn(source, "when")) layer.when = requireString(source.when, `${itemLabel}.when`);
     return layer;
   });
 }
@@ -337,13 +367,13 @@ class ConfigTable extends Table {
   }
 
   resolve(name: string): unknown {
-    if (this.path === "config" && !(name in this.table)) {
+    if (this.path === "config" && !hasOwn(this.table, name)) {
       const [path, resolved] = resolveShortConfig(this.central, name, this.ctx.projectRoot);
       this.ctx.inputs[`config.${path}`] = resolved;
       return new Text(resolved, `config.${path}`);
     }
     const label = `${this.path}.${name}`;
-    if (!(name in this.table)) throw new RenderError(`missing config value \`${label.replace(/^config\./, "")}\``);
+    if (!hasOwn(this.table, name)) throw new RenderError(`missing config value \`${label.replace(/^config\./, "")}\``);
     const value = this.table[name];
     if (value && typeof value === "object" && !Array.isArray(value)) {
       return new ConfigTable(this.central, value as Record<string, unknown>, label, this.ctx);
@@ -369,8 +399,8 @@ class CustomizationTable extends Table {
   resolve(name: string): unknown {
     const path = `${this.path}.${name}`;
     if (this.defaults === null) throw new RenderError(`\`${path}\` requires customize.toml`);
-    if (!(name in this.defaults)) throw new RenderError(`missing customization parameter \`${path}\``);
-    if (!(name in this.values)) throw new RenderError(`missing customization value \`${path}\``);
+    if (!hasOwn(this.defaults, name)) throw new RenderError(`missing customization parameter \`${path}\``);
+    if (!hasOwn(this.values, name)) throw new RenderError(`missing customization value \`${path}\``);
     const fallback = this.defaults[name];
     const value = this.values[name];
     const label = `customization.${path}`;
@@ -489,6 +519,19 @@ function pyEqual(a: unknown, b: unknown): boolean {
   if (b instanceof Text) b = b.value;
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((item, index) => pyEqual(item, b[index]));
   return a === b;
+}
+
+/** `<` and friends: Python compares two numbers numerically and everything else
+ * through its ordering — the port has no richer one, so it uses the string form.
+ * A bool is an int, so `True < 2` holds. */
+function compareValues(a: unknown, b: unknown): number {
+  const isNumber = (value: unknown) => typeof value === "number" || typeof value === "boolean";
+  if (isNumber(a) && isNumber(b)) {
+    const [x, y] = [Number(a), Number(b)];
+    return x === y ? 0 : x < y ? -1 : 1;
+  }
+  const [x, y] = [toDisplay(a), toDisplay(b)];
+  return x === y ? 0 : x < y ? -1 : 1;
 }
 
 const FILTERS: Record<string, (value: unknown, args: unknown[]) => unknown> = {
@@ -642,7 +685,9 @@ function parseNodes(chunks: Chunk[], from: number, stop?: (body: string) => bool
       let expr: string | null = chunk.body.replace(/^if\s+/, "").trim();
       let cursor = i + 1;
       for (;;) {
-        const parsed = parseNodes(chunks, cursor, (body) => /^(elif|else|endif)\b/.test(body));
+        // Only a bare `else` ends a branch: `{% else if %}` is not a Jinja tag,
+        // and letting it through would silently make it an unconditional else.
+        const parsed = parseNodes(chunks, cursor, (body) => /^(elif\b|else\s*$|endif\b)/.test(body));
         branches.push({ expr, body: parsed.nodes });
         const tag = chunks[parsed.index];
         if (!tag || tag.kind !== "tag") throw new RenderError("unexpected end of template; missing endif");
@@ -915,7 +960,7 @@ function getAttribute(target: unknown, name: string, path: (e: Expr) => string, 
   }
   if (target instanceof Table) return target.resolve(name);
   if (target instanceof Text) return undefinedValue(`${path(expr)}`);
-  if (target && typeof target === "object" && !Array.isArray(target) && name in (target as Record<string, unknown>)) {
+  if (target && typeof target === "object" && !Array.isArray(target) && hasOwn(target, name)) {
     return (target as Record<string, unknown>)[name];
   }
   return undefinedValue(path(expr));
@@ -949,7 +994,7 @@ function evaluate(expr: Expr, scope: Scope, context: Record<string, unknown>): u
     case "literal":
       return expr.value;
     case "name":
-      return scope.has(expr.name) ? scope.get(expr.name) : expr.name in context ? context[expr.name] : undefinedValue(expr.name);
+      return scope.has(expr.name) ? scope.get(expr.name) : hasOwn(context, expr.name) ? context[expr.name] : undefinedValue(expr.name);
     case "attr":
       return getAttribute(evaluate(expr.target, scope, context), expr.name, expressionPath, expr);
     case "item": {
@@ -957,8 +1002,13 @@ function evaluate(expr: Expr, scope: Scope, context: Record<string, unknown>): u
       const index = evaluate(expr.index, scope, context);
       if (isUndefined(target)) usedUndefined(target);
       if (target instanceof Table) return target.resolve(String(index));
-      if (Array.isArray(target) && typeof index === "number") return target[index];
-      if (target && typeof target === "object" && String(index) in (target as Record<string, unknown>)) {
+      // A list index is Python's: negative counts from the end, an out-of-range
+      // one is a miss (`undefined`), which a use then raises on.
+      if (Array.isArray(target) && typeof index === "number") {
+        const at = index < 0 ? target.length + index : index;
+        return at >= 0 && at < target.length ? target[at] : undefinedValue(expressionPath(expr));
+      }
+      if (target && typeof target === "object" && hasOwn(target, String(index))) {
         return (target as Record<string, unknown>)[String(index)];
       }
       return undefinedValue(`${expressionPath(expr)}`);
@@ -998,11 +1048,19 @@ function evaluate(expr: Expr, scope: Scope, context: Record<string, unknown>): u
       if (isUndefined(left)) usedUndefined(left);
       if (isUndefined(right)) usedUndefined(right);
       if (expr.op === "~") return toDisplay(left) + toDisplay(right);
+      // Python's `+`: two strings concatenate, two numbers add, and every other
+      // pair is the TypeError Jinja surfaces as a template error — `'a' + 'b'`
+      // is 'ab', never NaN. A bool is an int (`True + 1` is 2).
+      if (expr.op === "+") {
+        const isString = (value: unknown) => typeof value === "string" || value instanceof Text;
+        const isNumber = (value: unknown) => typeof value === "number" || typeof value === "boolean";
+        if (isString(left) && isString(right)) return toDisplay(left) + toDisplay(right);
+        if (isNumber(left) && isNumber(right)) return Number(left) + Number(right);
+        throw new RenderError(`unsupported operand type(s) for +: ${pyTypeName(left)} and ${pyTypeName(right)}`);
+      }
       const a = Number(left);
       const b = Number(right);
       switch (expr.op) {
-        case "+":
-          return a + b;
         case "-":
           return a - b;
         case "*":
@@ -1030,13 +1088,13 @@ function evaluate(expr: Expr, scope: Scope, context: Record<string, unknown>): u
         case "not in":
           return !contains(right, left);
         case "<":
-          return toDisplay(left) < toDisplay(right);
+          return compareValues(left, right) < 0;
         case ">":
-          return toDisplay(left) > toDisplay(right);
+          return compareValues(left, right) > 0;
         case "<=":
-          return toDisplay(left) <= toDisplay(right);
+          return compareValues(left, right) <= 0;
         default:
-          return toDisplay(left) >= toDisplay(right);
+          return compareValues(left, right) >= 0;
       }
     }
   }
@@ -1047,7 +1105,7 @@ function contains(haystack: unknown, needle: unknown): boolean {
   if (haystack instanceof Text) return haystack.value.includes(toDisplay(needle));
   if (typeof haystack === "string") return haystack.includes(toDisplay(needle));
   if (Array.isArray(haystack)) return haystack.some((item) => pyEqual(item, needle));
-  if (haystack && typeof haystack === "object") return String(toDisplay(needle)) in (haystack as Record<string, unknown>);
+  if (haystack && typeof haystack === "object") return hasOwn(haystack, String(toDisplay(needle)));
   return false;
 }
 
@@ -1322,11 +1380,12 @@ async function render(projectRoot: string, skillRoot: string, set: Record<string
   const customizePath = `${skillRoot}/customize.toml`;
   const hasCustomization = Object.keys(set).length > 0 || (await fs.exists(customizePath));
   const defaults = hasCustomization ? ((await readTomlLayer(customizePath, fs)) as Record<string, unknown>) : null;
+  const defaultsSource = hasCustomization && (await fs.exists(customizePath)) ? await fs.readText(customizePath) : "";
   await checkPersistentLayers(projectRoot, skillName, defaults, fs);
   let customization = hasCustomization ? await resolveCustomization(projectRoot, skillRoot, skillName, fs) : {};
   const supplied = new Set<string>();
   if (defaults !== null) {
-    const commandLayer = invocationCustomization(defaults, set);
+    const commandLayer = invocationCustomization(defaults, set, defaultsSource);
     customization = deepMerge(customization, commandLayer) as Record<string, unknown>;
     for (const leaf of leafPaths(commandLayer)) supplied.add(leaf);
   }
@@ -1345,7 +1404,7 @@ async function render(projectRoot: string, skillRoot: string, set: Record<string
   // destination collects the inputs, and the real pass renders the output.
   const probe = buildContext(`${namespace}/pending`);
   renderSources(sources, skillRoot, probe);
-  const unused = [...supplied].filter((path) => !(`customization.${path}` in probe.inputs)).sort();
+  const unused = [...supplied].filter((path) => !hasOwn(probe.inputs, `customization.${path}`)).sort();
   if (unused.length) throw new RenderError(`invocation override not used by this render: ${unused.join(", ")}`);
 
   const identity = {

@@ -81,4 +81,29 @@ describe("roster port", () => {
     expect(r.exitCode).toBe(2);
     expect(r.stdout).toContain("give --skill or --root");
   });
+
+  /** A code is a dict key: `constructor` and `__proto__` are codes like any
+   * other, so a roster holding them loads instead of reading Object.prototype
+   * (`constructor` as "already defined", `__proto__` as a dropped member). */
+  it("reads member and group names that Object.prototype also carries", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/skills/mod-a");
+    await fs.writeText("/p/skills/mod-a/bmod.toml", '[bmod]\ncode = "mod-a"\nskills = ["mod-a"]\n');
+    await fs.writeText(
+      "/p/skills/mod-a/roster.toml",
+      '[[members]]\ncode = "constructor"\nname = "Constructor"\n\n' +
+        '[[members]]\ncode = "__proto__"\nname = "Proto"\n\n' +
+        '[[groups]]\nid = "__proto__"\nname = "The prototype club"\n',
+    );
+
+    const { collect } = await import("../roster");
+    const report = await collect(fs, ["/p/skills"]);
+
+    expect(report.problems).toEqual([]);
+    expect(Object.keys(report.members).sort()).toEqual(["__proto__", "constructor"]);
+    expect(report.members["constructor"].name).toBe("Constructor");
+    expect(report.members["__proto__"].name).toBe("Proto");
+    expect(report.groups).toHaveLength(1);
+    expect((report.groups[0] as Record<string, unknown>).id).toBe("__proto__");
+  });
 });

@@ -1,7 +1,7 @@
 import { parse as parseToml } from "smol-toml";
 import type { Fs } from "./fs";
 import { compareStrings, isDirectory, isFile, pyJson, pyJsonString, pyRepr } from "./knowledge";
-import { splitFlag, usageError, type PortResult } from "./compat";
+import { hasOwn, splitFlag, usageError, type PortResult } from "./compat";
 
 /**
  * Port of `skills/bmad-toolsmith/scripts/init_skill.py` — scaffold a new skill
@@ -67,7 +67,8 @@ function stripQuotes(value: string): string {
 export function parseSkillFrontmatter(content: string): { meta: Record<string, string> | null; body: string } {
   const { block, body } = frontmatterBlock(content);
   if (block === null) return { meta: null, body };
-  const result: Record<string, string> = {};
+  // A `__proto__` key in a frontmatter is a field like any other.
+  const result: Record<string, string> = Object.create(null);
   let key: string | null = null;
   let value = "";
   for (const line of block.split("\n")) {
@@ -192,14 +193,16 @@ async function readBmod(
     findings.push(finding("bmod.toml", 1, "bmod-invalid", text, "fix the TOML"));
     return { data: null, status: "invalid" };
   }
-  if (!("skill" in data) && !("bmod" in data)) {
+  if (!hasOwn(data, "skill") && !hasOwn(data, "bmod")) {
     findings.push(finding("bmod.toml", 1, "bmod-tables", "neither [skill] nor [bmod]", "add a [skill] table"));
     return { data, status: "invalid" };
   }
   return { data, status: "ok" };
 }
 
-/** Every file under a folder, sorted the way `sorted(dir.rglob("*"))` sorts. */
+/** Every file under a folder, sorted the way `sorted(dir.rglob("*"))` sorts.
+ * A symlinked directory that points at an ancestor re-lists it under ever
+ * longer paths, so the walk remembers the real paths it has been in. */
 export async function walkFiles(fs: Fs, root: string, skip: (rel: string[]) => boolean = () => false): Promise<string[]> {
   const out: string[] = [];
   const walk = async (dir: string, rel: string[]): Promise<void> => {
@@ -207,8 +210,10 @@ export async function walkFiles(fs: Fs, root: string, skip: (rel: string[]) => b
       const path = `${dir}/${name}`;
       const parts = [...rel, name];
       if (skip(parts)) continue;
-      if (await isDirectory(fs, path)) await walk(path, parts);
-      else out.push(path);
+      if (await isDirectory(fs, path)) {
+        // `rglob` lists a symlinked directory and never descends into it.
+        if (!(await fs.isSymlink(path))) await walk(path, parts);
+      } else out.push(path);
     }
   };
   await walk(root, []);
@@ -218,7 +223,7 @@ export async function walkFiles(fs: Fs, root: string, skip: (rel: string[]) => b
 async function check(fs: Fs, skillDir: string, anyName: boolean): Promise<Record<string, unknown>> {
   const findings: Record<string, unknown>[] = [];
   const bmod = await readBmod(fs, skillDir, findings);
-  const isRecord = bmod.data !== null && "bmod" in bmod.data && !("skill" in bmod.data);
+  const isRecord = bmod.data !== null && hasOwn(bmod.data, "bmod") && !hasOwn(bmod.data, "skill");
 
   const skillPath = `${skillDir}/SKILL.md`;
   if (!(await isFile(fs, skillPath))) {

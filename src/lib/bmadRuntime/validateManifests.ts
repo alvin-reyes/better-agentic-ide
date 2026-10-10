@@ -1,4 +1,5 @@
 import { parse as parseToml } from "smol-toml";
+import { absolutePath } from "./compat";
 import type { Fs } from "./fs";
 import {
   HELP_NAME,
@@ -1281,7 +1282,9 @@ export async function validateManifests(
       return usageError(`unrecognized arguments: ${token}`);
     }
   }
-  const root = resolvePath(projectRoot ?? (typeof process !== "undefined" ? process.cwd() : "."));
+  // `args.project_root.resolve()`: `.` is the folder the caller stands in, and
+  // an empty result would name nothing at all.
+  const root = absolutePath(projectRoot ?? ".");
   const report = await checkRepo(fs, root);
   if (report.problems.length) {
     return {

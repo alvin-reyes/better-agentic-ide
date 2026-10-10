@@ -390,6 +390,16 @@ describe("tickets port on Windows-shaped paths", () => {
     expect(out.ready_to_start[0].epic).toBe("epic-demo");
   });
 
+  /** A slug is a dict key: an epic slugged `constructor` is an epic like any
+   * other, not a collision with Object.prototype's own member. */
+  it("reads an epic slug that Object.prototype also carries", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [{ id: 1, slug: "constructor" }], stories: [] });
+    const r = await tickets(["next", "--project-root", "/p"], fs);
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(r.stdout).folder).toBe("initiative-demo");
+  });
+
   it("refuses a store folder that is genuinely missing, naming the folded path", async () => {
     const fs = memFs();
     await seedTicketTree(fs, ROOT, { epics: [], stories: [] });

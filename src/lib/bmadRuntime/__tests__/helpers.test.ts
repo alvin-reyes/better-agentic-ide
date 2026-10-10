@@ -310,6 +310,46 @@ describe("runTriggers against a real harness", () => {
     }
   }, 60_000);
 
+  /** The project's resolver merges the override layers deeply: a personal
+   * `[workflow.harness] env` is a layer over the team's `command`, not a
+   * replacement for the whole table. */
+  it("merges the team and personal harness layers instead of replacing one with the other", async () => {
+    const { root, skill, queries, out } = await tree();
+    try {
+      const fs = await import("node:fs/promises");
+      await fs.mkdir(join(root, "_bmad", "custom"), { recursive: true });
+      await fs.writeFile(
+        join(root, "_bmad", "custom", "bmad-eval.toml"),
+        '[workflow.harness]\ncommand = ["/bin/sh", "-c", \'printf %s "$ADE_MARKER"; printf %s "{prompt}" >/dev/null\', "{prompt}"]\n',
+        "utf8",
+      );
+      await fs.writeFile(
+        join(root, "_bmad", "custom", "bmad-eval.user.toml"),
+        '[workflow.harness.env]\nADE_MARKER = "kept-from-the-team-command"\n',
+        "utf8",
+      );
+      const r = await helpers.runTriggers(
+        ["--skill-path", skill, "--queries", queries, "--output-dir", out, "--runs-per-query", "1"],
+        realFs(),
+      );
+      expect(r.exitCode).toBe(0);
+      const runs = await readdir(out);
+      const run = JSON.parse(await readFile(join(out, runs[0], "run.json"), "utf8"));
+      expect(run.harness).toBe("customization workflow.harness");
+      expect(run.command).toEqual([
+        "/bin/sh",
+        "-c",
+        'printf %s "$ADE_MARKER"; printf %s "{prompt}" >/dev/null',
+        "{prompt}",
+      ]);
+      // The personal layer's env reached the run: the command printed it.
+      const transcript = await readFile(join(out, runs[0], "queries", "q000-r1", "transcript.jsonl"), "utf8");
+      expect(transcript).toContain("kept-from-the-team-command");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("stages a skill per attempt, detects the canary, and scores the queries", async () => {
     const { root, skill, queries, out } = await tree();
     try {
@@ -392,6 +432,51 @@ describe("the dialect pieces the ports had to bring themselves", () => {
     expect(data.empty).toBeNull();
   });
 
+  /** PyYAML reads a flow collection wherever a value goes: `key: {a: 1}` is a
+   * mapping entry whose value is a flow mapping, and `- {a: 1}` a one-entry
+   * sequence. The block-mapping refusal is for an inline `key: a: b` only. */
+  it("reads flow mappings and sequences as values", async () => {
+    const { loadYaml } = await import("../compat");
+    expect(loadYaml("key: {a: 1}\n")).toEqual({ key: { a: 1 } });
+    expect(loadYaml("key: {a: 1, b: [2, 3]}\n")).toEqual({ key: { a: 1, b: [2, 3] } });
+    expect(loadYaml("- {a: 1}\n")).toEqual([{ a: 1 }]);
+    expect(loadYaml("key: [1, 2]\n")).toEqual({ key: [1, 2] });
+    expect(loadYaml("key:\n  a: 1\n")).toEqual({ key: { a: 1 } });
+    expect(() => loadYaml("key: a: b\n")).toThrow(/own line/);
+  });
+
+  /** The join is the host's, so Windows hands back `\` separators: the
+   * containment test folds them, or every nested path "escapes" there. */
+  it("covers Windows-shaped paths in the workspace containment test", async () => {
+    const { contained, containedPath } = await import("../runTriggers");
+    expect(containedPath("C:\\a\\repo", "C:\\a\\repo\\sub\\step.md")).toBe(true);
+    expect(containedPath("C:\\a\\repo", "C:\\a\\repo")).toBe(true);
+    expect(containedPath("C:\\", "C:\\a\\step.md")).toBe(true);
+    expect(containedPath("C:\\a\\repo", "C:\\a\\other\\step.md")).toBe(false);
+    expect(containedPath("C:\\a\\repo", "C:\\a\\repo2\\step.md")).toBe(false);
+    expect(containedPath("/a/repo", "/a/repo/sub/step.md")).toBe(true);
+    // The host's own join, on this host: `../evil` leaves the workspace.
+    expect(contained("/root", "sub/step.md")).toBe("/root/sub/step.md");
+    expect(() => contained("/root", "../evil")).toThrow(/escapes the workspace/);
+  });
+
+  /** A code is a dict key: `constructor`, `toString` and `__proto__` are codes
+   * like any other, and assigning one must not hit Object.prototype instead. */
+  it("keeps a party code that Object.prototype also carries", async () => {
+    const { buildCollective } = await import("../resolveParty");
+    const { buildPool } = await import("../resolvePersonas");
+    for (const code of ["constructor", "__proto__", "toString"]) {
+      const agents = { [code]: { code, name: code, icon: "", title: "", description: "", persona: "", source: "installed" } };
+      const collective = buildCollective(agents, [{ code }]);
+      expect(Object.keys(collective.collective), code).toEqual([code]);
+      expect(collective.collective[code], code).toMatchObject({ code });
+      expect(collective.index.get(code), code).toBe(code);
+      const pool = buildPool(agents, [{ code }]);
+      expect(Object.keys(pool.pool), code).toEqual([code]);
+      expect(pool.pool[code], code).toMatchObject({ code, source: "custom" });
+    }
+  });
+
   it("reads CSV the way csv.DictReader did", async () => {
     const { csvDictRows } = await import("../compat");
     const rows = csvDictRows('a,b,c\n1,"two, and a\nnewline",\n"",2\n');
@@ -399,6 +484,88 @@ describe("the dialect pieces the ports had to bring themselves", () => {
       { a: "1", b: "two, and a\nnewline", c: "" },
       { a: "", b: "2", c: null },
     ]);
+  });
+
+  it("writes a slashless --out path without inventing a folder", async () => {
+    // `Path("page.html").parent` is the working directory: slicing before the
+    // last `/` would make the junk folder `page.htm`.
+    const fs = memFs();
+    await seed(fs);
+    const r = await helpers.brain(
+      ["--file", "/p/catalog/brain.csv", "--extra", "/p/catalog/extra.json", "html", "--out", "page.html"],
+      fs,
+    );
+    expect(r.exitCode).toBe(0);
+    expect(await fs.exists("page.html")).toBe(true);
+    expect(await fs.exists("page.htm")).toBe(false);
+  });
+
+  /** `wake`'s activity scan walks the sanctum: a directory that links back to an
+   * ancestor is listed by the OS, so a walk without a visited set re-lists the
+   * same folder under ever longer paths. The listing below stops answering
+   * after 200 folders, so a missing guard fails the assertion instead of
+   * hanging the test. */
+  it("lists a symlinked directory in wake without descending into it", async () => {
+    const base = memFs();
+    await seed(base);
+    const memory = "/p/_bmad/memory/demo-agent/memory";
+    const link = `${memory}/loop`;
+    const through = (p: string) =>
+      p === link ? memory : p.startsWith(`${link}/`) ? `${memory}${p.slice(link.length)}` : p;
+    const visited: string[] = [];
+    const fs: Fs = {
+      ...base,
+      readText: (p) => base.readText(through(p)),
+      writeText: (p, body) => base.writeText(through(p), body),
+      append: (p, body) => base.append(through(p), body),
+      exists: (p) => base.exists(through(p)),
+      mkdir: (p) => base.mkdir(through(p)),
+      delete: (p) => base.delete(through(p)),
+      isSymlink: async (p) => p === link,
+      list: async (p) => {
+        visited.push(p);
+        if (visited.length > 200) return [];
+        const entries = await base.list(through(p));
+        return p === memory && !entries.includes("loop") ? [...entries, "loop"] : entries;
+      },
+    };
+
+    const r = await helpers.wake(["--skill-root", "/p/skills/demo-agent", "--pulse", "/p"], fs);
+    expect(r.exitCode).toBe(0);
+    // `is_dir()` follows the link, so the folder keeps its line (a link is
+    // counted by what it lists); `rglob` never descends, so nothing below the
+    // link is walked (its `sessions` subfolder gets no line).
+    expect(r.stdout).toContain("memory/loop/ (");
+    expect(r.stdout).not.toContain("memory/loop/sessions/");
+    expect(visited.length).toBeLessThan(100);
+  });
+
+  /** `Path(positional).resolve()`: `.` is the folder the caller stands in, and
+   * an empty root would aim the lookups at the filesystem root. */
+  it("reads `--project-root .` as the working directory, never the filesystem root", async () => {
+    const fs = memFs();
+    await fs.mkdir("/_bmad/custom");
+    await fs.writeText("/_bmad/custom/bmad-eval.toml", '[workflow.harness]\ncommand = ["/bin/sh", "{prompt}"]\n');
+    await fs.mkdir("/p/skills/bmad-demo");
+    await fs.writeText(
+      "/p/skills/bmad-demo/SKILL.md",
+      "---\nname: bmad-demo\ndescription: Use when a demo is wanted.\n---\n\n# Demo\n",
+    );
+    await fs.writeText("/p/queries.json", "[]");
+    const { mkdtemp } = await import("node:fs/promises");
+    const out = await mkdtemp(join(tmpdir(), "ade-triggers-dot-"));
+    try {
+      const r = await helpers.runTriggers(
+        ["--skill-path", "/p/skills/bmad-demo", "--queries", "/p/queries.json", "--output-dir", out, "--project-root", "."],
+        fs,
+      );
+      // The harness at the filesystem root is not this project's: the root is
+      // the working directory, which has no `_bmad`.
+      expect(r.exitCode).toBe(3);
+      expect(JSON.parse(r.stdout).reason).toBe("no harness recorded");
+    } finally {
+      await rm(out, { recursive: true, force: true });
+    }
   });
 
   it("counts months the way the Python's date arithmetic did", async () => {

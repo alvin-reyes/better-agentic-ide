@@ -105,11 +105,18 @@ export function pyJson(value: unknown, opts: { ensureAscii?: boolean; indent?: n
  * and dot-segment-normalized, symlinks left alone. Windows roots (`C:\…`, a
  * UNC share) are recognized and folded to the runtime's `/` strings. */
 export function resolvePath(text: string): string {
-  return normalizePath(text);
+  const folded = normalizePath(text);
+  // `Path(".").resolve()` is the working directory, not an empty path.
+  return folded === "" ? normalizePath(process.cwd()) : folded;
 }
 
 export function dirname(p: string): string {
-  return pathDirname(p);
+  // `Path("roster").parent` is `Path(".")`, not the filesystem root: a slashless
+  // relative path names something in the working directory, and answering `/`
+  // would send the callers that scan it across the whole root.
+  const folded = toForwardSlashes(p);
+  if (!folded.includes("/")) return ".";
+  return pathDirname(folded);
 }
 
 /** Python `PurePosixPath(entry)`: empty and "." components are dropped. */

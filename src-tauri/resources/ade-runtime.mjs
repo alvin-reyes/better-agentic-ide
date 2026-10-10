@@ -540,14 +540,14 @@ function parseInlineTable(ctx) {
     }
     let k;
     let t = res;
-    let hasOwn = false;
+    let hasOwn2 = false;
     let errPtr = ctx.p;
     let key = parseKey(ctx);
     for (let i = 0; i < key.length; i++) {
       if (i)
-        t = hasOwn ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
+        t = hasOwn2 ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
       k = key[i];
-      if ((hasOwn = Object.hasOwn(t, k)) && (typeof t[k] !== "object" || seen.has(t[k]))) {
+      if ((hasOwn2 = Object.hasOwn(t, k)) && (typeof t[k] !== "object" || seen.has(t[k]))) {
         TomlError.x("trying to redefine an already defined value", ctx, errPtr);
       }
       let unsafe = k === "__proto__";
@@ -555,11 +555,11 @@ function parseInlineTable(ctx) {
         t = ctx.uk !== 1 && TomlError.x("document contains an unsafe property", ctx, errPtr);
         break;
       }
-      if (!hasOwn && unsafe) {
+      if (!hasOwn2 && unsafe) {
         Object.defineProperty(t, k, { enumerable: true, configurable: true, writable: true });
       }
     }
-    if (hasOwn) {
+    if (hasOwn2) {
       TomlError.x("trying to redefine an already defined value", ctx, errPtr);
     }
     skipVoid(ctx, true, true);
@@ -607,11 +607,11 @@ function peekTable(ctx, key, table, meta, type) {
   let t = table;
   let m = meta;
   let k;
-  let hasOwn = false;
+  let hasOwn2 = false;
   let state;
   for (let i = 0; i < key.length; i++) {
     if (i) {
-      t = hasOwn ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
+      t = hasOwn2 ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
       m = (state = m[k]).c;
       if (type === 0 && (state.t === 1 || state.t === 2)) {
         return null;
@@ -623,10 +623,10 @@ function peekTable(ctx, key, table, meta, type) {
       }
     }
     k = key[i];
-    if ((hasOwn = Object.hasOwn(t, k)) && m[k]?.t === 0 && m[k]?.d) {
+    if ((hasOwn2 = Object.hasOwn(t, k)) && m[k]?.t === 0 && m[k]?.d) {
       return null;
     }
-    if (!hasOwn) {
+    if (!hasOwn2) {
       let unsafe = k === "__proto__";
       if (ctx.uk && (unsafe || k === "constructor"))
         return false;
@@ -659,8 +659,8 @@ function peekTable(ctx, key, table, meta, type) {
   }
   state.d = true;
   if (type === 1) {
-    t = hasOwn ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
-  } else if (type === 0 && hasOwn) {
+    t = hasOwn2 ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
+  } else if (type === 0 && hasOwn2) {
     return null;
   }
   return [k, t, state.c];
@@ -744,6 +744,1003 @@ function parse(toml, options = {}) {
   }
   return res;
 }
+function isAbsolutePath(p) {
+  return p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
+}
+function toForwardSlashes(p) {
+  return p.includes("\\") ? p.replace(/\\/g, "/") : p;
+}
+function splitPathRoot(text) {
+  const unc = text.startsWith("\\\\");
+  const p = toForwardSlashes(text);
+  const drive = /^([A-Za-z]:)\//.exec(p);
+  if (drive) return { root: `${drive[1]}/`, rest: p.slice(drive[0].length) };
+  if (unc) return { root: "//", rest: p.replace(/^\/+/, "") };
+  if (p.startsWith("/")) return { root: "/", rest: p.replace(/^\/+/, "") };
+  return { root: "", rest: p };
+}
+function normalizePath$1(text, relativeEmpty = "") {
+  const { root, rest } = splitPathRoot(text);
+  const parts = [];
+  for (const segment of rest.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
+      else if (root === "") parts.push("..");
+      continue;
+    }
+    parts.push(segment);
+  }
+  const joined = parts.join("/");
+  if (root !== "") return `${root}${joined}`;
+  return joined === "" ? relativeEmpty : joined;
+}
+function joinPath(base, child) {
+  if (child === "") return normalizePath$1(base);
+  if (isAbsolutePath(child)) return normalizePath$1(child);
+  const trimmed = toForwardSlashes(base).replace(/\/+$/, "");
+  return normalizePath$1(trimmed === "" ? child : `${trimmed}/${child}`);
+}
+function pathDirname(p) {
+  const trimmed = toForwardSlashes(p).replace(/\/+$/, "");
+  if (/^[A-Za-z]:$/.test(trimmed)) return `${trimmed}/`;
+  const cut = trimmed.lastIndexOf("/");
+  const parent = cut <= 0 ? "/" : trimmed.slice(0, cut);
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent;
+}
+function pathBasename(p) {
+  const trimmed = toForwardSlashes(p).replace(/\/+$/, "");
+  const cut = trimmed.lastIndexOf("/");
+  return cut === -1 ? trimmed : trimmed.slice(cut + 1);
+}
+function isTable$3(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function pyRepr$4(value) {
+  if (typeof value === "string") {
+    const quote = value.includes("'") && !value.includes('"') ? '"' : "'";
+    let out2 = quote;
+    for (const ch of value) {
+      if (ch === "\\") out2 += "\\\\";
+      else if (ch === quote) out2 += "\\" + quote;
+      else if (ch === "\n") out2 += "\\n";
+      else if (ch === "\r") out2 += "\\r";
+      else if (ch === "	") out2 += "\\t";
+      else out2 += ch;
+    }
+    return out2 + quote;
+  }
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (value === void 0 || value === null) return "None";
+  if (Array.isArray(value)) return "[" + value.map(pyRepr$4).join(", ") + "]";
+  const entries = Object.entries(value);
+  return "{" + entries.map(([k, v]) => `${pyRepr$4(k)}: ${pyRepr$4(v)}`).join(", ") + "}";
+}
+function pyJsonString$1(value, ensureAscii) {
+  let out2 = '"';
+  const escape = (code) => "\\u" + code.toString(16).padStart(4, "0");
+  for (const ch of value) {
+    const code = ch.codePointAt(0);
+    if (ch === '"') out2 += '\\"';
+    else if (ch === "\\") out2 += "\\\\";
+    else if (ch === "\n") out2 += "\\n";
+    else if (ch === "\r") out2 += "\\r";
+    else if (ch === "	") out2 += "\\t";
+    else if (ch === "\b") out2 += "\\b";
+    else if (ch === "\f") out2 += "\\f";
+    else if (code < 32) out2 += escape(code);
+    else if (ensureAscii && code > 126) {
+      if (code > 65535) {
+        const pair = code - 65536;
+        out2 += escape(55296 + (pair >> 10)) + escape(56320 + (pair & 1023));
+      } else out2 += escape(code);
+    } else out2 += ch;
+  }
+  return out2 + '"';
+}
+function pyJson$2(value, opts = {}) {
+  const ensureAscii = opts.ensureAscii ?? false;
+  const indent = opts.indent;
+  const write = (value2, depth) => {
+    if (value2 === null || value2 === void 0) return "null";
+    if (typeof value2 === "boolean") return value2 ? "true" : "false";
+    if (typeof value2 === "number") return Number.isFinite(value2) ? String(value2) : "null";
+    if (typeof value2 === "string") return pyJsonString$1(value2, ensureAscii);
+    const open = indent === void 0 ? "" : "\n";
+    const close = indent === void 0 ? "" : "\n" + " ".repeat(indent * depth);
+    const inner = indent === void 0 ? "" : " ".repeat(indent * (depth + 1));
+    const separator = indent === void 0 ? ", " : ",\n";
+    if (Array.isArray(value2)) {
+      if (!value2.length) return "[]";
+      return "[" + open + value2.map((v) => inner + write(v, depth + 1)).join(separator) + close + "]";
+    }
+    const entries = Object.entries(value2).map(
+      ([k, v]) => inner + pyJsonString$1(k, ensureAscii) + ": " + write(v, depth + 1)
+    );
+    if (!entries.length) return "{}";
+    return "{" + open + entries.join(separator) + close + "}";
+  };
+  return write(value, 0);
+}
+function resolvePath(text) {
+  const folded = normalizePath$1(text);
+  return folded === "" ? normalizePath$1(process.cwd()) : folded;
+}
+function dirname(p) {
+  const folded = toForwardSlashes(p);
+  if (!folded.includes("/")) return ".";
+  return pathDirname(folded);
+}
+function purePosixParts(entry) {
+  return entry.split("/").filter((part) => part !== "" && part !== ".");
+}
+function posixName(parts) {
+  return parts.length ? parts[parts.length - 1] : "";
+}
+function folderName(path) {
+  return posixName(purePosixParts(toForwardSlashes(path)));
+}
+function posixStem(name) {
+  const cut = name.lastIndexOf(".");
+  return cut <= 0 ? name : name.slice(0, cut);
+}
+async function isDirectory$1(fs2, path) {
+  try {
+    await fs2.list(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function isFile$1(fs2, path) {
+  if (!await fs2.exists(path)) return false;
+  return !await isDirectory$1(fs2, path);
+}
+function missingPathError(path) {
+  return `[Errno 2] No such file or directory: '${path}'`;
+}
+function errorText(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function byteLength(text) {
+  if (!/[^\x00-\x7f]/.test(text)) return text.length;
+  return new TextEncoder().encode(text).length;
+}
+const MANIFEST_NAME$1 = "bmod.toml";
+const TOPICS_DIR = "help";
+const HELP_NAME = `${TOPICS_DIR}/help.md`;
+const ROSTER_NAME$1 = "roster.toml";
+const RETIRED_NAME$1 = "retired.toml";
+const MIGRATION_TABLE = "migration";
+const MIGRATION_FIELDS = ["module", "from", "to", "title", "summary", "detect", "guide"];
+const MIGRATION_NAME = /^migration-([0-9]+)\.toml$/;
+const READ_LIMIT = 1024 * 1024;
+async function readDocument(fs2, path, folder) {
+  const resolved = resolvePath(path);
+  const base = resolvePath(folder);
+  if (!(resolved === base || resolved.startsWith(base.endsWith("/") ? base : base + "/"))) {
+    throw new Error("resolves outside the skill folder");
+  }
+  if (!await fs2.exists(path)) throw new Error(missingPathError(path));
+  if (await isDirectory$1(fs2, path)) throw new Error("is not a regular file");
+  const text = await fs2.readText(path);
+  if (byteLength(text) > READ_LIMIT) throw new Error(`is larger than ${READ_LIMIT} bytes`);
+  return text;
+}
+function safeSkillRelative(entry) {
+  if (!entry || entry.includes("://") || entry.includes("\\") || entry.includes(":")) return null;
+  if (entry.startsWith("/")) return null;
+  const parts = purePosixParts(entry);
+  if (parts.includes("..") || posixName(parts) === "") return null;
+  return parts;
+}
+function installCommand(source, skill) {
+  if (typeof source !== "string" || !source.startsWith("github:")) return null;
+  const parts = source.slice("github:".length).split("/");
+  if (parts.length < 2 || !parts[0] || !parts[1]) return null;
+  return `npx skills add ${parts[0]}/${parts[1]} --skill ${skill}`;
+}
+function manifestProblem(folder, problem) {
+  return {
+    kind: "manifest",
+    skill: folder.slice(folder.lastIndexOf("/") + 1),
+    manifest: `${folder}/${MANIFEST_NAME$1}`,
+    problem
+  };
+}
+async function scan(fs2, roots) {
+  const folders = /* @__PURE__ */ new Map();
+  const modules = [];
+  const problems = [];
+  const recordCodes = /* @__PURE__ */ new Map();
+  const pending = [];
+  for (const root of roots) {
+    let entries;
+    try {
+      entries = await fs2.list(root);
+    } catch (error) {
+      const text = await fs2.exists(root) ? errorText(error) : missingPathError(root);
+      problems.push({ kind: "root", root, problem: `cannot read root ${root}: ${text}` });
+      continue;
+    }
+    entries.sort(compareStrings);
+    for (const name of entries) {
+      const folder = `${root}/${name}`;
+      if (!await isDirectory$1(fs2, folder)) continue;
+      if (folders.has(name)) continue;
+      folders.set(name, folder);
+      const manifest = `${folder}/${MANIFEST_NAME$1}`;
+      if (!await isFile$1(fs2, manifest)) continue;
+      let data;
+      try {
+        data = parse(await fs2.readText(manifest));
+      } catch (error) {
+        problems.push(manifestProblem(folder, `cannot use ${manifest}: ${errorText(error)}`));
+        continue;
+      }
+      if (!("bmod" in data) && !("skill" in data)) {
+        problems.push(manifestProblem(folder, `${manifest} has neither a [bmod] nor a [skill] table`));
+        continue;
+      }
+      let skill = isTable$3(data.skill) ? data.skill : null;
+      if ("skill" in data && !isTable$3(data.skill)) {
+        problems.push(manifestProblem(folder, `${manifest}: 'skill' is not a table`));
+        skill = null;
+      }
+      if ("bmod" in data) {
+        const module = readRecord(folder, data.bmod, skill !== null, problems);
+        if (module !== null) {
+          recordCodes.set(name, module.code);
+          const first = modules.find((other) => other.code.toLowerCase() === module.code.toLowerCase());
+          if (first === void 0) modules.push(module);
+          else {
+            problems.push({
+              kind: "module",
+              skill: name,
+              problem: `${name}: module ${pyRepr$4(module.code)} is already recorded by ${first.folder.slice(first.folder.lastIndexOf("/") + 1)}; ${first.folder.slice(first.folder.lastIndexOf("/") + 1)} is used`
+            });
+          }
+        }
+      }
+      if (skill !== null) pending.push({ root, folder, table: skill, ownRecord: "bmod" in data });
+    }
+  }
+  const skills = pending.map(
+    ({ root, folder, table, ownRecord }) => resolveSkill(root, folder, table, ownRecord, recordCodes)
+  );
+  problems.push(...absentRecords(skills, folders));
+  for (const entry of skills) delete entry.source;
+  return { folders, modules, skills, problems };
+}
+function readRecord(folder, table, hasSkill, problems) {
+  const manifest = `${folder}/${MANIFEST_NAME$1}`;
+  if (!isTable$3(table)) {
+    problems.push(manifestProblem(folder, `${manifest}: 'bmod' is not a table`));
+    return null;
+  }
+  const code = table.code;
+  if (typeof code !== "string" || !code) {
+    problems.push(manifestProblem(folder, `${manifest}: [bmod] has no usable 'code'`));
+    return null;
+  }
+  const listed2 = table.skills;
+  let members;
+  if (listed2 === void 0) {
+    members = hasSkill ? [folderName(folder)] : [];
+  } else if (Array.isArray(listed2) && listed2.every((name) => typeof name === "string" && name)) {
+    members = [...new Set(listed2)];
+  } else {
+    problems.push(manifestProblem(folder, `${manifest}: [bmod] 'skills' is not a list of skill names`));
+    members = [];
+  }
+  return { code, folder, table, skills: members };
+}
+function resolveSkill(root, folder, table, ownRecord, recordCodes) {
+  const name = folderName(folder);
+  let bmod = ownRecord ? name : table.bmod ?? null;
+  if (typeof bmod !== "string" || !bmod) bmod = null;
+  return {
+    skill: name,
+    module: bmod !== null && recordCodes.has(bmod) ? recordCodes.get(bmod) : null,
+    bmod,
+    root,
+    source: table.source
+  };
+}
+function absentRecords(skills, folders) {
+  const problems = [];
+  const byBmod = /* @__PURE__ */ new Map();
+  for (const entry of skills) {
+    if (entry.module !== null) continue;
+    if (entry.bmod === null) {
+      problems.push({
+        kind: "manifest",
+        skill: entry.skill,
+        problem: `${entry.skill}: [skill] does not name its module record under 'bmod'`
+      });
+      continue;
+    }
+    const group = byBmod.get(entry.bmod);
+    if (group) group.push(entry);
+    else byBmod.set(entry.bmod, [entry]);
+  }
+  for (const bmod of [...byBmod.keys()].sort(compareStrings)) {
+    const entries = byBmod.get(bmod);
+    const names = entries.map((entry) => entry.skill).sort(compareStrings);
+    const state = folders.has(bmod) ? "has no usable module record" : "is not installed";
+    const problem = {
+      kind: "module",
+      bmod,
+      skills: names,
+      problem: `module record ${bmod} ${state}; it is named by ${names.join(", ")}`
+    };
+    const command = folders.has(bmod) ? null : installCommand(entries[0].source, bmod);
+    if (command) {
+      problem.install = command;
+      problem.problem = `${problem.problem}; install it with \`${command}\``;
+    }
+    problems.push(problem);
+  }
+  return problems;
+}
+async function collect$1(fs2, roots, includeContent = false) {
+  const found = await scan(fs2, roots);
+  const problems = found.problems;
+  const documents = /* @__PURE__ */ new Map();
+  for (const module of found.modules) {
+    const declared = module.table.knowledge ?? [];
+    if (!Array.isArray(declared)) {
+      problems.push({
+        kind: "knowledge",
+        skill: folderName(module.folder),
+        problem: "[bmod] 'knowledge' is not a list"
+      });
+      continue;
+    }
+    let entries = declared;
+    if (await isFile$1(fs2, `${module.folder}/${HELP_NAME}`)) entries = [{ path: HELP_NAME }, ...entries];
+    for (const entry of entries) {
+      await recordDocument(fs2, documents, problems, found.folders, module, entry, includeContent);
+    }
+  }
+  const topics = [];
+  for (const module of found.modules) {
+    for (const topic of await moduleTopics(fs2, module, problems)) {
+      if (!documents.has(`${module.code}\0${topic.path}`)) topics.push(topic);
+    }
+  }
+  const migrations = [];
+  for (const module of found.modules) migrations.push(...await moduleMigrations(fs2, module, problems));
+  return {
+    roots: roots.map((root) => root),
+    skills: [...found.skills].sort((a, b) => compareStrings(String(a.skill), String(b.skill))),
+    documents: [...documents.values()].sort(
+      (a, b) => compareStrings(a.module, b.module) || compareStrings(a.path, b.path)
+    ),
+    topics: [...topics].sort((a, b) => compareStrings(a.module, b.module) || compareStrings(a.path, b.path)),
+    migrations: [...migrations].sort(
+      (a, b) => compareStrings(a.module, b.module) || migrationNumber(a.path) - migrationNumber(b.path)
+    ),
+    problems
+  };
+}
+async function recordDocument(fs2, documents, problems, folders, module, entry, includeContent) {
+  const own = folderName(module.folder);
+  const name = isTable$3(entry) ? entry.path : void 0;
+  if (typeof name !== "string") {
+    problems.push({
+      kind: "knowledge",
+      skill: own,
+      problem: `knowledge entry ${pyRepr$4(entry)} has no path`
+    });
+    return;
+  }
+  const relative = safeSkillRelative(name);
+  if (relative === null) {
+    problems.push({
+      kind: "knowledge",
+      skill: own,
+      problem: `knowledge names unsafe path ${pyRepr$4(name)}`
+    });
+    return;
+  }
+  const covered = isTable$3(entry) ? entry.skills ?? "*" : "*";
+  let skills;
+  if (covered === "*") {
+    skills = [...module.skills];
+  } else if (Array.isArray(covered) && covered.every((skill) => typeof skill === "string" && skill)) {
+    skills = [...new Set(covered)];
+  } else {
+    problems.push({
+      kind: "knowledge",
+      skill: own,
+      problem: `knowledge entry ${pyRepr$4(name)}: 'skills' is neither "*" nor a list of skill names`
+    });
+    return;
+  }
+  const key = `${module.code}\0${relative.join("/")}`;
+  if (documents.has(key)) {
+    problems.push({ kind: "knowledge", skill: own, problem: `knowledge names ${pyRepr$4(name)} twice` });
+    return;
+  }
+  const path = `${module.folder}/${relative.join("/")}`;
+  let text;
+  try {
+    text = await readDocument(fs2, path, module.folder);
+  } catch (error) {
+    problems.push({
+      kind: "document",
+      skill: own,
+      document: path,
+      problem: `${path}: ${errorText(error)}`
+    });
+    return;
+  }
+  const document = {
+    module: module.code,
+    path: relative.join("/"),
+    skills,
+    installed_skills: skills.filter((skill) => folders.has(skill)),
+    reported_from: own
+  };
+  if (includeContent) document.content = text;
+  documents.set(key, document);
+}
+async function moduleTopics(fs2, module, problems) {
+  const own = folderName(module.folder);
+  let names;
+  try {
+    names = await fs2.list(`${module.folder}/${TOPICS_DIR}`);
+  } catch {
+    return [];
+  }
+  names.sort(compareStrings);
+  const topics = [];
+  for (const name of names) {
+    if (!name.endsWith(".md") || name === "help.md") continue;
+    const path = `${module.folder}/${TOPICS_DIR}/${name}`;
+    try {
+      await readDocument(fs2, path, module.folder);
+    } catch (error) {
+      problems.push({
+        kind: "document",
+        skill: own,
+        document: path,
+        problem: `${path}: ${errorText(error)}`
+      });
+      continue;
+    }
+    topics.push({
+      module: module.code,
+      topic: posixStem(name),
+      path: `${TOPICS_DIR}/${name}`,
+      file: path
+    });
+  }
+  return topics;
+}
+async function moduleMigrations(fs2, module, problems) {
+  let names;
+  try {
+    names = await fs2.list(module.folder);
+  } catch {
+    return [];
+  }
+  names = names.filter((name) => name.endsWith(".toml") && ![MANIFEST_NAME$1, ROSTER_NAME$1, RETIRED_NAME$1].includes(name)).sort(compareStrings);
+  const migrations = [];
+  for (const name of names) {
+    const path = `${module.folder}/${name}`;
+    let data;
+    try {
+      data = parse(await readDocument(fs2, path, module.folder));
+    } catch (error) {
+      problems.push(migrationProblem(module.folder, path, errorText(error)));
+      continue;
+    }
+    if (!(MIGRATION_TABLE in data)) continue;
+    const table = data[MIGRATION_TABLE];
+    if (!isTable$3(table)) {
+      problems.push(migrationProblem(module.folder, path, "'migration' is not a table"));
+      continue;
+    }
+    const fields = {};
+    for (const field of MIGRATION_FIELDS) fields[field] = table[field];
+    const missing = MIGRATION_FIELDS.filter(
+      (field) => typeof fields[field] !== "string" || !fields[field].trim()
+    );
+    const checklist = table.checklist;
+    if (!Array.isArray(checklist) || !checklist.length || !checklist.every((item) => typeof item === "string" && item.trim())) {
+      missing.push("checklist");
+    }
+    if (missing.length) {
+      problems.push(migrationProblem(module.folder, path, `[migration] needs non-empty ${missing.join(", ")}`));
+      continue;
+    }
+    if (fields.module !== module.code) {
+      problems.push(
+        migrationProblem(
+          module.folder,
+          path,
+          `[migration] module ${pyRepr$4(fields.module)} is not this record's ${pyRepr$4(module.code)}`
+        )
+      );
+      continue;
+    }
+    if (migrationNumber(name) === null) {
+      problems.push(migrationProblem(module.folder, path, "a migration file must be named migration-<n>.toml"));
+      continue;
+    }
+    migrations.push({
+      module: module.code,
+      path: name,
+      file: path,
+      from: fields.from,
+      to: fields.to,
+      title: fields.title
+    });
+  }
+  const numbers = migrations.map((migration) => migrationNumber(migration.path));
+  const duplicated = new Set(numbers.filter((number) => numbers.filter((n) => n === number).length > 1));
+  for (const item of migrations) {
+    if (duplicated.has(migrationNumber(item.path))) {
+      problems.push(migrationProblem(module.folder, item.file, "another migration of this module has the same number"));
+    }
+  }
+  return migrations.filter((item) => !duplicated.has(migrationNumber(item.path))).sort((a, b) => migrationNumber(a.path) - migrationNumber(b.path));
+}
+function migrationNumber(name) {
+  const match = MIGRATION_NAME.exec(name);
+  return match ? Number(match[1]) : null;
+}
+function migrationProblem(folder, path, problem) {
+  return {
+    kind: "migration",
+    skill: folderName(folder),
+    document: path,
+    problem: `${path}: ${problem}`
+  };
+}
+function compareStrings(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+async function knowledge(argv, fs2) {
+  const roots = [];
+  let content = false;
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (token === "--root") {
+      const value = argv[++i];
+      if (value === void 0) return usageError$4("argument --root: expected one argument");
+      roots.push(value);
+    } else if (token.startsWith("--root=")) {
+      roots.push(token.slice("--root=".length));
+    } else if (token === "--content") {
+      content = true;
+    } else if (token === "--skill-root") {
+      const value = argv[++i];
+      if (value === void 0) return usageError$4("argument --skill-root: expected one argument");
+    } else if (!token.startsWith("--skill-root=")) {
+      return usageError$4(`unrecognized arguments: ${token}`);
+    }
+  }
+  if (!roots.length) return usageError$4("the following arguments are required: --root");
+  const report = await collect$1(fs2, roots, content);
+  return { stdout: `${pyJson$2(report)}
+`, exitCode: 0 };
+}
+function usageError$4(message) {
+  return { stdout: `knowledge: error: ${message}`, exitCode: 2 };
+}
+function csvDictRows(text) {
+  const rows = csvRows(text);
+  if (!rows.length) return [];
+  const header = rows[0];
+  return rows.slice(1).map((cells) => {
+    const row = {};
+    header.forEach((name, i) => {
+      row[name] = i < cells.length ? cells[i] : null;
+    });
+    if (cells.length > header.length) row["null"] = cells[header.length];
+    return row;
+  });
+}
+function csvRows(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted2 = false;
+  let fieldSeen = false;
+  let i = 0;
+  const push = () => {
+    row.push(field);
+    field = "";
+    fieldSeen = false;
+  };
+  const endRow = () => {
+    push();
+    if (!(row.length === 1 && row[0] === "")) rows.push(row);
+    row = [];
+  };
+  while (i < text.length) {
+    const ch = text[i];
+    if (quoted2) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 2;
+          continue;
+        }
+        quoted2 = false;
+        i += 1;
+        continue;
+      }
+      field += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' && field === "" && !fieldSeen) {
+      quoted2 = true;
+      fieldSeen = true;
+      i += 1;
+      continue;
+    }
+    if (ch === ",") {
+      push();
+      i += 1;
+      continue;
+    }
+    if (ch === "\n") {
+      endRow();
+      i += 1;
+      continue;
+    }
+    if (ch === "\r" && text[i + 1] === "\n") {
+      endRow();
+      i += 2;
+      continue;
+    }
+    field += ch;
+    fieldSeen = true;
+    i += 1;
+  }
+  if (field !== "" || row.length) endRow();
+  return rows;
+}
+class YamlError extends Error {
+}
+function scanLines(text) {
+  const out2 = [];
+  text.split(/\r\n|\n|\r/).forEach((raw, index) => {
+    const trimmed = raw.replace(/\s+$/, "");
+    const body = trimmed.trimStart();
+    if (body === "" || body.startsWith("#") || body === "---") return;
+    out2.push({ indent: trimmed.length - body.length, text: body, number: index + 1 });
+  });
+  return out2;
+}
+function stripComment(text) {
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else if (ch === "\\" && quote === '"') i += 1;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (ch === "#" && (i === 0 || /\s/.test(text[i - 1]))) return text.slice(0, i).replace(/\s+$/, "");
+  }
+  return text;
+}
+function unquote(raw, line) {
+  const text = raw.trim();
+  if (text.startsWith("'")) {
+    if (!text.endsWith("'") || text.length < 2) throw new YamlError(`unterminated single-quoted scalar at line ${line}`);
+    return text.slice(1, -1).replace(/''/g, "'");
+  }
+  if (text.startsWith('"')) {
+    if (!text.endsWith('"') || text.length < 2) throw new YamlError(`unterminated double-quoted scalar at line ${line}`);
+    let out2 = "";
+    for (let i = 1; i < text.length - 1; i++) {
+      const ch = text[i];
+      if (ch !== "\\") {
+        out2 += ch;
+        continue;
+      }
+      const next = text[++i];
+      if (next === "n") out2 += "\n";
+      else if (next === "t") out2 += "	";
+      else if (next === "r") out2 += "\r";
+      else out2 += next;
+    }
+    return out2;
+  }
+  return text;
+}
+function plainScalar(text) {
+  if (text === "" || text === "~" || /^null$/i.test(text)) return null;
+  if (/^(true|yes|on)$/i.test(text)) return true;
+  if (/^(false|no|off)$/i.test(text)) return false;
+  if (/^[-+]?[0-9]+$/.test(text)) return Number.parseInt(text, 10);
+  if (/^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*)(?:[eE][-+]?[0-9]+)?$/.test(text)) return Number.parseFloat(text);
+  return text;
+}
+function scalar$1(raw, line) {
+  const text = raw.trim();
+  if (text.startsWith("[") || text.startsWith("{")) return readFlow(text, line);
+  if (text.startsWith("'") || text.startsWith('"')) return unquote(text, line);
+  return plainScalar(text);
+}
+function readFlow(text, line) {
+  let i = 0;
+  const skip = () => {
+    while (i < text.length && /\s/.test(text[i])) i += 1;
+  };
+  const readPlain = (stops) => {
+    const start = i;
+    while (i < text.length && !stops.includes(text[i])) i += 1;
+    return text.slice(start, i).trim();
+  };
+  const readValue = () => {
+    skip();
+    const ch = text[i];
+    if (ch === "[" || ch === "{") {
+      const mapping = ch === "{";
+      const close = mapping ? "}" : "]";
+      i += 1;
+      const items = [];
+      const entries = {};
+      for (; ; ) {
+        skip();
+        if (i >= text.length) throw new YamlError(`unterminated flow collection at line ${line}`);
+        if (text[i] === close) {
+          i += 1;
+          return mapping ? entries : items;
+        }
+        if (text[i] === ",") {
+          i += 1;
+          continue;
+        }
+        if (mapping) {
+          skip();
+          const key = text[i] === "'" || text[i] === '"' ? String(readValue()) : readPlain(":," + close);
+          skip();
+          if (text[i] !== ":") throw new YamlError(`flow mapping entry without a value at line ${line}`);
+          i += 1;
+          entries[key] = readValue();
+        } else {
+          items.push(readValue());
+        }
+      }
+    }
+    if (ch === "'" || ch === '"') {
+      let out2 = "";
+      const quote = ch;
+      i += 1;
+      while (i < text.length) {
+        if (text[i] === quote) {
+          if (quote === "'" && text[i + 1] === "'") {
+            out2 += "'";
+            i += 2;
+            continue;
+          }
+          i += 1;
+          break;
+        }
+        if (text[i] === "\\" && quote === '"') {
+          const next = text[++i];
+          out2 += next === "n" ? "\n" : next === "t" ? "	" : next;
+          i += 1;
+          continue;
+        }
+        out2 += text[i++];
+      }
+      return out2;
+    }
+    return plainScalar(readPlain(",]}"));
+  };
+  const value = readValue();
+  skip();
+  if (i !== text.length) throw new YamlError(`trailing text after a flow collection at line ${line}`);
+  return value;
+}
+function loadYaml(text, file = "module.yaml") {
+  const lines = scanLines(text);
+  let at = 0;
+  const fail = (number, detail) => {
+    throw new YamlError(`${file}: ${detail} at line ${number}`);
+  };
+  const blockScalar = (header, indent) => {
+    const keep = header.endsWith("+");
+    const chomp = header.endsWith("-");
+    const folded = header.startsWith(">");
+    const parts = [];
+    while (at < lines.length && lines[at].indent > indent) {
+      parts.push({ indent: lines[at].indent, text: lines[at].text });
+      at += 1;
+    }
+    if (!parts.length) return "";
+    const base = parts[0].indent;
+    const body = parts.map((part) => " ".repeat(Math.max(0, part.indent - base)) + part.text).join("\n");
+    const value2 = folded ? body.replace(/([^\n])\n(?!\n)/g, "$1 ") : body;
+    if (chomp) return value2;
+    return keep ? value2 + "\n\n" : value2 + "\n";
+  };
+  const isMappingLine = (line) => {
+    if (line.text.startsWith("- ") || line.text === "-") return false;
+    const text2 = stripComment(line.text);
+    return text2.includes(":");
+  };
+  const isFlowValue = (rest) => rest.startsWith("{") || rest.startsWith("[");
+  const parseNode = (indent) => {
+    if (at >= lines.length) return null;
+    if (lines[at].text.startsWith("- ") || lines[at].text === "-") return parseSequence(indent);
+    return parseMapping(indent);
+  };
+  const parseSequence = (indent) => {
+    const items = [];
+    while (at < lines.length && lines[at].indent === indent && (lines[at].text.startsWith("- ") || lines[at].text === "-")) {
+      const line = lines[at];
+      const rest = line.text === "-" ? "" : stripComment(line.text.slice(2)).trim();
+      at += 1;
+      if (rest === "") {
+        items.push(at < lines.length && lines[at].indent > indent ? parseNode(lines[at].indent) : null);
+        continue;
+      }
+      if (isMappingLine({ ...line, text: rest }) && !isFlowValue(rest)) items.push(parseMapping(indent + 2, [rest]));
+      else items.push(scalar$1(rest, line.number));
+    }
+    return items;
+  };
+  const parseMapping = (indent, leading = []) => {
+    const map = {};
+    let pending = leading;
+    for (; ; ) {
+      let text2;
+      let number;
+      if (pending.length) {
+        text2 = pending.shift();
+        number = lines[Math.max(0, at - 1)]?.number ?? 1;
+      } else {
+        if (at >= lines.length || lines[at].indent !== indent || !isMappingLine(lines[at])) return map;
+        const line = lines[at];
+        text2 = stripComment(line.text);
+        number = line.number;
+        at += 1;
+      }
+      const cut = text2.indexOf(":");
+      const key = unquote(text2.slice(0, cut), number).trim();
+      const rest = stripComment(text2.slice(cut + 1)).trim();
+      if (rest.startsWith("|") || rest.startsWith(">")) {
+        if (!/^[|>][+-]?$/.test(rest)) fail(number, `unsupported block scalar header ${pyRepr$4(rest)}`);
+        map[key] = blockScalar(rest, indent);
+        continue;
+      }
+      if (rest === "") {
+        if (at < lines.length && lines[at].indent > indent) map[key] = parseNode(lines[at].indent);
+        else if (at < lines.length && lines[at].indent === indent && (lines[at].text.startsWith("- ") || lines[at].text === "-"))
+          map[key] = parseSequence(indent);
+        else map[key] = null;
+        continue;
+      }
+      if (isMappingLine({ text: rest }) && !isFlowValue(rest)) {
+        fail(number, `a mapping value must start on its own line`);
+      }
+      map[key] = scalar$1(rest, number);
+    }
+  };
+  if (!lines.length) return null;
+  const value = parseNode(lines[0].indent);
+  if (at < lines.length) fail(lines[at].number, "cannot parse");
+  return value;
+}
+function parseDate(raw) {
+  const text = raw.trim();
+  const match = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/.exec(text);
+  if (!match) throw new Error(`unparseable date: ${pyRepr$4(text)} (want YYYY[-MM[-DD]])`);
+  const [, year, month, day] = match;
+  const date = { year: Number(year), month: Number(month ?? 1), day: Number(day ?? 1) };
+  if (!dayOfMonthExists(date)) throw new Error(`day is out of range for month`);
+  return date;
+}
+function dayOfMonthExists({ year, month, day }) {
+  if (month < 1 || month > 12) return false;
+  return day >= 1 && day <= daysInMonth(year, month);
+}
+function daysInMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+function addMonths(date, months) {
+  const total = date.month - 1 + months;
+  const year = date.year + Math.floor(total / 12);
+  const month = (total % 12 + 12) % 12 + 1;
+  return { year, month, day: Math.min(date.day, daysInMonth(year, month)) };
+}
+function formatDate(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${String(date.year).padStart(4, "0")}-${pad(date.month)}-${pad(date.day)}`;
+}
+function compareDates(a, b) {
+  return a.year - b.year || a.month - b.month || a.day - b.day;
+}
+function today() {
+  const now2 = /* @__PURE__ */ new Date();
+  return { year: now2.getFullYear(), month: now2.getMonth() + 1, day: now2.getDate() };
+}
+function absolutePath(text, cwd2 = process.cwd()) {
+  const path = toForwardSlashes(text);
+  return resolvePath(isAbsolutePath(path) ? path : `${toForwardSlashes(cwd2)}/${path}`);
+}
+function asciiFold(text) {
+  return text.normalize("NFKD").split("").filter((ch) => ch.codePointAt(0) < 128).join("");
+}
+function htmlEscape(text, quote = true) {
+  const out2 = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return quote ? out2.replace(/"/g, "&quot;").replace(/'/g, "&#x27;") : out2;
+}
+function pySplitLines(text) {
+  if (text === "") return [];
+  const lines = text.split(new RegExp("\\r\\n|[\\n\\r\\v\\f\\x1c-\\x1e\\x85\\u2028\\u2029]"));
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+function pySplitJoin(text) {
+  return text.split(/\s+/).filter(Boolean).join(" ");
+}
+function pyRound(value, digits = 0) {
+  const factor = 10 ** digits;
+  const scaled = value * factor;
+  const floor = Math.floor(scaled);
+  const diff = scaled - floor;
+  let rounded;
+  if (diff > 0.5) rounded = floor + 1;
+  else if (diff < 0.5) rounded = floor;
+  else rounded = floor % 2 === 0 ? floor : floor + 1;
+  return rounded / factor;
+}
+function usageError$3(script, message) {
+  return { stdout: `${script}: error: ${message}`, exitCode: 2 };
+}
+const BLOCK_RE = /\{if-([a-zA-Z0-9_-]+)\}([\s\S]*?)\{\/if-\1\}/;
+function processConditionals(text, truths) {
+  const kept = [];
+  const removed = [];
+  let current = text;
+  for (; ; ) {
+    const match = BLOCK_RE.exec(current);
+    if (match === null) break;
+    const condition = match[1];
+    const replacement = truths.has(condition) ? match[2] : "";
+    if (truths.has(condition)) {
+      if (!kept.includes(condition)) kept.push(condition);
+    } else if (!removed.includes(condition)) removed.push(condition);
+    current = current.slice(0, match.index) + replacement + current.slice(match.index + match[0].length);
+  }
+  return { text: current.replace(/\n{3,}/g, "\n\n"), kept, removed };
+}
+function processVariables(text, variables) {
+  const substituted = [];
+  let current = text;
+  for (const [name, value] of variables) {
+    const placeholder = `{${name}}`;
+    if (current.includes(placeholder)) {
+      current = current.split(placeholder).join(value);
+      substituted.push(name);
+    }
+  }
+  return { text: current, substituted };
+}
+function splitFlag$1(token) {
+  if (!token.startsWith("-") || token === "-" || token === "--") return [token, null];
+  const cut = token.indexOf("=");
+  if (cut < 0) return [token, null];
+  return [token.slice(0, cut), token.slice(cut + 1)];
+}
+const hasOwn = (record, key) => Object.prototype.hasOwnProperty.call(record, key);
 const KEYED_MERGE_FIELDS = ["code", "id"];
 function keyedMergeField(items) {
   if (items.length === 0 || !items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))) {
@@ -814,55 +1811,6 @@ async function resolveCustomization(projectRoot, skillRoot, skill, fs2) {
   if (userLayer) out2 = deepMerge(out2, userLayer);
   return out2;
 }
-function isAbsolutePath(p) {
-  return p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
-}
-function toForwardSlashes(p) {
-  return p.includes("\\") ? p.replace(/\\/g, "/") : p;
-}
-function splitPathRoot(text) {
-  const unc = text.startsWith("\\\\");
-  const p = toForwardSlashes(text);
-  const drive = /^([A-Za-z]:)\//.exec(p);
-  if (drive) return { root: `${drive[1]}/`, rest: p.slice(drive[0].length) };
-  if (unc) return { root: "//", rest: p.replace(/^\/+/, "") };
-  if (p.startsWith("/")) return { root: "/", rest: p.replace(/^\/+/, "") };
-  return { root: "", rest: p };
-}
-function normalizePath$1(text, relativeEmpty = "") {
-  const { root, rest } = splitPathRoot(text);
-  const parts = [];
-  for (const segment of rest.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
-      else if (root === "") parts.push("..");
-      continue;
-    }
-    parts.push(segment);
-  }
-  const joined = parts.join("/");
-  if (root !== "") return `${root}${joined}`;
-  return joined === "" ? relativeEmpty : joined;
-}
-function joinPath(base, child) {
-  if (child === "") return normalizePath$1(base);
-  if (isAbsolutePath(child)) return normalizePath$1(child);
-  const trimmed = toForwardSlashes(base).replace(/\/+$/, "");
-  return normalizePath$1(trimmed === "" ? child : `${trimmed}/${child}`);
-}
-function pathDirname(p) {
-  const trimmed = toForwardSlashes(p).replace(/\/+$/, "");
-  if (/^[A-Za-z]:$/.test(trimmed)) return `${trimmed}/`;
-  const cut = trimmed.lastIndexOf("/");
-  const parent = cut <= 0 ? "/" : trimmed.slice(0, cut);
-  return /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent;
-}
-function pathBasename(p) {
-  const trimmed = toForwardSlashes(p).replace(/\/+$/, "");
-  const cut = trimmed.lastIndexOf("/");
-  return cut === -1 ? trimmed : trimmed.slice(cut + 1);
-}
 const STATUSES = ["draft", "ready-for-dev", "in-progress", "in-review", "built", "done", "blocked", "dropped"];
 const STATES = ["backlog", "in-progress", "review", "done", "dropped"];
 const CONTAINER_STATUSES = ["in-progress", "done", "dropped"];
@@ -903,7 +1851,7 @@ function pyStr(value) {
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
   if (typeof value === "boolean") return value ? "True" : "False";
-  return pyRepr$4(value);
+  return pyRepr$3(value);
 }
 function pyOr(value, fallback) {
   return pyTruthy$1(value) ? value : fallback;
@@ -916,7 +1864,7 @@ function pyTruthy$1(value) {
   if (typeof value === "object") return Object.keys(value).length > 0;
   return true;
 }
-function pyRepr$4(value) {
+function pyRepr$3(value) {
   if (typeof value === "string") {
     const quote = value.includes("'") && !value.includes('"') ? '"' : "'";
     let out2 = quote;
@@ -933,10 +1881,10 @@ function pyRepr$4(value) {
   if (typeof value === "number") return String(value);
   if (typeof value === "boolean") return value ? "True" : "False";
   if (value === void 0 || value === null) return "None";
-  if (Array.isArray(value)) return "[" + value.map(pyRepr$4).join(", ") + "]";
+  if (Array.isArray(value)) return "[" + value.map(pyRepr$3).join(", ") + "]";
   return String(value);
 }
-function pyJsonString$1(value, ensureAscii) {
+function pyJsonString(value, ensureAscii) {
   let out2 = '"';
   const escape = (code) => "\\u" + code.toString(16).padStart(4, "0");
   for (const ch of value) {
@@ -958,14 +1906,14 @@ function pyJsonString$1(value, ensureAscii) {
   }
   return out2 + '"';
 }
-function pyJson$2(value, opts = {}) {
+function pyJson$1(value, opts = {}) {
   const ensureAscii = opts.ensureAscii ?? false;
   const indent = opts.indent;
   const write = (value2, depth) => {
     if (value2 === null || value2 === void 0) return "null";
     if (typeof value2 === "boolean") return value2 ? "true" : "false";
     if (typeof value2 === "number") return Number.isFinite(value2) ? String(value2) : "null";
-    if (typeof value2 === "string") return pyJsonString$1(value2, ensureAscii);
+    if (typeof value2 === "string") return pyJsonString(value2, ensureAscii);
     const open = indent === void 0 ? "" : "\n";
     const close = indent === void 0 ? "" : "\n" + " ".repeat(indent * depth);
     const inner = indent === void 0 ? "" : " ".repeat(indent * (depth + 1));
@@ -975,7 +1923,7 @@ function pyJson$2(value, opts = {}) {
       return "[" + open + value2.map((v) => inner + write(v, depth + 1)).join(separator) + close + "]";
     }
     const entries = Object.entries(value2).map(
-      ([k, v]) => inner + pyJsonString$1(k, ensureAscii) + ": " + write(v, depth + 1)
+      ([k, v]) => inner + pyJsonString(k, ensureAscii) + ": " + write(v, depth + 1)
     );
     if (!entries.length) return "{}";
     return "{" + open + entries.join(separator) + close + "}";
@@ -1010,7 +1958,7 @@ async function isDir(path, fs2) {
     return false;
   }
 }
-async function isFile$1(path, fs2) {
+async function isFile(path, fs2) {
   return await fs2.exists(path) && !await isDir(path, fs2);
 }
 async function readText$1(path, fs2) {
@@ -1030,14 +1978,14 @@ function parseFrontmatter(text, lenient = false) {
     const key = line.slice(0, at);
     const value = line.slice(at + 1).split("   #")[0].trim();
     const quotedValue = QUOTED_COMMENT_RE.exec(value);
-    data[key.trim()] = scalar$1(quotedValue ? quotedValue[1] : value);
+    data[key.trim()] = scalar(quotedValue ? quotedValue[1] : value);
   }
   return data;
 }
-function scalar$1(value) {
+function scalar(value) {
   if (value.startsWith("[") && value.endsWith("]")) {
     const inner = value.slice(1, -1).trim();
-    return inner === "" ? [] : inner.split(",").map((v) => scalar$1(v.trim()));
+    return inner === "" ? [] : inner.split(",").map((v) => scalar(v.trim()));
   }
   if (value.length >= 2 && value[0] === value[value.length - 1] && (value[0] === '"' || value[0] === "'")) {
     if (value[0] === '"') {
@@ -1083,7 +2031,7 @@ function asFlag(value) {
 }
 function oneOf(value, allowed, where, field) {
   if (value !== "" && !allowed.includes(value)) {
-    throw new TicketError(`${where}: ${field} ${pyRepr$4(value)} is not one of ${allowed.join(", ")}`);
+    throw new TicketError(`${where}: ${field} ${pyRepr$3(value)} is not one of ${allowed.join(", ")}`);
   }
   return value;
 }
@@ -1100,7 +2048,7 @@ function isRecord(value) {
 }
 async function loadBreakdown(folder, fs2) {
   const path = joinPath(folder, BREAKDOWN);
-  if (!await isFile$1(path, fs2)) return {};
+  if (!await isFile(path, fs2)) return {};
   const where = `${pathBasename(folder)}/${BREAKDOWN}`;
   let data;
   try {
@@ -1146,11 +2094,11 @@ async function loadBreakdown(folder, fs2) {
 async function loadContainer(folder, fs2) {
   const name = pathBasename(folder);
   const path = joinPath(folder, `${name}.md`);
-  if (!await isFile$1(path, fs2)) throw new TicketError(`${name}: no ${name}.md`);
+  if (!await isFile(path, fs2)) throw new TicketError(`${name}: no ${name}.md`);
   const fm = parseFrontmatter(await readText$1(path, fs2));
   if (!CONTAINER_TYPES.includes(fm["type"])) {
     throw new TicketError(
-      `${name}/${name}.md: type ${pyRepr$4(fm["type"] ?? null)} is not one of ${CONTAINER_TYPES.join(", ")}`
+      `${name}/${name}.md: type ${pyRepr$3(fm["type"] ?? null)} is not one of ${CONTAINER_TYPES.join(", ")}`
     );
   }
   const status = oneOf(fm["status"] ?? "", CONTAINER_STATUSES, `${name}/${name}.md`, "status");
@@ -1174,7 +2122,7 @@ async function loadFolder(folder, problems, fs2) {
     const n = e["id"];
     const kind = e["type"];
     if (!LEAF_TYPES.includes(kind)) {
-      throw new TicketError(`${where}/${BREAKDOWN}: entry ${n} type ${pyRepr$4(kind ?? null)} is not one of ${LEAF_TYPES.join(", ")}`);
+      throw new TicketError(`${where}/${BREAKDOWN}: entry ${n} type ${pyRepr$3(kind ?? null)} is not one of ${LEAF_TYPES.join(", ")}`);
     }
     if (rows.has(n)) throw new TicketError(`${where}/${BREAKDOWN}: two entries with id ${n}`);
     rows.set(n, {
@@ -1219,7 +2167,7 @@ async function loadFolder(folder, problems, fs2) {
       throw new TicketError(`${where}/${name}: frontmatter does not close`);
     }
     if (!LEAF_TYPES.includes(fm["type"])) {
-      if ("ticket" in fm) plans.push([name, fm]);
+      if (hasOwn(fm, "ticket")) plans.push([name, fm]);
       continue;
     }
     try {
@@ -1289,15 +2237,15 @@ function joinPlans(rows, plans, where, problems) {
       row = rows.find((r) => r["file"] === `${ticket}.md`);
     }
     if (row === void 0) {
-      problems.push(`${where}/${name}: ticket ${pyRepr$4(ticket)} names no entry or leaf file in ${where}; skipped`);
+      problems.push(`${where}/${name}: ticket ${pyRepr$3(ticket)} names no entry or leaf file in ${where}; skipped`);
       continue;
     }
-    if ("plan" in row) {
-      throw new TicketError(`${where}/${row["plan"]} and ${name} are both plans for ticket ${pyRepr$4(ticket)}`);
+    if (hasOwn(row, "plan")) {
+      throw new TicketError(`${where}/${row["plan"]} and ${name} are both plans for ticket ${pyRepr$3(ticket)}`);
     }
     const fields = {};
     for (const key of PLAN_FIELDS) fields[key] = pyStr(pyOr(fm[key] ?? "", ""));
-    if (!("assignee" in fm)) {
+    if (!hasOwn(fm, "assignee")) {
       fields["assignee"] = row["assignee"] ?? "";
     }
     try {
@@ -1305,7 +2253,7 @@ function joinPlans(rows, plans, where, problems) {
     } catch (e) {
       if (!(e instanceof TicketError)) throw e;
       problems.push(`${e.message}; the ticket reads as blocked until the plan is fixed`);
-      fields["blocked_reason"] = `${name} has an unknown status ${pyRepr$4(fields["status"])}`;
+      fields["blocked_reason"] = `${name} has an unknown status ${pyRepr$3(fields["status"])}`;
       fields["status"] = "blocked";
     }
     row["plan"] = name;
@@ -1323,7 +2271,7 @@ async function epicFolders(initiative, fs2) {
   const out2 = [];
   for (const name of names.filter((n) => n.startsWith("epic-")).sort()) {
     const dir = joinPath(initiative, name);
-    if (await isFile$1(joinPath(dir, `${name}.md`), fs2) || await isFile$1(joinPath(dir, BREAKDOWN), fs2)) out2.push(dir);
+    if (await isFile(joinPath(dir, `${name}.md`), fs2) || await isFile(joinPath(dir, BREAKDOWN), fs2)) out2.push(dir);
   }
   return out2;
 }
@@ -1332,7 +2280,7 @@ async function loadTree(folder, fs2) {
   let scope;
   let initiative;
   let folders;
-  if (epics.length > 0 || "epic" in await loadBreakdown(folder, fs2)) {
+  if (epics.length > 0 || hasOwn(await loadBreakdown(folder, fs2), "epic")) {
     scope = null;
     initiative = folder;
     folders = null;
@@ -1357,12 +2305,12 @@ async function loadTree(folder, fs2) {
     return pathBasename(a) < pathBasename(b) ? -1 : pathBasename(a) > pathBasename(b) ? 1 : 0;
   });
   if (folders === null) folders = [...epics, folder];
-  const epicIds = {};
+  const epicIds = /* @__PURE__ */ Object.create(null);
   for (const e of listed2) {
     if (Object.values(epicIds).includes(e["id"])) {
       throw new TicketError(`${pathBasename(initiative)}/${BREAKDOWN}: two epics with id ${e["id"]}`);
     }
-    if (e["slug"] in epicIds) {
+    if (hasOwn(epicIds, String(e["slug"]))) {
       throw new TicketError(`${pathBasename(initiative)}/${BREAKDOWN}: two epics with slug ${e["slug"]}`);
     }
     epicIds[e["slug"]] = e["id"];
@@ -1376,7 +2324,7 @@ async function loadTree(folder, fs2) {
     initiative,
     folders: Object.fromEntries(folders.map((f) => [pathBasename(f), f])),
     epicIds,
-    containers: {},
+    containers: /* @__PURE__ */ Object.create(null),
     tickets: tickets2,
     problems
   };
@@ -1403,13 +2351,13 @@ function resolveRefs(tree) {
     owners.set(tid.toLowerCase(), [...owners.get(tid.toLowerCase()) ?? [], key]);
   }
   for (const [tid, keys] of owners) {
-    if (keys.length > 1) throw new TicketError(`tracker_id ${pyRepr$4(tid)} is on more than one ticket: ${keys.join(", ")}`);
+    if (keys.length > 1) throw new TicketError(`tracker_id ${pyRepr$3(tid)} is on more than one ticket: ${keys.join(", ")}`);
   }
   const sibling = (t, ref2, where) => {
     const mates = tickets2.filter((o) => o["epic"] === t["epic"]);
     if (typeof ref2 === "number") {
       const hit = mates.find((o) => o["id"] === ref2);
-      if (hit === void 0) throw new TicketError(`${where}: after ${pyRepr$4(ref2)} names no entry in ${t["epic"]}`);
+      if (hit === void 0) throw new TicketError(`${where}: after ${pyRepr$3(ref2)} names no entry in ${t["epic"]}`);
       return hit["key"];
     }
     for (const o of mates) if (typeof o["id"] === "string" && o["id"] === ref2) return o["key"];
@@ -1422,27 +2370,27 @@ function resolveRefs(tree) {
     const keys = [];
     for (const ref2 of refs) {
       const text = pyStr(ref2);
-      let key = "id" in t ? sibling(t, ref2, where) : null;
+      let key = hasOwn(t, "id") ? sibling(t, ref2, where) : null;
       const m = CROSS_RE.exec(text);
       const slug = m ? slugs.get(asId(m[1])) ?? null : null;
       if (key === null && slug) {
         key = `${slug}/${asId(m[2])}`;
-        if (!byKey.has(key)) throw new TicketError(`${where}: after ${pyRepr$4(ref2)} names no entry in ${slug}`);
+        if (!byKey.has(key)) throw new TicketError(`${where}: after ${pyRepr$3(ref2)} names no entry in ${slug}`);
       }
       if (key === null && EPIC_RE.test(text)) {
-        if (!(text in containers)) throw new TicketError(`${where}: after ${pyRepr$4(ref2)} names no epic in this initiative`);
+        if (!hasOwn(containers, text)) throw new TicketError(`${where}: after ${pyRepr$3(ref2)} names no epic in this initiative`);
         key = text;
       }
       if (key === null) key = ids.get(text) ?? null;
       if (key === null && m) {
-        throw new TicketError(`${where}: after ${pyRepr$4(ref2)} names no epic id in this initiative's ${BREAKDOWN}`);
+        throw new TicketError(`${where}: after ${pyRepr$3(ref2)} names no epic id in this initiative's ${BREAKDOWN}`);
       }
       if (key === null && NAME_RE.test(text.endsWith(".md") ? text : `${text}.md`)) {
         throw new TicketError(
-          `${where}: after ${pyRepr$4(ref2)} matches no ticket in ${t["epic"]}; a file name names a pulled ticket in the same folder only: use the entry's id, or move a backlog ticket into the epic as an entry`
+          `${where}: after ${pyRepr$3(ref2)} matches no ticket in ${t["epic"]}; a file name names a pulled ticket in the same folder only: use the entry's id, or move a backlog ticket into the epic as an entry`
         );
       }
-      if (key === null) throw new TicketError(`${where}: after ${pyRepr$4(ref2)} matches no ticket`);
+      if (key === null) throw new TicketError(`${where}: after ${pyRepr$3(ref2)} matches no ticket`);
       if (!keys.includes(key)) keys.push(key);
     }
     return keys;
@@ -1563,7 +2511,7 @@ function ref(key, epic, tree) {
   if (!n) return slug;
   if (asId(n) === null) return key;
   if (slug === epic) return asId(n);
-  if (slug in tree.epicIds) return `${tree.epicIds[slug]}.${n}`;
+  if (hasOwn(tree.epicIds, slug)) return `${tree.epicIds[slug]}.${n}`;
   return key;
 }
 async function declaredAfter(tree, fs2) {
@@ -1571,14 +2519,14 @@ async function declaredAfter(tree, fs2) {
   const listed2 = (await loadBreakdown(tree.initiative, fs2))["epic"] ?? [];
   const slugs = listed2.map((e) => e["slug"]);
   const byId = new Map(Object.entries(tree.epicIds).map(([slug, i]) => [i, slug]));
-  const out2 = {};
+  const out2 = /* @__PURE__ */ Object.create(null);
   for (const e of listed2) {
     out2[e["slug"]] = [];
     for (const a of e["after"] ?? []) {
       const needed = byId.get(asId(a["epic"])) ?? a["epic"];
       if (!slugs.includes(needed)) {
         throw new TicketError(
-          `${pathBasename(tree.initiative)}/${BREAKDOWN}: ${e["slug"]} is after ${pyRepr$4(a["epic"] ?? null)}, which is no epic listed`
+          `${pathBasename(tree.initiative)}/${BREAKDOWN}: ${e["slug"]} is after ${pyRepr$3(a["epic"] ?? null)}, which is no epic listed`
         );
       }
       out2[e["slug"]].push({ epic: needed, needs: a["needs"] ?? "" });
@@ -1616,15 +2564,15 @@ function crossEpicAfter(tree, declared) {
   for (const [slug, c] of Object.entries(tree.containers)) {
     for (const b of c["after"]) {
       const needed = String(b).split("/")[0];
-      if (slug in declared && needed in declared) conflict(slug, needed);
+      if (hasOwn(declared, slug) && hasOwn(declared, needed)) conflict(slug, needed);
     }
   }
   for (const t of tree.tickets) {
-    if (!(t["epic"] in declared)) continue;
+    if (!hasOwn(declared, String(t["epic"]))) continue;
     const allowed = new Set(declared[t["epic"]].map((a) => a["epic"]));
     for (const b of t["after"]) {
       const needed = String(b).split("/")[0];
-      if (needed === t["epic"] || !(needed in declared)) continue;
+      if (needed === t["epic"] || !hasOwn(declared, needed)) continue;
       conflict(t["epic"], needed);
       if (!allowed.has(needed) && (tree.scope === null || tree.scope === t["epic"])) {
         undeclared.push({
@@ -1639,7 +2587,7 @@ function crossEpicAfter(tree, declared) {
   return { undeclared_after: undeclared, order_conflict: conflicts };
 }
 function rowRef(t, tree) {
-  if (t["id"] !== null && t["epic"] in tree.epicIds) return `${tree.epicIds[t["epic"]]}.${t["id"]}`;
+  if (t["id"] !== null && hasOwn(tree.epicIds, t["epic"])) return `${tree.epicIds[t["epic"]]}.${t["id"]}`;
   if (t["id"] !== null && t["epic"] === tree.scope) return pyStr(t["id"]);
   return t["file"];
 }
@@ -1702,7 +2650,7 @@ async function projectRootFor(args, start, fs2) {
 async function storeConfig(projectRoot, fs2) {
   if (projectRoot === null) return {};
   const path = joinPath(projectRoot, "_bmad/custom/ticketing-store-config.toml");
-  if (!await isFile$1(path, fs2)) return {};
+  if (!await isFile(path, fs2)) return {};
   const parsed = parse(await readText$1(path, fs2));
   const tickets2 = parsed["tickets"] ?? {};
   return isRecord(tickets2) ? tickets2 : {};
@@ -1929,9 +2877,9 @@ function resolveTicket(tree, text) {
   if (!hits.length && !/^\d+$/.test(needle)) {
     hits = inScope(tree).filter((t) => t["title"].toLowerCase().includes(low));
   }
-  if (!hits.length) throw new NoMatch(`no ticket matches ${pyRepr$4(needle)}`);
+  if (!hits.length) throw new NoMatch(`no ticket matches ${pyRepr$3(needle)}`);
   if (hits.length > 1) {
-    throw new TicketError(`${pyRepr$4(needle)} matches more than one ticket: ${hits.map((t) => refName(t)).join(", ")}`);
+    throw new TicketError(`${pyRepr$3(needle)} matches more than one ticket: ${hits.map((t) => refName(t)).join(", ")}`);
   }
   return hits[0];
 }
@@ -1967,7 +2915,7 @@ async function cmdFind(args, fs2) {
     references: entry["references"] ?? [],
     notes: entry["notes"] ?? [],
     unknown: t["unknown"] ?? "",
-    epic_file: await isFile$1(container, fs2) ? container : null,
+    epic_file: await isFile(container, fs2) ? container : null,
     story_file: t["file"] ? joinPath(home, t["file"]) : null,
     plan: planPath(t, tree)
   };
@@ -2005,14 +2953,14 @@ async function writeLeaf(t, tree, root, fs2) {
   const fields = [
     ["id", pyStr(t["id"])],
     ["type", t["type"]],
-    ["title", pyJsonString$1(pyStr(t["title"]), false)],
+    ["title", pyJsonString(pyStr(t["title"]), false)],
     ["parent", t["epic"]],
     ["covers", t["covers"].length ? `[${t["covers"].join(", ")}]` : ""],
     ["after", `[${after.join(", ")}]`],
     ["refined", t["refine"] ? "false" : ""],
     ["hitl", t["hitl"] ? "true" : "false"],
     ["risk", t["risk"]],
-    ["estimate", t["estimate"] !== "" ? pyJsonString$1(pyStr(t["estimate"]), false) : ""]
+    ["estimate", t["estimate"] !== "" ? pyJsonString(pyStr(t["estimate"]), false) : ""]
   ];
   const values = {
     frontmatter: fields.filter(([, v]) => v !== "").map(([k, v]) => `${k}: ${v}`).join("\n"),
@@ -2031,7 +2979,7 @@ async function writeLeaf(t, tree, root, fs2) {
   return path;
 }
 function quoted(value) {
-  const text = pyJsonString$1(value, false).replaceAll("   #", "   \\u0023");
+  const text = pyJsonString(value, false).replaceAll("   #", "   \\u0023");
   const separators = new RegExp(
     `[${String.fromCharCode(133, 8232, 8233)}]`,
     "g"
@@ -2106,7 +3054,7 @@ function mirrorValues(item, where) {
     for (const b of item["after"]) {
       const ok = typeof b === "number" && Number.isInteger(b) || typeof b === "string";
       if (!ok || typeof b === "string" && (b.includes(",") || !b)) {
-        throw new TicketError(`${where}: after takes ids and names without commas, not ${pyRepr$4(b)}`);
+        throw new TicketError(`${where}: after takes ids and names without commas, not ${pyRepr$3(b)}`);
       }
       parts.push(typeof b === "number" ? pyStr(b) : quoted(b));
     }
@@ -2116,8 +3064,8 @@ function mirrorValues(item, where) {
 }
 function byTrackerId(tree, trackerId) {
   const hits = tree.tickets.filter((t) => t["tracker_id"] && t["tracker_id"].toLowerCase() === trackerId.toLowerCase());
-  if (!hits.length) throw new NoMatch(`no ticket carries tracker_id ${pyRepr$4(trackerId)}`);
-  if (hits.length > 1) throw new TicketError(`tracker_id ${pyRepr$4(trackerId)} is on more than one ticket`);
+  if (!hits.length) throw new NoMatch(`no ticket carries tracker_id ${pyRepr$3(trackerId)}`);
+  if (hits.length > 1) throw new TicketError(`tracker_id ${pyRepr$3(trackerId)} is on more than one ticket`);
   return hits[0];
 }
 async function cmdMirror(args, stdin, fs2) {
@@ -2149,11 +3097,11 @@ async function cmdMirror(args, stdin, fs2) {
   for (const [index, item] of items.entries()) {
     const n = index + 1;
     const name = "ref" in item ? item["ref"] : item["tracker_id"];
-    const where = `item ${n} (${pyRepr$4(name)})`;
+    const where = `item ${n} (${pyRepr$3(name)})`;
     const unknown = Object.keys(item).filter((k) => !MIRROR_KEYS.includes(k));
     if (unknown.length) {
       const hint = unknown.includes("status") ? "; status is the build's and is never mirrored" : "";
-      throw new TicketError(`${where}: unknown key ${pyRepr$4(unknown[0])}${hint}`);
+      throw new TicketError(`${where}: unknown key ${pyRepr$3(unknown[0])}${hint}`);
     }
     if (typeof name === "boolean" || !(typeof name === "number" || typeof name === "string") || name === "") {
       throw new TicketError(`item ${n}: give a ref, or the tracker_id of a ticket that already carries it`);
@@ -2366,7 +3314,7 @@ function parseTicketArgs(command, rest, args) {
       [args.dir, args.ref, args.status] = positional.length === 3 ? positional : [void 0, ...positional];
       if (!STATUSES.includes(args.status)) {
         throw new UsageError$1(
-          `argument status: invalid choice: ${pyRepr$4(args.status)} (choose from ${STATUSES.join(", ")})`
+          `argument status: invalid choice: ${pyRepr$3(args.status)} (choose from ${STATUSES.join(", ")})`
         );
       }
       if (flags["--assignee"] !== void 0) args.assignee = flags["--assignee"];
@@ -2374,7 +3322,7 @@ function parseTicketArgs(command, rest, args) {
       return args;
     }
     default:
-      throw new UsageError$1(`argument command: invalid choice: ${pyRepr$4(command)}`);
+      throw new UsageError$1(`argument command: invalid choice: ${pyRepr$3(command)}`);
   }
 }
 const STORE_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -2389,13 +3337,13 @@ function mergeShallow(base, over) {
 async function storeConfigMerged(projectRoot, starters, fs2) {
   const path = joinPath(projectRoot, PROJECT_FILE);
   let project = {};
-  if (await isFile$1(path, fs2)) project = parse(await readText$1(path, fs2));
+  if (await isFile(path, fs2)) project = parse(await readText$1(path, fs2));
   const tickets2 = project["tickets"];
   const raw = isRecord(tickets2) ? tickets2["store"] : null;
   const store = typeof raw === "string" && raw ? raw : "repo";
   const starter = joinPath(starters, `${store}-ticketing.toml`);
   let config = project;
-  if (STORE_RE.test(store) && await isFile$1(starter, fs2)) {
+  if (STORE_RE.test(store) && await isFile(starter, fs2)) {
     config = mergeShallow(parse(await readText$1(starter, fs2)), project);
   }
   if (isRecord(config["tickets"])) config["tickets"]["store"] = store;
@@ -2465,11 +3413,11 @@ async function readStore(argv, fs2, globals) {
         const store = isRecord(data2["tickets"]) ? data2["tickets"]["store"] : null;
         found2[store ?? name] = data2["description"] ?? "";
       }
-      return { stdout: pyJson$2(found2, { indent: 2 }) + "\n", exitCode: 0 };
+      return { stdout: pyJson$1(found2, { indent: 2 }) + "\n", exitCode: 0 };
     }
     if (!flags["root"]) throw new UsageError$1("--project-root is required");
     const data = await storeConfigMerged(flags["root"], starters, fs2);
-    if (!keys.length) return { stdout: pyJson$2(data, { indent: 2 }) + "\n", exitCode: 0 };
+    if (!keys.length) return { stdout: pyJson$1(data, { indent: 2 }) + "\n", exitCode: 0 };
     const found = {};
     const missing = [];
     for (const key of keys) {
@@ -2482,10 +3430,10 @@ async function readStore(argv, fs2, globals) {
     if (keys.length === 1) {
       if (missing.length) return { stdout: out2, exitCode: 2 };
       const value = found[keys[0]];
-      out2 += typeof value === "string" ? value.replace(/\n+$/, "") + "\n" : pyJson$2(value, { indent: 2 }) + "\n";
+      out2 += typeof value === "string" ? value.replace(/\n+$/, "") + "\n" : pyJson$1(value, { indent: 2 }) + "\n";
       return { stdout: out2, exitCode: 0 };
     }
-    out2 += pyJson$2(found, { indent: 2 }) + "\n";
+    out2 += pyJson$1(found, { indent: 2 }) + "\n";
     return { stdout: out2, exitCode: missing.length ? 2 : 0 };
   } catch (e) {
     if (e instanceof UsageError$1) throw e;
@@ -2496,7 +3444,7 @@ async function readStore(argv, fs2, globals) {
 function errorJson(e) {
   const body = { error: e.message };
   if (e instanceof TicketError) Object.assign(body, e.data);
-  return pyJson$2(body, { ensureAscii: false }) + "\n";
+  return pyJson$1(body, { ensureAscii: false }) + "\n";
 }
 async function readStdin() {
   if (typeof process === "undefined" || !process.stdin) return "";
@@ -2539,14 +3487,14 @@ ${HELP[command]}
     else if (command === "pull") out2 = await cmdPull(parsed, fs2);
     else if (command === "mark") out2 = await cmdMark(parsed, fs2);
     else out2 = await cmdMirror(parsed, stdin ?? await readStdin(), fs2);
-    return { stdout: pyJson$2(out2, { ensureAscii: false }) + "\n", exitCode: 0 };
+    return { stdout: pyJson$1(out2, { ensureAscii: false }) + "\n", exitCode: 0 };
   } catch (e) {
     if (e instanceof UsageError$1) {
       return { stdout: `${USAGE}
 tickets.py ${command}: error: ${e.message}
 `, exitCode: 2 };
     }
-    if (e instanceof StoreRefusal) return { stdout: pyJson$2({ error: e.message }, { ensureAscii: true }) + "\n", exitCode: 2 };
+    if (e instanceof StoreRefusal) return { stdout: pyJson$1({ error: e.message }, { ensureAscii: true }) + "\n", exitCode: 2 };
     return { stdout: errorJson(e), exitCode: 1 };
   }
 }
@@ -2886,7 +3834,7 @@ class UndefinedError extends RenderError {
 const pyTypeName = (value) => {
   if (typeof value === "boolean") return "bool";
   if (typeof value === "number") return Number.isInteger(value) ? "int" : "float";
-  if (typeof value === "string") return "str";
+  if (typeof value === "string" || value instanceof Text) return "str";
   if (Array.isArray(value)) return "list";
   if (value === null || value === void 0) return "NoneType";
   return "dict";
@@ -2930,7 +3878,7 @@ function leafPaths(table, prefix = "") {
 function declares(defaults, path) {
   let node = defaults;
   for (const part of path.split(".")) {
-    if (!node || typeof node !== "object" || Array.isArray(node) || !(part in node)) return false;
+    if (!node || typeof node !== "object" || Array.isArray(node) || !hasOwn(node, part)) return false;
     node = node[part];
   }
   return true;
@@ -2938,7 +3886,7 @@ function declares(defaults, path) {
 function lookup(data, path, label) {
   let current = data;
   for (const part of path.split(".")) {
-    if (!current || typeof current !== "object" || Array.isArray(current) || !(part in current)) {
+    if (!current || typeof current !== "object" || Array.isArray(current) || !hasOwn(current, part)) {
       throw new RenderError(`missing ${label} \`${path}\``);
     }
     current = current[part];
@@ -2962,7 +3910,15 @@ async function readTomlLayer(path, fs2) {
     throw new RenderError(`failed to parse ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
-function invocationCustomization(defaults, assignments) {
+const DECIMAL_FLOAT_RE = /^[+-]?\d[\d_]*(\.\d|[eE])/;
+function defaultWrittenAsInt(source, path) {
+  const leaf = path.split(".").pop() ?? path;
+  const escaped = leaf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const line = new RegExp(`^\\s*(?:${escaped}|"${escaped}"|'${escaped}')\\s*=\\s*([^#\\n]*)`, "gm");
+  const values = [...source.matchAll(line)].map((m) => m[1].trim());
+  return values.length > 0 && values.every((v) => /^[+-]?(\d[\d_]*|0x[\da-fA-F_]+|0o[0-7_]+|0b[01_]+)$/.test(v));
+}
+function invocationCustomization(defaults, assignments, defaultsSource = "") {
   const commandLayer = {};
   const assigned = [];
   for (const [path, raw] of Object.entries(assignments)) {
@@ -2977,6 +3933,9 @@ function invocationCustomization(defaults, assignments) {
     assigned.push(path);
     const fallback = lookup(defaults ?? {}, path, "customization parameter");
     const value = typeof fallback === "string" && !/^\s*["']/.test(raw) ? raw : tomlLiteral(raw, path);
+    if (typeof value === "number" && Number.isInteger(value) && Number.isInteger(fallback) && DECIMAL_FLOAT_RE.test(raw.trim()) && defaultWrittenAsInt(defaultsSource, path)) {
+      throw new RenderError(`customization.${path} must be int, got float`);
+    }
     let target = commandLayer;
     const parts = path.split(".");
     for (const part of parts.slice(0, -1)) {
@@ -3053,7 +4012,7 @@ function requireReviewLayers(value, label) {
       name: requireString(source.name ?? id, `${itemLabel}.name`),
       instruction: requireString(source.instruction, `${itemLabel}.instruction`, true)
     };
-    if ("when" in source) layer.when = requireString(source.when, `${itemLabel}.when`);
+    if (hasOwn(source, "when")) layer.when = requireString(source.when, `${itemLabel}.when`);
     return layer;
   });
 }
@@ -3103,13 +4062,13 @@ class ConfigTable extends Table {
     this.ctx = ctx;
   }
   resolve(name) {
-    if (this.path === "config" && !(name in this.table)) {
+    if (this.path === "config" && !hasOwn(this.table, name)) {
       const [path, resolved2] = resolveShortConfig(this.central, name, this.ctx.projectRoot);
       this.ctx.inputs[`config.${path}`] = resolved2;
       return new Text(resolved2, `config.${path}`);
     }
     const label = `${this.path}.${name}`;
-    if (!(name in this.table)) throw new RenderError(`missing config value \`${label.replace(/^config\./, "")}\``);
+    if (!hasOwn(this.table, name)) throw new RenderError(`missing config value \`${label.replace(/^config\./, "")}\``);
     const value = this.table[name];
     if (value && typeof value === "object" && !Array.isArray(value)) {
       return new ConfigTable(this.central, value, label, this.ctx);
@@ -3129,8 +4088,8 @@ class CustomizationTable extends Table {
   resolve(name) {
     const path = `${this.path}.${name}`;
     if (this.defaults === null) throw new RenderError(`\`${path}\` requires customize.toml`);
-    if (!(name in this.defaults)) throw new RenderError(`missing customization parameter \`${path}\``);
-    if (!(name in this.values)) throw new RenderError(`missing customization value \`${path}\``);
+    if (!hasOwn(this.defaults, name)) throw new RenderError(`missing customization parameter \`${path}\``);
+    if (!hasOwn(this.values, name)) throw new RenderError(`missing customization value \`${path}\``);
     const fallback = this.defaults[name];
     const value = this.values[name];
     const label = `customization.${path}`;
@@ -3188,13 +4147,13 @@ function pyTruthy(value) {
   if (typeof value === "object") return Object.keys(value).length > 0;
   return true;
 }
-function pyRepr$3(value) {
+function pyRepr$2(value) {
   if (typeof value === "string") return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
   if (typeof value === "boolean") return value ? "True" : "False";
   if (value === null || value === void 0) return "None";
-  if (Array.isArray(value)) return `[${value.map(pyRepr$3).join(", ")}]`;
+  if (Array.isArray(value)) return `[${value.map(pyRepr$2).join(", ")}]`;
   if (value && typeof value === "object" && !(value instanceof Text)) {
-    const entries = Object.entries(value).map(([k, v]) => `${pyRepr$3(k)}: ${pyRepr$3(v)}`);
+    const entries = Object.entries(value).map(([k, v]) => `${pyRepr$2(k)}: ${pyRepr$2(v)}`);
     return `{${entries.join(", ")}}`;
   }
   return String(value);
@@ -3209,8 +4168,8 @@ function toDisplay(value) {
   if (typeof value === "boolean") return value ? "True" : "False";
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
-  if (Array.isArray(value)) return pyRepr$3(value);
-  if (typeof value === "object") return pyRepr$3(value);
+  if (Array.isArray(value)) return pyRepr$2(value);
+  if (typeof value === "object") return pyRepr$2(value);
   return String(value);
 }
 function pyEqual(a, b) {
@@ -3220,6 +4179,15 @@ function pyEqual(a, b) {
   if (b instanceof Text) b = b.value;
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((item, index) => pyEqual(item, b[index]));
   return a === b;
+}
+function compareValues(a, b) {
+  const isNumber = (value) => typeof value === "number" || typeof value === "boolean";
+  if (isNumber(a) && isNumber(b)) {
+    const [x2, y2] = [Number(a), Number(b)];
+    return x2 === y2 ? 0 : x2 < y2 ? -1 : 1;
+  }
+  const [x, y] = [toDisplay(a), toDisplay(b)];
+  return x === y ? 0 : x < y ? -1 : 1;
 }
 const FILTERS = {
   /** jinja's `default(value, default_value="", boolean=false)`. */
@@ -3345,7 +4313,7 @@ function parseNodes(chunks, from, stop) {
       let expr = chunk.body.replace(/^if\s+/, "").trim();
       let cursor = i + 1;
       for (; ; ) {
-        const parsed = parseNodes(chunks, cursor, (body) => /^(elif|else|endif)\b/.test(body));
+        const parsed = parseNodes(chunks, cursor, (body) => /^(elif\b|else\s*$|endif\b)/.test(body));
         branches.push({ expr, body: parsed.nodes });
         const tag = chunks[parsed.index];
         if (!tag || tag.kind !== "tag") throw new RenderError("unexpected end of template; missing endif");
@@ -3586,7 +4554,7 @@ function getAttribute(target, name, path, expr) {
   }
   if (target instanceof Table) return target.resolve(name);
   if (target instanceof Text) return undefinedValue(`${path(expr)}`);
-  if (target && typeof target === "object" && !Array.isArray(target) && name in target) {
+  if (target && typeof target === "object" && !Array.isArray(target) && hasOwn(target, name)) {
     return target[name];
   }
   return undefinedValue(path(expr));
@@ -3618,7 +4586,7 @@ function evaluate(expr, scope, context) {
     case "literal":
       return expr.value;
     case "name":
-      return scope.has(expr.name) ? scope.get(expr.name) : expr.name in context ? context[expr.name] : undefinedValue(expr.name);
+      return scope.has(expr.name) ? scope.get(expr.name) : hasOwn(context, expr.name) ? context[expr.name] : undefinedValue(expr.name);
     case "attr":
       return getAttribute(evaluate(expr.target, scope, context), expr.name, expressionPath, expr);
     case "item": {
@@ -3626,8 +4594,11 @@ function evaluate(expr, scope, context) {
       const index = evaluate(expr.index, scope, context);
       if (isUndefined(target)) usedUndefined(target);
       if (target instanceof Table) return target.resolve(String(index));
-      if (Array.isArray(target) && typeof index === "number") return target[index];
-      if (target && typeof target === "object" && String(index) in target) {
+      if (Array.isArray(target) && typeof index === "number") {
+        const at = index < 0 ? target.length + index : index;
+        return at >= 0 && at < target.length ? target[at] : undefinedValue(expressionPath(expr));
+      }
+      if (target && typeof target === "object" && hasOwn(target, String(index))) {
         return target[String(index)];
       }
       return undefinedValue(`${expressionPath(expr)}`);
@@ -3667,11 +4638,16 @@ function evaluate(expr, scope, context) {
       if (isUndefined(left)) usedUndefined(left);
       if (isUndefined(right)) usedUndefined(right);
       if (expr.op === "~") return toDisplay(left) + toDisplay(right);
+      if (expr.op === "+") {
+        const isString = (value) => typeof value === "string" || value instanceof Text;
+        const isNumber = (value) => typeof value === "number" || typeof value === "boolean";
+        if (isString(left) && isString(right)) return toDisplay(left) + toDisplay(right);
+        if (isNumber(left) && isNumber(right)) return Number(left) + Number(right);
+        throw new RenderError(`unsupported operand type(s) for +: ${pyTypeName(left)} and ${pyTypeName(right)}`);
+      }
       const a = Number(left);
       const b = Number(right);
       switch (expr.op) {
-        case "+":
-          return a + b;
         case "-":
           return a - b;
         case "*":
@@ -3699,13 +4675,13 @@ function evaluate(expr, scope, context) {
         case "not in":
           return !contains(right, left);
         case "<":
-          return toDisplay(left) < toDisplay(right);
+          return compareValues(left, right) < 0;
         case ">":
-          return toDisplay(left) > toDisplay(right);
+          return compareValues(left, right) > 0;
         case "<=":
-          return toDisplay(left) <= toDisplay(right);
+          return compareValues(left, right) <= 0;
         default:
-          return toDisplay(left) >= toDisplay(right);
+          return compareValues(left, right) >= 0;
       }
     }
   }
@@ -3715,7 +4691,7 @@ function contains(haystack, needle) {
   if (haystack instanceof Text) return haystack.value.includes(toDisplay(needle));
   if (typeof haystack === "string") return haystack.includes(toDisplay(needle));
   if (Array.isArray(haystack)) return haystack.some((item) => pyEqual(item, needle));
-  if (haystack && typeof haystack === "object") return String(toDisplay(needle)) in haystack;
+  if (haystack && typeof haystack === "object") return hasOwn(haystack, String(toDisplay(needle)));
   return false;
 }
 function renderNodes(nodes, scope, context, state) {
@@ -3765,7 +4741,7 @@ function renderNodes(nodes, scope, context, state) {
   }
   return out2;
 }
-async function isDirectory$1(path, fs2) {
+async function isDirectory(path, fs2) {
   try {
     await fs2.list(path);
     return true;
@@ -3778,7 +4754,7 @@ async function loadSources(skillRoot, fs2) {
   const walk2 = async (dir, prefix) => {
     for (const name of await fs2.list(dir)) {
       const path = `${dir}/${name}`;
-      if (await isDirectory$1(path, fs2)) await walk2(path, `${prefix}${name}/`);
+      if (await isDirectory(path, fs2)) await walk2(path, `${prefix}${name}/`);
       else if (name.endsWith(".md") && name !== "SKILL.md") sources[`${prefix}${name}`] = await fs2.readText(path);
     }
   };
@@ -3923,11 +4899,12 @@ async function render$1(projectRoot, skillRoot, set, fs2) {
   const customizePath = `${skillRoot}/customize.toml`;
   const hasCustomization = Object.keys(set).length > 0 || await fs2.exists(customizePath);
   const defaults = hasCustomization ? await readTomlLayer(customizePath, fs2) : null;
+  const defaultsSource = hasCustomization && await fs2.exists(customizePath) ? await fs2.readText(customizePath) : "";
   await checkPersistentLayers(projectRoot, skillName, defaults, fs2);
   let customization = hasCustomization ? await resolveCustomization(projectRoot, skillRoot, skillName, fs2) : {};
   const supplied = /* @__PURE__ */ new Set();
   if (defaults !== null) {
-    const commandLayer = invocationCustomization(defaults, set);
+    const commandLayer = invocationCustomization(defaults, set, defaultsSource);
     customization = deepMerge(customization, commandLayer);
     for (const leaf of leafPaths(commandLayer)) supplied.add(leaf);
   }
@@ -3939,7 +4916,7 @@ async function render$1(projectRoot, skillRoot, set, fs2) {
   const buildContext = (destination2) => new RenderContext(projectRoot, destination2, central, defaults, customization, new Set(Object.keys(sources)));
   const probe = buildContext(`${namespace}/pending`);
   renderSources(sources, skillRoot, probe);
-  const unused = [...supplied].filter((path) => !(`customization.${path}` in probe.inputs)).sort();
+  const unused = [...supplied].filter((path) => !hasOwn(probe.inputs, `customization.${path}`)).sort();
   if (unused.length) throw new RenderError(`invocation override not used by this render: ${unused.join(", ")}`);
   const identity = {
     project_root: projectRoot,
@@ -3980,7 +4957,7 @@ class CommandError extends Error {
 }
 class CrashError extends Error {
 }
-function pyJson$1(value) {
+function pyJson(value) {
   const write = (value2) => {
     if (value2 === null || value2 === void 0) return "null";
     if (typeof value2 === "boolean") return value2 ? "true" : "false";
@@ -3993,7 +4970,7 @@ function pyJson$1(value) {
   return write(value);
 }
 const splitlines = (text) => text.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/);
-const pyRepr$2 = (text) => `'${text.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+const pyRepr$1 = (text) => `'${text.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 function now() {
   const d = /* @__PURE__ */ new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -4004,7 +4981,7 @@ function split(text) {
   if (!lines.length || lines[0] !== "---") throw new CrashError("ValueError: .memlog.md has no frontmatter");
   const end = lines.findIndex((line, index) => index > 0 && line === "---");
   if (end === -1) throw new CrashError("ValueError: .memlog.md frontmatter is not terminated");
-  const meta = {};
+  const meta = /* @__PURE__ */ Object.create(null);
   for (const line of lines.slice(1, end)) {
     const cut = line.indexOf(":");
     if (cut !== -1) meta[line.slice(0, cut).trim()] = line.slice(cut + 1).trim();
@@ -4025,16 +5002,17 @@ function touch(meta) {
   meta.updated = now();
 }
 const entryCount = (body) => splitlines(body).filter((line) => line.startsWith("- ")).length;
-const ack = (path, body) => pyJson$1({ ok: true, memlog: path, entries: entryCount(body) }) + "\n";
+const ack = (path, body) => pyJson({ ok: true, memlog: path, entries: entryCount(body) }) + "\n";
 async function cmdInit(path, fields, fs2) {
   if (await fs2.exists(path)) throw new CommandError(`${path} already exists; use append/set to update it`);
-  const parent = path.slice(0, path.lastIndexOf("/"));
+  const cut = path.lastIndexOf("/");
+  const parent = cut > 0 ? path.slice(0, cut) : "";
   if (parent) await fs2.mkdir(parent);
-  const meta = {};
+  const meta = /* @__PURE__ */ Object.create(null);
   for (const pair of fields) {
-    const cut = pair.indexOf("=");
-    if (cut === -1) throw new CommandError(`--field expects key=value, got ${pyRepr$2(pair)}`);
-    meta[pair.slice(0, cut).trim()] = pair.slice(cut + 1).trim();
+    const cut2 = pair.indexOf("=");
+    if (cut2 === -1) throw new CommandError(`--field expects key=value, got ${pyRepr$1(pair)}`);
+    meta[pair.slice(0, cut2).trim()] = pair.slice(cut2 + 1).trim();
   }
   touch(meta);
   await fs2.writeText(path, render(meta, ""));
@@ -4048,7 +5026,7 @@ async function cmdAppend(path, text, type, by, fs2) {
   if (by) label = `${label} by ${by}`.trim();
   const tag = label ? `(${label}) ` : "";
   const entry = `- ${tag}${entryText}`;
-  await fs2.writeText(path, raw + (raw.endsWith("\n") ? "" : "\n") + entry + "\n");
+  await fs2.append(path, (raw.endsWith("\n") ? "" : "\n") + entry + "\n");
   return ack(path, split(await fs2.readText(path))[1]);
 }
 async function cmdSet(path, key, value, fs2) {
@@ -4060,11 +5038,11 @@ async function cmdSet(path, key, value, fs2) {
 }
 async function readLog(path, fs2) {
   if (!await fs2.exists(path)) {
-    throw new CrashError(`FileNotFoundError: [Errno 2] No such file or directory: ${pyRepr$2(path)}`);
+    throw new CrashError(`FileNotFoundError: [Errno 2] No such file or directory: ${pyRepr$1(path)}`);
   }
   return fs2.readText(path);
 }
-const splitFlag$1 = (token) => {
+const splitFlag = (token) => {
   const cut = token.indexOf("=");
   return cut === -1 || !token.startsWith("--") ? [token, void 0] : [token.slice(0, cut), token.slice(cut + 1)];
 };
@@ -4076,7 +5054,7 @@ function flagsOf(argv) {
   const options = {};
   const takesValue = /* @__PURE__ */ new Set(["--workspace", "--path", "--text", "--type", "--by", "--field", "--key", "--value"]);
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag$1(argv[i]);
+    const [flag, inline] = splitFlag(argv[i]);
     if (!takesValue.has(flag)) throw new UsageError2(`unrecognized arguments: ${argv[i]}`);
     const value = inline ?? argv[++i];
     if (value === void 0) throw new UsageError2(`argument ${flag}: expected one argument`);
@@ -4099,7 +5077,7 @@ async function memlog(argv, fs2) {
   }
   if (!COMMANDS.includes(command)) {
     return {
-      stdout: `${PROG}: error: argument cmd: invalid choice: ${pyRepr$2(command)} (choose from init, append, set)
+      stdout: `${PROG}: error: argument cmd: invalid choice: ${pyRepr$1(command)} (choose from init, append, set)
 `,
       exitCode: 2
     };
@@ -4128,949 +5106,6 @@ async function memlog(argv, fs2) {
 `, exitCode: 1 };
     throw error;
   }
-}
-function isTable$3(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-function pyRepr$1(value) {
-  if (typeof value === "string") {
-    const quote = value.includes("'") && !value.includes('"') ? '"' : "'";
-    let out2 = quote;
-    for (const ch of value) {
-      if (ch === "\\") out2 += "\\\\";
-      else if (ch === quote) out2 += "\\" + quote;
-      else if (ch === "\n") out2 += "\\n";
-      else if (ch === "\r") out2 += "\\r";
-      else if (ch === "	") out2 += "\\t";
-      else out2 += ch;
-    }
-    return out2 + quote;
-  }
-  if (typeof value === "number") return String(value);
-  if (typeof value === "boolean") return value ? "True" : "False";
-  if (value === void 0 || value === null) return "None";
-  if (Array.isArray(value)) return "[" + value.map(pyRepr$1).join(", ") + "]";
-  const entries = Object.entries(value);
-  return "{" + entries.map(([k, v]) => `${pyRepr$1(k)}: ${pyRepr$1(v)}`).join(", ") + "}";
-}
-function pyJsonString(value, ensureAscii) {
-  let out2 = '"';
-  const escape = (code) => "\\u" + code.toString(16).padStart(4, "0");
-  for (const ch of value) {
-    const code = ch.codePointAt(0);
-    if (ch === '"') out2 += '\\"';
-    else if (ch === "\\") out2 += "\\\\";
-    else if (ch === "\n") out2 += "\\n";
-    else if (ch === "\r") out2 += "\\r";
-    else if (ch === "	") out2 += "\\t";
-    else if (ch === "\b") out2 += "\\b";
-    else if (ch === "\f") out2 += "\\f";
-    else if (code < 32) out2 += escape(code);
-    else if (ensureAscii && code > 126) {
-      if (code > 65535) {
-        const pair = code - 65536;
-        out2 += escape(55296 + (pair >> 10)) + escape(56320 + (pair & 1023));
-      } else out2 += escape(code);
-    } else out2 += ch;
-  }
-  return out2 + '"';
-}
-function pyJson(value, opts = {}) {
-  const ensureAscii = opts.ensureAscii ?? false;
-  const indent = opts.indent;
-  const write = (value2, depth) => {
-    if (value2 === null || value2 === void 0) return "null";
-    if (typeof value2 === "boolean") return value2 ? "true" : "false";
-    if (typeof value2 === "number") return Number.isFinite(value2) ? String(value2) : "null";
-    if (typeof value2 === "string") return pyJsonString(value2, ensureAscii);
-    const open = indent === void 0 ? "" : "\n";
-    const close = indent === void 0 ? "" : "\n" + " ".repeat(indent * depth);
-    const inner = indent === void 0 ? "" : " ".repeat(indent * (depth + 1));
-    const separator = indent === void 0 ? ", " : ",\n";
-    if (Array.isArray(value2)) {
-      if (!value2.length) return "[]";
-      return "[" + open + value2.map((v) => inner + write(v, depth + 1)).join(separator) + close + "]";
-    }
-    const entries = Object.entries(value2).map(
-      ([k, v]) => inner + pyJsonString(k, ensureAscii) + ": " + write(v, depth + 1)
-    );
-    if (!entries.length) return "{}";
-    return "{" + open + entries.join(separator) + close + "}";
-  };
-  return write(value, 0);
-}
-function resolvePath(text) {
-  return normalizePath$1(text);
-}
-function dirname(p) {
-  return pathDirname(p);
-}
-function purePosixParts(entry) {
-  return entry.split("/").filter((part) => part !== "" && part !== ".");
-}
-function posixName(parts) {
-  return parts.length ? parts[parts.length - 1] : "";
-}
-function folderName(path) {
-  return posixName(purePosixParts(toForwardSlashes(path)));
-}
-function posixStem(name) {
-  const cut = name.lastIndexOf(".");
-  return cut <= 0 ? name : name.slice(0, cut);
-}
-async function isDirectory(fs2, path) {
-  try {
-    await fs2.list(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-async function isFile(fs2, path) {
-  if (!await fs2.exists(path)) return false;
-  return !await isDirectory(fs2, path);
-}
-function missingPathError(path) {
-  return `[Errno 2] No such file or directory: '${path}'`;
-}
-function errorText(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-function byteLength(text) {
-  if (!/[^\x00-\x7f]/.test(text)) return text.length;
-  return new TextEncoder().encode(text).length;
-}
-const MANIFEST_NAME$1 = "bmod.toml";
-const TOPICS_DIR = "help";
-const HELP_NAME = `${TOPICS_DIR}/help.md`;
-const ROSTER_NAME$1 = "roster.toml";
-const RETIRED_NAME$1 = "retired.toml";
-const MIGRATION_TABLE = "migration";
-const MIGRATION_FIELDS = ["module", "from", "to", "title", "summary", "detect", "guide"];
-const MIGRATION_NAME = /^migration-([0-9]+)\.toml$/;
-const READ_LIMIT = 1024 * 1024;
-async function readDocument(fs2, path, folder) {
-  const resolved = resolvePath(path);
-  const base = resolvePath(folder);
-  if (!(resolved === base || resolved.startsWith(base.endsWith("/") ? base : base + "/"))) {
-    throw new Error("resolves outside the skill folder");
-  }
-  if (!await fs2.exists(path)) throw new Error(missingPathError(path));
-  if (await isDirectory(fs2, path)) throw new Error("is not a regular file");
-  const text = await fs2.readText(path);
-  if (byteLength(text) > READ_LIMIT) throw new Error(`is larger than ${READ_LIMIT} bytes`);
-  return text;
-}
-function safeSkillRelative(entry) {
-  if (!entry || entry.includes("://") || entry.includes("\\") || entry.includes(":")) return null;
-  if (entry.startsWith("/")) return null;
-  const parts = purePosixParts(entry);
-  if (parts.includes("..") || posixName(parts) === "") return null;
-  return parts;
-}
-function installCommand(source, skill) {
-  if (typeof source !== "string" || !source.startsWith("github:")) return null;
-  const parts = source.slice("github:".length).split("/");
-  if (parts.length < 2 || !parts[0] || !parts[1]) return null;
-  return `npx skills add ${parts[0]}/${parts[1]} --skill ${skill}`;
-}
-function manifestProblem(folder, problem) {
-  return {
-    kind: "manifest",
-    skill: folder.slice(folder.lastIndexOf("/") + 1),
-    manifest: `${folder}/${MANIFEST_NAME$1}`,
-    problem
-  };
-}
-async function scan(fs2, roots) {
-  const folders = /* @__PURE__ */ new Map();
-  const modules = [];
-  const problems = [];
-  const recordCodes = /* @__PURE__ */ new Map();
-  const pending = [];
-  for (const root of roots) {
-    let entries;
-    try {
-      entries = await fs2.list(root);
-    } catch (error) {
-      const text = await fs2.exists(root) ? errorText(error) : missingPathError(root);
-      problems.push({ kind: "root", root, problem: `cannot read root ${root}: ${text}` });
-      continue;
-    }
-    entries.sort(compareStrings);
-    for (const name of entries) {
-      const folder = `${root}/${name}`;
-      if (!await isDirectory(fs2, folder)) continue;
-      if (folders.has(name)) continue;
-      folders.set(name, folder);
-      const manifest = `${folder}/${MANIFEST_NAME$1}`;
-      if (!await isFile(fs2, manifest)) continue;
-      let data;
-      try {
-        data = parse(await fs2.readText(manifest));
-      } catch (error) {
-        problems.push(manifestProblem(folder, `cannot use ${manifest}: ${errorText(error)}`));
-        continue;
-      }
-      if (!("bmod" in data) && !("skill" in data)) {
-        problems.push(manifestProblem(folder, `${manifest} has neither a [bmod] nor a [skill] table`));
-        continue;
-      }
-      let skill = isTable$3(data.skill) ? data.skill : null;
-      if ("skill" in data && !isTable$3(data.skill)) {
-        problems.push(manifestProblem(folder, `${manifest}: 'skill' is not a table`));
-        skill = null;
-      }
-      if ("bmod" in data) {
-        const module = readRecord(folder, data.bmod, skill !== null, problems);
-        if (module !== null) {
-          recordCodes.set(name, module.code);
-          const first = modules.find((other) => other.code.toLowerCase() === module.code.toLowerCase());
-          if (first === void 0) modules.push(module);
-          else {
-            problems.push({
-              kind: "module",
-              skill: name,
-              problem: `${name}: module ${pyRepr$1(module.code)} is already recorded by ${first.folder.slice(first.folder.lastIndexOf("/") + 1)}; ${first.folder.slice(first.folder.lastIndexOf("/") + 1)} is used`
-            });
-          }
-        }
-      }
-      if (skill !== null) pending.push({ root, folder, table: skill, ownRecord: "bmod" in data });
-    }
-  }
-  const skills = pending.map(
-    ({ root, folder, table, ownRecord }) => resolveSkill(root, folder, table, ownRecord, recordCodes)
-  );
-  problems.push(...absentRecords(skills, folders));
-  for (const entry of skills) delete entry.source;
-  return { folders, modules, skills, problems };
-}
-function readRecord(folder, table, hasSkill, problems) {
-  const manifest = `${folder}/${MANIFEST_NAME$1}`;
-  if (!isTable$3(table)) {
-    problems.push(manifestProblem(folder, `${manifest}: 'bmod' is not a table`));
-    return null;
-  }
-  const code = table.code;
-  if (typeof code !== "string" || !code) {
-    problems.push(manifestProblem(folder, `${manifest}: [bmod] has no usable 'code'`));
-    return null;
-  }
-  const listed2 = table.skills;
-  let members;
-  if (listed2 === void 0) {
-    members = hasSkill ? [folderName(folder)] : [];
-  } else if (Array.isArray(listed2) && listed2.every((name) => typeof name === "string" && name)) {
-    members = [...new Set(listed2)];
-  } else {
-    problems.push(manifestProblem(folder, `${manifest}: [bmod] 'skills' is not a list of skill names`));
-    members = [];
-  }
-  return { code, folder, table, skills: members };
-}
-function resolveSkill(root, folder, table, ownRecord, recordCodes) {
-  const name = folderName(folder);
-  let bmod = ownRecord ? name : table.bmod ?? null;
-  if (typeof bmod !== "string" || !bmod) bmod = null;
-  return {
-    skill: name,
-    module: bmod !== null && recordCodes.has(bmod) ? recordCodes.get(bmod) : null,
-    bmod,
-    root,
-    source: table.source
-  };
-}
-function absentRecords(skills, folders) {
-  const problems = [];
-  const byBmod = /* @__PURE__ */ new Map();
-  for (const entry of skills) {
-    if (entry.module !== null) continue;
-    if (entry.bmod === null) {
-      problems.push({
-        kind: "manifest",
-        skill: entry.skill,
-        problem: `${entry.skill}: [skill] does not name its module record under 'bmod'`
-      });
-      continue;
-    }
-    const group = byBmod.get(entry.bmod);
-    if (group) group.push(entry);
-    else byBmod.set(entry.bmod, [entry]);
-  }
-  for (const bmod of [...byBmod.keys()].sort(compareStrings)) {
-    const entries = byBmod.get(bmod);
-    const names = entries.map((entry) => entry.skill).sort(compareStrings);
-    const state = folders.has(bmod) ? "has no usable module record" : "is not installed";
-    const problem = {
-      kind: "module",
-      bmod,
-      skills: names,
-      problem: `module record ${bmod} ${state}; it is named by ${names.join(", ")}`
-    };
-    const command = folders.has(bmod) ? null : installCommand(entries[0].source, bmod);
-    if (command) {
-      problem.install = command;
-      problem.problem = `${problem.problem}; install it with \`${command}\``;
-    }
-    problems.push(problem);
-  }
-  return problems;
-}
-async function collect$1(fs2, roots, includeContent = false) {
-  const found = await scan(fs2, roots);
-  const problems = found.problems;
-  const documents = /* @__PURE__ */ new Map();
-  for (const module of found.modules) {
-    const declared = module.table.knowledge ?? [];
-    if (!Array.isArray(declared)) {
-      problems.push({
-        kind: "knowledge",
-        skill: folderName(module.folder),
-        problem: "[bmod] 'knowledge' is not a list"
-      });
-      continue;
-    }
-    let entries = declared;
-    if (await isFile(fs2, `${module.folder}/${HELP_NAME}`)) entries = [{ path: HELP_NAME }, ...entries];
-    for (const entry of entries) {
-      await recordDocument(fs2, documents, problems, found.folders, module, entry, includeContent);
-    }
-  }
-  const topics = [];
-  for (const module of found.modules) {
-    for (const topic of await moduleTopics(fs2, module, problems)) {
-      if (!documents.has(`${module.code}\0${topic.path}`)) topics.push(topic);
-    }
-  }
-  const migrations = [];
-  for (const module of found.modules) migrations.push(...await moduleMigrations(fs2, module, problems));
-  return {
-    roots: roots.map((root) => root),
-    skills: [...found.skills].sort((a, b) => compareStrings(String(a.skill), String(b.skill))),
-    documents: [...documents.values()].sort(
-      (a, b) => compareStrings(a.module, b.module) || compareStrings(a.path, b.path)
-    ),
-    topics: [...topics].sort((a, b) => compareStrings(a.module, b.module) || compareStrings(a.path, b.path)),
-    migrations: [...migrations].sort(
-      (a, b) => compareStrings(a.module, b.module) || migrationNumber(a.path) - migrationNumber(b.path)
-    ),
-    problems
-  };
-}
-async function recordDocument(fs2, documents, problems, folders, module, entry, includeContent) {
-  const own = folderName(module.folder);
-  const name = isTable$3(entry) ? entry.path : void 0;
-  if (typeof name !== "string") {
-    problems.push({
-      kind: "knowledge",
-      skill: own,
-      problem: `knowledge entry ${pyRepr$1(entry)} has no path`
-    });
-    return;
-  }
-  const relative = safeSkillRelative(name);
-  if (relative === null) {
-    problems.push({
-      kind: "knowledge",
-      skill: own,
-      problem: `knowledge names unsafe path ${pyRepr$1(name)}`
-    });
-    return;
-  }
-  const covered = isTable$3(entry) ? entry.skills ?? "*" : "*";
-  let skills;
-  if (covered === "*") {
-    skills = [...module.skills];
-  } else if (Array.isArray(covered) && covered.every((skill) => typeof skill === "string" && skill)) {
-    skills = [...new Set(covered)];
-  } else {
-    problems.push({
-      kind: "knowledge",
-      skill: own,
-      problem: `knowledge entry ${pyRepr$1(name)}: 'skills' is neither "*" nor a list of skill names`
-    });
-    return;
-  }
-  const key = `${module.code}\0${relative.join("/")}`;
-  if (documents.has(key)) {
-    problems.push({ kind: "knowledge", skill: own, problem: `knowledge names ${pyRepr$1(name)} twice` });
-    return;
-  }
-  const path = `${module.folder}/${relative.join("/")}`;
-  let text;
-  try {
-    text = await readDocument(fs2, path, module.folder);
-  } catch (error) {
-    problems.push({
-      kind: "document",
-      skill: own,
-      document: path,
-      problem: `${path}: ${errorText(error)}`
-    });
-    return;
-  }
-  const document = {
-    module: module.code,
-    path: relative.join("/"),
-    skills,
-    installed_skills: skills.filter((skill) => folders.has(skill)),
-    reported_from: own
-  };
-  if (includeContent) document.content = text;
-  documents.set(key, document);
-}
-async function moduleTopics(fs2, module, problems) {
-  const own = folderName(module.folder);
-  let names;
-  try {
-    names = await fs2.list(`${module.folder}/${TOPICS_DIR}`);
-  } catch {
-    return [];
-  }
-  names.sort(compareStrings);
-  const topics = [];
-  for (const name of names) {
-    if (!name.endsWith(".md") || name === "help.md") continue;
-    const path = `${module.folder}/${TOPICS_DIR}/${name}`;
-    try {
-      await readDocument(fs2, path, module.folder);
-    } catch (error) {
-      problems.push({
-        kind: "document",
-        skill: own,
-        document: path,
-        problem: `${path}: ${errorText(error)}`
-      });
-      continue;
-    }
-    topics.push({
-      module: module.code,
-      topic: posixStem(name),
-      path: `${TOPICS_DIR}/${name}`,
-      file: path
-    });
-  }
-  return topics;
-}
-async function moduleMigrations(fs2, module, problems) {
-  let names;
-  try {
-    names = await fs2.list(module.folder);
-  } catch {
-    return [];
-  }
-  names = names.filter((name) => name.endsWith(".toml") && ![MANIFEST_NAME$1, ROSTER_NAME$1, RETIRED_NAME$1].includes(name)).sort(compareStrings);
-  const migrations = [];
-  for (const name of names) {
-    const path = `${module.folder}/${name}`;
-    let data;
-    try {
-      data = parse(await readDocument(fs2, path, module.folder));
-    } catch (error) {
-      problems.push(migrationProblem(module.folder, path, errorText(error)));
-      continue;
-    }
-    if (!(MIGRATION_TABLE in data)) continue;
-    const table = data[MIGRATION_TABLE];
-    if (!isTable$3(table)) {
-      problems.push(migrationProblem(module.folder, path, "'migration' is not a table"));
-      continue;
-    }
-    const fields = {};
-    for (const field of MIGRATION_FIELDS) fields[field] = table[field];
-    const missing = MIGRATION_FIELDS.filter(
-      (field) => typeof fields[field] !== "string" || !fields[field].trim()
-    );
-    const checklist = table.checklist;
-    if (!Array.isArray(checklist) || !checklist.length || !checklist.every((item) => typeof item === "string" && item.trim())) {
-      missing.push("checklist");
-    }
-    if (missing.length) {
-      problems.push(migrationProblem(module.folder, path, `[migration] needs non-empty ${missing.join(", ")}`));
-      continue;
-    }
-    if (fields.module !== module.code) {
-      problems.push(
-        migrationProblem(
-          module.folder,
-          path,
-          `[migration] module ${pyRepr$1(fields.module)} is not this record's ${pyRepr$1(module.code)}`
-        )
-      );
-      continue;
-    }
-    if (migrationNumber(name) === null) {
-      problems.push(migrationProblem(module.folder, path, "a migration file must be named migration-<n>.toml"));
-      continue;
-    }
-    migrations.push({
-      module: module.code,
-      path: name,
-      file: path,
-      from: fields.from,
-      to: fields.to,
-      title: fields.title
-    });
-  }
-  const numbers = migrations.map((migration) => migrationNumber(migration.path));
-  const duplicated = new Set(numbers.filter((number) => numbers.filter((n) => n === number).length > 1));
-  for (const item of migrations) {
-    if (duplicated.has(migrationNumber(item.path))) {
-      problems.push(migrationProblem(module.folder, item.file, "another migration of this module has the same number"));
-    }
-  }
-  return migrations.filter((item) => !duplicated.has(migrationNumber(item.path))).sort((a, b) => migrationNumber(a.path) - migrationNumber(b.path));
-}
-function migrationNumber(name) {
-  const match = MIGRATION_NAME.exec(name);
-  return match ? Number(match[1]) : null;
-}
-function migrationProblem(folder, path, problem) {
-  return {
-    kind: "migration",
-    skill: folderName(folder),
-    document: path,
-    problem: `${path}: ${problem}`
-  };
-}
-function compareStrings(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-async function knowledge(argv, fs2) {
-  const roots = [];
-  let content = false;
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i];
-    if (token === "--root") {
-      const value = argv[++i];
-      if (value === void 0) return usageError$4("argument --root: expected one argument");
-      roots.push(value);
-    } else if (token.startsWith("--root=")) {
-      roots.push(token.slice("--root=".length));
-    } else if (token === "--content") {
-      content = true;
-    } else if (token === "--skill-root") {
-      const value = argv[++i];
-      if (value === void 0) return usageError$4("argument --skill-root: expected one argument");
-    } else if (!token.startsWith("--skill-root=")) {
-      return usageError$4(`unrecognized arguments: ${token}`);
-    }
-  }
-  if (!roots.length) return usageError$4("the following arguments are required: --root");
-  const report = await collect$1(fs2, roots, content);
-  return { stdout: `${pyJson(report)}
-`, exitCode: 0 };
-}
-function usageError$4(message) {
-  return { stdout: `knowledge: error: ${message}`, exitCode: 2 };
-}
-function csvDictRows(text) {
-  const rows = csvRows(text);
-  if (!rows.length) return [];
-  const header = rows[0];
-  return rows.slice(1).map((cells) => {
-    const row = {};
-    header.forEach((name, i) => {
-      row[name] = i < cells.length ? cells[i] : null;
-    });
-    if (cells.length > header.length) row["null"] = cells[header.length];
-    return row;
-  });
-}
-function csvRows(text) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let quoted2 = false;
-  let fieldSeen = false;
-  let i = 0;
-  const push = () => {
-    row.push(field);
-    field = "";
-    fieldSeen = false;
-  };
-  const endRow = () => {
-    push();
-    if (!(row.length === 1 && row[0] === "")) rows.push(row);
-    row = [];
-  };
-  while (i < text.length) {
-    const ch = text[i];
-    if (quoted2) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i += 2;
-          continue;
-        }
-        quoted2 = false;
-        i += 1;
-        continue;
-      }
-      field += ch;
-      i += 1;
-      continue;
-    }
-    if (ch === '"' && field === "" && !fieldSeen) {
-      quoted2 = true;
-      fieldSeen = true;
-      i += 1;
-      continue;
-    }
-    if (ch === ",") {
-      push();
-      i += 1;
-      continue;
-    }
-    if (ch === "\n") {
-      endRow();
-      i += 1;
-      continue;
-    }
-    if (ch === "\r" && text[i + 1] === "\n") {
-      endRow();
-      i += 2;
-      continue;
-    }
-    field += ch;
-    fieldSeen = true;
-    i += 1;
-  }
-  if (field !== "" || row.length) endRow();
-  return rows;
-}
-class YamlError extends Error {
-}
-function scanLines(text) {
-  const out2 = [];
-  text.split(/\r\n|\n|\r/).forEach((raw, index) => {
-    const trimmed = raw.replace(/\s+$/, "");
-    const body = trimmed.trimStart();
-    if (body === "" || body.startsWith("#") || body === "---") return;
-    out2.push({ indent: trimmed.length - body.length, text: body, number: index + 1 });
-  });
-  return out2;
-}
-function stripComment(text) {
-  let quote = null;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quote) {
-      if (ch === quote) quote = null;
-      else if (ch === "\\" && quote === '"') i += 1;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      continue;
-    }
-    if (ch === "#" && (i === 0 || /\s/.test(text[i - 1]))) return text.slice(0, i).replace(/\s+$/, "");
-  }
-  return text;
-}
-function unquote(raw, line) {
-  const text = raw.trim();
-  if (text.startsWith("'")) {
-    if (!text.endsWith("'") || text.length < 2) throw new YamlError(`unterminated single-quoted scalar at line ${line}`);
-    return text.slice(1, -1).replace(/''/g, "'");
-  }
-  if (text.startsWith('"')) {
-    if (!text.endsWith('"') || text.length < 2) throw new YamlError(`unterminated double-quoted scalar at line ${line}`);
-    let out2 = "";
-    for (let i = 1; i < text.length - 1; i++) {
-      const ch = text[i];
-      if (ch !== "\\") {
-        out2 += ch;
-        continue;
-      }
-      const next = text[++i];
-      if (next === "n") out2 += "\n";
-      else if (next === "t") out2 += "	";
-      else if (next === "r") out2 += "\r";
-      else out2 += next;
-    }
-    return out2;
-  }
-  return text;
-}
-function plainScalar(text) {
-  if (text === "" || text === "~" || /^null$/i.test(text)) return null;
-  if (/^(true|yes|on)$/i.test(text)) return true;
-  if (/^(false|no|off)$/i.test(text)) return false;
-  if (/^[-+]?[0-9]+$/.test(text)) return Number.parseInt(text, 10);
-  if (/^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*)(?:[eE][-+]?[0-9]+)?$/.test(text)) return Number.parseFloat(text);
-  return text;
-}
-function scalar(raw, line) {
-  const text = raw.trim();
-  if (text.startsWith("[") || text.startsWith("{")) return readFlow(text, line);
-  if (text.startsWith("'") || text.startsWith('"')) return unquote(text, line);
-  return plainScalar(text);
-}
-function readFlow(text, line) {
-  let i = 0;
-  const skip = () => {
-    while (i < text.length && /\s/.test(text[i])) i += 1;
-  };
-  const readPlain = (stops) => {
-    const start = i;
-    while (i < text.length && !stops.includes(text[i])) i += 1;
-    return text.slice(start, i).trim();
-  };
-  const readValue = () => {
-    skip();
-    const ch = text[i];
-    if (ch === "[" || ch === "{") {
-      const mapping = ch === "{";
-      const close = mapping ? "}" : "]";
-      i += 1;
-      const items = [];
-      const entries = {};
-      for (; ; ) {
-        skip();
-        if (i >= text.length) throw new YamlError(`unterminated flow collection at line ${line}`);
-        if (text[i] === close) {
-          i += 1;
-          return mapping ? entries : items;
-        }
-        if (text[i] === ",") {
-          i += 1;
-          continue;
-        }
-        if (mapping) {
-          skip();
-          const key = text[i] === "'" || text[i] === '"' ? String(readValue()) : readPlain(":," + close);
-          skip();
-          if (text[i] !== ":") throw new YamlError(`flow mapping entry without a value at line ${line}`);
-          i += 1;
-          entries[key] = readValue();
-        } else {
-          items.push(readValue());
-        }
-      }
-    }
-    if (ch === "'" || ch === '"') {
-      let out2 = "";
-      const quote = ch;
-      i += 1;
-      while (i < text.length) {
-        if (text[i] === quote) {
-          if (quote === "'" && text[i + 1] === "'") {
-            out2 += "'";
-            i += 2;
-            continue;
-          }
-          i += 1;
-          break;
-        }
-        if (text[i] === "\\" && quote === '"') {
-          const next = text[++i];
-          out2 += next === "n" ? "\n" : next === "t" ? "	" : next;
-          i += 1;
-          continue;
-        }
-        out2 += text[i++];
-      }
-      return out2;
-    }
-    return plainScalar(readPlain(",]}"));
-  };
-  const value = readValue();
-  skip();
-  if (i !== text.length) throw new YamlError(`trailing text after a flow collection at line ${line}`);
-  return value;
-}
-function loadYaml(text, file = "module.yaml") {
-  const lines = scanLines(text);
-  let at = 0;
-  const fail = (number, detail) => {
-    throw new YamlError(`${file}: ${detail} at line ${number}`);
-  };
-  const blockScalar = (header, indent) => {
-    const keep = header.endsWith("+");
-    const chomp = header.endsWith("-");
-    const folded = header.startsWith(">");
-    const parts = [];
-    while (at < lines.length && lines[at].indent > indent) {
-      parts.push({ indent: lines[at].indent, text: lines[at].text });
-      at += 1;
-    }
-    if (!parts.length) return "";
-    const base = parts[0].indent;
-    const body = parts.map((part) => " ".repeat(Math.max(0, part.indent - base)) + part.text).join("\n");
-    const value2 = folded ? body.replace(/([^\n])\n(?!\n)/g, "$1 ") : body;
-    if (chomp) return value2;
-    return keep ? value2 + "\n\n" : value2 + "\n";
-  };
-  const isMappingLine = (line) => {
-    if (line.text.startsWith("- ") || line.text === "-") return false;
-    const text2 = stripComment(line.text);
-    return text2.includes(":");
-  };
-  const parseNode = (indent) => {
-    if (at >= lines.length) return null;
-    if (lines[at].text.startsWith("- ") || lines[at].text === "-") return parseSequence(indent);
-    return parseMapping(indent);
-  };
-  const parseSequence = (indent) => {
-    const items = [];
-    while (at < lines.length && lines[at].indent === indent && (lines[at].text.startsWith("- ") || lines[at].text === "-")) {
-      const line = lines[at];
-      const rest = line.text === "-" ? "" : stripComment(line.text.slice(2)).trim();
-      at += 1;
-      if (rest === "") {
-        items.push(at < lines.length && lines[at].indent > indent ? parseNode(lines[at].indent) : null);
-        continue;
-      }
-      if (isMappingLine({ ...line, text: rest })) items.push(parseMapping(indent + 2, [rest]));
-      else items.push(scalar(rest, line.number));
-    }
-    return items;
-  };
-  const parseMapping = (indent, leading = []) => {
-    const map = {};
-    let pending = leading;
-    for (; ; ) {
-      let text2;
-      let number;
-      if (pending.length) {
-        text2 = pending.shift();
-        number = lines[Math.max(0, at - 1)]?.number ?? 1;
-      } else {
-        if (at >= lines.length || lines[at].indent !== indent || !isMappingLine(lines[at])) return map;
-        const line = lines[at];
-        text2 = stripComment(line.text);
-        number = line.number;
-        at += 1;
-      }
-      const cut = text2.indexOf(":");
-      const key = unquote(text2.slice(0, cut), number).trim();
-      const rest = stripComment(text2.slice(cut + 1)).trim();
-      if (rest.startsWith("|") || rest.startsWith(">")) {
-        if (!/^[|>][+-]?$/.test(rest)) fail(number, `unsupported block scalar header ${pyRepr$1(rest)}`);
-        map[key] = blockScalar(rest, indent);
-        continue;
-      }
-      if (rest === "") {
-        if (at < lines.length && lines[at].indent > indent) map[key] = parseNode(lines[at].indent);
-        else if (at < lines.length && lines[at].indent === indent && (lines[at].text.startsWith("- ") || lines[at].text === "-"))
-          map[key] = parseSequence(indent);
-        else map[key] = null;
-        continue;
-      }
-      if (isMappingLine({ text: rest })) {
-        fail(number, `a mapping value must start on its own line`);
-      }
-      map[key] = scalar(rest, number);
-    }
-  };
-  if (!lines.length) return null;
-  const value = parseNode(lines[0].indent);
-  if (at < lines.length) fail(lines[at].number, "cannot parse");
-  return value;
-}
-function parseDate(raw) {
-  const text = raw.trim();
-  const match = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/.exec(text);
-  if (!match) throw new Error(`unparseable date: ${pyRepr$1(text)} (want YYYY[-MM[-DD]])`);
-  const [, year, month, day] = match;
-  const date = { year: Number(year), month: Number(month ?? 1), day: Number(day ?? 1) };
-  if (!dayOfMonthExists(date)) throw new Error(`day is out of range for month`);
-  return date;
-}
-function dayOfMonthExists({ year, month, day }) {
-  if (month < 1 || month > 12) return false;
-  return day >= 1 && day <= daysInMonth(year, month);
-}
-function daysInMonth(year, month) {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-function addMonths(date, months) {
-  const total = date.month - 1 + months;
-  const year = date.year + Math.floor(total / 12);
-  const month = (total % 12 + 12) % 12 + 1;
-  return { year, month, day: Math.min(date.day, daysInMonth(year, month)) };
-}
-function formatDate(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${String(date.year).padStart(4, "0")}-${pad(date.month)}-${pad(date.day)}`;
-}
-function compareDates(a, b) {
-  return a.year - b.year || a.month - b.month || a.day - b.day;
-}
-function today() {
-  const now2 = /* @__PURE__ */ new Date();
-  return { year: now2.getFullYear(), month: now2.getMonth() + 1, day: now2.getDate() };
-}
-function absolutePath(text, cwd2 = process.cwd()) {
-  const path = toForwardSlashes(text);
-  return resolvePath(isAbsolutePath(path) ? path : `${toForwardSlashes(cwd2)}/${path}`);
-}
-function asciiFold(text) {
-  return text.normalize("NFKD").split("").filter((ch) => ch.codePointAt(0) < 128).join("");
-}
-function htmlEscape(text, quote = true) {
-  const out2 = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return quote ? out2.replace(/"/g, "&quot;").replace(/'/g, "&#x27;") : out2;
-}
-function pySplitLines(text) {
-  if (text === "") return [];
-  const lines = text.split(new RegExp("\\r\\n|[\\n\\r\\v\\f\\x1c-\\x1e\\x85\\u2028\\u2029]"));
-  if (lines[lines.length - 1] === "") lines.pop();
-  return lines;
-}
-function pySplitJoin(text) {
-  return text.split(/\s+/).filter(Boolean).join(" ");
-}
-function pyRound(value, digits = 0) {
-  const factor = 10 ** digits;
-  const scaled = value * factor;
-  const floor = Math.floor(scaled);
-  const diff = scaled - floor;
-  let rounded;
-  if (diff > 0.5) rounded = floor + 1;
-  else if (diff < 0.5) rounded = floor;
-  else rounded = floor % 2 === 0 ? floor : floor + 1;
-  return rounded / factor;
-}
-function usageError$3(script, message) {
-  return { stdout: `${script}: error: ${message}`, exitCode: 2 };
-}
-const BLOCK_RE = /\{if-([a-zA-Z0-9_-]+)\}([\s\S]*?)\{\/if-\1\}/;
-function processConditionals(text, truths) {
-  const kept = [];
-  const removed = [];
-  let current = text;
-  for (; ; ) {
-    const match = BLOCK_RE.exec(current);
-    if (match === null) break;
-    const condition = match[1];
-    const replacement = truths.has(condition) ? match[2] : "";
-    if (truths.has(condition)) {
-      if (!kept.includes(condition)) kept.push(condition);
-    } else if (!removed.includes(condition)) removed.push(condition);
-    current = current.slice(0, match.index) + replacement + current.slice(match.index + match[0].length);
-  }
-  return { text: current.replace(/\n{3,}/g, "\n\n"), kept, removed };
-}
-function processVariables(text, variables) {
-  const substituted = [];
-  let current = text;
-  for (const [name, value] of variables) {
-    const placeholder = `{${name}}`;
-    if (current.includes(placeholder)) {
-      current = current.split(placeholder).join(value);
-      substituted.push(name);
-    }
-  }
-  return { text: current, substituted };
-}
-function splitFlag(token) {
-  if (!token.startsWith("-") || token === "-" || token === "--") return [token, null];
-  const cut = token.indexOf("=");
-  if (cut < 0) return [token, null];
-  return [token.slice(0, cut), token.slice(cut + 1)];
 }
 const SHA1_IV = /* @__PURE__ */ Uint32Array.from([
   1732584193,
@@ -5473,7 +5508,7 @@ function loadExtra$1(text) {
   const rows = [];
   data.forEach((item, index) => {
     if (item === null || typeof item !== "object" || Array.isArray(item)) {
-      throw new Error(`each --extra entry must be a JSON object, got: ${pyRepr$1(item)}`);
+      throw new Error(`each --extra entry must be a JSON object, got: ${pyRepr$4(item)}`);
     }
     const entry = item;
     const row = {};
@@ -5527,16 +5562,16 @@ async function resolveDetail(fs2, row, csvDir) {
   const base = csvDir.replace(/\/+$/, "");
   const path = normalizePath$1(`${base}/${row.detail}`);
   if (path !== base && !path.startsWith(`${base}/`)) return null;
-  if (!await isFile(fs2, path)) return null;
+  if (!await isFile$1(fs2, path)) return null;
   return (await fs2.readText(path)).trim();
 }
 function fmtCategories$1(cats, asJson) {
-  if (asJson) return pyJson(cats.map(([category, count]) => ({ category, count })), { ensureAscii: true });
+  if (asJson) return pyJson$2(cats.map(([category, count]) => ({ category, count })), { ensureAscii: true });
   return cats.map(([category, count]) => `${category}	${count}`).join("\n");
 }
 function fmtList(rows, asJson) {
   if (asJson) {
-    return pyJson(
+    return pyJson$2(
       rows.map((row) => ({ category: row.category, technique_name: row.technique_name, description: row.description })),
       { ensureAscii: true }
     );
@@ -5556,7 +5591,7 @@ async function fmtShow(fs2, rows, csvDir, asJson) {
       if (detail) entry.detail = detail;
       out2.push(entry);
     }
-    return pyJson(out2, { ensureAscii: true });
+    return pyJson$2(out2, { ensureAscii: true });
   }
   const blocks = [];
   for (const row of rows) {
@@ -5732,7 +5767,7 @@ async function brain(argv, fs2) {
   let outPath = null;
   let drawCount = 1;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--file") {
       const taken = value();
@@ -5776,13 +5811,13 @@ async function brain(argv, fs2) {
   if (file === null) {
     return usageError$3(script, "--file is required (the pin defaulted to the catalog beside the script)");
   }
-  if (!await isFile(fs2, file)) {
+  if (!await isFile$1(fs2, file)) {
     return { stdout: `error: technique file not found: ${file}
 `, exitCode: 2 };
   }
   let rows = loadCatalog$1(await fs2.readText(file));
   if (extra !== null) {
-    if (!await isFile(fs2, extra)) {
+    if (!await isFile$1(fs2, extra)) {
       return { stdout: `error: --extra file not found: ${extra}
 `, exitCode: 2 };
     }
@@ -5829,7 +5864,8 @@ async function brain(argv, fs2) {
       exitCode: 2
     };
   }
-  const parent = outPath.slice(0, outPath.lastIndexOf("/"));
+  const cut = outPath.lastIndexOf("/");
+  const parent = cut > 0 ? outPath.slice(0, cut) : "";
   if (parent && !await fs2.exists(parent)) await fs2.mkdir(parent);
   await fs2.writeText(outPath, htmlDoc(await loadIcons(fs2, iconDir), rows));
   return { stdout: `wrote ${outPath} (${rows.length} techniques, ${categories$1(rows).length} categories)
@@ -5838,7 +5874,7 @@ async function brain(argv, fs2) {
 const UNIT_SEP = "";
 const LOG_FORMAT = `--format=%H${UNIT_SEP}%P${UNIT_SEP}%s`;
 function emit$1(payload, code = 0) {
-  return { stdout: pyJson(payload, { ensureAscii: true }), exitCode: code };
+  return { stdout: pyJson$2(payload, { ensureAscii: true }), exitCode: code };
 }
 function argumentError(message) {
   return emit$1({ ok: false, error: `argument error: ${message}` }, 2);
@@ -5953,7 +5989,7 @@ async function gitEvidence(argv, _fs) {
   let range = null;
   let storiesArg = null;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--repo") {
       const taken = value();
@@ -5979,7 +6015,7 @@ async function gitEvidence(argv, _fs) {
   const left = cut < 0 ? range : range.slice(0, cut);
   const right = cut < 0 ? "" : range.slice(cut + 2);
   if (range !== range.trim() || range.startsWith("-") || !left || !right || right.startsWith(".")) {
-    return emit$1({ ok: false, error: `invalid --range ${pyRepr$1(range)}: expected a revision range like REV..REV` }, 2);
+    return emit$1({ ok: false, error: `invalid --range ${pyRepr$4(range)}: expected a revision range like REV..REV` }, 2);
   }
   try {
     const first = parseLog(await gitLog(repo, [], range), stories);
@@ -6028,7 +6064,7 @@ function yamlSingleQuoted(value) {
   return "'" + value.replace(/'/g, "''") + "'";
 }
 function tomlString(value) {
-  return pyJsonString(value, true);
+  return pyJsonString$1(value, true);
 }
 function frontmatterBlock(content) {
   const text = content.replace(/^\s+/, "");
@@ -6049,7 +6085,7 @@ function stripQuotes(value) {
 function parseSkillFrontmatter(content) {
   const { block, body } = frontmatterBlock(content);
   if (block === null) return { meta: null, body };
-  const result = {};
+  const result = /* @__PURE__ */ Object.create(null);
   let key = null;
   let value = "";
   for (const line of block.split("\n")) {
@@ -6105,10 +6141,10 @@ async function create(fs2, args) {
   const name = args.name;
   if (!KEBAB_RE.test(name) || name.length > 64) {
     return {
-      stdout: `${pyJson(
+      stdout: `${pyJson$2(
         {
           ok: false,
-          error: `name ${pyRepr$1(name)} must be kebab-case (lowercase, digits, single hyphens), at most 64 characters`
+          error: `name ${pyRepr$4(name)} must be kebab-case (lowercase, digits, single hyphens), at most 64 characters`
         },
         { ensureAscii: true }
       )}
@@ -6117,14 +6153,14 @@ async function create(fs2, args) {
     };
   }
   if (args.shape === "multi-skill-module" && !RECORD_NAME_RE.test(name)) {
-    return { stdout: `${pyJson({ ok: false, error: "a multi-skill-module record is named bmod-<code>" }, { ensureAscii: true })}
+    return { stdout: `${pyJson$2({ ok: false, error: "a multi-skill-module record is named bmod-<code>" }, { ensureAscii: true })}
 `, exitCode: 1 };
   }
   const dirs = args.dirs.split(",").map((entry) => entry.trim()).filter(Boolean);
   const unknown = dirs.filter((dir) => !KNOWN_DIRS.includes(dir));
   if (unknown.length) {
     return {
-      stdout: `${pyJson(
+      stdout: `${pyJson$2(
         { ok: false, error: `unknown dirs ${unknown.join(", ")}; known: ${KNOWN_DIRS.join(", ")}` },
         { ensureAscii: true }
       )}
@@ -6134,7 +6170,7 @@ async function create(fs2, args) {
   }
   const skillDir = `${args.dest}/${name}`;
   if (await fs2.exists(skillDir)) {
-    return { stdout: `${pyJson({ ok: false, error: `${skillDir} already exists` }, { ensureAscii: true })}
+    return { stdout: `${pyJson$2({ ok: false, error: `${skillDir} already exists` }, { ensureAscii: true })}
 `, exitCode: 1 };
   }
   let description = args.description ?? DESCRIPTION_PLACEHOLDER;
@@ -6154,7 +6190,7 @@ async function create(fs2, args) {
     created.push(dir + "/");
   }
   const result = { ok: true, skill: name, dir: skillDir, shape: args.shape, created };
-  return { stdout: `${pyJson(result, { indent: 2, ensureAscii: true })}
+  return { stdout: `${pyJson$2(result, { indent: 2, ensureAscii: true })}
 `, exitCode: 0 };
 }
 function finding$2(path, line, rule, text, fix) {
@@ -6162,7 +6198,7 @@ function finding$2(path, line, rule, text, fix) {
 }
 async function readBmod(fs2, skillDir, findings) {
   const path = `${skillDir}/bmod.toml`;
-  if (!await isFile(fs2, path)) return { data: null, status: "absent" };
+  if (!await isFile$1(fs2, path)) return { data: null, status: "absent" };
   let data;
   try {
     data = parse(await fs2.readText(path));
@@ -6171,7 +6207,7 @@ async function readBmod(fs2, skillDir, findings) {
     findings.push(finding$2("bmod.toml", 1, "bmod-invalid", text, "fix the TOML"));
     return { data: null, status: "invalid" };
   }
-  if (!("skill" in data) && !("bmod" in data)) {
+  if (!hasOwn(data, "skill") && !hasOwn(data, "bmod")) {
     findings.push(finding$2("bmod.toml", 1, "bmod-tables", "neither [skill] nor [bmod]", "add a [skill] table"));
     return { data, status: "invalid" };
   }
@@ -6184,8 +6220,9 @@ async function walkFiles(fs2, root, skip = () => false) {
       const path = `${dir}/${name}`;
       const parts = [...rel2, name];
       if (skip(parts)) continue;
-      if (await isDirectory(fs2, path)) await walk2(path, parts);
-      else out2.push(path);
+      if (await isDirectory$1(fs2, path)) {
+        if (!await fs2.isSymlink(path)) await walk2(path, parts);
+      } else out2.push(path);
     }
   };
   await walk2(root, []);
@@ -6194,9 +6231,9 @@ async function walkFiles(fs2, root, skip = () => false) {
 async function check(fs2, skillDir, anyName) {
   const findings = [];
   const bmod = await readBmod(fs2, skillDir, findings);
-  const isRecord2 = bmod.data !== null && "bmod" in bmod.data && !("skill" in bmod.data);
+  const isRecord2 = bmod.data !== null && hasOwn(bmod.data, "bmod") && !hasOwn(bmod.data, "skill");
   const skillPath = `${skillDir}/SKILL.md`;
-  if (!await isFile(fs2, skillPath)) {
+  if (!await isFile$1(fs2, skillPath)) {
     findings.push(finding$2("SKILL.md", 1, "skill-md-missing", "no SKILL.md", "create SKILL.md"));
   } else {
     const content = await fs2.readText(skillPath);
@@ -6266,7 +6303,7 @@ async function initSkill(argv, fs2) {
   let checkPath = null;
   let anyName = false;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     const take = () => value();
     if (flag === "--check") {
@@ -6290,9 +6327,9 @@ async function initSkill(argv, fs2) {
     } else return usageError$3(script, `unrecognized arguments: ${argv[i]}`);
   }
   if (checkPath !== null) {
-    if (!await isDirectory(fs2, checkPath)) return usageError$3(script, `not a directory: ${checkPath}`);
+    if (!await isDirectory$1(fs2, checkPath)) return usageError$3(script, `not a directory: ${checkPath}`);
     const result = await check(fs2, checkPath, anyName);
-    return { stdout: `${pyJson(result, { indent: 2, ensureAscii: true })}
+    return { stdout: `${pyJson$2(result, { indent: 2, ensureAscii: true })}
 `, exitCode: result.ok ? 0 : 1 };
   }
   if (!(args.name && args.dest && args.shape)) {
@@ -6339,7 +6376,7 @@ function findPlaceholders(body, offset, name) {
       findings.push({
         category: "placeholder",
         severity,
-        detail: `${label}: ${pyRepr$1(match[0])}`,
+        detail: `${label}: ${pyRepr$4(match[0])}`,
         location: `${name} (line ${offset + lineOf$1(scan2, match.index)})`
       });
     }
@@ -6353,7 +6390,7 @@ function findFrontmatterPlaceholders(frontmatter, name) {
       findings.push({
         category: "placeholder",
         severity,
-        detail: `frontmatter ${label}: ${pyRepr$1(match[0])}`,
+        detail: `frontmatter ${label}: ${pyRepr$4(match[0])}`,
         location: `${name} frontmatter (line ${1 + lineOf$1(frontmatter, match.index)})`
       });
     }
@@ -6441,7 +6478,7 @@ function findUnpinnedStack(body, offset, name) {
       findings.push({
         category: "version_pin",
         severity: "medium",
-        detail: `Stack entry ${pyRepr$1(dep)} has no version`,
+        detail: `Stack entry ${pyRepr$4(dep)} has no version`,
         location: `${name} (line ${offset + i + 1})`
       });
     }
@@ -6472,7 +6509,7 @@ async function lintSpine(argv, fs2) {
   let workspace = null;
   let output = null;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--workspace") {
       const taken = value();
@@ -6495,7 +6532,7 @@ async function lintSpine(argv, fs2) {
   let result;
   if (!await fs2.exists(spinePath)) {
     result = { ok: false, error: `${spinePath} not found`, findings: [], total_findings: 0 };
-  } else if (await isDirectory(fs2, spinePath)) {
+  } else if (await isDirectory$1(fs2, spinePath)) {
     result = { ok: false, error: `could not read ${spinePath}: [Errno 21] Is a directory: '${spinePath}'`, findings: [], total_findings: 0 };
   } else {
     try {
@@ -6505,7 +6542,7 @@ async function lintSpine(argv, fs2) {
       result = { ok: false, error: `could not read ${spinePath}: ${text}`, findings: [], total_findings: 0 };
     }
   }
-  const out2 = pyJson(result, { indent: 2, ensureAscii: true });
+  const out2 = pyJson$2(result, { indent: 2, ensureAscii: true });
   if (output !== null) {
     const parent = output.slice(0, output.lastIndexOf("/"));
     if (parent && parent !== "/" && !await fs2.exists(parent)) await fs2.mkdir(parent);
@@ -6543,16 +6580,16 @@ async function scanCustomizableSkills(fs2, roots, projectRoot) {
   const seen = /* @__PURE__ */ new Set();
   const customDir = `${projectRoot}/_bmad/custom`;
   for (const root of roots) {
-    if (!await isDirectory(fs2, root)) {
+    if (!await isDirectory$1(fs2, root)) {
       errors.push(`skills root does not exist: ${root}`);
       continue;
     }
     scannedRoots.push(root);
     for (const name of (await fs2.list(root)).sort(compareStrings)) {
       const skillDir = `${root}/${name}`;
-      if (!await isDirectory(fs2, skillDir)) continue;
+      if (!await isDirectory$1(fs2, skillDir)) continue;
       const customizeToml = `${skillDir}/customize.toml`;
-      if (!await isFile(fs2, customizeToml)) continue;
+      if (!await isFile$1(fs2, customizeToml)) continue;
       let data;
       try {
         data = parse(await fs2.readText(customizeToml));
@@ -6566,7 +6603,7 @@ async function scanCustomizableSkills(fs2, roots, projectRoot) {
       if (seen.has(name)) continue;
       seen.add(name);
       const skillMd2 = `${skillDir}/SKILL.md`;
-      const description = await isFile(fs2, skillMd2) ? frontmatterDescription(await fs2.readText(skillMd2)) : "";
+      const description = await isFile$1(fs2, skillMd2) ? frontmatterDescription(await fs2.readText(skillMd2)) : "";
       const teamOverride = `${customDir}/${name}.toml`;
       const userOverride = `${customDir}/${name}.user.toml`;
       const surfaces = SURFACE_KEYS.filter((key) => key in data);
@@ -6577,8 +6614,8 @@ async function scanCustomizableSkills(fs2, roots, projectRoot) {
       for (const surface of surfaces) {
         const entry = {
           description,
-          has_team_override: await isFile(fs2, teamOverride),
-          has_user_override: await isFile(fs2, userOverride),
+          has_team_override: await isFile$1(fs2, teamOverride),
+          has_user_override: await isFile$1(fs2, userOverride),
           install_path: skillDir,
           name,
           skills_root: root,
@@ -6607,7 +6644,7 @@ async function listCustomizableSkills(argv, fs2) {
   let skillRoot = null;
   const extraRoots = [];
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     const taken = () => value();
     if (flag === "--project-root") {
@@ -6631,7 +6668,7 @@ async function listCustomizableSkills(argv, fs2) {
   if (projectRoot === null) return usageError$3(script, "the following arguments are required: --project-root");
   const home = homedir();
   const resolvedProject = absolutePath(expandUser(projectRoot, home));
-  if (!await isDirectory(fs2, resolvedProject)) {
+  if (!await isDirectory$1(fs2, resolvedProject)) {
     return {
       stdout: `error: project-root does not exist or is not a directory: ${resolvedProject}
 `,
@@ -6648,7 +6685,7 @@ async function listCustomizableSkills(argv, fs2) {
   }
   try {
     const result = await scanCustomizableSkills(fs2, roots, resolvedProject);
-    return { stdout: `${pyJson(result, { indent: 2, ensureAscii: true })}
+    return { stdout: `${pyJson$2(result, { indent: 2, ensureAscii: true })}
 `, exitCode: 0 };
   } catch (error) {
     return { stdout: `${errorText(error)}
@@ -6671,7 +6708,7 @@ function loadExtra(text) {
   const rows = [];
   data.forEach((item, index) => {
     if (item === null || typeof item !== "object" || Array.isArray(item)) {
-      throw new Error(`each --extra entry must be a JSON object, got: ${pyRepr$1(item)}`);
+      throw new Error(`each --extra entry must be a JSON object, got: ${pyRepr$4(item)}`);
     }
     const entry = item;
     const row = {};
@@ -6780,12 +6817,12 @@ function sample(rows, n, random) {
   return out2;
 }
 function fmtCategories(cats, asJson) {
-  if (asJson) return pyJson(cats.map(([category, count]) => ({ category, count })), { ensureAscii: true });
+  if (asJson) return pyJson$2(cats.map(([category, count]) => ({ category, count })), { ensureAscii: true });
   return cats.map(([category, count]) => `${category}	${count}`).join("\n");
 }
 function fmtRows(rows, asJson) {
   if (asJson) {
-    return pyJson(
+    return pyJson$2(
       rows.map((row) => Object.fromEntries(FIELDS.map((field) => [field, row[field]]))),
       { ensureAscii: true }
     );
@@ -6805,7 +6842,7 @@ async function pickMethods(argv, fs2) {
   let excludeArgs = [];
   let spread = false;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--file") {
       const taken = value();
@@ -6846,7 +6883,7 @@ async function pickMethods(argv, fs2) {
   if (file === null) {
     return usageError$3(script, "--file is required (the pin defaulted to the catalog beside the script)");
   }
-  if (!await isFile(fs2, file)) {
+  if (!await isFile$1(fs2, file)) {
     return { stdout: `error: method file not found: ${file}
 `, exitCode: 2 };
   }
@@ -7037,7 +7074,7 @@ function detectFormat(path, requested) {
 async function expand(fs2, paths) {
   const files = [];
   for (const path of paths) {
-    if (await isDirectory(fs2, path)) {
+    if (await isDirectory$1(fs2, path)) {
       const names = (await fs2.list(path)).sort(compareStrings);
       for (const name of names) if (name.endsWith(".jsonl")) files.push(`${path}/${name}`);
       for (const name of names) if (name.endsWith(".memlog.md")) files.push(`${path}/${name}`);
@@ -7052,7 +7089,7 @@ async function readSessionLog(argv, fs2) {
   let format = "auto";
   let maxItems = 20;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--project") {
       const taken = value();
@@ -7082,7 +7119,7 @@ async function readSessionLog(argv, fs2) {
     const { resolve: resolvePath2 } = await import("node:path");
     const expanded = project.startsWith("~") ? `${homedir2()}${project.slice(1)}` : project;
     const folder = `${projectsDir(homedir2(), process.env.CLAUDE_CONFIG_DIR)}/${encodeCwd(resolvePath2(expanded))}`;
-    if (!await isDirectory(fs2, folder)) {
+    if (!await isDirectory$1(fs2, folder)) {
       return usageError$3(script, `no transcripts for ${project} at ${folder}`);
     }
     paths.push(folder);
@@ -7099,7 +7136,7 @@ async function readSessionLog(argv, fs2) {
     const entries = detected === "claude-code" ? readClaudeCode(text, digest) : readMemlog(text, digest);
     digest.sources.push({ path, format: detected, entries });
   }
-  return { stdout: `${pyJson(digest.render(maxItems), { indent: 2, ensureAscii: true })}
+  return { stdout: `${pyJson$2(digest.render(maxItems), { indent: 2, ensureAscii: true })}
 `, exitCode: 0 };
 }
 const MARKER_RE$1 = /\[(\d+)\](?!\()/g;
@@ -7109,7 +7146,7 @@ const ROW_ID_RE = /^\[(\d+)\]$/;
 const FENCE_RE = /^\s*(`{3,}|~{3,})/;
 const ENTRY_RE = /^- (?:\(([\p{L}\p{N}_-]+)(?: by [^)]*)?\)\s*)?(.*)$/u;
 function out(payload, exitCode) {
-  return { stdout: `${pyJson(payload, { indent: 2 })}
+  return { stdout: `${pyJson$2(payload, { indent: 2 })}
 `, exitCode };
 }
 function refusal(message) {
@@ -7227,7 +7264,7 @@ function cmdStaleness(text, windowsArg, todayArg) {
     windows = new Map(
       Object.entries(rawWindows).map(([key, value]) => {
         const months = Number(value);
-        if (!Number.isInteger(months)) throw new Error(`--windows values must be whole months, got ${pyRepr$1(value)}`);
+        if (!Number.isInteger(months)) throw new Error(`--windows values must be whole months, got ${pyRepr$4(value)}`);
         return [key.toLowerCase(), months];
       })
     );
@@ -7255,7 +7292,7 @@ function cmdStaleness(text, windowsArg, todayArg) {
     try {
       published = parseDate(String(claim.pub_date));
     } catch (error) {
-      return { stdout: `error in claim ${pyRepr$1(claim)}: ${errorText(error)}
+      return { stdout: `error in claim ${pyRepr$4(claim)}: ${errorText(error)}
 `, exitCode: 2 };
     }
     const months = windows.get(claimClass);
@@ -7336,7 +7373,7 @@ async function reconKit(argv, fs2) {
   const rest = [];
   let command = null;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     if (flag === "--skill-root") {
       if ((inline ?? argv[++i]) === void 0) {
         return usageError$3("recon_kit", "argument --skill-root: expected one argument");
@@ -7354,7 +7391,7 @@ async function reconKit(argv, fs2) {
   let pattern = "research-{topic_slug}";
   let dateArg = null;
   for (let i = 0; i < rest.length; i++) {
-    const [flag, inline] = splitFlag(rest[i]);
+    const [flag, inline] = splitFlag$1(rest[i]);
     const value = () => inline ?? rest[++i];
     if (flag === "--skill-root") {
       if (value() === void 0) return usageError$3("recon_kit", "argument --skill-root: expected one argument");
@@ -7401,7 +7438,7 @@ async function reconKit(argv, fs2) {
       return cmdSlug(topic, type, pattern, dateArg);
     }
     default:
-      return usageError$3("recon_kit", `invalid choice: ${pyRepr$1(command)}`);
+      return usageError$3("recon_kit", `invalid choice: ${pyRepr$4(command)}`);
   }
 }
 const RUNTIME_RE = /_bmad\/scripts\//;
@@ -7430,20 +7467,20 @@ async function scanRegistry(fs2, projectRoot, roots) {
   const unregistered = [];
   const home = resolvePath(homedir());
   for (const root of roots) {
-    if (!await isDirectory(fs2, root)) continue;
+    if (!await isDirectory$1(fs2, root)) continue;
     const entries = (await fs2.list(root)).sort(compareStrings);
     for (const name of entries) {
       const folder = `${root}/${name}`;
-      if (!await isDirectory(fs2, folder)) continue;
-      if (!await isFile(fs2, `${folder}/SKILL.md`)) continue;
+      if (!await isDirectory$1(fs2, folder)) continue;
+      if (!await isFile$1(fs2, `${folder}/SKILL.md`)) continue;
       const real = resolvePath(folder);
       if (seen.has(real)) continue;
       seen.add(real);
       const scope = isRelativeTo(real, home) && !isRelativeTo(real, resolvePath(projectRoot)) ? "user" : "project";
       const manifest = `${folder}/bmod.toml`;
-      if (!await isFile(fs2, manifest)) {
+      if (!await isFile$1(fs2, manifest)) {
         const skillText = await fs2.readText(`${folder}/SKILL.md`);
-        if (await isFile(fs2, `${folder}/customize.toml`) || RUNTIME_RE.test(skillText)) {
+        if (await isFile$1(fs2, `${folder}/customize.toml`) || RUNTIME_RE.test(skillText)) {
           unregistered.push({ skill: name, path: folder });
         }
         continue;
@@ -7466,8 +7503,8 @@ async function scanRegistry(fs2, projectRoot, roots) {
           version: table.version ?? null,
           update_source: table.update_source ?? null,
           skills: skills.map(String),
-          has_help: await isFile(fs2, `${folder}/help/help.md`),
-          has_roster: await isFile(fs2, `${folder}/roster.toml`),
+          has_help: await isFile$1(fs2, `${folder}/help/help.md`),
+          has_roster: await isFile$1(fs2, `${folder}/roster.toml`),
           single_skill: "skill" in data
         });
       }
@@ -7490,11 +7527,11 @@ async function scanRegistry(fs2, projectRoot, roots) {
   const core = out2.find((rec) => rec.code === "core-tools") ?? null;
   const skillsDir = `${projectRoot}/skills`;
   let skillsRepo = false;
-  if (await isDirectory(fs2, skillsDir)) {
+  if (await isDirectory$1(fs2, skillsDir)) {
     for (const name of await fs2.list(skillsDir)) {
       const folder = `${skillsDir}/${name}`;
-      if (!await isDirectory(fs2, folder)) continue;
-      if (await isFile(fs2, `${folder}/SKILL.md`) && await isFile(fs2, `${folder}/bmod.toml`)) {
+      if (!await isDirectory$1(fs2, folder)) continue;
+      if (await isFile$1(fs2, `${folder}/SKILL.md`) && await isFile$1(fs2, `${folder}/bmod.toml`)) {
         skillsRepo = true;
         break;
       }
@@ -7502,7 +7539,7 @@ async function scanRegistry(fs2, projectRoot, roots) {
   }
   return {
     project_root: projectRoot,
-    bmad: { present: await isDirectory(fs2, bmadDir), version: core === null ? null : core.version },
+    bmad: { present: await isDirectory$1(fs2, bmadDir), version: core === null ? null : core.version },
     skills_repo: skillsRepo,
     records: out2,
     unregistered
@@ -7524,7 +7561,7 @@ async function registry(argv, fs2) {
   let skillRoot = null;
   const roots = [];
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--project-root") {
       const taken = value();
@@ -7544,11 +7581,11 @@ async function registry(argv, fs2) {
   }
   if (projectRoot === null) return usageError$3(script, "the following arguments are required: --project-root");
   const resolved = absolutePath(projectRoot);
-  if (!await isDirectory(fs2, resolved)) return usageError$3(script, `not a directory: ${resolved}`);
+  if (!await isDirectory$1(fs2, resolved)) return usageError$3(script, `not a directory: ${resolved}`);
   const fallback = skillRoot === null ? [] : [resolvePath(`${skillRoot}/..`)];
   const allRoots = roots.length ? roots.map((root) => absolutePath(root)) : [...fallback, ...defaultRegistryRoots(resolved)];
   const report = await scanRegistry(fs2, resolved, allRoots);
-  return { stdout: `${pyJson(report, { indent: 2, ensureAscii: true })}
+  return { stdout: `${pyJson$2(report, { indent: 2, ensureAscii: true })}
 `, exitCode: 0 };
 }
 const MEMBER_FIELDS = ["name", "icon", "title", "persona", "capabilities", "model"];
@@ -7563,8 +7600,8 @@ async function collect(fs2, roots, projectRoot = null) {
       await recordFile(fs2, files, problems, module);
     }
   }
-  const members = {};
-  const groups = {};
+  const members = /* @__PURE__ */ Object.create(null);
+  const groups = /* @__PURE__ */ Object.create(null);
   const ordered = [...files.values()].sort(
     (a, b) => compareStrings(a.module.code, b.module.code) || compareStrings(a.path, b.path)
   );
@@ -7577,7 +7614,7 @@ async function collect(fs2, roots, projectRoot = null) {
       addGroup(groups, problems, group, file.module.code, file.path);
     }
   }
-  const agents = {};
+  const agents = /* @__PURE__ */ Object.create(null);
   for (const [code, member] of Object.entries(members)) if (member.installed) agents[code] = member;
   await applyCentralAgents(fs2, agents, members, problems, projectRoot);
   return {
@@ -7621,10 +7658,10 @@ async function addMember(fs2, members, problems, member, module, path, source, s
     problems.push({ kind: "member", problem: `${module} ${path}: a member has no code` });
     return;
   }
-  if (code in members) {
+  if (hasOwn(members, code)) {
     problems.push({
       kind: "member",
-      problem: `${module} ${path}: member ${pyRepr$1(code)} is already defined by ${members[code].module}`
+      problem: `${module} ${path}: member ${pyRepr$4(code)} is already defined by ${members[code].module}`
     });
     return;
   }
@@ -7644,7 +7681,7 @@ async function addMember(fs2, members, problems, member, module, path, source, s
       if (command) entry.install = command;
     }
   }
-  if (!("name" in entry)) entry.name = code;
+  if (!hasOwn(entry, "name")) entry.name = code;
   members[code] = entry;
 }
 async function agentIdentity(fs2, skillDir, projectRoot) {
@@ -7669,17 +7706,17 @@ function addGroup(groups, problems, group, module, path) {
     problems.push({ kind: "group", problem: `${module} ${path}: a group has no id` });
     return;
   }
-  if (id in groups) {
+  if (hasOwn(groups, id)) {
     problems.push({
       kind: "group",
-      problem: `${module} ${path}: group ${pyRepr$1(id)} is already defined by ${groups[id].module}`
+      problem: `${module} ${path}: group ${pyRepr$4(id)} is already defined by ${groups[id].module}`
     });
     return;
   }
   groups[id] = { ...group, module };
 }
 async function applyCentralAgents(fs2, agents, members, problems, projectRoot) {
-  if (projectRoot === null || !await isDirectory(fs2, `${projectRoot}/_bmad`)) return;
+  if (projectRoot === null || !await isDirectory$1(fs2, `${projectRoot}/_bmad`)) return;
   let configured;
   try {
     configured = (await loadCentralConfig(projectRoot, fs2)).agents ?? {};
@@ -7690,20 +7727,20 @@ async function applyCentralAgents(fs2, agents, members, problems, projectRoot) {
   if (!isTable$3(configured)) return;
   for (const [code, info] of Object.entries(configured)) {
     if (!isTable$3(info) || members[code]?.installed === false) continue;
-    if (!(code in agents)) agents[code] = { code, source: "config" };
+    if (!hasOwn(agents, code)) agents[code] = { code, source: "config" };
     const entry = agents[code];
     const settled = /* @__PURE__ */ new Set();
     if (entry.source === "roster") {
       settled.add("module");
-      for (const field of AGENT_FIELDS) if (field in entry) settled.add(field);
+      for (const field of AGENT_FIELDS) if (hasOwn(entry, field)) settled.add(field);
     }
-    const hasPersona = "persona" in info;
+    const hasPersona = hasOwn(info, "persona");
     for (const [field, value] of Object.entries(info)) {
       if (settled.has(field)) continue;
       const target = field === "description" && !hasPersona ? "persona" : field;
       entry[target] = value;
     }
-    if (!("name" in entry)) entry.name = code;
+    if (!hasOwn(entry, "name")) entry.name = code;
   }
 }
 async function roster(argv, fs2) {
@@ -7737,7 +7774,7 @@ async function roster(argv, fs2) {
   const allRoots = (skill !== null ? [dirname(resolvePath(skill))] : []).concat(roots);
   if (!allRoots.length) return usageError$2("give --skill or --root");
   const report = await collect(fs2, allRoots, projectRoot === null ? null : resolvePath(projectRoot));
-  return { stdout: `${pyJson(report, { indent: 2 })}
+  return { stdout: `${pyJson$2(report, { indent: 2 })}
 `, exitCode: 0 };
 }
 function usageError$2(message) {
@@ -7752,8 +7789,8 @@ async function loadRoster$1(fs2, projectRoot, skillRoot) {
     const data = await collect(fs2, [root], projectRoot);
     const agents = data.agents ?? {};
     const members = data.members ?? {};
-    const guests = {};
-    for (const [code, member] of Object.entries(members)) if (!(code in agents)) guests[code] = member;
+    const guests = /* @__PURE__ */ Object.create(null);
+    for (const [code, member] of Object.entries(members)) if (!hasOwn(agents, code)) guests[code] = member;
     const problems = (data.problems ?? []).filter((problem) => isTable$2(problem) && typeof problem.problem === "string").map((problem) => problem.problem).filter(Boolean);
     return { agents, guests, groups: data.groups ?? [], resolved: true, problems };
   } catch {
@@ -7799,7 +7836,7 @@ function badMember$1(code, name) {
   return !(typeof code === "string" && (name === void 0 || name === null || typeof name === "string"));
 }
 function buildCollective(agents, partyMembers, guests = null) {
-  const collective = {};
+  const collective = /* @__PURE__ */ Object.create(null);
   const index = /* @__PURE__ */ new Map();
   const installedCodes = [];
   const aliasOwner = /* @__PURE__ */ new Map();
@@ -7869,7 +7906,7 @@ function resolveMembers(tokens, collective, index) {
       continue;
     }
     const code = index.get(token) ?? index.get(token.toLowerCase());
-    if (code && code in collective) resolved.push(collective[code]);
+    if (code && hasOwn(collective, code)) resolved.push(collective[code]);
     else unresolved.push(token);
   }
   return { resolved, unresolved };
@@ -7914,7 +7951,7 @@ async function resolveParty(argv, fs2) {
   let party = null;
   let listGroups = false;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--project-root") {
       const taken = value();
@@ -7943,7 +7980,7 @@ async function resolveParty(argv, fs2) {
   const defaultParty = typeof workflow.default_party === "string" ? workflow.default_party : "";
   const partyMode = typeof workflow.party_mode === "string" && workflow.party_mode || "session";
   const partyMemory = Boolean(workflow.party_memory ?? true);
-  const emit2 = (payload) => ({ stdout: `${pyJson(payload, { indent: 2 })}
+  const emit2 = (payload) => ({ stdout: `${pyJson$2(payload, { indent: 2 })}
 `, exitCode: 0 });
   if (listGroups) {
     return emit2({ party_mode: partyMode, default_party: defaultParty, groups: groupMenu(groups) });
@@ -7991,9 +8028,9 @@ async function loadRoster(fs2, projectRoot, skillRoot) {
     const data = await collect(fs2, [resolvePath(`${skillRoot}/..`)], projectRoot);
     const agents = isTable$1(data.agents) ? data.agents : {};
     const members = isTable$1(data.members) ? data.members : {};
-    const guests = {};
+    const guests = /* @__PURE__ */ Object.create(null);
     for (const [code, member] of Object.entries(members)) {
-      if (!(code in agents) && isTable$1(member)) guests[code] = member;
+      if (!hasOwn(agents, code) && isTable$1(member)) guests[code] = member;
     }
     return { agents, guests, groups: Array.isArray(data.groups) ? data.groups : [], resolved: true };
   } catch {
@@ -8030,7 +8067,7 @@ async function findPartySkill(fs2, projectRoot, skillRoot) {
     `${projectRoot}/_bmad/skills/${PARTY_SKILL}`
   ];
   for (const candidate of candidates) {
-    if (await isFile(fs2, `${candidate}/customize.toml`)) return candidate;
+    if (await isFile$1(fs2, `${candidate}/customize.toml`)) return candidate;
   }
   return null;
 }
@@ -8050,7 +8087,7 @@ async function loadPartyWorkflow(fs2, projectRoot, partySkill) {
 async function loadPartyOverrides(fs2, projectRoot) {
   const custom = `${projectRoot}/_bmad/custom`;
   const read = async (path) => {
-    if (!await isFile(fs2, path)) return {};
+    if (!await isFile$1(fs2, path)) return {};
     try {
       const data = parse(await fs2.readText(path));
       return isTable$1(data.workflow) ? data.workflow : {};
@@ -8069,7 +8106,7 @@ async function loadPartyOverrides(fs2, projectRoot) {
   return merged;
 }
 function buildPool(agents, partyMembers, guests = null) {
-  const pool = {};
+  const pool = /* @__PURE__ */ Object.create(null);
   const index = /* @__PURE__ */ new Map();
   const installedCodes = [];
   const customCodes = [];
@@ -8113,7 +8150,7 @@ function buildPool(agents, partyMembers, guests = null) {
     if (code === null || code === void 0 || code === "" || badMember(code, member.name)) continue;
     const text = String(code);
     const canonical = index.get(text) ?? index.get(text.toLowerCase()) ?? text;
-    const wasInstalled = canonical in pool;
+    const wasInstalled = hasOwn(pool, canonical);
     const entry = { ...pool[canonical] ?? {}, code: canonical, source: "custom" };
     for (const field of ["name", "icon", "title", "persona", "capabilities", "model"]) {
       if (member[field] !== null && member[field] !== void 0) entry[field] = member[field];
@@ -8147,9 +8184,9 @@ function resolveParties(groups, pool, index) {
     const raw = Array.isArray(group.members) ? group.members : [];
     const members = [];
     for (const token of raw) {
-      const key = typeof token === "string" ? token : pyRepr$1(token);
+      const key = typeof token === "string" ? token : pyRepr$4(token);
       const code = index.get(key) ?? index.get(key.toLowerCase());
-      if (code !== void 0 && code in pool) members.push(brief(pool[code]));
+      if (code !== void 0 && hasOwn(pool, code)) members.push(brief(pool[code]));
     }
     const party = { id: group.id, name: group.name ?? group.id, members };
     if (group.scene) party.scene = group.scene;
@@ -8163,7 +8200,7 @@ async function resolvePersonas(argv, fs2) {
   let projectRoot = null;
   let skill = null;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     if (flag === "--project-root") {
       const taken = value();
@@ -8194,7 +8231,7 @@ async function resolvePersonas(argv, fs2) {
     party_mode_found: partySkill !== null,
     agents_resolved: roster2.resolved
   };
-  return { stdout: `${pyJson(payload, { indent: 2 })}
+  return { stdout: `${pyJson$2(payload, { indent: 2 })}
 `, exitCode: 0 };
 }
 const CANARY_PREFIX = "TRIGGER-LOADED-";
@@ -8203,7 +8240,7 @@ function utcNowIso() {
   return `${(/* @__PURE__ */ new Date()).toISOString().slice(0, 19)}Z`;
 }
 function writeJson(path, data) {
-  return writeFile(path, `${pyJson(data, { indent: 2, ensureAscii: true })}
+  return writeFile(path, `${pyJson$2(data, { indent: 2, ensureAscii: true })}
 `, "utf8");
 }
 function readJson(text) {
@@ -8213,7 +8250,7 @@ async function findProjectRoot(fs2, start) {
   let gitRoot = null;
   let current = resolvePath(start);
   for (; ; ) {
-    if (await isDirectory(fs2, `${current}/_bmad`)) return current;
+    if (await isDirectory$1(fs2, `${current}/_bmad`)) return current;
     if (gitRoot === null && await fs2.exists(`${current}/.git`)) gitRoot = current;
     const parent = pathDirname(current);
     if (parent === current) return gitRoot;
@@ -8244,26 +8281,24 @@ function validateHarness(harness) {
 }
 async function resolveHarness(fs2, projectRoot, explicit) {
   if (explicit !== null) {
-    if (!await isFile(fs2, explicit)) return { harness: null, note: `harness file not found: ${explicit}` };
+    if (!await isFile$1(fs2, explicit)) return { harness: null, note: `harness file not found: ${explicit}` };
     return { harness: validateHarness(readJson(await fs2.readText(explicit))), note: explicit };
   }
   if (projectRoot === null) return { harness: null, note: "no project root" };
-  if (!await isDirectory(fs2, `${projectRoot}/_bmad`)) {
+  if (!await isDirectory$1(fs2, `${projectRoot}/_bmad`)) {
     return { harness: null, note: "BMad is not set up in this project; pass --harness" };
   }
-  let workflow = {};
+  let customization = {};
   for (const name of ["bmad-eval.toml", "bmad-eval.user.toml"]) {
     const path = `${projectRoot}/_bmad/custom/${name}`;
-    if (!await isFile(fs2, path)) continue;
+    if (!await isFile$1(fs2, path)) continue;
     try {
-      const data = parse(await fs2.readText(path));
-      if (data.workflow !== void 0 && data.workflow !== null && typeof data.workflow === "object") {
-        workflow = { ...workflow, ...data.workflow };
-      }
+      customization = deepMerge(customization, parse(await fs2.readText(path)));
     } catch {
       continue;
     }
   }
+  const workflow = customization.workflow ?? {};
   const harness = workflow.harness;
   if (harness === null || harness === void 0 || typeof harness !== "object" || !harness.command) {
     return { harness: null, note: "no harness recorded in bmad-eval's customization" };
@@ -8296,12 +8331,13 @@ function buildCaseEnv(harness, homeDir, hostEnv) {
 function contained(root, rel2) {
   const base = resolve(root);
   const target = resolve(base, rel2);
+  if (!containedPath(base, target)) throw new Error(`path escapes the workspace: ${rel2}`);
+  return target;
+}
+function containedPath(base, target) {
   const into = toForwardSlashes(base);
   const folded = toForwardSlashes(target);
-  if (folded !== into && !folded.startsWith(into.endsWith("/") ? into : `${into}/`)) {
-    throw new Error(`path escapes the workspace: ${rel2}`);
-  }
-  return target;
+  return folded === into || folded.startsWith(into.endsWith("/") ? into : `${into}/`);
 }
 async function makeHome(harness, room) {
   const home = join(room, ".home");
@@ -8534,7 +8570,7 @@ async function runTriggers(argv, fs2) {
   let workers = 4;
   let quiet = false;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     const value = () => inline ?? argv[++i];
     const number = () => {
       const taken = value();
@@ -8561,7 +8597,7 @@ async function runTriggers(argv, fs2) {
   if (outputDir === null) return usageError$3(script, "the following arguments are required: --output-dir");
   const resolvedSkill = resolvePath(skillPath);
   const resolvedQueries = resolvePath(queriesFile);
-  if (!await isFile(fs2, resolvedQueries)) {
+  if (!await isFile$1(fs2, resolvedQueries)) {
     return { stdout: `queries file not found: ${resolvedQueries}
 `, exitCode: 2 };
   }
@@ -8587,7 +8623,7 @@ async function runTriggers(argv, fs2) {
 `, exitCode: 2 };
   }
   if (!Array.isArray(queries)) return { stdout: "queries file must be a JSON list\n", exitCode: 2 };
-  const root = projectRoot !== null ? resolvePath(projectRoot) : await findProjectRoot(fs2, resolvedSkill);
+  const root = projectRoot !== null ? absolutePath(projectRoot) : await findProjectRoot(fs2, resolvedSkill);
   let harness;
   let harnessNote;
   try {
@@ -8621,7 +8657,7 @@ async function runTriggers(argv, fs2) {
       summary: { total: queries.length, passed: 0, failed: 0, unmeasured: queries.length }
     };
     await writeJson(join(runDir, "triggers-result.json"), output2);
-    return { stdout: `${pyJson(output2, { indent: 2, ensureAscii: true })}
+    return { stdout: `${pyJson$2(output2, { indent: 2, ensureAscii: true })}
 `, exitCode: 3 };
   }
   const attempts = queries.map(() => []);
@@ -8706,7 +8742,7 @@ async function runTriggers(argv, fs2) {
     }
   };
   await writeJson(join(runDir, "triggers-result.json"), output);
-  return { stdout: `${pyJson(output, { indent: 2, ensureAscii: true })}
+  return { stdout: `${pyJson$2(output, { indent: 2, ensureAscii: true })}
 `, exitCode: unmeasured ? 1 : 0 };
 }
 const SKIP_DIRS$1 = [".git", "__pycache__", "node_modules", ".venv", "venv", ".pytest_cache"];
@@ -8732,7 +8768,7 @@ async function walk(fs2, root) {
       if (SKIP_DIRS$1.includes(name)) continue;
       const path = `${dir}/${name}`;
       const next = [...parts, name];
-      if (await isDirectory(fs2, path)) await visit(path, next);
+      if (await isDirectory$1(fs2, path)) await visit(path, next);
       else out2.push(path);
     }
   };
@@ -8765,7 +8801,7 @@ function configKey(key, spec) {
   }
   const result = spec.result;
   if (typeof result === "string" && result !== "{value}" && result !== "") {
-    reasons.push(`result template ${pyRepr$1(result)}; fold it into the default and the skill that reads it`);
+    reasons.push(`result template ${pyRepr$4(result)}; fold it into the default and the skill that reads it`);
   }
   for (const extra of ["regex", "required", "example"]) {
     if (extra in spec) reasons.push(`${extra} has no bmod equivalent`);
@@ -8860,7 +8896,7 @@ async function scanLegacyModule(argv, fs2) {
   const script = "scan_legacy_module";
   const positionals = [];
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     if (flag === "--skill-root") {
       if ((inline ?? argv[++i]) === void 0) return usageError$3(script, "argument --skill-root: expected one argument");
     } else if (argv[i].startsWith("-") && argv[i] !== "-") {
@@ -8869,13 +8905,13 @@ async function scanLegacyModule(argv, fs2) {
   }
   const module = positionals[0];
   if (module === void 0) return usageError$3(script, "the following arguments are required: module");
-  if (!await isDirectory(fs2, module)) return usageError$3(script, `not a directory: ${module}`);
+  if (!await isDirectory$1(fs2, module)) return usageError$3(script, `not a directory: ${module}`);
   const result = await scanLegacy(fs2, module);
   if (result === null) {
     return { stdout: `scan_legacy_module: no module.yaml under ${module}
 `, exitCode: 1 };
   }
-  return { stdout: `${pyJson(result, { indent: 2, ensureAscii: true })}
+  return { stdout: `${pyJson$2(result, { indent: 2, ensureAscii: true })}
 `, exitCode: 0 };
 }
 const SKIP_DIRS = [".git", "__pycache__", "node_modules", ".venv", "venv"];
@@ -8908,7 +8944,7 @@ async function iterMarkdown(fs2, root) {
       const path = `${dir}/${name}`;
       const next = [...parts, name];
       if (SKIP_DIRS.includes(name) || name.startsWith(".")) continue;
-      if (await isDirectory(fs2, path)) await walk2(path, next);
+      if (await isDirectory$1(fs2, path)) await walk2(path, next);
       else if (name.endsWith(".md")) out2.push(path);
     }
   };
@@ -8966,10 +9002,10 @@ async function scanReferences(fs2, content, rel2, skillRoot) {
     }
     if (raw.startsWith("/") || raw.startsWith("./") || raw.startsWith("_bmad/") || raw.startsWith("@")) continue;
     if (isExample(rel2.split("/"))) continue;
-    const resolves = async (path) => await fs2.exists(path) && !await isDirectory(fs2, path);
+    const resolves = async (path) => await fs2.exists(path) && !await isDirectory$1(fs2, path);
     if (await resolves(`${relDir}/${raw}`) || await resolves(`${skillRoot}/${raw}`)) continue;
     const firstDir = raw.split("/")[0];
-    if (await isDirectory(fs2, `${relDir}/${firstDir}`) || await isDirectory(fs2, `${skillRoot}/${firstDir}`)) {
+    if (await isDirectory$1(fs2, `${relDir}/${firstDir}`) || await isDirectory$1(fs2, `${skillRoot}/${firstDir}`)) {
       findings.push(finding$1(rel2, line, "missing-file", raw, "fix the path or remove the dead reference"));
     }
   }
@@ -8997,7 +9033,7 @@ async function scanPaths(argv, fs2) {
   const positionals = [];
   const allow = [];
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     if (flag === "--allow") {
       const value = inline ?? argv[++i];
       if (value === void 0) return usageError$3(script, "argument --allow: expected one argument");
@@ -9011,13 +9047,13 @@ async function scanPaths(argv, fs2) {
   }
   const skill = positionals[0];
   if (skill === void 0) return usageError$3(script, "the following arguments are required: skill");
-  if (!await isDirectory(fs2, skill)) return usageError$3(script, `not a directory: ${skill}`);
+  if (!await isDirectory$1(fs2, skill)) return usageError$3(script, `not a directory: ${skill}`);
   const unknown = [...new Set(allow)].filter((rule) => !RULES.includes(rule)).sort(compareStrings);
   if (unknown.length) {
     return usageError$3(script, `unknown rule(s): ${unknown.join(", ")}; rules: ${[...RULES].sort(compareStrings).join(", ")}`);
   }
   const result = await scanSkill(fs2, skill, allow);
-  return { stdout: `${pyJson(result, { indent: 2, ensureAscii: true })}
+  return { stdout: `${pyJson$2(result, { indent: 2, ensureAscii: true })}
 `, exitCode: result.findings.length ? 1 : 0 };
 }
 const FLOOR = [3, 11];
@@ -9257,7 +9293,7 @@ async function scanOneScript(fs2, path, scriptsDir) {
   const content = await fs2.readText(path);
   const { hasBlock, requires } = pep723Floor(content);
   const stem = name.replace(/\.[^.]*$/, "");
-  const hasTest = await isFile(fs2, `${scriptsDir}/tests/test_${stem}.py`);
+  const hasTest = await isFile$1(fs2, `${scriptsDir}/tests/test_${stem}.py`);
   const info = { path: rel2, has_pep723: hasBlock, floor: requires, has_test: hasTest };
   return { info, findings: scanSource(content, rel2, hasTest) };
 }
@@ -9265,7 +9301,7 @@ async function scanScriptsTree(fs2, skillRoot) {
   const scriptsDir = `${skillRoot}/scripts`;
   const scripts = [];
   const findings = [];
-  if (await isDirectory(fs2, scriptsDir)) {
+  if (await isDirectory$1(fs2, scriptsDir)) {
     const names = (await fs2.list(scriptsDir)).filter((name) => name.endsWith(".py")).sort(compareStrings);
     for (const name of names) {
       const result = await scanOneScript(fs2, `${scriptsDir}/${name}`, scriptsDir);
@@ -9282,7 +9318,7 @@ async function scanScripts(argv, fs2) {
   const script = "scan_scripts";
   const positionals = [];
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     if (flag === "--skill-root") {
       const value = inline ?? argv[++i];
       if (value === void 0) return usageError$3(script, "argument --skill-root: expected one argument");
@@ -9292,10 +9328,10 @@ async function scanScripts(argv, fs2) {
   }
   const skill = positionals[0];
   if (skill === void 0) return usageError$3(script, "the following arguments are required: skill");
-  if (!await isDirectory(fs2, skill)) return usageError$3(script, `not a directory: ${skill}`);
+  if (!await isDirectory$1(fs2, skill)) return usageError$3(script, `not a directory: ${skill}`);
   const result = await scanScriptsTree(fs2, skill);
   return {
-    stdout: `${pyJson(result, { indent: 2, ensureAscii: true })}
+    stdout: `${pyJson$2(result, { indent: 2, ensureAscii: true })}
 `,
     exitCode: result.findings.length ? 1 : 0
   };
@@ -9332,7 +9368,7 @@ function parseBmodFile(path, text) {
     ["skill", skillTable]
   ]) {
     if (table !== void 0 && !isTable$3(table)) {
-      throw new Error(`bmod file ${path} field ${pyRepr$1(name)} must be a table`);
+      throw new Error(`bmod file ${path} field ${pyRepr$4(name)} must be a table`);
     }
   }
   const bmod = bmodTable !== void 0 ? parseBmodTable(bmodTable, path) : null;
@@ -9342,7 +9378,7 @@ function parseBmodFile(path, text) {
 function parseBmodTable(table, path) {
   const code = requiredString(table, "bmod", "code", path);
   if (!MODULE_NAME.test(code) || RESERVED_MODULE_DIRS.has(code.toLowerCase())) {
-    throw new Error(`bmod file ${path} field 'bmod.code' has unsafe value ${pyRepr$1(code)}`);
+    throw new Error(`bmod file ${path} field 'bmod.code' has unsafe value ${pyRepr$4(code)}`);
   }
   const version = requiredString(table, "bmod", "version", path);
   const updateSource = requiredString(table, "bmod", "update_source", path);
@@ -9363,14 +9399,14 @@ function parseBmodTable(table, path) {
 }
 async function readRetiredFile(fs2, folder) {
   const path = `${folder}/${RETIRED_NAME}`;
-  if (!await isFile(fs2, path)) return { renamed: [], removed: [] };
+  if (!await isFile$1(fs2, path)) return { renamed: [], removed: [] };
   const data = parseTomlText(await fs2.readText(path), path);
   const renamed = parseRenamed(data.renamed, path);
   const removed = parseSkillNames(data.removed ?? [], "removed", path);
   const retired = [...renamed.map((rename) => rename.old), ...removed];
   const repeated = retired.find((name) => retired.filter((other) => other === name).length > 1);
   if (repeated !== void 0) {
-    throw new Error(`bmod file ${path} retires ${pyRepr$1(repeated)} more than once in renamed and removed`);
+    throw new Error(`bmod file ${path} retires ${pyRepr$4(repeated)} more than once in renamed and removed`);
   }
   return { renamed, removed };
 }
@@ -9387,12 +9423,12 @@ function parseRenamed(value, path) {
     for (const key of ["from", "to"]) {
       const name = entry[key];
       if (typeof name !== "string" || !SKILL_NAME.test(name)) {
-        throw new Error(`bmod file ${path} field '${field}.${key}' must be a skill name; found ${pyRepr$1(name)}`);
+        throw new Error(`bmod file ${path} field '${field}.${key}' must be a skill name; found ${pyRepr$4(name)}`);
       }
       names.push(name);
     }
     if (names[0] === names[1]) {
-      throw new Error(`bmod file ${path} field ${field} renames ${pyRepr$1(names[0])} to itself`);
+      throw new Error(`bmod file ${path} field ${field} renames ${pyRepr$4(names[0])} to itself`);
     }
     renamed.push({ old: names[0], new: names[1] });
   });
@@ -9404,7 +9440,7 @@ function parseSkillTable(table, path, standalone) {
   if (standalone) {
     bmod = requiredString(table, "skill", "bmod", path);
     if (!SKILL_NAME.test(bmod)) {
-      throw new Error(`bmod file ${path} field 'skill.bmod' has unsafe value ${pyRepr$1(bmod)}`);
+      throw new Error(`bmod file ${path} field 'skill.bmod' has unsafe value ${pyRepr$4(bmod)}`);
     }
     source = requiredString(table, "skill", "source", path);
     validateSource(source, "skill.source", path);
@@ -9420,29 +9456,29 @@ function parseSkillTable(table, path, standalone) {
 function validateSource(value, field, path) {
   const prefix = UPDATE_SOURCE_PREFIXES.find((candidate) => value.startsWith(candidate));
   if (prefix === void 0 || !value.slice(prefix.length)) {
-    throw new Error(`bmod file ${path} field ${pyRepr$1(field)} must name a source`);
+    throw new Error(`bmod file ${path} field ${pyRepr$4(field)} must name a source`);
   }
   if (prefix === "github:") {
     const parts = value.slice(prefix.length).split("/");
     if (parts.length < 2 || parts.some((part) => !part)) {
-      throw new Error(`bmod file ${path} field ${pyRepr$1(field)} github source must name owner/repo`);
+      throw new Error(`bmod file ${path} field ${pyRepr$4(field)} github source must name owner/repo`);
     }
   }
   if (prefix === "https://" && [...value].some((character) => /\s/.test(character))) {
-    throw new Error(`bmod file ${path} field ${pyRepr$1(field)} must be a valid HTTPS URL`);
+    throw new Error(`bmod file ${path} field ${pyRepr$4(field)} must be a valid HTTPS URL`);
   }
 }
 function parseSkillNames(value, field, path) {
   if (!Array.isArray(value)) {
-    throw new Error(`bmod file ${path} field ${pyRepr$1(field)} must be a list of skill names`);
+    throw new Error(`bmod file ${path} field ${pyRepr$4(field)} must be a list of skill names`);
   }
   const names = [];
   for (const entry of value) {
     if (typeof entry !== "string" || !SKILL_NAME.test(entry)) {
-      throw new Error(`bmod file ${path} field ${pyRepr$1(field)} has unsafe skill name ${pyRepr$1(entry)}`);
+      throw new Error(`bmod file ${path} field ${pyRepr$4(field)} has unsafe skill name ${pyRepr$4(entry)}`);
     }
     if (names.includes(entry)) {
-      throw new Error(`bmod file ${path} field ${pyRepr$1(field)} repeats ${pyRepr$1(entry)}`);
+      throw new Error(`bmod file ${path} field ${pyRepr$4(field)} repeats ${pyRepr$4(entry)}`);
     }
     names.push(entry);
   }
@@ -9450,14 +9486,14 @@ function parseSkillNames(value, field, path) {
 }
 function parsePath(entry, field, path, seen) {
   if (typeof entry !== "string" || !entry) {
-    throw new Error(`bmod file ${path} field ${pyRepr$1(field)} has invalid value ${pyRepr$1(entry)}`);
+    throw new Error(`bmod file ${path} field ${pyRepr$4(field)} has invalid value ${pyRepr$4(entry)}`);
   }
   const relative = safeSkillRelative(entry);
   if (relative === null) {
-    throw new Error(`bmod file ${path} field ${pyRepr$1(field)} has unsafe value ${pyRepr$1(entry)}`);
+    throw new Error(`bmod file ${path} field ${pyRepr$4(field)} has unsafe value ${pyRepr$4(entry)}`);
   }
   if (seen.some((other) => other.join("/") === relative.join("/"))) {
-    throw new Error(`bmod file ${path} field ${pyRepr$1(field)} repeats ${pyRepr$1(entry)}`);
+    throw new Error(`bmod file ${path} field ${pyRepr$4(field)} repeats ${pyRepr$4(entry)}`);
   }
   return relative;
 }
@@ -9487,7 +9523,7 @@ function parseKnowledge(value, path) {
 function parseRequirements(value, field, path) {
   if (value === void 0) return [];
   if (!Array.isArray(value)) {
-    throw new Error(`bmod file ${path} field ${pyRepr$1(field)} must be a list of skills`);
+    throw new Error(`bmod file ${path} field ${pyRepr$4(field)} must be a list of skills`);
   }
   const requirements = [];
   value.forEach((entry, index) => {
@@ -9512,19 +9548,19 @@ function parseRequirements(value, field, path) {
         }
         if (parseOrderableSemver(minimum) === null) {
           throw new Error(
-            `bmod file ${path} field '${item}.version' must be an orderable version; found ${pyRepr$1(minimum)}`
+            `bmod file ${path} field '${item}.version' must be an orderable version; found ${pyRepr$4(minimum)}`
           );
         }
       }
       requirement = { skill, version: minimum ?? null, source };
     } else {
-      throw new Error(`bmod file ${path} field ${pyRepr$1(item)} must be a skill name or a table`);
+      throw new Error(`bmod file ${path} field ${pyRepr$4(item)} must be a skill name or a table`);
     }
     if (!SKILL_NAME.test(requirement.skill)) {
-      throw new Error(`bmod file ${path} field ${pyRepr$1(item)} has unsafe skill name ${pyRepr$1(requirement.skill)}`);
+      throw new Error(`bmod file ${path} field ${pyRepr$4(item)} has unsafe skill name ${pyRepr$4(requirement.skill)}`);
     }
     if (requirements.some((other) => other.skill === requirement.skill)) {
-      throw new Error(`bmod file ${path} field ${pyRepr$1(field)} repeats ${pyRepr$1(requirement.skill)}`);
+      throw new Error(`bmod file ${path} field ${pyRepr$4(field)} repeats ${pyRepr$4(requirement.skill)}`);
     }
     requirements.push(requirement);
   });
@@ -9559,7 +9595,7 @@ function parseQuestions(value, module, path) {
     if (!QUESTION_KEYS.every((key2) => keys.includes(key2)) || keys.some((key2) => !allowed.has(key2))) {
       const missing = QUESTION_KEYS.filter((key2) => !keys.includes(key2)).sort();
       const unknown = keys.filter((key2) => !allowed.has(key2)).sort();
-      const detail = missing.length ? `missing key ${pyRepr$1(missing[0])}` : `unknown key ${pyRepr$1(unknown[0])}`;
+      const detail = missing.length ? `missing key ${pyRepr$4(missing[0])}` : `unknown key ${pyRepr$4(unknown[0])}`;
       throw new Error(`bmod file ${path} field ${field} has ${detail}`);
     }
     for (const key2 of QUESTION_KEYS) {
@@ -9569,7 +9605,7 @@ function parseQuestions(value, module, path) {
     }
     const scope = question.scope ?? "team";
     if (!QUESTION_SCOPES.includes(scope)) {
-      throw new Error(`bmod file ${path} field ${field}.scope must be "team" or "user"; found ${pyRepr$1(scope)}`);
+      throw new Error(`bmod file ${path} field ${field}.scope must be "team" or "user"; found ${pyRepr$4(scope)}`);
     }
     const prompt = question.prompt;
     const key = question.key;
@@ -9580,11 +9616,11 @@ function parseQuestions(value, module, path) {
       throw new Error(`bmod file ${path} field ${field}.key must be a non-empty dotted key`);
     }
     if (key === module || key.startsWith(`${module}.`)) {
-      throw new Error(`bmod file ${path} field ${field}.key ${pyRepr$1(key)} must not start with module ${pyRepr$1(module)}`);
+      throw new Error(`bmod file ${path} field ${field}.key ${pyRepr$4(key)} must not start with module ${pyRepr$4(module)}`);
     }
     const conflict = conflictingQuestionKey(seen, key);
     if (conflict !== null) {
-      throw new Error(`bmod file ${path} config question key ${pyRepr$1(key)} conflicts with ${pyRepr$1(conflict)}`);
+      throw new Error(`bmod file ${path} config question key ${pyRepr$4(key)} conflicts with ${pyRepr$4(conflict)}`);
     }
     seen.push(key);
     questions.push({
@@ -9611,11 +9647,11 @@ function parseScripts(value, path) {
   const scripts = [];
   for (const entry of value) {
     if (typeof entry !== "string" || !entry) {
-      throw new Error(`bmod file ${path} field 'skill.scripts' has invalid value ${pyRepr$1(entry)}`);
+      throw new Error(`bmod file ${path} field 'skill.scripts' has invalid value ${pyRepr$4(entry)}`);
     }
     const parts = purePosixParts(entry);
     if (entry.startsWith("/") || entry.includes("\\") || parts.length < 2 || parts[0] !== "scripts" || parts.includes("..")) {
-      throw new Error(`bmod file ${path} field 'skill.scripts' has unsafe value ${pyRepr$1(entry)}`);
+      throw new Error(`bmod file ${path} field 'skill.scripts' has unsafe value ${pyRepr$4(entry)}`);
     }
     scripts.push(parts);
   }
@@ -9658,12 +9694,12 @@ async function discoverInstallation(fs2, skillRoot, roots = []) {
         members.push(member);
         continue;
       }
-      const detail = member.parsed.bmod === null ? `names ${pyRepr$1(member.parsed.skill.bmod)} as its bmod` : "is a module record of its own";
+      const detail = member.parsed.bmod === null ? `names ${pyRepr$4(member.parsed.skill.bmod)} as its bmod` : "is a module record of its own";
       problems.push({
         kind: "membership",
         skill: name,
         bmod: recordFile2.folder,
-        message: `${recordFile2.file} lists the skill ${pyRepr$1(name)}, but ${member.file} ${detail}`
+        message: `${recordFile2.file} lists the skill ${pyRepr$4(name)}, but ${member.file} ${detail}`
       });
     }
     let retired = { renamed: [], removed: [] };
@@ -9693,7 +9729,7 @@ async function discoverInstallation(fs2, skillRoot, roots = []) {
         kind: "membership",
         skill: installed.folder,
         bmod: installed.folder,
-        message: `${installed.file} holds [bmod] and [skill], but its skills list leaves out ${pyRepr$1(installed.folder)}`
+        message: `${installed.file} holds [bmod] and [skill], but its skills list leaves out ${pyRepr$4(installed.folder)}`
       });
     }
     if (skill === null || installed.parsed.bmod !== null || skill.bmod === null) continue;
@@ -9712,7 +9748,7 @@ async function discoverInstallation(fs2, skillRoot, roots = []) {
         kind: "membership",
         skill: installed.folder,
         bmod: skill.bmod,
-        message: `${installed.file} names ${pyRepr$1(skill.bmod)} as its bmod, but ${recordFile2.file} does not list the skill ${pyRepr$1(installed.folder)}`
+        message: `${installed.file} names ${pyRepr$4(skill.bmod)} as its bmod, but ${recordFile2.file} does not list the skill ${pyRepr$4(installed.folder)}`
       });
     }
   }
@@ -9754,7 +9790,7 @@ async function locateSkills(fs2, roots, ownFolder) {
     entries.sort(compareStrings);
     for (const name of entries) {
       const path = `${root}/${name}`;
-      if (await isDirectory(fs2, path)) {
+      if (await isDirectory$1(fs2, path)) {
         const group = copies.get(name);
         if (group) group.push(path);
         else copies.set(name, [path]);
@@ -9768,7 +9804,7 @@ async function locateSkills(fs2, roots, ownFolder) {
     const distinct = uniqueFolders(copies.get(name));
     if (distinct.length > 1) {
       let anyManifest = false;
-      for (const path of distinct) if (await isFile(fs2, `${path}/${MANIFEST_NAME}`)) anyManifest = true;
+      for (const path of distinct) if (await isFile$1(fs2, `${path}/${MANIFEST_NAME}`)) anyManifest = true;
       if (anyManifest) duplicates.push({ skill: name, folders: distinct });
     }
   }
@@ -9791,7 +9827,7 @@ async function discoverInstalledFiles(fs2, folders, problems) {
   return files;
 }
 async function readBmodFile(fs2, path) {
-  if (!await isFile(fs2, path)) return null;
+  if (!await isFile$1(fs2, path)) return null;
   let text;
   try {
     text = await fs2.readText(path);
@@ -9814,7 +9850,7 @@ function selectModuleRecords(files, problems) {
     }
     if (previous.parsed.bmod.code !== record.code) {
       throw new Error(
-        `installed module codes differ only by case: ${pyRepr$1(previous.parsed.bmod.code)} from ${previous.file} and ${pyRepr$1(record.code)} from ${installed.file}`
+        `installed module codes differ only by case: ${pyRepr$4(previous.parsed.bmod.code)} from ${previous.file} and ${pyRepr$4(record.code)} from ${installed.file}`
       );
     }
     problems.push({
@@ -9822,7 +9858,7 @@ function selectModuleRecords(files, problems) {
       module: record.code,
       folder: installed.folder,
       kept: previous.folder,
-      message: `module code ${pyRepr$1(record.code)} is declared by ${previous.file} and by ${installed.file}; the first is used`
+      message: `module code ${pyRepr$4(record.code)} is declared by ${previous.file} and by ${installed.file}; the first is used`
     });
   }
   return winners;
@@ -9853,7 +9889,7 @@ async function checkRepo(fs2, projectRoot) {
   }
   entries.sort(compareStrings);
   const folders = [];
-  for (const name of entries) if (await isDirectory(fs2, `${skillsDir}/${name}`)) folders.push(name);
+  for (const name of entries) if (await isDirectory$1(fs2, `${skillsDir}/${name}`)) folders.push(name);
   if (!folders.length) {
     return {
       records: [],
@@ -9868,7 +9904,7 @@ async function checkRepo(fs2, projectRoot) {
   const files = /* @__PURE__ */ new Map();
   for (const name of folders) {
     const manifest = `${skillsDir}/${name}/${MANIFEST_NAME}`;
-    if (!await isFile(fs2, manifest)) {
+    if (!await isFile$1(fs2, manifest)) {
       problems.push(`skills/${name}: missing ${MANIFEST_NAME}`);
       continue;
     }
@@ -9905,7 +9941,7 @@ async function checkRepo(fs2, projectRoot) {
   let documents = 0;
   for (const [name, record] of records) {
     const folder = `${skillsDir}/${name}`;
-    documents += record.knowledge.length + (await isFile(fs2, `${folder}/${HELP_NAME}`) ? 1 : 0);
+    documents += record.knowledge.length + (await isFile$1(fs2, `${folder}/${HELP_NAME}`) ? 1 : 0);
     problems.push(...await knowledgeProblems(fs2, name, record, folder, members.get(name)));
     problems.push(...await topicProblems(fs2, name, folder));
     problems.push(...await rosterFileProblems(fs2, name, record, folder, skillsDir));
@@ -9920,14 +9956,14 @@ async function checkRepo(fs2, projectRoot) {
 function versionProblem(version) {
   const match = fullmatch(SEMVER, version);
   if (match === null) {
-    return `invalid version ${pyRepr$1(version)}: must be SemVer (MAJOR.MINOR.PATCH, optional prerelease), e.g. 6.12.0`;
+    return `invalid version ${pyRepr$4(version)}: must be SemVer (MAJOR.MINOR.PATCH, optional prerelease), e.g. 6.12.0`;
   }
   if (version.toLowerCase().includes("-dev")) {
-    return `invalid version ${pyRepr$1(version)}: setup.py cannot order "-dev" versions, so an installed module would never compare as current — pick a different prerelease label`;
+    return `invalid version ${pyRepr$4(version)}: setup.py cannot order "-dev" versions, so an installed module would never compare as current — pick a different prerelease label`;
   }
   if (match.groups.build !== void 0) {
     const base = version.split("+", 1)[0];
-    return `invalid version ${pyRepr$1(version)}: setup.py ignores build metadata when ordering, so this compares equal to ${pyRepr$1(base)} and an installed module would never see the release — change the major, minor, patch, or prerelease part`;
+    return `invalid version ${pyRepr$4(version)}: setup.py ignores build metadata when ordering, so this compares equal to ${pyRepr$4(base)} and an installed module would never see the release — change the major, minor, patch, or prerelease part`;
   }
   return null;
 }
@@ -9995,7 +10031,7 @@ function deepEqual(left, right) {
 async function messageProblems(fs2, name, manifest) {
   const table = parse(await fs2.readText(manifest)).bmod;
   return MESSAGE_KEYS.filter((key) => !(key in table)).map(
-    (key) => `${rel(name)}: [bmod] is missing ${pyRepr$1(key)}; add it, empty if the module has no message`
+    (key) => `${rel(name)}: [bmod] is missing ${pyRepr$4(key)}; add it, empty if the module has no message`
   );
 }
 async function stampProblems(fs2, name, manifest) {
@@ -10018,26 +10054,26 @@ async function recordProblems(fs2, files, records, skillsDir) {
     const problem = versionProblem(record.version);
     if (problem !== null) problems.push(`${rel(name)}: [bmod] ${problem}`);
     const skillMd2 = `${skillsDir}/${name}/SKILL.md`;
-    if (!await isFile(fs2, skillMd2)) {
+    if (!await isFile$1(fs2, skillMd2)) {
       problems.push(`skills/${name}: a module record folder must ship SKILL.md as a plain file`);
     }
     if (files.get(name).skill === null && name !== RECORD_PREFIX + record.code) {
       problems.push(
-        `${rel(name)}: a module record folder is named ${pyRepr$1(RECORD_PREFIX + record.code)} after its code; this one is ${pyRepr$1(name)}`
+        `${rel(name)}: a module record folder is named ${pyRepr$4(RECORD_PREFIX + record.code)} after its code; this one is ${pyRepr$4(name)}`
       );
     }
     const first = firstByCode.get(record.code.toLowerCase()) ?? name;
     if (!firstByCode.has(record.code.toLowerCase())) firstByCode.set(record.code.toLowerCase(), name);
     if (first !== name) {
       problems.push(
-        `${rel(name)}: module code ${pyRepr$1(record.code)} is already declared by ${rel(first)}; one record per code`
+        `${rel(name)}: module code ${pyRepr$4(record.code)} is already declared by ${rel(first)}; one record per code`
       );
     }
   }
   const versions = [...records.entries()].map(([name, record]) => `${name}\0${record.version}`);
   const distinct = new Set(versions.map((entry) => entry.split("\0")[1]));
   if (distinct.size > 1) {
-    const listed2 = [...records.entries()].map(([name, record]) => `${name} has ${pyRepr$1(record.version)}`).join(", ");
+    const listed2 = [...records.entries()].map(([name, record]) => `${name} has ${pyRepr$4(record.version)}`).join(", ");
     problems.push(`skills/: every module record carries one version, stamped together; ${listed2}`);
   }
   return problems;
@@ -10048,7 +10084,7 @@ function membershipProblems(files, records, members, shipped) {
     if (parsed.skill === null) continue;
     if (parsed.bmod !== null) {
       if (!members.get(name).includes(name)) {
-        problems.push(`${rel(name)}: holds [skill], but its own [bmod] skills list leaves ${pyRepr$1(name)} out`);
+        problems.push(`${rel(name)}: holds [skill], but its own [bmod] skills list leaves ${pyRepr$4(name)} out`);
       }
       continue;
     }
@@ -10056,27 +10092,27 @@ function membershipProblems(files, records, members, shipped) {
     const record = records.get(bmod);
     if (record !== void 0 && parsed.skill.source !== record.update_source) {
       problems.push(
-        `${rel(name)}: [skill] source ${pyRepr$1(parsed.skill.source)} differs from ${rel(bmod)} update_source ${pyRepr$1(record.update_source)}`
+        `${rel(name)}: [skill] source ${pyRepr$4(parsed.skill.source)} differs from ${rel(bmod)} update_source ${pyRepr$4(record.update_source)}`
       );
     }
     if (record === void 0) {
-      problems.push(`${rel(name)}: [skill] bmod names ${pyRepr$1(bmod)}, which is not a module record in this repository`);
+      problems.push(`${rel(name)}: [skill] bmod names ${pyRepr$4(bmod)}, which is not a module record in this repository`);
     } else if (!members.get(bmod).includes(name)) {
-      problems.push(`${rel(name)}: [skill] bmod names ${pyRepr$1(bmod)}, but ${rel(bmod)} does not list ${pyRepr$1(name)}`);
+      problems.push(`${rel(name)}: [skill] bmod names ${pyRepr$4(bmod)}, but ${rel(bmod)} does not list ${pyRepr$4(name)}`);
     }
   }
   for (const [name, listed2] of members) {
     for (const member of listed2) {
       const parsed = files.get(member);
       if (!shipped.has(member)) {
-        problems.push(`${rel(name)}: lists the skill ${pyRepr$1(member)}, which this repository does not ship`);
+        problems.push(`${rel(name)}: lists the skill ${pyRepr$4(member)}, which this repository does not ship`);
       } else if (parsed === void 0) {
         continue;
       } else if (parsed.skill === null || parsed.bmod !== null && member !== name) {
-        problems.push(`${rel(name)}: lists ${pyRepr$1(member)}, which is a module record and not a skill of this module`);
+        problems.push(`${rel(name)}: lists ${pyRepr$4(member)}, which is a module record and not a skill of this module`);
       } else if (member !== name && parsed.skill.bmod !== name) {
         problems.push(
-          `${rel(name)}: lists the skill ${pyRepr$1(member)}, but ${rel(member)} names ${pyRepr$1(parsed.skill.bmod)} as its bmod`
+          `${rel(name)}: lists the skill ${pyRepr$4(member)}, but ${rel(member)} names ${pyRepr$4(parsed.skill.bmod)} as its bmod`
         );
       }
     }
@@ -10091,25 +10127,25 @@ function retiredProblems(records, shipped) {
     for (const old of retired) {
       if (shipped.has(old)) {
         problems.push(
-          `${retiredRel(name)}: retires ${pyRepr$1(old)}, but skills/${old} still ships; a retired name is never reused`
+          `${retiredRel(name)}: retires ${pyRepr$4(old)}, but skills/${old} still ships; a retired name is never reused`
         );
       }
       if (!retiredBy.has(old)) retiredBy.set(old, name);
       const first = retiredBy.get(old);
       if (first !== name) {
-        problems.push(`${retiredRel(name)}: retires ${pyRepr$1(old)}, which ${retiredRel(first)} already retires`);
+        problems.push(`${retiredRel(name)}: retires ${pyRepr$4(old)}, which ${retiredRel(first)} already retires`);
       }
     }
     const targets = record.renamed.map((rename) => rename.new);
     for (const target of [...new Set(targets.filter((t) => targets.filter((o) => o === t).length > 1))]) {
       problems.push(
-        `${retiredRel(name)}: renames more than one skill to ${pyRepr$1(target)}; their customizations would collide, so list the extras under removed`
+        `${retiredRel(name)}: renames more than one skill to ${pyRepr$4(target)}; their customizations would collide, so list the extras under removed`
       );
     }
     for (const rename of record.renamed) {
       if (!shipped.has(rename.new)) {
         problems.push(
-          `${retiredRel(name)}: renames ${pyRepr$1(rename.old)} to ${pyRepr$1(rename.new)}, which this repository does not ship`
+          `${retiredRel(name)}: renames ${pyRepr$4(rename.old)} to ${pyRepr$4(rename.new)}, which this repository does not ship`
         );
       }
     }
@@ -10120,10 +10156,10 @@ function requirementProblems(folder, table, source, shipped) {
   const problems = [];
   for (const field of ["required_skills", "recommended_skills"]) {
     for (const requirement of source[field]) {
-      const where = `${rel(folder)}: ${table}.${field} entry ${pyRepr$1(requirement.skill)}`;
+      const where = `${rel(folder)}: ${table}.${field} entry ${pyRepr$4(requirement.skill)}`;
       if (requirement.version !== null && requirement.version.includes("+")) {
         problems.push(
-          `${where} version ${pyRepr$1(requirement.version)} carries build metadata, which setup.py ignores when ordering; it would compare equal to ${pyRepr$1(requirement.version.split("+", 1)[0])}`
+          `${where} version ${pyRepr$4(requirement.version)} carries build metadata, which setup.py ignores when ordering; it would compare equal to ${pyRepr$4(requirement.version.split("+", 1)[0])}`
         );
       }
       if (requirement.source === null && !shipped.has(requirement.skill)) {
@@ -10144,17 +10180,17 @@ async function knowledgeProblems(fs2, name, record, folder, members) {
   }
   for (const entry of record.knowledge) {
     if (entry.path === HELP_NAME) {
-      problems.push(`${rel(name)}: knowledge names ${pyRepr$1(HELP_NAME)}, which is always read`);
+      problems.push(`${rel(name)}: knowledge names ${pyRepr$4(HELP_NAME)}, which is always read`);
       continue;
     }
     const problem = await plainFileProblem(fs2, folder, entry.path);
     if (problem !== null) {
-      problems.push(`${rel(name)}: knowledge names ${pyRepr$1(entry.path)}, which ${problem}`);
+      problems.push(`${rel(name)}: knowledge names ${pyRepr$4(entry.path)}, which ${problem}`);
     }
     for (const skill of entry.skills ?? []) {
       if (!members.includes(skill)) {
         problems.push(
-          `${rel(name)}: knowledge ${pyRepr$1(entry.path)} names ${pyRepr$1(skill)}, which is not a skill of module ${pyRepr$1(record.code)}`
+          `${rel(name)}: knowledge ${pyRepr$4(entry.path)} names ${pyRepr$4(skill)}, which is not a skill of module ${pyRepr$4(record.code)}`
         );
       }
     }
@@ -10234,18 +10270,18 @@ async function rosterProblems(fs2, party, skillsDir) {
   const repeated = [...new Set(strings.filter((code) => strings.filter((other) => other === code).length > 1))].sort(
     compareStrings
   );
-  for (const code of repeated) problems.push(`member code ${pyRepr$1(code)} is defined twice`);
+  for (const code of repeated) problems.push(`member code ${pyRepr$4(code)} is defined twice`);
   for (const member of members) {
     const skill = member.skill;
-    if (skill !== void 0 && !(typeof skill === "string" && await isFile(fs2, `${skillsDir}/${skill}/SKILL.md`))) {
-      problems.push(`member ${pyRepr$1(member.code)} names skill ${pyRepr$1(skill)}, which this repository does not ship`);
+    if (skill !== void 0 && !(typeof skill === "string" && await isFile$1(fs2, `${skillsDir}/${skill}/SKILL.md`))) {
+      problems.push(`member ${pyRepr$4(member.code)} names skill ${pyRepr$4(skill)}, which this repository does not ship`);
     }
   }
   for (const group of asList(party.groups)) {
     if (!isTable$3(group)) continue;
     for (const code of asList(group.members)) {
       if (!codes.includes(code)) {
-        problems.push(`group ${pyRepr$1(group.id)} lists ${pyRepr$1(code)}, which no member defines`);
+        problems.push(`group ${pyRepr$4(group.id)} lists ${pyRepr$4(code)}, which no member defines`);
       }
     }
   }
@@ -10265,7 +10301,7 @@ async function runtimeProblems(fs2, skillsDir) {
   problems.push(...installation.problems.map((problem) => `skills/: setup.py reports: ${problem.message}`));
   problems.push(
     ...installation.missing_records.map(
-      (missing) => `skills/: setup.py finds no module record ${pyRepr$1(missing.bmod)} for ${pyRepr$1(missing.skill)}`
+      (missing) => `skills/: setup.py finds no module record ${pyRepr$4(missing.bmod)} for ${pyRepr$4(missing.skill)}`
     )
   );
   const report = await collect$1(fs2, [skillsDir]);
@@ -10286,7 +10322,7 @@ async function validateManifests(argv, fs2) {
       return usageError$1(`unrecognized arguments: ${token}`);
     }
   }
-  const root = resolvePath(projectRoot ?? (typeof process !== "undefined" ? process.cwd() : "."));
+  const root = absolutePath(projectRoot ?? ".");
   const report = await checkRepo(fs2, root);
   if (report.problems.length) {
     return {
@@ -10316,7 +10352,7 @@ async function processTemplate(argv, fs2) {
   let output = null;
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
-    const [flag, inline] = splitFlag(token);
+    const [flag, inline] = splitFlag$1(token);
     if (flag === "-o" || flag === "--output") {
       const value = inline ?? argv[++i];
       if (value === void 0) return usageError$3(script, `argument ${flag}: expected one argument`);
@@ -10325,7 +10361,7 @@ async function processTemplate(argv, fs2) {
       const value = inline ?? argv[++i];
       if (value === void 0) return usageError$3(script, "argument --var: expected one argument");
       const cut = value.indexOf("=");
-      if (cut <= 0) return usageError$3(script, `argument --var: expected key=value, got ${pyRepr$1(value)}`);
+      if (cut <= 0) return usageError$3(script, `argument --var: expected key=value, got ${pyRepr$4(value)}`);
       variables.push([value.slice(0, cut), value.slice(cut + 1)]);
     } else if (flag === "--true") {
       const value = inline ?? argv[++i];
@@ -10369,7 +10405,7 @@ async function processTemplate(argv, fs2) {
     const parent = dirname(output);
     if (parent !== "/" && !await fs2.exists(parent)) await fs2.mkdir(parent);
     await fs2.writeText(output, variable.text);
-    return { stdout: `${pyJson(metadata, { ensureAscii: true })}
+    return { stdout: `${pyJson$2(metadata, { ensureAscii: true })}
 `, exitCode: 0 };
   }
   return { stdout: variable.text, exitCode: 0 };
@@ -10389,9 +10425,9 @@ async function directoriesUnder(fs2, root) {
     }
     for (const name of entries) {
       const path = `${dir}/${name}`;
-      if (!await isDirectory(fs2, path)) continue;
+      if (!await isDirectory$1(fs2, path)) continue;
       out2.push(path);
-      await walk2(path);
+      if (!await fs2.isSymlink(path)) await walk2(path);
     }
   };
   await walk2(root);
@@ -10401,7 +10437,7 @@ async function filesUnder(fs2, root) {
   const out2 = [];
   for (const dir of [root, ...await directoriesUnder(fs2, root)]) {
     for (const path of await listOrEmpty(fs2, dir)) {
-      if (await isFile(fs2, path)) out2.push(path);
+      if (await isFile$1(fs2, path)) out2.push(path);
     }
   }
   return out2;
@@ -10418,21 +10454,21 @@ function relativeTo(path, parent) {
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 async function folderLines(fs2, root, label) {
-  if (!await isDirectory(fs2, root)) return [];
+  if (!await isDirectory$1(fs2, root)) return [];
   const lines = [];
   const directFiles = [];
-  for (const path of await listOrEmpty(fs2, root)) if (await isFile(fs2, path)) directFiles.push(path);
+  for (const path of await listOrEmpty(fs2, root)) if (await isFile$1(fs2, path)) directFiles.push(path);
   const named = directFiles.filter((path) => !folderName(path).startsWith("."));
   if (named.length) lines.push(`${label}/ (${named.length} files)`);
   for (const folder of await directoriesUnder(fs2, root)) {
     const files = (await listOrEmpty(fs2, folder)).filter((path) => !folderName(path).startsWith("."));
-    const count = (await Promise.all(files.map((path) => isFile(fs2, path)))).filter(Boolean).length;
+    const count = (await Promise.all(files.map((path) => isFile$1(fs2, path)))).filter(Boolean).length;
     lines.push(`${relativeTo(folder, dirname(root))}/ (${count} files)`);
   }
   return lines;
 }
 async function recentDated(fs2, root) {
-  if (!await isDirectory(fs2, root)) return [];
+  if (!await isDirectory$1(fs2, root)) return [];
   const dated = (await filesUnder(fs2, root)).filter((path) => DATED_RE.test(folderName(path)));
   dated.sort((a, b) => {
     const nameA = folderName(a);
@@ -10443,10 +10479,10 @@ async function recentDated(fs2, root) {
   return dated.slice(0, RECENT_COUNT).map((path) => relativeTo(path, dirname(root)));
 }
 async function undistilled(fs2, raw) {
-  if (!await isDirectory(fs2, raw)) return [];
+  if (!await isDirectory$1(fs2, raw)) return [];
   const out2 = [];
   for (const path of (await listOrEmpty(fs2, raw)).sort()) {
-    if (!await isFile(fs2, path)) continue;
+    if (!await isFile$1(fs2, path)) continue;
     const head = (await fs2.readText(path)).slice(0, 2e3);
     if (STATUS_RAW_RE.test(head)) out2.push(folderName(path));
   }
@@ -10454,9 +10490,9 @@ async function undistilled(fs2, raw) {
 }
 async function tendingLine(fs2, sanctum) {
   const stamp = `${sanctum}/memory/.tended`;
-  const tended = await isFile(fs2, stamp) ? (await fs2.readText(stamp)).trim().slice(0, 10) : "";
+  const tended = await isFile$1(fs2, stamp) ? (await fs2.readText(stamp)).trim().slice(0, 10) : "";
   const sessions = `${sanctum}/memory/sessions`;
-  const notes = await isDirectory(fs2, sessions) ? (await listOrEmpty(fs2, sessions)).filter((path) => DATED_RE.test(folderName(path))) : [];
+  const notes = await isDirectory$1(fs2, sessions) ? (await listOrEmpty(fs2, sessions)).filter((path) => DATED_RE.test(folderName(path))) : [];
   const since = tended ? notes.filter((path) => (DATED_RE.exec(folderName(path))?.[1] ?? "") > tended) : notes;
   if (tended) return `Tended: ${tended}; session notes since: ${since.length}`;
   return `Never tended; session notes: ${since.length}`;
@@ -10473,7 +10509,7 @@ async function wake(argv, fs2) {
   let skillRoot = null;
   let pulse = false;
   for (let i = 0; i < argv.length; i++) {
-    const [flag, inline] = splitFlag(argv[i]);
+    const [flag, inline] = splitFlag$1(argv[i]);
     if (flag === "--pulse" && inline === null) pulse = true;
     else if (flag === "--skill-root") {
       skillRoot = inline ?? argv[++i] ?? null;
@@ -10489,10 +10525,10 @@ async function wake(argv, fs2) {
   const skillName = folderName(skillRoot);
   const sanctum = `${projectRoot}/_bmad/memory/${skillName}`;
   const missing = [];
-  for (const name of IDENTITY_FILES) if (!await isFile(fs2, `${sanctum}/${name}`)) missing.push(name);
+  for (const name of IDENTITY_FILES) if (!await isFile$1(fs2, `${sanctum}/${name}`)) missing.push(name);
   if (missing.length) {
     const lines2 = ["MODE: FIRST_BREATH"];
-    if (await isDirectory(fs2, sanctum)) lines2.push(`INCOMPLETE SANCTUM at ${sanctum}: missing ${missing.join(", ")}`);
+    if (await isDirectory$1(fs2, sanctum)) lines2.push(`INCOMPLETE SANCTUM at ${sanctum}: missing ${missing.join(", ")}`);
     else lines2.push(`NO SANCTUM at ${sanctum}`);
     lines2.push("This is your one birth. Load references/first-breath.md and follow it.");
     return { stdout: lines2.join("\n") + "\n", exitCode: 0 };
@@ -10501,7 +10537,7 @@ async function wake(argv, fs2) {
   out2 += `Sanctum: ${sanctum}
 `;
   for (const name of IDENTITY_FILES) out2 += await emit(fs2, `${sanctum}/${name}`);
-  if (pulse && await isFile(fs2, `${sanctum}/PULSE.md`)) out2 += await emit(fs2, `${sanctum}/PULSE.md`);
+  if (pulse && await isFile$1(fs2, `${sanctum}/PULSE.md`)) out2 += await emit(fs2, `${sanctum}/PULSE.md`);
   out2 += "\n===== memory map =====\n";
   const lines = (await folderLines(fs2, `${sanctum}/memory`, "memory")).concat(
     await folderLines(fs2, `${sanctum}/raw`, "raw")
@@ -10517,7 +10553,7 @@ ${await tendingLine(fs2, sanctum)}
 Undistilled raw (${raw.length}):
 ` + raw.map((name) => `  raw/${name}`).join("\n") + "\n";
   const pending = `${sanctum}/memory/pending.md`;
-  if (await isFile(fs2, pending) && (await fs2.readText(pending)).trim()) out2 += await emit(fs2, pending);
+  if (await isFile$1(fs2, pending) && (await fs2.readText(pending)).trim()) out2 += await emit(fs2, pending);
   return { stdout: out2, exitCode: 0 };
 }
 const helpers = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -10548,11 +10584,15 @@ function realFs() {
   return {
     readText: (p) => import("node:fs/promises").then(async (f) => utf8.decode(await f.readFile(p))),
     writeText: (p, body) => import("node:fs/promises").then((f) => f.writeFile(p, body)),
+    // `appendFile` opens with O_APPEND: the write lands at the end of whatever
+    // is there when it runs, not at the length this process last saw.
+    append: (p, body) => import("node:fs/promises").then((f) => f.appendFile(p, body)),
     list: (p) => import("node:fs/promises").then((f) => f.readdir(p)),
     exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),
     // `mkdir` with `recursive: true` resolves to the first created path; discard it for Promise<void>.
     mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true }).then(() => void 0)),
-    delete: (p) => import("node:fs/promises").then((f) => f.unlink(p))
+    delete: (p) => import("node:fs/promises").then((f) => f.unlink(p)),
+    isSymlink: (p) => import("node:fs/promises").then((f) => f.lstat(p).then((st) => st.isSymbolicLink(), () => false))
   };
 }
 const fs = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -10561,14 +10601,19 @@ const fs = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
 }, Symbol.toStringTag, { value: "Module" }));
 const PENDING_PORTS = /* @__PURE__ */ new Set(["roster", "knowledge", "validate_manifests"]);
 function flagValue(argv, flag) {
-  const at = argv.indexOf(flag);
-  return at >= 0 && at + 1 < argv.length ? argv[at + 1] : null;
+  for (let i = 0; i < argv.length; i++) {
+    const [name, inline] = splitFlag$1(argv[i]);
+    if (name !== flag) continue;
+    if (inline !== null) return inline;
+    return i + 1 < argv.length ? argv[i + 1] : null;
+  }
+  return null;
 }
 function usageError(script, message) {
   return { stdout: `${script}: error: ${message}`, exitCode: 2 };
 }
 function absoluteRoot(root) {
-  return resolve(root).replace(/\\/g, "/");
+  return absolutePath(root);
 }
 function pyRepr(value) {
   return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;

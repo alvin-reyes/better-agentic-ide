@@ -3,7 +3,7 @@ import type { Fs } from "./fs";
 import { isFile, pyJson, pyRepr, resolvePath } from "./knowledge";
 import { collect as collectRoster } from "./roster";
 import { loadCentralConfig, resolveCustomization } from "./config";
-import { absolutePath, splitFlag, usageError, type PortResult } from "./compat";
+import { absolutePath, hasOwn, splitFlag, usageError, type PortResult } from "./compat";
 
 /**
  * Port of `skills/bmad-forge-idea/scripts/resolve_personas.py` — the personas
@@ -45,9 +45,9 @@ export async function loadRoster(
     const data = await collectRoster(fs, [resolvePath(`${skillRoot}/..`)], projectRoot);
     const agents = isTable(data.agents) ? (data.agents as Record<string, Entry>) : {};
     const members = isTable(data.members) ? (data.members as Record<string, Entry>) : {};
-    const guests: Record<string, Entry> = {};
+    const guests: Record<string, Entry> = Object.create(null);
     for (const [code, member] of Object.entries(members)) {
-      if (!(code in agents) && isTable(member)) guests[code] = member as Entry;
+      if (!hasOwn(agents, code) && isTable(member)) guests[code] = member as Entry;
     }
     return { agents, guests, groups: Array.isArray(data.groups) ? data.groups : [], resolved: true };
   } catch {
@@ -144,7 +144,7 @@ export function buildPool(
   partyMembers: unknown,
   guests: Record<string, Entry> | null = null,
 ): { pool: Record<string, Entry>; index: Map<string, string>; installedCodes: string[]; customCodes: string[] } {
-  const pool: Record<string, Entry> = {};
+  const pool: Record<string, Entry> = Object.create(null);
   const index = new Map<string, string>();
   const installedCodes: string[] = [];
   const customCodes: string[] = [];
@@ -193,7 +193,7 @@ export function buildPool(
     if (code === null || code === undefined || code === "" || badMember(code, member.name)) continue;
     const text = String(code);
     const canonical = index.get(text) ?? index.get(text.toLowerCase()) ?? text;
-    const wasInstalled = canonical in pool;
+    const wasInstalled = hasOwn(pool, canonical);
     const entry: Entry = { ...(pool[canonical] ?? ({} as Entry)), code: canonical, source: "custom" };
     for (const field of ["name", "icon", "title", "persona", "capabilities", "model"]) {
       if (member[field] !== null && member[field] !== undefined) entry[field] = member[field];
@@ -241,7 +241,7 @@ export function resolveParties(
       // `str(t)`: a malformed entry is a token that resolves to nothing.
       const key = typeof token === "string" ? token : pyRepr(token);
       const code = index.get(key) ?? index.get(key.toLowerCase());
-      if (code !== undefined && code in pool) members.push(brief(pool[code]));
+      if (code !== undefined && hasOwn(pool, code)) members.push(brief(pool[code]));
     }
     const party: Record<string, unknown> = { id: group.id, name: group.name ?? group.id, members };
     if (group.scene) party.scene = group.scene;

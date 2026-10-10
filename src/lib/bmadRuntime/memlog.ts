@@ -83,7 +83,8 @@ function split(text: string): [Meta, string] {
   if (!lines.length || lines[0] !== "---") throw new CrashError("ValueError: .memlog.md has no frontmatter");
   const end = lines.findIndex((line, index) => index > 0 && line === "---");
   if (end === -1) throw new CrashError("ValueError: .memlog.md frontmatter is not terminated");
-  const meta: Meta = {};
+  // A `constructor`/`__proto__` field name is a field like any other.
+  const meta: Meta = Object.create(null);
   for (const line of lines.slice(1, end)) {
     const cut = line.indexOf(":");
     if (cut !== -1) meta[line.slice(0, cut).trim()] = line.slice(cut + 1).trim();
@@ -116,9 +117,12 @@ const ack = (path: string, body: string): string => pyJson({ ok: true, memlog: p
 
 async function cmdInit(path: string, fields: string[], fs: Fs): Promise<string> {
   if (await fs.exists(path)) throw new CommandError(`${path} already exists; use append/set to update it`);
-  const parent = path.slice(0, path.lastIndexOf("/"));
+  // A path with no directory part has no folder to create — slicing before the
+  // last `/` would turn `.memlog.md` into the junk folder `.memlog.m`.
+  const cut = path.lastIndexOf("/");
+  const parent = cut > 0 ? path.slice(0, cut) : "";
   if (parent) await fs.mkdir(parent);
-  const meta: Meta = {};
+  const meta: Meta = Object.create(null);
   for (const pair of fields) {
     const cut = pair.indexOf("=");
     if (cut === -1) throw new CommandError(`--field expects key=value, got ${pyRepr(pair)}`);
@@ -137,8 +141,9 @@ async function cmdAppend(path: string, text: string, type: string | undefined, b
   if (by) label = `${label} by ${by}`.trim();
   const tag = label ? `(${label}) ` : "";
   const entry = `- ${tag}${entryText}`;
-  // `append_line` adds the entry at the end of the file, in one write.
-  await fs.writeText(path, raw + (raw.endsWith("\n") ? "" : "\n") + entry + "\n");
+  // `append_line` adds the entry at the end of the file in one OS append, after
+  // whatever another writer put there — never a read-modify-write.
+  await fs.append(path, (raw.endsWith("\n") ? "" : "\n") + entry + "\n");
   return ack(path, split(await fs.readText(path))[1]);
 }
 

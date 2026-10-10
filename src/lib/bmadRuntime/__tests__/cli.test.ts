@@ -55,6 +55,27 @@ describe("cli dispatch", () => {
     expect(validateRun.stdout).toContain("pass the repository root with --project-root");
     expect(validateRun.stdout).not.toContain("not ported");
   });
+
+  /** argparse took both spellings of a flag; `--flag=value` is the one the
+   * agents' own transcripts write. */
+  it("takes the --flag=value form as well as the two-token one", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const inline = await cliMain(["resolve_config", "--project-root=/p", "--key=core.project_name"], fs);
+    expect(inline.exitCode).toBe(0);
+    expect(JSON.parse(inline.stdout)).toEqual({ "core.project_name": "p" });
+    const split = await cliMain(["resolve_config", "--project-root", "/p", "--key", "core.project_name"], fs);
+    expect(split.stdout).toBe(inline.stdout);
+  });
+
+  /** `Path(".").resolve()` is the folder the caller stands in: an empty root
+   * would make validate_manifests check `/skills` instead. */
+  it("reads `--project-root .` as the working directory", async () => {
+    const r = await cliMain(["validate_manifests", "--project-root", "."], memFs());
+    expect(r.exitCode).toBe(1);
+    expect(r.stdout).toContain(process.cwd());
+    expect(r.stdout).not.toMatch(/under : /);
+  });
 });
 
 describe("resolve --key filter", () => {

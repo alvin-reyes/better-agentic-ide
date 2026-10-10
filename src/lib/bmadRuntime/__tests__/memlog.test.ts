@@ -68,6 +68,54 @@ describe("memlog port", () => {
     expect(second.slice(first.length)).toBe("- one line\n");
   });
 
+  it("appends through Fs.append, one OS append per entry", async () => {
+    // The Python's `append_line` is an O_APPEND write, not a read-modify-write:
+    // two writers appending at once must both land. The port has to use the
+    // append the Fs offers, so this records which method each call took.
+    const base = await seed();
+    const calls: string[] = [];
+    const fs: Fs = {
+      ...base,
+      append: (p, body) => { calls.push("append"); return base.append(p, body); },
+      writeText: (p, body) => { calls.push("writeText"); return base.writeText(p, body); },
+    };
+    await memlog(["init", "--workspace", "/p/ws"], fs);
+    calls.length = 0;
+    await memlog(["append", "--workspace", "/p/ws", "--type", "decision", "--text", "first"], fs);
+    await memlog(["append", "--workspace", "/p/ws", "--type", "idea", "--text", "second"], fs);
+
+    expect(calls).toEqual(["append", "append"]);
+    const log = await base.readText("/p/ws/.memlog.md");
+    expect(log.trimEnd().split("\n").slice(-2)).toEqual(["- (decision) first", "- (idea) second"]);
+  });
+
+  it("initialises a slashless --path without inventing a folder", async () => {
+    // `Path(".memlog.md").parent` is the working directory: slicing before the
+    // last `/` would make the junk folder `.memlog.m`.
+    const fs = await seed();
+    const r = await memlog(["init", "--path", "log.md", "--field", "topic=Slashless"], fs);
+    expect(r.exitCode).toBe(0);
+    expect(await fs.exists("log.md")).toBe(true);
+    expect(await fs.exists("log.m")).toBe(false);
+  });
+
+  /** A field name is a dict key: `__proto__` and `constructor` are fields like
+   * any other, and assigning one must not touch the prototype. */
+  it("keeps a field name that Object.prototype also carries", async () => {
+    const fs = await seed();
+    const init = await memlog(
+      ["init", "--workspace", "/p/ws", "--field", "__proto__=sneaky", "--field", "constructor=plain"],
+      fs,
+    );
+    expect(init.exitCode).toBe(0);
+    const log = await fs.readText("/p/ws/.memlog.md");
+    expect(log).toContain("__proto__: sneaky");
+    expect(log).toContain("constructor: plain");
+    const set = await memlog(["set", "--workspace", "/p/ws", "--key", "constructor", "--value", "changed"], fs);
+    expect(set.exitCode).toBe(0);
+    expect(await fs.readText("/p/ws/.memlog.md")).toContain("constructor: changed");
+  });
+
   it("refuses with the Python's own line, exit and nothing written", async () => {
     const cases: [string, string[], number][] = [
       // A missing log: the Python's FileNotFoundError line, exit 1.

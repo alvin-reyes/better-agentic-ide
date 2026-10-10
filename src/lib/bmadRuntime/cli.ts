@@ -1,4 +1,4 @@
-import { resolve as resolvePath } from "node:path";
+import { absolutePath, splitFlag } from "./compat";
 import { loadCentralConfig, resolveCustomization } from "./config";
 import { tickets } from "./tickets";
 import { renderSkill } from "./render";
@@ -25,13 +25,19 @@ export type Port = (argv: string[], fs: Fs) => Promise<{ stdout: string; exitCod
 const PENDING_PORTS = new Set(["roster", "knowledge", "validate_manifests"]);
 
 /**
- * The value after `--flag`, or null when the flag is absent or left without a
- * value. The Python's argparse accepted both; a missing required argument is
- * its exit-2 usage error, which `usageError` reproduces.
+ * The value after `--flag` — as the two tokens argparse took (`--flag value`),
+ * or as the single `--flag=value` token it also took — or null when the flag is
+ * absent or left without a value. A missing required argument is the Python's
+ * exit-2 usage error, which `usageError` reproduces.
  */
 function flagValue(argv: string[], flag: string): string | null {
-  const at = argv.indexOf(flag);
-  return at >= 0 && at + 1 < argv.length ? argv[at + 1] : null;
+  for (let i = 0; i < argv.length; i++) {
+    const [name, inline] = splitFlag(argv[i]);
+    if (name !== flag) continue;
+    if (inline !== null) return inline;
+    return i + 1 < argv.length ? argv[i + 1] : null;
+  }
+  return null;
 }
 
 function usageError(script: string, message: string): { stdout: string; exitCode: number } {
@@ -42,10 +48,11 @@ function usageError(script: string, message: string): { stdout: string; exitCode
  * The project root as the Python saw it. `Path.resolve()`d before anything was
  * derived from it — and the ports derive slugs and directory hashes from the
  * string they are handed (render.ts), so `--project-root` must arrive absolute
- * and slash-normalized, as the Task 5 review ruled.
+ * and slash-normalized, as the Task 5 review ruled. `--project-root .` arrives
+ * as the working directory, which is what the interpreter resolved it to.
  */
 function absoluteRoot(root: string): string {
-  return resolvePath(root).replace(/\\/g, "/");
+  return absolutePath(root);
 }
 
 /** Python `repr()` of the ASCII text the refusals quote back. */

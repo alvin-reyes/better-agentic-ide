@@ -255,4 +255,137 @@ describe("renderTemplate", () => {
   it("passes {% raw %} through untouched", () => {
     expect(renderTemplate("{% raw %}{{keep}}{{ this }}{% endraw %} after", {})).toBe("{{keep}}{{ this }} after");
   });
+
+  /**
+   * Object.prototype's own members are not template data: Jinja reads a dict
+   * with `dict[name]`, so `constructor` is a miss like any other, and
+   * StrictUndefined then raises on use — it does not render the function.
+   */
+  it("does not see Object.prototype through an attribute or item lookup", () => {
+    expect(() => renderTemplate("{{ config.constructor }}", { config: { a: 1 } })).toThrow("'config.constructor' is undefined");
+    expect(() => renderTemplate("{{ config['constructor'] }}", { config: { a: 1 } })).toThrow("'config.constructor' is undefined");
+    expect(() => renderTemplate("{{ config.a.toString }}", { config: { a: 1 } })).toThrow("'config.a.toString' is undefined");
+    expect(renderTemplate("{{ config.a }}", { config: { a: 1 } })).toBe("1");
+  });
+
+  it("contains() reads own keys, not the prototype chain", () => {
+    expect(renderTemplate("{{ 'a' in config }}", { config: { a: 1 } })).toBe("True");
+    expect(renderTemplate("{{ 'constructor' in config }}", { config: { a: 1 } })).toBe("False");
+    expect(renderTemplate("{{ 'toString' not in config }}", { config: { a: 1 } })).toBe("True");
+  });
+
+  /** Python's `+`: str + str concatenates, number + number adds, everything
+   * else is the TypeError Jinja surfaces as a template error. */
+  it("adds with Python's types: strings concatenate, numbers sum, the rest raises", () => {
+    expect(renderTemplate("{{ 'a' + 'b' }}", {})).toBe("ab");
+    expect(renderTemplate("{{ '2' + '3' }}", {})).toBe("23");
+    expect(renderTemplate("{{ 2 + 3 }}", {})).toBe("5");
+    expect(renderTemplate("{{ config.a + '!' }}", { config: { a: "x" } })).toBe("x!");
+    expect(() => renderTemplate("{{ 'a' + 1 }}", {})).toThrow(/unsupported operand/);
+    expect(() => renderTemplate("{{ 1 + 'a' }}", {})).toThrow(/unsupported operand/);
+  });
+
+  /** `<` and friends compare the Python values: two numbers numerically, the
+   * rest by their string form. */
+  it("compares numbers numerically, not as their display strings", () => {
+    expect(renderTemplate("{{ 2 < 10 }}", {})).toBe("True");
+    expect(renderTemplate("{{ 10 > 2 }}", {})).toBe("True");
+    expect(renderTemplate("{{ 2 <= 10 }}", {})).toBe("True");
+    expect(renderTemplate("{{ 10 >= 2 }}", {})).toBe("True");
+    expect(renderTemplate("{% if workflow.x < 10 %}small{% else %}big{% endif %}", { workflow: { x: 2 } })).toBe("small");
+    expect(renderTemplate("{% if workflow.x < 10 %}small{% else %}big{% endif %}", { workflow: { x: 20 } })).toBe("big");
+    expect(renderTemplate("{{ 'b' < 'c' }}", {})).toBe("True");
+    expect(renderTemplate("{{ config.v > 3 }}", { config: { v: 5 } })).toBe("True");
+  });
+
+  /** Python's `list[index]`: a negative index counts from the end, and an index
+   * outside the list is a miss — which a use then raises on, not an empty
+   * insert. */
+  it("indexes a list the way Python does instead of rendering nothing", () => {
+    const ctx = { workflow: { items: ["a", "b"] } };
+    expect(renderTemplate("{{ workflow.items[1] }}", ctx)).toBe("b");
+    expect(renderTemplate("{{ workflow.items[-1] }}", ctx)).toBe("b");
+    expect(() => renderTemplate("{{ workflow.items[5] }}", ctx)).toThrow("'workflow.items.5' is undefined");
+    expect(() => renderTemplate("{{ workflow.items[-5] }}", ctx)).toThrow(/undefined/);
+    expect(() => renderTemplate("{{ workflow.items[0] }}", { workflow: { items: [] } })).toThrow(
+      "'workflow.items.0' is undefined",
+    );
+  });
+
+  it("refuses `{% else if %}`, which Jinja never accepted either", () => {
+    const ctx = { workflow: { a: false, b: true } };
+    expect(() => renderTemplate("{% if workflow.a %}A{% else if workflow.b %}B{% endif %}", ctx)).toThrow(/unknown tag/);
+    expect(renderTemplate("{% if workflow.a %}A{% elif workflow.b %}B{% endif %}", ctx)).toBe("B");
+  });
+});
+
+/** A skill the test writes itself: a workflow that reads config names, with no
+ * customize.toml unless the case needs one. */
+async function miniSkill(fs: Fs, workflow: string, customize?: string): Promise<void> {
+  await fs.mkdir("/p/_bmad/custom");
+  await fs.writeText("/p/_bmad/config.toml", '[core]\nproject_name = "p"\n');
+  await fs.mkdir("/p/skills/mini");
+  await fs.writeText("/p/skills/mini/workflow.md", workflow);
+  if (customize !== undefined) await fs.writeText("/p/skills/mini/customize.toml", customize);
+}
+
+describe("render port: the project root, the tables and the number types", () => {
+  /** `{project-root}` is bound to whatever root the caller passed, and the
+   * Python's `_resolve_config_value` only asks that the result be absolute —
+   * `C:\…` is as absolute as `/…`. */
+  it("renders a project rooted at a Windows drive letter", async () => {
+    const root = "C:/Users/x/app";
+    const fs = await seed(WALKTHROUGH, root);
+    await fs.writeText(
+      `${root}/_bmad/config.toml`,
+      `[core]\nproject_name = "app"\noutput_folder = "{project-root}/_bmad-output"\nactive_initiative = "initiative-demo"\n`,
+    );
+    const out = await renderSkill(root, WALKTHROUGH, {}, fs);
+    expect(out).toMatch(/^read and follow C:\/Users\/x\/app\/_bmad\/render\/bmad-walkthrough\//);
+    const dest = snapshotDir(out);
+    expect(await fs.readText(`${dest}/step-02-narrative.md`)).toContain("C:/Users/x/app/_bmad-output");
+  });
+
+  /** A dict lookup in Jinja is `config[name]`: a name only Object.prototype
+   * holds is missing, and the port says so in the Python's words. */
+  it("refuses a config name that only the prototype chain holds", async () => {
+    const fs = memFs();
+    await miniSkill(fs, "{{ config.constructor }}\n");
+    expect(await renderSkill("/p", "/p/skills/mini", {}, fs)).toContain("missing config value `constructor`");
+  });
+
+  /** Python's `type(value) is not type(default)`: a float spelled `2.0` is a
+   * float, and an int default refuses it — `--set` carries the spelling, so
+   * the port refuses it there. */
+  it("refuses an integral float --set where the default is an int", async () => {
+    const fs = memFs();
+    await miniSkill(fs, "count={{ workflow.count }} rate={{ workflow.rate }}\n", "[workflow]\ncount = 2\nrate = 2.5\n");
+    expect(await renderSkill("/p", "/p/skills/mini", { "workflow.count": "2.0" }, fs)).toContain(
+      "customization.workflow.count must be int, got float",
+    );
+    expect(await renderSkill("/p", "/p/skills/mini", { "workflow.rate": "3" }, fs)).toContain(
+      "customization.workflow.rate must be float, got int",
+    );
+    const ok = await renderSkill("/p", "/p/skills/mini", { "workflow.count": "2" }, fs);
+    expect(ok).toMatch(/^read and follow /);
+    expect(await fs.readText(`${snapshotDir(ok)}/workflow.md`)).toBe("count=2 rate=2.5\n");
+  });
+
+  /** TOML `0x1E` is the integer 30: the `E` is a digit, not an exponent. */
+  it("accepts a hex integer --set where the default is an int", async () => {
+    const fs = memFs();
+    await miniSkill(fs, "count={{ workflow.count }}\n", "[workflow]\ncount = 2\n");
+    const ok = await renderSkill("/p", "/p/skills/mini", { "workflow.count": "0x1E" }, fs);
+    expect(ok).toMatch(/^read and follow /);
+    expect(await fs.readText(`${snapshotDir(ok)}/workflow.md`)).toBe("count=30\n");
+  });
+
+  /** A default written `2.0` is a float (smol-toml reads it as the number 2),
+   * so a float `--set` is float against float. */
+  it("accepts a float --set where the default is written as a float", async () => {
+    const fs = memFs();
+    await miniSkill(fs, "count={{ workflow.count }}\n", "[workflow]\ncount = 2.0\n");
+    const ok = await renderSkill("/p", "/p/skills/mini", { "workflow.count": "3.0" }, fs);
+    expect(ok).toMatch(/^read and follow /);
+  });
 });
