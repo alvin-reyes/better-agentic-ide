@@ -123,7 +123,6 @@ const PORTED = new Set([
   "go.py", "scan_legacy_module.py", "registry.py", "read_session_log.py",
   "pick_methods.py", "list_customizable_skills.py", "lint_spine.py",
   "resolve_personas.py", "run_triggers.py", "x.py", "git_evidence.py",
-  "git_evidence.py",
 ]);
 
 /** Lines that legitimately keep `uv run`: dev tooling with external deps
@@ -217,7 +216,7 @@ if (process.argv[1]?.endsWith("patchBmadSkills.ts")) {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run scripts/__tests__/patchBmadSkills.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (9 tests — 7 matcher shapes + 2 CLI post-pass tests).
 
 - [ ] **Step 5: Write the vendor script**
 
@@ -251,7 +250,7 @@ echo "vendored $SHA ($LABEL) at $DEST"
 - [ ] **Step 6: Run the vendor script**
 
 Run: `bash scripts/vendor-bmad-v6.sh bda3c59 6.13.0-next`
-Expected: exit 0; `src-tauri/resources/bmad-v6/skills/` holds 33 dirs; `VERSION` reads `bda3c59 6.13.0-next`; the patch ran (check `grep -c "ade-runtime.mjs" src-tauri/resources/bmad-v6/skills/bmad/SKILL.md` is ≥ 1).
+Expected: exit 0; `src-tauri/resources/bmad-v6/skills/` holds 33 dirs; `VERSION` reads `bda3c59 6.13.0-next`; the patch ran (check `grep -rc "ade-runtime.mjs" src-tauri/resources/bmad-v6/skills --include="*.md" | grep -v ":0" | wc -l` is ≥ 1 — tree-wide count, since bmad/SKILL.md itself has no project-root call site at this pin).
 
 - [ ] **Step 7: Add the CI pin check**
 
@@ -273,7 +272,9 @@ In `.github/workflows/ci.yml`, add a job after the frontend tests:
         run: |
           if grep -rn "uv run" src-tauri/resources/bmad-v6/skills/ --include="*.md" \
             | grep -v -e "count_tokens.py" -e "prepass.py" -e "run_evals.py" -e "word_metrics.py" \
-                     -e "<name>.py" -e "uv run pytest"; then
+                     -e "<name>.py" -e "uv run pytest" -e "setup.py" -e "convert_cases.py" \
+                     -e "aggregate_benchmark.py" -e "init-sanctum.py" -e "{script}.py" \
+                     -e "<path>" -e '`uv run`'; then
             echo "unpatched uv run call site in vendored markdown" && exit 1
           fi
           echo "no unpatched call sites"
