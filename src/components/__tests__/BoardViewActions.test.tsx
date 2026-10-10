@@ -54,6 +54,25 @@ describe("BoardView actions", () => {
     expect(row("2.2").querySelector("button[data-action=dispatch]")).toBeNull();
   });
 
+  it("disables Dispatch with the reason when the provider cannot take a task", () => {
+    const all = { onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) };
+    render(<BoardView methodology="v4" board={board} stage={stageView(board, null)} error={null} actions={all} dispatchUnavailable="Ollama cannot start with a task." />);
+    const btn = row("1.2").querySelector("button[data-action=dispatch]") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.title).toBe("Ollama cannot start with a task.");
+    expect(screen.getByText(/Dispatch unavailable: Ollama cannot start with a task\./)).toBeTruthy();
+    fireEvent.click(btn);
+    expect(all.onDispatch).not.toHaveBeenCalled();
+    // Still nothing below approved.
+    expect(row("1.1").querySelector("button[data-action=dispatch]")).toBeNull();
+  });
+
+  it("shows no unavailable note when the provider can take a task", () => {
+    renderWith(null);
+    expect(screen.queryByText(/Dispatch unavailable/)).toBeNull();
+    expect((row("1.2").querySelector("button[data-action=dispatch]") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("shows a dispatched row as Dispatched, disabled, instead of Dispatch", () => {
     const all = { onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) };
     render(<BoardView methodology="v4" board={board} stage={stageView(board, null)} error={null} actions={all} dispatched={(v) => v.story.id === "1.2"} />);

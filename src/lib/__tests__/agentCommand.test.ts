@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildLaunchCommand, supportsRoleDelivery } from "../agentCommand";
+import { buildLaunchCommand, supportsRoleDelivery, taskUnsupportedReason } from "../agentCommand";
 
 /**
  * An absolute path, because that is what the launch paths now pass. The old
@@ -253,5 +253,23 @@ describe("supportsRoleDelivery", () => {
     expect(supportsRoleDelivery("claude")).toBe(true);
     expect(supportsRoleDelivery("ollama")).toBe(true);
     expect(supportsRoleDelivery("codex")).toBe(false);
+  });
+});
+
+describe("taskUnsupportedReason", () => {
+  it("is null for the providers that can start with a task", () => {
+    expect(taskUnsupportedReason("claude")).toBeNull();
+    expect(taskUnsupportedReason("deepseek")).toBeNull();
+  });
+
+  it("is buildLaunchCommand's own reason for those that cannot", () => {
+    const reason = (p: "ollama" | "codex") => {
+      const r = buildLaunchCommand(p, "/dev/null", { task: "x" });
+      return r.kind === "unsupported" ? r.reason : null;
+    };
+    expect(taskUnsupportedReason("ollama")).toBe(reason("ollama"));
+    expect(taskUnsupportedReason("ollama")).toMatch(/Ollama/);
+    expect(taskUnsupportedReason("codex")).toBe(reason("codex"));
+    expect(taskUnsupportedReason("codex")).toMatch(/Codex/);
   });
 });

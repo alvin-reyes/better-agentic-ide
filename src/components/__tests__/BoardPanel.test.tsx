@@ -40,6 +40,8 @@ vi.mock("../../lib/agentLaunch", () => launch);
 import BoardPanel from "../board/BoardPanel";
 import { useBoardPanel } from "../../stores/boardPanelStore";
 import { buildBoard } from "../../stores/stageBoardStore";
+import { useSettingsStore } from "../../stores/settingsStore";
+import { taskUnsupportedReason } from "../../lib/agentCommand";
 
 beforeEach(() => {
   disk.bmad = {};
@@ -194,6 +196,21 @@ describe("BoardPanel dispatch", () => {
     // The agent moves the story on: Dispatch comes back for the new state.
     act(() => { useBoardPanel.setState({ board: approved("InProgress") }); });
     await waitFor(() => expect(rowEl().querySelector("button[data-action=dispatch]")).not.toBeNull());
+  });
+
+  it.each(["ollama", "codex"] as const)("disables Dispatch when the default provider is %s", async (provider) => {
+    useSettingsStore.setState({ defaultProvider: provider });
+    try {
+      disk.roots = { "/dr": "/dr" };
+      useBoardPanel.setState({ root: "/dr", methodology: "v4", board: approved("Approved"), error: null, loading: false });
+      render(<BoardPanel cwd="/dr" onClose={vi.fn()} />);
+      await waitFor(() => expect(rowEl().querySelector("button[data-action=dispatch]")).not.toBeNull());
+      const btn = rowEl().querySelector("button[data-action=dispatch]") as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+      expect(btn.title).toBe(taskUnsupportedReason(provider));
+    } finally {
+      useSettingsStore.setState({ defaultProvider: "claude" });
+    }
   });
 
   it("does not mark a row whose dispatch failed", async () => {

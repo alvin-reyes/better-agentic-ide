@@ -5,6 +5,7 @@ import { useBoardPanel } from "../../stores/boardPanelStore";
 import { stageView, writeStage } from "../../lib/confirmedStage";
 import { approveStory, approveTicket } from "../../lib/boardActions";
 import { dispatchAgent } from "../../lib/agentLaunch";
+import { taskUnsupportedReason } from "../../lib/agentCommand";
 import { watchTargets, WATCH_EXTENSIONS } from "../../lib/boardWatch";
 import { tauriFs } from "../../lib/tauriFs";
 import { setUpProject, isSetupCandidate, bmadRootOf } from "../../lib/projectSetup";
@@ -102,6 +103,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [dispatchCount, setDispatchCount] = useState(0);
+  const provider = useSettingsStore((s) => s.defaultProvider);
 
   // The active pane's project, by the same walk-up agent launches use: the
   // nearest BMAD project from cwd up to the project root, else the project
@@ -200,7 +202,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       );
     }
     if (!board || !methodology) return error ? <Empty><div role="alert">{error}</div></Empty> : <Empty>Loading…</Empty>;
-    return <BoardView methodology={methodology} board={board} stage={stageView(board, stageFile)} error={error} actions={actions} dispatched={dispatched} />;
+    return <BoardView methodology={methodology} board={board} stage={stageView(board, stageFile)} error={error} actions={actions} dispatched={dispatched} dispatchUnavailable={taskUnsupportedReason(provider)} />;
   })();
 
   return (

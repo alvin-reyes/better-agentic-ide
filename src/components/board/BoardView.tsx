@@ -19,6 +19,8 @@ export interface BoardViewProps {
   actions: BoardActions;
   /** Whether this row was already dispatched in its current state (this session). */
   dispatched?: (v: StoryView) => boolean;
+  /** Why Dispatch cannot launch anything (the provider takes no opening task), or unset when it can. */
+  dispatchUnavailable?: string | null;
 }
 
 /** What a row says it is. Done is only ever "done ✓" with a gate behind it. */
@@ -33,13 +35,14 @@ const section = { padding: "10px 12px", borderBottom: "1px solid var(--border)" 
 const heading = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, ...muted, marginBottom: 6 } as const;
 
 /** A button whose async action shows its own failure, leaving the row as it was. */
-function ActionButton({ action, label, run, onError }: { action: string; label: string; run(): Promise<void>; onError(msg: string | null): void }) {
+function ActionButton({ action, label, run, onError, unavailable }: { action: string; label: string; run(): Promise<void>; onError(msg: string | null): void; unavailable?: string | null }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
       type="button"
       data-action={action}
-      disabled={busy}
+      disabled={busy || !!unavailable}
+      title={unavailable ?? undefined}
       onClick={async () => {
         setBusy(true);
         onError(null);
@@ -51,7 +54,7 @@ function ActionButton({ action, label, run, onError }: { action: string; label: 
           setBusy(false);
         }
       }}
-      style={{ fontSize: 11, padding: "1px 6px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer" }}
+      style={{ fontSize: 11, padding: "1px 6px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-primary)", color: unavailable ? "var(--text-secondary)" : "var(--text-primary)", cursor: unavailable ? "not-allowed" : "pointer" }}
     >
       {label}
     </button>
@@ -145,7 +148,7 @@ function GateDetail({ gate }: { gate: Gate | undefined }) {
   );
 }
 
-export function Row({ v, actions, methodology = "v4", dispatched }: { v: StoryView; actions: BoardActions; methodology?: "v4" | "v6"; dispatched?: (v: StoryView) => boolean }) {
+export function Row({ v, actions, methodology = "v4", dispatched, dispatchUnavailable }: { v: StoryView; actions: BoardActions; methodology?: "v4" | "v6"; dispatched?: (v: StoryView) => boolean; dispatchUnavailable?: string | null }) {
   const [open, setOpen] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
   const label = rowLabel(v);
@@ -178,7 +181,7 @@ export function Row({ v, actions, methodology = "v4", dispatched }: { v: StoryVi
             Dispatched
           </button>
         ) : (
-          <ActionButton action="dispatch" label="Dispatch" run={() => actions.onDispatch!(v)} onError={setRowError} />
+          <ActionButton action="dispatch" label="Dispatch" run={() => actions.onDispatch!(v)} onError={setRowError} unavailable={dispatchUnavailable} />
         ))}
       </div>
       {alwaysNote && <div style={{ ...muted, fontSize: 11, paddingLeft: 40 }}>{v.note}</div>}
@@ -188,20 +191,27 @@ export function Row({ v, actions, methodology = "v4", dispatched }: { v: StoryVi
   );
 }
 
-function WorkItems({ methodology, board, actions, dispatched }: { methodology: "v4" | "v6"; board: BoardState; actions: BoardActions; dispatched?: (v: StoryView) => boolean }) {
+function WorkItems({ methodology, board, actions, dispatched, dispatchUnavailable }: {
+  methodology: "v4" | "v6"; board: BoardState; actions: BoardActions; dispatched?: (v: StoryView) => boolean; dispatchUnavailable?: string | null;
+}) {
   if (board.noInitiative) return <div style={{ ...section, ...muted }}>No active initiative yet. Start one with bmad-spec.</div>;
   if (board.stories.length === 0) return <div style={{ ...section, ...muted }}>No {methodology === "v6" ? "tickets" : "stories"} yet.</div>;
 
   const rows = (refs: string[] | null) =>
-    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} methodology={methodology} dispatched={dispatched} />);
+    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} methodology={methodology} dispatched={dispatched} dispatchUnavailable={dispatchUnavailable} />);
+
+  const unavailableNote = dispatchUnavailable && actions.onDispatch && board.stories.some((v) => v.dispatchable) ? (
+    <div style={{ ...muted, fontSize: 11, marginBottom: 6 }}>Dispatch unavailable: {dispatchUnavailable}</div>
+  ) : null;
 
   if (methodology === "v4" || !board.epics) {
-    return <div style={section}><div style={heading}>Stories</div>{rows(null)}</div>;
+    return <div style={section}><div style={heading}>Stories</div>{unavailableNote}{rows(null)}</div>;
   }
   const grouped = new Set(board.epics.flatMap((e) => e.refs));
   const other = board.stories.filter((v) => !grouped.has(v.story.id)).map((v) => v.story.id);
   return (
     <div style={section}>
+      {unavailableNote}
       {board.epics.map((e) => (
         <div key={e.slug} style={{ marginBottom: 8 }}>
           <div style={heading}>{e.title}</div>
@@ -228,7 +238,7 @@ function GateProblems({ board }: { board: BoardState }) {
   );
 }
 
-export default function BoardView({ methodology, board, stage, error, actions, dispatched }: BoardViewProps) {
+export default function BoardView({ methodology, board, stage, error, actions, dispatched, dispatchUnavailable }: BoardViewProps) {
   return (
     <div style={{ overflowY: "auto", flex: 1, fontSize: 12 }}>
       {error && (
@@ -238,7 +248,7 @@ export default function BoardView({ methodology, board, stage, error, actions, d
       )}
       <StageRail board={board} stage={stage} actions={actions} />
       <Artifacts board={board} onOpen={actions.onOpen} />
-      <WorkItems methodology={methodology} board={board} actions={actions} dispatched={dispatched} />
+      <WorkItems methodology={methodology} board={board} actions={actions} dispatched={dispatched} dispatchUnavailable={dispatchUnavailable} />
       <GateProblems board={board} />
     </div>
   );

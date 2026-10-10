@@ -149,3 +149,13 @@ export function buildLaunchCommand(
 export function supportsRoleDelivery(provider: Provider): boolean {
   return buildLaunchCommand(provider, "/dev/null").kind === "command";
 }
+
+/**
+ * Why a provider cannot be launched with an opening task, or null when it
+ * can. Derived from `buildLaunchCommand` like `supportsRoleDelivery`, so the
+ * board's disabled Dispatch cannot drift from what launching does.
+ */
+export function taskUnsupportedReason(provider: Provider): string | null {
+  const r = buildLaunchCommand(provider, "/dev/null", { task: "x" });
+  return r.kind === "unsupported" ? r.reason : null;
+}
