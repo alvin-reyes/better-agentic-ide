@@ -1,0 +1,19 @@
+{
+  "store": "repo",
+  "access": "Read and write the files under `output_folder`.\n",
+  "fields": "risk and severity live in the frontmatter (risk: low|medium|high on any ticket; severity: P0-P3\non bugs); estimate the same way. Nothing else carries them.\n",
+  "types": {
+    "initiative": "initiative",
+    "epic": "epic",
+    "story": "story",
+    "spike": "spike",
+    "bug": "bug"
+  },
+  "status": {
+    "backlog": "backlog",
+    "in-progress": "in-progress",
+    "review": "review",
+    "done": "done",
+    "dropped": "dropped"
+  }
+}

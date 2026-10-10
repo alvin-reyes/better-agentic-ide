@@ -1,0 +1,8 @@
+{
+  "github": "GitHub Issues through the gh CLI: labels, sub-issues, blocked-by, milestones. For teams whose code and planning already live on GitHub.",
+  "jira": "Jira Cloud through acli: work types, transitions, links, JQL. For teams already on Jira, usually with an admin who can adjust the project workflow.",
+  "linear": "Linear through its MCP server: projects, parent issues, relations, labels. For product teams on Linear.",
+  "notion": "Notion through its MCP server: one tickets database with a board view, relations for hierarchy and blocking. For teams that plan in Notion and want tickets beside their docs.",
+  "repo": "Quick setup, and the default when nothing else is chosen. Tickets are markdown files under version control: in the monorepo, or in their own repo (recommended for mono and poly repos alike). No tracker or account needed. The simplest store — right for a solo developer or a very small team with no other tracking.",
+  "trello": "Trello through its MCP server: lists as status, labels as type, card links as hierarchy. For small teams that run a Trello board and want to keep it."
+}
