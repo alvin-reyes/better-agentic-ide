@@ -1215,6 +1215,26 @@ async function statusView(folder: string, fs: Fs): Promise<Record<string, any>> 
   return out;
 }
 
+/**
+ * The app's entry into the store, beside the command line: the project's
+ * active initiative folder (`{output_folder}/{active_initiative}`, with
+ * `{project-root}` substituted). Throws what `status` would print as its error.
+ */
+export async function activeInitiativeFolder(projectRoot: string, fs: Fs): Promise<string> {
+  return activeInitiative(normalizePath(projectRoot), fs);
+}
+
+/**
+ * The `status` view of the project's active initiative, as `tickets.py status`
+ * prints it run from that project with no folder — minus the `backlog` key, which
+ * the board does not show. Same object, not reparsed JSON; no CLI output changes.
+ */
+export async function ticketStatus(projectRoot: string, fs: Fs): Promise<Record<string, any>> {
+  const root = normalizePath(projectRoot);
+  const folder = await activeInitiative(root, fs);
+  return { store: await storeName(root, fs), ...(await statusView(folder, fs)) };
+}
+
 async function cmdStatus(args: Args, fs: Fs): Promise<Record<string, any>> {
   const folder = await commandFolder(args, fs);
   const store = await storeName(await projectRootFor(args, folder, fs), fs);
