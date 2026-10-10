@@ -64,7 +64,9 @@ describe("parseGate", () => {
 
   it("names a v6 gate by its whole ref, letters and all", () => {
     // v6 ids are any letters and digits, so only the directory says which rule applies.
-    expect(parseGate(".ade/gates/1.abc.yml", "gate: PASS\n").storyId).toBe("1.abc");
+    expect(parseGate(".ade/gates/2.1slug.yml", "gate: PASS\n").storyId).toBe("2.1slug");
+    // Only gates directly in .ade/gates/ are v6; anything deeper is read as v4.
+    expect(parseGate(".ade/gates/sub/2.1slug.yml", "gate: PASS\n").storyId).toBe("2.1");
     expect(parseGate("/proj/.ade/gates/2.3b.yml", "gate: PASS\n").storyId).toBe("2.3b");
   });
 
