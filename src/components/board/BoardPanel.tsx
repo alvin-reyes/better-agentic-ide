@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import BoardView, { type BoardActions } from "./BoardView";
 import { useBoardPanel } from "../../stores/boardPanelStore";
 import { stageView, writeStage } from "../../lib/confirmedStage";
 import { approveStory, approveTicket } from "../../lib/boardActions";
 import { dispatchAgent } from "../../lib/agentLaunch";
 import { taskUnsupportedReason } from "../../lib/agentCommand";
-import { watchTargets, WATCH_EXTENSIONS } from "../../lib/boardWatch";
+import { watchTargets } from "../../lib/boardWatch";
+import { useBoardWatch, useExistingFolders } from "./useBoardWatchers";
+import { useDragWidth } from "../../hooks/useDragWidth";
 import { tauriFs } from "../../lib/tauriFs";
 import { setUpProject, isSetupCandidate, bmadRootOf } from "../../lib/projectSetup";
 import { ROLE_ITEMS } from "../../data/pickerItems";
@@ -14,6 +16,8 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { joinPath } from "../../lib/bmadRuntime/paths";
 import { openFileFromTerminal } from "../../lib/openFile";
 import type { StoryView } from "../../lib/storyState";
+
+const BOARD_WIDTH = { initial: 380, min: 280, max: 720 };
 
 interface Props {
   cwd: string | null;
@@ -28,82 +32,12 @@ interface Props {
 const dispatchedRows = new Set<string>();
 const dispatchKey = (root: string, v: StoryView) => `${root}::${v.story.id}::${v.state}`;
 
-/** How often a missing candidate folder is looked for again while the panel is open. */
-export const MISSING_FOLDER_RECHECK_MS = 5000;
-
-/**
- * Which of the board's folders exist. Recomputed after each rebuild
- * (`rebuilt` changes), and, while any is missing, every few seconds: a folder
- * that cannot be watched yet cannot report its own creation, and the root is
- * never watched. A folder that appears schedules a rebuild.
- */
-function useExistingFolders(candidates: string[], rebuilt: unknown, onAppeared: () => void): string[] {
-  const key = candidates.join("\n");
-  const [found, setFound] = useState<{ key: string; dirs: string[] }>({ key: "", dirs: [] });
-
-  useEffect(() => {
-    let live = true;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const check = (dirs: string[]) =>
-      Promise.all(dirs.map((d) => tauriFs.exists(d).catch(() => false))).then((ok) => dirs.filter((_, i) => ok[i]));
-    const publish = (dirs: string[]) =>
-      setFound((prev) => (prev.key === key && prev.dirs.join("\n") === dirs.join("\n") ? prev : { key, dirs }));
-
-    check(candidates).then((present) => {
-      if (!live) return;
-      publish(present);
-      if (present.length === candidates.length) return;
-      timer = setInterval(async () => {
-        const missing = candidates.filter((d) => !present.includes(d));
-        const appeared = await check(missing);
-        if (!live || appeared.length === 0) return;
-        present = candidates.filter((d) => present.includes(d) || appeared.includes(d));
-        publish(present);
-        onAppeared();
-        if (present.length === candidates.length && timer) clearInterval(timer);
-      }, MISSING_FOLDER_RECHECK_MS);
-    });
-    return () => {
-      live = false;
-      if (timer) clearInterval(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the folder list and each rebuild
-  }, [key, rebuilt]);
-
-  return found.key === key ? found.dirs : [];
-}
-
-/** Watch the given folders; any change schedules a rebuild. Re-registers only when the list changes. */
-function useBoardWatch(dirs: string[], onChange: () => void) {
-  const key = dirs.join("\n");
-  useEffect(() => {
-    let cancelled = false;
-    const ids: number[] = [];
-    (async () => {
-      for (const dir of dirs) {
-        if (cancelled) break;
-        const channel = new Channel<{ type: string }>();
-        channel.onmessage = () => { if (!cancelled) onChange(); };
-        const id = await invoke<number>("watch_directory", { dir, extensions: WATCH_EXTENSIONS, withContent: false, onEvent: channel }).catch(() => null);
-        if (id === null) continue;
-        if (cancelled) invoke("unwatch_directory", { id }).catch(() => {});
-        else ids.push(id);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      for (const id of ids) invoke("unwatch_directory", { id }).catch(() => {});
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the folder list
-  }, [key]);
-}
-
 export default function BoardPanel({ cwd, onClose }: Props) {
   const [root, setRoot] = useState<string | null>(null);
   const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [dispatchCount, setDispatchCount] = useState(0);
-  const { width, onDragStart } = useDragWidth();
+  const { width, onDragStart } = useDragWidth(BOARD_WIDTH.min, BOARD_WIDTH.max, BOARD_WIDTH.initial);
   const provider = useSettingsStore((s) => s.defaultProvider);
 
   // The active pane's project, by the same walk-up agent launches use: the
@@ -226,37 +160,6 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       {body}
     </aside>
   );
-}
-
-const BOARD_WIDTH = { initial: 380, min: 280, max: 720 };
-
-/** The panel's width, dragged from its left edge like the Preview panel's. Not persisted. */
-function useDragWidth() {
-  const [width, setWidth] = useState(BOARD_WIDTH.initial);
-  const cleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => cleanupRef.current?.(), []);
-
-  const onDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = width;
-    const onMove = (ev: MouseEvent) =>
-      setWidth(Math.min(BOARD_WIDTH.max, Math.max(BOARD_WIDTH.min, startWidth + startX - ev.clientX)));
-    const cleanup = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", cleanup);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      cleanupRef.current = null;
-    };
-    cleanupRef.current = cleanup;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", cleanup);
-  }, [width]);
-
-  return { width, onDragStart };
 }
 
 function Empty({ children }: { children: React.ReactNode }) {

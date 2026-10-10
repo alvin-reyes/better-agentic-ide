@@ -201,6 +201,15 @@ describe("BoardPanel width", () => {
     expect(panel().style.width).toBe("280px");
   });
 
+  it("drags from the width on screen when flex has squeezed the panel", () => {
+    render(<BoardPanel cwd={null} onClose={vi.fn()} />);
+    panel().getBoundingClientRect = () => ({ width: 300 }) as DOMRect; // stored 380, shown 300
+    fireEvent.mouseDown(handle(), { clientX: 1000 });
+    fireEvent.mouseMove(document, { clientX: 990 });
+    expect(panel().style.width).toBe("310px");
+    fireEvent.mouseUp(document);
+  });
+
   it("keeps the terminal area from being crushed by the side panels", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");

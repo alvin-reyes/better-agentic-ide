@@ -228,7 +228,9 @@ export default function FileBrowser() {
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = width;
+    // From the width on screen: flex may have squeezed the panel below its stored width.
+    const rendered = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect().width ?? 0;
+    const startWidth = rendered > 0 ? rendered : width;
 
     const cleanup = () => {
       document.removeEventListener("mousemove", onMove);
@@ -239,7 +241,7 @@ export default function FileBrowser() {
     };
 
     const onMove = (ev: MouseEvent) => {
-      setWidth(Math.min(500, Math.max(180, startWidth + ev.clientX - startX)));
+      setWidth(Math.round(Math.min(500, Math.max(180, startWidth + ev.clientX - startX))));
     };
 
     dragCleanupRef.current = cleanup;
@@ -261,7 +263,9 @@ export default function FileBrowser() {
         backgroundColor: "var(--bg-secondary)",
         borderRight: "1px solid var(--border)",
         position: "relative",
-        flexShrink: 0,
+        // Gives way, down to its minimum, before the terminal area does.
+        flexShrink: 1,
+        minWidth: 180,
       }}
     >
       {/* Resize handle (right edge) */}
