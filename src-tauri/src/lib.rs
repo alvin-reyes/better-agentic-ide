@@ -361,6 +361,22 @@ fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))
 }
 
+/// Whether a path exists (file or directory). The board's `Fs` needs this to
+/// tell "missing" from "unreadable"; read_file alone conflates the two.
+#[tauri::command(async)]
+fn path_exists(path: String) -> bool {
+    std::path::Path::new(&expand_home(&path)).exists()
+}
+
+/// Whether the path itself is a symbolic link, without following it. The
+/// runtime's walks list a linked directory but never descend into it.
+#[tauri::command(async)]
+fn path_is_symlink(path: String) -> bool {
+    std::fs::symlink_metadata(expand_home(&path))
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
+}
+
 #[tauri::command(async)]
 fn list_md_files(dir: String) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
@@ -411,6 +427,8 @@ pub fn run() {
             write_text_file,
             save_temp_image,
             read_file,
+            path_exists,
+            path_is_symlink,
             read_file_base64,
             resolve_file_paths,
             project_root,
@@ -519,5 +537,30 @@ mod tests {
         }
         assert!(!std::path::Path::new("/tmp/ade-pwned").exists());
         assert!(find_command("sh").is_ok());
+    }
+
+    #[test]
+    fn path_exists_reports_files_and_directories_and_not_missing_paths() {
+        use super::path_exists;
+        let d = std::env::temp_dir().join(format!("ade_exists_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("f.md"), "x").unwrap();
+        assert!(path_exists(d.to_string_lossy().into()));
+        assert!(path_exists(d.join("f.md").to_string_lossy().into()));
+        assert!(!path_exists(d.join("missing").to_string_lossy().into()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn path_is_symlink_does_not_follow_the_link() {
+        use super::path_is_symlink;
+        let d = std::env::temp_dir().join(format!("ade_symlink_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("real")).unwrap();
+        std::os::unix::fs::symlink(d.join("real"), d.join("link")).unwrap();
+        assert!(path_is_symlink(d.join("link").to_string_lossy().into()));
+        assert!(!path_is_symlink(d.join("real").to_string_lossy().into()));
+        assert!(!path_is_symlink(d.join("missing").to_string_lossy().into()));
     }
 }
