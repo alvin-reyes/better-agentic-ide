@@ -20,6 +20,11 @@ describe("realFs", () => {
       expect(await fs.exists(join(nested, "f.txt"))).toBe(true);
       expect(await fs.exists(join(root, "missing"))).toBe(false);
       await expect(fs.writeText(join(root, "missing", "x.txt"), "x")).rejects.toThrow();
+
+      await fs.delete(join(nested, "f.txt"));
+      expect(await fs.exists(join(nested, "f.txt"))).toBe(false);
+      expect(await fs.list(nested)).toEqual([]);
+      await expect(fs.delete(join(nested, "f.txt"))).rejects.toThrow(/ENOENT/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -79,5 +84,18 @@ describe("memFs", () => {
     await expect(fs.writeText("/p/a/f.txt", "f")).rejects.toThrow(/ENOENT/);
     await expect(fs.readText("/p/a/f.txt")).rejects.toThrow(/no such file/);
     await expect(fs.list("/p/a")).rejects.toThrow(/ENOENT/);
+  });
+
+  it("delete removes a file and rejects like unlink", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/a");
+    await fs.writeText("/p/a/f.txt", "f");
+    await fs.delete("/p/a/f.txt");
+    expect(await fs.exists("/p/a/f.txt")).toBe(false);
+    expect(await fs.exists("/p/a")).toBe(true);
+    expect(await fs.list("/p/a")).toEqual([]);
+    await expect(fs.readText("/p/a/f.txt")).rejects.toThrow(/no such file/);
+    await expect(fs.delete("/p/a/f.txt")).rejects.toThrow(/ENOENT/);
+    await expect(fs.delete("/p/a")).rejects.toThrow(/EISDIR/);
   });
 });

@@ -10,13 +10,11 @@ import type { Fs } from "./fs";
  * `mark` and `mirror` write all follow it. The goldens under
  * `__tests__/goldens/tickets` are the contract.
  *
- * Three deliberate substitutions, all seams with earlier tasks:
+ * Two deliberate substitutions, both seams with earlier tasks:
  * - config comes from the Task 3 `loadCentralConfig`, not the project's own
  *   `_bmad/scripts/config_utils.py` (so a missing config names itself in
  *   different words);
- * - output goes to `stdout` alone; the Python splits errors onto stderr;
- * - `Fs` cannot delete, so a `mirror` that rolls back leaves behind a leaf file
- *   it had just pulled (the Python unlinks it); everything it edited is restored.
+ * - output goes to `stdout` alone; the Python splits errors onto stderr.
  * argparse's usage line wraps to the terminal and is not reproduced; its error
  * line is.
  */
@@ -1606,11 +1604,10 @@ async function cmdMirror(args: Args, stdin: string, fs: Fs): Promise<Record<stri
     for (const f of folders) await loadTree(f, fs);
   } catch (e) {
     for (const [path, raw] of undo) {
-      // The Fs cannot delete, so a leaf this call pulled stays behind; everything
-      // it edited is restored byte for byte.
-      if (raw === null) continue;
       try {
-        await fs.writeText(path, raw);
+        // A leaf this call pulled is removed again; everything it edited is restored byte for byte.
+        if (raw === null) await fs.delete(path);
+        else await fs.writeText(path, raw);
       } catch {
         // keep restoring the rest; the first failure is the one reported
       }

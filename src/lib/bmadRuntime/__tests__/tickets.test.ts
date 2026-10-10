@@ -256,6 +256,29 @@ describe("tickets port", () => {
     expect(written).toContain("\r\ntracker_status: done\r\n");
     expect(written.replace(/\r\n/g, "")).not.toContain("\n");
   });
+
+  it("writes nothing when a mirrored value breaks the tree, like Python", async () => {
+    // The mirror pulls entry 2's leaf, then its own `after` names a ticket the
+    // tree does not hold: the leaf is removed again and the initiative's tree
+    // is exactly what it was.
+    const fs = memFs();
+    await seedTrackerStore(fs, "/p", "jira");
+    await fs.writeText(epicToml("/p"), (await fs.readText(epicToml("/p"))) + SECOND_ENTRY);
+    const before = await fs.list(epicDir("/p"));
+    const r = await tickets(
+      ["mirror", "--project-root", "/p", epicDir("/p")],
+      fs,
+      JSON.stringify([
+        { ref: 2, tracker_id: "42", after: ["NOPE-7"] },
+        { ref: "NOPE-7", tracker_status: "backlog" },
+      ]),
+    );
+    expect(r.exitCode).toBe(1);
+    expect(r.stdout).toContain("nothing was mirrored");
+    expect(r.stdout).toContain("NOPE-7");
+    expect(await fs.exists(`${epicDir("/p")}/story-second.md`)).toBe(false);
+    expect(await fs.list(epicDir("/p"))).toEqual(before);
+  });
 });
 
 describe("read_store port", () => {

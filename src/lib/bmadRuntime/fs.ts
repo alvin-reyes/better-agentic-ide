@@ -5,6 +5,7 @@ export interface Fs {
   list(p: string): Promise<string[]>;
   exists(p: string): Promise<boolean>;
   mkdir(p: string): Promise<void>;
+  delete(p: string): Promise<void>;
 }
 
 function withoutTrailingSlash(p: string): string {
@@ -19,7 +20,9 @@ function parentDirectory(p: string): string {
 /**
  * In-memory Fs for tests. Behavior mirrors realFs: list returns the immediate
  * children (files and directories) of a directory, mkdir creates every parent
- * along the path, and a write into a directory that does not exist rejects.
+ * along the path, a write into a directory that does not exist rejects, and
+ * delete removes a file, rejecting like unlink (ENOENT for a missing file,
+ * EISDIR for a directory).
  */
 export function memFs(): Fs {
   const files = new Map<string, string>();
@@ -71,6 +74,14 @@ export function memFs(): Fs {
         directories.add(current);
       }
     },
+    delete: async (p) => {
+      const key = withoutTrailingSlash(p);
+      if (!files.has(key)) {
+        if (isDirectory(key)) throw new Error(`EISDIR: cannot delete a directory: ${key}`);
+        throw new Error(`ENOENT: no such file: ${key}`);
+      }
+      files.delete(key);
+    },
   };
 }
 
@@ -82,5 +93,6 @@ export function realFs(): Fs {
     exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),
     // `mkdir` with `recursive: true` resolves to the first created path; discard it for Promise<void>.
     mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true }).then(() => undefined)),
+    delete: (p) => import("node:fs/promises").then((f) => f.unlink(p)),
   };
 }
