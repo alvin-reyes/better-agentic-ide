@@ -1,5 +1,5 @@
 import type { Fs } from "./bmadRuntime/fs";
-import { joinPath } from "./bmadRuntime/paths";
+import { joinPath, normalizePath } from "./bmadRuntime/paths";
 import { APPROVALS_DIR } from "./boardV6";
 
 /**
@@ -24,7 +24,11 @@ export function approveStoryMarkdown(md: string): string | null {
 
 /** BMAD's own Draft → Approved, on a v4 story file (path relative to root). */
 export async function approveStory(root: string, file: string, fs: Fs): Promise<void> {
+  // The story folder comes from core-config.yaml, which a cloned repo
+  // controls: only a file strictly under the project root is written.
+  const base = normalizePath(root).replace(/\/+$/, "");
   const path = joinPath(root, file);
+  if (!path.startsWith(`${base}/`) || path.length <= base.length + 1) throw new Error("Story is outside the project");
   const next = approveStoryMarkdown(await fs.readText(path));
   if (next === null) throw new Error("Story is not a draft");
   await fs.writeText(path, next);

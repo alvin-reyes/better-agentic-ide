@@ -32,6 +32,22 @@ describe("approveStory", () => {
     expect(await fs.readText("/p/docs/stories/1.1.cart.md")).toContain("## Status\n\nApproved\n");
     await expect(approveStory("/p", "docs/stories/1.1.cart.md", fs)).rejects.toThrow("Story is not a draft");
   });
+
+  // devStoryLocation comes from core-config.yaml, which a cloned repo controls.
+  it.each([
+    ["a parent-relative path", "../x.md", "/x.md"],
+    ["a path that climbs out through a subfolder", "docs/../../x.md", "/x.md"],
+    ["an absolute path", "/etc/x.md", "/etc/x.md"],
+    ["a sibling folder sharing the root's prefix", "../p2/x.md", "/p2/x.md"],
+  ])("refuses %s, writing nothing", async (_, file, abs) => {
+    const fs = memFs();
+    await fs.mkdir("/p");
+    await fs.mkdir("/etc");
+    await fs.mkdir("/p2");
+    await fs.writeText(abs, STORY);
+    await expect(approveStory("/p", file, fs)).rejects.toThrow("Story is outside the project");
+    expect(await fs.readText(abs)).toBe(STORY);
+  });
 });
 
 describe("approveTicket", () => {
