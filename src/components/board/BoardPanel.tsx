@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import BoardView, { type BoardActions } from "./BoardView";
 import { useBoardPanel } from "../../stores/boardPanelStore";
@@ -12,11 +12,20 @@ import { ROLE_ITEMS } from "../../data/pickerItems";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { joinPath } from "../../lib/bmadRuntime/paths";
 import { openFileFromTerminal } from "../../lib/openFile";
+import type { StoryView } from "../../lib/storyState";
 
 interface Props {
   cwd: string | null;
   onClose(): void;
 }
+
+/**
+ * Rows a developer was started on this session, as `root::ref::state`. In
+ * memory only (nothing is written): it stops a second click opening a second
+ * developer tab, and lapses once the row's state moves on.
+ */
+const dispatchedRows = new Set<string>();
+const dispatchKey = (root: string, v: StoryView) => `${root}::${v.story.id}::${v.state}`;
 
 /** How often a missing candidate folder is looked for again while the panel is open. */
 export const MISSING_FOLDER_RECHECK_MS = 5000;
@@ -92,6 +101,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   const [root, setRoot] = useState<string | null>(null);
   const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [dispatchCount, setDispatchCount] = useState(0);
 
   // The active pane's project, by the same walk-up agent launches use: the
   // nearest BMAD project from cwd up to the project root, else the project
@@ -142,6 +152,8 @@ export default function BoardPanel({ cwd, onClose }: Props) {
         task: `Implement ${what} ${v.story.id}${v.story.file ? ` (${v.story.file})` : ""}.`,
       });
       if (err) throw new Error(err);
+      dispatchedRows.add(dispatchKey(root, v));
+      setDispatchCount((n) => n + 1);
     },
     onStage: async (to) => {
       if (!root) return;
@@ -149,6 +161,12 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       await refresh();
     },
   }), [root, methodology, refresh]);
+
+  const dispatched = useCallback(
+    (v: StoryView) => !!root && dispatchedRows.has(dispatchKey(root, v)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispatchCount marks a change to the module-level set
+    [root, dispatchCount],
+  );
 
   const body = (() => {
     if (!cwd || (!root && !loading)) return <Empty>No project in this pane</Empty>;
@@ -179,7 +197,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       );
     }
     if (!board || !methodology) return error ? <Empty><div role="alert">{error}</div></Empty> : <Empty>Loading…</Empty>;
-    return <BoardView methodology={methodology} board={board} stage={stageView(board, stageFile)} error={error} actions={actions} />;
+    return <BoardView methodology={methodology} board={board} stage={stageView(board, stageFile)} error={error} actions={actions} dispatched={dispatched} />;
   })();
 
   return (

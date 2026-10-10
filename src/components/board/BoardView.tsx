@@ -17,6 +17,8 @@ export interface BoardViewProps {
   stage: StageView;
   error: string | null;
   actions: BoardActions;
+  /** Whether this row was already dispatched in its current state (this session). */
+  dispatched?: (v: StoryView) => boolean;
 }
 
 /** What a row says it is. Done is only ever "done ✓" with a gate behind it. */
@@ -143,7 +145,7 @@ function GateDetail({ gate }: { gate: Gate | undefined }) {
   );
 }
 
-export function Row({ v, actions, methodology = "v4" }: { v: StoryView; actions: BoardActions; methodology?: "v4" | "v6" }) {
+export function Row({ v, actions, methodology = "v4", dispatched }: { v: StoryView; actions: BoardActions; methodology?: "v4" | "v6"; dispatched?: (v: StoryView) => boolean }) {
   const [open, setOpen] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
   const label = rowLabel(v);
@@ -171,9 +173,13 @@ export function Row({ v, actions, methodology = "v4" }: { v: StoryView; actions:
         {v.state === "draft" && actions.onApprove && (
           <ActionButton action="approve" label="Approve" run={() => actions.onApprove!(v)} onError={setRowError} />
         )}
-        {canDispatch && actions.onDispatch && (
+        {canDispatch && actions.onDispatch && (dispatched?.(v) ? (
+          <button type="button" data-action="dispatched" disabled title="A developer was already started on this row" style={{ fontSize: 11, padding: "1px 6px", border: "1px solid var(--border)", borderRadius: 4, background: "none", color: "var(--text-secondary)" }}>
+            Dispatched
+          </button>
+        ) : (
           <ActionButton action="dispatch" label="Dispatch" run={() => actions.onDispatch!(v)} onError={setRowError} />
-        )}
+        ))}
       </div>
       {alwaysNote && <div style={{ ...muted, fontSize: 11, paddingLeft: 40 }}>{v.note}</div>}
       {rowError && <div style={{ fontSize: 11, paddingLeft: 40, color: "var(--error, #f85149)" }}>{rowError}</div>}
@@ -182,12 +188,12 @@ export function Row({ v, actions, methodology = "v4" }: { v: StoryView; actions:
   );
 }
 
-function WorkItems({ methodology, board, actions }: { methodology: "v4" | "v6"; board: BoardState; actions: BoardActions }) {
+function WorkItems({ methodology, board, actions, dispatched }: { methodology: "v4" | "v6"; board: BoardState; actions: BoardActions; dispatched?: (v: StoryView) => boolean }) {
   if (board.noInitiative) return <div style={{ ...section, ...muted }}>No active initiative yet. Start one with bmad-spec.</div>;
   if (board.stories.length === 0) return <div style={{ ...section, ...muted }}>No {methodology === "v6" ? "tickets" : "stories"} yet.</div>;
 
   const rows = (refs: string[] | null) =>
-    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} methodology={methodology} />);
+    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} methodology={methodology} dispatched={dispatched} />);
 
   if (methodology === "v4" || !board.epics) {
     return <div style={section}><div style={heading}>Stories</div>{rows(null)}</div>;
@@ -222,7 +228,7 @@ function GateProblems({ board }: { board: BoardState }) {
   );
 }
 
-export default function BoardView({ methodology, board, stage, error, actions }: BoardViewProps) {
+export default function BoardView({ methodology, board, stage, error, actions, dispatched }: BoardViewProps) {
   return (
     <div style={{ overflowY: "auto", flex: 1, fontSize: 12 }}>
       {error && (
@@ -232,7 +238,7 @@ export default function BoardView({ methodology, board, stage, error, actions }:
       )}
       <StageRail board={board} stage={stage} actions={actions} />
       <Artifacts board={board} onOpen={actions.onOpen} />
-      <WorkItems methodology={methodology} board={board} actions={actions} />
+      <WorkItems methodology={methodology} board={board} actions={actions} dispatched={dispatched} />
       <GateProblems board={board} />
     </div>
   );

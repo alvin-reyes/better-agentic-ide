@@ -36,6 +36,34 @@ describe("BoardView actions", () => {
     expect(row("1.3").querySelector("button[data-action=dispatch]")).not.toBeNull();
   });
 
+  it("never offers Dispatch on a done ✓ or waived row", () => {
+    const gate = (id: string, verdict: string) => ({
+      file: `docs/qa/gates/${id}-x.yml`,
+      yaml: `story: "${id}"\ngate: "${verdict}"\nstatus_reason: "r"\nupdated: "2026-10-10"\n`,
+    });
+    const finished = buildBoard({
+      config: null,
+      artifactExists: () => false,
+      stories: [story("2.1", "Done"), story("2.2", "Done")],
+      gates: [gate("2.1", "PASS"), gate("2.2", "WAIVED")],
+    });
+    render(<BoardView methodology="v4" board={finished} stage={stageView(finished, null)} error={null} actions={{ onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) }} />);
+    expect(row("2.1").querySelector("[data-state]")!.textContent).toBe("done ✓");
+    expect(row("2.2").querySelector("[data-state]")!.textContent).toBe("waived");
+    expect(row("2.1").querySelector("button[data-action=dispatch]")).toBeNull();
+    expect(row("2.2").querySelector("button[data-action=dispatch]")).toBeNull();
+  });
+
+  it("shows a dispatched row as Dispatched, disabled, instead of Dispatch", () => {
+    const all = { onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) };
+    render(<BoardView methodology="v4" board={board} stage={stageView(board, null)} error={null} actions={all} dispatched={(v) => v.story.id === "1.2"} />);
+    const done = row("1.2").querySelector("button[data-action=dispatched]") as HTMLButtonElement;
+    expect(done.textContent).toBe("Dispatched");
+    expect(done.disabled).toBe(true);
+    expect(row("1.2").querySelector("button[data-action=dispatch]")).toBeNull();
+    expect(row("1.3").querySelector("button[data-action=dispatch]")).not.toBeNull();
+  });
+
   it("calls the action with the row and shows a failure on that row", async () => {
     const a = renderWith(null, { onApprove: vi.fn(async () => { throw new Error("Story is not a draft"); }) });
     fireEvent.click(row("1.1").querySelector("button[data-action=approve]")!);

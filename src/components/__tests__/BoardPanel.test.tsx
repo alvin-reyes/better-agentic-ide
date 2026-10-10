@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 
 const disk = vi.hoisted(() => ({
@@ -33,6 +33,9 @@ vi.mock("../../stores/boardPanelStore", async () => {
   }));
   return { useBoardPanel };
 });
+
+const launch = vi.hoisted(() => ({ dispatchAgent: vi.fn(async (_a: unknown): Promise<string | null> => null) }));
+vi.mock("../../lib/agentLaunch", () => launch);
 
 import BoardPanel from "../board/BoardPanel";
 import { useBoardPanel } from "../../stores/boardPanelStore";
@@ -150,5 +153,44 @@ describe("BoardPanel", () => {
     render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("Loading…")).toBeTruthy());
     expect(screen.queryByRole("button", { name: /approve|dispatch/i })).toBeNull();
+  });
+});
+
+describe("BoardPanel dispatch", () => {
+  const approved = (status: string) =>
+    buildBoard({
+      config: null,
+      artifactExists: () => false,
+      stories: [{ file: "docs/stories/1.2.x.md", markdown: `# Story 1.2: T\n\n## Status\n\n${status}\n` }],
+      gates: [],
+    });
+  const rowEl = () => document.querySelector('[data-row="1.2"]') as HTMLElement;
+
+  it("shows a row as Dispatched once its dispatch succeeds, until its state changes", async () => {
+    launch.dispatchAgent.mockClear();
+    disk.roots = { "/dp": "/dp" };
+    useBoardPanel.setState({ root: "/dp", methodology: "v4", board: approved("Approved"), error: null, loading: false });
+    render(<BoardPanel cwd="/dp" onClose={vi.fn()} />);
+    await waitFor(() => expect(rowEl().querySelector("button[data-action=dispatch]")).not.toBeNull());
+    fireEvent.click(rowEl().querySelector("button[data-action=dispatch]")!);
+    await waitFor(() => expect(rowEl().querySelector("button[data-action=dispatched]")).not.toBeNull());
+    expect((rowEl().querySelector("button[data-action=dispatched]") as HTMLButtonElement).disabled).toBe(true);
+    expect(rowEl().querySelector("button[data-action=dispatch]")).toBeNull();
+    expect(launch.dispatchAgent).toHaveBeenCalledTimes(1);
+
+    // The agent moves the story on: Dispatch comes back for the new state.
+    act(() => { useBoardPanel.setState({ board: approved("InProgress") }); });
+    await waitFor(() => expect(rowEl().querySelector("button[data-action=dispatch]")).not.toBeNull());
+  });
+
+  it("does not mark a row whose dispatch failed", async () => {
+    launch.dispatchAgent.mockImplementationOnce(async () => "The new terminal did not start.");
+    disk.roots = { "/dq": "/dq" };
+    useBoardPanel.setState({ root: "/dq", methodology: "v4", board: approved("Approved"), error: null, loading: false });
+    render(<BoardPanel cwd="/dq" onClose={vi.fn()} />);
+    await waitFor(() => expect(rowEl().querySelector("button[data-action=dispatch]")).not.toBeNull());
+    fireEvent.click(rowEl().querySelector("button[data-action=dispatch]")!);
+    await waitFor(() => expect(rowEl().textContent).toContain("The new terminal did not start."));
+    expect(rowEl().querySelector("button[data-action=dispatched]")).toBeNull();
   });
 });
