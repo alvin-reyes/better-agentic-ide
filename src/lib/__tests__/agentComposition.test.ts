@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { composeRoleMarkdown, roleFileName } from "../agentComposition";
-import { getRole } from "../../data/roles";
+import { getRole, type Role } from "../../data/roles";
 import { getDomain } from "../../data/domains";
 
 const architect = getRole("architect")!;
@@ -42,6 +44,74 @@ describe("composeRoleMarkdown", () => {
   it("produces markdown headings, not a flat blob", () => {
     const md = composeRoleMarkdown(architect, security);
     expect(md.split("\n").filter((l) => l.startsWith("#")).length).toBeGreaterThan(2);
+  });
+});
+
+const dual = (body: string): Role => ({ id: "qa", title: "QA", body, owns: [], summary: "" });
+const DUAL = "# QA\n\nintro\n\n## BMAD tasks (v4)\nv4 stuff\n\n## BMAD tasks (v6)\nv6 stuff\n";
+
+describe("composeRoleMarkdown per methodology", () => {
+  it("emits only the v6 task section for v6 projects", () => {
+    const out = composeRoleMarkdown(dual(DUAL), undefined, "v6");
+    expect(out).toContain("## BMAD tasks (v6)");
+    expect(out).toContain("v6 stuff");
+    expect(out).not.toContain("v4 stuff");
+    expect(out).not.toContain("## BMAD tasks (v4)");
+  });
+
+  it("emits only the v4 task section for v4 projects", () => {
+    const out = composeRoleMarkdown(dual(DUAL), undefined, "v4");
+    expect(out).toContain("## BMAD tasks (v4)");
+    expect(out).toContain("v4 stuff");
+    expect(out).not.toContain("v6 stuff");
+    expect(out).not.toContain("## BMAD tasks (v6)");
+  });
+
+  it("defaults to v6", () => {
+    const out = composeRoleMarkdown(dual(DUAL));
+    expect(out).toContain("v6 stuff");
+    expect(out).not.toContain("v4 stuff");
+  });
+
+  it("keeps the sections after the task sections in both modes", () => {
+    const md = DUAL + "\n## Project knowledge\nknow\n\n## Boundaries & anti-patterns\n- never this\n";
+    for (const m of ["v4", "v6"] as const) {
+      const out = composeRoleMarkdown(dual(md), undefined, m);
+      expect(out, m).toContain("## Project knowledge\nknow");
+      expect(out, m).toContain("## Boundaries & anti-patterns\n- never this");
+      expect(out.indexOf("## Boundaries"), m).toBeGreaterThan(out.indexOf("## BMAD tasks"));
+    }
+    expect(composeRoleMarkdown(dual(md), undefined, "v4")).not.toContain("v6 stuff");
+  });
+
+  it("keeps the domain focus with the filtered section", () => {
+    const out = composeRoleMarkdown(dual(DUAL), security, "v4");
+    expect(out).toContain("v4 stuff");
+    expect(out).not.toContain("v6 stuff");
+    expect(out).toContain(security.focus);
+  });
+
+  it("passes roles without BMAD task sections through unchanged", () => {
+    const role = dual("# SRE\nplain role\n");
+    expect(composeRoleMarkdown(role, undefined, "v6")).toBe(role.body);
+    expect(composeRoleMarkdown(role, undefined, "v4")).toBe(role.body);
+  });
+
+  it("composes each of the eight vendored roles for either methodology with a non-empty section", () => {
+    const AGENTS = join(__dirname, "../../../vendor/ade-setup/agents");
+    const names = ["analyst", "designer", "developer", "brainstorming-architect", "product-owner", "qa", "scrum-master", "technical-writer"];
+    for (const name of names) {
+      const md = readFileSync(join(AGENTS, `${name}.md`), "utf8");
+      for (const [m, other] of [["v4", "v6"], ["v6", "v4"]] as const) {
+        const out = composeRoleMarkdown(dual(md), undefined, m);
+        expect(out, `${name} lost its ${m} section`).toContain(`## BMAD tasks (${m})`);
+        const section = out.split(`## BMAD tasks (${m})`)[1].split(/^## /m)[0];
+        expect(section.trim().length, `${name} ${m} section is empty`).toBeGreaterThan(20);
+        expect(out, `${name} ${m} composition leaked ${other}`).not.toContain(`## BMAD tasks (${other})`);
+        expect(out, `${name} ${m} lost Project knowledge`).toContain("## Project knowledge");
+        expect(out, `${name} ${m} lost Boundaries`).toMatch(/^## Boundaries/m);
+      }
+    }
   });
 });
 

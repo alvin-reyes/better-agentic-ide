@@ -148,3 +148,34 @@ describe("agents by project type", () => {
     for (const a of c) expect(a.file.content).toMatch(/^---\nname: [a-z0-9-]+\ndescription: ".+"\n(tools: .+\n)?(model: .+\n)?---\n/);
   });
 });
+
+describe("core role files per methodology", () => {
+  const agentFiles = (files: { path: string; content: string }[]) => files.filter((f) => f.path.startsWith(".claude/agents/"));
+
+  it("writes only the v6 task section into a v6 project's agents, and v6 by default", () => {
+    for (const files of [methodologyFiles("demo", [], "v6"), methodologyFiles("demo")]) {
+      const all = agentFiles(files).map((f) => f.content).join("\n");
+      expect(all).toContain("## BMAD tasks (v6)");
+      expect(all).not.toContain("## BMAD tasks (v4)");
+    }
+  });
+
+  it("writes only the v4 task section into a v4 project's agents", () => {
+    const files = agentFiles(methodologyFiles("demo", [], "v4"));
+    const all = files.map((f) => f.content).join("\n");
+    expect(all).toContain("## BMAD tasks (v4)");
+    expect(all).not.toContain("## BMAD tasks (v6)");
+    const qa = files.find((f) => f.path === ".claude/agents/qa.md")!.content;
+    expect(qa).toContain("## Project knowledge");
+    expect(qa).toMatch(/^## Boundaries/m);
+  });
+
+  it("builds the add-agent catalog for the project's methodology", async () => {
+    const { agentCatalog } = await import("../projectMethodology");
+    const qa = (m?: "v4" | "v6") => (m ? agentCatalog(m) : agentCatalog()).find((a) => a.id === "qa")!.file.content;
+    expect(qa("v4")).toContain("## BMAD tasks (v4)");
+    expect(qa("v4")).not.toContain("## BMAD tasks (v6)");
+    expect(qa()).toContain("## BMAD tasks (v6)");
+    expect(qa()).not.toContain("## BMAD tasks (v4)");
+  });
+});

@@ -13,6 +13,7 @@ import { getDomain } from "../data/domains";
 import { composeRoleMarkdown, toModelfile } from "../lib/agentComposition";
 import { buildLaunchCommand, supportsRoleDelivery, type Provider } from "../lib/agentCommand";
 import { ensureRoleDir, rolePathFor, type AgentSpec } from "../lib/agentSpec";
+import { methodologyOf } from "../lib/projectSetup";
 import { AGENT_CATEGORIES } from "../data/curatedAgents";
 import {
   CURATED_ITEMS,
@@ -151,7 +152,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
    * that reads it. Shared by the curated pairs and the bare roles — a bare
    * role is just a spec with no domain. Returns null after reporting why.
    */
-  const buildCommand = useCallback(async (spec: AgentSpec) => {
+  const buildCommand = useCallback(async (spec: AgentSpec, cwd?: string) => {
     // Clear first: an error from a previous attempt (a failed Codex launch,
     // say) must not outlive the attempt that replaces it.
     setLaunchError(null);
@@ -188,7 +189,9 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     try {
       // Ollama takes a system prompt only through a Modelfile, so the file we
       // write is one; every other provider reads the role markdown directly.
-      const roleText = composeRoleMarkdown(role, domain);
+      // Only the BMAD tasks for the methodology of the project the agent
+      // starts in; v6 when the folder is on neither or unknown.
+      const roleText = composeRoleMarkdown(role, domain, await methodologyOf(cwd));
       const content = spec.provider === "ollama"
         ? toModelfile(roleText, settings.ollamaModel || "deepseek-r1")
         : roleText;
@@ -229,15 +232,17 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
 
     // Built before the tab is created: a role file that cannot be written, or
     // a provider that cannot take one, should not leave an empty tab behind.
-    const built = await buildCommand(spec);
+    // Either way the agent starts in the active pane's folder: "This terminal"
+    // runs there, and a new tab inherits it.
+    const from = getActivePane();
+    const cwd = from ? usePaneCwd.getState().cwds[from.id] ?? from.initialCwd ?? undefined : undefined;
+    const built = await buildCommand(spec, cwd);
     if (!built) return;
     const cmd = built.command;
 
     const ptyId = getActivePtyId();
     let paneId: string | null = null;
     if (where === "new" || ptyId === null) {
-      const from = getActivePane();
-      const cwd = from ? usePaneCwd.getState().cwds[from.id] ?? from.initialCwd ?? undefined : undefined;
       onClose();
       // Runs in the new tab's own shell, even if you switch tabs meanwhile.
       paneId = await runInNewTabPane(item.name, cwd, cmd);

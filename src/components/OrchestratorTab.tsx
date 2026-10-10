@@ -9,6 +9,7 @@ import { getDomain } from "../data/domains";
 import { composeRoleMarkdown } from "../lib/agentComposition";
 import { specFromCurated, rolePathFor, ensureRoleDir } from "../lib/agentSpec";
 import { buildLaunchCommand, shellQuote } from "../lib/agentCommand";
+import { methodologyOf } from "../lib/projectSetup";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
@@ -302,7 +303,9 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     // user-authored task description still travels as a shell argument, and
     // it is quoted with the same shellQuote every other provider argument
     // already goes through — not a second, ad hoc escaper.
-    const markdown = composeRoleMarkdown(role, domain);
+    // Only the BMAD tasks for the project's own methodology (v6 when the
+    // project is on neither, or there is no project directory).
+    const markdown = composeRoleMarkdown(role, domain, await methodologyOf(projectDir));
     try {
       await invoke("write_text_file", { path: rolePath, content: markdown });
     } catch (err) {

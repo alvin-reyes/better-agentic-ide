@@ -13,11 +13,40 @@ import type { Domain } from "../data/domains";
  * domain narrows the role, its title is appended to the role's own heading so
  * the pairing is visible in the file the CLI reads.
  */
-export function composeRoleMarkdown(role: Role, domain?: Domain): string {
+export function composeRoleMarkdown(role: Role, domain?: Domain, methodology: BmadMethodology = "v6"): string {
+  const filtered = filterBmadSection(role.body, methodology);
   const body = domain
-    ? role.body.replace(/^#\s+.+$/m, (h) => `${h} — ${domain.title}`)
-    : role.body;
+    ? filtered.replace(/^#\s+.+$/m, (h) => `${h} — ${domain.title}`)
+    : filtered;
   return domain ? `${body.trimEnd()}\n\n## Focus\n\n${domain.focus}\n` : body;
+}
+
+/** The BMAD line a project is on. v6 is the default for anything that does not say. */
+export type BmadMethodology = "v4" | "v6";
+
+const BMAD_HEADING = /^## BMAD tasks \((v4|v6)\)[ \t]*$/m;
+
+/**
+ * Keep only the BMAD tasks section for the project's methodology.
+ *
+ * A methodology-aware role carries both `## BMAD tasks (v4)` and
+ * `## BMAD tasks (v6)`; an agent must never see the other version's commands,
+ * which do not exist in its project. Each section runs to the next `## `
+ * heading, and everything outside the two sections — "Project knowledge",
+ * "Boundaries", whatever follows — is kept verbatim. A body without a
+ * versioned section is returned unchanged.
+ */
+export function filterBmadSection(md: string, methodology: BmadMethodology): string {
+  let out = md;
+  for (;;) {
+    const sections = [...out.matchAll(new RegExp(BMAD_HEADING.source, "gm"))];
+    const drop = sections.find((m) => m[1] !== methodology);
+    if (!drop || drop.index === undefined) return out;
+    const start = drop.index;
+    const afterHeading = start + drop[0].length;
+    const next = out.slice(afterHeading).search(/^## /m);
+    out = next < 0 ? out.slice(0, start) : out.slice(0, start) + out.slice(afterHeading + next);
+  }
 }
 
 

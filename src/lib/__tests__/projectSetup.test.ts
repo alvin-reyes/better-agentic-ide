@@ -31,7 +31,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { agentCatalog } from "../projectMethodology";
-import { addAgent, addStackAgents, detectOnDisk, setUpProject } from "../projectSetup";
+import { addAgent, addStackAgents, detectOnDisk, methodologyOf, setUpProject } from "../projectSetup";
 
 const lastApply = () => tauri.applies[tauri.applies.length - 1];
 
@@ -78,5 +78,32 @@ describe("methodology in project setup", () => {
     expect(lastApply().methodology).toBe("v6");
     await addAgent("/tmp/proj", agentCatalog()[0]);
     expect(lastApply().methodology).toBe("v6");
+  });
+
+  const files = () => lastApply().files as { path: string; content: string }[];
+  const qaIn = () => files().find((f) => f.path === ".claude/agents/qa.md")?.content ?? "";
+
+  it("writes the core roles with only the project's BMAD section", async () => {
+    tauri.methodology = "v4";
+    await setUpProject("/tmp/proj");
+    expect(qaIn()).toContain("## BMAD tasks (v4)");
+    expect(qaIn()).not.toContain("## BMAD tasks (v6)");
+    await setUpProject("/tmp/proj", "v6", []);
+    expect(qaIn()).toContain("## BMAD tasks (v6)");
+    expect(qaIn()).not.toContain("## BMAD tasks (v4)");
+  });
+
+  it("adds a single core role on the project's methodology", async () => {
+    const qa = agentCatalog().find((a) => a.id === "qa")!;
+    await addAgent("/tmp/proj", qa, "v4");
+    expect(qaIn()).toContain("## BMAD tasks (v4)");
+    expect(qaIn()).not.toContain("## BMAD tasks (v6)");
+  });
+
+  it("resolves a launch's methodology from the project, v6 when unknown", async () => {
+    expect(await methodologyOf(undefined)).toBe("v6");
+    expect(await methodologyOf("/tmp/proj")).toBe("v6");
+    tauri.methodology = "v4";
+    expect(await methodologyOf("/tmp/proj")).toBe("v4");
   });
 });
