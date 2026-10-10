@@ -1,0 +1,175 @@
+import { useState } from "react";
+import type { BoardState, StageId } from "../../stores/stageBoardStore";
+import type { StageView } from "../../lib/confirmedStage";
+import type { StoryView } from "../../lib/storyState";
+import type { Gate } from "../../lib/bmadGates";
+
+export interface BoardActions {
+  onOpen(path: string): void;
+  onApprove?(v: StoryView): Promise<void>;
+  onDispatch?(v: StoryView): Promise<void>;
+  onStage?(to: StageId): Promise<void>;
+}
+
+export interface BoardViewProps {
+  methodology: "v4" | "v6";
+  board: BoardState;
+  stage: StageView;
+  error: string | null;
+  actions: BoardActions;
+}
+
+/** What a row says it is. Done is only ever "done ✓" with a gate behind it. */
+export function rowLabel(v: StoryView): string {
+  if (v.state === "done") return v.gate?.verdict === "WAIVED" ? "waived" : "done ✓";
+  if (v.state === "unknown") return v.story.rawStatus || "unknown";
+  return v.state;
+}
+
+const muted = { color: "var(--text-secondary)" } as const;
+const section = { padding: "10px 12px", borderBottom: "1px solid var(--border)" } as const;
+const heading = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, ...muted, marginBottom: 6 } as const;
+
+function StageRail({ board, stage }: { board: BoardState; stage: StageView }) {
+  const phases = [...new Set(board.stages.map((s) => s.phase))];
+  return (
+    <div style={section}>
+      {phases.map((phase) => (
+        <div key={phase} style={{ marginBottom: 6 }}>
+          <div style={heading}>{phase}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {board.stages.filter((s) => s.phase === phase).map((s) => {
+              const current = s.id === stage.shown;
+              const skipped = s.optional && s.complete && !board.artifacts.some((a) => s.evidence.includes(a.id) && a.present);
+              return (
+                <span
+                  key={s.id}
+                  data-stage={s.id}
+                  data-current={current}
+                  data-skipped={skipped}
+                  style={{
+                    padding: "2px 8px",
+                    borderRadius: 10,
+                    border: `1px solid ${current ? "var(--accent)" : "var(--border)"}`,
+                    color: current ? "var(--accent)" : s.complete ? "var(--text-primary)" : "var(--text-secondary)",
+                    textDecoration: skipped ? "line-through" : undefined,
+                  }}
+                >
+                  {s.label}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Artifacts({ board, onOpen }: { board: BoardState; onOpen(path: string): void }) {
+  return (
+    <div style={section}>
+      <div style={heading}>Artifacts</div>
+      {board.artifacts.map((a) => (
+        <div key={a.id} data-artifact={a.id} data-present={a.present} style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
+          <span aria-hidden>{a.present ? "●" : "○"}</span>
+          {a.present && !a.isDirectory ? (
+            <button type="button" onClick={() => onOpen(a.path)} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", cursor: "pointer" }}>
+              {a.label}
+            </button>
+          ) : (
+            <span style={a.present ? undefined : muted}>{a.label}</span>
+          )}
+          <span style={{ ...muted, fontSize: 11 }}>{a.present ? a.path : `missing: ${a.path}`}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GateDetail({ gate }: { gate: Gate | undefined }) {
+  if (!gate) return <div style={{ ...muted, fontSize: 11 }}>No gate file.</div>;
+  return (
+    <div style={{ fontSize: 11 }}>
+      <div>{gate.verdict ?? "unreadable"}{gate.reason ? `: ${gate.reason}` : ""}</div>
+      {gate.error && <div style={{ color: "var(--error, #f85149)" }}>{gate.error}</div>}
+      <div style={muted}>{gate.file}</div>
+    </div>
+  );
+}
+
+export function Row({ v, children }: { v: StoryView; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const label = rowLabel(v);
+  // A waiver's and a claim's reason are always visible: a waiver should be
+  // uncomfortable to look at, and a claim needs saying why it is not believed.
+  const alwaysNote = (label === "waived" || label === "claimed") && v.note;
+  return (
+    <div data-row={v.story.id} style={{ padding: "4px 0" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+        <span style={{ ...muted, fontSize: 11, minWidth: 32 }}>{v.story.id}</span>
+        <span onClick={() => setOpen((o) => !o)} style={{ flex: 1, cursor: "pointer" }}>{v.story.title}</span>
+        <span data-state={label} style={{ fontSize: 11, color: label === "claimed" ? "var(--warning, #d29922)" : undefined }}>{label}</span>
+        {children}
+      </div>
+      {alwaysNote && <div style={{ ...muted, fontSize: 11, paddingLeft: 40 }}>{v.note}</div>}
+      {open && <div style={{ paddingLeft: 40 }}><GateDetail gate={v.gate} /></div>}
+    </div>
+  );
+}
+
+function WorkItems({ methodology, board, renderActions }: { methodology: "v4" | "v6"; board: BoardState; renderActions(v: StoryView): React.ReactNode }) {
+  if (board.noInitiative) return <div style={{ ...section, ...muted }}>No active initiative yet. Start one with bmad-spec.</div>;
+  if (board.stories.length === 0) return <div style={{ ...section, ...muted }}>No {methodology === "v6" ? "tickets" : "stories"} yet.</div>;
+
+  const rows = (refs: string[] | null) =>
+    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v}>{renderActions(v)}</Row>);
+
+  if (methodology === "v4" || !board.epics) {
+    return <div style={section}><div style={heading}>Stories</div>{rows(null)}</div>;
+  }
+  const grouped = new Set(board.epics.flatMap((e) => e.refs));
+  const other = board.stories.filter((v) => !grouped.has(v.story.id)).map((v) => v.story.id);
+  return (
+    <div style={section}>
+      {board.epics.map((e) => (
+        <div key={e.slug} style={{ marginBottom: 8 }}>
+          <div style={heading}>{e.title}</div>
+          {rows(e.refs)}
+        </div>
+      ))}
+      {other.length > 0 && <div><div style={heading}>Other</div>{rows(other)}</div>}
+    </div>
+  );
+}
+
+function GateProblems({ board }: { board: BoardState }) {
+  const unreadable = board.unmatchedGates.filter((g) => g.error);
+  const unmatched = board.unmatchedGates.filter((g) => !g.error);
+  if (!unmatched.length && !unreadable.length && !board.supersededGates.length && !board.problems?.length) return null;
+  return (
+    <div style={section}>
+      <div style={heading}>Needs attention</div>
+      {board.problems?.map((p) => <div key={p}>{p}</div>)}
+      {unmatched.map((g) => <div key={g.file}>Gate for {g.storyId} matches no story or ticket: {g.file}</div>)}
+      {unreadable.map((g) => <div key={g.file}>{g.file}: {g.error}</div>)}
+      {board.supersededGates.map((g) => <div key={g.file} style={muted}>Superseded: {g.file}</div>)}
+    </div>
+  );
+}
+
+export default function BoardView({ methodology, board, stage, error, actions }: BoardViewProps) {
+  return (
+    <div style={{ overflowY: "auto", flex: 1, fontSize: 12 }}>
+      {error && (
+        <div role="alert" style={{ ...section, color: "var(--error, #f85149)" }}>
+          Could not refresh: {error}
+        </div>
+      )}
+      <StageRail board={board} stage={stage} />
+      <Artifacts board={board} onOpen={actions.onOpen} />
+      <WorkItems methodology={methodology} board={board} renderActions={() => null} />
+      <GateProblems board={board} />
+    </div>
+  );
+}
