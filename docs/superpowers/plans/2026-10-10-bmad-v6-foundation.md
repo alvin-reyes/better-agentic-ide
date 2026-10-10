@@ -664,11 +664,12 @@ export async function seedTicketTree(
 
 `src/lib/bmadRuntime/tickets.ts` is the port: the sketch's `storeRoot`/`readStore`/`planFor` shapes became the Python's own `tickets_root`/`load_tree`/`plan_path`, and the commands follow it line for line, including the quirks the goldens pin (a `[[epic]]` `slug` is looked up by slug, not by folder name, so the seed's `slug = "demo"` against folder `epic-demo` leaves `epic_ids` empty and rows `ref` their file names; a bare numeric ref matches nothing outside an epic folder; `state` prefers `tracker_status`).
 
-Four divergences, all at seams with earlier tasks or the Fs contract, are documented at the top of the module:
+Three divergences, all at seams with earlier tasks, are documented at the top of the module:
 - config comes from Task 3's `loadCentralConfig`, so a missing `_bmad/config.toml` refuses in different words than the Python's own `config_utils.py`;
 - output goes to `stdout` alone (the interface has one channel; the Python splits errors onto stderr);
-- `Fs` has no delete, so a `mirror` that rolls back cannot unlink a leaf it had just pulled (everything it edited is restored byte for byte);
 - argparse's usage line wraps to the terminal and is not reproduced (its error line is).
+
+`mirror`'s rollback needs a delete, which the first cut of `Fs` had no way to do; the controller ruled the gap load-bearing and `delete(p)` was added to `Fs` (realFs `unlink`, memFs removes the entry) with parity tests, so a failed mirror now removes the leaf it had just pulled exactly as the Python does.
 
 The full JSON shapes come from the goldens captured in Step 1 — the port is complete only when every golden passes. A throwaway differential harness (run once, not committed) also diffed 58 command cases against the Python on identical on-disk trees — exit codes, output bytes and the files both sides left behind — which is what caught the optional `<dir>` on `find`/`mark` and a `waiting_on: []` that the Python omits.
 
