@@ -28,10 +28,13 @@ const SEED = join(GOLDENS, "seed");
 
 /**
  * The exports this task ships: one per skill-root script with a Python source
- * at the pin, named by its stem in camelCase. The brief's list also names `go`
+ * at the pin, named by its stem in camelCase. The brief's list also named `go`
  * and `x`; neither is a script — `go.py` and `x.py` appear only as placeholder
- * names in the patcher's own comments and test fixtures (no file, no call
- * site, nothing to port), so the set below is what the tree can dispatch.
+ * names in the patcher's own comment and test fixtures (no file, no call site,
+ * nothing to port). The controller's ruling dropped them from the patcher's
+ * `PORTED` set and from the plan's lists too, so the set below is exactly what
+ * the tree can dispatch, and a future pin that grows one fails the patcher
+ * loudly rather than arriving here unported.
  */
 const PORTS = [
   "reconKit",

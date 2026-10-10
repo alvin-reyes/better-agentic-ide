@@ -37,6 +37,16 @@ describe("patchBmadSkills", () => {
       .toThrow(/no TS port/);
   });
 
+  it("refuses the placeholder names the plan's list once carried", () => {
+    // `go.py` and `x.py` are not scripts at this pin (Task 5c's ruling): if a
+    // future pin grows a real call site for either, the patch must stop and
+    // force a conscious port rather than pass the name through.
+    for (const name of ["go.py", "x.py"]) {
+      expect(() => rewriteCallSite(`\`uv run {project-root}/_bmad/scripts/${name} --weird\``))
+        .toThrow(/no TS port/);
+    }
+  });
+
   it("leaves the allowlisted dev-tooling forms untouched", () => {
     for (const line of [
       "`uv run {skill-root}/scripts/count_tokens.py …`",

@@ -112,7 +112,14 @@ Expected: FAIL — `rewriteCallSite` is not exported.
  * scripts in addition to the spec's eight. `git_evidence.py` is a real call
  * site (bmad-retrospective's evidence gathering) with no port in the plan:
  * rewriting it keeps uv out of the tree, and `ade-runtime.mjs` must grow a
- * `git_evidence` subcommand. See task-1-report.md (fix round 1). */
+ * `git_evidence` subcommand. See task-1-report.md (fix round 1).
+ *
+ * `go.py` and `x.py` are gone from the set (Task 5c's ruling): neither is a
+ * script at this pin — no file in the vendored tree and no call site, only
+ * placeholder names in this file's own comment and in two toolsmith test
+ * fixtures that build synthetic trees. A future pin that grows a real call
+ * site for one of them fails the post-pass loudly, which is the point: the
+ * name has to be ported consciously, not silently. */
 const PORTED = new Set([
   "resolve_config.py", "resolve_customization.py", "config_utils.py",
   "tickets.py", "read_store.py", "render_skill.py", "memlog.py",
@@ -120,9 +127,9 @@ const PORTED = new Set([
   // Task 5c: skill-root helper scripts (see the plan task for the full list).
   "recon_kit.py", "init_skill.py", "brain.py", "process_template.py",
   "wake.py", "scan_scripts.py", "scan_paths.py", "resolve_party.py",
-  "go.py", "scan_legacy_module.py", "registry.py", "read_session_log.py",
+  "scan_legacy_module.py", "registry.py", "read_session_log.py",
   "pick_methods.py", "list_customizable_skills.py", "lint_spine.py",
-  "resolve_personas.py", "run_triggers.py", "x.py", "git_evidence.py",
+  "resolve_personas.py", "run_triggers.py", "git_evidence.py",
 ]);
 
 /** Lines that legitimately keep `uv run`: dev tooling with external deps
@@ -891,7 +898,7 @@ git commit -m "feat(bmad-v6): port roster, knowledge and manifest validation"
 
 **Interfaces:**
 - Consumes: `Fs`, `loadCentralConfig` (Task 3), the Task 5b ports.
-- Produces: one export per ported script with the uniform shape `export async function <name>(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>`, named by the Python stem: `reconKit, initSkill, brain, processTemplate, wake, scanScripts, scanPaths, resolveParty, go, scanLegacyModule, registry, readSessionLog, pickMethods, listCustomizableSkills, lintSpine, resolvePersonas, runTriggers, x`. Skill-root invocations of `tickets.py`, `read_store.py`, `knowledge.py` route to the Task 4/5b ports (the `--skill-root` arg is accepted and, where the Python used it to locate files, honored; otherwise ignored). The Python sources live in the vendored tree — e.g. `skills/bmad-architecture/scripts/lint_spine.py`, `skills/bmad-deep-recon/scripts/recon_kit.py`.
+- Produces: one export per ported script with the uniform shape `export async function <name>(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>`, named by the Python stem: `reconKit, initSkill, brain, processTemplate, wake, scanScripts, scanPaths, resolveParty, scanLegacyModule, registry, readSessionLog, pickMethods, listCustomizableSkills, lintSpine, resolvePersonas, runTriggers, gitEvidence`. (**Corrected in Task 5c:** the list originally also named `go` and `x`. Neither is a script at this pin — no file in the vendored tree and no call site; `go.py` and `x.py` are placeholder names in the patcher's own comment and in two toolsmith test fixtures that build synthetic trees. They are not ported and not in `PORTED`; a future pin that grows a real call site fails the patcher's post-pass loudly.) Skill-root invocations of `tickets.py`, `read_store.py`, `knowledge.py` route to the Task 4/5b ports (the `--skill-root` arg is accepted and, where the Python used it to locate files, honored; otherwise ignored). The Python sources live in the vendored tree — e.g. `skills/bmad-architecture/scripts/lint_spine.py`, `skills/bmad-deep-recon/scripts/recon_kit.py`.
 
 - [ ] **Step 1: Generate goldens from the real Python**
 

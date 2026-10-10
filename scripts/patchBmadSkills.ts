@@ -9,7 +9,14 @@
  * scripts in addition to the spec's eight. `git_evidence.py` is a real call
  * site (bmad-retrospective's evidence gathering) with no port in the plan:
  * rewriting it keeps uv out of the tree, and `ade-runtime.mjs` must grow a
- * `git_evidence` subcommand. See task-1-report.md (fix round 1). */
+ * `git_evidence` subcommand. See task-1-report.md (fix round 1).
+ *
+ * The plan's Task 1 list also named `go.py` and `x.py`. Neither is a script at
+ * this pin — they appear only as placeholder names in this file's own comment
+ * and in two toolsmith test fixtures that build synthetic trees — so they are
+ * gone from the set (Task 5c's ruling). A future pin that grows a real call
+ * site for one of them fails the post-pass below loudly, which is the point:
+ * the name has to be ported consciously, not silently. */
 const PORTED = new Set([
   "resolve_config.py", "resolve_customization.py", "config_utils.py",
   "tickets.py", "read_store.py", "render_skill.py", "memlog.py",
@@ -17,9 +24,9 @@ const PORTED = new Set([
   // Task 5c: skill-root helper scripts (see the plan task for the full list).
   "recon_kit.py", "init_skill.py", "brain.py", "process_template.py",
   "wake.py", "scan_scripts.py", "scan_paths.py", "resolve_party.py",
-  "go.py", "scan_legacy_module.py", "registry.py", "read_session_log.py",
+  "scan_legacy_module.py", "registry.py", "read_session_log.py",
   "pick_methods.py", "list_customizable_skills.py", "lint_spine.py",
-  "resolve_personas.py", "run_triggers.py", "x.py",
+  "resolve_personas.py", "run_triggers.py",
   "git_evidence.py",
 ]);
 
