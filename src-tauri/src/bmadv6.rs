@@ -271,8 +271,11 @@ mod tests {
         let name = dir.file_name().unwrap().to_string_lossy().into_owned();
         let config = fs::read_to_string(dir.join("_bmad/config.toml")).unwrap();
         assert!(config.contains(&format!("project_name = \"{name}\"")), "{config}");
+        // The assertion mirrors the scaffold's own construction: the dir as-is
+        // (backslashes on Windows), TOML-escaped, then "/_bmad-output".
+        let escaped_dir = dir.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
         assert!(
-            config.contains(&format!("output_folder = \"{}/_bmad-output\"", dir.display())),
+            config.contains(&format!("output_folder = \"{escaped_dir}/_bmad-output\"")),
             "{config}"
         );
         assert_eq!(detect_on_disk(&dir), Some(Methodology::V6), "the marker reads back as v6");
