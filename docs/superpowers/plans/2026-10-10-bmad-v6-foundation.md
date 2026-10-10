@@ -87,10 +87,13 @@ Expected: FAIL — `rewriteCallSite` is not exported.
  */
 const CALL = /uv run \{project-root\}\/_bmad\/scripts\/([\w.]+\.py)([\s\S]*?)(?=`|$)/g;
 
-/** The runtime scripts the TS port covers (spec: architecture section). */
+/** The runtime scripts the TS port covers (spec: architecture section). The
+ * pinned tree also invokes roster.py, knowledge.py and validate_manifests.py
+ * from project roots — see Task 5b. */
 const PORTED = new Set([
   "resolve_config.py", "resolve_customization.py", "config_utils.py",
   "tickets.py", "read_store.py", "render_skill.py", "memlog.py",
+  "roster.py", "knowledge.py", "validate_manifests.py",
 ]);
 
 export function rewriteCallSite(line: string): string {
@@ -718,6 +721,77 @@ git commit -m "feat(bmad-v6): port workflow rendering and memlog"
 
 ---
 
+### Task 5b: Port roster, knowledge and validate_manifests
+
+**Files:**
+- Create: `src/lib/bmadRuntime/roster.ts`, `src/lib/bmadRuntime/knowledge.ts`, `src/lib/bmadRuntime/validateManifests.ts`
+- Test: `src/lib/bmadRuntime/__tests__/roster.test.ts`, `src/lib/bmadRuntime/__tests__/knowledge.test.ts`, `src/lib/bmadRuntime/__tests__/validateManifests.test.ts`
+- Create: `src/lib/bmadRuntime/__tests__/goldens/misc/*.json` (generated in Step 1)
+
+**Interfaces:**
+- Consumes: `Fs`, `loadCentralConfig` (Task 3), the vendored tree paths.
+- Produces: `export async function roster(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` (party-mode roster, port of `skills/bmad/scripts/roster.py`), `export async function knowledge(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` (module knowledge aggregator, port of `skills/bmad/scripts/knowledge.py`), `export async function validateManifests(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` (module manifest validation, port of `skills/bmad/scripts/validate_manifests.py`). Each accepts exactly the argument shapes the patched call sites pass — those shapes are the contract, and the goldens pin the output.
+
+- [ ] **Step 1: Find the argument shapes and generate goldens**
+
+The vendored tree was patched in Task 1; every call site is now `node {project-root}/_bmad/ade-runtime.mjs <script> …`. Find them:
+
+Run: `grep -rn "ade-runtime.mjs roster\|ade-runtime.mjs knowledge\|ade-runtime.mjs validate_manifests" src-tauri/resources/bmad-v6/skills/ | head -20`
+Expected: the full list of call sites (7 across the tree). These argument shapes are what the ports must accept.
+
+Then, at dev time (Python available), run the real scripts for each distinct call-site shape against /tmp/golden-proj (from Task 3, seeded the same way) and capture stdout+exit to `src/lib/bmadRuntime/__tests__/goldens/misc/<script>-<shape>.json` — one golden per distinct shape. Where a shape depends on a module not present in /tmp/golden-proj, capture the error output as the golden (an error golden is a golden).
+
+- [ ] **Step 2: Write the failing tests**
+
+```ts
+// roster.test.ts (same shape for knowledge.test.ts / validateManifests.test.ts)
+import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { roster } from "../roster";
+import { memFs } from "../fs";
+import { seedTicketTree } from "./fixtures/ticketTree";
+
+const golden = async (name: string) =>
+  JSON.parse(await readFile(join(__dirname, "goldens/misc", name), "utf8"));
+
+describe("roster port", () => {
+  it("matches Python for each patched call-site shape", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    for (const name of await fs.list("/shape-list")) { /* per-shape loop driven by the golden files */ }
+    const r = await roster(["<the first shape's args>", "--project-root", "/p"], fs);
+    expect(r.exitCode).toBe(golden("roster-1.json").exitCode);
+    expect(JSON.parse(r.stdout)).toEqual(golden("roster-1.json").stdout);
+  });
+});
+```
+
+Write one test per golden file (loop over them is fine); each compares stdout and exitCode against the golden.
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/roster.test.ts src/lib/bmadRuntime/__tests__/knowledge.test.ts src/lib/bmadRuntime/__tests__/validateManifests.test.ts`
+Expected: FAIL — modules not found.
+
+- [ ] **Step 4: Implement the three ports**
+
+Port `skills/bmad/scripts/roster.py` (party roster), `knowledge.py` (module knowledge aggregation), and `validate_manifests.py` (module manifest checks) against the goldens — same discipline as Tasks 3–5: the Python output is the contract; each module is small and reads files under the project root via `Fs`. No external dependencies.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/roster.test.ts src/lib/bmadRuntime/__tests__/knowledge.test.ts src/lib/bmadRuntime/__tests__/validateManifests.test.ts`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/bmadRuntime/roster.ts src/lib/bmadRuntime/knowledge.ts src/lib/bmadRuntime/validateManifests.ts src/lib/bmadRuntime/__tests__/roster.test.ts src/lib/bmadRuntime/__tests__/knowledge.test.ts src/lib/bmadRuntime/__tests__/validateManifests.test.ts src/lib/bmadRuntime/__tests__/goldens/misc
+git commit -m "feat(bmad-v6): port roster, knowledge and manifest validation"
+```
+
+---
+
 ### Task 6: The ade-runtime.mjs CLI bundle
 
 **Files:**
@@ -727,8 +801,8 @@ git commit -m "feat(bmad-v6): port workflow rendering and memlog"
 - Test: `src/lib/bmadRuntime/__tests__/cli.test.ts`
 
 **Interfaces:**
-- Consumes: `tickets`, `loadCentralConfig`, `resolveCustomization`, `renderSkill`, `memlog`, `realFs`.
-- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v`).
+- Consumes: `tickets`, `loadCentralConfig`, `resolveCustomization`, `renderSkill`, `memlog`, `roster`, `knowledge`, `validateManifests` (Task 5b), `realFs`.
+- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog|roster|knowledge|validate_manifests`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -760,6 +834,15 @@ describe("cli dispatch", () => {
     const r = await cliMain(["bogus"], memFs());
     expect(r.exitCode).toBe(2);
   });
+
+  it("dispatches the Task 5b scripts by their patched names", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    for (const name of ["roster", "knowledge", "validate_manifests"] as const) {
+      const r = await cliMain([name, "--project-root", "/p"], fs);
+      expect(r.exitCode, `${name} should dispatch`).not.toBe(2);
+    }
+  });
 });
 ```
 
@@ -775,6 +858,9 @@ import { loadCentralConfig, resolveCustomization } from "./config";
 import { tickets } from "./tickets";
 import { renderSkill } from "./render";
 import { memlog } from "./memlog";
+import { roster } from "./roster";
+import { knowledge } from "./knowledge";
+import { validateManifests } from "./validateManifests";
 import type { Fs } from "./fs";
 
 export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
@@ -806,6 +892,12 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
       const entry = action === "append" ? rest[rest.length - 1] : null;
       return { stdout: await memlog(root, action, entry, fs), exitCode: 0 };
     }
+    case "roster":
+      return roster(rest, fs);
+    case "knowledge":
+      return knowledge(rest, fs);
+    case "validate_manifests":
+      return validateManifests(rest, fs);
     default:
       return { stdout: `unknown runtime script: ${script}`, exitCode: 2 };
   }
