@@ -64,7 +64,7 @@ The fleet view reads Claude Code's own transcripts, so Claude Code gets the most
 4. Open the scratchpad with {% include key.html mac="⌘J" other="Ctrl+Shift+J" %}, write your prompt, and send it with {% include key.html mac="⌘↵" other="Ctrl+Enter" %}.
 5. When the agent writes a file, click its path in the terminal to see it.
 
-The first time you open a project, ADE sets it up for agents: BMAD, the ADE methodology and a team of Claude Code sub-agents, adding only files that are missing. A new project is asked which BMAD to use, v6 (the default) or v4. See [Project setup]({{ '/guide/project-setup/' | relative_url }}).
+The first time you open a project, ADE sets it up for agents: BMAD, the ADE methodology and a team of Claude Code sub-agents, adding only files that are missing. Opened from the New tab dialog, a project with neither BMAD on disk is asked which to use, v6 (the default) or v4; set up any other way, it gets v6. See [Project setup]({{ '/guide/project-setup/' | relative_url }}).
 
 > Shortcuts on this site follow your platform. Switch between macOS and Linux with the buttons in the sidebar.
 

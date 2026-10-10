@@ -12,7 +12,7 @@ ADE bundles pinned copies of BMAD-METHOD under `src-tauri/resources/`:
 
 ## The policy
 
-**ADE owns the verification gate.** ADE's central rule is that a ticket is Done only when evidence says so, and no agent certifies its own work. v6 removed BMAD's QA gate, so ADE keeps the artifact itself: `.ade/gates/<epic id>.<ticket id>.yml` (for example `1.6a.yml`), with `gate: PASS|CONCERNS|FAIL|WAIVED` and the same keys as v4's gate files. v4 projects keep reading `docs/qa/gates/`. Because the gate is ADE's, BMAD can change underneath it.
+**ADE owns the verification gate.** ADE's central rule is that a ticket is Done only when evidence says so, and no agent certifies its own work. v6 removed BMAD's QA gate, so ADE keeps the artifact itself: `.ade/gates/<ref>.yml`, named by the ticket's `ref` exactly as the ticket tree prints it (for example `1.6a.yml`), with `story: "<ref>"`, `gate: PASS|CONCERNS|FAIL|WAIVED` and the same keys as v4's gate files. v4 projects keep reading `docs/qa/gates/`. Because the gate is ADE's, BMAD can change underneath it.
 
 **No Python, no `uv`.** v6 resolves its layered TOML config with a Python script run through `uv`. ADE ports those runtime scripts to TypeScript and ships them as one bundle, `_bmad/ade-runtime.mjs`, which the vendored skills call with `node`.
 

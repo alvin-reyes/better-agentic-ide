@@ -17,7 +17,7 @@ The first time ADE opens a project, it adds whatever the project is missing:
 
 ## v6 or v4
 
-When you open or create a project that has neither BMAD on disk, ADE asks which to use: **BMAD v6 (default)** or **BMAD v4**, the classic `.bmad-core/` with the `/BMad:tasks:` slash commands for Claude Code (v4 only). The answer is written to `.ade/methodology`.
+When you pick **New project** or **Open project** in the New tab dialog for a folder that has neither BMAD on disk, ADE asks which to use: **BMAD v6 (default)** or **BMAD v4**, the classic `.bmad-core/` with the `/BMad:tasks:` slash commands for Claude Code (v4 only). The answer is written to `.ade/methodology`. Only that dialog asks, and only while **Set up every project I open** is on: a project set up when a terminal `cd`s into it, from the command palette, or with **Set up now** on the Agents tab gets v6 without a question. To start a project on v4, open it from the New tab dialog first.
 
 Existing projects are not asked. One with `.ade/methodology` follows it; one with `.bmad-core/` and no marker is treated as v4 and stays that way. A v4 project keeps its QA gates in `docs/qa/gates/`; v6 projects use `.ade/gates/`, same format.
 
