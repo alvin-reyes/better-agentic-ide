@@ -132,6 +132,19 @@ describe("BoardPanel", () => {
     expect(show).not.toHaveBeenCalledWith("/mono");
   });
 
+  it("lets go of the project when it closes, cancelling a pending refresh, and shows it again on reopening", async () => {
+    const show = vi.fn();
+    useBoardPanel.setState({ root: null, methodology: null, board: null, error: null, loading: false, show });
+    const first = render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
+    await waitFor(() => expect(show).toHaveBeenLastCalledWith("/p"));
+    first.unmount();
+    expect(show).toHaveBeenLastCalledWith(null);
+
+    show.mockClear();
+    render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
+    await waitFor(() => expect(show).toHaveBeenLastCalledWith("/p"));
+  });
+
   it("falls back to the repository root when nothing is set up", async () => {
     disk.roots = { "/mono/app/src": "/mono" };
     const show = vi.fn();

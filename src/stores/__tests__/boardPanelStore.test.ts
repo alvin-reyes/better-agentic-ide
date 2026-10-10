@@ -30,6 +30,24 @@ describe("boardPanelStore", () => {
     expect(store.getState().board).not.toBeNull();
   });
 
+  it("drops a pending debounced rebuild when the panel lets go, and rebuilds when shown again", async () => {
+    vi.useFakeTimers();
+    const { deps, pending } = controlled();
+    const store = createBoardPanelStore(deps);
+    store.getState().show("/p");
+    await vi.advanceTimersByTimeAsync(0);
+    pending[0].resolve(empty());
+    await vi.advanceTimersByTimeAsync(0);
+    store.getState().scheduleRefresh();
+    store.getState().show(null); // the panel closes
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS * 2);
+    expect(deps.build).toHaveBeenCalledTimes(1);
+
+    store.getState().show("/p"); // reopened
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deps.build).toHaveBeenCalledTimes(2);
+  });
+
   it("does not build for a project with no methodology", async () => {
     const { deps } = controlled(null);
     const store = createBoardPanelStore(deps);

@@ -117,6 +117,9 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   }, [cwd]);
 
   useEffect(() => { show(root); }, [root, show]);
+  // Closing lets go of the project, which also cancels a pending debounced
+  // rebuild. Reopening mounts with no root and shows the project once resolved.
+  useEffect(() => () => show(null), [show]);
 
   // A missed watcher event costs a refresh, not correctness.
   useEffect(() => {
