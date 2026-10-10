@@ -36,10 +36,24 @@ describe("cli dispatch", () => {
   it("dispatches the Task 5b scripts by their patched names", async () => {
     const fs = memFs();
     await seedTicketTree(fs, "/p", { epics: [], stories: [] });
-    for (const name of ["roster", "knowledge", "validate_manifests"] as const) {
-      const r = await cliMain([name, "--project-root", "/p"], fs);
-      expect(r.exitCode, `${name} should dispatch`).not.toBe(2);
-    }
+
+    // roster and knowledge answer the JSON report their Python prints, exit 0 —
+    // a root that is not there is a problem inside the report, not a refusal.
+    const rosterRun = await cliMain(["roster", "--root", "/p/nope", "--project-root", "/p"], fs);
+    expect(rosterRun.exitCode).toBe(0);
+    expect(JSON.parse(rosterRun.stdout).problems).toHaveLength(1);
+
+    const knowledgeRun = await cliMain(["knowledge", "--root", "/p/nope"], fs);
+    expect(knowledgeRun.exitCode).toBe(0);
+    expect(JSON.parse(knowledgeRun.stdout).problems).toHaveLength(1);
+
+    // validate_manifests answers its own refusal (exit 1) for a project with no
+    // skills/ tree — no longer the interim "not ported" line, and never the
+    // unknown-script exit 2.
+    const validateRun = await cliMain(["validate_manifests", "--project-root", "/p"], fs);
+    expect(validateRun.exitCode).toBe(1);
+    expect(validateRun.stdout).toContain("pass the repository root with --project-root");
+    expect(validateRun.stdout).not.toContain("not ported");
   });
 });
 

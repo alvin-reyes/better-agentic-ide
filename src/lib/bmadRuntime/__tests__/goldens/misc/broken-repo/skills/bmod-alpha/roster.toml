@@ -1,0 +1,15 @@
+[[members]]
+code = "dup"
+name = "Dup"
+
+[[members]]
+code = "dup"
+name = "Dup Two"
+
+[[members]]
+code = "ghosty"
+skill = "ghost-skill"
+
+[[groups]]
+id = "g1"
+members = ["dup", "ghost"]

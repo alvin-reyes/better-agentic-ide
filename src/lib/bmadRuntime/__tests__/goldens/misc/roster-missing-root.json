@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad/scripts/roster.py --skill /p/nope/skills/bmad --project-root /p",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--skill",
+    "/p/nope/skills/bmad",
+    "--project-root",
+    "/p"
+  ],
+  "stdout": "{\n  \"agents\": {\n    \"bmad-agent-analyst\": {\n      \"code\": \"bmad-agent-analyst\",\n      \"source\": \"config\",\n      \"persona\": \"A custom persona the user prefers.\",\n      \"name\": \"bmad-agent-analyst\"\n    },\n    \"my-own-agent\": {\n      \"code\": \"my-own-agent\",\n      \"source\": \"config\",\n      \"name\": \"My Own Agent\",\n      \"title\": \"Hand-rolled\",\n      \"persona\": \"An old-style persona paragraph.\"\n    }\n  },\n  \"members\": {},\n  \"groups\": [],\n  \"rosters\": [],\n  \"problems\": [\n    {\n      \"kind\": \"root\",\n      \"root\": \"/p/nope/skills\",\n      \"problem\": \"cannot read root /p/nope/skills: [Errno 2] No such file or directory: '/p/nope/skills'\"\n    }\n  ]\n}\n"
+}

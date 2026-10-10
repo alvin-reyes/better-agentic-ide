@@ -7,10 +7,12 @@
  * into `dist-runtime/ade-runtime.mjs`, so every port that lands here ships in
  * the single-file runtime with no dispatcher change.
  *
- * The module exists, empty, from Task 6 on: the brief's `import("./helpers")`
- * must resolve at bundle time (Rollup fails an unresolved dynamic import), and
- * the two scripts whose ports are not written yet — roster, knowledge,
- * validate_manifests (Task 5b) — dispatch by name through here the moment they
- * are exported.
+ * Task 5b's trio lives in its own modules (they share `knowledge.ts`'s scan and
+ * document reader the way the Python modules share `knowledge.py`); this file
+ * re-exports them so the CLI's name lookup — `helpers[script] ??
+ * helpers[camel(script)]` — finds `roster`, `knowledge` and
+ * `validate_manifests` → `validateManifests`.
  */
-export {};
+export { knowledge } from "./knowledge";
+export { roster } from "./roster";
+export { validateManifests } from "./validateManifests";

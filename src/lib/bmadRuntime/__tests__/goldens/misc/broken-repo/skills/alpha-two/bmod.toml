@@ -1,0 +1,3 @@
+[skill]
+bmod = "bmod-alpha"
+source = "github:acme/other"
