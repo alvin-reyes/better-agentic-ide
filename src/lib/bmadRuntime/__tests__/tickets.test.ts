@@ -342,3 +342,59 @@ describe("read_store port", () => {
     expect(r.stdout).not.toContain("~");
   });
 });
+
+/**
+ * The Windows shape of the e2e's failure: the vendored call site hands the
+ * store folder as `--dir` and the scaffold writes `output_folder` as a `C:\…`
+ * absolute, so the port must read a drive-rooted path as absolute rather than
+ * gluing it onto its working directory (`not a folder:
+ * D:\…\src-tauri/C:\Users\…`). memFs keys are plain strings, so the tree is
+ * seeded at the drive root in the runtime's canonical `/` form — the form
+ * `node:fs` accepts on Windows too — while every string the port is handed
+ * keeps the backslashes a Windows host would give it.
+ */
+describe("tickets port on Windows-shaped paths", () => {
+  const ROOT = "C:/Users/runner/proj";
+  const ROOT_WINDOWS = "C:\\Users\\runner\\proj";
+  const STORE_WINDOWS = "C:\\Users\\runner\\proj\\_bmad-output\\initiative-demo";
+
+  it("reads a backslash output_folder as absolute and finds the store", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, ROOT, { epics: [], stories: [] });
+    // As the scaffold writes it on Windows: a TOML basic string, backslashes
+    // escaped, parsed back to the absolute path the runtime must not prefix.
+    await fs.writeText(
+      `${ROOT}/_bmad/config.toml`,
+      '[core]\nproject_name = "p"\noutput_folder = "C:\\\\Users\\\\runner\\\\proj\\\\_bmad-output"\nactive_initiative = "initiative-demo"\n',
+    );
+    const r = await tickets(["next", "--project-root", ROOT_WINDOWS], fs);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.folder).toBe("initiative-demo");
+    expect(out.store).toBe("repo");
+  });
+
+  it("takes a backslash --dir as absolute, not relative to the working directory", async () => {
+    // The failing e2e call: `tickets next <store> --project-root <root>`, both
+    // handed over with the host's separators.
+    const fs = memFs();
+    await seedTicketTree(fs, ROOT, {
+      epics: [{ id: 1, slug: "demo" }],
+      stories: [{ id: 1, slug: "demo", parent: "epic-demo" }],
+    });
+    const r = await tickets(["next", STORE_WINDOWS, "--project-root", ROOT_WINDOWS], fs);
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    expect(out.folder).toBe("initiative-demo");
+    expect(out.ready_to_start).toHaveLength(1);
+    expect(out.ready_to_start[0].epic).toBe("epic-demo");
+  });
+
+  it("refuses a store folder that is genuinely missing, naming the folded path", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, ROOT, { epics: [], stories: [] });
+    const r = await tickets(["next", "C:\\Users\\runner\\proj\\_bmad-output\\nope", "--project-root", ROOT_WINDOWS], fs);
+    expect(r.exitCode).toBe(1);
+    expect(JSON.parse(r.stdout).error).toBe(`not a folder: ${ROOT}/_bmad-output/nope`);
+  });
+});

@@ -1,6 +1,7 @@
 import type { Fs } from "./fs";
 import { compareStrings, isDirectory, pyJson } from "./knowledge";
 import { splitFlag, usageError, type PortResult } from "./compat";
+import { normalizePath as normalizeShared } from "./paths";
 
 /**
  * Port of `skills/bmad-toolsmith/scripts/scan_paths.py` — lint a skill's
@@ -129,19 +130,9 @@ async function scanReferences(
   return findings;
 }
 
-/** A lexical `Path.resolve()`: dot segments folded, no symlinks to follow. */
-function normalize(path: string): string {
-  const parts: string[] = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(segment);
-  }
-  return "/" + parts.join("/");
-}
+/** A lexical `Path.resolve()`: dot segments folded, no symlinks to follow; the
+ * base it is called on is the (absolute) skill root, so the root is kept. */
+const normalize = (path: string): string => normalizeShared(path);
 
 export async function scanSkill(
   fs: Fs,

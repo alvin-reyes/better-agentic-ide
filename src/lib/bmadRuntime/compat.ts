@@ -1,4 +1,5 @@
 import { pyRepr, resolvePath } from "./knowledge";
+import { isAbsolutePath, toForwardSlashes } from "./paths";
 
 /**
  * The dialect pieces a bundled runtime has to bring itself: Python's `csv`
@@ -435,7 +436,10 @@ export function today(): PyDate {
  * `--project-root .` gets the folder they are standing in.
  */
 export function absolutePath(text: string, cwd = process.cwd()): string {
-  return resolvePath(text.startsWith("/") ? text : `${cwd}/${text}`);
+  // A Windows absolute (`C:\…`, a UNC share) is already resolved: prefixing the
+  // working directory is what broke the runtime on Windows.
+  const path = toForwardSlashes(text);
+  return resolvePath(isAbsolutePath(path) ? path : `${toForwardSlashes(cwd)}/${path}`);
 }
 
 /** `unicodedata.normalize("NFKD", text).encode("ascii", "ignore")`. */

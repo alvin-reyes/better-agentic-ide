@@ -1,6 +1,13 @@
 import { parse as parseToml } from "smol-toml";
 import { loadCentralConfig } from "./config";
 import type { Fs } from "./fs";
+import {
+  isAbsolutePath,
+  joinPath,
+  normalizePath as normalizeShared,
+  pathBasename as baseName,
+  pathDirname as parentOf,
+} from "./paths";
 
 /**
  * Port of `skills/bmad-ticket/scripts/tickets.py` (and `read_store.py`, which
@@ -161,43 +168,8 @@ function pyJson(value: unknown, opts: { ensureAscii?: boolean; indent?: number }
 
 // ---------------------------------------------------------------- paths
 
-const isAbsolutePath = (p: string): boolean => p.startsWith("/");
-
-function normalizePath(p: string): string {
-  const absolute = p.startsWith("/");
-  const parts: string[] = [];
-  for (const segment of p.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
-      else if (!absolute) parts.push("..");
-      continue;
-    }
-    parts.push(segment);
-  }
-  const joined = parts.join("/");
-  if (absolute) return "/" + joined;
-  return joined === "" ? "." : joined;
-}
-
-function joinPath(base: string, child: string): string {
-  if (child === "") return normalizePath(base);
-  if (isAbsolutePath(child)) return normalizePath(child);
-  const trimmed = base.replace(/\/+$/, "");
-  return normalizePath(trimmed === "" ? child : `${trimmed}/${child}`);
-}
-
-function baseName(p: string): string {
-  const trimmed = p.replace(/\/+$/, "");
-  const cut = trimmed.lastIndexOf("/");
-  return cut === -1 ? trimmed : trimmed.slice(cut + 1);
-}
-
-function parentOf(p: string): string {
-  const trimmed = p.replace(/\/+$/, "");
-  const cut = trimmed.lastIndexOf("/");
-  return cut <= 0 ? "/" : trimmed.slice(0, cut);
-}
+/** This store's fold: `.` is the empty relative path (the Python's answer). */
+const normalizePath = (p: string): string => normalizeShared(p, ".");
 
 /** `os.path.relpath(target, root)`, posix flavor. */
 function relativePath(target: string, root: string): string {
@@ -1009,8 +981,11 @@ async function findProjectRoot(start: string, fs: Fs): Promise<string | null> {
   let p = normalizePath(start);
   for (;;) {
     if (await isDir(joinPath(p, "_bmad"), fs)) return p;
-    if (p === "/") return null;
-    p = parentOf(p);
+    // The walk ends at a root — `/` on POSIX, `C:/` or a UNC share on Windows —
+    // which is the one path that is its own parent.
+    const parent = parentOf(p);
+    if (parent === p) return null;
+    p = parent;
   }
 }
 

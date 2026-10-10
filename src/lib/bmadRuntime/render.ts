@@ -3,6 +3,7 @@ import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
 import { loadCentralConfig, resolveCustomization, deepMerge } from "./config";
 import type { Fs } from "./fs";
+import { isAbsolutePath } from "./paths";
 
 /**
  * Port of `skills/bmad/scripts/render_skill.py` at bda3c59. The Python is the
@@ -393,7 +394,7 @@ function resolveConfigValue(value: unknown, label: string, projectRoot: string):
   const text = requireString(value, label);
   if (!text.includes("{project-root}")) return text;
   const resolved = text.replaceAll("{project-root}", projectRoot);
-  if (!resolved.startsWith("/")) throw new RenderError(`${label} must resolve to an absolute path: ${resolved}`);
+  if (!isAbsolutePath(resolved)) throw new RenderError(`${label} must resolve to an absolute path: ${resolved}`);
   return resolved;
 }
 

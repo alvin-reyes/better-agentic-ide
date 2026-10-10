@@ -5,6 +5,7 @@ import { errorText, isFile, pyJson, pyRepr } from "./knowledge";
 import { absolutePath, csvDictRows, htmlEscape, pyRound } from "./compat";
 import { SELECTOR_TEMPLATE } from "./brainTemplate";
 import { splitFlag, usageError, type PortResult } from "./compat";
+import { normalizePath } from "./paths";
 
 /**
  * Port of `skills/bmad-brainstorming/scripts/brain.py` — serve the
@@ -105,23 +106,12 @@ function find(rows: Row[], names: string[]): { found: Row[]; missing: string[] }
 export async function resolveDetail(fs: Fs, row: Row, csvDir: string): Promise<string | null> {
   if (!row.detail) return null;
   const base = csvDir.replace(/\/+$/, "");
+  // `base` is absolute (from `absolute_path`), so the fold keeps its root: a
+  // Windows catalog stays `C:/…` instead of growing a leading slash.
   const path = normalizePath(`${base}/${row.detail}`);
   if (path !== base && !path.startsWith(`${base}/`)) return null; // reported on stderr, not fatal
   if (!(await isFile(fs, path))) return null;
   return (await fs.readText(path)).trim();
-}
-
-function normalizePath(path: string): string {
-  const parts: string[] = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(segment);
-  }
-  return "/" + parts.join("/");
 }
 
 function fmtCategories(cats: [string, number][], asJson: boolean): string {

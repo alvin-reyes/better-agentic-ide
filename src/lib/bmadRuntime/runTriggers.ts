@@ -7,6 +7,7 @@ import { parse as parseToml } from "smol-toml";
 import type { Fs } from "./fs";
 import { isDirectory, isFile, pyJson, resolvePath } from "./knowledge";
 import { splitFlag, usageError, type PortResult } from "./compat";
+import { pathDirname, toForwardSlashes } from "./paths";
 
 /**
  * Port of `skills/bmad-eval/scripts/run_triggers.py`, with the pieces it
@@ -52,7 +53,8 @@ async function findProjectRoot(fs: Fs, start: string): Promise<string | null> {
   for (;;) {
     if (await isDirectory(fs, `${current}/_bmad`)) return current;
     if (gitRoot === null && (await fs.exists(`${current}/.git`))) gitRoot = current;
-    const parent = current.slice(0, current.lastIndexOf("/")) || "/";
+    // The walk ends at a root, which is its own parent (`/`, `C:/`).
+    const parent = pathDirname(current);
     if (parent === current) return gitRoot;
     current = parent;
   }
@@ -148,11 +150,15 @@ export function buildCaseEnv(
   return env;
 }
 
-/** `contained`: `root / rel`, refusing a path that would escape it. */
+/** `contained`: `root / rel`, refusing a path that would escape it. The join is
+ * the host's (`node:path`), so on Windows it hands back `\` separators; the
+ * containment test compares the `/` form, which is the runtime's convention. */
 export function contained(root: string, rel: string): string {
   const base = resolvePathNative(root);
   const target = resolvePathNative(base, rel);
-  if (target !== base && !target.startsWith(base.endsWith("/") ? base : `${base}/`)) {
+  const into = toForwardSlashes(base);
+  const folded = toForwardSlashes(target);
+  if (folded !== into && !folded.startsWith(into.endsWith("/") ? into : `${into}/`)) {
     throw new Error(`path escapes the workspace: ${rel}`);
   }
   return target;

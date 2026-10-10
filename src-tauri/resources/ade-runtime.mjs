@@ -814,6 +814,55 @@ async function resolveCustomization(projectRoot, skillRoot, skill, fs2) {
   if (userLayer) out2 = deepMerge(out2, userLayer);
   return out2;
 }
+function isAbsolutePath(p) {
+  return p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
+}
+function toForwardSlashes(p) {
+  return p.includes("\\") ? p.replace(/\\/g, "/") : p;
+}
+function splitPathRoot(text) {
+  const unc = text.startsWith("\\\\");
+  const p = toForwardSlashes(text);
+  const drive = /^([A-Za-z]:)\//.exec(p);
+  if (drive) return { root: `${drive[1]}/`, rest: p.slice(drive[0].length) };
+  if (unc) return { root: "//", rest: p.replace(/^\/+/, "") };
+  if (p.startsWith("/")) return { root: "/", rest: p.replace(/^\/+/, "") };
+  return { root: "", rest: p };
+}
+function normalizePath$1(text, relativeEmpty = "") {
+  const { root, rest } = splitPathRoot(text);
+  const parts = [];
+  for (const segment of rest.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
+      else if (root === "") parts.push("..");
+      continue;
+    }
+    parts.push(segment);
+  }
+  const joined = parts.join("/");
+  if (root !== "") return `${root}${joined}`;
+  return joined === "" ? relativeEmpty : joined;
+}
+function joinPath(base, child) {
+  if (child === "") return normalizePath$1(base);
+  if (isAbsolutePath(child)) return normalizePath$1(child);
+  const trimmed = toForwardSlashes(base).replace(/\/+$/, "");
+  return normalizePath$1(trimmed === "" ? child : `${trimmed}/${child}`);
+}
+function pathDirname(p) {
+  const trimmed = toForwardSlashes(p).replace(/\/+$/, "");
+  if (/^[A-Za-z]:$/.test(trimmed)) return `${trimmed}/`;
+  const cut = trimmed.lastIndexOf("/");
+  const parent = cut <= 0 ? "/" : trimmed.slice(0, cut);
+  return /^[A-Za-z]:$/.test(parent) ? `${parent}/` : parent;
+}
+function pathBasename(p) {
+  const trimmed = toForwardSlashes(p).replace(/\/+$/, "");
+  const cut = trimmed.lastIndexOf("/");
+  return cut === -1 ? trimmed : trimmed.slice(cut + 1);
+}
 const STATUSES = ["draft", "ready-for-dev", "in-progress", "in-review", "built", "done", "blocked", "dropped"];
 const STATES = ["backlog", "in-progress", "review", "done", "dropped"];
 const CONTAINER_STATUSES = ["in-progress", "done", "dropped"];
@@ -933,42 +982,10 @@ function pyJson$2(value, opts = {}) {
   };
   return write(value, 0);
 }
-const isAbsolutePath = (p) => p.startsWith("/");
-function normalizePath$1(p) {
-  const absolute = p.startsWith("/");
-  const parts = [];
-  for (const segment of p.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
-      else if (!absolute) parts.push("..");
-      continue;
-    }
-    parts.push(segment);
-  }
-  const joined = parts.join("/");
-  if (absolute) return "/" + joined;
-  return joined === "" ? "." : joined;
-}
-function joinPath(base, child) {
-  if (child === "") return normalizePath$1(base);
-  if (isAbsolutePath(child)) return normalizePath$1(child);
-  const trimmed = base.replace(/\/+$/, "");
-  return normalizePath$1(trimmed === "" ? child : `${trimmed}/${child}`);
-}
-function baseName(p) {
-  const trimmed = p.replace(/\/+$/, "");
-  const cut = trimmed.lastIndexOf("/");
-  return cut === -1 ? trimmed : trimmed.slice(cut + 1);
-}
-function parentOf(p) {
-  const trimmed = p.replace(/\/+$/, "");
-  const cut = trimmed.lastIndexOf("/");
-  return cut <= 0 ? "/" : trimmed.slice(0, cut);
-}
+const normalizePath = (p) => normalizePath$1(p, ".");
 function relativePath(target, root) {
-  const t = normalizePath$1(target);
-  const r = normalizePath$1(root);
+  const t = normalizePath(target);
+  const r = normalizePath(root);
   if (isAbsolutePath(t) !== isAbsolutePath(r)) throw new Error("no relative path between the two");
   const ts = t.split("/").filter(Boolean);
   const rs = r.split("/").filter(Boolean);
@@ -1084,7 +1101,7 @@ function isRecord(value) {
 async function loadBreakdown(folder, fs2) {
   const path = joinPath(folder, BREAKDOWN);
   if (!await isFile$1(path, fs2)) return {};
-  const where = `${baseName(folder)}/${BREAKDOWN}`;
+  const where = `${pathBasename(folder)}/${BREAKDOWN}`;
   let data;
   try {
     data = parse(await readText$1(path, fs2));
@@ -1127,7 +1144,7 @@ async function loadBreakdown(folder, fs2) {
   return data;
 }
 async function loadContainer(folder, fs2) {
-  const name = baseName(folder);
+  const name = pathBasename(folder);
   const path = joinPath(folder, `${name}.md`);
   if (!await isFile$1(path, fs2)) throw new TicketError(`${name}: no ${name}.md`);
   const fm = parseFrontmatter(await readText$1(path, fs2));
@@ -1151,7 +1168,7 @@ function fileUnknown(text) {
   return found.join("; ");
 }
 async function loadFolder(folder, problems, fs2) {
-  const where = baseName(folder);
+  const where = pathBasename(folder);
   const rows = /* @__PURE__ */ new Map();
   for (const e of (await loadBreakdown(folder, fs2))["entry"] ?? []) {
     const n = e["id"];
@@ -1319,34 +1336,34 @@ async function loadTree(folder, fs2) {
     scope = null;
     initiative = folder;
     folders = null;
-  } else if ((await epicFolders(parentOf(folder), fs2)).includes(folder)) {
-    scope = baseName(folder);
-    initiative = parentOf(folder);
+  } else if ((await epicFolders(pathDirname(folder), fs2)).includes(folder)) {
+    scope = pathBasename(folder);
+    initiative = pathDirname(folder);
     folders = await epicFolders(initiative, fs2);
     epics = folders;
   } else {
-    scope = baseName(folder);
+    scope = pathBasename(folder);
     initiative = null;
     folders = [folder];
   }
   const listed2 = initiative ? (await loadBreakdown(initiative, fs2))["epic"] ?? [] : [];
   const order = listed2.map((e) => e["slug"]);
   epics.sort((a, b) => {
-    const ia = order.indexOf(baseName(a));
-    const ib = order.indexOf(baseName(b));
+    const ia = order.indexOf(pathBasename(a));
+    const ib = order.indexOf(pathBasename(b));
     const ka = ia === -1 ? order.length : ia;
     const kb = ib === -1 ? order.length : ib;
     if (ka !== kb) return ka - kb;
-    return baseName(a) < baseName(b) ? -1 : baseName(a) > baseName(b) ? 1 : 0;
+    return pathBasename(a) < pathBasename(b) ? -1 : pathBasename(a) > pathBasename(b) ? 1 : 0;
   });
   if (folders === null) folders = [...epics, folder];
   const epicIds = {};
   for (const e of listed2) {
     if (Object.values(epicIds).includes(e["id"])) {
-      throw new TicketError(`${baseName(initiative)}/${BREAKDOWN}: two epics with id ${e["id"]}`);
+      throw new TicketError(`${pathBasename(initiative)}/${BREAKDOWN}: two epics with id ${e["id"]}`);
     }
     if (e["slug"] in epicIds) {
-      throw new TicketError(`${baseName(initiative)}/${BREAKDOWN}: two epics with slug ${e["slug"]}`);
+      throw new TicketError(`${pathBasename(initiative)}/${BREAKDOWN}: two epics with slug ${e["slug"]}`);
     }
     epicIds[e["slug"]] = e["id"];
   }
@@ -1357,13 +1374,13 @@ async function loadTree(folder, fs2) {
   const tree = {
     scope,
     initiative,
-    folders: Object.fromEntries(folders.map((f) => [baseName(f), f])),
+    folders: Object.fromEntries(folders.map((f) => [pathBasename(f), f])),
     epicIds,
     containers: {},
     tickets: tickets2,
     problems
   };
-  for (const f of epics) tree.containers[baseName(f)] = await loadContainer(f, fs2);
+  for (const f of epics) tree.containers[pathBasename(f)] = await loadContainer(f, fs2);
   resolveRefs(tree);
   checkCycles(tickets2, tree.containers);
   return tree;
@@ -1561,7 +1578,7 @@ async function declaredAfter(tree, fs2) {
       const needed = byId.get(asId(a["epic"])) ?? a["epic"];
       if (!slugs.includes(needed)) {
         throw new TicketError(
-          `${baseName(tree.initiative)}/${BREAKDOWN}: ${e["slug"]} is after ${pyRepr$4(a["epic"] ?? null)}, which is no epic listed`
+          `${pathBasename(tree.initiative)}/${BREAKDOWN}: ${e["slug"]} is after ${pyRepr$4(a["epic"] ?? null)}, which is no epic listed`
         );
       }
       out2[e["slug"]].push({ epic: needed, needs: a["needs"] ?? "" });
@@ -1671,15 +1688,16 @@ function publicRow(t, tree, blocks) {
   return row;
 }
 async function findProjectRoot$1(start, fs2) {
-  let p = normalizePath$1(start);
+  let p = normalizePath(start);
   for (; ; ) {
     if (await isDir(joinPath(p, "_bmad"), fs2)) return p;
-    if (p === "/") return null;
-    p = parentOf(p);
+    const parent = pathDirname(p);
+    if (parent === p) return null;
+    p = parent;
   }
 }
 async function projectRootFor(args, start, fs2) {
-  return args.projectRoot !== void 0 ? normalizePath$1(args.projectRoot) : findProjectRoot$1(start, fs2);
+  return args.projectRoot !== void 0 ? normalizePath(args.projectRoot) : findProjectRoot$1(start, fs2);
 }
 async function storeConfig(projectRoot, fs2) {
   if (projectRoot === null) return {};
@@ -1714,7 +1732,7 @@ async function activeInitiative(projectRoot, fs2) {
       "no active initiative: set core.active_initiative in _bmad/custom/config.user.toml, or pass a folder"
     );
   }
-  const folder = normalizePath$1(joinPath(await ticketsRoot(projectRoot, config), name.trim()));
+  const folder = normalizePath(joinPath(await ticketsRoot(projectRoot, config), name.trim()));
   if (!await isDir(folder, fs2)) throw new TicketError(`active initiative folder not found: ${folder}`);
   return folder;
 }
@@ -1726,12 +1744,12 @@ async function commandFolder(args, fs2) {
     }
     args.projectRoot = root2;
     const folder = await activeInitiative(root2, fs2);
-    const backlog = normalizePath$1(joinPath(await ticketsRoot(root2, await centralConfig(root2, fs2)), "backlog"));
+    const backlog = normalizePath(joinPath(await ticketsRoot(root2, await centralConfig(root2, fs2)), "backlog"));
     args.backlog = await isDir(backlog, fs2) && backlog !== folder ? backlog : null;
     return folder;
   }
   const given = args.dir;
-  const candidate = normalizePath$1(isAbsolutePath(given) ? given : joinPath(cwd(), given));
+  const candidate = normalizePath(isAbsolutePath(given) ? given : joinPath(cwd(), given));
   let root = null;
   if (!await isDir(candidate, fs2) && !isAbsolutePath(given)) root = await projectRootFor(args, cwd(), fs2);
   if (root !== null) {
@@ -1750,7 +1768,7 @@ async function commandFolder(args, fs2) {
       }
     }
     for (const base of bases) {
-      const joined = normalizePath$1(joinPath(base, given));
+      const joined = normalizePath(joinPath(base, given));
       if (await isDir(joined, fs2)) return joined;
     }
   }
@@ -1763,7 +1781,7 @@ async function withBacklog(args, out2, view) {
     try {
       out2["backlog"] = await view(backlog);
     } catch (e) {
-      out2["backlog"] = { folder: baseName(backlog), error: pyStr(e instanceof Error ? e.message : e) };
+      out2["backlog"] = { folder: pathBasename(backlog), error: pyStr(e instanceof Error ? e.message : e) };
     }
     for (const group of ["ready_to_refine", "ready_to_start", "in_progress", "blocked", "tickets"]) {
       for (const row of out2["backlog"][group] ?? []) {
@@ -1793,7 +1811,7 @@ async function locate(args, folder, text, fs2) {
 async function nextView(folder, fs2) {
   const tree = await loadTree(folder, fs2);
   const declared = await declaredAfter(tree, fs2);
-  const out2 = { folder: baseName(folder) };
+  const out2 = { folder: pathBasename(folder) };
   for (const [group, rows] of Object.entries(classify(tree))) {
     out2[group] = rows.map((t) => publicRow(t, tree));
   }
@@ -1828,7 +1846,7 @@ async function statusView(folder, fs2) {
     for (const b of t["after"]) (blocks[b] ??= []).push(t["key"]);
   }
   const out2 = {
-    folder: baseName(folder),
+    folder: pathBasename(folder),
     tickets: tickets2.map((t) => publicRow(t, tree, blocks)),
     counts: { total: tickets2.length, ...counts },
     longest_remaining_chain: longestRemainingChain(tree),
@@ -1940,10 +1958,10 @@ async function cmdFind(args, fs2) {
   const row = publicRow(t, tree);
   if (tree.fallback && t["file"]) row["ref"] = t["file"];
   const entry = t["file"] ? {} : t;
-  const container = joinPath(home, `${baseName(home)}.md`);
+  const container = joinPath(home, `${pathBasename(home)}.md`);
   return {
     ...row,
-    folder: baseName(home),
+    folder: pathBasename(home),
     description: entry["description"] ?? "",
     verify: entry["verify"] ?? "",
     references: entry["references"] ?? [],
@@ -1961,18 +1979,18 @@ async function cmdPull(args, fs2) {
   const folder = await commandFolder(args, fs2);
   const tree = await loadTree(folder, fs2);
   const n = asId(args.id);
-  const t = inScope(tree).find((c) => c["epic"] === baseName(folder) && c["id"] === n);
-  if (n === null || t === void 0) throw new TicketError(`${baseName(folder)}/${BREAKDOWN} has no entry ${args.id}`);
+  const t = inScope(tree).find((c) => c["epic"] === pathBasename(folder) && c["id"] === n);
+  if (n === null || t === void 0) throw new TicketError(`${pathBasename(folder)}/${BREAKDOWN} has no entry ${args.id}`);
   if (t["file"]) throw new TicketError(`entry ${args.id} is already pulled: ${t["file"]}`);
   const path = await writeLeaf(t, tree, await projectRootFor(args, folder, fs2), fs2);
-  return { file: baseName(path), refine: t["refine"] };
+  return { file: pathBasename(path), refine: t["refine"] };
 }
 async function writeLeaf(t, tree, root, fs2) {
   const folder = tree.folders[t["epic"]];
   const path = joinPath(folder, `${leafStem(t, tree)}.md`);
-  if (await fs2.exists(path)) throw new TicketError(`${baseName(path)} exists already; change entry ${t["id"]}'s title`);
+  if (await fs2.exists(path)) throw new TicketError(`${pathBasename(path)} exists already; change entry ${t["id"]}'s title`);
   const after = t["after"].map((b) => pyStr(ref(b, t["epic"], tree)));
-  const epicFile = joinPath(folder, `${baseName(folder)}.md`);
+  const epicFile = joinPath(folder, `${pathBasename(folder)}.md`);
   let parent;
   if (root !== null) {
     try {
@@ -2009,7 +2027,7 @@ async function writeLeaf(t, tree, root, fs2) {
   };
   const body = PULLED.replace(/\{(\w+)\}/g, (_, key) => values[key]);
   await fs2.writeText(path, body);
-  t["file"] = baseName(path);
+  t["file"] = pathBasename(path);
   return path;
 }
 function quoted(value) {
@@ -2057,7 +2075,7 @@ async function cmdMark(args, fs2) {
     text = "---\n" + fields.filter(([, v]) => v !== "").map(([k, v]) => `${k}: ${v}
 `).join("") + "---\n";
     if (await fs2.exists(path)) {
-      throw new TicketError(`${baseName(path)} exists already and is not the plan for ${refName(t)}`);
+      throw new TicketError(`${pathBasename(path)} exists already and is not the plan for ${refName(t)}`);
     }
     await fs2.writeText(path, text);
   } else {
@@ -2175,8 +2193,8 @@ async function cmdMirror(args, stdin, fs2) {
         undo.push([path, await fs2.readText(path)]);
       }
       await editFrontmatter(path, values, fs2);
-      const refOut = tree === trees[0] ? rowRef(t, tree) : baseName(path);
-      mirrored.push({ ref: refOut, file: baseName(path), pulled, set: Object.keys(values).sort() });
+      const refOut = tree === trees[0] ? rowRef(t, tree) : pathBasename(path);
+      mirrored.push({ ref: refOut, file: pathBasename(path), pulled, set: Object.keys(values).sort() });
     }
     for (const f of folders) await loadTree(f, fs2);
   } catch (e) {
@@ -2191,7 +2209,7 @@ async function cmdMirror(args, stdin, fs2) {
     if (unmatched.length) error.data["unmatched"] = unmatched;
     throw error;
   }
-  return { folder: baseName(folder), store, mirrored, unmatched };
+  return { folder: pathBasename(folder), store, mirrored, unmatched };
 }
 const COMMANDS$1 = ["next", "status", "find", "pull", "mark", "mirror"];
 const HELP = {
@@ -3131,7 +3149,7 @@ function resolveConfigValue(value, label, projectRoot) {
   const text = requireString(value, label);
   if (!text.includes("{project-root}")) return text;
   const resolved = text.replaceAll("{project-root}", projectRoot);
-  if (!resolved.startsWith("/")) throw new RenderError(`${label} must resolve to an absolute path: ${resolved}`);
+  if (!isAbsolutePath(resolved)) throw new RenderError(`${label} must resolve to an absolute path: ${resolved}`);
   return resolved;
 }
 function findConfigValues(data, key, prefix = "") {
@@ -4182,23 +4200,10 @@ function pyJson(value, opts = {}) {
   return write(value, 0);
 }
 function resolvePath(text) {
-  const absolute = text.startsWith("/");
-  const parts = [];
-  for (const segment of text.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
-      else if (!absolute) parts.push("..");
-      continue;
-    }
-    parts.push(segment);
-  }
-  const joined = parts.join("/");
-  return absolute ? "/" + joined : joined;
+  return normalizePath$1(text);
 }
 function dirname(p) {
-  const cut = p.replace(/\/+$/, "").lastIndexOf("/");
-  return cut <= 0 ? "/" : p.replace(/\/+$/, "").slice(0, cut);
+  return pathDirname(p);
 }
 function purePosixParts(entry) {
   return entry.split("/").filter((part) => part !== "" && part !== ".");
@@ -4207,7 +4212,7 @@ function posixName(parts) {
   return parts.length ? parts[parts.length - 1] : "";
 }
 function folderName(path) {
-  return posixName(purePosixParts(path));
+  return posixName(purePosixParts(toForwardSlashes(path)));
 }
 function posixStem(name) {
   const cut = name.lastIndexOf(".");
@@ -4999,7 +5004,8 @@ function today() {
   return { year: now2.getFullYear(), month: now2.getMonth() + 1, day: now2.getDate() };
 }
 function absolutePath(text, cwd2 = process.cwd()) {
-  return resolvePath(text.startsWith("/") ? text : `${cwd2}/${text}`);
+  const path = toForwardSlashes(text);
+  return resolvePath(isAbsolutePath(path) ? path : `${toForwardSlashes(cwd2)}/${path}`);
 }
 function asciiFold(text) {
   return text.normalize("NFKD").split("").filter((ch) => ch.codePointAt(0) < 128).join("");
@@ -5519,22 +5525,10 @@ function find$1(rows, names) {
 async function resolveDetail(fs2, row, csvDir) {
   if (!row.detail) return null;
   const base = csvDir.replace(/\/+$/, "");
-  const path = normalizePath(`${base}/${row.detail}`);
+  const path = normalizePath$1(`${base}/${row.detail}`);
   if (path !== base && !path.startsWith(`${base}/`)) return null;
   if (!await isFile(fs2, path)) return null;
   return (await fs2.readText(path)).trim();
-}
-function normalizePath(path) {
-  const parts = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(segment);
-  }
-  return "/" + parts.join("/");
 }
 function fmtCategories$1(cats, asJson) {
   if (asJson) return pyJson(cats.map(([category, count]) => ({ category, count })), { ensureAscii: true });
@@ -8221,7 +8215,7 @@ async function findProjectRoot(fs2, start) {
   for (; ; ) {
     if (await isDirectory(fs2, `${current}/_bmad`)) return current;
     if (gitRoot === null && await fs2.exists(`${current}/.git`)) gitRoot = current;
-    const parent = current.slice(0, current.lastIndexOf("/")) || "/";
+    const parent = pathDirname(current);
     if (parent === current) return gitRoot;
     current = parent;
   }
@@ -8302,7 +8296,9 @@ function buildCaseEnv(harness, homeDir, hostEnv) {
 function contained(root, rel2) {
   const base = resolve(root);
   const target = resolve(base, rel2);
-  if (target !== base && !target.startsWith(base.endsWith("/") ? base : `${base}/`)) {
+  const into = toForwardSlashes(base);
+  const folded = toForwardSlashes(target);
+  if (folded !== into && !folded.startsWith(into.endsWith("/") ? into : `${into}/`)) {
     throw new Error(`path escapes the workspace: ${rel2}`);
   }
   return target;
@@ -8979,18 +8975,7 @@ async function scanReferences(fs2, content, rel2, skillRoot) {
   }
   return findings;
 }
-function normalize(path) {
-  const parts = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(segment);
-  }
-  return "/" + parts.join("/");
-}
+const normalize = (path) => normalizePath$1(path);
 async function scanSkill(fs2, skillRoot, allow = []) {
   let findings = [];
   let count = 0;

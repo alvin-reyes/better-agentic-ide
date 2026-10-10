@@ -1,3 +1,5 @@
+import { splitPathRoot } from "./paths";
+
 /** Minimal filesystem surface so the runtime port is testable without Tauri or Node. */
 export interface Fs {
   readText(p: string): Promise<string>;
@@ -67,11 +69,18 @@ export function memFs(): Fs {
       return files.has(key) || isDirectory(key);
     },
     mkdir: async (p) => {
-      const parts = withoutTrailingSlash(p).split("/").filter(Boolean);
-      let current = "";
+      // Root-preserving: a Windows-shaped key (`C:/…`, a UNC share) records its
+      // own ancestors rather than a `/`-prefixed copy nothing looks up.
+      const { root, rest } = splitPathRoot(p);
+      let current = root === "" ? "" : root.slice(0, -1);
+      const parts = rest.split("/").filter(Boolean);
+      if (!parts.length) {
+        if (root !== "") directories.add(root);
+        return;
+      }
       for (const part of parts) {
         current += `/${part}`;
-        directories.add(current);
+        directories.add(current === "" ? "/" : current);
       }
     },
     delete: async (p) => {

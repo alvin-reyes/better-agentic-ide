@@ -1,5 +1,6 @@
 import { parse as parseToml } from "smol-toml";
 import type { Fs } from "./fs";
+import { normalizePath, pathDirname, toForwardSlashes } from "./paths";
 
 /**
  * Port of `skills/bmad/scripts/knowledge.py` — report the knowledge documents
@@ -101,26 +102,14 @@ export function pyJson(value: unknown, opts: { ensureAscii?: boolean; indent?: n
 }
 
 /** `Path(text).resolve()` as far as a filesystem-free port can go: absolute
- * and dot-segment-normalized, symlinks left alone. */
+ * and dot-segment-normalized, symlinks left alone. Windows roots (`C:\…`, a
+ * UNC share) are recognized and folded to the runtime's `/` strings. */
 export function resolvePath(text: string): string {
-  const absolute = text.startsWith("/");
-  const parts: string[] = [];
-  for (const segment of text.split("/")) {
-    if (segment === "" || segment === ".") continue;
-    if (segment === "..") {
-      if (parts.length && parts[parts.length - 1] !== "..") parts.pop();
-      else if (!absolute) parts.push("..");
-      continue;
-    }
-    parts.push(segment);
-  }
-  const joined = parts.join("/");
-  return absolute ? "/" + joined : joined;
+  return normalizePath(text);
 }
 
 export function dirname(p: string): string {
-  const cut = p.replace(/\/+$/, "").lastIndexOf("/");
-  return cut <= 0 ? "/" : p.replace(/\/+$/, "").slice(0, cut);
+  return pathDirname(p);
 }
 
 /** Python `PurePosixPath(entry)`: empty and "." components are dropped. */
@@ -132,9 +121,10 @@ export function posixName(parts: string[]): string {
   return parts.length ? parts[parts.length - 1] : "";
 }
 
-/** A path's last segment — `Path(folder).name`. */
+/** A path's last segment — `Path(folder).name`. Windows separators fold first
+ * so a `C:\a\skill` folder names its skill on either host. */
 export function folderName(path: string): string {
-  return posixName(purePosixParts(path));
+  return posixName(purePosixParts(toForwardSlashes(path)));
 }
 
 export function posixStem(name: string): string {
