@@ -42,6 +42,28 @@ jobs:
       - name: Build
         run: npx vite build
 
+  # src-tauri/resources/ade-runtime.mjs is committed (the crate embeds it as a
+  # bundled resource, and cargo test runs with no preceding npm build), so it
+  # must be regenerated with every change to the runtime sources. This rebuilds
+  # it exactly as `npm run build` does — build:runtime then its copy — and fails
+  # on any byte of drift.
+  runtime-bundle:
+    name: Runtime bundle freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # vite 7 requires ^20.19; the frontend job builds on 20 too.
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: The committed runtime bundle must match a fresh build
+        run: |
+          npm run build:runtime
+          cp dist-runtime/ade-runtime.mjs src-tauri/resources/ade-runtime.mjs
+          git diff --exit-code -- src-tauri/resources/ade-runtime.mjs
+
   vendored-bmad:
     runs-on: ubuntu-latest
     steps:
