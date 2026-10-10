@@ -9,3 +9,6 @@ src-tauri/gen/
 .superpowers/
 .claude/worktrees/
 .shots/
+# The vendored v6 tree is Python; running any of it writes bytecode beside the
+# script, and a scaffolded project must never pick one up.
+**/__pycache__/

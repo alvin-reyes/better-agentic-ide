@@ -1,6 +1,8 @@
 mod antislop;
 mod bmad;
-mod bmadv6;
+// Public so `tests/bmadv6_e2e.rs` — an integration test, outside the crate —
+// can scaffold a project with the same `install` setup uses.
+pub mod bmadv6;
 mod contracts;
 mod crashlog;
 mod mcp;
