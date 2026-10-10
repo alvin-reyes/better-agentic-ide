@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Vendor BMAD v6.9.0 into ADE, port its runtime scripts to TypeScript, and scaffold working v6 projects — no Python/uv anywhere.
+**Goal:** Vendor BMAD v6 (upstream main @ bda3c59, 6.13.0-next) into ADE, port its runtime scripts to TypeScript, and scaffold working v6 projects — no Python/uv anywhere.
 
 **Architecture:** The vendored `skills/` tree is patched at vendor time so every `uv run` call site becomes `node _bmad/ade-runtime.mjs`, a single dependency-free bundle of the TS port. The same TS module powers the app UI and the scaffolded per-project CLI. Scaffolding mirrors v6's own setup.py output.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Node 18+ on user machines; never require Python or uv at runtime.
-- Vendored skills pinned at tag `v6.9.0`; `VERSION` file stamps it.
+- Vendored skills pinned at upstream main SHA `bda3c59` (6.13.0-next); `VERSION` file stamps the SHA and label.
 - Nothing overwrites existing files during scaffold.
 - The patch script must fail loudly on any `uv run` call site it cannot rewrite.
 - The runtime bundle `_bmad/ade-runtime.mjs` is a single dependency-free ESM file.
@@ -30,7 +30,7 @@
 
 ---
 
-### Task 1: Vendor the v6.9.0 skills and patch them
+### Task 1: Vendor the v6 skills (main @ bda3c59) and patch them
 
 **Files:**
 - Create: `scripts/vendor-bmad-v6.sh`
@@ -40,7 +40,7 @@
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Produces: `src-tauri/resources/bmad-v6/skills/` (33 skill dirs, `uv run` call sites rewritten), `src-tauri/resources/bmad-v6/VERSION` containing `v6.9.0`.
+- Produces: `src-tauri/resources/bmad-v6/skills/` (33 skill dirs, `uv run` call sites rewritten), `src-tauri/resources/bmad-v6/VERSION` containing `bda3c59 6.13.0-next`.
 
 - [ ] **Step 1: Write the failing test for the patch script**
 
@@ -108,18 +108,19 @@ export function rewriteCallSite(line: string): string {
 }
 
 if (process.argv[1]?.endsWith("patchBmadSkills.ts")) {
-  const { readFileSync, writeFileSync } = await import("node:fs");
-  const { readdirSync } = await import("node:fs");
+  const { readFileSync, writeFileSync, readdirSync } = await import("node:fs");
   const { join } = await import("node:path");
   const root = process.argv[2];
-  for (const dir of readdirSync(root)) {
-    const skill = join(root, dir);
-    for (const f of ["SKILL.md", ...readdirSync(skill).filter((f) => f.endsWith(".md") && f !== "SKILL.md")]) {
-      const p = join(skill, f);
-      const body = readFileSync(p, "utf8");
-      const next = body.replace(/`uv run \{project-root\}\/_bmad\/scripts\/[\s\S]*?`/g, rewriteCallSite);
-      if (next !== body) writeFileSync(p, next);
-    }
+  /** Every markdown file under a directory, recursively: call sites live in
+   * nested references/*.md too, and an unpatched one would ship Python to
+   * users. */
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".md") ? [join(dir, e.name)] : []);
+  for (const p of walk(root)) {
+    const body = readFileSync(p, "utf8");
+    const next = body.replace(/`uv run \{project-root\}\/_bmad\/scripts\/[\s\S]*?`/g, rewriteCallSite);
+    if (next !== body) writeFileSync(p, next);
   }
 }
 ```
@@ -136,27 +137,32 @@ Expected: PASS (3 tests).
 ```bash
 #!/usr/bin/env bash
 # Re-vendor BMAD v6 skills. Manual step, same policy as v4's vendoring.
+# Pinned to a fixed upstream commit: the v6 tags carry the old layout, and
+# `--branch <sha>` does not work on clone, so clone main and check out.
 set -euo pipefail
-TAG="${1:-v6.9.0}"
+SHA="${1:-bda3c59}"
+LABEL="${2:-6.13.0-next}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/src-tauri/resources/bmad-v6"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-git clone --quiet --depth 1 --branch "$TAG" https://github.com/bmad-code-org/BMAD-METHOD "$TMP/bmad"
+git clone --quiet https://github.com/bmad-code-org/BMAD-METHOD "$TMP/bmad"
+git -C "$TMP/bmad" checkout --quiet "$SHA"
+mkdir -p "$DEST"
 rm -rf "$DEST/skills"
 cp -R "$TMP/bmad/skills" "$DEST/skills"
-echo "$TAG" > "$DEST/VERSION"
+echo "$SHA $LABEL" > "$DEST/VERSION"
 
 npx tsx "$ROOT/scripts/patchBmadSkills.ts" "$DEST/skills"
 cd "$ROOT" && npx vitest run scripts/__tests__/patchBmadSkills.test.ts
-echo "vendored $TAG at $DEST"
+echo "vendored $SHA ($LABEL) at $DEST"
 ```
 
 - [ ] **Step 6: Run the vendor script**
 
-Run: `bash scripts/vendor-bmad-v6.sh v6.9.0`
-Expected: exit 0; `src-tauri/resources/bmad-v6/skills/` holds 33 dirs; `VERSION` reads `v6.9.0`; the patch ran (check `grep -c "ade-runtime.mjs" src-tauri/resources/bmad-v6/skills/bmad/SKILL.md` is ≥ 1).
+Run: `bash scripts/vendor-bmad-v6.sh bda3c59 6.13.0-next`
+Expected: exit 0; `src-tauri/resources/bmad-v6/skills/` holds 33 dirs; `VERSION` reads `bda3c59 6.13.0-next`; the patch ran (check `grep -c "ade-runtime.mjs" src-tauri/resources/bmad-v6/skills/bmad/SKILL.md` is ≥ 1).
 
 - [ ] **Step 7: Add the CI pin check**
 
@@ -167,19 +173,20 @@ In `.github/workflows/ci.yml`, add a job after the frontend tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify vendored v6 tree matches the pinned tag
+      - name: Verify vendored v6 tree matches the pinned commit
         run: |
-          TAG=$(cat src-tauri/resources/bmad-v6/VERSION)
-          rm -rf /tmp/bmad && git clone --quiet --depth 1 --branch "$TAG" https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad
+          SHA=$(awk '{print $1}' src-tauri/resources/bmad-v6/VERSION)
+          rm -rf /tmp/bmad && git clone --quiet https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad
+          git -C /tmp/bmad checkout --quiet "$SHA"
           diff -r --exclude="*.md" src-tauri/resources/bmad-v6/skills /tmp/bmad/skills
-          echo "vendored tree matches $TAG"
+          echo "vendored tree matches $SHA"
 ```
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add scripts/vendor-bmad-v6.sh scripts/patchBmadSkills.ts scripts/__tests__/patchBmadSkills.test.ts .github/workflows/ci.yml src-tauri/resources/bmad-v6
-git commit -m "feat(bmad-v6): vendor v6.9.0 skills with patched runtime call sites"
+git commit -m "feat(bmad-v6): vendor v6 skills (main @ bda3c59) with patched runtime call sites"
 ```
 
 ---

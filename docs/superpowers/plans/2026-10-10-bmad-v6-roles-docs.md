@@ -286,7 +286,7 @@ git commit -m "test(bmad-v6): v4 task-ref checks read the renamed section"
 
 - [ ] **Step 1: Rewrite docs/bmad-vendoring.md**
 
-Replace the "Why ADE stays on v4.44.3" decision with the new policy, keeping the same structure: pinned version (v6.9.0), the v4/v6 per-project choice, ADE's ownership of the gate under `.ade/gates/`, the TS runtime and patched skills (no Python/uv), the v4 read-only compatibility, and the re-vendor instructions:
+Replace the "Why ADE stays on v4.44.3" decision with the new policy, keeping the same structure: pinned version (main @ bda3c59, 6.13.0-next), the v4/v6 per-project choice, ADE's ownership of the gate under `.ade/gates/`, the TS runtime and patched skills (no Python/uv), the v4 read-only compatibility, and the re-vendor instructions:
 
 ```bash
 bash scripts/vendor-bmad-v6.sh v6.x.y     # skills + patch + VERSION
