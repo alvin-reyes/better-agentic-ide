@@ -54,6 +54,10 @@ Open *Integrations* with {% include key.html mac="⌘⇧I" other="Ctrl+Alt+Shift
 
 An agent you remove stays removed: setup won't bring it back when the project is opened again. Add it from the same tab if you change your mind.
 
+### Agents from an older setup
+
+A core role's file carries the BMAD tasks for one methodology, the project's. A project set up before ADE supported v6 is treated as v4, and its role files list the v4 tasks, which is correct for it. If you later move such a project to v6, those files still name v4 tasks, and setup never replaces an existing file. To bring a role up to date, **Remove** it and **Add** it again on the Agents tab: the file is rewritten for the project's methodology. Copy out anything you changed in it first.
+
 ## How Claude Code uses the agents
 
 The agents are ordinary [Claude Code sub-agents](https://docs.anthropic.com/en/docs/claude-code/sub-agents), one Markdown file each in `.claude/agents/`. Commit them so your team shares them.
