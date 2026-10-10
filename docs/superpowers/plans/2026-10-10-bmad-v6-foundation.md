@@ -960,7 +960,7 @@ git commit -m "feat(bmad-v6): port the skill-root helper scripts"
 
 **Interfaces:**
 - Consumes: `tickets`, `loadCentralConfig`, `resolveCustomization`, `renderSkill`, `memlog`, `roster`, `knowledge`, `validateManifests` (Task 5b), `realFs`.
-- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog|roster|knowledge|validate_manifests`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v` — the two-token argparse form, split at the first `=` per the Python's partition). `render_skill` exits 1 on a `HALT:` refusal, matching the Python's exit code. Until Task 5b lands, the roster/knowledge/validate_manifests names dispatch through a placeholder `helpers.ts` and answer "not ported into this runtime build yet" with exit 1 — never the unknown-script exit 2; Task 5b re-exports the trio from helpers.ts so the CLI needs no changes.
+- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog|roster|knowledge|validate_manifests`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v` — the two-token argparse form, split at the first `=` per the Python's partition). `render_skill` exits 1 on a `HALT:` refusal, matching the Python's exit code. Until Task 5b lands, the roster/knowledge/validate_manifests names dispatch through a placeholder `helpers.ts` and answer "not ported into this runtime build yet" with exit 1 — never the unknown-script exit 2; Task 5b re-exports the trio from helpers.ts so the CLI needs no changes. `resolve_config` and `resolve_customization` honour `--key`/`-k` exactly as the Python does: without `--key`, the whole merge; with it, one entry per requested dotted path that resolved — under the path as it was written, in the order requested, an unresolvable key omitted rather than an error (13 call sites read values this way).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -981,11 +981,13 @@ describe("cli dispatch", () => {
     expect(() => JSON.parse(r.stdout)).not.toThrow();
   });
 
-  it("resolves --key queries for resolve_config", async () => {
+  it("resolves --key queries for resolve_config with the Python's filter", async () => {
     const fs = memFs();
     await seedTicketTree(fs, "/p", { epics: [], stories: [] });
     const r = await cliMain(["resolve_config", "--project-root", "/p", "--key", "core.output_folder"], fs);
-    expect(JSON.parse(r.stdout)).toHaveProperty("core");
+    // The Python's shape: one entry per requested dotted path that resolved,
+    // under the path as written — not the whole merged table.
+    expect(JSON.parse(r.stdout)).toEqual({ "core.output_folder": "/p/_bmad-output" });
   });
 
   it("reports an unknown script with a non-zero exit", async () => {
@@ -1021,6 +1023,47 @@ import { knowledge } from "./knowledge";
 import { validateManifests } from "./validateManifests";
 import type { Fs } from "./fs";
 
+/** The Python's repeatable `--key`/`-k` dotted paths, in the order given. */
+function keyPaths(argv: string[]): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (token === "--key" || token === "-k") {
+      const value = argv[++i];
+      if (value !== undefined) keys.push(value);
+    } else if (token.startsWith("--key=")) keys.push(token.slice("--key=".length));
+  }
+  return keys;
+}
+
+/** The Python's `_MISSING`. */
+const MISSING = Symbol("missing");
+
+/** The Python's `extract_key`: the path walks nested tables only — a missing
+ * part, or a scalar or list along the way, is missing. */
+function extractKey(data: unknown, dotted: string): unknown {
+  let current: unknown = data;
+  for (const part of dotted.split(".")) {
+    if (current === null || typeof current !== "object" || Array.isArray(current)) return MISSING;
+    if (!Object.prototype.hasOwnProperty.call(current, part)) return MISSING;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+/** What the two resolvers print: without `--key`, the whole merged table; with
+ * it, one entry per requested path that resolved, missing keys omitted. */
+function resolveOutput(merged: Record<string, unknown>, argv: string[]): unknown {
+  const keys = keyPaths(argv);
+  if (keys.length === 0) return merged;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = extractKey(merged, key);
+    if (value !== MISSING) out[key] = value;
+  }
+  return out;
+}
+
 export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
   const [script, ...rest] = argv;
   switch (script) {
@@ -1030,13 +1073,17 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
     case "resolve_config": {
       const root = rest[rest.indexOf("--project-root") + 1];
       const cfg = await loadCentralConfig(root, fs);
-      return { stdout: JSON.stringify(cfg, null, 2), exitCode: 0 };
+      // `resolveOutput` is the Python's `extract_key` filter: with `--key`/`-k`
+      // the answer holds one entry per requested dotted path that resolved,
+      // under the path as written, the order requested, missing keys omitted.
+      return { stdout: JSON.stringify(resolveOutput(cfg, rest), null, 2), exitCode: 0 };
     }
     case "resolve_customization": {
       const root = rest[rest.indexOf("--project-root") + 1];
       const skillRoot = rest[rest.indexOf("--skill") + 1];
       const skill = skillRoot.split("/").pop()!;
-      return { stdout: JSON.stringify(await resolveCustomization(root, skillRoot, skill, fs), null, 2), exitCode: 0 };
+      const merged = await resolveCustomization(root, skillRoot, skill, fs);
+      return { stdout: JSON.stringify(resolveOutput(merged, rest), null, 2), exitCode: 0 };
     }
     case "render_skill": {
       const root = rest[rest.indexOf("--project-root") + 1];
