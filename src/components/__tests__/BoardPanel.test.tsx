@@ -9,10 +9,13 @@ const disk = vi.hoisted(() => ({
   roots: {} as Record<string, string>,
   /** Folders that exist. */
   exists: new Set<string>(),
+  /** When set, project_root waits for it: the root is still resolving. */
+  rootGate: null as Promise<void> | null,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args: Record<string, unknown>) => {
+    if (cmd === "project_root" && disk.rootGate) await disk.rootGate;
     if (cmd === "project_root") return args.path === "/home/u" ? "/home/u" : disk.roots[args.path as string] ?? "/p";
     if (cmd === "project_setup_status") {
       return { isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: disk.bmad[args.root as string] ?? null };
@@ -47,6 +50,7 @@ beforeEach(() => {
   disk.bmad = {};
   disk.roots = {};
   disk.exists = new Set();
+  disk.rootGate = null;
   vi.mocked(invoke).mockClear();
 });
 
@@ -154,6 +158,23 @@ describe("BoardPanel", () => {
     show.mockClear();
     render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
     await waitFor(() => expect(show).toHaveBeenLastCalledWith("/p"));
+  });
+
+  it("says Loading, not No project, while the pane's project is still resolving", async () => {
+    let release!: () => void;
+    disk.rootGate = new Promise<void>((r) => { release = r; });
+    useBoardPanel.setState({ root: null, methodology: null, board: null, error: null, loading: false });
+    render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.queryByText("No project in this pane")).toBeNull();
+    await act(async () => { release(); });
+  });
+
+  it("says No project once the pane's folder resolves to a home directory", async () => {
+    useBoardPanel.setState({ root: null, methodology: null, board: null, error: null, loading: false });
+    render(<BoardPanel cwd="/home/u" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("No project in this pane")).toBeTruthy());
   });
 
   it("falls back to the repository root when nothing is set up", async () => {

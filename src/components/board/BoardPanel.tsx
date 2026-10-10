@@ -33,7 +33,8 @@ const dispatchedRows = new Set<string>();
 const dispatchKey = (root: string, v: StoryView) => `${root}::${v.story.id}::${v.state}`;
 
 export default function BoardPanel({ cwd, onClose }: Props) {
-  const [root, setRoot] = useState<string | null>(null);
+  // undefined while the pane's project is being resolved; null when it has none.
+  const [root, setRoot] = useState<string | null | undefined>(undefined);
   const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [dispatchCount, setDispatchCount] = useState(0);
@@ -46,6 +47,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   useEffect(() => {
     let live = true;
     if (!cwd) { setRoot(null); return; }
+    setRoot(undefined);
     bmadRootOf(cwd)
       .catch(() => null)
       .then(async (found) => found?.root ?? (await invoke<string>("project_root", { path: cwd }).catch(() => cwd)))
@@ -53,7 +55,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
     return () => { live = false; };
   }, [cwd]);
 
-  useEffect(() => { show(root); }, [root, show]);
+  useEffect(() => { if (root !== undefined) show(root); }, [root, show]);
   // Closing lets go of the project, which also cancels a pending debounced
   // rebuild. Reopening mounts with no root and shows the project once resolved.
   useEffect(() => () => show(null), [show]);
@@ -109,7 +111,8 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   );
 
   const body = (() => {
-    if (!cwd || (!root && !loading)) return <Empty>No project in this pane</Empty>;
+    if (!cwd || root === null) return <Empty>No project in this pane</Empty>;
+    if (root === undefined) return <Empty>Loading…</Empty>;
     // The store follows `root` one effect late; until it catches up, everything it holds is the previous project's.
     if (storeRoot !== root) return <Empty>Loading…</Empty>;
     if (!methodology && !loading && !board && !error) {
@@ -122,7 +125,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
             onClick={async () => {
               setSetupError(null);
               try {
-                const result = await setUpProject(root!);
+                const result = await setUpProject(root);
                 window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result }));
                 await refresh();
               } catch (e) {
