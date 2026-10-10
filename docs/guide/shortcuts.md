@@ -43,6 +43,7 @@ On **macOS**, shortcuts use <kbd>⌘</kbd>. On **Linux**, they use <kbd>Ctrl+Shi
 | Command palette | {% include key.html mac="⌘P" other="Ctrl+Shift+P" %} |
 | File browser | {% include key.html mac="⌘B" other="Ctrl+Shift+B" %} |
 | Preview panel | {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} |
+| Stage board | {% include key.html mac="⌘⇧Y" other="Ctrl+Alt+Shift+Y" %} |
 | Agent picker | {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} |
 | Fleet view | {% include key.html mac="⌘." other="Ctrl+Shift+." %} |
 | Orchestrator | {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} |
