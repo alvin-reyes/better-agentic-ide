@@ -14,9 +14,9 @@ const REPO = resolve(__dirname, "..");
 const AGENTS = join(REPO, "vendor", "ade-setup", "agents");
 const TASKS = join(REPO, "src-tauri", "resources", "bmad", "bmad-core", "tasks");
 
-/** Task names referenced from a "## BMAD tasks" section, as `- \`name\` — why`. */
+/** Task names referenced from a "## BMAD tasks (v4)" section, as `- \`name\` — why`. */
 function referencedTasks(body: string): string[] {
-  const start = body.indexOf("## BMAD tasks");
+  const start = body.indexOf("## BMAD tasks (v4)");
   if (start < 0) return [];
   const rest = body.slice(start + 1);
   const next = rest.search(/^## /m);
@@ -44,7 +44,7 @@ describe("BMAD task references", () => {
     // /BMad:tasks: is Claude Code only. An ollama agent needs the file.
     for (const f of files) {
       const body = readFileSync(join(AGENTS, f), "utf8");
-      if (!body.includes("## BMAD tasks")) continue;
+      if (!body.includes("## BMAD tasks (v4)")) continue;
       expect(body, `${f} gives only the Claude Code command`).toContain(".bmad-core/tasks/");
     }
   });
@@ -55,5 +55,24 @@ describe("BMAD task references", () => {
     const qa = readFileSync(join(AGENTS, "qa.md"), "utf8");
     expect(referencedTasks(qa)).not.toContain("apply-qa-fixes");
     expect(referencedTasks(readFileSync(join(AGENTS, "developer.md"), "utf8"))).toContain("apply-qa-fixes");
+  });
+
+  it("every v6 task citation names a skill in the vendored v6 tree", () => {
+    const skills = readdirSync(join(__dirname, "../src-tauri/resources/bmad-v6/skills"));
+    for (const f of files) {
+      const body = readFileSync(join(AGENTS, f), "utf8");
+      const v6 = body.split("## BMAD tasks (v6)")[1]?.split(/^## /m)[0] ?? "";
+      for (const m of v6.matchAll(/`(bmad[\w-]+)`/g)) {
+        expect(skills, `${f} cites ${m[1]}`).toContain(m[1]);
+      }
+    }
+  });
+
+  it("the QA v6 section names the gate file by ticket id", () => {
+    // Review Focus #4: an agent must know the filename is the ticket id.
+    const qa = readFileSync(join(AGENTS, "qa.md"), "utf8");
+    const v6 = qa.split("## BMAD tasks (v6)")[1]?.split(/^## /m)[0] ?? "";
+    expect(v6).toContain(".ade/gates/<ticket-id>.yml");
+    expect(v6).toContain("PASS|CONCERNS|FAIL|WAIVED");
   });
 });

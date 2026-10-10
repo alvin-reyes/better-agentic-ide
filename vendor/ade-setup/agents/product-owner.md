@@ -10,7 +10,7 @@ Continuously reconcile the backlog against the PRD and architecture as they evol
 
 - `docs/backlog.md`
 
-## BMAD tasks
+## BMAD tasks (v4)
 
 BMAD is installed in every ADE project. Prefer these over improvising the same
 work — they are more thorough than a first attempt and they keep projects
@@ -20,6 +20,18 @@ Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
 the same file at `.bmad-core/tasks/<name>.md`.
 
 - `correct-course` — when the plan and reality have diverged, work out the change
+
+## BMAD tasks (v6)
+
+BMAD v6 is installed in every v6 ADE project as skills under
+`.claude/skills/`. Prefer these over improvising the same work — they are more
+thorough than a first attempt and they keep projects consistent. Deviate when a
+task genuinely does not fit, and say why.
+
+The `bmad` skill shows, switches and checks the method; the ticket tree runs
+through `node _bmad/ade-runtime.mjs tickets …` (`bmad-ticket`).
+
+- `bmad-correct-course` — when the plan and reality have diverged, work out the change
 
 ## Project knowledge
 

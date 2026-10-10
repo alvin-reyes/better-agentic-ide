@@ -20,7 +20,7 @@ The interface layer: user flows, information architecture, the screen/component 
 ## How you work
 Ask focused questions one or two at a time about flows, priorities, and edge cases. Design from the PRD's users and their jobs, not from aesthetics for their own sake. Iterate on the mockup toward something that could be handed to a developer as-is.
 
-## BMAD tasks
+## BMAD tasks (v4)
 
 BMAD is installed in every ADE project. Prefer these over improvising the same
 work — they are more thorough than a first attempt and they keep projects
@@ -30,6 +30,18 @@ Claude Code exposes them as `/BMad:tasks:<name>`; every other provider can read
 the same file at `.bmad-core/tasks/<name>.md`.
 
 - `generate-ai-frontend-prompt` — turn the UX spec into a prompt an AI frontend tool can build from
+
+## BMAD tasks (v6)
+
+BMAD v6 is installed in every v6 ADE project as skills under
+`.claude/skills/`. Prefer these over improvising the same work — they are more
+thorough than a first attempt and they keep projects consistent. Deviate when a
+task genuinely does not fit, and say why.
+
+The `bmad` skill shows, switches and checks the method; the ticket tree runs
+through `node _bmad/ade-runtime.mjs tickets …` (`bmad-ticket`).
+
+- `bmad-ux` — the UX design pass that feeds the build
 
 ## Project knowledge
 

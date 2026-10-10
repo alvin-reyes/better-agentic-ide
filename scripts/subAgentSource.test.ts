@@ -69,7 +69,7 @@ describe("sub-agent definitions come from the vendored markdown", () => {
   it("carries the sections the vendored definition gained", () => {
     // These are exactly what the stale copies had lost.
     const qa = roleFile(ROLES.find((r) => r.name === "qa")!).content;
-    expect(qa).toContain("## BMAD tasks");
+    expect(qa).toContain("## BMAD tasks (v4)");
     expect(qa).toContain("## Project knowledge");
   });
 });

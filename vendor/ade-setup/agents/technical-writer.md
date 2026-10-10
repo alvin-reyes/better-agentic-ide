@@ -11,7 +11,7 @@ Keep documentation in sync with what shipped, not with what was originally plann
 - `docs/**`
 - `README.md`
 
-## BMAD tasks
+## BMAD tasks (v4)
 
 BMAD is installed in every ADE project. Prefer these over improvising the same
 work — they are more thorough than a first attempt and they keep projects
@@ -22,6 +22,20 @@ the same file at `.bmad-core/tasks/<name>.md`.
 
 - `document-project` — produce documentation for a codebase that has none
 - `index-docs` — build and maintain the index over docs/
+
+## BMAD tasks (v6)
+
+BMAD v6 is installed in every v6 ADE project as skills under
+`.claude/skills/`. Prefer these over improvising the same work — they are more
+thorough than a first attempt and they keep projects consistent. Deviate when a
+task genuinely does not fit, and say why.
+
+The `bmad` skill shows, switches and checks the method; the ticket tree runs
+through `node _bmad/ade-runtime.mjs tickets …` (`bmad-ticket`).
+
+- `bmad-spec` — condense a codebase into a short spec (v4's `document-project`)
+- The docs index has no core v6 equivalent — keep maintaining `docs/` indexes
+  by the convention this role used under v4
 
 ## Project knowledge
 
