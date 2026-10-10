@@ -198,4 +198,57 @@ describe("buildBoardV6", () => {
     );
     await expect(buildBoardV6("/p", fs)).rejects.toThrow(/active initiative folder not found/);
   });
+
+  it("groups tickets under their epics and passes the tree's problems through", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", oneTicket("draft"));
+    const board = await buildBoardV6("/p", fs);
+    expect(board.epics).toHaveLength(1);
+    expect(board.epics![0].refs).toEqual(["1.1"]);
+    expect(board.epics![0].title).toBeTruthy();
+    expect(Array.isArray(board.problems)).toBe(true);
+    expect(board.noInitiative).toBeUndefined();
+  });
+
+  it("says when there is no active initiative", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/_bmad");
+    await fs.writeText("/p/_bmad/config.toml", '[core]\nproject_name = "p"\noutput_folder = "{project-root}/_bmad-output"\n');
+    const board = await buildBoardV6("/p", fs);
+    expect(board.noInitiative).toBe(true);
+    expect(board.epics).toEqual([]);
+  });
+
+  it.each(["draft", "ready-for-dev"])("a %s ticket with no approval file is draft and not dispatchable", async (status) => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", oneTicket(status));
+    const v = (await buildBoardV6("/p", fs)).stories[0];
+    expect(v.state).toBe("draft");
+    expect(v.dispatchable).toBe(false);
+  });
+
+  it.each(["draft", "ready-for-dev"])("a %s ticket with an approval file is approved and dispatchable", async (status) => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", oneTicket(status));
+    await fs.mkdir("/p/.ade/approvals");
+    await fs.writeText("/p/.ade/approvals/1.1", "2026-10-10\n");
+    const v = (await buildBoardV6("/p", fs)).stories[0];
+    expect(v.state).toBe("approved");
+    expect(v.dispatchable).toBe(true);
+  });
+
+  it("an approval file does not change a ticket already past draft", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", oneTicket("in-progress"));
+    await fs.mkdir("/p/.ade/approvals");
+    await fs.writeText("/p/.ade/approvals/1.1", "2026-10-10\n");
+    expect((await buildBoardV6("/p", fs)).stories[0].state).toBe("in-progress");
+  });
+
+  it("never appends or deletes, so the panel's Fs can refuse both", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", oneTicket("done"));
+    const strict = { ...fs, append: async () => { throw new Error("append"); }, delete: async () => { throw new Error("delete"); } };
+    await expect(buildBoardV6("/p", strict)).resolves.toBeDefined();
+  });
 });

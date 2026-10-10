@@ -3,6 +3,7 @@ import { ticketView } from "./ticketView";
 import { findGates } from "./gateDiscovery";
 import { parseGate } from "./bmadGates";
 import { executionComplete } from "./storyState";
+import type { StoryView } from "./storyState";
 import type { Artifact, ArtifactId } from "./bmadArtifacts";
 import type { BmadPaths } from "./bmadConfig";
 import type { BoardState, Stage, StageId } from "../stores/stageBoardStore";
@@ -22,6 +23,26 @@ import { joinPath, normalizePath, pathBasename } from "./bmadRuntime/paths";
  *  - Audit: at least one gate file, or a plan with a `## Code Review` section.
  *  - Execution and Review: every ticket done — an empty tree is never done.
  */
+
+/**
+ * ADE's record that a person approved a ticket: one file per ref holding the
+ * date. v6 has no human approval status — `ready-for-dev` is written by agents
+ * when their own plan is done — so the human gate lives in `.ade/`, beside the
+ * verification gates ADE also owns.
+ */
+export const APPROVALS_DIR = ".ade/approvals";
+
+async function approvedRefs(projectRoot: string, fs: Fs): Promise<Set<string>> {
+  const dir = joinPath(projectRoot, APPROVALS_DIR);
+  if (!(await fs.exists(dir))) return new Set();
+  return new Set(await fs.list(dir));
+}
+
+/** A draft ticket a person approved is approved, and may be dispatched. */
+function withApproval(v: StoryView, approved: Set<string>): StoryView {
+  if (v.state !== "draft" || !approved.has(v.story.id)) return v;
+  return { ...v, state: "approved", dispatchable: true };
+}
 
 const NO_INITIATIVE = /^no active initiative\b/;
 const CODE_REVIEW = /^##[^\S\n]+Code Review\b/im;
@@ -86,8 +107,9 @@ export async function buildBoardV6(root: string, fs: Fs): Promise<BoardState> {
   const gates = (await findGates(projectRoot, "v6", fs)).map((g) => parseGate(g.file, g.yaml));
   const tickets = tree?.tickets ?? [];
   const epics = tree?.epics ?? [];
+  const approved = await approvedRefs(projectRoot, fs);
   const views = tickets
-    .map((t) => ticketView(t, gates))
+    .map((t) => withApproval(ticketView(t, gates), approved))
     .sort((a, b) => a.story.id.localeCompare(b.story.id, undefined, { numeric: true }));
 
   const store = tree ? relativeTo(projectRoot, tree.initiative) : "";
@@ -160,6 +182,13 @@ export async function buildBoardV6(root: string, fs: Fs): Promise<BoardState> {
     stages,
     unmatchedGates: spare.filter((g) => !storyIds.has(g.storyId)),
     supersededGates: spare.filter((g) => storyIds.has(g.storyId)),
+    epics: epics.map((e) => ({
+      slug: e.slug,
+      title: e.title,
+      refs: tickets.filter((t) => t.epic === e.slug).map((t) => t.id),
+    })),
+    problems: tree?.problems ?? [],
+    ...(tree ? {} : { noInitiative: true as const }),
     currentStage,
     usedDefaults: false,
   };

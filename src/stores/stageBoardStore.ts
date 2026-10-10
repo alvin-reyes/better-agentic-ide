@@ -56,6 +56,12 @@ export interface BoardState {
    * list above.
    */
   supersededGates: Gate[];
+  /** v6 only: the epics in the tree's order, with their tickets' refs, for grouping rows. */
+  epics?: { slug: string; title: string; refs: string[] }[];
+  /** v6 only: what the ticket tree flags as needing a fix. */
+  problems?: string[];
+  /** v6 only: the project has no active initiative yet, so the board is empty for that reason. */
+  noInitiative?: true;
   /** The first incomplete stage. */
   currentStage: StageId;
   usedDefaults: boolean;
@@ -70,6 +76,9 @@ const STAGES: StageSpec[] = [
   { id: "execution", label: "Execution", phase: "Dev cycle", evidence: [], optional: false },
   { id: "review", label: "Review", phase: "Dev cycle", evidence: [], optional: false },
 ];
+
+/** The five stages in order, for code that steps between them. */
+export const STAGE_ORDER: StageId[] = STAGES.map((s) => s.id);
 
 export function buildBoard(input: {
   config: string | null;
