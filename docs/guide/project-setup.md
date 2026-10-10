@@ -8,12 +8,18 @@ description: How ADE sets up each project with BMAD, the "verified, not vibed" m
 
 The first time ADE opens a project, it adds whatever the project is missing:
 
-- **BMAD**: the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) in `.bmad-core/` (tasks, checklists, templates, workflows and reference data), plus the `/BMad:tasks:` slash commands for Claude Code. Its personas are not installed; the roles in `.claude/agents/` cover those jobs once.
+- **BMAD**: the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD). By default that is **v6**: its skills in `.claude/skills/`, a `_bmad/` folder with the config and `ade-runtime.mjs`, an empty `_bmad-output/` for tickets, and a `.ade/methodology` file recording the choice. Verification gates are ADE's own, in `.ade/gates/`. Nothing needs Python or `uv`; the skills call a bundled Node script. Its personas are not installed; the roles in `.claude/agents/` cover those jobs once.
 - **The ADE methodology**: the rules in `.ade/rules.md`, loaded from `CLAUDE.md`, plus a context store, a decision log and a session journal under `.ade/`, and an `llms.txt`. See [The methodology](#the-methodology) below.
 - **Eight core roles** as Claude Code sub-agents in `.claude/agents/`: product manager, architect, designer, scrum master, developer, QA, DevOps and adversarial reviewer.
 - **Agents for your stack**: see [By project type](#by-project-type).
 
 **Only missing files are written.** A file that already exists is left alone. If the project already has a `CLAUDE.md`, ADE adds one import line that loads `.ade/rules.md` and never replaces the file.
+
+## v6 or v4
+
+When you open or create a project that has neither BMAD on disk, ADE asks which to use: **BMAD v6 (default)** or **BMAD v4**, the classic `.bmad-core/` with the `/BMad:tasks:` slash commands for Claude Code (v4 only). The answer is written to `.ade/methodology`.
+
+Existing projects are not asked. One with `.ade/methodology` follows it; one with `.bmad-core/` and no marker is treated as v4 and stays that way. A v4 project keeps its QA gates in `docs/qa/gates/`; v6 projects use `.ade/gates/`, same format.
 
 ## When it runs
 
@@ -77,7 +83,11 @@ llms.txt                      short project summary for LLMs
 .ade/context/                 context store: shared interfaces, types and contracts
 .ade/context/decisions/       decision log (ADRs, NNNN-slug.md)
 .ade/session.md               session journal: what was planned, built and shipped
-.bmad-core/                   BMAD
+.ade/methodology              v6 or v4
+.ade/gates/                   verification gates, one per ticket (v6)
+_bmad/, _bmad-output/         BMAD v6 config, runtime and tickets
+.claude/skills/               BMAD v6 skills
+.bmad-core/                   BMAD v4, only on v4 projects
 .claude/agents/               the sub-agents
 docs/prd.md, docs/architecture.md, docs/ux-spec.md, docs/ops.md, docs/stories/
                               written by the agents as the project goes

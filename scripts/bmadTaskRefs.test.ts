@@ -75,4 +75,15 @@ describe("BMAD task references", () => {
     expect(v6).toContain(".ade/gates/<ticket-id>.yml");
     expect(v6).toContain("PASS|CONCERNS|FAIL|WAIVED");
   });
+
+  it("the guide never sends v6 users to v4 task files", () => {
+    for (const f of ["../docs/guide/agents.md", "../docs/guide/settings.md", "../docs/guide/project-setup.md"]) {
+      const body = readFileSync(join(__dirname, f), "utf8");
+      for (const line of body.split("\n")) {
+        if (line.includes(".bmad-core/tasks/") || line.includes("/BMad:tasks:")) {
+          expect(line.includes("v4"), `${f}: v4-only path without v4 context`).toBe(true);
+        }
+      }
+    }
+  });
 });

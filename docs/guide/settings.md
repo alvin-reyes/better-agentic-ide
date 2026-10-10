@@ -24,6 +24,10 @@ Your theme is painted before the first frame is drawn, so starting ADE never fla
 - **Cursor**: bar, block or underline, with optional blink
 - **Scrollback**: from 1,000 to 100,000 lines
 
+## Project setup
+
+**Set up every project I open** (*Settings → Terminal*) is on by default. New projects are asked whether to use BMAD v6 or v4; see [Project setup]({{ '/guide/project-setup/' | relative_url }}#v6-or-v4).
+
 ## Workspace
 
 Rename any open tab, and save the current set of tabs as a named workspace. **Load** reopens a workspace's tabs.
