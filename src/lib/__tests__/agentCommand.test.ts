@@ -199,6 +199,44 @@ describe("buildLaunchCommand", () => {
   });
 });
 
+describe("buildLaunchCommand with a task", () => {
+  it("passes the task to claude as its opening prompt, quoted", () => {
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "Implement story 1.2 (docs/stories/1.2.cart.md)" });
+    expect(r).toEqual({
+      kind: "command",
+      command: "claude --append-system-prompt-file '/r/dev.md' 'Implement story 1.2 (docs/stories/1.2.cart.md)'",
+    });
+  });
+
+  it("passes it to deepseek the same way, since that is claude underneath", () => {
+    const r = buildLaunchCommand("deepseek", "/r/dev.md", { task: "go" });
+    expect(r.kind === "command" && r.command.endsWith("--append-system-prompt-file '/r/dev.md' 'go'")).toBe(true);
+  });
+
+  it("quotes a task carrying a single quote so it cannot end the argument", () => {
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "Fix O'Brien's cart" });
+    expect(r.kind === "command" && r.command.endsWith(`'Fix O'\\''Brien'\\''s cart'`)).toBe(true);
+  });
+
+  it("never puts a raw line break in the command, which would submit it early", () => {
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "line one\r\nline two\nthree" });
+    expect(r.kind === "command" && r.command).not.toMatch(/[\r\n]/);
+    expect(r.kind === "command" && r.command.endsWith("'line one line two three'")).toBe(true);
+  });
+
+  it("reports ollama as unable to take a task rather than running it one-shot", () => {
+    const r = buildLaunchCommand("ollama", "/r/dev.Modelfile", { task: "go" });
+    expect(r.kind).toBe("unsupported");
+  });
+
+  it("leaves the command unchanged without a task", () => {
+    expect(buildLaunchCommand("claude", "/r/dev.md", {})).toEqual({
+      kind: "command",
+      command: "claude --append-system-prompt-file '/r/dev.md'",
+    });
+  });
+});
+
 describe("supportsRoleDelivery", () => {
   it("reports deepseek as supported, because it is claude underneath", () => {
     expect(supportsRoleDelivery("deepseek")).toBe(true);

@@ -8,6 +8,11 @@ export interface LaunchOptions {
   /** Identifies the derived Ollama model, so a role keeps the same one. */
   roleId?: string;
   domainId?: string;
+  /**
+   * The agent's opening task, sent as its first prompt. Line breaks are
+   * collapsed: a newline typed into the PTY would submit the command early.
+   */
+  task?: string;
 }
 
 export type LaunchResult =
@@ -32,7 +37,8 @@ export const DEEPSEEK_MODEL = "deepseek-v4-pro";
 /** The claude invocation both the claude and deepseek providers launch. */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
-  return `claude${flags} --append-system-prompt-file ${quotedPath}`;
+  const task = opts.task ? ` ${shellQuote(opts.task.replace(/[\r\n]+/g, " "))}` : "";
+  return `claude${flags} --append-system-prompt-file ${quotedPath}${task}`;
 }
 
 /**
@@ -96,6 +102,15 @@ export function buildLaunchCommand(
     }
 
     case "ollama": {
+      // `ollama run <model> <prompt>` answers once and exits: an agent sent
+      // a task that way would never become the interactive session it should.
+      if (opts.task) {
+        return {
+          kind: "unsupported",
+          reason: "Ollama cannot start an interactive session with an opening task. Launch the developer from the agent picker and paste the story path.",
+        };
+      }
+
       // `ollama run` has no system-prompt flag; the only way to start an
       // interactive session with one is to derive a model whose Modelfile
       // carries it. ollamaModel is free text from Settings, so it is quoted
