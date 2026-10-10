@@ -57,12 +57,11 @@ project (a home directory, no cwd yet) shows "No project in this pane".
 | `delete` | throws "not available in the board panel" |
 
 The two new commands are one-liners in `src-tauri/src/lib.rs` with Rust unit
-tests. `append` and `delete` get no commands: nothing the panel runs calls them
-(the runtime appends only in `memlog`, and deletes only when undoing a failed
-`mirror`), and a generic delete command in the webview is a capability the
-panel has no use for. A test runs `tickets mark` on a repo-store fixture
-through an `Fs` whose `append` and `delete` throw, so a runtime change that
-starts calling them fails the build instead of the click.
+tests. `append` and `delete` get no commands: the panel only reads through the
+engines and writes whole files, and a generic delete command in the webview is
+a capability it has no use for. `buildBoardV6` is tested through an `Fs` whose
+`append` and `delete` throw, so an engine change that starts calling them fails
+the build instead of the panel.
 
 `list_directory` skips `node_modules`, `.git`, `target` and `dist`; that is
 acceptable for every path the engines walk (`_bmad-output/`, `docs/`,
@@ -72,11 +71,11 @@ acceptable for every path the engines walk (`_bmad-output/`, `docs/`,
 
 `BoardState` today has a flat `stories` list and no place for the v6 ticket
 tree's `problems`, and an empty v6 board cannot say *why* it is empty. Three
-optional fields, filled only by `buildBoardV6`:
+optional fields, filled only by `buildBoardV6`, plus the v6 approvals below:
 
-- `epics?: { id: string; title: string }[]`, in the tree's order. Rows group
-  under their epic by the ref's epic id; a ticket whose epic is not listed
-  goes under "Other".
+- `epics?: { slug: string; title: string }[]`, in the tree's order. Rows
+  group under the epic whose `slug` is the ticket's `parent` folder; a ticket
+  whose folder is not a listed epic goes under "Other".
 - `problems?: string[]`, the tree's `problems` passed through.
 - `noInitiative?: true` when the tree read failed with "no active initiative".
 
@@ -126,7 +125,7 @@ Top to bottom:
    tab) or missing.
 3. **Work items.** v4: stories. v6: tickets grouped under epic headers. Each
    row shows its title and state:
-   - `draft`, `approved` / `ready-for-dev`, `in-progress`, `review`
+   - `draft`, `approved`, `in-progress`, `review` (v6 shows its own status word, e.g. `ready-for-dev`, beside the state)
    - **done ✓**: done with a PASS gate behind it
    - **waived**: done on a WAIVED gate, its reason always visible
    - **claimed**: says done, no PASS or WAIVED gate
@@ -151,25 +150,33 @@ written in the background.
 
 ### Approve
 
-- **v4:** rewrites the story's `Status: Draft` line to `Status: Approved`.
-  Every other byte of the file is unchanged, line endings included. The
-  rewrite is in `src/lib/storyStatus.ts` and is tested on its own.
-- **v6:** runs the runtime port's `tickets mark <epic dir> <id> ready-for-dev`
-  over `tauriFs`, the same command the agents use, so the panel and the
-  agents write tickets identically. `mark` refuses any store but `repo`
-  ("change status through the store's write verb"), so on a tracker-backed
-  project the button is replaced by "Approve in <store>", read from the same
-  store config.
+- **v4:** rewrites the story's status, the first non-empty line under
+  `## Status`, from `Draft` to `Approved`. Every other byte of the file is
+  unchanged, line endings included. The rewrite is in `src/lib/storyStatus.ts`
+  and is tested on its own.
+- **v6:** writes **`.ade/approvals/<ref>`**, one line holding the ISO date.
+  The ticket and its plan are not touched.
+
+  v6 has no human approval status. `ready-for-dev` is written by agents
+  (`bmad-build-auto` sets it when its own plan is done), which is why
+  `ticketView` already maps it to Draft; marking it from the panel would make
+  the human gate indistinguishable from an agent finishing a plan. ADE owns
+  the approval the way it owns the gate, in `.ade/`. `buildBoardV6` reads
+  `.ade/approvals/`: a ticket with an approval file whose state is draft
+  renders as **approved** and is dispatchable. Past `ready-for-dev`
+  (in-progress, review, done) a ticket is dispatchable as a v4 story past
+  Approved is, so a ticket an agent already started is not stranded.
 
 The button appears only on draft rows. A failed write leaves the row as it was
 and shows the error on it.
 
 ### Dispatch
 
-On approved / `ready-for-dev` rows only. **Nothing below approved can be
+On approved rows and later only. **Nothing below approved can be
 dispatched**, and a test reintroduces the violation to prove it fails.
-Dispatch opens a new terminal pane in the project root and launches the
-developer role through the existing agent-launch path with the story file or
+Dispatch opens a new terminal tab in the project root and launches the
+developer role through the agent picker's launch path, moved out of
+`AgentPicker.tsx` into `src/lib/agentLaunch.ts` so both use one copy, with the story file or
 ticket ref as its opening task. No prompt is typed for the user.
 
 `buildLaunchCommand` cannot carry a task today: `LaunchOptions` has none. It
@@ -200,6 +207,11 @@ half of the gate.
 - **No file, or an unreadable or unknown value:** the shown stage is the
   evidence-derived one, exactly as today, so existing projects do not jump
   backwards when this ships. An invalid file also shows a one-line warning.
+  Without a valid file there is nothing to advance from, so instead of Next
+  the rail offers **Track stage**, which writes the shown stage to
+  `.ade/stage`; from then on the project moves only on Next and Back. Setup
+  never writes the file: it adds missing files to projects it has already
+  set up, and writing the first stage there would send them backwards.
 - Execution completes only when every story or ticket is done (gated) or
   dropped. That rule is the engines' and is not restated here.
 
@@ -220,7 +232,8 @@ Tauri.
 - B, each verified by reintroducing the violation:
   - nothing dispatches below approved
   - Next does not appear without the evidence on disk
-  - the v4 approve rewrite changes only the Status line
+  - the v4 approve rewrite changes only the status line under `## Status`
+  - a v6 ticket at draft with no approval file is not dispatchable
   - a missing or garbled `.ade/stage` falls back to evidence
   - a `.ade/stage` ahead of the evidence renders as claimed
   - Dispatch passes the ref as the task, and a provider without an initial
