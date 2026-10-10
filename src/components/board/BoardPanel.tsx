@@ -18,7 +18,52 @@ interface Props {
   onClose(): void;
 }
 
-/** Watch the board's folders while they exist; any change schedules a rebuild. */
+/** How often a missing candidate folder is looked for again while the panel is open. */
+export const MISSING_FOLDER_RECHECK_MS = 5000;
+
+/**
+ * Which of the board's folders exist. Recomputed after each rebuild
+ * (`rebuilt` changes), and, while any is missing, every few seconds: a folder
+ * that cannot be watched yet cannot report its own creation, and the root is
+ * never watched. A folder that appears schedules a rebuild.
+ */
+function useExistingFolders(candidates: string[], rebuilt: unknown, onAppeared: () => void): string[] {
+  const key = candidates.join("\n");
+  const [found, setFound] = useState<{ key: string; dirs: string[] }>({ key: "", dirs: [] });
+
+  useEffect(() => {
+    let live = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const check = (dirs: string[]) =>
+      Promise.all(dirs.map((d) => tauriFs.exists(d).catch(() => false))).then((ok) => dirs.filter((_, i) => ok[i]));
+    const publish = (dirs: string[]) =>
+      setFound((prev) => (prev.key === key && prev.dirs.join("\n") === dirs.join("\n") ? prev : { key, dirs }));
+
+    check(candidates).then((present) => {
+      if (!live) return;
+      publish(present);
+      if (present.length === candidates.length) return;
+      timer = setInterval(async () => {
+        const missing = candidates.filter((d) => !present.includes(d));
+        const appeared = await check(missing);
+        if (!live || appeared.length === 0) return;
+        present = candidates.filter((d) => present.includes(d) || appeared.includes(d));
+        publish(present);
+        onAppeared();
+        if (present.length === candidates.length && timer) clearInterval(timer);
+      }, MISSING_FOLDER_RECHECK_MS);
+    });
+    return () => {
+      live = false;
+      if (timer) clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the folder list and each rebuild
+  }, [key, rebuilt]);
+
+  return found.key === key ? found.dirs : [];
+}
+
+/** Watch the given folders; any change schedules a rebuild. Re-registers only when the list changes. */
 function useBoardWatch(dirs: string[], onChange: () => void) {
   const key = dirs.join("\n");
   useEffect(() => {
@@ -26,7 +71,7 @@ function useBoardWatch(dirs: string[], onChange: () => void) {
     const ids: number[] = [];
     (async () => {
       for (const dir of dirs) {
-        if (cancelled || !(await tauriFs.exists(dir).catch(() => false))) continue;
+        if (cancelled) break;
         const channel = new Channel<{ type: string }>();
         channel.onmessage = () => { if (!cancelled) onChange(); };
         const id = await invoke<number>("watch_directory", { dir, extensions: WATCH_EXTENSIONS, onEvent: channel }).catch(() => null);
@@ -74,7 +119,8 @@ export default function BoardPanel({ cwd, onClose }: Props) {
     () => (root && methodology ? watchTargets(root, methodology, board?.paths ?? null) : []),
     [root, methodology, board?.paths],
   );
-  useBoardWatch(dirs, scheduleRefresh);
+  const existing = useExistingFolders(dirs, board, scheduleRefresh);
+  useBoardWatch(existing, scheduleRefresh);
 
   const actions: BoardActions = useMemo(() => ({
     onOpen: (path) => { if (root) openFileFromTerminal(joinPath(root, path)); },

@@ -1,11 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 
 const disk = vi.hoisted(() => ({
   /** Folders that say what they are on, as project_setup_status reports. */
   bmad: {} as Record<string, "v4" | "v6">,
   /** project_root by path; default "/p". */
   roots: {} as Record<string, string>,
+  /** Folders that exist. */
+  exists: new Set<string>(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -14,7 +17,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (cmd === "project_setup_status") {
       return { isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: disk.bmad[args.root as string] ?? null };
     }
-    if (cmd === "path_exists") return false;
+    if (cmd === "path_exists") return disk.exists.has(args.path as string);
     if (cmd === "watch_directory") return 1;
     return null;
   }),
@@ -38,6 +41,67 @@ import { buildBoard } from "../../stores/stageBoardStore";
 beforeEach(() => {
   disk.bmad = {};
   disk.roots = {};
+  disk.exists = new Set();
+  vi.mocked(invoke).mockClear();
+});
+
+const watched = () =>
+  vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "watch_directory").map(([, args]) => (args as { dir: string }).dir);
+const existsChecks = () => vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "path_exists").length;
+const v4Board = () => buildBoard({ config: null, artifactExists: () => false, stories: [], gates: [] });
+
+describe("BoardPanel watching", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("watches only folders that exist, and picks up one created before the next rebuild", async () => {
+    disk.exists = new Set(["/p/.bmad-core"]);
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await waitFor(() => expect(watched()).toContain("/p/.bmad-core"));
+    expect(watched()).not.toContain("/p/.ade");
+
+    // An agent creates .ade/; the next rebuild produces a new board.
+    disk.exists.add("/p/.ade");
+    act(() => { useBoardPanel.setState({ board: v4Board() }); });
+    await waitFor(() => expect(watched()).toContain("/p/.ade"));
+  });
+
+  it("does not re-register when a rebuild leaves the existing folders unchanged", async () => {
+    disk.exists = new Set(["/p/.bmad-core", "/p/.ade", "/p/docs"]);
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await waitFor(() => expect(watched()).toHaveLength(3));
+    act(() => { useBoardPanel.setState({ board: v4Board() }); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(watched()).toHaveLength(3);
+  });
+
+  it("re-checks a missing folder every 5 s, watches it once it appears and schedules a refresh", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const scheduleRefresh = vi.fn();
+    disk.exists = new Set(["/p/.bmad-core", "/p/.ade"]);
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false, scheduleRefresh });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await waitFor(() => expect(watched()).toContain("/p/.ade"));
+    expect(watched()).not.toContain("/p/docs");
+
+    disk.exists.add("/p/docs");
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    await waitFor(() => expect(watched()).toContain("/p/docs"));
+    expect(scheduleRefresh).toHaveBeenCalled();
+  });
+
+  it("stops re-checking once the panel closes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    disk.exists = new Set(["/p/.bmad-core"]);
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    const { unmount } = render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await waitFor(() => expect(watched()).toContain("/p/.bmad-core"));
+    unmount();
+    const before = existsChecks();
+    await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
+    expect(existsChecks()).toBe(before);
+  });
 });
 
 describe("BoardPanel", () => {
