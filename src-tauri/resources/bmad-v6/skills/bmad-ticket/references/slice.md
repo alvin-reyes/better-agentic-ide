@@ -91,7 +91,7 @@ A split at inception is a second epic folder and envelope, a new `[[epic]]` in t
 
 On approval, write the whole set into the epic's `tickets.toml`. No leaf file is written until its entry is pulled.
 
-Then run `uv run {skill-root}/scripts/tickets.py --project-root {project-root} status <initiative folder>`. In `epics`, this epic's `blocks` lists the tickets in other epics whose `after` names the whole epic; replace each with the entry that delivers what it waits for. Clear any `unpinned_after`, `undeclared_after`, or `order_conflict` it reports as `board.md` says. Publication follows `board.md`.
+Then run `node {project-root}/_bmad/ade-runtime.mjs tickets --skill-root {skill-root} --project-root {project-root} status <initiative folder>`. In `epics`, this epic's `blocks` lists the tickets in other epics whose `after` names the whole epic; replace each with the entry that delivers what it waits for. Clear any `unpinned_after`, `undeclared_after`, or `order_conflict` it reports as `board.md` says. Publication follows `board.md`.
 
 Then tell the user the entries are ready to build, and what that means for how they build. With `bmad-build`, each ticket is refined during the build: the builder questions the user and writes the criteria itself, so refining here repeats that work. With `bmad-build-auto`, a loop, or a factory, nobody answers questions during the build and the entry is all the builder gets: recommend one more review of the sequence and of each entry now (`ticket.md`), and offer the checkpoints where none are set.
 

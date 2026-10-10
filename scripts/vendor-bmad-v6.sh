@@ -17,6 +17,7 @@ rm -rf "$DEST/skills"
 cp -R "$TMP/bmad/skills" "$DEST/skills"
 echo "$SHA $LABEL" > "$DEST/VERSION"
 
-npx tsx "$ROOT/scripts/patchBmadSkills.ts" "$DEST/skills"
+# --no-install: tsx is a devDependency; fail fast rather than fetching at vendor time.
+npx --no-install tsx "$ROOT/scripts/patchBmadSkills.ts" "$DEST/skills"
 cd "$ROOT" && npx vitest run scripts/__tests__/patchBmadSkills.test.ts
 echo "vendored $SHA ($LABEL) at $DEST"

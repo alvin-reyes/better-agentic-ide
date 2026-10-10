@@ -2,7 +2,7 @@
 
 Operations on existing tickets. Read an existing ticket before changing it; if it has been published to a tracker, query its current remote state too.
 
-`tickets.py` below is `uv run {skill-root}/scripts/tickets.py --project-root {project-root}`. `tickets.py <command> --help` gives a command's arguments and output keys.
+`tickets.py` below is `node {project-root}/_bmad/ade-runtime.mjs tickets --skill-root {skill-root} --project-root {project-root}`. `tickets.py <command> --help` gives a command's arguments and output keys.
 
 ## Reading the tree
 

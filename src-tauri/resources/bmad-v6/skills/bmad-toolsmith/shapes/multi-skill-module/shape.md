@@ -30,4 +30,4 @@ When the read-back registers one skill as a member of a record that exists, the 
 - Roster `[[members]]`: `code`, `skill`, `name`, `icon`, `title`, `persona`, copied from the agent's `customize.toml`. A member without `skill` is a guest who exists only in `[[groups]]`.
 - Help has one reader, the `bmad` help agent, answering a user: what each skill gives, when to recommend it, what to offer next, where output lands and which `bmad setup` answer sets it. Leave out install mechanics and manifest keys, which it cannot act on while answering.
 
-Fill a template with `uv run {skill-root}/scripts/process_template.py <template> -o <dest> --var key=value ... --true <condition> ...`; a `{if-X}...{/if-X}` block survives only when `--true X` is given, and `{project-root}` passes through untouched.
+Fill a template with `node {project-root}/_bmad/ade-runtime.mjs process_template --skill-root {skill-root} <template> -o <dest> --var key=value ... --true <condition> ...`; a `{if-X}...{/if-X}` block survives only when `--true X` is given, and `{project-root}` passes through untouched.

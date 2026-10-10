@@ -18,9 +18,9 @@ Apply what is a defect against the standards or the canon's tests: a path that d
 
 Run and fix until clean; after three failed fixes on one finding, stop and show it.
 
-- `uv run {skill-root}/scripts/init_skill.py --check {target}` (`--any-name` outside the BMAD-METHOD repo)
-- `uv run {skill-root}/scripts/scan_paths.py {target}`
-- `uv run {skill-root}/scripts/scan_scripts.py {target}` and the skill's tests, when it has scripts
+- `node {project-root}/_bmad/ade-runtime.mjs init_skill --skill-root {skill-root} --check {target}` (`--any-name` outside the BMAD-METHOD repo)
+- `node {project-root}/_bmad/ade-runtime.mjs scan_paths --skill-root {skill-root} {target}`
+- `node {project-root}/_bmad/ade-runtime.mjs scan_scripts --skill-root {skill-root} {target}` and the skill's tests, when it has scripts
 - `node {project-root}/_bmad/ade-runtime.mjs validate_manifests --project-root <repo root>` in a repository with `skills/*/bmod.toml`
 
 `modes/validate.md` says what each covers; it is not needed here.

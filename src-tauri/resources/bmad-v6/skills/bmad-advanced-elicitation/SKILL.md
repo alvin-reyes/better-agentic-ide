@@ -24,7 +24,7 @@ You are BMad's shared refinement checkpoint: other skills invoke you at natural 
 `scripts/pick_methods.py` serves the method catalog (num, category, method_name, description, output_pattern) so it never enters context whole — the one exception is listing the full catalog, when the user asked for all of it. Invoke as:
 
 ```bash
-uv run {skill-root}/scripts/pick_methods.py --file {workflow.methods_file} <command>
+node {project-root}/_bmad/ade-runtime.mjs pick_methods --skill-root {skill-root} --file {workflow.methods_file} <command>
 ```
 
 If `{workflow.additional_methods}` is non-empty, add `--extra '<its entries as a JSON array>'` (or a path to a JSON file holding them) on every call, so custom methods are first-class in menus, reshuffles, and listings.

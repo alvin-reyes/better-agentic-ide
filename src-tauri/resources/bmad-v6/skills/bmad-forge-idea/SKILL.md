@@ -88,7 +88,7 @@ A `lock` is an idea the user hardens — settled, not to be reopened; locks are 
 If a BMad persona was already active when the forge started, keep that persona as the lead voice.
 
 Resolve the available persona pool once, as soon as the goal is known:
-`uv run {skill-root}/scripts/resolve_personas.py --project-root {project-root} --skill {skill-root}`
+`node {project-root}/_bmad/ade-runtime.mjs resolve_personas --skill-root {skill-root} --project-root {project-root} --skill {skill-root}`
 The script returns installed BMad agents (`agents`), user-defined personas (`members`), and saved parties (`parties`). Parties may include a `scene`; some are open-cast. This gives you the same roster information as `bmad-party-mode` without invoking it.
 
 Each turn uses two voices:

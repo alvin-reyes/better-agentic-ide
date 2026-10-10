@@ -4,7 +4,7 @@ Convert an old-format module into a bmod in place. The old format is a `<code>-s
 
 ## Read everything
 
-`{target}` is the module folder: the one holding the member skills and the setup skill, or for a one-skill module that skill's folder. Run `uv run {skill-root}/scripts/scan_legacy_module.py {target}` and read its JSON: `module` (code, version, greeting, agents), `config_keys` (key, prompt, default, user_setting, kind, unconvertible reasons), `help_rows`, `skills`, `legacy_reads` (every config read by skill, path and line), `setup_skill`, `files_to_delete`. Ask the user only for `update_source`, the pushed `github:<owner>/<repo>` or `github:<owner>/<repo>/<path>`. `{bmad_version}` is the `version` in the `bmod-core-tools` record installed beside `{skill-root}`; ask when it is not installed.
+`{target}` is the module folder: the one holding the member skills and the setup skill, or for a one-skill module that skill's folder. Run `node {project-root}/_bmad/ade-runtime.mjs scan_legacy_module --skill-root {skill-root} {target}` and read its JSON: `module` (code, version, greeting, agents), `config_keys` (key, prompt, default, user_setting, kind, unconvertible reasons), `help_rows`, `skills`, `legacy_reads` (every config read by skill, path and line), `setup_skill`, `files_to_delete`. Ask the user only for `update_source`, the pushed `github:<owner>/<repo>` or `github:<owner>/<repo>/<path>`. `{bmad_version}` is the `version` in the `bmod-core-tools` record installed beside `{skill-root}`; ask when it is not installed.
 
 ## The plan
 

@@ -31,7 +31,7 @@ When the user asks you to do the thinking without the conversation, the same gui
    - Script not found: BMad is not set up here. Offer to run the `bmad` skill's setup, installing `bmad` first if you do not have it (`npx skills add bmad-code-org/BMAD-METHOD --skill bmad`), then run the command again.
 
    Tickets are drafted under `{output_folder}/{active_initiative}/` — an initiative folder, or a backlog folder scoped however the user wants. Unset: offer to create the initiative folder, or a backlog folder, and record it as `active_initiative` under `[core]` in `{project-root}/_bmad/custom/config.user.toml`.
-2. Read the store config: `uv run {skill-root}/scripts/read_store.py --project-root {project-root} -k tickets` — the store, how to reach it, and its type and status maps. A project that has set up no store uses the repo store, and this still answers.
+2. Read the store config: `node {project-root}/_bmad/ade-runtime.mjs read_store --skill-root {skill-root} --project-root {project-root} -k tickets` — the store, how to reach it, and its type and status maps. A project that has set up no store uses the repo store, and this still answers.
 3. Resolve the customization: `node {project-root}/_bmad/ade-runtime.mjs resolve_customization --skill {skill-root} --project-root {project-root} -k workflow`. A `{workflow.<key>}` in a reference is that key's value in this result.
 4. Run `{workflow.activation_steps_prepend}`. Treat `{workflow.persistent_facts}` as foundational context for the session: entries prefixed `file:` are paths or globs under `{project-root}` to load, the rest are facts verbatim.
 5. Run `{workflow.activation_steps_append}`. When the requested operation ends, run `{workflow.on_complete}`.
@@ -56,11 +56,11 @@ A spec folder handed over by `bmad-spec` is the epic's requirement source: `cove
 | a ticket, a set, or a tree validated | `{skill-root}/references/validate.md` |
 | a tracker connected; the store reconfigured or switched | `{skill-root}/references/store-setup.md` |
 
-`tickets.py` in this skill is `uv run {skill-root}/scripts/tickets.py --project-root {project-root}`. On the repo store, for "what is ready" or "what is the status", run `tickets.py next` or `tickets.py status` first and answer from it: it covers the active initiative and `backlog/`. Open `references/board.md` to act on a row, or when `problems`, `drift`, `unpinned_after`, `undeclared_after`, or `order_conflict` comes back with something in it. On a tracker, open `references/board.md` first.
+`tickets.py` in this skill is `node {project-root}/_bmad/ade-runtime.mjs tickets --skill-root {skill-root} --project-root {project-root}`. On the repo store, for "what is ready" or "what is the status", run `tickets.py next` or `tickets.py status` first and answer from it: it covers the active initiative and `backlog/`. Open `references/board.md` to act on a row, or when `problems`, `drift`, `unpinned_after`, `undeclared_after`, or `order_conflict` comes back with something in it. On a tracker, open `references/board.md` first.
 
 ## Store operations
 
-`uv run {skill-root}/scripts/read_store.py --project-root {project-root} -k verbs.<name>` (repeat `-k`), then follow the verb as written. A verb holds the store's own commands; the rules every store shares are in `references/board.md`.
+`node {project-root}/_bmad/ade-runtime.mjs read_store --skill-root {skill-root} --project-root {project-root} -k verbs.<name>` (repeat `-k`), then follow the verb as written. A verb holds the store's own commands; the rules every store shares are in `references/board.md`.
 
 | Verb | For |
 |---|---|

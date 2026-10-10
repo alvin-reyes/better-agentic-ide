@@ -5,7 +5,7 @@ description: '{description}'
 Run the following command exactly once without changing the current working directory. Replace `{project-root}` with the absolute path to the project root and `{skill-root}` with the absolute path to this skill's directory:
 
 ```bash
-uv run --no-cache "{project-root}/_bmad/scripts/render_skill.py" --project-root "{project-root}" --skill "{skill-root}"
+node {project-root}/_bmad/ade-runtime.mjs render_skill --project-root "{project-root}" --skill "{skill-root}"
 ```
 
 - When the invocation names a {selector} ({the allowed values, and the words that mean each}), append `--set workflow.{selector}=<value>` to the command.

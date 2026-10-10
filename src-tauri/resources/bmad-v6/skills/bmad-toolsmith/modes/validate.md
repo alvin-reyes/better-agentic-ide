@@ -11,7 +11,7 @@ A path to a skill, a record folder, or a repository. A folder holding `module.ya
 Run them all, then report; do not stop at the first failure.
 
 - In a repository with `skills/*/bmod.toml`: `node {project-root}/_bmad/ade-runtime.mjs validate_manifests --project-root <repo>`. It covers manifests, membership, versions, retired names, help topics and the roster, and each message names its fix.
-- For each skill: `uv run {skill-root}/scripts/init_skill.py --check <skill>` (frontmatter, name, description, `[TODO:` left behind, `bmod.toml` parses; add `--any-name` outside BMAD-METHOD) and `uv run {skill-root}/scripts/scan_paths.py <skill>` (paths that do not resolve, bare `scripts/` calls, references into another skill, old-format names). `uv run {skill-root}/scripts/scan_scripts.py <skill>` when it has scripts, then run its tests.
+- For each skill: `node {project-root}/_bmad/ade-runtime.mjs init_skill --skill-root {skill-root} --check <skill>` (frontmatter, name, description, `[TODO:` left behind, `bmod.toml` parses; add `--any-name` outside BMAD-METHOD) and `node {project-root}/_bmad/ade-runtime.mjs scan_paths --skill-root {skill-root} <skill>` (paths that do not resolve, bare `scripts/` calls, references into another skill, old-format names). `node {project-root}/_bmad/ade-runtime.mjs scan_scripts --skill-root {skill-root} <skill>` when it has scripts, then run its tests.
 - When `evals/triggers.json` exists, offer a trigger eval once and invoke the `bmad-eval` skill in trigger mode on a yes.
 
 Only what the tools do not check is yours to judge:

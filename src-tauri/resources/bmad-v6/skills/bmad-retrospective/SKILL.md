@@ -6,7 +6,7 @@ description: 'Review a finished epic folder in the ticket tree against the evide
 Run the following command exactly once without changing the current working directory. Replace `{project-root}` with the absolute path to the project root and `{skill-root}` with the absolute path to this skill's directory:
 
 ```bash
-uv run --no-cache "{project-root}/_bmad/scripts/render_skill.py" --project-root "{project-root}" --skill "{skill-root}"
+node {project-root}/_bmad/ade-runtime.mjs render_skill --project-root "{project-root}" --skill "{skill-root}"
 ```
 
 - The command should print one line to stdout. `read and follow <rendered workflow.md>`: read that file and follow it. `HALT: <reason>`: report the reason and stop.

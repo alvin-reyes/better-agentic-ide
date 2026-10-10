@@ -48,7 +48,7 @@ uv run {skill-root}/scripts/run_evals.py \
 Trigger:
 
 ```
-uv run {skill-root}/scripts/run_triggers.py \
+node {project-root}/_bmad/ade-runtime.mjs run_triggers --skill-root {skill-root} \
   --skill-path <skill> --queries <queries-file> --output-dir <dir> \
   [--runs-per-query N]
 ```

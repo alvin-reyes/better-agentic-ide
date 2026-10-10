@@ -53,6 +53,16 @@ jobs:
           git -C /tmp/bmad checkout --quiet "$SHA"
           diff -r --exclude="*.md" src-tauri/resources/bmad-v6/skills /tmp/bmad/skills
           echo "vendored tree matches $SHA"
+      - name: No unpatched uv run call sites in vendored markdown
+        run: |
+          if grep -rn "uv run" src-tauri/resources/bmad-v6/skills/ --include="*.md" \
+            | grep -v -e "count_tokens.py" -e "prepass.py" -e "run_evals.py" -e "word_metrics.py" \
+                     -e "<name>.py" -e "uv run pytest" \
+                     -e "setup.py" -e "convert_cases.py" -e "aggregate_benchmark.py" \
+                     -e "init-sanctum.py" -e "{script}.py" -e "<path>" -e '`uv run`'; then
+            echo "unpatched uv run call site in vendored markdown" && exit 1
+          fi
+          echo "no unpatched call sites"
 
   backend:
     name: Backend (cargo test)

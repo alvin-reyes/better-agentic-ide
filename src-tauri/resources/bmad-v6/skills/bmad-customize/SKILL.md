@@ -31,7 +31,7 @@ Greet the user. If the user's invocation already names a target skill AND a spec
 ## Step 2: Discovery
 
 ```
-uv run {skill-root}/scripts/list_customizable_skills.py --project-root {project-root}
+node {project-root}/_bmad/ade-runtime.mjs list_customizable_skills --skill-root {skill-root} --project-root {project-root}
 ```
 
 Use `--extra-root <path>` (repeatable) if the user has skills installed in additional locations.

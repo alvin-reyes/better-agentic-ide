@@ -8,7 +8,7 @@ Ask once, with the default offered: this project's Claude Code sessions (`--proj
 
 ## Digest
 
-`uv run {skill-root}/scripts/read_session_log.py --project {project-root}` or `--format claude-code|memlog|auto <paths...>`, with `--max-items N` to cap the lists. The JSON holds `user_requests` with counts, `tool_sequences`, `corrections`, `files_touched` and `skills_invoked`. Read it whole before proposing anything.
+`node {project-root}/_bmad/ade-runtime.mjs read_session_log --skill-root {skill-root} --project {project-root}` or `--format claude-code|memlog|auto <paths...>`, with `--max-items N` to cap the lists. The JSON holds `user_requests` with counts, `tool_sequences`, `corrections`, `files_touched` and `skills_invoked`. Read it whole before proposing anything.
 
 ## Candidates
 
