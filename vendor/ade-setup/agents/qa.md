@@ -53,11 +53,12 @@ through `node _bmad/ade-runtime.mjs tickets …` (`bmad-ticket`).
 - `bmad-qa-generate-e2e-tests` — end-to-end coverage for a story; risk and test
   design ride the ticket's `risk:` field and the review lenses
 - The ADE gate — after the review and the Closure check, record the verdict in
-  `.ade/gates/<ticket-id>.yml` with `gate: PASS|CONCERNS|FAIL|WAIVED`,
-  `status_reason` and `updated`. This is ADE's own step, replacing v4's
-  `qa-gate`; `<ticket-id>` is the ticket's ref from the ticket tree,
-  `<epic id>.<ticket id>` (e.g. `1.6a`), since the board keys gates by that
-  ref, and a ticket is not done until a readable verdict says so.
+  `.ade/gates/<ticket-id>.yml` with `story: "<ticket-id>"`,
+  `gate: PASS|CONCERNS|FAIL|WAIVED`, `status_reason` and `updated`. This is
+  ADE's own step, replacing v4's `qa-gate`; `<ticket-id>` is the ticket's
+  `ref` exactly as the ticket tree prints it (e.g. `1.6a`), since the board
+  keys gates by that ref, and a ticket is not done until a readable verdict
+  says so.
 
 ## Project knowledge
 

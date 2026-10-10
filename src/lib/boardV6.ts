@@ -95,6 +95,11 @@ export async function buildBoardV6(root: string, fs: Fs): Promise<BoardState> {
   const initiativePresent = initiativeDoc ? await isFile(initiativeDoc, fs) : false;
   const initiativeDocRel = initiativeDoc ? relativeTo(projectRoot, initiativeDoc) : "";
   const firstEpic = epics[0];
+  // The first epic's doc, `<epic>/<epic>.md`. A breakdown can list an epic
+  // before its folder exists, so it is checked like the initiative doc.
+  const epicDoc = tree && firstEpic ? joinPath(joinPath(tree.initiative, firstEpic.slug), `${firstEpic.slug}.md`) : null;
+  const epicDocPresent = epicDoc ? await isFile(epicDoc, fs) : false;
+  const epicDocRel = epicDoc ? relativeTo(projectRoot, epicDoc) : "";
   const plan = tree && gates.length === 0 ? await reviewedPlan(tree, fs) : null;
   const reviewsPresent = gates.length > 0 || plan !== null;
 
@@ -104,8 +109,8 @@ export async function buildBoardV6(root: string, fs: Fs): Promise<BoardState> {
   const artifacts: Artifact[] = [
     artifact("brief", "Initiative", initiativeDocRel, initiativePresent, false),
     artifact("prd", "Initiative", initiativeDocRel, initiativePresent, false),
-    firstEpic
-      ? artifact("architecture", "Epics", joinPath(joinPath(store, firstEpic.slug), `${firstEpic.slug}.md`), true, false)
+    epicDoc
+      ? artifact("architecture", "Epics", epicDocRel, epicDocPresent, false)
       : artifact("architecture", "Epics", store, false, true),
     plan
       ? artifact("reviews", "Reviews", relativeTo(projectRoot, plan), true, false)
@@ -120,8 +125,10 @@ export async function buildBoardV6(root: string, fs: Fs): Promise<BoardState> {
     { id: "execution", label: "Execution", phase: "Dev cycle", evidence: [], optional: false, own: done },
     { id: "review", label: "Review", phase: "Dev cycle", evidence: [], optional: false, own: done },
   ];
-  // Completion is monotonic, exactly as in buildBoard: a stage cannot be
-  // complete while an earlier one is not.
+  // Completion is monotonic: a stage cannot be complete while an earlier one is
+  // not. Unlike buildBoard, there is no optional-stage skip (v4's
+  // anyLaterEvidence): v6's only optional stage, Brainstorming, shares the
+  // initiative doc with Design, so later evidence never stands without it.
   const stages: Stage[] = specs.map(({ own, ...s }, i) => ({
     ...s,
     complete: own && specs.slice(0, i).every((p) => p.own),
@@ -134,7 +141,7 @@ export async function buildBoardV6(root: string, fs: Fs): Promise<BoardState> {
     prdFile: initiativeDocRel,
     prdSharded: false,
     prdShardedLocation: "",
-    architectureFile: firstEpic ? artifacts[2].path : "",
+    architectureFile: epicDocRel,
     architectureSharded: false,
     architectureShardedLocation: "",
     devStoryLocation: store,

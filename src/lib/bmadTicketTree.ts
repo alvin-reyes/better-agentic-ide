@@ -135,7 +135,9 @@ export async function readTicketTree(root: string, fs: Fs): Promise<TicketTree> 
     const leafPath = row.file ? joinPath(dir, String(row.file)) : null;
     const leaf = leafPath ? await readIfFile(leafPath, fs) : null;
     const localId = row.id === null || row.id === undefined ? "" : String(row.id);
-    const ref = row.ref ?? (localId ? `${epic}/${localId}` : String(row.file ?? ""));
+    // The port's ref (`1.6a`, a bare id in scope, else the file name) is the
+    // board-wide key gates match on; the file name stands in only as rowRef does.
+    const ref = row.ref ?? String(row.file ?? "");
     tickets.push({
       file: leafPath ? relativeTo(projectRoot, leafPath) : null,
       id: String(ref),

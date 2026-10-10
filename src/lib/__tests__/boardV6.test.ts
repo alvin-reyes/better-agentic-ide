@@ -84,6 +84,49 @@ describe("buildBoardV6", () => {
     expect(board.unmatchedGates).toEqual([]);
   });
 
+  it("credits a letter-suffixed gate to its own ticket, not to the ticket it extends", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", {
+      initiative: { slug: "demo" },
+      epics: [{ id: 1, slug: "cart" }],
+      tickets: [
+        { id: 6, title: "Cart total", epic: "cart" },
+        { id: "6a", title: "Cart total rounding", epic: "cart" },
+      ],
+      plans: { "1.6": { status: "done" }, "1.6a": { status: "done" } },
+    });
+    await fs.mkdir("/p/.ade/gates");
+    await fs.writeText("/p/.ade/gates/1.6a.yml", 'gate: "PASS"\nstatus_reason: "verified"\nupdated: "2026-10-10"\n');
+    const board = await buildBoardV6("/p", fs);
+    const byId = Object.fromEntries(board.stories.map((s) => [s.story.id, s]));
+    expect(byId["1.6a"].state).toBe("done");
+    expect(byId["1.6a"].gate?.file).toBe(".ade/gates/1.6a.yml");
+    expect(byId["1.6"].state).toBe("claimed");
+    expect(byId["1.6"].gate).toBeUndefined();
+  });
+
+  it("does not cite a missing epic doc as present", async () => {
+    // The runtime port refuses an epic folder without its doc, so this models
+    // the doc vanishing after the ticket tree was read (an edit under a
+    // watcher; the board looks for gates next): the board must check, not assume.
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", oneTicket("done"));
+    const doc = `${STORE}/epic-cart/epic-cart.md`;
+    const vanishing = {
+      ...fs,
+      exists: async (path: string) => {
+        if (path === "/p/.ade/gates") await fs.delete(doc);
+        return fs.exists(path);
+      },
+    };
+    const board = await buildBoardV6("/p", vanishing);
+    expect(board.artifacts.find((a) => a.id === "architecture")).toMatchObject({
+      path: "_bmad-output/initiative-demo/epic-cart/epic-cart.md",
+      present: false,
+    });
+    expect(board.paths.architectureFile).toBe("_bmad-output/initiative-demo/epic-cart/epic-cart.md");
+  });
+
   it("reads the initiative doc at <folder>/<folder>.md for brainstorming and design", async () => {
     const fs = memFs();
     await seedV6Tree(fs, "/p", { initiative: { slug: "demo" }, epics: [{ id: 1, slug: "cart" }], tickets: [], plans: {} });
