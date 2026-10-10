@@ -126,4 +126,23 @@ describe("boardPanelStore", () => {
     await flush();
     expect(store.getState()).toMatchObject({ root: null, board: null, methodology: null, loading: false });
   });
+
+  it("a refresh issued right after a build settles still builds", async () => {
+    const { deps, pending } = controlled();
+    const store = createBoardPanelStore(deps);
+    store.getState().show("/p");
+    await flush();
+    const first = store.getState().refresh();
+    first.then(() => { void store.getState().refresh(); });
+    await flush();
+    pending[0].resolve(empty());
+    await flush();
+    pending[1].resolve(empty());
+    await flush();
+    await flush();
+    expect(deps.build).toHaveBeenCalledTimes(3);
+    pending[2]?.resolve(empty());
+    await flush();
+    expect(store.getState().loading).toBe(false);
+  });
 });

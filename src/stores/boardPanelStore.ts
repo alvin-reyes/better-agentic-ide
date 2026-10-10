@@ -69,17 +69,19 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
         if (get().root) set({ loading: true });
         return running;
       }
+      // Cleared inside the loop's own task, so a refresh arriving after the
+      // loop exits starts a new build instead of queueing behind a settled one.
       running = (async () => {
-        do {
-          queued = false;
-          await buildOnce();
-        } while (queued);
+        try {
+          do {
+            queued = false;
+            await buildOnce();
+          } while (queued);
+        } finally {
+          running = null;
+        }
       })();
-      try {
-        await running;
-      } finally {
-        running = null;
-      }
+      return running;
     }
 
     return {

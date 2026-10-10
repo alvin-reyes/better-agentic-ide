@@ -45,7 +45,7 @@ function useBoardWatch(dirs: string[], onChange: () => void) {
 
 export default function BoardPanel({ cwd, onClose }: Props) {
   const [root, setRoot] = useState<string | null>(null);
-  const { methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
+  const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
 
   // The active pane's project, by the same walk-up agent launches use.
@@ -103,7 +103,9 @@ export default function BoardPanel({ cwd, onClose }: Props) {
 
   const body = (() => {
     if (!cwd || (!root && !loading)) return <Empty>No project in this pane</Empty>;
-    if (!methodology && !loading && !board) {
+    // The store follows `root` one effect late; until it catches up, everything it holds is the previous project's.
+    if (storeRoot !== root) return <Empty>Loading…</Empty>;
+    if (!methodology && !loading && !board && !error) {
       return (
         <Empty>
           <div>This project isn't set up for BMAD</div>

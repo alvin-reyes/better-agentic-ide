@@ -22,6 +22,8 @@ vi.mock("../../stores/boardPanelStore", async () => {
 });
 
 import BoardPanel from "../board/BoardPanel";
+import { useBoardPanel } from "../../stores/boardPanelStore";
+import { buildBoard } from "../../stores/stageBoardStore";
 
 describe("BoardPanel", () => {
   it("says so when the pane has no project", () => {
@@ -34,5 +36,20 @@ describe("BoardPanel", () => {
     render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("This project isn't set up for BMAD")).toBeTruthy());
     expect(screen.getByRole("button", { name: "Set up now" })).toBeTruthy();
+  });
+
+  it("shows a failed methodology check instead of the setup card", async () => {
+    useBoardPanel.setState({ root: "/p", methodology: null, board: null, error: "boom", loading: false });
+    render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("boom"));
+    expect(screen.queryByRole("button", { name: "Set up now" })).toBeNull();
+  });
+
+  it("does not render another project's board while the store catches up", async () => {
+    const board = buildBoard({ config: null, artifactExists: () => false, stories: [], gates: [] });
+    useBoardPanel.setState({ root: "/other", methodology: "v4", board, error: null, loading: false });
+    render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Loading…")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: /approve|dispatch/i })).toBeNull();
   });
 });
