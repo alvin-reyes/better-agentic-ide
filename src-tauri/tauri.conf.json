@@ -43,6 +43,8 @@
     ],
     "resources": {
       "resources/bmad/": "resources/bmad/",
+      "resources/bmad-v6/": "resources/bmad-v6/",
+      "resources/ade-runtime.mjs": "resources/bmad-v6/ade-runtime.mjs",
       "../claude-plugin/": "claude-plugin/"
     }
   }

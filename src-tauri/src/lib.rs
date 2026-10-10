@@ -1,5 +1,6 @@
 mod antislop;
 mod bmad;
+mod bmadv6;
 mod contracts;
 mod crashlog;
 mod mcp;
