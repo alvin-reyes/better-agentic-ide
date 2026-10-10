@@ -42,6 +42,18 @@ jobs:
       - name: Build
         run: npx vite build
 
+  vendored-bmad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify vendored v6 tree matches the pinned commit
+        run: |
+          SHA=$(awk '{print $1}' src-tauri/resources/bmad-v6/VERSION)
+          rm -rf /tmp/bmad && git clone --quiet https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad
+          git -C /tmp/bmad checkout --quiet "$SHA"
+          diff -r --exclude="*.md" src-tauri/resources/bmad-v6/skills /tmp/bmad/skills
+          echo "vendored tree matches $SHA"
+
   backend:
     name: Backend (cargo test)
     runs-on: ubuntu-22.04
