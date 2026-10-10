@@ -28,13 +28,6 @@ describe("cli dispatch", () => {
     expect(() => JSON.parse(r.stdout)).not.toThrow();
   });
 
-  it("resolves --key queries for resolve_config", async () => {
-    const fs = memFs();
-    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
-    const r = await cliMain(["resolve_config", "--project-root", "/p", "--key", "core.output_folder"], fs);
-    expect(JSON.parse(r.stdout)).toHaveProperty("core");
-  });
-
   it("reports an unknown script with a non-zero exit", async () => {
     const r = await cliMain(["bogus"], memFs());
     expect(r.exitCode).toBe(2);
@@ -47,6 +40,60 @@ describe("cli dispatch", () => {
       const r = await cliMain([name, "--project-root", "/p"], fs);
       expect(r.exitCode, `${name} should dispatch`).not.toBe(2);
     }
+  });
+});
+
+describe("resolve --key filter", () => {
+  it("answers a --key query with the dotted path as written, not the whole table", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const r = await cliMain(["resolve_config", "--project-root", "/p", "--key", "core.output_folder"], fs);
+    expect(r.exitCode).toBe(0);
+    // The Python's shape: `json.dumps({key: extract_key(merged, key)})`, the
+    // dotted path itself as the one entry — not the nested `[core]` table.
+    expect(JSON.parse(r.stdout)).toEqual({ "core.output_folder": "/p/_bmad-output" });
+  });
+
+  it("keeps the requested order, omits missing keys, and takes the -k spelling", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const r = await cliMain(
+      ["resolve_config", "--project-root", "/p", "-k", "core.active_initiative", "--key", "core.nope", "--key=core.project_name"],
+      fs,
+    );
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual({
+      "core.active_initiative": "initiative-demo",
+      "core.project_name": "p",
+    });
+    expect(Object.keys(JSON.parse(r.stdout))).toEqual(["core.active_initiative", "core.project_name"]);
+  });
+
+  it("dumps the whole table when no --key is given", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const r = await cliMain(["resolve_config", "--project-root", "/p"], fs);
+    expect(JSON.parse(r.stdout)).toHaveProperty("core");
+  });
+
+  it("filters resolve_customization the same way", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    await copyTree(WALKTHROUGH, fs, WALKTHROUGH);
+    // A second table comes from the project's own layer: the full merge holds
+    // both, the filter holds only what was asked for.
+    await fs.writeText("/p/_bmad/custom/bmad-walkthrough.toml", `[agent]\nname = "Team"\n`);
+    const r = await cliMain(
+      ["resolve_customization", "--skill", WALKTHROUGH, "--project-root", "/p", "--key", "agent", "--key", "workflow", "--key", "nope.x"],
+      fs,
+    );
+    expect(r.exitCode).toBe(0);
+    const out = JSON.parse(r.stdout);
+    // The requested order, the requested tables only, and the key that cannot
+    // resolve omitted rather than an error — the Python's filter exactly.
+    expect(Object.keys(out)).toEqual(["agent", "workflow"]);
+    expect(out["agent"]).toEqual({ name: "Team" });
+    expect(out["workflow"]).toHaveProperty("persistent_facts");
   });
 });
 
@@ -68,5 +115,54 @@ describe("render_skill exit codes", () => {
     expect(r.stdout).toMatch(
       /^read and follow \/p\/_bmad\/render\/bmad-walkthrough\/p-[0-9a-f]{12}\/[0-9a-f]{20}\/workflow\.md\n$/,
     );
+  });
+});
+
+describe("render_skill --set shapes", () => {
+  const OVERRIDE = "workflow.on_activation";
+
+  /** Render the walkthrough with the given argv tail. Its `workflow.md` prints
+   * `workflow.on_activation` only when the resolved value is non-empty, so the
+   * rendered body tells an applied override from one that was dropped. */
+  async function render(argv: string[]): Promise<{ stdout: string; exitCode: number; body: string }> {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    await copyTree(WALKTHROUGH, fs, WALKTHROUGH);
+    const r = await cliMain(["render_skill", "--project-root", "/p", "--skill", WALKTHROUGH, ...argv], fs);
+    if (r.exitCode !== 0) return { ...r, body: "" };
+    const dest = r.stdout.trim().replace(/^read and follow /, "").replace(/\/workflow\.md$/, "");
+    return { ...r, body: await fs.readText(`${dest}/workflow.md`) };
+  }
+
+  it("applies the two-token form the call sites write, changing the render", async () => {
+    const plain = await render([]);
+    const set = await render(["--set", `${OVERRIDE}=smoke marker`]);
+    expect(plain.exitCode).toBe(0);
+    expect(set.exitCode).toBe(0);
+    expect(plain.body).not.toContain("smoke marker");
+    expect(set.body).toContain("smoke marker");
+    expect(set.body).not.toBe(plain.body);
+  });
+
+  it("applies the `--set=k=v` and single quoted-token forms", async () => {
+    const equals = await render([`--set=${OVERRIDE}=equals form`]);
+    expect(equals.exitCode).toBe(0);
+    expect(equals.body).toContain("equals form");
+
+    const quoted = await render([`--set ${OVERRIDE}=quoted form`]);
+    expect(quoted.exitCode).toBe(0);
+    expect(quoted.body).toContain("quoted form");
+  });
+
+  it("keeps `=` inside the value, splitting at the first one only", async () => {
+    const r = await render(["--set", `${OVERRIDE}=keeps=equals`]);
+    expect(r.exitCode).toBe(0);
+    expect(r.body).toContain("keeps=equals");
+  });
+
+  it("refuses a malformed assignment with the Python's HALT line", async () => {
+    const r = await render(["--set", "noequals"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stdout).toBe("HALT: invalid --set assignment 'noequals'; expected bare dotted key=value\n");
   });
 });

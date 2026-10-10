@@ -78,6 +78,58 @@ function setOverrides(argv: string[]): { set: Record<string, string>; invalid: s
   return { set, invalid };
 }
 
+/**
+ * Every `--key`/`-k` dotted path, in the order given: the Python's repeatable
+ * `action="append"` argument, in both spellings the call sites use (`--key
+ * core.output_folder`, `-k workflow`) and the `--key=k` form argparse also
+ * takes. Repeats are kept — the Python emits one entry per requested key.
+ */
+function keyPaths(argv: string[]): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (token === "--key" || token === "-k") {
+      const value = argv[++i];
+      if (value !== undefined) keys.push(value);
+    } else if (token.startsWith("--key=")) {
+      keys.push(token.slice("--key=".length));
+    }
+  }
+  return keys;
+}
+
+/** The Python's `_MISSING`. */
+const MISSING = Symbol("missing");
+
+/** The Python's `extract_key`: the dotted path walks nested tables only — a
+ * missing part, or a scalar or list along the way, is missing. */
+function extractKey(data: unknown, dotted: string): unknown {
+  let current: unknown = data;
+  for (const part of dotted.split(".")) {
+    if (current === null || typeof current !== "object" || Array.isArray(current)) return MISSING;
+    if (!Object.prototype.hasOwnProperty.call(current, part)) return MISSING;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+/**
+ * What the two resolvers print: without `--key`, the whole merged table; with
+ * it, the Python's filter — one entry per requested dotted path that resolved,
+ * under the path as it was written, in the order requested, a key that is not
+ * there omitted rather than an error. 13 call sites read values this way.
+ */
+function resolveOutput(merged: Record<string, unknown>, argv: string[]): unknown {
+  const keys = keyPaths(argv);
+  if (keys.length === 0) return merged;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = extractKey(merged, key);
+    if (value !== MISSING) out[key] = value;
+  }
+  return out;
+}
+
 /** `validate_manifests` → `validateManifests`: the helper ports export the
  * Python stem in camelCase, while the tree invokes the stem as written. */
 function camel(stem: string): string {
@@ -99,7 +151,7 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
       const root = flagValue(rest, "--project-root");
       if (root === null) return usageError("resolve_config", "the following arguments are required: --project-root");
       const cfg = await loadCentralConfig(absoluteRoot(root), fs);
-      return { stdout: JSON.stringify(cfg, null, 2), exitCode: 0 };
+      return { stdout: JSON.stringify(resolveOutput(cfg, rest), null, 2), exitCode: 0 };
     }
 
     case "resolve_customization": {
@@ -110,7 +162,7 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
       // The skill's name is its install folder — Python's `Path(skill_root).name`.
       const skill = skillRoot.replace(/\/+$/, "").split("/").pop() ?? skillRoot;
       const merged = await resolveCustomization(absoluteRoot(root), skillRoot, skill, fs);
-      return { stdout: JSON.stringify(merged, null, 2), exitCode: 0 };
+      return { stdout: JSON.stringify(resolveOutput(merged, rest), null, 2), exitCode: 0 };
     }
 
     case "render_skill": {
