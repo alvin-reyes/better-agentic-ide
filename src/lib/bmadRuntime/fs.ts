@@ -85,9 +85,17 @@ export function memFs(): Fs {
   };
 }
 
+/**
+ * A UTF-8 decoder that refuses invalid bytes, like the Python's `read_text`:
+ * `readFile(p, "utf8")` would replace them with U+FFFD and answer a verdict
+ * (validate_manifests, roster, knowledge) where the interpreter raises and
+ * exits 1.
+ */
+const utf8 = new TextDecoder("utf-8", { fatal: true });
+
 export function realFs(): Fs {
   return {
-    readText: (p) => import("node:fs/promises").then((f) => f.readFile(p, "utf8")),
+    readText: (p) => import("node:fs/promises").then(async (f) => utf8.decode(await f.readFile(p))),
     writeText: (p, body) => import("node:fs/promises").then((f) => f.writeFile(p, body)),
     list: (p) => import("node:fs/promises").then((f) => f.readdir(p)),
     exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),

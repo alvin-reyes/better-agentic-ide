@@ -5973,6 +5973,8 @@ async function gitEvidence(argv, _fs) {
       const taken = value();
       if (taken === void 0) return argumentError("argument --stories: expected one argument");
       storiesArg = taken;
+    } else if (flag === "--skill-root") {
+      if (value() === void 0) return argumentError("argument --skill-root: expected one argument");
     } else return argumentError(`unrecognized arguments: ${argv[i]}`);
   }
   const stories = storiesArg ? [...new Set(storiesArg.split(",").map((id) => id.trim()).filter(Boolean))] : [];
@@ -10344,6 +10346,9 @@ async function processTemplate(argv, fs2) {
       const value = inline ?? argv[++i];
       if (value === void 0) return usageError$3(script, "argument --true: expected one argument");
       truths.push(value);
+    } else if (flag === "--skill-root") {
+      const value = inline ?? argv[++i];
+      if (value === void 0) return usageError$3(script, "argument --skill-root: expected one argument");
     } else if (flag === "--json" && inline === null) ;
     else if (token.startsWith("-") && token !== "-") {
       return usageError$3(script, `unrecognized arguments: ${token}`);
@@ -10553,9 +10558,10 @@ const helpers = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
   validateManifests,
   wake
 }, Symbol.toStringTag, { value: "Module" }));
+const utf8 = new TextDecoder("utf-8", { fatal: true });
 function realFs() {
   return {
-    readText: (p) => import("node:fs/promises").then((f) => f.readFile(p, "utf8")),
+    readText: (p) => import("node:fs/promises").then(async (f) => utf8.decode(await f.readFile(p))),
     writeText: (p, body) => import("node:fs/promises").then((f) => f.writeFile(p, body)),
     list: (p) => import("node:fs/promises").then((f) => f.readdir(p)),
     exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),

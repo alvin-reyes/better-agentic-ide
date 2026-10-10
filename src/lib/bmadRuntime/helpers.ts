@@ -68,6 +68,11 @@ const sortedUnique = (matches: string[]): string[] => [...new Set(matches)].sort
  * Port of `skills/bmad-toolsmith/scripts/process_template.py`: fill a
  * template's `{name}` variables and `{if-X}…{/if-X}` blocks. The goldens in
  * `__tests__/goldens/helpers/processTemplate-*.json` are the contract.
+ *
+ * `--skill-root` is accepted and ignored: Task 1's patcher writes it into the
+ * shapes' call sites (`process_template --skill-root {skill-root} <template>
+ * …`) and the Python never read its own location, so the port reads and
+ * discards the value, as the neighbouring ports do.
  */
 export async function processTemplate(argv: string[], fs: Fs): Promise<PortResult> {
   const script = "process_template";
@@ -92,6 +97,12 @@ export async function processTemplate(argv: string[], fs: Fs): Promise<PortResul
       const value = inline ?? argv[++i];
       if (value === undefined) return usageError(script, "argument --true: expected one argument");
       truths.push(value);
+    } else if (flag === "--skill-root") {
+      // Task 1's patch artifact: the shapes' call sites write
+      // `--skill-root {skill-root}` before the template; the Python never read
+      // its own location, so the value is read and discarded (Task 5c).
+      const value = inline ?? argv[++i];
+      if (value === undefined) return usageError(script, "argument --skill-root: expected one argument");
     } else if (flag === "--json" && inline === null) {
       // The Python wrote the run metadata to stderr under this flag; the
       // runtime's one return shape has no stderr, so it changes nothing here.

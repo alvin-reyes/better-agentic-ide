@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memFs, realFs } from "../fs";
@@ -25,6 +25,28 @@ describe("realFs", () => {
       expect(await fs.exists(join(nested, "f.txt"))).toBe(false);
       expect(await fs.list(nested)).toEqual([]);
       await expect(fs.delete(join(nested, "f.txt"))).rejects.toThrow(/ENOENT/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid UTF-8 instead of decoding it with replacement", async () => {
+    // The Python's `read_text(encoding="utf-8")` raises on these bytes, so the
+    // validation ports must see a rejection too: a replacement-character
+    // decode would let validate_manifests/roster/knowledge answer VALID where
+    // the interpreter exits 1.
+    const fs = realFs();
+    const root = await mkdtemp(join(tmpdir(), "bmad-runtime-utf8-"));
+    try {
+      const bad = join(root, "bad.json");
+      await writeFile(bad, Buffer.from([0xff, 0xfe]));
+      await expect(fs.readText(bad)).rejects.toThrow();
+
+      // Valid multi-byte UTF-8 still decodes, so the fatal decoder is not
+      // refusing the encodable.
+      const good = join(root, "good.json");
+      await writeFile(good, "héllo — ✓\n", "utf8");
+      expect(await fs.readText(good)).toBe("héllo — ✓\n");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

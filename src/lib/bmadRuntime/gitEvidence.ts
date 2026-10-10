@@ -14,6 +14,9 @@ import { splitFlag, type PortResult } from "./compat";
  * runs the same commands through `node:child_process`, which is what a bundled
  * runtime that must measure a repository has instead. `Fs` plays no part —
  * git reads the repository itself — and the argv names the repo and the range.
+ * `--skill-root` is Task 1's patcher artifact: the call site writes it and the
+ * Python never read its own location, so the port accepts it and ignores it,
+ * as the neighbouring ports do.
  *
  * One documented divergence: the Python decoded git's output with
  * `errors="surrogateescape"`, so two distinct non-UTF-8 paths stay distinct.
@@ -199,6 +202,11 @@ export async function gitEvidence(argv: string[], _fs: Fs): Promise<PortResult> 
       const taken = value();
       if (taken === undefined) return argumentError("argument --stories: expected one argument");
       storiesArg = taken;
+    } else if (flag === "--skill-root") {
+      // The patched call site (bmad-retrospective's evidence-gathering.md)
+      // writes `--skill-root {skill-root}` first; nothing derives from its own
+      // location, so the value is read and discarded (Task 5c's convention).
+      if (value() === undefined) return argumentError("argument --skill-root: expected one argument");
     } else return argumentError(`unrecognized arguments: ${argv[i]}`);
   }
 

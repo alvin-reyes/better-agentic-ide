@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as helpers from "../helpers";
+import { cliMain } from "../cli";
 import { memFs, realFs, type Fs } from "../fs";
 import { seedTicketTree } from "./fixtures/ticketTree";
 
@@ -124,6 +125,21 @@ const REAL_DISK: Record<string, string> = {
   "gitEvidence-range": "gitEvidence over a real repository",
 };
 
+/**
+ * The pinned demo history (`seed-git-demo.sh`), rebuilt in a fresh temp folder:
+ * the golden and the call-site test both measure this repository, and its shas
+ * are the captured ones because the recipe pins identity, dates and locale.
+ */
+async function buildGitDemo(): Promise<string> {
+  const { execFile } = await import("node:child_process");
+  const { mkdtemp } = await import("node:fs/promises");
+  const repo = join(await mkdtemp(join(tmpdir(), "ade-gitdemo-")), "git-demo");
+  await new Promise<void>((resolve, reject) =>
+    execFile("bash", [join(GOLDENS, "seed-git-demo.sh"), repo], (error) => (error ? reject(error) : resolve())),
+  );
+  return repo;
+}
+
 describe("helper script ports", () => {
   it("matches Python for every captured golden", async () => {
     const names = (await readdir(GOLDENS)).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5));
@@ -178,6 +194,11 @@ describe("refusals the Python printed through argparse", () => {
     await refusal("listCustomizableSkills", [], "--project-root");
     await refusal("resolveParty", [], "--project-root");
     await refusal("gitEvidence", ["--repo", "/p", "--range", "HEAD"], "invalid --range");
+  });
+
+  it("refuses the patched --skill-root with no value rather than eating the next argument", async () => {
+    await refusal("processTemplate", ["--skill-root"], "argument --skill-root: expected one argument");
+    await refusal("gitEvidence", ["--skill-root"], "argument --skill-root: expected one argument");
   });
 
   it("reports a path that is not a directory the way the pin did", async () => {
@@ -392,18 +413,8 @@ describe("gitEvidence over a real repository", () => {
   // The Python's own tests measure a real temp repo; so does this one. The
   // recipe is committed as `seed-git-demo.sh` and pins identity, dates, config
   // and locale, so the rebuilt history has the same shas as the captured one.
-  const build = async (): Promise<string> => {
-    const { execFile } = await import("node:child_process");
-    const { mkdtemp } = await import("node:fs/promises");
-    const repo = join(await mkdtemp(join(tmpdir(), "ade-gitdemo-")), "git-demo");
-    await new Promise<void>((resolve, reject) =>
-      execFile("bash", [join(GOLDENS, "seed-git-demo.sh"), repo], (error) => (error ? reject(error) : resolve())),
-    );
-    return repo;
-  };
-
   it("measures the same history the Python measured", async () => {
-    const repo = await build();
+    const repo = await buildGitDemo();
     try {
       const expected = await golden("gitEvidence-range");
       const argv = expected.argv.map((arg) => (arg === "/p/git-demo" ? repo : arg));
@@ -413,6 +424,64 @@ describe("gitEvidence over a real repository", () => {
       expect(r.stdout).toBe(expected.stdout.split("/p/git-demo").join(repo));
     } finally {
       await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * The Task 1 patcher rewrites the vendored call sites to
+ * `node {project-root}/_bmad/ade-runtime.mjs <script> --skill-root {skill-root} …`,
+ * and the runtime CLI must accept every flag those call sites write. The argv
+ * below is copied from the vendored call sites themselves (flags and order),
+ * and replayed through `cliMain`, which is what `node _bmad/ade-runtime.mjs`
+ * dispatches to.
+ */
+describe("the vendored call sites' argv through cliMain", () => {
+  // bmad-retrospective/references/evidence-gathering.md:
+  //   git_evidence --skill-root {skill-root} --repo {project-root} --range <range> --stories <story-ids>
+  // The golden's argv is the same shape without the flag the patcher added.
+  it("runs git_evidence with --skill-root first, as the evidence-gathering call site writes it", async () => {
+    const repo = await buildGitDemo();
+    try {
+      const expected = await golden("gitEvidence-range");
+      const r = await cliMain(
+        [
+          "git_evidence",
+          "--skill-root", "/p/skills/bmad-retrospective",
+          "--repo", repo,
+          "--range", "main~3..main",
+          "--stories", "story-1-1,story-1-2",
+        ],
+        realFs(),
+      );
+      expect(r.exitCode).toBe(expected.exitCode);
+      expect(r.stdout).toBe(expected.stdout.split("/p/git-demo").join(repo));
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  // bmad-toolsmith/shapes/{multi-skill-module,single-skill-module,memory-agent}/shape.md:
+  //   process_template --skill-root {skill-root} <template> -o <dest> --var key=value … --true <condition> …
+  it("runs process_template with --skill-root before the template, as the toolsmith shapes write it", async () => {
+    const expected = await golden("processTemplate-out-files");
+    const fs = memFs();
+    await seed(fs);
+    const r = await cliMain(
+      [
+        "process_template",
+        "--skill-root", "/p/skills/bmad-toolsmith",
+        "/p/recon/brief.md.tpl",
+        "-o", "/p/out/brief.md",
+        "--var", "topic=Product direction",
+        "--true", "deep",
+      ],
+      fs,
+    );
+    expect(r.exitCode).toBe(expected.exitCode);
+    expect(r.stdout).toBe(expected.stdout);
+    for (const [path, body] of Object.entries(expected.files)) {
+      expect(await fs.readText(path), `wrote ${path}`).toBe(body);
     }
   });
 });
