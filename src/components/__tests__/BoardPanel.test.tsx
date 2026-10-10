@@ -71,6 +71,15 @@ describe("BoardPanel watching", () => {
     await waitFor(() => expect(watched()).toContain("/p/.ade"));
   });
 
+  it("asks the watcher for change notices only, not file contents", async () => {
+    disk.exists = new Set(["/p/.ade"]);
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await waitFor(() => expect(watched()).toContain("/p/.ade"));
+    const call = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "watch_directory")!;
+    expect(call[1]).toMatchObject({ dir: "/p/.ade", withContent: false });
+  });
+
   it("does not re-register when a rebuild leaves the existing folders unchanged", async () => {
     disk.exists = new Set(["/p/.bmad-core", "/p/.ade", "/p/docs"]);
     useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });

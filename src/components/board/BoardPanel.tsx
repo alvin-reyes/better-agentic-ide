@@ -84,7 +84,7 @@ function useBoardWatch(dirs: string[], onChange: () => void) {
         if (cancelled) break;
         const channel = new Channel<{ type: string }>();
         channel.onmessage = () => { if (!cancelled) onChange(); };
-        const id = await invoke<number>("watch_directory", { dir, extensions: WATCH_EXTENSIONS, onEvent: channel }).catch(() => null);
+        const id = await invoke<number>("watch_directory", { dir, extensions: WATCH_EXTENSIONS, withContent: false, onEvent: channel }).catch(() => null);
         if (id === null) continue;
         if (cancelled) invoke("unwatch_directory", { id }).catch(() => {});
         else ids.push(id);
