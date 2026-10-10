@@ -1363,11 +1363,13 @@ git commit -m "feat(bmad-v6): scaffold v6 projects with methodology marker"
 **Files:**
 - Modify: `src/lib/projectSetup.ts`
 - Modify: `src/components/NewTabDialog.tsx` (or wherever the setup prompt renders — follow the existing `autoProjectSetup` flow)
-- Test: `src/lib/__tests__/projectSetup.test.ts` (extend; check existing suite name first)
+- Modify: `src-tauri/src/projectsetup.rs` (carried from Task 7: `SetupStatus` gains the methodology field the frontend detects from)
+- Test: `src/lib/__tests__/projectSetup.test.ts` (new; the existing "project setup" cases live in projectMethodology.test.ts)
+- Test: `src/components/__tests__/NewTabDialog.test.tsx` (the question asks only when the project has neither)
 
 **Interfaces:**
-- Consumes: `project_setup_apply` with a new `methodology: "v4" | "v6"` argument; `project_setup_status` unchanged.
-- Produces: `setupProject(root, methodology: "v6" | "v4")` — the existing `setupProject(root)` callers now pass the user's choice; default `"v6"`. The setup UI asks once when `autoProjectSetup` is on and the project has neither methodology on disk: "Methodology: BMAD v6 (default) or BMAD v4". Existing v4 projects (`.bmad-core/` present, per `project_setup_status`) skip the question and stay v4.
+- Consumes: `project_setup_apply` with a new `methodology: "v4" | "v6"` argument; `project_setup_status` gains `methodology: "v4" | "v6" | null` — filled by `bmadv6::detect_on_disk`, marker first (`.ade/methodology`), then `.bmad-core/` ⇒ v4; null for a project with neither. That field is the frontend's detection source; no new command.
+- Produces: `setUpProject(root, methodology?: "v6" | "v4", stacks?)` — the owner's answer wins; without one the project's own marker (else `.bmad-core/`) decides, and a project with neither — a new one — gets the v6 default. The setup UI asks once when `autoProjectSetup` is on and the project has neither methodology on disk: "Methodology: BMAD v6 (default) or BMAD v4". Existing v4 projects skip the question and stay v4. All three `project_setup_apply` call sites send `methodology`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1376,9 +1378,9 @@ Extend the projectSetup suite:
 ```ts
 it("passes the chosen methodology to setup and defaults new projects to v6", async () => {
   // existing mock of invoke("project_setup_apply") records args
-  await setupProject("/tmp/proj", "v6");
+  await setUpProject("/tmp/proj", "v6");
   expect(lastApplyArgs.methodology).toBe("v6");
-  await setupProject("/tmp/proj");
+  await setUpProject("/tmp/proj");
   expect(lastApplyArgs.methodology).toBe("v6");
 });
 ```
@@ -1390,7 +1392,9 @@ Expected: FAIL — `methodology` arg not sent.
 
 - [ ] **Step 3: Implement**
 
-`projectSetup.ts`: add `methodology: "v6" | "v4" = "v6"` parameter to the apply invocations; add `detectOnDisk(root): Promise<"v4" | "v6" | null>` via the existing status command (`.bmad-core/` ⇒ v4, `.ade/methodology` ⇒ its value, else null). The setup prompt component asks only when `detectOnDisk` is null; v4-detected projects proceed silently as before.
+`projectsetup.rs`: `SetupStatus` gains `methodology: Option<String>` from `bmadv6::detect_on_disk`, and the status test pins the three cases (none / `.bmad-core/` ⇒ v4 / marker wins).
+
+`projectSetup.ts`: add `methodology: Methodology = "v6"` to the apply invocations; add `detectOnDisk(root): Promise<"v4" | "v6" | null>` via the existing status command's `methodology` field. `setUpProject(root, methodology?, stacks?)` sends the explicit answer, else what the project reports, else "v6". The setup prompt component asks only when `detectOnDisk` is null; v4- and v6-detected projects proceed silently.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1405,7 +1409,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/lib/projectSetup.ts src/components/NewTabDialog.tsx src/lib/__tests__/projectSetup.test.ts
+git add src/lib/projectSetup.ts src/lib/newTab.ts src/hooks/useProjectSetup.ts src/components/NewTabDialog.tsx src/components/AgentsTab.tsx src/index.css src/lib/__tests__/projectSetup.test.ts src/components/__tests__/NewTabDialog.test.tsx src-tauri/src/projectsetup.rs src-tauri/src/bmadv6.rs
 git commit -m "feat(bmad-v6): methodology choice in project setup"
 ```
 
