@@ -699,7 +699,7 @@ git commit -m "feat(bmad-v6): port the ticket tree commands"
 
 **Interfaces:**
 - Consumes: `loadCentralConfig`, `resolveCustomization` (Task 3), `Fs`.
-- Produces: `export async function renderSkill(projectRoot: string, skillRoot: string, set: Record<string, string>, fs: Fs): Promise<string>` — renders the skill's SKILL.md with a jinja2 subset (`{{ var }}`, `{% for x in list %}…{% endfor %}`, `{% if x %}…{% endif %}`). And `export async function memlog(projectRoot: string, action: "append" | "read" | "init", entry: string | null, fs: Fs): Promise<string>` — append-only JSON-lines log at `_bmad/memlog.jsonl`.
+- Produces: `export async function renderSkill(projectRoot: string, skillRoot: string, set: Record<string, string>, fs: Fs): Promise<string>` — runs the skill's workflow render like the Python: merges config + customization, templates the SKILL.md with a jinja2 subset (variables, `for`/`if`/`elif`/`else`, `set`, `raw`, `default` filter, tuples, `in`, `and`/`or`/`not`, `~`, comments, `+`/`-` whitespace signs, StrictUndefined), writes the rendered snapshot where the Python writes it, and **returns the Python's stdout line** (`read and follow …` / `HALT: …`). And `export async function memlog(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` — a port of the pinned memlog.py CLI: subcommands `init|append|set`, flags `--workspace/--field/--type/--text`, the log at `{workspace}/.memlog.md` (one frontmatter block + one flat chronological list), every command echoing the new state as one JSON line. There is no `read` subcommand in the pinned script — the plan's earlier `_bmad/memlog.jsonl` description was wrong; the Python at the pin is the contract.
 
 - [ ] **Step 1: Generate goldens from the real Python**
 
@@ -778,13 +778,22 @@ export async function renderSkill(projectRoot: string, skillRoot: string, set: R
 ```ts
 import type { Fs } from "./fs";
 
-export async function memlog(projectRoot: string, action: "append" | "read" | "init", entry: string | null, fs: Fs): Promise<string> {
-  const p = `${projectRoot}/_bmad/memlog.jsonl`;
-  if (action === "read") return (await fs.exists(p)) ? await fs.readText(p) : "";
-  if (action === "init") { await fs.writeText(p, ""); return ""; }
-  const prev = (await fs.exists(p)) ? await fs.readText(p) : "";
-  await fs.writeText(p, prev + entry + "\n");
-  return "";
+/**
+ * Port of the pinned memlog.py CLI. Subcommands `init|append|set`, flags
+ * `--workspace/--field/--type/--text`; the log is `{workspace}/.memlog.md`
+ * (one frontmatter block + one flat chronological list); every command echoes
+ * the new state as one JSON line. The goldens under goldens/memlog are the
+ * contract — the shipped implementation in the repo is authoritative; this
+ * sketch is only the shape.
+ */
+export async function memlog(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
+  const [cmd, ...rest] = argv;
+  if (!["init", "append", "set"].includes(cmd)) {
+    return { stdout: "memlog.py: error: one of init|append|set is required", exitCode: 2 };
+  }
+  // Port each subcommand against the goldens: frontmatter round-trip, the
+  // append list, and the per-command echo of the new state.
+  return { stdout: "", exitCode: 0 };
 }
 ```
 
@@ -1035,12 +1044,9 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
       const set = Object.fromEntries(rest.filter((a) => a.startsWith("--set ")).map((a) => a.slice(6).split("=") as [string, string]));
       return { stdout: await renderSkill(root, skill, set, fs), exitCode: 0 };
     }
-    case "memlog": {
-      const root = rest[rest.indexOf("--project-root") + 1];
-      const action = rest.find((a) => ["append", "read", "init"].includes(a)) as "append" | "read" | "init";
-      const entry = action === "append" ? rest[rest.length - 1] : null;
-      return { stdout: await memlog(root, action, entry, fs), exitCode: 0 };
-    }
+    case "memlog":
+      // The pinned memlog.py is a CLI: pass its argv straight through.
+      return memlog(rest, fs);
     case "roster":
       return roster(rest, fs);
     case "knowledge":
