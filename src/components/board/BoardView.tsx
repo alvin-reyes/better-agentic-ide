@@ -30,7 +30,51 @@ const muted = { color: "var(--text-secondary)" } as const;
 const section = { padding: "10px 12px", borderBottom: "1px solid var(--border)" } as const;
 const heading = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, ...muted, marginBottom: 6 } as const;
 
-function StageRail({ board, stage }: { board: BoardState; stage: StageView }) {
+/** A button whose async action shows its own failure, leaving the row as it was. */
+function ActionButton({ action, label, run, onError }: { action: string; label: string; run(): Promise<void>; onError(msg: string | null): void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      data-action={action}
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        onError(null);
+        try {
+          await run();
+        } catch (e) {
+          onError(e instanceof Error ? e.message : String(e));
+        } finally {
+          setBusy(false);
+        }
+      }}
+      style={{ fontSize: 11, padding: "1px 6px", border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer" }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function StageControls({ stage, actions }: { stage: StageView; actions: BoardActions }) {
+  const [err, setErr] = useState<string | null>(null);
+  if (!actions.onStage) return null;
+  const go = (to: StageId) => () => actions.onStage!(to);
+  return (
+    <div style={{ marginTop: 6 }}>
+      {stage.invalid && <div style={{ fontSize: 11, color: "var(--warning, #d29922)" }}>.ade/stage is not a stage; following the files.</div>}
+      {stage.claimed && <div style={{ fontSize: 11, color: "var(--warning, #d29922)" }}>Stage claimed: the files only support {stage.derived}.</div>}
+      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+        {stage.prev && <ActionButton action="back" label="← Back" run={go(stage.prev)} onError={setErr} />}
+        {!stage.tracked && <ActionButton action="track" label="Track stage" run={go(stage.shown)} onError={setErr} />}
+        {stage.next && <ActionButton action="next" label="Next →" run={go(stage.next)} onError={setErr} />}
+      </div>
+      {err && <div style={{ fontSize: 11, color: "var(--error, #f85149)" }}>{err}</div>}
+    </div>
+  );
+}
+
+function StageRail({ board, stage, actions }: { board: BoardState; stage: StageView; actions: BoardActions }) {
   const phases = [...new Set(board.stages.map((s) => s.phase))];
   return (
     <div style={section}>
@@ -62,6 +106,7 @@ function StageRail({ board, stage }: { board: BoardState; stage: StageView }) {
           </div>
         </div>
       ))}
+      <StageControls stage={stage} actions={actions} />
     </div>
   );
 }
@@ -98,12 +143,15 @@ function GateDetail({ gate }: { gate: Gate | undefined }) {
   );
 }
 
-export function Row({ v, children }: { v: StoryView; children?: React.ReactNode }) {
+export function Row({ v, actions }: { v: StoryView; actions: BoardActions }) {
   const [open, setOpen] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
   const label = rowLabel(v);
   // A waiver's and a claim's reason are always visible: a waiver should be
   // uncomfortable to look at, and a claim needs saying why it is not believed.
   const alwaysNote = (label === "waived" || label === "claimed" || v.gate?.error) && v.note;
+  // Nothing below approved is dispatched: `dispatchable` is the engines' rule.
+  const canDispatch = v.dispatchable && label !== "done ✓" && label !== "waived";
   return (
     <div data-row={v.story.id} style={{ padding: "4px 0" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
@@ -117,20 +165,26 @@ export function Row({ v, children }: { v: StoryView; children?: React.ReactNode 
           {v.story.title}
         </button>
         <span data-state={label} style={{ fontSize: 11, color: label === "claimed" ? "var(--warning, #d29922)" : undefined }}>{label}</span>
-        {children}
+        {v.state === "draft" && actions.onApprove && (
+          <ActionButton action="approve" label="Approve" run={() => actions.onApprove!(v)} onError={setRowError} />
+        )}
+        {canDispatch && actions.onDispatch && (
+          <ActionButton action="dispatch" label="Dispatch" run={() => actions.onDispatch!(v)} onError={setRowError} />
+        )}
       </div>
       {alwaysNote && <div style={{ ...muted, fontSize: 11, paddingLeft: 40 }}>{v.note}</div>}
+      {rowError && <div style={{ fontSize: 11, paddingLeft: 40, color: "var(--error, #f85149)" }}>{rowError}</div>}
       {open && <div style={{ paddingLeft: 40 }}><GateDetail gate={v.gate} /></div>}
     </div>
   );
 }
 
-function WorkItems({ methodology, board, renderActions }: { methodology: "v4" | "v6"; board: BoardState; renderActions(v: StoryView): React.ReactNode }) {
+function WorkItems({ methodology, board, actions }: { methodology: "v4" | "v6"; board: BoardState; actions: BoardActions }) {
   if (board.noInitiative) return <div style={{ ...section, ...muted }}>No active initiative yet. Start one with bmad-spec.</div>;
   if (board.stories.length === 0) return <div style={{ ...section, ...muted }}>No {methodology === "v6" ? "tickets" : "stories"} yet.</div>;
 
   const rows = (refs: string[] | null) =>
-    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v}>{renderActions(v)}</Row>);
+    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} />);
 
   if (methodology === "v4" || !board.epics) {
     return <div style={section}><div style={heading}>Stories</div>{rows(null)}</div>;
@@ -173,9 +227,9 @@ export default function BoardView({ methodology, board, stage, error, actions }:
           Could not refresh: {error}
         </div>
       )}
-      <StageRail board={board} stage={stage} />
+      <StageRail board={board} stage={stage} actions={actions} />
       <Artifacts board={board} onOpen={actions.onOpen} />
-      <WorkItems methodology={methodology} board={board} renderActions={() => null} />
+      <WorkItems methodology={methodology} board={board} actions={actions} />
       <GateProblems board={board} />
     </div>
   );
