@@ -9,8 +9,10 @@ export interface LaunchOptions {
   roleId?: string;
   domainId?: string;
   /**
-   * The agent's opening task, sent as its first prompt. Line breaks are
-   * collapsed: a newline typed into the PTY would submit the command early.
+   * The agent's opening task, sent as its first prompt. Every control
+   * character is collapsed to a space: the command is typed into an
+   * interactive shell, whose line editor acts on them even inside quotes (a
+   * newline submits early, ^U erases the opening quote, ESC starts an edit).
    */
   task?: string;
 }
@@ -34,10 +36,13 @@ export const DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
  */
 export const DEEPSEEK_MODEL = "deepseek-v4-pro";
 
+/** C0 controls and DEL: everything a line editor might act on. */
+const CONTROL_CHARS = /[\x00-\x1f\x7f]+/g;
+
 /** The claude invocation both the claude and deepseek providers launch. */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
-  const task = opts.task ? ` ${shellQuote(opts.task.replace(/[\r\n]+/g, " "))}` : "";
+  const task = opts.task ? ` ${shellQuote(opts.task.replace(CONTROL_CHARS, " "))}` : "";
   return `claude${flags} --append-system-prompt-file ${quotedPath}${task}`;
 }
 

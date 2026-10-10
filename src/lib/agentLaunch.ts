@@ -67,6 +67,10 @@ export async function dispatchAgent(args: {
   cwd: string;
   task: string;
 }): Promise<string | null> {
+  // The task comes from file names in the project, which a cloned repo
+  // controls. The command builder also collapses these, but a task carrying
+  // one is refused outright rather than launched as something else.
+  if (/[\x00-\x1f\x7f]/.test(args.task)) return "The task contains a control character and was not dispatched.";
   const prepared = await prepareAgentLaunch(args.spec, args.cwd, { task: args.task });
   if (!prepared.ok) return prepared.error || `Unknown role "${args.spec.roleId}"`;
   const paneId = await runInNewTabPane(args.name, args.cwd, prepared.command);

