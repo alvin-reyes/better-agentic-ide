@@ -1,0 +1,1 @@
+HALT: workflow.md:1: workflow.route must be oneshot, full, or auto, not bogus

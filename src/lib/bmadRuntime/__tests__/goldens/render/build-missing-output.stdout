@@ -1,0 +1,1 @@
+HALT: generation is missing rendered files: step-01-clarify-and-route.md in /p/_bmad/render/bmad-build/golden-proj-d8475e76786a/4c076ba22f37de55dbe0; deleting that folder is safe because the next run renders it again
