@@ -4,6 +4,7 @@ import BoardView, { rowLabel } from "../board/BoardView";
 import { buildBoard, type BoardState } from "../../stores/stageBoardStore";
 import { stageView } from "../../lib/confirmedStage";
 import type { StoryView } from "../../lib/storyState";
+import { ticketView } from "../../lib/ticketView";
 
 const story = (id: string, status: string) => ({
   file: `docs/stories/${id}.x.md`,
@@ -99,6 +100,26 @@ describe("BoardView", () => {
     renderBoard(board);
     expect(screen.getByText("Needs attention")).toBeTruthy();
     expect(screen.getByText("docs/stories/1.6.x.md: could not be read: EACCES")).toBeTruthy();
+  });
+
+  it("shows a v6 ticket's own status word beside its state", () => {
+    const t = (id: string, status: string) => ticketView({
+      file: `x/story-${id}.md`, id, localId: id, type: "story", title: `Ticket ${id}`,
+      parent: "epic-cart", status, state: "planned", acceptanceCriteria: [], epic: "epic-cart",
+    }, []);
+    const base = buildBoard({ config: null, artifactExists: () => false, stories: [], gates: [] });
+    const board: BoardState = { ...base, stories: [t("1.1", "ready-for-dev"), t("1.2", "draft")], epics: [{ slug: "epic-cart", title: "Cart", refs: ["1.1", "1.2"] }] };
+    render(<BoardView methodology="v6" board={board} stage={stageView(board, null)} error={null} actions={{ onOpen: vi.fn() }} />);
+    const row = (id: string) => document.querySelector(`[data-row="${id}"]`) as HTMLElement;
+    expect(row("1.1").querySelector("[data-state]")!.textContent).toBe("draft");
+    expect(row("1.1").querySelector("[data-raw-status]")!.textContent).toBe("ready-for-dev");
+    // Same word as the state: not repeated.
+    expect(row("1.2").querySelector("[data-raw-status]")).toBeNull();
+  });
+
+  it("does not repeat a v4 story's status word", () => {
+    renderBoard();
+    expect(document.querySelector("[data-raw-status]")).toBeNull();
   });
 
   it("shows a rebuild error above the last good board", () => {

@@ -143,7 +143,7 @@ function GateDetail({ gate }: { gate: Gate | undefined }) {
   );
 }
 
-export function Row({ v, actions }: { v: StoryView; actions: BoardActions }) {
+export function Row({ v, actions, methodology = "v4" }: { v: StoryView; actions: BoardActions; methodology?: "v4" | "v6" }) {
   const [open, setOpen] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
   const label = rowLabel(v);
@@ -152,6 +152,8 @@ export function Row({ v, actions }: { v: StoryView; actions: BoardActions }) {
   const alwaysNote = (label === "waived" || label === "claimed" || v.gate?.error) && v.note;
   // Nothing below approved is dispatched: `dispatchable` is the engines' rule.
   const canDispatch = v.dispatchable && label !== "done ✓" && label !== "waived";
+  // v6 has its own status words (ready-for-dev maps to draft); show the plan's word too.
+  const ownWord = methodology === "v6" && v.story.rawStatus && v.story.rawStatus !== label ? v.story.rawStatus : null;
   return (
     <div data-row={v.story.id} style={{ padding: "4px 0" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
@@ -165,6 +167,7 @@ export function Row({ v, actions }: { v: StoryView; actions: BoardActions }) {
           {v.story.title}
         </button>
         <span data-state={label} style={{ fontSize: 11, color: label === "claimed" ? "var(--warning, #d29922)" : undefined }}>{label}</span>
+        {ownWord && <span data-raw-status={ownWord} style={{ ...muted, fontSize: 10 }}>{ownWord}</span>}
         {v.state === "draft" && actions.onApprove && (
           <ActionButton action="approve" label="Approve" run={() => actions.onApprove!(v)} onError={setRowError} />
         )}
@@ -184,7 +187,7 @@ function WorkItems({ methodology, board, actions }: { methodology: "v4" | "v6"; 
   if (board.stories.length === 0) return <div style={{ ...section, ...muted }}>No {methodology === "v6" ? "tickets" : "stories"} yet.</div>;
 
   const rows = (refs: string[] | null) =>
-    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} />);
+    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} methodology={methodology} />);
 
   if (methodology === "v4" || !board.epics) {
     return <div style={section}><div style={heading}>Stories</div>{rows(null)}</div>;
