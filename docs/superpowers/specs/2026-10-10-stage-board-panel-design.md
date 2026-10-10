@@ -53,13 +53,34 @@ project (a home directory, no cwd yet) shows "No project in this pane".
 | `mkdir` | `create_directory` (existing) |
 | `exists` | `path_exists` (new) |
 | `isSymlink` | `path_is_symlink` (new, does not follow the link) |
-| `append` | `append_text_file` (new, `O_APPEND`, creates when missing) |
-| `delete` | `remove_file` (new, files only) |
+| `append` | throws "not available in the board panel" |
+| `delete` | throws "not available in the board panel" |
 
-The four new commands are one-liners in `src-tauri/src/lib.rs` with Rust unit
-tests. `list_directory` skips `node_modules`, `.git`, `target` and `dist`;
-that is acceptable for every path the engines walk (`_bmad-output/`, `docs/`,
+The two new commands are one-liners in `src-tauri/src/lib.rs` with Rust unit
+tests. `append` and `delete` get no commands: nothing the panel runs calls them
+(the runtime appends only in `memlog`, and deletes only when undoing a failed
+`mirror`), and a generic delete command in the webview is a capability the
+panel has no use for. A test runs `tickets mark` on a repo-store fixture
+through an `Fs` whose `append` and `delete` throw, so a runtime change that
+starts calling them fails the build instead of the click.
+
+`list_directory` skips `node_modules`, `.git`, `target` and `dist`; that is
+acceptable for every path the engines walk (`_bmad-output/`, `docs/`,
 `.ade/gates/`), and the adapter's tests say so.
+
+### Engine additions
+
+`BoardState` today has a flat `stories` list and no place for the v6 ticket
+tree's `problems`, and an empty v6 board cannot say *why* it is empty. Three
+optional fields, filled only by `buildBoardV6`:
+
+- `epics?: { id: string; title: string }[]`, in the tree's order. Rows group
+  under their epic by the ref's epic id; a ticket whose epic is not listed
+  goes under "Other".
+- `problems?: string[]`, the tree's `problems` passed through.
+- `noInitiative?: true` when the tree read failed with "no active initiative".
+
+`buildBoard` (v4) is unchanged.
 
 **Which engine.** `project_setup_status` reports `methodology`:
 
@@ -77,9 +98,17 @@ rebuilt from disk.
 
 ### Refresh
 
-- One `watch_directory` on the project root, extensions
-  `md, yml, yaml, toml`, debounced 300 ms. Unwatched when the panel closes or
-  the project changes.
+- `watch_directory` on the directories the engine reads, not the project root,
+  extensions `md, yml, yaml, toml`, debounced 300 ms. The watcher has no skip
+  list, so a recursive watch on the root would register all of
+  `node_modules`, `target` and `.git` (inotify limits on Linux) and turn an
+  `npm install` into a storm of rebuilds from vendored Markdown.
+  - v6: `_bmad/`, `_bmad-output/`, `.ade/`
+  - v4: `.bmad-core/`, `.ade/`, and the story, PRD, architecture and QA
+    locations from `core-config.yaml` (the parent folder for a single file)
+  - Only directories that exist are watched; the set is recomputed after each
+    rebuild, so a folder an agent creates is picked up on the next one.
+  - All are unwatched when the panel closes or the project changes.
 - A rebuild on window focus, so a missed event costs a refresh, not
   correctness.
 - A rebuild that throws keeps the last good board on screen with the error
@@ -127,7 +156,10 @@ written in the background.
   rewrite is in `src/lib/storyStatus.ts` and is tested on its own.
 - **v6:** runs the runtime port's `tickets mark <epic dir> <id> ready-for-dev`
   over `tauriFs`, the same command the agents use, so the panel and the
-  agents write tickets identically.
+  agents write tickets identically. `mark` refuses any store but `repo`
+  ("change status through the store's write verb"), so on a tracker-backed
+  project the button is replaced by "Approve in <store>", read from the same
+  store config.
 
 The button appears only on draft rows. A failed write leaves the row as it was
 and shows the error on it.
@@ -137,9 +169,14 @@ and shows the error on it.
 On approved / `ready-for-dev` rows only. **Nothing below approved can be
 dispatched**, and a test reintroduces the violation to prove it fails.
 Dispatch opens a new terminal pane in the project root and launches the
-developer role through the existing agent-launch path, naming the story file
-or ticket ref. No prompt is typed for the user; the story or ticket names the
-work.
+developer role through the existing agent-launch path with the story file or
+ticket ref as its opening task. No prompt is typed for the user.
+
+`buildLaunchCommand` cannot carry a task today: `LaunchOptions` has none. It
+gains `task?: string`, passed as the provider's initial prompt argument and
+shell-quoted like the role path. A provider with no initial-prompt argument
+returns `{ kind: "unsupported" }` for a launch with a task, and the Dispatch
+button shows that reason instead of launching an agent with nothing to do.
 
 ### Stage advance
 
@@ -149,7 +186,13 @@ half of the gate.
 
 - **`.ade/stage`** holds the stage a person confirmed: one line, a `StageId`.
   It sits in `.ade/` and is committed like the rest of it; git is the history.
-- **Shown stage** = the confirmed stage when the file exists and is valid.
+- **Shown stage** = the confirmed stage when the file exists, is valid, and
+  every stage before it is complete on the evidence.
+- **The file is not trusted on its own.** Any agent can write `.ade/stage`,
+  as any agent can write `Status: Done`. A confirmed stage whose earlier
+  stages lack their evidence renders as **claimed**, with the evidence-derived
+  stage beside it, the same distrust rule as a claimed story. The panel
+  cannot stop the write; it declines to believe it.
 - **Next →** appears when `canAdvance(board, confirmed)` is true: the confirmed
   stage's evidence is on disk. Clicking writes the next stage.
 - **Back** is always available from any stage past the first. It writes the
@@ -167,7 +210,7 @@ Tauri.
 ## Testing
 
 - `tauriFs`: each method calls its command with the right arguments
-  (mocked `invoke`); the four new Rust commands have unit tests.
+  (mocked `invoke`); the two new Rust commands have unit tests; `append` and `delete` throw.
 - `boardV4Inputs`: gathers config, stories and gates from an in-memory `Fs`
   fixture and produces the same board `buildBoard` gives for those inputs.
 - Store: debounce coalesces a burst of events into one rebuild; a throwing
@@ -179,6 +222,9 @@ Tauri.
   - Next does not appear without the evidence on disk
   - the v4 approve rewrite changes only the Status line
   - a missing or garbled `.ade/stage` falls back to evidence
+  - a `.ade/stage` ahead of the evidence renders as claimed
+  - Dispatch passes the ref as the task, and a provider without an initial
+    prompt disables Dispatch rather than launching empty
 
 ## Non-goals
 
