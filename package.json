@@ -40,6 +40,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-resizable-panels": "^4.6.5",
+    "smol-toml": "^1.9.1",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
