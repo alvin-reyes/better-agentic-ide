@@ -1,0 +1,6 @@
+{
+  "core": {
+    "project_name": "golden-proj",
+    "output_folder": "{project-root}/_bmad-output"
+  }
+}
