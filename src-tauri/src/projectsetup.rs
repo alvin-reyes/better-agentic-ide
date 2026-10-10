@@ -23,6 +23,9 @@ pub struct SetupStatus {
     pub bmad_installed: bool,
     /// Detected stacks: "evm", "solana", "go", "rust".
     pub stacks: Vec<String>,
+    /// What the project is on: the marker, else `.bmad-core/` ⇒ "v4". `None`
+    /// is a project with neither — the one setup asks about.
+    pub methodology: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -115,6 +118,7 @@ pub fn project_setup_status(root: String, paths: Vec<String>, marker: String) ->
         needs_import: dir.join("CLAUDE.md").is_file() && !has_import(&dir, &marker),
         bmad_installed: dir.join(".bmad-core").join("VERSION").is_file(),
         stacks: detect_stacks(&dir),
+        methodology: crate::bmadv6::detect_on_disk(&dir).map(|m| m.as_str().to_string()),
     })
 }
 
@@ -340,6 +344,26 @@ mod tests {
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# Mine\n");
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "edited");
         assert!(!dir.join(".claude").exists(), "empty folders setup created are removed");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn status_reports_the_methodology_on_disk_marker_first() {
+        let dir = temp();
+        let root: String = dir.to_string_lossy().into();
+        let status = || project_setup_status(root.clone(), vec![], "<!-- m -->".into()).unwrap();
+        assert_eq!(status().methodology, None, "a brand-new project has neither");
+
+        // `.bmad-core/` without a marker: a v4 project from before the marker.
+        std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+        assert_eq!(status().methodology.as_deref(), Some("v4"));
+
+        // The marker wins over `.bmad-core/`, as detect_on_disk (and so setup) does.
+        std::fs::create_dir_all(dir.join(".ade")).unwrap();
+        std::fs::write(dir.join(".ade/methodology"), "v6\n").unwrap();
+        assert_eq!(status().methodology.as_deref(), Some("v6"));
+        std::fs::write(dir.join(".ade/methodology"), "v4\n").unwrap();
+        assert_eq!(status().methodology.as_deref(), Some("v4"));
         std::fs::remove_dir_all(dir).ok();
     }
 

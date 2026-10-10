@@ -8,12 +8,17 @@ import {
   CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, methodologyFiles, stackAgentFiles, type AgentEntry, type MethodologyFile, type Stack,
 } from "./projectMethodology";
 
+/** The two BMAD lines a project can be set up on; v6 is the default. */
+export type Methodology = "v6" | "v4";
+
 export interface SetupStatus {
   isGit: boolean;
   missing: string[];
   needsImport: boolean;
   bmadInstalled: boolean;
   stacks: Stack[];
+  /** The marker, else `.bmad-core/` ⇒ "v4"; null when the project has neither. */
+  methodology: Methodology | null;
 }
 
 export interface SetupReport {
@@ -119,13 +124,20 @@ const withoutRemoved = (root: string, files: MethodologyFile[]) => {
   return files.filter((f) => !removed.has(f.path));
 };
 
-function apply(root: string, files: MethodologyFile[]): Promise<SetupReport> {
-  return invoke<SetupReport>("project_setup_apply", { root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, full: true });
+function apply(root: string, files: MethodologyFile[], methodology: Methodology): Promise<SetupReport> {
+  return invoke<SetupReport>("project_setup_apply", {
+    root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: true,
+  });
 }
 
 export function setupStatus(root: string): Promise<SetupStatus> {
   const files = methodologyFiles(baseName(root));
   return invoke<SetupStatus>("project_setup_status", { root, paths: files.map((f) => f.path), marker: CLAUDE_MD_IMPORT_MARKER });
+}
+
+/** What a project is on, from its status; null when it has neither. */
+export async function detectOnDisk(root: string): Promise<Methodology | null> {
+  return (await setupStatus(root)).methodology ?? null;
 }
 
 export function isComplete(s: SetupStatus): boolean {
@@ -143,14 +155,21 @@ export function isSettingUp(root: string): boolean {
  * Set up a project: BMAD, methodology, the core roles and its stack's agents.
  * Safe to run again; a setup already running for the project is shared.
  * Running it by hand clears an earlier Undo.
+ *
+ * `methodology` is the owner's answer from the setup prompt. Without one, the
+ * project's own marker (else `.bmad-core/`) decides, and a project with
+ * neither — a new one — gets the v6 default.
  */
-export function setUpProject(root: string, stacks?: Stack[]): Promise<SetupResult> {
+export function setUpProject(root: string, methodology?: Methodology, stacks?: Stack[]): Promise<SetupResult> {
   const running = inFlight.get(root);
   if (running) return running;
   const job = (async () => {
-    const detected = stacks ?? (await setupStatus(root)).stacks;
+    // Only ask the project itself when the callers left something unresolved.
+    const status = methodology !== undefined && stacks !== undefined ? null : await setupStatus(root);
+    const chosen = methodology ?? status?.methodology ?? "v6";
+    const detected = stacks ?? status?.stacks ?? [];
     const files = withoutRemoved(root, methodologyFiles(baseName(root), detected));
-    const report = await apply(root, files);
+    const report = await apply(root, files, chosen);
     markSetUp(root, true);
     writeList(DECLINED_KEY, root, false);
     return { root, report, files, stacks: detected };
@@ -160,16 +179,20 @@ export function setUpProject(root: string, stacks?: Stack[]): Promise<SetupResul
 }
 
 /** Agents for stacks a set-up project has gained since (e.g. a new foundry.toml). */
-export async function addStackAgents(root: string, stacks: Stack[]): Promise<SetupResult> {
+export async function addStackAgents(root: string, stacks: Stack[], methodology: Methodology = "v6"): Promise<SetupResult> {
   const files = withoutRemoved(root, stackAgentFiles(stacks));
-  const report = await invoke<SetupReport>("project_setup_apply", { root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, full: false });
+  const report = await invoke<SetupReport>("project_setup_apply", {
+    root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: false,
+  });
   return { root, report, files, stacks };
 }
 
 /** Add one agent to a project now. */
-export async function addAgent(root: string, agent: AgentEntry): Promise<void> {
+export async function addAgent(root: string, agent: AgentEntry, methodology: Methodology = "v6"): Promise<void> {
   setRemoved(root, agent.id, false);
-  await invoke<SetupReport>("project_setup_apply", { root, files: [agent.file], import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, full: false });
+  await invoke<SetupReport>("project_setup_apply", {
+    root, files: [agent.file], import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: false,
+  });
 }
 
 /** Remove one agent from a project; setup won't add it back. */

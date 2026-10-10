@@ -17,6 +17,17 @@ pub enum Methodology {
     V6,
 }
 
+impl Methodology {
+    /// The marker's spelling: what `.ade/methodology` holds, and what the
+    /// frontend's `methodology` argument accepts.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Methodology::V4 => "v4",
+            Methodology::V6 => "v6",
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ScaffoldReport {
     pub created: Vec<PathBuf>,

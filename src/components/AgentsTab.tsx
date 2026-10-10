@@ -43,7 +43,7 @@ export default function AgentsTab({ root, onNotice, onError }: Props) {
         await removeAgent(root, a.id);
         onNotice(`Removed ${a.title}. Setup won't add it back to this project.`);
       } else {
-        await addAgent(root, a);
+        await addAgent(root, a, status?.methodology ?? "v6");
         onNotice(`Added ${a.title} as .claude/agents/${a.id}.md. New Claude Code sessions can delegate to it.`);
       }
       await refresh();
