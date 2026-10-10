@@ -1,0 +1,14 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-forge-idea/scripts/resolve_personas.py --project-root /p --skill /p/elsewhere/bmad-forge-idea",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--project-root",
+    "/p",
+    "--skill",
+    "/p/elsewhere/bmad-forge-idea"
+  ],
+  "stdout": "{\n  \"agents\": [\n    {\n      \"code\": \"bmad-agent-analyst\",\n      \"name\": \"Renamed Analyst\",\n      \"source\": \"custom\",\n      \"persona\": \"A custom persona the user prefers.\"\n    },\n    {\n      \"code\": \"my-own-agent\",\n      \"name\": \"My Own Agent\",\n      \"title\": \"Hand-rolled\",\n      \"source\": \"installed\",\n      \"persona\": \"An old-style persona paragraph.\"\n    }\n  ],\n  \"members\": [\n    {\n      \"code\": \"scribe\",\n      \"name\": \"The Scribe\",\n      \"title\": \"Keeper of the minutes\",\n      \"source\": \"custom\",\n      \"persona\": \"Writes everything down, argues nothing.\"\n    }\n  ],\n  \"parties\": [\n    {\n      \"id\": \"writers-room\",\n      \"name\": \"The Writers' Room\",\n      \"members\": [\n        {\n          \"code\": \"scribe\",\n          \"name\": \"The Scribe\",\n          \"title\": \"Keeper of the minutes\",\n          \"source\": \"custom\",\n          \"persona\": \"Writes everything down, argues nothing.\"\n        },\n        {\n          \"code\": \"bmad-agent-analyst\",\n          \"name\": \"Renamed Analyst\",\n          \"source\": \"custom\",\n          \"persona\": \"A custom persona the user prefers.\"\n        },\n        {\n          \"code\": \"bmad-agent-analyst\",\n          \"name\": \"Renamed Analyst\",\n          \"source\": \"custom\",\n          \"persona\": \"A custom persona the user prefers.\"\n        }\n      ],\n      \"scene\": \"A long table, cold coffee, a whiteboard nobody erased.\"\n    }\n  ],\n  \"default_party\": \"writers-room\",\n  \"party_mode_found\": false,\n  \"agents_resolved\": true\n}\n",
+  "stderr": "",
+  "files": {}
+}

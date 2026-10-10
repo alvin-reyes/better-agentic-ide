@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-deep-recon/scripts/recon_kit.py staleness /p/recon/claims.json --windows {\"size/growth\": 18, \"pricing\": 3} --today 2026-04-01",
+  "stream": "stdout",
+  "exitCode": 1,
+  "argv": [
+    "staleness",
+    "/p/recon/claims.json",
+    "--windows",
+    "{\"size/growth\": 18, \"pricing\": 3}",
+    "--today",
+    "2026-04-01"
+  ],
+  "stdout": "{\n  \"today\": \"2026-04-01\",\n  \"claims\": [\n    {\n      \"claim\": \"The market grows 9% a year\",\n      \"class\": \"size/growth\",\n      \"pub_date\": \"2024-03\",\n      \"recheck\": \"2025-09-01\",\n      \"stale\": true\n    },\n    {\n      \"claim\": \"Competitors ignore onboarding\",\n      \"class\": \"pricing\",\n      \"pub_date\": \"2023-11-02\",\n      \"recheck\": \"2024-02-02\",\n      \"stale\": true\n    },\n    {\n      \"claim\": \"Teams of five are the median buyer\",\n      \"class\": \"buyers\",\n      \"pub_date\": \"2025-12-01\",\n      \"recheck\": null,\n      \"stale\": null\n    }\n  ],\n  \"stale_count\": 2,\n  \"earliest_recheck\": \"2024-02-02\",\n  \"no_window_classes\": [\n    \"buyers\"\n  ]\n}\n",
+  "stderr": "",
+  "files": {}
+}

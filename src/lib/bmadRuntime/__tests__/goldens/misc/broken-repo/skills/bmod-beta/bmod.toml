@@ -1,0 +1,6 @@
+[bmod]
+code = "beta"
+version = "2.0.0"
+update_source = "github:acme/beta"
+skills = ["beta-one"]
+pre_install_message = ""

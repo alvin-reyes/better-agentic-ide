@@ -1,0 +1,10 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad/scripts/validate_manifests.py --project-root /p/src-tauri/resources/bmad-v6",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--project-root",
+    "/p/src-tauri/resources/bmad-v6"
+  ],
+  "stdout": "bmod files valid: 30 skills, 3 module records, 3 knowledge documents.\n"
+}

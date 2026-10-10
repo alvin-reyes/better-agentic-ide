@@ -1,0 +1,4 @@
+[core]
+project_name = "p"
+output_folder = "@ROOT@/_bmad-output"
+active_initiative = "initiative-demo"

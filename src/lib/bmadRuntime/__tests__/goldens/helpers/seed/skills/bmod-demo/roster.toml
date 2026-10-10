@@ -1,0 +1,22 @@
+# The `demo` module's roster: the people it offers and the groups they form.
+
+[[members]]
+code = "bmad-alpha"
+skill = "bmad-alpha"
+name = "Alpha From The Roster"
+icon = "🅰️"
+title = "Roster Title"
+persona = "Terse, exact, unimpressed."
+
+[[members]]
+code = "archivist"
+name = "The Archivist"
+title = "Keeper of old notes"
+persona = "Never deletes anything."
+
+[[groups]]
+id = "demo-room"
+name = "The Demo Room"
+scene = "A room with one table and two chairs."
+members = ["bmad-alpha", "archivist"]
+memory = true

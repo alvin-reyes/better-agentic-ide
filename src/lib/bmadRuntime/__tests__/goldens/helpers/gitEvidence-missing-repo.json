@@ -1,0 +1,14 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-retrospective/scripts/git_evidence.py --repo /p/nope --range HEAD~1..HEAD",
+  "stream": "stdout",
+  "exitCode": 1,
+  "argv": [
+    "--repo",
+    "/p/nope",
+    "--range",
+    "HEAD~1..HEAD"
+  ],
+  "stdout": "{\"ok\": false, \"error\": \"fatal: cannot change to '/p/nope': No such file or directory\"}",
+  "stderr": "",
+  "files": {}
+}

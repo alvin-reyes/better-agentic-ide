@@ -1,0 +1,36 @@
+{
+  "generation_hash": "c0be84ab0d6b233ea0b1",
+  "inputs": {
+    "jinja2_version": "3.1.6",
+    "project_root": "/p",
+    "renderer_sha256": "a622fd5d9f633690323bdecf6cc9dc28625ef0d7b9d971fcc3cd101ed271fa19",
+    "resolved_values": {
+      "config.core.output_folder": "/p/_bmad-output",
+      "customization.workflow.on_activation": "",
+      "customization.workflow.on_block_activation": "",
+      "customization.workflow.on_block_complete": "",
+      "customization.workflow.on_complete": "",
+      "customization.workflow.persistent_facts": []
+    },
+    "skill_root": "/Users/alvin-reyes/Project/better-agentic-ide/.claude/worktrees/bmad-v6/src-tauri/resources/bmad-v6/skills/bmad-walkthrough",
+    "source_sha256": {
+      "step-01-orientation.md": "6ba18633dd1f0cb83f9b76c83dd9b4632405372d1bbe3cbc76ddb2dd5532fe9f",
+      "step-02-narrative.md": "adfb54009c18844b5fd733450b5a5199a3ffd2a441308945e71ea57ecb03a7ff",
+      "step-03-walkthrough.md": "32fd4ffab64e1829789f941e37ce830c95257bf6ed5d5a8ae539ec3a564945f9",
+      "templates/log-template.md": "ebf59c7f6a85dfccea6f580e8a35363a0a8641e66067427ec803592d297ae770",
+      "workflow.md": "d5297f4f90e52a9bc013f3dd011b75b73a197da6d3f0639fd8a580578b5ba88d"
+    }
+  },
+  "outputs": {
+    "step-01-orientation.md": "41eef2729dbd4b39fd70763d5721589b0d0c0d5fa14f184d0de5c6b4e971a70c",
+    "step-02-narrative.md": "81e50727dc72ce7c4687d2b9e4f0404faf3a3a3daf854c774d97c481aa3e1e81",
+    "step-03-walkthrough.md": "ef6e6e7dcef093956467175db9e24ae4b49f3ac7817a9d4b0b86db17deb48bea",
+    "templates/log-template.md": "e4992dcf11a8c0c798c8f63c75417a8777f2b2c74c1b38bdaf3f676513f0875d",
+    "workflow.md": "3b361c60434ee4f69f5d79c6e2fe9d061be1ee6e808e923a7f912435490bb737"
+  },
+  "project_root": "/p",
+  "project_slug": "golden-proj",
+  "root_hash": "d8475e76786a",
+  "schema_version": 1,
+  "skill": "bmad-walkthrough"
+}

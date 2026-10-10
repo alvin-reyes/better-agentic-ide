@@ -1,0 +1,11 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/read_session_log.py /p/sessions/party.memlog.md",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "/p/sessions/party.memlog.md"
+  ],
+  "stdout": "{\n  \"sources\": [\n    {\n      \"path\": \"/p/sessions/party.memlog.md\",\n      \"format\": \"memlog\",\n      \"entries\": 6\n    }\n  ],\n  \"user_requests\": [\n    {\n      \"text\": \"Keep the default party as the installed agents.\",\n      \"count\": 1\n    },\n    {\n      \"text\": \"Let the analyst open the room.\",\n      \"count\": 1\n    }\n  ],\n  \"tool_sequences\": [],\n  \"corrections\": [\n    \"Nobody owns the finale note.\",\n    \"The pricing number was wrong, use the report.\"\n  ],\n  \"files_touched\": [],\n  \"skills_invoked\": []\n}\n",
+  "stderr": "",
+  "files": {}
+}

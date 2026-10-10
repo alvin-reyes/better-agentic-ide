@@ -1,0 +1,11 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/scan_scripts.py /p/skills/bmad-alpha",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "/p/skills/bmad-alpha"
+  ],
+  "stdout": "{\n  \"skill\": \"bmad-alpha\",\n  \"scripts\": [\n    {\n      \"path\": \"scripts/good.py\",\n      \"has_pep723\": true,\n      \"floor\": \">=3.11\",\n      \"has_test\": true\n    }\n  ],\n  \"findings\": []\n}\n",
+  "stderr": "",
+  "files": {}
+}

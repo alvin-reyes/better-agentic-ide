@@ -1,0 +1,13 @@
+{
+  "python": "uv run /p/skills/half-born/scripts/wake.py --skill-root /p/skills/half-born /p",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--skill-root",
+    "/p/skills/half-born",
+    "/p"
+  ],
+  "stdout": "MODE: FIRST_BREATH\nINCOMPLETE SANCTUM at /p/_bmad/memory/half-born: missing CREED.md, BOND.md, HOW-I-REMEMBER.md, CAPABILITIES.md\nThis is your one birth. Load references/first-breath.md and follow it.\n",
+  "stderr": "",
+  "files": {}
+}

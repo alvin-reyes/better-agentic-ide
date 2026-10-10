@@ -1,0 +1,22 @@
+{
+  "store": "jira",
+  "key": "",
+  "site": "",
+  "access": "Use acli against `site`. Custom fields go through `--from-json`; check a subcommand's spelling\nwith `acli jira workitem --help` before first use.\n",
+  "fields": "severity is Jira's priority: P0 = Highest, P1 = High, P2 = Medium, P3 = Low; set it at create\n(--priority, or --from-json when the flag is absent) and change it the same way. risk is a label\nrisk-low, risk-medium, or risk-high. estimate is the Story Points field on a story and a label est:<value> on an epic, through --from-json. Empty field: default priority, no label.\n",
+  "reference": "acli creates no web links; the description line is the reference.\n",
+  "types": {
+    "initiative": "",
+    "epic": "Epic",
+    "story": "Story",
+    "spike": "Task",
+    "bug": "Bug"
+  },
+  "status": {
+    "backlog": "To Do",
+    "in-progress": "In Progress",
+    "review": "In Review",
+    "done": "Done",
+    "dropped": "Done"
+  }
+}

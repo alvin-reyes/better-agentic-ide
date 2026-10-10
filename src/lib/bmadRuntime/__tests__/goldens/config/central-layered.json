@@ -1,0 +1,43 @@
+{
+  "core": {
+    "project_name": "team-project",
+    "output_folder": "{project-root}/_bmad-output",
+    "active_initiative": "initiative-checkout"
+  },
+  "modules": {
+    "demo": {
+      "panels": [
+        {
+          "code": "keep-team",
+          "title": "user override"
+        },
+        {
+          "code": "team-only",
+          "title": "team only"
+        },
+        {
+          "code": "user-only",
+          "title": "user only"
+        }
+      ],
+      "checks": [
+        {
+          "code": "lint",
+          "enabled": true
+        },
+        {
+          "code": "lint",
+          "enabled": false
+        },
+        {
+          "id": "docs",
+          "enabled": true
+        }
+      ],
+      "flags": {
+        "alpha": true,
+        "beta": true
+      }
+    }
+  }
+}

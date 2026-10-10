@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-deep-recon/scripts/recon_kit.py staleness /p/recon/claims-bad.json --windows {\"pricing\": 3} --today 2026-04-01",
+  "stream": "stderr",
+  "exitCode": 2,
+  "argv": [
+    "staleness",
+    "/p/recon/claims-bad.json",
+    "--windows",
+    "{\"pricing\": 3}",
+    "--today",
+    "2026-04-01"
+  ],
+  "stdout": "error in claim {'claim': 'The market grows 9% a year', 'class': 'pricing', 'pub_date': 'nope'}: unparseable date: 'nope' (want YYYY[-MM[-DD]])\n",
+  "stderr": "error in claim {'claim': 'The market grows 9% a year', 'class': 'pricing', 'pub_date': 'nope'}: unparseable date: 'nope' (want YYYY[-MM[-DD]])\n",
+  "files": {}
+}

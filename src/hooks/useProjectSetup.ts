@@ -43,13 +43,15 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
       if (!status || cancelled) return;
       if (wasSetUp(root)) {
         if (!status.stacks.length) return;
-        const r = await addStackAgents(root, status.stacks).catch(() => null);
+        const r = await addStackAgents(root, status.stacks, status.methodology ?? "v6").catch(() => null);
         if (r && !cancelled) announceSetup(r, show, true);
         return;
       }
       if (!status.isGit) return;
       const quiet = isComplete(status);
-      const result = await setUpProject(root, status.stacks).catch(() => null);
+      // The project's own methodology: a v4 project stays v4. The setup prompt
+      // (New tab) is where a project with neither gets asked about.
+      const result = await setUpProject(root, status.methodology ?? "v6", status.stacks).catch(() => null);
       if (result && !cancelled && !quiet) announceSetup(result, show);
     })();
     return () => { cancelled = true; };

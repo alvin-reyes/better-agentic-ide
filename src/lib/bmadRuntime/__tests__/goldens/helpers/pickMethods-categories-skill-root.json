@@ -1,0 +1,15 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-advanced-elicitation/scripts/pick_methods.py --skill-root /p/skills/bmad-advanced-elicitation --file /p/catalog/methods.csv categories",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--skill-root",
+    "/p/skills/bmad-advanced-elicitation",
+    "--file",
+    "/p/catalog/methods.csv",
+    "categories"
+  ],
+  "stdout": "business\t2\nexperiential\t1\ntechnical\t2\n",
+  "stderr": "",
+  "files": {}
+}

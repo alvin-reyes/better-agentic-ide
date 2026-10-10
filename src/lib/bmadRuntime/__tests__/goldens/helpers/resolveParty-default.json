@@ -1,0 +1,14 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-party-mode/scripts/resolve_party.py --project-root /p --skill /p/skills/bmad-party-mode",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--project-root",
+    "/p",
+    "--skill",
+    "/p/skills/bmad-party-mode"
+  ],
+  "stdout": "{\n  \"party_mode\": \"session\",\n  \"groups\": [\n    {\n      \"id\": \"demo-room\",\n      \"name\": \"The Demo Room\",\n      \"member_count\": 2\n    },\n    {\n      \"id\": \"code-review-crew\",\n      \"name\": \"Code Review Crew\",\n      \"member_count\": 5\n    },\n    {\n      \"id\": \"anti-consensus-club\",\n      \"name\": \"Anti-Consensus Club\",\n      \"member_count\": 4\n    },\n    {\n      \"id\": \"writers-room\",\n      \"name\": \"The Writers' Room\",\n      \"member_count\": 4\n    }\n  ],\n  \"installed_agents_resolved\": true,\n  \"roster_problems\": [\n    \"/p/skills/bmad-epsilon/bmod.toml has neither a [bmod] nor a [skill] table\",\n    \"module record bmod-core-tools is not installed; it is named by bmad-party-mode; install it with `npx skills add bmad-code-org/BMAD-METHOD --skill bmod-core-tools`\"\n  ],\n  \"active\": \"writers-room\",\n  \"name\": \"The Writers' Room\",\n  \"members\": [\n    {\n      \"code\": \"scribe\",\n      \"source\": \"custom\",\n      \"name\": \"The Scribe\",\n      \"title\": \"Keeper of the minutes\",\n      \"persona\": \"Writes everything down, argues nothing.\"\n    },\n    {\n      \"code\": \"bmad-agent-analyst\",\n      \"name\": \"Renamed Analyst\",\n      \"icon\": \"\",\n      \"title\": \"\",\n      \"module\": \"\",\n      \"source\": \"custom\",\n      \"persona\": \"A custom persona the user prefers.\"\n    },\n    {\n      \"code\": \"bmad-agent-analyst\",\n      \"name\": \"Renamed Analyst\",\n      \"icon\": \"\",\n      \"title\": \"\",\n      \"module\": \"\",\n      \"source\": \"custom\",\n      \"persona\": \"A custom persona the user prefers.\"\n    }\n  ],\n  \"unresolved\": [\n    \"nobody\"\n  ],\n  \"memory_enabled\": false,\n  \"scene\": \"A long table, cold coffee, a whiteboard nobody erased.\"\n}\n",
+  "stderr": "",
+  "files": {}
+}

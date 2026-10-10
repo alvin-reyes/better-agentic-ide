@@ -1,0 +1,13 @@
+{
+  "python": "uv run /tmp/golden-proj/skills/bmad-brainstorming/scripts/brain.py --file /p/catalog/brain.csv categories",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--file",
+    "/p/catalog/brain.csv",
+    "categories"
+  ],
+  "stdout": "creative\t2\ndeep\t1\nwild\t2\n",
+  "stderr": "",
+  "files": {}
+}

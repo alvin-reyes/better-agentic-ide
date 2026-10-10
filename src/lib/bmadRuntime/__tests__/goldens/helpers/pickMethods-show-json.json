@@ -1,0 +1,16 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-advanced-elicitation/scripts/pick_methods.py --file /p/catalog/methods.csv --json show pre-mortem 4",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--file",
+    "/p/catalog/methods.csv",
+    "--json",
+    "show",
+    "pre-mortem",
+    "4"
+  ],
+  "stdout": "[{\"num\": \"1\", \"category\": \"technical\", \"method_name\": \"Pre-mortem\", \"description\": \"Imagine the launch failed and work backwards to the causes\", \"output_pattern\": \"failure \\u2192 causes \\u2192 prevention\"}, {\"num\": \"4\", \"category\": \"business\", \"method_name\": \"Business Model Canvas\", \"description\": \"Sketch the nine blocks on one page\", \"output_pattern\": \"blocks \\u2192 unknowns \\u2192 tests\"}]\n",
+  "stderr": "",
+  "files": {}
+}

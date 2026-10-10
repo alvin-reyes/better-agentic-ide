@@ -1,0 +1,18 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-deep-recon/scripts/recon_kit.py slug Where should the product go next? --type market --pattern research-{topic_slug}-{research_type}-{date} --date 2026-04-01",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "slug",
+    "Where should the product go next?",
+    "--type",
+    "market",
+    "--pattern",
+    "research-{topic_slug}-{research_type}-{date}",
+    "--date",
+    "2026-04-01"
+  ],
+  "stdout": "{\n  \"topic_slug\": \"where-should-the-product-go-next\",\n  \"folder\": \"research-where-should-the-product-go-next-market-2026-04-01\"\n}\n",
+  "stderr": "",
+  "files": {}
+}

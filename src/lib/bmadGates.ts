@@ -57,10 +57,17 @@ function topLevel(yaml: string, key: string): string | null {
   return raw.slice(0, end).trim().replace(/^(["'])(.*)\1$/, "$2");
 }
 
-/** "2.1-ledger-write-path.yml" -> "2.1" */
+/**
+ * "2.1-ledger-write-path.yml" -> "2.1" (v4); "1.6a.yml" -> "1.6a" (a v6 ref).
+ *
+ * A v6 ticket id may carry letters (`6a`, a ticket split off `6`). Stopping at
+ * the digits read `1.6a.yml` as "1.6", crediting 1.6a's verdict to 1.6 — a
+ * done 1.6 then rendered verified on someone else's evidence. The id runs to
+ * the first `-` or `.` (the slug or the extension), or the end.
+ */
 function idFromFilename(file: string): string {
   const base = file.slice(file.lastIndexOf("/") + 1);
-  return /^(\d+\.\d+)/.exec(base)?.[1] ?? base.replace(/\.ya?ml$/, "");
+  return /^(\d+\.\d+[A-Za-z]*)(?=[-.]|$)/.exec(base)?.[1] ?? base.replace(/\.ya?ml$/, "");
 }
 
 /**

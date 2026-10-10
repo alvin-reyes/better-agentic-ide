@@ -1,0 +1,11 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/scan_paths.py /p/skills/bmad-alpha",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "/p/skills/bmad-alpha"
+  ],
+  "stdout": "{\n  \"skill\": \"bmad-alpha\",\n  \"files_scanned\": 3,\n  \"findings\": []\n}\n",
+  "stderr": "",
+  "files": {}
+}

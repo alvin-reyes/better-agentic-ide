@@ -1,0 +1,7 @@
+{
+  "claims": [
+    {"claim": "The market grows 9% a year", "class": "size/growth", "pub_date": "2024-03"},
+    {"claim": "Competitors ignore onboarding", "class": "pricing", "pub_date": "2023-11-02"},
+    {"claim": "Teams of five are the median buyer", "class": "buyers", "pub_date": "2025-12-01"}
+  ]
+}

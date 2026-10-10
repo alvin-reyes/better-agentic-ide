@@ -47,6 +47,18 @@ describe("parseGate", () => {
     const g = parseGate("docs/qa/gates/4.2-settlement.yml", "gate: PASS\n");
     expect(g.storyId).toBe("4.2");
   });
+
+  it("keeps a v6 ref's letter suffix when the story id comes from the filename", () => {
+    expect(parseGate(".ade/gates/1.6a.yml", "gate: PASS\n").storyId).toBe("1.6a");
+    expect(parseGate(".ade/gates/1.6a-slug.yml", "gate: PASS\n").storyId).toBe("1.6a");
+    expect(parseGate(".ade/gates/1.6.yml", "gate: PASS\n").storyId).toBe("1.6");
+  });
+
+  it("still reads v4's <epic>.<story>-slug and bare <epic>.<story> filenames", () => {
+    expect(parseGate("docs/qa/gates/2.1-slug.yml", "gate: PASS\n").storyId).toBe("2.1");
+    expect(parseGate("docs/qa/gates/2.1.yml", "gate: PASS\n").storyId).toBe("2.1");
+    expect(parseGate("docs/qa/gates/2.1.yaml", "gate: PASS\n").storyId).toBe("2.1");
+  });
 });
 
 describe("gateFor", () => {

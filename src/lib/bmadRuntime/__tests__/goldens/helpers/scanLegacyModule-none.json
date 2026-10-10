@@ -1,0 +1,11 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/scan_legacy_module.py /p/skills",
+  "stream": "stderr",
+  "exitCode": 1,
+  "argv": [
+    "/p/skills"
+  ],
+  "stdout": "scan_legacy_module: no module.yaml under /p/skills\n",
+  "stderr": "scan_legacy_module: no module.yaml under /p/skills\n",
+  "files": {}
+}

@@ -46,4 +46,10 @@ describe("rolePathFor", () => {
     const path = rolePathFor({ roleId: "dev", provider: "claude" }, "/Users/x/.ade/roles/");
     expect(path).toBe("/Users/x/.ade/roles/dev.md");
   });
+
+  it("keys the file by methodology, so a v4 and a v6 launch never share one", () => {
+    const spec = { roleId: "qa", domainId: "security", provider: "claude" as const };
+    expect(rolePathFor(spec, "/r", "v4")).toBe("/r/qa-security.v4.md");
+    expect(rolePathFor({ roleId: "qa", provider: "claude" }, "/r", "v6")).toBe("/r/qa.v6.md");
+  });
 });

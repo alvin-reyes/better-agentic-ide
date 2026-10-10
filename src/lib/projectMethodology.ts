@@ -8,6 +8,7 @@
 import { AGENT_CATALOG } from "../data/curatedAgents";
 import { getRole } from "../data/roles";
 import { agentMarkdown, rolePrompt } from "./pluginContent";
+import { filterBmadSection, type BmadMethodology } from "./agentComposition";
 import KNOWLEDGE_README from "../../vendor/ade-setup/templates/knowledge/README.md?raw";
 
 export interface MethodologyFile {
@@ -301,10 +302,16 @@ Append-only: one dated line when a plan is approved, a story is sharded or a sto
 
 `;
 
-export function roleFile(r: Role): MethodologyFile {
+/**
+ * A core role as a sub-agent file, carrying only the BMAD tasks section for the
+ * project's methodology: a v4 project's agents must never be pointed at v6
+ * skills, or the other way round. v6 is the default.
+ */
+export function roleFile(r: Role, methodology: BmadMethodology = "v6"): MethodologyFile {
+  const body = filterBmadSection(r.body, methodology).trim();
   return {
     path: `.claude/agents/${r.name}.md`,
-    content: `---\nname: ${r.name}\ndescription: ${JSON.stringify(r.description)}\n${r.tools ? `tools: ${r.tools}\n` : ""}${r.model ? `model: ${r.model}\n` : ""}---\n\n# ${r.title}\n\nFollow the project rules in .ade/rules.md and the constitution in CLAUDE.md.\n\n${r.body}\n`,
+    content: `---\nname: ${r.name}\ndescription: ${JSON.stringify(r.description)}\n${r.tools ? `tools: ${r.tools}\n` : ""}${r.model ? `model: ${r.model}\n` : ""}---\n\n# ${r.title}\n\nFollow the project rules in .ade/rules.md and the constitution in CLAUDE.md.\n\n${body}\n`,
   };
 }
 
@@ -344,8 +351,8 @@ const hasRolePrompt = (id: string) => {
  * agents as sub-agents (architects excluded: they're interactive, see the ADE
  * plugin).
  */
-export function agentCatalog(): AgentEntry[] {
-  const core: AgentEntry[] = ROLES.map((r) => ({ id: r.name, title: r.title, description: r.description, group: "Core", file: roleFile(r) }));
+export function agentCatalog(methodology: BmadMethodology = "v6"): AgentEntry[] {
+  const core: AgentEntry[] = ROLES.map((r) => ({ id: r.name, title: r.title, description: r.description, group: "Core", file: roleFile(r, methodology) }));
   const profiles: AgentEntry[] = AGENT_CATALOG.filter((p) => p.category !== "Architects" && hasRolePrompt(p.id)).map((p) => ({
     id: p.id,
     title: p.name,
@@ -357,13 +364,13 @@ export function agentCatalog(): AgentEntry[] {
 }
 
 /** Agent files for the detected stacks. */
-export function stackAgentFiles(stacks: Stack[]): MethodologyFile[] {
+export function stackAgentFiles(stacks: Stack[], methodology: BmadMethodology = "v6"): MethodologyFile[] {
   const ids = new Set(stacks.flatMap((s) => STACK_AGENTS[s] ?? []));
-  return agentCatalog().filter((a) => ids.has(a.id)).map((a) => a.file);
+  return agentCatalog(methodology).filter((a) => ids.has(a.id)).map((a) => a.file);
 }
 
 /** Every methodology file for a project, ready to write where missing. */
-export function methodologyFiles(projectName: string, stacks: Stack[] = []): MethodologyFile[] {
+export function methodologyFiles(projectName: string, stacks: Stack[] = [], methodology: BmadMethodology = "v6"): MethodologyFile[] {
   return [
     { path: "CLAUDE.md", content: CLAUDE_MD(projectName) },
     { path: "llms.txt", content: LLMS_TXT(projectName) },
@@ -375,7 +382,7 @@ export function methodologyFiles(projectName: string, stacks: Stack[] = []): Met
     // Vendored from ade-setup rather than restated here, and scaffolded once —
     // setup never overwrites, so a project's accumulated knowledge is safe.
     { path: ".ade/knowledge/README.md", content: KNOWLEDGE_README },
-    ...ROLES.map(roleFile),
-    ...stackAgentFiles(stacks),
+    ...ROLES.map((r) => roleFile(r, methodology)),
+    ...stackAgentFiles(stacks, methodology),
   ];
 }

@@ -1,0 +1,4 @@
+[skill]
+bmod = "bmod-alpha"
+source = "github:acme/alpha"
+required_skills = ["absent-skill", { skill = "other", source = "github:acme/other", version = "1.2.3+build" }]

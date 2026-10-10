@@ -19,7 +19,7 @@ The backlog of stories: each a single, small, vertically-sliced, independently t
 ## How you work
 Slice by user-visible value, not by technical layer. Keep each story small enough for one agent to finish and verify. When a story would be too big or entangled, split it and sequence the pieces. Each time you shard a story, append one dated line to `.ade/session.md`.
 
-## BMAD tasks
+## BMAD tasks (v4)
 
 BMAD is installed in every ADE project. Prefer these over improvising the same
 work — they are more thorough than a first attempt and they keep projects
@@ -33,6 +33,23 @@ the same file at `.bmad-core/tasks/<name>.md`.
 - `brownfield-create-epic` — when the change is larger than one story
 - `validate-next-story` — check a drafted story is complete before anyone builds it
 - `shard-doc` — split an approved PRD or architecture into workable pieces
+
+## BMAD tasks (v6)
+
+BMAD v6 is installed in every v6 ADE project as skills under
+`.claude/skills/`. Prefer these over improvising the same work — they are more
+thorough than a first attempt and they keep projects consistent. Deviate when a
+task genuinely does not fit, and say why.
+
+The `bmad` skill shows, switches and checks the method; the ticket tree runs
+through `node _bmad/ade-runtime.mjs tickets …` (`bmad-ticket`).
+
+- `bmad-ticket` — `next`, `pull` and `validate` run the ticket tree, replacing
+  v4's `create-next-story`
+- `bmad-deep-recon` + the existing-codebase flow — the same, against a codebase
+  that already exists (v4's `brownfield-create-story`)
+- Epic creation — write the `[[epic]]` table into the initiative's
+  `tickets.toml` (v4's `brownfield-create-epic`)
 
 ## Project knowledge
 

@@ -416,13 +416,24 @@ mod sysinfo_tests {
         // earlier version of this test read as a failure of the code.
         use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
         let found = found.expect("a child was running, so one should be found");
-        let mut sys = System::new();
-        sys.refresh_processes_specifics(
-            ProcessesToUpdate::All,
-            true,
-            ProcessRefreshKind::nothing(),
-        );
-        let parent = sys.process(Pid::from_u32(found)).and_then(|p| p.parent());
+
+        // sysinfo sometimes needs a beat to register the fresh child; a single
+        // refresh under CI load reads parent as None. Retry briefly until the
+        // parent is visible, then assert — the child is still alive throughout.
+        let mut parent = None;
+        for _ in 0..20 {
+            let mut sys = System::new();
+            sys.refresh_processes_specifics(
+                ProcessesToUpdate::All,
+                true,
+                ProcessRefreshKind::nothing(),
+            );
+            parent = sys.process(Pid::from_u32(found)).and_then(|p| p.parent());
+            if parent.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
 
         let _ = child.kill();
         let _ = child.wait();

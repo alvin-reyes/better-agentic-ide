@@ -1,0 +1,10 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad/scripts/validate_manifests.py --project-root /p/empty",
+  "stream": "stderr",
+  "exitCode": 1,
+  "argv": [
+    "--project-root",
+    "/p/empty"
+  ],
+  "stdout": "bmod file validation failed (1):\n  no skills/*/bmod.toml found under /p/empty: pass the repository root with --project-root\n"
+}

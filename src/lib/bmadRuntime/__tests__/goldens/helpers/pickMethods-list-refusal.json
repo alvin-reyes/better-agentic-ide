@@ -1,0 +1,13 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-advanced-elicitation/scripts/pick_methods.py --file /p/catalog/methods.csv list",
+  "stream": "stderr",
+  "exitCode": 2,
+  "argv": [
+    "--file",
+    "/p/catalog/methods.csv",
+    "list"
+  ],
+  "stdout": "error: `list` needs --category (one or more) — or --all to dump the whole catalog on purpose. Use `categories` for the cheap map, or `random` to draw blind.\n",
+  "stderr": "error: `list` needs --category (one or more) — or --all to dump the whole catalog on purpose. Use `categories` for the cheap map, or `random` to draw blind.\n",
+  "files": {}
+}

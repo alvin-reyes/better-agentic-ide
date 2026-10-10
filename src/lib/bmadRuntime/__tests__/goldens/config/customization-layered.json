@@ -1,0 +1,48 @@
+{
+  "workflow": {
+    "activation_steps_prepend": [],
+    "activation_steps_append": [],
+    "persistent_facts": [
+      "team-fact",
+      "user-fact"
+    ],
+    "route": "full",
+    "route_selection": "Decide whether to use a coding subagent (full) or implement directly (oneshot).\nUsing the information already gathered, with no further reading and minimal\nextra reasoning, estimate the lines of code to add or modify.\n100 lines or fewer: oneshot. Otherwise: full.\nIf the change touches more than five files and is not simple or mechanical,\nconsider upgrading to full.\n",
+    "on_complete": "User completion note.",
+    "open_plan": "",
+    "implementation_handoff": "Launch a subagent with no prior conversation context, with this prompt:\n\n> Read {plan_file} fully and implement it — the plan is the sole source of truth. Load every file listed in its frontmatter `context:` before you start.\n>\n> When done, report what you changed, how you verified it, and anything left incomplete or risky.\n",
+    "review": "quick",
+    "quick_lenses": [
+      {
+        "id": "quick",
+        "instruction": "Team review instruction."
+      }
+    ],
+    "thorough_lenses": [
+      {
+        "id": "blind-hunter",
+        "name": "Blind Hunter",
+        "instruction": "Launch a context-free subagent with this prompt:\n\nConduct a review of CONTENT.\nLook for what's missing, not only what's wrong.\nCompute your finding floor N from the diff file's size: N = min(floor(sqrt(kB) + 1), 10), where kB is the file's size in kilobytes. State the arithmetic in one line, then find at least N issues to fix or improve.\nOutput a Markdown list of findings only — no severity, priority, or ranking.\nIf the content is empty, stop and say so.\nIf you have zero findings, re-check and keep thinking; do not stop with an empty list.\n\nCONTENT: the unified diff at `{diff_file}`. Read that file — it is the content under review.\n\nDo not invoke any skill, and do not spawn subagents of your own — you are the reviewer. Return your findings as text in your final message; do not route them through any findings-reporting tool the host may offer.\n\n"
+      },
+      {
+        "id": "edge-case-hunter",
+        "name": "Edge Case Hunter",
+        "instruction": "Launch a context-free subagent with this prompt:\n\nRead `{skill-root}/review-prompts/edge-case-hunter.md` completely and follow it as your review instructions.\n\nclaims_file (leave unread until your instructions call for it): {claims_file}\n\nReview content: the unified diff at `{diff_file}`. Read that file — it is the content under review.\n\nDo not invoke any skill, and do not spawn subagents of your own — you are the reviewer. If the instruction file is unreadable, report that exact failure and stop. Return your findings as text in your final message; do not route them through any findings-reporting tool the host may offer.\n\n"
+      },
+      {
+        "id": "verification-gap",
+        "name": "Verification Gap Reviewer",
+        "instruction": "Launch a context-free subagent with this prompt:\n\nRead `{skill-root}/review-prompts/verification-gap.md` completely and follow it as your review instructions.\n\nReview content: the unified diff at `{diff_file}`. Read that file — it is the content under review.\n\nDo not invoke any skill, and do not spawn subagents of your own — you are the reviewer. If the instruction file is unreadable, report that exact failure and stop. Return your findings as text in your final message; do not route them through any findings-reporting tool the host may offer.\n\n"
+      },
+      {
+        "id": "intent-alignment",
+        "name": "Intent Alignment Auditor (user)"
+      },
+      {
+        "id": "team-lens",
+        "name": "Team Lens",
+        "instruction": "Team thorough lens."
+      }
+    ]
+  }
+}

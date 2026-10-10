@@ -5,8 +5,11 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import {
-  CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, methodologyFiles, stackAgentFiles, type AgentEntry, type MethodologyFile, type Stack,
+  CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, agentCatalog, methodologyFiles, stackAgentFiles, type AgentEntry, type MethodologyFile, type Stack,
 } from "./projectMethodology";
+
+/** The two BMAD lines a project can be set up on; v6 is the default. */
+export type Methodology = "v6" | "v4";
 
 export interface SetupStatus {
   isGit: boolean;
@@ -14,6 +17,8 @@ export interface SetupStatus {
   needsImport: boolean;
   bmadInstalled: boolean;
   stacks: Stack[];
+  /** The marker, else `.bmad-core/` ⇒ "v4"; null when the project has neither. */
+  methodology: Methodology | null;
 }
 
 export interface SetupReport {
@@ -119,13 +124,54 @@ const withoutRemoved = (root: string, files: MethodologyFile[]) => {
   return files.filter((f) => !removed.has(f.path));
 };
 
-function apply(root: string, files: MethodologyFile[]): Promise<SetupReport> {
-  return invoke<SetupReport>("project_setup_apply", { root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, full: true });
+function apply(root: string, files: MethodologyFile[], methodology: Methodology): Promise<SetupReport> {
+  return invoke<SetupReport>("project_setup_apply", {
+    root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: true,
+  });
 }
 
 export function setupStatus(root: string): Promise<SetupStatus> {
   const files = methodologyFiles(baseName(root));
   return invoke<SetupStatus>("project_setup_status", { root, paths: files.map((f) => f.path), marker: CLAUDE_MD_IMPORT_MARKER });
+}
+
+/** What a project is on, from its status; null when it has neither. */
+export async function detectOnDisk(root: string): Promise<Methodology | null> {
+  return (await setupStatus(root)).methodology ?? null;
+}
+
+/** `dir`'s parent, or null at a filesystem root. Handles `/` and `\\`. */
+function parentDir(dir: string): string | null {
+  const trimmed = dir.replace(/[\\/]+$/, "");
+  const cut = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return cut > 0 ? trimmed.slice(0, cut) : null;
+}
+
+/**
+ * The methodology an agent launched in folder `cwd` should be composed for.
+ *
+ * A terminal is often cd'd below the project root (`myproject/src`), and the
+ * marker and `.bmad-core/` live at the root, so the folders from `cwd` up to its
+ * project root (the nearest `.git` ancestor, as the rest of the app resolves
+ * it) are asked in turn and the nearest one that says what it is on wins. A
+ * BMAD project nested in a bigger repository is found before the repository.
+ * v6 when none says, or there is no folder, or a check fails.
+ */
+export async function methodologyOf(cwd: string | null | undefined): Promise<Methodology> {
+  if (!cwd) return "v6";
+  const root = await invoke<string>("project_root", { path: cwd }).catch(() => cwd);
+  const norm = (p: string) => p.replace(/[\\/]+$/, "");
+  const stop = norm(root);
+  let dir: string | null = norm(cwd);
+  // Bounded: a cwd that is somehow not under its root still ends at the
+  // filesystem root.
+  for (let i = 0; dir && i < 64; i++) {
+    const found = await detectOnDisk(dir).catch(() => null);
+    if (found) return found;
+    if (dir === stop || !dir.startsWith(stop)) break;
+    dir = parentDir(dir);
+  }
+  return "v6";
 }
 
 export function isComplete(s: SetupStatus): boolean {
@@ -143,14 +189,21 @@ export function isSettingUp(root: string): boolean {
  * Set up a project: BMAD, methodology, the core roles and its stack's agents.
  * Safe to run again; a setup already running for the project is shared.
  * Running it by hand clears an earlier Undo.
+ *
+ * `methodology` is the owner's answer from the setup prompt. Without one, the
+ * project's own marker (else `.bmad-core/`) decides, and a project with
+ * neither — a new one — gets the v6 default.
  */
-export function setUpProject(root: string, stacks?: Stack[]): Promise<SetupResult> {
+export function setUpProject(root: string, methodology?: Methodology, stacks?: Stack[]): Promise<SetupResult> {
   const running = inFlight.get(root);
   if (running) return running;
   const job = (async () => {
-    const detected = stacks ?? (await setupStatus(root)).stacks;
-    const files = withoutRemoved(root, methodologyFiles(baseName(root), detected));
-    const report = await apply(root, files);
+    // Only ask the project itself when the callers left something unresolved.
+    const status = methodology !== undefined && stacks !== undefined ? null : await setupStatus(root);
+    const chosen = methodology ?? status?.methodology ?? "v6";
+    const detected = stacks ?? status?.stacks ?? [];
+    const files = withoutRemoved(root, methodologyFiles(baseName(root), detected, chosen));
+    const report = await apply(root, files, chosen);
     markSetUp(root, true);
     writeList(DECLINED_KEY, root, false);
     return { root, report, files, stacks: detected };
@@ -160,16 +213,23 @@ export function setUpProject(root: string, stacks?: Stack[]): Promise<SetupResul
 }
 
 /** Agents for stacks a set-up project has gained since (e.g. a new foundry.toml). */
-export async function addStackAgents(root: string, stacks: Stack[]): Promise<SetupResult> {
-  const files = withoutRemoved(root, stackAgentFiles(stacks));
-  const report = await invoke<SetupReport>("project_setup_apply", { root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, full: false });
+export async function addStackAgents(root: string, stacks: Stack[], methodology: Methodology = "v6"): Promise<SetupResult> {
+  const files = withoutRemoved(root, stackAgentFiles(stacks, methodology));
+  const report = await invoke<SetupReport>("project_setup_apply", {
+    root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: false,
+  });
   return { root, report, files, stacks };
 }
 
 /** Add one agent to a project now. */
-export async function addAgent(root: string, agent: AgentEntry): Promise<void> {
+export async function addAgent(root: string, agent: AgentEntry, methodology: Methodology = "v6"): Promise<void> {
   setRemoved(root, agent.id, false);
-  await invoke<SetupReport>("project_setup_apply", { root, files: [agent.file], import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, full: false });
+  // The entry's file was built for the catalog's default; a core role carries
+  // the BMAD section for one methodology, so rebuild it for this project's.
+  const file = agentCatalog(methodology).find((a) => a.id === agent.id)?.file ?? agent.file;
+  await invoke<SetupReport>("project_setup_apply", {
+    root, files: [file], import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: false,
+  });
 }
 
 /** Remove one agent from a project; setup won't add it back. */

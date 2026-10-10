@@ -43,12 +43,18 @@ export function rolePrompt(agent: CatalogAgent): string {
 const PROJECT_SECTIONS = ["## BMAD tasks", "## Project knowledge"];
 
 function withoutProjectSections(body: string): string {
+  // A heading may repeat or carry a suffix ("## BMAD tasks (v4)" and
+  // "## BMAD tasks (v6)"), so strip every section whose heading line starts
+  // with one of the project headings.
   return PROJECT_SECTIONS.reduce((acc, heading) => {
-    const start = acc.indexOf(heading);
-    if (start < 0) return acc;
-    const rest = acc.slice(start + 1);
-    const next = rest.search(/^## /m);
-    return next < 0 ? acc.slice(0, start) : acc.slice(0, start) + rest.slice(next);
+    for (;;) {
+      const start = acc.search(new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m"));
+      if (start < 0) return acc;
+      const rest = acc.slice(start + 1);
+      const next = rest.search(/^## /m);
+      if (next < 0) return acc.slice(0, start);
+      acc = acc.slice(0, start) + rest.slice(next);
+    }
   }, body);
 }
 

@@ -1,0 +1,13 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/process_template.py /p/recon/broken.tpl --var topic=x",
+  "stream": "stderr",
+  "exitCode": 3,
+  "argv": [
+    "/p/recon/broken.tpl",
+    "--var",
+    "topic=x"
+  ],
+  "stdout": "process_template: leftover conditional markers: {if-lonely}\n",
+  "stderr": "process_template: leftover conditional markers: {if-lonely}\n",
+  "files": {}
+}

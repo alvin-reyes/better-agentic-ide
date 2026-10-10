@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { CURATED_AGENTS } from "../data/curatedAgents";
-import { roleFileName } from "./agentComposition";
+import { roleFileName, type BmadMethodology } from "./agentComposition";
 import type { Provider } from "./agentCommand";
 
 /**
@@ -45,6 +45,6 @@ export async function ensureRoleDir(): Promise<string> {
  * be written into a shell command. The `ROLE_DIR` default is for callers that
  * only hand the path to Rust.
  */
-export function rolePathFor(spec: AgentSpec, dir: string = ROLE_DIR): string {
-  return `${dir.replace(/\/+$/, "")}/${roleFileName(spec.roleId, spec.domainId)}`;
+export function rolePathFor(spec: AgentSpec, dir: string = ROLE_DIR, methodology?: BmadMethodology): string {
+  return `${dir.replace(/\/+$/, "")}/${roleFileName(spec.roleId, spec.domainId, methodology)}`;
 }

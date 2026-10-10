@@ -13,7 +13,7 @@ differ from the ones eight ADE roles cite.
 
 The decision is now reversed because its first "what would change the decision"
 condition is met: **ADE owns the verification gate as its own artifact**, so v6's
-missing gate no longer blocks. This spec covers adopting BMAD v6 (pinned v6.9.0)
+missing gate no longer blocks. This spec covers adopting BMAD v6 (pinned at upstream main commit bda3c59, self-described 6.13.0-next)
 as the default methodology, with v4 retained as an option and read-only
 compatibility for existing v4 projects.
 
@@ -44,7 +44,7 @@ compatibility for existing v4 projects.
 
 - v6 skills (all 33 skill dirs plus the `bmod-*` module records — skills
   reference each other by name and modules validate their members) live at
-  `src-tauri/resources/bmad-v6/skills/`, pinned at tag `v6.9.0`, stamped by a
+  `src-tauri/resources/bmad-v6/skills/`, pinned at upstream main commit `bda3c59` (6.13.0-next), stamped by a
   `VERSION` file.
 - The existing v4 tree at `src-tauri/resources/bmad/` stays untouched for
   legacy projects.
@@ -182,7 +182,7 @@ never sees commands that don't exist there.
 
 - **Parsers**: fixture-driven, as today's bmad* suites are. v6 fixtures are
   real upstream outputs (tickets.toml, leaf, plan, config samples) captured
-  from v6.9.0 and committed — CI needs no Python.
+  from that commit and committed — CI needs no Python.
 - **Runtime port**: golden tests. Dev-time, run the real Python scripts once
   to capture expected JSON; the TS port asserts against the committed goldens.
 - **Scaffold**: temp-dir tests — v6 setup produces the exact file tree and

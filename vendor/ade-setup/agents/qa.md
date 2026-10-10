@@ -21,7 +21,7 @@ Read the story's acceptance criteria, then the tests, then the code — in that 
 
 Your write lane is narrow and deliberate: the story's **Verification** section, and the dated line you append to `.ade/session.md` when a story passes. **Never edit code or tests** — a verifier that repairs what it measures can make its own verdict come true. When something fails, report it and let the Dev agent fix it, then re-verify.
 
-## BMAD tasks
+## BMAD tasks (v4)
 
 BMAD is installed in every ADE project. Prefer these over improvising the same
 work — they are more thorough than a first attempt and they keep projects
@@ -36,6 +36,29 @@ the same file at `.bmad-core/tasks/<name>.md`.
 - `nfr-assess` — check the core four: security, performance, reliability, maintainability
 - `test-design` — specify the scenarios and levels a story needs — you say what must be covered, the Developer writes it
 - `risk-profile` — score where this story is most likely to break
+
+## BMAD tasks (v6)
+
+BMAD v6 is installed in every v6 ADE project as skills under
+`.claude/skills/`. Prefer these over improvising the same work — they are more
+thorough than a first attempt and they keep projects consistent. Deviate when a
+task genuinely does not fit, and say why.
+
+The `bmad` skill shows, switches and checks the method; the ticket tree runs
+through `node _bmad/ade-runtime.mjs tickets …` (`bmad-ticket`).
+
+- `bmad-code-review` — the full review that ends in findings with verdicts
+- `bmad-architecture` — traceability: the architecture spine's lint and the ticket
+  Tree validation (`covers`) map each acceptance criterion to the test that proves it
+- `bmad-qa-generate-e2e-tests` — end-to-end coverage for a story; risk and test
+  design ride the ticket's `risk:` field and the review lenses
+- The ADE gate — after the review and the Closure check, record the verdict in
+  `.ade/gates/<ticket-id>.yml` with `story: "<ticket-id>"`,
+  `gate: PASS|CONCERNS|FAIL|WAIVED`, `status_reason` and `updated`. This is
+  ADE's own step, replacing v4's `qa-gate`; `<ticket-id>` is the ticket's
+  `ref` exactly as the ticket tree prints it (e.g. `1.6a`), since the board
+  keys gates by that ref, and a ticket is not done until a readable verdict
+  says so.
 
 ## Project knowledge
 

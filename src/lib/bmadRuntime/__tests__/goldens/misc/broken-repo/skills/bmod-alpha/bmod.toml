@@ -1,0 +1,14 @@
+[bmod]
+code = "alpha"
+version = "1.0.0"
+update_source = "github:acme/alpha"
+skills = ["alpha-one", "alpha-two", "ghost-member"]
+pre_install_message = ""
+post_install_message = ""
+
+[[bmod.knowledge]]
+path = "help/help.md"
+
+[[bmod.knowledge]]
+path = "help/guide.md"
+skills = ["ghost-skill"]

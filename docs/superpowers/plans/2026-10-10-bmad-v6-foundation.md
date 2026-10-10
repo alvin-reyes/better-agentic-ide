@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Vendor BMAD v6.9.0 into ADE, port its runtime scripts to TypeScript, and scaffold working v6 projects — no Python/uv anywhere.
+**Goal:** Vendor BMAD v6 (upstream main @ bda3c59, 6.13.0-next) into ADE, port its runtime scripts to TypeScript, and scaffold working v6 projects — no Python/uv anywhere.
 
 **Architecture:** The vendored `skills/` tree is patched at vendor time so every `uv run` call site becomes `node _bmad/ade-runtime.mjs`, a single dependency-free bundle of the TS port. The same TS module powers the app UI and the scaffolded per-project CLI. Scaffolding mirrors v6's own setup.py output.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Node 18+ on user machines; never require Python or uv at runtime.
-- Vendored skills pinned at tag `v6.9.0`; `VERSION` file stamps it.
+- Vendored skills pinned at upstream main SHA `bda3c59` (6.13.0-next); `VERSION` file stamps the SHA and label.
 - Nothing overwrites existing files during scaffold.
 - The patch script must fail loudly on any `uv run` call site it cannot rewrite.
 - The runtime bundle `_bmad/ade-runtime.mjs` is a single dependency-free ESM file.
@@ -30,7 +30,7 @@
 
 ---
 
-### Task 1: Vendor the v6.9.0 skills and patch them
+### Task 1: Vendor the v6 skills (main @ bda3c59) and patch them
 
 **Files:**
 - Create: `scripts/vendor-bmad-v6.sh`
@@ -40,7 +40,7 @@
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
-- Produces: `src-tauri/resources/bmad-v6/skills/` (33 skill dirs, `uv run` call sites rewritten), `src-tauri/resources/bmad-v6/VERSION` containing `v6.9.0`.
+- Produces: `src-tauri/resources/bmad-v6/skills/` (33 skill dirs, `uv run` call sites rewritten), `src-tauri/resources/bmad-v6/VERSION` containing `bda3c59 6.13.0-next`.
 
 - [ ] **Step 1: Write the failing test for the patch script**
 
@@ -63,9 +63,30 @@ describe("patchBmadSkills", () => {
     expect(rewriteCallSite(patched)).toBe(patched);
   });
 
-  it("throws on an unrecognised uv run call site instead of shipping it unpatched", () => {
+  it("rewrites the flag-and-quote form the skill bootstraps use", () => {
+    const line = "`uv run --no-cache \"{project-root}/_bmad/scripts/render_skill.py\" --project-root \"{project-root}\" --skill \"{skill-root}\"`";
+    expect(rewriteCallSite(line)).toBe(
+      "`node {project-root}/_bmad/ade-runtime.mjs render_skill --project-root \"{project-root}\" --skill \"{skill-root}\"`",
+    );
+  });
+
+  it("rewrites module-path and skill-root call sites", () => {
+    expect(rewriteCallSite("`uv run {project-root}/_bmad/method/scripts/tickets.py --project-root {project-root} next`"))
+      .toBe("`node {project-root}/_bmad/ade-runtime.mjs tickets --project-root {project-root} next`");
+    expect(rewriteCallSite("`uv run {skill-root}/scripts/lint_spine.py --project-root {project-root}`"))
+      .toBe("`node {project-root}/_bmad/ade-runtime.mjs lint_spine --skill-root {skill-root} --project-root {project-root}`");
+  });
+
+  it("throws on a call site whose script has no TS port instead of shipping it unpatched", () => {
     expect(() => rewriteCallSite("`uv run {project-root}/_bmad/scripts/some_new_script.py --weird`"))
-      .toThrow(/unrecognised/);
+      .toThrow(/no TS port/);
+  });
+
+  it("leaves the allowlisted dev-tooling forms untouched", () => {
+    for (const line of [
+      "`uv run {skill-root}/scripts/count_tokens.py …`",
+      "`uv run pytest`",
+    ]) expect(rewriteCallSite(line)).toBe(line);
   });
 });
 ```
@@ -82,52 +103,127 @@ Expected: FAIL — `rewriteCallSite` is not exported.
 ```ts
 /**
  * Vendor-time patch: rewrite every `uv run …/scripts/<name>.py` call site in the
- * vendored SKILL.md files to the ADE runtime. Idempotent, and it throws on any
+ * vendored skill markdown to the ADE runtime. Idempotent, and it throws on any
  * call site it does not recognise — upstream churn must not ship unpatched.
  */
-const CALL = /uv run \{project-root\}\/_bmad\/scripts\/([\w.]+\.py)([\s\S]*?)(?=`|$)/g;
 
-/** The runtime scripts the TS port covers (spec: architecture section). */
+/** The runtime scripts the TS port covers. The pinned tree invokes the Task 5b
+ * trio (roster, knowledge, validate_manifests) and the Task 5c skill-root
+ * scripts in addition to the spec's eight. `git_evidence.py` is a real call
+ * site (bmad-retrospective's evidence gathering) with no port in the plan:
+ * rewriting it keeps uv out of the tree, and `ade-runtime.mjs` must grow a
+ * `git_evidence` subcommand. See task-1-report.md (fix round 1).
+ *
+ * `go.py` and `x.py` are gone from the set (Task 5c's ruling): neither is a
+ * script at this pin — no file in the vendored tree and no call site, only
+ * placeholder names in this file's own comment and in two toolsmith test
+ * fixtures that build synthetic trees. A future pin that grows a real call
+ * site for one of them fails the post-pass loudly, which is the point: the
+ * name has to be ported consciously, not silently. */
 const PORTED = new Set([
   "resolve_config.py", "resolve_customization.py", "config_utils.py",
   "tickets.py", "read_store.py", "render_skill.py", "memlog.py",
+  "roster.py", "knowledge.py", "validate_manifests.py",
+  // Task 5c: skill-root helper scripts (see the plan task for the full list).
+  "recon_kit.py", "init_skill.py", "brain.py", "process_template.py",
+  "wake.py", "scan_scripts.py", "scan_paths.py", "resolve_party.py",
+  "scan_legacy_module.py", "registry.py", "read_session_log.py",
+  "pick_methods.py", "list_customizable_skills.py", "lint_spine.py",
+  "resolve_personas.py", "run_triggers.py", "git_evidence.py",
 ]);
+
+/** Lines that legitimately keep `uv run`: dev tooling with external deps
+ * (tiktoken), eval tooling, and documentation prose. Anything else throws.
+ * The pinned tree forces the entries past `uv run pytest`; every one was
+ * checked against the lines that actually remain (task-1-report.md, fix
+ * round 1):
+ *   setup.py                  — the spec replaces setup with the Rust-side
+ *                               scaffold; not ported as an agent-facing command.
+ *   convert_cases.py,         — eval tooling, the same ruled category as
+ *   aggregate_benchmark.py      run_evals.py.
+ *   init-sanctum.py           — memory-agent template asset; no such script
+ *                               ships at the pin, so there is nothing to port.
+ *   {script}.py, <path>       — template placeholders.
+ *   `uv run`                  — prose naming the phrase without a call site. */
+const ALLOWED_UV = [
+  "count_tokens.py", "prepass.py", "run_evals.py", "word_metrics.py",
+  "<name>.py", "uv run pytest",
+  "setup.py", "convert_cases.py", "aggregate_benchmark.py",
+  "init-sanctum.py", "{script}.py", "<path>", "`uv run`",
+];
 
 export function rewriteCallSite(line: string): string {
   if (!line.includes("uv run")) return line;
-  const m = /_bmad\/scripts\/([\w.]+\.py)/.exec(line);
-  if (!m) throw new Error(`unrecognised uv run call site: ${line.slice(0, 120)}`);
-  const script = m[1];
+  // Real call sites take three shapes: `uv run --flags "{project-root}/_bmad/scripts/x.py"`,
+  // `uv run {project-root}/_bmad/<module>/scripts/x.py`, and
+  // `uv run {skill-root}/scripts/x.py`. Optional flags and quoting sit between
+  // `uv run` and the path. The guard is a zero-width lookbehind: a consuming
+  // guard would be swallowed by the replacement below, dropping the delimiter
+  // before `uv run` (the plan's own first test catches exactly that).
+  const m = /(?<![a-z])uv run(?:\s+(?:--?[\w-]+|"[^"]*"|'[^']*'))*\s+"?(\{project-root\}\/_bmad\/(?:\w+\/)?scripts\/([\w.]+\.py)|\{skill-root\}\/scripts\/([\w.]+\.py))"?/.exec(line);
+  if (!m) return line;
+  const script = m[2] ?? m[3];
+  if (ALLOWED_UV.includes(script)) return line;
   if (!PORTED.has(script)) {
     throw new Error(`no TS port for ${script}; call site cannot be patched: ${line.slice(0, 120)}`);
   }
-  return line.replace(
-    new RegExp(`uv run \\{project-root\\}\\/_bmad\\/scripts\\/${script.replace(".", "\\.")}`, "g"),
-    `node {project-root}/_bmad/ade-runtime.mjs ${script.replace(/\.py$/, "")}`,
-  );
+  const skillRoot = m[3] ? " --skill-root {skill-root}" : "";
+  return line.replace(m[0], `node {project-root}/_bmad/ade-runtime.mjs ${script.replace(/\.py$/, "")}${skillRoot}`);
 }
 
-if (process.argv[1]?.endsWith("patchBmadSkills.ts")) {
-  const { readFileSync, writeFileSync } = await import("node:fs");
-  const { readdirSync } = await import("node:fs");
+/** The CLI half. Declared, not inline, because this file is CJS here (no
+ * `"type": "module"`): `tsx` refuses top-level await in a CJS output. */
+async function main(): Promise<void> {
+  const { readFileSync, writeFileSync, readdirSync } = await import("node:fs");
   const { join } = await import("node:path");
   const root = process.argv[2];
-  for (const dir of readdirSync(root)) {
-    const skill = join(root, dir);
-    for (const f of ["SKILL.md", ...readdirSync(skill).filter((f) => f.endsWith(".md") && f !== "SKILL.md")]) {
-      const p = join(skill, f);
-      const body = readFileSync(p, "utf8");
-      const next = body.replace(/`uv run \{project-root\}\/_bmad\/scripts\/[\s\S]*?`/g, rewriteCallSite);
-      if (next !== body) writeFileSync(p, next);
+  /** Every markdown file under a directory, recursively: call sites live in
+   * nested references/*.md too, and an unpatched one would ship Python to
+   * users. */
+  const walk = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith(".md") ? [join(dir, e.name)] : []);
+  const files = walk(root);
+  /** An invocation, wherever it appears — inline in a span, inside a fenced
+   * block, or continued across lines with trailing backslashes. Bounded to the
+   * invocation itself, so the replacement leaves the surrounding text and the
+   * arguments after the script path intact. A span-only pass misses every
+   * fenced-block call site — 12 in the pinned tree, including the five
+   * render_skill bootstraps it exists to patch (task-1-report.md, fix round 1). */
+  const CALL = /(?<![a-z])uv run(?:\s+(?:--?[\w-]+|"[^"]*"|'[^']*'))*\s+"?(\{project-root\}\/_bmad\/(?:\w+\/)?scripts\/[\w.]+\.py|\{skill-root\}\/scripts\/[\w.]+\.py)"?/g;
+  for (const p of files) {
+    const body = readFileSync(p, "utf8");
+    // rewriteCallSite returns allowlisted and non-call spans unchanged; the
+    // post-pass below rejects any real `uv run` left over.
+    const next = body.replace(CALL, (site) => rewriteCallSite(site));
+    if (next !== body) writeFileSync(p, next);
+  }
+  /** Fail-loudly post-pass: any remaining `uv run` in any walked file must be
+   * on the allowlist or the patch cannot claim the tree ships Python-free. */
+  for (const p of files) {
+    const body = readFileSync(p, "utf8");
+    for (const line of body.split("\n")) {
+      if (!/\buv run\b/.test(line)) continue;
+      if (ALLOWED_UV.some((a) => line.includes(a))) continue;
+      console.error(`unpatched uv run in ${p}: ${line.trim().slice(0, 120)}`);
+      process.exit(1);
     }
   }
 }
+
+if (process.argv[1]?.endsWith("patchBmadSkills.ts")) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run scripts/__tests__/patchBmadSkills.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (9 tests — 7 matcher shapes + 2 CLI post-pass tests).
 
 - [ ] **Step 5: Write the vendor script**
 
@@ -136,27 +232,32 @@ Expected: PASS (3 tests).
 ```bash
 #!/usr/bin/env bash
 # Re-vendor BMAD v6 skills. Manual step, same policy as v4's vendoring.
+# Pinned to a fixed upstream commit: the v6 tags carry the old layout, and
+# `--branch <sha>` does not work on clone, so clone main and check out.
 set -euo pipefail
-TAG="${1:-v6.9.0}"
+SHA="${1:-bda3c59}"
+LABEL="${2:-6.13.0-next}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/src-tauri/resources/bmad-v6"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-git clone --quiet --depth 1 --branch "$TAG" https://github.com/bmad-code-org/BMAD-METHOD "$TMP/bmad"
+git clone --quiet https://github.com/bmad-code-org/BMAD-METHOD "$TMP/bmad"
+git -C "$TMP/bmad" checkout --quiet "$SHA"
+mkdir -p "$DEST"
 rm -rf "$DEST/skills"
 cp -R "$TMP/bmad/skills" "$DEST/skills"
-echo "$TAG" > "$DEST/VERSION"
+echo "$SHA $LABEL" > "$DEST/VERSION"
 
 npx tsx "$ROOT/scripts/patchBmadSkills.ts" "$DEST/skills"
 cd "$ROOT" && npx vitest run scripts/__tests__/patchBmadSkills.test.ts
-echo "vendored $TAG at $DEST"
+echo "vendored $SHA ($LABEL) at $DEST"
 ```
 
 - [ ] **Step 6: Run the vendor script**
 
-Run: `bash scripts/vendor-bmad-v6.sh v6.9.0`
-Expected: exit 0; `src-tauri/resources/bmad-v6/skills/` holds 33 dirs; `VERSION` reads `v6.9.0`; the patch ran (check `grep -c "ade-runtime.mjs" src-tauri/resources/bmad-v6/skills/bmad/SKILL.md` is ≥ 1).
+Run: `bash scripts/vendor-bmad-v6.sh bda3c59 6.13.0-next`
+Expected: exit 0; `src-tauri/resources/bmad-v6/skills/` holds 33 dirs; `VERSION` reads `bda3c59 6.13.0-next`; the patch ran (check `grep -rc "ade-runtime.mjs" src-tauri/resources/bmad-v6/skills --include="*.md" | grep -v ":0" | wc -l` is ≥ 1 — tree-wide count, since bmad/SKILL.md itself has no project-root call site at this pin).
 
 - [ ] **Step 7: Add the CI pin check**
 
@@ -167,19 +268,30 @@ In `.github/workflows/ci.yml`, add a job after the frontend tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify vendored v6 tree matches the pinned tag
+      - name: Verify vendored v6 tree matches the pinned commit
         run: |
-          TAG=$(cat src-tauri/resources/bmad-v6/VERSION)
-          rm -rf /tmp/bmad && git clone --quiet --depth 1 --branch "$TAG" https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad
+          SHA=$(awk '{print $1}' src-tauri/resources/bmad-v6/VERSION)
+          rm -rf /tmp/bmad && git clone --quiet https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad
+          git -C /tmp/bmad checkout --quiet "$SHA"
           diff -r --exclude="*.md" src-tauri/resources/bmad-v6/skills /tmp/bmad/skills
-          echo "vendored tree matches $TAG"
+          echo "vendored tree matches $SHA"
+      - name: No unpatched uv run call sites in vendored markdown
+        run: |
+          if grep -rn "uv run" src-tauri/resources/bmad-v6/skills/ --include="*.md" \
+            | grep -v -e "count_tokens.py" -e "prepass.py" -e "run_evals.py" -e "word_metrics.py" \
+                     -e "<name>.py" -e "uv run pytest" -e "setup.py" -e "convert_cases.py" \
+                     -e "aggregate_benchmark.py" -e "init-sanctum.py" -e "{script}.py" \
+                     -e "<path>" -e '`uv run`'; then
+            echo "unpatched uv run call site in vendored markdown" && exit 1
+          fi
+          echo "no unpatched call sites"
 ```
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add scripts/vendor-bmad-v6.sh scripts/patchBmadSkills.ts scripts/__tests__/patchBmadSkills.test.ts .github/workflows/ci.yml src-tauri/resources/bmad-v6
-git commit -m "feat(bmad-v6): vendor v6.9.0 skills with patched runtime call sites"
+git commit -m "feat(bmad-v6): vendor v6 skills (main @ bda3c59) with patched runtime call sites"
 ```
 
 ---
@@ -259,7 +371,7 @@ export function realFs(): Fs {
     writeText: (p, body) => import("node:fs/promises").then((f) => f.writeFile(p, body)),
     list: (p) => import("node:fs/promises").then((f) => f.readdir(p)),
     exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),
-    mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true })),
+    mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true }).then(() => undefined)),
   };
 }
 ```
@@ -295,14 +407,14 @@ Run once (dev machine has uv; output is committed so CI never needs it):
 
 ```bash
 cd /tmp/bmad-v6 && uv run skills/bmad/scripts/setup.py --project-root /tmp/golden-proj --skill /tmp/bmad-v6/skills/bmad >/dev/null
-mkdir -p /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config
+mkdir -p src/lib/bmadRuntime/__tests__/goldens/config
 uv run /tmp/golden-proj/_bmad/scripts/resolve_config.py --project-root /tmp/golden-proj > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/central.json
+  src/lib/bmadRuntime/__tests__/goldens/config/central.json
 printf '[core]\nactive_initiative = "initiative-checkout"\n' > /tmp/golden-proj/_bmad/custom/config.user.toml
 uv run /tmp/golden-proj/_bmad/scripts/resolve_config.py --project-root /tmp/golden-proj > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/central-with-user.json
-uv run /tmp/golden-proj/_bmad/scripts/resolve_customization.py --project-root /tmp/golden-proj --skill bmad-build > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/customization.json
+  src/lib/bmadRuntime/__tests__/goldens/config/central-with-user.json
+uv run /tmp/golden-proj/_bmad/scripts/resolve_customization.py --project-root /tmp/golden-proj --skill /tmp/bmad-v6/skills/bmad-build > \
+  src/lib/bmadRuntime/__tests__/goldens/config/customization.json
 ```
 
 Expected: three JSON files exist; `central-with-user.json` contains `"active_initiative": "initiative-checkout"`.
@@ -362,16 +474,59 @@ Expected: FAIL — `config.ts` not found.
 import { parse as parseToml } from "smol-toml";
 import type { Fs } from "./fs";
 
+type Toml = Record<string, unknown>;
+
+const KEYED_MERGE_FIELDS = ["code", "id"] as const;
+
+/**
+ * The field that identifies every item of both arrays, or null when the arrays
+ * are plain lists. Like the Python, `code` wins over `id`, a field must be
+ * present on *every* item to identify one, and an identifier that is not a
+ * non-empty string is refused rather than coerced.
+ */
+function keyedMergeField(items: unknown[]): "code" | "id" | null {
+  if (
+    items.length === 0 ||
+    !items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))
+  ) {
+    return null;
+  }
+  const records = items as Record<string, unknown>[];
+  for (const field of KEYED_MERGE_FIELDS) {
+    if (!records.every((item) => field in item)) continue;
+    for (const item of records) {
+      const value = item[field];
+      if (typeof value !== "string") {
+        throw new Error(`keyed array identifier \`${field}\` must be a string, got ${typeof value}`);
+      }
+      if (!value) throw new Error(`keyed array identifier \`${field}\` must not be empty`);
+    }
+    return field;
+  }
+  return null;
+}
+
 /** Merge b into a: keys replace; arrays keyed-merge by code/id, else append. */
 export function deepMerge(a: any, b: any): any {
   if (Array.isArray(a) && Array.isArray(b)) {
-    const keyed = (x: any[]) => x.every((i) => i && typeof i === "object" && (i.code !== undefined || i.id !== undefined));
-    if (keyed(a) && keyed(b)) {
-      const byKey = new Map<string, any>();
-      for (const item of [...a, ...b]) byKey.set(String(item.code ?? item.id), item);
-      return [...byKey.values()];
+    const field = keyedMergeField([...a, ...b]);
+    if (field === null) return [...a, ...b];
+    // A matching identifier replaces its item where it stands; a new one appends.
+    const merged = a.map((item) => ({ ...item }));
+    const indexByKey = new Map<string, number>();
+    a.forEach((item, index) => indexByKey.set(item[field], index));
+    for (const item of b) {
+      const copy = { ...item };
+      const key: string = copy[field];
+      const at = indexByKey.get(key);
+      if (at === undefined) {
+        indexByKey.set(key, merged.length);
+        merged.push(copy);
+      } else {
+        merged[at] = copy;
+      }
     }
-    return [...a, ...b];
+    return merged;
   }
   if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
     const out = { ...a };
@@ -381,12 +536,13 @@ export function deepMerge(a: any, b: any): any {
   return b;
 }
 
-async function readLayer(fs: Fs, p: string): Promise<Record<string, unknown> | null> {
+async function readLayer(fs: Fs, p: string): Promise<Toml | null> {
   if (!(await fs.exists(p))) return null;
-  return parseToml(await fs.readText(p)) as Record<string, unknown>;
+  return parseToml(await fs.readText(p)) as Toml;
 }
 
-export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Record<string, unknown>> {
+/** Merge `_bmad/config.toml` ← `_bmad/custom/config.toml` ← `_bmad/custom/config.user.toml`. */
+export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Toml> {
   const base = await readLayer(fs, `${projectRoot}/_bmad/config.toml`);
   if (!base) throw new Error(`no _bmad/config.toml under ${projectRoot}`);
   let out = deepMerge({}, base);
@@ -397,15 +553,23 @@ export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Re
   return out;
 }
 
-export async function resolveCustomization(projectRoot: string, skillRoot: string, skill: string, fs: Fs): Promise<Record<string, unknown>> {
+/** Merge `{skillRoot}/customize.toml` ← `_bmad/custom/<skill>.toml` ← `<skill>.user.toml`. */
+export async function resolveCustomization(
+  projectRoot: string,
+  skillRoot: string,
+  skill: string,
+  fs: Fs,
+): Promise<Toml> {
   const base = await readLayer(fs, `${skillRoot}/customize.toml`);
-  let out = deepMerge({}, base ?? {});
+  if (!base) throw new Error(`no customize.toml at the root of skill ${skill} (${skillRoot})`);
+  let out = deepMerge({}, base);
   const skillLayer = await readLayer(fs, `${projectRoot}/_bmad/custom/${skill}.toml`);
   if (skillLayer) out = deepMerge(out, skillLayer);
   const userLayer = await readLayer(fs, `${projectRoot}/_bmad/custom/${skill}.user.toml`);
   if (userLayer) out = deepMerge(out, userLayer);
   return out;
 }
+
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -425,79 +589,37 @@ git commit -m "feat(bmad-v6): port layered TOML config resolution"
 ### Task 4: Port the ticket tree (tickets.py + read_store.py)
 
 **Files:**
-- Create: `src/lib/bmadRuntime/tickets.ts`
-- Test: `src/lib/bmadRuntime/__tests__/tickets.test.ts`
-- Create: `src/lib/bmadRuntime/__tests__/goldens/tickets/*.json` (generated in Step 1)
+- Create: `src/lib/bmadRuntime/tickets.ts` (shipped, 1988 lines: one module, Python's own sections — constants, python value shapes, paths, fs probes, frontmatter, loading, views, store, the command line, read_store.py, entry)
+- Test: `src/lib/bmadRuntime/__tests__/tickets.test.ts` (18 tests)
+- Create: `src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts` — the `seedTicketTree` helper Tasks 5–6 import
+- Create: `src/lib/bmadRuntime/__tests__/goldens/tickets/*.json` + `*.exit` + `pull-leaf.md` + `mark-created-plan.md`, with `capture.sh` beside them
 
 **Interfaces:**
 - Consumes: `loadCentralConfig` (Task 3), `Fs`.
-- Produces: `export async function tickets(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` — dispatches `next`, `status`, `find`, `pull`, `mark`, `mirror` exactly as the Python CLI does, printing JSON to stdout. Resolves `--project-root`, the store location (`output_folder` + `active_initiative`), and the `after` dependency validation. Status transitions for `mark`: `draft → ready-for-dev → in-progress → in-review → built → done` (plus `blocked`/`dropped`), with `done` and `mark` refusal messages matching the Python strings.
+- Produces: `export async function tickets(argv: string[], fs: Fs, stdin?: string): Promise<{ stdout: string; exitCode: number }>` — dispatches `next`, `status`, `find`, `pull`, `mark`, `mirror` exactly as the Python CLI does, printing JSON to stdout; argv carrying no subcommand is `read_store.py`'s CLI (Task 6 routes `read_store` here), and `stdin` carries `mirror`'s JSON (left out, it is read from the process's own stdin). Resolves `--project-root` (accepted anywhere, which the plan's tests need and argparse does not allow), the store location (`output_folder` + `active_initiative`), and the `after` dependency validation. `mark <ref> <status>` sets the status in the ticket's plan, creating a frontmatter-only plan when there is none, with `--assignee`/`--blocked`; exit 0 ok, 1 a malformed tree, 2 a store refusal or a usage error.
 
-- [ ] **Step 1: Generate goldens from the real Python**
+- [x] **Step 1: Generate goldens from the real Python** — shipped as `src/lib/bmadRuntime/__tests__/goldens/tickets/capture.sh`, which reseeds `/tmp/golden-proj` per capture and records every command (the Ruling's capture-script rule). Run it from the worktree root; it is reproducible byte for byte. Fourteen goldens: `next-empty`, `next-unseeded-refusal`, `status-seeded`, `next-seeded`, `find-entry`, `pull` + `pull-leaf.md`, `find-pulled`, `mark-done`, `mark-created` + `mark-created-plan.md`, `after-missing-entry`, `tracker-store-refusal`, `read-store-tickets`, `read-store-starters`, `read-store-jira-starter`. Each capture also writes `<name>.exit`.
 
-```bash
-cd /tmp/golden-proj
-mkdir -p /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets
-uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj next > G.json 2>&1 || true
-cp G.json /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/next-empty.json
-# Seed one initiative + one epic + one story via the real skill, then capture:
-uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj status > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/status-seeded.json
-uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj mark 1 done > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/mark-done.json
-```
+Three things the sketch's literal commands could not do, all recorded in `capture.sh`:
+- `next` must succeed for its golden: the tree is configured (`_bmad/config.toml` with `output_folder` and `active_initiative`) and the store folder exists with an empty `tickets.toml`. An unseeded tree is captured separately as `next-unseeded-refusal.json` (exit 1).
+- `mark 1 done` with no folder runs on the **active initiative**, where a bare numeric ref matches nothing (`no ticket matches '1'`): the golden is the refusal. The working `mark-done.json` names the epic folder: `mark <root>/_bmad-output/initiative-demo/epic-demo 1 done`.
+- The seed's leaf file is already pulled, so `pull` is captured on a second entry the seed adds (no leaf file, no plan, full criteria) — which also gives `mark-created` its ticket.
+- `capture.sh` copies `_bmad/scripts/config_utils.py` from the vendored tree: the Python loads it, the port does not. The capture project root is rewritten to `/p` on the way out, so the goldens are comparable with the memFs fixtures.
 
-(Seed by creating `_bmad-output/initiative-demo/tickets.toml` with one `[[epic]]` and `epic-demo/tickets.toml` with one `[[entry]]`, plus `story-demo.md` and `story-demo-plan.md` per the vendored `bmad-ticket/assets` templates. If a command refuses without more setup, capture the refusal JSON — it is a golden too.)
+- [x] **Step 2: Write the failing test**
 
-- [ ] **Step 2: Write the failing test**
+`src/lib/bmadRuntime/__tests__/tickets.test.ts` starts as the plan wrote it — the two golden tests verbatim — and grew to 18: `next-seeded` (byte-for-byte), `find-entry`, `pull` + the leaf it writes, `find-pulled`, `mark-done` (and the plan it edits), `mark-created` (with its date moved to today), the tracker-store and unseeded refusals, `read_store`, two `mirror` cases, and CRLF/BOM preservation (verified against the Python before being pinned).
 
-`src/lib/bmadRuntime/__tests__/tickets.test.ts`:
+The plan's third test could not pass as written: `pull --project-root /p 2` is an argparse refusal before any tree loads (the Python exits 2 with `unrecognized arguments: --project-root`, which the shipped port reproduces and asserts), so there is no `after` in its output. The after-validation the test names is exercised on the tree the Python refuses — an entry whose `after` names no entry — against `after-missing-entry.json`, and the brief's argv shape is asserted separately.
 
-```ts
-import { describe, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tickets } from "../tickets";
-import { memFs } from "../fs";
-import { seedTicketTree } from "./fixtures/ticketTree";
-
-const golden = async (name: string) =>
-  JSON.parse(await readFile(join(__dirname, "goldens/tickets", name), "utf8"));
-
-describe("tickets port", () => {
-  it("matches Python on an empty project (next)", async () => {
-    const fs = memFs();
-    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
-    const r = await tickets(["next", "--project-root", "/p"], fs);
-    expect(r.exitCode).toBe(0);
-    expect(JSON.parse(r.stdout)).toEqual(await golden("next-empty.json"));
-  });
-
-  it("matches Python status on a seeded tree", async () => {
-    const fs = memFs();
-    await seedTicketTree(fs, "/p", { epics: [{ id: 1, slug: "demo" }], stories: [{ id: 1, slug: "demo", parent: "epic-demo" }] });
-    const r = await tickets(["status", "--project-root", "/p"], fs);
-    expect(JSON.parse(r.stdout)).toEqual(await golden("status-seeded.json"));
-  });
-
-  it("rejects an after-reference to a ticket that does not exist, like Python", async () => {
-    const fs = memFs();
-    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
-    const r = await tickets(["pull", "--project-root", "/p", "2"], fs);
-    expect(r.exitCode).not.toBe(0);
-    expect(r.stdout).toContain("after");
-  });
-});
-```
-
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `npx vitest run src/lib/bmadRuntime/__tests__/tickets.test.ts`
-Expected: FAIL — `tickets.ts` not found.
+Expected: FAIL — `tickets.ts` not found. (Seen.)
 
-- [ ] **Step 4: Implement tickets.ts and its fixture builder**
+- [x] **Step 4: Implement tickets.ts and its fixture builder**
 
-First create `src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts` — the `seedTicketTree` helper used by this task's tests and Tasks 5–6:
+`src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts` is the plan's fixture plus one thing the sketch omitted: the epic's own container file `<dir>/epic-<slug>.md`. Without it `load_container` refuses every epic folder (`epic-demo: no epic-demo.md`), which the status golden would have failed on.
 
 ```ts
 import type { Fs } from "../../fs";
@@ -506,83 +628,59 @@ import type { Fs } from "../../fs";
  * requested epics/stories as [[epic]]/[[entry]] tables plus leaf and plan
  * files. Mirrors the vendored templates' shape. */
 export async function seedTicketTree(
-  fs: Fs, root: string,
-  spec: { epics: { id: number; slug: string }[]; stories: { id: string | number; slug: string; parent: string }[] },
+  fs: Fs,
+  root: string,
+  spec: {
+    epics: { id: number; slug: string }[];
+    stories: { id: string | number; slug: string; parent: string }[];
+  },
 ): Promise<void> {
   await fs.mkdir(`${root}/_bmad/custom`);
-  await fs.writeText(`${root}/_bmad/config.toml`, `[core]\nproject_name = "p"\noutput_folder = "${root}/_bmad-output"\nactive_initiative = "initiative-demo"\n`);
+  await fs.writeText(
+    `${root}/_bmad/config.toml`,
+    `[core]\nproject_name = "p"\noutput_folder = "${root}/_bmad-output"\nactive_initiative = "initiative-demo"\n`,
+  );
   const store = `${root}/_bmad-output/initiative-demo`;
   await fs.mkdir(store);
-  const epicsToml = spec.epics.map((e) => `[[epic]]\nid = ${e.id}\nslug = "${e.slug}"\ntitle = "Demo"\n`).join("\n");
+  const epicsToml = spec.epics
+    .map((e) => `[[epic]]\nid = ${e.id}\nslug = "${e.slug}"\ntitle = "Demo"\n`)
+    .join("\n");
   await fs.writeText(`${store}/tickets.toml`, epicsToml);
   for (const e of spec.epics) {
     const dir = `${store}/epic-${e.slug}`;
     await fs.mkdir(dir);
+    // Every epic folder carries its own container file: without <folder>.md the
+    // loader refuses it ("epic-demo: no epic-demo.md").
+    await fs.writeText(`${dir}/epic-${e.slug}.md`, `---\ntype: epic\n---\n# Demo\n`);
     const mine = spec.stories.filter((s) => s.parent === `epic-${e.slug}`);
-    await fs.writeText(`${dir}/tickets.toml`, mine.map((s) => `[[entry]]\nid = ${typeof s.id === "string" ? `"${s.id}"` : s.id}\ntype = "story"\ntitle = "Demo story"\n`).join("\n"));
+    await fs.writeText(
+      `${dir}/tickets.toml`,
+      mine.map((s) => `[[entry]]\nid = ${typeof s.id === "string" ? `"${s.id}"` : s.id}\ntype = "story"\ntitle = "Demo story"\n`).join("\n"),
+    );
     for (const s of mine) {
       const stem = `story-${s.id}`;
-      await fs.writeText(`${dir}/${stem}.md`, `---\nid: ${s.id}\ntype: story\ntitle: "Demo story"\nparent: epic-${e.slug}\n---\n# Demo story\n\n## Acceptance Criteria\n- AC1\n`);
+      await fs.writeText(
+        `${dir}/${stem}.md`,
+        `---\nid: ${s.id}\ntype: story\ntitle: "Demo story"\nparent: epic-${e.slug}\n---\n# Demo story\n\n## Acceptance Criteria\n- AC1\n`,
+      );
       await fs.writeText(`${dir}/${stem}-plan.md`, `---\nticket: ${s.id}\nstatus: draft\n---\n# Plan\n`);
     }
   }
 }
 ```
 
-Then implement `src/lib/bmadRuntime/tickets.ts`. Port `skills/bmad-ticket/scripts/tickets.py` (1473 lines) and `read_store.py` (124 lines) into one module. Structure:
+`src/lib/bmadRuntime/tickets.ts` is the port: the sketch's `storeRoot`/`readStore`/`planFor` shapes became the Python's own `tickets_root`/`load_tree`/`plan_path`, and the commands follow it line for line, including the quirks the goldens pin (a `[[epic]]` `slug` is looked up by slug, not by folder name, so the seed's `slug = "demo"` against folder `epic-demo` leaves `epic_ids` empty and rows `ref` their file names; a bare numeric ref matches nothing outside an epic folder; `state` prefers `tracker_status`).
 
-```ts
-import { parse as parseToml } from "smol-toml";
-import { loadCentralConfig } from "./config";
-import type { Fs } from "./fs";
+Three substitutions, all seams with earlier tasks, are documented at the top of the module:
+- config comes from Task 3's `loadCentralConfig`, so a missing `_bmad/config.toml` refuses in different words than the Python's own `config_utils.py`;
+- output goes to `stdout` alone (the interface has one channel; the Python splits errors onto stderr);
+- `read_store.py` finds its starters at its own `../config`, which a bundle cannot know: the port takes `--skill-root` (what the patched call sites pass, defaulting to `<skill-root>/config`) or `--starters-dir`, expands `~`, and refuses a run that names neither rather than dropping the starter layer. `read-store-jira-starter` is the golden for the `--skill-root`-only shape.
 
-/** One entry from an epic's tickets.toml [[entry]] table. */
-interface Entry { id: string | number; type: string; title: string; parent?: string; after?: (string | number)[]; risk?: string; /* ...rest per tickets-template.toml */ }
+argparse's usage line wraps to the terminal and is not reproduced (its error line is).
 
-/** One [[epic]] table from the initiative's tickets.toml. */
-interface EpicEntry { id: string | number; slug: string; title: string; after?: { epic: number; needs: string }[] }
+`mirror`'s rollback needs a delete, which the first cut of `Fs` had no way to do; the controller ruled the gap load-bearing and `delete(p)` was added to `Fs` (realFs `unlink`, memFs removes the entry) with parity tests, so a failed mirror now removes the leaf it had just pulled exactly as the Python does.
 
-const STATUSES = ["draft", "ready-for-dev", "in-progress", "in-review", "built", "done", "blocked", "dropped"] as const;
-type Status = (typeof STATUSES)[number];
-
-async function storeRoot(projectRoot: string, fs: Fs): Promise<string> {
-  const cfg = await loadCentralConfig(projectRoot, fs);
-  const out = (cfg.core as any)?.output_folder ?? `${projectRoot}/_bmad-output`;
-  const init = (cfg.core as any)?.active_initiative ?? "";
-  return init ? `${out}/${init}` : out;
-}
-
-async function readStore(projectRoot: string, fs: Fs) {
-  // read_store.py port: find tickets.toml files under storeRoot, parse [[epic]]/[[entry]].
-  // Returns { epics: EpicEntry[], entries: Map<folder, Entry[]> } plus per-folder raw data.
-}
-
-/** Validate `after` references exist in build order — mirrors the Python errors verbatim. */
-function validateAfter(entries: Entry[], folder: string): string | null { /* ... */ }
-
-/** The leaf/plan join: status lives in <stem>-plan.md frontmatter `ticket` key. */
-async function planFor(stem: string, folder: string, fs: Fs): Promise<{ status?: Status; assignee?: string } | null> {
-  const p = `${folder}/${stem}-plan.md`;
-  if (!(await fs.exists(p))) return null;
-  const md = await fs.readText(p);
-  const fm = /^---\n([\s\S]*?)\n---/.exec(md)?.[1] ?? "";
-  const kv = (k: string) => new RegExp(`^${k}:\\s*(.+)$`, "m").exec(fm)?.[1]?.trim();
-  return { status: kv("status") as Status, assignee: kv("assignee") };
-}
-
-export async function tickets(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
-  const projectRoot = argv.includes("--project-root") ? argv[argv.indexOf("--project-root") + 1] : process.cwd();
-  const cmd = argv.find((a) => ["next", "status", "find", "pull", "mark", "mirror"].includes(a));
-  if (!cmd) return { stdout: "usage: tickets.py {next|status|find|pull|mark|mirror}", exitCode: 2 };
-  // Dispatch per command, printing the same JSON keys the Python prints.
-  // `mark <ref> <status>` writes the plan file's frontmatter `status:` line,
-  // preserving other keys, and validates the transition against STATUSES order.
-  // `pull <ref>` writes the leaf file from the [[entry]] + templates.
-  return { stdout: JSON.stringify({ /* command output */ }), exitCode: 0 };
-}
-```
-
-The full JSON shapes come from the goldens captured in Step 1 — the port is complete only when every golden passes.
+The full JSON shapes come from the goldens captured in Step 1 — the port is complete only when every golden passes. A throwaway differential harness (run once, not committed) also diffed 58 command cases against the Python on identical on-disk trees — exit codes, output bytes and the files both sides left behind — which is what caught the optional `<dir>` on `find`/`mark` and a `waiting_on: []` that the Python omits.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -608,7 +706,7 @@ git commit -m "feat(bmad-v6): port the ticket tree commands"
 
 **Interfaces:**
 - Consumes: `loadCentralConfig`, `resolveCustomization` (Task 3), `Fs`.
-- Produces: `export async function renderSkill(projectRoot: string, skillRoot: string, set: Record<string, string>, fs: Fs): Promise<string>` — renders the skill's SKILL.md with a jinja2 subset (`{{ var }}`, `{% for x in list %}…{% endfor %}`, `{% if x %}…{% endif %}`). And `export async function memlog(projectRoot: string, action: "append" | "read" | "init", entry: string | null, fs: Fs): Promise<string>` — append-only JSON-lines log at `_bmad/memlog.jsonl`.
+- Produces: `export async function renderSkill(projectRoot: string, skillRoot: string, set: Record<string, string>, fs: Fs): Promise<string>` — runs the skill's workflow render like the Python: merges config + customization, templates the SKILL.md with a jinja2 subset (variables, `for`/`if`/`elif`/`else`, `set`, `raw`, `default` filter, tuples, `in`, `and`/`or`/`not`, `~`, comments, `+`/`-` whitespace signs, StrictUndefined), writes the rendered snapshot where the Python writes it, and **returns the Python's stdout line** (`read and follow …` / `HALT: …`). And `export async function memlog(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` — a port of the pinned memlog.py CLI: subcommands `init|append|set`, flags `--workspace/--field/--type/--text`, the log at `{workspace}/.memlog.md` (one frontmatter block + one flat chronological list), every command echoing the new state as one JSON line. There is no `read` subcommand in the pinned script — the plan's earlier `_bmad/memlog.jsonl` description was wrong; the Python at the pin is the contract.
 
 - [ ] **Step 1: Generate goldens from the real Python**
 
@@ -687,13 +785,22 @@ export async function renderSkill(projectRoot: string, skillRoot: string, set: R
 ```ts
 import type { Fs } from "./fs";
 
-export async function memlog(projectRoot: string, action: "append" | "read" | "init", entry: string | null, fs: Fs): Promise<string> {
-  const p = `${projectRoot}/_bmad/memlog.jsonl`;
-  if (action === "read") return (await fs.exists(p)) ? await fs.readText(p) : "";
-  if (action === "init") { await fs.writeText(p, ""); return ""; }
-  const prev = (await fs.exists(p)) ? await fs.readText(p) : "";
-  await fs.writeText(p, prev + entry + "\n");
-  return "";
+/**
+ * Port of the pinned memlog.py CLI. Subcommands `init|append|set`, flags
+ * `--workspace/--field/--type/--text`; the log is `{workspace}/.memlog.md`
+ * (one frontmatter block + one flat chronological list); every command echoes
+ * the new state as one JSON line. The goldens under goldens/memlog are the
+ * contract — the shipped implementation in the repo is authoritative; this
+ * sketch is only the shape.
+ */
+export async function memlog(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
+  const [cmd, ...rest] = argv;
+  if (!["init", "append", "set"].includes(cmd)) {
+    return { stdout: "memlog.py: error: one of init|append|set is required", exitCode: 2 };
+  }
+  // Port each subcommand against the goldens: frontmatter round-trip, the
+  // append list, and the per-command echo of the new state.
+  return { stdout: "", exitCode: 0 };
 }
 ```
 
@@ -711,6 +818,145 @@ git commit -m "feat(bmad-v6): port workflow rendering and memlog"
 
 ---
 
+### Task 5b: Port roster, knowledge and validate_manifests
+
+**Files:**
+- Create: `src/lib/bmadRuntime/roster.ts`, `src/lib/bmadRuntime/knowledge.ts`, `src/lib/bmadRuntime/validateManifests.ts`
+- Test: `src/lib/bmadRuntime/__tests__/roster.test.ts`, `src/lib/bmadRuntime/__tests__/knowledge.test.ts`, `src/lib/bmadRuntime/__tests__/validateManifests.test.ts`
+- Create: `src/lib/bmadRuntime/__tests__/goldens/misc/*.json` (generated in Step 1)
+
+**Interfaces:**
+- Consumes: `Fs`, `loadCentralConfig` (Task 3), the vendored tree paths.
+- Produces: `export async function roster(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` (party-mode roster, port of `skills/bmad/scripts/roster.py`), `export async function knowledge(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` (module knowledge aggregator, port of `skills/bmad/scripts/knowledge.py`), `export async function validateManifests(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` (module manifest validation, port of `skills/bmad/scripts/validate_manifests.py`). Each accepts exactly the argument shapes the patched call sites pass — those shapes are the contract, and the goldens pin the output.
+
+- [ ] **Step 1: Find the argument shapes and generate goldens**
+
+The vendored tree was patched in Task 1; every call site is now `node {project-root}/_bmad/ade-runtime.mjs <script> …`. Find them:
+
+Run: `grep -rn "ade-runtime.mjs roster\|ade-runtime.mjs knowledge\|ade-runtime.mjs validate_manifests" src-tauri/resources/bmad-v6/skills/ | head -20`
+Expected: the full list of call sites (7 across the tree). These argument shapes are what the ports must accept.
+
+Then, at dev time (Python available), run the real scripts for each distinct call-site shape against /tmp/golden-proj (from Task 3, seeded the same way) and capture stdout+exit to `src/lib/bmadRuntime/__tests__/goldens/misc/<script>-<shape>.json` — one golden per distinct shape. Where a shape depends on a module not present in /tmp/golden-proj, capture the error output as the golden (an error golden is a golden).
+
+- [ ] **Step 2: Write the failing tests**
+
+```ts
+// roster.test.ts (same shape for knowledge.test.ts / validateManifests.test.ts)
+import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { roster } from "../roster";
+import { memFs } from "../fs";
+import { seedTicketTree } from "./fixtures/ticketTree";
+
+const golden = async (name: string) =>
+  JSON.parse(await readFile(join(__dirname, "goldens/misc", name), "utf8"));
+
+describe("roster port", () => {
+  it("matches Python for each patched call-site shape", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    for (const name of await fs.list("/shape-list")) { /* per-shape loop driven by the golden files */ }
+    const r = await roster(["<the first shape's args>", "--project-root", "/p"], fs);
+    expect(r.exitCode).toBe(golden("roster-1.json").exitCode);
+    expect(JSON.parse(r.stdout)).toEqual(golden("roster-1.json").stdout);
+  });
+});
+```
+
+Write one test per golden file (loop over them is fine); each compares stdout and exitCode against the golden.
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/roster.test.ts src/lib/bmadRuntime/__tests__/knowledge.test.ts src/lib/bmadRuntime/__tests__/validateManifests.test.ts`
+Expected: FAIL — modules not found.
+
+- [ ] **Step 4: Implement the three ports**
+
+Port `skills/bmad/scripts/roster.py` (party roster), `knowledge.py` (module knowledge aggregation), and `validate_manifests.py` (module manifest checks) against the goldens — same discipline as Tasks 3–5: the Python output is the contract; each module is small and reads files under the project root via `Fs`. No external dependencies.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/roster.test.ts src/lib/bmadRuntime/__tests__/knowledge.test.ts src/lib/bmadRuntime/__tests__/validateManifests.test.ts`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/bmadRuntime/roster.ts src/lib/bmadRuntime/knowledge.ts src/lib/bmadRuntime/validateManifests.ts src/lib/bmadRuntime/__tests__/roster.test.ts src/lib/bmadRuntime/__tests__/knowledge.test.ts src/lib/bmadRuntime/__tests__/validateManifests.test.ts src/lib/bmadRuntime/__tests__/goldens/misc
+git commit -m "feat(bmad-v6): port roster, knowledge and manifest validation"
+```
+
+---
+
+### Task 5c: Port the skill-root helper scripts
+
+**Files:**
+- Create: `src/lib/bmadRuntime/helpers.ts` (one module holding the small helper ports; a helper that grows past ~150 lines gets its own file)
+- Test: `src/lib/bmadRuntime/__tests__/helpers.test.ts`
+- Create: `src/lib/bmadRuntime/__tests__/goldens/helpers/*.json` (generated in Step 1)
+
+**Interfaces:**
+- Consumes: `Fs`, `loadCentralConfig` (Task 3), the Task 5b ports.
+- Produces: one export per ported script with the uniform shape `export async function <name>(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>`, named by the Python stem: `reconKit, initSkill, brain, processTemplate, wake, scanScripts, scanPaths, resolveParty, scanLegacyModule, registry, readSessionLog, pickMethods, listCustomizableSkills, lintSpine, resolvePersonas, runTriggers, gitEvidence`. (**Corrected in Task 5c:** the list originally also named `go` and `x`. Neither is a script at this pin — no file in the vendored tree and no call site; `go.py` and `x.py` are placeholder names in the patcher's own comment and in two toolsmith test fixtures that build synthetic trees. They are not ported and not in `PORTED`; a future pin that grows a real call site fails the patcher's post-pass loudly.) Skill-root invocations of `tickets.py`, `read_store.py`, `knowledge.py` route to the Task 4/5b ports (the `--skill-root` arg is accepted and, where the Python used it to locate files, honored; otherwise ignored). The Python sources live in the vendored tree — e.g. `skills/bmad-architecture/scripts/lint_spine.py`, `skills/bmad-deep-recon/scripts/recon_kit.py`.
+
+- [ ] **Step 1: Generate goldens from the real Python**
+
+For each of the 19 scripts, find its source in the vendored tree (`find src-tauri/resources/bmad-v6/skills -name "<name>.py" -path "*/scripts/*"`), find its call sites in the vendored markdown (`grep -rn "scripts/<name>.py" src-tauri/resources/bmad-v6/skills --include="*.md"`) to learn the argument shapes, then run the real Python against /tmp/golden-proj (seeded as in Task 3) and capture stdout+exit into `src/lib/bmadRuntime/__tests__/goldens/helpers/<name>-<shape>.json`. Where a script refuses without more setup, capture the refusal — it is a golden too. Scripts that are trivial (a few lines of string building) still get one golden each.
+
+- [ ] **Step 2: Write the failing tests**
+
+```ts
+import { describe, expect, it } from "vitest";
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import * as helpers from "../helpers";
+import { memFs } from "../fs";
+import { seedTicketTree } from "./fixtures/ticketTree";
+
+describe("helper script ports", () => {
+  it("matches Python for every captured golden", async () => {
+    const dir = join(__dirname, "goldens/helpers");
+    for (const f of await readdir(dir)) {
+      const [name] = f.split("-");
+      const golden = JSON.parse(await readFile(join(dir, f), "utf8"));
+      const port = (helpers as Record<string, (argv: string[], fs: unknown) => Promise<{ stdout: string; exitCode: number }>>)[name];
+      expect(port, `no port named ${name}`).toBeDefined();
+      const fs = memFs();
+      await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+      const r = await port!(golden.argv, fs);
+      expect(r.exitCode, `${name} exit code`).toBe(golden.exitCode);
+      expect(r.stdout, `${name} stdout`).toBe(golden.stdout);
+    }
+  });
+});
+```
+
+(The golden files carry the `argv` used, so the test replays exactly what the Python saw.)
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/helpers.test.ts`
+Expected: FAIL — no ports yet.
+
+- [ ] **Step 4: Implement helpers.ts**
+
+Port each of the 19 scripts against its goldens — same discipline as Tasks 3–5b: the Python output is the contract, `Fs` for all file access, no external dependencies. Each port is small; group them in one module and split out any that grows past ~150 lines (it then keeps the same export shape in its own file and is re-exported from `helpers.ts`).
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/helpers.test.ts`
+Expected: PASS (one golden each).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/bmadRuntime/helpers.ts src/lib/bmadRuntime/__tests__/helpers.test.ts src/lib/bmadRuntime/__tests__/goldens/helpers
+git commit -m "feat(bmad-v6): port the skill-root helper scripts"
+```
+
+---
+
 ### Task 6: The ade-runtime.mjs CLI bundle
 
 **Files:**
@@ -720,8 +966,8 @@ git commit -m "feat(bmad-v6): port workflow rendering and memlog"
 - Test: `src/lib/bmadRuntime/__tests__/cli.test.ts`
 
 **Interfaces:**
-- Consumes: `tickets`, `loadCentralConfig`, `resolveCustomization`, `renderSkill`, `memlog`, `realFs`.
-- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v`).
+- Consumes: `tickets`, `loadCentralConfig`, `resolveCustomization`, `renderSkill`, `memlog`, `roster`, `knowledge`, `validateManifests` (Task 5b), `realFs`.
+- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog|roster|knowledge|validate_manifests`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v` — the two-token argparse form, split at the first `=` per the Python's partition). `render_skill` exits 1 on a `HALT:` refusal, matching the Python's exit code. Until Task 5b lands, the roster/knowledge/validate_manifests names dispatch through a placeholder `helpers.ts` and answer "not ported into this runtime build yet" with exit 1 — never the unknown-script exit 2; Task 5b re-exports the trio from helpers.ts so the CLI needs no changes. `resolve_config` and `resolve_customization` honour `--key`/`-k` exactly as the Python does: without `--key`, the whole merge; with it, one entry per requested dotted path that resolved — under the path as it was written, in the order requested, an unresolvable key omitted rather than an error (13 call sites read values this way).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -742,16 +988,27 @@ describe("cli dispatch", () => {
     expect(() => JSON.parse(r.stdout)).not.toThrow();
   });
 
-  it("resolves --key queries for resolve_config", async () => {
+  it("resolves --key queries for resolve_config with the Python's filter", async () => {
     const fs = memFs();
     await seedTicketTree(fs, "/p", { epics: [], stories: [] });
     const r = await cliMain(["resolve_config", "--project-root", "/p", "--key", "core.output_folder"], fs);
-    expect(JSON.parse(r.stdout)).toHaveProperty("core");
+    // The Python's shape: one entry per requested dotted path that resolved,
+    // under the path as written — not the whole merged table.
+    expect(JSON.parse(r.stdout)).toEqual({ "core.output_folder": "/p/_bmad-output" });
   });
 
   it("reports an unknown script with a non-zero exit", async () => {
     const r = await cliMain(["bogus"], memFs());
     expect(r.exitCode).toBe(2);
+  });
+
+  it("dispatches the Task 5b scripts by their patched names", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    for (const name of ["roster", "knowledge", "validate_manifests"] as const) {
+      const r = await cliMain([name, "--project-root", "/p"], fs);
+      expect(r.exitCode, `${name} should dispatch`).not.toBe(2);
+    }
   });
 });
 ```
@@ -768,7 +1025,51 @@ import { loadCentralConfig, resolveCustomization } from "./config";
 import { tickets } from "./tickets";
 import { renderSkill } from "./render";
 import { memlog } from "./memlog";
+import { roster } from "./roster";
+import { knowledge } from "./knowledge";
+import { validateManifests } from "./validateManifests";
 import type { Fs } from "./fs";
+
+/** The Python's repeatable `--key`/`-k` dotted paths, in the order given. */
+function keyPaths(argv: string[]): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (token === "--key" || token === "-k") {
+      const value = argv[++i];
+      if (value !== undefined) keys.push(value);
+    } else if (token.startsWith("--key=")) keys.push(token.slice("--key=".length));
+  }
+  return keys;
+}
+
+/** The Python's `_MISSING`. */
+const MISSING = Symbol("missing");
+
+/** The Python's `extract_key`: the path walks nested tables only — a missing
+ * part, or a scalar or list along the way, is missing. */
+function extractKey(data: unknown, dotted: string): unknown {
+  let current: unknown = data;
+  for (const part of dotted.split(".")) {
+    if (current === null || typeof current !== "object" || Array.isArray(current)) return MISSING;
+    if (!Object.prototype.hasOwnProperty.call(current, part)) return MISSING;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+/** What the two resolvers print: without `--key`, the whole merged table; with
+ * it, one entry per requested path that resolved, missing keys omitted. */
+function resolveOutput(merged: Record<string, unknown>, argv: string[]): unknown {
+  const keys = keyPaths(argv);
+  if (keys.length === 0) return merged;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = extractKey(merged, key);
+    if (value !== MISSING) out[key] = value;
+  }
+  return out;
+}
 
 export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
   const [script, ...rest] = argv;
@@ -779,13 +1080,17 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
     case "resolve_config": {
       const root = rest[rest.indexOf("--project-root") + 1];
       const cfg = await loadCentralConfig(root, fs);
-      return { stdout: JSON.stringify(cfg, null, 2), exitCode: 0 };
+      // `resolveOutput` is the Python's `extract_key` filter: with `--key`/`-k`
+      // the answer holds one entry per requested dotted path that resolved,
+      // under the path as written, the order requested, missing keys omitted.
+      return { stdout: JSON.stringify(resolveOutput(cfg, rest), null, 2), exitCode: 0 };
     }
     case "resolve_customization": {
       const root = rest[rest.indexOf("--project-root") + 1];
       const skillRoot = rest[rest.indexOf("--skill") + 1];
       const skill = skillRoot.split("/").pop()!;
-      return { stdout: JSON.stringify(await resolveCustomization(root, skillRoot, skill, fs), null, 2), exitCode: 0 };
+      const merged = await resolveCustomization(root, skillRoot, skill, fs);
+      return { stdout: JSON.stringify(resolveOutput(merged, rest), null, 2), exitCode: 0 };
     }
     case "render_skill": {
       const root = rest[rest.indexOf("--project-root") + 1];
@@ -793,14 +1098,22 @@ export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string;
       const set = Object.fromEntries(rest.filter((a) => a.startsWith("--set ")).map((a) => a.slice(6).split("=") as [string, string]));
       return { stdout: await renderSkill(root, skill, set, fs), exitCode: 0 };
     }
-    case "memlog": {
-      const root = rest[rest.indexOf("--project-root") + 1];
-      const action = rest.find((a) => ["append", "read", "init"].includes(a)) as "append" | "read" | "init";
-      const entry = action === "append" ? rest[rest.length - 1] : null;
-      return { stdout: await memlog(root, action, entry, fs), exitCode: 0 };
-    }
-    default:
+    case "memlog":
+      // The pinned memlog.py is a CLI: pass its argv straight through.
+      return memlog(rest, fs);
+    case "roster":
+      return roster(rest, fs);
+    case "knowledge":
+      return knowledge(rest, fs);
+    case "validate_manifests":
+      return validateManifests(rest, fs);
+    default: {
+      // Task 5c helper scripts dispatch by their Python stem.
+      const helpers = await import("./helpers");
+      const fn = (helpers as Record<string, (argv: string[], fs: Fs) => Promise<{ stdout: string; exitCode: number }>>)[script];
+      if (fn) return fn(rest, fs);
       return { stdout: `unknown runtime script: ${script}`, exitCode: 2 };
+    }
   }
 }
 
@@ -827,14 +1140,27 @@ import { defineConfig } from "vite";
 // Single dependency-free ESM bundle scaffolded into v6 projects as
 // _bmad/ade-runtime.mjs. Node 18+ target; everything bundled inline.
 export default defineConfig({
+  // The frontend's public assets have no place in the runtime bundle's output.
+  publicDir: false,
   build: {
     lib: { entry: "src/lib/bmadRuntime/cli.ts", formats: ["es"], fileName: "ade-runtime" },
     outDir: "dist-runtime",
     target: "node18",
     minify: false,
-    rollupOptions: { external: [] },
+    rollupOptions: {
+      // Node built-ins are the runtime's, not dependencies: leaving them as
+      // imports keeps them out of the bundle, where a client-environment lib
+      // build would otherwise stub them "for browser compatibility" and leave
+      // realFs reading nothing. Every npm package (smol-toml, @noble/hashes)
+      // is bundled inline.
+      external: (id) => id.startsWith("node:"),
+      // One file: the late ports cli.ts imports dynamically are inlined rather
+      // than emitted as sibling chunks that nothing copies to the project.
+      output: { inlineDynamicImports: true },
+    },
   },
 });
+
 ```
 
 In `package.json`: `"build:runtime": "vite build --config vite.runtime.config.ts"`, and change `"build": "tsc && vite build && npm run build:runtime"`.
@@ -1037,11 +1363,13 @@ git commit -m "feat(bmad-v6): scaffold v6 projects with methodology marker"
 **Files:**
 - Modify: `src/lib/projectSetup.ts`
 - Modify: `src/components/NewTabDialog.tsx` (or wherever the setup prompt renders — follow the existing `autoProjectSetup` flow)
-- Test: `src/lib/__tests__/projectSetup.test.ts` (extend; check existing suite name first)
+- Modify: `src-tauri/src/projectsetup.rs` (carried from Task 7: `SetupStatus` gains the methodology field the frontend detects from)
+- Test: `src/lib/__tests__/projectSetup.test.ts` (new; the existing "project setup" cases live in projectMethodology.test.ts)
+- Test: `src/components/__tests__/NewTabDialog.test.tsx` (the question asks only when the project has neither)
 
 **Interfaces:**
-- Consumes: `project_setup_apply` with a new `methodology: "v4" | "v6"` argument; `project_setup_status` unchanged.
-- Produces: `setupProject(root, methodology: "v6" | "v4")` — the existing `setupProject(root)` callers now pass the user's choice; default `"v6"`. The setup UI asks once when `autoProjectSetup` is on and the project has neither methodology on disk: "Methodology: BMAD v6 (default) or BMAD v4". Existing v4 projects (`.bmad-core/` present, per `project_setup_status`) skip the question and stay v4.
+- Consumes: `project_setup_apply` with a new `methodology: "v4" | "v6"` argument; `project_setup_status` gains `methodology: "v4" | "v6" | null` — filled by `bmadv6::detect_on_disk`, marker first (`.ade/methodology`), then `.bmad-core/` ⇒ v4; null for a project with neither. That field is the frontend's detection source; no new command.
+- Produces: `setUpProject(root, methodology?: "v6" | "v4", stacks?)` — the owner's answer wins; without one the project's own marker (else `.bmad-core/`) decides, and a project with neither — a new one — gets the v6 default. The setup UI asks once when `autoProjectSetup` is on and the project has neither methodology on disk: "Methodology: BMAD v6 (default) or BMAD v4". Existing v4 projects skip the question and stay v4. All three `project_setup_apply` call sites send `methodology`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1050,9 +1378,9 @@ Extend the projectSetup suite:
 ```ts
 it("passes the chosen methodology to setup and defaults new projects to v6", async () => {
   // existing mock of invoke("project_setup_apply") records args
-  await setupProject("/tmp/proj", "v6");
+  await setUpProject("/tmp/proj", "v6");
   expect(lastApplyArgs.methodology).toBe("v6");
-  await setupProject("/tmp/proj");
+  await setUpProject("/tmp/proj");
   expect(lastApplyArgs.methodology).toBe("v6");
 });
 ```
@@ -1064,7 +1392,9 @@ Expected: FAIL — `methodology` arg not sent.
 
 - [ ] **Step 3: Implement**
 
-`projectSetup.ts`: add `methodology: "v6" | "v4" = "v6"` parameter to the apply invocations; add `detectOnDisk(root): Promise<"v4" | "v6" | null>` via the existing status command (`.bmad-core/` ⇒ v4, `.ade/methodology` ⇒ its value, else null). The setup prompt component asks only when `detectOnDisk` is null; v4-detected projects proceed silently as before.
+`projectsetup.rs`: `SetupStatus` gains `methodology: Option<String>` from `bmadv6::detect_on_disk`, and the status test pins the three cases (none / `.bmad-core/` ⇒ v4 / marker wins).
+
+`projectSetup.ts`: add `methodology: Methodology = "v6"` to the apply invocations; add `detectOnDisk(root): Promise<"v4" | "v6" | null>` via the existing status command's `methodology` field. `setUpProject(root, methodology?, stacks?)` sends the explicit answer, else what the project reports, else "v6". The setup prompt component asks only when `detectOnDisk` is null; v4- and v6-detected projects proceed silently.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1079,7 +1409,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/lib/projectSetup.ts src/components/NewTabDialog.tsx src/lib/__tests__/projectSetup.test.ts
+git add src/lib/projectSetup.ts src/lib/newTab.ts src/hooks/useProjectSetup.ts src/components/NewTabDialog.tsx src/components/AgentsTab.tsx src/index.css src/lib/__tests__/projectSetup.test.ts src/components/__tests__/NewTabDialog.test.tsx src-tauri/src/projectsetup.rs src-tauri/src/bmadv6.rs
 git commit -m "feat(bmad-v6): methodology choice in project setup"
 ```
 

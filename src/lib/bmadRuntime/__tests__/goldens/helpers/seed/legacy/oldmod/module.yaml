@@ -1,0 +1,26 @@
+code: oldmod
+name: Old Module
+module_version: 1.2.0
+module_greeting: |
+  Welcome to the old module.
+  Set your keys and go.
+agents:
+  - analyst
+  - architect
+output_folder:
+  prompt: Where should output go?
+  default: docs
+  user_setting: true
+flavor:
+  prompt: Which flavor?
+  default: plain
+  single-select: [plain, spicy]
+api_key:
+  prompt: API key?
+  regex: "^[a-z]+$"
+  required: true
+  example: abc
+prune_old:
+  prompt: Prune old runs?
+  default: false
+  result: "{value} days"

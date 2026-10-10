@@ -1,8 +1,14 @@
 node_modules/
 dist/
+# The runtime bundle is built by `npm run build:runtime`; the copy that ships is
+# src-tauri/resources/ade-runtime.mjs (committed, regenerated on every build).
+dist-runtime/
 src-tauri/target/
 .vite/
 src-tauri/gen/
 .superpowers/
 .claude/worktrees/
 .shots/
+# The vendored v6 tree is Python; running any of it writes bytecode beside the
+# script, and a scaffolded project must never pick one up.
+**/__pycache__/

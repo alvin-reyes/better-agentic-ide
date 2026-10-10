@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-deep-recon/scripts/recon_kit.py tally /p/recon/.memlog.md",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "tally",
+    "/p/recon/.memlog.md"
+  ],
+  "stdout": "{\n  \"entries\": 7,\n  \"by_type\": {\n    \"claim\": 3,\n    \"correction\": 1,\n    \"decision\": 1,\n    \"insight\": 1,\n    \"note\": 1\n  },\n  \"claims\": {\n    \"stale\": 1,\n    \"verified\": 1\n  },\n  \"claims_total\": 2\n}\n",
+  "stderr": "",
+  "files": {}
+}

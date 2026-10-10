@@ -1,0 +1,17 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/process_template.py /p/recon/brief.md.tpl -o /p/out/brief.md --var topic=Product direction --true deep",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "/p/recon/brief.md.tpl",
+    "-o",
+    "/p/out/brief.md",
+    "--var",
+    "topic=Product direction",
+    "--true",
+    "deep"
+  ],
+  "stdout": "{\"output_file\": \"/p/out/brief.md\", \"vars_substituted\": [\"topic\"], \"conditions_true\": [\"deep\"], \"conditions_false\": [], \"tokens_remaining\": [\"{project-root}\", \"{research_type}\", \"{topic_slug}\", \"{user_name}\"]}\n",
+  "stderr": "",
+  "files": {}
+}

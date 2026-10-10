@@ -1,0 +1,13 @@
+{
+  "python": "uv run /p/skills/demo-agent/scripts/wake.py --skill-root /p/skills/demo-agent /p",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--skill-root",
+    "/p/skills/demo-agent",
+    "/p"
+  ],
+  "stdout": "MODE: WAKING\nSanctum: /p/_bmad/memory/demo-agent\n\n===== PERSONA.md =====\n# Persona\n\nI am Demo, a patient sounding board.\n\n===== CREED.md =====\n# Creed\n\nSleep is not death.\n\n===== BOND.md =====\n# Bond\n\nOwner: Sam. Language: English.\n\n===== HOW-I-REMEMBER.md =====\n# How I remember\n\nSmall files, folders by subject.\n\n===== CAPABILITIES.md =====\n# Capabilities\n\n- Read a topic and ask three questions about it.\n\n===== memory map =====\nmemory/ (2 files)\nmemory/sessions/ (1 files)\nraw/ (1 files)\n\nNewest:\n  memory/sessions/2026-01-06-scope.md\n\nTended: 2026-01-05; session notes since: 1\n\nUndistilled raw (1):\n  raw/2026-01-06-email.md\n\n===== pending.md =====\n# Pending\n\nAsk about the launch date again next session.\n",
+  "stderr": "",
+  "files": {}
+}

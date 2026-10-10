@@ -1,0 +1,4 @@
+[
+  {"category": "creative", "technique_name": "five whys", "description": "Retuned by the overlay.", "good_for": "diagnosis"},
+  {"category": "custom", "technique_name": "Reverse Brief", "description": "Write the brief backwards, from the outcome.", "detail": "detail/reverse-brief.md"}
+]

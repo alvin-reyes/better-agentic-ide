@@ -1,0 +1,6 @@
+# A retired skill name is never shipped again; alpha-two still ships.
+removed = ["alpha-two"]
+
+[[renamed]]
+from = "alpha-old"
+to = "alpha-one"

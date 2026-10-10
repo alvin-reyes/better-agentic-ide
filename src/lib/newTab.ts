@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
-import { isSetupCandidate, setUpProject, setupDeclined } from "./projectSetup";
+import { isSetupCandidate, setUpProject, setupDeclined, type Methodology } from "./projectSetup";
 import { useTabStore } from "../stores/tabStore";
 
 const KEY = "ade-recent-projects";
@@ -41,18 +41,20 @@ export function forgetProject(path: string) {
 /**
  * Open a terminal tab in a project folder, remember it, and set the project up
  * (BMAD, the ADE methodology, the role agents) unless that's turned off.
+ * `methodology` is the owner's answer from the setup prompt; without one, the
+ * project's own marker decides and a new project gets the v6 default.
  */
-export function openProjectTab(path: string) {
+export function openProjectTab(path: string, methodology?: Methodology) {
   rememberProject(path);
   useTabStore.getState().addTab(undefined, path);
   if (!useSettingsStore.getState().autoProjectSetup || !isSetupCandidate(path) || setupDeclined(path)) return;
-  setUpProject(path)
+  setUpProject(path, methodology)
     .then((result) => window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result })))
     .catch(() => {});
 }
 
 /** Start a new project in a folder: git init, then open and set it up. */
-export async function newProjectTab(path: string) {
+export async function newProjectTab(path: string, methodology?: Methodology) {
   await invoke("project_git_init", { root: path });
-  openProjectTab(path);
+  openProjectTab(path, methodology);
 }

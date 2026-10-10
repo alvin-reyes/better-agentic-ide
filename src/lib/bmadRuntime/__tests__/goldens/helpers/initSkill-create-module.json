@@ -1,0 +1,18 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/init_skill.py --name bmad-mod-demo --dest /p/out --shape single-skill-module --source github:sam/skills",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--name",
+    "bmad-mod-demo",
+    "--dest",
+    "/p/out",
+    "--shape",
+    "single-skill-module",
+    "--source",
+    "github:sam/skills"
+  ],
+  "stdout": "{\n  \"ok\": true,\n  \"skill\": \"bmad-mod-demo\",\n  \"dir\": \"/p/out/bmad-mod-demo\",\n  \"shape\": \"single-skill-module\",\n  \"created\": [\n    \"SKILL.md\",\n    \"bmod.toml\"\n  ]\n}\n",
+  "stderr": "",
+  "files": {}
+}

@@ -2,6 +2,7 @@
 //! the role sub-agents. The frontend owns the content (src/lib/projectMethodology.ts);
 //! this writes only what's missing, never overwrites, and can undo its own writes.
 
+use crate::bmadv6::Methodology;
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 
@@ -22,6 +23,9 @@ pub struct SetupStatus {
     pub bmad_installed: bool,
     /// Detected stacks: "evm", "solana", "go", "rust".
     pub stacks: Vec<String>,
+    /// What the project is on: the marker, else `.bmad-core/` ⇒ "v4". `None`
+    /// is a project with neither — the one setup asks about.
+    pub methodology: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -32,7 +36,10 @@ pub struct SetupReport {
     /** The import block was appended to an existing CLAUDE.md. */
     pub appended_import: bool,
     pub agents: usize,
+    /// BMAD v4 files installed (`.bmad-core/` and the /BMad commands).
     pub bmad_files: usize,
+    /// BMAD v6 files scaffolded (skills, `_bmad/`, the methodology marker).
+    pub bmadv6_files: usize,
 }
 
 /// A relative path that stays inside the project.
@@ -111,12 +118,21 @@ pub fn project_setup_status(root: String, paths: Vec<String>, marker: String) ->
         needs_import: dir.join("CLAUDE.md").is_file() && !has_import(&dir, &marker),
         bmad_installed: dir.join(".bmad-core").join("VERSION").is_file(),
         stacks: detect_stacks(&dir),
+        methodology: crate::bmadv6::detect_on_disk(&dir).map(|m| m.as_str().to_string()),
     })
 }
 
 /// Write the files the project is missing, load the methodology from an
-/// existing CLAUDE.md, and install BMAD. Nothing that exists is overwritten.
-pub fn apply(dir: &Path, files: &[SetupFile], import: Option<&str>, marker: &str, bmad_src: Option<&Path>) -> Result<SetupReport, String> {
+/// existing CLAUDE.md, and install the project's methodology from
+/// `methodology_src` (its resource root). Nothing that exists is overwritten.
+pub fn apply(
+    dir: &Path,
+    files: &[SetupFile],
+    import: Option<&str>,
+    marker: &str,
+    methodology: Methodology,
+    methodology_src: Option<&Path>,
+) -> Result<SetupReport, String> {
     let mut report = SetupReport::default();
     // Decide the import before writing, so a CLAUDE.md we create isn't appended to.
     let append = import.is_some() && dir.join("CLAUDE.md").is_file() && !has_import(dir, marker);
@@ -140,13 +156,69 @@ pub fn apply(dir: &Path, files: &[SetupFile], import: Option<&str>, marker: &str
         file.write_all(import.unwrap_or_default().as_bytes()).map_err(|e| e.to_string())?;
         report.appended_import = true;
     }
-    if let Some(src) = bmad_src {
-        let mut bmad = crate::bmad::ScaffoldReport::default();
-        crate::bmad::install(src, dir, &mut bmad);
-        report.bmad_files = bmad.created.len();
-        report.created.extend(bmad.created);
+    match (methodology, methodology_src) {
+        (Methodology::V4, Some(src)) => {
+            let mut bmad = crate::bmad::ScaffoldReport::default();
+            crate::bmad::install(src, dir, &mut bmad);
+            report.bmad_files = bmad.created.len();
+            report.created.extend(bmad.created);
+        }
+        (Methodology::V6, Some(src)) => {
+            let mut v6 = crate::bmadv6::ScaffoldReport::default();
+            crate::bmadv6::install(src, dir, &mut v6)?;
+            report.bmadv6_files = v6.created.len();
+            report.created.extend(v6.created.iter().map(|p| p.to_string_lossy().into_owned()));
+        }
+        _ => {}
     }
     Ok(report)
+}
+
+/// Whether setup installs this methodology's resources: a full setup of a
+/// project that isn't on it yet, or one whose key files are missing — the
+/// spec's "a missing ade-runtime.mjs or skills folder in an older v6 project
+/// is fixed by setup's existing re-apply-missing-files pass".
+///
+/// A full v4 setup always re-applies v4's install, the way it did before the
+/// methodology choice landed: that install never overwrites and is idempotent,
+/// so re-running it is exactly what tops `.bmad-core/` (and the
+/// `.bmad-core/VERSION` marker bmad.rs writes) back up after files were lost.
+fn needs_install(methodology: Methodology, on_disk: Option<Methodology>, full: bool, dir: &Path) -> bool {
+    if !full {
+        return false;
+    }
+    match methodology {
+        Methodology::V4 => true,
+        Methodology::V6 => {
+            on_disk != Some(Methodology::V6)
+                || !dir.join("_bmad/ade-runtime.mjs").is_file()
+                || !dir.join(".claude/skills/bmad/SKILL.md").is_file()
+        }
+    }
+}
+
+/// The resources a full setup installs from, or `None` when there is nothing to
+/// install. A v6 setup whose resources did not resolve is an error: reporting
+/// success while writing nothing would leave the project without skills, without
+/// `_bmad/` and without a marker — what install() itself refuses to do.
+fn install_source(
+    methodology: Methodology,
+    on_disk: Option<Methodology>,
+    full: bool,
+    dir: &Path,
+    resolve: impl FnOnce(Methodology) -> Option<PathBuf>,
+) -> Result<Option<PathBuf>, String> {
+    if !needs_install(methodology, on_disk, full, dir) {
+        return Ok(None);
+    }
+    match resolve(methodology) {
+        Some(root) => Ok(Some(root)),
+        None if methodology == Methodology::V6 => {
+            Err("bmad v6 resources not found: cannot scaffold a v6 project without them".to_string())
+        }
+        // The v4 path predates this and leaves an unresolved root alone.
+        None => Ok(None),
+    }
 }
 
 #[tauri::command(async)]
@@ -156,6 +228,7 @@ pub fn project_setup_apply(
     files: Vec<SetupFile>,
     import: String,
     marker: String,
+    methodology: String,
     full: bool,
 ) -> Result<SetupReport, String> {
     let dir = project(&root)?;
@@ -163,10 +236,16 @@ pub fn project_setup_apply(
     // import and append it twice.
     static APPLY: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
-    // A full setup also loads the methodology from CLAUDE.md and installs BMAD;
-    // adding agents on their own touches nothing else.
-    let bmad = if full { crate::bmad::resource_root(&app).ok() } else { None };
-    apply(&dir, &files, full.then_some(import.as_str()), &marker, bmad.as_deref())
+    // The owner's answer from the setup prompt; anything else is the v6 default.
+    let methodology = if methodology.trim().eq_ignore_ascii_case("v4") { Methodology::V4 } else { Methodology::V6 };
+    // A full setup also loads the methodology from CLAUDE.md and installs the
+    // project's methodology; adding agents on their own touches nothing else.
+    let root = |wanted| match wanted {
+        Methodology::V4 => crate::bmad::resource_root(&app).ok(),
+        Methodology::V6 => crate::bmadv6::resource_root(&app).ok(),
+    };
+    let src = install_source(methodology, crate::bmadv6::detect_on_disk(&dir), full, &dir, root)?;
+    apply(&dir, &files, full.then_some(import.as_str()), &marker, methodology, src.as_deref())
 }
 
 /// Remove what a setup created (files still unchanged since, by content) and
@@ -228,9 +307,13 @@ mod tests {
     use super::*;
 
     fn temp() -> PathBuf {
+        // A counter, not the clock: the clock's resolution is coarse enough that
+        // parallel tests drew the same folder and deleted each other's tree.
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let d = std::env::temp_dir().join(format!(
-            "ade-setup-{}",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            "ade-setup-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -249,13 +332,13 @@ mod tests {
         let dir = temp();
         std::fs::create_dir_all(dir.join(".claude/agents")).unwrap();
         std::fs::write(dir.join(".claude/agents/qa.md"), "mine").unwrap();
-        let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", None).unwrap();
+        let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(".claude/agents/qa.md")).unwrap(), "mine");
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "rules");
         assert_eq!(r.created.len(), 2);
         assert!(!r.appended_import, "a CLAUDE.md we created already imports the rules");
         // Running again changes nothing.
-        let again = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", None).unwrap();
+        let again = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(again.created.is_empty() && !again.appended_import);
         std::fs::remove_dir_all(dir).ok();
     }
@@ -265,7 +348,7 @@ mod tests {
         let dir = temp();
         std::fs::write(dir.join("CLAUDE.md"), "# Mine\n").unwrap();
         let import = "\n<!-- m -->\n@.ade/rules.md\n";
-        let r = apply(&dir, &files(), Some(import), "<!-- m -->", None).unwrap();
+        let r = apply(&dir, &files(), Some(import), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(r.appended_import);
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), format!("# Mine\n{import}"));
         let status = project_setup_status(dir.to_string_lossy().into(), vec!["CLAUDE.md".into()], "<!-- m -->".into()).unwrap();
@@ -278,6 +361,26 @@ mod tests {
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# Mine\n");
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "edited");
         assert!(!dir.join(".claude").exists(), "empty folders setup created are removed");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn status_reports_the_methodology_on_disk_marker_first() {
+        let dir = temp();
+        let root: String = dir.to_string_lossy().into();
+        let status = || project_setup_status(root.clone(), vec![], "<!-- m -->".into()).unwrap();
+        assert_eq!(status().methodology, None, "a brand-new project has neither");
+
+        // `.bmad-core/` without a marker: a v4 project from before the marker.
+        std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+        assert_eq!(status().methodology.as_deref(), Some("v4"));
+
+        // The marker wins over `.bmad-core/`, as detect_on_disk (and so setup) does.
+        std::fs::create_dir_all(dir.join(".ade")).unwrap();
+        std::fs::write(dir.join(".ade/methodology"), "v6\n").unwrap();
+        assert_eq!(status().methodology.as_deref(), Some("v6"));
+        std::fs::write(dir.join(".ade/methodology"), "v4\n").unwrap();
+        assert_eq!(status().methodology.as_deref(), Some("v4"));
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -309,9 +412,115 @@ mod tests {
     fn refuses_paths_outside_the_project() {
         let dir = temp();
         let bad = vec![SetupFile { path: "../evil".into(), content: "x".into() }];
-        assert!(apply(&dir, &bad, None, "m", None).is_err());
+        assert!(apply(&dir, &bad, None, "m", Methodology::V4, None).is_err());
         let abs = vec![SetupFile { path: "/tmp/evil".into(), content: "x".into() }];
-        assert!(apply(&dir, &abs, None, "m", None).is_err());
+        assert!(apply(&dir, &abs, None, "m", Methodology::V4, None).is_err());
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_v6_setup_writes_the_v6_scaffold_and_counts_it() {
+        let dir = temp();
+        let src = temp();
+        std::fs::create_dir_all(src.join("skills/bmad")).unwrap();
+        std::fs::write(src.join("skills/bmad/SKILL.md"), "hello").unwrap();
+        std::fs::write(src.join("ade-runtime.mjs"), "// runtime").unwrap();
+
+        let r = apply(&dir, &files(), None, "<!-- m -->", Methodology::V6, Some(&src)).unwrap();
+
+        // skills file, config.toml, custom/.gitignore, the runtime, the marker.
+        assert_eq!(r.bmadv6_files, 5, "{:?}", r.created);
+        assert_eq!(r.bmad_files, 0, "a v6 project installs no v4 files");
+        assert!(dir.join(".claude/skills/bmad/SKILL.md").is_file());
+        assert!(dir.join("_bmad/ade-runtime.mjs").is_file());
+        assert_eq!(
+            std::fs::read_to_string(dir.join(".ade/methodology")).unwrap().trim(),
+            "v6"
+        );
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    /// The v6 key files a full setup must find on disk: the skills tree and the
+    /// runtime bundle every patched call site runs.
+    fn complete_v6_tree(dir: &Path) {
+        std::fs::create_dir_all(dir.join(".claude/skills/bmad")).unwrap();
+        std::fs::write(dir.join(".claude/skills/bmad/SKILL.md"), "hello").unwrap();
+        std::fs::create_dir_all(dir.join("_bmad")).unwrap();
+        std::fs::write(dir.join("_bmad/ade-runtime.mjs"), "// runtime").unwrap();
+    }
+
+    #[test]
+    fn a_full_v6_setup_without_resources_is_an_error() {
+        // An unresolvable root must not read as a setup that succeeded and wrote nothing.
+        let dir = temp();
+        let err = install_source(Methodology::V6, None, true, &dir, |_| None).unwrap_err();
+        assert!(err.contains("v6"), "{err}");
+        // With resources, the resolved root is what setup installs from.
+        let root = PathBuf::from("/tmp/bmad-v6");
+        assert_eq!(
+            install_source(Methodology::V6, None, true, &dir, |_| Some(root.clone())).unwrap(),
+            Some(root)
+        );
+        // A v6 project whose key files are gone is an install target too, so a
+        // miss there is this error, not a silent skip.
+        assert!(install_source(Methodology::V6, Some(Methodology::V6), true, &dir, |_| None).is_err());
+        // Nothing to install: already on the methodology with its key files
+        // present, or not a full setup.
+        complete_v6_tree(&dir);
+        assert_eq!(install_source(Methodology::V6, Some(Methodology::V6), true, &dir, |_| None).unwrap(), None);
+        assert_eq!(install_source(Methodology::V6, None, false, &dir, |_| None).unwrap(), None);
+        // The v4 path keeps its pre-existing behaviour: a miss is not fatal.
+        assert_eq!(install_source(Methodology::V4, None, true, &dir, |_| None).unwrap(), None);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn an_intact_v6_project_is_not_re_scaffolded() {
+        let dir = temp();
+        complete_v6_tree(&dir);
+        assert!(!needs_install(Methodology::V6, Some(Methodology::V6), true, &dir), "v6 project asked for v6, tree intact");
+        assert!(needs_install(Methodology::V6, None, true, &dir), "a new project is scaffolded");
+        assert!(!needs_install(Methodology::V6, None, false, &dir), "adding agents is not a full setup");
+        assert!(needs_install(Methodology::V4, Some(Methodology::V6), true, &dir), "switching to v4 installs it");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// The re-apply promise: a deleted key file sets the install running again,
+    /// and the install is idempotent, so nothing that is there is disturbed.
+    #[test]
+    fn a_full_setup_repairs_the_key_files_a_project_lost() {
+        let dir = temp();
+        complete_v6_tree(&dir);
+        assert!(!needs_install(Methodology::V6, Some(Methodology::V6), true, &dir), "an intact v6 tree has nothing to install");
+
+        std::fs::remove_file(dir.join("_bmad/ade-runtime.mjs")).unwrap();
+        assert!(
+            needs_install(Methodology::V6, Some(Methodology::V6), true, &dir),
+            "a v6 project without _bmad/ade-runtime.mjs is repaired"
+        );
+        std::fs::write(dir.join("_bmad/ade-runtime.mjs"), "// runtime").unwrap();
+        std::fs::remove_file(dir.join(".claude/skills/bmad/SKILL.md")).unwrap();
+        assert!(
+            needs_install(Methodology::V6, Some(Methodology::V6), true, &dir),
+            "a v6 project without .claude/skills/bmad/SKILL.md is repaired"
+        );
+
+        // v4: a full setup always re-applies v4's idempotent install, so
+        // `.bmad-core/` — the `.bmad-core/VERSION` marker bmad.rs writes
+        // included — is topped back up.
+        let v4 = temp();
+        assert!(
+            needs_install(Methodology::V4, Some(Methodology::V4), true, &v4),
+            "no .bmad-core/VERSION: the v4 install is re-applied"
+        );
+        std::fs::create_dir_all(v4.join(".bmad-core")).unwrap();
+        std::fs::write(v4.join(".bmad-core/VERSION"), "v4.1\n").unwrap();
+        assert!(
+            needs_install(Methodology::V4, Some(Methodology::V4), true, &v4),
+            "an intact v4 tree is still topped up, as it was before the methodology choice"
+        );
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(v4).ok();
     }
 }

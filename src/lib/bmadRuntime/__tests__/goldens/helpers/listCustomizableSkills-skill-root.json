@@ -1,0 +1,14 @@
+{
+  "python": "uv run /p/skills/bmad-customize/scripts/list_customizable_skills.py --skill-root /p/skills/bmad-customize --project-root /p",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--skill-root",
+    "/p/skills/bmad-customize",
+    "--project-root",
+    "/p"
+  ],
+  "stdout": "{\n  \"agents\": [\n    {\n      \"description\": \"A tidy fixture skill. Use when a golden needs a clean skill.\",\n      \"has_team_override\": true,\n      \"has_user_override\": false,\n      \"install_path\": \"/p/skills/bmad-alpha\",\n      \"name\": \"bmad-alpha\",\n      \"skills_root\": \"/p/skills\",\n      \"surface\": \"agent\",\n      \"team_override_path\": \"/p/_bmad/custom/bmad-alpha.toml\",\n      \"user_override_path\": \"/p/_bmad/custom/bmad-alpha.user.toml\"\n    }\n  ],\n  \"custom_dir\": \"/p/_bmad/custom\",\n  \"errors\": [],\n  \"project_root\": \"/p\",\n  \"scanned_roots\": [\n    \"/p/skills\"\n  ],\n  \"workflows\": [\n    {\n      \"description\": \"A tidy fixture skill. Use when a golden needs a clean skill.\",\n      \"has_team_override\": true,\n      \"has_user_override\": false,\n      \"install_path\": \"/p/skills/bmad-alpha\",\n      \"name\": \"bmad-alpha\",\n      \"skills_root\": \"/p/skills\",\n      \"surface\": \"workflow\",\n      \"team_override_path\": \"/p/_bmad/custom/bmad-alpha.toml\",\n      \"user_override_path\": \"/p/_bmad/custom/bmad-alpha.user.toml\"\n    },\n    {\n      \"description\": \"A wired skill with no record. Use when a golden needs an unregistered skill.\",\n      \"has_team_override\": false,\n      \"has_user_override\": false,\n      \"install_path\": \"/p/skills/bmad-beta\",\n      \"name\": \"bmad-beta\",\n      \"skills_root\": \"/p/skills\",\n      \"surface\": \"workflow\",\n      \"team_override_path\": \"/p/_bmad/custom/bmad-beta.toml\",\n      \"user_override_path\": \"/p/_bmad/custom/bmad-beta.user.toml\"\n    },\n    {\n      \"description\": \"Orchestrates lively group discussions between installed BMAD agents or custom personas, and helps author custom parties. Use when the user requests party mode, a roundtable, or multiple agent perspectives \\u2014 or wants to create/configure a party, define personas, or build an AI focus-group panel\",\n      \"has_team_override\": true,\n      \"has_user_override\": false,\n      \"install_path\": \"/p/skills/bmad-party-mode\",\n      \"name\": \"bmad-party-mode\",\n      \"skills_root\": \"/p/skills\",\n      \"surface\": \"workflow\",\n      \"team_override_path\": \"/p/_bmad/custom/bmad-party-mode.toml\",\n      \"user_override_path\": \"/p/_bmad/custom/bmad-party-mode.user.toml\"\n    }\n  ]\n}\n",
+  "stderr": "",
+  "files": {}
+}

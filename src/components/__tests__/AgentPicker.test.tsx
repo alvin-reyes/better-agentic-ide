@@ -142,7 +142,7 @@ describe("AgentPicker", () => {
     // POSIX shell, and the agent would launch with no role definition at all.
     expect(tauri.ptyWrites.length).toBe(1);
     expect(tauri.ptyWrites[0].text).toBe(
-      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.md'\r"
+      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md'\r"
     );
     expect(tauri.ptyWrites[0].id).toBe(11);
   });
@@ -153,7 +153,7 @@ describe("AgentPicker", () => {
     await clickRow("Auth Architect");
 
     expect(tauri.fileWrites.length).toBe(1);
-    expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/architect-security.md");
+    expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/architect-security.v6.md");
     expect(tauri.fileWrites[0].content.startsWith("# Architect — Security")).toBe(true);
     expect(tauri.ptyWrites[0].text.includes(tauri.fileWrites[0].path)).toBe(true);
   });
@@ -182,9 +182,9 @@ describe("AgentPicker", () => {
     fireEvent.click(pill("Roles"));
     await clickRow("Product Manager");
 
-    expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/product-manager.md");
+    expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/product-manager.v6.md");
     expect(tauri.ptyWrites[0].text).toBe(
-      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/product-manager.md'\r"
+      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/product-manager.v6.md'\r"
     );
   });
 

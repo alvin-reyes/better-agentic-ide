@@ -105,7 +105,7 @@ Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an O
 
 ## BMAD
 
-[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). The bundled, pinned copy goes into `.bmad-core/` along with the `/BMad:tasks:` slash commands for Claude Code; nothing is downloaded and existing files are never overwritten. BMAD's own ten personas are not installed: eight of them are the same jobs as the roles below, and a project carrying two architects and two QAs carries two definitions of Done.
+[BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). A project is on **BMAD v6** by default: the bundled, pinned skills go into `.claude/skills/`, a small `_bmad/` tree holds the config and ADE's runtime, tickets and planning documents land in `_bmad-output/`, and ADE's own verification gates live in `.ade/gates/`, one file per ticket, named by the ticket's ref as the ticket tree prints it (for example `1.6a.yml`). **BMAD v4** is a choice made at setup for a new project, which puts the classic `.bmad-core/` and its `/BMad:tasks:` slash commands for Claude Code in the project instead (v4 gates stay in `docs/qa/gates/`). A project that already has `.bmad-core/` stays on v4 and is never converted. Nothing is downloaded and existing files are never overwritten. BMAD's own ten personas are not installed: eight of them are the same jobs as the roles below, and a project carrying two architects and two QAs carries two definitions of Done.
 
 The BMAD panel shows the method's two phases, **Planning** and **Dev cycle**, as a reminder of where a project is.
 

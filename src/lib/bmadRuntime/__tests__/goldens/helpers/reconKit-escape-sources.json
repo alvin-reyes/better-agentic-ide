@@ -1,0 +1,12 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-deep-recon/scripts/recon_kit.py escape-sources /p/recon/dossier.md",
+  "stream": "stdout",
+  "exitCode": 1,
+  "argv": [
+    "escape-sources",
+    "/p/recon/dossier.md"
+  ],
+  "stdout": "{\n  \"rows\": 3,\n  \"invalid_urls\": [\n    \"javascript:alert(1)\"\n  ],\n  \"html\": \"<table class=\\\"sources\\\"><tbody><tr id=\\\"src-1\\\"><td>[1]</td><td>Annual market report</td><td><a href=\\\"https://example.com/report\\\" target=\\\"_blank\\\" rel=\\\"noopener\\\">https://example.com/report</a></td></tr><tr id=\\\"src-2\\\"><td>[2]</td><td>Onboarding teardown</td><td>ftp://example.com/teardown</td></tr><tr id=\\\"src-4\\\"><td>[4]</td><td>Uncited interview notes</td><td>notes</td></tr></tbody></table>\"\n}\n",
+  "stderr": "",
+  "files": {}
+}

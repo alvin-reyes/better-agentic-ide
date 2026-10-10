@@ -1,0 +1,14 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-deep-recon/scripts/recon_kit.py staleness /p/recon/claims.json --windows []",
+  "stream": "stderr",
+  "exitCode": 2,
+  "argv": [
+    "staleness",
+    "/p/recon/claims.json",
+    "--windows",
+    "[]"
+  ],
+  "stdout": "error: --windows must be a JSON object of class -> months\n",
+  "stderr": "error: --windows must be a JSON object of class -> months\n",
+  "files": {}
+}

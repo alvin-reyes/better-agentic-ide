@@ -1,0 +1,25 @@
+{
+  "python": "uv run /p/src-tauri/resources/bmad-v6/skills/bmad-toolsmith/scripts/init_skill.py --name bmad-new --dest /p/out --shape agent --bmod bmod-demo --description Use when a demo is needed. --dirs references,scripts",
+  "stream": "stdout",
+  "exitCode": 0,
+  "argv": [
+    "--name",
+    "bmad-new",
+    "--dest",
+    "/p/out",
+    "--shape",
+    "agent",
+    "--bmod",
+    "bmod-demo",
+    "--description",
+    "Use when a demo is needed.",
+    "--dirs",
+    "references,scripts"
+  ],
+  "stdout": "{\n  \"ok\": true,\n  \"skill\": \"bmad-new\",\n  \"dir\": \"/p/out/bmad-new\",\n  \"shape\": \"agent\",\n  \"created\": [\n    \"SKILL.md\",\n    \"bmod.toml\",\n    \"references/\",\n    \"scripts/\"\n  ]\n}\n",
+  "stderr": "",
+  "files": {
+    "/p/out/bmad-new/SKILL.md": "---\nname: bmad-new\ndescription: 'Use when a demo is needed.'\n---\n\n# bmad-new\n",
+    "/p/out/bmad-new/bmod.toml": "[skill]\nbmod = \"bmod-demo\"\n"
+  }
+}
