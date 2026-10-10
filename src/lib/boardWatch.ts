@@ -5,6 +5,41 @@ export const WATCH_EXTENSIONS = ["md", "yml", "yaml", "toml"];
 const parent = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 
 /**
+ * Normalize a relative path segment-wise, ensuring it never escapes the project.
+ * Returns the normalized path, or null if absolute, escaping, or normalizes to empty.
+ */
+const normalizePath = (rel: string): string | null => {
+  // Reject absolute paths
+  if (rel.startsWith("/")) return null;
+
+  // Split and process segments
+  const segments = rel.split("/");
+  const stack: string[] = [];
+
+  for (const segment of segments) {
+    if (segment === "" || segment === ".") {
+      // Skip empty and current-dir segments
+      continue;
+    } else if (segment === "..") {
+      // Try to collapse: pop from stack if possible, otherwise we're escaping
+      if (stack.length > 0) {
+        stack.pop();
+      } else {
+        // .. with no parent means we're escaping the project root
+        return null;
+      }
+    } else {
+      stack.push(segment);
+    }
+  }
+
+  // If nothing is left, the path normalized to empty (root)
+  if (stack.length === 0) return null;
+
+  return stack.join("/");
+};
+
+/**
  * The folders whose changes can change the board.
  *
  * Never the project root: the watcher has no skip list, so a recursive watch
@@ -30,7 +65,13 @@ export function watchTargets(root: string, methodology: "v4" | "v6", paths: Bmad
             : []),
         ];
 
-  const cleaned = [...new Set(rel.map((r) => r.replace(/^\.\/|\/+$/g, "")).filter((r) => r && r !== "."))];
+  const cleaned = [
+    ...new Set(
+      rel
+        .map((r) => normalizePath(r))
+        .filter((r): r is string => r !== null),
+    ),
+  ];
   const inside = (a: string, b: string) => a !== b && a.startsWith(`${b}/`);
   const kept = cleaned.filter((r) => !cleaned.some((o) => inside(r, o)));
   const ordered = methodology === "v6" ? kept : [kept[0], kept[1], ...kept.slice(2).sort()];

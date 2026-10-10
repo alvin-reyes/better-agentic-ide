@@ -20,4 +20,51 @@ describe("watchTargets", () => {
     const paths = { ...BMAD_DEFAULTS, prdSharded: false, prdFile: "prd.md" };
     expect(watchTargets("/p", "v4", paths)).not.toContain("/p");
   });
+
+  it("drops `..` that escapes the project", () => {
+    const paths = { ...BMAD_DEFAULTS, devStoryLocation: ".." };
+    const result = watchTargets("/p", "v4", paths);
+    expect(result).not.toContain("/p/..");
+    expect(result.every((p) => p.startsWith("/p/"))).toBe(true);
+  });
+
+  it("drops `docs/..` that normalizes to root", () => {
+    const paths = { ...BMAD_DEFAULTS, devStoryLocation: "docs/.." };
+    const result = watchTargets("/p", "v4", paths);
+    expect(result).not.toContain("/p");
+    expect(result.every((p) => p.startsWith("/p/"))).toBe(true);
+  });
+
+  it("drops `a/../..` that escapes", () => {
+    const paths = { ...BMAD_DEFAULTS, devStoryLocation: "a/../.." };
+    const result = watchTargets("/p", "v4", paths);
+    expect(result).not.toContain("/p/..");
+    expect(result.every((p) => p.startsWith("/p/"))).toBe(true);
+  });
+
+  it("drops `../shared/stories` that escapes", () => {
+    const paths = { ...BMAD_DEFAULTS, devStoryLocation: "../shared/stories" };
+    const result = watchTargets("/p", "v4", paths);
+    expect(result.every((p) => p.startsWith("/p/"))).toBe(true);
+  });
+
+  it("drops absolute paths like `/abs/stories`", () => {
+    const paths = { ...BMAD_DEFAULTS, devStoryLocation: "/abs/stories" };
+    const result = watchTargets("/p", "v4", paths);
+    expect(result.every((p) => p.startsWith("/p/"))).toBe(true);
+  });
+
+  it("normalizes `./docs/stories` and `docs/./stories` under `/p/docs`", () => {
+    const paths = { ...BMAD_DEFAULTS, devStoryLocation: "./docs/stories" };
+    const result = watchTargets("/p", "v4", paths);
+    expect(result).toContain("/p/docs");
+    expect(result).not.toContain("/p/docs/stories");
+  });
+
+  it("normalizes `docs/./stories` under `/p/docs`", () => {
+    const paths = { ...BMAD_DEFAULTS, devStoryLocation: "docs/./stories" };
+    const result = watchTargets("/p", "v4", paths);
+    expect(result).toContain("/p/docs");
+    expect(result).not.toContain("/p/docs/stories");
+  });
 });
