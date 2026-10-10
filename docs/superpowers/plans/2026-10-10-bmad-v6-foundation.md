@@ -591,7 +591,7 @@ git commit -m "feat(bmad-v6): port layered TOML config resolution"
 - Consumes: `loadCentralConfig` (Task 3), `Fs`.
 - Produces: `export async function tickets(argv: string[], fs: Fs, stdin?: string): Promise<{ stdout: string; exitCode: number }>` — dispatches `next`, `status`, `find`, `pull`, `mark`, `mirror` exactly as the Python CLI does, printing JSON to stdout; argv carrying no subcommand is `read_store.py`'s CLI (Task 6 routes `read_store` here), and `stdin` carries `mirror`'s JSON (left out, it is read from the process's own stdin). Resolves `--project-root` (accepted anywhere, which the plan's tests need and argparse does not allow), the store location (`output_folder` + `active_initiative`), and the `after` dependency validation. `mark <ref> <status>` sets the status in the ticket's plan, creating a frontmatter-only plan when there is none, with `--assignee`/`--blocked`; exit 0 ok, 1 a malformed tree, 2 a store refusal or a usage error.
 
-- [x] **Step 1: Generate goldens from the real Python** — shipped as `src/lib/bmadRuntime/__tests__/goldens/tickets/capture.sh`, which reseeds `/tmp/golden-proj` per capture and records every command (the Ruling's capture-script rule). Run it from the worktree root; it is reproducible byte for byte. Thirteen goldens: `next-empty`, `next-unseeded-refusal`, `status-seeded`, `next-seeded`, `find-entry`, `pull` + `pull-leaf.md`, `find-pulled`, `mark-done`, `mark-created` + `mark-created-plan.md`, `after-missing-entry`, `tracker-store-refusal`, `read-store-tickets`, `read-store-starters`. Each capture also writes `<name>.exit`.
+- [x] **Step 1: Generate goldens from the real Python** — shipped as `src/lib/bmadRuntime/__tests__/goldens/tickets/capture.sh`, which reseeds `/tmp/golden-proj` per capture and records every command (the Ruling's capture-script rule). Run it from the worktree root; it is reproducible byte for byte. Fourteen goldens: `next-empty`, `next-unseeded-refusal`, `status-seeded`, `next-seeded`, `find-entry`, `pull` + `pull-leaf.md`, `find-pulled`, `mark-done`, `mark-created` + `mark-created-plan.md`, `after-missing-entry`, `tracker-store-refusal`, `read-store-tickets`, `read-store-starters`, `read-store-jira-starter`. Each capture also writes `<name>.exit`.
 
 Three things the sketch's literal commands could not do, all recorded in `capture.sh`:
 - `next` must succeed for its golden: the tree is configured (`_bmad/config.toml` with `output_folder` and `active_initiative`) and the store folder exists with an empty `tickets.toml`. An unseeded tree is captured separately as `next-unseeded-refusal.json` (exit 1).
@@ -664,10 +664,12 @@ export async function seedTicketTree(
 
 `src/lib/bmadRuntime/tickets.ts` is the port: the sketch's `storeRoot`/`readStore`/`planFor` shapes became the Python's own `tickets_root`/`load_tree`/`plan_path`, and the commands follow it line for line, including the quirks the goldens pin (a `[[epic]]` `slug` is looked up by slug, not by folder name, so the seed's `slug = "demo"` against folder `epic-demo` leaves `epic_ids` empty and rows `ref` their file names; a bare numeric ref matches nothing outside an epic folder; `state` prefers `tracker_status`).
 
-Three divergences, all at seams with earlier tasks, are documented at the top of the module:
+Three substitutions, all seams with earlier tasks, are documented at the top of the module:
 - config comes from Task 3's `loadCentralConfig`, so a missing `_bmad/config.toml` refuses in different words than the Python's own `config_utils.py`;
 - output goes to `stdout` alone (the interface has one channel; the Python splits errors onto stderr);
-- argparse's usage line wraps to the terminal and is not reproduced (its error line is).
+- `read_store.py` finds its starters at its own `../config`, which a bundle cannot know: the port takes `--skill-root` (what the patched call sites pass, defaulting to `<skill-root>/config`) or `--starters-dir`, expands `~`, and refuses a run that names neither rather than dropping the starter layer. `read-store-jira-starter` is the golden for the `--skill-root`-only shape.
+
+argparse's usage line wraps to the terminal and is not reproduced (its error line is).
 
 `mirror`'s rollback needs a delete, which the first cut of `Fs` had no way to do; the controller ruled the gap load-bearing and `delete(p)` was added to `Fs` (realFs `unlink`, memFs removes the entry) with parity tests, so a failed mirror now removes the leaf it had just pulled exactly as the Python does.
 
