@@ -1,0 +1,1147 @@
+# BMAD v6 Foundation Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Vendor BMAD v6.9.0 into ADE, port its runtime scripts to TypeScript, and scaffold working v6 projects — no Python/uv anywhere.
+
+**Architecture:** The vendored `skills/` tree is patched at vendor time so every `uv run` call site becomes `node _bmad/ade-runtime.mjs`, a single dependency-free bundle of the TS port. The same TS module powers the app UI and the scaffolded per-project CLI. Scaffolding mirrors v6's own setup.py output.
+
+**Tech Stack:** TypeScript (vitest), Rust (Tauri), Node 18+, `smol-toml` (bundled), bash vendor script.
+
+**Spec:** `docs/superpowers/specs/2026-10-10-bmad-v6-adoption-design.md`
+
+## Global Constraints
+
+- Node 18+ on user machines; never require Python or uv at runtime.
+- Vendored skills pinned at tag `v6.9.0`; `VERSION` file stamps it.
+- Nothing overwrites existing files during scaffold.
+- The patch script must fail loudly on any `uv run` call site it cannot rewrite.
+- The runtime bundle `_bmad/ade-runtime.mjs` is a single dependency-free ESM file.
+- Existing v4 behavior (`.bmad-core/`, v4 parsers, v4 tests) must stay green.
+- Commit message style follows repo history (conventional prefixes).
+
+## Review Focus
+
+1. **A skill gains a new `uv run` form upstream** — the patch script must reject it (exit non-zero, name the file) so it cannot ship unpatched; pinned by a patch-script unit test with an unknown call site.
+2. **`tickets.py mark done` on a ticket that never had a plan** — v6's own behavior (status lives in the plan) must be preserved: the TS port reports the same JSON as Python, pinned by a golden test.
+3. **A project scaffolded before this change opens in the new app** — the `.ade/methodology` marker is absent; detection must fall back to `.bmad-core/` ⇒ v4, pinned by a scaffold temp-dir test.
+4. **`after` references a ticket id that does not exist** — `tickets.py` validates dependencies; the port must report the same error shape, pinned by a golden test.
+5. **Scaffold into a directory that already contains `_bmad/config.toml`** — nothing overwrites; setup reports the existing file as kept, pinned by a scaffold temp-dir test.
+
+---
+
+### Task 1: Vendor the v6.9.0 skills and patch them
+
+**Files:**
+- Create: `scripts/vendor-bmad-v6.sh`
+- Create: `scripts/patchBmadSkills.ts`
+- Create: `scripts/__tests__/patchBmadSkills.test.ts`
+- Create (generated): `src-tauri/resources/bmad-v6/skills/**`, `src-tauri/resources/bmad-v6/VERSION`
+- Modify: `.github/workflows/ci.yml`
+
+**Interfaces:**
+- Produces: `src-tauri/resources/bmad-v6/skills/` (33 skill dirs, `uv run` call sites rewritten), `src-tauri/resources/bmad-v6/VERSION` containing `v6.9.0`.
+
+- [ ] **Step 1: Write the failing test for the patch script**
+
+`scripts/__tests__/patchBmadSkills.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { rewriteCallSite } from "../patchBmadSkills";
+
+describe("patchBmadSkills", () => {
+  it("rewrites uv run script calls to the ADE runtime", () => {
+    const line = "`uv run {project-root}/_bmad/scripts/resolve_config.py --project-root {project-root} --key core.output_folder`";
+    expect(rewriteCallSite(line)).toBe(
+      "`node {project-root}/_bmad/ade-runtime.mjs resolve_config --project-root {project-root} --key core.output_folder`",
+    );
+  });
+
+  it("is idempotent — a patched line comes back unchanged", () => {
+    const patched = "`node {project-root}/_bmad/ade-runtime.mjs resolve_config --project-root {project-root} --key core.output_folder`";
+    expect(rewriteCallSite(patched)).toBe(patched);
+  });
+
+  it("throws on an unrecognised uv run call site instead of shipping it unpatched", () => {
+    expect(() => rewriteCallSite("`uv run {project-root}/_bmad/scripts/some_new_script.py --weird`"))
+      .toThrow(/unrecognised/);
+  });
+});
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npx vitest run scripts/__tests__/patchBmadSkills.test.ts`
+Expected: FAIL — `rewriteCallSite` is not exported.
+
+- [ ] **Step 3: Implement the patch script**
+
+`scripts/patchBmadSkills.ts`:
+
+```ts
+/**
+ * Vendor-time patch: rewrite every `uv run …/scripts/<name>.py` call site in the
+ * vendored SKILL.md files to the ADE runtime. Idempotent, and it throws on any
+ * call site it does not recognise — upstream churn must not ship unpatched.
+ */
+const CALL = /uv run \{project-root\}\/_bmad\/scripts\/([\w.]+\.py)([\s\S]*?)(?=`|$)/g;
+
+/** The runtime scripts the TS port covers (spec: architecture section). */
+const PORTED = new Set([
+  "resolve_config.py", "resolve_customization.py", "config_utils.py",
+  "tickets.py", "read_store.py", "render_skill.py", "memlog.py",
+]);
+
+export function rewriteCallSite(line: string): string {
+  if (!line.includes("uv run")) return line;
+  const m = /_bmad\/scripts\/([\w.]+\.py)/.exec(line);
+  if (!m) throw new Error(`unrecognised uv run call site: ${line.slice(0, 120)}`);
+  const script = m[1];
+  if (!PORTED.has(script)) {
+    throw new Error(`no TS port for ${script}; call site cannot be patched: ${line.slice(0, 120)}`);
+  }
+  return line.replace(
+    new RegExp(`uv run \\{project-root\\}\\/_bmad\\/scripts\\/${script.replace(".", "\\.")}`, "g"),
+    `node {project-root}/_bmad/ade-runtime.mjs ${script.replace(/\.py$/, "")}`,
+  );
+}
+
+if (process.argv[1]?.endsWith("patchBmadSkills.ts")) {
+  const { readFileSync, writeFileSync } = await import("node:fs");
+  const { readdirSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const root = process.argv[2];
+  for (const dir of readdirSync(root)) {
+    const skill = join(root, dir);
+    for (const f of ["SKILL.md", ...readdirSync(skill).filter((f) => f.endsWith(".md") && f !== "SKILL.md")]) {
+      const p = join(skill, f);
+      const body = readFileSync(p, "utf8");
+      const next = body.replace(/`uv run \{project-root\}\/_bmad\/scripts\/[\s\S]*?`/g, rewriteCallSite);
+      if (next !== body) writeFileSync(p, next);
+    }
+  }
+}
+```
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `npx vitest run scripts/__tests__/patchBmadSkills.test.ts`
+Expected: PASS (3 tests).
+
+- [ ] **Step 5: Write the vendor script**
+
+`scripts/vendor-bmad-v6.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Re-vendor BMAD v6 skills. Manual step, same policy as v4's vendoring.
+set -euo pipefail
+TAG="${1:-v6.9.0}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEST="$ROOT/src-tauri/resources/bmad-v6"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+git clone --quiet --depth 1 --branch "$TAG" https://github.com/bmad-code-org/BMAD-METHOD "$TMP/bmad"
+rm -rf "$DEST/skills"
+cp -R "$TMP/bmad/skills" "$DEST/skills"
+echo "$TAG" > "$DEST/VERSION"
+
+npx tsx "$ROOT/scripts/patchBmadSkills.ts" "$DEST/skills"
+cd "$ROOT" && npx vitest run scripts/__tests__/patchBmadSkills.test.ts
+echo "vendored $TAG at $DEST"
+```
+
+- [ ] **Step 6: Run the vendor script**
+
+Run: `bash scripts/vendor-bmad-v6.sh v6.9.0`
+Expected: exit 0; `src-tauri/resources/bmad-v6/skills/` holds 33 dirs; `VERSION` reads `v6.9.0`; the patch ran (check `grep -c "ade-runtime.mjs" src-tauri/resources/bmad-v6/skills/bmad/SKILL.md` is ≥ 1).
+
+- [ ] **Step 7: Add the CI pin check**
+
+In `.github/workflows/ci.yml`, add a job after the frontend tests:
+
+```yaml
+  vendored-bmad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify vendored v6 tree matches the pinned tag
+        run: |
+          TAG=$(cat src-tauri/resources/bmad-v6/VERSION)
+          rm -rf /tmp/bmad && git clone --quiet --depth 1 --branch "$TAG" https://github.com/bmad-code-org/BMAD-METHOD /tmp/bmad
+          diff -r --exclude="*.md" src-tauri/resources/bmad-v6/skills /tmp/bmad/skills
+          echo "vendored tree matches $TAG"
+```
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add scripts/vendor-bmad-v6.sh scripts/patchBmadSkills.ts scripts/__tests__/patchBmadSkills.test.ts .github/workflows/ci.yml src-tauri/resources/bmad-v6
+git commit -m "feat(bmad-v6): vendor v6.9.0 skills with patched runtime call sites"
+```
+
+---
+
+### Task 2: Add the TOML dependency and the filesystem abstraction
+
+**Files:**
+- Modify: `package.json` (add `smol-toml`)
+- Create: `src/lib/bmadRuntime/fs.ts`
+- Test: `src/lib/bmadRuntime/__tests__/fs.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `import { parse as parseToml } from "smol-toml"` available app-wide.
+  - `fs.ts` exports `export interface Fs { readText(p: string): Promise<string>; writeText(p: string, body: string): Promise<void>; list(p: string): Promise<string[]>; exists(p: string): Promise<boolean>; mkdir(p: string): Promise<void>; }` and `export function realFs(): Fs` (Node fs wrapper for the CLI bundle) and `export function memFs(): Fs` (in-memory map for tests).
+
+- [ ] **Step 1: Write the failing test**
+
+`src/lib/bmadRuntime/__tests__/fs.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { memFs } from "../fs";
+
+describe("memFs", () => {
+  it("round-trips text and lists directories", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/a");
+    await fs.writeText("/p/a/f.txt", "hello");
+    expect(await fs.readText("/p/a/f.txt")).toBe("hello");
+    expect(await fs.exists("/p/a")).toBe(true);
+    expect(await fs.list("/p/a")).toEqual(["f.txt"]);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/fs.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Install smol-toml**
+
+Run: `npm install smol-toml`
+Expected: `package.json` and lockfile updated.
+
+- [ ] **Step 4: Implement fs.ts**
+
+```ts
+/** Minimal filesystem surface so the runtime port is testable without Tauri or Node. */
+export interface Fs {
+  readText(p: string): Promise<string>;
+  writeText(p: string, body: string): Promise<void>;
+  list(p: string): Promise<string[]>;
+  exists(p: string): Promise<boolean>;
+  mkdir(p: string): Promise<void>;
+}
+
+export function memFs(): Fs {
+  const files = new Map<string, string>();
+  const mkdir = async (p: string) => { files.set(p.endsWith("/") ? p : p + "/", ""); };
+  return {
+    readText: async (p) => files.get(p) ?? Promise.reject(new Error(`no such file: ${p}`)),
+    writeText: async (p, body) => { files.set(p, body); },
+    list: async (p) =>
+      [...files.keys()]
+        .filter((k) => k.startsWith(p + "/") && !k.endsWith("/"))
+        .map((k) => k.slice(p.length + 1)),
+    exists: async (p) => files.has(p) || files.has(p + "/"),
+    mkdir,
+  };
+}
+
+export function realFs(): Fs {
+  return {
+    readText: (p) => import("node:fs/promises").then((f) => f.readFile(p, "utf8")),
+    writeText: (p, body) => import("node:fs/promises").then((f) => f.writeFile(p, body)),
+    list: (p) => import("node:fs/promises").then((f) => f.readdir(p)),
+    exists: (p) => import("node:fs/promises").then((f) => f.access(p).then(() => true, () => false)),
+    mkdir: (p) => import("node:fs/promises").then((f) => f.mkdir(p, { recursive: true })),
+  };
+}
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/fs.test.ts`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add package.json package-lock.json src/lib/bmadRuntime/fs.ts src/lib/bmadRuntime/__tests__/fs.test.ts
+git commit -m "feat(bmad-v6): filesystem abstraction for the runtime port"
+```
+
+---
+
+### Task 3: Port config resolution (config_utils + resolve_config + resolve_customization)
+
+**Files:**
+- Create: `src/lib/bmadRuntime/config.ts`
+- Test: `src/lib/bmadRuntime/__tests__/config.test.ts`
+- Create: `src/lib/bmadRuntime/__tests__/goldens/config/*.json` (generated in Step 1)
+
+**Interfaces:**
+- Consumes: `parseToml` from `smol-toml`, `Fs`.
+- Produces: `export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Record<string, unknown>>` — merges `_bmad/config.toml` ← `_bmad/custom/config.toml` ← `_bmad/custom/config.user.toml` (required base, later layers override; arrays keyed-merged by `code`/`id` when every item carries one, else appended). Also `export async function resolveCustomization(projectRoot: string, skillRoot: string, skill: string, fs: Fs): Promise<Record<string, unknown>>` — merges `{skillRoot}/customize.toml` (required) ← `_bmad/custom/<skill>.toml` ← `<skill>.user.toml`.
+
+- [ ] **Step 1: Generate goldens from the real Python**
+
+Run once (dev machine has uv; output is committed so CI never needs it):
+
+```bash
+cd /tmp/bmad-v6 && uv run skills/bmad/scripts/setup.py --project-root /tmp/golden-proj --skill /tmp/bmad-v6/skills/bmad >/dev/null
+mkdir -p /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config
+uv run /tmp/golden-proj/_bmad/scripts/resolve_config.py --project-root /tmp/golden-proj > \
+  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/central.json
+printf '[core]\nactive_initiative = "initiative-checkout"\n' > /tmp/golden-proj/_bmad/custom/config.user.toml
+uv run /tmp/golden-proj/_bmad/scripts/resolve_config.py --project-root /tmp/golden-proj > \
+  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/central-with-user.json
+uv run /tmp/golden-proj/_bmad/scripts/resolve_customization.py --project-root /tmp/golden-proj --skill bmad-build > \
+  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/customization.json
+```
+
+Expected: three JSON files exist; `central-with-user.json` contains `"active_initiative": "initiative-checkout"`.
+
+- [ ] **Step 2: Write the failing test**
+
+`src/lib/bmadRuntime/__tests__/config.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { loadCentralConfig, resolveCustomization } from "../config";
+import { memFs } from "../fs";
+
+const golden = async (name: string) =>
+  JSON.parse(await readFile(join(__dirname, "goldens/config", name), "utf8"));
+
+describe("config port", () => {
+  it("matches the Python central resolution on the seeded project", async () => {
+    const fs = memFs();
+    // Mirror /tmp/golden-proj: seed from the vendored template the way setup.py does.
+    const template = await readFile(join(__dirname, "../../../../src-tauri/resources/bmad-v6/skills/bmad/assets/config.template.toml"), "utf8");
+    await fs.mkdir("/p/_bmad/custom");
+    await fs.writeText("/p/_bmad/config.toml", template.replaceAll("{project-root}", "/p"));
+    expect(await loadCentralConfig("/p", fs)).toEqual(await golden("central.json"));
+  });
+
+  it("matches the Python central resolution after a user override", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/_bmad/custom");
+    await fs.writeText("/p/_bmad/config.toml", (await readFile(join(__dirname, "../../../../src-tauri/resources/bmad-v6/skills/bmad/assets/config.template.toml"), "utf8")).replaceAll("{project-root}", "/p"));
+    await fs.writeText("/p/_bmad/custom/config.user.toml", '[core]\nactive_initiative = "initiative-checkout"\n');
+    expect(await loadCentralConfig("/p", fs)).toEqual(await golden("central-with-user.json"));
+  });
+
+  it("matches the Python customization resolution", async () => {
+    const fs = memFs();
+    // customize.toml lives at the skill root; _bmad/custom/ layers sit beside
+    // the central config. Mirror the layout /tmp/golden-proj had when the
+    // golden was captured, then compare — the golden is authoritative.
+    const skillRoot = join(__dirname, "../../../../src-tauri/resources/bmad-v6/skills/bmad-build");
+    await fs.mkdir("/p/_bmad/custom");
+    expect(await resolveCustomization("/p", skillRoot, "bmad-build", fs)).toEqual(await golden("customization.json"));
+  });
+});
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/config.test.ts`
+Expected: FAIL — `config.ts` not found.
+
+- [ ] **Step 4: Implement config.ts**
+
+```ts
+import { parse as parseToml } from "smol-toml";
+import type { Fs } from "./fs";
+
+/** Merge b into a: keys replace; arrays keyed-merge by code/id, else append. */
+export function deepMerge(a: any, b: any): any {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const keyed = (x: any[]) => x.every((i) => i && typeof i === "object" && (i.code !== undefined || i.id !== undefined));
+    if (keyed(a) && keyed(b)) {
+      const byKey = new Map<string, any>();
+      for (const item of [...a, ...b]) byKey.set(String(item.code ?? item.id), item);
+      return [...byKey.values()];
+    }
+    return [...a, ...b];
+  }
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+    const out = { ...a };
+    for (const [k, v] of Object.entries(b)) out[k] = deepMerge(out[k], v);
+    return out;
+  }
+  return b;
+}
+
+async function readLayer(fs: Fs, p: string): Promise<Record<string, unknown> | null> {
+  if (!(await fs.exists(p))) return null;
+  return parseToml(await fs.readText(p)) as Record<string, unknown>;
+}
+
+export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Record<string, unknown>> {
+  const base = await readLayer(fs, `${projectRoot}/_bmad/config.toml`);
+  if (!base) throw new Error(`no _bmad/config.toml under ${projectRoot}`);
+  let out = deepMerge({}, base);
+  const team = await readLayer(fs, `${projectRoot}/_bmad/custom/config.toml`);
+  if (team) out = deepMerge(out, team);
+  const user = await readLayer(fs, `${projectRoot}/_bmad/custom/config.user.toml`);
+  if (user) out = deepMerge(out, user);
+  return out;
+}
+
+export async function resolveCustomization(projectRoot: string, skillRoot: string, skill: string, fs: Fs): Promise<Record<string, unknown>> {
+  const base = await readLayer(fs, `${skillRoot}/customize.toml`);
+  let out = deepMerge({}, base ?? {});
+  const skillLayer = await readLayer(fs, `${projectRoot}/_bmad/custom/${skill}.toml`);
+  if (skillLayer) out = deepMerge(out, skillLayer);
+  const userLayer = await readLayer(fs, `${projectRoot}/_bmad/custom/${skill}.user.toml`);
+  if (userLayer) out = deepMerge(out, userLayer);
+  return out;
+}
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/config.test.ts`
+Expected: PASS. (If the golden comparison exposes a merge difference, adjust `deepMerge` until the goldens match — the Python behavior is the contract, not this first draft.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/bmadRuntime/config.ts src/lib/bmadRuntime/__tests__/config.test.ts src/lib/bmadRuntime/__tests__/goldens/config
+git commit -m "feat(bmad-v6): port layered TOML config resolution"
+```
+
+---
+
+### Task 4: Port the ticket tree (tickets.py + read_store.py)
+
+**Files:**
+- Create: `src/lib/bmadRuntime/tickets.ts`
+- Test: `src/lib/bmadRuntime/__tests__/tickets.test.ts`
+- Create: `src/lib/bmadRuntime/__tests__/goldens/tickets/*.json` (generated in Step 1)
+
+**Interfaces:**
+- Consumes: `loadCentralConfig` (Task 3), `Fs`.
+- Produces: `export async function tickets(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }>` — dispatches `next`, `status`, `find`, `pull`, `mark`, `mirror` exactly as the Python CLI does, printing JSON to stdout. Resolves `--project-root`, the store location (`output_folder` + `active_initiative`), and the `after` dependency validation. Status transitions for `mark`: `draft → ready-for-dev → in-progress → in-review → built → done` (plus `blocked`/`dropped`), with `done` and `mark` refusal messages matching the Python strings.
+
+- [ ] **Step 1: Generate goldens from the real Python**
+
+```bash
+cd /tmp/golden-proj
+mkdir -p /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets
+uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj next > G.json 2>&1 || true
+cp G.json /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/next-empty.json
+# Seed one initiative + one epic + one story via the real skill, then capture:
+uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj status > \
+  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/status-seeded.json
+uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj mark 1 done > \
+  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/mark-done.json
+```
+
+(Seed by creating `_bmad-output/initiative-demo/tickets.toml` with one `[[epic]]` and `epic-demo/tickets.toml` with one `[[entry]]`, plus `story-demo.md` and `story-demo-plan.md` per the vendored `bmad-ticket/assets` templates. If a command refuses without more setup, capture the refusal JSON — it is a golden too.)
+
+- [ ] **Step 2: Write the failing test**
+
+`src/lib/bmadRuntime/__tests__/tickets.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tickets } from "../tickets";
+import { memFs } from "../fs";
+import { seedTicketTree } from "./fixtures/ticketTree";
+
+const golden = async (name: string) =>
+  JSON.parse(await readFile(join(__dirname, "goldens/tickets", name), "utf8"));
+
+describe("tickets port", () => {
+  it("matches Python on an empty project (next)", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const r = await tickets(["next", "--project-root", "/p"], fs);
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual(await golden("next-empty.json"));
+  });
+
+  it("matches Python status on a seeded tree", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [{ id: 1, slug: "demo" }], stories: [{ id: 1, slug: "demo", parent: "epic-demo" }] });
+    const r = await tickets(["status", "--project-root", "/p"], fs);
+    expect(JSON.parse(r.stdout)).toEqual(await golden("status-seeded.json"));
+  });
+
+  it("rejects an after-reference to a ticket that does not exist, like Python", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const r = await tickets(["pull", "--project-root", "/p", "2"], fs);
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout).toContain("after");
+  });
+});
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/tickets.test.ts`
+Expected: FAIL — `tickets.ts` not found.
+
+- [ ] **Step 4: Implement tickets.ts and its fixture builder**
+
+First create `src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts` — the `seedTicketTree` helper used by this task's tests and Tasks 5–6:
+
+```ts
+import type { Fs } from "../../fs";
+
+/** Seed a minimal v6 project: _bmad/config.toml, the store folders, and the
+ * requested epics/stories as [[epic]]/[[entry]] tables plus leaf and plan
+ * files. Mirrors the vendored templates' shape. */
+export async function seedTicketTree(
+  fs: Fs, root: string,
+  spec: { epics: { id: number; slug: string }[]; stories: { id: string | number; slug: string; parent: string }[] },
+): Promise<void> {
+  await fs.mkdir(`${root}/_bmad/custom`);
+  await fs.writeText(`${root}/_bmad/config.toml`, `[core]\nproject_name = "p"\noutput_folder = "${root}/_bmad-output"\nactive_initiative = "initiative-demo"\n`);
+  const store = `${root}/_bmad-output/initiative-demo`;
+  await fs.mkdir(store);
+  const epicsToml = spec.epics.map((e) => `[[epic]]\nid = ${e.id}\nslug = "${e.slug}"\ntitle = "Demo"\n`).join("\n");
+  await fs.writeText(`${store}/tickets.toml`, epicsToml);
+  for (const e of spec.epics) {
+    const dir = `${store}/epic-${e.slug}`;
+    await fs.mkdir(dir);
+    const mine = spec.stories.filter((s) => s.parent === `epic-${e.slug}`);
+    await fs.writeText(`${dir}/tickets.toml`, mine.map((s) => `[[entry]]\nid = ${typeof s.id === "string" ? `"${s.id}"` : s.id}\ntype = "story"\ntitle = "Demo story"\n`).join("\n"));
+    for (const s of mine) {
+      const stem = `story-${s.id}`;
+      await fs.writeText(`${dir}/${stem}.md`, `---\nid: ${s.id}\ntype: story\ntitle: "Demo story"\nparent: epic-${e.slug}\n---\n# Demo story\n\n## Acceptance Criteria\n- AC1\n`);
+      await fs.writeText(`${dir}/${stem}-plan.md`, `---\nticket: ${s.id}\nstatus: draft\n---\n# Plan\n`);
+    }
+  }
+}
+```
+
+Then implement `src/lib/bmadRuntime/tickets.ts`. Port `skills/bmad-ticket/scripts/tickets.py` (1473 lines) and `read_store.py` (124 lines) into one module. Structure:
+
+```ts
+import { parse as parseToml } from "smol-toml";
+import { loadCentralConfig } from "./config";
+import type { Fs } from "./fs";
+
+/** One entry from an epic's tickets.toml [[entry]] table. */
+interface Entry { id: string | number; type: string; title: string; parent?: string; after?: (string | number)[]; risk?: string; /* ...rest per tickets-template.toml */ }
+
+/** One [[epic]] table from the initiative's tickets.toml. */
+interface EpicEntry { id: string | number; slug: string; title: string; after?: { epic: number; needs: string }[] }
+
+const STATUSES = ["draft", "ready-for-dev", "in-progress", "in-review", "built", "done", "blocked", "dropped"] as const;
+type Status = (typeof STATUSES)[number];
+
+async function storeRoot(projectRoot: string, fs: Fs): Promise<string> {
+  const cfg = await loadCentralConfig(projectRoot, fs);
+  const out = (cfg.core as any)?.output_folder ?? `${projectRoot}/_bmad-output`;
+  const init = (cfg.core as any)?.active_initiative ?? "";
+  return init ? `${out}/${init}` : out;
+}
+
+async function readStore(projectRoot: string, fs: Fs) {
+  // read_store.py port: find tickets.toml files under storeRoot, parse [[epic]]/[[entry]].
+  // Returns { epics: EpicEntry[], entries: Map<folder, Entry[]> } plus per-folder raw data.
+}
+
+/** Validate `after` references exist in build order — mirrors the Python errors verbatim. */
+function validateAfter(entries: Entry[], folder: string): string | null { /* ... */ }
+
+/** The leaf/plan join: status lives in <stem>-plan.md frontmatter `ticket` key. */
+async function planFor(stem: string, folder: string, fs: Fs): Promise<{ status?: Status; assignee?: string } | null> {
+  const p = `${folder}/${stem}-plan.md`;
+  if (!(await fs.exists(p))) return null;
+  const md = await fs.readText(p);
+  const fm = /^---\n([\s\S]*?)\n---/.exec(md)?.[1] ?? "";
+  const kv = (k: string) => new RegExp(`^${k}:\\s*(.+)$`, "m").exec(fm)?.[1]?.trim();
+  return { status: kv("status") as Status, assignee: kv("assignee") };
+}
+
+export async function tickets(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
+  const projectRoot = argv.includes("--project-root") ? argv[argv.indexOf("--project-root") + 1] : process.cwd();
+  const cmd = argv.find((a) => ["next", "status", "find", "pull", "mark", "mirror"].includes(a));
+  if (!cmd) return { stdout: "usage: tickets.py {next|status|find|pull|mark|mirror}", exitCode: 2 };
+  // Dispatch per command, printing the same JSON keys the Python prints.
+  // `mark <ref> <status>` writes the plan file's frontmatter `status:` line,
+  // preserving other keys, and validates the transition against STATUSES order.
+  // `pull <ref>` writes the leaf file from the [[entry]] + templates.
+  return { stdout: JSON.stringify({ /* command output */ }), exitCode: 0 };
+}
+```
+
+The full JSON shapes come from the goldens captured in Step 1 — the port is complete only when every golden passes.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/tickets.test.ts`
+Expected: PASS (all goldens match).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/bmadRuntime/tickets.ts src/lib/bmadRuntime/__tests__/tickets.test.ts src/lib/bmadRuntime/__tests__/fixtures/ticketTree.ts src/lib/bmadRuntime/__tests__/goldens/tickets
+git commit -m "feat(bmad-v6): port the ticket tree commands"
+```
+
+---
+
+### Task 5: Port workflow rendering and memlog (render_skill + memlog)
+
+**Files:**
+- Create: `src/lib/bmadRuntime/render.ts`
+- Create: `src/lib/bmadRuntime/memlog.ts`
+- Test: `src/lib/bmadRuntime/__tests__/render.test.ts`, `src/lib/bmadRuntime/__tests__/memlog.test.ts`
+- Create: `src/lib/bmadRuntime/__tests__/goldens/render/*.json` (generated in Step 1)
+
+**Interfaces:**
+- Consumes: `loadCentralConfig`, `resolveCustomization` (Task 3), `Fs`.
+- Produces: `export async function renderSkill(projectRoot: string, skillRoot: string, set: Record<string, string>, fs: Fs): Promise<string>` — renders the skill's SKILL.md with a jinja2 subset (`{{ var }}`, `{% for x in list %}…{% endfor %}`, `{% if x %}…{% endif %}`). And `export async function memlog(projectRoot: string, action: "append" | "read" | "init", entry: string | null, fs: Fs): Promise<string>` — append-only JSON-lines log at `_bmad/memlog.jsonl`.
+
+- [ ] **Step 1: Generate goldens from the real Python**
+
+```bash
+mkdir -p /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/render
+uv run /tmp/golden-proj/_bmad/scripts/render_skill.py --project-root /tmp/golden-proj --skill /tmp/bmad-v6/skills/bmad-build --set workflow.route=full > \
+  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/render/build-full.md
+uv run /tmp/golden-proj/_bmad/scripts/memlog.py --project-root /tmp/golden-proj append '{"t":"test"}' >/dev/null
+uv run /tmp/golden-proj/_bmad/scripts/memlog.py --project-root /tmp/golden-proj read > \
+  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/render/memlog.jsonl
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+```ts
+import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { renderSkill } from "../render";
+import { memlog } from "../memlog";
+import { memFs } from "../fs";
+import { seedTicketTree } from "./fixtures/ticketTree";
+
+describe("render port", () => {
+  it("matches Python render_skill output for bmad-build full route", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    // The golden was rendered from the same tag's tree; read the vendored copy.
+    const skillRoot = join(__dirname, "../../../../src-tauri/resources/bmad-v6/skills/bmad-build");
+    const out = await renderSkill("/p", skillRoot, { "workflow.route": "full" }, fs);
+    // The golden is captured with the skill path substituted; substitute the
+    // same way before comparing.
+    expect(out).toBe((await readFile(join(__dirname, "goldens/render/build-full.md"), "utf8")));
+  });
+
+  it("matches Python memlog append/read", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    await memlog("/p", "append", '{"t":"test"}', fs);
+    expect(await memlog("/p", "read", null, fs)).toBe(await readFile(join(__dirname, "goldens/render/memlog.jsonl"), "utf8"));
+  });
+});
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/render.test.ts src/lib/bmadRuntime/__tests__/memlog.test.ts`
+Expected: FAIL — modules not found.
+
+- [ ] **Step 4: Implement render.ts and memlog.ts**
+
+```ts
+/** jinja2 subset: variable substitution, for-loops, if-blocks. Enough for SKILL.md workflows. */
+export function renderTemplate(tpl: string, ctx: Record<string, unknown>): string {
+  let out = tpl;
+  out = out.replace(/\{%\s*for\s+(\w+)\s+in\s+([\w.]+)\s*%\}([\s\S]*?)\{%\s*endfor\s*%\}/g, (_, v: string, src: string, body: string) => {
+    const list = (src.split(".").reduce((o, k) => (o as any)?.[k], ctx) ?? []) as unknown[];
+    return list.map((item) => renderTemplate(body, { ...ctx, [v]: item })).join("");
+  });
+  out = out.replace(/\{%\s*if\s+([\w.]+)\s*%\}([\s\S]*?)\{%\s*endif\s*%\}/g, (_, cond: string, body: string) =>
+    cond.split(".").reduce((o, k) => (o as any)?.[k], ctx) ? renderTemplate(body, ctx) : "");
+  out = out.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key: string) =>
+    String(key.split(".").reduce((o, k) => (o as any)?.[k], ctx) ?? ""));
+  return out;
+}
+
+export async function renderSkill(projectRoot: string, skillRoot: string, set: Record<string, string>, fs: Fs): Promise<string> {
+  const cfg = await loadCentralConfig(projectRoot, fs);
+  const skillName = skillRoot.split("/").pop()!;
+  const custom = await resolveCustomization(projectRoot, skillRoot, skillName, fs);
+  const ctx = { ...cfg, ...custom, workflow: { ...(cfg.workflow as any ?? {}), ...Object.fromEntries(Object.entries(set).map(([k, v]) => [k.split(".").slice(1).join("."), v])) } };
+  return renderTemplate(await fs.readText(`${skillRoot}/SKILL.md`), ctx);
+}
+```
+
+```ts
+import type { Fs } from "./fs";
+
+export async function memlog(projectRoot: string, action: "append" | "read" | "init", entry: string | null, fs: Fs): Promise<string> {
+  const p = `${projectRoot}/_bmad/memlog.jsonl`;
+  if (action === "read") return (await fs.exists(p)) ? await fs.readText(p) : "";
+  if (action === "init") { await fs.writeText(p, ""); return ""; }
+  const prev = (await fs.exists(p)) ? await fs.readText(p) : "";
+  await fs.writeText(p, prev + entry + "\n");
+  return "";
+}
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/render.test.ts src/lib/bmadRuntime/__tests__/memlog.test.ts`
+Expected: PASS. (As in Task 3, adjust to the goldens — Python behavior is the contract.)
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/bmadRuntime/render.ts src/lib/bmadRuntime/memlog.ts src/lib/bmadRuntime/__tests__/render.test.ts src/lib/bmadRuntime/__tests__/memlog.test.ts src/lib/bmadRuntime/__tests__/goldens/render
+git commit -m "feat(bmad-v6): port workflow rendering and memlog"
+```
+
+---
+
+### Task 6: The ade-runtime.mjs CLI bundle
+
+**Files:**
+- Create: `src/lib/bmadRuntime/cli.ts`
+- Create: `vite.runtime.config.ts`
+- Modify: `package.json` (add `"build:runtime": "vite build --config vite.runtime.config.ts"` and hook into the existing `build` script)
+- Test: `src/lib/bmadRuntime/__tests__/cli.test.ts`
+
+**Interfaces:**
+- Consumes: `tickets`, `loadCentralConfig`, `resolveCustomization`, `renderSkill`, `memlog`, `realFs`.
+- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v`).
+
+- [ ] **Step 1: Write the failing test**
+
+`src/lib/bmadRuntime/__tests__/cli.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { cliMain } from "../cli";
+import { memFs } from "../fs";
+import { seedTicketTree } from "./fixtures/ticketTree";
+
+describe("cli dispatch", () => {
+  it("dispatches tickets next with the same argv shape the patched skills use", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const r = await cliMain(["tickets", "next", "--project-root", "/p"], fs);
+    expect(r.exitCode).toBe(0);
+    expect(() => JSON.parse(r.stdout)).not.toThrow();
+  });
+
+  it("resolves --key queries for resolve_config", async () => {
+    const fs = memFs();
+    await seedTicketTree(fs, "/p", { epics: [], stories: [] });
+    const r = await cliMain(["resolve_config", "--project-root", "/p", "--key", "core.output_folder"], fs);
+    expect(JSON.parse(r.stdout)).toHaveProperty("core");
+  });
+
+  it("reports an unknown script with a non-zero exit", async () => {
+    const r = await cliMain(["bogus"], memFs());
+    expect(r.exitCode).toBe(2);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/cli.test.ts`
+Expected: FAIL — `cli.ts` not found.
+
+- [ ] **Step 3: Implement cli.ts**
+
+```ts
+import { loadCentralConfig, resolveCustomization } from "./config";
+import { tickets } from "./tickets";
+import { renderSkill } from "./render";
+import { memlog } from "./memlog";
+import type { Fs } from "./fs";
+
+export async function cliMain(argv: string[], fs: Fs): Promise<{ stdout: string; exitCode: number }> {
+  const [script, ...rest] = argv;
+  switch (script) {
+    case "tickets":
+    case "read_store":
+      return tickets(rest, fs);
+    case "resolve_config": {
+      const root = rest[rest.indexOf("--project-root") + 1];
+      const cfg = await loadCentralConfig(root, fs);
+      return { stdout: JSON.stringify(cfg, null, 2), exitCode: 0 };
+    }
+    case "resolve_customization": {
+      const root = rest[rest.indexOf("--project-root") + 1];
+      const skillRoot = rest[rest.indexOf("--skill") + 1];
+      const skill = skillRoot.split("/").pop()!;
+      return { stdout: JSON.stringify(await resolveCustomization(root, skillRoot, skill, fs), null, 2), exitCode: 0 };
+    }
+    case "render_skill": {
+      const root = rest[rest.indexOf("--project-root") + 1];
+      const skill = rest[rest.indexOf("--skill") + 1];
+      const set = Object.fromEntries(rest.filter((a) => a.startsWith("--set ")).map((a) => a.slice(6).split("=") as [string, string]));
+      return { stdout: await renderSkill(root, skill, set, fs), exitCode: 0 };
+    }
+    case "memlog": {
+      const root = rest[rest.indexOf("--project-root") + 1];
+      const action = rest.find((a) => ["append", "read", "init"].includes(a)) as "append" | "read" | "init";
+      const entry = action === "append" ? rest[rest.length - 1] : null;
+      return { stdout: await memlog(root, action, entry, fs), exitCode: 0 };
+    }
+    default:
+      return { stdout: `unknown runtime script: ${script}`, exitCode: 2 };
+  }
+}
+
+if (typeof process !== "undefined" && process.argv[1]?.endsWith("ade-runtime.mjs")) {
+  const { realFs } = await import("./fs");
+  const r = await cliMain(process.argv.slice(2), realFs());
+  if (r.stdout) process.stdout.write(r.stdout + "\n");
+  process.exit(r.exitCode);
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run src/lib/bmadRuntime/__tests__/cli.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Add the bundle build**
+
+`vite.runtime.config.ts`:
+
+```ts
+import { defineConfig } from "vite";
+
+// Single dependency-free ESM bundle scaffolded into v6 projects as
+// _bmad/ade-runtime.mjs. Node 18+ target; everything bundled inline.
+export default defineConfig({
+  build: {
+    lib: { entry: "src/lib/bmadRuntime/cli.ts", formats: ["es"], fileName: "ade-runtime" },
+    outDir: "dist-runtime",
+    target: "node18",
+    minify: false,
+    rollupOptions: { external: [] },
+  },
+});
+```
+
+In `package.json`: `"build:runtime": "vite build --config vite.runtime.config.ts"`, and change `"build": "tsc && vite build && npm run build:runtime"`.
+
+- [ ] **Step 6: Build and smoke it**
+
+Run: `npm run build:runtime && node dist-runtime/ade-runtime.mjs bogus; echo "exit=$?"`
+Expected: `unknown runtime script: bogus` and `exit=2`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/lib/bmadRuntime/cli.ts src/lib/bmadRuntime/__tests__/cli.test.ts vite.runtime.config.ts package.json
+git commit -m "feat(bmad-v6): ade-runtime CLI bundle for terminal agents"
+```
+
+---
+
+### Task 7: Rust-side v6 scaffold and the methodology marker
+
+**Files:**
+- Create: `src-tauri/src/bmadv6.rs`
+- Modify: `src-tauri/src/lib.rs` (register the command + resource path)
+- Modify: `src-tauri/src/projectsetup.rs` (methodology-aware apply)
+- Test: `src-tauri/src/bmadv6.rs` (`#[cfg(test)]` temp-dir tests)
+
+**Interfaces:**
+- Consumes: `src-tauri/resources/bmad-v6/` (bundled resource), the runtime bundle at `dist-runtime/ade-runtime.mjs` (bundled as a resource, `src-tauri/resources/ade-runtime.mjs`, copied by the tauri build's `beforeBuildCommand` — add `cp dist-runtime/ade-runtime.mjs src-tauri/resources/ade-runtime.mjs` to `"build"`).
+- Produces: `pub fn install(src: &Path, dir: &Path, report: &mut ScaffoldReport) -> Result<(), String>` — writes `.claude/skills/` (33 dirs), `_bmad/config.toml` (project_name + output_folder from the directory name), `_bmad/custom/` + `.gitignore`, `_bmad/ade-runtime.mjs`, `_bmad-output/`, and `.ade/methodology` containing `v6`. Never overwrites. `ScaffoldReport { created: Vec<PathBuf>, kept: Vec<PathBuf> }`.
+
+- [ ] **Step 1: Write the failing Rust tests**
+
+In `bmadv6.rs`:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn installs_the_v6_tree_and_marker() {
+        let dir = std::env::temp_dir().join(format!("bmadv6-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        // src is a tiny fixture tree, not the real vendored skills:
+        let src = std::env::temp_dir().join(format!("bmadv6-src-{}", std::process::id()));
+        fs::create_dir_all(src.join("skills/bmad")).unwrap();
+        fs::write(src.join("skills/bmad/SKILL.md"), "hello").unwrap();
+        fs::write(src.join("runtime.mjs"), "// runtime").unwrap();
+
+        let mut report = ScaffoldReport::default();
+        install(&src, &dir, &mut report).unwrap();
+
+        assert!(dir.join(".claude/skills/bmad/SKILL.md").is_file());
+        assert!(dir.join("_bmad/config.toml").is_file());
+        assert!(dir.join("_bmad/custom/.gitignore").is_file());
+        assert!(dir.join("_bmad/ade-runtime.mjs").is_file());
+        assert!(dir.join("_bmad-output").is_dir());
+        assert_eq!(fs::read_to_string(dir.join(".ade/methodology")).unwrap().trim(), "v6");
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&src).ok();
+    }
+
+    #[test]
+    fn never_overwrites_existing_files() {
+        let dir = std::env::temp_dir().join(format!("bmadv6-keep-{}", std::process::id()));
+        fs::create_dir_all(dir.join("_bmad")).unwrap();
+        fs::write(dir.join("_bmad/config.toml"), "custom").unwrap();
+        let src = std::env::temp_dir().join(format!("bmadv6-src-keep-{}", std::process::id()));
+        fs::create_dir_all(src.join("skills")).unwrap();
+
+        let mut report = ScaffoldReport::default();
+        install(&src, &dir, &mut report).unwrap();
+
+        assert_eq!(fs::read_to_string(dir.join("_bmad/config.toml")).unwrap(), "custom");
+        assert!(!report.created.iter().any(|p| p.ends_with("config.toml")));
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&src).ok();
+    }
+
+    #[test]
+    fn detects_v4_projects_without_a_marker() {
+        let dir = std::env::temp_dir().join(format!("bmadv6-detect-{}", std::process::id()));
+        fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+        assert_eq!(detect_methodology(&dir), Methodology::V4);
+        fs::remove_dir_all(&dir).ok();
+    }
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `cd src-tauri && cargo test bmadv6`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement bmadv6.rs**
+
+```rust
+//! BMAD v6 scaffold: vendored skills into .claude/skills, the _bmad/ tree,
+//! the runtime bundle, and the methodology marker. Mirrors v6's own setup.py
+//! output; nothing that exists is overwritten.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Methodology { V4, V6 }
+
+#[derive(Default)]
+pub struct ScaffoldReport {
+    pub created: Vec<PathBuf>,
+    pub kept: Vec<PathBuf>,
+}
+
+/// What methodology a project is on: the marker when present, otherwise disk
+/// evidence (.bmad-core/ => v4) for projects from before the marker existed.
+pub fn detect_methodology(dir: &Path) -> Methodology {
+    match fs::read_to_string(dir.join(".ade/methodology")) {
+        Ok(m) if m.trim() == "v6" => Methodology::V6,
+        _ if dir.join(".bmad-core").is_dir() => Methodology::V4,
+        _ => Methodology::V6, // a project with neither is new; setup will ask and write the marker
+    }
+}
+
+fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), String> {
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let to = dst.join(entry.file_name());
+        if entry.path().is_dir() {
+            fs::create_dir_all(&to).map_err(|e| e.to_string())?;
+            copy_tree(&entry.path(), &to, report)?;
+        } else if to.exists() {
+            report.kept.push(to.clone());
+        } else {
+            fs::copy(entry.path(), &to).map_err(|e| e.to_string())?;
+            report.created.push(to);
+        }
+    }
+    Ok(())
+}
+
+pub fn install(src: &Path, dir: &Path, report: &mut ScaffoldReport) -> Result<(), String> {
+    // Skills: .claude/skills/*
+    copy_tree(&src.join("skills"), &dir.join(".claude/skills"), report)?;
+    // _bmad/ tree
+    fs::create_dir_all(dir.join("_bmad/custom")).map_err(|e| e.to_string())?;
+    let config = dir.join("_bmad/config.toml");
+    if config.exists() {
+        report.kept.push(config);
+    } else {
+        let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let body = format!("[core]\nproject_name = \"{name}\"\noutput_folder = \"{}/_bmad-output\"\n",
+            dir.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\""));
+        fs::write(&config, body).map_err(|e| e.to_string())?;
+        report.created.push(config);
+    }
+    let gitignore = dir.join("_bmad/custom/.gitignore");
+    if gitignore.exists() { report.kept.push(gitignore); } else {
+        fs::write(&gitignore, "# user-scoped overrides\n").map_err(|e| e.to_string())?;
+        report.created.push(gitignore);
+    }
+    // Runtime bundle
+    let runtime = dir.join("_bmad/ade-runtime.mjs");
+    if runtime.exists() { report.kept.push(runtime); } else {
+        fs::copy(src.join("ade-runtime.mjs"), &runtime).map_err(|e| e.to_string())?;
+        report.created.push(runtime);
+    }
+    fs::create_dir_all(dir.join("_bmad-output")).map_err(|e| e.to_string())?;
+    // Methodology marker
+    let marker = dir.join(".ade/methodology");
+    fs::create_dir_all(dir.join(".ade")).map_err(|e| e.to_string())?;
+    if marker.exists() { report.kept.push(marker); } else {
+        fs::write(&marker, "v6\n").map_err(|e| e.to_string())?;
+        report.created.push(marker);
+    }
+    Ok(())
+}
+```
+
+- [ ] **Step 4: Wire it into projectsetup.rs**
+
+In `projectsetup.rs`: `apply()` gains a `methodology: Methodology` parameter; when `Methodology::V6`, call `bmadv6::install` with the resource root `crate::bmadv6::resource_root(&app)` (mirroring `crate::bmad::resource_root`); when `V4`, the existing `bmad::install` path runs unchanged. `project_setup_apply` reads the requested methodology from the frontend and skips the install when `detect_methodology` says the project already has that methodology. Keep `bmad_files` counting v4 files and add `bmadv6_files` for v6.
+
+- [ ] **Step 5: Run all Rust tests**
+
+Run: `cd src-tauri && cargo test`
+Expected: PASS (existing v4 scaffold tests stay green).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src-tauri/src/bmadv6.rs src-tauri/src/lib.rs src-tauri/src/projectsetup.rs
+git commit -m "feat(bmad-v6): scaffold v6 projects with methodology marker"
+```
+
+---
+
+### Task 8: Frontend setup flow — the v4/v6 question
+
+**Files:**
+- Modify: `src/lib/projectSetup.ts`
+- Modify: `src/components/NewTabDialog.tsx` (or wherever the setup prompt renders — follow the existing `autoProjectSetup` flow)
+- Test: `src/lib/__tests__/projectSetup.test.ts` (extend; check existing suite name first)
+
+**Interfaces:**
+- Consumes: `project_setup_apply` with a new `methodology: "v4" | "v6"` argument; `project_setup_status` unchanged.
+- Produces: `setupProject(root, methodology: "v6" | "v4")` — the existing `setupProject(root)` callers now pass the user's choice; default `"v6"`. The setup UI asks once when `autoProjectSetup` is on and the project has neither methodology on disk: "Methodology: BMAD v6 (default) or BMAD v4". Existing v4 projects (`.bmad-core/` present, per `project_setup_status`) skip the question and stay v4.
+
+- [ ] **Step 1: Write the failing test**
+
+Extend the projectSetup suite:
+
+```ts
+it("passes the chosen methodology to setup and defaults new projects to v6", async () => {
+  // existing mock of invoke("project_setup_apply") records args
+  await setupProject("/tmp/proj", "v6");
+  expect(lastApplyArgs.methodology).toBe("v6");
+  await setupProject("/tmp/proj");
+  expect(lastApplyArgs.methodology).toBe("v6");
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run src/lib/__tests__/projectSetup.test.ts`
+Expected: FAIL — `methodology` arg not sent.
+
+- [ ] **Step 3: Implement**
+
+`projectSetup.ts`: add `methodology: "v6" | "v4" = "v6"` parameter to the apply invocations; add `detectOnDisk(root): Promise<"v4" | "v6" | null>` via the existing status command (`.bmad-core/` ⇒ v4, `.ade/methodology` ⇒ its value, else null). The setup prompt component asks only when `detectOnDisk` is null; v4-detected projects proceed silently as before.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `npx vitest run src/lib/__tests__/projectSetup.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Run the whole suite and typecheck**
+
+Run: `npx tsc --noEmit && npm test`
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/projectSetup.ts src/components/NewTabDialog.tsx src/lib/__tests__/projectSetup.test.ts
+git commit -m "feat(bmad-v6): methodology choice in project setup"
+```
+
+---
+
+### Task 9: End-to-end scaffold verification
+
+**Files:**
+- Test: `src-tauri/tests/bmadv6_e2e.rs` (integration test behind `#[cfg(test)]`)
+
+**Interfaces:**
+- Consumes: Task 7's `install` and Task 6's bundle at `src-tauri/resources/ade-runtime.mjs`.
+
+- [ ] **Step 1: Write the failing test**
+
+```rust
+#[test]
+fn scaffolded_project_runs_the_runtime_cli() {
+    let dir = std::env::temp_dir().join(format!("bmadv6-e2e-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = std::env::temp_dir().join(format!("bmadv6-e2e-src-{}", std::process::id()));
+    std::fs::create_dir_all(src.join("skills")).unwrap();
+    std::fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/resources/ade-runtime.mjs"), src.join("ade-runtime.mjs")).unwrap();
+
+    let mut report = bmadv6::ScaffoldReport::default();
+    bmadv6::install(&src, &dir, &mut report).unwrap();
+
+    // `node` must be present for this test; skip otherwise (CI has it).
+    if std::process::Command::new("node").arg("--version").output().is_err() { return; }
+    let out = std::process::Command::new("node")
+        .arg(dir.join("_bmad/ade-runtime.mjs"))
+        .arg("resolve_config").arg("--project-root").arg(&dir)
+        .output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("output_folder"), "runtime returned: {stdout}");
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&src).ok();
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd src-tauri && cargo test bmadv6_e2e`
+Expected: FAIL until the runtime bundle is built — see Step 3.
+
+- [ ] **Step 3: Ensure the bundle exists before tests**
+
+Add to `package.json` `"build"`: `"tsc && vite build && npm run build:runtime && cp dist-runtime/ade-runtime.mjs src-tauri/resources/ade-runtime.mjs"`. Commit `src-tauri/resources/ade-runtime.mjs` (it is regenerated on every build, like the frontend dist). Run `npm run build:runtime` first so the file exists for `cargo test`.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd src-tauri && cargo test bmadv6_e2e`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src-tauri/tests/bmadv6_e2e.rs src-tauri/resources/ade-runtime.mjs package.json
+git commit -m "test(bmad-v6): end-to-end scaffold runs the runtime CLI"
+```
+
+---
+
+Plan 1 complete: a v6 project scaffolds fully, terminal agents can run the patched skills against `_bmad/ade-runtime.mjs`, and the app knows each project's methodology. Plans 2 (ADE gate + v6 board) and 3 (role sections + docs) follow this file's task format.
