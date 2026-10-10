@@ -436,7 +436,7 @@ export default function App() {
             <FileBrowser />
           </Suspense>
         )}
-        <div className="overflow-hidden" style={{ minWidth: 0, flex: 1 }}>
+        <div className="overflow-hidden" style={{ minWidth: 320, flex: 1 }}>
           {activeTab && (
             activeTab.type === "orchestrator" && activeTab.orchestratorSessionId
               ? <Suspense fallback={null}>

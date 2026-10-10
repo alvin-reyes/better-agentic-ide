@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import BoardView, { type BoardActions } from "./BoardView";
 import { useBoardPanel } from "../../stores/boardPanelStore";
@@ -103,6 +103,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [dispatchCount, setDispatchCount] = useState(0);
+  const { width, onDragStart } = useDragWidth();
   const provider = useSettingsStore((s) => s.defaultProvider);
 
   // The active pane's project, by the same walk-up agent launches use: the
@@ -206,14 +207,56 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   })();
 
   return (
-    <div style={{ width: 380, height: "100%", display: "flex", flexDirection: "column", backgroundColor: "var(--bg-secondary)", borderLeft: "1px solid var(--border)", flexShrink: 0 }}>
+    <aside
+      aria-label="Stage board"
+      // Shrinks (down to its minimum) before the terminal area goes below its own.
+      style={{ width, minWidth: BOARD_WIDTH.min, height: "100%", display: "flex", flexDirection: "column", backgroundColor: "var(--bg-secondary)", borderLeft: "1px solid var(--border)", flexShrink: 1, position: "relative" }}
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize stage board"
+        onMouseDown={onDragStart}
+        style={{ position: "absolute", top: 0, left: -3, width: 6, height: "100%", cursor: "col-resize", zIndex: 10 }}
+      />
       <div style={{ display: "flex", alignItems: "center", padding: "8px 12px", borderBottom: "1px solid var(--border)", gap: 8 }}>
         <span style={{ flex: 1, fontWeight: 600 }}>Board{methodology ? ` · BMAD ${methodology}` : ""}</span>
         <button type="button" aria-label="Close board" onClick={onClose} style={{ background: "none", border: 0, color: "var(--text-secondary)", cursor: "pointer" }}>✕</button>
       </div>
       {body}
-    </div>
+    </aside>
   );
+}
+
+const BOARD_WIDTH = { initial: 380, min: 280, max: 720 };
+
+/** The panel's width, dragged from its left edge like the Preview panel's. Not persisted. */
+function useDragWidth() {
+  const [width, setWidth] = useState(BOARD_WIDTH.initial);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cleanupRef.current?.(), []);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    const onMove = (ev: MouseEvent) =>
+      setWidth(Math.min(BOARD_WIDTH.max, Math.max(BOARD_WIDTH.min, startWidth + startX - ev.clientX)));
+    const cleanup = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", cleanup);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      cleanupRef.current = null;
+    };
+    cleanupRef.current = cleanup;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", cleanup);
+  }, [width]);
+
+  return { width, onDragStart };
 }
 
 function Empty({ children }: { children: React.ReactNode }) {

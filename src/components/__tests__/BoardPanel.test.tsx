@@ -180,6 +180,37 @@ describe("BoardPanel", () => {
   });
 });
 
+describe("BoardPanel width", () => {
+  const panel = () => screen.getByRole("complementary", { name: "Stage board" });
+  const handle = () => screen.getByRole("separator", { name: "Resize stage board" });
+
+  it("opens at 380 px and resizes by dragging its left edge, clamped to 280–720", () => {
+    render(<BoardPanel cwd={null} onClose={vi.fn()} />);
+    expect(panel().style.width).toBe("380px");
+
+    fireEvent.mouseDown(handle(), { clientX: 1000 });
+    fireEvent.mouseMove(document, { clientX: 900 }); // dragged left: wider
+    expect(panel().style.width).toBe("480px");
+    fireEvent.mouseMove(document, { clientX: 0 });
+    expect(panel().style.width).toBe("720px");
+    fireEvent.mouseMove(document, { clientX: 2000 });
+    expect(panel().style.width).toBe("280px");
+    fireEvent.mouseUp(document);
+
+    fireEvent.mouseMove(document, { clientX: 900 }); // released: no effect
+    expect(panel().style.width).toBe("280px");
+  });
+
+  it("keeps the terminal area from being crushed by the side panels", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const app = readFileSync(resolve(__dirname, "../../App.tsx"), "utf8");
+    const m = /<div className="overflow-hidden" style=\{\{ minWidth: (\d+), flex: 1 \}\}>/.exec(app);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeGreaterThanOrEqual(320);
+  });
+});
+
 describe("BoardPanel dispatch", () => {
   const approved = (status: string) =>
     buildBoard({
