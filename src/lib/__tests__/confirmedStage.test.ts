@@ -49,4 +49,27 @@ describe("stage file", () => {
     expect(await fs.readText("/p/.ade/stage")).toBe("audit\n");
     expect(await readStageFile("/p", fs)).toBe("audit\n");
   });
+
+  it("reads an unreadable file as an invalid value instead of failing, so the rail falls back to the evidence with a warning", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/.ade/stage"); // a directory where the file should be
+    const broken = { ...fs, readText: async () => { throw new Error("Is a directory"); } };
+    const value = await readStageFile("/p", broken);
+    expect(value).not.toBeNull();
+    const v = stageView(board([BRIEF]), value);
+    expect(v).toMatchObject({ shown: "design", derived: "design", tracked: false, invalid: true, next: null });
+  });
+});
+
+describe("stageView while claimed", () => {
+  it("never offers Next from a claimed stage, even on a board whose stages are not monotonic", () => {
+    // The engines keep completion monotonic, so a claimed stage is never
+    // complete today; Next must not depend on that invariant.
+    const b = board([]);
+    const odd = { ...b, stages: b.stages.map((s) => (s.id === "audit" ? { ...s, complete: true } : s)) };
+    const v = stageView(odd, "audit\n");
+    expect(v.claimed).toBe(true);
+    expect(v.next).toBeNull();
+    expect(v.prev).toBe("design");
+  });
 });

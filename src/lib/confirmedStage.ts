@@ -38,15 +38,30 @@ export function stageView(board: BoardState, file: string | null): StageView {
     tracked,
     invalid: value !== null && !tracked,
     claimed,
-    next: tracked && !last && canAdvance(board, shown) ? STAGE_ORDER[i + 1] : null,
+    // Not from a claimed stage: advancing past one the files do not support
+    // would compound the claim.
+    next: tracked && !claimed && !last && canAdvance(board, shown) ? STAGE_ORDER[i + 1] : null,
     prev: i > 0 ? STAGE_ORDER[i - 1] : null,
   };
 }
 
+/** What an unreadable `.ade/stage` reads as: never a StageId, so it is invalid. */
+export const UNREADABLE_STAGE = "\u0000unreadable";
+
+/**
+ * The raw `.ade/stage`, or null when there is none. A file that exists but
+ * cannot be read (a directory, no permission) reads as `UNREADABLE_STAGE`,
+ * so the rail falls back to the evidence with a warning instead of failing
+ * the whole rebuild.
+ */
 export async function readStageFile(root: string, fs: Fs): Promise<string | null> {
   const path = joinPath(root, STAGE_FILE);
   if (!(await fs.exists(path))) return null;
-  return fs.readText(path);
+  try {
+    return await fs.readText(path);
+  } catch {
+    return UNREADABLE_STAGE;
+  }
 }
 
 export async function writeStage(root: string, stage: StageId, fs: Fs): Promise<void> {
