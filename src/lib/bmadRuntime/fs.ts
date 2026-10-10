@@ -7,18 +7,70 @@ export interface Fs {
   mkdir(p: string): Promise<void>;
 }
 
+function withoutTrailingSlash(p: string): string {
+  return p.length > 1 ? p.replace(/\/+$/, "") : p;
+}
+
+function parentDirectory(p: string): string {
+  const cut = p.lastIndexOf("/");
+  return cut <= 0 ? "/" : p.slice(0, cut);
+}
+
+/**
+ * In-memory Fs for tests. Behavior mirrors realFs: list returns the immediate
+ * children (files and directories) of a directory, mkdir creates every parent
+ * along the path, and a write into a directory that does not exist rejects.
+ */
 export function memFs(): Fs {
   const files = new Map<string, string>();
-  const mkdir = async (p: string) => { files.set(p.endsWith("/") ? p : p + "/", ""); };
+  const directories = new Set<string>(["/"]);
+
+  // A directory exists once mkdir recorded it, or once a file lives under it.
+  const isDirectory = (p: string) => {
+    if (directories.has(p)) return true;
+    const prefix = p === "/" ? "/" : `${p}/`;
+    for (const key of files.keys()) if (key.startsWith(prefix)) return true;
+    return false;
+  };
+
   return {
-    readText: async (p) => files.get(p) ?? Promise.reject(new Error(`no such file: ${p}`)),
-    writeText: async (p, body) => { files.set(p, body); },
-    list: async (p) =>
-      [...files.keys()]
-        .filter((k) => k.startsWith(p + "/") && !k.endsWith("/"))
-        .map((k) => k.slice(p.length + 1)),
-    exists: async (p) => files.has(p) || files.has(p + "/"),
-    mkdir,
+    readText: async (p) => {
+      const key = withoutTrailingSlash(p);
+      const body = files.get(key);
+      if (body === undefined) throw new Error(`no such file: ${key}`);
+      return body;
+    },
+    writeText: async (p, body) => {
+      const key = withoutTrailingSlash(p);
+      const parent = parentDirectory(key);
+      if (!isDirectory(parent)) throw new Error(`ENOENT: no such directory: ${parent}`);
+      files.set(key, body);
+    },
+    list: async (p) => {
+      const dir = withoutTrailingSlash(p);
+      if (!isDirectory(dir)) throw new Error(`ENOENT: no such directory: ${dir}`);
+      const prefix = dir === "/" ? "/" : `${dir}/`;
+      const children = new Set<string>();
+      // Every file and every recorded directory contributes its first path segment.
+      for (const key of [...files.keys(), ...directories]) {
+        if (!key.startsWith(prefix)) continue;
+        const segment = key.slice(prefix.length).split("/", 1)[0];
+        if (segment) children.add(segment);
+      }
+      return [...children];
+    },
+    exists: async (p) => {
+      const key = withoutTrailingSlash(p);
+      return files.has(key) || isDirectory(key);
+    },
+    mkdir: async (p) => {
+      const parts = withoutTrailingSlash(p).split("/").filter(Boolean);
+      let current = "";
+      for (const part of parts) {
+        current += `/${part}`;
+        directories.add(current);
+      }
+    },
   };
 }
 
