@@ -89,6 +89,8 @@ llms.txt                      short project summary for LLMs
 .ade/session.md               session journal: what was planned, built and shipped
 .ade/methodology              v6 or v4
 .ade/gates/                   verification gates, one per ticket (v6)
+.ade/approvals/               approved v6 tickets, one file per ticket (v6)
+.ade/stage                    the stage you confirmed on the board
 _bmad/, _bmad-output/         BMAD v6 config, runtime and tickets
 .claude/skills/               BMAD v6 skills
 .bmad-core/                   BMAD v4, only on v4 projects
@@ -96,6 +98,8 @@ _bmad/, _bmad-output/         BMAD v6 config, runtime and tickets
 docs/prd.md, docs/architecture.md, docs/ux-spec.md, docs/ops.md, docs/stories/
                               written by the agents as the project goes
 ```
+
+`.ade/stage` and `.ade/approvals/` are written only when you click on the board. Commit them with the rest of `.ade/` so the team shares them.
 
 ## Related
 

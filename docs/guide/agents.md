@@ -103,11 +103,13 @@ Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an O
 - **Dispatch** one task, or **Dispatch All** ready tasks. Each runs in its own terminal with `claude`, the task, and a generated `SPEC.md`.
 - The orchestrator uses the Anthropic API, DeepSeek, or a local Ollama model — pick one in *Settings → AI API*. DeepSeek reuses the `DEEPSEEK_API_KEY` in [Secrets]({{ '/guide/integrations/' | relative_url }}#secrets-vault), so it needs no second key.
 
-## BMAD
+## Stage board
 
 [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) is installed as part of [project setup]({{ '/guide/project-setup/' | relative_url }}). A project is on **BMAD v6** by default: the bundled, pinned skills go into `.claude/skills/`, a small `_bmad/` tree holds the config and ADE's runtime, tickets and planning documents land in `_bmad-output/`, and ADE's own verification gates live in `.ade/gates/`, one file per ticket, named by the ticket's ref as the ticket tree prints it (for example `1.6a.yml`). **BMAD v4** is a choice made at setup for a new project, which puts the classic `.bmad-core/` and its `/BMad:tasks:` slash commands for Claude Code in the project instead (v4 gates stay in `docs/qa/gates/`). A project that already has `.bmad-core/` stays on v4 and is never converted. Nothing is downloaded and existing files are never overwritten. BMAD's own ten personas are not installed: eight of them are the same jobs as the roles below, and a project carrying two architects and two QAs carries two definitions of Done.
 
-The BMAD panel shows the method's two phases, **Planning** and **Dev cycle**, as a reminder of where a project is.
+The **stage board** (*View: Toggle stage board*, {% include key.html mac="⌘⇧Y" other="Ctrl+Alt+Shift+Y" %}) is a panel beside your terminals for the project of the active pane. It shows where the project is in BMAD's five stages, which plan documents exist, and every story (v4) or ticket (v6) with its state. A story that says it is done without a passing QA gate shows as **claimed**, and a waiver always shows its reason. It refreshes as agents write files.
+
+From the board you can **Approve** a draft, **Dispatch** an approved story to a developer agent in a new tab, and move the project's stage with **Next** and **Back**. Next appears only once the current stage's documents are on disk. A project that has never had its stage set follows its files until you click **Track stage**.
 
 The personas themselves are roles in the [agent picker](#agent-picker) (filter to **Roles** and you have all nineteen) Analyst, Product Manager, Designer, Architect, Product Owner, Scrum Master, Developer, QA, DevOps, Adversarial Reviewer, Security Engineer, SRE, Release Manager, Engineering Manager, Support Engineer, Solutions Engineer, Brainstorming Architect, Technical Writer and Advisor, each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
 
