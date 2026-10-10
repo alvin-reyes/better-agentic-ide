@@ -211,4 +211,12 @@ EPIC="$ROOT/_bmad-output/initiative-demo/epic-demo"
 run read-store-tickets "$READ_STORE" --project-root "$ROOT" -k tickets
 run read-store-starters "$READ_STORE" --starters --starters-dir "$STARTERS"
 
+# ---- read_store with no --starters-dir: read_store.py defaults to its own
+# ---- parents[1]/config, so this one is captured against a project whose store
+# ---- is jira and whose starter layer must therefore show through. The port is
+# ---- given the same folder as --skill-root; it has no script path of its own.
+seed_tracker
+EPIC="$ROOT/_bmad-output/initiative-demo/epic-demo"
+run read-store-jira-starter "$READ_STORE" --project-root "$ROOT" -k tickets
+
 echo "captured $(ls "$OUT" | grep -c '\.json$') goldens into $OUT"

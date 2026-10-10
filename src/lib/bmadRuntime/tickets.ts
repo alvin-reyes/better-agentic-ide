@@ -10,11 +10,15 @@ import type { Fs } from "./fs";
  * `mark` and `mirror` write all follow it. The goldens under
  * `__tests__/goldens/tickets` are the contract.
  *
- * Two deliberate substitutions, both seams with earlier tasks:
+ * Three deliberate substitutions, all seams with earlier tasks:
  * - config comes from the Task 3 `loadCentralConfig`, not the project's own
  *   `_bmad/scripts/config_utils.py` (so a missing config names itself in
  *   different words);
- * - output goes to `stdout` alone; the Python splits errors onto stderr.
+ * - output goes to `stdout` alone; the Python splits errors onto stderr;
+ * - `read_store.py` finds its store starters at its own `../config`, which a
+ *   bundle cannot know: the port takes `--skill-root` (what the patched call
+ *   sites pass, defaulting to `<skill-root>/config`) or `--starters-dir`, and
+ *   refuses a run that names neither rather than dropping the starter layer.
  * argparse's usage line wraps to the terminal and is not reproduced; its error
  * line is.
  */
@@ -1828,9 +1832,9 @@ async function storeConfigMerged(
   const tickets = project["tickets"];
   const raw: unknown = isRecord(tickets) ? tickets["store"] : null;
   const store: string = typeof raw === "string" && raw ? raw : "repo"; // as tickets.py reads it
-  const starter = joinPath(starters === "" ? "." : starters, `${store}-ticketing.toml`);
+  const starter = joinPath(starters, `${store}-ticketing.toml`);
   let config = project;
-  if (STORE_RE.test(store) && starters !== "" && (await isFile(starter, fs))) {
+  if (STORE_RE.test(store) && (await isFile(starter, fs))) {
     config = mergeShallow(parseToml(await readText(starter, fs)) as Record<string, any>, project);
   }
   if (isRecord(config["tickets"])) config["tickets"]["store"] = store;
@@ -1846,7 +1850,18 @@ function extractKey(data: unknown, dotted: string): unknown {
   return current;
 }
 
-/** The read_store.py CLI, which the runtime dispatches as `read_store`. */
+/** `Path.expanduser` for the shapes a project is likely to write. */
+function expandHome(p: string): string {
+  if (p !== "~" && !p.startsWith("~/")) return p;
+  const env = typeof process !== "undefined" ? process.env : undefined;
+  const home = env?.HOME || env?.USERPROFILE || "";
+  if (!home) return p;
+  return p === "~" ? home : joinPath(home, p.slice(2));
+}
+
+/** The read_store.py CLI, which the runtime dispatches as `read_store`. Its store
+ * starters come from `--starters-dir`, or `<skill-root>/config` (the Python's own
+ * default, spelled out by the patched call sites); with neither flag it refuses. */
 async function readStore(
   argv: string[],
   fs: Fs,
@@ -1885,7 +1900,17 @@ async function readStore(
   if (globals.projectRoot !== undefined && flags["root"] === undefined) flags["root"] = globals.projectRoot;
   if (globals.skillRoot !== undefined && flags["skill"] === undefined) flags["skill"] = globals.skillRoot;
 
-  const starters = (flags["startersDir"] as string) ?? (flags["skill"] ? `${flags["skill"]}/config` : "");
+  // The Python's starters dir is its own `../config`, which a bundle cannot know:
+  // the patched call sites pass `--skill-root`, so that is the default here, and a
+  // run that names neither flag is refused rather than quietly losing the layer.
+  const startersDir = flags["startersDir"] as string | undefined;
+  const skillRoot = flags["skill"] as string | undefined;
+  if (startersDir === undefined && skillRoot === undefined) {
+    throw new UsageError(
+      "one of --skill-root or --starters-dir is required: the store's starters are the skill's config/ folder",
+    );
+  }
+  const starters = expandHome(startersDir ?? `${skillRoot}/config`);
   try {
     if (flags["starters"]) {
       const found: Record<string, string> = {};

@@ -312,4 +312,33 @@ describe("read_store port", () => {
     expect(r.exitCode).toBe(0);
     expect(JSON.parse(r.stdout)).toEqual(await golden("read-store-starters.json"));
   });
+
+  it("defaults the starters dir to the skill's config, like the Python's own default", async () => {
+    // read_store.py reads `<skill>/config`; the port is told where the skill is.
+    // The jira store makes the golden prove the starter layer survived: without
+    // it the answer is `missing: tickets`, not this merged table.
+    const fs = memFs();
+    await seedTrackerStore(fs, "/p", "jira");
+    await seedStarters(fs, "/p/skill");
+    const r = await tickets(["read_store", "--skill-root", "/p/skill", "--project-root", "/p", "-k", "tickets"], fs);
+    expect(r.exitCode).toBe(await goldenExit("read-store-jira-starter"));
+    expect(JSON.parse(r.stdout)).toEqual(await golden("read-store-jira-starter.json"));
+  });
+
+  it("refuses read_store when it cannot know where the starters live", async () => {
+    const fs = memFs();
+    await seedDemoTree(fs);
+    const r = await tickets(["read_store", "--project-root", "/p", "-k", "tickets"], fs);
+    expect(r.exitCode).toBe(2);
+    expect(r.stdout).toContain("--skill-root");
+    expect(r.stdout).toContain("--starters-dir");
+  });
+
+  it("expands ~ in --starters-dir, like Python", async () => {
+    const fs = memFs();
+    const r = await tickets(["read_store", "--starters", "--starters-dir", "~/nowhere"], fs);
+    expect(r.exitCode).toBe(1);
+    expect(r.stdout).toContain(`${process.env.HOME}/nowhere`);
+    expect(r.stdout).not.toContain("~");
+  });
 });
