@@ -7,7 +7,7 @@ import { approveStory, approveTicket } from "../../lib/boardActions";
 import { dispatchAgent } from "../../lib/agentLaunch";
 import { watchTargets, WATCH_EXTENSIONS } from "../../lib/boardWatch";
 import { tauriFs } from "../../lib/tauriFs";
-import { setUpProject, isSetupCandidate } from "../../lib/projectSetup";
+import { setUpProject, isSetupCandidate, bmadRootOf } from "../../lib/projectSetup";
 import { ROLE_ITEMS } from "../../data/pickerItems";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { joinPath } from "../../lib/bmadRuntime/paths";
@@ -48,12 +48,15 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
 
-  // The active pane's project, by the same walk-up agent launches use.
+  // The active pane's project, by the same walk-up agent launches use: the
+  // nearest BMAD project from cwd up to the project root, else the project
+  // root itself (which is what the setup card would set up).
   useEffect(() => {
     let live = true;
     if (!cwd) { setRoot(null); return; }
-    invoke<string>("project_root", { path: cwd })
-      .catch(() => cwd)
+    bmadRootOf(cwd)
+      .catch(() => null)
+      .then(async (found) => found?.root ?? (await invoke<string>("project_root", { path: cwd }).catch(() => cwd)))
       .then((r) => { if (live) setRoot(isSetupCandidate(r) ? r : null); });
     return () => { live = false; };
   }, [cwd]);
@@ -109,6 +112,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       return (
         <Empty>
           <div>This project isn't set up for BMAD</div>
+          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{root}</div>
           <button
             type="button"
             onClick={async () => {

@@ -148,17 +148,17 @@ function parentDir(dir: string): string | null {
 }
 
 /**
- * The methodology an agent launched in folder `cwd` should be composed for.
+ * The BMAD project folder `cwd` is in, and what it is on.
  *
  * A terminal is often cd'd below the project root (`myproject/src`), and the
  * marker and `.bmad-core/` live at the root, so the folders from `cwd` up to its
  * project root (the nearest `.git` ancestor, as the rest of the app resolves
  * it) are asked in turn and the nearest one that says what it is on wins. A
  * BMAD project nested in a bigger repository is found before the repository.
- * v6 when none says, or there is no folder, or a check fails.
+ * Null when none says, or there is no folder.
  */
-export async function methodologyOf(cwd: string | null | undefined): Promise<Methodology> {
-  if (!cwd) return "v6";
+export async function bmadRootOf(cwd: string | null | undefined): Promise<{ root: string; methodology: Methodology } | null> {
+  if (!cwd) return null;
   const root = await invoke<string>("project_root", { path: cwd }).catch(() => cwd);
   const norm = (p: string) => p.replace(/[\\/]+$/, "");
   const stop = norm(root);
@@ -167,11 +167,20 @@ export async function methodologyOf(cwd: string | null | undefined): Promise<Met
   // filesystem root.
   for (let i = 0; dir && i < 64; i++) {
     const found = await detectOnDisk(dir).catch(() => null);
-    if (found) return found;
+    if (found) return { root: dir, methodology: found };
     if (dir === stop || !dir.startsWith(stop)) break;
     dir = parentDir(dir);
   }
-  return "v6";
+  return null;
+}
+
+/**
+ * The methodology an agent launched in folder `cwd` should be composed for:
+ * that of the BMAD project it is in (`bmadRootOf`), v6 when there is none or
+ * a check fails.
+ */
+export async function methodologyOf(cwd: string | null | undefined): Promise<Methodology> {
+  return (await bmadRootOf(cwd))?.methodology ?? "v6";
 }
 
 export function isComplete(s: SetupStatus): boolean {

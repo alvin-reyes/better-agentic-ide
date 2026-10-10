@@ -37,7 +37,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { agentCatalog } from "../projectMethodology";
-import { addAgent, addStackAgents, detectOnDisk, methodologyOf, setUpProject } from "../projectSetup";
+import { addAgent, addStackAgents, bmadRootOf, detectOnDisk, methodologyOf, setUpProject } from "../projectSetup";
 
 const lastApply = () => tauri.applies[tauri.applies.length - 1];
 
@@ -134,5 +134,33 @@ describe("methodology in project setup", () => {
     tauri.byDir = { "C:\\p": "v4", "C:\\p\\src": null };
     tauri.roots = { "C:\\p\\src": "C:\\p" };
     expect(await methodologyOf("C:\\p\\src")).toBe("v4");
+  });
+});
+
+describe("bmadRootOf", () => {
+  it("finds a BMAD project nested below the repository root", async () => {
+    tauri.byDir = { "/mono": null, "/mono/app": "v4", "/mono/app/src": null };
+    tauri.roots = { "/mono/app/src": "/mono" };
+    expect(await bmadRootOf("/mono/app/src")).toEqual({ root: "/mono/app", methodology: "v4" });
+  });
+
+  it("walks up to the project root and no further", async () => {
+    tauri.byDir = { "/p": "v6", "/p/src": null };
+    // project_root resolves /p/src to itself: /p is above it and not asked.
+    expect(await bmadRootOf("/p/src")).toBeNull();
+    tauri.roots = { "/p/src": "/p" };
+    expect(await bmadRootOf("/p/src")).toEqual({ root: "/p", methodology: "v6" });
+  });
+
+  it("is the cwd itself when that is the project", async () => {
+    tauri.byDir = { "/p": "v6" };
+    expect(await bmadRootOf("/p/")).toEqual({ root: "/p", methodology: "v6" });
+  });
+
+  it("is null when nothing from cwd to the project root is set up, or there is no cwd", async () => {
+    tauri.byDir = { "/p": null, "/p/src": null };
+    tauri.roots = { "/p/src": "/p" };
+    expect(await bmadRootOf("/p/src")).toBeNull();
+    expect(await bmadRootOf(null)).toBeNull();
   });
 });
