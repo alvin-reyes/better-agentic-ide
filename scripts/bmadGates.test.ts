@@ -54,6 +54,20 @@ describe("parseGate", () => {
     expect(parseGate(".ade/gates/1.6.yml", "gate: PASS\n").storyId).toBe("1.6");
   });
 
+  it("reads every v4 filename the v4 parser always accepted", () => {
+    // v4 gates were read up to the digits; a slug joined by _ or a space, or
+    // letters straight after the number, must still name the story.
+    expect(parseGate("docs/qa/gates/2.1_slug.yml", "gate: PASS\n").storyId).toBe("2.1");
+    expect(parseGate("docs/qa/gates/2.1 slug.yml", "gate: PASS\n").storyId).toBe("2.1");
+    expect(parseGate("docs/qa/gates/2.1slug.yml", "gate: PASS\n").storyId).toBe("2.1");
+  });
+
+  it("names a v6 gate by its whole ref, letters and all", () => {
+    // v6 ids are any letters and digits, so only the directory says which rule applies.
+    expect(parseGate(".ade/gates/1.abc.yml", "gate: PASS\n").storyId).toBe("1.abc");
+    expect(parseGate("/proj/.ade/gates/2.3b.yml", "gate: PASS\n").storyId).toBe("2.3b");
+  });
+
   it("still reads v4's <epic>.<story>-slug and bare <epic>.<story> filenames", () => {
     expect(parseGate("docs/qa/gates/2.1-slug.yml", "gate: PASS\n").storyId).toBe("2.1");
     expect(parseGate("docs/qa/gates/2.1.yml", "gate: PASS\n").storyId).toBe("2.1");

@@ -62,12 +62,19 @@ function topLevel(yaml: string, key: string): string | null {
  *
  * A v6 ticket id may carry letters (`6a`, a ticket split off `6`). Stopping at
  * the digits read `1.6a.yml` as "1.6", crediting 1.6a's verdict to 1.6 — a
- * done 1.6 then rendered verified on someone else's evidence. The id runs to
- * the first `-` or `.` (the slug or the extension), or the end.
+ * done 1.6 then rendered verified on someone else's evidence.
+ *
+ * The name alone cannot tell the two apart: a v6 id is any letters and digits,
+ * so `2.1slug` could be a v4 story with its slug or a v6 ref. The directory
+ * can. ADE's `.ade/gates/` holds only v6 verdicts, named by ref (a ref never
+ * contains `-`, so a slug after one is dropped); anywhere else is v4, read up
+ * to the digits exactly as v4 always was.
  */
 function idFromFilename(file: string): string {
   const base = file.slice(file.lastIndexOf("/") + 1);
-  return /^(\d+\.\d+[A-Za-z]*)(?=[-.]|$)/.exec(base)?.[1] ?? base.replace(/\.ya?ml$/, "");
+  const stem = base.replace(/\.ya?ml$/, "");
+  if (/(^|\/)\.ade\/gates\/[^/]+$/.test(file)) return stem.split("-")[0];
+  return /^(\d+\.\d+)/.exec(base)?.[1] ?? stem;
 }
 
 /**
