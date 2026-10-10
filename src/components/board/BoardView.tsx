@@ -157,8 +157,10 @@ export function Row({ v, actions, methodology = "v4", dispatched, dispatchUnavai
   const alwaysNote = (label === "waived" || label === "claimed" || v.gate?.error) && v.note;
   // Nothing below approved is dispatched: `dispatchable` is the engines' rule.
   const canDispatch = v.dispatchable && label !== "done ✓" && label !== "waived";
-  // v6 has its own status words (ready-for-dev maps to draft); show the plan's word too.
-  const ownWord = methodology === "v6" && v.story.rawStatus && v.story.rawStatus !== label ? v.story.rawStatus : null;
+  // v6 has its own status words (ready-for-dev maps to draft); show the plan's
+  // word too, except on a passed or waived row, where the gate says it all.
+  const gated = label === "done ✓" || label === "waived";
+  const ownWord = methodology === "v6" && !gated && v.story.rawStatus && v.story.rawStatus !== label ? v.story.rawStatus : null;
   return (
     <div data-row={v.story.id} style={{ padding: "4px 0" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
