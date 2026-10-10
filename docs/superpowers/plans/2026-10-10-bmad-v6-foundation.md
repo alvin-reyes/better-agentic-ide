@@ -400,14 +400,14 @@ Run once (dev machine has uv; output is committed so CI never needs it):
 
 ```bash
 cd /tmp/bmad-v6 && uv run skills/bmad/scripts/setup.py --project-root /tmp/golden-proj --skill /tmp/bmad-v6/skills/bmad >/dev/null
-mkdir -p /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config
+mkdir -p src/lib/bmadRuntime/__tests__/goldens/config
 uv run /tmp/golden-proj/_bmad/scripts/resolve_config.py --project-root /tmp/golden-proj > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/central.json
+  src/lib/bmadRuntime/__tests__/goldens/config/central.json
 printf '[core]\nactive_initiative = "initiative-checkout"\n' > /tmp/golden-proj/_bmad/custom/config.user.toml
 uv run /tmp/golden-proj/_bmad/scripts/resolve_config.py --project-root /tmp/golden-proj > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/central-with-user.json
-uv run /tmp/golden-proj/_bmad/scripts/resolve_customization.py --project-root /tmp/golden-proj --skill bmad-build > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/config/customization.json
+  src/lib/bmadRuntime/__tests__/goldens/config/central-with-user.json
+uv run /tmp/golden-proj/_bmad/scripts/resolve_customization.py --project-root /tmp/golden-proj --skill /tmp/bmad-v6/skills/bmad-build > \
+  src/lib/bmadRuntime/__tests__/goldens/config/customization.json
 ```
 
 Expected: three JSON files exist; `central-with-user.json` contains `"active_initiative": "initiative-checkout"`.
@@ -467,16 +467,59 @@ Expected: FAIL — `config.ts` not found.
 import { parse as parseToml } from "smol-toml";
 import type { Fs } from "./fs";
 
+type Toml = Record<string, unknown>;
+
+const KEYED_MERGE_FIELDS = ["code", "id"] as const;
+
+/**
+ * The field that identifies every item of both arrays, or null when the arrays
+ * are plain lists. Like the Python, `code` wins over `id`, a field must be
+ * present on *every* item to identify one, and an identifier that is not a
+ * non-empty string is refused rather than coerced.
+ */
+function keyedMergeField(items: unknown[]): "code" | "id" | null {
+  if (
+    items.length === 0 ||
+    !items.every((item) => item !== null && typeof item === "object" && !Array.isArray(item))
+  ) {
+    return null;
+  }
+  const records = items as Record<string, unknown>[];
+  for (const field of KEYED_MERGE_FIELDS) {
+    if (!records.every((item) => field in item)) continue;
+    for (const item of records) {
+      const value = item[field];
+      if (typeof value !== "string") {
+        throw new Error(`keyed array identifier \`${field}\` must be a string, got ${typeof value}`);
+      }
+      if (!value) throw new Error(`keyed array identifier \`${field}\` must not be empty`);
+    }
+    return field;
+  }
+  return null;
+}
+
 /** Merge b into a: keys replace; arrays keyed-merge by code/id, else append. */
 export function deepMerge(a: any, b: any): any {
   if (Array.isArray(a) && Array.isArray(b)) {
-    const keyed = (x: any[]) => x.every((i) => i && typeof i === "object" && (i.code !== undefined || i.id !== undefined));
-    if (keyed(a) && keyed(b)) {
-      const byKey = new Map<string, any>();
-      for (const item of [...a, ...b]) byKey.set(String(item.code ?? item.id), item);
-      return [...byKey.values()];
+    const field = keyedMergeField([...a, ...b]);
+    if (field === null) return [...a, ...b];
+    // A matching identifier replaces its item where it stands; a new one appends.
+    const merged = a.map((item) => ({ ...item }));
+    const indexByKey = new Map<string, number>();
+    a.forEach((item, index) => indexByKey.set(item[field], index));
+    for (const item of b) {
+      const copy = { ...item };
+      const key: string = copy[field];
+      const at = indexByKey.get(key);
+      if (at === undefined) {
+        indexByKey.set(key, merged.length);
+        merged.push(copy);
+      } else {
+        merged[at] = copy;
+      }
     }
-    return [...a, ...b];
+    return merged;
   }
   if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
     const out = { ...a };
@@ -486,12 +529,13 @@ export function deepMerge(a: any, b: any): any {
   return b;
 }
 
-async function readLayer(fs: Fs, p: string): Promise<Record<string, unknown> | null> {
+async function readLayer(fs: Fs, p: string): Promise<Toml | null> {
   if (!(await fs.exists(p))) return null;
-  return parseToml(await fs.readText(p)) as Record<string, unknown>;
+  return parseToml(await fs.readText(p)) as Toml;
 }
 
-export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Record<string, unknown>> {
+/** Merge `_bmad/config.toml` ← `_bmad/custom/config.toml` ← `_bmad/custom/config.user.toml`. */
+export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Toml> {
   const base = await readLayer(fs, `${projectRoot}/_bmad/config.toml`);
   if (!base) throw new Error(`no _bmad/config.toml under ${projectRoot}`);
   let out = deepMerge({}, base);
@@ -502,15 +546,23 @@ export async function loadCentralConfig(projectRoot: string, fs: Fs): Promise<Re
   return out;
 }
 
-export async function resolveCustomization(projectRoot: string, skillRoot: string, skill: string, fs: Fs): Promise<Record<string, unknown>> {
+/** Merge `{skillRoot}/customize.toml` ← `_bmad/custom/<skill>.toml` ← `<skill>.user.toml`. */
+export async function resolveCustomization(
+  projectRoot: string,
+  skillRoot: string,
+  skill: string,
+  fs: Fs,
+): Promise<Toml> {
   const base = await readLayer(fs, `${skillRoot}/customize.toml`);
-  let out = deepMerge({}, base ?? {});
+  if (!base) throw new Error(`no customize.toml at the root of skill ${skill} (${skillRoot})`);
+  let out = deepMerge({}, base);
   const skillLayer = await readLayer(fs, `${projectRoot}/_bmad/custom/${skill}.toml`);
   if (skillLayer) out = deepMerge(out, skillLayer);
   const userLayer = await readLayer(fs, `${projectRoot}/_bmad/custom/${skill}.user.toml`);
   if (userLayer) out = deepMerge(out, userLayer);
   return out;
 }
+
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
