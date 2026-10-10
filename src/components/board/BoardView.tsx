@@ -103,12 +103,19 @@ export function Row({ v, children }: { v: StoryView; children?: React.ReactNode 
   const label = rowLabel(v);
   // A waiver's and a claim's reason are always visible: a waiver should be
   // uncomfortable to look at, and a claim needs saying why it is not believed.
-  const alwaysNote = (label === "waived" || label === "claimed") && v.note;
+  const alwaysNote = (label === "waived" || label === "claimed" || v.gate?.error) && v.note;
   return (
     <div data-row={v.story.id} style={{ padding: "4px 0" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
         <span style={{ ...muted, fontSize: 11, minWidth: 32 }}>{v.story.id}</span>
-        <span onClick={() => setOpen((o) => !o)} style={{ flex: 1, cursor: "pointer" }}>{v.story.title}</span>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          style={{ flex: 1, background: "none", border: 0, padding: 0, color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
+        >
+          {v.story.title}
+        </button>
         <span data-state={label} style={{ fontSize: 11, color: label === "claimed" ? "var(--warning, #d29922)" : undefined }}>{label}</span>
         {children}
       </div>
@@ -153,7 +160,7 @@ function GateProblems({ board }: { board: BoardState }) {
       {board.problems?.map((p) => <div key={p}>{p}</div>)}
       {unmatched.map((g) => <div key={g.file}>Gate for {g.storyId} matches no story or ticket: {g.file}</div>)}
       {unreadable.map((g) => <div key={g.file}>{g.file}: {g.error}</div>)}
-      {board.supersededGates.map((g) => <div key={g.file} style={muted}>Superseded: {g.file}</div>)}
+      {board.supersededGates.map((g) => <div key={g.file} style={muted}>Superseded: {g.file}{g.error ? `: ${g.error}` : ""}</div>)}
     </div>
   );
 }

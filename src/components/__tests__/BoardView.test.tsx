@@ -67,7 +67,11 @@ describe("BoardView", () => {
 
   it("expands a row to its gate", () => {
     renderBoard();
-    fireEvent.click(screen.getByText("Title 1.2"));
+    const title = screen.getByText("Title 1.2");
+    expect(title.tagName).toBe("BUTTON");
+    expect(title.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(title);
+    expect(title.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("docs/qa/gates/1.2-x.yml")).toBeTruthy();
   });
 
@@ -94,5 +98,31 @@ describe("BoardView", () => {
     renderBoard(v4Board(), { error: "tickets.toml: bad" });
     expect(screen.getByRole("alert").textContent).toContain("tickets.toml: bad");
     expect(screen.getByText("Title 1.1")).toBeTruthy();
+  });
+
+  it("shows an unreadable gate's error without expanding, on a story that is not Done", () => {
+    const board = buildBoard({
+      config: null,
+      artifactExists: () => false,
+      stories: [story("1.1", "Draft")],
+      gates: [{ file: "docs/qa/gates/1.1-x.yml", yaml: 'story: "1.1"\nnope: 1\n' }],
+    });
+    renderBoard(board);
+    expect(screen.getByText(/gate unreadable: no gate: key/)).toBeTruthy();
+  });
+
+  it("shows an unreadable superseded gate's error", () => {
+    const board = buildBoard({
+      config: null,
+      artifactExists: () => false,
+      stories: [story("1.2", "Done")],
+      gates: [
+        gate("1.2", "PASS"),
+        { file: "docs/qa/gates/1.2-old.yml", yaml: 'story: "1.2"\nupdated: "2026-01-01"\n' },
+      ],
+    });
+    expect(board.supersededGates.map((g) => g.file)).toEqual(["docs/qa/gates/1.2-old.yml"]);
+    renderBoard(board);
+    expect(screen.getByText(/Superseded: docs\/qa\/gates\/1\.2-old\.yml: no gate: key/)).toBeTruthy();
   });
 });
