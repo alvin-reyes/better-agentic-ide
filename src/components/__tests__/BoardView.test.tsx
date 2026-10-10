@@ -94,6 +94,13 @@ describe("BoardView", () => {
     expect(screen.getByText(/No active initiative/)).toBeTruthy();
   });
 
+  it("lists a v4 board's problems, such as an unreadable story, under Needs attention", () => {
+    const board: BoardState = { ...v4Board(), problems: ["docs/stories/1.6.x.md: could not be read: EACCES"] };
+    renderBoard(board);
+    expect(screen.getByText("Needs attention")).toBeTruthy();
+    expect(screen.getByText("docs/stories/1.6.x.md: could not be read: EACCES")).toBeTruthy();
+  });
+
   it("shows a rebuild error above the last good board", () => {
     renderBoard(v4Board(), { error: "tickets.toml: bad" });
     expect(screen.getByRole("alert").textContent).toContain("tickets.toml: bad");
