@@ -91,6 +91,17 @@ describe("composeRoleMarkdown per methodology", () => {
     expect(out).toContain(security.focus);
   });
 
+  it("filters CRLF role files too", () => {
+    const crlf = (DUAL + "\n## Boundaries\n- keep\n").replace(/\n/g, "\r\n");
+    for (const [m, other] of [["v4", "v6"], ["v6", "v4"]] as const) {
+      const out = composeRoleMarkdown(dual(crlf), undefined, m);
+      expect(out, m).toContain(`${m} stuff`);
+      expect(out, m).not.toContain(`${other} stuff`);
+      expect(out, m).not.toContain(`## BMAD tasks (${other})`);
+      expect(out, m).toContain("## Boundaries\r\n- keep");
+    }
+  });
+
   it("passes roles without BMAD task sections through unchanged", () => {
     const role = dual("# SRE\nplain role\n");
     expect(composeRoleMarkdown(role, undefined, "v6")).toBe(role.body);
@@ -122,5 +133,10 @@ describe("roleFileName", () => {
 
   it("names a role-and-domain file", () => {
     expect(roleFileName("architect", "security")).toBe("architect-security.md");
+  });
+
+  it("adds the methodology when given", () => {
+    expect(roleFileName("qa", undefined, "v4")).toBe("qa.v4.md");
+    expect(roleFileName("qa", "security", "v6")).toBe("qa-security.v6.md");
   });
 });

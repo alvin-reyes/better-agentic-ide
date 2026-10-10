@@ -169,7 +169,11 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       setLaunchError(`Could not create the role directory: ${err}`);
       return null;
     }
-    const rolePath = rolePathFor(spec, roleDir);
+    // Only the BMAD tasks for the methodology of the project the agent starts
+    // in (v6 when it is on neither or unknown), and a role file keyed by it so
+    // a launch in a project on the other methodology never shares it.
+    const methodology = await methodologyOf(cwd);
+    const rolePath = rolePathFor(spec, roleDir, methodology);
 
     // Build the command before writing anything. A provider without a verified
     // role-delivery mechanism can never launch, so writing its role file first
@@ -189,9 +193,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     try {
       // Ollama takes a system prompt only through a Modelfile, so the file we
       // write is one; every other provider reads the role markdown directly.
-      // Only the BMAD tasks for the methodology of the project the agent
-      // starts in; v6 when the folder is on neither or unknown.
-      const roleText = composeRoleMarkdown(role, domain, await methodologyOf(cwd));
+      const roleText = composeRoleMarkdown(role, domain, methodology);
       const content = spec.provider === "ollama"
         ? toModelfile(roleText, settings.ollamaModel || "deepseek-r1")
         : roleText;

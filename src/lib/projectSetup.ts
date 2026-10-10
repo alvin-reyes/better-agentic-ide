@@ -140,14 +140,38 @@ export async function detectOnDisk(root: string): Promise<Methodology | null> {
   return (await setupStatus(root)).methodology ?? null;
 }
 
+/** `dir`'s parent, or null at a filesystem root. Handles `/` and `\\`. */
+function parentDir(dir: string): string | null {
+  const trimmed = dir.replace(/[\\/]+$/, "");
+  const cut = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return cut > 0 ? trimmed.slice(0, cut) : null;
+}
+
 /**
- * The methodology an agent launched in `root` should be composed for: what the
- * project is on, else the v6 default (no project, neither on disk, or the
- * status check failed).
+ * The methodology an agent launched in folder `cwd` should be composed for.
+ *
+ * A terminal is often cd'd below the project root (`myproject/src`), and the
+ * marker and `.bmad-core/` live at the root, so the folders from `cwd` up to its
+ * project root (the nearest `.git` ancestor, as the rest of the app resolves
+ * it) are asked in turn and the nearest one that says what it is on wins. A
+ * BMAD project nested in a bigger repository is found before the repository.
+ * v6 when none says, or there is no folder, or a check fails.
  */
-export async function methodologyOf(root: string | null | undefined): Promise<Methodology> {
-  if (!root) return "v6";
-  return (await detectOnDisk(root).catch(() => null)) ?? "v6";
+export async function methodologyOf(cwd: string | null | undefined): Promise<Methodology> {
+  if (!cwd) return "v6";
+  const root = await invoke<string>("project_root", { path: cwd }).catch(() => cwd);
+  const norm = (p: string) => p.replace(/[\\/]+$/, "");
+  const stop = norm(root);
+  let dir: string | null = norm(cwd);
+  // Bounded: a cwd that is somehow not under its root still ends at the
+  // filesystem root.
+  for (let i = 0; dir && i < 64; i++) {
+    const found = await detectOnDisk(dir).catch(() => null);
+    if (found) return found;
+    if (dir === stop || !dir.startsWith(stop)) break;
+    dir = parentDir(dir);
+  }
+  return "v6";
 }
 
 export function isComplete(s: SetupStatus): boolean {

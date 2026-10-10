@@ -7,11 +7,17 @@ const tauri = vi.hoisted(() => ({
   applies: [] as Record<string, unknown>[],
   /** What `project_setup_status` reports the project is already on. */
   methodology: null as "v4" | "v6" | null,
+  /** Per-folder override of `methodology`, for folders inside a project. */
+  byDir: {} as Record<string, "v4" | "v6" | null>,
+  /** What `project_root` resolves a folder to (default: the folder itself). */
+  roots: {} as Record<string, string>,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args: Record<string, unknown> = {}) => {
     switch (command) {
+      case "project_root":
+        return tauri.roots[args.path as string] ?? args.path;
       case "project_setup_status":
         return {
           isGit: true,
@@ -19,7 +25,7 @@ vi.mock("@tauri-apps/api/core", () => ({
           needsImport: false,
           bmadInstalled: false,
           stacks: [],
-          methodology: tauri.methodology,
+          methodology: (args.root as string) in tauri.byDir ? tauri.byDir[args.root as string] : tauri.methodology,
         };
       case "project_setup_apply":
         tauri.applies.push(args);
@@ -38,6 +44,8 @@ const lastApply = () => tauri.applies[tauri.applies.length - 1];
 beforeEach(() => {
   tauri.applies.length = 0;
   tauri.methodology = null;
+  tauri.byDir = {};
+  tauri.roots = {};
 });
 
 describe("methodology in project setup", () => {
@@ -105,5 +113,26 @@ describe("methodology in project setup", () => {
     expect(await methodologyOf("/tmp/proj")).toBe("v6");
     tauri.methodology = "v4";
     expect(await methodologyOf("/tmp/proj")).toBe("v4");
+  });
+
+  it("finds the methodology of a folder's project from inside a subfolder", async () => {
+    // A v4 project with its marker at the root; the terminal is cd'd into src.
+    tauri.byDir = { "/p": "v4", "/p/src": null, "/p/src/deep": null };
+    tauri.roots = { "/p/src/deep": "/p", "/p/src": "/p" };
+    expect(await methodologyOf("/p/src/deep")).toBe("v4");
+    expect(await methodologyOf("/p/src")).toBe("v4");
+  });
+
+  it("stops at the nearest folder that says what it is on", async () => {
+    // A BMAD project nested inside a larger git repository.
+    tauri.byDir = { "/mono": "v6", "/mono/app": "v4", "/mono/app/src": null };
+    tauri.roots = { "/mono/app/src": "/mono" };
+    expect(await methodologyOf("/mono/app/src")).toBe("v4");
+  });
+
+  it("handles Windows paths", async () => {
+    tauri.byDir = { "C:\\p": "v4", "C:\\p\\src": null };
+    tauri.roots = { "C:\\p\\src": "C:\\p" };
+    expect(await methodologyOf("C:\\p\\src")).toBe("v4");
   });
 });

@@ -50,8 +50,14 @@ export function filterBmadSection(md: string, methodology: BmadMethodology): str
 }
 
 
-export function roleFileName(roleId: string, domainId?: string): string {
-  return domainId ? `${roleId}-${domainId}.md` : `${roleId}.md`;
+/**
+ * The role file's name. With a methodology it is keyed by it too: the role
+ * directory is shared by every project, and a v4 and a v6 launch of the same
+ * role must not read each other's file.
+ */
+export function roleFileName(roleId: string, domainId?: string, methodology?: BmadMethodology): string {
+  const base = domainId ? `${roleId}-${domainId}` : roleId;
+  return methodology ? `${base}.${methodology}.md` : `${base}.md`;
 }
 
 /**

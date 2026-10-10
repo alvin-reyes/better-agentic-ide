@@ -205,10 +205,10 @@ describe("OrchestratorTab dispatch command", () => {
     // And no leading space before "Read SPEC.md".
     expect(tauri.ptyWrites.length).toBe(1);
     expect(tauri.ptyWrites[0].text).toBe(
-      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.md' " +
+      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md' " +
         "-p 'Read SPEC.md for the full project specification and context. Your task: Wire up OAuth'\r"
     );
-    expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/architect-security.md");
+    expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/architect-security.v6.md");
   });
 
   it("dispatches into the tab it created, not whichever tab the user focused", async () => {

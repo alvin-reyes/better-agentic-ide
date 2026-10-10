@@ -283,7 +283,11 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     } catch (err) {
       return abortDispatch(`Could not create the role directory for "${task.title}": ${err}`);
     }
-    const rolePath = rolePathFor(spec, roleDir);
+    // Only the BMAD tasks for the project's own methodology (v6 when the
+    // project is on neither, or there is no project directory), in a role file
+    // keyed by it.
+    const methodology = await methodologyOf(projectDir);
+    const rolePath = rolePathFor(spec, roleDir, methodology);
 
     const launch = buildLaunchCommand(spec.provider, rolePath);
     if (launch.kind === "unsupported") {
@@ -303,9 +307,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     // user-authored task description still travels as a shell argument, and
     // it is quoted with the same shellQuote every other provider argument
     // already goes through — not a second, ad hoc escaper.
-    // Only the BMAD tasks for the project's own methodology (v6 when the
-    // project is on neither, or there is no project directory).
-    const markdown = composeRoleMarkdown(role, domain, await methodologyOf(projectDir));
+    const markdown = composeRoleMarkdown(role, domain, methodology);
     try {
       await invoke("write_text_file", { path: rolePath, content: markdown });
     } catch (err) {
