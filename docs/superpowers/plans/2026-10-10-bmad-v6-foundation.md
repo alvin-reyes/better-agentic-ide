@@ -960,7 +960,7 @@ git commit -m "feat(bmad-v6): port the skill-root helper scripts"
 
 **Interfaces:**
 - Consumes: `tickets`, `loadCentralConfig`, `resolveCustomization`, `renderSkill`, `memlog`, `roster`, `knowledge`, `validateManifests` (Task 5b), `realFs`.
-- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog|roster|knowledge|validate_manifests`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v`).
+- Produces: `dist-runtime/ade-runtime.mjs` — a single ESM file; CLI contract: `node ade-runtime.mjs <script-name> <script args…>` where script-name ∈ `resolve_config|resolve_customization|tickets|read_store|render_skill|memlog|roster|knowledge|validate_manifests`, arguments identical to the Python scripts' (including `--project-root`, `--key`, `--skill`, `--set k=v` — the two-token argparse form, split at the first `=` per the Python's partition). `render_skill` exits 1 on a `HALT:` refusal, matching the Python's exit code. Until Task 5b lands, the roster/knowledge/validate_manifests names dispatch through a placeholder `helpers.ts` and answer "not ported into this runtime build yet" with exit 1 — never the unknown-script exit 2; Task 5b re-exports the trio from helpers.ts so the CLI needs no changes.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1086,14 +1086,27 @@ import { defineConfig } from "vite";
 // Single dependency-free ESM bundle scaffolded into v6 projects as
 // _bmad/ade-runtime.mjs. Node 18+ target; everything bundled inline.
 export default defineConfig({
+  // The frontend's public assets have no place in the runtime bundle's output.
+  publicDir: false,
   build: {
     lib: { entry: "src/lib/bmadRuntime/cli.ts", formats: ["es"], fileName: "ade-runtime" },
     outDir: "dist-runtime",
     target: "node18",
     minify: false,
-    rollupOptions: { external: [] },
+    rollupOptions: {
+      // Node built-ins are the runtime's, not dependencies: leaving them as
+      // imports keeps them out of the bundle, where a client-environment lib
+      // build would otherwise stub them "for browser compatibility" and leave
+      // realFs reading nothing. Every npm package (smol-toml, @noble/hashes)
+      // is bundled inline.
+      external: (id) => id.startsWith("node:"),
+      // One file: the late ports cli.ts imports dynamically are inlined rather
+      // than emitted as sibling chunks that nothing copies to the project.
+      output: { inlineDynamicImports: true },
+    },
   },
 });
+
 ```
 
 In `package.json`: `"build:runtime": "vite build --config vite.runtime.config.ts"`, and change `"build": "tsc && vite build && npm run build:runtime"`.
