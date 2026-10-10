@@ -594,17 +594,19 @@ git commit -m "feat(bmad-v6): port layered TOML config resolution"
 
 ```bash
 cd /tmp/golden-proj
-mkdir -p /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets
+mkdir -p src/lib/bmadRuntime/__tests__/goldens/tickets
 uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj next > G.json 2>&1 || true
-cp G.json /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/next-empty.json
+cp G.json src/lib/bmadRuntime/__tests__/goldens/tickets/next-empty.json
 # Seed one initiative + one epic + one story via the real skill, then capture:
 uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj status > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/status-seeded.json
+  src/lib/bmadRuntime/__tests__/goldens/tickets/status-seeded.json
 uv run /tmp/bmad-v6/skills/bmad-ticket/scripts/tickets.py --project-root /tmp/golden-proj mark 1 done > \
-  /Users/alvin-reyes/Project/better-agentic-ide/src/lib/bmadRuntime/__tests__/goldens/tickets/mark-done.json
+  src/lib/bmadRuntime/__tests__/goldens/tickets/mark-done.json
 ```
 
 (Seed by creating `_bmad-output/initiative-demo/tickets.toml` with one `[[epic]]` and `epic-demo/tickets.toml` with one `[[entry]]`, plus `story-demo.md` and `story-demo-plan.md` per the vendored `bmad-ticket/assets` templates. If a command refuses without more setup, capture the refusal JSON — it is a golden too.)
+
+**Capture script rule (controller ruling, applies from this task on):** every golden capture must ALSO write the exact commands it ran — including the seed steps — into `src/lib/bmadRuntime/__tests__/goldens/<name>/capture.sh` and commit it beside the goldens, so a re-capture is reproducible without archaeology. The golden files alone never record their own inputs.
 
 - [ ] **Step 2: Write the failing test**
 
