@@ -6,6 +6,9 @@ use tauri::Manager;
 pub struct ScaffoldReport {
     pub created: Vec<String>,
     pub skipped: Vec<String>,
+    /// Folders the install created, outermost first.
+    #[serde(skip)]
+    pub created_dirs: Vec<std::path::PathBuf>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -14,27 +17,27 @@ pub struct BmadStatus {
     pub version: Option<String>,
 }
 
-pub fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) {
+/// Copy a file or a tree, leaving what exists alone. An error stops the copy:
+/// a setup that half-succeeds silently is worse than one that says why it failed.
+pub fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), String> {
     if src.is_dir() {
-        let _ = std::fs::create_dir_all(dst);
-        if let Ok(entries) = std::fs::read_dir(src) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                copy_tree(&entry.path(), &dst.join(&name), report);
-            }
+        crate::projectsetup::mkdirs(dst, &mut report.created_dirs)?;
+        for entry in std::fs::read_dir(src).map_err(|e| format!("{}: {e}", src.display()))? {
+            let entry = entry.map_err(|e| format!("{}: {e}", src.display()))?;
+            copy_tree(&entry.path(), &dst.join(entry.file_name()), report)?;
         }
     } else if src.is_file() {
         if dst.exists() {
             report.skipped.push(dst.to_string_lossy().to_string());
         } else {
             if let Some(parent) = dst.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                crate::projectsetup::mkdirs(parent, &mut report.created_dirs)?;
             }
-            if std::fs::copy(src, dst).is_ok() {
-                report.created.push(dst.to_string_lossy().to_string());
-            }
+            std::fs::copy(src, dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+            report.created.push(dst.to_string_lossy().to_string());
         }
     }
+    Ok(())
 }
 
 /// The bundled BMAD resources.
@@ -46,19 +49,25 @@ pub fn resource_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Strin
 
 /// Copy BMAD into a project: .bmad-core/ and the /BMad Claude Code commands.
 /// Existing files are left alone.
-pub fn install(res_root: &Path, project: &Path, report: &mut ScaffoldReport) {
-    copy_tree(&res_root.join("bmad-core"), &project.join(".bmad-core"), report);
+pub fn install(res_root: &Path, project: &Path, report: &mut ScaffoldReport) -> Result<(), String> {
+    let core = res_root.join("bmad-core");
+    if !core.is_dir() {
+        return Err(format!("bmad v4 resources not found at {}", core.display()));
+    }
+    copy_tree(&core, &project.join(".bmad-core"), report)?;
     let cmd_src = res_root.join("claude-commands").join("BMad");
     if cmd_src.is_dir() {
-        copy_tree(&cmd_src, &project.join(".claude").join("commands").join("BMad"), report);
+        copy_tree(&cmd_src, &project.join(".claude").join("commands").join("BMad"), report)?;
     }
     // VERSION marker for bmad_status.
     if let Ok(v) = std::fs::read_to_string(res_root.join("VERSION")) {
         let marker = project.join(".bmad-core").join("VERSION");
-        if !marker.exists() && std::fs::write(&marker, v).is_ok() {
+        if !marker.exists() {
+            std::fs::write(&marker, v).map_err(|e| format!("{}: {e}", marker.display()))?;
             report.created.push(marker.to_string_lossy().to_string());
         }
     }
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -68,7 +77,7 @@ pub fn scaffold_bmad(app: tauri::AppHandle, path: String) -> Result<ScaffoldRepo
         return Err(format!("Not a directory: {}", path));
     }
     let mut report = ScaffoldReport::default();
-    install(&resource_root(&app)?, project, &mut report);
+    install(&resource_root(&app)?, project, &mut report)?;
     Ok(report)
 }
 
@@ -91,6 +100,24 @@ pub fn bmad_status(path: String) -> BmadStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fresh folder per test and process: fixed names collide across runs.
+    fn temp(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A miniature of the bundled v4 resource root.
+    fn v4_source(name: &str) -> std::path::PathBuf {
+        let src = temp(name);
+        std::fs::create_dir_all(src.join("bmad-core/tasks")).unwrap();
+        std::fs::write(src.join("bmad-core/core-config.yaml"), "x").unwrap();
+        std::fs::write(src.join("bmad-core/tasks/a.md"), "a").unwrap();
+        std::fs::write(src.join("VERSION"), "v4.1\n").unwrap();
+        src
+    }
 
     #[test]
     fn absent_when_no_core() {
@@ -122,16 +149,57 @@ mod tests {
         std::fs::write(src.join("a/f.txt"), "hi").unwrap();
 
         let mut r1 = ScaffoldReport::default();
-        copy_tree(&src, &dst, &mut r1);
+        copy_tree(&src, &dst, &mut r1).unwrap();
         assert_eq!(r1.created.len(), 1);
         assert!(dst.join("a/f.txt").is_file());
 
         // Second run: file already exists -> skipped, not overwritten.
         std::fs::write(dst.join("a/f.txt"), "user-edit").unwrap();
         let mut r2 = ScaffoldReport::default();
-        copy_tree(&src, &dst, &mut r2);
+        copy_tree(&src, &dst, &mut r2).unwrap();
         assert_eq!(r2.created.len(), 0);
         assert_eq!(r2.skipped.len(), 1);
         assert_eq!(std::fs::read_to_string(dst.join("a/f.txt")).unwrap(), "user-edit");
+    }
+
+    #[test]
+    fn install_copies_the_core_and_records_its_folders() {
+        let src = v4_source("ade_bmad_install_src");
+        let dir = temp("ade_bmad_install");
+        let mut report = ScaffoldReport::default();
+        install(&src, &dir, &mut report).unwrap();
+        assert!(dir.join(".bmad-core/tasks/a.md").is_file());
+        assert_eq!(std::fs::read_to_string(dir.join(".bmad-core/VERSION")).unwrap(), "v4.1\n");
+        assert!(report.created_dirs.contains(&dir.join(".bmad-core")), "{:?}", report.created_dirs);
+        assert!(report.created_dirs.contains(&dir.join(".bmad-core").join("tasks")), "{:?}", report.created_dirs);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn install_fails_when_a_copy_fails() {
+        let src = v4_source("ade_bmad_fail_src");
+        let dir = temp("ade_bmad_fail");
+        // A file where the install needs a folder.
+        std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+        std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
+        let mut report = ScaffoldReport::default();
+        let err = install(&src, &dir, &mut report).unwrap_err();
+        assert!(err.contains("tasks"), "{err}");
+        assert_eq!(std::fs::read_to_string(dir.join(".bmad-core/tasks")).unwrap(), "mine");
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn install_fails_without_the_bundled_core() {
+        let src = temp("ade_bmad_empty_src");
+        let dir = temp("ade_bmad_empty");
+        let mut report = ScaffoldReport::default();
+        let err = install(&src, &dir, &mut report).unwrap_err();
+        assert!(err.contains("v4"), "{err}");
+        assert!(!dir.join(".bmad-core").exists());
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
     }
 }

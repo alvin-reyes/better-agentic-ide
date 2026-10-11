@@ -44,6 +44,10 @@ pub struct SetupReport {
     pub attribution_off: bool,
     /// `.claude/settings.json` couldn't be updated; the rest of setup still ran.
     pub settings_error: Option<String>,
+    /// Folders this setup created, outermost first. Only Rust reads it: a
+    /// failed setup removes the ones still empty.
+    #[serde(skip)]
+    pub created_dirs: Vec<PathBuf>,
 }
 
 /// A relative path that stays inside the project.
@@ -61,6 +65,36 @@ fn project(root: &str) -> Result<PathBuf, String> {
         return Err(format!("{root} isn't a folder."));
     }
     Ok(p)
+}
+
+/// Create `path` and any missing parents, recording each level created,
+/// outermost first. A folder that holds no file (`_bmad-output/`) is otherwise
+/// unknown to whoever has to take a setup back.
+pub(crate) fn mkdirs(path: &Path, created: &mut Vec<PathBuf>) -> Result<(), String> {
+    if path.is_dir() {
+        return Ok(());
+    }
+    if path.exists() {
+        return Err(format!("{}: exists and is not a folder", path.display()));
+    }
+    let mut missing = Vec::new();
+    let mut at = Some(path);
+    while let Some(p) = at {
+        if p.as_os_str().is_empty() || p.exists() {
+            break;
+        }
+        missing.push(p.to_path_buf());
+        at = p.parent();
+    }
+    for p in missing.into_iter().rev() {
+        match std::fs::create_dir(&p) {
+            Ok(()) => created.push(p),
+            // Someone else made it first: it isn't this setup's to remove.
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && p.is_dir() => {}
+            Err(e) => return Err(format!("{}: {e}", p.display())),
+        }
+    }
+    Ok(())
 }
 
 fn has_import(root: &Path, marker: &str) -> bool {
@@ -129,6 +163,9 @@ pub fn project_setup_status(root: String, paths: Vec<String>, marker: String) ->
 /// Write the files the project is missing, load the methodology from an
 /// existing CLAUDE.md, and install the project's methodology from
 /// `methodology_src` (its resource root). Nothing that exists is overwritten.
+///
+/// The report is the caller's, so what was written before an error is still
+/// known and can be taken back.
 pub fn apply(
     dir: &Path,
     files: &[SetupFile],
@@ -136,8 +173,8 @@ pub fn apply(
     marker: &str,
     methodology: Methodology,
     methodology_src: Option<&Path>,
-) -> Result<SetupReport, String> {
-    let mut report = SetupReport::default();
+    report: &mut SetupReport,
+) -> Result<(), String> {
     // Decide the import before writing, so a CLAUDE.md we create isn't appended to.
     let append = import.is_some() && dir.join("CLAUDE.md").is_file() && !has_import(dir, marker);
     for f in files {
@@ -146,7 +183,7 @@ pub fn apply(
             continue;
         }
         if let Some(parent) = dst.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            mkdirs(parent, &mut report.created_dirs)?;
         }
         std::fs::write(&dst, &f.content).map_err(|e| format!("{}: {e}", f.path))?;
         if f.path.starts_with(".claude/agents/") {
@@ -160,12 +197,36 @@ pub fn apply(
         file.write_all(import.unwrap_or_default().as_bytes()).map_err(|e| e.to_string())?;
         report.appended_import = true;
     }
+    match (methodology, methodology_src) {
+        (Methodology::V4, Some(src)) => {
+            let mut bmad = crate::bmad::ScaffoldReport::default();
+            let installed = crate::bmad::install(src, dir, &mut bmad);
+            // Recorded before the error is returned: what a failed install
+            // copied is still this setup's to take back.
+            report.bmad_files = bmad.created.len();
+            report.created.extend(bmad.created);
+            report.created_dirs.extend(bmad.created_dirs);
+            installed?;
+        }
+        (Methodology::V6, Some(src)) => {
+            let mut v6 = crate::bmadv6::ScaffoldReport::default();
+            let installed = crate::bmadv6::install(src, dir, &mut v6);
+            report.bmadv6_files = v6.created.len();
+            report.created.extend(v6.created.iter().map(|p| p.to_string_lossy().into_owned()));
+            report.created_dirs.extend(v6.created_dirs);
+            installed?;
+        }
+        _ => {}
+    }
     // A full setup also has agents commit as the user: no AI co-author trailer
     // or "Generated with" line. A broken settings file is reported, not fatal.
+    // Last, because nothing after it can fail: a setup that fails has then
+    // never edited a settings file the project already had.
     if import.is_some() {
         let settings = dir.join(".claude").join("settings.json");
         let existed = settings.exists();
-        match crate::usage::hide_attribution(dir) {
+        let hidden = mkdirs(&dir.join(".claude"), &mut report.created_dirs).and_then(|()| crate::usage::hide_attribution(dir));
+        match hidden {
             Ok(changed) => {
                 report.attribution_off = changed;
                 if changed && !existed {
@@ -175,22 +236,68 @@ pub fn apply(
             Err(e) => report.settings_error = Some(e),
         }
     }
-    match (methodology, methodology_src) {
-        (Methodology::V4, Some(src)) => {
-            let mut bmad = crate::bmad::ScaffoldReport::default();
-            crate::bmad::install(src, dir, &mut bmad);
-            report.bmad_files = bmad.created.len();
-            report.created.extend(bmad.created);
+    Ok(())
+}
+
+/// apply(), and on an error take back what it wrote: a failed setup leaves
+/// nothing behind.
+fn apply_or_clean(
+    dir: &Path,
+    files: &[SetupFile],
+    import: Option<&str>,
+    marker: &str,
+    methodology: Methodology,
+    methodology_src: Option<&Path>,
+) -> Result<SetupReport, String> {
+    let mut report = SetupReport::default();
+    match apply(dir, files, import, marker, methodology, methodology_src, &mut report) {
+        Ok(()) => Ok(report),
+        Err(e) => {
+            remove_unchanged(dir, &report.created, files);
+            if let (true, Some(import)) = (report.appended_import, import) {
+                let _ = strip_import(dir, import);
+            }
+            // Innermost first. A folder something else has written into since stays.
+            for d in report.created_dirs.iter().rev() {
+                let _ = std::fs::remove_dir(d);
+            }
+            Err(e)
         }
-        (Methodology::V6, Some(src)) => {
-            let mut v6 = crate::bmadv6::ScaffoldReport::default();
-            crate::bmadv6::install(src, dir, &mut v6)?;
-            report.bmadv6_files = v6.created.len();
-            report.created.extend(v6.created.iter().map(|p| p.to_string_lossy().into_owned()));
-        }
-        _ => {}
     }
-    Ok(report)
+}
+
+/// Remove the files in `created` that are still as setup wrote them (by
+/// content for `files`; BMAD's own, if still there). Returns the ones removed;
+/// anything edited since is left.
+fn remove_unchanged(dir: &Path, created: &[String], files: &[SetupFile]) -> Vec<PathBuf> {
+    let ours: std::collections::HashMap<PathBuf, &str> =
+        files.iter().filter_map(|f| inside(dir, &f.path).ok().map(|p| (p, f.content.as_str()))).collect();
+    let mut removed = Vec::new();
+    for path in created.iter().map(PathBuf::from) {
+        if !path.starts_with(dir) {
+            continue;
+        }
+        let unchanged = match ours.get(&path) {
+            Some(content) => std::fs::read_to_string(&path).map(|s| s == *content).unwrap_or(false),
+            // BMAD files: removed only if they're still where setup put them.
+            None => path.is_file(),
+        };
+        if unchanged && std::fs::remove_file(&path).is_ok() {
+            removed.push(path);
+        }
+    }
+    removed
+}
+
+/// Take the import block setup appended back off the end of CLAUDE.md.
+fn strip_import(dir: &Path, import: &str) -> Result<(), String> {
+    let claude = dir.join("CLAUDE.md");
+    if let Ok(text) = std::fs::read_to_string(&claude) {
+        if let Some(stripped) = text.strip_suffix(import) {
+            std::fs::write(&claude, stripped).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 /// Whether setup installs this methodology's resources: a full setup of a
@@ -240,6 +347,11 @@ fn install_source(
     }
 }
 
+/// One setup at a time: two at once could both see CLAUDE.md without the
+/// import and append it twice. Crate-visible so another command that sets a
+/// project up can hold it for its whole run.
+pub(crate) static APPLY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[tauri::command(async)]
 pub fn project_setup_apply(
     app: tauri::AppHandle,
@@ -251,9 +363,6 @@ pub fn project_setup_apply(
     full: bool,
 ) -> Result<SetupReport, String> {
     let dir = project(&root)?;
-    // One setup at a time: two at once could both see CLAUDE.md without the
-    // import and append it twice.
-    static APPLY: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
     // The owner's answer from the setup prompt; anything else is the v6 default.
     let methodology = if methodology.trim().eq_ignore_ascii_case("v4") { Methodology::V4 } else { Methodology::V6 };
@@ -264,7 +373,7 @@ pub fn project_setup_apply(
         Methodology::V6 => crate::bmadv6::resource_root(&app).ok(),
     };
     let src = install_source(methodology, crate::bmadv6::detect_on_disk(&dir), full, &dir, root)?;
-    apply(&dir, &files, full.then_some(import.as_str()), &marker, methodology, src.as_deref())
+    apply_or_clean(&dir, &files, full.then_some(import.as_str()), &marker, methodology, src.as_deref())
 }
 
 /// Remove what a setup created (files still unchanged since, by content) and
@@ -272,39 +381,21 @@ pub fn project_setup_apply(
 #[tauri::command(async)]
 pub fn project_setup_undo(root: String, created: Vec<String>, files: Vec<SetupFile>, import: Option<String>) -> Result<usize, String> {
     let dir = project(&root)?;
-    let ours: std::collections::HashMap<PathBuf, &str> =
-        files.iter().filter_map(|f| inside(&dir, &f.path).ok().map(|p| (p, f.content.as_str()))).collect();
-    let mut removed = 0;
-    for path in created.iter().map(PathBuf::from) {
-        if !path.starts_with(&dir) {
-            continue;
-        }
-        let unchanged = match ours.get(&path) {
-            Some(content) => std::fs::read_to_string(&path).map(|s| s == *content).unwrap_or(false),
-            // BMAD files: removed only if they're still where setup put them.
-            None => path.is_file(),
-        };
-        if unchanged && std::fs::remove_file(&path).is_ok() {
-            removed += 1;
-            // Tidy directories setup created that are now empty.
-            let mut parent = path.parent();
-            while let Some(p) = parent {
-                if p == dir || std::fs::remove_dir(p).is_err() {
-                    break;
-                }
-                parent = p.parent();
+    let removed = remove_unchanged(&dir, &created, &files);
+    for path in &removed {
+        // Tidy directories setup created that are now empty.
+        let mut parent = path.parent();
+        while let Some(p) = parent {
+            if p == dir || std::fs::remove_dir(p).is_err() {
+                break;
             }
+            parent = p.parent();
         }
     }
     if let Some(import) = import {
-        let claude = dir.join("CLAUDE.md");
-        if let Ok(text) = std::fs::read_to_string(&claude) {
-            if let Some(stripped) = text.strip_suffix(&import) {
-                std::fs::write(&claude, stripped).map_err(|e| e.to_string())?;
-            }
-        }
+        strip_import(&dir, &import)?;
     }
-    Ok(removed)
+    Ok(removed.len())
 }
 
 /// `git init` a new project folder (no commit: the first commit is the owner's).
@@ -346,19 +437,42 @@ mod tests {
         ]
     }
 
+    /// apply() into a fresh report, as project_setup_apply does, without the cleanup.
+    fn run(
+        dir: &Path,
+        files: &[SetupFile],
+        import: Option<&str>,
+        marker: &str,
+        methodology: Methodology,
+        methodology_src: Option<&Path>,
+    ) -> Result<SetupReport, String> {
+        let mut report = SetupReport::default();
+        apply(dir, files, import, marker, methodology, methodology_src, &mut report).map(|()| report)
+    }
+
+    /// A miniature of the bundled v4 resource root.
+    fn v4_source() -> PathBuf {
+        let src = temp();
+        std::fs::create_dir_all(src.join("bmad-core/tasks")).unwrap();
+        std::fs::write(src.join("bmad-core/core-config.yaml"), "x").unwrap();
+        std::fs::write(src.join("bmad-core/tasks/a.md"), "a").unwrap();
+        std::fs::write(src.join("VERSION"), "v4.1\n").unwrap();
+        src
+    }
+
     #[test]
     fn writes_missing_files_and_never_overwrites() {
         let dir = temp();
         std::fs::create_dir_all(dir.join(".claude/agents")).unwrap();
         std::fs::write(dir.join(".claude/agents/qa.md"), "mine").unwrap();
-        let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        let r = run(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(".claude/agents/qa.md")).unwrap(), "mine");
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "rules");
         // CLAUDE.md, .ade/rules.md and .claude/settings.json.
         assert_eq!(r.created.len(), 3);
         assert!(!r.appended_import, "a CLAUDE.md we created already imports the rules");
         // Running again changes nothing.
-        let again = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        let again = run(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(again.created.is_empty() && !again.appended_import);
         std::fs::remove_dir_all(dir).ok();
     }
@@ -368,7 +482,7 @@ mod tests {
         let dir = temp();
         std::fs::write(dir.join("CLAUDE.md"), "# Mine\n").unwrap();
         let import = "\n<!-- m -->\n@.ade/rules.md\n";
-        let r = apply(&dir, &files(), Some(import), "<!-- m -->", Methodology::V4, None).unwrap();
+        let r = run(&dir, &files(), Some(import), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(r.appended_import);
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), format!("# Mine\n{import}"));
         let status = project_setup_status(dir.to_string_lossy().into(), vec!["CLAUDE.md".into()], "<!-- m -->".into()).unwrap();
@@ -388,9 +502,9 @@ mod tests {
     #[test]
     fn a_full_setup_turns_ai_attribution_off_and_agents_alone_do_not() {
         let dir = temp();
-        let r = apply(&dir, &files(), None, "<!-- m -->", Methodology::V4, None).unwrap();
+        let r = run(&dir, &files(), None, "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(!r.attribution_off && !dir.join(".claude/settings.json").exists());
-        let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        let r = run(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(r.attribution_off && r.settings_error.is_none());
         let settings = dir.join(".claude").join("settings.json");
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
@@ -400,7 +514,7 @@ mod tests {
         // Setup created the file, so Undo removes it with the rest.
         assert!(r.created.contains(&settings.to_string_lossy().into_owned()));
         // A later setup is safe: nothing new to write.
-        let again = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        let again = run(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(!again.attribution_off && again.created.is_empty());
         std::fs::remove_dir_all(dir).ok();
     }
@@ -410,7 +524,7 @@ mod tests {
         let dir = temp();
         std::fs::create_dir_all(dir.join(".claude")).unwrap();
         std::fs::write(dir.join(".claude/settings.json"), "{ not json").unwrap();
-        let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        let r = run(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(!r.attribution_off);
         assert!(r.settings_error.as_deref().unwrap_or_default().contains("not valid JSON"));
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "rules");
@@ -466,9 +580,9 @@ mod tests {
     fn refuses_paths_outside_the_project() {
         let dir = temp();
         let bad = vec![SetupFile { path: "../evil".into(), content: "x".into() }];
-        assert!(apply(&dir, &bad, None, "m", Methodology::V4, None).is_err());
+        assert!(run(&dir, &bad, None, "m", Methodology::V4, None).is_err());
         let abs = vec![SetupFile { path: "/tmp/evil".into(), content: "x".into() }];
-        assert!(apply(&dir, &abs, None, "m", Methodology::V4, None).is_err());
+        assert!(run(&dir, &abs, None, "m", Methodology::V4, None).is_err());
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -480,7 +594,7 @@ mod tests {
         std::fs::write(src.join("skills/bmad/SKILL.md"), "hello").unwrap();
         std::fs::write(src.join("ade-runtime.mjs"), "// runtime").unwrap();
 
-        let r = apply(&dir, &files(), None, "<!-- m -->", Methodology::V6, Some(&src)).unwrap();
+        let r = run(&dir, &files(), None, "<!-- m -->", Methodology::V6, Some(&src)).unwrap();
 
         // skills file, config.toml, custom/.gitignore, the runtime, the marker.
         assert_eq!(r.bmadv6_files, 5, "{:?}", r.created);
@@ -576,5 +690,77 @@ mod tests {
         );
         std::fs::remove_dir_all(dir).ok();
         std::fs::remove_dir_all(v4).ok();
+    }
+
+    #[test]
+    fn mkdirs_records_each_level_it_creates() {
+        let dir = temp();
+        std::fs::create_dir_all(dir.join("a")).unwrap();
+        let mut made = Vec::new();
+        mkdirs(&dir.join("a/b/c"), &mut made).unwrap();
+        assert_eq!(made, [dir.join("a/b"), dir.join("a/b/c")]);
+        // Again: nothing to create, nothing recorded.
+        mkdirs(&dir.join("a/b/c"), &mut made).unwrap();
+        assert_eq!(made.len(), 2);
+        // A file in the way is an error, not a silent skip.
+        std::fs::write(dir.join("a/f"), "x").unwrap();
+        assert!(mkdirs(&dir.join("a/f"), &mut made).is_err());
+        assert!(mkdirs(&dir.join("a/f/g"), &mut made).is_err());
+        assert_eq!(made.len(), 2);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn apply_keeps_its_partial_report_when_the_install_fails() {
+        let dir = temp();
+        let src = v4_source();
+        // A file where the install needs a folder: its copy fails partway.
+        std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+        std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
+        let mut report = SetupReport::default();
+        let err = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src), &mut report).unwrap_err();
+        assert!(err.contains("tasks"), "{err}");
+        assert!(report.created.contains(&dir.join(".ade/rules.md").to_string_lossy().into_owned()), "{:?}", report.created);
+        assert!(report.created_dirs.contains(&dir.join(".ade")), "{:?}", report.created_dirs);
+        assert!(!dir.join(".claude/settings.json").exists(), "settings are written last, so a failed setup never edits them");
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn a_failed_setup_leaves_nothing_behind() {
+        let dir = temp();
+        let src = v4_source();
+        std::fs::write(dir.join("CLAUDE.md"), "# Mine\n").unwrap();
+        std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+        std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
+        let import = "\n<!-- m -->\n@.ade/rules.md\n";
+
+        assert!(apply_or_clean(&dir, &files(), Some(import), "<!-- m -->", Methodology::V4, Some(&src)).is_err());
+
+        let names = |d: &Path| {
+            let mut v: Vec<String> =
+                std::fs::read_dir(d).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+            v.sort();
+            v
+        };
+        assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# Mine\n", "the appended import is stripped");
+        assert_eq!(names(&dir), [".bmad-core", "CLAUDE.md"], "created files and the folders made for them are gone");
+        assert_eq!(names(&dir.join(".bmad-core")), ["tasks"], "what the install copied before it failed is gone");
+        assert_eq!(std::fs::read_to_string(dir.join(".bmad-core/tasks")).unwrap(), "mine");
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn a_setup_that_succeeds_keeps_what_it_wrote() {
+        let dir = temp();
+        let src = v4_source();
+        let r = apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src)).unwrap();
+        assert!(dir.join(".bmad-core/tasks/a.md").is_file());
+        assert!(dir.join(".ade/rules.md").is_file());
+        assert!(r.created_dirs.contains(&dir.join(".bmad-core").join("tasks")), "{:?}", r.created_dirs);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
     }
 }
