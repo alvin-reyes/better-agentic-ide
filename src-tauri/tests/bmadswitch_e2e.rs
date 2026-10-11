@@ -777,13 +777,51 @@ mod bmadswitch_e2e {
         clean_up(&dir, &res);
     }
 
+    /// The setup toast's *Undo* outlives a switch: pressed after one, it is
+    /// handed the list of what the v4 setup created, which names
+    /// `.ade/methodology`. The marker there now is v6's, and so is everything
+    /// the switch set up.
+    #[test]
+    fn undoing_the_setup_from_before_a_switch_leaves_the_new_version_alone() {
+        let res = resources("bmadswitch-e2e-undo");
+        let dir = temp("bmadswitch-e2e-undo");
+        for (path, content) in OWN {
+            write(&dir, path, content);
+        }
+        let first = set_up(&dir, Methodology::V4, &res);
+        let marker = at(&dir, ".ade/methodology").to_string_lossy().into_owned();
+        assert!(first.created.contains(&marker), "the v4 setup wrote the marker: {:?}", first.created);
+        let (shown, result) = switch(&dir, Methodology::V6, &res);
+        let before = listing(&dir);
+
+        // `undoSetup` in src/lib/projectSetup.ts: the report's list, the files it sent, the import if appended.
+        let import = first.appended_import.then(|| IMPORT.to_string());
+        projectsetup::project_setup_undo(root_of(&dir), first.created.clone(), setup_files(&dir, Methodology::V4), import).unwrap();
+
+        assert_eq!(read(&dir, ".ade/methodology"), "v6\n");
+        assert_is_v6(&dir, &res);
+        // Nothing the switch set up, and nothing in the archive, is gone or changed.
+        let fresh: BTreeSet<String> = result.setup.created.iter().map(|path| path.replace('\\', "/")).collect();
+        let root = root_of(&dir).replace('\\', "/");
+        for difference in differences(&before, &listing(&dir)) {
+            let path = difference.split(':').next().unwrap();
+            assert!(!fresh.contains(&format!("{root}/{path}")), "{difference}: the switch's setup wrote it");
+            assert!(!path.starts_with(&shown.archive), "{difference}: it is in the archive");
+            for v6s in ["_bmad", ".claude/skills", ".claude/agents", ".ade/methodology"] {
+                assert!(path != v6s && !path.starts_with(&format!("{v6s}/")), "{difference}: it is v6's");
+            }
+        }
+
+        clean_up(&dir, &res);
+    }
+
     /// A switch that was cut short blocks the project until its journal is
     /// resolved by hand, which the guide does by setting `status: abandoned`.
     ///
-    /// Setup's own refusal is the frontend's (`askMethodology` in
-    /// src/lib/methodologyPrompt.ts asks `bmad_switch_pending` and stops); the
-    /// setup command has no check of its own. What is held here is the answer
-    /// it stops on.
+    /// Setup is refused twice over: the frontend asks `bmad_switch_pending`
+    /// and stops (`askMethodology` in src/lib/methodologyPrompt.ts), and
+    /// `projectsetup::set_up`, which `project_setup_apply` runs, refuses on
+    /// its own. Both are held here.
     #[test]
     fn a_pending_journal_blocks_the_plan_the_apply_and_what_setup_asks() {
         let res = resources("bmadswitch-e2e-pending");
@@ -810,9 +848,24 @@ mod bmadswitch_e2e {
         assert_eq!(apply(&dir, &earlier, &res).unwrap_err(), why, "a plan shown before the journal appeared is refused too");
         assert_eq!(differences(&before, &listing(&dir)), Vec::<String>::new());
 
-        // Resolved by hand: the project switches again.
+        // Setup has a role file to write, and writes nothing: neither a full
+        // setup nor an agent added on its own.
+        let role = ".claude/agents/qa.md";
+        std::fs::remove_file(at(&dir, role)).unwrap();
+        let before = listing(&dir);
+        let files = setup_files(&dir, Methodology::V4);
+        let setup =
+            |full: bool| projectsetup::set_up(&dir, &files, IMPORT, MARKER, Methodology::V4, full, |wanted| Some(source(&res, wanted).to_path_buf()));
+        assert_eq!(setup(true).unwrap_err(), why);
+        assert_eq!(setup(false).unwrap_err(), why);
+        assert_eq!(differences(&before, &listing(&dir)), Vec::<String>::new());
+
+        // Resolved by hand: setup works again, and the project switches again.
         write(&dir, &format!("{archive}/ARCHIVE.md"), &an_interrupted_journal().replace("status: in-progress", "status: abandoned"));
         assert_eq!(bmadswitch::bmad_switch_pending(root_of(&dir)), []);
+        let report = setup(true).unwrap();
+        assert_eq!(report.created, [at(&dir, role).to_string_lossy().into_owned()]);
+        assert_eq!(read(&dir, role), role_file("qa", Methodology::V4));
         let (_, result) = switch(&dir, Methodology::V6, &res);
         assert_ne!(result.archive, archive);
         assert_is_v6(&dir, &res);

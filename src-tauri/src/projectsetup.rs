@@ -431,24 +431,78 @@ pub fn project_setup_apply(
     full: bool,
 ) -> Result<SetupReport, String> {
     let dir = project(&root)?;
-    let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
     // The owner's answer from the setup prompt; anything else is the v6 default.
     let methodology = if methodology.trim().eq_ignore_ascii_case("v4") { Methodology::V4 } else { Methodology::V6 };
-    // A full setup also loads the methodology from CLAUDE.md and installs the
-    // project's methodology; adding agents on their own touches nothing else.
-    let root = |wanted| match wanted {
+    set_up(&dir, &files, &import, &marker, methodology, full, |wanted| match wanted {
         Methodology::V4 => crate::bmad::resource_root(&app).ok(),
         Methodology::V6 => crate::bmadv6::resource_root(&app).ok(),
-    };
-    let src = install_source(methodology, crate::bmadv6::detect_on_disk(&dir), full, &dir, root)?;
-    apply_or_clean(&dir, &files, full.then_some(import.as_str()), &marker, methodology, src.as_deref())
+    })
+}
+
+/// What `project_setup_apply` runs once it has the project's folder.
+/// `resolve` finds a version's bundled resources, which the command asks the
+/// app for. Every setup comes through here: a full one, and an agent or a
+/// stack's agents added on their own.
+///
+/// None of them writes into a project a switch left unfinished: its tree may
+/// be half moved, and the journal may tell the person to move back the very
+/// folders this would write into. The switch's own setup calls apply() and
+/// is not held to this.
+pub fn set_up(
+    dir: &Path,
+    files: &[SetupFile],
+    import: &str,
+    marker: &str,
+    methodology: Methodology,
+    full: bool,
+    resolve: impl FnOnce(Methodology) -> Option<PathBuf>,
+) -> Result<SetupReport, String> {
+    let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
+    // Under the lock: a switch holds it for its whole run.
+    refuse_unfinished(dir)?;
+    // A full setup also loads the methodology from CLAUDE.md and installs the
+    // project's methodology; adding agents on their own touches nothing else.
+    let src = install_source(methodology, crate::bmadv6::detect_on_disk(dir), full, dir, resolve)?;
+    apply_or_clean(dir, files, full.then_some(import), marker, methodology, src.as_deref())
+}
+
+/// Setup and Undo are refused in a project a switch left unfinished, with
+/// the reason the switch itself gives.
+fn refuse_unfinished(dir: &Path) -> Result<(), String> {
+    crate::bmadswitch::unfinished(dir).map_or(Ok(()), Err)
+}
+
+/// The version whose engine a setup installed, read from the list of what it
+/// created: only the v4 install writes under `.bmad-core/`, only the v6 one
+/// under `_bmad/`. `None` when the list names neither, as after a setup that
+/// found the engine already there.
+fn installed(dir: &Path, created: &[String]) -> Option<Methodology> {
+    let under = |folder: &str| created.iter().any(|path| Path::new(path).starts_with(dir.join(folder)));
+    match (under(".bmad-core"), under("_bmad")) {
+        (true, false) => Some(Methodology::V4),
+        (false, true) => Some(Methodology::V6),
+        _ => None,
+    }
 }
 
 /// Remove what a setup created (files still unchanged since, by content) and
 /// the import block it appended. Leaves anything the user has edited.
+///
+/// The marker is among what a setup creates, and it is ADE's, so "still a
+/// file" would remove it whatever it says. It goes only while it names the
+/// version the undone setup installed: after a switch it is the other
+/// version's. When the list doesn't say which version that was, the marker
+/// stays; the count returned has no place to say so.
 #[tauri::command(async)]
 pub fn project_setup_undo(root: String, created: Vec<String>, files: Vec<SetupFile>, import: Option<String>) -> Result<usize, String> {
     let dir = project(&root)?;
+    // As a setup: one at a time, and not under a switch that is moving the tree.
+    let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
+    refuse_unfinished(&dir)?;
+    let marker = dir.join(".ade").join("methodology");
+    let wrote = installed(&dir, &created);
+    let still_names_it = wrote.is_some() && std::fs::read_to_string(&marker).is_ok_and(|text| text.trim() == wrote.map_or("", Methodology::as_str));
+    let created: Vec<String> = created.into_iter().filter(|path| still_names_it || Path::new(path) != marker).collect();
     let removed = remove_unchanged(&dir, &created, &files);
     for path in &removed {
         // Tidy directories setup created that are now empty.
@@ -770,6 +824,100 @@ mod tests {
         assert!(!dir.join(".ade").exists(), "an unchanged file and the folder setup made are gone");
         assert_eq!(std::fs::read_to_string(dir.join(".claude/agents/qa.md")).unwrap(), "edited");
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// A switch that was cut short, as its journal's front matter says it.
+    fn a_journal(dir: &Path, status: &str) {
+        let archive = dir.join(".ade").join("archive").join("bmad-v4-2026-01-02");
+        std::fs::create_dir_all(&archive).unwrap();
+        std::fs::write(archive.join("ARCHIVE.md"), format!("---\nstatus: {status}\nphase: moving\nfrom: v4\nto: v6\ndate: 2026-01-02\n---\n")).unwrap();
+    }
+
+    const UNFINISHED: &str = "An earlier switch here didn't finish. See .ade/archive/bmad-v4-2026-01-02/ARCHIVE.md.";
+
+    #[test]
+    fn setup_refuses_a_project_with_an_unfinished_switch() {
+        let dir = temp();
+        let src = v4_source();
+        let set_up = |full: bool| set_up(&dir, &files(), "\nIMPORT\n", "<!-- m -->", Methodology::V4, full, |_| Some(src.clone()));
+        for status in ["in-progress", "incomplete"] {
+            a_journal(&dir, status);
+            assert_eq!(set_up(true).unwrap_err(), UNFINISHED, "{status}");
+            // Adding an agent, or a stack's agents, is a setup too.
+            assert_eq!(set_up(false).unwrap_err(), UNFINISHED, "{status}");
+        }
+        assert_eq!(names(&dir), [".ade"], "nothing was written");
+        assert_eq!(names(&dir.join(".ade")), ["archive"]);
+
+        // Resolved by hand: setup runs again.
+        a_journal(&dir, "abandoned");
+        let report = set_up(true).unwrap();
+        assert!(report.created.contains(&dir.join(".ade/rules.md").to_string_lossy().into_owned()), "{:?}", report.created);
+        assert!(dir.join(".bmad-core/tasks/a.md").is_file());
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    // R7: what can't be read may be a switch that didn't finish.
+    #[test]
+    fn setup_refuses_when_the_archive_cannot_be_understood() {
+        let dir = temp();
+        let notes = dir.join(".ade").join("archive").join("notes");
+        std::fs::create_dir_all(&notes).unwrap();
+        std::fs::write(notes.join("ARCHIVE.md"), "my own notes, no front matter\n").unwrap();
+        let err = set_up(&dir, &files(), "\nIMPORT\n", "<!-- m -->", Methodology::V4, false, |_| None).unwrap_err();
+        assert_eq!(err, "ADE can't read .ade/archive/notes, so it can't tell whether an earlier switch here finished.");
+        assert_eq!(names(&dir), [".ade"], "nothing was written");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn undo_refuses_a_project_with_an_unfinished_switch() {
+        let dir = temp();
+        let root: String = dir.to_string_lossy().into();
+        let r = run(&dir, &files(), None, "<!-- m -->", Methodology::V4, None).unwrap();
+        a_journal(&dir, "in-progress");
+        assert_eq!(project_setup_undo(root.clone(), r.created.clone(), files(), None).unwrap_err(), UNFINISHED);
+        assert!(dir.join(".ade/rules.md").is_file() && dir.join(".claude/agents/qa.md").is_file(), "nothing was removed");
+
+        a_journal(&dir, "abandoned");
+        assert_eq!(project_setup_undo(root, r.created, files(), None).unwrap(), 3);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn undo_removes_the_marker_only_while_it_names_the_version_that_setup_wrote() {
+        let marker = |dir: &Path| dir.join(".ade").join("methodology");
+        let undo = |dir: &Path, created: Vec<String>| project_setup_undo(dir.to_string_lossy().into(), created, files(), None).unwrap();
+        let v4 = v4_source();
+        let v6 = v6_source(true);
+
+        // Still the marker this setup wrote: it goes with the rest.
+        let dir = temp();
+        let r = run(&dir, &files(), None, "<!-- m -->", Methodology::V4, Some(&v4)).unwrap();
+        undo(&dir, r.created);
+        assert!(names(&dir).is_empty(), "{:?}", names(&dir));
+
+        // The project was switched since: the marker is the other version's.
+        for (wrote, src, now) in [(Methodology::V4, &v4, "v6\n"), (Methodology::V6, &v6, "v4\n")] {
+            let dir = temp();
+            let r = run(&dir, &files(), None, "<!-- m -->", wrote, Some(src)).unwrap();
+            std::fs::write(marker(&dir), now).unwrap();
+            undo(&dir, r.created);
+            assert_eq!(std::fs::read_to_string(marker(&dir)).unwrap(), now, "an undo of a {} setup", wrote.as_str());
+            std::fs::remove_dir_all(dir).ok();
+        }
+
+        // A list that doesn't say which version its setup installed: the
+        // marker is left rather than guessed at.
+        let dir = temp();
+        std::fs::create_dir_all(dir.join(".ade")).unwrap();
+        std::fs::write(marker(&dir), "v4\n").unwrap();
+        assert_eq!(undo(&dir, vec![marker(&dir).to_string_lossy().into_owned()]), 0);
+        assert_eq!(std::fs::read_to_string(marker(&dir)).unwrap(), "v4\n");
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(v4).ok();
+        std::fs::remove_dir_all(v6).ok();
     }
 
     #[test]

@@ -274,6 +274,22 @@ fn unknown(archive: String) -> PendingSwitch {
     PendingSwitch { archive, status: unknown(), phase: unknown(), from: unknown(), to: unknown(), date: unknown() }
 }
 
+/// Why nothing may be set up in `root` or switched there now: the first
+/// switch that didn't finish, with where its journal is. `None` when the
+/// project is clear. The switch's own plan and every setup command refuse
+/// with this.
+pub(crate) fn unfinished(root: &Path) -> Option<String> {
+    let found = pending(root);
+    let earlier = found.first()?;
+    // An archive that can't be read may hold no journal to point at, and
+    // isn't known to be unfinished.
+    Some(if earlier.status == "unknown" {
+        format!("ADE can't read {}, so it can't tell whether an earlier switch here finished.", earlier.archive)
+    } else {
+        format!("An earlier switch here didn't finish. See {}/{JOURNAL}.", earlier.archive)
+    })
+}
+
 /// The one way the frontend reads the archive: which switches didn't finish.
 #[tauri::command(async)]
 pub fn bmad_switch_pending(root: String) -> Vec<PendingSwitch> {
@@ -1005,15 +1021,7 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
     if !resolved(&lexical(&at(root, &plan.archive))).starts_with(&real_root) {
         reasons.push(format!("The archive folder {} would be outside the project.", plan.archive));
     }
-    if let Some(earlier) = pending(root).first() {
-        // An archive that can't be read may hold no journal to point at, and
-        // isn't known to be unfinished.
-        reasons.push(if earlier.status == "unknown" {
-            format!("ADE can't read {}, so it can't tell whether an earlier switch here finished.", earlier.archive)
-        } else {
-            format!("An earlier switch here didn't finish. See {}/{JOURNAL}.", earlier.archive)
-        });
-    }
+    reasons.extend(unfinished(root));
 
     let mut moves: Vec<String> = Vec::new();
     let mut leftovers: Vec<String> = Vec::new();
