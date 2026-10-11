@@ -1,22 +1,78 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBoardPanelStore, REFRESH_DEBOUNCE_MS, type BoardDeps } from "../boardPanelStore";
+import { createBoardPanelStore, REFRESH_DEBOUNCE_MS, type BoardDeps, type BoardResult } from "../boardPanelStore";
+import type { V6Map } from "../../lib/v6Map";
 import { buildBoard, type BoardState } from "../stageBoardStore";
 
 const empty = (): BoardState => buildBoard({ config: null, artifactExists: () => false, stories: [], gates: [] });
 
 /** Deps whose build resolves only when the test says so. */
 function controlled(methodology: "v4" | "v6" | null = "v4") {
-  const pending: { root: string; resolve: (b: BoardState) => void; reject: (e: Error) => void }[] = [];
+  const pending: { root: string; resolve: (b: BoardState) => void; resolveMap: (m: V6Map) => void; reject: (e: Error) => void }[] = [];
   const deps: BoardDeps = {
     methodology: vi.fn(async () => methodology),
-    build: vi.fn((root: string) => new Promise<BoardState>((resolve, reject) => pending.push({ root, resolve, reject }))),
+    build: vi.fn((root: string) => new Promise<BoardResult>((res, reject) => pending.push({
+      root,
+      resolve: (board) => res({ kind: "v4", board }),
+      resolveMap: (map) => res({ kind: "v6", map }),
+      reject,
+    }))),
     stageFile: vi.fn(async () => null),
   };
   return { deps, pending };
 }
+
+const emptyMap = (): V6Map => ({
+  outputFolder: "_bmad-output", initiative: null, initiativeState: "none",
+  docs: { analysis: [], planning: [], implementation: [], validation: [] },
+  loose: [], epics: [], tickets: [], backlog: [], unmatchedGates: [], supersededGates: [], problems: [],
+});
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("boardPanelStore", () => {
+  it("holds a v6 project's map, not a board", async () => {
+    const { deps, pending } = controlled("v6");
+    const store = createBoardPanelStore(deps);
+    store.getState().show("/p");
+    await flush();
+    pending[0].resolveMap(emptyMap());
+    await flush();
+    expect(store.getState().map).not.toBeNull();
+    expect(store.getState().board).toBeNull();
+  });
+
+  it("clears the old shape when a project's methodology changes", async () => {
+    let methodology: "v4" | "v6" = "v4";
+    const { deps, pending } = controlled();
+    deps.methodology = vi.fn(async () => methodology);
+    const store = createBoardPanelStore(deps);
+    store.getState().show("/p");
+    await flush();
+    pending[0].resolve(empty());
+    await flush();
+    expect(store.getState().board).not.toBeNull();
+
+    methodology = "v6";
+    void store.getState().refresh();
+    await flush();
+    pending[1].resolveMap(emptyMap());
+    await flush();
+    expect(store.getState().methodology).toBe("v6");
+    expect(store.getState().board).toBeNull();
+    expect(store.getState().map).not.toBeNull();
+  });
+
+  it("does not rebuild when shown the same project it already holds a map for", async () => {
+    const { deps, pending } = controlled("v6");
+    const store = createBoardPanelStore(deps);
+    store.getState().show("/p");
+    await flush();
+    pending[0].resolveMap(emptyMap());
+    await flush();
+    store.getState().show("/p");
+    await flush();
+    expect(deps.build).toHaveBeenCalledTimes(1);
+  });
+
   afterEach(() => vi.useRealTimers());
 
   it("builds the board for the project it is shown", async () => {
