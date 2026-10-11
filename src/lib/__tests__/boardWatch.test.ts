@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WATCH_EXTENSIONS, watchExtensions, watchTargets } from "../boardWatch";
+import { WATCH_EXTENSIONS, watchExcludes, watchExtensions, watchTargets } from "../boardWatch";
 import { BMAD_DEFAULTS } from "../bmadConfig";
 
 describe("watchTargets", () => {
@@ -90,5 +90,15 @@ describe("watchExtensions", () => {
 
   it("adds html on v6, for brainstorm and forge reports", () => {
     expect(watchExtensions("/p/_bmad-output", "v6")).toEqual([...WATCH_EXTENSIONS, "html"]);
+  });
+});
+
+describe("watchExcludes", () => {
+  it("keeps the archive out of the .ade watch, and nothing out of any other", () => {
+    expect(watchExcludes("/p/.ade")).toEqual(["/p/.ade/archive"]);
+    expect(watchExcludes("/p/.ade/")).toEqual(["/p/.ade/archive"]);
+    expect(watchExcludes("C:\\p\\.ade")).toEqual(["C:\\p\\.ade/archive"]);
+    expect(watchExcludes("/p/docs")).toEqual([]);
+    expect(watchExcludes("/p/.adept")).toEqual([]);
   });
 });

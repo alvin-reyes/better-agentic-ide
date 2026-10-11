@@ -1,0 +1,18 @@
+{
+  "yaml": {
+    "qaLocation": "quality",
+    "prdFile": "spec/prd#1.md",
+    "prdShardedLocation": "spec/prd",
+    "architectureFile": "docs/architecture.md",
+    "architectureShardedLocation": "docs/architecture",
+    "devStoryLocation": "work/stories"
+  },
+  "toml": {
+    "root": "/code/shop",
+    "projectName": "team-shop",
+    "communicationLanguage": "English",
+    "outputFolder": "/code/shop/work/out",
+    "demoEnabled": true,
+    "demoLevel": 2
+  }
+}

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 
 const tauri = vi.hoisted(() => ({
   byDir: {} as Record<string, "v4" | "v6" | null>,
@@ -8,6 +9,10 @@ const tauri = vi.hoisted(() => ({
   /** `.bmad-core/VERSION` is on disk. */
   bmadInstalled: false,
   applies: [] as Record<string, unknown>[],
+  /** Switches of the project that didn't finish. */
+  pending: [] as unknown[],
+  /** None of the files asked about is on disk: no agent is installed. */
+  noFiles: false,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -15,9 +20,11 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "project_root":
         return tauri.roots[args.path as string] ?? args.path;
+      case "bmad_switch_pending":
+        return tauri.pending;
       case "project_setup_status":
         return {
-          isGit: true, missing: [], needsImport: false, bmadInstalled: tauri.bmadInstalled, stacks: [],
+          isGit: true, missing: tauri.noFiles ? args.paths : [], needsImport: false, bmadInstalled: tauri.bmadInstalled, stacks: [],
           methodology: tauri.byDir[args.root as string] ?? null,
         };
       case "project_setup_apply":
@@ -41,6 +48,7 @@ import AgentsTab from "../AgentsTab";
 import IntegrationsPanel from "../IntegrationsPanel";
 import MethodologyPromptHost from "../MethodologyPrompt";
 import { __resetPromptForTests } from "../../lib/methodologyPrompt";
+import { SWITCH_DONE_EVENT } from "../../lib/bmadSwitch";
 
 const question = () => document.querySelector(".new-tab-ask")?.textContent ?? null;
 const renderTab = (root: string) =>
@@ -57,6 +65,8 @@ beforeEach(() => {
   tauri.roots = {};
   tauri.bmadInstalled = false;
   tauri.applies.length = 0;
+  tauri.pending = [];
+  tauri.noFiles = false;
   __resetPromptForTests();
 });
 
@@ -110,6 +120,25 @@ describe("Set up now in a folder that isn't a project", () => {
   });
 });
 
+describe("a project whose switch didn't finish", () => {
+  it("gets no agent added: the reason is shown, and nothing is written", async () => {
+    tauri.byDir = { "/code/shop": "v4" };
+    tauri.noFiles = true;
+    tauri.pending = [{ archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" }];
+    const onError = vi.fn();
+    const onNotice = vi.fn();
+    render(<AgentsTab root="/code/shop" onNotice={onNotice} onError={onError} />);
+    const [add] = await screen.findAllByRole("button", { name: "Add" });
+    fireEvent.click(add);
+    await waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    expect(onError.mock.calls[0][0]).toBe(
+      "A BMAD switch in shop didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+    );
+    expect(onNotice).not.toHaveBeenCalled();
+    expect(tauri.applies).toHaveLength(0);
+  });
+});
+
 describe("the Agents tab's project", () => {
   it("is the BMAD project the pane is in, not the repository above it", async () => {
     tauri.roots = { "/code/mono/app/src": "/code/mono", "/code/mono/app": "/code/mono" };
@@ -134,5 +163,32 @@ describe("the Project setup card", () => {
     expect(await screen.findByText("Incomplete")).toBeTruthy();
     expect(screen.getByText(/BMAD isn't installed/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Set up now" })).toBeTruthy();
+  });
+});
+
+describe("the Agents tab and a BMAD switch", () => {
+  const statusCalls = () => vi.mocked(invoke).mock.calls.filter(([c]) => c === "project_setup_status").length;
+
+  it("re-reads the project when its switch is done, and not for another project's", async () => {
+    renderTab("/code/shop");
+    await screen.findByRole("button", { name: "Set up now" });
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(0));
+    const before = statusCalls();
+    act(() => { window.dispatchEvent(new CustomEvent(SWITCH_DONE_EVENT, { detail: { root: "/code/other" } })); });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(statusCalls()).toBe(before);
+
+    act(() => { window.dispatchEvent(new CustomEvent(SWITCH_DONE_EVENT, { detail: { root: "/code/shop" } })); });
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(before));
+  });
+
+  it("stops listening when it unmounts", async () => {
+    const { unmount } = renderTab("/code/shop");
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(0));
+    unmount();
+    const before = statusCalls();
+    window.dispatchEvent(new CustomEvent(SWITCH_DONE_EVENT, { detail: { root: "/code/shop" } }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(statusCalls()).toBe(before);
   });
 });

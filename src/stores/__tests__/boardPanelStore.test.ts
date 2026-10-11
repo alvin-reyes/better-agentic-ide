@@ -29,6 +29,20 @@ const emptyMap = (): V6Map => ({
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("boardPanelStore", () => {
+  it("counts every rebuild, one that finds no BMAD included", async () => {
+    const { deps } = controlled(null);
+    const store = createBoardPanelStore(deps);
+    expect(store.getState().builds).toBe(0);
+    store.getState().show("/p");
+    await flush();
+    // Nothing to show, and nothing in the state changed but the count.
+    expect(store.getState().board).toBeNull();
+    expect(store.getState().map).toBeNull();
+    expect(store.getState().builds).toBe(1);
+    await store.getState().refresh();
+    expect(store.getState().builds).toBe(2);
+  });
+
   it("holds a v6 project's map, not a board", async () => {
     const { deps, pending } = controlled("v6");
     const store = createBoardPanelStore(deps);

@@ -18,6 +18,7 @@ describe("isPersistedKey", () => {
     expect(isPersistedKey("better-terminal-settings")).toBe(true);
     expect(isPersistedKey("ade-scratchpad-draft")).toBe(true);
     expect(isPersistedKey("ade-rec-abc")).toBe(true);
+    expect(isPersistedKey("ade-bmad-kept")).toBe(true);
     expect(isPersistedKey("some-other-lib-key")).toBe(false);
   });
 });

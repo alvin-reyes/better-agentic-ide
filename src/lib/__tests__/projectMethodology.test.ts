@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, ROLES, RULES_MD, methodologyFiles } from "../projectMethodology";
+import { ARCHIVE_RULE_MARKER, CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, ROLES, RULES_MD, methodologyFiles } from "../projectMethodology";
 import { isSetupCandidate, summarize } from "../projectSetup";
 
 describe("ADE methodology", () => {
@@ -201,5 +201,19 @@ describe("core role files per methodology", () => {
     expect(qa("v4")).not.toContain("## BMAD tasks (v6)");
     expect(qa()).toContain("## BMAD tasks (v6)");
     expect(qa()).not.toContain("## BMAD tasks (v4)");
+  });
+
+  it("tells agents the archive is read-only history, once", () => {
+    const rule =
+      "`.ade/archive/` holds earlier BMAD versions of this project. It is\n" +
+      "read-only history: never treat it as current documents, never write to it,\n" +
+      "and read it only when a person asks about the earlier work.\n";
+    expect(RULES_MD).toContain(rule);
+    expect(RULES_MD.split(ARCHIVE_RULE_MARKER)).toHaveLength(2);
+    // After the Definition of Done, set apart by one blank line.
+    expect(RULES_MD).toContain(`no overrides by assertion.\n\n${ARCHIVE_RULE_MARKER}\n## 4. The archive\n`);
+    expect(RULES_MD.endsWith(rule)).toBe(true);
+    // New projects get it with the rest of the rules.
+    expect(methodologyFiles("demo").find((f) => f.path === ".ade/rules.md")!.content).toBe(RULES_MD);
   });
 });

@@ -65,7 +65,7 @@ function parseRustCommands(): Map<string, Set<string>> {
 
   for (const file of rustFiles(TAURI_SRC)) {
     const source = readFileSync(file, "utf8");
-    const re = /#\[tauri::command\]\s*(?:pub\s+)?fn\s+(\w+)\s*\(([^)]*)\)/g;
+    const re = /#\[tauri::command(?:\(async\))?\]\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)\s*\(([^)]*)\)/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(source)) !== null) {
       const [, name, rawParams] = m;

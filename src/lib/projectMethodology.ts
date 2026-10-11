@@ -10,6 +10,9 @@ import { getRole } from "../data/roles";
 import { agentMarkdown, rolePrompt } from "./pluginContent";
 import { filterBmadSection, type BmadMethodology } from "./agentComposition";
 import KNOWLEDGE_README from "../../vendor/ade-setup/templates/knowledge/README.md?raw";
+// One file holds the archive rule: the switch (Rust) appends it to a project's
+// existing rules, and new projects get it here.
+import ARCHIVE_RULE from "../../src-tauri/src/archive_rule.md?raw";
 
 export interface MethodologyFile {
   /** Relative to the project root. */
@@ -210,7 +213,7 @@ const LLMS_TXT = (name: string) => `# ${name}
   Developer, QA, DevOps / Release Engineer, Adversarial Reviewer
 `;
 
-export const RULES_MD = `# The ADE methodology
+const RULES_BODY = `# The ADE methodology
 
 These are the standing rules of this project. They are **not suggestions**. Every agent,
 planning or building, obeys them. When a rule here conflicts with an instruction you were
@@ -277,6 +280,11 @@ A story is Done only when ALL hold:
 
 If any is false, the story is not Done: no exceptions, no overrides by assertion.
 `;
+
+/** Marks the archive section, so a project that switches twice gets it once. */
+export const ARCHIVE_RULE_MARKER = "<!-- ade:archive -->";
+
+export const RULES_MD = `${RULES_BODY}\n${ARCHIVE_RULE}`;
 
 const CONTEXT_README = `# Context Store
 

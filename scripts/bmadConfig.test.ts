@@ -78,6 +78,15 @@ describe("the same newline defect, in the config parser", () => {
     expect(parseBmadConfig("prd:\n  prdSharded: maybe\n").prdSharded).toBe(true);
   });
 
+  it("reads a config saved with Windows line endings", () => {
+    const p = parseBmadConfig("qa:\r\n  qaLocation: quality\r\nprd:\r\n  prdFile: spec/prd.md\r\n  prdSharded: false\r\ndevStoryLocation: work/stories\r\n");
+    expect(p.usedDefaults).toBe(false);
+    expect(p.qaLocation).toBe("quality");
+    expect(p.prdFile).toBe("spec/prd.md");
+    expect(p.prdSharded).toBe(false);
+    expect(p.devStoryLocation).toBe("work/stories");
+  });
+
   it("says it used defaults when the config names no path at all", () => {
     // markdownExploder/slashPrefix exist in the vendored file but set no path.
     expect(parseBmadConfig("markdownExploder: true\nslashPrefix: BMad\n").usedDefaults).toBe(true);

@@ -5,12 +5,13 @@ import TerminalPane from "./components/TerminalPane";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
-import { useProjectSetup, announceSetup } from "./hooks/useProjectSetup";
-import type { SetupResult } from "./lib/projectSetup";
+import { useProjectSetup, announceFailure, announceSetup, announceSwitch } from "./hooks/useProjectSetup";
+import type { SetupFailure, SetupResult } from "./lib/projectSetup";
+import { SWITCH_DONE_EVENT, type SwitchDone } from "./lib/bmadSwitch";
 import { writePty } from "./lib/terminalCommands";
 import Toast from "./components/Toast";
 import MethodologyPromptHost from "./components/MethodologyPrompt";
-import { useMethodologyPrompt } from "./lib/methodologyPrompt";
+import { togglePalette, useMethodologyPrompt } from "./lib/methodologyPrompt";
 import { hideSplash } from "./lib/splash";
 import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
@@ -171,16 +172,20 @@ export default function App() {
   const withdraw = useCallback((key: string) => setToast((current) => withdrawToast(current, key)), []);
   useContextGuard(activeCwd, showToast);
   useProjectSetup(activeCwd, showToast, withdraw);
-  // Setups run elsewhere (new-tab dialog, command palette) report here.
+  // Setups run elsewhere (new-tab dialog, command palette) report here. A BMAD
+  // switch has its own event: a setup's toast offers Undo, and undoing the
+  // setup a switch ran would leave the project with no BMAD.
   useEffect(() => {
     const onSetup = (e: Event) => announceSetup((e as CustomEvent<SetupResult>).detail, showToast);
-    const onSetupFailed = (e: Event) =>
-      showToast({ title: "Project setup", body: (e as CustomEvent<{ why: string }>).detail.why });
+    const onSetupFailed = (e: Event) => announceFailure((e as CustomEvent<SetupFailure>).detail, showToast);
+    const onSwitch = (e: Event) => announceSwitch((e as CustomEvent<SwitchDone>).detail, showToast);
     window.addEventListener("project-setup-done", onSetup);
     window.addEventListener("project-setup-failed", onSetupFailed);
+    window.addEventListener(SWITCH_DONE_EVENT, onSwitch);
     return () => {
       window.removeEventListener("project-setup-done", onSetup);
       window.removeEventListener("project-setup-failed", onSetupFailed);
+      window.removeEventListener(SWITCH_DONE_EVENT, onSwitch);
     };
   }, [showToast]);
   useTerminalFocusGuard();
@@ -290,7 +295,8 @@ export default function App() {
     return () => { cancelled = true; window.clearInterval(id); };
   }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
 
-  const toggleCommandPalette = useCallback(() => setPaletteOpen((prev) => !prev), []);
+  // Not over the BMAD version question or the switch's confirm step.
+  const toggleCommandPalette = useCallback(() => setPaletteOpen(togglePalette), []);
 
   const toggleScratchpad = useCallback(() => {
     const sp = scratchpadRef.current;

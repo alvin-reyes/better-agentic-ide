@@ -555,6 +555,14 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
     if let Some(bad) = rules.iter().find(|r| !valid_rule(r)) {
         return Err(format!("refusing unexpected rule {bad}"));
     }
+    merge_deny(root, rules)
+}
+
+/// Merge `rules` into `permissions.deny` in the project's settings file,
+/// keeping everything else. A file that exists but isn't valid JSON is an
+/// error and is left as it is. Returns the rules actually added; the file is
+/// only written when there are some. No rule check: callers decide that.
+fn merge_deny(root: &Path, rules: &[String]) -> Result<Vec<String>, String> {
     let path = settings_path(root);
     let mut v = load_settings(&path)?;
     let obj = v.as_object_mut().ok_or("settings.json is not a JSON object")?;
@@ -597,6 +605,22 @@ pub fn hide_attribution(root: &Path) -> Result<bool, String> {
         save_settings(&path, &v)?;
     }
     Ok(changed)
+}
+
+/// The rule that keeps Claude Code's file-editing tools out of the archive.
+/// `Edit` covers every file-editing tool, and the leading `/` anchors the path
+/// to the project wherever the session was started. It does not stop a shell
+/// command; `.ade/rules.md` is the guard for those. Reading stays allowed.
+pub const ARCHIVE_DENY_RULE: &str = "Edit(/.ade/archive/**)";
+
+/// Add `ARCHIVE_DENY_RULE` to `permissions.deny` in the project's
+/// `.claude/settings.json`, keeping everything else in the file. Returns
+/// whether the file changed. Only a switch calls this: a project with no
+/// archive needs no rule, and setup must not edit every project's shared
+/// settings. It skips `add_deny_rules`' `valid_rule` check, which keeps the
+/// webview to the heavy-path `Read` rules.
+pub fn deny_archive_edits(root: &Path) -> Result<bool, String> {
+    Ok(!merge_deny(root, &[ARCHIVE_DENY_RULE.to_string()])?.is_empty())
 }
 
 /// Personal settings Claude Code keeps out of git; presets are a personal choice.
@@ -984,5 +1008,47 @@ mod tests {
         assert!(latest_in(&d, Duration::from_secs(60)).is_none(), "context reset by /compact");
         std::fs::write(&f, format!("{}\n{}\n{}\n", usage("a", 150_000), boundary, usage("b", 20_000))).unwrap();
         assert_eq!(latest_in(&d, Duration::from_secs(60)).unwrap().context_tokens, 20_000);
+    }
+
+    #[test]
+    fn archive_edits_are_denied_once_and_other_keys_are_kept() {
+        let d = tmp("archive_deny");
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        std::fs::write(settings_path(&d), r#"{"model":"sonnet","permissions":{"allow":["Bash(npm test)"],"deny":["Read(./dist/**)"]}}"#).unwrap();
+        assert!(deny_archive_edits(&d).unwrap());
+        let v = read_json::<Value>(&settings_path(&d)).unwrap();
+        assert_eq!(v["model"], "sonnet");
+        assert_eq!(v["permissions"]["allow"][0], "Bash(npm test)");
+        assert_eq!(v["permissions"]["deny"], serde_json::json!(["Read(./dist/**)", "Edit(/.ade/archive/**)"]));
+        // Again: nothing to add, and the file is not rewritten.
+        let before = std::fs::read_to_string(settings_path(&d)).unwrap();
+        assert!(!deny_archive_edits(&d).unwrap());
+        assert_eq!(std::fs::read_to_string(settings_path(&d)).unwrap(), before);
+    }
+
+    #[test]
+    fn archive_edits_are_denied_in_a_project_with_no_settings() {
+        let d = tmp("archive_deny_new");
+        assert!(deny_archive_edits(&d).unwrap());
+        assert_eq!(read_json::<Value>(&settings_path(&d)).unwrap(), serde_json::json!({ "permissions": { "deny": ["Edit(/.ade/archive/**)"] } }));
+    }
+
+    #[test]
+    fn archive_deny_reports_a_malformed_settings_file_and_leaves_it() {
+        let d = tmp("archive_deny_bad");
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        std::fs::write(settings_path(&d), "{ not json").unwrap();
+        assert!(deny_archive_edits(&d).unwrap_err().contains("not valid JSON"));
+        assert_eq!(std::fs::read_to_string(settings_path(&d)).unwrap(), "{ not json");
+    }
+
+    /// The webview's command adds heavy-path Read rules and nothing else: the
+    /// archive rule is the switch's to add, not something a page can ask for.
+    #[test]
+    fn the_webviews_deny_command_still_refuses_the_archive_rule() {
+        let d = tmp("archive_deny_webview");
+        assert!(!valid_rule(ARCHIVE_DENY_RULE));
+        assert!(add_deny_rules(&d, &[ARCHIVE_DENY_RULE.to_string()]).is_err());
+        assert!(!settings_path(&d).exists());
     }
 }

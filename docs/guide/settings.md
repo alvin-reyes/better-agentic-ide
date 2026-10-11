@@ -26,7 +26,7 @@ Your theme is painted before the first frame is drawn, so starting ADE never fla
 
 ## Project setup
 
-**Set up every project I open** (*Settings → Terminal*) is on by default. A project with no BMAD is asked whether to use BMAD v6 or v4 before it is set up, and the question must be answered; turn this off to not be asked. See [Project setup]({{ '/guide/project-setup/' | relative_url }}#choosing-the-bmad-version).
+**Set up every project I open** (*Settings → Terminal*) is on by default. A project with no BMAD is asked whether to use BMAD v6 or v4 before it is set up, and the question must be answered; turn this off to not be asked. A project that already has BMAD is asked once, from the New tab dialog, whether to keep its version or switch. See [Project setup]({{ '/guide/project-setup/' | relative_url }}#choosing-and-switching-the-bmad-version).
 
 ## Workspace
 

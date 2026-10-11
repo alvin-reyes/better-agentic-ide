@@ -1,12 +1,15 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { GuardToast } from "./useContextGuard";
+import { movedLabel, type SwitchDone } from "../lib/bmadSwitch";
+import { joinPath } from "../lib/bmadRuntime/paths";
+import { openFileFromTerminal } from "../lib/openFile";
 import { STACK_LABELS } from "../lib/projectMethodology";
 import { askMethodology, projectName, versionToSetUp, type AskUi, type MethodologyAnswer } from "../lib/methodologyPrompt";
 import {
-  addStackAgents, foldersUpTo, isComplete, isSettingUp, isSetupCandidate, normRoot, onProjectSetUp, setUpProject, setupDeclined,
-  setupRootOf, setupStatus, summarize, undoSetup, wasSetUp,
-  type Methodology, type SetupResult,
+  addStackAgents, foldersUpTo, isComplete, isSettingUp, isSetupCandidate, normRoot, onProjectHasBmad, setUpProject, setupDeclined,
+  setupRootOf, setupStatus, summarize, switchBlock, undoSetup, wasSetUp,
+  type Methodology, type SetupFailure, type SetupResult, type SwitchBlock,
 } from "../lib/projectSetup";
 
 /** Show what a setup wrote, with Undo. */
@@ -22,6 +25,44 @@ export function announceSetup(r: SetupResult, show: (t: GuardToast) => void, sta
     title: stackOnly ? `${stacks} detected in ${projectName(r.root)}` : `Set up ${projectName(r.root)}`,
     body: [added, failed].filter(Boolean).join(" "),
     action: { label: "Undo", run: () => { void undoSetup(r); } },
+  });
+}
+
+/**
+ * Say that a switch went through. Unlike a setup's toast it offers no Undo:
+ * undoing the setup would leave the project with no BMAD at all. The way back
+ * is in ARCHIVE.md, which it links to.
+ */
+export function announceSwitch(done: SwitchDone, show: (t: GuardToast) => void) {
+  const { archive, archiveDenied } = done.result;
+  const guard = archiveDenied
+    ? "Agents can't edit the archive: a permission rule in .claude/settings.json stops them."
+    : "The permission rule that stops agents editing the archive couldn't be added to .claude/settings.json, so the archive isn't protected from edits.";
+  show({
+    title: `Switched ${projectName(done.root)} to BMAD ${done.to}`,
+    body: `Moved ${movedLabel(done.result)} to ${archive}/. ${guard} Agents already running keep their old role prompt until restarted.`,
+    action: { label: "Open ARCHIVE.md", run: () => openFileFromTerminal(joinPath(done.root, `${archive}/ARCHIVE.md`)) },
+  });
+}
+
+/**
+ * The journals of unfinished switches a toast has pointed to this session.
+ * The cd hook says so once for each; a route someone asked for says it every time.
+ */
+const toldPending = new Set<string>();
+
+/**
+ * Say why a setup or a switch didn't happen. When an unfinished switch is the
+ * reason the toast links to its journal, which is where it is resolved, and
+ * so stays up as long as any toast with a button.
+ */
+export function announceFailure(failed: SetupFailure, show: (t: GuardToast) => void) {
+  const { why, title, archiveFile } = failed;
+  if (archiveFile) toldPending.add(archiveFile);
+  show({
+    title: title ?? "Project setup",
+    body: why,
+    ...(archiveFile ? { action: { label: "Open ARCHIVE.md", run: () => openFileFromTerminal(archiveFile) } } : {}),
   });
 }
 
@@ -100,38 +141,61 @@ const askByToast = (show: (t: GuardToast) => void): AskUi => (root) => {
  * is picked. On later opens, agents for a stack the project has gained since
  * are added.
  *
- * The question belongs to the project the terminal is in: `withdraw` takes its
- * toast down (by key, so no other toast goes with it) when the terminal leaves
- * the project, when automatic setup is turned off, and when the project is set
- * up some other way.
+ * The question belongs to the project the terminal is in. Its toast is taken
+ * down (by key, so no other toast goes with it) when the terminal leaves the
+ * project, when automatic setup is turned off, and when the project is set up
+ * some other way. It is the next run that takes it down, once it knows which
+ * project the new folder is in: a `cd` inside the same project leaves the
+ * toast mounted where it is, rather than withdrawing it and showing it again.
  */
 export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => void, withdraw: (key: string) => void) {
   const enabled = useSettingsStore((s) => s.autoProjectSetup);
-  useEffect(() => onProjectSetUp(({ root }) => {
+  // The project whose question toast this hook has put on screen, if any.
+  const questionFor = useRef<string | null>(null);
+  const withdrawQuestion = useCallback(() => {
+    const root = questionFor.current;
+    questionFor.current = null;
+    if (root) withdraw(questionKey(root));
+  }, [withdraw]);
+  useEffect(() => onProjectHasBmad((root) => {
     const open = asking.get(root);
     // An answered question is its own run's to finish; an open one is over.
     if (open && !open.answered) {
       asking.delete(root);
       open.leave();
     }
+    if (questionFor.current && normRoot(questionFor.current) === normRoot(root)) questionFor.current = null;
     withdraw(questionKey(root));
   }), [withdraw]);
+  // The toast goes when the hook does.
+  useEffect(() => withdrawQuestion, [withdrawQuestion]);
   useEffect(() => {
-    if (!enabled || !cwd) return;
+    // No folder, or automatic setup is off: there is no project to ask about.
+    if (!enabled || !cwd) {
+      withdrawQuestion();
+      return;
+    }
     let cancelled = false;
-    // The project this run put the question up for, if it did.
-    let asked: string | null = null;
+    // This run put the question up, or put it up again.
+    let asked = false;
     const byToast = askByToast(show);
     const ask: AskUi = (root) => {
       // The terminal has left: this run has no place to ask from any more.
       if (cancelled) return Promise.resolve(LEAVE_IT);
-      asked = root;
+      asked = true;
+      questionFor.current = root;
       return byToast(root);
     };
-    (async () => {
-      const root = await setupRootOf(cwd);
+    // A project blocked by an unfinished switch is told why once, not on each
+    // cd: after a restart nothing else on screen says so. Any other block (a
+    // switch running, a check that failed) stays quiet here.
+    const tellBlocked = (block: SwitchBlock) => {
+      if (cancelled || !block.archiveFile || toldPending.has(block.archiveFile)) return;
+      announceFailure({ why: block.reason, archiveFile: block.archiveFile }, show);
+    };
+    const run = async (root: string) => {
       // Skip projects whose setup the user undid.
-      if (cancelled || !isSetupCandidate(root) || setupDeclined(root)) return;
+      if (!isSetupCandidate(root) || setupDeclined(root)) return;
       // And ones the new-tab dialog is setting up right now. That project can
       // be a folder below `root`: New tab sets up the folder that was picked,
       // and until its marker is written this hook resolves the repository
@@ -140,7 +204,9 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
       const status = await setupStatus(root).catch(() => null);
       if (!status || cancelled) return;
       if (wasSetUp(root)) {
-        if (!status.stacks.length) return;
+        const block = await switchBlock(root);
+        if (block) return tellBlocked(block);
+        if (!status.stacks.length || cancelled) return;
         const r = await addStackAgents(root, status.stacks, status.methodology ?? "v6").catch(() => null);
         if (r && !cancelled) announceSetup(r, show, true);
         return;
@@ -151,6 +217,7 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
       const quiet = isComplete(status);
       // The project's own version, with no question; a project with neither is asked.
       const answer = await askMethodology(root, { ask });
+      if (answer.kind === "blocked") tellBlocked(answer);
       if (answer.kind !== "chosen") return;
       if (!answer.asked) {
         if (cancelled) return;
@@ -175,17 +242,27 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
         // the setup is running. After a failure the next run asks afresh.
         asking.delete(normRoot(root));
       }
+    };
+    (async () => {
+      const root = await setupRootOf(cwd);
+      if (cancelled) return;
+      // Another project's question leaves with it. The same project's stays.
+      if (questionFor.current !== null && normRoot(questionFor.current) !== normRoot(root)) withdrawQuestion();
+      await run(root);
+      // This run found nothing to ask (set up meanwhile, declined, mid-setup):
+      // a question still up for the project has had its day.
+      if (!cancelled && !asked && questionFor.current !== null && normRoot(questionFor.current) === normRoot(root)) withdrawQuestion();
     })();
     return () => {
+      // The question stays open, and so does its toast until the next run
+      // knows whether the terminal is still in the project.
       cancelled = true;
-      // The question stays open, without its toast: the next run for the
-      // project shows it again.
-      if (asked) withdraw(questionKey(asked));
     };
-  }, [cwd, enabled, show, withdraw]);
+  }, [cwd, enabled, show, withdraw, withdrawQuestion]);
 }
 
-/** Test seam: forget every open question. */
+/** Test seam: forget every open question, and what has been said about unfinished switches. */
 export function __resetSetupQuestionsForTests() {
   asking.clear();
+  toldPending.clear();
 }

@@ -44,7 +44,9 @@ export const BMAD_DEFAULTS: BmadPaths = {
  */
 function scalars(yaml: string): Map<string, string> {
   const out = new Map<string, string>();
-  for (const raw of yaml.split("\n")) {
+  // \r?\n: a file saved on Windows ends its lines in \r, which `.` below
+  // does not match, so every line of such a file was skipped.
+  for (const raw of yaml.split(/\r?\n/)) {
     // [^\S\n] rather than \s: the latter matches the line break, so a key with
     // no value captured the following line.
     const m = /^(\s*)([A-Za-z_][\w-]*):[^\S\n]*(.*)$/.exec(raw);

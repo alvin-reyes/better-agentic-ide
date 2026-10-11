@@ -1,0 +1,13 @@
+# Shared by src-tauri/src/bmadconfig.rs and scripts/switchFixtures.test.ts.
+markdownExploder: true
+qa:
+  qaLocation: "quality"   # the gates live here
+prd:
+  prdFile: 'spec/prd#1.md'
+  prdSharded: True
+  prdShardedLocation: spec/prd
+architecture:
+    architectureFile: docs/architecture.md
+devDebugLog: logs/debug.md
+devStoryLocation: work/stories # sharded stories
+slashPrefix: BMad

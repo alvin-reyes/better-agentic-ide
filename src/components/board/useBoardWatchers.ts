@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import { watchExtensions } from "../../lib/boardWatch";
+import { watchExcludes, watchExtensions } from "../../lib/boardWatch";
 import { tauriFs } from "../../lib/tauriFs";
 
 /** How often a missing candidate folder is looked for again while the panel is open. */
@@ -59,7 +59,7 @@ export function useBoardWatch(dirs: string[], methodology: "v4" | "v6" | null, o
         if (cancelled) break;
         const channel = new Channel<{ type: string }>();
         channel.onmessage = () => { if (!cancelled) onChange(); };
-        const id = await invoke<number>("watch_directory", { dir, extensions: watchExtensions(dir, methodology ?? "v4"), withContent: false, onEvent: channel }).catch(() => null);
+        const id = await invoke<number>("watch_directory", { dir, extensions: watchExtensions(dir, methodology ?? "v4"), withContent: false, exclude: watchExcludes(dir), onEvent: channel }).catch(() => null);
         if (id === null) continue;
         if (cancelled) invoke("unwatch_directory", { id }).catch(() => {});
         else ids.push(id);

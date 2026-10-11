@@ -569,3 +569,56 @@ Frontend:
   in place when the project hasn't changed.
 - **Undo is the only way back** from a forced answer, and it lives in a
   15-second toast. Consider an Undo entry on the Agents tab.
+
+## Amendments made while planning the switch
+
+- **A v6 output folder that holds documents stays.** When a v6 project's
+  output folder is `docs`, is or is inside a documents location, or contains
+  one, it is listed under "Your documents (stay)" and moves only when ticked.
+  "What moves, v6 → v4" and the `documents` field therefore apply in both
+  directions. Documents locations are `docs`, the six v4 locations and the
+  v4 template outputs.
+- **A move never swallows what must stay.** A planned move that equals or
+  contains a path that stays, or an unticked documents location, blocks the
+  plan and is named. So does a source called `ARCHIVE.md` or `leftovers-*`
+  at the project's top level.
+- **Only "not found" means absent.** A marker or `settings.json` that exists
+  but can't be read fails the switch; rollback never removes or replaces it.
+- **The journal leads the disk.** Each move is recorded as `moving` before
+  its rename, so a crash never leaves a move the journal doesn't name.
+  `ARCHIVE.md` gives the hand steps per phase.
+- **Rollback reports its own failures** and keeps the journal `incomplete`
+  when a restore step fails.
+- **The pending-switch check fails closed.** If it can't run, setup is
+  blocked with "Couldn't check for an unfinished BMAD switch."
+
+## Decisions made while building the switch
+
+These settle points the sections above leave open, or change them. Where they differ from the text above, they are what the code does.
+
+- **A v6 output folder that holds documents stays.** When the output folder is `docs`, is inside a documents location, or contains one, it is offered in the dialog unticked, like a document, and moves only when ticked. This holds when the folder is reached through a link.
+- **Only "not found" means absent.** A marker or `settings.json` that exists but can't be read fails the step; it is never removed or replaced.
+- **The journal leads the disk.** Each move is journalled as `moving` before its rename and `moved` after it. `ARCHIVE.md` gives by-hand steps for each `phase`.
+- **A rollback reports its own failures**, and leaves the journal `incomplete` when any restore step failed. It writes `incomplete` first and does not start if that write fails: the journal on disk is then still true, and the person follows it.
+- **A rollback never replaces a file.** A regular file comes back by hard link, then removal of the archive name; a folder only onto a path that is absent. `settings.json` and `.ade/methodology` are put back only if they are still as the switch left them.
+- **A move never swallows what must stay.** A planned move that equals or contains a path that stays, an unticked documents location, a person's own `.claude/agents`, `.claude/skills` or `.claude/commands`, or a path that is also a leftover, blocks the plan and names the path and the config key.
+- **The archive stays in the project.** A linked `.ade` or `.ade/archive` blocks.
+- **A capped count says so**: 50,000 means "at least", shown as "50,000+".
+- **The pending check fails closed, on both sides.** The front end treats a failed check as blocked. The Rust setup commands and Undo also refuse a project with an unfinished switch, under the same lock as the switch.
+- **Undo leaves another version's marker alone.**
+- **Git has a ten-second limit**, after which the dialog says it couldn't check git. A project outside any repository says that instead. Applying a switch asks git only what decides a move.
+- **A blocked project says so.** New Tab, the palette, the board and (once per session) a terminal in the project show a toast with an **Open ARCHIVE.md** action. This goes beyond the sections above.
+- **The confirm dialog** keeps the blocked reason and a failed switch's error above the buttons, outside the scrolling list, and lists the open terminals and agents first.
+- **Refusals** (blocked, no BMAD, not a project) are told apart from failures by identity and shown without a "failed:" prefix.
+
+### Left for later
+
+- Undo pressed after a switch still removes a `settings.json` the first setup created, whatever it holds, and unchanged shared files; a refused Undo is silent. Reaching it needs the setup toast to outlive a switch.
+- The by-hand text for `status: incomplete` doesn't name the new version's files.
+- Unreadable `settings.json` or `rules.md` is found only after the moves (the rollback is clean).
+- A failed journal save leaves a `.tmp` in the archive, so a clean rollback keeps the folder.
+- The rollback's fallback for links and volumes without hard links is check-then-rename; a no-replace rename would close its window.
+- The palette is held back only at the hotkey press; other panel hotkeys still open beneath a must-answer question.
+- The Agents tab's refusal has no link to the journal.
+- Nothing exercises a hung git on Windows; two tests assume no `.git` above the temp folder.
+- Approvals and gates carried across initiatives (issue #42).

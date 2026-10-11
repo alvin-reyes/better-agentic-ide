@@ -1,13 +1,20 @@
 mod antislop;
 mod bmad;
+mod bmadconfig;
+// Public so `tests/bmadswitch_e2e.rs` can plan and apply a switch the way the
+// commands do, without the `AppHandle` they take.
+pub mod bmadswitch;
 // Public so `tests/bmadv6_e2e.rs` — an integration test, outside the crate —
 // can scaffold a project with the same `install` setup uses.
 pub mod bmadv6;
 mod contracts;
 mod crashlog;
+mod git;
 mod mcp;
 mod platform;
-mod projectsetup;
+// Public so `tests/bmadswitch_e2e.rs` can set a project up with the same
+// `apply` the setup command and the switch use.
+pub mod projectsetup;
 mod pty;
 mod ptysink;
 mod state;
@@ -444,6 +451,9 @@ pub fn run() {
             list_md_files,
             list_directory,
             bmad::bmad_status,
+            bmadswitch::bmad_switch_pending,
+            bmadswitch::bmad_switch_plan,
+            bmadswitch::bmad_switch_apply,
             subagent::watch_subagents,
             subagent::unwatch_subagents,
             state::state_read_all,

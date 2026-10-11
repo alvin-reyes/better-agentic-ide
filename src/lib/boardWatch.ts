@@ -14,6 +14,14 @@ export function watchExtensions(dir: string, methodology: "v4" | "v6"): string[]
   return methodology === "v6" ? [...WATCH_EXTENSIONS, "html"] : WATCH_EXTENSIONS;
 }
 
+/**
+ * Path prefixes whose events the watcher drops. `.ade/archive/` holds earlier
+ * BMAD versions: the board never reads it, and a switch writes it in one burst.
+ */
+export function watchExcludes(dir: string): string[] {
+  return /(^|[\\/])\.ade[\\/]*$/.test(dir) ? [`${dir.replace(/[\\/]+$/, "")}/archive`] : [];
+}
+
 const parent = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 
 /**
