@@ -22,7 +22,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
-  __resetPromptForTests, askAndSetUp, askMethodology, dismissedThisSession, projectName, settlePrompt, useMethodologyPrompt,
+  __resetPromptForTests, askAndSetUp, askMethodology, projectName, settlePrompt, useMethodologyPrompt,
   type MethodologyAnswer,
 } from "../methodologyPrompt";
 
@@ -62,10 +62,13 @@ describe("askMethodology", () => {
 
   it("asks when the check on disk fails, rather than guessing a version", async () => {
     tauri.statusFails = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const answer = askMethodology("/code/shop");
     await asked("/code/shop");
     settlePrompt({ kind: "dismissed" });
     await answer;
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("shares one question between two callers asking about the same project", async () => {
@@ -92,50 +95,6 @@ describe("askMethodology", () => {
     expect(await askMethodology("/code/shop/", { ask })).toEqual({ kind: "chosen", methodology: "v4", asked: true });
     expect(ask).toHaveBeenCalledWith("/code/shop");
     expect(request()).toBeNull();
-  });
-});
-
-describe("asking once per session", () => {
-  it("marks the project before the question shows, and doesn't ask it again", async () => {
-    // A question that is never answered: a toast that timed out.
-    const ask = vi.fn(() => new Promise<MethodologyAnswer>(() => {}));
-    void askMethodology("/code/shop", { once: true, ask });
-    await vi.waitFor(() => expect(ask).toHaveBeenCalledOnce());
-    expect(dismissedThisSession("/code/shop/")).toBe(true);
-
-    expect(await askMethodology("/code/shop/", { once: true, ask })).toEqual({ kind: "dismissed" });
-    expect(ask).toHaveBeenCalledOnce();
-  });
-
-  it("stays dismissed after the question is closed", async () => {
-    const ask = async (): Promise<MethodologyAnswer> => ({ kind: "dismissed" });
-    expect(await askMethodology("/code/shop", { once: true, ask })).toEqual({ kind: "dismissed" });
-    expect(dismissedThisSession("/code/shop")).toBe(true);
-  });
-
-  it("clears the mark when a version is chosen", async () => {
-    const ask = async (): Promise<MethodologyAnswer> => ({ kind: "chosen", methodology: "v6", asked: true });
-    await askMethodology("/code/shop", { once: true, ask });
-    expect(dismissedThisSession("/code/shop")).toBe(false);
-  });
-
-  it("still asks a dismissed project when the caller doesn't ask once", async () => {
-    await askMethodology("/code/shop", { once: true, ask: async () => ({ kind: "dismissed" }) });
-    const answer = askMethodology("/code/shop");
-    await asked("/code/shop");
-    settlePrompt({ kind: "dismissed" });
-    await answer;
-  });
-
-  it("never dismisses a project that has BMAD", async () => {
-    tauri.byDir = { "/code/old": "v4" };
-    await askMethodology("/code/old", { once: true });
-    expect(dismissedThisSession("/code/old")).toBe(false);
-  });
-
-  it("keeps the dismissals in memory only", async () => {
-    await askMethodology("/code/shop", { once: true, ask: async () => ({ kind: "dismissed" }) });
-    expect(localStorage.length).toBe(0);
   });
 });
 

@@ -42,35 +42,20 @@ export function settlePrompt(answer: MethodologyAnswer) {
 }
 
 /**
- * Projects asked about since launch that weren't given a version. In memory on
- * purpose: the next launch asks again.
- */
-const dismissed = new Set<string>();
-
-export function dismissedThisSession(root: string): boolean {
-  return dismissed.has(normRoot(root));
-}
-
-/**
  * The version to set `root` up on: the one on disk, or the person's answer.
+ * The question must be answered; `dismissed` only means another project's
+ * question replaced it, or the dialog's host went away.
  *
  * `ask` swaps the dialog for another way of asking (the cd hook's toast).
- * `once` asks a project at most once per app session, for the entry points
- * nobody chose to run: New tab and the cd hook.
  */
-export async function askMethodology(root: string, opts: { ask?: AskUi; once?: boolean } = {}): Promise<MethodologyAnswer> {
+export async function askMethodology(root: string, opts: { ask?: AskUi } = {}): Promise<MethodologyAnswer> {
   const at = normRoot(root);
-  const detected = await detectOnDisk(at).catch(() => null);
+  const detected = await detectOnDisk(at).catch((e) => {
+    console.warn("BMAD check failed; asking which version", e);
+    return null;
+  });
   if (detected) return { kind: "chosen", methodology: detected, asked: false };
-  if (opts.once) {
-    if (dismissed.has(at)) return { kind: "dismissed" };
-    // Marked before the question shows: a toast that times out, or is
-    // replaced by another, never answers.
-    dismissed.add(at);
-  }
-  const answer = await (opts.ask ?? askByDialog)(at);
-  if (answer.kind === "chosen") dismissed.delete(at);
-  return answer;
+  return (opts.ask ?? askByDialog)(at);
 }
 
 /**
@@ -88,9 +73,8 @@ export async function askAndSetUp(root: string): Promise<SetupResult | null> {
 /** "/code/shop" → "shop", on either separator. */
 export const projectName = (root: string) => root.split(/[\\/]/).filter(Boolean).pop() ?? root;
 
-/** Test seam: forget this session's dismissals and any open question. */
+/** Test seam: forget any open question. */
 export function __resetPromptForTests() {
-  dismissed.clear();
   waiting = null;
   useMethodologyPrompt.setState({ request: null });
 }
