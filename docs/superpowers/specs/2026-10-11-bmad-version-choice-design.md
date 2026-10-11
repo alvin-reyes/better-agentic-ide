@@ -569,3 +569,25 @@ Frontend:
   in place when the project hasn't changed.
 - **Undo is the only way back** from a forced answer, and it lives in a
   15-second toast. Consider an Undo entry on the Agents tab.
+
+## Amendments made while planning the switch
+
+- **A v6 output folder that holds documents stays.** When a v6 project's
+  output folder is `docs`, is or is inside a documents location, or contains
+  one, it is listed under "Your documents (stay)" and moves only when ticked.
+  "What moves, v6 → v4" and the `documents` field therefore apply in both
+  directions. Documents locations are `docs`, the six v4 locations and the
+  v4 template outputs.
+- **A move never swallows what must stay.** A planned move that equals or
+  contains a path that stays, or an unticked documents location, blocks the
+  plan and is named. So does a source called `ARCHIVE.md` or `leftovers-*`
+  at the project's top level.
+- **Only "not found" means absent.** A marker or `settings.json` that exists
+  but can't be read fails the switch; rollback never removes or replaces it.
+- **The journal leads the disk.** Each move is recorded as `moving` before
+  its rename, so a crash never leaves a move the journal doesn't name.
+  `ARCHIVE.md` gives the hand steps per phase.
+- **Rollback reports its own failures** and keeps the journal `incomplete`
+  when a restore step fails.
+- **The pending-switch check fails closed.** If it can't run, setup is
+  blocked with "Couldn't check for an unfinished BMAD switch."
