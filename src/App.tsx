@@ -9,6 +9,7 @@ import { useProjectSetup, announceSetup } from "./hooks/useProjectSetup";
 import type { SetupResult } from "./lib/projectSetup";
 import { writePty } from "./lib/terminalCommands";
 import Toast from "./components/Toast";
+import MethodologyPromptHost from "./components/MethodologyPrompt";
 import { hideSplash } from "./lib/splash";
 import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
@@ -527,6 +528,8 @@ export default function App() {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
+      {/* After the panels in the DOM, so it sits over one that raised it. */}
+      <MethodologyPromptHost />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
