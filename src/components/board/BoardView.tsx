@@ -3,6 +3,7 @@ import type { BoardState, StageId } from "../../stores/stageBoardStore";
 import type { StageView } from "../../lib/confirmedStage";
 import type { StoryView } from "../../lib/storyState";
 import type { Gate } from "../../lib/bmadGates";
+import { heading, muted, section } from "./boardStyles";
 
 export interface BoardActions {
   onOpen(path: string): void;
@@ -29,10 +30,6 @@ export function rowLabel(v: StoryView): string {
   if (v.state === "unknown") return v.story.rawStatus || "unknown";
   return v.state;
 }
-
-const muted = { color: "var(--text-secondary)" } as const;
-const section = { padding: "10px 12px", borderBottom: "1px solid var(--border)" } as const;
-const heading = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, ...muted, marginBottom: 6 } as const;
 
 /** A button whose async action shows its own failure, leaving the row as it was. */
 function ActionButton({ action, label, run, onError, unavailable }: { action: string; label: string; run(): Promise<void>; onError(msg: string | null): void; unavailable?: string | null }) {
@@ -228,17 +225,17 @@ function WorkItems({ methodology, board, actions, dispatched, dispatchUnavailabl
   );
 }
 
-function GateProblems({ board }: { board: BoardState }) {
-  const unreadable = board.unmatchedGates.filter((g) => g.error);
-  const unmatched = board.unmatchedGates.filter((g) => !g.error);
-  if (!unmatched.length && !unreadable.length && !board.supersededGates.length && !board.problems?.length) return null;
+export function GateProblems({ unmatchedGates, supersededGates, problems }: { unmatchedGates: Gate[]; supersededGates: Gate[]; problems?: string[] }) {
+  const unreadable = unmatchedGates.filter((g) => g.error);
+  const unmatched = unmatchedGates.filter((g) => !g.error);
+  if (!unmatched.length && !unreadable.length && !supersededGates.length && !problems?.length) return null;
   return (
     <div style={section}>
       <div style={heading}>Needs attention</div>
-      {board.problems?.map((p) => <div key={p}>{p}</div>)}
+      {problems?.map((p) => <div key={p}>{p}</div>)}
       {unmatched.map((g) => <div key={g.file}>Gate for {g.storyId} matches no story or ticket: {g.file}</div>)}
       {unreadable.map((g) => <div key={g.file}>{g.file}: {g.error}</div>)}
-      {board.supersededGates.map((g) => <div key={g.file} style={muted}>Superseded: {g.file}{g.error ? `: ${g.error}` : ""}</div>)}
+      {supersededGates.map((g) => <div key={g.file} style={muted}>Superseded: {g.file}{g.error ? `: ${g.error}` : ""}</div>)}
     </div>
   );
 }
@@ -254,7 +251,7 @@ export default function BoardView({ methodology, board, stage, error, actions, d
       <StageRail board={board} stage={stage} actions={actions} />
       <Artifacts board={board} onOpen={actions.onOpen} />
       <WorkItems methodology={methodology} board={board} actions={actions} dispatched={dispatched} dispatchUnavailable={dispatchUnavailable} />
-      <GateProblems board={board} />
+      <GateProblems unmatchedGates={board.unmatchedGates} supersededGates={board.supersededGates} problems={board.problems} />
     </div>
   );
 }
