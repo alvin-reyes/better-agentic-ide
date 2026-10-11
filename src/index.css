@@ -659,7 +659,10 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .switch-confirm__section ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .switch-confirm__section small { color: var(--text-muted); }
 .switch-confirm__section label { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; cursor: pointer; }
-.switch-confirm__warning { color: var(--text-primary); }
+.switch-confirm .switch-confirm__warning { color: var(--yellow); font-weight: 600; }
+.switch-confirm__alerts { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px 0; }
+.switch-confirm__retry { display: flex; align-items: flex-start; gap: 8px; }
+.switch-confirm__retry > .integrations-msg { flex: 1; }
 .switch-confirm__actions { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); }
 
 /* Agent picker: where to run */

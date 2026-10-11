@@ -14,8 +14,9 @@ const INSTALLS: Record<Methodology, string> = {
 
 /** "1 file", "2,000 files", "50,000+ files" (a capped count means at least that many). */
 const fileCount = (n: number) => `${countLabel(n)} ${n === 1 ? "file" : "files"}`;
+/** Set for a path git ignores: what is in it can't be got back from history. */
 const ignoredNote = (m: SwitchMove) =>
-  m.ignored === "all" ? ", ignored by git" : m.ignored === "some" ? ", partly ignored by git" : "";
+  m.ignored === "all" ? "ignored by git" : m.ignored === "some" ? "partly ignored by git" : null;
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -29,11 +30,15 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Moves({ moves }: { moves: SwitchMove[] }) {
   return (
     <ul>
-      {moves.map((m) => (
-        <li key={m.from}>
-          <code>{m.from}</code> <small>{fileCount(m.files)}{ignoredNote(m)}</small>
-        </li>
-      ))}
+      {moves.map((m) => {
+        const ignored = ignoredNote(m);
+        return (
+          <li key={m.from}>
+            <code>{m.from}</code>{" "}
+            <small>{fileCount(m.files)}{ignored && <>, <span className="switch-confirm__warning">{ignored}</span></>}</small>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -44,14 +49,16 @@ function GitNotes({ plan }: { plan: SwitchPlan }) {
     <>
       {(plan.dirty === null || plan.archiveIgnored === null) && <p>Couldn't check git.</p>}
       {plan.dirty === true && (
-        <p>This project has uncommitted changes. They stay as they are. Commit first if you want the move in its own commit.</p>
+        <p className="switch-confirm__warning">
+          This project has uncommitted changes. They stay as they are. Commit first if you want the move in its own commit.
+        </p>
       )}
       {ignored.length > 0 && (
         <p>
           Git ignores {ignored.join(", ")} today. An ignore rule like <code>/_bmad-output/</code> no longer matches once they move.
         </p>
       )}
-      {plan.archiveIgnored === true && <p><code>.ade/</code> is ignored by git, so the archive won't be committed.</p>}
+      {plan.archiveIgnored === true && <p><code>.ade/archive/</code> is ignored by git, so the archive won't be committed.</p>}
       {plan.archiveIgnored === false && <p><code>.ade/archive/</code> isn't ignored by git: the archive shows up as new files.</p>}
     </>
   );
@@ -88,12 +95,17 @@ export default function SwitchConfirm({ root, to, leaveLabel, onLeave, onDone }:
   // Confirming is a deliberate step, so unlike the two questions it has a way
   // back. Not while the switch runs: there is nothing to go back to mid-move.
   useEscapeToClose(() => { if (!running) onLeave(); });
+  // The button that was pressed was disabled while the switch ran, which takes
+  // focus from it: after a failure the keyboard would be nowhere.
+  useEffect(() => { if (error) dialog.current?.focus(); }, [error]);
 
   // The dry run, again whenever a box changes: a ticked document moves. An
   // answer that arrives after a newer request was made is dropped (`live`).
   const key = `${round}\n${ticked.join("\n")}`;
   useEffect(() => {
     let live = true;
+    // The error is the last attempt's, and this is a new one.
+    setPlanError(null);
     planSwitch(root, to, ticked)
       .then((p) => { if (live) { setPlan(p); setPlanKey(key); setPlanError(null); } })
       .catch((e) => { if (live) { setPlan(null); setPlanKey(key); setPlanError(String(e)); } });
@@ -156,10 +168,24 @@ export default function SwitchConfirm({ root, to, leaveLabel, onLeave, onDone }:
           <span className="contracts-panel__root" title={root}>{root}</span>
         </div>
         <div className="switch-confirm__body">
+          {/* First: what to stop before switching, then what git won't keep. Further down they were below the fold. */}
+          {busyOpen && (
+            <Section title="Open in this project">
+              <ul>
+                {open.panes.map((p, i) => (
+                  <li key={`pane-${i}`}>Terminal <b>{p.tab}</b> <small>{p.cwd}</small></li>
+                ))}
+                {open.agents.map((a, i) => (
+                  <li key={`agent-${i}`}>Agent <b>{a.name}</b> <small>{a.cwd}</small></li>
+                ))}
+              </ul>
+              <p className="switch-confirm__warning">Stop agents before switching: they may keep writing into moved folders.</p>
+            </Section>
+          )}
           {!plan && !planError && <p>Checking what would move…</p>}
-          {planError && <div className="integrations-msg" data-kind="error" role="alert">{planError}</div>}
           {plan && (
             <>
+              <Section title="Git"><GitNotes plan={plan} /></Section>
               {plan.archive && (
                 <p>
                   The old version moves into <code>{plan.archive}/</code> inside this project. Nothing is deleted.
@@ -211,25 +237,22 @@ export default function SwitchConfirm({ root, to, leaveLabel, onLeave, onDone }:
                 </Section>
               )}
               <Section title="The new version installs"><p>{INSTALLS[to]}</p></Section>
-              {busyOpen && (
-                <Section title="Open in this project">
-                  <ul>
-                    {open.panes.map((p, i) => (
-                      <li key={`pane-${i}`}>Terminal <b>{p.tab}</b> <small>{p.cwd}</small></li>
-                    ))}
-                    {open.agents.map((a, i) => (
-                      <li key={`agent-${i}`}>Agent <b>{a.name}</b> <small>{a.cwd}</small></li>
-                    ))}
-                  </ul>
-                  <p className="switch-confirm__warning">Stop agents before switching: they may keep writing into moved folders</p>
-                </Section>
-              )}
-              <Section title="Git"><GitNotes plan={plan} /></Section>
-              {plan.blocked && <div className="integrations-msg" data-kind="error" role="alert">{plan.blocked}</div>}
             </>
           )}
-          {error && <div className="integrations-msg" data-kind="error" role="alert">{error}</div>}
         </div>
+        {/* Outside the part that scrolls: why the button is disabled, or what just went wrong, is never below the fold. */}
+        {(error || planError || plan?.blocked) && (
+          <div className="switch-confirm__alerts">
+            {error && <div className="integrations-msg" data-kind="error" role="alert">{error}</div>}
+            {planError && (
+              <div className="switch-confirm__retry">
+                <div className="integrations-msg" data-kind="error" role="alert">{planError}</div>
+                <button type="button" className="ig-btn" onClick={() => setRound((r) => r + 1)}>Try again</button>
+              </div>
+            )}
+            {plan?.blocked && <div className="integrations-msg" data-kind="error" role="alert">{plan.blocked}</div>}
+          </div>
+        )}
         <div className="switch-confirm__actions">
           <button type="button" className="ig-btn" disabled={running} onClick={onLeave}>{leaveLabel}</button>
           <button type="button" className="ig-btn" data-primary disabled={!canSwitch} onClick={confirm}>

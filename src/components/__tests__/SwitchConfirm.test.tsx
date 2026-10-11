@@ -76,6 +76,11 @@ const renderConfirm = (leaveLabel: "Back" | "Cancel" = "Back") => {
 };
 /** The dry run has come back and is on screen. */
 const planned = () => screen.findByText(`${ARCHIVE}/`);
+/** The part of the dialog that scrolls: what is in it can be below the fold. */
+const scrolls = (el: Element) => el.closest(".switch-confirm__body") !== null;
+const warnings = () => [...dialog().querySelectorAll(".switch-confirm__warning")].map((el) => el.textContent);
+/** `a` comes before `b` on screen. */
+const precedes = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 beforeEach(() => {
   localStorage.clear();
@@ -138,6 +143,18 @@ describe("SwitchConfirm", () => {
     expect(tauri.applies).toHaveLength(0);
   });
 
+  it("keeps the blocked reason out of the scrolling part, right above the buttons", async () => {
+    tauri.plan = { blocked: "An earlier switch here didn't finish. See .ade/archive/bmad-v6-2026-10-01/ARCHIVE.md." };
+    renderConfirm();
+    await planned();
+    const reason = screen.getByRole("alert");
+    expect(dialog().contains(reason)).toBe(true);
+    expect(scrolls(reason)).toBe(false);
+    expect(precedes(dialog().querySelector(".switch-confirm__body")!, reason)).toBe(true);
+    expect(precedes(reason, confirm())).toBe(true);
+    expect(confirm().disabled).toBe(true);
+  });
+
   it("lists what is left in place, with why, and leftovers", async () => {
     tauri.plan = {
       leftInPlace: [{ path: "/shared/out", reason: "The output folder is outside the project, so it stays where it is." }],
@@ -166,8 +183,25 @@ describe("SwitchConfirm", () => {
     expect(git.textContent).toContain("Git ignores _bmad-output, _bmad today");
     expect(git.textContent).toContain("/_bmad-output/");
     expect(git.textContent).toContain("no longer matches once they move");
-    expect(git.textContent).toContain(".ade/ is ignored by git");
+    // What the back end asked git about: the archive, not all of `.ade/`.
+    expect(git.textContent).toContain(".ade/archive/ is ignored by git, so the archive won't be committed.");
+    expect(git.textContent).not.toContain(".ade/ is ignored by git");
     expect(screen.getByRole("region", { name: "Moves to the archive" }).textContent).toContain("9 files, ignored by git");
+  });
+
+  it("marks as warnings what can't be got back: uncommitted changes, and rows git ignores", async () => {
+    tauri.plan = {
+      dirty: true,
+      moves: [{ from: "_bmad-output", to: `${ARCHIVE}/_bmad-output`, files: 9, ignored: "all" }, { from: "_bmad", to: `${ARCHIVE}/_bmad`, files: 3, ignored: "some" }],
+      leftovers: [{ from: ".bmad-core", to: `${ARCHIVE}/leftovers-v4/.bmad-core`, files: 5, ignored: "none" }],
+    };
+    renderConfirm();
+    await planned();
+    expect(warnings()).toEqual([
+      "This project has uncommitted changes. They stay as they are. Commit first if you want the move in its own commit.",
+      "ignored by git",
+      "partly ignored by git",
+    ]);
   });
 
   it("says Couldn't check git when git is missing, and nothing else about git", async () => {
@@ -186,6 +220,17 @@ describe("SwitchConfirm", () => {
     expect(section.textContent).toContain("/code/shop/src");
     expect(section.textContent).toContain("Verify story 1.2");
     expect(section.textContent).toContain("Stop agents before switching: they may keep writing into moved folders");
+  });
+
+  it("puts what is open first, with its warning, then git, then what moves", async () => {
+    open.value = { panes: [], agents: [{ name: "Verify story 1.2", cwd: "/code/shop" }] };
+    renderConfirm();
+    await planned();
+    const section = await screen.findByRole("region", { name: "Open in this project" });
+    expect(section.parentElement!.firstElementChild).toBe(section);
+    expect(section.nextElementSibling).toBe(screen.getByRole("region", { name: "Git" }));
+    expect(precedes(screen.getByRole("region", { name: "Git" }), screen.getByRole("region", { name: "Moves to the archive" }))).toBe(true);
+    expect(warnings()).toEqual(["Stop agents before switching: they may keep writing into moved folders."]);
   });
 
   it("has no Open in this project section when nothing is open there", async () => {
@@ -265,6 +310,43 @@ describe("SwitchConfirm", () => {
     expect(onLeave).toHaveBeenCalledOnce();
   });
 
+  it("keeps a failed switch's error out of the scrolling part, and takes the keyboard back", async () => {
+    let finish!: () => void;
+    tauri.applyGate = new Promise<void>((r) => { finish = r; });
+    tauri.applyError = "Couldn't move .ade/stage: the file is in use";
+    renderConfirm();
+    await planned();
+    confirm().focus();
+    fireEvent.click(confirm());
+    await waitFor(() => expect(confirm().disabled).toBe(true));
+    // What a browser does to a focused button once it is disabled: focus is
+    // nowhere. jsdom leaves it on the button, so it is taken away here.
+    const elsewhere = document.body.appendChild(document.createElement("button"));
+    elsewhere.focus();
+    elsewhere.remove();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => { finish(); });
+
+    const failure = await screen.findByRole("alert");
+    expect(failure.textContent).toContain("the file is in use");
+    expect(scrolls(failure)).toBe(false);
+    expect(precedes(failure, confirm())).toBe(true);
+    expect(document.activeElement).toBe(dialog());
+  });
+
+  it("shows the failure beside the reason when the plan made after it is blocked", async () => {
+    tauri.applyError = "Couldn't move .ade/stage. It couldn't be put back.";
+    renderConfirm();
+    await planned();
+    tauri.plan = { blocked: "An earlier switch here didn't finish." };
+    fireEvent.click(confirm());
+    await waitFor(() => expect(screen.getAllByRole("alert")).toHaveLength(2));
+    const said = screen.getAllByRole("alert").map((el) => el.textContent);
+    expect(said).toEqual(["Couldn't move .ade/stage. It couldn't be put back.", "An earlier switch here didn't finish."]);
+    expect(screen.getAllByRole("alert").some(scrolls)).toBe(false);
+    expect(confirm().disabled).toBe(true);
+  });
+
   it("says so when the dry run itself fails", async () => {
     tauri.plan = {};
     const { invoke } = await import("@tauri-apps/api/core");
@@ -272,6 +354,46 @@ describe("SwitchConfirm", () => {
     renderConfirm();
     expect((await screen.findByRole("alert")).textContent).toContain("isn't a folder");
     expect(confirm().disabled).toBe(true);
+  });
+
+  it("offers Try again after a failed dry run, which plans again", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockRejectedValueOnce("/code/shop couldn't be read.");
+    renderConfirm();
+    const failure = await screen.findByRole("alert");
+    expect(failure.textContent).toBe("/code/shop couldn't be read.");
+    expect(scrolls(failure)).toBe(false);
+    expect(tauri.plans).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await planned();
+    expect(tauri.plans).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    await waitFor(() => expect(confirm().disabled).toBe(false));
+  });
+
+  it("clears a dry run's error as soon as the next one starts", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockRejectedValueOnce("/code/shop couldn't be read.");
+    renderConfirm();
+    await screen.findByRole("alert");
+    let release!: () => void;
+    tauri.hold = () => new Promise<void>((r) => { release = r; });
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.getByText("Checking what would move…")).toBeTruthy();
+    expect(dialog().getAttribute("aria-busy")).toBe("true");
+    expect(confirm().disabled).toBe(true);
+    await act(async () => { release(); });
+    await planned();
+  });
+
+  it("has no Try again when the plan came back, blocked or not", async () => {
+    tauri.plan = { blocked: "An earlier switch here didn't finish." };
+    renderConfirm();
+    await planned();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("offers the documents going to v4 too, labelled as the output folder", async () => {
