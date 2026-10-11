@@ -549,3 +549,23 @@ Frontend:
 - Rewriting an existing project's `CLAUDE.md`.
 - Stopping shell commands from changing the archive.
 - Switching several projects at once.
+
+## Notes for plan B, from building plan A
+
+- **A replaced marker is recorded as created.** When an install replaces a
+  `.ade/methodology` that read the other version, the path goes into
+  `created`, so setup's failed-setup cleanup deletes it rather than putting
+  the old value back. Plan A can't reach that (a project with BMAD keeps its
+  version). The switch's rollback must record the old marker and restore it.
+- **Cleanup tests to add** before the switch relies on them: a failed setup
+  leaves a pre-existing `.claude/agents/` and `.claude/settings.json` alone;
+  a failed v6 setup is taken back; a file left half-written by a failed copy
+  is removed.
+- **`foldersUpTo` and `bmadRootOf`** compare paths with `startsWith` and no
+  separator boundary (`/mono2` reads as inside `/mono`). Fix it when the
+  switch starts resolving roots.
+- **The question toast flickers** when the terminal's folder changes inside
+  the same project: it is withdrawn, then shown again a moment later. Keep it
+  in place when the project hasn't changed.
+- **Undo is the only way back** from a forced answer, and it lives in a
+  15-second toast. Consider an Undo entry on the Agents tab.
