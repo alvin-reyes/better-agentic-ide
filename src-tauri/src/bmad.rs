@@ -47,8 +47,8 @@ pub fn resource_root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Strin
         .map_err(|e| format!("resource not found: {}", e))
 }
 
-/// Copy BMAD into a project: .bmad-core/ and the /BMad Claude Code commands.
-/// Existing files are left alone.
+/// Copy BMAD into a project: .bmad-core/, the /BMad Claude Code commands and
+/// the methodology marker. Existing files are left alone.
 pub fn install(res_root: &Path, project: &Path, report: &mut ScaffoldReport) -> Result<(), String> {
     let core = res_root.join("bmad-core");
     if !core.is_dir() {
@@ -66,6 +66,17 @@ pub fn install(res_root: &Path, project: &Path, report: &mut ScaffoldReport) -> 
             std::fs::write(&marker, v).map_err(|e| format!("{}: {e}", marker.display()))?;
             report.created.push(marker.to_string_lossy().to_string());
         }
+    }
+    // The methodology marker, as the v6 install writes it: without one a v4
+    // project reads as v4 only while `.bmad-core/` exists. It is ADE's own
+    // file, so an explicit v4 install replaces a marker that says otherwise.
+    let methodology = project.join(".ade").join("methodology");
+    if std::fs::read_to_string(&methodology).map(|s| s.trim() == "v4").unwrap_or(false) {
+        report.skipped.push(methodology.to_string_lossy().to_string());
+    } else {
+        crate::projectsetup::mkdirs(&project.join(".ade"), &mut report.created_dirs)?;
+        std::fs::write(&methodology, "v4\n").map_err(|e| format!("{}: {e}", methodology.display()))?;
+        report.created.push(methodology.to_string_lossy().to_string());
     }
     Ok(())
 }
@@ -199,6 +210,46 @@ mod tests {
         let err = install(&src, &dir, &mut report).unwrap_err();
         assert!(err.contains("v4"), "{err}");
         assert!(!dir.join(".bmad-core").exists());
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn install_writes_the_v4_marker_once() {
+        let src = v4_source("ade_bmad_marker_src");
+        let dir = temp("ade_bmad_marker");
+        let mut report = ScaffoldReport::default();
+        install(&src, &dir, &mut report).unwrap();
+
+        let marker = dir.join(".ade").join("methodology");
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "v4\n");
+        assert!(report.created.contains(&marker.to_string_lossy().to_string()), "{:?}", report.created);
+        assert!(report.created_dirs.contains(&dir.join(".ade")), "{:?}", report.created_dirs);
+
+        // The marker alone says v4, with `.bmad-core/` gone.
+        std::fs::remove_dir_all(dir.join(".bmad-core")).unwrap();
+        assert_eq!(crate::bmadv6::detect_on_disk(&dir), Some(crate::bmadv6::Methodology::V4));
+
+        // A second run keeps it, and doesn't claim to have created it.
+        let mut again = ScaffoldReport::default();
+        install(&src, &dir, &mut again).unwrap();
+        assert!(!again.created.contains(&marker.to_string_lossy().to_string()), "{:?}", again.created);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    /// An explicit v4 install over a marker that says otherwise: the tree is
+    /// v4 now, so the marker must be too.
+    #[test]
+    fn a_v4_install_replaces_a_marker_that_says_otherwise() {
+        let src = v4_source("ade_bmad_flip_src");
+        let dir = temp("ade_bmad_flip");
+        std::fs::create_dir_all(dir.join(".ade")).unwrap();
+        std::fs::write(dir.join(".ade/methodology"), "v6\n").unwrap();
+        let mut report = ScaffoldReport::default();
+        install(&src, &dir, &mut report).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join(".ade/methodology")).unwrap(), "v4\n");
+        assert_eq!(crate::bmadv6::detect_on_disk(&dir), Some(crate::bmadv6::Methodology::V4));
         std::fs::remove_dir_all(dir).ok();
         std::fs::remove_dir_all(src).ok();
     }

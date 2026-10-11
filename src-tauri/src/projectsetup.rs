@@ -763,4 +763,29 @@ mod tests {
         std::fs::remove_dir_all(dir).ok();
         std::fs::remove_dir_all(src).ok();
     }
+
+    #[test]
+    fn a_v4_setup_writes_the_marker_and_counts_it() {
+        let dir = temp();
+        let src = v4_source();
+        let r = run(&dir, &files(), None, "<!-- m -->", Methodology::V4, Some(&src)).unwrap();
+
+        assert_eq!(std::fs::read_to_string(dir.join(".ade/methodology")).unwrap().trim(), "v4");
+        // core-config.yaml, tasks/a.md, VERSION, the marker.
+        assert_eq!(r.bmad_files, 4, "{:?}", r.created);
+        assert!(r.created.contains(&dir.join(".ade").join("methodology").to_string_lossy().into_owned()), "{:?}", r.created);
+        let status = project_setup_status(dir.to_string_lossy().into(), vec![], "<!-- m -->".into()).unwrap();
+        assert_eq!(status.methodology.as_deref(), Some("v4"));
+        assert!(status.bmad_installed);
+
+        // A project from before the marker: `.bmad-core/` only. Its next setup writes it.
+        let old = temp();
+        std::fs::create_dir_all(old.join(".bmad-core")).unwrap();
+        let again = run(&old, &files(), None, "<!-- m -->", Methodology::V4, Some(&src)).unwrap();
+        assert_eq!(std::fs::read_to_string(old.join(".ade/methodology")).unwrap().trim(), "v4");
+        assert!(again.created.contains(&old.join(".ade").join("methodology").to_string_lossy().into_owned()));
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(old).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
 }
