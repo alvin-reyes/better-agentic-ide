@@ -391,60 +391,53 @@ mod sysinfo_tests {
         assert_eq!(cwd_via_sysinfo(4_294_967_000), None);
     }
 
-    /// Asserts what is actually guaranteed. The suite runs tests in parallel
-    /// and several spawn children, so "the most recently spawned child" is
-    /// ambiguous from inside one test: an earlier version asserted the exact
-    /// pid and failed when another test's child happened to be newer. What the
-    /// caller relies on is that the answer is a real child of the shell.
+    /// The parent is one only this test owns. The suite runs tests in parallel
+    /// and several spawn short-lived children of the test process (git, for
+    /// one), so "a child of this process" could be a process that was gone a
+    /// moment later, with no parent left to check.
     #[test]
     fn finds_a_child_of_this_process() {
+        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
         // `sleep` does not exist on Windows, and this test has to pass on the
-        // runner that actually exercises the code it covers.
+        // runner that actually exercises the code it covers. `& wait` keeps
+        // `sh` from replacing itself with `sleep`, which would leave no child.
         let mut cmd = if crate::platform::IS_WINDOWS {
             let mut c = std::process::Command::new("cmd");
             c.args(["/c", "timeout", "/t", "30", "/nobreak"]);
             c
         } else {
-            let mut c = std::process::Command::new("sleep");
-            c.arg("30");
+            let mut c = std::process::Command::new("sh");
+            c.args(["-c", "sleep 30 & wait"]);
             c
         };
-        let mut child = cmd.spawn().expect("spawn a child to look for");
-        std::thread::sleep(std::time::Duration::from_millis(250));
-
-        let found = foreground_pid_via_sysinfo(std::process::id());
-
-        // Look the parent up while the child is still alive. Killing it first
-        // leaves a reaped process that sysinfo reports no parent for, which an
-        // earlier version of this test read as a failure of the code.
-        use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
-        let found = found.expect("a child was running, so one should be found");
-
-        // sysinfo sometimes needs a beat to register the fresh child; a single
-        // refresh under CI load reads parent as None. Retry briefly until the
-        // parent is visible, then assert — the child is still alive throughout.
-        let mut parent = None;
-        for _ in 0..20 {
+        let mut parent = cmd.spawn().expect("spawn a parent to look under");
+        let owner = Pid::from_u32(parent.id());
+        let table = || {
             let mut sys = System::new();
-            sys.refresh_processes_specifics(
-                ProcessesToUpdate::All,
-                true,
-                ProcessRefreshKind::nothing(),
-            );
-            parent = sys.process(Pid::from_u32(found)).and_then(|p| p.parent());
-            if parent.is_some() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+            sys
+        };
+        let has_child = |sys: &System| sys.processes().values().any(|p| p.parent() == Some(owner));
+
+        // The parent needs a moment to start its child.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while !has_child(&table()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
-        let _ = child.kill();
-        let _ = child.wait();
-        assert_eq!(
-            parent,
-            Some(Pid::from_u32(std::process::id())),
-            "returned pid {found} should be a child of this process",
-        );
+        let found = foreground_pid_via_sysinfo(parent.id());
+
+        // Look the answer's parent up while it is still alive, then stop both.
+        let sys = table();
+        let its_parent = found.and_then(|pid| sys.process(Pid::from_u32(pid))).and_then(|p| p.parent());
+        for child in sys.processes().values().filter(|p| p.parent() == Some(owner)) {
+            child.kill();
+        }
+        let _ = parent.kill();
+        let _ = parent.wait();
+
+        let found = found.expect("the parent had a child, so one should be found");
+        assert_eq!(its_parent, Some(owner), "returned pid {found} should be a child of the parent this test started");
     }
 
     #[test]
