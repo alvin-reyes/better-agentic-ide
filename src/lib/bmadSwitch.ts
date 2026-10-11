@@ -4,7 +4,7 @@
  * is one Rust command (src-tauri/src/bmadswitch.rs); this is its frontend.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER } from "./projectMethodology";
+import { CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, bmadText } from "./projectMethodology";
 import {
   beginSwitch, isSettingUp, isWithin, markSwitched, normRoot, setupFiles, setupStatus,
   type Methodology, type SetupReport,
@@ -135,6 +135,8 @@ export function runSwitch(root: string, plan: SwitchPlan): Promise<SwitchResult>
       files: setupFiles(at, stacks, plan.to),
       import: CLAUDE_MD_IMPORT,
       marker: CLAUDE_MD_IMPORT_MARKER,
+      // An existing CLAUDE.md is brought to the paragraph of the version switched to.
+      bmad: bmadText(plan.to),
     });
     markSwitched(at, plan.to);
     const detail: SwitchDone = { root: at, from: otherVersion(plan.to), to: plan.to, result };

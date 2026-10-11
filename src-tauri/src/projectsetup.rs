@@ -12,6 +12,42 @@ pub struct SetupFile {
     pub content: String,
 }
 
+/// What setup needs to bring an existing CLAUDE.md to the project's BMAD
+/// version. The texts are the frontend's (src/lib/projectMethodology.ts), with
+/// `\n` line ends.
+#[derive(Deserialize, Clone, Debug)]
+pub struct BmadText {
+    /// The paragraph for the project's version, and the same as a marked section.
+    pub paragraph: String,
+    pub section: String,
+    /// Every paragraph ADE has shipped, and each as a marked section. Only
+    /// text that is one of these, byte for byte, is ever replaced.
+    pub paragraphs: Vec<String>,
+    pub sections: Vec<String>,
+    /// The first and the last line of a marked section.
+    pub open: String,
+    pub close: String,
+}
+
+/// What a setup did to the BMAD paragraph of a CLAUDE.md that was already there.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeEdit {
+    /// "replaced": a shipped paragraph, or a marked section, now reads as the
+    /// project's version. "appended": the file had neither, and has a marked
+    /// section at its end. "skipped": the file needed the edit and was left.
+    pub status: String,
+    /// Skipped: why ("link", "read-only", "not-utf8", "twice", "edited-section",
+    /// or what reading or writing it failed with). Otherwise "edited" when the
+    /// file still holds a BMAD line that is not ADE's, which the person has to
+    /// remove; `None` when it holds none.
+    pub reason: Option<String>,
+    /// The whole file before and after the edit: what taking it back compares
+    /// and restores. Empty when skipped.
+    pub before: String,
+    pub after: String,
+}
+
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupStatus {
@@ -44,6 +80,9 @@ pub struct SetupReport {
     pub attribution_off: bool,
     /// `.claude/settings.json` couldn't be updated; the rest of setup still ran.
     pub settings_error: Option<String>,
+    /// The BMAD paragraph of an existing CLAUDE.md was edited, or needed to be
+    /// and was left. `None` when the file was already right, or isn't there.
+    pub claude_md: Option<ClaudeEdit>,
     /// Folders this setup created, outermost first. Only Rust reads it: a
     /// failed setup removes the ones still empty.
     #[serde(skip)]
@@ -140,6 +179,200 @@ fn mentions(path: &Path, needles: &[&str]) -> bool {
     std::fs::read_to_string(path).map(|s| needles.iter().any(|n| s.contains(n))).unwrap_or(false)
 }
 
+/// How a BMAD bullet starts in a CLAUDE.md, ADE's or an edited one.
+const BMAD_LINE: &str = "- **BMAD";
+
+/// Where `needle` sits in `text` as whole lines: from the start of a line to
+/// the end of one. A paragraph someone added words to is not found.
+fn whole_lines(text: &str, needle: &str) -> Vec<(usize, usize)> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    text.match_indices(needle)
+        .map(|(from, _)| (from, from + needle.len()))
+        .filter(|&(from, to)| {
+            let rest = &text[to..];
+            (from == 0 || text[..from].ends_with('\n')) && (rest.is_empty() || rest.starts_with('\n') || rest.starts_with("\r\n"))
+        })
+        .collect()
+}
+
+/// The bullet that ends at `to` goes on: the next line is indented and not
+/// blank. Someone added to the paragraph, and it is theirs now.
+fn continues(text: &str, to: usize) -> bool {
+    let rest = &text[to..];
+    let Some(next) = rest.strip_prefix("\r\n").or_else(|| rest.strip_prefix('\n')) else { return false };
+    let line = next.lines().next().unwrap_or_default();
+    line.starts_with([' ', '\t']) && !line.trim().is_empty()
+}
+
+/// The edit that brings `before` to the project's BMAD paragraph: the new
+/// text and its status ("replaced", "appended") with a reason, `Ok(None)`
+/// when it already reads right, `Err(reason)` when the file is not one ADE
+/// edits.
+///
+/// Only text that is byte for byte ADE's is replaced: one shipped paragraph,
+/// or one marked section holding one. A file with neither keeps every byte and
+/// gains a marked section at its end.
+fn bmad_edit(before: &str, bmad: &BmadText) -> Result<Option<ClaudeEdit>, &'static str> {
+    // The file's own line ends, for what is written into it.
+    let eol = if before.contains("\r\n") { "\r\n" } else { "\n" };
+    let with = |text: &str, eol: &str| text.replace('\n', eol);
+    let done = |status: &str, after: String, ours: (usize, usize)| {
+        // A BMAD bullet outside what was just written is the person's, or one
+        // of ADE's they edited: it stays, and they are told.
+        let mut at = 0;
+        let stale = after.split_inclusive('\n').any(|line| {
+            let from = at;
+            at += line.len();
+            line.starts_with(BMAD_LINE) && !(ours.0 <= from && from < ours.1)
+        });
+        Ok(Some(ClaudeEdit { status: status.to_string(), reason: stale.then(|| "edited".to_string()), before: before.to_string(), after }))
+    };
+
+    let (opens, closes) = (whole_lines(before, &bmad.open), whole_lines(before, &bmad.close));
+    if opens.len() > 1 || closes.len() > 1 {
+        return Err("twice");
+    }
+    let section = match (opens.first(), closes.first()) {
+        (None, None) => None,
+        (Some(open), Some(close)) if open.1 <= close.0 => Some((open.0, close.1)),
+        // One marker without the other, or the two the wrong way round.
+        _ => return Err("edited-section"),
+    };
+    // Shipped paragraphs outside the section, in either line end. A paragraph
+    // of one line reads the same in both, and is one match.
+    let mut loose: Vec<(usize, usize)> = bmad
+        .paragraphs
+        .iter()
+        .flat_map(|p| [with(p, "\n"), with(p, "\r\n")])
+        .flat_map(|p| whole_lines(before, &p))
+        .filter(|&(from, _)| section.is_none_or(|(start, end)| from < start || from >= end))
+        // The whole bullet, not its first lines with more below them.
+        .filter(|&(_, to)| !continues(before, to))
+        .collect();
+    loose.sort_unstable();
+    loose.dedup();
+
+    if let Some((start, end)) = section {
+        if !loose.is_empty() {
+            return Err("twice");
+        }
+        // A section's last line end is the file's to have or not.
+        let reads = |s: &String| with(s.trim_end_matches('\n'), "\n") == before[start..end] || with(s.trim_end_matches('\n'), "\r\n") == before[start..end];
+        if reads(&bmad.section) {
+            return Ok(None);
+        }
+        if !bmad.sections.iter().any(reads) {
+            return Err("edited-section");
+        }
+        let fresh = with(bmad.section.trim_end_matches('\n'), eol);
+        let after = format!("{}{fresh}{}", &before[..start], &before[end..]);
+        return done("replaced", after, (start, start + fresh.len()));
+    }
+    match loose[..] {
+        [] => {
+            let gap = if before.is_empty() || before.ends_with('\n') { "" } else { eol };
+            let after = format!("{before}{gap}{eol}{}", with(&bmad.section, eol));
+            let end = after.len();
+            done("appended", after, (before.len(), end))
+        }
+        [(from, to)] => {
+            let old = &before[from..to];
+            // In the line end the paragraph had; a single line has the file's.
+            let fresh = with(&bmad.paragraph, if old.contains("\r\n") { "\r\n" } else if old.contains('\n') { "\n" } else { eol });
+            if fresh == old {
+                return Ok(None);
+            }
+            let after = format!("{}{fresh}{}", &before[..from], &before[to..]);
+            done("replaced", after, (from, from + fresh.len()))
+        }
+        _ => Err("twice"),
+    }
+}
+
+/// Write the whole of a CLAUDE.md that is a regular file, in one step, with
+/// the permissions it had. An error means the file is as it was: once the
+/// content is in place, permissions that can't be put back are not a failed
+/// write, and whoever recorded the edit must keep the record.
+fn write_claude_md(path: &Path, text: &str) -> std::io::Result<()> {
+    let permissions = std::fs::metadata(path)?.permissions();
+    crate::state::atomic_write(path, text)?;
+    let _ = std::fs::set_permissions(path, permissions);
+    Ok(())
+}
+
+/// Bring the BMAD paragraph of the CLAUDE.md the project already has to its
+/// version, and record it. The record is made before the write, so whatever
+/// fails afterwards, the edit is known and can be taken back.
+///
+/// A file that needs the edit and is a link, is read-only or is not UTF-8 is
+/// left, as is one holding a paragraph twice; the record says why. A file that
+/// already reads right is not written and nothing is recorded.
+fn edit_claude_md(dir: &Path, bmad: &BmadText, report: &mut SetupReport) {
+    let path = dir.join("CLAUDE.md");
+    let Ok(meta) = std::fs::symlink_metadata(&path) else { return };
+    let skipped = |reason: String| Some(ClaudeEdit { status: "skipped".to_string(), reason: Some(reason), ..Default::default() });
+    let is_link = meta.file_type().is_symlink();
+    // Through a link, to know whether there is anything to say about it.
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        // A link that leads nowhere, or to a folder: nothing to bring up to date.
+        Err(_) if is_link || !meta.is_file() => return,
+        Err(e) => {
+            report.claude_md = skipped(format!("it couldn't be read: {e}"));
+            return;
+        }
+    };
+    let Ok(before) = String::from_utf8(bytes) else {
+        report.claude_md = skipped("not-utf8".to_string());
+        return;
+    };
+    let edit = match bmad_edit(&before, bmad) {
+        Ok(None) => return,
+        Ok(Some(edit)) => edit,
+        Err(reason) => {
+            report.claude_md = skipped(reason.to_string());
+            return;
+        }
+    };
+    if is_link {
+        // Writing would replace the link with a file, or edit a file that
+        // is somewhere else and may be shared.
+        report.claude_md = skipped("link".to_string());
+        return;
+    }
+    if meta.permissions().readonly() {
+        report.claude_md = skipped("read-only".to_string());
+        return;
+    }
+    let after = edit.after.clone();
+    report.claude_md = Some(edit);
+    if let Err(e) = write_claude_md(&path, &after) {
+        // Written in one step or not at all: the file is as it was.
+        report.claude_md = skipped(format!("it couldn't be written: {e}"));
+    }
+}
+
+/// Put CLAUDE.md back as it was before `edit`, while it still reads as the
+/// edit left it. Anything else was saved by the person since, and is kept;
+/// so is a file that is gone. One that is there and can't be read may still
+/// hold the edit, and that is the error.
+fn revert_claude_md(dir: &Path, edit: &ClaudeEdit) -> Result<(), String> {
+    if edit.status == "skipped" || edit.before == edit.after {
+        return Ok(());
+    }
+    let path = dir.join("CLAUDE.md");
+    if !std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_file()) {
+        return Ok(());
+    }
+    let now = std::fs::read(&path).map_err(|e| format!("couldn't check CLAUDE.md for the BMAD paragraph setup wrote, which may still be in it: {e}"))?;
+    if now != edit.after.as_bytes() {
+        return Ok(());
+    }
+    write_claude_md(&path, &edit.before).map_err(|e| format!("CLAUDE.md: {e}"))
+}
+
 /// What the project is built with, from its manifest files.
 pub fn detect_stacks(dir: &Path) -> Vec<String> {
     let mut out = Vec::new();
@@ -197,7 +430,9 @@ pub fn project_setup_status(root: String, paths: Vec<String>, marker: String) ->
 
 /// Write the files the project is missing, load the methodology from an
 /// existing CLAUDE.md, and install the project's methodology from
-/// `methodology_src` (its resource root). Nothing that exists is overwritten.
+/// `methodology_src` (its resource root). Nothing that exists is overwritten,
+/// but the BMAD paragraph of an existing CLAUDE.md, which is brought to the
+/// project's version when `bmad` is given (see `bmad_edit`).
 ///
 /// The report is the caller's, so what was written before an error is still
 /// known and can be taken back.
@@ -208,10 +443,18 @@ pub fn apply(
     marker: &str,
     methodology: Methodology,
     methodology_src: Option<&Path>,
+    bmad: Option<&BmadText>,
     report: &mut SetupReport,
 ) -> Result<(), String> {
     // Decide the import before writing, so a CLAUDE.md we create isn't appended to.
     let append = import.is_some() && dir.join("CLAUDE.md").is_file() && !has_import(dir, marker);
+    // A full setup brings the CLAUDE.md that is already there to the project's
+    // BMAD version: before the import, which then follows a section added at
+    // the end. One written below is born with its paragraph. Adding agents on
+    // their own never reads the file.
+    if let (Some(_), Some(bmad)) = (import, bmad) {
+        edit_claude_md(dir, bmad, report);
+    }
     for f in files {
         let dst = inside(dir, &f.path)?;
         if dst.exists() {
@@ -288,9 +531,10 @@ fn apply_or_clean(
     marker: &str,
     methodology: Methodology,
     methodology_src: Option<&Path>,
+    bmad: Option<&BmadText>,
 ) -> Result<SetupReport, String> {
     let mut report = SetupReport::default();
-    match apply(dir, files, import, marker, methodology, methodology_src, &mut report) {
+    match apply(dir, files, import, marker, methodology, methodology_src, bmad, &mut report) {
         Ok(()) => Ok(report),
         Err(e) => {
             let failed = take_back(dir, &report, files, import);
@@ -300,8 +544,13 @@ fn apply_or_clean(
 }
 
 /// Take back what a setup wrote, as its report records it: the files still as
-/// setup wrote them, the import it appended, then the folders it created that
-/// are empty. Shared by a failed setup and a failed switch's rollback.
+/// setup wrote them, the import it appended, its edit to the BMAD paragraph of
+/// CLAUDE.md, then the folders it created that are empty. Shared by a failed
+/// setup and a failed switch's rollback.
+///
+/// The paragraph goes back only while CLAUDE.md, the import stripped, still
+/// reads as the edit left it: a file the person has saved since is kept, and
+/// that is not a failure.
 ///
 /// "Still as setup wrote them" is by content only for the files in `files`;
 /// for the rest (the BMAD engine's) it is only "still a file". Returns what
@@ -313,6 +562,11 @@ pub(crate) fn take_back(dir: &Path, report: &SetupReport, files: &[SetupFile], i
     if let (true, Some(import)) = (report.appended_import, import) {
         if let Err(e) = strip_import(dir, import) {
             failed.push(format!("CLAUDE.md: {e}"));
+        }
+    }
+    if let Some(edit) = &report.claude_md {
+        if let Err(e) = revert_claude_md(dir, edit) {
+            failed.push(e);
         }
     }
     // Innermost first. A folder something else has written into since stays.
@@ -429,11 +683,12 @@ pub fn project_setup_apply(
     marker: String,
     methodology: String,
     full: bool,
+    bmad: Option<BmadText>,
 ) -> Result<SetupReport, String> {
     let dir = project(&root)?;
     // The owner's answer from the setup prompt; anything else is the v6 default.
     let methodology = if methodology.trim().eq_ignore_ascii_case("v4") { Methodology::V4 } else { Methodology::V6 };
-    set_up(&dir, &files, &import, &marker, methodology, full, |wanted| match wanted {
+    set_up(&dir, &files, &import, &marker, bmad.as_ref(), methodology, full, |wanted| match wanted {
         Methodology::V4 => crate::bmad::resource_root(&app).ok(),
         Methodology::V6 => crate::bmadv6::resource_root(&app).ok(),
     })
@@ -453,6 +708,7 @@ pub fn set_up(
     files: &[SetupFile],
     import: &str,
     marker: &str,
+    bmad: Option<&BmadText>,
     methodology: Methodology,
     full: bool,
     resolve: impl FnOnce(Methodology) -> Option<PathBuf>,
@@ -460,10 +716,11 @@ pub fn set_up(
     let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
     // Under the lock: a switch holds it for its whole run.
     refuse_unfinished(dir)?;
-    // A full setup also loads the methodology from CLAUDE.md and installs the
-    // project's methodology; adding agents on their own touches nothing else.
+    // A full setup also loads the methodology from CLAUDE.md, brings its BMAD
+    // paragraph to the project's version and installs the project's
+    // methodology; adding agents on their own touches nothing else.
     let src = install_source(methodology, crate::bmadv6::detect_on_disk(dir), full, dir, resolve)?;
-    apply_or_clean(dir, files, full.then_some(import), marker, methodology, src.as_deref())
+    apply_or_clean(dir, files, full.then_some(import), marker, methodology, src.as_deref(), bmad.filter(|_| full))
 }
 
 /// Setup and Undo are refused in a project a switch left unfinished, with
@@ -486,7 +743,9 @@ fn installed(dir: &Path, created: &[String]) -> Option<Methodology> {
 }
 
 /// Remove what a setup created (files still unchanged since, by content) and
-/// the import block it appended. Leaves anything the user has edited.
+/// the import block it appended, and put back the BMAD paragraph of CLAUDE.md
+/// as `claude_md` (the report's own record) says it was. Leaves anything the
+/// user has edited: a CLAUDE.md saved since the setup keeps its paragraph.
 ///
 /// The marker is among what a setup creates, and it is ADE's, so "still a
 /// file" would remove it whatever it says. It goes only while it names the
@@ -494,7 +753,13 @@ fn installed(dir: &Path, created: &[String]) -> Option<Methodology> {
 /// version's. When the list doesn't say which version that was, the marker
 /// stays; the count returned has no place to say so.
 #[tauri::command(async)]
-pub fn project_setup_undo(root: String, created: Vec<String>, files: Vec<SetupFile>, import: Option<String>) -> Result<usize, String> {
+pub fn project_setup_undo(
+    root: String,
+    created: Vec<String>,
+    files: Vec<SetupFile>,
+    import: Option<String>,
+    claude_md: Option<ClaudeEdit>,
+) -> Result<usize, String> {
     let dir = project(&root)?;
     // As a setup: one at a time, and not under a switch that is moving the tree.
     let _one = APPLY.lock().unwrap_or_else(|e| e.into_inner());
@@ -516,6 +781,9 @@ pub fn project_setup_undo(root: String, created: Vec<String>, files: Vec<SetupFi
     }
     if let Some(import) = import {
         strip_import(&dir, &import)?;
+    }
+    if let Some(edit) = claude_md {
+        revert_claude_md(&dir, &edit)?;
     }
     Ok(removed.len())
 }
@@ -569,7 +837,7 @@ mod tests {
         methodology_src: Option<&Path>,
     ) -> Result<SetupReport, String> {
         let mut report = SetupReport::default();
-        apply(dir, files, import, marker, methodology, methodology_src, &mut report).map(|()| report)
+        apply(dir, files, import, marker, methodology, methodology_src, None, &mut report).map(|()| report)
     }
 
     /// A miniature of the bundled v4 resource root.
@@ -611,7 +879,7 @@ mod tests {
         std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
         std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
 
-        assert!(apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src)).is_err());
+        assert!(apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src), None).is_err());
 
         assert_eq!(names(&dir), [".bmad-core", ".claude"]);
         assert_eq!(names(&dir.join(".claude")), ["agents", "settings.json"]);
@@ -626,7 +894,7 @@ mod tests {
         let dir = temp();
         // No runtime bundle: the install fails after the skills and `_bmad/` are written.
         let src = v6_source(false);
-        assert!(apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V6, Some(&src)).is_err());
+        assert!(apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V6, Some(&src), None).is_err());
         assert!(names(&dir).is_empty(), "{:?}", names(&dir));
         std::fs::remove_dir_all(dir).ok();
         std::fs::remove_dir_all(src).ok();
@@ -710,7 +978,7 @@ mod tests {
             eprintln!("skipped: the mode does not bite here (running as root)");
             return;
         }
-        let r = apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src));
+        let r = apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src), None);
         std::fs::set_permissions(src.join("bmad-core/tasks/a.md"), std::fs::Permissions::from_mode(0o644)).unwrap();
         assert!(r.is_err());
         assert!(names(&dir).is_empty(), "{:?}", names(&dir));
@@ -803,7 +1071,7 @@ mod tests {
     fn a_clean_take_back_reports_nothing() {
         let dir = temp();
         let mut report = SetupReport::default();
-        apply(&dir, &files(), None, "<!-- m -->", Methodology::V4, None, &mut report).unwrap();
+        apply(&dir, &files(), None, "<!-- m -->", Methodology::V4, None, None, &mut report).unwrap();
         assert!(take_back(&dir, &report, &files(), None).is_empty());
         std::fs::remove_dir_all(dir).ok();
     }
@@ -813,7 +1081,7 @@ mod tests {
         let dir = temp();
         std::fs::write(dir.join("CLAUDE.md"), "# mine\n").unwrap();
         let mut report = SetupReport::default();
-        apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None, &mut report).unwrap();
+        apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None, None, &mut report).unwrap();
         assert!(report.appended_import);
         // The person edits one of the files setup wrote: it stays.
         std::fs::write(dir.join(".claude/agents/qa.md"), "edited").unwrap();
@@ -839,7 +1107,7 @@ mod tests {
     fn setup_refuses_a_project_with_an_unfinished_switch() {
         let dir = temp();
         let src = v4_source();
-        let set_up = |full: bool| set_up(&dir, &files(), "\nIMPORT\n", "<!-- m -->", Methodology::V4, full, |_| Some(src.clone()));
+        let set_up = |full: bool| set_up(&dir, &files(), "\nIMPORT\n", "<!-- m -->", None, Methodology::V4, full, |_| Some(src.clone()));
         for status in ["in-progress", "incomplete"] {
             a_journal(&dir, status);
             assert_eq!(set_up(true).unwrap_err(), UNFINISHED, "{status}");
@@ -865,7 +1133,7 @@ mod tests {
         let notes = dir.join(".ade").join("archive").join("notes");
         std::fs::create_dir_all(&notes).unwrap();
         std::fs::write(notes.join("ARCHIVE.md"), "my own notes, no front matter\n").unwrap();
-        let err = set_up(&dir, &files(), "\nIMPORT\n", "<!-- m -->", Methodology::V4, false, |_| None).unwrap_err();
+        let err = set_up(&dir, &files(), "\nIMPORT\n", "<!-- m -->", None, Methodology::V4, false, |_| None).unwrap_err();
         assert_eq!(err, "ADE can't read .ade/archive/notes, so it can't tell whether an earlier switch here finished.");
         assert_eq!(names(&dir), [".ade"], "nothing was written");
         std::fs::remove_dir_all(dir).ok();
@@ -877,18 +1145,18 @@ mod tests {
         let root: String = dir.to_string_lossy().into();
         let r = run(&dir, &files(), None, "<!-- m -->", Methodology::V4, None).unwrap();
         a_journal(&dir, "in-progress");
-        assert_eq!(project_setup_undo(root.clone(), r.created.clone(), files(), None).unwrap_err(), UNFINISHED);
+        assert_eq!(project_setup_undo(root.clone(), r.created.clone(), files(), None, None).unwrap_err(), UNFINISHED);
         assert!(dir.join(".ade/rules.md").is_file() && dir.join(".claude/agents/qa.md").is_file(), "nothing was removed");
 
         a_journal(&dir, "abandoned");
-        assert_eq!(project_setup_undo(root, r.created, files(), None).unwrap(), 3);
+        assert_eq!(project_setup_undo(root, r.created, files(), None, None).unwrap(), 3);
         std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]
     fn undo_removes_the_marker_only_while_it_names_the_version_that_setup_wrote() {
         let marker = |dir: &Path| dir.join(".ade").join("methodology");
-        let undo = |dir: &Path, created: Vec<String>| project_setup_undo(dir.to_string_lossy().into(), created, files(), None).unwrap();
+        let undo = |dir: &Path, created: Vec<String>| project_setup_undo(dir.to_string_lossy().into(), created, files(), None, None).unwrap();
         let v4 = v4_source();
         let v6 = v6_source(true);
 
@@ -950,7 +1218,7 @@ mod tests {
 
         // Edit one created file: undo keeps it.
         std::fs::write(dir.join(".ade/rules.md"), "edited").unwrap();
-        let removed = project_setup_undo(dir.to_string_lossy().into(), r.created.clone(), files(), Some(import.into())).unwrap();
+        let removed = project_setup_undo(dir.to_string_lossy().into(), r.created.clone(), files(), Some(import.into()), None).unwrap();
         // The agent file and the settings file setup created.
         assert_eq!(removed, 2);
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# Mine\n");
@@ -1198,7 +1466,7 @@ mod tests {
         std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
         std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
         let mut report = SetupReport::default();
-        let err = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src), &mut report).unwrap_err();
+        let err = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src), None, &mut report).unwrap_err();
         assert!(err.contains("tasks"), "{err}");
         assert!(report.created.contains(&dir.join(".ade/rules.md").to_string_lossy().into_owned()), "{:?}", report.created);
         assert!(report.created_dirs.contains(&dir.join(".ade")), "{:?}", report.created_dirs);
@@ -1216,7 +1484,7 @@ mod tests {
         std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
         let import = "\n<!-- m -->\n@.ade/rules.md\n";
 
-        assert!(apply_or_clean(&dir, &files(), Some(import), "<!-- m -->", Methodology::V4, Some(&src)).is_err());
+        assert!(apply_or_clean(&dir, &files(), Some(import), "<!-- m -->", Methodology::V4, Some(&src), None).is_err());
 
         let names = |d: &Path| {
             let mut v: Vec<String> =
@@ -1236,7 +1504,7 @@ mod tests {
     fn a_setup_that_succeeds_keeps_what_it_wrote() {
         let dir = temp();
         let src = v4_source();
-        let r = apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src)).unwrap();
+        let r = apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src), None).unwrap();
         assert!(dir.join(".bmad-core/tasks/a.md").is_file());
         assert!(dir.join(".ade/rules.md").is_file());
         assert!(r.created_dirs.contains(&dir.join(".bmad-core").join("tasks")), "{:?}", r.created_dirs);
@@ -1267,5 +1535,532 @@ mod tests {
         std::fs::remove_dir_all(dir).ok();
         std::fs::remove_dir_all(old).ok();
         std::fs::remove_dir_all(src).ok();
+    }
+
+    // ---- The BMAD paragraph of an existing CLAUDE.md ----
+
+    const OLD_ONE_LINE: &str = "- **BMAD** personas and tasks: the `/BMad:` slash commands (`.bmad-core/`).";
+    const OLD_LONGER: &str = "- **BMAD** personas and tasks: the `/BMad:` slash commands (`.bmad-core/`). These are\n  optional helpers. The ADE rules always win.";
+    const V4_PARAGRAPH: &str = "- **BMAD v4** tasks: the `/BMad:tasks:` slash commands\n  (`.bmad-core/`). These are optional helpers.";
+    const V6_PARAGRAPH: &str = "- **BMAD v6** is how work is done in this project. Use its skills in\n  `.claude/skills/`; their work lives in `_bmad-output/`.";
+    const BMAD_IMPORT: &str = "\n\n<!-- m -->\n@.ade/rules.md\n";
+
+    fn section(paragraph: &str) -> String {
+        format!("<!-- ade:bmad -->\n## BMAD\n\n{paragraph}\n<!-- /ade:bmad -->\n")
+    }
+
+    /// What the frontend sends for a project on `methodology`.
+    fn bmad(methodology: Methodology) -> BmadText {
+        let paragraphs = [V6_PARAGRAPH, V4_PARAGRAPH, OLD_ONE_LINE, OLD_LONGER];
+        let paragraph = if methodology == Methodology::V4 { V4_PARAGRAPH } else { V6_PARAGRAPH };
+        BmadText {
+            paragraph: paragraph.to_string(),
+            section: section(paragraph),
+            paragraphs: paragraphs.iter().map(|p| p.to_string()).collect(),
+            sections: paragraphs.iter().map(|p| section(p)).collect(),
+            open: "<!-- ade:bmad -->".to_string(),
+            close: "<!-- /ade:bmad -->".to_string(),
+        }
+    }
+
+    /// A CLAUDE.md as ADE wrote it, around `paragraph`, with the import a
+    /// setup of the time put in it.
+    fn claude_with(paragraph: &str) -> String {
+        format!("# CLAUDE.md: working in shop\n\n@.ade/rules.md\n\n## Agents and commands\n- **Sub-agents** in `.claude/agents/`.\n{paragraph}\n- `qa` can write.\n\n## Project layout\n- `docs/prd.md`\n")
+    }
+
+    /// A full setup of a project whose CLAUDE.md reads `claude`, on `methodology`.
+    fn full_setup(claude: &[u8], methodology: Methodology) -> (PathBuf, SetupReport) {
+        let dir = temp();
+        std::fs::write(dir.join("CLAUDE.md"), claude).unwrap();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", methodology, None, Some(&bmad(methodology)), &mut report).unwrap();
+        (dir, report)
+    }
+
+    fn claude(dir: &Path) -> String {
+        std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap()
+    }
+
+    /// Undo, as the toast's button asks for it.
+    fn undo(dir: &Path, report: &SetupReport) {
+        let import = report.appended_import.then(|| BMAD_IMPORT.to_string());
+        project_setup_undo(dir.to_string_lossy().into(), report.created.clone(), files(), import, report.claude_md.clone()).unwrap();
+    }
+
+    fn edit(report: &SetupReport) -> (&str, Option<&str>) {
+        let edit = report.claude_md.as_ref().expect("the report records the edit");
+        (edit.status.as_str(), edit.reason.as_deref())
+    }
+
+    #[test]
+    fn a_new_project_gets_claude_md_as_the_frontend_wrote_it() {
+        let dir = temp();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V6, None, Some(&bmad(Methodology::V6)), &mut report).unwrap();
+        assert_eq!(claude(&dir), "# new\n@.ade/rules.md\n", "written with its version's paragraph, which the files carry");
+        assert_eq!(report.claude_md, None, "nothing was edited");
+        assert!(!report.appended_import);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_shipped_paragraph_is_replaced_and_every_other_byte_kept() {
+        for (old, to, new) in [
+            (OLD_ONE_LINE, Methodology::V6, V6_PARAGRAPH),
+            (OLD_LONGER, Methodology::V6, V6_PARAGRAPH),
+            (V4_PARAGRAPH, Methodology::V6, V6_PARAGRAPH),
+            (V6_PARAGRAPH, Methodology::V4, V4_PARAGRAPH),
+            (OLD_LONGER, Methodology::V4, V4_PARAGRAPH),
+        ] {
+            let before = claude_with(old);
+            let (dir, report) = full_setup(before.as_bytes(), to);
+            assert_eq!(claude(&dir), claude_with(new), "{old}");
+            assert_eq!(edit(&report), ("replaced", None));
+            let recorded = report.claude_md.as_ref().unwrap();
+            assert_eq!((recorded.before.as_str(), recorded.after.as_str()), (before.as_str(), claude_with(new).as_str()));
+            assert!(!report.appended_import, "it loads the rules already");
+
+            undo(&dir, &report);
+            assert_eq!(claude(&dir), before, "Undo puts the paragraph back");
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    #[test]
+    fn a_failed_setups_cleanup_puts_the_paragraph_back() {
+        let before = claude_with(V4_PARAGRAPH);
+        let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+        assert_ne!(claude(&dir), before);
+        assert!(take_back(&dir, &report, &files(), Some(BMAD_IMPORT)).is_empty());
+        assert_eq!(claude(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn an_edited_paragraph_is_kept_and_a_marked_section_added() {
+        // The person reworded the paragraph ADE wrote: it is theirs now.
+        let before = claude_with("- **BMAD** tasks: the `/BMad:` commands. We only use the QA ones.");
+        let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+        assert_eq!(claude(&dir), format!("{before}\n{}", section(V6_PARAGRAPH)), "every byte kept, the section at the end");
+        assert_eq!(edit(&report), ("appended", Some("edited")), "the old BMAD lines need removing by hand");
+
+        undo(&dir, &report);
+        assert_eq!(claude(&dir), before, "Undo removes the section");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_shipped_paragraph_with_words_added_to_it_is_an_edited_one() {
+        // The first line is a shipped paragraph's; the bullet is not.
+        let before = claude_with(&format!("{OLD_ONE_LINE} Ask Sam first."));
+        let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+        assert!(claude(&dir).starts_with(&before));
+        assert_eq!(edit(&report), ("appended", Some("edited")));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_shipped_paragraph_with_a_line_added_below_it_is_an_edited_one() {
+        for eol in ["\n", "\r\n"] {
+            for old in [OLD_ONE_LINE, V4_PARAGRAPH] {
+                // Every line ADE wrote is there; the bullet goes on.
+                let before = claude_with(&format!("{old}\n  We only use the QA ones.")).replace('\n', eol);
+                let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+                assert_eq!(claude(&dir), format!("{before}{eol}{}", section(V6_PARAGRAPH).replace('\n', eol)), "kept, and the section added");
+                assert_eq!(edit(&report), ("appended", Some("edited")));
+                std::fs::remove_dir_all(dir).ok();
+            }
+            // A blank line, or a line that isn't indented, is not the bullet's.
+            for below in ["\n\nNotes.", "\nNotes."] {
+                let before = claude_with(&format!("{OLD_ONE_LINE}{below}")).replace('\n', eol);
+                let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+                assert_eq!(claude(&dir), claude_with(&format!("{V6_PARAGRAPH}{below}")).replace('\n', eol));
+                assert_eq!(edit(&report), ("replaced", None));
+                std::fs::remove_dir_all(dir).ok();
+            }
+        }
+    }
+
+    /// The paragraphs as the app sends them: generated from the frontend's
+    /// exports, and scripts/bmadTextFixture.test.ts fails when it is stale.
+    fn shipped(methodology: Methodology) -> BmadText {
+        let all: serde_json::Value = serde_json::from_str(include_str!("fixtures/bmad-text.json")).unwrap();
+        serde_json::from_value(all[methodology.as_str()].clone()).unwrap()
+    }
+
+    #[test]
+    fn every_shipped_paragraph_is_brought_to_each_version() {
+        for to in [Methodology::V6, Methodology::V4] {
+            let bmad = shipped(to);
+            assert!(bmad.paragraphs.len() >= 6 && bmad.sections.len() == bmad.paragraphs.len());
+            assert!(bmad.paragraph.starts_with(&format!("- **BMAD {}**", to.as_str())), "{}", bmad.paragraph);
+            for eol in ["\n", "\r\n"] {
+                let wanted = claude_with(&bmad.paragraph).replace('\n', eol);
+                for (old, old_section) in bmad.paragraphs.iter().zip(&bmad.sections) {
+                    // As ADE wrote it into its own CLAUDE.md.
+                    let before = claude_with(old).replace('\n', eol);
+                    let after = match bmad_edit(&before, &bmad).unwrap() {
+                        Some(edit) => {
+                            assert_eq!((edit.status.as_str(), edit.reason.as_deref()), ("replaced", None), "{old}");
+                            edit.after
+                        }
+                        None => before.clone(),
+                    };
+                    assert_eq!(after, wanted, "{old}");
+                    assert_eq!(after.lines().filter(|line| line.starts_with(BMAD_LINE)).count(), 1);
+                    assert_eq!(bmad_edit(&after, &bmad).unwrap(), None, "nothing left to do");
+
+                    // As a marked section in someone's own file.
+                    let before = format!("# Mine\n@.ade/rules.md\n\n{old_section}").replace('\n', eol);
+                    let after = bmad_edit(&before, &bmad).unwrap().map_or(before.clone(), |edit| edit.after);
+                    assert_eq!(after, format!("# Mine\n@.ade/rules.md\n\n{}", bmad.section).replace('\n', eol), "{old}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_claude_md_with_no_paragraph_gains_the_section_before_the_import() {
+        let (dir, report) = full_setup(b"# Mine\n", Methodology::V6);
+        assert_eq!(claude(&dir), format!("# Mine\n\n{}{BMAD_IMPORT}", section(V6_PARAGRAPH)));
+        assert_eq!(edit(&report), ("appended", None), "nothing to warn about");
+        assert!(report.appended_import);
+
+        undo(&dir, &report);
+        assert_eq!(claude(&dir), "# Mine\n");
+        std::fs::remove_dir_all(dir).ok();
+
+        // No line end at the end of the file: the section still starts its own line.
+        let (dir, report) = full_setup(b"# Mine", Methodology::V4);
+        assert_eq!(claude(&dir), format!("# Mine\n\n{}{BMAD_IMPORT}", section(V4_PARAGRAPH)));
+        assert!(take_back(&dir, &report, &files(), Some(BMAD_IMPORT)).is_empty());
+        assert_eq!(claude(&dir), "# Mine");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_marked_section_of_the_other_version_is_replaced() {
+        // Set up on v4 at an earlier switch; the import is in the file since.
+        let before = format!("# Mine\n\n{}{BMAD_IMPORT}Notes of my own.\n", section(V4_PARAGRAPH));
+        let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+        assert_eq!(claude(&dir), format!("# Mine\n\n{}{BMAD_IMPORT}Notes of my own.\n", section(V6_PARAGRAPH)));
+        assert_eq!(edit(&report), ("replaced", None));
+
+        undo(&dir, &report);
+        assert_eq!(claude(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_marked_section_someone_edited_is_left_and_said() {
+        let before = format!("# Mine\n\n<!-- ade:bmad -->\n## BMAD\n\n{V4_PARAGRAPH}\nAnd ask Sam.\n<!-- /ade:bmad -->\n@.ade/rules.md\n");
+        let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+        assert_eq!(claude(&dir), before);
+        assert_eq!(edit(&report), ("skipped", Some("edited-section")));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_claude_md_that_is_already_current_is_not_written() {
+        for current in [claude_with(V6_PARAGRAPH), format!("# Mine\n\n{}{BMAD_IMPORT}", section(V6_PARAGRAPH)), format!("# Mine\n@.ade/rules.md\n\n{}", section(V6_PARAGRAPH).trim_end())] {
+            let dir = temp();
+            let path = dir.join("CLAUDE.md");
+            std::fs::write(&path, &current).unwrap();
+            // Read-only: a write would be refused and reported.
+            let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+            permissions.set_readonly(true);
+            std::fs::set_permissions(&path, permissions).unwrap();
+            let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+            let mut report = SetupReport::default();
+            apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V6, None, Some(&bmad(Methodology::V6)), &mut report).unwrap();
+
+            assert_eq!(report.claude_md, None, "nothing reported");
+            assert_eq!(claude(&dir), current);
+            assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), modified);
+            #[allow(clippy::permissions_set_readonly_false)]
+            {
+                let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+                permissions.set_readonly(false);
+                std::fs::set_permissions(&path, permissions).unwrap();
+            }
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    #[test]
+    fn a_second_setup_finds_nothing_left_to_edit() {
+        for start in [claude_with(OLD_LONGER), "# Mine\n".to_string(), claude_with("- **BMAD** my own words.")] {
+            let (dir, first) = full_setup(start.as_bytes(), Methodology::V6);
+            assert!(first.claude_md.is_some());
+            let after = claude(&dir);
+            let mut again = SetupReport::default();
+            apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V6, None, Some(&bmad(Methodology::V6)), &mut again).unwrap();
+            assert_eq!(again.claude_md, None);
+            assert_eq!(claude(&dir), after);
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    #[test]
+    fn a_paragraph_with_windows_line_ends_is_replaced_and_keeps_them() {
+        let crlf = |text: &str| text.replace('\n', "\r\n");
+        let before = crlf(&claude_with(V4_PARAGRAPH));
+        let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+        assert_eq!(claude(&dir), crlf(&claude_with(V6_PARAGRAPH)));
+        assert_eq!(edit(&report), ("replaced", None));
+        undo(&dir, &report);
+        assert_eq!(claude(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+
+        // A section added to such a file has its line ends too.
+        let (dir, report) = full_setup(b"# Mine\r\n@.ade/rules.md\r\n", Methodology::V6);
+        assert_eq!(claude(&dir), format!("# Mine\r\n@.ade/rules.md\r\n\r\n{}", crlf(&section(V6_PARAGRAPH))));
+        undo(&dir, &report);
+        assert_eq!(claude(&dir), "# Mine\r\n@.ade/rules.md\r\n");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_claude_md_that_is_not_utf8_is_left_and_said() {
+        let mut before = claude_with(V4_PARAGRAPH).into_bytes();
+        before.extend([0xff, 0xfe, b'\n']);
+        let (dir, report) = full_setup(&before, Methodology::V6);
+        assert_eq!(edit(&report), ("skipped", Some("not-utf8")));
+        // The import is appended as it always was to a file that can't be
+        // read as text; no byte the file had is changed.
+        assert!(report.appended_import);
+        before.extend(BMAD_IMPORT.as_bytes());
+        assert_eq!(std::fs::read(dir.join("CLAUDE.md")).unwrap(), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_claude_md_holding_a_paragraph_twice_is_left_and_said() {
+        for before in [
+            format!("{}\n{OLD_ONE_LINE}\n", claude_with(V4_PARAGRAPH)),
+            format!("{}\n{}", claude_with(V4_PARAGRAPH), section(V4_PARAGRAPH)),
+            format!("# Mine\n@.ade/rules.md\n{}\n{}", section(V4_PARAGRAPH), section(V4_PARAGRAPH)),
+        ] {
+            let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+            assert_eq!(claude(&dir), before);
+            assert_eq!(edit(&report), ("skipped", Some("twice")));
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_claude_md_that_is_a_link_is_left_and_said() {
+        let shared = temp();
+        let before = claude_with(V4_PARAGRAPH);
+        std::fs::write(shared.join("AGENTS.md"), &before).unwrap();
+        let dir = temp();
+        std::os::unix::fs::symlink(shared.join("AGENTS.md"), dir.join("CLAUDE.md")).unwrap();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V6, None, Some(&bmad(Methodology::V6)), &mut report).unwrap();
+        assert_eq!(edit(&report), ("skipped", Some("link")));
+        assert!(std::fs::symlink_metadata(dir.join("CLAUDE.md")).unwrap().file_type().is_symlink(), "still a link");
+        assert_eq!(std::fs::read_to_string(shared.join("AGENTS.md")).unwrap(), before, "what it leads to is untouched");
+
+        // A link to a file that already reads right: there is nothing to say.
+        std::fs::write(shared.join("AGENTS.md"), claude_with(V6_PARAGRAPH)).unwrap();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V6, None, Some(&bmad(Methodology::V6)), &mut report).unwrap();
+        assert_eq!(report.claude_md, None);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(shared).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_claude_md_is_left_and_said() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let path = dir.join("CLAUDE.md");
+        let before = claude_with(V4_PARAGRAPH);
+        std::fs::write(&path, &before).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V6, None, Some(&bmad(Methodology::V6)), &mut report).unwrap();
+        assert_eq!(edit(&report), ("skipped", Some("read-only")));
+        assert_eq!(claude(&dir), before);
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o444);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_edit_keeps_the_files_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let path = dir.join("CLAUDE.md");
+        std::fs::write(&path, claude_with(V4_PARAGRAPH)).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V6, None, Some(&bmad(Methodology::V6)), &mut report).unwrap();
+        assert_eq!(edit(&report).0, "replaced");
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(names(&dir).iter().filter(|name| name.contains("CLAUDE.md")).count(), 1, "no temporary file is left: {:?}", names(&dir));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_edit_whose_permissions_cannot_be_put_back_is_still_recorded() {
+        use std::os::unix::fs::PermissionsExt;
+        // The content is written, so the write succeeded whatever happens to
+        // the mode: nothing after the rename may undo the record.
+        let dir = temp();
+        let path = dir.join("CLAUDE.md");
+        std::fs::write(&path, "old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        write_claude_md(&path, "new").unwrap();
+        assert_eq!(claude(&dir), "new");
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o640);
+        let source = lf(include_str!("projectsetup.rs"));
+        let write = body(&source, "fn write_claude_md(");
+        assert!(write.contains("let _ = std::fs::set_permissions("), "a failure to restore permissions must not be the write's error");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_claude_md_that_cannot_be_read_when_the_edit_is_taken_back_is_an_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let before = claude_with(V4_PARAGRAPH);
+        let (dir, report) = full_setup(before.as_bytes(), Methodology::V6);
+        let path = dir.join("CLAUDE.md");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&path).is_ok() {
+            eprintln!("skipped: the mode does not bite here (running as root)");
+            return;
+        }
+        let failed = take_back(&dir, &report, &[], Some(BMAD_IMPORT));
+        let undone = project_setup_undo(dir.to_string_lossy().into(), vec![], files(), None, report.claude_md.clone());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(failed.len(), 1, "{failed:?}");
+        assert!(failed[0].starts_with("couldn't check CLAUDE.md for the BMAD paragraph setup wrote, which may still be in it: "), "{failed:?}");
+        assert_eq!(undone.unwrap_err(), failed[0]);
+        assert_eq!(claude(&dir), claude_with(V6_PARAGRAPH), "left as it was");
+
+        // A file that is gone is not one.
+        std::fs::remove_file(&path).unwrap();
+        assert!(take_back(&dir, &report, &[], Some(BMAD_IMPORT)).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_claude_md_saved_after_the_edit_is_kept_by_undo_and_by_cleanup() {
+        for start in [claude_with(V4_PARAGRAPH), "# Mine\n".to_string()] {
+            // Undo.
+            let (dir, report) = full_setup(start.as_bytes(), Methodology::V6);
+            let theirs = format!("{}\nA line the person added.\n", claude(&dir));
+            std::fs::write(dir.join("CLAUDE.md"), &theirs).unwrap();
+            undo(&dir, &report);
+            assert_eq!(claude(&dir), theirs, "their version is kept");
+            std::fs::remove_dir_all(dir).ok();
+
+            // A failed setup's cleanup, and a switch's rollback.
+            let (dir, report) = full_setup(start.as_bytes(), Methodology::V6);
+            let theirs = claude(&dir).replacen('#', "# Edited:", 1);
+            std::fs::write(dir.join("CLAUDE.md"), &theirs).unwrap();
+            assert!(take_back(&dir, &report, &files(), Some(BMAD_IMPORT)).is_empty(), "keeping it is not a failure");
+            assert_eq!(claude(&dir), theirs.strip_suffix(BMAD_IMPORT).unwrap_or(&theirs));
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    #[test]
+    fn a_setup_that_fails_after_the_edit_has_recorded_it_and_puts_it_back() {
+        let src = v4_source();
+        for start in [claude_with(V6_PARAGRAPH), "# Mine\n".to_string()] {
+            let broken = |dir: &Path| {
+                std::fs::write(dir.join("CLAUDE.md"), &start).unwrap();
+                // A file where the install needs a folder: its copy fails partway.
+                std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+                std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
+            };
+            // The report holds the edit when the error comes back.
+            let dir = temp();
+            broken(&dir);
+            let mut report = SetupReport::default();
+            apply(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V4, Some(&src), Some(&bmad(Methodology::V4)), &mut report).unwrap_err();
+            let recorded = report.claude_md.clone().expect("recorded before the install ran");
+            assert_eq!(recorded.before, start);
+            assert_ne!(claude(&dir), start, "the edit was made");
+            assert!(claude(&dir).starts_with(&recorded.after));
+            std::fs::remove_dir_all(dir).ok();
+
+            // And the setup command takes it back.
+            let dir = temp();
+            broken(&dir);
+            assert!(apply_or_clean(&dir, &files(), Some(BMAD_IMPORT), "<!-- m -->", Methodology::V4, Some(&src), Some(&bmad(Methodology::V4))).is_err());
+            assert_eq!(claude(&dir), start);
+            assert_eq!(names(&dir), [".bmad-core", "CLAUDE.md"]);
+            std::fs::remove_dir_all(dir).ok();
+        }
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn adding_agents_never_writes_claude_md() {
+        let dir = temp();
+        let before = claude_with(V4_PARAGRAPH);
+        std::fs::write(dir.join("CLAUDE.md"), &before).unwrap();
+        let modified = std::fs::metadata(dir.join("CLAUDE.md")).unwrap().modified().unwrap();
+        // The paragraphs are sent all the same: only a full setup uses them.
+        let report = set_up(&dir, &files(), BMAD_IMPORT, "<!-- m -->", Some(&bmad(Methodology::V6)), Methodology::V6, false, |_| None).unwrap();
+        assert_eq!(report.claude_md, None);
+        assert_eq!(claude(&dir), before);
+        assert_eq!(std::fs::metadata(dir.join("CLAUDE.md")).unwrap().modified().unwrap(), modified);
+
+        // A full setup of the same project does.
+        let v6 = v6_source(true);
+        let report = set_up(&dir, &files(), BMAD_IMPORT, "<!-- m -->", Some(&bmad(Methodology::V6)), Methodology::V6, true, |_| Some(v6.clone())).unwrap();
+        assert_eq!(edit(&report), ("replaced", None));
+        assert_eq!(claude(&dir), claude_with(V6_PARAGRAPH));
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(v6).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn adding_agents_never_reads_claude_md() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let path = dir.join("CLAUDE.md");
+        std::fs::write(&path, claude_with(V4_PARAGRAPH)).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&path).is_ok() {
+            eprintln!("skipped: the mode does not bite here (running as root)");
+            return;
+        }
+        // A full setup would say it couldn't read the file.
+        let mut full = SetupReport::default();
+        edit_claude_md(&dir, &bmad(Methodology::V6), &mut full);
+        assert!(edit(&full).1.unwrap_or_default().starts_with("it couldn't be read"), "{:?}", full.claude_md);
+
+        let report = set_up(&dir, &files(), BMAD_IMPORT, "<!-- m -->", Some(&bmad(Methodology::V6)), Methodology::V6, false, |_| None).unwrap();
+        assert_eq!(report.claude_md, None);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_report_names_the_edit_as_the_frontend_reads_it() {
+        let (dir, report) = full_setup(claude_with(V4_PARAGRAPH).as_bytes(), Methodology::V6);
+        let json = serde_json::to_value(&report).unwrap();
+        assert_eq!(json["claudeMd"]["status"], "replaced");
+        assert_eq!(json["claudeMd"]["reason"], serde_json::Value::Null);
+        assert_eq!(json["claudeMd"]["before"], claude_with(V4_PARAGRAPH));
+        assert_eq!(json["claudeMd"]["after"], claude_with(V6_PARAGRAPH));
+        // And Undo takes it back as it was sent.
+        let back: ClaudeEdit = serde_json::from_value(json["claudeMd"].clone()).unwrap();
+        assert_eq!(Some(back), report.claude_md);
+        assert_eq!(serde_json::to_value(SetupReport::default()).unwrap()["claudeMd"], serde_json::Value::Null);
+        std::fs::remove_dir_all(dir).ok();
     }
 }

@@ -162,10 +162,15 @@ fn source(res: &Resources, methodology: Methodology) -> &Path {
     }
 }
 
-/// A full setup, as `project_setup_apply` runs it with `full: true`.
+/// A full setup, as `project_setup_apply` runs it with `full: true`, but for
+/// one thing: no BMAD paragraphs are passed (`bmad: None`), so an existing
+/// CLAUDE.md gets its import line and is otherwise not edited. The setup files
+/// here are stand-ins with no BMAD paragraph, and these tests compare whole
+/// trees; the paragraph edit is tested in src/projectsetup.rs and
+/// src/bmadswitch.rs, with the shipped texts in src/fixtures/bmad-text.json.
 fn set_up(dir: &Path, methodology: Methodology, res: &Resources) -> SetupReport {
     let mut report = SetupReport::default();
-    projectsetup::apply(dir, &setup_files(dir, methodology), Some(IMPORT), MARKER, methodology, Some(source(res, methodology)), &mut report)
+    projectsetup::apply(dir, &setup_files(dir, methodology), Some(IMPORT), MARKER, methodology, Some(source(res, methodology)), None, &mut report)
         .unwrap_or_else(|e| panic!("setup on {} failed: {e}", version(methodology)));
     report
 }
@@ -249,11 +254,12 @@ fn plan(dir: &Path, to: Methodology, ticked: &[&str], res: &Resources) -> Switch
 }
 
 /// `runSwitch(root, plan)`: the plan that was shown, and the setup files of
-/// the version it switches to.
+/// the version it switches to. Unlike the app, it sends no BMAD paragraphs
+/// (`bmad: None`): see `set_up` above for why.
 fn apply(dir: &Path, shown: &SwitchPlan, res: &Resources) -> Result<SwitchResult, String> {
     let to = if shown.to == "v4" { Methodology::V4 } else { Methodology::V6 };
     let files = setup_files(dir, to);
-    bmadswitch::apply(dir, to, &through_the_webview(shown), &SetupInput { files: &files, import: IMPORT, marker: MARKER }, &env(res))
+    bmadswitch::apply(dir, to, &through_the_webview(shown), &SetupInput { files: &files, import: IMPORT, marker: MARKER, bmad: None }, &env(res))
 }
 
 /// Plan with nothing ticked and apply it, expecting both to go through.
@@ -787,7 +793,7 @@ mod bmadswitch_e2e {
 
         // `undoSetup` in src/lib/projectSetup.ts: the report's list, the files it sent, the import if appended.
         let import = first.appended_import.then(|| IMPORT.to_string());
-        projectsetup::project_setup_undo(root_of(&dir), first.created.clone(), setup_files(&dir, Methodology::V4), import).unwrap();
+        projectsetup::project_setup_undo(root_of(&dir), first.created.clone(), setup_files(&dir, Methodology::V4), import, None).unwrap();
 
         assert_eq!(read(&dir, ".ade/methodology"), "v6\n");
         assert_is_v6(&dir, &res);
@@ -846,7 +852,7 @@ mod bmadswitch_e2e {
         let before = listing(&dir);
         let files = setup_files(&dir, Methodology::V4);
         let setup =
-            |full: bool| projectsetup::set_up(&dir, &files, IMPORT, MARKER, Methodology::V4, full, |wanted| Some(source(&res, wanted).to_path_buf()));
+            |full: bool| projectsetup::set_up(&dir, &files, IMPORT, MARKER, None, Methodology::V4, full, |wanted| Some(source(&res, wanted).to_path_buf()));
         assert_eq!(setup(true).unwrap_err(), why);
         assert_eq!(setup(false).unwrap_err(), why);
         assert_eq!(differences(&before, &listing(&dir)), Vec::<String>::new());

@@ -1345,6 +1345,8 @@ pub struct SetupInput<'a> {
     pub files: &'a [SetupFile],
     pub import: &'a str,
     pub marker: &'a str,
+    /// The BMAD paragraphs, for the CLAUDE.md the project already has.
+    pub bmad: Option<&'a crate::projectsetup::BmadText>,
 }
 
 /// `.ade/archive/bmad-<from>-YYYY-MM-DD`, with an optional `-N`. The name
@@ -1677,7 +1679,7 @@ impl<'a> Run<'a> {
         .ok_or_else(|| format!("ADE's bundled BMAD {} files weren't found.", to.as_str()))?;
         self.setup_ran = true;
         // Setup edits the settings last, and only when all else worked.
-        crate::projectsetup::apply(root, setup.files, Some(setup.import), setup.marker, to, Some(src), &mut self.report)?;
+        crate::projectsetup::apply(root, setup.files, Some(setup.import), setup.marker, to, Some(src), setup.bmad, &mut self.report)?;
         self.note_settings();
 
         // 6. Rules, after setup: a project with no rules.md has the full rules by now.
@@ -1950,8 +1952,8 @@ pub fn apply(root: &Path, to: Methodology, shown: &SwitchPlan, setup: &SetupInpu
 }
 
 /// Archive the old version and set up the other one. `plan` is the plan the
-/// dialog showed; `files`, `import` and `marker` are the new version's setup
-/// files, as `project_setup_apply` takes them.
+/// dialog showed; `files`, `import`, `marker` and `bmad` are the new version's
+/// setup files and paragraphs, as `project_setup_apply` takes them.
 #[tauri::command(async)]
 pub fn bmad_switch_apply(
     app: tauri::AppHandle,
@@ -1961,11 +1963,12 @@ pub fn bmad_switch_apply(
     files: Vec<SetupFile>,
     import: String,
     marker: String,
+    bmad: Option<crate::projectsetup::BmadText>,
 ) -> Result<SwitchResult, String> {
     let dir = crate::projectsetup::project(&root)?;
     // Held for the whole run: no setup may write into a tree that is half moved.
     let _one = crate::projectsetup::APPLY.lock().unwrap_or_else(|e| e.into_inner());
-    apply(&dir, target(&to)?, &plan, &SetupInput { files: &files, import: &import, marker: &marker }, &env(&app))
+    apply(&dir, target(&to)?, &plan, &SetupInput { files: &files, import: &import, marker: &marker, bmad: bmad.as_ref() }, &env(&app))
 }
 
 #[cfg(test)]
@@ -3531,7 +3534,7 @@ mod tests {
 
     fn switch(dir: &Path, to: Methodology, shown: &SwitchPlan, env: &Env) -> Result<SwitchResult, String> {
         let files = files();
-        apply(dir, to, shown, &SetupInput { files: &files, import: IMPORT, marker: "<!-- m -->" }, env)
+        apply(dir, to, shown, &SetupInput { files: &files, import: IMPORT, marker: "<!-- m -->", bmad: None }, env)
     }
 
     /// Every file under `root` with its content, every folder (with a
@@ -4369,7 +4372,7 @@ mod tests {
     fn rules_setup_wrote_without_the_section_are_taken_back_too() {
         let mut files = files();
         files[1].content = "rules from an older frontend\n".into();
-        let input = SetupInput { files: &files, import: IMPORT, marker: "<!-- m -->" };
+        let input = SetupInput { files: &files, import: IMPORT, marker: "<!-- m -->", bmad: None };
         let project = || {
             let dir = v4_project();
             std::fs::remove_file(at(&dir, ".ade/rules.md")).unwrap();
@@ -4447,7 +4450,7 @@ mod tests {
     // ---- fix round 1 ----
 
     fn input(files: &[SetupFile]) -> SetupInput<'_> {
-        SetupInput { files, import: IMPORT, marker: "<!-- m -->" }
+        SetupInput { files, import: IMPORT, marker: "<!-- m -->", bmad: None }
     }
 
     // Step 7 sets `complete` in memory and then saves. Whatever the journal
@@ -4632,6 +4635,29 @@ mod tests {
         if unreadable {
             assert!(err.contains("couldn't check CLAUDE.md for the import line"), "{err}");
             assert_eq!(read(&dir, "CLAUDE.md"), format!("# Mine\n{IMPORT}"), "left as it was");
+            assert_eq!(pending(&dir)[0].status, "incomplete");
+        } else {
+            eprintln!("running as a user who reads everything; skipping");
+        }
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // The paragraph setup wrote may still be in a CLAUDE.md that can't be read.
+    #[cfg(unix)]
+    #[test]
+    fn a_claude_md_whose_paragraph_cannot_be_checked_at_rollback_is_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = v4_project();
+        // It loads the rules already: no import is added, so only the paragraph is at stake.
+        write(&dir, "CLAUDE.md", &claude_with(V4_PARAGRAPH));
+        let failing = Env { fail_after_rules: true, before_rollback: claude_md_cannot_be_read, ..env() };
+        let err = switch_with_paragraphs(&dir, V6, &failing).unwrap_err();
+        let unreadable = std::fs::read(dir.join("CLAUDE.md")).is_err();
+        std::fs::set_permissions(dir.join("CLAUDE.md"), std::fs::Permissions::from_mode(0o644)).unwrap();
+        if unreadable {
+            assert!(err.contains("couldn't check CLAUDE.md for the BMAD paragraph setup wrote, which may still be in it"), "{err}");
+            assert!(!err.contains("import line"), "{err}");
+            assert_eq!(read(&dir, "CLAUDE.md"), claude_with(V6_PARAGRAPH), "left as it was");
             assert_eq!(pending(&dir)[0].status, "incomplete");
         } else {
             eprintln!("running as a user who reads everything; skipping");
@@ -4957,6 +4983,140 @@ mod tests {
         assert!(err.contains("commands"), "{err}");
         assert_eq!(tree(&dir), before, "the engine it had copied is gone, and v6 is back");
         assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // ---- The BMAD paragraph of CLAUDE.md ----
+
+    const BOTH_VERSIONS: &str = "- **BMAD** tasks, in the version `.ade/methodology`\n  names. **v4**: the `/BMad:tasks:` slash commands in `.bmad-core/`. **v6**: the skills\n  in `.claude/skills/`. Either way these are optional helpers.";
+    const V4_PARAGRAPH: &str = "- **BMAD v4** tasks: the `/BMad:tasks:` slash commands\n  (`.bmad-core/`). These are optional helpers.";
+    const V6_PARAGRAPH: &str = "- **BMAD v6** is how work is done in this project. Use its skills in\n  `.claude/skills/`; their work lives in `_bmad-output/`.";
+
+    fn bmad_section(paragraph: &str) -> String {
+        format!("<!-- ade:bmad -->\n## BMAD\n\n{paragraph}\n<!-- /ade:bmad -->\n")
+    }
+
+    /// What the frontend sends with a switch to `to`.
+    fn bmad(to: Methodology) -> crate::projectsetup::BmadText {
+        let paragraphs = [V6_PARAGRAPH, V4_PARAGRAPH, BOTH_VERSIONS];
+        let paragraph = if to == V4 { V4_PARAGRAPH } else { V6_PARAGRAPH };
+        crate::projectsetup::BmadText {
+            paragraph: paragraph.to_string(),
+            section: bmad_section(paragraph),
+            paragraphs: paragraphs.iter().map(|p| p.to_string()).collect(),
+            sections: paragraphs.iter().map(|p| bmad_section(p)).collect(),
+            open: "<!-- ade:bmad -->".to_string(),
+            close: "<!-- /ade:bmad -->".to_string(),
+        }
+    }
+
+    /// A CLAUDE.md ADE wrote, around `paragraph`.
+    fn claude_with(paragraph: &str) -> String {
+        format!("# CLAUDE.md: working in shop\n\n@.ade/rules.md\n\n## Agents and commands\n- **Sub-agents** in `.claude/agents/`.\n{paragraph}\n- `qa` can write.\n\n## Project layout\n- `docs/prd.md`\n")
+    }
+
+    /// The switch as the app runs it: with the paragraphs of the version it goes to.
+    fn switch_with_paragraphs(dir: &Path, to: Methodology, env: &Env) -> Result<SwitchResult, String> {
+        let (files, bmad) = (files(), bmad(to));
+        let shown = plan(dir, to, &[], env);
+        assert_eq!(shown.blocked, None);
+        apply(dir, to, &shown, &SetupInput { files: &files, import: IMPORT, marker: "<!-- m -->", bmad: Some(&bmad) }, env)
+    }
+
+    #[test]
+    fn a_switch_brings_a_shipped_paragraph_to_the_new_version_and_back() {
+        for old in [BOTH_VERSIONS, V4_PARAGRAPH] {
+            let dir = v4_project();
+            write(&dir, "CLAUDE.md", &claude_with(old));
+
+            let result = switch_with_paragraphs(&dir, V6, &env()).unwrap();
+            let now = read(&dir, "CLAUDE.md");
+            assert_eq!(now, claude_with(V6_PARAGRAPH), "it differs from before only in that paragraph");
+            for gone in ["v4", ".bmad-core", "/BMad:"] {
+                assert!(!now.contains(gone), "{gone} is still in CLAUDE.md");
+            }
+            let edit = result.setup.claude_md.expect("the result says what happened to CLAUDE.md");
+            assert_eq!((edit.status.as_str(), edit.reason), ("replaced", None));
+
+            // And back: it names only v4.
+            let result = switch_with_paragraphs(&dir, V4, &env()).unwrap();
+            let now = read(&dir, "CLAUDE.md");
+            assert_eq!(now, claude_with(V4_PARAGRAPH));
+            for gone in ["v6", ".claude/skills", "_bmad-output"] {
+                assert!(!now.contains(gone), "{gone} is still in CLAUDE.md");
+            }
+            assert_eq!(result.setup.claude_md.map(|edit| edit.status), Some("replaced".to_string()));
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    #[test]
+    fn a_switch_adds_a_marked_section_to_a_claude_md_of_the_persons_own_and_replaces_it_on_the_way_back() {
+        let dir = v4_project();
+        assert_eq!(read(&dir, "CLAUDE.md"), "# Mine\n");
+
+        let result = switch_with_paragraphs(&dir, V6, &env()).unwrap();
+        assert_eq!(read(&dir, "CLAUDE.md"), format!("# Mine\n\n{}{IMPORT}", bmad_section(V6_PARAGRAPH)), "their text is kept; the section comes before the import");
+        let edit = result.setup.claude_md.expect("the result says what happened to CLAUDE.md");
+        assert_eq!((edit.status.as_str(), edit.reason), ("appended", None));
+
+        let result = switch_with_paragraphs(&dir, V4, &env()).unwrap();
+        assert_eq!(read(&dir, "CLAUDE.md"), format!("# Mine\n\n{}{IMPORT}", bmad_section(V4_PARAGRAPH)));
+        assert_eq!(result.setup.claude_md.map(|edit| edit.status), Some("replaced".to_string()));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rollback_leaves_claude_md_byte_identical() {
+        let projects: [(fn() -> PathBuf, Methodology, &str); 2] = [(v4_project, V6, V4_PARAGRAPH), (v6_project, V4, V6_PARAGRAPH)];
+        for (project, to, on) in projects {
+            for claude in [claude_with(on), claude_with(BOTH_VERSIONS), "# Mine\n".to_string(), format!("# Mine\n@.ade/rules.md\n\n{}", bmad_section(on))] {
+                let dir = project();
+                write(&dir, "CLAUDE.md", &claude);
+                let before = tree(&dir);
+                // Setup has finished, the paragraph edit with it, when the switch fails.
+                let failing = Env { fail_after_rules: true, ..env() };
+                let err = switch_with_paragraphs(&dir, to, &failing).unwrap_err();
+                assert_eq!(err, "failed on purpose, after the rules step", "a rollback that worked adds nothing");
+                assert_eq!(std::fs::read(at(&dir, "CLAUDE.md")).unwrap(), claude.as_bytes(), "to {}", to.as_str());
+                assert_eq!(tree(&dir), before);
+                assert!(pending(&dir).is_empty());
+                std::fs::remove_dir_all(dir).ok();
+            }
+        }
+    }
+
+    #[test]
+    fn rollback_after_a_failed_setup_puts_the_paragraph_back() {
+        for claude in [claude_with(V4_PARAGRAPH), "# Mine\n".to_string()] {
+            let dir = v4_project();
+            write(&dir, "CLAUDE.md", &claude);
+            let before = tree(&dir);
+            // A v6 resource root with no runtime: setup fails after the edit.
+            let broken = temp();
+            write(&broken, "skills/bmad/SKILL.md", "bmad skill");
+            let failing = Env { v6_src: Some(broken.clone()), ..env() };
+            let err = switch_with_paragraphs(&dir, V6, &failing).unwrap_err();
+            assert!(err.contains("ade-runtime.mjs"), "{err}");
+            assert_eq!(tree(&dir), before);
+            std::fs::remove_dir_all(dir).ok();
+            std::fs::remove_dir_all(broken).ok();
+        }
+    }
+
+    #[test]
+    fn rollback_keeps_a_claude_md_the_person_saved_during_the_switch() {
+        fn the_person_saves_claude_md(root: &Path) {
+            let path = root.join("CLAUDE.md");
+            let text = std::fs::read_to_string(&path).unwrap();
+            std::fs::write(&path, text.replace("- `qa` can write.", "- `qa` can write. Ask Sam.")).unwrap();
+        }
+        let dir = v4_project();
+        write(&dir, "CLAUDE.md", &claude_with(V4_PARAGRAPH));
+        let failing = Env { fail_after_rules: true, before_rollback: the_person_saves_claude_md, ..env() };
+        let err = switch_with_paragraphs(&dir, V6, &failing).unwrap_err();
+        assert_eq!(err, "failed on purpose, after the rules step", "their version is kept, and that is not a failure");
+        assert_eq!(read(&dir, "CLAUDE.md"), claude_with(V6_PARAGRAPH).replace("- `qa` can write.", "- `qa` can write. Ask Sam."));
         std::fs::remove_dir_all(dir).ok();
     }
 

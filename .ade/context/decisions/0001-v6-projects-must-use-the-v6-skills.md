@@ -1,0 +1,6 @@
+# 0001: A project on BMAD v6 must use the v6 skills
+
+- Status: Accepted (owner, 2026-10-11)
+- Context: A project switched to BMAD v6 kept a `CLAUDE.md` that named both versions and called the BMAD skills optional, so nothing made its agents use v6. Requiring the skills raised a conflict: they write to `_bmad-output/` and tickets have their own states, while the layout ADE writes names `docs/prd.md` and `docs/stories/`.
+- Decision: In a v6 project the `bmad-*` skills are required for planning, stories, builds and reviews, and `CLAUDE.md` names only v6. Where a skill's location differs from the layout section, the BMAD location is used. Done stays with ADE's verification command, whatever state a ticket is in. A v4 project's `CLAUDE.md` names only v4, with BMAD optional. ADE replaces the BMAD paragraph of an existing `CLAUDE.md` only when it is byte for byte a text ADE shipped; otherwise it appends a marked section.
+- Consequences: The layout section of a v6 project's `CLAUDE.md` still lists the `docs/` paths and is overridden by one sentence, not rewritten. The qa and scrum-master role files still name the v4 task each skill replaces until ade-setup changes. Every BMAD paragraph ADE ships from now on has to join the shipped list, or later versions will not recognise it.
