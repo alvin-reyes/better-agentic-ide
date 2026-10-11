@@ -201,7 +201,7 @@ describe("a project that gains BMAD while its question is open", () => {
 
 describe("a folder that isn't a project", () => {
   it.each(["/Users/testuser", "/Users/testuser/", "/home/u", "/", "C:\\", "C:\\Users\\u"])("is refused before anything is asked: %s", async (root) => {
-    await expect(askAndSetUp(root)).rejects.toBe("This folder isn't a project.");
+    await expect(askAndSetUp(root)).rejects.toMatchObject({ reason: "This folder isn't a project." });
     expect(request()).toBeNull();
     expect(tauri.applies).toHaveLength(0);
   });
@@ -279,7 +279,7 @@ describe("a project whose BMAD switch didn't finish", () => {
 
   it("is not set up by the palette or Set up now, which say why", async () => {
     tauri.pending = [PENDING];
-    await expect(askAndSetUp("/code/shop")).rejects.toMatch(/didn't finish.*ARCHIVE\.md/);
+    await expect(askAndSetUp("/code/shop")).rejects.toMatchObject({ reason: expect.stringMatching(/didn't finish.*ARCHIVE\.md/) });
     expect(tauri.applies).toHaveLength(0);
   });
 
@@ -525,7 +525,7 @@ describe("another project's question while a switch is running in the confirm st
     void newTab.then(() => { settled = true; });
 
     expect(await askMethodology("/code/shop")).toEqual(REFUSED);
-    await expect(askAndSetUp("/code/shop")).rejects.toBe(REFUSED.reason);
+    await expect(askAndSetUp("/code/shop")).rejects.toMatchObject({ reason: REFUSED.reason });
     expect(request()).toEqual(CONFIRM);
     expect(settled).toBe(false);
     expect(tauri.applies).toHaveLength(0);
@@ -541,7 +541,7 @@ describe("another project's question while a switch is running in the confirm st
     tauri.byDir = { "/code/other": "v6" };
     expect(await askKeepOrSwitch("/code/other", "v6")).toEqual(REFUSED);
     expect(await askSwitch("/code/other", "v6")).toEqual(REFUSED);
-    await expect(switchOnDemand("/code/other")).rejects.toBe(REFUSED.reason);
+    await expect(switchOnDemand("/code/other")).rejects.toMatchObject({ reason: REFUSED.reason });
     expect(request()).toEqual(CONFIRM);
     expect(isKept("/code/other")).toBe(false);
 
@@ -593,11 +593,23 @@ describe("switchOnDemand", () => {
   });
 
   it("refuses a project with no BMAD", async () => {
-    await expect(switchOnDemand("/code/shop")).rejects.toBe("This project has no BMAD to switch from.");
-    // A reason, as opposed to a step that failed.
-    expect(isRefusal("This project has no BMAD to switch from.")).toBe(true);
-    expect(isRefusal("disk full")).toBe(false);
+    await expect(switchOnDemand("/code/shop")).rejects.toMatchObject({ reason: "This project has no BMAD to switch from." });
     expect(request()).toBeNull();
+  });
+
+  it("tells a refusal from any other error by identity, not by its text", async () => {
+    const reason = "This project has no BMAD to switch from.";
+    // The same reason thrown twice is a refusal both times, and reads as the reason.
+    for (let i = 0; i < 2; i++) {
+      const err = await switchOnDemand("/code/shop").catch((e) => e);
+      expect(isRefusal(err)).toBe(true);
+      expect(String(err)).toBe(reason);
+      expect(err.message).toBe(reason);
+    }
+    // A plain string, an Error or an object with the same text is not one.
+    expect(isRefusal(reason)).toBe(false);
+    expect(isRefusal(new Error(reason))).toBe(false);
+    expect(isRefusal({ reason })).toBe(false);
   });
 });
 

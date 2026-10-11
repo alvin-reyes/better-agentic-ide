@@ -52,6 +52,8 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   const { root: storeRoot, methodology, board, map, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
+  // One project's refusal never shows under another project's link.
+  useEffect(() => { setSwitchError(null); }, [root]);
   const [dispatchCount, setDispatchCount] = useState(0);
   const { width, onDragStart } = useDragWidth(BOARD_WIDTH.min, BOARD_WIDTH.max, BOARD_WIDTH.initial);
   const provider = useSettingsStore((s) => s.defaultProvider);

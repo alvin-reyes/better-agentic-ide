@@ -182,10 +182,10 @@ export async function askMethodology(root: string, opts: { ask?: AskUi } = {}): 
  */
 export async function askAndSetUp(root: string): Promise<SetupResult | null> {
   // A string, as Tauri's own rejections are: callers show it as it is.
-  if (!isSetupCandidate(normRoot(root))) throw NOT_A_PROJECT;
+  if (!isSetupCandidate(normRoot(root))) throw new Refusal(NOT_A_PROJECT);
   const answer = await askMethodology(root);
-  // Thrown as the string it is, like NOT_A_PROJECT: callers show it as it is.
-  if (answer.kind === "blocked") throw refusal(answer.reason);
+  // Thrown as a Refusal: callers show its reason as it is.
+  if (answer.kind === "blocked") throw new Refusal(answer.reason);
   if (answer.kind !== "chosen") return null;
   // Set up, and announced, by whoever got there first.
   if (answer.done) return answer.done;
@@ -198,19 +198,19 @@ export async function askAndSetUp(root: string): Promise<SetupResult | null> {
 const NOT_A_PROJECT = "This folder isn't a project.";
 
 /**
- * Reasons thrown because setting up or switching isn't allowed here (blocked,
- * not a project, no BMAD), as opposed to a step that was tried and failed.
- * Both are strings, so the thrown ones are remembered: a caller shows a
- * refusal as it is, and prefixes a failure with what was being done.
+ * Thrown when setting up or switching isn't allowed here (blocked, not a
+ * project, no BMAD), as opposed to a step that was tried and failed. Told
+ * apart by identity, so no other error is mistaken for one. It reads as its
+ * reason wherever it is shown: `String(err)` and `err.message` are the reason.
  */
-const refusals = new Set<string>();
-function refusal(reason: string): string {
-  refusals.add(reason);
-  return reason;
+export class Refusal {
+  constructor(readonly reason: string) {}
+  get message() { return this.reason; }
+  toString() { return this.reason; }
 }
 
-/** Whether `error` is one of the reasons `askAndSetUp` or `switchOnDemand` refused with. */
-export const isRefusal = (error: unknown): boolean => typeof error === "string" && refusals.has(error);
+/** Whether `error` is a refusal from `askAndSetUp` or `switchOnDemand`. */
+export const isRefusal = (error: unknown): error is Refusal => error instanceof Refusal;
 
 /** "/code/shop" → "shop", on either separator. */
 export const projectName = (root: string) => root.split(/[\\/]/).filter(Boolean).pop() ?? root;
@@ -267,11 +267,11 @@ const NO_BMAD = "This project has no BMAD to switch from.";
 export async function switchOnDemand(root: string): Promise<SwitchAnswer> {
   const at = normRoot(root);
   const from = await detectOnDisk(at);
-  // A string, as NOT_A_PROJECT is: callers show it as it is.
-  if (!from) throw refusal(NO_BMAD);
+  // A Refusal, as askAndSetUp throws: callers show its reason as it is.
+  if (!from) throw new Refusal(NO_BMAD);
   const answer = await askSwitch(at, from);
-  // Thrown as the string it is, as askAndSetUp does: callers show it as it is.
-  if (answer.kind === "blocked") throw refusal(answer.reason);
+  // Thrown as a Refusal: callers show its reason as it is.
+  if (answer.kind === "blocked") throw new Refusal(answer.reason);
   return answer;
 }
 

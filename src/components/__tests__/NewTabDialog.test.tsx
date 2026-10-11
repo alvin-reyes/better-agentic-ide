@@ -618,9 +618,9 @@ describe("a project that already has BMAD", () => {
       tauri.byDir = { [NEWAPP]: null, [OTHER]: "v4" };
 
       // The palette's "Set up BMAD" and both Set up now buttons.
-      await expect(askAndSetUp(NEWAPP)).rejects.toBe(REFUSED);
+      await expect(askAndSetUp(NEWAPP)).rejects.toMatchObject({ reason: REFUSED });
       // The palette's and the board's switch.
-      await expect(switchOnDemand(OTHER)).rejects.toBe(REFUSED);
+      await expect(switchOnDemand(OTHER)).rejects.toMatchObject({ reason: REFUSED });
       expect(confirmDialog()).toBeTruthy();
       expect(tabs()).toBe(before);
 
@@ -658,7 +658,7 @@ describe("a project that already has BMAD", () => {
       const before = tabs();
       const release = await startSwitching();
       tauri.byDir = { [NEWAPP]: null };
-      await expect(askAndSetUp(NEWAPP)).rejects.toBe(REFUSED);
+      await expect(askAndSetUp(NEWAPP)).rejects.toMatchObject({ reason: REFUSED });
 
       release();
       await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("A folder is in use."));

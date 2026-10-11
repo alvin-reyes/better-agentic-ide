@@ -599,6 +599,20 @@ describe("BoardPanel and a BMAD switch", () => {
     expect(screen.queryByRole("button", { name: /Switch to BMAD/ })).toBeNull();
   });
 
+  it("drops one project's refusal when the board moves to another project", async () => {
+    disk.bmad = {};
+    disk.roots = { "/q": "/q" };
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    const view = render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to BMAD v6…" }));
+    await screen.findByRole("alert");
+
+    useBoardPanel.setState({ root: "/q", methodology: "v4", board: v4Board(), error: null, loading: false });
+    view.rerender(<BoardPanel cwd="/q" onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "Switch to BMAD v6…" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("says why when the switch can't be offered after all", async () => {
     // The board still shows v4, but the marker is gone from disk.
     disk.bmad = {};

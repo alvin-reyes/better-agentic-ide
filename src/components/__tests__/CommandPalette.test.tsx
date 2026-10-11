@@ -115,7 +115,7 @@ describe("Project: Set up BMAD, methodology and agents", () => {
     renderPalette();
     fireEvent.click(screen.getByText(COMMAND));
     await waitFor(() => expect(failed).toHaveBeenCalledOnce());
-    expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toBe("Project setup failed: This folder isn't a project.");
+    expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toBe("This folder isn't a project.");
     expect(question()).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(tauri.applies).toHaveLength(0);

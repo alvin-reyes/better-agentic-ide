@@ -31,7 +31,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 let terminalLoad: Promise<typeof import("../hooks/useTerminal")> | null = null;
 const terminalModule = () => (terminalLoad ??= import("../hooks/useTerminal"));
 
-const categoryColor =(cat: string) => CATEGORY_COLORS[cat] ?? "var(--text-muted)";
+const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? "var(--text-muted)";
 
 interface CommandPaletteProps {
   onClose: () => void;
