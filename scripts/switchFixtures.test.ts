@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { parseBmadConfig } from "../src/lib/bmadConfig";
 import { loadCentralConfig } from "../src/lib/bmadRuntime/config";
 import { memFs } from "../src/lib/bmadRuntime/fs";
+import { ROLES } from "../src/lib/projectMethodology";
 
 /**
  * The switch reads two configs in Rust that the app reads in TypeScript. If
@@ -50,5 +51,15 @@ describe("the switch's shared config fixtures", () => {
     // The test substitutes `{project-root}` itself, so this pins the merged
     // value, not the substitution.
     expect(String(config.core.output_folder).replaceAll("{project-root}", root)).toBe(expected.toml.outputFolder);
+  });
+});
+
+describe("the core roles, as the switch knows them", () => {
+  it("are the roles setup writes", () => {
+    const rust = readFileSync(resolve(__dirname, "..", "src-tauri/src/bmadswitch.rs"), "utf8");
+    const list = /const CORE_ROLES: \[&str; \d+\] = \[([^\]]*)\]/.exec(rust);
+    expect(list, "CORE_ROLES not found in bmadswitch.rs").not.toBeNull();
+    const names = [...list![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(names).toEqual(ROLES.map((r) => r.name));
   });
 });

@@ -59,7 +59,7 @@ fn inside(root: &Path, rel: &str) -> Result<PathBuf, String> {
     Ok(root.join(p))
 }
 
-fn project(root: &str) -> Result<PathBuf, String> {
+pub(crate) fn project(root: &str) -> Result<PathBuf, String> {
     let p = PathBuf::from(root);
     if !p.is_dir() {
         return Err(format!("{root} isn't a folder."));
