@@ -46,14 +46,64 @@ fn changed_event(path: &Path, with_content: bool) -> WatchEvent {
     }
 }
 
+/// The path prefixes whose events are dropped: each entry as given (taken
+/// under `dir` when relative), and under `dir`'s resolved path as well, which
+/// is the spelling the OS reports events in when `dir` is reached through a link.
+fn exclusions(dir: &Path, exclude: &[String]) -> Vec<PathBuf> {
+    let resolved = std::fs::canonicalize(dir).ok();
+    let mut out = Vec::new();
+    for entry in exclude {
+        let given = Path::new(entry);
+        let abs = if given.is_absolute() { given.to_path_buf() } else { dir.join(given) };
+        if let (Some(resolved), Ok(rest)) = (resolved.as_ref(), abs.strip_prefix(dir)) {
+            let twin = resolved.join(rest);
+            if twin != abs {
+                out.push(twin);
+            }
+        }
+        out.push(abs);
+    }
+    out
+}
+
+/// Whether two path components name the same entry: case-insensitively where
+/// the platform's file systems usually are (Windows, macOS), exactly elsewhere.
+fn same_component(a: &std::ffi::OsStr, b: &std::ffi::OsStr) -> bool {
+    if cfg!(any(windows, target_os = "macos")) {
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    } else {
+        a == b
+    }
+}
+
+/// `path` is an excluded folder or inside one. Whole path components are
+/// compared, so `archive2` is not under `archive`; a trailing separator on the
+/// prefix does not matter, and `Path` treats both separators alike on Windows.
+fn excluded(path: &Path, exclude: &[PathBuf]) -> bool {
+    exclude.iter().any(|prefix| {
+        let mut inside = path.components();
+        prefix
+            .components()
+            .all(|want| inside.next().is_some_and(|got| same_component(got.as_os_str(), want.as_os_str())))
+    })
+}
+
 /// `with_content` defaults to true; the board panel passes false, since it
 /// rebuilds from disk anyway and every modify would otherwise read the file.
+///
+/// `exclude` is path prefixes whose events are dropped. The board passes
+/// `.ade/archive` for its `.ade/` watch: the archive is history, and a switch
+/// writes it in one burst. A recursive watch on Linux still registers the
+/// archive's folders with inotify; that cost is accepted, since the archive is
+/// written once per switch. An event listing several paths is filtered path by
+/// path: only the excluded ones are dropped.
 #[tauri::command]
 pub fn watch_directory(
     state: tauri::State<'_, WatcherManager>,
     dir: String,
     extensions: Vec<String>,
     with_content: Option<bool>,
+    exclude: Option<Vec<String>>,
     on_event: Channel<WatchEvent>,
 ) -> Result<u32, String> {
     let with_content = with_content.unwrap_or(true);
@@ -61,6 +111,7 @@ pub fn watch_directory(
     if !watch_path.is_dir() {
         return Err(format!("Not a directory: {}", dir));
     }
+    let exclude = exclusions(&watch_path, &exclude.unwrap_or_default());
 
     let extensions: Vec<String> = extensions.iter().map(|e| e.to_lowercase()).collect();
     let wanted = move |p: &PathBuf| {
@@ -79,7 +130,7 @@ pub fn watch_directory(
                     return;
                 }
             };
-            for path in event.paths.iter().filter(|p| wanted(p)) {
+            for path in event.paths.iter().filter(|p| wanted(p) && !excluded(p, &exclude)) {
                 let path_str = path.to_string_lossy().to_string();
                 let ev = match event.kind {
                     EventKind::Create(_) => WatchEvent::Created { path: path_str },
@@ -143,5 +194,78 @@ mod tests {
             }
             _ => panic!("expected a change"),
         }
+    }
+
+    #[test]
+    fn drops_events_under_an_excluded_prefix() {
+        let exclude = vec![PathBuf::from("/p/.ade/archive")];
+        assert!(excluded(Path::new("/p/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md"), &exclude));
+        assert!(excluded(Path::new("/p/.ade/archive"), &exclude), "the folder itself");
+        assert!(!excluded(Path::new("/p/.ade/archive2/x.md"), &exclude), "a prefix ends at a path separator");
+        assert!(!excluded(Path::new("/p/.ade/archived-notes.md"), &exclude));
+        assert!(!excluded(Path::new("/p/.ade"), &exclude), "the parent is not under the prefix");
+        assert!(!excluded(Path::new("/p/.ade/stage"), &exclude));
+        assert!(!excluded(Path::new("/p/.ade/stage"), &[]));
+    }
+
+    #[test]
+    fn a_trailing_separator_on_the_prefix_is_tolerated() {
+        let exclude = vec![PathBuf::from("/p/.ade/archive/")];
+        assert!(excluded(Path::new("/p/.ade/archive/x.md"), &exclude));
+        assert!(!excluded(Path::new("/p/.ade/archive2/x.md"), &exclude));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_separators_and_case_are_tolerated() {
+        let exclude = vec![PathBuf::from(r"C:\p\.ade\archive")];
+        assert!(excluded(Path::new("C:/p/.ade/archive/x.md"), &exclude));
+        assert!(excluded(Path::new(r"c:\P\.ADE\Archive\x.md"), &exclude));
+        assert!(!excluded(Path::new(r"C:\p\.ade\archive2\x.md"), &exclude));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn case_matters_where_the_file_system_cares() {
+        let exclude = vec![PathBuf::from("/p/.ade/archive")];
+        assert!(!excluded(Path::new("/p/.ade/Archive/x.md"), &exclude));
+    }
+
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn case_is_ignored_where_the_file_system_ignores_it() {
+        let exclude = vec![PathBuf::from("/p/.ade/archive")];
+        assert!(excluded(Path::new("/p/.ade/Archive/x.md"), &exclude));
+    }
+
+    #[test]
+    fn an_exclusion_is_absolute_or_under_the_watched_folder() {
+        let dir = std::env::temp_dir().join(format!("ade-watch-exclude-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let elsewhere = std::env::temp_dir().join("elsewhere").join("x");
+        let found = exclusions(&dir, &["archive".to_string(), elsewhere.to_string_lossy().into_owned()]);
+        assert!(found.contains(&dir.join("archive")), "{found:?}");
+        assert!(found.contains(&elsewhere), "{found:?}");
+        assert!(exclusions(&dir, &[]).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// The OS reports events under the watched folder's resolved path
+    /// (`/private/var/...` for `/var/...` on macOS), so a prefix given through
+    /// a link must match that spelling too.
+    #[cfg(unix)]
+    #[test]
+    fn excludes_the_resolved_path_too() {
+        let base = std::env::temp_dir().join(format!("ade-watch-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("real/.ade")).unwrap();
+        std::os::unix::fs::symlink(base.join("real"), base.join("link")).unwrap();
+        let watched = base.join("link/.ade");
+        let given = watched.join("archive").to_string_lossy().into_owned();
+        let found = exclusions(&watched, &[given]);
+        let resolved = std::fs::canonicalize(base.join("real/.ade")).unwrap().join("archive");
+        assert!(excluded(&resolved.join("x.md"), &found), "{found:?}");
+        assert!(excluded(&watched.join("archive/x.md"), &found), "{found:?}");
+        std::fs::remove_dir_all(base).ok();
     }
 }
