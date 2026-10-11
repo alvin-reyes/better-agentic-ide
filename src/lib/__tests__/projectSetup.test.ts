@@ -30,6 +30,10 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "project_setup_apply":
         tauri.applies.push(args);
         return { created: [], appendedImport: false, agents: 0, bmadFiles: 0, bmadv6Files: 0 };
+      case "project_setup_undo":
+        return 0;
+      case "project_agent_remove":
+        return true;
       default:
         throw new Error(`unexpected command: ${command}`);
     }
@@ -37,11 +41,15 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { agentCatalog } from "../projectMethodology";
-import { addAgent, addStackAgents, bmadRootOf, detectOnDisk, methodologyOf, setUpProject } from "../projectSetup";
+import {
+  addAgent, addStackAgents, bmadRootOf, detectOnDisk, foldersUpTo, isSettingUp, methodologyOf, normRoot, removeAgent, removedAgents,
+  setUpProject, setupDeclined, setupRootOf, undoSetup, wasSetUp,
+} from "../projectSetup";
 
 const lastApply = () => tauri.applies[tauri.applies.length - 1];
 
 beforeEach(() => {
+  localStorage.clear();
   tauri.applies.length = 0;
   tauri.methodology = null;
   tauri.byDir = {};
@@ -162,5 +170,81 @@ describe("bmadRootOf", () => {
     tauri.roots = { "/p/src": "/p" };
     expect(await bmadRootOf("/p/src")).toBeNull();
     expect(await bmadRootOf(null)).toBeNull();
+  });
+});
+
+describe("the normalised root", () => {
+  it("strips trailing separators and leaves a bare root alone", () => {
+    expect(normRoot("/code/shop/")).toBe("/code/shop");
+    expect(normRoot("/code/shop//")).toBe("/code/shop");
+    expect(normRoot("C:\\code\\shop\\")).toBe("C:\\code\\shop");
+    expect(normRoot("/code/shop")).toBe("/code/shop");
+    expect(normRoot("/")).toBe("/");
+  });
+
+  it("marks a project set up under one key, with or without a trailing slash", async () => {
+    const result = await setUpProject("/code/shop/", "v6", []);
+    expect(result.root).toBe("/code/shop");
+    expect(lastApply().root).toBe("/code/shop");
+    expect(wasSetUp("/code/shop")).toBe(true);
+    expect(wasSetUp("/code/shop/")).toBe(true);
+    expect(JSON.parse(localStorage.getItem("ade-project-setup-done")!)).toEqual(["/code/shop"]);
+  });
+
+  it("normalises keys written before, when it reads them", () => {
+    localStorage.setItem("ade-project-setup-done", JSON.stringify(["/code/old/", "/code/old"]));
+    localStorage.setItem("ade-project-setup-declined", JSON.stringify(["C:\\code\\old\\"]));
+    expect(wasSetUp("/code/old")).toBe(true);
+    expect(setupDeclined("C:\\code\\old")).toBe(true);
+  });
+
+  it("declines under the normalised root, and a later setup clears it", async () => {
+    const result = await setUpProject("/code/shop", "v6", []);
+    await undoSetup({ ...result, root: "/code/shop/" });
+    expect(setupDeclined("/code/shop")).toBe(true);
+    expect(JSON.parse(localStorage.getItem("ade-project-setup-declined")!)).toEqual(["/code/shop"]);
+    await setUpProject("/code/shop/", "v6", []);
+    expect(setupDeclined("/code/shop")).toBe(false);
+  });
+
+  it("keeps removed agents under the normalised root", async () => {
+    await removeAgent("/code/shop/", "qa");
+    expect(removedAgents("/code/shop")).toEqual(["qa"]);
+    localStorage.setItem("ade-project-agents-removed", JSON.stringify({ "/code/old/": ["qa"], "/code/old": ["architect"] }));
+    expect(removedAgents("/code/old").sort()).toEqual(["architect", "qa"]);
+  });
+
+  it("shares a running setup across spellings of the root", async () => {
+    const first = setUpProject("/code/shop", "v6", []);
+    expect(isSettingUp("/code/shop/")).toBe(true);
+    expect(setUpProject("/code/shop/", "v6", [])).toBe(first);
+    await first;
+    expect(tauri.applies).toHaveLength(1);
+    expect(isSettingUp("/code/shop")).toBe(false);
+  });
+});
+
+describe("setupRootOf", () => {
+  it("is the BMAD project the folder is in", async () => {
+    tauri.byDir = { "/mono": null, "/mono/app": "v4", "/mono/app/src": null };
+    tauri.roots = { "/mono/app/src": "/mono" };
+    expect(await setupRootOf("/mono/app/src")).toBe("/mono/app");
+  });
+
+  it("falls back to the project root, normalised", async () => {
+    tauri.roots = { "/mono/app/src": "/mono/" };
+    expect(await setupRootOf("/mono/app/src")).toBe("/mono");
+  });
+});
+
+describe("foldersUpTo", () => {
+  it("lists the folder and each one above it, up to the stop", () => {
+    expect(foldersUpTo("/mono/app/src", "/mono")).toEqual(["/mono/app/src", "/mono/app", "/mono"]);
+    expect(foldersUpTo("/mono/", "/mono")).toEqual(["/mono"]);
+    expect(foldersUpTo("C:\\p\\src", "C:\\p")).toEqual(["C:\\p\\src", "C:\\p"]);
+  });
+
+  it("is just the folder when it isn't under the stop", () => {
+    expect(foldersUpTo("/elsewhere/x", "/mono")).toEqual(["/elsewhere/x"]);
   });
 });

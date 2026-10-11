@@ -43,18 +43,29 @@ const DONE_KEY = "ade-project-setup-done";
 const REMOVED_KEY = "ade-project-agents-removed";
 const DECLINED_KEY = "ade-project-setup-declined";
 
+/**
+ * One spelling per project: no trailing separator. Every per-project list keys
+ * on it, so `/code/shop/` and `/code/shop` are one project.
+ */
+export function normRoot(root: string): string {
+  return root.replace(/[\\/]+$/, "") || root;
+}
+
 function readList(key: string): string[] {
   try {
     const v = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(v) ? v : [];
+    if (!Array.isArray(v)) return [];
+    // Lists written before roots were normalised may hold a trailing separator.
+    return [...new Set(v.filter((r): r is string => typeof r === "string").map(normRoot))];
   } catch {
     return [];
   }
 }
 
 function writeList(key: string, root: string, on: boolean) {
-  const list = readList(key).filter((r) => r !== root);
-  if (on) list.push(root);
+  const at = normRoot(root);
+  const list = readList(key).filter((r) => r !== at);
+  if (on) list.push(at);
   try {
     localStorage.setItem(key, JSON.stringify(list));
   } catch {
@@ -64,7 +75,7 @@ function writeList(key: string, root: string, on: boolean) {
 
 /** The user undid setup here: automatic setup leaves this project alone. */
 export function setupDeclined(root: string): boolean {
-  return readList(DECLINED_KEY).includes(root);
+  return readList(DECLINED_KEY).includes(normRoot(root));
 }
 
 const baseName = (p: string) => p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
@@ -74,33 +85,26 @@ export function isSetupCandidate(root: string): boolean {
   return !/^(\/|[A-Za-z]:\\?|\/(Users|home)\/[^/]+\/?|[A-Za-z]:\\Users\\[^\\]+\\?)$/.test(root);
 }
 
-function doneRoots(): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(DONE_KEY) ?? "[]");
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
-}
-
 export function wasSetUp(root: string): boolean {
-  return doneRoots().includes(root);
+  return readList(DONE_KEY).includes(normRoot(root));
 }
 
 function markSetUp(root: string, done: boolean) {
-  const list = doneRoots().filter((r) => r !== root);
-  if (done) list.push(root);
-  try {
-    localStorage.setItem(DONE_KEY, JSON.stringify(list));
-  } catch {
-    // Storage blocked: setup may run again, which only fills gaps.
-  }
+  writeList(DONE_KEY, root, done);
 }
 
 function readRemoved(): Record<string, string[]> {
   try {
     const v = JSON.parse(localStorage.getItem(REMOVED_KEY) ?? "{}");
-    return v && typeof v === "object" ? v : {};
+    if (!v || typeof v !== "object") return {};
+    // Two spellings of one root, from before roots were normalised, are merged.
+    const out: Record<string, string[]> = {};
+    for (const [root, ids] of Object.entries(v as Record<string, unknown>)) {
+      if (!Array.isArray(ids)) continue;
+      const at = normRoot(root);
+      out[at] = [...new Set([...(out[at] ?? []), ...ids.filter((id): id is string => typeof id === "string")])];
+    }
+    return out;
   } catch {
     return {};
   }
@@ -108,14 +112,15 @@ function readRemoved(): Record<string, string[]> {
 
 /** Agents the user removed from a project, which setup won't bring back. */
 export function removedAgents(root: string): string[] {
-  return readRemoved()[root] ?? [];
+  return readRemoved()[normRoot(root)] ?? [];
 }
 
 function setRemoved(root: string, id: string, removed: boolean) {
+  const at = normRoot(root);
   const all = readRemoved();
-  const list = (all[root] ?? []).filter((x) => x !== id);
+  const list = (all[at] ?? []).filter((x) => x !== id);
   if (removed) list.push(id);
-  all[root] = list;
+  all[at] = list;
   try {
     localStorage.setItem(REMOVED_KEY, JSON.stringify(all));
   } catch {
@@ -187,6 +192,32 @@ export async function methodologyOf(cwd: string | null | undefined): Promise<Met
   return (await bmadRootOf(cwd))?.methodology ?? "v6";
 }
 
+/**
+ * The folder a setup started from `cwd` works on: the BMAD project `cwd` is in,
+ * else its project root (the nearest `.git` ancestor, or `cwd` itself).
+ */
+export async function setupRootOf(cwd: string): Promise<string> {
+  const found = await bmadRootOf(cwd);
+  return normRoot(found?.root ?? (await invoke<string>("project_root", { path: cwd }).catch(() => cwd)));
+}
+
+/**
+ * `dir` and each folder above it, up to and including `stop`. Just `dir` when
+ * it isn't under `stop`.
+ */
+export function foldersUpTo(dir: string, stop: string): string[] {
+  const end = normRoot(stop);
+  const out: string[] = [];
+  let at: string | null = normRoot(dir);
+  // Bounded, as bmadRootOf is: a dir that is somehow not under its stop still ends.
+  for (let i = 0; at && i < 64; i++) {
+    out.push(at);
+    if (at === end || !at.startsWith(end)) break;
+    at = parentDir(at);
+  }
+  return out;
+}
+
 export function isComplete(s: SetupStatus): boolean {
   return s.missing.length === 0 && !s.needsImport && s.bmadInstalled;
 }
@@ -195,7 +226,7 @@ const inFlight = new Map<string, Promise<SetupResult>>();
 
 /** A setup for this project is running right now. */
 export function isSettingUp(root: string): boolean {
-  return inFlight.has(root);
+  return inFlight.has(normRoot(root));
 }
 
 /**
@@ -208,20 +239,21 @@ export function isSettingUp(root: string): boolean {
  * neither — a new one — gets the v6 default.
  */
 export function setUpProject(root: string, methodology?: Methodology, stacks?: Stack[]): Promise<SetupResult> {
-  const running = inFlight.get(root);
+  const at = normRoot(root);
+  const running = inFlight.get(at);
   if (running) return running;
   const job = (async () => {
     // Only ask the project itself when the callers left something unresolved.
-    const status = methodology !== undefined && stacks !== undefined ? null : await setupStatus(root);
+    const status = methodology !== undefined && stacks !== undefined ? null : await setupStatus(at);
     const chosen = methodology ?? status?.methodology ?? "v6";
     const detected = stacks ?? status?.stacks ?? [];
-    const files = withoutRemoved(root, methodologyFiles(baseName(root), detected, chosen));
-    const report = await apply(root, files, chosen);
-    markSetUp(root, true);
-    writeList(DECLINED_KEY, root, false);
-    return { root, report, files, stacks: detected };
-  })().finally(() => inFlight.delete(root));
-  inFlight.set(root, job);
+    const files = withoutRemoved(at, methodologyFiles(baseName(at), detected, chosen));
+    const report = await apply(at, files, chosen);
+    markSetUp(at, true);
+    writeList(DECLINED_KEY, at, false);
+    return { root: at, report, files, stacks: detected };
+  })().finally(() => inFlight.delete(at));
+  inFlight.set(at, job);
   return job;
 }
 
