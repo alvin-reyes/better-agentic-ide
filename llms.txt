@@ -1,0 +1,16 @@
+# better-agentic-ide
+
+> An ADE project: disciplined AI development, *verified, not vibed*. Work flows
+> Plan → Approve → Shard → Build → Verify; a story is Done only when the agreed
+> verification command passes.
+
+## Docs
+- [PRD](docs/prd.md): the product requirements
+- [Architecture](docs/architecture.md): system design and the verification command
+- [Ops & Release](docs/ops.md): CI/CD, environments, rollout, rollback, monitoring
+- [Stories](docs/stories/): the unit of work, sharded from the approved plan
+
+## Rules & Agents
+- [Rules](.ade/rules.md): the methodology and the non-negotiables every agent obeys
+- [Agents](.claude/agents/): Product Manager, Architect, Designer, Scrum Master,
+  Developer, QA, DevOps / Release Engineer, Adversarial Reviewer
