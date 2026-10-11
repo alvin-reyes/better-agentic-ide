@@ -47,7 +47,7 @@ Rejected:
 Three plans, built in this order. Each ships on its own.
 
 - **A. Ask before setup.** The shared dialog in choose mode, every entry
-  point, session dismissal, the toast's buttons, removing "BMAD: Initialize",
+  point, the toast's buttons, removing "BMAD: Initialize",
   the Agents tab's `isComplete`, the v4 marker, setup's error reporting, and
   the `CLAUDE_MD` paragraph for both versions. Nothing in A mentions the
   archive.
@@ -68,8 +68,8 @@ Three plans, built in this order. Each ships on its own.
   folder up to the git root holding a marker or `.bmad-core/`, falling back
   to `project_root`.
 
-Every per-project list (set up, declined, kept, the session-dismiss set)
-keys on one normalised root, `normRoot`: no trailing separator. Existing
+Every per-project list (set up, declined, kept) keys on one normalised
+root, `normRoot`: no trailing separator. Existing
 keys are normalised when read.
 
 ### A project with no BMAD (plan A)
@@ -80,30 +80,34 @@ keys are normalised when read.
 
 Enter picks v6.
 
+**The question must be answered.** The person picks v6 or v4; the question
+offers no way to skip. The dialog has no Cancel or close button, Escape and
+a click outside it do nothing, and Escape does not reach a panel beneath it.
+
 Every entry point goes through `askMethodology(root)`. It returns the
 detected version without a dialog when the project has BMAD; choose mode is
 only for a project with neither.
 
-- **New Tab**: its own methodology list becomes the shared dialog. Escape
-  opens the folder without setup and dismisses the question for this app
-  session.
-- **The `cd` hook** (`useProjectSetup`): no modal. A toast, "Set up **shop**
-  with BMAD?", with **v6**, **v4** and **Not now**. Showing the toast adds
-  the root to the session-dismiss set, so timing out, being replaced by
-  another toast, or Not now all leave it dismissed; only **v6** or **v4**
-  sets up. The hook no longer sets up v6 without asking.
+- **New Tab**: its own methodology list becomes the shared dialog. A folder
+  with no BMAD is not opened until a version is picked.
+- **The `cd` hook** (`useProjectSetup`): no modal, so typing in the terminal
+  is never blocked. A toast, "Set up **shop** with BMAD?", with **v6** and
+  **v4**. It stays until answered: it has no timeout and a click on its body
+  doesn't dismiss it. If another toast takes its place, the hook shows it
+  again the next time it runs for that project. The hook no longer sets up
+  v6 without asking.
 - **Palette** "Project: Set up BMAD, methodology and agents", and **Set up
-  now** on the board and the Agents tab: the modal. Escape cancels.
+  now** on the board and the Agents tab: the modal.
 
-The session-dismiss set is a module-level `Set`, not localStorage: the next
-launch asks again.
-
-`autoProjectSetup` off, or a declined project: New Tab and the `cd` hook
-neither set up nor ask. The palette and Set up now always work.
+The ways not to have BMAD in a project are outside the question:
+`autoProjectSetup` off, or a declined project (**Undo** after a setup
+declines it). For those, New Tab and the `cd` hook neither set up nor ask.
+The palette and Set up now always work.
 
 **The toast.** `GuardToast` gains `actions: { label, run }[]`; `action`
 stays as shorthand for one. A toast with actions is not dismissed by a click
-on its body.
+on its body. `GuardToast` also gains `sticky?: boolean`: a sticky toast has
+no timeout.
 
 The palette's "BMAD: Initialize in current project" is removed, and with it
 the `scaffold_bmad` command, which then has no caller. "Set up BMAD" covers
@@ -121,8 +125,8 @@ is not declined or kept. Never from the `cd` hook.
 
 The **kept list** (`ade-bmad-kept`, localStorage, in `PERSISTED_KEYS`) means
 "don't ask this project the keep-or-switch question". Keep adds the project.
-So does answering choose mode, and finishing a switch. Escape keeps the
-version and dismisses for this app session.
+So does answering choose mode, and finishing a switch. This question must
+be answered too: Enter keeps the version, and Escape does nothing.
 
 **Migration.** When `ade-bmad-kept` is absent (not merely empty), after
 hydration, every root in `ade-project-setup-done` is added to it. The update
@@ -472,13 +476,16 @@ Rust:
 
 Frontend:
 
-- the dialog in choose mode; Enter picks v6
+- the dialog in choose mode; Enter picks v6; it has no close button, and
+  Escape and a click outside do nothing; Escape doesn't close a panel
+  beneath it
 - each entry point calls `askMethodology`; a project with BMAD never sees
   choose mode
-- the `cd` hook shows a toast with three actions, not a modal; a toast that
-  timed out or was replaced is not shown again this session; a click on the
-  toast body doesn't dismiss it
-- New Tab then the `cd` hook: asked once
+- the `cd` hook shows a toast with two actions (v6, v4), not a modal; the
+  toast is sticky (no timeout) and a click on its body doesn't dismiss it;
+  after another toast replaces it, the next hook run shows it again
+- New Tab does not open a folder with no BMAD until a version is picked
+- New Tab then the `cd` hook: one question, not two
 - New Tab on a subfolder with no BMAD above it sets up that folder
 - lists key on the normalised root (a trailing slash doesn't ask twice)
 - auto-setup off or declined: New Tab and the hook do nothing; the palette

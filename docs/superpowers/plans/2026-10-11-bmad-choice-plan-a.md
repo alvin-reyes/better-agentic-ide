@@ -27,6 +27,61 @@
 - An existing project's `CLAUDE.md` is never rewritten.
 - Line numbers below are as of commit `76da871`. Earlier tasks shift later ones, so find each edit by the code quoted with it.
 
+## Amendment: the question must be answered (owner decision, 2026-10-11)
+
+This overrides the task briefs and the plan's Global Constraints wherever they
+conflict. The spec was updated to match ("The question must be answered" in
+"A project with no BMAD (plan A)").
+
+**Rule.** A project with no BMAD gets an answer: v6 or v4. The question offers
+no way to skip.
+
+1. **The dialog** (`MethodologyPrompt`, choose mode):
+   - No Cancel or close (✕) button. A click on the backdrop does nothing.
+   - Escape does nothing, and must not reach a panel beneath the dialog: the
+     dialog registers on the `useEscapeToClose` stack with a handler that
+     does nothing (it swallows Escape while it is the top entry).
+   - Enter picks the highlighted row (v6 until the arrows move it), but only
+     when the event target is the dialog itself or an option, never another
+     control. Ignore auto-repeat Enter (`e.repeat`).
+   - Copy unchanged: "Set up **shop** with **BMAD v6** (default) or **BMAD v4**?"
+2. **`askMethodology`**:
+   - The `once` option and the session-dismiss `Set` are removed. Nothing
+     dismisses.
+   - `{ kind: "dismissed" }` stays in the union, only for a question
+     superseded by one for another root, and for the host unmounting (its
+     effect cleanup settles an open question as dismissed). Callers treat it
+     as "do nothing".
+   - A failed detection (`detectOnDisk` rejects) still falls through to the
+     question; log it with `console.warn`.
+3. **New Tab**: a folder with no BMAD is not opened until a version is
+   picked. There is no "Escape opens it without setup". A new project is
+   still `git init`ed first. If the answer is `dismissed` (superseded), the
+   folder is not opened.
+4. **The `cd` hook's toast**:
+   - Two actions, in this order: **v6**, **v4**. No "Not now".
+   - `GuardToast` gains `sticky?: boolean`; App's toast timer does not start
+     for a sticky toast. The setup question is sticky.
+   - Showing it adds nothing to any dismiss set. While a project is still
+     unanswered, each hook run for it shows the toast again (same handlers,
+     one pending question per root), so a toast replaced by another comes
+     back on the next `cd` or tab switch. It must not set up twice if both
+     an old and a re-shown toast's buttons are clicked.
+5. **Palette "Set up BMAD" and both Set up now buttons**: the modal, which
+   must be answered.
+6. **Unchanged**: `autoProjectSetup` off or a declined project — New Tab and
+   the hook neither set up nor ask. Undo after a setup still declines the
+   project. A project that has BMAD never sees the question.
+7. **Tests**: replace every Escape / Cancel / Not now / session-dismiss test
+   with tests of the rule above (Escape does nothing and doesn't close a panel
+   beneath; no close button; toast has two actions and is sticky; re-shown
+   after being replaced; New Tab doesn't open a no-BMAD folder unanswered;
+   Enter on a non-option control doesn't pick).
+8. **Docs (Task 11)**: the guide says the question must be answered, and
+   names the two ways out (the setting, Undo).
+
+The task text below was written before this amendment. Where a task still shows Escape, a Cancel button, "Not now", `once` or the session-dismiss set, the amendment wins.
+
 ## Review Focus
 
 1. **A setup the person asked for fails** (a v4 copy error, a folder that can't be written). They are told in a toast, from New Tab and from the `cd` toast's **v6**/**v4** buttons, and the project is left as it was. Today the error is swallowed and half a setup stays on disk. (Task 1 `a_failed_setup_leaves_nothing_behind`; Task 6 "reports a setup that fails"; Task 7 "says so when the setup it was asked for fails".)
