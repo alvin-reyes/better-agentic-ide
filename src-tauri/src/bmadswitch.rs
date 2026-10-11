@@ -69,20 +69,26 @@ pub(crate) struct Journal {
     pub moves: Vec<(String, String, MoveState)>,
 }
 
+/// Front matter is line-oriented: a newline or control character in a value
+/// could start a line of its own, such as a later `status:` that wins.
+fn clean(value: &str) -> String {
+    value.chars().filter(|c| !c.is_control()).collect()
+}
+
 impl Journal {
     pub(crate) fn new(from: &str, to: &str, date: &str, moves: &[Move]) -> Self {
         Journal {
             status: "in-progress",
             phase: "moving",
-            from: from.to_string(),
-            to: to.to_string(),
-            date: date.to_string(),
+            from: clean(from),
+            to: clean(to),
+            date: clean(date),
             moves: moves.iter().map(|m| (m.from.clone(), m.to.clone(), MoveState::Pending)).collect(),
         }
     }
 
     pub(crate) fn render(&self) -> String {
-        let (old, new, date) = (&self.from, &self.to, &self.date);
+        let (old, new, date) = (clean(&self.from), clean(&self.to), clean(&self.date));
         let mut out = format!(
             "---\nstatus: {}\nphase: {}\nfrom: {old}\nto: {new}\ndate: {date}\n---\n\n\
              # BMAD {old}, archived on {date}\n\n\
@@ -103,17 +109,37 @@ impl Journal {
              2. Move the paths in this archive back to their places, replacing the fresh role files in `.claude/agents/` and `.ade/methodology`.\n\
              3. Run `git add -A`. Git usually shows tracked files as renames.\n\n\
              ## To finish an interrupted switch by hand\n\n\
-             While `status` above is `in-progress` or `incomplete`, ADE neither sets this project up nor switches it. \
-             Look at `phase` above:\n\n\
-             - `phase: moving`: a path marked *moving* may be at either place, so check both. \
-             Move each path marked *moving* or *moved* back to its place if it is in this archive.\n\
-             - `phase: setup`: every path was moved. BMAD {new}'s files may be partly written at the old paths. \
-             Remove them first, then move the archive's paths back.\n\
-             - `phase: rules` or `phase: done`: the switch finished and there is nothing to undo. \
-             Set `status: complete` above.\n\n\
-             Otherwise, when you have moved everything back, set `status: abandoned` above.\n"
-        ));
+             While `status` above is `in-progress` or `incomplete`, ADE neither sets this project up nor switches it.\n\n\
+             {}\n"
+        , self.hand_instructions()));
         out
+    }
+
+    /// What a person does by hand. While the switch is running, `phase` says
+    /// how far it got. Once it is `incomplete`, a restore step failed after the
+    /// phase was set, so `phase` no longer says what is where: the moves do.
+    fn hand_instructions(&self) -> String {
+        let new = clean(&self.to);
+        match self.status {
+            "in-progress" => format!(
+                "Look at `phase` above:\n\n\
+                 - `phase: moving`: a path marked *moving* may be at either place, so check both. \
+                 Move each path marked *moving* or *moved* back to its place if it is in this archive.\n\
+                 - `phase: setup`: every path was moved. BMAD {new}'s files may be partly written at the old paths. \
+                 Remove them first, then move the archive's paths back.\n\
+                 - `phase: rules` or `phase: done`: the switch finished and there is nothing to undo. \
+                 Set `status: complete` above.\n\n\
+                 Otherwise, when you have moved everything back, set `status: abandoned` above."
+            ),
+            "incomplete" => "A restore step failed, so ignore `phase` and use each move's state in the list above:\n\n\
+                 - marked *moved*: it is in this archive. Move it back to its place.\n\
+                 - marked *moving*: it may be at either place, so check both.\n\
+                 - marked *moved back* or *pending*: it is at its original place.\n\n\
+                 BMAD's files written at the old paths by the new version may still be there. \
+                 Remove them before moving a path back. Then set `status: abandoned` above."
+                .to_string(),
+            _ => "This switch is no longer open. There is nothing to do.".to_string(),
+        }
     }
 
     pub(crate) fn write(&self, archive: &Path) -> Result<(), String> {
@@ -124,7 +150,8 @@ impl Journal {
 
 /// The `key: value` lines between a file's opening `---` and the next one.
 pub(crate) fn front_matter(text: &str) -> Option<HashMap<String, String>> {
-    let mut lines = text.lines();
+    // A Windows editor may add a byte order mark when a person edits the file.
+    let mut lines = text.strip_prefix('\u{feff}').unwrap_or(text).lines();
     if lines.next()?.trim_end() != "---" {
         return None;
     }
@@ -165,10 +192,21 @@ pub(crate) fn pending(root: &Path) -> Vec<PendingSwitch> {
         Err(_) => return vec![unknown(ARCHIVE_DIR.to_string())],
     };
     let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let archive = format!("{ARCHIVE_DIR}/{}", entry.file_name().to_string_lossy());
-        if !entry.path().is_dir() {
+    for entry in entries {
+        let Ok(entry) = entry else {
+            out.push(unknown(ARCHIVE_DIR.to_string()));
             continue;
+        };
+        let archive = format!("{ARCHIVE_DIR}/{}", entry.file_name().to_string_lossy());
+        match std::fs::metadata(entry.path()) {
+            Ok(meta) if meta.is_dir() => {}
+            Ok(_) => continue,
+            // A dangling link is nothing to read.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => {
+                out.push(unknown(archive));
+                continue;
+            }
         }
         let text = match std::fs::read_to_string(entry.path().join(JOURNAL)) {
             Ok(text) => text,
@@ -990,6 +1028,81 @@ mod tests {
         ] {
             assert!(text.contains(needle), "missing {needle:?} in {text}");
         }
+    }
+
+
+    #[test]
+    fn an_incomplete_journal_is_followed_by_its_moves_whatever_its_phase() {
+        let mut journal = Journal::new("v4", "v6", "2026-10-11", &two_moves());
+        journal.status = "incomplete";
+        journal.phase = "rules";
+        let text = journal.render();
+        assert!(!text.contains("nothing to undo"), "{text}");
+        assert!(!text.contains("`status: complete`"), "{text}");
+        assert!(text.contains("ignore `phase`"), "{text}");
+        for needle in ["marked *moved*", "marked *moving*", "*moved back*", "*pending*"] {
+            assert!(text.contains(needle), "missing {needle:?} in {text}");
+        }
+        // The phase guidance is for a switch that is still running.
+        let running = Journal::new("v4", "v6", "2026-10-11", &two_moves()).render();
+        assert!(running.contains("nothing to undo"), "{running}");
+    }
+
+    #[test]
+    fn a_newline_or_control_character_cannot_add_a_front_matter_line() {
+        let evil = "v4\nstatus: complete\r\u{7}";
+        let journal = Journal::new(evil, "v6\nstatus: complete", "2026\nstatus: complete", &two_moves());
+        let text = journal.render();
+        let fm = front_matter(&text).unwrap();
+        assert_eq!(fm["status"], "in-progress");
+        assert_eq!(fm["from"], "v4status: complete");
+        assert_eq!(fm.keys().count(), 5, "{fm:?}");
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_hide_the_front_matter() {
+        let text = ["\u{feff}", &Journal::new("v4", "v6", "2026-10-11", &two_moves()).render()].concat();
+        assert_eq!(front_matter(&text).unwrap()["status"], "in-progress");
+        assert_eq!(front_matter("\u{feff}---\r\nstatus: abandoned\r\n---\r\n").unwrap()["status"], "abandoned");
+    }
+
+    #[test]
+    fn a_bom_edited_journal_is_read_by_pending() {
+        let dir = temp();
+        write(&dir, ".ade/archive/a/ARCHIVE.md", "\u{feff}---\nstatus: abandoned\nphase: moving\n---\n");
+        assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn awkward_paths_and_edited_bodies_never_change_the_parsed_status() {
+        let moves = vec![Move {
+            from: "odd |: `x`\nstatus: complete\n---\nstatus: complete".into(),
+            to: "a|b:c`d\n---\nstatus: abandoned".into(),
+            files: 1,
+            ignored: "none".into(),
+        }];
+        let journal = Journal::new("v4", "v6", "2026-10-11", &moves);
+        let text = journal.render();
+        let fm = front_matter(&text).unwrap();
+        assert_eq!(fm["status"], "in-progress");
+        assert_eq!(fm["phase"], "moving");
+        // Whatever a person does to the body, the front matter decides.
+        let (head, body) = text.split_once("\n---\n\n").unwrap();
+        let edited = format!("{head}\n---\n\nstatus: complete\n---\nstatus: abandoned\n{body}");
+        assert_eq!(front_matter(&edited).unwrap()["status"], "in-progress");
+    }
+
+    #[test]
+    fn a_journal_written_to_disk_reads_back_through_pending() {
+        let dir = temp();
+        let archive = at(&dir, ".ade/archive/bmad-v4-x");
+        std::fs::create_dir_all(&archive).unwrap();
+        Journal::new("v4", "v6", "2026-10-11", &two_moves()).write(&archive).unwrap();
+        let found = pending(&dir);
+        assert_eq!(found.len(), 1);
+        assert_eq!((found[0].from.as_str(), found[0].to.as_str()), ("v4", "v6"));
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]
