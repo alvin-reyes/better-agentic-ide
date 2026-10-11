@@ -85,6 +85,20 @@ pub(crate) struct Journal {
     pub problems: Vec<String>,
 }
 
+/// What a setup of `version` puts in a project beside the role files and the
+/// marker, as a journal's hand steps name it. `output` adds v6's output
+/// folder: after a finished switch it is a fresh one, where the archived one
+/// goes back; behind a setup that got partway, one that is there may be the
+/// person's own, and is not for removing.
+fn engine(version: &str, output: bool) -> &'static str {
+    match (version, output) {
+        ("v4", _) => "`.bmad-core/`, `.claude/commands/BMad/`",
+        ("v6", true) => "`_bmad/`, `_bmad-output/`, ADE's BMAD skills in `.claude/skills/`",
+        ("v6", false) => "`_bmad/`, ADE's BMAD skills in `.claude/skills/`",
+        _ => "that version's own folders",
+    }
+}
+
 /// Front matter is line-oriented: a newline or control character in a value
 /// could start a line of its own, such as a later `status:` that wins.
 fn clean(value: &str) -> String {
@@ -126,15 +140,22 @@ impl Journal {
                 out.push_str(&format!("- {}\n", clean(problem)));
             }
         }
+        // By step 2 the switch back has set BMAD {old} up fresh, at the very
+        // places this archive's paths go back to.
         out.push_str(&format!(
             "\n## To go back to BMAD {old}\n\n\
-             1. Run **BMAD: Switch to {old}…** from the command palette. It archives BMAD {new} the same way.\n\
-             2. Move the paths in this archive back to their places, replacing the fresh role files in `.claude/agents/` and `.ade/methodology`.\n\
-             3. Run `git add -A`. Git usually shows tracked files as renames.\n\n\
+             1. Run **BMAD: Switch to {old}…** from the command palette. It archives BMAD {new} the same way and sets up BMAD {old} fresh.\n\
+             2. To have this archive's files back as they were, first move whatever is at each path's place out of the way: \
+             the fresh {}, ADE's role files in `.claude/agents/` and `.ade/methodology`. \
+             Onto a folder that exists, `mv` puts the folder inside it and a file manager merges the two.\n\
+             3. Move the paths in this archive back to their places.\n\
+             4. Run `git add -A`. Git usually shows tracked files as renames.\n\n\
              ## To finish an interrupted switch by hand\n\n\
              While `status` above is `in-progress` or `incomplete`, ADE neither sets this project up nor switches it.\n\n\
-             {}\n"
-        , self.hand_instructions()));
+             {}\n",
+            engine(&old, true),
+            self.hand_instructions()
+        ));
         out
     }
 
@@ -148,11 +169,14 @@ impl Journal {
                 "Look at `phase` above:\n\n\
                  - `phase: moving`: a path marked *moving* may be at either place, so check both. \
                  Move each path marked *moving* or *moved* back to its place if it is in this archive.\n\
-                 - `phase: setup`: every path was moved. BMAD {new}'s files may be partly written at the old paths. \
+                 - `phase: setup`: every path was moved. BMAD {new}'s files may be partly written at the old paths: \
+                 {}, ADE's role files in `.claude/agents/` and `.ade/methodology`. \
                  Remove them first, then move the archive's paths back.\n\
                  - `phase: rules` or `phase: done`: the switch finished and there is nothing to undo. \
+                 If `.ade/rules.md` has no section about the archive, the last step didn't finish: switching again later adds it. \
                  Set `status: complete` above.\n\n\
-                 Otherwise, when you have moved everything back, set `status: abandoned` above."
+                 Otherwise, when you have moved everything back, set `status: abandoned` above.",
+                engine(&new, false)
             ),
             "incomplete" => "A restore step failed, so ignore `phase` and use each move's state in the list above:\n\n\
                  - marked *moved*: it is in this archive. Move it back to its place.\n\
@@ -2020,6 +2044,59 @@ mod tests {
         }
     }
 
+    /// The part of a journal under `heading`, up to the next one.
+    fn section<'a>(journal: &'a str, heading: &str) -> &'a str {
+        let rest = journal.split_once(heading).unwrap_or_else(|| panic!("no {heading:?} in {journal}")).1;
+        rest.split("\n## ").next().unwrap()
+    }
+
+    // The guide's "Going back": by the time the archive's paths go back, the
+    // switch back has set the old version up fresh at those places.
+    #[test]
+    fn going_back_by_hand_moves_what_is_in_the_way_first() {
+        let from_v4 = Journal::new("v4", "v6", "2026-10-11", &two_moves()).render();
+        let back = section(&from_v4, "## To go back to BMAD v4");
+        for fresh in ["`.bmad-core/`", "`.claude/commands/BMad/`", "`.claude/agents/`", "`.ade/methodology`"] {
+            assert!(back.contains(fresh), "missing {fresh} in {back}");
+        }
+        let (aside, moved) = (back.find("out of the way").expect(back), back.find("back to their places").expect(back));
+        assert!(aside < moved, "what is in the way is moved before the archive's paths: {back}");
+        assert!(!back.contains("replacing"), "a folder moved onto a folder replaces nothing: {back}");
+        assert!(!back.contains("`_bmad/`"), "v6's files are archived by then, not in the way: {back}");
+
+        let from_v6 = Journal::new("v6", "v4", "2026-10-11", &two_moves()).render();
+        let back = section(&from_v6, "## To go back to BMAD v6");
+        for fresh in ["`_bmad/`", "`_bmad-output/`", "`.claude/skills/`", "`.claude/agents/`", "`.ade/methodology`"] {
+            assert!(back.contains(fresh), "missing {fresh} in {back}");
+        }
+        assert!(!back.contains("`.bmad-core/`"), "{back}");
+    }
+
+    #[test]
+    fn the_setup_phase_names_what_the_new_version_wrote() {
+        let line = |journal: &str| journal.lines().find(|line| line.starts_with("- `phase: setup`")).unwrap().to_string();
+        let to_v6 = line(&Journal::new("v4", "v6", "2026-10-11", &two_moves()).render());
+        for path in ["`_bmad/`", "`.claude/skills/`", "`.claude/agents/`", "`.ade/methodology`"] {
+            assert!(to_v6.contains(path), "missing {path} in {to_v6}");
+        }
+        // The output folder is not named: one that was there is the person's.
+        assert!(!to_v6.contains("_bmad-output") && !to_v6.contains(".bmad-core"), "{to_v6}");
+        let to_v4 = line(&Journal::new("v6", "v4", "2026-10-11", &two_moves()).render());
+        for path in ["`.bmad-core/`", "`.claude/commands/BMad/`", "`.claude/agents/`", "`.ade/methodology`"] {
+            assert!(to_v4.contains(path), "missing {path} in {to_v4}");
+        }
+        assert!(!to_v4.contains("`_bmad/`"), "{to_v4}");
+    }
+
+    #[test]
+    fn the_rules_phase_says_how_to_tell_that_the_last_step_did_not_finish() {
+        let text = Journal::new("v4", "v6", "2026-10-11", &two_moves()).render();
+        let line = text.lines().find(|line| line.starts_with("- `phase: rules` or `phase: done`")).unwrap();
+        assert!(
+            line.contains("If `.ade/rules.md` has no section about the archive, the last step didn't finish: switching again later adds it."),
+            "{line}"
+        );
+    }
 
     #[test]
     fn an_incomplete_journal_is_followed_by_its_moves_whatever_its_phase() {
