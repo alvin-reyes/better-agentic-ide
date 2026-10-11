@@ -10,9 +10,9 @@ import { watchTargets } from "../../lib/boardWatch";
 import { useBoardWatch, useExistingFolders } from "./useBoardWatchers";
 import { useDragWidth } from "../../hooks/useDragWidth";
 import { tauriFs } from "../../lib/tauriFs";
-import { isSetupCandidate, isSwitching, normRoot, onSwitchChange, setupRootOf } from "../../lib/projectSetup";
+import { isSetupCandidate, isSwitching, normRoot, onSwitchChange, setupRootOf, type SetupFailure } from "../../lib/projectSetup";
 import { SWITCH_DONE_EVENT, otherVersion, pendingSwitches, type PendingSwitch } from "../../lib/bmadSwitch";
-import { askAndSetUp, switchOnDemand } from "../../lib/methodologyPrompt";
+import { askAndSetUp, isRefusal, switchOnDemand } from "../../lib/methodologyPrompt";
 import { ROLE_ITEMS } from "../../data/pickerItems";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { joinPath } from "../../lib/bmadRuntime/paths";
@@ -45,6 +45,16 @@ const pendingText = (p: PendingSwitch) =>
   p.status === "unknown"
     ? "A BMAD switch's record couldn't be read, so it may not have finished. Setup and switching wait until it is resolved:"
     : "A BMAD switch didn't finish here. Setup and switching wait until it is resolved:";
+
+/**
+ * A refusal over an unfinished switch also goes to the app's toast, which
+ * links to the journal: the line in the panel can't be clicked.
+ */
+function tellRefusal(e: unknown) {
+  if (!isRefusal(e) || !e.archiveFile) return;
+  const detail: SetupFailure = { why: e.reason, archiveFile: e.archiveFile };
+  window.dispatchEvent(new CustomEvent("project-setup-failed", { detail }));
+}
 
 export default function BoardPanel({ cwd, onClose }: Props) {
   // undefined while the pane's project is being resolved; null when it has none.
@@ -191,6 +201,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
                 if (await askAndSetUp(root)) await refresh();
               } catch (e) {
                 setSetupError(String(e));
+                tellRefusal(e);
               }
             }}
           >
@@ -245,7 +256,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
             onClick={() => {
               setSwitchError(null);
               // Opens the confirm step; nothing moves until that is confirmed.
-              switchOnDemand(root).catch((e) => setSwitchError(String(e)));
+              switchOnDemand(root).catch((e) => { setSwitchError(String(e)); tellRefusal(e); });
             }}
           >
             Switch to BMAD {otherVersion(methodology)}…

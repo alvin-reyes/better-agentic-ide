@@ -8,8 +8,8 @@ import { STACK_LABELS } from "../lib/projectMethodology";
 import { askMethodology, projectName, versionToSetUp, type AskUi, type MethodologyAnswer } from "../lib/methodologyPrompt";
 import {
   addStackAgents, foldersUpTo, isComplete, isSettingUp, isSetupCandidate, normRoot, onProjectHasBmad, setUpProject, setupDeclined,
-  setupRootOf, setupStatus, summarize, undoSetup, wasSetUp,
-  type Methodology, type SetupResult,
+  setupRootOf, setupStatus, summarize, switchBlock, undoSetup, wasSetUp,
+  type Methodology, type SetupFailure, type SetupResult, type SwitchBlock,
 } from "../lib/projectSetup";
 
 /** Show what a setup wrote, with Undo. */
@@ -42,6 +42,27 @@ export function announceSwitch(done: SwitchDone, show: (t: GuardToast) => void) 
     title: `Switched ${projectName(done.root)} to BMAD ${done.to}`,
     body: `Moved ${movedLabel(done.result)} to ${archive}/. ${guard} Agents already running keep their old role prompt until restarted.`,
     action: { label: "Open ARCHIVE.md", run: () => openFileFromTerminal(joinPath(done.root, `${archive}/ARCHIVE.md`)) },
+  });
+}
+
+/**
+ * The journals of unfinished switches a toast has pointed to this session.
+ * The cd hook says so once for each; a route someone asked for says it every time.
+ */
+const toldPending = new Set<string>();
+
+/**
+ * Say why a setup or a switch didn't happen. When an unfinished switch is the
+ * reason the toast links to its journal, which is where it is resolved, and
+ * so stays up as long as any toast with a button.
+ */
+export function announceFailure(failed: SetupFailure, show: (t: GuardToast) => void) {
+  const { why, title, archiveFile } = failed;
+  if (archiveFile) toldPending.add(archiveFile);
+  show({
+    title: title ?? "Project setup",
+    body: why,
+    ...(archiveFile ? { action: { label: "Open ARCHIVE.md", run: () => openFileFromTerminal(archiveFile) } } : {}),
   });
 }
 
@@ -165,6 +186,13 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
       questionFor.current = root;
       return byToast(root);
     };
+    // A project blocked by an unfinished switch is told why once, not on each
+    // cd: after a restart nothing else on screen says so. Any other block (a
+    // switch running, a check that failed) stays quiet here.
+    const tellBlocked = (block: SwitchBlock) => {
+      if (cancelled || !block.archiveFile || toldPending.has(block.archiveFile)) return;
+      announceFailure({ why: block.reason, archiveFile: block.archiveFile }, show);
+    };
     const run = async (root: string) => {
       // Skip projects whose setup the user undid.
       if (!isSetupCandidate(root) || setupDeclined(root)) return;
@@ -176,7 +204,9 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
       const status = await setupStatus(root).catch(() => null);
       if (!status || cancelled) return;
       if (wasSetUp(root)) {
-        if (!status.stacks.length) return;
+        const block = await switchBlock(root);
+        if (block) return tellBlocked(block);
+        if (!status.stacks.length || cancelled) return;
         const r = await addStackAgents(root, status.stacks, status.methodology ?? "v6").catch(() => null);
         if (r && !cancelled) announceSetup(r, show, true);
         return;
@@ -187,6 +217,7 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
       const quiet = isComplete(status);
       // The project's own version, with no question; a project with neither is asked.
       const answer = await askMethodology(root, { ask });
+      if (answer.kind === "blocked") tellBlocked(answer);
       if (answer.kind !== "chosen") return;
       if (!answer.asked) {
         if (cancelled) return;
@@ -230,7 +261,8 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
   }, [cwd, enabled, show, withdraw, withdrawQuestion]);
 }
 
-/** Test seam: forget every open question. */
+/** Test seam: forget every open question, and what has been said about unfinished switches. */
 export function __resetSetupQuestionsForTests() {
   asking.clear();
+  toldPending.clear();
 }

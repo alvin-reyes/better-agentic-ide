@@ -5,8 +5,8 @@ import TerminalPane from "./components/TerminalPane";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
-import { useProjectSetup, announceSetup, announceSwitch } from "./hooks/useProjectSetup";
-import type { SetupResult } from "./lib/projectSetup";
+import { useProjectSetup, announceFailure, announceSetup, announceSwitch } from "./hooks/useProjectSetup";
+import type { SetupFailure, SetupResult } from "./lib/projectSetup";
 import { SWITCH_DONE_EVENT, type SwitchDone } from "./lib/bmadSwitch";
 import { writePty } from "./lib/terminalCommands";
 import Toast from "./components/Toast";
@@ -177,8 +177,7 @@ export default function App() {
   // setup a switch ran would leave the project with no BMAD.
   useEffect(() => {
     const onSetup = (e: Event) => announceSetup((e as CustomEvent<SetupResult>).detail, showToast);
-    const onSetupFailed = (e: Event) =>
-      showToast({ title: "Project setup", body: (e as CustomEvent<{ why: string }>).detail.why });
+    const onSetupFailed = (e: Event) => announceFailure((e as CustomEvent<SetupFailure>).detail, showToast);
     const onSwitch = (e: Event) => announceSwitch((e as CustomEvent<SwitchDone>).detail, showToast);
     window.addEventListener("project-setup-done", onSetup);
     window.addEventListener("project-setup-failed", onSetupFailed);

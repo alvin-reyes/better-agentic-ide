@@ -316,6 +316,8 @@ describe("when something fails", () => {
     open(/Open project/);
     await waitFor(() => expect(failed).toHaveBeenCalledOnce());
     expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toContain(".ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
+    // The journal itself, for the toast's link.
+    expect((failed.mock.calls[0][0] as CustomEvent<{ archiveFile?: string }>).detail.archiveFile).toBe(`${NEWAPP}/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md`);
     // A terminal there is how the person resolves it.
     expect(tabs()).toBe(before + 1);
     expect(recentProjects()).toEqual([NEWAPP]);
@@ -484,6 +486,7 @@ describe("a project that already has BMAD", () => {
     // The folder opens, so the journal can be followed, and nothing is installed over it.
     await waitFor(() => expect(failed).toHaveBeenCalledOnce());
     expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toContain(".ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
+    expect((failed.mock.calls[0][0] as CustomEvent<{ archiveFile?: string }>).detail.archiveFile).toBe(`${OLDAPP}/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md`);
     await settle();
     expect(tabs(), "one tab for the folder").toBe(before + 1);
     expect(recentProjects()).toEqual([OLDAPP]);

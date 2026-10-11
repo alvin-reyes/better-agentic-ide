@@ -176,7 +176,7 @@ export async function askAndSetUp(root: string): Promise<SetupResult | null> {
   if (!isSetupCandidate(normRoot(root))) throw new Refusal(NOT_A_PROJECT);
   const answer = await askMethodology(root);
   // Thrown as a Refusal: callers show its reason as it is.
-  if (answer.kind === "blocked") throw new Refusal(answer.reason);
+  if (answer.kind === "blocked") throw new Refusal(answer.reason, answer.archiveFile);
   if (answer.kind !== "chosen") return null;
   // Set up, and announced, by whoever got there first.
   if (answer.done) return answer.done;
@@ -193,9 +193,10 @@ const NOT_A_PROJECT = "This folder isn't a project.";
  * project, no BMAD), as opposed to a step that was tried and failed. Told
  * apart by identity, so no other error is mistaken for one. It reads as its
  * reason wherever it is shown: `String(err)` and `err.message` are the reason.
+ * `archiveFile` is the journal to open when an unfinished switch is the reason.
  */
 export class Refusal {
-  constructor(readonly reason: string) {}
+  constructor(readonly reason: string, readonly archiveFile?: string) {}
   get message() { return this.reason; }
   toString() { return this.reason; }
 }
@@ -262,7 +263,7 @@ export async function switchOnDemand(root: string): Promise<SwitchAnswer> {
   if (!from) throw new Refusal(NO_BMAD);
   const answer = await askSwitch(at, from);
   // Thrown as a Refusal: callers show its reason as it is.
-  if (answer.kind === "blocked") throw new Refusal(answer.reason);
+  if (answer.kind === "blocked") throw new Refusal(answer.reason, answer.archiveFile);
   return answer;
 }
 

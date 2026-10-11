@@ -214,6 +214,8 @@ describe("BMAD: Switch to the other version", () => {
     await waitFor(() => expect(seen.failed).toHaveBeenCalledOnce());
     expect(seen.why()).toMatch(/^A BMAD switch in shop didn't finish\./);
     expect(seen.why()).not.toContain("Project setup failed");
+    // With the journal, so the toast can open it.
+    expect((seen.failed.mock.calls[0][0] as CustomEvent<{ archiveFile?: string }>).detail.archiveFile).toBe("/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
     seen.stop();
   });
 });

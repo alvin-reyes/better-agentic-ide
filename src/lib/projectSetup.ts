@@ -398,6 +398,18 @@ export async function switchBlock(root: string): Promise<SwitchBlock | null> {
   return { reason, archiveFile: joinPath(at, where) };
 }
 
+/**
+ * The detail of `project-setup-failed`: a setup or a switch that didn't
+ * happen, reported from outside the component that shows the toast.
+ */
+export interface SetupFailure {
+  why: string;
+  /** The toast's title; "Project setup" when unset. */
+  title?: string;
+  /** The journal of the unfinished switch that is the reason, as a full path. */
+  archiveFile?: string;
+}
+
 /** A finished switch set the project up: it is set up, kept, and no longer declined. */
 export function markSwitched(root: string, methodology: Methodology) {
   markSetUp(root, true);

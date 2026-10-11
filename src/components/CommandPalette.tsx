@@ -118,8 +118,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         // Every failure below used to land in a bare .catch(() => {}): the
         // palette closed and nothing happened at all — no setup, no event, no
         // error. Say what went wrong instead.
-        const failed = (why: string) =>
-          window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why } }));
+        const failed = (why: string, archiveFile?: string) =>
+          window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why, archiveFile } }));
         if (!cwd) return failed("No active tab to set up.");
         terminalModule().then(({ getPtyCwd }) =>
           getPtyCwd(cwd.activePaneId).then(async (dir) => {
@@ -134,7 +134,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         ).catch(async (err) => {
           // A blocked project (an unfinished switch, one running) isn't a failed setup.
           const { isRefusal } = await import("../lib/methodologyPrompt");
-          failed(isRefusal(err) ? String(err) : `Project setup failed: ${err}`);
+          if (isRefusal(err)) failed(err.reason, err.archiveFile);
+          else failed(`Project setup failed: ${err}`);
         });
       } },
       ...(bmadProject

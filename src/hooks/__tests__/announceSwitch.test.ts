@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const opened = vi.hoisted(() => ({ file: vi.fn() }));
 vi.mock("../../lib/openFile", () => ({ openFileFromTerminal: opened.file }));
 
-import { announceSwitch } from "../useProjectSetup";
+import { announceFailure, announceSwitch } from "../useProjectSetup";
 import { toastActions, toastLifetime, type GuardToast } from "../useContextGuard";
 import type { SwitchDone } from "../../lib/bmadSwitch";
 
@@ -72,7 +72,44 @@ describe("announceSwitch", () => {
   });
 });
 
+describe("announceFailure", () => {
+  const said = (failed: Parameters<typeof announceFailure>[0]): GuardToast => {
+    const show = vi.fn<(t: GuardToast) => void>();
+    announceFailure(failed, show);
+    expect(show).toHaveBeenCalledOnce();
+    return show.mock.calls[0][0];
+  };
+
+  it("says why, under Project setup, and goes after a few seconds", () => {
+    const toast = said({ why: "Project setup failed: disk full" });
+    expect(toast).toEqual({ title: "Project setup", body: "Project setup failed: disk full" });
+    expect(toastLifetime(toast)).toBe(4000);
+  });
+
+  it("takes the title it is given", () => {
+    expect(said({ why: "This project has no BMAD to switch from.", title: "BMAD switch" }).title).toBe("BMAD switch");
+  });
+
+  it("links to the journal when an unfinished switch is the reason, and stays long enough to click", () => {
+    const toast = said({
+      why: "A BMAD switch in shop didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+      archiveFile: "/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md",
+    });
+    expect(toast.body).toContain("didn't finish");
+    const actions = toastActions(toast);
+    expect(actions.map((a) => a.label)).toEqual(["Open ARCHIVE.md"]);
+    actions[0].run!();
+    expect(opened.file).toHaveBeenCalledWith("/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
+    expect(toastLifetime(toast)).toBe(15000);
+  });
+});
+
 describe("App", () => {
+  it("reports a setup or switch that didn't happen through announceFailure", () => {
+    const app = readFileSync(resolve(__dirname, "../../App.tsx"), "utf8");
+    expect(app).toMatch(/const onSetupFailed = \(e: Event\) => announceFailure\(/);
+  });
+
   it("announces a switch from its own event, apart from setup's", () => {
     const app = readFileSync(resolve(__dirname, "../../App.tsx"), "utf8");
     expect(app).toMatch(/const onSwitch = \(e: Event\) => announceSwitch\(/);

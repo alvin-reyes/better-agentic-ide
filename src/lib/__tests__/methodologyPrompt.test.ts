@@ -282,6 +282,8 @@ describe("a project whose BMAD switch didn't finish", () => {
   it("is not set up by the palette or Set up now, which say why", async () => {
     tauri.pending = [PENDING];
     await expect(askAndSetUp("/code/shop")).rejects.toMatchObject({ reason: expect.stringMatching(/didn't finish.*ARCHIVE\.md/) });
+    // And hand on the journal, so whoever shows the reason can link to it.
+    await expect(askAndSetUp("/code/shop")).rejects.toMatchObject({ archiveFile: "/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md" });
     expect(tauri.applies).toHaveLength(0);
   });
 

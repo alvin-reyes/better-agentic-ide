@@ -3,7 +3,8 @@ import { useCallback, useState } from "react";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 
 const tauri = vi.hoisted(() => ({
-  pending: [] as unknown[],
+  /** What `bmad_switch_pending` answers; null makes the check itself fail. */
+  pending: [] as unknown[] | null,
   byDir: {} as Record<string, "v4" | "v6" | null>,
   /** What `project_root` resolves a folder to (default: the folder itself). */
   roots: {} as Record<string, string>,
@@ -23,6 +24,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "project_root":
         return tauri.roots[args.path as string] ?? args.path;
       case "bmad_switch_pending":
+        if (tauri.pending === null) throw new Error("no journal access");
         return tauri.pending;
       case "project_setup_status":
         return {
@@ -42,8 +44,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import { __resetSetupQuestionsForTests, useProjectSetup } from "../useProjectSetup";
-import { withdrawToast, type GuardToast } from "../useContextGuard";
+import { __resetSetupQuestionsForTests, announceFailure, useProjectSetup } from "../useProjectSetup";
+import { toastActions, toastLifetime, withdrawToast, type GuardToast } from "../useContextGuard";
 import Toast from "../../components/Toast";
 import { __resetPromptForTests, askAndSetUp, settlePrompt, useMethodologyPrompt } from "../../lib/methodologyPrompt";
 import { openProjectTab } from "../../lib/newTab";
@@ -61,6 +63,7 @@ const toasts = () => show.mock.calls.map(([t]) => t);
 /** The toasts that ask which version: all of them, or those about one project. */
 const questions = (name?: string) =>
   toasts().filter((t) => (name ? t.title === `Set up ${name} with BMAD?` : / with BMAD\?$/.test(t.title)));
+const PENDING = { archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" };
 /** Let the hook's chain of awaits run out, to assert that nothing happened. */
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 
@@ -485,12 +488,106 @@ describe("when automatic setup doesn't apply", () => {
     expect(show).not.toHaveBeenCalled();
   });
 
-  it("neither asks nor sets up a project whose switch didn't finish, and shows no toast", async () => {
-    tauri.pending = [{ archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" }];
+  it("neither asks nor sets up a project whose switch didn't finish, and says so with a link to its journal", async () => {
+    tauri.pending = [PENDING];
+    mount("/code/shop");
+    await settle();
+    expect(questions()).toHaveLength(0);
+    expect(tauri.applies).toHaveLength(0);
+    // After a restart this is the only thing on screen that says the project is blocked.
+    expect(toasts()).toHaveLength(1);
+    const [toast] = toasts();
+    expect(toast.body).toBe("A BMAD switch in shop didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.");
+    expect(toastActions(toast).map((a) => a.label)).toEqual(["Open ARCHIVE.md"]);
+    expect(toastLifetime(toast)).toBe(15000);
+    expect(toast.sticky).toBeUndefined();
+  });
+
+  it("stays quiet about a project it couldn't check", async () => {
+    tauri.pending = null;
     mount("/code/shop");
     await settle();
     expect(toasts()).toHaveLength(0);
     expect(tauri.applies).toHaveLength(0);
+  });
+});
+
+describe("a terminal in a project whose switch didn't finish", () => {
+  beforeEach(() => {
+    tauri.roots = { "/code/shop/src": "/code/shop" };
+    tauri.byDir = { "/code/shop": "v4" };
+    tauri.pending = [PENDING];
+  });
+  /** The toasts about one project's unfinished switch: the mock answers every folder alike. */
+  const told = (name: string) => toasts().filter((t) => t.body.includes(` in ${name} didn't finish.`));
+
+  it("is told once, not on every cd inside the project or back into it", async () => {
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(told("shop")).toHaveLength(1));
+    hook.rerender({ cwd: "/code/shop/src" });
+    await settle();
+    hook.rerender({ cwd: "/code/elsewhere" });
+    await settle();
+    hook.rerender({ cwd: "/code/shop" });
+    await settle();
+    expect(told("shop")).toHaveLength(1);
+  });
+
+  it("is told about each project once", async () => {
+    tauri.byDir = { "/code/shop": "v4", "/code/other": "v6" };
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(toasts()).toHaveLength(1));
+    hook.rerender({ cwd: "/code/other" });
+    await waitFor(() => expect(toasts()).toHaveLength(2));
+    expect(toasts()[1].body).toMatch(/^A BMAD switch in other didn't finish\./);
+  });
+
+  it("is told when the project was already set up, whether or not it has gained a stack", async () => {
+    localStorage.setItem("ade-project-setup-done", JSON.stringify(["/code/shop"]));
+    const first = mount("/code/shop");
+    await waitFor(() => expect(toasts()).toHaveLength(1));
+    first.unmount();
+
+    __resetSetupQuestionsForTests();
+    show.mockClear();
+    tauri.stacks = ["evm"];
+    mount("/code/shop");
+    await waitFor(() => expect(toasts()).toHaveLength(1));
+    expect(toastActions(toasts()[0]).map((a) => a.label)).toEqual(["Open ARCHIVE.md"]);
+    expect(tauri.applies).toHaveLength(0);
+  });
+
+  it("is told how many when more than one switch is unfinished", async () => {
+    tauri.pending = [PENDING, { ...PENDING, archive: ".ade/archive/bmad-v6-2026-10-11" }];
+    mount("/code/shop");
+    await waitFor(() => expect(toasts()).toHaveLength(1));
+    expect(toasts()[0].body).toBe(
+      "2 BMAD switches in shop didn't finish. Setup waits until each one is resolved: start with .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+    );
+  });
+
+  it("is not told by a run the terminal has already left, and is told on coming back", async () => {
+    const hook = mount("/code/shop");
+    hook.rerender({ cwd: "/code/elsewhere" });
+    await settle();
+    expect(told("shop")).toHaveLength(0);
+    hook.rerender({ cwd: "/code/shop" });
+    await waitFor(() => expect(told("shop")).toHaveLength(1));
+  });
+
+  it("is not told again by the hook after New Tab said so", async () => {
+    const failed = vi.fn();
+    window.addEventListener("project-setup-failed", failed);
+    await openProjectTab("/code/shop");
+    expect(failed).toHaveBeenCalledOnce();
+    window.removeEventListener("project-setup-failed", failed);
+    // App shows what the event carries, as it does for every route.
+    announceFailure((failed.mock.calls[0][0] as CustomEvent).detail, show);
+    expect(toasts()).toHaveLength(1);
+
+    mount("/code/shop");
+    await settle();
+    expect(toasts()).toHaveLength(1);
   });
 });
 

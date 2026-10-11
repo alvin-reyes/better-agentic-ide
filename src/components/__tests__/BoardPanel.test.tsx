@@ -508,6 +508,36 @@ describe("BoardPanel and a BMAD switch", () => {
     expect(opened.file).toHaveBeenCalledWith("/p/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
   });
 
+  it("says why Set up now is refused while a switch is unfinished, in the panel and in a toast that links to the journal", async () => {
+    disk.pending = [pendingEntry("incomplete")];
+    const failed = vi.fn();
+    window.addEventListener("project-setup-failed", failed);
+    useBoardPanel.setState({ root: "/p", methodology: null, board: null, map: null, error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Set up now" }));
+    await waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect((failed.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      why: "A BMAD switch in p didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+      archiveFile: "/p/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md",
+    });
+    expect(screen.getAllByRole("alert").map((el) => el.textContent)).toContain(
+      "A BMAD switch in p didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+    );
+    window.removeEventListener("project-setup-failed", failed);
+  });
+
+  it("raises no toast for a refusal that has no journal behind it", async () => {
+    disk.bmad = {};
+    const failed = vi.fn();
+    window.addEventListener("project-setup-failed", failed);
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to BMAD v6…" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("This project has no BMAD to switch from.");
+    expect(failed).not.toHaveBeenCalled();
+    window.removeEventListener("project-setup-failed", failed);
+  });
+
   it("warns for an in-progress journal too, and says an unreadable one couldn't be read", async () => {
     disk.pending = [pendingEntry("in-progress")];
     useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });

@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
 import { askKeepOrSwitch, askMethodology, useMethodologyPrompt, versionToSetUp } from "./methodologyPrompt";
-import { bmadRootOf, isKept, isSetupCandidate, normRoot, setUpProject, setupDeclined, switchBlock, type SwitchBlock } from "./projectSetup";
+import {
+  bmadRootOf, isKept, isSetupCandidate, normRoot, setUpProject, setupDeclined, switchBlock, type SetupFailure, type SwitchBlock,
+} from "./projectSetup";
 import { useTabStore } from "../stores/tabStore";
 
 const KEY = "ade-recent-projects";
@@ -69,7 +71,8 @@ export async function openProjectTab(path: string): Promise<void> {
   const openBlocked = (block: SwitchBlock) => {
     rememberProject(path);
     useTabStore.getState().addTab(undefined, path);
-    window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: block.reason } }));
+    const detail: SetupFailure = { why: block.reason, archiveFile: block.archiveFile };
+    window.dispatchEvent(new CustomEvent("project-setup-failed", { detail }));
   };
   const root = await setupRootFor(path);
   const answer = root ? await askMethodology(root) : null;
