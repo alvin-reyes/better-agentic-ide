@@ -8,7 +8,7 @@ description: How ADE sets up each project with BMAD, the "verified, not vibed" m
 
 The first time ADE opens a project, it adds whatever the project is missing:
 
-- **BMAD**: the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD). By default that is **v6**: its skills in `.claude/skills/`, a `_bmad/` folder with the config and `ade-runtime.mjs`, an empty `_bmad-output/` for tickets, and a `.ade/methodology` file recording the choice. Verification gates are ADE's own, in `.ade/gates/`. Nothing needs Python or `uv`; the skills call a bundled Node script. v6's five persona skills come with the rest; on v4 the personas are not installed at all. Either way, the roles in `.claude/agents/` are the team.
+- **BMAD**: the bundled [BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD). By default that is **v6**: its skills in `.claude/skills/`, a `_bmad/` folder with the config and `ade-runtime.mjs`, an empty `_bmad-output/` for tickets, and a `.ade/methodology` file recording the choice. Verification gates are ADE's own, in `.ade/gates/`. Setup and the core workflows need neither Python nor `uv`; the skills call a bundled Node script. v6's five persona skills come with the rest; on v4 the personas are not installed at all. Either way, the roles in `.claude/agents/` are the team.
 - **The ADE methodology**: the rules in `.ade/rules.md`, loaded from `CLAUDE.md`, plus a context store, a decision log and a session journal under `.ade/`, and an `llms.txt`. See [The methodology](#the-methodology) below.
 - **Eight core roles** as Claude Code sub-agents in `.claude/agents/`: product manager, architect, designer, scrum master, developer, QA, DevOps and adversarial reviewer.
 - **Agents for your stack**: see [By project type](#by-project-type).
