@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import BoardView, { type BoardActions } from "./BoardView";
+import V6MapView from "./V6MapView";
 import { useBoardPanel } from "../../stores/boardPanelStore";
 import { stageView, writeStage } from "../../lib/confirmedStage";
 import { approveStory, approveTicket } from "../../lib/boardActions";
@@ -35,7 +36,7 @@ const dispatchKey = (root: string, v: StoryView) => `${root}::${v.story.id}::${v
 export default function BoardPanel({ cwd, onClose }: Props) {
   // undefined while the pane's project is being resolved; null when it has none.
   const [root, setRoot] = useState<string | null | undefined>(undefined);
-  const { root: storeRoot, methodology, board, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
+  const { root: storeRoot, methodology, board, map, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [dispatchCount, setDispatchCount] = useState(0);
   const { width, onDragStart } = useDragWidth(BOARD_WIDTH.min, BOARD_WIDTH.max, BOARD_WIDTH.initial);
@@ -68,10 +69,10 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   }, [scheduleRefresh]);
 
   const dirs = useMemo(
-    () => (root && methodology ? watchTargets(root, methodology, board?.paths ?? null) : []),
-    [root, methodology, board?.paths],
+    () => (root && methodology ? watchTargets(root, methodology, board?.paths ?? null, map?.outputFolder) : []),
+    [root, methodology, board?.paths, map?.outputFolder],
   );
-  const existing = useExistingFolders(dirs, board, scheduleRefresh);
+  const existing = useExistingFolders(dirs, board ?? map, scheduleRefresh);
   useBoardWatch(existing, methodology, scheduleRefresh);
 
   const actions: BoardActions = useMemo(() => ({
@@ -97,11 +98,11 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       dispatchedRows.add(dispatchKey(root, v));
       setDispatchCount((n) => n + 1);
     },
-    onStage: async (to) => {
+    onStage: methodology === "v4" ? async (to) => {
       if (!root) return;
       await writeStage(root, to, tauriFs);
       await refresh();
-    },
+    } : undefined,
   }), [root, methodology, refresh]);
 
   const dispatched = useCallback(
@@ -115,7 +116,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
     if (root === undefined) return <Empty>Loading…</Empty>;
     // The store follows `root` one effect late; until it catches up, everything it holds is the previous project's.
     if (storeRoot !== root) return <Empty>Loading…</Empty>;
-    if (!methodology && !loading && !board && !error) {
+    if (!methodology && !loading && !board && !map && !error) {
       return (
         <Empty>
           <div>This project isn't set up for BMAD</div>
@@ -139,8 +140,13 @@ export default function BoardPanel({ cwd, onClose }: Props) {
         </Empty>
       );
     }
-    if (!board || !methodology) return error ? <Empty><div role="alert">{error}</div></Empty> : <Empty>Loading…</Empty>;
-    return <BoardView methodology={methodology} board={board} stage={stageView(board, stageFile)} error={error} actions={actions} dispatched={dispatched} dispatchUnavailable={taskUnsupportedReason(provider)} />;
+    if (methodology === "v6" && map) {
+      return <V6MapView map={map} error={error} actions={actions} dispatched={dispatched} dispatchUnavailable={taskUnsupportedReason(provider)} />;
+    }
+    if (methodology === "v4" && board) {
+      return <BoardView methodology="v4" board={board} stage={stageView(board, stageFile)} error={error} actions={actions} dispatched={dispatched} dispatchUnavailable={taskUnsupportedReason(provider)} />;
+    }
+    return error ? <Empty><div role="alert">{error}</div></Empty> : <Empty>Loading…</Empty>;
   })();
 
   return (
