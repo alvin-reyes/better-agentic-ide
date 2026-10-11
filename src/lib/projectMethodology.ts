@@ -261,6 +261,9 @@ command decides.
   append one dated line to \`.ade/session.md\`. The architect records approvals, the
   scrum-master records shards, and QA records Done when the
   verification command passes.
+- **Commit as the user.** Commits and pull requests go out under the user's own git
+  identity. Add no AI attribution: no \`Co-Authored-By\` trailer for an agent or model, no
+  "Generated with ..." line in a PR description.
 
 ## 3. Definition of Done (per story)
 A story is Done only when ALL hold:

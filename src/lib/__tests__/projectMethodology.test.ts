@@ -93,6 +93,13 @@ describe("ADE methodology", () => {
     expect(RULES_MD).not.toMatch(/QA is read-only/i);
   });
 
+  it("has every agent commit as the user, with no AI attribution", () => {
+    const rules = RULES_MD.slice(RULES_MD.indexOf("## 2. The non-negotiables"), RULES_MD.indexOf("## 3."));
+    expect(rules).toMatch(/own git\s+identity/);
+    expect(rules).toMatch(/Co-Authored-By/);
+    expect(rules).toMatch(/Generated with/);
+  });
+
   it("makes the ADE rules win over the BMAD slash commands", () => {
     const claude = methodologyFiles("demo").find((f) => f.path === "CLAUDE.md")!.content;
     expect(claude).toContain("/BMad:");
@@ -122,6 +129,11 @@ describe("project setup", () => {
   it("summarizes what a setup wrote", () => {
     expect(summarize({ created: new Array(20).fill("x"), appendedImport: true, agents: 8, bmadFiles: 6 })).toBe("BMAD, 8 agents, the methodology and a line in CLAUDE.md");
     expect(summarize({ created: [], appendedImport: false, agents: 0, bmadFiles: 0 })).toBeNull();
+    // A settings file setup created is the attribution setting, not the methodology.
+    expect(summarize({ created: ["/p/.claude/settings.json"], appendedImport: false, agents: 0, bmadFiles: 0, attributionOff: true }))
+      .toBe("settings that turn off AI attribution");
+    expect(summarize({ created: new Array(3).fill("x"), appendedImport: false, agents: 1, bmadFiles: 0, attributionOff: true }))
+      .toBe("1 agent, the methodology and settings that turn off AI attribution");
   });
 });
 

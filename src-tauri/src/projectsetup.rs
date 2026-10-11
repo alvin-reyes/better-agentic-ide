@@ -40,6 +40,10 @@ pub struct SetupReport {
     pub bmad_files: usize,
     /// BMAD v6 files scaffolded (skills, `_bmad/`, the methodology marker).
     pub bmadv6_files: usize,
+    /// AI attribution was turned off in `.claude/settings.json` by this setup.
+    pub attribution_off: bool,
+    /// `.claude/settings.json` couldn't be updated; the rest of setup still ran.
+    pub settings_error: Option<String>,
 }
 
 /// A relative path that stays inside the project.
@@ -155,6 +159,21 @@ pub fn apply(
         let mut file = std::fs::OpenOptions::new().append(true).open(dir.join("CLAUDE.md")).map_err(|e| e.to_string())?;
         file.write_all(import.unwrap_or_default().as_bytes()).map_err(|e| e.to_string())?;
         report.appended_import = true;
+    }
+    // A full setup also has agents commit as the user: no AI co-author trailer
+    // or "Generated with" line. A broken settings file is reported, not fatal.
+    if import.is_some() {
+        let settings = dir.join(".claude").join("settings.json");
+        let existed = settings.exists();
+        match crate::usage::hide_attribution(dir) {
+            Ok(changed) => {
+                report.attribution_off = changed;
+                if changed && !existed {
+                    report.created.push(settings.to_string_lossy().into_owned());
+                }
+            }
+            Err(e) => report.settings_error = Some(e),
+        }
     }
     match (methodology, methodology_src) {
         (Methodology::V4, Some(src)) => {
@@ -335,7 +354,8 @@ mod tests {
         let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(".claude/agents/qa.md")).unwrap(), "mine");
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "rules");
-        assert_eq!(r.created.len(), 2);
+        // CLAUDE.md, .ade/rules.md and .claude/settings.json.
+        assert_eq!(r.created.len(), 3);
         assert!(!r.appended_import, "a CLAUDE.md we created already imports the rules");
         // Running again changes nothing.
         let again = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
@@ -357,10 +377,44 @@ mod tests {
         // Edit one created file: undo keeps it.
         std::fs::write(dir.join(".ade/rules.md"), "edited").unwrap();
         let removed = project_setup_undo(dir.to_string_lossy().into(), r.created.clone(), files(), Some(import.into())).unwrap();
-        assert_eq!(removed, 1);
+        // The agent file and the settings file setup created.
+        assert_eq!(removed, 2);
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# Mine\n");
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "edited");
         assert!(!dir.join(".claude").exists(), "empty folders setup created are removed");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_full_setup_turns_ai_attribution_off_and_agents_alone_do_not() {
+        let dir = temp();
+        let r = apply(&dir, &files(), None, "<!-- m -->", Methodology::V4, None).unwrap();
+        assert!(!r.attribution_off && !dir.join(".claude/settings.json").exists());
+        let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        assert!(r.attribution_off && r.settings_error.is_none());
+        let settings = dir.join(".claude").join("settings.json");
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(v["attribution"]["commit"], "");
+        assert_eq!(v["attribution"]["pr"], "");
+        assert_eq!(v["includeCoAuthoredBy"], false);
+        // Setup created the file, so Undo removes it with the rest.
+        assert!(r.created.contains(&settings.to_string_lossy().into_owned()));
+        // A later setup is safe: nothing new to write.
+        let again = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        assert!(!again.attribution_off && again.created.is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_malformed_settings_file_is_reported_and_setup_carries_on() {
+        let dir = temp();
+        std::fs::create_dir_all(dir.join(".claude")).unwrap();
+        std::fs::write(dir.join(".claude/settings.json"), "{ not json").unwrap();
+        let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
+        assert!(!r.attribution_off);
+        assert!(r.settings_error.as_deref().unwrap_or_default().contains("not valid JSON"));
+        assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "rules");
+        assert_eq!(std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap(), "{ not json");
         std::fs::remove_dir_all(dir).ok();
     }
 

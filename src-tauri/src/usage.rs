@@ -575,6 +575,30 @@ pub fn add_deny_rules(root: &Path, rules: &[String]) -> Result<Vec<String>, Stri
     Ok(added)
 }
 
+/// Turn off the AI attribution Claude Code adds to commits and PRs in the
+/// project's `.claude/settings.json`, keeping everything else in the file:
+/// `attribution` empties the commit trailer and PR line and drops the session
+/// link; `includeCoAuthoredBy` is the deprecated key older versions read. A key
+/// the user already set is left as it is. Returns whether the file changed.
+pub fn hide_attribution(root: &Path) -> Result<bool, String> {
+    let path = settings_path(root);
+    let mut v = load_settings(&path)?;
+    let obj = v.as_object_mut().ok_or("settings.json is not a JSON object")?;
+    let mut changed = false;
+    if !obj.contains_key("attribution") {
+        obj.insert("attribution".into(), serde_json::json!({ "commit": "", "pr": "", "sessionUrl": false }));
+        changed = true;
+    }
+    if !obj.contains_key("includeCoAuthoredBy") {
+        obj.insert("includeCoAuthoredBy".into(), Value::Bool(false));
+        changed = true;
+    }
+    if changed {
+        save_settings(&path, &v)?;
+    }
+    Ok(changed)
+}
+
 /// Personal settings Claude Code keeps out of git; presets are a personal choice.
 fn local_settings_path(root: &Path) -> PathBuf {
     root.join(".claude").join("settings.local.json")
@@ -900,6 +924,50 @@ mod tests {
         std::fs::write(d.join(".claude").join("settings.json"), "{ not json").unwrap();
         assert!(add_deny_rules(&d, &["Read(./dist/**)".into()]).is_err());
         assert_eq!(std::fs::read_to_string(d.join(".claude").join("settings.json")).unwrap(), "{ not json");
+    }
+
+    #[test]
+    fn attribution_is_turned_off_in_an_empty_project() {
+        let d = tmp("attr_new");
+        assert!(hide_attribution(&d).unwrap());
+        assert_eq!(
+            read_json::<Value>(&settings_path(&d)).unwrap(),
+            serde_json::json!({ "attribution": { "commit": "", "pr": "", "sessionUrl": false }, "includeCoAuthoredBy": false })
+        );
+        // Running again changes nothing.
+        assert!(!hide_attribution(&d).unwrap());
+    }
+
+    #[test]
+    fn attribution_is_added_beside_the_other_keys() {
+        let d = tmp("attr_keep");
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        std::fs::write(settings_path(&d), r#"{"model":"sonnet","permissions":{"deny":["Read(./dist/**)"]}}"#).unwrap();
+        assert!(hide_attribution(&d).unwrap());
+        let v = read_json::<Value>(&settings_path(&d)).unwrap();
+        assert_eq!(v["model"], "sonnet");
+        assert_eq!(v["permissions"]["deny"][0], "Read(./dist/**)");
+        assert_eq!(v["attribution"], serde_json::json!({ "commit": "", "pr": "", "sessionUrl": false }));
+        assert_eq!(v["includeCoAuthoredBy"], false);
+    }
+
+    #[test]
+    fn attribution_the_user_set_is_left_alone() {
+        let d = tmp("attr_user");
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        let mine = r#"{"attribution":{"commit":"Reviewed-by: me"},"includeCoAuthoredBy":true}"#;
+        std::fs::write(settings_path(&d), mine).unwrap();
+        assert!(!hide_attribution(&d).unwrap());
+        assert_eq!(std::fs::read_to_string(settings_path(&d)).unwrap(), mine);
+    }
+
+    #[test]
+    fn attribution_reports_a_malformed_settings_file() {
+        let d = tmp("attr_bad");
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        std::fs::write(settings_path(&d), "{ not json").unwrap();
+        assert!(hide_attribution(&d).unwrap_err().contains("not valid JSON"));
+        assert_eq!(std::fs::read_to_string(settings_path(&d)).unwrap(), "{ not json");
     }
 
     #[test]
