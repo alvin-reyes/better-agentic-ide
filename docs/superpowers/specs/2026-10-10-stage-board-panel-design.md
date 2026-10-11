@@ -13,6 +13,10 @@ Two parts, built in order:
 Out of scope here: retiring `OrchestratorTab` and the v4 workflow graph. Both
 come after B.
 
+> **Superseded for v6** by `2026-10-11-v6-board-map-design.md`: a v6 project
+> gets a map of v6's four phases instead of the five-stage board. The stage
+> rail, Track stage, Next and Back, and `.ade/stage` below apply to v4 only.
+
 ## Approach
 
 The engines run in the webview over a Tauri-backed `Fs`. `buildBoardV6` already
