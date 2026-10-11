@@ -9,6 +9,12 @@ export interface Pane {
   initialCwd?: string | null;
   serializedBuffer?: string;
   savedCwd?: string;
+  /**
+   * The first pane of a tab just opened as a new terminal (addTab, or the
+   * launch tab when no session is restored): it opens with the banner. Splits
+   * and restored panes never carry it, and it is never saved with a session.
+   */
+  isNewTab?: boolean;
 }
 
 export interface SplitNode {
@@ -109,6 +115,11 @@ function createDefaultPane(initialCwd?: string | null): Pane {
   const pane: Pane = { id: newPaneId(), ptyId: null };
   if (initialCwd) pane.initialCwd = initialCwd;
   return pane;
+}
+
+/** The first pane of a new terminal tab: the one that shows the banner. */
+function createNewTabPane(initialCwd?: string | null): Pane {
+  return { ...createDefaultPane(initialCwd), isNewTab: true };
 }
 
 function findPane(node: PaneNode, paneId: string): Pane | null {
@@ -222,7 +233,7 @@ function neighbourTabId(tabs: Tab[], idx: number): string {
 }
 
 export const useTabStore = create<TabStore>((set, get) => {
-  const initialPane = createDefaultPane();
+  const initialPane = createNewTabPane();
   const initialTabId = newTabId();
 
   /** Append a tab and activate it. Non-terminal tabs carry a placeholder pane. */
@@ -262,7 +273,7 @@ export const useTabStore = create<TabStore>((set, get) => {
     activeTabId: initialTabId,
     closedTabs: [],
 
-    addTab: (name, initialCwd) => openTab({ name: name || "Terminal" }, createDefaultPane(initialCwd)),
+    addTab: (name, initialCwd) => openTab({ name: name || "Terminal" }, createNewTabPane(initialCwd)),
 
     addOrchestratorTab: (sessionId) =>
       openTab({ name: "Orchestrator", type: "orchestrator", orchestratorSessionId: sessionId }),

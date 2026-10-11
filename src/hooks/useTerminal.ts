@@ -7,10 +7,12 @@ import { registerFileLinks } from "../lib/terminalFileLinks";
 import { isAppShortcut } from "../lib/shortcuts";
 import { openFileFromTerminal } from "../lib/openFile";
 import { writePty } from "../lib/terminalCommands";
+import { bannerLines, shouldShowBanner } from "../lib/banner";
 import { SearchAddon } from "@xterm/addon-search";
 import { ImageAddon } from "@xterm/addon-image";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -336,13 +338,71 @@ function getTerminalOptions() {
   };
 }
 
-async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null, serializedBuffer?: string): Promise<TerminalInstance> {
+// The running app's version, asked of Tauri once. Null when it can't be read:
+// the banner then leaves the version out rather than show a stale one.
+let appVersion: Promise<string | null> | null = null;
+function readAppVersion(): Promise<string | null> {
+  return (appVersion ??= getVersion().catch(() => null));
+}
+
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+/**
+ * Fit the pane's terminal to the container it was just seated in. A few
+ * frames are allowed for layout and the font measurement to land; false when
+ * no real size came (or the pane went away), and the terminal keeps xterm's
+ * default 80x24.
+ */
+async function fitToPane(paneId: string, inst: TerminalInstance): Promise<boolean> {
+  for (let i = 0; i < 3; i++) {
+    await nextFrame();
+    if (instances.get(paneId) !== inst || !inst.wrapper.isConnected) return false;
+    if (inst.fitAddon.proposeDimensions()) {
+      inst.fitAddon.fit();
+      return true;
+    }
+  }
+  return false;
+}
+
+interface NewInstanceOptions {
+  initialCwd?: string | null;
+  serializedBuffer?: string;
+  /** The first pane of a newly opened tab (see Pane.isNewTab). */
+  isNewTab?: boolean;
+  /**
+   * The pane's container, when it's still mounted. The terminal is seated and
+   * fitted there before the banner and the shell, so both see the pane's real
+   * size rather than xterm's default 80x24.
+   */
+  container?: HTMLElement | null;
+}
+
+async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, opts: NewInstanceOptions): Promise<TerminalInstance> {
+  const { initialCwd, serializedBuffer, isNewTab = false, container } = opts;
   const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
 
   if (serializedBuffer) term.write(serializedBuffer);
 
   const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };
   instances.set(paneId, inst);
+
+  // Seat and fit the terminal before anything is decided from its size.
+  let fitted = false;
+  if (container) {
+    attachSolely(container, wrapper);
+    fitted = await fitToPane(paneId, inst);
+    if (instances.get(paneId) !== inst) return inst; // closed meanwhile
+  }
+
+  // The first pane of a new tab opens with the banner, written before the
+  // shell starts so its prompt follows it. An unknown width skips it.
+  const enabled = useSettingsStore.getState().showBanner;
+  if (shouldShowBanner({ isNewTab, cols: fitted ? term.cols : 0, enabled })) {
+    const version = await readAppVersion();
+    if (instances.get(paneId) !== inst) return inst; // closed meanwhile
+    for (const line of bannerLines(version)) term.writeln(line);
+  }
 
   try {
     const ptyId = await invoke<number>("create_pty", {
@@ -405,7 +465,14 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
         if (pane?.ptyId) {
           inst = await createReattachedInstance(paneId, pane.ptyId, setPtyId);
         } else {
-          inst = await createInstance(paneId, setPtyId, pane?.initialCwd || pane?.savedCwd, pane?.serializedBuffer);
+          // While this effect is still mounted, the terminal is seated here
+          // first so the banner and the shell get the pane's real size.
+          inst = await createInstance(paneId, setPtyId, {
+            initialCwd: pane?.initialCwd || pane?.savedCwd,
+            serializedBuffer: pane?.serializedBuffer,
+            isNewTab: pane?.isNewTab,
+            container: cancelled ? null : container,
+          });
         }
       }
 
