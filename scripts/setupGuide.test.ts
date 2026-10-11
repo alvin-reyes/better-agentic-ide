@@ -46,6 +46,12 @@ describe("the project setup guide", () => {
     expect(section).toContain("**Undo**");
   });
 
+  it("says a setup that fails partway is cleaned up, as the app does", () => {
+    const section = guide.slice(guide.indexOf("## When it runs"), guide.indexOf("## By project type"));
+    expect(section).toContain("If setup fails partway, ADE removes what it had written.");
+    expect(read("src-tauri/src/projectsetup.rs")).toMatch(/\n\s+apply_or_clean\(/);
+  });
+
   it("describes no way to skip the question", () => {
     for (const page of [guide, settings]) {
       expect(page).not.toContain("Not now");

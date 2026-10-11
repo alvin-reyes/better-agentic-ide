@@ -38,6 +38,8 @@ A project with no BMAD is [asked which version](#choosing-the-bmad-version) firs
 
 When setup is done, a toast lists what was added. **Undo** in the toast removes those files again, but keeps any file you've edited since.
 
+If setup fails partway, ADE removes what it had written.
+
 To stop automatic setup, turn off **Set up every project I open** in *Settings → Terminal*. It's on by default. You can still set up a project by hand with *Project: Set up BMAD, methodology and agents* in the command palette.
 
 ## By project type
