@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readTicketTree } from "../bmadTicketTree";
+import { readBacklogTree, readTicketTree } from "../bmadTicketTree";
 import { memFs } from "../bmadRuntime/fs";
-import { ticketStatus } from "../bmadRuntime/tickets";
+import { activeInitiativeName, outputFolder, ticketStatus } from "../bmadRuntime/tickets";
 import { seedV6Tree } from "./fixtures/v6tree";
 
 describe("readTicketTree", () => {
@@ -178,5 +178,48 @@ describe("seedV6Tree", () => {
       ["1.6a", "blocked"],
       ["2.1", "in-progress"],
     ]);
+  });
+});
+
+describe("v6 output folder and backlog", () => {
+  const empty = { initiative: { slug: "demo" }, epics: [], tickets: [], plans: {} };
+
+  it("resolves the output folder and the active initiative's name from the config", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", empty);
+    expect(await outputFolder("/p", fs)).toBe("/p/_bmad-output");
+    expect(await activeInitiativeName("/p", fs)).toBe("initiative-demo");
+  });
+
+  it("names no initiative when the config sets none", async () => {
+    const fs = memFs();
+    await fs.mkdir("/p/_bmad");
+    await fs.writeText("/p/_bmad/config.toml", '[core]\nproject_name = "p"\noutput_folder = "{project-root}/_bmad-output"\n');
+    expect(await activeInitiativeName("/p", fs)).toBeNull();
+  });
+
+  it("reads the backlog as a ticket tree, rows keyed by file name, plans joined by stem", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", empty);
+    await fs.mkdir("/p/_bmad-output/backlog");
+    await fs.writeText("/p/_bmad-output/backlog/bug-login-crash.md", "---\ntype: bug\ntitle: Login crash\n---\n\n# Login crash\n");
+    await fs.writeText("/p/_bmad-output/backlog/bug-login-crash-plan.md", "---\nticket: bug-login-crash\nstatus: in-progress\n---\n\n# Plan\n");
+    const tree = await readBacklogTree("/p", fs);
+    expect(tree?.initiative).toBe("/p/_bmad-output/backlog");
+    expect(tree?.epics).toEqual([]);
+    expect(tree?.tickets).toHaveLength(1);
+    expect(tree?.tickets[0]).toMatchObject({
+      id: "bug-login-crash.md",
+      type: "bug",
+      title: "Login crash",
+      status: "in-progress",
+      file: "_bmad-output/backlog/bug-login-crash.md",
+    });
+  });
+
+  it("has no backlog when the folder is missing", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", empty);
+    expect(await readBacklogTree("/p", fs)).toBeNull();
   });
 });
