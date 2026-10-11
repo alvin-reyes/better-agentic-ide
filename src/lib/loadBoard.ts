@@ -2,7 +2,6 @@ import type { Fs } from "./bmadRuntime/fs";
 import { joinPath } from "./bmadRuntime/paths";
 import { gatesDir, parseBmadConfig } from "./bmadConfig";
 import { artifactCandidates } from "./bmadArtifacts";
-import { buildBoardV6 } from "./boardV6";
 import { buildBoard, type BoardState } from "../stores/stageBoardStore";
 
 export const V4_CONFIG = ".bmad-core/core-config.yaml";
@@ -69,9 +68,8 @@ export async function v4Inputs(root: string, fs: Fs): Promise<V4Inputs> {
   };
 }
 
-/** The board for a project, by its methodology. */
-export async function loadBoard(root: string, methodology: "v4" | "v6", fs: Fs): Promise<BoardState> {
-  if (methodology === "v6") return buildBoardV6(root, fs);
+/** The five-stage board for a BMAD v4 project. A v6 project has a map instead (`buildV6Map`). */
+export async function loadBoard(root: string, fs: Fs): Promise<BoardState> {
   const inputs = await v4Inputs(root, fs);
   const board = buildBoard(inputs);
   return inputs.problems.length ? { ...board, problems: inputs.problems } : board;

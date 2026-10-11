@@ -14,7 +14,7 @@ const board = buildBoard({
 
 function renderWith(file: string | null, actions: Record<string, unknown> = {}) {
   const all = { onOpen: vi.fn(), onApprove: vi.fn(async () => {}), onDispatch: vi.fn(async () => {}), onStage: vi.fn(async () => {}), ...actions };
-  render(<BoardView methodology="v4" board={board} stage={stageView(board, file)} error={null} actions={all} />);
+  render(<BoardView board={board} stage={stageView(board, file)} error={null} actions={all} />);
   return all;
 }
 const row = (id: string) => document.querySelector(`[data-row="${id}"]`) as HTMLElement;
@@ -47,7 +47,7 @@ describe("BoardView actions", () => {
       stories: [story("2.1", "Done"), story("2.2", "Done")],
       gates: [gate("2.1", "PASS"), gate("2.2", "WAIVED")],
     });
-    render(<BoardView methodology="v4" board={finished} stage={stageView(finished, null)} error={null} actions={{ onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) }} />);
+    render(<BoardView board={finished} stage={stageView(finished, null)} error={null} actions={{ onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) }} />);
     expect(row("2.1").querySelector("[data-state]")!.textContent).toBe("done ✓");
     expect(row("2.2").querySelector("[data-state]")!.textContent).toBe("waived");
     expect(row("2.1").querySelector("button[data-action=dispatch]")).toBeNull();
@@ -56,7 +56,7 @@ describe("BoardView actions", () => {
 
   it("disables Dispatch with the reason when the provider cannot take a task", () => {
     const all = { onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) };
-    render(<BoardView methodology="v4" board={board} stage={stageView(board, null)} error={null} actions={all} dispatchUnavailable="Ollama cannot start with a task." />);
+    render(<BoardView board={board} stage={stageView(board, null)} error={null} actions={all} dispatchUnavailable="Ollama cannot start with a task." />);
     const btn = row("1.2").querySelector("button[data-action=dispatch]") as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(btn.title).toBe("Ollama cannot start with a task.");
@@ -75,7 +75,7 @@ describe("BoardView actions", () => {
 
   it("shows a dispatched row as Dispatched, disabled, instead of Dispatch", () => {
     const all = { onOpen: vi.fn(), onDispatch: vi.fn(async () => {}) };
-    render(<BoardView methodology="v4" board={board} stage={stageView(board, null)} error={null} actions={all} dispatched={(v) => v.story.id === "1.2"} />);
+    render(<BoardView board={board} stage={stageView(board, null)} error={null} actions={all} dispatched={(v) => v.story.id === "1.2"} />);
     const done = row("1.2").querySelector("button[data-action=dispatched]") as HTMLButtonElement;
     expect(done.textContent).toBe("Dispatched");
     expect(done.disabled).toBe(true);

@@ -123,6 +123,6 @@ export const useBoardPanel = createBoardPanelStore({
   build: async (root, methodology) =>
     methodology === "v6"
       ? { kind: "v6", map: await buildV6Map(root, tauriFs) }
-      : { kind: "v4", board: await loadBoard(root, "v4", tauriFs) },
+      : { kind: "v4", board: await loadBoard(root, tauriFs) },
   stageFile: (root) => readStageFile(root, tauriFs),
 });

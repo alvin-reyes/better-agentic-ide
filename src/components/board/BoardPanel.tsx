@@ -144,7 +144,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       return <V6MapView map={map} error={error} actions={actions} dispatched={dispatched} dispatchUnavailable={taskUnsupportedReason(provider)} />;
     }
     if (methodology === "v4" && board) {
-      return <BoardView methodology="v4" board={board} stage={stageView(board, stageFile)} error={error} actions={actions} dispatched={dispatched} dispatchUnavailable={taskUnsupportedReason(provider)} />;
+      return <BoardView board={board} stage={stageView(board, stageFile)} error={error} actions={actions} dispatched={dispatched} dispatchUnavailable={taskUnsupportedReason(provider)} />;
     }
     return error ? <Empty><div role="alert">{error}</div></Empty> : <Empty>Loading…</Empty>;
   })();

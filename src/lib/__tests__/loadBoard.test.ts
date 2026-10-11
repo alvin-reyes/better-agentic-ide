@@ -44,7 +44,7 @@ describe("v4Inputs", () => {
 describe("loadBoard", () => {
   it("builds the same v4 board buildBoard gives for the gathered inputs", async () => {
     const fs = await v4Project();
-    const board = await loadBoard("/p", "v4", fs);
+    const board = await loadBoard("/p", fs);
     expect(board).toEqual(buildBoard(await v4Inputs("/p", fs)));
     expect(board.stories[0].state).toBe("done");
   });
@@ -65,11 +65,11 @@ describe("loadBoard with an unreadable file", () => {
   it("keeps an unreadable story on the board as unknown, says why, and does not count execution complete", async () => {
     const base = await v4Project();
     // Execution would be complete with 1.1 alone (done, behind a PASS gate).
-    expect(executionComplete((await loadBoard("/p", "v4", base)).stories)).toBe(true);
+    expect(executionComplete((await loadBoard("/p", base)).stories)).toBe(true);
 
     await base.writeText("/p/docs/stories/1.2.checkout.md", STORY("Done"));
     const fs = unreadable(base, ["/p/docs/stories/1.2.checkout.md"]);
-    const board = await loadBoard("/p", "v4", fs);
+    const board = await loadBoard("/p", fs);
     const row = board.stories.find((s) => s.story.file === "docs/stories/1.2.checkout.md");
     expect(row).toBeDefined();
     expect(row!.state).toBe("unknown");
@@ -80,7 +80,7 @@ describe("loadBoard with an unreadable file", () => {
   it("keeps an unreadable gate as an errored gate and says why", async () => {
     const base = await v4Project();
     const fs = unreadable(base, ["/p/docs/qa/gates/1.1-cart-total.yml"]);
-    const board = await loadBoard("/p", "v4", fs);
+    const board = await loadBoard("/p", fs);
     expect(board.problems).toEqual(["docs/qa/gates/1.1-cart-total.yml: could not be read: Error: permission denied"]);
     const gates = [...board.unmatchedGates, ...board.stories.flatMap((s) => (s.gate ? [s.gate] : []))];
     expect(gates.map((g) => g.file)).toContain("docs/qa/gates/1.1-cart-total.yml");
@@ -88,6 +88,6 @@ describe("loadBoard with an unreadable file", () => {
   });
 
   it("adds no problems when everything reads", async () => {
-    expect((await loadBoard("/p", "v4", await v4Project())).problems).toBeUndefined();
+    expect((await loadBoard("/p", await v4Project())).problems).toBeUndefined();
   });
 });
