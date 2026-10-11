@@ -29,7 +29,7 @@ There are two ways not to have BMAD in a project. Turn off **Set up every projec
 
 ### Keeping or switching
 
-The first time you open a project that already has BMAD from the New tab dialog, ADE asks once: *shop uses BMAD v4.* **Keep v4** (default) · **Switch to v6…** Press <kbd>Enter</kbd> to keep the version. Like the version question, this one has to be answered, and the folder isn't opened until it is. ADE doesn't ask that project again, and it never asks from a terminal `cd`. Projects ADE had set up before this question existed aren't asked at all. With **Set up every project I open** turned off, it isn't asked either.
+The first time you open a project that already has BMAD from the New tab dialog, ADE asks once: *shop uses BMAD v4.* **Keep v4** (default) · **Switch to v6…** Press <kbd>Enter</kbd> to keep the version. Like the version question, this one has to be answered, and the folder isn't opened until it is. ADE doesn't ask that project again, and it never asks from a terminal `cd`. A project ADE had set up before this question existed is asked too when it is on v4, the first time you open it from the New tab dialog after updating; one already on v6 isn't. A project you declined with **Undo** isn't asked: use the palette commands for it. With **Set up every project I open** turned off, it isn't asked either.
 
 You can switch a project at any time:
 

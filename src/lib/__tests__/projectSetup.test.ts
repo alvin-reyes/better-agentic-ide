@@ -49,7 +49,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { agentCatalog } from "../projectMethodology";
 import {
-  addAgent, addStackAgents, beginSwitch, bmadRootOf, detectOnDisk, foldersUpTo, hasBmad, isComplete, isKept, isSettingUp, isWithin, markKept, methodologyOf, migrateKept, normRoot, removeAgent,
+  addAgent, addStackAgents, beginSwitch, bmadRootOf, detectOnDisk, foldersUpTo, hasBmad, isComplete, isKept, isSettingUp, isWithin, markKept, methodologyOf, migrateKept, normRoot, reaskV4Projects, removeAgent,
   removedAgents, setUpProject, setupDeclined, setupRootOf, switchBlock, undoSetup, wasSetUp,
   type SetupStatus,
 } from "../projectSetup";
@@ -313,6 +313,44 @@ describe("the kept list", () => {
     localStorage.setItem("ade-project-setup-done", JSON.stringify(["/code/new"]));
     migrateKept();
     expect(isKept("/code/new")).toBe(false);
+  });
+
+  it("drops the v4 projects once, so each is asked to keep v4 or switch", async () => {
+    tauri.byDir = { "/code/four": "v4", "/code/six": "v6", "/code/none": null };
+    localStorage.setItem("ade-bmad-kept", JSON.stringify(["/code/four/", "/code/six", "/code/none"]));
+    await reaskV4Projects();
+    expect(kept()).toEqual(["/code/six", "/code/none"]);
+    // Once: a v4 project kept after that stays kept.
+    markKept("/code/four");
+    await reaskV4Projects();
+    expect(isKept("/code/four")).toBe(true);
+  });
+
+  it("leaves a project it couldn't check, and one kept while it was checking", async () => {
+    tauri.byDir = { "/code/four": "v4" };
+    localStorage.setItem("ade-bmad-kept", JSON.stringify(["/code/four", "/code/gone"]));
+    const invoke = vi.mocked((await import("@tauri-apps/api/core")).invoke);
+    const real = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (command, args) => {
+      if (command === "project_setup_status" && (args as { root: string }).root === "/code/gone") {
+        markKept("/code/answered");
+        throw new Error("no such folder");
+      }
+      return real(command, args);
+    });
+    try {
+      await reaskV4Projects();
+    } finally {
+      invoke.mockImplementation(real);
+    }
+    expect(kept()).toEqual(["/code/gone", "/code/answered"]);
+  });
+
+  it("re-asks v4 projects after the kept list is seeded, in the main window", () => {
+    const main = readFileSync(resolve(__dirname, "../../main.tsx"), "utf8");
+    const seeded = main.indexOf("migrateKept();");
+    expect(seeded).toBeGreaterThan(-1);
+    expect(main.indexOf("reaskV4Projects()", seeded)).toBeGreaterThan(seeded);
   });
 
   it("is migrated after the saved state is restored, in the main window", () => {
