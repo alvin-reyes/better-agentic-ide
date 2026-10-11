@@ -5,6 +5,7 @@ import type { BoardActions } from "../board/BoardView";
 import type { V6Map } from "../../lib/v6Map";
 import type { V6Doc } from "../../lib/v6Kinds";
 import { ticketView } from "../../lib/ticketView";
+import { parseGate } from "../../lib/bmadGates";
 import type { Ticket } from "../../lib/bmadTicketTree";
 
 const ticket = (id: string, status: string): Ticket => ({
@@ -102,5 +103,40 @@ describe("V6MapView", () => {
     renderMap(map({ problems: ["Initiative initiative-gone not found: _bmad-output/initiative-gone"] }));
     expect(screen.getByText("Needs attention")).toBeTruthy();
     expect(screen.getByText(/initiative-gone not found/)).toBeTruthy();
+  });
+
+  describe("a ticket's own status word", () => {
+    const row = (id: string) => document.querySelector(`[data-row="${id}"]`) as HTMLElement;
+    const gates = [
+      parseGate(".ade/gates/1.1.yml", 'story: "1.1"\ngate: "PASS"\nstatus_reason: "ok"\nupdated: "2026-10-10"\n'),
+      parseGate(".ade/gates/1.2.yml", 'story: "1.2"\ngate: "WAIVED"\nstatus_reason: "legacy"\nupdated: "2026-10-10"\n'),
+    ];
+    const withTickets = (...t: [string, string][]) =>
+      renderMap(map({ epics: [{ slug: "epic-cart", title: "Cart", refs: t.map(([id]) => id) }], tickets: t.map(([id, st]) => ticketView(ticket(id, st), gates)) }));
+
+    it("shows beside the state when it differs", () => {
+      withTickets(["1.3", "ready-for-dev"]);
+      expect(row("1.3").querySelector("[data-state]")!.textContent).toBe("draft");
+      expect(row("1.3").querySelector("[data-raw-status]")!.textContent).toBe("ready-for-dev");
+    });
+
+    it("is not repeated when it equals the state", () => {
+      withTickets(["1.3", "draft"]);
+      expect(row("1.3").querySelector("[data-raw-status]")).toBeNull();
+    });
+
+    it("is dropped on a passed or waived ticket", () => {
+      withTickets(["1.1", "done"], ["1.2", "built"]);
+      expect(row("1.1").querySelector("[data-state]")!.textContent).toBe("done ✓");
+      expect(row("1.1").querySelector("[data-raw-status]")).toBeNull();
+      expect(row("1.2").querySelector("[data-state]")!.textContent).toBe("waived");
+      expect(row("1.2").querySelector("[data-raw-status]")).toBeNull();
+    });
+
+    it("is kept on a claimed ticket", () => {
+      withTickets(["1.3", "done"]);
+      expect(row("1.3").querySelector("[data-state]")!.textContent).toBe("claimed");
+      expect(row("1.3").querySelector("[data-raw-status]")!.textContent).toBe("done");
+    });
   });
 });
