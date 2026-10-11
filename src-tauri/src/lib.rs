@@ -9,6 +9,7 @@ mod mcp;
 mod platform;
 mod projectsetup;
 mod pty;
+mod ptysink;
 mod state;
 mod subagent;
 mod sync;

@@ -26,7 +26,7 @@ impl PtyManager {
     }
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(tag = "type")]
 pub enum PtyEvent {
     #[serde(rename = "output")]
