@@ -126,7 +126,7 @@ export default function V6MapView({ map, error, actions, dispatched, dispatchUna
       {map.backlog.length > 0 && (
         <div style={section}>
           <div style={heading}>Backlog</div>
-          {map.backlog.map((v) => <BacklogRow key={v.story.id} v={v} onOpen={actions.onOpen} />)}
+          {map.backlog.map((v) => <BacklogRow key={v.story.file ?? v.story.id} v={v} onOpen={actions.onOpen} />)}
         </div>
       )}
       <GateProblems unmatchedGates={map.unmatchedGates} supersededGates={map.supersededGates} problems={map.problems} />

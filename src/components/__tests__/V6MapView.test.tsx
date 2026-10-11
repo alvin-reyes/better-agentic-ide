@@ -99,6 +99,15 @@ describe("V6MapView", () => {
     expect(actions.onOpen).toHaveBeenCalledWith("_bmad-output/backlog/bug-login-crash.md");
   });
 
+  it("shows backlog leaves with the same file name from different folders as separate rows, with no duplicate-key warning", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const bug = (folder: string): Ticket => ({ ...ticket("x", "draft"), id: "bug-crash.md", title: `Crash in ${folder}`, file: `_bmad-output/backlog/${folder}/bug-crash.md`, type: "bug" });
+    renderMap(map({ backlog: [ticketView(bug("epic-a"), []), ticketView(bug("epic-b"), [])] }));
+    expect(document.querySelectorAll('[data-backlog="bug-crash.md"]').length).toBe(2);
+    expect(error.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    error.mockRestore();
+  });
+
   it("names the initiative it could not find", () => {
     renderMap(map({ initiative: { title: "initiative-gone", folder: "initiative-gone" }, initiativeState: "missing" }));
     expect(screen.getByText("Initiative initiative-gone not found")).toBeTruthy();
