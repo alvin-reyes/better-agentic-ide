@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CLAUDE_MD_IMPORT_MARKER, STACK_AGENTS, STACK_LABELS, agentCatalog, type AgentEntry } from "../lib/projectMethodology";
-import { addAgent, hasBmad, isComplete, removeAgent, setupStatus, type SetupStatus } from "../lib/projectSetup";
+import { addAgent, hasBmad, isComplete, normRoot, removeAgent, setupStatus, type SetupStatus } from "../lib/projectSetup";
 import { askAndSetUp } from "../lib/methodologyPrompt";
+import { SWITCH_DONE_EVENT } from "../lib/bmadSwitch";
 
 interface Props {
   root: string | null;
@@ -33,6 +34,16 @@ export default function AgentsTab({ root, onNotice, onError }: Props) {
     }
   }, [root, catalog, onError]);
   useEffect(() => { void refresh(); }, [refresh]);
+  // A switch settles the BMAD question without going through "Set up now".
+  useEffect(() => {
+    if (!root) return;
+    const onDone = (e: Event) => {
+      const done = (e as CustomEvent<{ root?: string }>).detail;
+      if (done?.root && normRoot(done.root) === normRoot(root)) void refresh();
+    };
+    window.addEventListener(SWITCH_DONE_EVENT, onDone);
+    return () => window.removeEventListener(SWITCH_DONE_EVENT, onDone);
+  }, [root, refresh]);
 
   const suggested = useMemo(() => new Set((status?.stacks ?? []).flatMap((s) => STACK_AGENTS[s])), [status]);
 

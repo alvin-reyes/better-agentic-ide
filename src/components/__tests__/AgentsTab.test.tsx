@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 
 const tauri = vi.hoisted(() => ({
   byDir: {} as Record<string, "v4" | "v6" | null>,
@@ -43,6 +44,7 @@ import AgentsTab from "../AgentsTab";
 import IntegrationsPanel from "../IntegrationsPanel";
 import MethodologyPromptHost from "../MethodologyPrompt";
 import { __resetPromptForTests } from "../../lib/methodologyPrompt";
+import { SWITCH_DONE_EVENT } from "../../lib/bmadSwitch";
 
 const question = () => document.querySelector(".new-tab-ask")?.textContent ?? null;
 const renderTab = (root: string) =>
@@ -136,5 +138,32 @@ describe("the Project setup card", () => {
     expect(await screen.findByText("Incomplete")).toBeTruthy();
     expect(screen.getByText(/BMAD isn't installed/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Set up now" })).toBeTruthy();
+  });
+});
+
+describe("the Agents tab and a BMAD switch", () => {
+  const statusCalls = () => vi.mocked(invoke).mock.calls.filter(([c]) => c === "project_setup_status").length;
+
+  it("re-reads the project when its switch is done, and not for another project's", async () => {
+    renderTab("/code/shop");
+    await screen.findByRole("button", { name: "Set up now" });
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(0));
+    const before = statusCalls();
+    act(() => { window.dispatchEvent(new CustomEvent(SWITCH_DONE_EVENT, { detail: { root: "/code/other" } })); });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(statusCalls()).toBe(before);
+
+    act(() => { window.dispatchEvent(new CustomEvent(SWITCH_DONE_EVENT, { detail: { root: "/code/shop" } })); });
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(before));
+  });
+
+  it("stops listening when it unmounts", async () => {
+    const { unmount } = renderTab("/code/shop");
+    await waitFor(() => expect(statusCalls()).toBeGreaterThan(0));
+    unmount();
+    const before = statusCalls();
+    window.dispatchEvent(new CustomEvent(SWITCH_DONE_EVENT, { detail: { root: "/code/shop" } }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(statusCalls()).toBe(before);
   });
 });
