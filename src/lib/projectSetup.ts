@@ -26,6 +26,10 @@ export interface SetupReport {
   appendedImport: boolean;
   agents: number;
   bmadFiles: number;
+  /** AI attribution was turned off in .claude/settings.json. */
+  attributionOff?: boolean;
+  /** .claude/settings.json couldn't be updated; the rest of setup still ran. */
+  settingsError?: string | null;
 }
 
 export interface SetupResult {
@@ -258,9 +262,12 @@ export function summarize(r: SetupReport): string | null {
   const parts: string[] = [];
   if (r.bmadFiles) parts.push("BMAD");
   if (r.agents) parts.push(r.agents === 1 ? "1 agent" : `${r.agents} agents`);
-  const other = r.created.length - r.bmadFiles - r.agents;
+  // A settings file setup created is counted below, not as the methodology.
+  const settings = r.created.filter((p) => /[\\/]\.claude[\\/]settings\.json$/.test(p)).length;
+  const other = r.created.length - r.bmadFiles - r.agents - settings;
   if (other > 0) parts.push("the methodology");
   if (r.appendedImport) parts.push("a line in CLAUDE.md");
+  if (r.attributionOff) parts.push("settings that turn off AI attribution");
   if (!parts.length) return null;
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }

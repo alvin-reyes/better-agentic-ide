@@ -13,13 +13,15 @@ const nameOf = (root: string) => root.split(/[\\/]/).filter(Boolean).pop() ?? ro
 /** Show what a setup wrote, with Undo. */
 export function announceSetup(r: SetupResult, show: (t: GuardToast) => void, stackOnly = false) {
   const what = summarize(r.report);
-  if (!what) return;
+  const failed = r.report.settingsError ? `AI attribution is still on: ${r.report.settingsError}.` : "";
+  if (!what && !failed) return;
   const stacks = r.stacks.map((s) => STACK_LABELS[s]).join(", ");
+  const added = !what ? "" : stackOnly
+    ? `Added ${what} for it. Remove any in Integrations > Agents.`
+    : `Added ${what}${stacks ? ` (${stacks} project)` : ""}. Existing files were left as they were.`;
   show({
     title: stackOnly ? `${stacks} detected in ${nameOf(r.root)}` : `Set up ${nameOf(r.root)}`,
-    body: stackOnly
-      ? `Added ${what} for it. Remove any in Integrations > Agents.`
-      : `Added ${what}${stacks ? ` (${stacks} project)` : ""}. Existing files were left as they were.`,
+    body: [added, failed].filter(Boolean).join(" "),
     action: { label: "Undo", run: () => { void undoSetup(r); } },
   });
 }
