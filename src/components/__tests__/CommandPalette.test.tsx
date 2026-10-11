@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "bmad_switch_plan":
         return {
           from: "v4", to: args.to, archive: ".ade/archive/bmad-v4-2026-10-11",
-          moves: [], documents: [], leftovers: [], leftInPlace: [], dirty: null, archiveIgnored: null, blocked: null,
+          moves: [], documents: [], leftovers: [], leftInPlace: [], isGit: true, dirty: null, archiveIgnored: null, blocked: null,
         };
       case "project_setup_status":
         return {

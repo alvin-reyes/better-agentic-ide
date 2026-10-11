@@ -67,7 +67,9 @@ export interface SwitchPlan {
   documents: SwitchDocument[];
   leftovers: SwitchMove[];
   leftInPlace: SwitchNote[];
-  /** Null: git is missing or failed. */
+  /** False: the project isn't in a git repository, so there is nothing to say about git. */
+  isGit: boolean;
+  /** Null: git is missing or failed, or the project isn't in a repository. */
   dirty: boolean | null;
   archiveIgnored: boolean | null;
   blocked: string | null;

@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "project_setup_apply") return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
     if (command === "bmad_switch_plan") {
       tauri.plans += 1;
-      return { from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [], leftInPlace: [], dirty: null, archiveIgnored: null, blocked: null };
+      return { from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [], leftInPlace: [], isGit: true, dirty: null, archiveIgnored: null, blocked: null };
     }
     if (command === "project_setup_status") {
       return { isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: null };

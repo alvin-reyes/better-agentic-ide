@@ -481,7 +481,7 @@ describe("New Tab asking about a project whose switch is already being confirmed
 describe("a project that changes by another route while keep-or-switch is open", () => {
   const PLAN: SwitchPlan = {
     from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
-    leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+    leftInPlace: [], isGit: true, dirty: false, archiveIgnored: false, blocked: null,
   };
 
   it("has its question settled by a switch that finishes, from the question or the confirm step", async () => {
@@ -540,7 +540,7 @@ describe("a project that changes by another route while keep-or-switch is open",
 describe("another project's question while a switch is running in the confirm step", () => {
   const PLAN: SwitchPlan = {
     from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
-    leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+    leftInPlace: [], isGit: true, dirty: false, archiveIgnored: false, blocked: null,
   };
   const REFUSED = { kind: "blocked", reason: "A BMAD switch is running in old. Wait for it to finish." };
   const CONFIRM = { root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: true };

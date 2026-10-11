@@ -37,6 +37,7 @@ vi.mock("@tauri-apps/api/core", () => ({
           ],
           leftovers: [],
           leftInPlace: [],
+          isGit: true,
           dirty: false,
           archiveIgnored: false,
           blocked: null,
@@ -172,6 +173,7 @@ describe("SwitchConfirm", () => {
 
   it("gives the git notes: uncommitted changes, ignored paths, and whether the archive is ignored", async () => {
     tauri.plan = {
+      isGit: true,
       dirty: true,
       archiveIgnored: true,
       moves: [{ from: "_bmad-output", to: `${ARCHIVE}/_bmad-output`, files: 9, ignored: "all" }, { from: "_bmad", to: `${ARCHIVE}/_bmad`, files: 3, ignored: "some" }],
@@ -191,6 +193,7 @@ describe("SwitchConfirm", () => {
 
   it("marks as warnings what can't be got back: uncommitted changes, and rows git ignores", async () => {
     tauri.plan = {
+      isGit: true,
       dirty: true,
       moves: [{ from: "_bmad-output", to: `${ARCHIVE}/_bmad-output`, files: 9, ignored: "all" }, { from: "_bmad", to: `${ARCHIVE}/_bmad`, files: 3, ignored: "some" }],
       leftovers: [{ from: ".bmad-core", to: `${ARCHIVE}/leftovers-v4/.bmad-core`, files: 5, ignored: "none" }],
@@ -205,10 +208,17 @@ describe("SwitchConfirm", () => {
   });
 
   it("says Couldn't check git when git is missing, and nothing else about git", async () => {
-    tauri.plan = { dirty: null, archiveIgnored: null };
+    tauri.plan = { isGit: true, dirty: null, archiveIgnored: null };
     renderConfirm();
     await planned();
     expect(screen.getByRole("region", { name: "Git" }).textContent).toBe("GitCouldn't check git.");
+  });
+
+  it("says a project outside git is outside git, not that git couldn't be checked", async () => {
+    tauri.plan = { isGit: false, dirty: null, archiveIgnored: null };
+    renderConfirm();
+    await planned();
+    expect(screen.getByRole("region", { name: "Git" }).textContent).toBe("GitThis project isn't in a git repository.");
   });
 
   it("lists the panes and agents open in the project, and says to stop agents first", async () => {
@@ -449,7 +459,7 @@ describe("SwitchConfirm", () => {
   });
 
   it("says Couldn't check beside what is known when only one answer is missing", async () => {
-    tauri.plan = { dirty: true, archiveIgnored: null };
+    tauri.plan = { isGit: true, dirty: true, archiveIgnored: null };
     renderConfirm();
     await planned();
     const note = screen.getByRole("region", { name: "Git" }).textContent;

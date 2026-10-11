@@ -84,6 +84,7 @@ const PLAN: SwitchPlan = {
   documents: [],
   leftovers: [],
   leftInPlace: [],
+  isGit: true,
   dirty: false,
   archiveIgnored: false,
   blocked: null,

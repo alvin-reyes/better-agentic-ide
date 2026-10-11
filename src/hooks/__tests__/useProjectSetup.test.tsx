@@ -637,7 +637,7 @@ describe("a BMAD switch finishing while the question is open", () => {
   const dialogAsks = (root: string) => waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root, mode: "choose" }));
   const PLAN: SwitchPlan = {
     from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
-    leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+    leftInPlace: [], isGit: true, dirty: false, archiveIgnored: false, blocked: null,
   };
 
   it("withdraws the toast and ends its question, with no setup", async () => {

@@ -54,7 +54,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         return {
           from: "v4", to: args.to, archive: ".ade/archive/bmad-v4-2026-10-11",
           moves: [{ from: ".bmad-core", to: ".ade/archive/bmad-v4-2026-10-11/.bmad-core", files: 2, ignored: "none" }],
-          documents: [], leftovers: [], leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+          documents: [], leftovers: [], leftInPlace: [], isGit: true, dirty: false, archiveIgnored: false, blocked: null,
         };
       case "bmad_switch_apply":
         tauri.switches.push(args);
@@ -334,7 +334,7 @@ describe("a project that already has BMAD", () => {
   const isKeptNow = () => JSON.parse(localStorage.getItem("ade-bmad-kept") ?? "[]") as string[];
   const PLAN: SwitchPlan = {
     from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
-    leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+    leftInPlace: [], isGit: true, dirty: false, archiveIgnored: false, blocked: null,
   };
 
   beforeEach(() => {

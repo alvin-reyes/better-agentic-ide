@@ -46,6 +46,7 @@ function Moves({ moves }: { moves: SwitchMove[] }) {
 
 function GitNotes({ plan }: { plan: SwitchPlan }) {
   const ignored = [...new Set([...plan.moves, ...plan.leftovers].filter((m) => m.ignored !== "none").map((m) => m.from))];
+  if (!plan.isGit) return <p>This project isn't in a git repository.</p>;
   return (
     <>
       {(plan.dirty === null || plan.archiveIgnored === null) && <p>Couldn't check git.</p>}

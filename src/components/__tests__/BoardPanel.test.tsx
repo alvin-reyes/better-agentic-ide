@@ -31,7 +31,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (cmd === "watch_directory") return 1;
     if (cmd === "project_setup_apply") return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
     if (cmd === "bmad_switch_plan") {
-      return { from: "v4", to: args.to, archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [], leftInPlace: [], dirty: null, archiveIgnored: null, blocked: null };
+      return { from: "v4", to: args.to, archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [], leftInPlace: [], isGit: true, dirty: null, archiveIgnored: null, blocked: null };
     }
     return null;
   }),
