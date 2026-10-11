@@ -198,6 +198,8 @@ describe("BMAD: Switch to the other version", () => {
       fireEvent.click(await screen.findByText("BMAD: Switch to v6…"));
       await waitFor(() => expect(seen.failed).toHaveBeenCalledOnce());
       expect(seen.why()).toBe("A BMAD switch is running in other. Wait for it to finish.");
+      // Not "Project setup": nothing was being set up.
+      expect((seen.failed.mock.calls[0][0] as CustomEvent<{ title?: string }>).detail.title).toBe("BMAD switch");
       expect(request()).toMatchObject({ root: "/code/other" });
     } finally {
       end();
@@ -216,6 +218,8 @@ describe("BMAD: Switch to the other version", () => {
     expect(seen.why()).not.toContain("Project setup failed");
     // With the journal, so the toast can open it.
     expect((seen.failed.mock.calls[0][0] as CustomEvent<{ archiveFile?: string }>).detail.archiveFile).toBe("/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
+    // The setup command's refusal keeps the setup title.
+    expect((seen.failed.mock.calls[0][0] as CustomEvent<{ title?: string }>).detail.title).toBeUndefined();
     seen.stop();
   });
 });

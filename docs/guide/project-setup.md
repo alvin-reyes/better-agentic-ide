@@ -36,7 +36,7 @@ You can switch a project at any time:
 - *BMAD: Switch to v6…* (or *v4*) in the command palette, for the project the active terminal is in;
 - **Switch to BMAD v6…** (or *v4*) at the bottom of the stage board.
 
-A switch never happens on that click. A dialog first shows what it would do: the archive folder, every path that moves with its file count (a count of 50,000 or more shows as "50,000+"), your documents, anything left in place, what git makes of it, and the terminals and agents open in the project. **Archive and switch** runs it. **Back** (when the dialog came from the keep-or-switch question) or **Cancel** leaves the project as it was. Stop agents working in the project before you switch: they may keep writing into folders that have moved.
+A switch never happens on that click. A dialog first shows what it would do: the archive folder, every path that moves with its file count (a count of 50,000 or more shows as "50,000+"), your documents, anything left in place, what git makes of it, and the terminals and agents open in the project. **Archive and switch** runs it. **Back** (when the dialog came from the keep-or-switch question) or **Cancel** leaves the project as it was. Commit your work before you switch, so the move is a change of its own in git. Stop agents working in the project before you switch: they may keep writing into folders that have moved.
 
 If the dialog can't offer the switch, it says why instead, for example when an earlier switch didn't finish or a location in your config can't be moved. ADE never moves your own entries in `.claude/agents`, `.claude/skills` or `.claude/commands`: if a config points a moved path at one of those folders, the switch is refused and names the path.
 
@@ -68,14 +68,17 @@ Agents are told the archive is read-only history. The rule is added to `.ade/rul
 If a step fails, ADE puts everything back and removes the archive.
 
 - **It puts back** each moved path, but only when nothing has taken its place; and `.claude/settings.json` and `.ade/methodology`, but only if they are still as the switch left them.
-- **It leaves, and reports,** anything it can't put back: a file that is locked, something written into a folder that had moved, or a file changed since. The error names each one and `ARCHIVE.md` lists them. `ARCHIVE.md` then reads `status: incomplete`, the stage board shows a warning that links to it, and ADE neither sets the project up nor switches it until you resolve it.
+- **It leaves, and reports,** anything it can't put back: a file that is locked, something written into a folder that had moved, or a file changed since. The error names each one and `ARCHIVE.md` lists them. `ARCHIVE.md` then reads `status: incomplete`, the stage board shows a warning that links to it, and ADE neither sets the project up nor switches it until you resolve it. When you open the project or a terminal is in it, a toast with an **Open ARCHIVE.md** button says so; from a terminal it shows once per session.
 - **If it can't record the rollback** in `ARCHIVE.md` (a full disk, for example), it undoes nothing and says so. `ARCHIVE.md` then still describes the project as it is, at `status: in-progress`, and you follow it by hand.
 
-To resolve a switch that didn't finish, use the words `ARCHIVE.md` puts beside each path: *pending*, *moving*, *moved* or *moved back*. Remove any files the new version wrote at the old paths. Move the paths marked *moved* back to their places; one marked *moving* may be at either place, so check both. Then set `status: abandoned`. A switch cut short by a crash is left at `status: in-progress`, and `ARCHIVE.md` says what to do for each phase.
+To resolve a switch that didn't finish, put the project right by hand and then set `status: abandoned` in `ARCHIVE.md`. You make this edit yourself: the permission rule keeps Claude Code's file-editing tools out of the archive, so an agent can't make it for you.
+
+- At `status: incomplete`, use the words `ARCHIVE.md` puts beside each path: *pending*, *moving*, *moved* or *moved back*. Remove any files the new version wrote at the old paths. Move the paths marked *moved* back to their places; one marked *moving* may be at either place, so check both.
+- At `status: in-progress` (a switch cut short by a crash, or a rollback that couldn't be recorded), follow the steps `ARCHIVE.md` gives for its `phase` instead.
 
 ### Going back
 
-Switch again: *BMAD: Switch to v4…* archives v6 the same way and sets up v4 fresh. To have your old v4 files back as they were, move the paths from the first archive to their places. Before you move a path back, move whatever is at its place out of the way, including the fresh `.bmad-core/`, `.claude/commands/BMad/`, role files in `.claude/agents/` and `.ade/methodology` that the second switch set up: moving a folder onto one that exists merges them and replaces files with the same name. A document folder you ticked may have a new folder of the same name by now, so check it too. After `git add -A`, git usually shows tracked files as renames. ADE has no button that restores an archive.
+Switch again: *BMAD: Switch to v4…* archives v6 the same way and sets up v4 fresh. To have your old v4 files back as they were, move the paths from the first archive to their places. Before you move a path back, move whatever is at its place out of the way, including the fresh `.bmad-core/`, `.claude/commands/BMad/`, role files in `.claude/agents/` and `.ade/methodology` that the second switch set up: onto a folder that exists, a shell `mv` puts the folder inside the one that is there, and a file manager merges them and replaces files with the same name. Either way, move what is there out of the way first. A document folder you ticked may have a new folder of the same name by now, so check it too. After `git add -A`, git usually shows tracked files as renames. ADE has no button that restores an archive.
 
 ## When it runs
 

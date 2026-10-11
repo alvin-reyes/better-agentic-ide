@@ -5,6 +5,7 @@ import {
 } from "../lib/bmadSwitch";
 import type { Methodology } from "../lib/projectSetup";
 import { useEscapeToClose } from "./useEscapeToClose";
+import { useFocusTrap } from "./useFocusTrap";
 
 /** What the new version puts in the project. */
 const INSTALLS: Record<Methodology, string> = {
@@ -95,6 +96,7 @@ export default function SwitchConfirm({ root, to, leaveLabel, onLeave, onDone }:
   // Confirming is a deliberate step, so unlike the two questions it has a way
   // back. Not while the switch runs: there is nothing to go back to mid-move.
   useEscapeToClose(() => { if (!running) onLeave(); });
+  useFocusTrap(dialog);
   // The button that was pressed was disabled while the switch ran, which takes
   // focus from it: after a failure the keyboard would be nowhere.
   useEffect(() => { if (error) dialog.current?.focus(); }, [error]);

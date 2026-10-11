@@ -42,7 +42,7 @@ const store = vi.hoisted(() => ({ methodology: null as "v4" | "v6" | null }));
 vi.mock("../../stores/boardPanelStore", async () => {
   const { create } = await import("zustand");
   const useBoardPanel = create(() => ({
-    root: "/p", methodology: store.methodology, board: null, map: null, stageFile: null, error: null, loading: false,
+    root: "/p", methodology: store.methodology, board: null, map: null, stageFile: null, error: null, loading: false, builds: 0,
     show: vi.fn(), refresh: vi.fn(async () => {}), scheduleRefresh: vi.fn(),
   }));
   return { useBoardPanel };
@@ -572,6 +572,17 @@ describe("BoardPanel and a BMAD switch", () => {
     act(() => end());
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("drops the warning after the next rebuild once the switch is resolved, in a project with no BMAD", async () => {
+    disk.pending = [pendingEntry("incomplete")];
+    useBoardPanel.setState({ root: "/p", methodology: null, board: null, map: null, error: null, loading: false, builds: 1 });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await screen.findByRole("alert");
+    // `status: abandoned`, set by hand. The rebuild that follows finds no BMAD, as before: no board, no map.
+    disk.pending = [];
+    act(() => { useBoardPanel.setState({ builds: 2 }); });
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 
   it("shows no warning when nothing is pending", async () => {

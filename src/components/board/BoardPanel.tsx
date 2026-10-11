@@ -59,7 +59,7 @@ function tellRefusal(e: unknown) {
 export default function BoardPanel({ cwd, onClose }: Props) {
   // undefined while the pane's project is being resolved; null when it has none.
   const [root, setRoot] = useState<string | null | undefined>(undefined);
-  const { root: storeRoot, methodology, board, map, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
+  const { root: storeRoot, methodology, board, map, stageFile, error, loading, builds, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
   const [switchError, setSwitchError] = useState<string | null>(null);
   // One project's refusal never shows under another project's link.
@@ -134,7 +134,9 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   }, [root, refresh]);
 
   // A switch that didn't finish. It asks again after each rebuild: resolving
-  // one by hand is an edit to ARCHIVE.md, which the watcher (rightly) doesn't report.
+  // one by hand is an edit to ARCHIVE.md, which the watcher (rightly) doesn't
+  // report. On the rebuild's own count, not on what it built: a project with
+  // no BMAD rebuilds to the same nothing, and its warning would never go.
   useEffect(() => {
     let live = true;
     if (!root || switching) { setPending(null); return; }
@@ -143,7 +145,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
       () => { if (live) setPending({ root, list: [], failed: true }); },
     );
     return () => { live = false; };
-  }, [root, switching, board, map]);
+  }, [root, switching, builds]);
 
   const actions: BoardActions = useMemo(() => ({
     onOpen: (path) => { if (root) openFileFromTerminal(joinPath(root, path)); },
@@ -256,7 +258,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
             onClick={() => {
               setSwitchError(null);
               // Opens the confirm step; nothing moves until that is confirmed.
-              switchOnDemand(root).catch((e) => { setSwitchError(String(e)); tellRefusal(e); });
+              switchOnDemand(root).catch((e) => setSwitchError(String(e)));
             }}
           >
             Switch to BMAD {otherVersion(methodology)}…

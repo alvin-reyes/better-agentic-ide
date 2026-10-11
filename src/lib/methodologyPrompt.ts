@@ -59,7 +59,7 @@ export type SwitchAnswer =
   | { kind: "setUp"; done: SetupResult }
   | { kind: "dismissed" }
   /** Not asked: another project's switch is running in the dialog. `reason` is for the person. */
-  | { kind: "blocked"; reason: string; archiveFile?: string };
+  | { kind: "blocked"; reason: string };
 
 let waiting: { root: string; promise: Promise<MethodologyAnswer>; resolve: (a: MethodologyAnswer) => void } | null = null;
 let deciding: { root: string; promise: Promise<SwitchAnswer>; resolve: (a: SwitchAnswer) => void } | null = null;
@@ -172,7 +172,7 @@ export async function askMethodology(root: string, opts: { ask?: AskUi } = {}): 
  * folder: that is refused before the question, which has no way out.
  */
 export async function askAndSetUp(root: string): Promise<SetupResult | null> {
-  // A string, as Tauri's own rejections are: callers show it as it is.
+  // Thrown as a Refusal: callers show its reason as it is.
   if (!isSetupCandidate(normRoot(root))) throw new Refusal(NOT_A_PROJECT);
   const answer = await askMethodology(root);
   // Thrown as a Refusal: callers show its reason as it is.
@@ -203,6 +203,14 @@ export class Refusal {
 
 /** Whether `error` is a refusal from `askAndSetUp` or `switchOnDemand`. */
 export const isRefusal = (error: unknown): error is Refusal => error instanceof Refusal;
+
+/**
+ * The command palette's next state when it is toggled. It closes as ever, but
+ * never opens over a question that must be answered or over the confirm step:
+ * its commands would start a second setup or switch beneath the dialog. New
+ * Tab is held back the same way (`requestNewTab`).
+ */
+export const togglePalette = (open: boolean): boolean => (open ? false : !useMethodologyPrompt.getState().request);
 
 /** "/code/shop" → "shop", on either separator. */
 export const projectName = (root: string) => root.split(/[\\/]/).filter(Boolean).pop() ?? root;
@@ -263,7 +271,7 @@ export async function switchOnDemand(root: string): Promise<SwitchAnswer> {
   if (!from) throw new Refusal(NO_BMAD);
   const answer = await askSwitch(at, from);
   // Thrown as a Refusal: callers show its reason as it is.
-  if (answer.kind === "blocked") throw new Refusal(answer.reason, answer.archiveFile);
+  if (answer.kind === "blocked") throw new Refusal(answer.reason);
   return answer;
 }
 

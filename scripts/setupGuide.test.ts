@@ -171,6 +171,30 @@ describe("the project setup guide", () => {
     expect(read("src/components/board/BoardPanel.tsx")).toContain("A BMAD switch didn't finish here.");
   });
 
+  it("says the person resolves an unfinished switch, and how for each status", () => {
+    const text = section();
+    // Editing ARCHIVE.md is the person's: the deny rule keeps Claude Code's tools out.
+    expect(text).toMatch(/You make this edit yourself: the permission rule keeps Claude Code's file-editing tools out of the archive/);
+    expect(read("src-tauri/src/usage.rs")).toContain("ARCHIVE_DENY_RULE");
+    expect(text).toMatch(/At `status: incomplete`, use the words `ARCHIVE\.md` puts beside each path/);
+    expect(text).toMatch(/At `status: in-progress`[^\n]*follow the steps `ARCHIVE\.md` gives for its `phase` instead/);
+    const rust = read("src-tauri/src/bmadswitch.rs");
+    expect(rust).toContain("Look at `phase` above:");
+    expect(rust).toContain("so ignore `phase` and use each move's state in the list above");
+    // What tells the person after a restart.
+    expect(text).toMatch(/a toast with an \*\*Open ARCHIVE\.md\*\* button/);
+    expect(read("src/hooks/useProjectSetup.ts")).toContain('label: "Open ARCHIVE.md"');
+  });
+
+  it("suggests committing before a switch, where the dialog is described", () => {
+    expect(section()).toMatch(/\*\*Archive and switch\*\* runs it\.[^\n]*Commit your work before you switch/);
+  });
+
+  it("says what a shell mv does to a folder that is already there", () => {
+    expect(section()).toMatch(/a shell `mv` puts the folder inside the one that is there, and a file manager merges them and replaces files with the same name/);
+    expect(section()).toMatch(/Either way, move what is there out of the way first/);
+  });
+
   it("says how to go back, and promises no restore button", () => {
     expect(section()).toContain("### Going back");
     expect(section()).toMatch(/git add -A/);

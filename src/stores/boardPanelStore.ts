@@ -22,6 +22,11 @@ export interface BoardPanelState {
   stageFile: string | null;
   error: string | null;
   loading: boolean;
+  /**
+   * How many rebuilds have finished. What a rebuild can't see in the board (a
+   * project with no BMAD rebuilds to the same nothing) is asked again on this.
+   */
+  builds: number;
   show(root: string | null): void;
   refresh(): Promise<void>;
   scheduleRefresh(): void;
@@ -66,7 +71,7 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
         if (get().root !== root) return;
         set({ error: e instanceof Error ? e.message : String(e) });
       } finally {
-        if (get().root === root) set({ loading: false });
+        if (get().root === root) set({ loading: false, builds: get().builds + 1 });
       }
     }
 
@@ -99,6 +104,7 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
       stageFile: null,
       error: null,
       loading: false,
+      builds: 0,
       show(root) {
         if (timer) clearTimeout(timer);
         timer = null;

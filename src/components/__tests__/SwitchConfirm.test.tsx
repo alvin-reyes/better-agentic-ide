@@ -476,6 +476,47 @@ describe("SwitchConfirm", () => {
     expect(sent.documents.map((d) => d.ticked)).toEqual([true, true]);
   });
 
+  it("keeps Tab inside the dialog, wrapping at either end", async () => {
+    renderConfirm();
+    await planned();
+    await waitFor(() => expect(confirm().disabled).toBe(false));
+    const first = screen.getByRole("checkbox", { name: /docs\/prd\.md/ });
+    confirm().focus();
+    expect(fireEvent.keyDown(confirm(), { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(first);
+    expect(fireEvent.keyDown(first, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm());
+    // Backwards from the dialog itself, where focus starts.
+    dialog().focus();
+    expect(fireEvent.keyDown(dialog(), { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(confirm());
+    // In between, the browser's own move stays inside.
+    first.focus();
+    expect(fireEvent.keyDown(first, { key: "Tab" })).toBe(true);
+    confirm().focus();
+    expect(fireEvent.keyDown(confirm(), { key: "Tab", shiftKey: true })).toBe(true);
+  });
+
+  it("wraps at Back while the switch is blocked: a disabled button is not a stop", async () => {
+    tauri.plan = { blocked: "An earlier switch here didn't finish.", documents: [] };
+    renderConfirm();
+    await planned();
+    const back = screen.getByRole("button", { name: "Back" });
+    back.focus();
+    expect(fireEvent.keyDown(back, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(back);
+  });
+
+  it("leaves Tab to whatever outside the dialog holds focus", async () => {
+    renderConfirm();
+    await planned();
+    const outside = document.body.appendChild(document.createElement("input"));
+    outside.focus();
+    expect(fireEvent.keyDown(outside, { key: "Tab" })).toBe(true);
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+
   it("focuses the dialog when it opens", async () => {
     renderConfirm();
     await planned();

@@ -96,6 +96,30 @@ describe("MethodologyPrompt, choose mode", () => {
     expect(dialog().getAttribute("aria-modal")).toBe("true");
   });
 
+  it("keeps Tab and Shift+Tab on the dialog, which has no other stop, and answers nothing", () => {
+    const onAnswer = vi.fn();
+    render(<MethodologyPrompt root="/code/shop" onAnswer={onAnswer} />);
+    expect(document.activeElement).toBe(dialog());
+    expect(fireEvent.keyDown(dialog(), { key: "Tab" })).toBe(false);
+    expect(fireEvent.keyDown(dialog(), { key: "Tab", shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(dialog());
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it("takes focus back on Tab when it had fallen to the page", () => {
+    render(<MethodologyPrompt root="/code/shop" onAnswer={vi.fn()} />);
+    dialog().blur();
+    expect(document.activeElement).toBe(document.body);
+    expect(fireEvent.keyDown(document.body, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(dialog());
+  });
+
+  it("lets go of Tab once it is gone", () => {
+    const { unmount } = render(<MethodologyPrompt root="/code/shop" onAnswer={vi.fn()} />);
+    unmount();
+    expect(fireEvent.keyDown(document.body, { key: "Tab" })).toBe(true);
+  });
+
   it("ignores Escape", () => {
     const onAnswer = vi.fn();
     render(<MethodologyPrompt root="/code/shop" onAnswer={onAnswer} />);
@@ -209,6 +233,17 @@ describe("MethodologyPrompt, keep-or-switch mode", () => {
     cleanup();
     render(<MethodologyPrompt root="/code/shop" onAnswer={vi.fn()} />);
     expect(screen.getByRole("listbox").getAttribute("aria-label")).not.toBe(dialog().getAttribute("aria-label"));
+  });
+
+  it("keeps Tab on the dialog", () => {
+    const onKeep = vi.fn();
+    const onSwitch = vi.fn();
+    render(<MethodologyPrompt mode="keep" root="/code/shop" methodology="v4" onKeep={onKeep} onSwitch={onSwitch} />);
+    const keep = screen.getByRole("dialog", { name: "BMAD version" });
+    expect(fireEvent.keyDown(keep, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(keep);
+    expect(onKeep).not.toHaveBeenCalled();
+    expect(onSwitch).not.toHaveBeenCalled();
   });
 
   it("must be answered: no close button, and Escape and a click outside do nothing", () => {

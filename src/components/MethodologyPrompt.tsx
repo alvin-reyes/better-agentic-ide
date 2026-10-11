@@ -6,6 +6,7 @@ import { otherVersion } from "../lib/bmadSwitch";
 import type { Methodology } from "../lib/projectSetup";
 import SwitchConfirm from "./SwitchConfirm";
 import { useEscapeToClose } from "./useEscapeToClose";
+import { useFocusTrap } from "./useFocusTrap";
 
 const VERSIONS: { methodology: Methodology; icon: string; title: string; detail: string }[] = [
   { methodology: "v6", icon: "▣", title: "BMAD v6 (default)", detail: "Skills, _bmad/ and the runtime — the current BMAD" },
@@ -77,6 +78,8 @@ export function MethodologyPrompt(props: Props) {
   // The question must be answered. Registered anyway so that, as the top of
   // the stack, it keeps Escape from closing a panel beneath it.
   useEscapeToClose(noop);
+  // Nor does Tab leave it: the dialog is modal, and has no control but itself.
+  useFocusTrap(dialog);
 
   return (
     <div

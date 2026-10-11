@@ -155,7 +155,8 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
                     throw isRefusal(err) ? String(err) : `BMAD switch failed: ${err}`;
                   }
                 })
-                .catch((why) => window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: String(why) } })));
+                // Its own title: nothing was being set up.
+                .catch((why) => window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: String(why), title: "BMAD switch" } })));
             },
           }]
         : []),

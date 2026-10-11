@@ -11,7 +11,7 @@ import { SWITCH_DONE_EVENT, type SwitchDone } from "./lib/bmadSwitch";
 import { writePty } from "./lib/terminalCommands";
 import Toast from "./components/Toast";
 import MethodologyPromptHost from "./components/MethodologyPrompt";
-import { useMethodologyPrompt } from "./lib/methodologyPrompt";
+import { togglePalette, useMethodologyPrompt } from "./lib/methodologyPrompt";
 import { hideSplash } from "./lib/splash";
 import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
@@ -295,7 +295,8 @@ export default function App() {
     return () => { cancelled = true; window.clearInterval(id); };
   }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
 
-  const toggleCommandPalette = useCallback(() => setPaletteOpen((prev) => !prev), []);
+  // Not over the BMAD version question or the switch's confirm step.
+  const toggleCommandPalette = useCallback(() => setPaletteOpen(togglePalette), []);
 
   const toggleScratchpad = useCallback(() => {
     const sp = scratchpadRef.current;

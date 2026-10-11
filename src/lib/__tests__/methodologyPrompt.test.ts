@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const tauri = vi.hoisted(() => ({
@@ -35,7 +37,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   __resetPromptForTests, askAndSetUp, askKeepOrSwitch, askMethodology, askSwitch, dismissPrompts, keepVersion, leaveConfirm,
-  isRefusal, projectName, settlePrompt, startSwitch, switchOnDemand, useMethodologyPrompt,
+  isRefusal, projectName, settlePrompt, startSwitch, switchOnDemand, togglePalette, useMethodologyPrompt,
   type MethodologyAnswer,
 } from "../methodologyPrompt";
 import { runSwitch, type SwitchPlan } from "../bmadSwitch";
@@ -225,6 +227,36 @@ describe("New Tab while a question is open", () => {
     requestNewTab();
     expect(requested.mock.calls.length + useTabStore.getState().tabs.length - before).toBe(1);
     window.removeEventListener("request-new-tab", requested);
+  });
+});
+
+describe("the command palette while a question is open", () => {
+  it("doesn't open over a question that must be answered, and opens again once it is", async () => {
+    expect(togglePalette(false)).toBe(true);
+    void askMethodology("/code/shop");
+    await asked("/code/shop");
+    expect(togglePalette(false)).toBe(false);
+    settlePrompt({ kind: "chosen", methodology: "v6", asked: true });
+    expect(togglePalette(false)).toBe(true);
+  });
+
+  it("doesn't open over keep-or-switch or the confirm step", () => {
+    useMethodologyPrompt.setState({ request: { root: "/code/shop", mode: "keep", methodology: "v4" } });
+    expect(togglePalette(false)).toBe(false);
+    useMethodologyPrompt.setState({ request: { root: "/code/shop", mode: "confirm", from: "v4", to: "v6", back: false } });
+    expect(togglePalette(false)).toBe(false);
+  });
+
+  it("still closes", () => {
+    useMethodologyPrompt.setState({ request: { root: "/code/shop", mode: "keep", methodology: "v4" } });
+    expect(togglePalette(true)).toBe(false);
+    useMethodologyPrompt.setState({ request: null });
+    expect(togglePalette(true)).toBe(false);
+  });
+
+  it("is what the app's shortcut runs", () => {
+    const app = readFileSync(resolve(__dirname, "../../App.tsx"), "utf8");
+    expect(app).toContain("const toggleCommandPalette = useCallback(() => setPaletteOpen(togglePalette), []);");
   });
 });
 
