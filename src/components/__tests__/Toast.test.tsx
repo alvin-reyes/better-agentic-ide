@@ -5,7 +5,7 @@ const terminal = vi.hoisted(() => ({ sendToActiveTerminal: vi.fn(async (_command
 vi.mock("../../lib/terminalCommands", () => terminal);
 
 import Toast from "../Toast";
-import { toastActions, toastLifetime, type GuardToast } from "../../hooks/useContextGuard";
+import { toastActions, toastLifetime, withdrawToast, type GuardToast } from "../../hooks/useContextGuard";
 
 beforeEach(() => terminal.sendToActiveTerminal.mockClear());
 
@@ -30,20 +30,39 @@ describe("toastLifetime", () => {
   });
 });
 
+describe("withdrawToast", () => {
+  const question: GuardToast = { title: "Set up shop with BMAD?", body: "b", sticky: true, key: "setup-question:/code/shop" };
+
+  it("takes down the toast it names", () => {
+    expect(withdrawToast(question, "setup-question:/code/shop")).toBeNull();
+  });
+
+  it("leaves a different toast on screen", () => {
+    const finished: GuardToast = { title: "Agent finished", body: "Done." };
+    expect(withdrawToast(finished, "setup-question:/code/shop")).toBe(finished);
+    const other: GuardToast = { ...question, key: "setup-question:/code/other" };
+    expect(withdrawToast(other, "setup-question:/code/shop")).toBe(other);
+  });
+
+  it("has nothing to do when no toast is up", () => {
+    expect(withdrawToast(null, "setup-question:/code/shop")).toBeNull();
+  });
+});
+
 describe("Toast", () => {
   const ask = (runs: Record<string, () => void>): GuardToast => ({
     title: "Set up shop with BMAD?",
     body: "Existing files are left as they were.",
     actions: [
-      { label: "v6", run: runs.v6 },
-      { label: "v4", run: runs.v4 },
-      { label: "Not now", run: runs.notNow },
+      { label: "One", run: runs.one },
+      { label: "Two", run: runs.two },
+      { label: "Three", run: runs.three },
     ],
   });
 
   it("shows every action as a button, in order", () => {
     render(<Toast toast={ask({})} onDismiss={vi.fn()} />);
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["v6", "v4", "Not now"]);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["One", "Two", "Three"]);
   });
 
   it("is not dismissed by a click on its body when it has actions", () => {
@@ -55,13 +74,13 @@ describe("Toast", () => {
   });
 
   it("runs the action clicked, only that one, then dismisses", () => {
-    const runs = { v6: vi.fn(), v4: vi.fn(), notNow: vi.fn() };
+    const runs = { one: vi.fn(), two: vi.fn(), three: vi.fn() };
     const onDismiss = vi.fn();
     render(<Toast toast={ask(runs)} onDismiss={onDismiss} />);
-    fireEvent.click(screen.getByRole("button", { name: "v4" }));
-    expect(runs.v4).toHaveBeenCalledOnce();
-    expect(runs.v6).not.toHaveBeenCalled();
-    expect(runs.notNow).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Two" }));
+    expect(runs.two).toHaveBeenCalledOnce();
+    expect(runs.one).not.toHaveBeenCalled();
+    expect(runs.three).not.toHaveBeenCalled();
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 

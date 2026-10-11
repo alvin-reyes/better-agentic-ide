@@ -233,6 +233,18 @@ export function isComplete(s: SetupStatus): boolean {
 
 const inFlight = new Map<string, Promise<SetupResult>>();
 
+type SetUpListener = (result: SetupResult, methodology: Methodology) => void;
+const setUpListeners = new Set<SetUpListener>();
+
+/**
+ * Hear of every setup that succeeds, whichever entry point ran it: a question
+ * still open about that project is over. Returns the way to stop listening.
+ */
+export function onProjectSetUp(listener: SetUpListener): () => void {
+  setUpListeners.add(listener);
+  return () => { setUpListeners.delete(listener); };
+}
+
 /** A setup for this project is running right now. */
 export function isSettingUp(root: string): boolean {
   return inFlight.has(normRoot(root));
@@ -260,7 +272,12 @@ export function setUpProject(root: string, methodology?: Methodology, stacks?: S
     const report = await apply(at, files, chosen);
     markSetUp(at, true);
     writeList(DECLINED_KEY, at, false);
-    return { root: at, report, files, stacks: detected };
+    const result: SetupResult = { root: at, report, files, stacks: detected };
+    for (const listener of [...setUpListeners]) {
+      // The setup is done whatever a listener makes of it.
+      try { listener(result, chosen); } catch (e) { console.warn("A project-setup listener failed", e); }
+    }
+    return result;
   })().finally(() => inFlight.delete(at));
   inFlight.set(at, job);
   return job;

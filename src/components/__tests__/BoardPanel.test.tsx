@@ -236,6 +236,8 @@ describe("BoardPanel", () => {
     useBoardPanel.setState({ root: null, methodology: null, board: null, error: null, loading: false });
     render(<BoardPanel cwd="/home/u" onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("No project in this pane")).toBeTruthy());
+    // So there is nothing to click that could set a home folder up.
+    expect(screen.queryByRole("button", { name: "Set up now" })).toBeNull();
   });
 
   it("falls back to the repository root when nothing is set up", async () => {

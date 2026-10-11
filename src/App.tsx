@@ -10,10 +10,11 @@ import type { SetupResult } from "./lib/projectSetup";
 import { writePty } from "./lib/terminalCommands";
 import Toast from "./components/Toast";
 import MethodologyPromptHost from "./components/MethodologyPrompt";
+import { useMethodologyPrompt } from "./lib/methodologyPrompt";
 import { hideSplash } from "./lib/splash";
 import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
-import { useContextGuard, toastLifetime, type GuardToast } from "./hooks/useContextGuard";
+import { useContextGuard, toastLifetime, withdrawToast, type GuardToast } from "./hooks/useContextGuard";
 
 // Lazy-load heavy components for faster startup
 const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
@@ -166,8 +167,10 @@ export default function App() {
     const ms = toastLifetime(t);
     toastTimer.current = ms === null ? null : window.setTimeout(() => setToast(null), ms);
   }, []);
+  // Only a sticky toast is withdrawn, and it has no timer to clear.
+  const withdraw = useCallback((key: string) => setToast((current) => withdrawToast(current, key)), []);
   useContextGuard(activeCwd, showToast);
-  useProjectSetup(activeCwd, showToast);
+  useProjectSetup(activeCwd, showToast, withdraw);
   // Setups run elsewhere (new-tab dialog, command palette) report here.
   useEffect(() => {
     const onSetup = (e: Event) => announceSetup((e as CustomEvent<SetupResult>).detail, showToast);
@@ -218,7 +221,8 @@ export default function App() {
       ["open-secrets", () => setIntegrations("secrets")],
       ["open-antislop", () => setIntegrations("antislop")],
       ["open-agents", () => setIntegrations("agents")],
-      ["request-new-tab", () => setNewTabOpen(true)],
+      // requestNewTab holds this back while the BMAD version question is open; so does this.
+      ["request-new-tab", () => { if (!useMethodologyPrompt.getState().request) setNewTabOpen(true); }],
       ["toggle-shortcuts", toggleShortcuts],
       ["toggle-tab-switcher", toggleTabSwitcher],
       ["toggle-contracts", toggleContracts],

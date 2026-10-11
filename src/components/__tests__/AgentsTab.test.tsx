@@ -93,6 +93,23 @@ describe("Set up now on the Agents tab", () => {
   });
 });
 
+describe("Set up now in a folder that isn't a project", () => {
+  it("says so, asks nothing and writes nothing", async () => {
+    const onError = vi.fn();
+    render(
+      <>
+        <AgentsTab root="/Users/testuser" onNotice={vi.fn()} onError={onError} />
+        <MethodologyPromptHost />
+      </>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Set up now" }));
+    await waitFor(() => expect(onError).toHaveBeenCalledWith("This folder isn't a project."));
+    expect(question()).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(tauri.applies).toHaveLength(0);
+  });
+});
+
 describe("the Agents tab's project", () => {
   it("is the BMAD project the pane is in, not the repository above it", async () => {
     tauri.roots = { "/code/mono/app/src": "/code/mono", "/code/mono/app": "/code/mono" };

@@ -3,15 +3,21 @@
  * has BMAD keeps its version without a question, and one with neither is asked.
  */
 import { create } from "zustand";
-import { detectOnDisk, normRoot, setUpProject, type Methodology, type SetupResult } from "./projectSetup";
+import {
+  detectOnDisk, isSetupCandidate, normRoot, onProjectSetUp, setUpProject, type Methodology, type SetupResult,
+} from "./projectSetup";
 
 /**
  * `chosen` is the only answer that sets a project up. Callers treat every
  * other kind as "leave it", so a new kind needs no change in them.
  */
 export type MethodologyAnswer =
-  /** `asked`: a person picked it, rather than the project already being on it. */
-  | { kind: "chosen"; methodology: Methodology; asked: boolean }
+  /**
+   * `asked`: a person picked it, rather than the project already being on it.
+   * `done`: the project was set up on it while the question was open, so there
+   * is nothing left to set up.
+   */
+  | { kind: "chosen"; methodology: Methodology; asked: boolean; done?: SetupResult }
   | { kind: "dismissed" };
 
 /** A way to put the question to a person. The default is the dialog. */
@@ -41,6 +47,22 @@ export function settlePrompt(answer: MethodologyAnswer) {
   open?.resolve(answer);
 }
 
+// A project set up by another route (the cd hook's toast) while the dialog
+// asks about it has its version: the dialog closes instead of offering the other.
+onProjectSetUp((done, methodology) => {
+  if (waiting?.root === done.root) settlePrompt({ kind: "chosen", methodology, asked: false, done });
+});
+
+/**
+ * The version to set up on after `answer`. One that a person picked is checked
+ * against the disk again: the question can stay open a long time, and a project
+ * that gained BMAD meanwhile keeps the version it has.
+ */
+export async function versionToSetUp(root: string, answer: Extract<MethodologyAnswer, { kind: "chosen" }>): Promise<Methodology> {
+  if (!answer.asked) return answer.methodology;
+  return (await detectOnDisk(normRoot(root)).catch(() => null)) ?? answer.methodology;
+}
+
 /**
  * The version to set `root` up on: the one on disk, or the person's answer.
  * The question must be answered; `dismissed` only means another project's
@@ -61,14 +83,23 @@ export async function askMethodology(root: string, opts: { ask?: AskUi } = {}): 
 /**
  * Ask, then set up: what the palette's command and both "Set up now" buttons
  * run. Null when no version was chosen.
+ *
+ * These work on whatever folder the active pane is in, which can be the home
+ * folder: that is refused before the question, which has no way out.
  */
 export async function askAndSetUp(root: string): Promise<SetupResult | null> {
+  // A string, as Tauri's own rejections are: callers show it as it is.
+  if (!isSetupCandidate(normRoot(root))) throw NOT_A_PROJECT;
   const answer = await askMethodology(root);
   if (answer.kind !== "chosen") return null;
-  const result = await setUpProject(root, answer.methodology);
+  // Set up, and announced, by whoever got there first.
+  if (answer.done) return answer.done;
+  const result = await setUpProject(root, await versionToSetUp(root, answer));
   window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result }));
   return result;
 }
+
+const NOT_A_PROJECT = "This folder isn't a project.";
 
 /** "/code/shop" → "shop", on either separator. */
 export const projectName = (root: string) => root.split(/[\\/]/).filter(Boolean).pop() ?? root;

@@ -1,14 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
-import { askMethodology } from "./methodologyPrompt";
+import { askMethodology, useMethodologyPrompt, versionToSetUp } from "./methodologyPrompt";
 import { bmadRootOf, isSetupCandidate, normRoot, setUpProject, setupDeclined } from "./projectSetup";
 import { useTabStore } from "../stores/tabStore";
 
 const KEY = "ade-recent-projects";
 const MAX = 8;
 
-/** Open a new tab: ask "terminal or project?" first unless that's turned off. */
+/**
+ * Open a new tab: ask "terminal or project?" first unless that's turned off.
+ * Not while the BMAD version question is open: it has to be answered first, and
+ * a second dialog beneath it could open the same folder twice.
+ */
 export function requestNewTab() {
+  if (useMethodologyPrompt.getState().request) return;
   if (useSettingsStore.getState().askOnNewTab) window.dispatchEvent(new CustomEvent("request-new-tab"));
   else useTabStore.getState().addTab();
 }
@@ -63,9 +68,11 @@ export async function openProjectTab(path: string): Promise<void> {
   if (answer && answer.kind !== "chosen") return;
   rememberProject(path);
   useTabStore.getState().addTab(undefined, path);
-  if (!root || !answer) return;
+  // `done`: set up, and announced, by another route while the question was open.
+  if (!root || !answer || answer.done) return;
   // Not awaited: the terminal is usable while the files are written.
-  setUpProject(root, answer.methodology)
+  versionToSetUp(root, answer)
+    .then((methodology) => setUpProject(root, methodology))
     .then((result) => window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result })))
     .catch((e) => window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: `Project setup failed: ${e}` } })));
 }

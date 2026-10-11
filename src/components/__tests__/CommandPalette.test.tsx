@@ -98,6 +98,20 @@ describe("Project: Set up BMAD, methodology and agents", () => {
     expect(tauri.applies).toHaveLength(0);
   });
 
+  it("says a home folder isn't a project, asks nothing and writes nothing", async () => {
+    pane.cwd = "/Users/testuser";
+    const failed = vi.fn();
+    window.addEventListener("project-setup-failed", failed);
+    renderPalette();
+    fireEvent.click(screen.getByText(COMMAND));
+    await waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toBe("Project setup failed: This folder isn't a project.");
+    expect(question()).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(tauri.applies).toHaveLength(0);
+    window.removeEventListener("project-setup-failed", failed);
+  });
+
   it("says why when the active tab has no folder", async () => {
     pane.cwd = null;
     const failed = vi.fn();

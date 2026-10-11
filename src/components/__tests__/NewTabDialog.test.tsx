@@ -142,6 +142,21 @@ describe("the BMAD version question", () => {
     expect(question()).toBeNull();
   });
 
+  it("sets up on the version the project gained while the question was open, not the one answered", async () => {
+    picker.picked = NEWAPP;
+    renderDialog();
+    const before = tabs();
+
+    open(/Open project/);
+    await waitFor(() => expect(question()).toBe(ASK_NEWAPP));
+    // Another route put v4 there in the meantime.
+    tauri.byDir = { [NEWAPP]: "v4" };
+    fireEvent.keyDown(prompt(), { key: "Enter" });
+    await waitFor(() => expect(tabs()).toBe(before + 1));
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    expect(lastApply().methodology).toBe("v4");
+  });
+
   it("opens nothing when the question is superseded", async () => {
     picker.picked = NEWAPP;
     renderDialog();

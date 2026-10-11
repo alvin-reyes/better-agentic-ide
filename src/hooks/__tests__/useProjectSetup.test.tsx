@@ -35,14 +35,18 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { __resetSetupQuestionsForTests, useProjectSetup } from "../useProjectSetup";
-import type { GuardToast } from "../useContextGuard";
-import { __resetPromptForTests, settlePrompt, useMethodologyPrompt } from "../../lib/methodologyPrompt";
+import { withdrawToast, type GuardToast } from "../useContextGuard";
+import { __resetPromptForTests, askAndSetUp, settlePrompt, useMethodologyPrompt } from "../../lib/methodologyPrompt";
 import { openProjectTab } from "../../lib/newTab";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useTabStore } from "../../stores/tabStore";
 
-const show = vi.fn<(t: GuardToast) => void>();
+/** The app's one toast, as App keeps it: the last shown, until it is withdrawn by its key. */
+const screen = { toast: null as GuardToast | null };
+const show = vi.fn<(t: GuardToast) => void>((t) => { screen.toast = t; });
+const withdraw = vi.fn<(key: string) => void>((key) => { screen.toast = withdrawToast(screen.toast, key); });
 const mount = (cwd: string | null) =>
-  renderHook(({ cwd }: { cwd: string | null }) => useProjectSetup(cwd, show), { initialProps: { cwd } });
+  renderHook(({ cwd }: { cwd: string | null }) => useProjectSetup(cwd, show, withdraw), { initialProps: { cwd } });
 const toasts = () => show.mock.calls.map(([t]) => t);
 /** The toasts that ask which version: all of them, or those about one project. */
 const questions = (name?: string) =>
@@ -59,6 +63,8 @@ beforeEach(() => {
   tauri.applyError = null;
   tauri.applyGate = null;
   show.mockClear();
+  withdraw.mockClear();
+  screen.toast = null;
   __resetPromptForTests();
   __resetSetupQuestionsForTests();
   useSettingsStore.getState().setAutoProjectSetup(true);
@@ -167,6 +173,16 @@ describe("a project with no BMAD", () => {
     expect(tauri.applies).toHaveLength(0);
   });
 
+  it("is set up on the version it gained while the toast was up, not the one clicked", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(questions("shop")).toHaveLength(1));
+    // Installed by hand in the meantime.
+    tauri.byDir = { "/code/shop": "v4" };
+    act(() => questions("shop")[0].actions![0].run!());
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    expect(tauri.applies[0]).toMatchObject({ root: "/code/shop", methodology: "v4" });
+  });
+
   it("says so when the setup it was asked for fails", async () => {
     tauri.applyError = "disk full";
     mount("/code/shop");
@@ -197,6 +213,134 @@ describe("a project with no BMAD", () => {
     await settle();
     expect(show).not.toHaveBeenCalled();
     expect(tauri.applies).toHaveLength(0);
+  });
+});
+
+describe("the question toast leaves with its project", () => {
+  const SHOP = "Set up shop with BMAD?";
+  /** A project set up long ago: the hook shows nothing for it. */
+  const setUpBefore = (root: string) => localStorage.setItem("ade-project-setup-done", JSON.stringify([root]));
+
+  it("is withdrawn when the terminal moves to another project, and shown again on return", async () => {
+    setUpBefore("/code/other");
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+
+    hook.rerender({ cwd: "/code/other" });
+    expect(screen.toast).toBeNull();
+    await settle();
+    expect(screen.toast).toBeNull();
+
+    hook.rerender({ cwd: "/code/shop" });
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+    // Still one question: the copy that came back answers it, once.
+    act(() => screen.toast!.actions![1].run!());
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    expect(tauri.applies[0]).toMatchObject({ root: "/code/shop", methodology: "v4" });
+  });
+
+  it("is withdrawn when the pane has no folder any more", async () => {
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+    hook.rerender({ cwd: null });
+    expect(screen.toast).toBeNull();
+  });
+
+  it("is withdrawn when automatic setup is turned off, and shown again when it is turned back on", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+
+    act(() => useSettingsStore.getState().setAutoProjectSetup(false));
+    expect(screen.toast).toBeNull();
+    await settle();
+    expect(screen.toast).toBeNull();
+    expect(tauri.applies).toHaveLength(0);
+
+    act(() => useSettingsStore.getState().setAutoProjectSetup(true));
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+  });
+
+  it("does not take a different toast off the screen", async () => {
+    setUpBefore("/code/other");
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+    const finished: GuardToast = { title: "Agent finished", body: "Done." };
+    show(finished);
+
+    hook.rerender({ cwd: "/code/other" });
+    await settle();
+    expect(screen.toast).toBe(finished);
+  });
+
+  it("is not shown by a run the terminal has already left", async () => {
+    setUpBefore("/code/other");
+    const hook = mount("/code/shop");
+    hook.rerender({ cwd: "/code/other" });
+    await settle();
+    expect(questions("shop")).toHaveLength(0);
+    expect(screen.toast).toBeNull();
+  });
+});
+
+describe("the toast and the dialog asking about one project", () => {
+  const dialogAsks = (root: string) => waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root }));
+
+  it("the toast's answer closes the dialog, and the project is set up once, on that version", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(questions("shop")).toHaveLength(1));
+    // Set up now, or the palette, for the same project.
+    const fromDialog = askAndSetUp("/code/shop");
+    await dialogAsks("/code/shop");
+
+    act(() => questions("shop")[0].actions![1].run!());
+    await waitFor(() => expect(useMethodologyPrompt.getState().request).toBeNull());
+    expect((await fromDialog)?.root).toBe("/code/shop");
+    await settle();
+    expect(tauri.applies.map((a) => a.methodology)).toEqual(["v4"]);
+  });
+
+  it("the toast's answer lets New Tab open the folder, with no second setup", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(questions("shop")).toHaveLength(1));
+    const before = useTabStore.getState().tabs.length;
+    const opened = openProjectTab("/code/shop");
+    await dialogAsks("/code/shop");
+    expect(useTabStore.getState().tabs).toHaveLength(before);
+
+    act(() => questions("shop")[0].actions![1].run!());
+    await opened;
+    expect(useTabStore.getState().tabs).toHaveLength(before + 1);
+    await settle();
+    expect(tauri.applies.map((a) => a.methodology)).toEqual(["v4"]);
+  });
+
+  it("the dialog's answer withdraws the toast, and a copy of it clicked afterwards installs nothing", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe("Set up shop with BMAD?"));
+    const stale = screen.toast!;
+    const fromDialog = askAndSetUp("/code/shop");
+    await dialogAsks("/code/shop");
+
+    act(() => settlePrompt({ kind: "chosen", methodology: "v6", asked: true }));
+    await fromDialog;
+    expect(screen.toast).toBeNull();
+    expect(withdraw).toHaveBeenCalledWith(stale.key);
+
+    act(() => stale.actions![1].run!());
+    await settle();
+    expect(tauri.applies.map((a) => a.methodology)).toEqual(["v6"]);
+  });
+
+  it("the dialog's answer does not take a different toast off the screen", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(questions("shop")).toHaveLength(1));
+    const finished: GuardToast = { title: "Agent finished", body: "Done." };
+    show(finished);
+    const fromDialog = askAndSetUp("/code/shop");
+    await dialogAsks("/code/shop");
+    act(() => settlePrompt({ kind: "chosen", methodology: "v6", asked: true }));
+    await fromDialog;
+    expect(screen.toast).toBe(finished);
   });
 });
 
