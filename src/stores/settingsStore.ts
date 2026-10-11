@@ -362,6 +362,8 @@ interface Settings {
   gpuRendering: boolean;
   /** Ask "terminal or project?" when opening a new tab. */
   askOnNewTab: boolean;
+  /** Print the ADE logo and version at the top of a new terminal. */
+  showBanner: boolean;
   /** Set up every project (BMAD, methodology, agents) when it's opened. */
   autoProjectSetup: boolean;
 }
@@ -397,6 +399,7 @@ interface SettingsStore extends Settings {
   setContextGuard: (patch: Partial<ContextGuard>) => void;
   setShowShortcutBar: (show: boolean) => void;
   setAskOnNewTab: (ask: boolean) => void;
+  setShowBanner: (show: boolean) => void;
   setAutoProjectSetup: (on: boolean) => void;
   setGpuRendering: (on: boolean) => void;
   getActiveTheme: () => ThemeColors;
@@ -433,6 +436,7 @@ const defaults: Settings = {
   showShortcutBar: false,
   gpuRendering: true,
   askOnNewTab: true,
+  showBanner: true,
   autoProjectSetup: true,
 };
 
@@ -505,6 +509,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setContextGuard: (patch) => save({ contextGuard: { ...get().contextGuard, ...patch } }),
     setShowShortcutBar: (showShortcutBar) => save({ showShortcutBar }),
     setAskOnNewTab: (askOnNewTab) => save({ askOnNewTab }),
+    setShowBanner: (showBanner) => save({ showBanner }),
     setAutoProjectSetup: (autoProjectSetup) => save({ autoProjectSetup }),
     setGpuRendering: (gpuRendering) => save({ gpuRendering }),
 

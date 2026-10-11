@@ -7,10 +7,12 @@ import { registerFileLinks } from "../lib/terminalFileLinks";
 import { isAppShortcut } from "../lib/shortcuts";
 import { openFileFromTerminal } from "../lib/openFile";
 import { writePty } from "../lib/terminalCommands";
+import { bannerLines, bannerWidth } from "../lib/banner";
 import { SearchAddon } from "@xterm/addon-search";
 import { ImageAddon } from "@xterm/addon-image";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -336,6 +338,13 @@ function getTerminalOptions() {
   };
 }
 
+// The running app's version, asked of Tauri once. Null when it can't be read:
+// the banner then leaves the version out rather than show a stale one.
+let appVersion: Promise<string | null> | null = null;
+function readAppVersion(): Promise<string | null> {
+  return (appVersion ??= getVersion().catch(() => null));
+}
+
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, initialCwd?: string | null, serializedBuffer?: string): Promise<TerminalInstance> {
   const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
 
@@ -343,6 +352,14 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 
   const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };
   instances.set(paneId, inst);
+
+  // A fresh tab (not one restored from its saved scrollback) opens with the
+  // banner, written before the shell starts so its prompt follows it.
+  if (!serializedBuffer && useSettingsStore.getState().showBanner && (term.cols || 80) >= bannerWidth()) {
+    const version = await readAppVersion();
+    if (instances.get(paneId) !== inst) return inst; // closed meanwhile
+    for (const line of bannerLines(version)) term.writeln(line);
+  }
 
   try {
     const ptyId = await invoke<number>("create_pty", {

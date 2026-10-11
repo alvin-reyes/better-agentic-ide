@@ -611,6 +611,18 @@ export default function SettingsPanel() {
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                 <input
                   type="checkbox"
+                  checked={store.showBanner}
+                  onChange={(e) => store.setShowBanner(e.target.checked)}
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Show the ADE logo and version at the top of a new terminal
+                </span>
+              </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
                   checked={store.autoProjectSetup}
                   onChange={(e) => store.setAutoProjectSetup(e.target.checked)}
                   style={{ accentColor: "var(--accent)" }}
