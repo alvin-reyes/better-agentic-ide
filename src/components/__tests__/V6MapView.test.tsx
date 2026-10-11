@@ -99,6 +99,23 @@ describe("V6MapView", () => {
     expect(actions.onOpen).toHaveBeenCalledWith("_bmad-output/backlog/bug-login-crash.md");
   });
 
+  it("names the initiative it could not find", () => {
+    renderMap(map({ initiative: { title: "initiative-gone", folder: "initiative-gone" }, initiativeState: "missing" }));
+    expect(screen.getByText("Initiative initiative-gone not found")).toBeTruthy();
+  });
+
+  it("shows same-named specs from different places as separate rows, with no duplicate-key warning", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderMap(map({ docs: { analysis: [], implementation: [], validation: [], planning: [
+      doc("spec", "Spec", "api", "present", "_bmad-output/initiative-shop/spec-api/spec-api.md"),
+      doc("spec", "Spec", "cart/api", "present", "_bmad-output/initiative-shop/epic-cart/spec-api/spec-api.md"),
+    ] } }));
+    expect(document.querySelectorAll('[data-doc="spec"]').length).toBe(2);
+    expect(screen.getByText("cart/api")).toBeTruthy();
+    expect(error.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    error.mockRestore();
+  });
+
   it("lists problems under Needs attention", () => {
     renderMap(map({ problems: ["Initiative initiative-gone not found: _bmad-output/initiative-gone"] }));
     expect(screen.getByText("Needs attention")).toBeTruthy();

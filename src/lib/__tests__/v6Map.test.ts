@@ -43,8 +43,51 @@ describe("buildV6Map", () => {
     await write(fs, `${I}/epic-cart/spec-checkout/spec-checkout.md`, "# spec\n");
     await write(fs, `${I}/epic-cart/epic-cart-retrospective.md`, "---\nverdict: accepted\n---\n");
     const map = await buildV6Map("/p", fs);
-    expect(map.docs.planning.map((d) => [d.kind, d.name])).toEqual([["spec", "checkout"]]);
+    expect(map.docs.planning.map((d) => [d.kind, d.name])).toEqual([["spec", "cart/checkout"]]);
     expect(map.docs.validation.map((d) => [d.kind, d.status])).toEqual([["retrospective", "accepted"]]);
+  });
+
+  it("tells same-named specs at the top and in an epic apart", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", tree);
+    await write(fs, `${I}/spec-api/spec-api.md`, "# top\n");
+    await write(fs, `${I}/epic-cart/spec-api/spec-api.md`, "# epic\n");
+    const specs = (await buildV6Map("/p", fs)).docs.planning.filter((d) => d.kind === "spec");
+    expect(specs.map((d) => d.name).sort()).toEqual(["api", "cart/api"]);
+    expect(new Set(specs.map((d) => d.path)).size).toBe(2);
+  });
+
+  it("a doc folder that cannot be listed is a problem, not a failure", async () => {
+    const mem = memFs();
+    await seedV6Tree(mem, "/p", tree);
+    await write(mem, `${I}/prd-shop/prd-shop.md`, "---\nstatus: draft\n---\n");
+    await write(mem, `${I}/brief-shop/brief-shop.md`, "---\nstatus: complete\n---\n");
+    const fs: Fs = { ...mem, list: async (p) => { if (p.endsWith("/prd-shop")) throw new Error("EACCES"); return mem.list(p); } };
+    const map = await buildV6Map("/p", fs);
+    expect(map.docs.analysis.map((d) => d.status)).toEqual(["complete"]);
+    expect(map.docs.planning.map((d) => [d.kind, d.path, d.status])).toEqual([["prd", null, "unreadable status"]]);
+    expect(map.problems).toContain("_bmad-output/initiative-shop/prd-shop could not be read: EACCES");
+  });
+
+  it("an epic folder that cannot be listed is a problem, not a failure", async () => {
+    const mem = memFs();
+    await seedV6Tree(mem, "/p", tree);
+    await write(mem, `${I}/epic-cart/spec-x/spec-x.md`, "# s\n");
+    let calls = 0; // the ticket tree lists the epic folder first; the map lists it again
+    const fs: Fs = { ...mem, list: async (p) => { if (p.endsWith("/epic-cart") && ++calls > 1) throw new Error("EIO"); return mem.list(p); } };
+    const map = await buildV6Map("/p", fs);
+    expect(map.initiativeState).toBe("active");
+    expect(map.problems).toContain("_bmad-output/initiative-shop/epic-cart could not be read: EIO");
+  });
+
+  it("an initiative folder that exists but cannot be listed is not called missing", async () => {
+    const mem = memFs();
+    await seedV6Tree(mem, "/p", tree);
+    const fs: Fs = { ...mem, list: async (p) => { if (p.endsWith("/initiative-shop")) throw new Error("EACCES"); return mem.list(p); } };
+    const map = await buildV6Map("/p", fs);
+    expect(map.initiativeState).toBe("active");
+    expect(map.problems).toContain("_bmad-output/initiative-shop could not be read: EACCES");
+    expect(map.problems.some((p) => p.includes("not found"))).toBe(false);
   });
 
   it("collects loose work outside the initiative, skipping backlog, inbox and initiative folders", async () => {
@@ -77,6 +120,7 @@ describe("buildV6Map", () => {
     await fs.writeText("/p/_bmad/config.toml", '[core]\nproject_name = "p"\noutput_folder = "{project-root}/_bmad-output"\nactive_initiative = "initiative-gone"\n');
     const map = await buildV6Map("/p", fs);
     expect(map.initiativeState).toBe("missing");
+    expect(map.initiative).toEqual({ title: "initiative-gone", folder: "initiative-gone" });
     expect(map.problems).toEqual(["Initiative initiative-gone not found: _bmad-output/initiative-gone"]);
   });
 

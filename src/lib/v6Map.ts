@@ -8,8 +8,8 @@ import type { Gate } from "./bmadGates";
 import type { StoryView } from "./storyState";
 import { v6Tickets } from "./v6Tickets";
 import {
-  classifyFolder, isDirectory,readFolderDoc, readPlanFile, readRetrospective, relativeTo,
-  type DocResult, type V6Doc, type V6Phase,
+  classifyFolder, listFolder, readFolderDoc, readPlanFile, readRetrospective, relativeTo,
+  type DocResult, type Listing, type V6Doc, type V6Phase,
 } from "./v6Kinds";
 
 export interface V6Map {
@@ -31,14 +31,15 @@ export interface V6Map {
 const byName = (a: V6Doc, b: V6Doc) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name);
 
 /**
- * Every doc and loose plan directly in `dir`, by kind. One level only: a doc
- * folder is probed for its main and status files, never walked, so a huge
- * `.working/` or `imports/` costs nothing. A symlinked folder is read like
- * any other at this depth and never followed further.
+ * Every doc and loose plan directly in `dir` (already listed as `names`), by
+ * kind. One level only: a doc folder is listed for its main and status files,
+ * never walked, so a huge `.working/` or `imports/` costs nothing. A symlinked
+ * folder is read like any other at this depth and never followed further.
+ * A folder that cannot be listed is a problem beside the others.
  */
-async function scanFolder(projectRoot: string, dir: string, skip: (name: string) => boolean, fs: Fs): Promise<{ found: { phase: V6Phase; r: DocResult }[] }> {
+async function scanFolder(projectRoot: string, dir: string, names: string[], skip: (name: string) => boolean, fs: Fs): Promise<{ found: { phase: V6Phase; r: DocResult }[] }> {
   const found: { phase: V6Phase; r: DocResult }[] = [];
-  for (const name of (await fs.list(dir)).sort()) {
+  for (const name of [...names].sort()) {
     if (skip(name)) continue;
     const abs = joinPath(dir, name);
     if (/^plan-.+\.md$/.test(name)) {
@@ -48,10 +49,17 @@ async function scanFolder(projectRoot: string, dir: string, skip: (name: string)
       found.push({ phase: "implementation", r: { doc: { kind: "deferred", label: "Deferred work", name: "", path: relativeTo(projectRoot, abs), status: "present" }, problem: null } });
     } else {
       const kind = classifyFolder(name);
-      if (kind && (await isDirectory(abs, fs))) found.push({ phase: kind.phase, r: await readFolderDoc(projectRoot, abs, kind, fs) });
+      const r = kind ? await readFolderDoc(projectRoot, abs, kind, fs) : null;
+      if (kind && r) found.push({ phase: kind.phase, r });
     }
   }
   return { found };
+}
+
+/** Why a folder is unusable: null when it is simply absent (or a file), else the read error. */
+async function unreadable(path: string, listing: Listing, fs: Fs): Promise<string | null> {
+  if (listing.names !== null || listing.isFile) return null;
+  return (await fs.exists(path)) ? listing.error : null;
 }
 
 async function initiativeTitle(folder: string, name: string, fs: Fs): Promise<string> {
@@ -85,12 +93,18 @@ export async function buildV6Map(root: string, fs: Fs): Promise<V6Map> {
   let initiative: V6Map["initiative"] = null;
   let initiativeState: V6Map["initiativeState"] = "none";
   const folder = name ? normalizePath(joinPath(out, name)) : null;
+  let initiativeNames: string[] | null = null;
   if (name && folder) {
-    if (await isDirectory(folder, fs)) {
+    const listing = await listFolder(folder, fs);
+    const failed = await unreadable(folder, listing, fs);
+    if (listing.names !== null || failed !== null) {
       initiativeState = "active";
+      initiativeNames = listing.names;
       initiative = { title: await initiativeTitle(folder, name, fs), folder: name };
+      if (failed !== null) problems.push(`${relativeTo(projectRoot, folder)} could not be read: ${failed}`);
     } else {
       initiativeState = "missing";
+      initiative = { title: name, folder: name };
       problems.push(`Initiative ${name} not found: ${relativeTo(projectRoot, folder)}`);
     }
   }
@@ -99,15 +113,22 @@ export async function buildV6Map(root: string, fs: Fs): Promise<V6Map> {
   problems.push(...t.problems);
 
   if (initiativeState === "active" && folder) {
-    for (const { phase, r } of (await scanFolder(projectRoot, folder, () => false, fs)).found) add(phase, r);
+    for (const { phase, r } of (await scanFolder(projectRoot, folder, initiativeNames ?? [], () => false, fs)).found) add(phase, r);
     // Specs can sit inside the epic they specify; each epic may have a retrospective.
     for (const e of t.epics) {
       const epicFolder = joinPath(folder, e.slug);
-      if (!(await isDirectory(epicFolder, fs))) continue;
-      for (const n of (await fs.list(epicFolder)).filter((n) => n.startsWith("spec-")).sort()) {
+      const listing = await listFolder(epicFolder, fs);
+      if (listing.names === null) {
+        const failed = await unreadable(epicFolder, listing, fs);
+        if (failed !== null) problems.push(`${relativeTo(projectRoot, epicFolder)} could not be read: ${failed}`);
+        continue;
+      }
+      // Named by epic, so `spec-api/` here and in another epic are told apart.
+      const epicName = e.slug.replace(/^epic-/, "");
+      for (const n of listing.names.filter((n) => n.startsWith("spec-")).sort()) {
         const kind = classifyFolder(n);
-        const abs = joinPath(epicFolder, n);
-        if (kind && (await isDirectory(abs, fs))) add("planning", await readFolderDoc(projectRoot, abs, kind, fs));
+        const r = kind ? await readFolderDoc(projectRoot, joinPath(epicFolder, n), kind, fs) : null;
+        if (r) add("planning", { ...r, doc: { ...r.doc, name: `${epicName}/${r.doc.name}` } });
       }
       const retro = await readRetrospective(projectRoot, epicFolder, fs);
       if (retro) add("validation", retro);
@@ -116,9 +137,12 @@ export async function buildV6Map(root: string, fs: Fs): Promise<V6Map> {
 
   const loose: V6Doc[] = [];
   let backlog: StoryView[] = [];
-  if (await isDirectory(out, fs)) {
+  const outListing = await listFolder(out, fs);
+  const outFailed = await unreadable(out, outListing, fs);
+  if (outFailed !== null) problems.push(`${relativeTo(projectRoot, out)} could not be read: ${outFailed}`);
+  if (outListing.names !== null) {
     const skip = (n: string) => n === "backlog" || n === "inbox" || n.startsWith("initiative-") || n === name;
-    for (const { phase, r } of (await scanFolder(projectRoot, out, skip, fs)).found) add(phase, r, loose);
+    for (const { phase, r } of (await scanFolder(projectRoot, out, outListing.names, skip, fs)).found) add(phase, r, loose);
     try {
       const tree = await readBacklogTree(projectRoot, fs);
       // No gates: a backlog ref is a file name, which `.ade/gates/` cannot key.

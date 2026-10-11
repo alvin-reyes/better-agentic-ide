@@ -28,6 +28,6 @@ describe("readFrontmatter", () => {
   });
 
   it("accepts CRLF line endings and a byte order mark", () => {
-    expect(readFrontmatter("﻿---\r\nstatus: complete\r\n---\r\n")).toEqual({ status: "complete" });
+    expect(readFrontmatter("\uFEFF---\r\nstatus: complete\r\n---\r\n")).toEqual({ status: "complete" });
   });
 });

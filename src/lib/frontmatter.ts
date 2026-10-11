@@ -10,7 +10,7 @@
  * frontmatter or body.
  */
 export function readFrontmatter(text: string): Record<string, string> | null {
-  const lines = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").split("\n");
+  const lines = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").split("\n");
   if (lines[0]?.trimEnd() !== "---") return {};
   const end = lines.findIndex((l, i) => i > 0 && l.trimEnd() === "---");
   if (end === -1) return null;

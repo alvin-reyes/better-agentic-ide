@@ -14,6 +14,9 @@ export interface V6MapViewProps {
 
 const link = { background: "none", border: 0, padding: 0, color: "var(--accent)", cursor: "pointer", font: "inherit" } as const;
 
+/** A doc's path is unique; a doc with no main file falls back to kind and name. */
+const docKey = (d: V6Doc) => d.path ?? `${d.kind}:${d.name}`;
+
 function DocRow({ doc, onOpen }: { doc: V6Doc; onOpen(path: string): void }) {
   return (
     <div data-doc={doc.kind} style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
@@ -38,10 +41,10 @@ function Phase({ phase, docs, onOpen, children }: { phase: V6Phase; docs: V6Doc[
       {kinds.map((k) => {
         const mine = docs.filter((d) => d.kind === k.kind);
         return mine.length > 0
-          ? mine.map((d) => <DocRow key={`${d.kind}:${d.name}`} doc={d} onOpen={onOpen} />)
+          ? mine.map((d) => <DocRow key={docKey(d)} doc={d} onOpen={onOpen} />)
           : <div key={k.kind} style={{ ...muted, fontSize: 11 }}>{k.label} · none yet</div>;
       })}
-      {others.map((d) => <DocRow key={`${d.kind}:${d.name}`} doc={d} onOpen={onOpen} />)}
+      {others.map((d) => <DocRow key={docKey(d)} doc={d} onOpen={onOpen} />)}
       {children}
     </section>
   );
@@ -104,7 +107,7 @@ export default function V6MapView({ map, error, actions, dispatched, dispatchUna
       {error && <div role="alert" style={{ ...section, color: "var(--error, #f85149)" }}>Could not refresh: {error}</div>}
       <div style={{ ...section, fontWeight: 600 }}>
         {active && map.initiative ? map.initiative.title
-          : map.initiativeState === "missing" ? "Initiative not found"
+          : map.initiativeState === "missing" ? `Initiative ${map.initiative?.folder ?? ""} not found`
           : <span style={{ ...muted, fontWeight: 400 }}>No active initiative. Set one with the bmad skill.</span>}
       </div>
       {active && V6_PHASES.map((phase) => (
@@ -117,7 +120,7 @@ export default function V6MapView({ map, error, actions, dispatched, dispatchUna
       {map.loose.length > 0 && (
         <div style={section}>
           <div style={heading}>Not in an initiative</div>
-          {map.loose.map((d) => <DocRow key={`${d.kind}:${d.name}`} doc={d} onOpen={actions.onOpen} />)}
+          {map.loose.map((d) => <DocRow key={docKey(d)} doc={d} onOpen={actions.onOpen} />)}
         </div>
       )}
       {map.backlog.length > 0 && (

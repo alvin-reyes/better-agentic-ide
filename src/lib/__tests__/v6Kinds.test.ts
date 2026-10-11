@@ -42,7 +42,7 @@ describe("readFolderDoc", () => {
   it("reads a doc's status from its own frontmatter and opens its main file", async () => {
     const fs = memFs();
     await folder(fs, "prd-shop", { "prd-shop.md": "---\nstatus: draft\n---\n# PRD\n" });
-    const { doc, problem } = await readFolderDoc("/p", `${I}/prd-shop`, kind("prd-shop"), fs);
+    const { doc, problem } = (await readFolderDoc("/p", `${I}/prd-shop`, kind("prd-shop"), fs))!;
     expect(doc).toEqual({ kind: "prd", label: "PRD", name: "shop", path: "_bmad-output/initiative-demo/prd-shop/prd-shop.md", status: "draft" });
     expect(problem).toBeNull();
   });
@@ -51,22 +51,42 @@ describe("readFolderDoc", () => {
     const fs = memFs();
     await folder(fs, "brainstorm-a", { "brainstorm-a.md": "# notes\n" });
     await folder(fs, "brainstorm-b", { "brainstorm-b.md": "# notes\n", "brainstorm.html": "<html></html>" });
-    expect((await readFolderDoc("/p", `${I}/brainstorm-a`, kind("brainstorm-a"), fs)).doc.path).toMatch(/brainstorm-a\/brainstorm-a\.md$/);
-    expect((await readFolderDoc("/p", `${I}/brainstorm-b`, kind("brainstorm-b"), fs)).doc.path).toMatch(/brainstorm-b\/brainstorm\.html$/);
+    expect((await readFolderDoc("/p", `${I}/brainstorm-a`, kind("brainstorm-a"), fs))!.doc.path).toMatch(/brainstorm-a\/brainstorm-a\.md$/);
+    expect((await readFolderDoc("/p", `${I}/brainstorm-b`, kind("brainstorm-b"), fs))!.doc.path).toMatch(/brainstorm-b\/brainstorm\.html$/);
+  });
+
+  it("picks the main file from the listing without opening it", async () => {
+    const mem = memFs();
+    await folder(mem, "brainstorm-big", { "brainstorm-big.md": "# notes\n", "brainstorm.html": "<html></html>" });
+    const read: string[] = [];
+    const fs: Fs = { ...mem, readText: async (p) => { read.push(p); return mem.readText(p); } };
+    expect((await readFolderDoc("/p", `${I}/brainstorm-big`, kind("brainstorm-big"), fs))!.doc.path).toMatch(/brainstorm\.html$/);
+    expect(read.some((p) => p.endsWith("brainstorm.html"))).toBe(false);
+  });
+
+  it("skips a file named like a doc folder, and reports a folder that cannot be listed", async () => {
+    const mem = memFs();
+    await mem.mkdir(I);
+    await mem.writeText(`${I}/prd-notes.md`, "# not a folder\n");
+    expect(await readFolderDoc("/p", `${I}/prd-notes.md`, kind("prd-notes.md"), mem)).toBeNull();
+    const fs: Fs = { ...mem, list: async () => { throw new Error("EIO"); }, readText: async () => { throw new Error("EIO"); } };
+    const r = (await readFolderDoc("/p", `${I}/prd-gone`, kind("prd-gone"), fs))!;
+    expect(r.doc).toMatchObject({ path: null, status: "unreadable status" });
+    expect(r.problem).toBe("_bmad-output/initiative-demo/prd-gone could not be read: EIO");
   });
 
   it("a brainstorm whose run log has no status yet is in progress; a finished one says so", async () => {
     const fs = memFs();
     await folder(fs, "brainstorm-live", { ".memlog.md": "---\ntopic: pricing: ideas\nmode: partner\n---\n- idea one\n" });
     await folder(fs, "brainstorm-done", { ".memlog.md": "---\ntopic: pricing\nstatus: complete\n---\n" });
-    expect((await readFolderDoc("/p", `${I}/brainstorm-live`, kind("brainstorm-live"), fs)).doc.status).toBe("in progress");
-    expect((await readFolderDoc("/p", `${I}/brainstorm-done`, kind("brainstorm-done"), fs)).doc.status).toBe("complete");
+    expect((await readFolderDoc("/p", `${I}/brainstorm-live`, kind("brainstorm-live"), fs))!.doc.status).toBe("in progress");
+    expect((await readFolderDoc("/p", `${I}/brainstorm-done`, kind("brainstorm-done"), fs))!.doc.status).toBe("complete");
   });
 
   it("reads UX status from DESIGN.md, not the pointer doc", async () => {
     const fs = memFs();
     await folder(fs, "ux-shop", { "ux-shop.md": "---\nstatus: draft\n---\n", "DESIGN.md": "---\nstatus: final\ntokens:\n  color: red\n---\n" });
-    const { doc } = await readFolderDoc("/p", `${I}/ux-shop`, kind("ux-shop"), fs);
+    const { doc } = (await readFolderDoc("/p", `${I}/ux-shop`, kind("ux-shop"), fs))!;
     expect(doc.status).toBe("final");
     expect(doc.path).toMatch(/ux-shop\/ux-shop\.md$/);
   });
@@ -74,27 +94,27 @@ describe("readFolderDoc", () => {
   it("falls back from a PRFAQ's status to its stage", async () => {
     const fs = memFs();
     await folder(fs, "prfaq-shop", { "prfaq-shop.md": "---\nstage: 3\n---\n" });
-    expect((await readFolderDoc("/p", `${I}/prfaq-shop`, kind("prfaq-shop"), fs)).doc.status).toBe("3");
+    expect((await readFolderDoc("/p", `${I}/prfaq-shop`, kind("prfaq-shop"), fs))!.doc.status).toBe("3");
   });
 
   it("a spec has no status word of its own", async () => {
     const fs = memFs();
     await folder(fs, "spec-cart", { "spec-cart.md": "---\nstatus: draft\n---\n" });
-    expect((await readFolderDoc("/p", `${I}/spec-cart`, kind("spec-cart"), fs)).doc.status).toBe("present");
+    expect((await readFolderDoc("/p", `${I}/spec-cart`, kind("spec-cart"), fs))!.doc.status).toBe("present");
   });
 
   it("a folder with no main file has no path, and a doc with no status key is present", async () => {
     const fs = memFs();
     await folder(fs, "prd-empty", { "addendum.md": "# x\n" });
     await folder(fs, "brief-shop", { "brief-shop.md": "# no frontmatter\n" });
-    expect((await readFolderDoc("/p", `${I}/prd-empty`, kind("prd-empty"), fs)).doc).toMatchObject({ path: null, status: "present" });
-    expect((await readFolderDoc("/p", `${I}/brief-shop`, kind("brief-shop"), fs)).doc.status).toBe("present");
+    expect((await readFolderDoc("/p", `${I}/prd-empty`, kind("prd-empty"), fs))!.doc).toMatchObject({ path: null, status: "present" });
+    expect((await readFolderDoc("/p", `${I}/brief-shop`, kind("brief-shop"), fs))!.doc.status).toBe("present");
   });
 
   it("an unclosed frontmatter fence is an unreadable status and a problem", async () => {
     const fs = memFs();
     await folder(fs, "prd-broken", { "prd-broken.md": "---\nstatus: draft\n# never closed\n" });
-    const { doc, problem } = await readFolderDoc("/p", `${I}/prd-broken`, kind("prd-broken"), fs);
+    const { doc, problem } = (await readFolderDoc("/p", `${I}/prd-broken`, kind("prd-broken"), fs))!;
     expect(doc.status).toBe("unreadable status");
     expect(problem).toBe("_bmad-output/initiative-demo/prd-broken/prd-broken.md: frontmatter is not closed");
   });

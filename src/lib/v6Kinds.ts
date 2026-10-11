@@ -73,23 +73,27 @@ export function relativeTo(root: string, path: string): string {
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
-export async function isFile(path: string, fs: Fs): Promise<boolean> {
-  if (!(await fs.exists(path))) return false;
-  try {
-    await fs.readText(path);
-    return true;
-  } catch {
-    return false; // a directory, or unreadable
-  }
-}
+export type Listing = { names: string[]; error: null } | { names: null; error: string; isFile: boolean };
 
-export async function isDirectory(path: string, fs: Fs): Promise<boolean> {
-  if (!(await fs.exists(path))) return false;
+/**
+ * A folder's entries, listed once. A failure is a value, not a throw: the map
+ * must survive a folder that vanishes or cannot be read. `isFile` is true when
+ * the path is a readable file, as a stray `prd-notes.md` is, so a caller can
+ * skip it without calling it a problem.
+ */
+export async function listFolder(path: string, fs: Fs): Promise<Listing> {
   try {
-    await fs.list(path);
-    return true;
-  } catch {
-    return false;
+    return { names: await fs.list(path), error: null };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    let isFile = false;
+    try {
+      await fs.readText(path);
+      isFile = true;
+    } catch {
+      // not a file either
+    }
+    return { names: null, error, isFile };
   }
 }
 
@@ -120,20 +124,29 @@ function result(projectRoot: string, doc: Omit<V6Doc, "status">, statusPath: str
   };
 }
 
-export async function readFolderDoc(projectRoot: string, folder: string, kind: V6Kind, fs: Fs): Promise<DocResult> {
+/**
+ * One doc folder's entry: the folder is listed once, the main file is the first
+ * candidate the listing holds (no file is opened to probe it), and only the
+ * status file is read. Null when `folder` is a file, not a folder.
+ */
+export async function readFolderDoc(projectRoot: string, folder: string, kind: V6Kind, fs: Fs): Promise<DocResult | null> {
   const name = pathBasename(folder);
   const sub = (s: string) => s.replaceAll("<f>", name);
-  let path: string | null = null;
-  for (const candidate of kind.main) {
-    const abs = joinPath(folder, sub(candidate));
-    if (await isFile(abs, fs)) {
-      path = relativeTo(projectRoot, abs);
-      break;
-    }
+  const base = { kind: kind.kind, label: kind.label, name: name.slice(kind.prefix.length) };
+  const listing = await listFolder(folder, fs);
+  if (listing.names === null) {
+    if (listing.isFile) return null;
+    return { doc: { ...base, path: null, status: "unreadable status" }, problem: `${relativeTo(projectRoot, folder)} could not be read: ${listing.error}` };
   }
-  const statusPath = kind.status ? joinPath(folder, sub(kind.status.file)) : null;
-  const read = kind.status && statusPath ? await statusFrom(statusPath, kind.status.keys, fs) : { word: null, error: null };
-  return result(projectRoot, { kind: kind.kind, label: kind.label, name: name.slice(kind.prefix.length), path }, statusPath, read, kind.missing);
+  const names = listing.names;
+  const main = kind.main.map(sub).find((c) => names.includes(c));
+  const path = main ? relativeTo(projectRoot, joinPath(folder, main)) : null;
+  const statusName = kind.status ? sub(kind.status.file) : null;
+  const statusPath = statusName ? joinPath(folder, statusName) : null;
+  const read = kind.status && statusName && statusPath && names.includes(statusName)
+    ? await statusFrom(statusPath, kind.status.keys, fs)
+    : { word: null, error: null };
+  return result(projectRoot, { ...base, path }, statusPath, read, kind.missing);
 }
 
 /**
@@ -165,7 +178,7 @@ export async function readPlanFile(projectRoot: string, file: string, fs: Fs): P
 export async function readRetrospective(projectRoot: string, epicFolder: string, fs: Fs): Promise<DocResult | null> {
   const slug = pathBasename(epicFolder);
   const file = joinPath(epicFolder, `${slug}-retrospective.md`);
-  if (!(await isFile(file, fs))) return null;
+  if (!(await fs.exists(file))) return null;
   const read = await statusFrom(file, ["verdict"], fs);
   const doc = { kind: "retrospective", label: "Retrospective", name: slug.replace(/^epic-/, ""), path: relativeTo(projectRoot, file) };
   return result(projectRoot, doc, file, read, "in progress");
