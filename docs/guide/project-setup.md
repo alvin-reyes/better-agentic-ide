@@ -71,7 +71,7 @@ If a step fails, ADE puts everything back and removes the archive.
 - **It leaves, and reports,** anything it can't put back: a file that is locked, something written into a folder that had moved, or a file changed since. The error names each one and `ARCHIVE.md` lists them. `ARCHIVE.md` then reads `status: incomplete`, the stage board shows a warning that links to it, and ADE neither sets the project up nor switches it until you resolve it. When you open the project or a terminal is in it, a toast with an **Open ARCHIVE.md** button says so; from a terminal it shows once per session.
 - **If it can't record the rollback** in `ARCHIVE.md` (a full disk, for example), it undoes nothing and says so. `ARCHIVE.md` then still describes the project as it is, at `status: in-progress`, and you follow it by hand.
 
-To resolve a switch that didn't finish, put the project right by hand and then set `status: abandoned` in `ARCHIVE.md`. You make this edit yourself: the permission rule keeps Claude Code's file-editing tools out of the archive, so an agent can't make it for you.
+To resolve a switch that didn't finish, put the project right by hand and then set `status: abandoned` in `ARCHIVE.md`. Make this edit yourself: the permission rule keeps Claude Code's file-editing tools out of the archive.
 
 - At `status: incomplete`, use the words `ARCHIVE.md` puts beside each path: *pending*, *moving*, *moved* or *moved back*. Remove any files the new version wrote at the old paths. Move the paths marked *moved* back to their places; one marked *moving* may be at either place, so check both.
 - At `status: in-progress` (a switch cut short by a crash, or a rollback that couldn't be recorded), follow the steps `ARCHIVE.md` gives for its `phase` instead.

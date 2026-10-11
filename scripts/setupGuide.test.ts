@@ -174,7 +174,7 @@ describe("the project setup guide", () => {
   it("says the person resolves an unfinished switch, and how for each status", () => {
     const text = section();
     // Editing ARCHIVE.md is the person's: the deny rule keeps Claude Code's tools out.
-    expect(text).toMatch(/You make this edit yourself: the permission rule keeps Claude Code's file-editing tools out of the archive/);
+    expect(text).toMatch(/Make this edit yourself: the permission rule keeps Claude Code's file-editing tools out of the archive/);
     expect(read("src-tauri/src/usage.rs")).toContain("ARCHIVE_DENY_RULE");
     expect(text).toMatch(/At `status: incomplete`, use the words `ARCHIVE\.md` puts beside each path/);
     expect(text).toMatch(/At `status: in-progress`[^\n]*follow the steps `ARCHIVE\.md` gives for its `phase` instead/);
