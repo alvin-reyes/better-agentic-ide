@@ -63,3 +63,13 @@ describe("the core roles, as the switch knows them", () => {
     expect(names).toEqual(ROLES.map((r) => r.name));
   });
 });
+
+describe("bmad_switch_apply", () => {
+  it("holds setup's lock for its whole run", () => {
+    const rust = readFileSync(resolve(__dirname, "..", "src-tauri/src/bmadswitch.rs"), "utf8");
+    const command = rust.slice(rust.indexOf("pub fn bmad_switch_apply("));
+    const body = command.slice(0, command.indexOf("\n}\n"));
+    // Taken before the switch starts, and bound to a name so it lives to the end.
+    expect(body).toMatch(/let _one = crate::projectsetup::APPLY\.lock\(\)[\s\S]*\n\s+apply\(/);
+  });
+});

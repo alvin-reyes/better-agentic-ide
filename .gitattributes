@@ -1,3 +1,7 @@
 # The fixtures are read by both Rust and TypeScript tests; the TS YAML reader
 # reads nothing from CRLF, so a Windows checkout must not convert them.
 src-tauri/src/fixtures/switch/* text eol=lf
+# The archive rule is compiled into the app and appended to a project's
+# rules, where a marker and an exact suffix find it again: one spelling on
+# every OS.
+src-tauri/src/archive_rule.md text eol=lf

@@ -8,6 +8,7 @@
 
 use crate::bmadconfig::V4Paths;
 use crate::bmadv6::Methodology;
+use crate::projectsetup::{SetupFile, SetupReport};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
@@ -16,6 +17,16 @@ use std::path::{Component, Path, PathBuf};
 pub(crate) const ARCHIVE_DIR: &str = ".ade/archive";
 /// The journal inside each archive.
 pub(crate) const JOURNAL: &str = "ARCHIVE.md";
+/// The rules' section about the archive, which `RULES_MD` in
+/// src/lib/projectMethodology.ts ends with too, and the marker that keeps a
+/// project from getting it twice.
+pub(crate) const ARCHIVE_RULE: &str = include_str!("archive_rule.md");
+pub(crate) const ARCHIVE_RULE_MARKER: &str = "<!-- ade:archive -->";
+
+/// What the switch reads and edits beside the paths it moves, project-relative.
+const MARKER: &str = ".ade/methodology";
+const RULES: &str = ".ade/rules.md";
+const SETTINGS: &str = ".claude/settings.json";
 
 /// A project-relative, `/`-separated path, under `root`.
 pub(crate) fn at(root: &Path, rel: &str) -> PathBuf {
@@ -69,6 +80,9 @@ pub(crate) struct Journal {
     pub date: String,
     /// (from, to, state), in the order they are moved.
     pub moves: Vec<(String, String, MoveState)>,
+    /// What a rollback couldn't put back. The error that says so is shown
+    /// once; this is what the person still has when they open the file.
+    pub problems: Vec<String>,
 }
 
 /// Front matter is line-oriented: a newline or control character in a value
@@ -86,6 +100,7 @@ impl Journal {
             to: clean(to),
             date: clean(date),
             moves: moves.iter().map(|m| (m.from.clone(), m.to.clone(), MoveState::Pending)).collect(),
+            problems: Vec::new(),
         }
     }
 
@@ -104,6 +119,12 @@ impl Journal {
         }
         if self.moves.is_empty() {
             out.push_str("Nothing was moved.\n");
+        }
+        if !self.problems.is_empty() {
+            out.push_str("\n## What couldn't be put back\n\n");
+            for problem in &self.problems {
+                out.push_str(&format!("- {}\n", clean(problem)));
+            }
         }
         out.push_str(&format!(
             "\n## To go back to BMAD {old}\n\n\
@@ -311,6 +332,9 @@ pub struct Document {
     pub ticked: bool,
     /// What moving it would cost: it is, or holds, a file ADE's rules name.
     pub warning: Option<String>,
+    /// Where it leads, when the path is itself a link: ticking it moves the
+    /// link and leaves what is behind it. `None` for a real file or folder.
+    pub link_to: Option<String>,
 }
 
 /// Something the switch leaves where it is, and why.
@@ -354,6 +378,14 @@ pub(crate) struct Env {
     pub today: String,
     /// The device a path is on, where that can be known.
     pub device: fn(&Path) -> Option<u64>,
+    /// `std::fs::rename`. A test's stand-in fails a chosen move.
+    pub rename: fn(&Path, &Path) -> std::io::Result<()>,
+    /// Test seam: fail once the rules step has run, the last point a real
+    /// failure can come from (the journal's final write).
+    pub fail_after_rules: bool,
+    /// Test seam: runs as a rollback starts, where a test changes the project
+    /// as a person or an agent might while a switch runs. Nothing otherwise.
+    pub before_rollback: fn(&Path),
 }
 
 /// Exists, a link that points nowhere included: a link is moved as the link.
@@ -645,7 +677,9 @@ fn document_locations(
         let behind = std::fs::canonicalize(at(root, &path))
             .ok()
             .and_then(|real| real.strip_prefix(real_root).ok().map(slashed))
-            .filter(|real| real.to_lowercase() != path.to_lowercase());
+            // `docs -> .` leads to the project itself, which is no place of
+            // its own: everything is inside it.
+            .filter(|real| !real.is_empty() && real.to_lowercase() != path.to_lowercase());
         for (path, offered) in std::iter::once((path, true)).chain(behind.map(|real| (real, false))) {
             if !places.iter().any(|known| known.path.to_lowercase() == path.to_lowercase()) {
                 places.push(Place { path, key, offered });
@@ -691,6 +725,25 @@ fn warning(root: &Path, real_root: &Path, path: &str) -> Option<String> {
         })
         .collect();
     (!sentences.is_empty()).then(|| sentences.join(" "))
+}
+
+/// Where `rel` leads when it is itself a link, `None` when it is not one:
+/// project-relative for a target in the project (`.` for the project
+/// itself), the system's spelling for one outside, and what the link says
+/// when it leads nowhere.
+fn link_target(root: &Path, real_root: &Path, rel: &str) -> Option<String> {
+    let path = at(root, rel);
+    if !std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return None;
+    }
+    Some(match std::fs::canonicalize(&path) {
+        Ok(real) => match real.strip_prefix(real_root) {
+            Ok(inside) if inside.as_os_str().is_empty() => ".".to_string(),
+            Ok(inside) => slashed(inside),
+            Err(_) => real.to_string_lossy().into_owned(),
+        },
+        Err(_) => std::fs::read_link(&path).map(|to| to.to_string_lossy().into_owned()).unwrap_or_default(),
+    })
 }
 
 /// `.bmad-core/core-config.yaml`, `None` when the project has none. One that
@@ -1118,7 +1171,13 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
     plan.leftovers = leftovers.iter().map(|rel| moved(rel, &leftovers_dir)).collect();
     plan.documents = offered
         .iter()
-        .map(|rel| Document { path: rel.clone(), files: count_files(&at(root, rel)), ticked: ticked.contains(rel), warning: warning(root, &real_root, rel) })
+        .map(|rel| Document {
+            path: rel.clone(),
+            files: count_files(&at(root, rel)),
+            ticked: ticked.contains(rel),
+            warning: warning(root, &real_root, rel),
+            link_to: link_target(root, &real_root, rel),
+        })
         .collect();
     plan.left_in_place = notes;
     plan.blocked = reasons.into_iter().next();
@@ -1140,6 +1199,9 @@ fn env(app: &tauri::AppHandle) -> Env {
         v6_src: crate::bmadv6::resource_root(app).ok(),
         today: today(),
         device: device_of,
+        rename: fs_rename,
+        fail_after_rules: false,
+        before_rollback: nothing,
     }
 }
 
@@ -1148,6 +1210,494 @@ fn env(app: &tauri::AppHandle) -> Env {
 pub fn bmad_switch_plan(app: tauri::AppHandle, root: String, to: String, documents: Vec<String>) -> Result<SwitchPlan, String> {
     let dir = crate::projectsetup::project(&root)?;
     Ok(plan(&dir, target(&to)?, &documents, &env(&app)))
+}
+
+fn fs_rename(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::rename(from, to)
+}
+
+fn nothing(_: &Path) {}
+
+/// A Windows path too long for the classic API, with the `\\?\` prefix that
+/// lifts the limit. Folder creation fails from 248 characters, so that is the
+/// threshold. Anything else is returned as it is.
+pub(crate) fn verbatim(path: &str) -> String {
+    let absolute = path.len() > 2 && path.as_bytes()[1] == b':';
+    if path.len() < 248 || !absolute || path.starts_with(r"\\?\") {
+        return path.to_string();
+    }
+    format!(r"\\?\{}", path.replace('/', r"\"))
+}
+
+/// `path`, in the form the OS will take however deep the archive mirrors it.
+fn long(path: PathBuf) -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from(verbatim(&path.to_string_lossy()))
+    } else {
+        path
+    }
+}
+
+/// What a finished switch reports.
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchResult {
+    /// The archive folder, project-relative.
+    pub archive: String,
+    /// Files moved into it. At least that many when `moved_capped`.
+    pub moved: u32,
+    /// A moved path's count stopped at `COUNT_LIMIT` (it holds that many
+    /// files or more, or a folder in it couldn't be read), so `moved` is a
+    /// lower bound.
+    pub moved_capped: bool,
+    pub setup: SetupReport,
+    /// The archive section was appended to an existing `.ade/rules.md`.
+    pub rules_appended: bool,
+    /// `.claude/settings.json` denies edits to the archive.
+    pub archive_denied: bool,
+}
+
+/// The new version's setup files, as `project_setup_apply` takes them.
+pub(crate) struct SetupInput<'a> {
+    pub files: &'a [SetupFile],
+    pub import: &'a str,
+    pub marker: &'a str,
+}
+
+/// `.ade/archive/bmad-<from>-YYYY-MM-DD`, with an optional `-N`. The name
+/// comes back from the webview, and everything the switch writes goes under it.
+fn valid_archive(archive: &str, from: &str) -> bool {
+    let Some(rest) = archive.strip_prefix(&format!("{ARCHIVE_DIR}/bmad-{from}-")) else { return false };
+    if !rest.is_ascii() || rest.len() < 10 {
+        return false;
+    }
+    let (date, number) = rest.split_at(10);
+    let date_ok = date.char_indices().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() });
+    let number_ok = number.is_empty() || number.strip_prefix('-').is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
+    date_ok && number_ok
+}
+
+/// The files a plan moves, and whether that is only a lower bound: one of
+/// its counts stopped at `COUNT_LIMIT`.
+fn moved_files(plan: &SwitchPlan) -> (u32, bool) {
+    let counts = || plan.moves.iter().chain(&plan.leftovers).map(|m| m.files);
+    (counts().fold(0, u32::saturating_add), counts().any(|files| files >= COUNT_LIMIT))
+}
+
+/// The archive folder, once made, is a folder of this project: every level
+/// on the way to it is a real folder, not a link that could lead anywhere.
+/// The plan refuses the same before anything is written; this is the check
+/// on what was made.
+fn archive_in_project(root: &Path, archive: &str) -> Result<(), String> {
+    let parts: Vec<&str> = archive.split('/').collect();
+    for n in 1..=parts.len() {
+        let level = parts[..n].join("/");
+        // A link's own metadata is never a folder's.
+        if !std::fs::symlink_metadata(at(root, &level)).is_ok_and(|meta| meta.is_dir()) {
+            return Err(format!("{level} is not a folder of this project, so the archive would not be kept in it."));
+        }
+    }
+    Ok(())
+}
+
+/// A file's bytes, or `None` when there is no such file. Only "not found" is
+/// absent: a file that is there and can't be read is an error, so nothing
+/// later takes it for one the switch may remove or replace.
+fn read_or_absent(path: &Path) -> std::io::Result<Option<Vec<u8>>> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        // A link that leads nowhere reads as not found, and is there.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !present(path) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// What `rel` holds before the switch changes it, for a rollback to put back.
+fn snapshot_of(root: &Path, rel: &str) -> Result<Option<Vec<u8>>, String> {
+    read_or_absent(&at(root, rel)).map_err(|e| format!("{rel} can't be read: {e}"))
+}
+
+/// Put a snapshot back: the file with the bytes it had, or no file. A file
+/// that is there now and can't be read is left as it is, and that is the
+/// error.
+fn restore(root: &Path, rel: &str, old: Option<&[u8]>) -> Result<(), String> {
+    let path = at(root, rel);
+    let now = read_or_absent(&path).map_err(|e| format!("{rel} can't be read, so it was left as it is: {e}"))?;
+    match (old, now.as_deref()) {
+        (Some(old), Some(now)) if old == now => Ok(()),
+        (Some(old), _) => match std::str::from_utf8(old) {
+            Ok(text) => crate::state::atomic_write(&path, text),
+            Err(_) => std::fs::write(&path, old),
+        },
+        (None, Some(_)) => std::fs::remove_file(&path),
+        (None, None) => Ok(()),
+    }
+    .map_err(|e| format!("{rel}: {e}"))
+}
+
+/// Append the archive section to the rules a project already has. Returns
+/// what was appended, so a rollback can take exactly that off again.
+fn append_archive_rule(root: &Path) -> Result<Option<String>, String> {
+    use std::io::{Seek, Write};
+    let rules = at(root, RULES);
+    let text = match std::fs::read_to_string(&rules) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        // Rules that are there and can't be read may or may not carry it.
+        Err(e) => return Err(format!("{RULES} can't be read: {e}")),
+    };
+    if text.contains(ARCHIVE_RULE_MARKER) {
+        return Ok(None);
+    }
+    let added = format!("{}{ARCHIVE_RULE}", if text.ends_with('\n') { "\n" } else { "\n\n" });
+    // In place, at the end: the file keeps its permissions, and a link stays a link.
+    let mut file = std::fs::OpenOptions::new().write(true).open(&rules).map_err(|e| format!("{RULES}: {e}"))?;
+    let wrote = file.seek(std::io::SeekFrom::End(0)).and_then(|_| file.write_all(added.as_bytes())).and_then(|()| file.sync_all());
+    if let Err(e) = wrote {
+        // Part of a section is neither the rule nor something a rollback
+        // would recognise: cut the file back to what it was.
+        return Err(match file.set_len(text.len() as u64) {
+            Ok(()) => format!("{RULES}: {e}"),
+            Err(cut) => format!("{RULES}: {e} (and what was written of the archive section couldn't be taken off: {cut})"),
+        });
+    }
+    Ok(Some(added))
+}
+
+/// Take the appended section off the end of the rules again. Rules that no
+/// longer end with it were edited since, and are left as they are.
+fn strip_archive_rule(root: &Path, added: &str) -> Result<(), String> {
+    let rules = at(root, RULES);
+    let text = std::fs::read_to_string(&rules).map_err(|e| format!("{RULES}: {e}"))?;
+    if !text.ends_with(added) {
+        return Err(format!("{RULES} changed after the archive section was added to it, so the section is still there"));
+    }
+    let file = std::fs::OpenOptions::new().write(true).open(&rules).map_err(|e| format!("{RULES}: {e}"))?;
+    file.set_len((text.len() - added.len()) as u64).map_err(|e| format!("{RULES}: {e}"))
+}
+
+/// One switch under way: what it has done so far, which is what a rollback undoes.
+struct Run<'a> {
+    root: &'a Path,
+    /// The archive folder, project-relative.
+    archive: String,
+    journal: Journal,
+    /// The journal is on disk.
+    journaled: bool,
+    /// Folders the switch itself created, outermost first.
+    dirs: Vec<PathBuf>,
+    /// Setup has started: the new version's files may be in the project.
+    setup_ran: bool,
+    report: SetupReport,
+    /// `.ade/methodology` before anything moved; `Some(None)` when there was none.
+    marker: Option<Option<Vec<u8>>>,
+    /// `.claude/settings.json` before setup ran; `Some(None)` when there was none.
+    settings: Option<Option<Vec<u8>>>,
+    /// What was appended to `.ade/rules.md`.
+    rules: Option<String>,
+}
+
+impl Run<'_> {
+    fn save(&self) -> Result<(), String> {
+        self.journal.write(&long(at(self.root, &self.archive)))
+    }
+
+    /// The move that takes the marker, if the plan has one.
+    fn marker_move(&self) -> Option<usize> {
+        self.journal.moves.iter().position(|m| m.0.to_lowercase() == MARKER)
+    }
+
+    fn forward(&mut self, to: Methodology, plan: &SwitchPlan, setup: &SetupInput, env: &Env) -> Result<SwitchResult, String> {
+        let root = self.root;
+        // What the marker says now, before anything is made or moved.
+        self.marker = Some(snapshot_of(root, MARKER)?);
+
+        // 2. The archive folder and the journal, before the first move.
+        // `create_dir` refuses a folder that appeared since apply() looked.
+        let archive = long(at(root, &self.archive));
+        if let Some(parent) = archive.parent() {
+            crate::projectsetup::mkdirs(parent, &mut self.dirs)?;
+        }
+        std::fs::create_dir(&archive).map_err(|e| format!("{}: {e}", self.archive))?;
+        self.dirs.push(archive);
+        archive_in_project(root, &self.archive)?;
+        self.save()?;
+        self.journaled = true;
+
+        // 3. Move. The journal leads the disk: each move is written down as
+        // `moving` before its rename, so a crash never leaves one it doesn't name.
+        for i in 0..self.journal.moves.len() {
+            let (from, into) = (self.journal.moves[i].0.clone(), self.journal.moves[i].1.clone());
+            self.journal.moves[i].2 = MoveState::Moving;
+            self.save()?;
+            let dst = long(at(root, &into));
+            if let Some(parent) = dst.parent() {
+                crate::projectsetup::mkdirs(parent, &mut self.dirs)?;
+            }
+            // rename() replaces a file that is in the way without a word.
+            if present(&dst) {
+                // Nothing was moved, and what is there is not this move's.
+                self.journal.moves[i].2 = MoveState::Pending;
+                return Err(format!("Couldn't move {from}: {into} already exists."));
+            }
+            // No copy for another volume: a rename is one step or nothing.
+            (env.rename)(&long(at(root, &from)), &dst).map_err(|e| format!("Couldn't move {from}: {e}"))?;
+            self.journal.moves[i].2 = MoveState::Moved;
+            self.save()?;
+        }
+
+        // 4. Snapshot the settings setup and the deny rule may edit.
+        self.settings = Some(snapshot_of(root, SETTINGS)?);
+
+        // 5. Set up the new version, keeping its report even when it fails.
+        self.journal.phase = "setup";
+        self.save()?;
+        let src = match to {
+            Methodology::V4 => env.v4_src.as_deref(),
+            Methodology::V6 => env.v6_src.as_deref(),
+        }
+        .ok_or_else(|| format!("ADE's bundled BMAD {} files weren't found.", to.as_str()))?;
+        self.setup_ran = true;
+        crate::projectsetup::apply(root, setup.files, Some(setup.import), setup.marker, to, Some(src), &mut self.report)?;
+
+        // 6. Rules, after setup: a project with no rules.md has the full rules by now.
+        self.journal.phase = "rules";
+        self.save()?;
+        self.rules = append_archive_rule(root)?;
+        // A settings file that can't be edited is reported, not fatal.
+        let archive_denied = crate::usage::deny_archive_edits(root).is_ok();
+        if env.fail_after_rules {
+            return Err("failed on purpose, after the rules step".to_string());
+        }
+
+        // 7. Done.
+        self.journal.status = "complete";
+        self.journal.phase = "done";
+        self.save()?;
+        let (moved, moved_capped) = moved_files(plan);
+        Ok(SwitchResult {
+            archive: self.archive.clone(),
+            moved,
+            moved_capped,
+            setup: std::mem::take(&mut self.report),
+            rules_appended: self.rules.is_some(),
+            archive_denied,
+        })
+    }
+
+    /// Undo what forward() did, and return the error to report. Every file
+    /// goes back to its path and content, and nothing the switch created is
+    /// left; directory times and git's index can't be restored. A step that
+    /// can't be undone doesn't stop the ones after it: each is named in the
+    /// error and in the journal, which then stays, `incomplete`, with the
+    /// archive.
+    fn rollback(&mut self, error: String, setup: &SetupInput, env: &Env) -> String {
+        let root = self.root;
+        (env.before_rollback)(root);
+        let mut failed: Vec<String> = Vec::new();
+
+        // The rules section first: a rules.md setup wrote must read as setup
+        // wrote it to be taken back below.
+        if let Some(added) = self.rules.take() {
+            if let Err(e) = strip_archive_rule(root, &added) {
+                failed.push(e);
+            }
+        }
+        // The settings before setup's folders, which go only when empty.
+        if let Some(old) = self.settings.take() {
+            if let Err(e) = restore(root, SETTINGS, old.as_deref()) {
+                failed.push(e);
+            }
+        }
+        // What setup created: a file only if it is still as setup wrote it,
+        // the import it appended, the folders it made that are empty.
+        failed.extend(crate::projectsetup::take_back(root, &self.report, setup.files, Some(setup.import)));
+
+        // The marker is ADE's own file, and setup can leave one its report
+        // doesn't name: an install that failed while writing it, or one that
+        // found it already saying the new version. Left there it would keep
+        // the old marker from coming back. It goes only once setup has run
+        // (before that nothing of the switch's writes one), and only when the
+        // old one is safe in the archive or there never was one.
+        if self.setup_ran {
+            let old_is_safe = match &self.marker {
+                Some(Some(_)) => self.marker_move().is_some_and(|i| present(&long(at(root, &self.journal.moves[i].1)))),
+                Some(None) => true,
+                None => false,
+            };
+            let stray = at(root, MARKER);
+            if old_is_safe && std::fs::symlink_metadata(&stray).is_ok_and(|meta| meta.is_file()) {
+                if let Err(e) = std::fs::remove_file(&stray) {
+                    failed.push(format!("{MARKER}: {e}"));
+                }
+            }
+        }
+
+        // The moves, last first.
+        for i in (0..self.journal.moves.len()).rev() {
+            let (from, into, state) = self.journal.moves[i].clone();
+            if !matches!(state, MoveState::Moving | MoveState::Moved) {
+                continue;
+            }
+            let (home, archived) = (long(at(root, &from)), long(at(root, &into)));
+            if !present(&archived) {
+                if state == MoveState::Moving {
+                    // Its rename failed, so it never left.
+                    self.journal.moves[i].2 = MoveState::Pending;
+                } else {
+                    failed.push(format!("{from}: {into} is no longer in the archive"));
+                }
+                continue;
+            }
+            // rename() replaces a file that is in the way without a word. If
+            // something is there again, an agent or a person wrote it since:
+            // it stays, and this move stays in the archive.
+            if present(&home) {
+                self.journal.moves[i].2 = MoveState::Moved;
+                failed.push(format!("{from}: something is there again, so what was moved is still at {into}"));
+                continue;
+            }
+            // The journal leads the disk on the way back too. This save is
+            // progress for a crash to find; the one that ends the rollback
+            // is the one that counts, and reports.
+            self.journal.moves[i].2 = MoveState::Moving;
+            let _progress = self.save();
+            let back = match home.parent() {
+                // Its folder was there when it left, unless someone removed it since.
+                Some(parent) => std::fs::create_dir_all(parent).and_then(|()| (env.rename)(&archived, &home)),
+                None => (env.rename)(&archived, &home),
+            };
+            match back {
+                Ok(()) => self.journal.moves[i].2 = MoveState::MovedBack,
+                Err(e) => {
+                    self.journal.moves[i].2 = MoveState::Moved;
+                    failed.push(format!("{from}: {e}"));
+                }
+            }
+            let _progress = self.save();
+        }
+
+        // The marker says what the project is on. Once setup has run,
+        // whatever happened to the file in between, it reads as it did
+        // before the switch, unless the old one is still in the archive,
+        // which the moves above reported.
+        if let (true, Some(Some(old))) = (self.setup_ran, &self.marker) {
+            let in_archive = self.marker_move().is_some_and(|i| matches!(self.journal.moves[i].2, MoveState::Moving | MoveState::Moved));
+            if !in_archive {
+                if let Err(e) = restore(root, MARKER, Some(old)) {
+                    failed.push(e);
+                }
+            }
+        }
+
+        if !failed.is_empty() {
+            self.journal.status = "incomplete";
+            self.journal.problems = failed.clone();
+            if let Err(e) = self.save() {
+                failed.push(e);
+            }
+            return format!(
+                "{}. The switch couldn't be fully undone: {}. See {}/{JOURNAL}.",
+                error.trim_end_matches('.'),
+                failed.join("; "),
+                self.archive
+            );
+        }
+        // Everything is back: the archive goes, journal included. Only what
+        // the switch made is removed, so anything else written there stays.
+        let mut left: Vec<String> = Vec::new();
+        if self.journaled {
+            let journal = long(at(root, &self.archive)).join(JOURNAL);
+            match std::fs::remove_file(&journal) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                // It still says `in-progress`, which blocks the project.
+                Err(e) => {
+                    return format!(
+                        "{}. Everything was put back, but {}/{JOURNAL} couldn't be removed ({e}). Delete it, or set `status: abandoned` in it.",
+                        error.trim_end_matches('.'),
+                        self.archive
+                    )
+                }
+            }
+        }
+        for dir in self.dirs.iter().rev() {
+            if let Err(e) = std::fs::remove_dir(dir) {
+                if !matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty) {
+                    left.push(format!("{}: {e}", dir.display()));
+                }
+            }
+        }
+        if left.is_empty() {
+            error
+        } else {
+            format!("{}. Everything was put back, but an empty folder couldn't be removed: {}.", error.trim_end_matches('.'), left.join("; "))
+        }
+    }
+}
+
+/// Switch `root` to `to`, as `shown` said it would go. On any failure the
+/// project is put back as it was.
+pub(crate) fn apply(root: &Path, to: Methodology, shown: &SwitchPlan, setup: &SetupInput, env: &Env) -> Result<SwitchResult, String> {
+    // 1. Recompute. The plan came back from the webview: only the archive's
+    // name is taken from it, checked, and every destination follows from that.
+    let ticked: Vec<String> = shown.documents.iter().filter(|d| d.ticked).map(|d| d.path.clone()).collect();
+    let fresh = plan_into(root, to, &ticked, env, Some(&shown.archive));
+    if fresh.from.is_empty() || fresh.from == fresh.to {
+        // No BMAD, or already on the version: there is nothing to archive.
+        return Err(fresh.blocked.unwrap_or_else(|| "There is nothing to switch.".to_string()));
+    }
+    if !valid_archive(&fresh.archive, &fresh.from) {
+        return Err(format!("{:?} isn't an archive folder ADE would make.", shown.archive));
+    }
+    if let Some(why) = &fresh.blocked {
+        return Err(why.clone());
+    }
+    let sources = |p: &SwitchPlan| -> std::collections::BTreeSet<String> { p.moves.iter().chain(&p.leftovers).map(|m| m.from.clone()).collect() };
+    // Nothing moves that the person didn't see.
+    if sources(&fresh) != sources(shown) {
+        return Err("The project changed since this was shown. Review the switch again.".to_string());
+    }
+    if present(&at(root, &fresh.archive)) {
+        return Err(format!("{} already exists. Review the switch again.", fresh.archive));
+    }
+
+    let moves: Vec<Move> = fresh.moves.iter().chain(&fresh.leftovers).cloned().collect();
+    let mut run = Run {
+        root,
+        archive: fresh.archive.clone(),
+        journal: Journal::new(&fresh.from, &fresh.to, &env.today, &moves),
+        journaled: false,
+        dirs: Vec::new(),
+        setup_ran: false,
+        report: SetupReport::default(),
+        marker: None,
+        settings: None,
+        rules: None,
+    };
+    match run.forward(to, &fresh, setup, env) {
+        Ok(result) => Ok(result),
+        Err(error) => Err(run.rollback(error, setup, env)),
+    }
+}
+
+/// Archive the old version and set up the other one. `plan` is the plan the
+/// dialog showed; `files`, `import` and `marker` are the new version's setup
+/// files, as `project_setup_apply` takes them.
+#[tauri::command(async)]
+pub fn bmad_switch_apply(
+    app: tauri::AppHandle,
+    root: String,
+    to: String,
+    plan: SwitchPlan,
+    files: Vec<SetupFile>,
+    import: String,
+    marker: String,
+) -> Result<SwitchResult, String> {
+    let dir = crate::projectsetup::project(&root)?;
+    // Held for the whole run: no setup may write into a tree that is half moved.
+    let _one = crate::projectsetup::APPLY.lock().unwrap_or_else(|e| e.into_inner());
+    apply(&dir, target(&to)?, &plan, &SetupInput { files: &files, import: &import, marker: &marker }, &env(&app))
 }
 
 #[cfg(test)]
@@ -1420,7 +1970,16 @@ mod tests {
 
     /// No git (the name doesn't exist), both versions' resources, a fixed day.
     pub(super) fn env() -> Env {
-        Env { git: "ade-no-such-git", v4_src: Some(v4_src()), v6_src: Some(v6_src()), today: "2026-10-11".into(), device: one_device }
+        Env {
+            git: "ade-no-such-git",
+            v4_src: Some(v4_src()),
+            v6_src: Some(v6_src()),
+            today: "2026-10-11".into(),
+            device: one_device,
+            rename: fs_rename,
+            fail_after_rules: false,
+            before_rollback: nothing,
+        }
     }
 
     pub(super) fn v4_project_in(dir: &Path) {
@@ -2464,7 +3023,7 @@ mod tests {
         assert_eq!(keys, ["archive", "archiveIgnored", "blocked", "dirty", "documents", "from", "leftInPlace", "leftovers", "moves", "to"]);
         let mut doc: Vec<&str> = json["documents"][0].as_object().unwrap().keys().map(String::as_str).collect();
         doc.sort_unstable();
-        assert_eq!(doc, ["files", "path", "ticked", "warning"]);
+        assert_eq!(doc, ["files", "linkTo", "path", "ticked", "warning"]);
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -2474,5 +3033,1034 @@ mod tests {
         assert_eq!(civil_date(19_782), "2024-02-29");
         assert_eq!(civil_date(20_737), "2026-10-11");
         assert_eq!(today().len(), 10);
+    }
+
+    #[test]
+    fn the_archive_rule_is_the_specs_text_under_its_marker() {
+        assert!(ARCHIVE_RULE.starts_with(&format!("{ARCHIVE_RULE_MARKER}\n## 4. The archive\n")), "{ARCHIVE_RULE}");
+        assert!(ARCHIVE_RULE.ends_with(
+            "`.ade/archive/` holds earlier BMAD versions of this project. It is\n\
+             read-only history: never treat it as current documents, never write to it,\n\
+             and read it only when a person asks about the earlier work.\n"
+        ));
+    }
+
+    // R16: a document that is itself a link says where it leads.
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_document_says_what_it_is_a_link_to() {
+        let dir = with_linked_docs(v6_with_output("docs", "docs"));
+        let linked = plan(&dir, V4, &["docs".into()], &env());
+        assert_eq!(linked.blocked, None);
+        assert_eq!(linked.documents.len(), 1, "{:?}", linked.documents);
+        assert_eq!((linked.documents[0].path.as_str(), linked.documents[0].link_to.as_deref()), ("docs", Some("realdocs")));
+        assert!(sources(&linked.moves).contains(&"docs") && !sources(&linked.moves).contains(&"realdocs"), "only the link: {:?}", sources(&linked.moves));
+        let json = serde_json::to_value(&linked).unwrap();
+        assert_eq!(json["documents"][0]["linkTo"], "realdocs");
+
+        // The folder behind it is no link.
+        write(&dir, "_bmad/config.toml", "[core]\noutput_folder = \"realdocs\"\n");
+        let real = plan(&dir, V4, &[], &env());
+        assert_eq!((real.documents[0].path.as_str(), real.documents[0].link_to.as_deref()), ("realdocs", None));
+        assert!(serde_json::to_value(&real).unwrap()["documents"][0]["linkTo"].is_null());
+
+        // A link that leaves the project is named as the system spells it.
+        let outside = temp();
+        std::fs::remove_file(dir.join("docs")).unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("docs")).unwrap();
+        write(&dir, "_bmad/config.toml", "[core]\noutput_folder = \"docs\"\n");
+        let away = plan(&dir, V4, &[], &env());
+        let real_outside = std::fs::canonicalize(&outside).unwrap();
+        assert_eq!(away.documents[0].link_to.as_deref(), Some(real_outside.to_string_lossy().as_ref()));
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(outside).ok();
+    }
+
+    #[test]
+    fn a_document_that_is_no_link_has_no_link_target() {
+        let dir = v4_project();
+        let plan = plan(&dir, V6, &[], &env());
+        assert!(!plan.documents.is_empty() && plan.documents.iter().all(|d| d.link_to.is_none()), "{:?}", plan.documents);
+        // A plan from a webview that predates the field still reads.
+        let mut json = serde_json::to_value(&plan).unwrap();
+        for doc in json["documents"].as_array_mut().unwrap() {
+            doc.as_object_mut().unwrap().remove("linkTo");
+        }
+        assert_eq!(serde_json::from_value::<SwitchPlan>(json).unwrap(), plan);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // R16: `docs -> .` would make the whole project "the documents".
+    #[cfg(unix)]
+    #[test]
+    fn a_docs_link_to_the_project_itself_adds_no_place() {
+        let dir = v6_project();
+        std::fs::remove_dir_all(dir.join("docs")).unwrap();
+        std::os::unix::fs::symlink(".", dir.join("docs")).unwrap();
+        let real_root = std::fs::canonicalize(&dir).unwrap();
+        let paths = crate::bmadconfig::parse_core_config(None);
+        let places = document_locations(&dir, &real_root, &paths, &mut Vec::new(), &mut |rel: String| rel);
+        assert!(places.iter().all(|place| !place.path.is_empty()), "{places:?}");
+        // So the output folder is still an ordinary move, not a document.
+        let plan = plan(&dir, V4, &[], &env());
+        assert_eq!(plan.blocked, None);
+        assert!(sources(&plan.moves).contains(&"_bmad-output"), "{:?}", sources(&plan.moves));
+        assert!(plan.documents.is_empty(), "{:?}", plan.documents);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn the_journal_lists_what_a_rollback_could_not_put_back() {
+        let mut journal = Journal::new("v4", "v6", "2026-10-11", &two_moves());
+        assert!(!journal.render().contains("couldn't be put back"));
+        journal.status = "incomplete";
+        journal.problems = vec![".ade/rules.md changed\nstatus: complete".into(), ".claude/settings.json can't be read".into()];
+        let text = journal.render();
+        assert!(text.contains("## What couldn't be put back\n\n- .ade/rules.md changedstatus: complete\n- .claude/settings.json can't be read\n"), "{text}");
+        assert_eq!(front_matter(&text).unwrap()["status"], "incomplete");
+    }
+
+    // ---- bmad_switch_apply ----
+
+    use crate::projectsetup::SetupFile;
+    use std::cell::Cell;
+    use std::collections::BTreeMap;
+
+    const IMPORT: &str = "\n<!-- m -->\n@.ade/rules.md\n";
+    const ARCHIVE_V6: &str = ".ade/archive/bmad-v6-2026-10-11";
+
+    /// What the frontend sends: the methodology files for the new version.
+    fn files() -> Vec<SetupFile> {
+        vec![
+            SetupFile { path: "CLAUDE.md".into(), content: "# new\n@.ade/rules.md\n".into() },
+            SetupFile { path: ".ade/rules.md".into(), content: format!("new rules\n\n{ARCHIVE_RULE}") },
+            SetupFile { path: ".claude/agents/qa.md".into(), content: "fresh qa".into() },
+        ]
+    }
+
+    fn switch(dir: &Path, to: Methodology, shown: &SwitchPlan, env: &Env) -> Result<SwitchResult, String> {
+        let files = files();
+        apply(dir, to, shown, &SetupInput { files: &files, import: IMPORT, marker: "<!-- m -->" }, env)
+    }
+
+    /// Every file under `root` with its content, every folder (with a
+    /// trailing `/`) and every link with where it points: what "left as it
+    /// was" is compared on.
+    fn tree(root: &Path) -> BTreeMap<String, String> {
+        fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                let rel = path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
+                let meta = std::fs::symlink_metadata(&path).unwrap();
+                if meta.file_type().is_symlink() {
+                    out.insert(rel, format!("-> {}", std::fs::read_link(&path).unwrap().display()));
+                } else if meta.is_dir() {
+                    out.insert(format!("{rel}/"), String::new());
+                    walk(root, &path, out);
+                } else {
+                    out.insert(rel, String::from_utf8_lossy(&std::fs::read(&path).unwrap()).into_owned());
+                }
+            }
+        }
+        let mut out = BTreeMap::new();
+        walk(root, root, &mut out);
+        out
+    }
+
+    fn read(dir: &Path, rel: &str) -> String {
+        std::fs::read_to_string(at(dir, rel)).unwrap_or_else(|e| panic!("{rel}: {e}"))
+    }
+
+    /// The archive holds what `plan` moved, at the same paths, with the
+    /// content it had in `before`, and beside the journal nothing else.
+    fn assert_mirrored(dir: &Path, plan: &SwitchPlan, before: &BTreeMap<String, String>) {
+        let mut expected: BTreeMap<String, String> = BTreeMap::new();
+        for (path, content) in before {
+            let file = path.trim_end_matches('/');
+            if plan.moves.iter().any(|m| file == m.from || nested(file, &m.from)) {
+                expected.insert(path.clone(), content.clone());
+                // The folders on the way to it, which the archive had to make.
+                let mut parent = Path::new(file).parent();
+                while let Some(p) = parent.filter(|p| !p.as_os_str().is_empty()) {
+                    expected.insert(format!("{}/", slashed(p)), String::new());
+                    parent = p.parent();
+                }
+            }
+        }
+        let mut found = tree(&at(dir, &plan.archive));
+        assert!(found.remove(JOURNAL).is_some(), "the journal is in the archive");
+        assert_eq!(found, expected);
+    }
+
+    /// A destination inside an archive: a forward move. A reverse move goes
+    /// the other way.
+    fn into_archive(to: &Path) -> bool {
+        to.components().any(|c| c.as_os_str() == "archive")
+    }
+
+    fn fail_at_stage(from: &Path, to: &Path) -> std::io::Result<()> {
+        if from.ends_with(".ade/stage") && into_archive(to) {
+            return Err(std::io::Error::other("the file is in use"));
+        }
+        std::fs::rename(from, to)
+    }
+
+    fn fail_at_stage_and_core_back(from: &Path, to: &Path) -> std::io::Result<()> {
+        if to.ends_with(".bmad-core") && !into_archive(to) {
+            return Err(std::io::Error::other("the folder is locked"));
+        }
+        fail_at_stage(from, to)
+    }
+
+    /// An agent that keeps working: once `.bmad-core` has moved, it writes
+    /// into `.bmad-core/` again. Then the switch fails.
+    fn agent_writes_then_stage_fails(from: &Path, to: &Path) -> std::io::Result<()> {
+        fail_at_stage(from, to)?;
+        if from.ends_with(".bmad-core") && into_archive(to) {
+            std::fs::create_dir_all(from)?;
+            std::fs::write(from.join("new.md"), "written by an agent")?;
+        }
+        Ok(())
+    }
+
+    thread_local! {
+        /// The forward move `fail_at_nth` fails at, and how many it has seen.
+        /// A rename seam is a plain function, and each test has its own thread.
+        static NTH: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
+    }
+
+    /// As Windows does for a folder that is some process's cwd.
+    fn fail_at_nth(from: &Path, to: &Path) -> std::io::Result<()> {
+        if into_archive(to) {
+            let (nth, seen) = NTH.get();
+            NTH.set((nth, seen + 1));
+            if seen == nth {
+                return Err(std::io::Error::other("the folder is in use by another process"));
+            }
+        }
+        std::fs::rename(from, to)
+    }
+
+    /// Something writes a v4 marker as soon as the old one has moved.
+    fn a_v4_marker_reappears(from: &Path, to: &Path) -> std::io::Result<()> {
+        std::fs::rename(from, to)?;
+        if from.ends_with(".ade/methodology") && into_archive(to) {
+            std::fs::write(from, "v4\n")?;
+        }
+        Ok(())
+    }
+
+    fn a_v4_marker_reappears_then_the_role_file_fails(from: &Path, to: &Path) -> std::io::Result<()> {
+        if from.ends_with(".claude/agents/qa.md") && into_archive(to) {
+            return Err(std::io::Error::other("the file is in use"));
+        }
+        a_v4_marker_reappears(from, to)
+    }
+
+    #[test]
+    fn a_switch_from_v4_to_v6() {
+        let dir = v4_project();
+        let before = tree(&dir);
+        let shown = plan(&dir, V6, &[], &env());
+        let result = switch(&dir, V6, &shown, &env()).unwrap();
+
+        assert_eq!(result.archive, ARCHIVE);
+        assert_eq!(result.moved, 7, "2 engine files, 1 command, the log, the stage, the marker, the role file");
+        assert!(!result.moved_capped);
+        // The old version is in the archive, mirrored.
+        assert!(!at(&dir, ".bmad-core").exists() && !at(&dir, ".claude/commands/BMad").exists());
+        assert_eq!(read(&dir, &format!("{ARCHIVE}/.bmad-core/tasks/a.md")), "a");
+        assert_eq!(read(&dir, &format!("{ARCHIVE}/.ade/methodology")), "v4\n");
+        assert_eq!(read(&dir, &format!("{ARCHIVE}/.claude/agents/qa.md")), "edited qa", "an edited role file is archived, not lost");
+        assert_mirrored(&dir, &shown, &before);
+        // The new version is set up fresh.
+        assert_eq!(crate::bmadv6::detect_on_disk(&dir), Some(V6));
+        assert_eq!(read(&dir, ".ade/methodology"), "v6\n");
+        assert_eq!(read(&dir, ".claude/agents/qa.md"), "fresh qa");
+        assert!(at(&dir, "_bmad/ade-runtime.mjs").is_file() && at(&dir, ".claude/skills/bmad/SKILL.md").is_file());
+        assert_eq!(result.setup.bmadv6_files, 6, "{:?}", result.setup.created);
+        // What both versions share stays, and so do the documents.
+        assert_eq!(read(&dir, ".claude/agents/mine.md"), "my agent");
+        assert_eq!(read(&dir, "docs/prd.md"), "prd");
+        assert_eq!(read(&dir, "docs/architecture.md"), "arch");
+        assert_eq!(read(&dir, "docs/stories/1.1.md"), "story");
+        assert_eq!(read(&dir, "CLAUDE.md"), format!("# Mine\n{IMPORT}"));
+        // The rules a project already had gain the archive section, once.
+        assert!(result.rules_appended);
+        assert_eq!(read(&dir, ".ade/rules.md"), format!("old rules\n\n{ARCHIVE_RULE}"));
+        // Claude Code is kept out of the archive.
+        assert!(result.archive_denied);
+        let settings: serde_json::Value = serde_json::from_str(&read(&dir, ".claude/settings.json")).unwrap();
+        assert_eq!(settings["permissions"]["deny"], serde_json::json!(["Edit(/.ade/archive/**)"]));
+        // The journal says it finished, so nothing is pending.
+        let journal = read(&dir, &format!("{ARCHIVE}/ARCHIVE.md"));
+        assert!(journal.starts_with("---\nstatus: complete\nphase: done\nfrom: v4\nto: v6\ndate: 2026-10-11\n---\n"), "{journal}");
+        assert!(!journal.contains(": pending") && !journal.contains(": moving"), "{journal}");
+        assert_eq!(journal.matches(": moved\n").count(), 6, "{journal}");
+        assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_switch_from_v6_to_v4_and_back_again() {
+        let dir = v6_project();
+        let before = tree(&dir);
+        let shown = plan(&dir, V4, &[], &env());
+        let result = switch(&dir, V4, &shown, &env()).unwrap();
+        assert_eq!(result.archive, ARCHIVE_V6);
+        assert!(!at(&dir, "_bmad").exists() && !at(&dir, "_bmad-output").exists() && !at(&dir, ".ade/gates").exists());
+        assert_eq!(read(&dir, &format!("{ARCHIVE_V6}/_bmad-output/shop/1.md")), "ticket");
+        assert_eq!(read(&dir, &format!("{ARCHIVE_V6}/.claude/skills/bmad/SKILL.md")), "bmad skill");
+        assert_mirrored(&dir, &shown, &before);
+        assert_eq!(read(&dir, ".claude/skills/mine/SKILL.md"), "my skill", "a person's own skill stays");
+        assert_eq!(read(&dir, ".claude/agents/mine.md"), "my agent");
+        assert_eq!(read(&dir, "docs/prd.md"), "prd");
+        assert_eq!(crate::bmadv6::detect_on_disk(&dir), Some(V4));
+        assert_eq!(read(&dir, ".ade/methodology"), "v4\n");
+        assert_eq!(read(&dir, ".bmad-core/tasks/a.md"), "a");
+        assert_eq!(read(&dir, ".claude/commands/BMad/tasks/x.md"), "x");
+        assert!(read(&dir, &format!("{ARCHIVE_V6}/ARCHIVE.md")).starts_with("---\nstatus: complete\nphase: done\nfrom: v6\nto: v4\n"));
+
+        // Back to v6 the same day: a second archive beside the first, which is not touched.
+        let back = plan(&dir, V6, &[], &env());
+        assert_eq!(back.blocked, None);
+        assert_eq!(back.archive, ".ade/archive/bmad-v4-2026-10-11");
+        let first = tree(&at(&dir, ARCHIVE_V6));
+        switch(&dir, V6, &back, &env()).unwrap();
+        assert_eq!(tree(&at(&dir, ARCHIVE_V6)), first);
+        assert_eq!(crate::bmadv6::detect_on_disk(&dir), Some(V6));
+        // The rules already have the section, and the settings the rule.
+        assert_eq!(read(&dir, ".ade/rules.md").matches(ARCHIVE_RULE_MARKER).count(), 1);
+        assert_eq!(read(&dir, ".claude/settings.json").matches("Edit(/.ade/archive/**)").count(), 1);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_project_with_no_rules_gets_the_full_rules_with_the_section_once() {
+        let dir = v4_project();
+        std::fs::remove_file(at(&dir, ".ade/rules.md")).unwrap();
+        let result = switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap();
+        assert!(!result.rules_appended, "setup wrote rules that already carry it");
+        assert_eq!(read(&dir, ".ade/rules.md"), format!("new rules\n\n{ARCHIVE_RULE}"));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rules_with_no_final_newline_still_get_a_clean_section() {
+        let dir = v4_project();
+        write(&dir, ".ade/rules.md", "old rules");
+        switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap();
+        assert_eq!(read(&dir, ".ade/rules.md"), format!("old rules\n\n{ARCHIVE_RULE}"));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_malformed_settings_file_does_not_stop_the_switch() {
+        let dir = v4_project();
+        write(&dir, ".claude/settings.json", "{ not json");
+        let result = switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap();
+        assert!(!result.archive_denied);
+        assert!(result.setup.settings_error.is_some());
+        assert_eq!(read(&dir, ".claude/settings.json"), "{ not json");
+        assert_eq!(read(&dir, ".ade/methodology"), "v6\n");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn apply_uses_the_archive_the_person_saw() {
+        let dir = v4_project();
+        // Planned yesterday, confirmed after midnight.
+        let shown = plan(&dir, V6, &[], &Env { today: "2026-10-10".into(), ..env() });
+        let result = switch(&dir, V6, &shown, &env()).unwrap();
+        assert_eq!(result.archive, ".ade/archive/bmad-v4-2026-10-10");
+        assert!(at(&dir, ".ade/archive/bmad-v4-2026-10-10/.bmad-core").is_dir());
+        assert!(!at(&dir, ARCHIVE).exists());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn apply_refuses_when_the_sources_differ_from_the_plan() {
+        let dir = v4_project();
+        let shown = plan(&dir, V6, &[], &env());
+        let before = tree(&dir);
+        // Something the person didn't see would move now.
+        write(&dir, ".claude/agents/architect.md", "architect");
+        let err = switch(&dir, V6, &shown, &env()).unwrap_err();
+        assert!(err.contains("changed since"), "{err}");
+        std::fs::remove_file(at(&dir, ".claude/agents/architect.md")).unwrap();
+        assert_eq!(tree(&dir), before, "nothing moved");
+        // Something the person saw is gone.
+        std::fs::remove_file(at(&dir, ".ade/stage")).unwrap();
+        assert!(switch(&dir, V6, &shown, &env()).unwrap_err().contains("changed since"));
+        assert!(at(&dir, ".bmad-core").is_dir() && !at(&dir, ".ade/archive").exists());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // The plan comes back from the webview. A document it never offered
+    // doesn't move, whatever the plan says.
+    #[test]
+    fn apply_refuses_a_document_the_plan_never_offered() {
+        let dir = v4_project();
+        write(&dir, "src/main.rs", "fn main() {}");
+        let mut shown = plan(&dir, V6, &[], &env());
+        let before = tree(&dir);
+        shown.documents.push(Document { path: "src".into(), files: 1, ticked: true, warning: None, link_to: None });
+        shown.moves.push(Move { from: "src".into(), to: format!("{ARCHIVE}/src"), files: 1, ignored: "none".into() });
+        assert!(switch(&dir, V6, &shown, &env()).unwrap_err().contains("changed since"));
+        assert_eq!(tree(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn apply_takes_only_the_archives_name_from_the_plan() {
+        let dir = v4_project();
+        let honest = plan(&dir, V6, &[], &env());
+        let before = tree(&dir);
+        for archive in [
+            "../elsewhere",
+            ".ade/archive/../../x",
+            ".ade/archive/bmad-v6-2026-10-11",
+            ".ade/archive/bmad-v4-2026-10-11/..",
+            ".ade/archive/bmad-v4-2026-10-11/x",
+            ".ade/archive/bmad-v4-2026-10-11-",
+            ".ade\\archive\\bmad-v4-2026-10-11",
+            "docs",
+            "",
+        ] {
+            let shown = SwitchPlan { archive: archive.to_string(), ..honest.clone() };
+            assert!(switch(&dir, V6, &shown, &env()).unwrap_err().contains("archive"), "{archive}");
+            assert_eq!(tree(&dir), before, "{archive}");
+        }
+        // Destinations the webview sends are not the ones used.
+        let mut shown = honest.clone();
+        for m in &mut shown.moves {
+            m.to = format!("docs/stolen/{}", m.from);
+        }
+        switch(&dir, V6, &shown, &env()).unwrap();
+        assert!(!at(&dir, "docs/stolen").exists());
+        assert!(at(&dir, &format!("{ARCHIVE}/.bmad-core")).is_dir());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn apply_refuses_when_the_archive_folder_now_exists() {
+        let dir = v4_project();
+        let shown = plan(&dir, V6, &[], &env());
+        std::fs::create_dir_all(at(&dir, ARCHIVE)).unwrap();
+        assert!(switch(&dir, V6, &shown, &env()).unwrap_err().contains("already exists"));
+        assert!(at(&dir, ".bmad-core").is_dir());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn apply_refuses_while_another_switch_is_in_progress() {
+        let dir = v4_project();
+        let shown = plan(&dir, V6, &[], &env());
+        // Another switch has started since the plan was shown.
+        let other = at(&dir, ".ade/archive/bmad-v4-2026-10-01");
+        std::fs::create_dir_all(&other).unwrap();
+        Journal::new("v4", "v6", "2026-10-01", &[]).write(&other).unwrap();
+        let before = tree(&dir);
+        let err = switch(&dir, V6, &shown, &env()).unwrap_err();
+        assert!(err.contains("didn't finish") && err.contains(".ade/archive/bmad-v4-2026-10-01/ARCHIVE.md"), "{err}");
+        assert_eq!(tree(&dir), before, "nothing moved, and no second archive");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn apply_refuses_when_the_new_versions_files_are_not_found() {
+        let dir = v4_project();
+        let shown = plan(&dir, V6, &[], &env());
+        let before = tree(&dir);
+        let err = switch(&dir, V6, &shown, &Env { v6_src: None, ..env() }).unwrap_err();
+        assert!(err.contains("weren't found"), "{err}");
+        assert_eq!(tree(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // R14, at the moment the archive folder is made.
+    #[cfg(unix)]
+    #[test]
+    fn an_archive_reached_through_a_link_is_refused_when_it_is_made() {
+        let dir = v4_project();
+        let shown = plan(&dir, V6, &[], &env());
+        std::fs::create_dir_all(at(&dir, ARCHIVE)).unwrap();
+        assert_eq!(archive_in_project(&dir, ARCHIVE), Ok(()));
+        // `.ade/archive` becomes a link out of the project after the plan.
+        let outside = temp();
+        std::fs::remove_dir_all(at(&dir, ARCHIVE_DIR)).unwrap();
+        std::os::unix::fs::symlink(&outside, at(&dir, ARCHIVE_DIR)).unwrap();
+        std::fs::create_dir_all(at(&dir, ARCHIVE)).unwrap();
+        let why = archive_in_project(&dir, ARCHIVE).unwrap_err();
+        assert!(why.starts_with(".ade/archive is not a folder of this project"), "{why}");
+        // Apply plans again first, and refuses there: nothing is made
+        // where the link leads.
+        std::fs::remove_dir_all(outside.join("bmad-v4-2026-10-11")).unwrap();
+        assert!(switch(&dir, V6, &shown, &env()).unwrap_err().contains("is a link"));
+        assert!(at(&dir, ".bmad-core").is_dir());
+        assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(outside).ok();
+    }
+
+    // A rename can fail at any move: on Windows, a folder that is some
+    // process's cwd. Wherever it stops, everything goes back.
+    #[test]
+    fn rollback_after_a_failed_move_puts_everything_back_whichever_move_failed() {
+        for (project, to, moves) in [(v4_project as fn() -> PathBuf, V6, 6), (v6_project as fn() -> PathBuf, V4, 7)] {
+            for nth in 0..moves {
+                let dir = project();
+                let before = tree(&dir);
+                let failing = Env { rename: fail_at_nth, ..env() };
+                let shown = plan(&dir, to, &[], &failing);
+                assert_eq!(shown.moves.len(), moves);
+                NTH.set((nth, 0));
+                let err = switch(&dir, to, &shown, &failing).unwrap_err();
+                assert_eq!(err, format!("Couldn't move {}: the folder is in use by another process", shown.moves[nth].from), "the path that failed is named");
+                assert_eq!(tree(&dir), before, "move {nth}: every file back, and no folder left: the archive is gone, journal included");
+                assert!(pending(&dir).is_empty());
+                // And the project can still be switched.
+                switch(&dir, to, &plan(&dir, to, &[], &env()), &env()).unwrap();
+                std::fs::remove_dir_all(dir).ok();
+            }
+        }
+    }
+
+    thread_local! {
+        /// What the journal on disk said as each rename was asked for, and
+        /// whether that rename was a forward move.
+        static JOURNALS: std::cell::RefCell<Vec<(bool, String)>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    fn noting_the_journal(from: &Path, to: &Path) -> std::io::Result<()> {
+        let forward = into_archive(to);
+        let archived = if forward { to } else { from };
+        let journal = archived.ancestors().map(|folder| folder.join(JOURNAL)).find(|file| file.is_file());
+        let text = journal.map(|file| std::fs::read_to_string(file).unwrap()).unwrap_or_default();
+        JOURNALS.with_borrow_mut(|seen| seen.push((forward, text)));
+        std::fs::rename(from, to)
+    }
+
+    // R3: the journal leads the disk, on the way in and on the way back.
+    #[test]
+    fn each_move_is_journalled_as_moving_before_its_rename() {
+        let dir = v4_project();
+        let failing = Env { rename: noting_the_journal, fail_after_rules: true, ..env() };
+        let shown = plan(&dir, V6, &[], &failing);
+        JOURNALS.with_borrow_mut(Vec::clear);
+        switch(&dir, V6, &shown, &failing).unwrap_err();
+        let seen = JOURNALS.with_borrow(Clone::clone);
+        let count = shown.moves.len();
+        assert_eq!(seen.len(), count * 2, "every move, there and back");
+        let state = |journal: &str, m: &Move| {
+            let line = journal.lines().find(|line| line.starts_with(&format!("- `{}` → ", m.from))).unwrap_or_else(|| panic!("{} in {journal}", m.from));
+            line.rsplit_once(": ").unwrap().1.to_string()
+        };
+        for (k, (forward, journal)) in seen[..count].iter().enumerate() {
+            assert!(*forward && journal.starts_with("---\nstatus: in-progress\nphase: moving\n"), "{journal}");
+            for (j, m) in shown.moves.iter().enumerate() {
+                let expected = if j < k { "moved" } else if j == k { "moving" } else { "pending" };
+                assert_eq!(state(journal, m), expected, "forward move {k}, line {j}: {journal}");
+            }
+        }
+        // Back, last first.
+        for (n, (forward, journal)) in seen[count..].iter().enumerate() {
+            let k = count - 1 - n;
+            assert!(!*forward && journal.starts_with("---\nstatus: in-progress\n"), "{journal}");
+            for (j, m) in shown.moves.iter().enumerate() {
+                let expected = if j < k { "moved" } else if j == k { "moving" } else { "moved back" };
+                assert_eq!(state(journal, m), expected, "reverse move {k}, line {j}: {journal}");
+            }
+        }
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rollback_after_a_failed_move_puts_everything_back() {
+        let dir = v4_project();
+        let before = tree(&dir);
+        let failing = Env { rename: fail_at_stage, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert!(err.contains(".ade/stage") && err.contains("in use"), "the path that failed is named: {err}");
+        assert_eq!(tree(&dir), before, "every file back, and no folder left: the archive is gone, journal included");
+        assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // R2: a settings file that is there and can't be read stops the switch,
+    // and the rollback leaves it alone.
+    #[test]
+    fn a_settings_file_that_cannot_be_read_fails_the_switch_and_is_left_alone() {
+        let dir = v4_project();
+        // A directory where the file should be: reading it fails on every OS.
+        std::fs::create_dir_all(at(&dir, ".claude/settings.json/inner")).unwrap();
+        let before = tree(&dir);
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap_err();
+        assert!(err.starts_with(".claude/settings.json can't be read"), "{err}");
+        assert_eq!(tree(&dir), before, "the moves are reversed and the unreadable file is neither removed nor replaced");
+        assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // R2: the same for the marker, before anything has moved.
+    #[test]
+    fn a_marker_that_cannot_be_read_fails_the_switch_and_is_left_alone() {
+        let dir = v4_project();
+        std::fs::remove_file(at(&dir, ".ade/methodology")).unwrap();
+        std::fs::create_dir_all(at(&dir, ".ade/methodology/inner")).unwrap();
+        let before = tree(&dir);
+        let shown = plan(&dir, V6, &[], &env());
+        assert_eq!(shown.blocked, None, "`.bmad-core/` says v4");
+        let err = switch(&dir, V6, &shown, &env()).unwrap_err();
+        assert!(err.starts_with(".ade/methodology can't be read"), "{err}");
+        assert_eq!(tree(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rollback_after_a_failed_setup_puts_everything_back() {
+        let dir = v4_project();
+        let before = tree(&dir);
+        // A v6 resource root with skills but no runtime: setup fails after it
+        // has written files, folders and the import line.
+        let broken = temp();
+        write(&broken, "skills/bmad/SKILL.md", "bmad skill");
+        let failing = Env { v6_src: Some(broken.clone()), ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert!(err.contains("ade-runtime.mjs"), "{err}");
+        assert_eq!(tree(&dir), before, "what setup created is gone, the import is stripped, the moves are reversed");
+        assert_eq!(read(&dir, ".claude/agents/qa.md"), "edited qa");
+        assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(broken).ok();
+    }
+
+    // The rules step: rules that are there and can't be read.
+    #[test]
+    fn rollback_after_a_failed_rules_step_puts_everything_back() {
+        let dir = v4_project();
+        std::fs::remove_file(at(&dir, ".ade/rules.md")).unwrap();
+        std::fs::create_dir_all(at(&dir, ".ade/rules.md/inner")).unwrap();
+        write(&dir, ".claude/settings.json", "{\"model\":\"sonnet\"}");
+        let before = tree(&dir);
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap_err();
+        assert!(err.starts_with(".ade/rules.md can't be read"), "{err}");
+        assert_eq!(tree(&dir), before, "setup had finished: all of it is taken back");
+        assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rollback_at_the_last_step_restores_settings_rules_and_the_marker() {
+        let dir = v4_project();
+        write(&dir, ".claude/settings.json", "{\"model\":\"sonnet\"}");
+        let before = tree(&dir);
+        // Setup has finished: the marker says v6, the settings carry two new
+        // keys and the rule, the rules carry the section.
+        let failing = Env { fail_after_rules: true, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert_eq!(err, "failed on purpose, after the rules step", "a rollback that worked adds nothing");
+        assert_eq!(tree(&dir), before);
+        assert_eq!(read(&dir, ".claude/settings.json"), "{\"model\":\"sonnet\"}");
+        assert_eq!(read(&dir, ".ade/rules.md"), "old rules\n");
+        assert_eq!(read(&dir, ".ade/methodology"), "v4\n", "the old marker, not the one setup wrote");
+        assert_eq!(read(&dir, "CLAUDE.md"), "# Mine\n");
+        assert!(pending(&dir).is_empty());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rollback_at_the_last_step_of_a_switch_to_v4() {
+        let dir = v6_project();
+        let before = tree(&dir);
+        let failing = Env { fail_after_rules: true, ..env() };
+        switch(&dir, V4, &plan(&dir, V4, &[], &failing), &failing).unwrap_err();
+        assert_eq!(tree(&dir), before, "no settings file, no engine, no commands, no archive");
+        assert_eq!(read(&dir, ".ade/methodology"), "v6\n");
+        assert_eq!(read(&dir, ".claude/agents/qa.md"), "qa for v6");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rollback_leaves_no_marker_in_a_project_that_had_none() {
+        let dir = v4_project();
+        // A v4 project from before the marker: `.bmad-core/` alone says v4.
+        std::fs::remove_file(at(&dir, ".ade/methodology")).unwrap();
+        let before = tree(&dir);
+        let failing = Env { fail_after_rules: true, ..env() };
+        switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert_eq!(tree(&dir), before);
+        assert!(!at(&dir, ".ade/methodology").exists());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // The explicit guard. A marker written while the old one is in the
+    // archive is one setup keeps and doesn't report: the v4 install finds it
+    // already saying v4. Left there, it would keep the old marker from coming
+    // back, on a tree that is v6 again.
+    #[test]
+    fn rollback_restores_the_marker_over_one_setup_kept() {
+        let dir = v6_project();
+        let before = tree(&dir);
+        let failing = Env { rename: a_v4_marker_reappears, fail_after_rules: true, ..env() };
+        let err = switch(&dir, V4, &plan(&dir, V4, &[], &failing), &failing).unwrap_err();
+        assert_eq!(err, "failed on purpose, after the rules step");
+        assert_eq!(read(&dir, ".ade/methodology"), "v6\n");
+        assert_eq!(tree(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// Something writes a v6 marker once the v4 engine has moved.
+    fn a_v6_marker_appears(from: &Path, to: &Path) -> std::io::Result<()> {
+        std::fs::rename(from, to)?;
+        if from.ends_with(".bmad-core") && into_archive(to) {
+            std::fs::write(from.parent().unwrap().join(".ade").join("methodology"), "v6\n")?;
+        }
+        Ok(())
+    }
+
+    // The same for a project that had no marker: the v6 install keeps one
+    // that already says v6, and the project ends with none again.
+    #[test]
+    fn rollback_leaves_no_marker_where_setup_kept_one() {
+        let dir = v4_project();
+        std::fs::remove_file(at(&dir, ".ade/methodology")).unwrap();
+        let before = tree(&dir);
+        let failing = Env { rename: a_v6_marker_appears, fail_after_rules: true, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert_eq!(err, "failed on purpose, after the rules step");
+        assert!(!present(&at(&dir, ".ade/methodology")));
+        assert_eq!(tree(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// The marker in the archive is rewritten while the switch runs.
+    fn the_archived_marker_is_rewritten(root: &Path) {
+        std::fs::write(at(root, &format!("{ARCHIVE}/.ade/methodology")), "something else\n").unwrap();
+    }
+
+    // Whatever happened to the marker in between, it reads as it did.
+    #[test]
+    fn rollback_puts_the_markers_old_text_back() {
+        let dir = v4_project();
+        let before = tree(&dir);
+        let failing = Env { fail_after_rules: true, before_rollback: the_archived_marker_is_rewritten, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert_eq!(err, "failed on purpose, after the rules step");
+        assert_eq!(read(&dir, ".ade/methodology"), "v4\n");
+        assert_eq!(tree(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // Before setup has run, nothing of the switch's writes a marker: one
+    // that appears is someone else's, and stays like anything else.
+    #[test]
+    fn a_marker_written_before_setup_ran_is_not_the_switchs_to_remove() {
+        let dir = v6_project();
+        let failing = Env { rename: a_v4_marker_reappears_then_the_role_file_fails, ..env() };
+        let err = switch(&dir, V4, &plan(&dir, V4, &[], &failing), &failing).unwrap_err();
+        assert!(err.contains(".ade/methodology") && err.contains(&format!("{ARCHIVE_V6}/ARCHIVE.md")), "{err}");
+        assert_eq!(read(&dir, ".ade/methodology"), "v4\n", "what was written stays");
+        assert_eq!(read(&dir, &format!("{ARCHIVE_V6}/.ade/methodology")), "v6\n", "and the old marker is still in the archive");
+        assert_eq!(read(&dir, "_bmad/ade-runtime.mjs"), "// runtime", "the rest is back");
+        assert_eq!(pending(&dir)[0].status, "incomplete");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_failed_reverse_move_leaves_an_incomplete_journal() {
+        let dir = v4_project();
+        let failing = Env { rename: fail_at_stage_and_core_back, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert!(err.contains("in use") && err.contains(&format!("{ARCHIVE}/ARCHIVE.md")), "{err}");
+        assert!(err.contains(".bmad-core: the folder is locked"), "what couldn't be restored is listed: {err}");
+        let journal = read(&dir, &format!("{ARCHIVE}/ARCHIVE.md"));
+        assert!(journal.starts_with("---\nstatus: incomplete\n"), "{journal}");
+        assert!(journal.contains(&format!("- `.bmad-core` → `{ARCHIVE}/.bmad-core`: moved\n")), "{journal}");
+        assert!(journal.contains(&format!("- `.claude/commands/BMad` → `{ARCHIVE}/.claude/commands/BMad`: moved back\n")), "{journal}");
+        assert!(journal.contains(&format!("- `.ade/stage` → `{ARCHIVE}/.ade/stage`: pending\n")), "{journal}");
+        assert!(journal.contains("## What couldn't be put back\n\n- .bmad-core: the folder is locked\n"), "{journal}");
+        // What couldn't go back is still in the archive, and the next switch is blocked.
+        assert!(at(&dir, &format!("{ARCHIVE}/.bmad-core/tasks/a.md")).is_file());
+        assert!(!at(&dir, ".bmad-core").exists());
+        assert_eq!(read(&dir, ".claude/commands/BMad/tasks/x.md"), "x");
+        assert_eq!(read(&dir, ".ai/debug-log.md"), "log");
+        assert_eq!(pending(&dir).len(), 1);
+        assert!(plan(&dir, V6, &[], &env()).blocked.unwrap().contains("didn't finish"));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn rollback_never_overwrites_what_reappeared() {
+        let dir = v4_project();
+        let failing = Env { rename: agent_writes_then_stage_fails, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert!(err.contains(".bmad-core: something is there again"), "{err}");
+        assert_eq!(read(&dir, ".bmad-core/new.md"), "written by an agent", "what the agent wrote is still there");
+        assert!(!at(&dir, ".bmad-core/tasks").exists(), "nothing was merged into it");
+        assert_eq!(read(&dir, &format!("{ARCHIVE}/.bmad-core/tasks/a.md")), "a", "and the engine is still in the archive");
+        assert_eq!(pending(&dir)[0].status, "incomplete");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// The archive section is no longer the end of the rules.
+    fn the_rules_are_edited(root: &Path) {
+        let rules = at(root, ".ade/rules.md");
+        let text = std::fs::read_to_string(&rules).unwrap();
+        std::fs::write(&rules, format!("{text}\nA line a person added.\n")).unwrap();
+    }
+
+    // R4: a restore step that fails is reported, and the journal stays.
+    #[test]
+    fn a_rules_section_that_cannot_be_taken_off_is_reported() {
+        let dir = v4_project();
+        let mut before = tree(&dir);
+        let failing = Env { fail_after_rules: true, before_rollback: the_rules_are_edited, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert!(err.starts_with("failed on purpose, after the rules step. The switch couldn't be fully undone: .ade/rules.md"), "{err}");
+        assert!(err.ends_with(&format!("See {ARCHIVE}/ARCHIVE.md.")), "{err}");
+        assert_eq!(read(&dir, ".ade/rules.md"), format!("old rules\n\n{ARCHIVE_RULE}\nA line a person added.\n"), "left as the person has it");
+        // The archive is kept with its journal, which says what is wrong.
+        let journal = read(&dir, &format!("{ARCHIVE}/ARCHIVE.md"));
+        assert!(journal.starts_with("---\nstatus: incomplete\n"), "{journal}");
+        assert!(journal.contains("## What couldn't be put back\n\n- .ade/rules.md"), "{journal}");
+        assert_eq!(journal.matches(": moved back\n").count(), 6, "{journal}");
+        assert_eq!(pending(&dir).len(), 1);
+        // Everything else was still put back.
+        let mut after = tree(&dir);
+        after.retain(|path, _| !path.starts_with(".ade/archive") && path != ".ade/rules.md");
+        before.remove(".ade/rules.md");
+        assert_eq!(after, before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// The settings file becomes something that can't be read.
+    fn the_settings_become_unreadable(root: &Path) {
+        let settings = at(root, ".claude/settings.json");
+        std::fs::remove_file(&settings).unwrap();
+        std::fs::create_dir_all(settings.join("inner")).unwrap();
+    }
+
+    // R2 and R4: settings that can't be read at rollback are not replaced.
+    #[test]
+    fn settings_that_cannot_be_read_at_rollback_are_left_and_reported() {
+        let dir = v4_project();
+        write(&dir, ".claude/settings.json", "{\"model\":\"sonnet\"}");
+        let failing = Env { fail_after_rules: true, before_rollback: the_settings_become_unreadable, ..env() };
+        let err = switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert!(err.contains(".claude/settings.json can't be read, so it was left as it is"), "{err}");
+        assert!(at(&dir, ".claude/settings.json/inner").is_dir(), "neither removed nor replaced");
+        assert_eq!(pending(&dir)[0].status, "incomplete");
+        // The rest went back.
+        assert_eq!(read(&dir, ".bmad-core/tasks/a.md"), "a");
+        assert_eq!(read(&dir, ".ade/methodology"), "v4\n");
+        assert_eq!(read(&dir, ".ade/rules.md"), "old rules\n");
+        assert_eq!(read(&dir, "CLAUDE.md"), "# Mine\n");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // R1 and R9: a v6 output folder among the documents.
+    #[test]
+    fn a_v6_output_folder_among_the_documents_stays_unless_ticked() {
+        let stays = v6_with_output("docs", "docs");
+        let shown = plan(&stays, V4, &[], &env());
+        assert_eq!(shown.documents.len(), 1);
+        switch(&stays, V4, &shown, &env()).unwrap();
+        assert_eq!(read(&stays, "docs/shop/1.md"), "ticket", "it stays by default");
+        assert_eq!(read(&stays, "docs/prd.md"), "prd");
+        assert!(!at(&stays, &format!("{ARCHIVE_V6}/docs")).exists());
+        assert_eq!(crate::bmadv6::detect_on_disk(&stays), Some(V4));
+
+        let moves = v6_with_output("docs", "docs");
+        let shown = plan(&moves, V4, &["docs".into()], &env());
+        assert!(shown.documents[0].ticked);
+        switch(&moves, V4, &shown, &env()).unwrap();
+        assert!(!at(&moves, "docs").exists(), "it moves when ticked");
+        assert_eq!(read(&moves, &format!("{ARCHIVE_V6}/docs/shop/1.md")), "ticket");
+        assert_eq!(read(&moves, &format!("{ARCHIVE_V6}/docs/prd.md")), "prd");
+
+        let back = v6_with_output("docs", "docs");
+        let before = tree(&back);
+        let failing = Env { fail_after_rules: true, ..env() };
+        switch(&back, V4, &plan(&back, V4, &["docs".into()], &failing), &failing).unwrap_err();
+        assert_eq!(tree(&back), before, "and it comes back on rollback");
+        for dir in [stays, moves, back] {
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    // What an earlier try of the new version left goes to its own folder,
+    // so the fresh install has the paths to itself; a rollback takes the
+    // fresh files away before the old ones come back.
+    #[test]
+    fn leftovers_are_archived_apart_and_come_back_on_rollback() {
+        let project = || {
+            let dir = v4_project();
+            write(&dir, "_bmad/config.toml", "[core]\nproject_name = \"old\"\n");
+            write(&dir, ".claude/skills/bmad/SKILL.md", "old skill");
+            write(&dir, ".claude/skills/mine/SKILL.md", "my skill");
+            dir
+        };
+        let back = project();
+        let before = tree(&back);
+        let failing = Env { fail_after_rules: true, ..env() };
+        switch(&back, V6, &plan(&back, V6, &[], &failing), &failing).unwrap_err();
+        assert_eq!(tree(&back), before);
+
+        let dir = project();
+        let result = switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap();
+        assert_eq!(result.moved, 9, "the seven of the old version and the two left over");
+        assert_eq!(read(&dir, &format!("{ARCHIVE}/leftovers-v6/_bmad/config.toml")), "[core]\nproject_name = \"old\"\n");
+        assert_eq!(read(&dir, &format!("{ARCHIVE}/leftovers-v6/.claude/skills/bmad/SKILL.md")), "old skill");
+        assert_eq!(read(&dir, ".claude/skills/bmad/SKILL.md"), "bmad skill", "the fresh one");
+        assert!(read(&dir, "_bmad/config.toml").contains("output_folder"), "the fresh config");
+        assert_eq!(read(&dir, ".claude/skills/mine/SKILL.md"), "my skill");
+        for dir in [back, dir] {
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    // Rules setup wrote without the section get it appended, and a rollback
+    // takes the section off first, so the file reads as setup wrote it and goes.
+    #[test]
+    fn rules_setup_wrote_without_the_section_are_taken_back_too() {
+        let mut files = files();
+        files[1].content = "rules from an older frontend\n".into();
+        let input = SetupInput { files: &files, import: IMPORT, marker: "<!-- m -->" };
+        let project = || {
+            let dir = v4_project();
+            std::fs::remove_file(at(&dir, ".ade/rules.md")).unwrap();
+            dir
+        };
+        let dir = project();
+        let result = apply(&dir, V6, &plan(&dir, V6, &[], &env()), &input, &env()).unwrap();
+        assert!(result.rules_appended);
+        assert_eq!(read(&dir, ".ade/rules.md"), format!("rules from an older frontend\n\n{ARCHIVE_RULE}"));
+
+        let back = project();
+        let before = tree(&back);
+        let failing = Env { fail_after_rules: true, ..env() };
+        apply(&back, V6, &plan(&back, V6, &[], &failing), &input, &failing).unwrap_err();
+        assert_eq!(tree(&back), before);
+        for dir in [dir, back] {
+            std::fs::remove_dir_all(dir).ok();
+        }
+    }
+
+    #[test]
+    fn a_ticked_document_moves_and_the_others_stay() {
+        let dir = v4_project();
+        let shown = plan(&dir, V6, &["docs/stories".into()], &env());
+        let result = switch(&dir, V6, &shown, &env()).unwrap();
+        assert_eq!(result.moved, 8);
+        assert!(!at(&dir, "docs/stories").exists());
+        assert_eq!(read(&dir, &format!("{ARCHIVE}/docs/stories/1.1.md")), "story");
+        assert_eq!(read(&dir, "docs/prd.md"), "prd");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_folder_moves_as_the_link() {
+        let dir = v4_project();
+        let outside = temp();
+        write(&outside, "a.md", "a");
+        std::fs::remove_dir_all(at(&dir, ".claude/commands/BMad")).unwrap();
+        std::os::unix::fs::symlink(&outside, at(&dir, ".claude/commands/BMad")).unwrap();
+        let before = tree(&dir);
+
+        // Rolled back, the link is a link again, at its place.
+        let failing = Env { fail_after_rules: true, ..env() };
+        switch(&dir, V6, &plan(&dir, V6, &[], &failing), &failing).unwrap_err();
+        assert_eq!(tree(&dir), before);
+        assert!(std::fs::symlink_metadata(at(&dir, ".claude/commands/BMad")).unwrap().file_type().is_symlink());
+
+        switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap();
+        let moved = at(&dir, &format!("{ARCHIVE}/.claude/commands/BMad"));
+        assert!(std::fs::symlink_metadata(&moved).unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read_link(&moved).unwrap(), outside);
+        assert!(!present(&at(&dir, ".claude/commands/BMad")));
+        assert_eq!(std::fs::read_to_string(outside.join("a.md")).unwrap(), "a", "what it points at is untouched");
+        assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 1);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(outside).ok();
+    }
+
+    // R16: ticking a linked `docs` moves the link; the documents stay behind it.
+    #[cfg(unix)]
+    #[test]
+    fn a_ticked_document_that_is_a_link_moves_only_the_link() {
+        let dir = with_linked_docs(v6_with_output("docs", "docs"));
+        let shown = plan(&dir, V4, &["docs".into()], &env());
+        assert_eq!(shown.blocked, None);
+        switch(&dir, V4, &shown, &env()).unwrap();
+        assert!(!present(&at(&dir, "docs")));
+        assert!(std::fs::symlink_metadata(at(&dir, &format!("{ARCHIVE_V6}/docs"))).unwrap().file_type().is_symlink());
+        assert_eq!(read(&dir, "realdocs/prd.md"), "prd", "the documents stay where they are");
+        assert_eq!(read(&dir, "realdocs/shop/1.md"), "ticket");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    fn a_move(files: u32) -> Move {
+        Move { from: "x".into(), to: "y".into(), files, ignored: "none".into() }
+    }
+
+    // R17: a total that includes a capped count is a lower bound, and says so.
+    #[test]
+    fn the_files_moved_say_when_a_count_was_capped() {
+        let dir = v4_project();
+        let mut plan = plan(&dir, V6, &[], &env());
+        assert_eq!(moved_files(&plan), (7, false));
+        plan.leftovers = vec![a_move(3)];
+        assert_eq!(moved_files(&plan), (10, false), "leftovers move too");
+        plan.moves.push(a_move(COUNT_LIMIT));
+        assert_eq!(moved_files(&plan), (10 + COUNT_LIMIT, true));
+        plan.moves.push(a_move(u32::MAX));
+        assert_eq!(moved_files(&plan), (u32::MAX, true), "a count can't overflow it");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn the_result_reaches_the_frontend_in_camel_case() {
+        let dir = v4_project();
+        let result = switch(&dir, V6, &plan(&dir, V6, &[], &env()), &env()).unwrap();
+        let json = serde_json::to_value(&result).unwrap();
+        let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["archive", "archiveDenied", "moved", "movedCapped", "rulesAppended", "setup"]);
+        assert_eq!(json["movedCapped"], false);
+        assert_eq!(json["setup"]["bmadv6Files"], 6);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn archive_names_are_only_the_ones_ade_makes() {
+        for good in [".ade/archive/bmad-v4-2026-10-11", ".ade/archive/bmad-v4-2026-10-11-2", ".ade/archive/bmad-v4-2026-10-11-17"] {
+            assert!(valid_archive(good, "v4"), "{good}");
+        }
+        for bad in [
+            ".ade/archive/bmad-v4-2026-10-11",
+            ".ade/archive/bmad-v6-2026-10-1",
+            ".ade/archive/bmad-v6-2026-10-11-",
+            ".ade/archive/bmad-v6-2026-10-11-x",
+            ".ade/archive/bmad-v6-2026-10-11/..",
+            ".ade/archive/bmad-v6-2026_10_11",
+            ".ade/archive/bmad-v6-２０２６-10-11",
+            "bmad-v6-2026-10-11",
+        ] {
+            assert!(!valid_archive(bad, "v6"), "{bad}");
+        }
+    }
+
+    #[test]
+    fn long_windows_paths_get_the_verbatim_prefix() {
+        let short = r"C:\code\shop\.ade\archive";
+        assert_eq!(verbatim(short), short);
+        let long = format!("C:/code/{}/x.md", "deep/".repeat(60));
+        assert_eq!(verbatim(&long), format!(r"\\?\{}", long.replace('/', r"\")));
+        let already = format!(r"\\?\C:\{}", "deep\\".repeat(60));
+        assert_eq!(verbatim(&already), already);
+        let relative = "deep/".repeat(60);
+        assert_eq!(verbatim(&relative), relative, "only an absolute path can carry it");
     }
 }

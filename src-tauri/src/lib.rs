@@ -448,6 +448,7 @@ pub fn run() {
             bmad::bmad_status,
             bmadswitch::bmad_switch_pending,
             bmadswitch::bmad_switch_plan,
+            bmadswitch::bmad_switch_apply,
             subagent::watch_subagents,
             subagent::unwatch_subagents,
             state::state_read_all,
