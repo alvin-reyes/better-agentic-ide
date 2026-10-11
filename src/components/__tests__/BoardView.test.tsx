@@ -61,6 +61,16 @@ describe("BoardView", () => {
     expect(screen.getByText("Architecture").closest("[data-artifact]")?.getAttribute("data-present")).toBe("false");
   });
 
+  it("lists a file once when two stages cite it as their evidence", () => {
+    // v6 has no separate brief: the initiative doc is the evidence for both
+    // the brief and the PRD, and the panel showed it twice.
+    const base = v4Board();
+    const doc = { label: "Initiative", path: "_bmad-output/initiative-x/initiative-x.md", present: true, isDirectory: false };
+    const board: BoardState = { ...base, artifacts: [{ id: "brief", ...doc }, { id: "prd", ...doc }] };
+    renderBoard(board);
+    expect(screen.getAllByText("Initiative")).toHaveLength(1);
+  });
+
   it("always shows a waiver's reason, and a claimed row's", () => {
     renderBoard();
     expect(screen.getByText(/legacy path/)).toBeTruthy();

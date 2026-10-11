@@ -117,10 +117,13 @@ function StageRail({ board, stage, actions }: { board: BoardState; stage: StageV
 }
 
 function Artifacts({ board, onOpen }: { board: BoardState; onOpen(path: string): void }) {
+  // One file can be the evidence for two stages (v6's initiative doc stands in
+  // for both the brief and the PRD); list it once.
+  const shown = board.artifacts.filter((a, i, all) => all.findIndex((b) => b.label === a.label && b.path === a.path) === i);
   return (
     <div style={section}>
       <div style={heading}>Artifacts</div>
-      {board.artifacts.map((a) => (
+      {shown.map((a) => (
         <div key={a.id} data-artifact={a.id} data-present={a.present} style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
           <span aria-hidden>{a.present ? "●" : "○"}</span>
           {a.present && !a.isDirectory ? (

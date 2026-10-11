@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { watchTargets } from "../boardWatch";
+import { WATCH_EXTENSIONS, watchExtensions, watchTargets } from "../boardWatch";
 import { BMAD_DEFAULTS } from "../bmadConfig";
 
 describe("watchTargets", () => {
@@ -66,5 +66,18 @@ describe("watchTargets", () => {
     const result = watchTargets("/p", "v4", paths);
     expect(result).toContain("/p/docs");
     expect(result).not.toContain("/p/docs/stories");
+  });
+});
+
+describe("watchExtensions", () => {
+  it("watches every file in .ade/, whose stage and approval files have no real extension", () => {
+    expect(watchExtensions("/p/.ade")).toEqual([]);
+    expect(watchExtensions("C:\\p\\.ade")).toEqual([]);
+  });
+
+  it("watches only the document extensions everywhere else", () => {
+    expect(watchExtensions("/p/docs")).toEqual(WATCH_EXTENSIONS);
+    expect(watchExtensions("/p/_bmad-output")).toEqual(WATCH_EXTENSIONS);
+    expect(watchExtensions("/p/my.ade-notes")).toEqual(WATCH_EXTENSIONS);
   });
 });

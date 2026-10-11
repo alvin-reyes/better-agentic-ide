@@ -2,6 +2,16 @@ import type { BmadPaths } from "./bmadConfig";
 
 export const WATCH_EXTENSIONS = ["md", "yml", "yaml", "toml"];
 
+/**
+ * The extensions to watch in `dir`; empty means every file. `.ade/` is
+ * watched whole: `.ade/stage` and `.ade/approvals/<ref>` carry no real
+ * extension (`1.2` reads as extension `2`), and an agent can write them as
+ * easily as a story. The folder is small and holds only ADE's own state.
+ */
+export function watchExtensions(dir: string): string[] {
+  return /(^|[\\/])\.ade[\\/]*$/.test(dir) ? [] : WATCH_EXTENSIONS;
+}
+
 const parent = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 
 /**
