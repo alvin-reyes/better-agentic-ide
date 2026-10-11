@@ -1,0 +1,7 @@
+[core]
+project_name = "shop"
+output_folder = "{project-root}/_bmad-output"
+communication_language = "English"
+
+[modules.demo]
+enabled = true

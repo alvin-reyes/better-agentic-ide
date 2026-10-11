@@ -1,0 +1,3 @@
+# The fixtures are read by both Rust and TypeScript tests; the TS YAML reader
+# reads nothing from CRLF, so a Windows checkout must not convert them.
+src-tauri/src/fixtures/switch/* text eol=lf

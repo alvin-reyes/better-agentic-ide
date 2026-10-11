@@ -273,6 +273,7 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "toml 0.8.2",
 ]
 
 [[package]]

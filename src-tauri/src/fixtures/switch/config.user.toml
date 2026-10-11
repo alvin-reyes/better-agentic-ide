@@ -1,0 +1,5 @@
+[core]
+output_folder = "{project-root}/work/out"
+
+[modules.demo]
+level = 2
