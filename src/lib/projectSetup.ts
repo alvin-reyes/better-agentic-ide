@@ -42,6 +42,7 @@ export interface SetupResult {
 const DONE_KEY = "ade-project-setup-done";
 const REMOVED_KEY = "ade-project-agents-removed";
 const DECLINED_KEY = "ade-project-setup-declined";
+const KEPT_KEY = "ade-bmad-kept";
 
 /**
  * One spelling per project: no trailing separator. Every per-project list keys
@@ -91,6 +92,46 @@ export function wasSetUp(root: string): boolean {
 
 function markSetUp(root: string, done: boolean) {
   writeList(DONE_KEY, root, done);
+}
+
+/**
+ * Don't ask this project the keep-or-switch question. Keeping its version
+ * adds it; so does answering which version to set up, and finishing a switch.
+ */
+export function isKept(root: string): boolean {
+  return readList(KEPT_KEY).includes(normRoot(root));
+}
+
+export function markKept(root: string) {
+  writeList(KEPT_KEY, root, true);
+}
+
+/**
+ * Run once, after the saved state is restored. The first launch with this
+ * list finds no key at all: every project already set up is added, so the
+ * update doesn't ask about projects the user already has. An empty list is a
+ * list, and is left alone.
+ */
+export function migrateKept() {
+  try {
+    if (localStorage.getItem(KEPT_KEY) !== null) return;
+    localStorage.setItem(KEPT_KEY, JSON.stringify(readList(DONE_KEY)));
+  } catch {
+    // Storage blocked: each project is asked once more.
+  }
+}
+
+/**
+ * `dir` is `root` or a folder inside it. A separator has to follow the root:
+ * `/mono2` is not inside `/mono`.
+ */
+export function isWithin(dir: string, root: string): boolean {
+  const at = normRoot(dir);
+  const top = normRoot(root);
+  if (at === top) return true;
+  if (!at.startsWith(top)) return false;
+  // A filesystem root keeps its separator (`/`), so the next character is a name.
+  return /[\\/]$/.test(top) || /[\\/]/.test(at[top.length]);
 }
 
 function readRemoved(): Record<string, string[]> {
@@ -177,7 +218,7 @@ export async function bmadRootOf(cwd: string | null | undefined): Promise<{ root
   for (let i = 0; dir && i < 64; i++) {
     const found = await detectOnDisk(dir).catch(() => null);
     if (found) return { root: dir, methodology: found };
-    if (dir === stop || !dir.startsWith(stop)) break;
+    if (dir === stop || !isWithin(dir, stop)) break;
     dir = parentDir(dir);
   }
   return null;
@@ -212,7 +253,7 @@ export function foldersUpTo(dir: string, stop: string): string[] {
   // Bounded, as bmadRootOf is: a dir that is somehow not under its stop still ends.
   for (let i = 0; at && i < 64; i++) {
     out.push(at);
-    if (at === end || !at.startsWith(end)) break;
+    if (at === end || !isWithin(at, end)) break;
     at = parentDir(at);
   }
   return out;
