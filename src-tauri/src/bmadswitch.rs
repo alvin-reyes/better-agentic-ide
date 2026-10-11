@@ -987,12 +987,22 @@ fn refuse(rel: &str, limits: &Limits) -> Option<String> {
 /// person ticked; only ones the plan itself offers are taken. Nothing is
 /// written.
 pub fn plan(root: &Path, to: Methodology, ticked: &[String], env: &Env) -> SwitchPlan {
-    plan_into(root, to, ticked, env, None)
+    planned(root, to, ticked, env, None, true)
 }
 
-/// plan(), into the archive folder given rather than the next free one: apply
-/// uses the name the person saw, so a plan made before midnight still applies.
+/// The plan apply() makes for itself. Into the archive folder given rather
+/// than the next free one: apply uses the name the person saw, so a plan made
+/// before midnight still applies. And without what git says of the project
+/// (`dirty`, `archive_ignored`, each move's `ignored`), which is only shown:
+/// apply runs under the lock that holds every setup back, and acts on none
+/// of it.
 pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &Env, archive: Option<&str>) -> SwitchPlan {
+    planned(root, to, ticked, env, archive, false)
+}
+
+/// `git_facts`: ask git what the dialog shows. Where git's own folder is
+/// decides whether a path may move, and is always asked.
+fn planned(root: &Path, to: Methodology, ticked: &[String], env: &Env, archive: Option<&str>, git_facts: bool) -> SwitchPlan {
     let from = crate::bmadv6::detect_on_disk(root);
     let mut plan = SwitchPlan {
         from: from.map(|m| m.as_str().to_string()).unwrap_or_default(),
@@ -1015,12 +1025,14 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
         return plan;
     }
     plan.archive = archive.map(str::to_string).unwrap_or_else(|| free_archive(root, from, &env.today));
-    plan.dirty = crate::git::run(env.git, root, &["status", "--porcelain", "--", "."]).map(|out| !out.trim().is_empty());
-    plan.archive_ignored = match crate::git::code(env.git, root, &["check-ignore", "-q", "--", ".ade/archive/"]) {
-        Some(0) => Some(true),
-        Some(1) => Some(false),
-        _ => None,
-    };
+    if git_facts {
+        plan.dirty = crate::git::run(env.git, root, &["status", "--porcelain", "--", "."]).map(|out| !out.trim().is_empty());
+        plan.archive_ignored = match crate::git::code(env.git, root, &["check-ignore", "-q", "--", ".ade/archive/"]) {
+            Some(0) => Some(true),
+            Some(1) => Some(false),
+            _ => None,
+        };
+    }
     let real_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
 
     // Every reason is collected and the first is the one shown; the rest of
@@ -1194,7 +1206,8 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
 
     let archive = plan.archive.clone();
     let leftovers_dir = format!("{archive}/leftovers-{}", to.as_str());
-    // Without a git that answers, each path would cost two failed runs.
+    // Without a git that answers, each path would cost two failed runs. Nor
+    // is it asked when `dirty` wasn't: these are git facts too.
     let git = plan.dirty.is_some().then_some(env.git);
     let moved = |rel: &String, into: &str| Move {
         from: rel.clone(),
@@ -3754,6 +3767,44 @@ mod tests {
         let err = switch(&dir, V6, &shown, &Env { v6_src: None, ..env() }).unwrap_err();
         assert!(err.contains("weren't found"), "{err}");
         assert_eq!(tree(&dir), before);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// What this thread has asked git since this was last read.
+    fn asked() -> Vec<String> {
+        crate::git::ASKED.take()
+    }
+
+    // The plan asks git what the dialog shows. Apply plans again under the
+    // lock that holds every setup back, and asks only what decides whether a
+    // path may move: where git's own folder is.
+    #[test]
+    fn apply_asks_git_only_what_decides_a_move() {
+        let dir = v6_project();
+        // Without git on the machine the same questions are asked, and none is answered.
+        let has_git = crate::git::run(crate::git::GIT, &dir, &["--version"]).is_some();
+        let env = Env { git: if has_git { crate::git::GIT } else { env().git }, ..env() };
+        if has_git {
+            assert!(crate::git::run(env.git, &dir, &["init", "-q"]).is_some());
+            write(&dir, ".gitignore", "/_bmad-output/\n");
+        }
+        asked();
+
+        let shown = plan(&dir, V4, &[], &env);
+        let for_the_dialog = asked();
+        assert_eq!(shown.blocked, None);
+        assert!(for_the_dialog.iter().any(|q| q.starts_with("status ")), "{for_the_dialog:?}");
+        assert!(for_the_dialog.iter().any(|q| q.starts_with("check-ignore ")), "{for_the_dialog:?}");
+        if has_git {
+            assert_eq!((shown.dirty, shown.archive_ignored), (Some(true), Some(false)));
+            assert_eq!(shown.moves.iter().find(|m| m.from == "_bmad-output").map(|m| m.ignored.as_str()), Some("all"));
+            assert!(for_the_dialog.iter().any(|q| q.contains("ls-files")), "{for_the_dialog:?}");
+        }
+
+        // The plan apply makes carries none of those facts, and is still the plan that was shown.
+        switch(&dir, V4, &shown, &env).unwrap();
+        assert_eq!(asked(), ["rev-parse --absolute-git-dir"]);
+        assert!(at(&dir, &format!("{ARCHIVE_V6}/_bmad-output/shop/1.md")).is_file());
         std::fs::remove_dir_all(dir).ok();
     }
 
