@@ -855,7 +855,9 @@ mod bmadswitch_e2e {
         write(&dir, &format!("{archive}/ARCHIVE.md"), &an_interrupted_journal().replace("status: in-progress", "status: abandoned"));
         assert_eq!(bmadswitch::bmad_switch_pending(root_of(&dir)), []);
         let report = setup(true).unwrap();
-        assert_eq!(report.created, [at(&dir, role).to_string_lossy().into_owned()]);
+        // Compared as paths: on Windows setup reports the file with the
+        // separators it was asked for.
+        assert_eq!(report.created.iter().map(PathBuf::from).collect::<Vec<_>>(), [at(&dir, role)]);
         assert_eq!(read(&dir, role), role_file("qa", Methodology::V4));
         let (_, result) = switch(&dir, Methodology::V6, &res);
         assert_ne!(result.archive, archive);
