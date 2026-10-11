@@ -77,8 +77,13 @@ mod tests {
     use serde_json::json;
 
     fn temp_project() -> PathBuf {
+        // The clock alone is not a name: it ticks in microseconds on macOS, and
+        // two tests running side by side drew the same folder.
+        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "ade-mcp-{}",
+            "ade-mcp-{}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
