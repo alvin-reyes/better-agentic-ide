@@ -290,7 +290,7 @@ describe("the question toast leaves with its project", () => {
 });
 
 describe("the toast and the dialog asking about one project", () => {
-  const dialogAsks = (root: string) => waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root }));
+  const dialogAsks = (root: string) => waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root, mode: "choose" }));
 
   it("the toast's answer closes the dialog, and the project is set up once, on that version", async () => {
     mount("/code/shop");
@@ -379,6 +379,17 @@ describe("a project that has BMAD", () => {
     await settle();
     expect(show).not.toHaveBeenCalled();
   });
+
+  it("is never asked to keep or switch from the cd hook, kept or not", async () => {
+    tauri.byDir = { "/code/old": "v4" };
+    expect(localStorage.getItem("ade-bmad-kept")).toBeNull();
+    mount("/code/old");
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    await settle();
+    expect(useMethodologyPrompt.getState().request).toBeNull();
+    expect(questions()).toHaveLength(0);
+    expect(toasts().some((t) => /Keep|Switch/.test(`${t.title} ${t.body}`))).toBe(false);
+  });
 });
 
 describe("when automatic setup doesn't apply", () => {
@@ -420,7 +431,7 @@ describe("after the New tab dialog", () => {
     tauri.applyGate = new Promise<void>((r) => { release = r; });
     tauri.roots = { "/code/mono/app": "/code/mono" };
     const opened = openProjectTab("/code/mono/app");
-    await waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/mono/app" }));
+    await waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/mono/app", mode: "choose" }));
     act(() => settlePrompt({ kind: "chosen", methodology: "v6", asked: true }));
     await opened;
     await waitFor(() => expect(tauri.applies).toHaveLength(1));
@@ -436,7 +447,7 @@ describe("after the New tab dialog", () => {
 });
 
 describe("a BMAD switch finishing while the question is open", () => {
-  const dialogAsks = (root: string) => waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root }));
+  const dialogAsks = (root: string) => waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root, mode: "choose" }));
   const PLAN: SwitchPlan = {
     from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
     leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
@@ -469,6 +480,6 @@ describe("a BMAD switch finishing while the question is open", () => {
 
     await act(async () => { await runSwitch("/code/other", PLAN); });
     expect(screen.toast).toBe(toast);
-    expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop" });
+    expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop", mode: "choose" });
   });
 });

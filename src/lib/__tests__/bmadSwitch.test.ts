@@ -287,13 +287,13 @@ describe("runSwitch", () => {
     // No BMAD on disk for these: the question is put to the dialog.
     tauri.noBmad = true;
     const shop = askMethodology("/code/shop");
-    await vi.waitFor(() => expect(prompt()).toEqual({ root: "/code/shop" }));
+    await vi.waitFor(() => expect(prompt()).toEqual({ root: "/code/shop", mode: "choose" }));
     const open = gate();
     const running = runSwitch("/code/other", PLAN);
     await vi.waitFor(() => expect(called("bmad_switch_apply")).toHaveLength(1));
     open();
     await running;
-    expect(prompt(), "another project's switch leaves the question").toEqual({ root: "/code/shop" });
+    expect(prompt(), "another project's switch leaves the question").toEqual({ root: "/code/shop", mode: "choose" });
 
     await runSwitch("/code/shop/", PLAN);
     expect(prompt()).toBeNull();

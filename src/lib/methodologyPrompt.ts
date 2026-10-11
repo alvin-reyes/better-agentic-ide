@@ -3,7 +3,7 @@
  * has BMAD keeps its version without a question, and one with neither is asked.
  */
 import { create } from "zustand";
-import { pendingSwitches } from "./bmadSwitch";
+import { otherVersion, pendingSwitches } from "./bmadSwitch";
 import {
   detectOnDisk, isSetupCandidate, isSwitching, markKept, normRoot, onProjectHasBmad, setUpProject, type Methodology, type SetupResult,
 } from "./projectSetup";
@@ -32,37 +32,81 @@ export type MethodologyAnswer =
 /** A way to put the question to a person. The default is the dialog. */
 export type AskUi = (root: string) => Promise<MethodologyAnswer>;
 
-/** The project the dialog is asking about; MethodologyPromptHost renders it. */
-export const useMethodologyPrompt = create<{ request: { root: string } | null }>(() => ({ request: null }));
+/**
+ * What the shared dialog is showing, which MethodologyPromptHost renders:
+ * which version to set up (`choose`), keep the version or switch (`keep`), or
+ * the switch's confirm step (`confirm`). `back`: New Tab's keep-or-switch
+ * question is behind the confirm step, which returns to it; otherwise it closes.
+ */
+export type PromptRequest =
+  | { root: string; mode: "choose" }
+  | { root: string; mode: "keep"; methodology: Methodology }
+  | { root: string; mode: "confirm"; from: Methodology; to: Methodology; back: boolean };
+
+export const useMethodologyPrompt = create<{ request: PromptRequest | null }>(() => ({ request: null }));
+
+/** How a keep-or-switch question, or a switch asked for on its own, ended. */
+export type SwitchAnswer =
+  | { kind: "kept" }
+  | { kind: "switched" }
+  /** Set up on its version by another route while the question was open: nothing is left to set up. */
+  | { kind: "setUp"; done: SetupResult }
+  | { kind: "dismissed" };
 
 let waiting: { root: string; promise: Promise<MethodologyAnswer>; resolve: (a: MethodologyAnswer) => void } | null = null;
+let deciding: { root: string; promise: Promise<SwitchAnswer>; resolve: (a: SwitchAnswer) => void } | null = null;
+
+/** One dialog at a time: a question that is covered by a newer one is over. */
+function supersede() {
+  const [choose, decide] = [waiting, deciding];
+  waiting = null;
+  deciding = null;
+  choose?.resolve({ kind: "dismissed" });
+  decide?.resolve({ kind: "dismissed" });
+}
 
 const askByDialog: AskUi = (root) => {
   if (waiting?.root === root) return waiting.promise;
-  // One dialog at a time: a question that is covered by a newer one is over.
-  waiting?.resolve({ kind: "dismissed" });
+  supersede();
   let resolve!: (a: MethodologyAnswer) => void;
   const promise = new Promise<MethodologyAnswer>((r) => { resolve = r; });
   waiting = { root, promise, resolve };
-  useMethodologyPrompt.setState({ request: { root } });
+  useMethodologyPrompt.setState({ request: { root, mode: "choose" } });
   return promise;
 };
 
-/** Answer the open dialog and close it. */
+/** Answer the open "which version" dialog and close it. */
 export function settlePrompt(answer: MethodologyAnswer) {
   const open = waiting;
   waiting = null;
-  useMethodologyPrompt.setState({ request: null });
+  // Only its own dialog: a keep-or-switch question on screen is someone else's.
+  if (useMethodologyPrompt.getState().request?.mode === "choose") useMethodologyPrompt.setState({ request: null });
   open?.resolve(answer);
 }
 
-// A project set up by another route (the cd hook's toast) while the dialog
-// asks about it has its version: the dialog closes instead of offering the other.
+function settleSwitch(answer: SwitchAnswer) {
+  const open = deciding;
+  deciding = null;
+  const mode = useMethodologyPrompt.getState().request?.mode;
+  if (mode === "keep" || mode === "confirm") useMethodologyPrompt.setState({ request: null });
+  open?.resolve(answer);
+}
+
+// A project that got its version by another route while a dialog asks about it
+// has its answer: the dialog closes instead of offering the other version, or
+// a second switch.
 onProjectHasBmad((root, methodology, done) => {
-  if (waiting?.root !== root) return;
-  settlePrompt(done
-    ? { kind: "chosen", methodology, asked: false, done }
-    : { kind: "chosen", methodology, asked: false, switched: true });
+  if (waiting?.root === root) {
+    settlePrompt(done
+      ? { kind: "chosen", methodology, asked: false, done }
+      : { kind: "chosen", methodology, asked: false, switched: true });
+  }
+  if (deciding?.root !== root) return;
+  // A finished switch, whichever dialog ran it: the confirm step's own included.
+  if (!done) settleSwitch({ kind: "switched" });
+  // A setup ends New Tab's question, which waits to open the folder. A switch
+  // asked for on its own is still what its person asked for.
+  else if (newTabWaits()) settleSwitch({ kind: "setUp", done });
 });
 
 /**
@@ -135,8 +179,94 @@ const NOT_A_PROJECT = "This folder isn't a project.";
 /** "/code/shop" → "shop", on either separator. */
 export const projectName = (root: string) => root.split(/[\\/]/).filter(Boolean).pop() ?? root;
 
+/** New Tab's question is open, or is behind the confirm step on screen. */
+function newTabWaits(): boolean {
+  const request = useMethodologyPrompt.getState().request;
+  return request?.mode === "keep" || (request?.mode === "confirm" && request.back);
+}
+
+function decide(request: PromptRequest): Promise<SwitchAnswer> {
+  supersede();
+  let resolve!: (a: SwitchAnswer) => void;
+  const promise = new Promise<SwitchAnswer>((r) => { resolve = r; });
+  deciding = { root: request.root, promise, resolve };
+  useMethodologyPrompt.setState({ request });
+  return promise;
+}
+
+/**
+ * "shop uses BMAD v4. Keep v4 (default) · Switch to v6…": asked from New Tab
+ * about a project that already has BMAD, until it is answered once. Like the
+ * version question it must be answered; `dismissed` only means another
+ * project's question replaced it, or the dialog's host went away.
+ */
+export function askKeepOrSwitch(root: string, methodology: Methodology): Promise<SwitchAnswer> {
+  const at = normRoot(root);
+  if (deciding?.root !== at) return decide({ root: at, mode: "keep", methodology });
+  // A switch of this project asked for on its own is on screen. New Tab now
+  // waits on it too, so its way out is Back to the question, not Cancel:
+  // cancelled, New Tab would be left with no answer and no folder opened.
+  const request = useMethodologyPrompt.getState().request;
+  if (request?.mode === "confirm" && !request.back) useMethodologyPrompt.setState({ request: { ...request, back: true } });
+  return deciding.promise;
+}
+
+/**
+ * The switch's confirm step on its own, for the palette and the board. It has
+ * Cancel: nobody was asked a question, so there is nothing that must be answered.
+ */
+export function askSwitch(root: string, from: Methodology): Promise<SwitchAnswer> {
+  const at = normRoot(root);
+  if (deciding?.root !== at) return decide({ root: at, mode: "confirm", from, to: otherVersion(from), back: false });
+  // The keep-or-switch question about this project is open: this is its Switch.
+  startSwitch();
+  return deciding.promise;
+}
+
+const NO_BMAD = "This project has no BMAD to switch from.";
+
+/** Switch `root` to the other version than it is on, after the confirm step. */
+export async function switchOnDemand(root: string): Promise<SwitchAnswer> {
+  const at = normRoot(root);
+  const from = await detectOnDisk(at);
+  // A string, as NOT_A_PROJECT is: callers show it as it is.
+  if (!from) throw NO_BMAD;
+  return askSwitch(at, from);
+}
+
+/** Keep: the project stays on its version, and isn't asked again. */
+export function keepVersion() {
+  const request = useMethodologyPrompt.getState().request;
+  if (request?.mode !== "keep") return;
+  markKept(request.root);
+  settleSwitch({ kind: "kept" });
+}
+
+/** Switch…: on to the confirm step. Nothing has changed yet. */
+export function startSwitch() {
+  const request = useMethodologyPrompt.getState().request;
+  if (request?.mode !== "keep") return;
+  const to = otherVersion(request.methodology);
+  useMethodologyPrompt.setState({ request: { root: request.root, mode: "confirm", from: request.methodology, to, back: true } });
+}
+
+/** Back, or Cancel: leave the confirm step with the project as it was. */
+export function leaveConfirm() {
+  const request = useMethodologyPrompt.getState().request;
+  if (request?.mode !== "confirm") return;
+  if (request.back) useMethodologyPrompt.setState({ request: { root: request.root, mode: "keep", methodology: request.from } });
+  else settleSwitch({ kind: "dismissed" });
+}
+
+/** Nobody is left to answer: whatever is open is over. */
+export function dismissPrompts() {
+  settlePrompt({ kind: "dismissed" });
+  settleSwitch({ kind: "dismissed" });
+}
+
 /** Test seam: forget any open question. */
 export function __resetPromptForTests() {
   waiting = null;
+  deciding = null;
   useMethodologyPrompt.setState({ request: null });
 }

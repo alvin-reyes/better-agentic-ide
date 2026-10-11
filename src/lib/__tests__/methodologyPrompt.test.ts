@@ -22,6 +22,8 @@ vi.mock("@tauri-apps/api/core", () => ({
         tauri.applies.push(args);
         if (tauri.applyFails) throw new Error("disk full");
         return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
+      case "bmad_switch_apply":
+        return { archive: ".ade/archive/bmad-v4-2026-10-11", moved: 2, setup: { created: [], appendedImport: false, agents: 8, bmadFiles: 0 }, rulesAppended: true, archiveDenied: true, movedCapped: false };
       default:
         throw new Error(`unexpected command: ${command}`);
     }
@@ -29,9 +31,11 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import {
-  __resetPromptForTests, askAndSetUp, askMethodology, projectName, settlePrompt, useMethodologyPrompt,
+  __resetPromptForTests, askAndSetUp, askKeepOrSwitch, askMethodology, askSwitch, dismissPrompts, keepVersion, leaveConfirm,
+  projectName, settlePrompt, startSwitch, switchOnDemand, useMethodologyPrompt,
   type MethodologyAnswer,
 } from "../methodologyPrompt";
+import { runSwitch, type SwitchPlan } from "../bmadSwitch";
 import { requestNewTab } from "../newTab";
 import { beginSwitch } from "../projectSetup";
 import { isKept, setUpProject } from "../projectSetup";
@@ -39,7 +43,7 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { useTabStore } from "../../stores/tabStore";
 
 const request = () => useMethodologyPrompt.getState().request;
-const asked = (root: string) => vi.waitFor(() => expect(request()).toEqual({ root }));
+const asked = (root: string) => vi.waitFor(() => expect(request()).toEqual({ root, mode: "choose" }));
 
 beforeEach(() => {
   tauri.pending = [];
@@ -179,7 +183,7 @@ describe("a project that gains BMAD while its question is open", () => {
     void askMethodology("/code/shop");
     await asked("/code/shop");
     await setUpProject("/code/other", "v4");
-    expect(request()).toEqual({ root: "/code/shop" });
+    expect(request()).toEqual({ root: "/code/shop", mode: "choose" });
   });
 
   it("keeps its question after a setup that failed", async () => {
@@ -187,7 +191,7 @@ describe("a project that gains BMAD while its question is open", () => {
     await asked("/code/shop");
     tauri.applyFails = true;
     await expect(setUpProject("/code/shop", "v4")).rejects.toThrow();
-    expect(request()).toEqual({ root: "/code/shop" });
+    expect(request()).toEqual({ root: "/code/shop", mode: "choose" });
   });
 });
 
@@ -307,5 +311,215 @@ describe("the kept list", () => {
     settlePrompt({ kind: "dismissed" });
     await answer;
     expect(isKept("/code/shop")).toBe(false);
+  });
+});
+
+describe("one dialog at a time, across both questions", () => {
+  it("dismisses a keep-or-switch question when another project is asked about", async () => {
+    const keep = askKeepOrSwitch("/code/old", "v4");
+    expect(request()).toEqual({ root: "/code/old", mode: "keep", methodology: "v4" });
+    const choose = askMethodology("/code/shop");
+    await asked("/code/shop");
+    expect(await keep).toEqual({ kind: "dismissed" });
+    settlePrompt({ kind: "dismissed" });
+    await choose;
+  });
+
+  it("dismisses a choose question when a switch is asked for", async () => {
+    const choose = askMethodology("/code/shop");
+    await asked("/code/shop");
+    void askSwitch("/code/old", "v4");
+    expect(await choose).toEqual({ kind: "dismissed" });
+    expect(request()).toEqual({ root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: false });
+  });
+
+  it("shares one keep-or-switch question between two callers for the same project", () => {
+    expect(askKeepOrSwitch("/code/old/", "v4")).toBe(askKeepOrSwitch("/code/old", "v4"));
+  });
+
+  it("is not closed by a choose answer that isn't its own", () => {
+    void askKeepOrSwitch("/code/old", "v4");
+    settlePrompt({ kind: "dismissed" });
+    expect(request()).toEqual({ root: "/code/old", mode: "keep", methodology: "v4" });
+  });
+
+  it("blocks New Tab while keep-or-switch is open, as while choosing", () => {
+    useSettingsStore.setState({ askOnNewTab: false });
+    const before = useTabStore.getState().tabs.length;
+    void askKeepOrSwitch("/code/old", "v4");
+    requestNewTab();
+    expect(useTabStore.getState().tabs).toHaveLength(before);
+  });
+
+  it("blocks New Tab on the confirm step too", () => {
+    useSettingsStore.setState({ askOnNewTab: true });
+    const requested = vi.fn();
+    window.addEventListener("request-new-tab", requested);
+    void askSwitch("/code/old", "v4");
+    requestNewTab();
+    expect(requested).not.toHaveBeenCalled();
+    window.removeEventListener("request-new-tab", requested);
+  });
+
+  it("settles both kinds of question as dismissed when nobody is left to answer", async () => {
+    const keep = askKeepOrSwitch("/code/old", "v4");
+    dismissPrompts();
+    expect(await keep).toEqual({ kind: "dismissed" });
+    expect(request()).toBeNull();
+
+    const choose = askMethodology("/code/shop");
+    await asked("/code/shop");
+    dismissPrompts();
+    expect(await choose).toEqual({ kind: "dismissed" });
+    expect(request()).toBeNull();
+  });
+});
+
+describe("the keep-or-switch question's answers", () => {
+  it("keeps: the project is on the kept list and the question is over", async () => {
+    const answer = askKeepOrSwitch("/code/old/", "v4");
+    keepVersion();
+    expect(await answer).toEqual({ kind: "kept" });
+    expect(isKept("/code/old")).toBe(true);
+    expect(request()).toBeNull();
+  });
+
+  it("goes to the confirm step and back without an answer or a kept project", async () => {
+    let settled = false;
+    void askKeepOrSwitch("/code/old", "v6").then(() => { settled = true; });
+    startSwitch();
+    expect(request()).toEqual({ root: "/code/old", mode: "confirm", from: "v6", to: "v4", back: true });
+    leaveConfirm();
+    expect(request()).toEqual({ root: "/code/old", mode: "keep", methodology: "v6" });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(isKept("/code/old")).toBe(false);
+  });
+
+  it("does not keep from the confirm step, or with nothing asked", () => {
+    keepVersion();
+    void askSwitch("/code/old", "v4");
+    keepVersion();
+    expect(isKept("/code/old")).toBe(false);
+    expect(request()).toEqual({ root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: false });
+  });
+
+  it("is dismissed when a switch asked for on its own is cancelled", async () => {
+    const answer = askSwitch("/code/old", "v4");
+    leaveConfirm();
+    expect(await answer).toEqual({ kind: "dismissed" });
+    expect(request()).toBeNull();
+    expect(isKept("/code/old")).toBe(false);
+  });
+});
+
+describe("New Tab asking about a project whose switch is already being confirmed", () => {
+  it("turns that confirm step's Cancel into Back, so the question still gets its answer", async () => {
+    const onDemand = askSwitch("/code/old", "v4");
+    const newTab = askKeepOrSwitch("/code/old/", "v4");
+    expect(newTab).toBe(onDemand);
+    expect(request()).toEqual({ root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: true });
+
+    let settled = false;
+    void newTab.then(() => { settled = true; });
+    leaveConfirm();
+    await Promise.resolve();
+    expect(settled, "New Tab is still waiting").toBe(false);
+    expect(request()).toEqual({ root: "/code/old", mode: "keep", methodology: "v4" });
+
+    keepVersion();
+    expect(await newTab).toEqual({ kind: "kept" });
+  });
+
+  it("takes a switch asked for while the question is open as the question's Switch", () => {
+    const newTab = askKeepOrSwitch("/code/old", "v4");
+    expect(askSwitch("/code/old/", "v4")).toBe(newTab);
+    expect(request()).toEqual({ root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: true });
+  });
+});
+
+describe("a project that changes by another route while keep-or-switch is open", () => {
+  const PLAN: SwitchPlan = {
+    from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
+    leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+  };
+
+  it("has its question settled by a switch that finishes, from the question or the confirm step", async () => {
+    const keep = askKeepOrSwitch("/code/old", "v4");
+    await runSwitch("/code/old/", PLAN);
+    expect(await keep).toEqual({ kind: "switched" });
+    expect(request()).toBeNull();
+
+    const confirm = askSwitch("/code/older", "v4");
+    await runSwitch("/code/older", PLAN);
+    expect(await confirm).toEqual({ kind: "switched" });
+    expect(request()).toBeNull();
+  });
+
+  it("has its question settled by a setup that finishes, with that setup's result", async () => {
+    tauri.byDir = { "/code/old": "v4" };
+    const keep = askKeepOrSwitch("/code/old", "v4");
+    const elsewhere = await setUpProject("/code/old/", "v4");
+    expect(await keep).toEqual({ kind: "setUp", done: elsewhere });
+    expect(request()).toBeNull();
+    // Nobody answered: the next New Tab asks again.
+    expect(isKept("/code/old")).toBe(false);
+  });
+
+  it("is settled by a setup from the confirm step New Tab is waiting behind", async () => {
+    const keep = askKeepOrSwitch("/code/old", "v4");
+    startSwitch();
+    const elsewhere = await setUpProject("/code/old", "v4");
+    expect(await keep).toEqual({ kind: "setUp", done: elsewhere });
+  });
+
+  it("leaves a switch asked for on its own open after a setup", async () => {
+    void askSwitch("/code/old", "v4");
+    await setUpProject("/code/old", "v4");
+    expect(request()).toEqual({ root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: false });
+  });
+
+  it("is left alone by another project's setup or switch", async () => {
+    void askKeepOrSwitch("/code/old", "v4");
+    await setUpProject("/code/other", "v4");
+    await runSwitch("/code/other2", PLAN);
+    expect(request()).toEqual({ root: "/code/old", mode: "keep", methodology: "v4" });
+  });
+
+  it("does not settle another project's question when the switch it ran finishes late", async () => {
+    // The confirm step for /code/old was replaced while its switch ran.
+    void askSwitch("/code/old", "v4");
+    const running = runSwitch("/code/old", PLAN);
+    const other = askKeepOrSwitch("/code/other", "v4");
+    await running;
+    expect(request()).toEqual({ root: "/code/other", mode: "keep", methodology: "v4" });
+    keepVersion();
+    expect(await other).toEqual({ kind: "kept" });
+  });
+});
+
+describe("switchOnDemand", () => {
+  it("opens the confirm step for the other version than the project is on", async () => {
+    tauri.byDir = { "/code/old": "v4", "/code/new": "v6" };
+    void switchOnDemand("/code/old/");
+    await vi.waitFor(() => expect(request()).toEqual({ root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: false }));
+    void switchOnDemand("/code/new");
+    await vi.waitFor(() => expect(request()).toEqual({ root: "/code/new", mode: "confirm", from: "v6", to: "v4", back: false }));
+  });
+
+  it("refuses a project with no BMAD", async () => {
+    await expect(switchOnDemand("/code/shop")).rejects.toBe("This project has no BMAD to switch from.");
+    expect(request()).toBeNull();
+  });
+});
+
+describe("the entry points that never ask keep-or-switch", () => {
+  it("returns the version of a project that was never kept, with no question", async () => {
+    tauri.byDir = { "/code/old": "v4" };
+    expect(isKept("/code/old")).toBe(false);
+    expect(await askMethodology("/code/old")).toEqual({ kind: "chosen", methodology: "v4", asked: false });
+    await askAndSetUp("/code/old");
+    expect(request()).toBeNull();
+    expect(tauri.applies.map((a) => a.methodology)).toEqual(["v4"]);
   });
 });

@@ -4,6 +4,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string) => {
     if (command === "bmad_switch_pending") return [];
+    if (command === "bmad_switch_plan") {
+      return { from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [], leftInPlace: [], dirty: null, archiveIgnored: null, blocked: null };
+    }
     if (command === "project_setup_status") {
       return { isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: null };
     }
@@ -11,9 +14,13 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
+// The confirm step asks every pane for its folder; there is no terminal here.
+vi.mock("../../hooks/useTerminal", () => ({ getPtyCwd: vi.fn(async () => null) }));
+
 import { useEscapeToClose } from "../useEscapeToClose";
 import MethodologyPromptHost, { MethodologyPrompt } from "../MethodologyPrompt";
-import { __resetPromptForTests, askMethodology, useMethodologyPrompt } from "../../lib/methodologyPrompt";
+import { __resetPromptForTests, askKeepOrSwitch, askMethodology, askSwitch, useMethodologyPrompt } from "../../lib/methodologyPrompt";
+import { isKept } from "../../lib/projectSetup";
 
 const dialog = () => screen.getByRole("dialog", { name: "Set up project" });
 const question = () => document.querySelector(".new-tab-ask");
@@ -141,13 +148,172 @@ describe("MethodologyPromptHost", () => {
     await screen.findByRole("dialog", { name: "Set up project" });
     act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
     expect(screen.getByRole("dialog", { name: "Set up project" })).toBeTruthy();
-    expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop" });
+    expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop", mode: "choose" });
   });
 
   it("settles an open question as dismissed when the host unmounts", async () => {
     const host = render(<MethodologyPromptHost />);
     const answer = askMethodology("/code/shop");
     await screen.findByRole("dialog", { name: "Set up project" });
+    host.unmount();
+    expect(await answer).toEqual({ kind: "dismissed" });
+    expect(useMethodologyPrompt.getState().request).toBeNull();
+  });
+});
+
+describe("MethodologyPrompt, keep-or-switch mode", () => {
+  const keepDialog = () => screen.getByRole("dialog", { name: "BMAD version" });
+  const renderKeep = () => {
+    const onKeep = vi.fn();
+    const onSwitch = vi.fn();
+    render(<MethodologyPrompt mode="keep" root="/code/shop" methodology="v4" onKeep={onKeep} onSwitch={onSwitch} />);
+    return { onKeep, onSwitch };
+  };
+
+  it("asks in the spec's words, with the project, its version and both answers in bold", () => {
+    renderKeep();
+    expect(question()!.textContent).toBe("shop uses BMAD v4. Keep v4 (default) · Switch to v6…");
+    expect([...question()!.querySelectorAll("b")].map((b) => b.textContent)).toEqual(["shop", "BMAD v4", "Keep v4", "Switch to v6…"]);
+  });
+
+  it("follows the version the project is on", () => {
+    render(<MethodologyPrompt mode="keep" root="/code/shop" methodology="v6" onKeep={vi.fn()} onSwitch={vi.fn()} />);
+    expect(question()!.textContent).toBe("shop uses BMAD v6. Keep v6 (default) · Switch to v4…");
+  });
+
+  it("keeps the version on Enter", () => {
+    const { onKeep, onSwitch } = renderKeep();
+    expect(document.activeElement).toBe(keepDialog());
+    fireEvent.keyDown(keepDialog(), { key: "Enter" });
+    expect(onKeep).toHaveBeenCalledOnce();
+    expect(onSwitch).not.toHaveBeenCalled();
+  });
+
+  it("goes to the switch by click, or by arrow and Enter", () => {
+    const { onKeep, onSwitch } = renderKeep();
+    fireEvent.click(screen.getByRole("option", { name: /Switch to v6…/ }));
+    expect(onSwitch).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(keepDialog(), { key: "ArrowDown" });
+    fireEvent.keyDown(keepDialog(), { key: "Enter" });
+    expect(onSwitch).toHaveBeenCalledTimes(2);
+    expect(onKeep).not.toHaveBeenCalled();
+  });
+
+  it("must be answered: no close button, and Escape and a click outside do nothing", () => {
+    const { onKeep, onSwitch } = renderKeep();
+    expect(screen.queryByRole("button")).toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.mouseDown(keepDialog().parentElement!);
+    fireEvent.click(keepDialog().parentElement!);
+    expect(onKeep).not.toHaveBeenCalled();
+    expect(onSwitch).not.toHaveBeenCalled();
+    expect(keepDialog()).toBeTruthy();
+    expect(keepDialog().getAttribute("aria-modal")).toBe("true");
+  });
+
+  it("doesn't close a panel beneath it on Escape", () => {
+    const under = vi.fn();
+    function Under() { useEscapeToClose(under); return null; }
+    render(<Under />);
+    renderKeep();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(under).not.toHaveBeenCalled();
+  });
+
+  it("ignores a repeated Enter, and Enter from another control", () => {
+    const { onKeep } = renderKeep();
+    fireEvent.keyDown(keepDialog(), { key: "Enter", repeat: true });
+    const other = document.createElement("button");
+    keepDialog().appendChild(other);
+    fireEvent.keyDown(other, { key: "Enter" });
+    expect(onKeep).not.toHaveBeenCalled();
+  });
+});
+
+describe("MethodologyPromptHost, keeping or switching", () => {
+  beforeEach(() => localStorage.clear());
+  /** Ask from outside React, as New Tab and the palette do. */
+  const ask = <T,>(raise: () => Promise<T>): Promise<T> => {
+    let answer!: Promise<T>;
+    act(() => { answer = raise(); });
+    return answer;
+  };
+
+  it("keeps the version, and remembers not to ask this project again", async () => {
+    render(<MethodologyPromptHost />);
+    const answer = ask(() => askKeepOrSwitch("/code/shop/", "v4"));
+    fireEvent.keyDown(await screen.findByRole("dialog", { name: "BMAD version" }), { key: "Enter" });
+    expect(await answer).toEqual({ kind: "kept" });
+    expect(isKept("/code/shop")).toBe(true);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps the question open on Escape", async () => {
+    render(<MethodologyPromptHost />);
+    void ask(() => askKeepOrSwitch("/code/shop", "v4"));
+    await screen.findByRole("dialog", { name: "BMAD version" });
+    act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
+    expect(screen.getByRole("dialog", { name: "BMAD version" })).toBeTruthy();
+    expect(isKept("/code/shop")).toBe(false);
+  });
+
+  it("shows the confirm step for Switch, and Back returns to the question unanswered", async () => {
+    render(<MethodologyPromptHost />);
+    let settled = false;
+    void ask(() => askKeepOrSwitch("/code/shop", "v4")).then(() => { settled = true; });
+    fireEvent.click(await screen.findByRole("option", { name: /Switch to v6…/ }));
+    expect(await screen.findByRole("dialog", { name: "Switch to BMAD v6" })).toBeTruthy();
+    expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop", mode: "confirm", from: "v4", to: "v6", back: true });
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("dialog", { name: "BMAD version" })).toBeTruthy();
+    expect(settled).toBe(false);
+    expect(isKept("/code/shop")).toBe(false);
+    // The way back is a new question: Enter keeps again.
+    expect(screen.getByRole("option", { name: /Keep v4/ }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("goes back to the question on Escape from the confirm step", async () => {
+    render(<MethodologyPromptHost />);
+    let settled = false;
+    void ask(() => askKeepOrSwitch("/code/shop", "v4")).then(() => { settled = true; });
+    fireEvent.click(await screen.findByRole("option", { name: /Switch to v6…/ }));
+    await screen.findByRole("dialog", { name: "Switch to BMAD v6" });
+    act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
+    expect(await screen.findByRole("dialog", { name: "BMAD version" })).toBeTruthy();
+    // And there Escape is no answer.
+    act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
+    expect(screen.getByRole("dialog", { name: "BMAD version" })).toBeTruthy();
+    expect(settled).toBe(false);
+  });
+
+  it("offers Cancel when the switch was asked for on its own, and Cancel closes it", async () => {
+    render(<MethodologyPromptHost />);
+    const answer = ask(() => askSwitch("/code/shop", "v6"));
+    await screen.findByRole("dialog", { name: "Switch to BMAD v4" });
+    expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop", mode: "confirm", from: "v6", to: "v4", back: false });
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await answer).toEqual({ kind: "dismissed" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("offers Back instead once New Tab asks about the project being confirmed", async () => {
+    render(<MethodologyPromptHost />);
+    void ask(() => askSwitch("/code/shop", "v4"));
+    await screen.findByRole("button", { name: "Cancel" });
+    let settled = false;
+    void ask(() => askKeepOrSwitch("/code/shop", "v4")).then(() => { settled = true; });
+    fireEvent.click(await screen.findByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("dialog", { name: "BMAD version" })).toBeTruthy();
+    expect(settled).toBe(false);
+  });
+
+  it("settles an open keep-or-switch question as dismissed when the host unmounts", async () => {
+    const host = render(<MethodologyPromptHost />);
+    const answer = ask(() => askKeepOrSwitch("/code/shop", "v4"));
+    await screen.findByRole("dialog", { name: "BMAD version" });
     host.unmount();
     expect(await answer).toEqual({ kind: "dismissed" });
     expect(useMethodologyPrompt.getState().request).toBeNull();
