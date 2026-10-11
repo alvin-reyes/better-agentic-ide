@@ -174,6 +174,12 @@ const withoutRemoved = (root: string, files: MethodologyFile[]) => {
   return files.filter((f) => !removed.has(f.path));
 };
 
+/** What setup writes for a project on `methodology`, without the agents the person removed. */
+export function setupFiles(root: string, stacks: Stack[], methodology: Methodology): MethodologyFile[] {
+  const at = normRoot(root);
+  return withoutRemoved(at, methodologyFiles(baseName(at), stacks, methodology));
+}
+
 function apply(root: string, files: MethodologyFile[], methodology: Methodology): Promise<SetupReport> {
   return invoke<SetupReport>("project_setup_apply", {
     root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: true,
@@ -286,9 +292,56 @@ export function onProjectSetUp(listener: SetUpListener): () => void {
   return () => { setUpListeners.delete(listener); };
 }
 
-/** A setup for this project is running right now. */
+/**
+ * Projects a BMAD switch is moving right now. Apart from `inFlight`: a setup
+ * asked for meanwhile must not be handed the switch's promise, which resolves
+ * to something else, and must not write into a tree that is half moved.
+ */
+const switching = new Set<string>();
+
+type SwitchListener = (root: string, running: boolean) => void;
+const switchListeners = new Set<SwitchListener>();
+
+/** What `setUpProject` rejects with while the project is being switched. */
+export const SWITCH_RUNNING = "a BMAD switch is running";
+
+export function isSwitching(root: string): boolean {
+  return switching.has(normRoot(root));
+}
+
+/** Hear when a switch starts and ends. Returns the way to stop listening. */
+export function onSwitchChange(listener: SwitchListener): () => void {
+  switchListeners.add(listener);
+  return () => { switchListeners.delete(listener); };
+}
+
+function tellSwitch(root: string, running: boolean) {
+  for (const listener of [...switchListeners]) {
+    try { listener(root, running); } catch (e) { console.warn("A switch listener failed", e); }
+  }
+}
+
+/** Register a switch of `root` as running. The returned function ends it. */
+export function beginSwitch(root: string): () => void {
+  const at = normRoot(root);
+  switching.add(at);
+  tellSwitch(at, true);
+  return () => {
+    if (switching.delete(at)) tellSwitch(at, false);
+  };
+}
+
+/** A finished switch set the project up: it is set up, kept, and no longer declined. */
+export function markSwitched(root: string) {
+  markSetUp(root, true);
+  writeList(DECLINED_KEY, root, false);
+  markKept(root);
+}
+
+/** A setup for this project is running right now, or a switch, which sets it up too. */
 export function isSettingUp(root: string): boolean {
-  return inFlight.has(normRoot(root));
+  const at = normRoot(root);
+  return inFlight.has(at) || switching.has(at);
 }
 
 /**
@@ -302,6 +355,8 @@ export function isSettingUp(root: string): boolean {
  */
 export function setUpProject(root: string, methodology?: Methodology, stacks?: Stack[]): Promise<SetupResult> {
   const at = normRoot(root);
+  // A string, as Tauri's own rejections are: callers show it as it is.
+  if (switching.has(at)) return Promise.reject(SWITCH_RUNNING);
   const running = inFlight.get(at);
   if (running) return running;
   const job = (async () => {
