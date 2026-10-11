@@ -44,6 +44,7 @@ const DONE_KEY = "ade-project-setup-done";
 const REMOVED_KEY = "ade-project-agents-removed";
 const DECLINED_KEY = "ade-project-setup-declined";
 const KEPT_KEY = "ade-bmad-kept";
+const REASKED_V4_KEY = "ade-bmad-reasked-v4";
 
 /**
  * One spelling per project: no trailing separator. Every per-project list keys
@@ -119,6 +120,28 @@ export function migrateKept() {
     localStorage.setItem(KEPT_KEY, JSON.stringify(readList(DONE_KEY)));
   } catch {
     // Storage blocked: each project is asked once more.
+  }
+}
+
+/**
+ * Run once, after `migrateKept`. That seeding kept every project the user
+ * already had, so one on v4 was never offered v6, the default: each v4 project
+ * leaves the list and is asked to keep v4 or switch the next time it is opened
+ * from New Tab. One that can't be checked stays kept.
+ */
+export async function reaskV4Projects(): Promise<void> {
+  try {
+    if (localStorage.getItem(REASKED_V4_KEY) !== null) return;
+    // Before the checks, so a second window or a relaunch doesn't start over.
+    localStorage.setItem(REASKED_V4_KEY, "1");
+  } catch {
+    // Storage blocked: nothing is kept across launches anyway.
+    return;
+  }
+  for (const root of readList(KEPT_KEY)) {
+    // One at a time, each removed on its own: the list can gain a project
+    // someone answered about while these run.
+    if ((await detectOnDisk(root).catch(() => null)) === "v4") writeList(KEPT_KEY, root, false);
   }
 }
 

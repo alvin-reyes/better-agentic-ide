@@ -19,6 +19,7 @@ describe("isPersistedKey", () => {
     expect(isPersistedKey("ade-scratchpad-draft")).toBe(true);
     expect(isPersistedKey("ade-rec-abc")).toBe(true);
     expect(isPersistedKey("ade-bmad-kept")).toBe(true);
+    expect(isPersistedKey("ade-bmad-reasked-v4")).toBe(true);
     expect(isPersistedKey("some-other-lib-key")).toBe(false);
   });
 });

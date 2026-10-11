@@ -133,6 +133,12 @@ hydration, every root in `ade-project-setup-done` is added to it. The update
 therefore doesn't ask about projects the user already has; only projects
 opened afresh are asked. Those existing projects can still switch on demand.
 
+**Changed in 0.20.1.** That left every v4 project the user already had
+without an offer of v6, the default. After the migration, once
+(`ade-bmad-reasked-v4`, persisted), each kept project that is on v4 is taken
+off the kept list, so New Tab asks it to keep v4 or switch. Kept projects on
+v6, and ones that can't be checked, stay kept.
+
 ### Switching on demand (plan B)
 
 - Palette: **BMAD: Switch to v6…** or **BMAD: Switch to v4…**, whichever is

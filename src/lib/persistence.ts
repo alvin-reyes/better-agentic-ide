@@ -39,6 +39,9 @@ const PERSISTED_KEYS = new Set([
   // Which projects have answered "keep this BMAD version or switch". Lost,
   // every project with BMAD is asked again the next time it is opened.
   "ade-bmad-kept",
+  // That the v4 projects were taken off that list once. Lost, they are taken
+  // off again, and each is asked once more.
+  "ade-bmad-reasked-v4",
 ]);
 
 /** Key prefixes that are persisted (one key per recording). */
