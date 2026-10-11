@@ -626,6 +626,8 @@ mod tests {
         std::fs::remove_dir_all(dir).ok();
     }
 
+    // Unix only: the closure deletes the file while its handle is open, which Windows refuses.
+    #[cfg(unix)]
     #[test]
     fn a_failed_removal_is_part_of_the_error() {
         let dir = temp();
@@ -650,6 +652,10 @@ mod tests {
         let src = v4_source();
         // A bundled file that can't be read: the copy fails once its destination was created.
         std::fs::set_permissions(src.join("bmad-core/tasks/a.md"), std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::File::open(src.join("bmad-core/tasks/a.md")).is_ok() {
+            eprintln!("skipped: the mode does not bite here (running as root)");
+            return;
+        }
         let r = apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src));
         std::fs::set_permissions(src.join("bmad-core/tasks/a.md"), std::fs::Permissions::from_mode(0o644)).unwrap();
         assert!(r.is_err());
@@ -709,6 +715,10 @@ mod tests {
         std::fs::write(&stuck, "x").unwrap();
         // A folder that can't be written to: its file can't be unlinked.
         std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o500)).unwrap();
+        if std::fs::write(sub.join("probe"), "x").is_ok() {
+            eprintln!("skipped: the mode does not bite here (running as root)");
+            return;
+        }
         let report = SetupReport { created: vec![stuck.to_string_lossy().into_owned()], ..Default::default() };
         let failed = take_back(&dir, &report, &[], None);
         std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755)).unwrap();
