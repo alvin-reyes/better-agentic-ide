@@ -401,9 +401,11 @@ mod sysinfo_tests {
         // `sleep` does not exist on Windows, and this test has to pass on the
         // runner that actually exercises the code it covers. `& wait` keeps
         // `sh` from replacing itself with `sleep`, which would leave no child.
+        // On Windows `ping` is the wait: `timeout` exits at once when stdin
+        // is not a console, as under `cargo test`.
         let mut cmd = if crate::platform::IS_WINDOWS {
             let mut c = std::process::Command::new("cmd");
-            c.args(["/c", "timeout", "/t", "30", "/nobreak"]);
+            c.args(["/c", "ping -n 31 127.0.0.1 >nul"]);
             c
         } else {
             let mut c = std::process::Command::new("sh");
