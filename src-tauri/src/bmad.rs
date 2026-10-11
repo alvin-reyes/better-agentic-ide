@@ -33,7 +33,8 @@ pub fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<
             if let Some(parent) = dst.parent() {
                 crate::projectsetup::mkdirs(parent, &mut report.created_dirs)?;
             }
-            std::fs::copy(src, dst).map_err(|e| format!("{}: {e}", dst.display()))?;
+            crate::projectsetup::write_or_clean(dst, |to| std::fs::copy(src, to).map(|_| ()))
+                .map_err(|e| format!("{}: {e}", dst.display()))?;
             report.created.push(dst.to_string_lossy().to_string());
         }
     }

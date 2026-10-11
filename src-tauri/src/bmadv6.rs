@@ -84,7 +84,8 @@ fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), 
         } else if to.exists() {
             report.kept.push(to);
         } else {
-            fs::copy(&from, &to).map_err(|e| format!("{}: {e}", from.display()))?;
+            crate::projectsetup::write_or_clean(&to, |to| fs::copy(&from, to).map(|_| ()))
+                .map_err(|e| format!("{}: {e}", from.display()))?;
             report.created.push(to);
         }
     }
@@ -96,7 +97,8 @@ fn copy_file(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), 
     if dst.exists() {
         report.kept.push(dst.to_path_buf());
     } else {
-        fs::copy(src, dst).map_err(|e| format!("{}: {e}", src.display()))?;
+        crate::projectsetup::write_or_clean(dst, |to| fs::copy(src, to).map(|_| ()))
+            .map_err(|e| format!("{}: {e}", src.display()))?;
         report.created.push(dst.to_path_buf());
     }
     Ok(())

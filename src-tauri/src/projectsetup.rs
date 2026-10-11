@@ -97,6 +97,15 @@ pub(crate) fn mkdirs(path: &Path, created: &mut Vec<PathBuf>) -> Result<(), Stri
     Ok(())
 }
 
+/// Run `write` for a file setup is creating at `dst`. A write that fails
+/// partway (a full disk, a lost volume) leaves a file no report names, so
+/// nothing would ever take it back: it is removed here instead.
+pub(crate) fn write_or_clean(dst: &Path, write: impl FnOnce(&Path) -> std::io::Result<()>) -> std::io::Result<()> {
+    write(dst).inspect_err(|_| {
+        let _ = std::fs::remove_file(dst);
+    })
+}
+
 fn has_import(root: &Path, marker: &str) -> bool {
     std::fs::read_to_string(root.join("CLAUDE.md")).map(|s| s.contains(marker) || s.contains("@.ade/rules.md")).unwrap_or(false)
 }
@@ -185,7 +194,7 @@ pub fn apply(
         if let Some(parent) = dst.parent() {
             mkdirs(parent, &mut report.created_dirs)?;
         }
-        std::fs::write(&dst, &f.content).map_err(|e| format!("{}: {e}", f.path))?;
+        write_or_clean(&dst, |to| std::fs::write(to, &f.content)).map_err(|e| format!("{}: {e}", f.path))?;
         if f.path.starts_with(".claude/agents/") {
             report.agents += 1;
         }
@@ -253,16 +262,23 @@ fn apply_or_clean(
     match apply(dir, files, import, marker, methodology, methodology_src, &mut report) {
         Ok(()) => Ok(report),
         Err(e) => {
-            remove_unchanged(dir, &report.created, files);
-            if let (true, Some(import)) = (report.appended_import, import) {
-                let _ = strip_import(dir, import);
-            }
-            // Innermost first. A folder something else has written into since stays.
-            for d in report.created_dirs.iter().rev() {
-                let _ = std::fs::remove_dir(d);
-            }
+            take_back(dir, &report, files, import);
             Err(e)
         }
+    }
+}
+
+/// Take back what a setup wrote, as its report records it: the files still as
+/// setup wrote them, the import it appended, then the folders it created that
+/// are empty. Shared by a failed setup and a failed switch's rollback.
+pub(crate) fn take_back(dir: &Path, report: &SetupReport, files: &[SetupFile], import: Option<&str>) {
+    remove_unchanged(dir, &report.created, files);
+    if let (true, Some(import)) = (report.appended_import, import) {
+        let _ = strip_import(dir, import);
+    }
+    // Innermost first. A folder something else has written into since stays.
+    for d in report.created_dirs.iter().rev() {
+        let _ = std::fs::remove_dir(d);
     }
 }
 
@@ -458,6 +474,92 @@ mod tests {
         std::fs::write(src.join("bmad-core/tasks/a.md"), "a").unwrap();
         std::fs::write(src.join("VERSION"), "v4.1\n").unwrap();
         src
+    }
+
+    /// A miniature of the bundled v6 resource root, with or without the runtime.
+    fn v6_source(with_runtime: bool) -> PathBuf {
+        let src = temp();
+        std::fs::create_dir_all(src.join("skills/bmad")).unwrap();
+        std::fs::write(src.join("skills/bmad/SKILL.md"), "hello").unwrap();
+        if with_runtime {
+            std::fs::write(src.join("ade-runtime.mjs"), "// runtime").unwrap();
+        }
+        src
+    }
+
+    fn names(d: &Path) -> Vec<String> {
+        let mut v: Vec<String> =
+            std::fs::read_dir(d).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn a_failed_setup_leaves_what_the_project_had_alone() {
+        let dir = temp();
+        let src = v4_source();
+        std::fs::create_dir_all(dir.join(".claude/agents")).unwrap();
+        std::fs::write(dir.join(".claude/agents/mine.md"), "my agent").unwrap();
+        std::fs::write(dir.join(".claude/settings.json"), "{\"model\":\"sonnet\"}").unwrap();
+        // A file where the install needs a folder: its copy fails partway.
+        std::fs::create_dir_all(dir.join(".bmad-core")).unwrap();
+        std::fs::write(dir.join(".bmad-core/tasks"), "mine").unwrap();
+
+        assert!(apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src)).is_err());
+
+        assert_eq!(names(&dir), [".bmad-core", ".claude"]);
+        assert_eq!(names(&dir.join(".claude")), ["agents", "settings.json"]);
+        assert_eq!(names(&dir.join(".claude/agents")), ["mine.md"], "the role file setup wrote is gone, the folder stays");
+        assert_eq!(std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap(), "{\"model\":\"sonnet\"}");
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn a_failed_v6_setup_is_taken_back() {
+        let dir = temp();
+        // No runtime bundle: the install fails after the skills and `_bmad/` are written.
+        let src = v6_source(false);
+        assert!(apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V6, Some(&src)).is_err());
+        assert!(names(&dir).is_empty(), "{:?}", names(&dir));
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[test]
+    fn a_half_written_file_is_removed() {
+        let dir = temp();
+        let dst = dir.join("half.md");
+        let err = write_or_clean(&dst, |to| {
+            std::fs::write(to, "half")?;
+            Err(std::io::Error::other("disk full"))
+        })
+        .unwrap_err();
+        assert_eq!(err.to_string(), "disk full");
+        assert!(!dst.exists(), "the half-written file is gone");
+
+        // A write that succeeds keeps its file.
+        write_or_clean(&dst, |to| std::fs::write(to, "whole")).unwrap();
+        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "whole");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn take_back_removes_what_a_setup_made_and_keeps_what_changed() {
+        let dir = temp();
+        std::fs::write(dir.join("CLAUDE.md"), "# mine\n").unwrap();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None, &mut report).unwrap();
+        assert!(report.appended_import);
+        // The person edits one of the files setup wrote: it stays.
+        std::fs::write(dir.join(".claude/agents/qa.md"), "edited").unwrap();
+
+        take_back(&dir, &report, &files(), Some("\nIMPORT\n"));
+
+        assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# mine\n", "the import is stripped");
+        assert!(!dir.join(".ade").exists(), "an unchanged file and the folder setup made are gone");
+        assert_eq!(std::fs::read_to_string(dir.join(".claude/agents/qa.md")).unwrap(), "edited");
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]
