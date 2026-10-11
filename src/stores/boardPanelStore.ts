@@ -1,13 +1,16 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import type { BoardState } from "./stageBoardStore";
+import { buildV6Map, type V6Map } from "../lib/v6Map";
 import { loadBoard } from "../lib/loadBoard";
 import { readStageFile } from "../lib/confirmedStage";
 import { tauriFs } from "../lib/tauriFs";
 import { detectOnDisk } from "../lib/projectSetup";
 
+export type BoardResult = { kind: "v4"; board: BoardState } | { kind: "v6"; map: V6Map };
+
 export interface BoardDeps {
   methodology(root: string): Promise<"v4" | "v6" | null>;
-  build(root: string, methodology: "v4" | "v6"): Promise<BoardState>;
+  build(root: string, methodology: "v4" | "v6"): Promise<BoardResult>;
   stageFile(root: string): Promise<string | null>;
 }
 
@@ -15,6 +18,7 @@ export interface BoardPanelState {
   root: string | null;
   methodology: "v4" | "v6" | null;
   board: BoardState | null;
+  map: V6Map | null;
   stageFile: string | null;
   error: string | null;
   loading: boolean;
@@ -48,13 +52,16 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
         const methodology = await deps.methodology(root);
         if (get().root !== root) return;
         if (!methodology) {
-          set({ methodology: null, board: null, stageFile: null, error: null });
+          set({ methodology: null, board: null, map: null, stageFile: null, error: null });
           return;
         }
         set({ methodology });
-        const [board, stageFile] = await Promise.all([deps.build(root, methodology), deps.stageFile(root)]);
+        const [result, stageFile] = await Promise.all([deps.build(root, methodology), deps.stageFile(root)]);
         if (get().root !== root) return;
-        set({ board, stageFile, error: null });
+        // One shape at a time: a project set up again on the other methodology
+        // must not keep showing the old one beside the new label.
+        if (result.kind === "v4") set({ board: result.board, map: null, stageFile, error: null });
+        else set({ map: result.map, board: null, stageFile: null, error: null });
       } catch (e) {
         if (get().root !== root) return;
         set({ error: e instanceof Error ? e.message : String(e) });
@@ -88,14 +95,15 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
       root: null,
       methodology: null,
       board: null,
+      map: null,
       stageFile: null,
       error: null,
       loading: false,
       show(root) {
         if (timer) clearTimeout(timer);
         timer = null;
-        if (root === get().root && get().board) return;
-        set({ root, methodology: null, board: null, stageFile: null, error: null, loading: !!root });
+        if (root === get().root && (get().board || get().map)) return;
+        set({ root, methodology: null, board: null, map: null, stageFile: null, error: null, loading: !!root });
         if (root) void refresh();
       },
       refresh,
@@ -112,6 +120,9 @@ export function createBoardPanelStore(deps: BoardDeps): UseBoundStore<StoreApi<B
 
 export const useBoardPanel = createBoardPanelStore({
   methodology: (root) => detectOnDisk(root),
-  build: (root, methodology) => loadBoard(root, methodology, tauriFs),
+  build: async (root, methodology) =>
+    methodology === "v6"
+      ? { kind: "v6", map: await buildV6Map(root, tauriFs) }
+      : { kind: "v4", board: await loadBoard(root, tauriFs) },
   stageFile: (root) => readStageFile(root, tauriFs),
 });

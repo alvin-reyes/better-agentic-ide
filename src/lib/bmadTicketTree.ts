@@ -1,7 +1,7 @@
 import { parse as parseToml } from "smol-toml";
 import type { Fs } from "./bmadRuntime/fs";
 import { joinPath, normalizePath, pathBasename } from "./bmadRuntime/paths";
-import { activeInitiativeFolder, ticketStatus } from "./bmadRuntime/tickets";
+import { activeInitiativeFolder, backlogStatus, outputFolder, ticketStatus } from "./bmadRuntime/tickets";
 
 /**
  * A typed view of a BMAD v6 project's ticket tree for the stage board. The
@@ -126,12 +126,45 @@ export async function readTicketTree(root: string, fs: Fs): Promise<TicketTree> 
   const projectRoot = normalizePath(root);
   const view = await ticketStatus(projectRoot, fs);
   const folder = await activeInitiativeFolder(projectRoot, fs);
-  const initiativeName = pathBasename(folder);
+  const tickets = await ticketRows(view, folder, projectRoot, fs);
 
+  const titles = await epicTitles(folder, fs);
+  const epics: EpicRow[] = [];
+  for (const e of (view.epics ?? []) as Record<string, any>[]) {
+    const slug = String(e.slug);
+    const doc = await readIfFile(joinPath(joinPath(folder, slug), `${slug}.md`), fs);
+    epics.push({
+      id: e.id === null || e.id === undefined ? "" : String(e.id),
+      slug,
+      title: titles[slug] ?? (doc ? frontmatterTitle(doc) : null) ?? words(slug),
+      ticketCount: tickets.filter((t) => t.epic === slug).length,
+    });
+  }
+
+  return { initiative: folder, tickets, epics, problems: (view.problems ?? []) as string[] };
+}
+
+/**
+ * The project's backlog (`{output_folder}/backlog/`) as a ticket tree: the
+ * view the agent's `status` prints under `backlog`. Its rows are named by file
+ * name, which `.ade/gates/` cannot key, so the board shows them without gates.
+ * Null when the project has no backlog folder.
+ */
+export async function readBacklogTree(root: string, fs: Fs): Promise<TicketTree | null> {
+  const projectRoot = normalizePath(root);
+  const view = await backlogStatus(projectRoot, fs);
+  if (!view) return null;
+  const folder = normalizePath(joinPath(await outputFolder(projectRoot, fs), "backlog"));
+  return { initiative: folder, tickets: await ticketRows(view, folder, projectRoot, fs), epics: [], problems: (view.problems ?? []) as string[] };
+}
+
+/** The port's status rows as `Ticket`s: each leaf read for its acceptance criteria. */
+async function ticketRows(view: Record<string, any>, folder: string, projectRoot: string, fs: Fs): Promise<Ticket[]> {
+  const folderName = pathBasename(folder);
   const tickets: Ticket[] = [];
   for (const row of (view.tickets ?? []) as Record<string, any>[]) {
     const epic = String(row.epic);
-    const dir = epic === initiativeName ? folder : joinPath(folder, epic);
+    const dir = epic === folderName ? folder : joinPath(folder, epic);
     const leafPath = row.file ? joinPath(dir, String(row.file)) : null;
     const leaf = leafPath ? await readIfFile(leafPath, fs) : null;
     const localId = row.id === null || row.id === undefined ? "" : String(row.id);
@@ -151,19 +184,5 @@ export async function readTicketTree(root: string, fs: Fs): Promise<TicketTree> 
       epic,
     });
   }
-
-  const titles = await epicTitles(folder, fs);
-  const epics: EpicRow[] = [];
-  for (const e of (view.epics ?? []) as Record<string, any>[]) {
-    const slug = String(e.slug);
-    const doc = await readIfFile(joinPath(joinPath(folder, slug), `${slug}.md`), fs);
-    epics.push({
-      id: e.id === null || e.id === undefined ? "" : String(e.id),
-      slug,
-      title: titles[slug] ?? (doc ? frontmatterTitle(doc) : null) ?? words(slug),
-      ticketCount: tickets.filter((t) => t.epic === slug).length,
-    });
-  }
-
-  return { initiative: folder, tickets, epics, problems: (view.problems ?? []) as string[] };
+  return tickets;
 }

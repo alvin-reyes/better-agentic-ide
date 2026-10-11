@@ -1224,6 +1224,34 @@ export async function activeInitiativeFolder(projectRoot: string, fs: Fs): Promi
   return activeInitiative(normalizePath(projectRoot), fs);
 }
 
+/** `{output_folder}` for the project, absolute, with `{project-root}` substituted. */
+export async function outputFolder(projectRoot: string, fs: Fs): Promise<string> {
+  const root = normalizePath(projectRoot);
+  return normalizePath(await ticketsRoot(root, await centralConfig(root, fs)));
+}
+
+/** `core.active_initiative` from the merged config, or null when it is unset. */
+export async function activeInitiativeName(projectRoot: string, fs: Fs): Promise<string | null> {
+  const config = await centralConfig(normalizePath(projectRoot), fs);
+  const core = config["core"];
+  const name = isRecord(core) ? core["active_initiative"] : null;
+  return typeof name === "string" && name.trim() ? name.trim() : null;
+}
+
+/**
+ * The `status` view of `{output_folder}/backlog`: the view `ticketStatus`
+ * drops. Each row's `ref` is its file name, as `withBacklog` names it, since
+ * a bare id here could also name a ticket in the initiative. Null when there
+ * is no backlog folder.
+ */
+export async function backlogStatus(projectRoot: string, fs: Fs): Promise<Record<string, any> | null> {
+  const folder = normalizePath(joinPath(await outputFolder(projectRoot, fs), "backlog"));
+  if (!(await isDir(folder, fs))) return null;
+  const view = await statusView(folder, fs);
+  for (const row of (view["tickets"] ?? []) as Record<string, any>[]) row["ref"] = row["file"] || row["ref"];
+  return view;
+}
+
 /**
  * The `status` view of the project's active initiative, as `tickets.py status`
  * prints it run from that project with no folder — minus the `backlog` key, which

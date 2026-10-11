@@ -3,6 +3,7 @@ import type { BoardState, StageId } from "../../stores/stageBoardStore";
 import type { StageView } from "../../lib/confirmedStage";
 import type { StoryView } from "../../lib/storyState";
 import type { Gate } from "../../lib/bmadGates";
+import { heading, muted, section } from "./boardStyles";
 
 export interface BoardActions {
   onOpen(path: string): void;
@@ -12,7 +13,6 @@ export interface BoardActions {
 }
 
 export interface BoardViewProps {
-  methodology: "v4" | "v6";
   board: BoardState;
   stage: StageView;
   error: string | null;
@@ -29,10 +29,6 @@ export function rowLabel(v: StoryView): string {
   if (v.state === "unknown") return v.story.rawStatus || "unknown";
   return v.state;
 }
-
-const muted = { color: "var(--text-secondary)" } as const;
-const section = { padding: "10px 12px", borderBottom: "1px solid var(--border)" } as const;
-const heading = { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, ...muted, marginBottom: 6 } as const;
 
 /** A button whose async action shows its own failure, leaving the row as it was. */
 function ActionButton({ action, label, run, onError, unavailable }: { action: string; label: string; run(): Promise<void>; onError(msg: string | null): void; unavailable?: string | null }) {
@@ -196,54 +192,40 @@ export function Row({ v, actions, methodology = "v4", dispatched, dispatchUnavai
   );
 }
 
-function WorkItems({ methodology, board, actions, dispatched, dispatchUnavailable }: {
-  methodology: "v4" | "v6"; board: BoardState; actions: BoardActions; dispatched?: (v: StoryView) => boolean; dispatchUnavailable?: string | null;
+function WorkItems({ board, actions, dispatched, dispatchUnavailable }: {
+  board: BoardState; actions: BoardActions; dispatched?: (v: StoryView) => boolean; dispatchUnavailable?: string | null;
 }) {
-  if (board.noInitiative) return <div style={{ ...section, ...muted }}>No active initiative yet. Start one with bmad-spec.</div>;
-  if (board.stories.length === 0) return <div style={{ ...section, ...muted }}>No {methodology === "v6" ? "tickets" : "stories"} yet.</div>;
-
-  const rows = (refs: string[] | null) =>
-    board.stories.filter((v) => refs === null || refs.includes(v.story.id)).map((v) => <Row key={v.story.id} v={v} actions={actions} methodology={methodology} dispatched={dispatched} dispatchUnavailable={dispatchUnavailable} />);
+  if (board.stories.length === 0) return <div style={{ ...section, ...muted }}>No stories yet.</div>;
 
   const unavailableNote = dispatchUnavailable && actions.onDispatch && board.stories.some((v) => v.dispatchable) ? (
     <div style={{ ...muted, fontSize: 11, marginBottom: 6 }}>Dispatch unavailable: {dispatchUnavailable}</div>
   ) : null;
 
-  if (methodology === "v4" || !board.epics) {
-    return <div style={section}><div style={heading}>Stories</div>{unavailableNote}{rows(null)}</div>;
-  }
-  const grouped = new Set(board.epics.flatMap((e) => e.refs));
-  const other = board.stories.filter((v) => !grouped.has(v.story.id)).map((v) => v.story.id);
   return (
     <div style={section}>
+      <div style={heading}>Stories</div>
       {unavailableNote}
-      {board.epics.map((e) => (
-        <div key={e.slug} style={{ marginBottom: 8 }}>
-          <div style={heading}>{e.title}</div>
-          {rows(e.refs)}
-        </div>
-      ))}
-      {other.length > 0 && <div><div style={heading}>Other</div>{rows(other)}</div>}
+      {board.stories.map((v) => <Row key={v.story.id} v={v} actions={actions} dispatched={dispatched} dispatchUnavailable={dispatchUnavailable} />)}
     </div>
   );
 }
 
-function GateProblems({ board }: { board: BoardState }) {
-  const unreadable = board.unmatchedGates.filter((g) => g.error);
-  const unmatched = board.unmatchedGates.filter((g) => !g.error);
-  if (!unmatched.length && !unreadable.length && !board.supersededGates.length && !board.problems?.length) return null;
+export function GateProblems({ unmatchedGates, supersededGates, problems }: { unmatchedGates: Gate[]; supersededGates: Gate[]; problems?: string[] }) {
+  const unreadable = unmatchedGates.filter((g) => g.error);
+  const unmatched = unmatchedGates.filter((g) => !g.error);
+  if (!unmatched.length && !unreadable.length && !supersededGates.length && !problems?.length) return null;
   return (
     <div style={section}>
       <div style={heading}>Needs attention</div>
-      {board.problems?.map((p) => <div key={p}>{p}</div>)}
+      {problems?.map((p) => <div key={p}>{p}</div>)}
       {unmatched.map((g) => <div key={g.file}>Gate for {g.storyId} matches no story or ticket: {g.file}</div>)}
       {unreadable.map((g) => <div key={g.file}>{g.file}: {g.error}</div>)}
-      {board.supersededGates.map((g) => <div key={g.file} style={muted}>Superseded: {g.file}{g.error ? `: ${g.error}` : ""}</div>)}
+      {supersededGates.map((g) => <div key={g.file} style={muted}>Superseded: {g.file}{g.error ? `: ${g.error}` : ""}</div>)}
     </div>
   );
 }
 
-export default function BoardView({ methodology, board, stage, error, actions, dispatched, dispatchUnavailable }: BoardViewProps) {
+export default function BoardView({ board, stage, error, actions, dispatched, dispatchUnavailable }: BoardViewProps) {
   return (
     <div style={{ overflowY: "auto", flex: 1, fontSize: 12 }}>
       {error && (
@@ -253,8 +235,8 @@ export default function BoardView({ methodology, board, stage, error, actions, d
       )}
       <StageRail board={board} stage={stage} actions={actions} />
       <Artifacts board={board} onOpen={actions.onOpen} />
-      <WorkItems methodology={methodology} board={board} actions={actions} dispatched={dispatched} dispatchUnavailable={dispatchUnavailable} />
-      <GateProblems board={board} />
+      <WorkItems board={board} actions={actions} dispatched={dispatched} dispatchUnavailable={dispatchUnavailable} />
+      <GateProblems unmatchedGates={board.unmatchedGates} supersededGates={board.supersededGates} problems={board.problems} />
     </div>
   );
 }

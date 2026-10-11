@@ -1,6 +1,6 @@
 import type { Fs } from "./bmadRuntime/fs";
 import { joinPath, normalizePath } from "./bmadRuntime/paths";
-import { APPROVALS_DIR } from "./boardV6";
+import { APPROVALS_DIR } from "./v6Tickets";
 
 /**
  * The story with its status changed from Draft to Approved, or null when its

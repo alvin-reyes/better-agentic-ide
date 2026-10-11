@@ -31,7 +31,7 @@ const store = vi.hoisted(() => ({ methodology: null as "v4" | "v6" | null }));
 vi.mock("../../stores/boardPanelStore", async () => {
   const { create } = await import("zustand");
   const useBoardPanel = create(() => ({
-    root: "/p", methodology: store.methodology, board: null, stageFile: null, error: null, loading: false,
+    root: "/p", methodology: store.methodology, board: null, map: null, stageFile: null, error: null, loading: false,
     show: vi.fn(), refresh: vi.fn(async () => {}), scheduleRefresh: vi.fn(),
   }));
   return { useBoardPanel };
@@ -45,6 +45,7 @@ import { useBoardPanel } from "../../stores/boardPanelStore";
 import { buildBoard } from "../../stores/stageBoardStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { taskUnsupportedReason } from "../../lib/agentCommand";
+import type { V6Map } from "../../lib/v6Map";
 
 beforeEach(() => {
   disk.bmad = {};
@@ -122,6 +123,23 @@ describe("BoardPanel watching", () => {
   });
 });
 
+const v6Map = (): V6Map => ({
+  outputFolder: "docs/bmad", initiative: { title: "Shop relaunch", folder: "initiative-shop" }, initiativeState: "active",
+  docs: { analysis: [], planning: [], implementation: [], validation: [] },
+  loose: [], epics: [], tickets: [], backlog: [], unmatchedGates: [], supersededGates: [], problems: [],
+});
+
+describe("BoardPanel v6", () => {
+  it("shows a v6 project's map, with no stage controls, and watches its output folder", async () => {
+    disk.exists = new Set(["/p/docs/bmad"]);
+    useBoardPanel.setState({ root: "/p", methodology: "v6", board: null, map: v6Map(), error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={() => {}} />);
+    expect(await screen.findByText("Shop relaunch")).toBeTruthy();
+    expect(screen.queryByText(/Track stage|Next →/)).toBeNull();
+    await waitFor(() => expect(watched()).toContain("/p/docs/bmad"));
+  });
+});
+
 describe("BoardPanel", () => {
   it("says so when the pane has no project", () => {
     render(<BoardPanel cwd={null} onClose={vi.fn()} />);
@@ -130,7 +148,7 @@ describe("BoardPanel", () => {
 
   it("offers setup for a project with no BMAD, naming the folder it would set up", async () => {
     store.methodology = null;
-    useBoardPanel.setState({ root: "/p", methodology: null, board: null, error: null, loading: false });
+    useBoardPanel.setState({ root: "/p", methodology: null, board: null, map: null, error: null, loading: false });
     render(<BoardPanel cwd="/p/src" onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("This project isn't set up for BMAD")).toBeTruthy());
     expect(screen.getByText("/p")).toBeTruthy();

@@ -7,6 +7,14 @@ describe("watchTargets", () => {
     expect(watchTargets("/p", "v6", null)).toEqual(["/p/_bmad", "/p/_bmad-output", "/p/.ade"]);
   });
 
+  it("watches a v6 project's configured output folder", () => {
+    expect(watchTargets("/p", "v6", null, "docs/bmad")).toEqual(["/p/_bmad", "/p/docs/bmad", "/p/.ade"]);
+  });
+
+  it("drops a v6 output folder that would escape the project", () => {
+    expect(watchTargets("/p", "v6", null, "../elsewhere")).toEqual(["/p/_bmad", "/p/.ade"]);
+  });
+
   it("watches v4's configured locations, collapsing ones inside docs/", () => {
     expect(watchTargets("/p", "v4", BMAD_DEFAULTS)).toEqual(["/p/.bmad-core", "/p/.ade", "/p/docs"]);
   });
@@ -71,13 +79,16 @@ describe("watchTargets", () => {
 
 describe("watchExtensions", () => {
   it("watches every file in .ade/, whose stage and approval files have no real extension", () => {
-    expect(watchExtensions("/p/.ade")).toEqual([]);
-    expect(watchExtensions("C:\\p\\.ade")).toEqual([]);
+    expect(watchExtensions("/p/.ade", "v4")).toEqual([]);
+    expect(watchExtensions("C:\\p\\.ade", "v6")).toEqual([]);
   });
 
-  it("watches only the document extensions everywhere else", () => {
-    expect(watchExtensions("/p/docs")).toEqual(WATCH_EXTENSIONS);
-    expect(watchExtensions("/p/_bmad-output")).toEqual(WATCH_EXTENSIONS);
-    expect(watchExtensions("/p/my.ade-notes")).toEqual(WATCH_EXTENSIONS);
+  it("watches only the document extensions everywhere else on v4", () => {
+    expect(watchExtensions("/p/docs", "v4")).toEqual(WATCH_EXTENSIONS);
+    expect(watchExtensions("/p/my.ade-notes", "v4")).toEqual(WATCH_EXTENSIONS);
+  });
+
+  it("adds html on v6, for brainstorm and forge reports", () => {
+    expect(watchExtensions("/p/_bmad-output", "v6")).toEqual([...WATCH_EXTENSIONS, "html"]);
   });
 });

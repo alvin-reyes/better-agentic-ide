@@ -4,8 +4,6 @@ import BoardView, { rowLabel } from "../board/BoardView";
 import { buildBoard, type BoardState } from "../../stores/stageBoardStore";
 import { stageView } from "../../lib/confirmedStage";
 import type { StoryView } from "../../lib/storyState";
-import { ticketView } from "../../lib/ticketView";
-import { parseGate } from "../../lib/bmadGates";
 
 const story = (id: string, status: string) => ({
   file: `docs/stories/${id}.x.md`,
@@ -26,7 +24,7 @@ function v4Board(): BoardState {
 }
 
 const renderBoard = (board = v4Board(), extra: Partial<Parameters<typeof BoardView>[0]> = {}) =>
-  render(<BoardView methodology="v4" board={board} stage={stageView(board, null)} error={null} actions={{ onOpen: vi.fn() }} {...extra} />);
+  render(<BoardView board={board} stage={stageView(board, null)} error={null} actions={{ onOpen: vi.fn() }} {...extra} />);
 
 describe("rowLabel", () => {
   it("names every state the board can show", () => {
@@ -93,59 +91,11 @@ describe("BoardView", () => {
     expect(screen.getByText(/no gate: key/)).toBeTruthy();
   });
 
-  it("groups v6 rows under their epics, with problems and a no-initiative note", () => {
-    const base = buildBoard({ config: null, artifactExists: () => false, stories: [story("1.1", "Draft"), story("2.1", "Draft")], gates: [] });
-    const board: BoardState = { ...base, epics: [{ slug: "epic-cart", title: "Cart", refs: ["1.1"] }], problems: ["plan names no ticket"] };
-    render(<BoardView methodology="v6" board={board} stage={stageView(board, null)} error={null} actions={{ onOpen: vi.fn() }} />);
-    expect(screen.getByText("Cart")).toBeTruthy();
-    expect(screen.getByText("Other")).toBeTruthy();
-    expect(screen.getByText("plan names no ticket")).toBeTruthy();
-
-    const none: BoardState = { ...base, stories: [], epics: [], noInitiative: true };
-    render(<BoardView methodology="v6" board={none} stage={stageView(none, null)} error={null} actions={{ onOpen: vi.fn() }} />);
-    expect(screen.getByText(/No active initiative/)).toBeTruthy();
-  });
-
   it("lists a v4 board's problems, such as an unreadable story, under Needs attention", () => {
     const board: BoardState = { ...v4Board(), problems: ["docs/stories/1.6.x.md: could not be read: EACCES"] };
     renderBoard(board);
     expect(screen.getByText("Needs attention")).toBeTruthy();
     expect(screen.getByText("docs/stories/1.6.x.md: could not be read: EACCES")).toBeTruthy();
-  });
-
-  it("shows a v6 ticket's own status word beside its state", () => {
-    const t = (id: string, status: string) => ticketView({
-      file: `x/story-${id}.md`, id, localId: id, type: "story", title: `Ticket ${id}`,
-      parent: "epic-cart", status, state: "planned", acceptanceCriteria: [], epic: "epic-cart",
-    }, []);
-    const base = buildBoard({ config: null, artifactExists: () => false, stories: [], gates: [] });
-    const board: BoardState = { ...base, stories: [t("1.1", "ready-for-dev"), t("1.2", "draft")], epics: [{ slug: "epic-cart", title: "Cart", refs: ["1.1", "1.2"] }] };
-    render(<BoardView methodology="v6" board={board} stage={stageView(board, null)} error={null} actions={{ onOpen: vi.fn() }} />);
-    const row = (id: string) => document.querySelector(`[data-row="${id}"]`) as HTMLElement;
-    expect(row("1.1").querySelector("[data-state]")!.textContent).toBe("draft");
-    expect(row("1.1").querySelector("[data-raw-status]")!.textContent).toBe("ready-for-dev");
-    // Same word as the state: not repeated.
-    expect(row("1.2").querySelector("[data-raw-status]")).toBeNull();
-  });
-
-  it("drops the v6 word on a passed or waived ticket, and keeps it on a claimed one", () => {
-    const t = (id: string, status: string) => ticketView({
-      file: `x/story-${id}.md`, id, localId: id, type: "story", title: `Ticket ${id}`,
-      parent: "epic-cart", status, state: "planned", acceptanceCriteria: [], epic: "epic-cart",
-    }, [
-      parseGate(".ade/gates/1.1.yml", 'story: "1.1"\ngate: "PASS"\nstatus_reason: "ok"\nupdated: "2026-10-10"\n'),
-      parseGate(".ade/gates/1.2.yml", 'story: "1.2"\ngate: "WAIVED"\nstatus_reason: "legacy"\nupdated: "2026-10-10"\n'),
-    ]);
-    const base = buildBoard({ config: null, artifactExists: () => false, stories: [], gates: [] });
-    const board: BoardState = { ...base, stories: [t("1.1", "done"), t("1.2", "built"), t("1.3", "done")] };
-    render(<BoardView methodology="v6" board={board} stage={stageView(board, null)} error={null} actions={{ onOpen: vi.fn() }} />);
-    const row = (id: string) => document.querySelector(`[data-row="${id}"]`) as HTMLElement;
-    expect(row("1.1").querySelector("[data-state]")!.textContent).toBe("done ✓");
-    expect(row("1.1").querySelector("[data-raw-status]")).toBeNull();
-    expect(row("1.2").querySelector("[data-state]")!.textContent).toBe("waived");
-    expect(row("1.2").querySelector("[data-raw-status]")).toBeNull();
-    expect(row("1.3").querySelector("[data-state]")!.textContent).toBe("claimed");
-    expect(row("1.3").querySelector("[data-raw-status]")!.textContent).toBe("done");
   });
 
   it("does not repeat a v4 story's status word", () => {

@@ -56,12 +56,8 @@ export interface BoardState {
    * list above.
    */
   supersededGates: Gate[];
-  /** v6 only: the epics in the tree's order, with their tickets' refs, for grouping rows. */
-  epics?: { slug: string; title: string; refs: string[] }[];
-  /** What needs a fix: the v6 ticket tree's problems, or v4 story and gate files that could not be read. */
+  /** Story and gate files that could not be read, with why. */
   problems?: string[];
-  /** v6 only: the project has no active initiative yet, so the board is empty for that reason. */
-  noInitiative?: true;
   /** The first incomplete stage. */
   currentStage: StageId;
   usedDefaults: boolean;
