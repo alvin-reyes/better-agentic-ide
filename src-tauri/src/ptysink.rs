@@ -6,6 +6,7 @@
 // one PTY each get part of the output, which is what a second reader thread
 // per reattach used to cause.
 
+use std::collections::VecDeque;
 use std::sync::{Mutex, MutexGuard};
 
 use crate::pty::PtyEvent;
@@ -15,8 +16,13 @@ use crate::pty::PtyEvent;
 /// bound, and the end of its output is the part worth having.
 pub(crate) const BACKLOG_CAP: usize = 1024 * 1024;
 
-/// Hands one event to a window. False when it could not be handed over (the
-/// window is gone).
+/// How far into the kept bytes a line end is looked for after a drop.
+const LINE_SCAN: usize = 64 * 1024;
+
+/// Hands one event to a window. False when it could not be handed over. For
+/// a real window that almost never happens, and never because the window
+/// closed (see `channel_out` in pty.rs): whoever knows a window is gone has
+/// to say so, the sink can't find out by sending.
 pub(crate) type Out = Box<dyn Fn(PtyEvent) -> bool + Send>;
 
 // Read by the tests today; the tab-move commands will read it too.
@@ -33,7 +39,8 @@ pub(crate) enum SinkState {
 
 pub(crate) struct Sink {
     out: Option<Out>,
-    backlog: Vec<u8>,
+    /// A deque: once it is full, every read drops bytes from the front.
+    backlog: VecDeque<u8>,
     /// Bytes the cap pushed out of the backlog since a window last took it.
     dropped: usize,
     exited: bool,
@@ -45,7 +52,7 @@ impl Sink {
     }
 
     pub(crate) fn unattached() -> Self {
-        Self { out: None, backlog: Vec::new(), dropped: 0, exited: false }
+        Self { out: None, backlog: VecDeque::new(), dropped: 0, exited: false }
     }
 
     #[allow(dead_code)]
@@ -59,8 +66,8 @@ impl Sink {
         }
     }
 
-    /// Send to the window. One that can't be reached is let go, so the reader
-    /// stops trying it and keeps what follows.
+    /// Send to the window. An output that reports failure is let go, so the
+    /// reader stops trying it and keeps what follows.
     fn send(&mut self, event: PtyEvent) -> bool {
         let sent = match &self.out {
             Some(out) => out(event),
@@ -73,11 +80,19 @@ impl Sink {
     }
 
     fn keep(&mut self, bytes: &[u8]) {
-        self.backlog.extend_from_slice(bytes);
-        if self.backlog.len() > BACKLOG_CAP {
-            let over = self.backlog.len() - BACKLOG_CAP;
-            self.backlog.drain(..over);
-            self.dropped += over;
+        self.backlog.extend(bytes);
+        if self.backlog.len() <= BACKLOG_CAP {
+            return;
+        }
+        let over = self.backlog.len() - BACKLOG_CAP;
+        self.backlog.drain(..over);
+        self.dropped += over;
+        // The cut fell on an arbitrary byte: inside a character, an escape
+        // sequence, an inline image. Start on the next line instead, when one
+        // begins soon; output with no line ends is left cut where it is.
+        if let Some(end) = self.backlog.iter().take(LINE_SCAN).position(|b| *b == b'\n') {
+            self.backlog.drain(..=end);
+            self.dropped += end + 1;
         }
     }
 
@@ -102,12 +117,13 @@ impl Sink {
             return false;
         }
         if !self.backlog.is_empty() {
-            // Cloned so a window that vanishes mid-flush leaves the backlog
-            // for the next one.
-            if !self.send(PtyEvent::Output { data: self.backlog.clone() }) {
+            // Copied, not taken, so an output that fails mid-flush leaves the
+            // backlog for the next one.
+            let data: Vec<u8> = self.backlog.iter().copied().collect();
+            if !self.send(PtyEvent::Output { data }) {
                 return false;
             }
-            self.backlog = Vec::new();
+            self.backlog = VecDeque::new();
         }
         self.dropped = 0;
         self.exited && self.send(PtyEvent::Exit {})
@@ -128,8 +144,8 @@ impl Sink {
     }
 
     #[cfg(test)]
-    pub(crate) fn kept(&self) -> &[u8] {
-        &self.backlog
+    pub(crate) fn kept(&self) -> Vec<u8> {
+        self.backlog.iter().copied().collect()
     }
 }
 
@@ -138,8 +154,10 @@ pub(crate) fn dropped_notice(bytes: usize) -> String {
     format!("\r\n\x1b[38;5;241m[ADE dropped {bytes} bytes of earlier output]\x1b[0m\r\n")
 }
 
-/// Lock a sink. A panic in some window's output must not stop the PTY's
-/// reader for good, so a poisoned lock is used as it is.
+/// Lock a sink, poisoned or not. A panic while the lock was held leaves the
+/// mutex poisoned; taking it anyway keeps a later attach, and the reader's
+/// next read, from panicking in turn. It does not bring back a reader thread
+/// that was the one to panic: that PTY's output has stopped for good.
 pub(crate) fn lock(sink: &Mutex<Sink>) -> MutexGuard<'_, Sink> {
     sink.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -333,7 +351,10 @@ mod tests {
     #[test]
     fn the_backlog_keeps_the_newest_mebibyte_and_says_what_it_dropped() {
         let extra = 10_000;
-        let written: Vec<u8> = (0..BACKLOG_CAP + extra).map(|i| (i % 251) as u8).collect();
+        // No line end where the cut could move to: the one newline sits just
+        // past the stretch that is searched, so the cut stays exact.
+        let mut written: Vec<u8> = (0..BACKLOG_CAP + extra).map(|i| (i % 200) as u8 + 32).collect();
+        written[extra + LINE_SCAN + 5] = b'\n';
         let mut sink = Sink::unattached();
         for chunk in written.chunks(4096) {
             sink.push(chunk);
@@ -473,5 +494,72 @@ mod tests {
             window.events(),
             [output("x"), PtyEvent::Error { message: "gone".to_string() }, PtyEvent::Exit {}],
         );
+    }
+
+    #[test]
+    fn after_a_drop_the_backlog_starts_on_a_line() {
+        // 14 bytes a line, well over the cap in all.
+        let lines = BACKLOG_CAP / 14 + 1000;
+        let written: Vec<u8> = (0..lines).flat_map(|i| format!("line {i:07}\r\n").into_bytes()).collect();
+        let mut sink = Sink::unattached();
+        for chunk in written.chunks(4096) {
+            sink.push(chunk);
+        }
+
+        let window = Window::new();
+        sink.attach(window.out());
+        let events = window.events();
+        assert_eq!(events.len(), 2, "{} events", events.len());
+        let PtyEvent::Output { data } = &events[1] else { panic!("the backlog is an output") };
+        assert!(data.starts_with(b"line "), "starts mid-line: {:?}", String::from_utf8_lossy(&data[..20]));
+        assert!(written.ends_with(data), "what is kept is the end of what was written");
+        assert!(data.len() <= BACKLOG_CAP && data.len() > BACKLOG_CAP - 14, "{} kept", data.len());
+        assert_eq!(events[0], output(&dropped_notice(written.len() - data.len())), "the cut line is counted as dropped");
+    }
+
+    /// A free-running feeder and windows taking over as fast as they can: the
+    /// swap may land between any two reads. Whatever the interleaving, every
+    /// byte reaches exactly one window, in order.
+    #[test]
+    fn nothing_is_lost_or_repeated_while_windows_take_turns() {
+        use std::time::{Duration, Instant};
+
+        let total = 20_000;
+        let chunk = |i: usize| format!("{i:08};").into_bytes();
+        let written: Vec<u8> = (0..total).flat_map(chunk).collect();
+
+        // A rendezvous channel: the feeder moves at the pump's pace.
+        let (feeder, chunks) = mpsc::sync_channel::<std::io::Result<Vec<u8>>>(0);
+        let first = Window::new();
+        let sink = Arc::new(Mutex::new(Sink::new(first.out())));
+        let for_pump = sink.clone();
+        let pumping = std::thread::spawn(move || pump(Feed { chunks, left: Vec::new() }, &for_pump));
+        let feeding = std::thread::spawn(move || {
+            for i in 0..total {
+                feeder.send(Ok(chunk(i))).unwrap();
+            }
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut windows = vec![first];
+        while windows.len() < 16 {
+            // Take over as soon as the current window has something.
+            while windows.last().unwrap().bytes().is_empty() && !feeding.is_finished() {
+                assert!(Instant::now() < deadline, "timed out waiting for window {} to receive output", windows.len());
+                std::thread::yield_now();
+            }
+            let next = Window::new();
+            lock(&sink).attach(next.out());
+            windows.push(next);
+        }
+        feeding.join().unwrap();
+        assert!(pumping.join().unwrap(), "the last window was told of the exit");
+
+        let mut received: Vec<u8> = windows.iter().flat_map(|w| w.bytes()).collect();
+        received.extend(lock(&sink).kept());
+        assert_eq!(received.len(), written.len(), "bytes lost or repeated");
+        assert!(received == written, "bytes out of order");
+        let took_part = windows.iter().filter(|w| !w.bytes().is_empty()).count();
+        assert!(took_part > 1, "the windows never took turns, so this proved nothing");
     }
 }

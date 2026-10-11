@@ -41,9 +41,14 @@ pub enum PtyEvent {
     Error { message: String },
 }
 
-/// A window's channel as a sink output. `send` runs a script in the webview,
-/// so it fails only when the webview can't be reached; a webview that is
-/// alive but no longer listening takes the event and drops it.
+/// A window's channel as a sink output.
+///
+/// `send` posts a script for the webview to the event loop. It fails only
+/// when the event can't be serialised or the event loop has shut down. A
+/// script for a window that has closed, or whose terminal is gone, is posted
+/// and dropped without an error. So a closed window is not detected here, and
+/// in the running app the sink never falls back to its backlog on its own:
+/// that takes an explicit detach, which the tab-move commands will add.
 fn channel_out(channel: Channel<PtyEvent>) -> Out {
     Box::new(move |event| channel.send(event).is_ok())
 }
@@ -537,7 +542,7 @@ mod tests {
         // The first window goes away. What the shell prints next is kept.
         first.close();
         enter();
-        wait_for("B2 in the backlog", || has(crate::ptysink::lock(&sink).kept(), "B2"));
+        wait_for("B2 in the backlog", || has(&crate::ptysink::lock(&sink).kept(), "B2"));
 
         let second = Window::new();
         attach(&instances, id, second.out()).unwrap();
