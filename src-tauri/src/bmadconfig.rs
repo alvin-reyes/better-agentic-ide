@@ -115,7 +115,14 @@ const LAYERS: [&str; 3] = ["_bmad/config.toml", "_bmad/custom/config.toml", "_bm
 pub(crate) fn load_central_config(root: &Path) -> Result<toml::Table, String> {
     let mut merged = toml::Table::new();
     for layer in LAYERS {
-        let Ok(text) = std::fs::read_to_string(root.join(layer)) else { continue };
+        // Only "not found" is a missing layer. A layer that exists but can't be
+        // read (permissions, not UTF-8, a directory) may be the one that sets
+        // the output folder, so skipping it could plan the wrong move.
+        let text = match std::fs::read_to_string(root.join(layer)) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("{layer} can't be read: {e}")),
+        };
         let table: toml::Table = toml::from_str(&text).map_err(|e| format!("{layer} can't be read: {}", e.message()))?;
         merge(&mut merged, table);
     }
@@ -233,6 +240,56 @@ mod tests {
         std::fs::write(dir.join("_bmad/custom/config.toml"), "not = [toml").unwrap();
         let err = load_central_config(&dir).unwrap_err();
         assert!(err.contains("_bmad/custom/config.toml"), "{err}");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_layer_that_is_a_directory_is_an_error_not_a_missing_layer() {
+        let dir = temp("dirlayer");
+        std::fs::create_dir_all(dir.join("_bmad/custom/config.user.toml")).unwrap();
+        let err = load_central_config(&dir).unwrap_err();
+        assert!(err.contains("_bmad/custom/config.user.toml"), "{err}");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_layer_that_is_not_utf8_is_an_error_naming_it() {
+        let dir = temp("utf8");
+        std::fs::write(dir.join("_bmad/config.toml"), [0xff, 0xfe, 0x00, 0x80]).unwrap();
+        let err = load_central_config(&dir).unwrap_err();
+        assert!(err.contains("_bmad/config.toml"), "{err}");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_missing_layer_is_skipped_and_layer_one_alone_is_enough() {
+        let dir = temp("one");
+        std::fs::write(dir.join("_bmad/config.toml"), "[core]\noutput_folder = \"{project-root}/o\"\n").unwrap();
+        let config = load_central_config(&dir).unwrap();
+        assert_eq!(output_folder(Path::new("/p"), &config), "/p/o");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn arrays_are_replaced_not_merged() {
+        let dir = temp("arrays");
+        std::fs::write(dir.join("_bmad/config.toml"), "[core]\nlist = [1, 2, 3]\n").unwrap();
+        std::fs::write(dir.join("_bmad/custom/config.toml"), "[core]\nlist = [9]\n").unwrap();
+        let config = load_central_config(&dir).unwrap();
+        let list = config["core"]["list"].as_array().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].as_integer(), Some(9));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn an_absolute_output_folder_is_kept_and_a_non_string_one_means_the_default() {
+        let dir = temp("forms");
+        let abs = if cfg!(windows) { "C:/elsewhere/out" } else { "/elsewhere/out" };
+        std::fs::write(dir.join("_bmad/config.toml"), format!("[core]\noutput_folder = \"{abs}\"\n")).unwrap();
+        assert_eq!(output_folder(&dir, &load_central_config(&dir).unwrap()), abs);
+        std::fs::write(dir.join("_bmad/config.toml"), "[core]\noutput_folder = 5\n").unwrap();
+        assert_eq!(output_folder(&dir, &load_central_config(&dir).unwrap()), "_bmad-output");
         std::fs::remove_dir_all(dir).ok();
     }
 
