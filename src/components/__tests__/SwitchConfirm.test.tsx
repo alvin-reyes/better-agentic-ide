@@ -365,11 +365,14 @@ describe("SwitchConfirm", () => {
     expect(scrolls(failure)).toBe(false);
     expect(tauri.plans).toHaveLength(0);
 
+    screen.getByRole("button", { name: "Try again" }).focus();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await planned();
     expect(tauri.plans).toHaveLength(1);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    // The button that had focus is gone: the dialog has the keyboard, not the page.
+    expect(document.activeElement).toBe(dialog());
     await waitFor(() => expect(confirm().disabled).toBe(false));
   });
 

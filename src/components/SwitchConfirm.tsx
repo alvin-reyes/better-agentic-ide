@@ -249,7 +249,8 @@ export default function SwitchConfirm({ root, to, leaveLabel, onLeave, onDone }:
             {planError && (
               <div className="switch-confirm__retry">
                 <div className="integrations-msg" data-kind="error" role="alert">{planError}</div>
-                <button type="button" className="ig-btn" onClick={() => setRound((r) => r + 1)}>Try again</button>
+                {/* The button goes with the error it clears, so the dialog takes the keyboard first. */}
+                <button type="button" className="ig-btn" onClick={() => { dialog.current?.focus(); setRound((r) => r + 1); }}>Try again</button>
               </div>
             )}
             {plan?.blocked && <div className="integrations-msg" data-kind="error" role="alert">{plan.blocked}</div>}
