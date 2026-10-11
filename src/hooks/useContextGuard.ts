@@ -5,11 +5,24 @@ import { contextWindow, fmtTokens } from "../lib/tokenUsage";
 
 const CHECK_EVERY_MS = 30_000;
 
+/** A command typed into the active terminal for review (never run), or a callback. */
+export interface ToastAction {
+  label: string;
+  command?: string;
+  run?: () => void;
+}
+
 export interface GuardToast {
   title: string;
   body: string;
-  /** A command typed into the active terminal for review (never run), or a callback. */
-  action?: { label: string; command?: string; run?: () => void };
+  /** Shorthand for a single action. */
+  action?: ToastAction;
+  /** Several buttons, in order. A toast with any action is not dismissed by a click on its body. */
+  actions?: ToastAction[];
+}
+
+export function toastActions(t: GuardToast): ToastAction[] {
+  return t.actions ?? (t.action ? [t.action] : []);
 }
 
 interface LatestContext {

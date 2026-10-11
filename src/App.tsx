@@ -7,11 +7,12 @@ import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
 import { useProjectSetup, announceSetup } from "./hooks/useProjectSetup";
 import type { SetupResult } from "./lib/projectSetup";
-import { writePty, sendToActiveTerminal } from "./lib/terminalCommands";
+import { writePty } from "./lib/terminalCommands";
+import Toast from "./components/Toast";
 import { hideSplash } from "./lib/splash";
 import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
-import { useContextGuard, type GuardToast } from "./hooks/useContextGuard";
+import { useContextGuard, toastActions, type GuardToast } from "./hooks/useContextGuard";
 
 // Lazy-load heavy components for faster startup
 const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
@@ -160,7 +161,7 @@ export default function App() {
     setToast(t);
     if (toastTimer.current !== null) clearTimeout(toastTimer.current);
     // Leave time to click an action.
-    toastTimer.current = window.setTimeout(() => setToast(null), t.action ? 15000 : 4000);
+    toastTimer.current = window.setTimeout(() => setToast(null), toastActions(t).length ? 15000 : 4000);
   }, []);
   useContextGuard(activeCwd, showToast);
   useProjectSetup(activeCwd, showToast);
@@ -526,45 +527,7 @@ export default function App() {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "60px",
-            right: "20px",
-            zIndex: 2500,
-            backgroundColor: "var(--bg-elevated)",
-            border: "1px solid var(--border-strong)",
-            borderRadius: "var(--radius)",
-            padding: "12px 16px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-            animation: "toast-slide-in 0.3s ease",
-            maxWidth: "320px",
-          }}
-          onClick={() => setToast(null)}
-        >
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "2px" }}>
-            {toast.title}
-          </div>
-          <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-            {toast.body}
-          </div>
-          {toast.action && (
-            <button
-              className="contracts-action"
-              style={{ marginTop: 8 }}
-              onClick={() => {
-                const a = toast.action!;
-                if (a.run) a.run();
-                else if (a.command) void sendToActiveTerminal(a.command, false);
-                setToast(null);
-              }}
-            >
-              {toast.action.label}
-            </button>
-          )}
-        </div>
-      )}
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   );
 }
