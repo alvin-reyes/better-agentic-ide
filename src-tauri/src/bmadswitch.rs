@@ -368,7 +368,7 @@ pub struct SwitchPlan {
 }
 
 /// What a switch needs from outside the project. Tests swap each part.
-pub(crate) struct Env {
+pub struct Env {
     /// The git program. A name that doesn't exist is a machine without git.
     pub git: &'static str,
     /// Each version's bundled resources, when they resolve.
@@ -398,7 +398,7 @@ pub(crate) fn present(path: &Path) -> bool {
 
 /// Unix `st_dev`: a rename can't cross devices. Unknown elsewhere, where the
 /// rename itself reports it.
-pub(crate) fn device_of(path: &Path) -> Option<u64> {
+pub fn device_of(path: &Path) -> Option<u64> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -427,7 +427,7 @@ pub(crate) fn civil_date(days: i64) -> String {
 }
 
 /// Today in UTC: the crate has no time-zone data, and the date only names a folder.
-pub(crate) fn today() -> String {
+pub fn today() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     civil_date((secs / 86_400) as i64)
 }
@@ -946,7 +946,7 @@ fn refuse(rel: &str, limits: &Limits) -> Option<String> {
 /// What switching `root` to `to` would do. `ticked` is the documents the
 /// person ticked; only ones the plan itself offers are taken. Nothing is
 /// written.
-pub(crate) fn plan(root: &Path, to: Methodology, ticked: &[String], env: &Env) -> SwitchPlan {
+pub fn plan(root: &Path, to: Methodology, ticked: &[String], env: &Env) -> SwitchPlan {
     plan_into(root, to, ticked, env, None)
 }
 
@@ -1266,7 +1266,7 @@ pub struct SwitchResult {
 }
 
 /// The new version's setup files, as `project_setup_apply` takes them.
-pub(crate) struct SetupInput<'a> {
+pub struct SetupInput<'a> {
     pub files: &'a [SetupFile],
     pub import: &'a str,
     pub marker: &'a str,
@@ -1843,7 +1843,7 @@ impl<'a> Run<'a> {
 
 /// Switch `root` to `to`, as `shown` said it would go. On any failure the
 /// project is put back as it was.
-pub(crate) fn apply(root: &Path, to: Methodology, shown: &SwitchPlan, setup: &SetupInput, env: &Env) -> Result<SwitchResult, String> {
+pub fn apply(root: &Path, to: Methodology, shown: &SwitchPlan, setup: &SetupInput, env: &Env) -> Result<SwitchResult, String> {
     // 1. Recompute. The plan came back from the webview: only the archive's
     // name is taken from it, checked, and every destination follows from that.
     let ticked: Vec<String> = shown.documents.iter().filter(|d| d.ticked).map(|d| d.path.clone()).collect();
