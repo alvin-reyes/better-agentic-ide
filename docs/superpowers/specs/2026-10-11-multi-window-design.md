@@ -217,10 +217,19 @@ struct Sink { channel: Option<Channel<PtyEvent>>, backlog: Vec<u8>, exited: bool
 // PtyInstance gains: sink: Arc<Mutex<Sink>>
 ```
 
-For each read the thread locks the sink. With a channel, it sends `Output`;
-if the send fails (the window is gone) it takes the channel out and keeps
-the bytes. Without a channel, it appends to `backlog`, which keeps the
-newest 1 MiB.
+For each read the thread locks the sink. With a channel, it sends `Output`.
+Without one, it appends to `backlog`, which keeps the newest 1 MiB; after a
+drop the backlog starts on the next line, when one begins within 64 KiB,
+and the next window is told how many bytes were dropped.
+
+**A closed window is not detected by sending.** `Channel::send` posts a
+script to the event loop and fails only when the event can't be serialised
+or the app is shutting down; a script for a destroyed window is dropped
+without an error. The sink does let go of an output whose send fails, but in
+P1 nothing clears it otherwise, so the backlog, the kept exit and the
+dropped notice are exercised only by tests until P6 adds `detach_pty`.
+Until then, output printed between a tab's detach and its `reattach_pty`
+is lost in the old window's webview, a shell's last output included.
 
 `reattach_pty(id, on_event)` locks the sink, puts the new channel in, sends
 the backlog as one `Output` and clears it. It starts no thread. Any window
@@ -623,7 +632,14 @@ deleted, so a crash between them leaves an orphan for the next launch.
 
 **When a window is destroyed,** however it happened, Rust's handler kills
 the PTYs it owns, drops its watchers, fails any tab move it is part of, and
-emits `window-gone { id }` to the others. The lead, on `window-gone`,
+emits `window-gone { id }` to the others. This handler, on Tauri's
+window-destroyed event, is the only way a closed window is noticed; a
+failed send never is (see P1).
+
+Killing a PTY has to end its shell. `kill_pty` today only drops the table
+entry: the reader thread holds its own handle on the PTY, so the shell and
+a foreground job keep running and the thread keeps reading. The cleanup
+here, and `kill_pty` itself, kill the child process. The lead, on `window-gone`,
 cancels that window's `running` tracker sessions. A window destroyed
 without `window_close` (its webview crashed) keeps its registry entry and
 session and comes back next launch.
@@ -668,6 +684,12 @@ windows** instead of "Closed terminals".
 `pty.rs` gains `detach_pty(id)`: it locks the sink, takes the channel out
 and sends `PtyEvent::Detached` (`"detached"`) on it. Sends happen under the
 lock, so `Detached` is the last thing the old window receives for that PTY.
+This explicit detach is what first puts a sink in its unattached state in
+the running app.
+
+Once a sink can be unattached, a killed PTY whose shell lives on would keep
+filling a backlog of up to 1 MiB that nobody will read. So from P6 a killed
+PTY's sink is also marked closed, and `push` on a closed sink discards.
 
 S is the source window, T the target.
 
@@ -735,9 +757,11 @@ What each plan must show; the test design is the plan's.
 
 - **P1.** Bytes read with no sink arrive first on the next one, once and in
   order, capped at 1 MiB. With a real PTY and a steady writer (Unix), three
-  sinks in turn receive exactly what was written. A failed send falls back
-  to the backlog. A shell that exits unattached delivers its last output
-  and `Exit` on the next attach.
+  sinks in turn receive exactly what was written, also under a free-running
+  writer. A cut backlog starts on a line. On the sink alone (not reachable
+  in the app before P6): an output that fails falls back to the backlog,
+  and a shell that exits unattached delivers its last output and `Exit` on
+  the next attach.
 - **P2.** Rust: the disk gets the newest value, also after a failed write;
   an unannounced key is refused; the two `ANNOUNCED_KEYS` lists match; setup
   is refused for a busy project and for the other version, and `apply`

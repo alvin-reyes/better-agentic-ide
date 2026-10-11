@@ -27,8 +27,8 @@
 ## Review Focus
 
 1. **A program is printing while the tab moves.** After the new window attaches, it gets everything from that point, in order, and the old window gets nothing more. Today the two readers each take part. (Task 3 `output_follows_the_window_that_attached_last`; Task 2 `bytes_arrive_once_and_in_order_across_windows`.)
-2. **The window is gone when output arrives** (its send fails). The bytes of that very chunk are kept and reach the next window that attaches; they are not lost with the failed send. (Task 1 `a_failed_send_keeps_the_bytes_for_the_next_window` and `a_window_that_goes_away_during_the_flush_loses_nothing`.)
-3. **The shell exits while no window can take its output.** Its last output and the exit notice reach the next window that attaches, and the PTY is forgotten only then. (Task 1 `an_exit_with_no_window_waits_for_the_next_one`; Task 2 `a_shell_that_ends_with_no_window_keeps_its_last_output`.)
+2. **An output that fails when output arrives.** The bytes of that very chunk are kept and reach the next window that attaches; they are not lost with the failed send. This is proven for the `Sink`. In the running app a closed window does not make a send fail (see "What P1 does not fix"), so it becomes user-visible with P6's `detach_pty`. (Task 1 `a_failed_send_keeps_the_bytes_for_the_next_window` and `a_window_that_goes_away_during_the_flush_loses_nothing`.)
+3. **The shell exits while no window can take its output.** Its last output and the exit notice reach the next window that attaches, and the PTY is forgotten only then. Proven for the `Sink` and the loop; like item 2 it becomes user-visible with P6, and until then a shell that exits between a detach and the reattach still loses its last output. (Task 1 `an_exit_with_no_window_waits_for_the_next_one`; Task 2 `a_shell_that_ends_with_no_window_keeps_its_last_output`.)
 4. **A long-running job fills more than 1 MiB with no window attached.** The newest 1 MiB is kept, memory stays bounded, and the next window is told how much was dropped, once. (Task 1 `the_backlog_keeps_the_newest_mebibyte_and_says_what_it_dropped`.)
 5. **`reattach_pty` for a PTY that is gone** (killed, or a stale id). It fails with "PTY not found", as today, and the window that asked receives nothing. (Task 3 `attaching_to_an_unknown_pty_is_an_error`.)
 
@@ -41,7 +41,7 @@ The spec leaves these open; each is decided here.
 3. **A dropped-bytes notice.** The spec says the backlog keeps the newest 1 MiB. The next window is also told, as terminal output ahead of the backlog: `[ADE dropped 12345 bytes of earlier output]` in the grey that `[Process exited]` uses. It is an ordinary `output` event, so the event shapes don't change.
 4. **`Sink::attach` returns whether the shell's exit was just delivered,** and `Sink::finish` returns the same. The caller forgets the PTY when either returns true. That keeps the table out of the sink.
 5. **Exit is sent before the PTY is removed from the table.** Today it is removed first. Nothing in the webview depends on the order.
-6. **A PTY whose shell exited with no window attached stays in the table** until something attaches or `kill_pty` is called. In P1 that only happens after a failed send, and `detachWindow.ts` already kills a closed bare window's PTYs. P5's cleanup on window destroy covers the rest.
+6. **A PTY whose shell exited with no window attached stays in the table** until something attaches or `kill_pty` is called. In P1 that state is reached only from tests: nothing clears the sink's output in the running app, because a closed window does not make a send fail. It becomes reachable with P6's `detach_pty`, which must then also deal with a killed PTY whose shell lives on (`kill_pty` today drops the table entry and does not end the shell or the reader).
 7. **A window lost during the backlog flush keeps the backlog.** The flush clones the bytes before sending so a failed send can put them back. It is at most 1 MiB, once per attach.
 8. **The source guard.** A test reads `pty.rs` and asserts that the reader is cloned in one place and a thread is started in one place. It is how "exactly one thread reads a PTY" stays true after someone edits the file.
 9. **The cap is tested in memory, not through a real PTY.** Writing a mebibyte through a shell is slow and timing-sensitive, and the cap is the sink's logic. The real-PTY test covers the hand-over.
@@ -49,7 +49,7 @@ The spec leaves these open; each is decided here.
 
 ## What P1 does not fix
 
-`Channel::send` runs a script in the webview and fails only when that fails. When a tab is detached, the source window is still alive: its terminal is disposed, but sends to it succeed and the bytes are thrown away in the webview. So output printed between the detach and the bare window's `reattach_pty` is still lost after P1. Closing that gap needs the webview to say "stop sending to me", which is `detach_pty` in P6. P1 fixes what happens after the reattach: one reader, nothing split between two.
+`Channel::send` posts a script for the webview to the event loop. It fails only when the event can't be serialised or the event loop has shut down; a script for a window that has closed is posted and dropped without an error (`tauri-runtime-wry`'s `send_user_message` and its `EvaluateScript` handler). So the sink never learns from a send that a window is gone, and in P1 its backlog, its kept exit and its dropped notice are reached only from tests. When a tab is detached, the source window is in any case still alive: its terminal is disposed, sends to it succeed, and the bytes are thrown away in the webview. So output printed between the detach and the bare window's `reattach_pty` is still lost after P1. Closing that gap needs the webview to say "stop sending to me", which is `detach_pty` in P6. P1 fixes what happens after the reattach: one reader, nothing split between two.
 
 ---
 
@@ -1048,3 +1048,14 @@ Expected: `[Process exited]`, once.
 git add src-tauri/src/pty.rs
 git commit -m "fix(pty): one reader per PTY, so a moved tab keeps all its output"
 ```
+
+---
+
+## Amendment after review
+
+The code on the branch differs from the blocks above in these ways (commit "fix(pty): a cheap backlog cut that lands on a line, and comments that say what send can detect"):
+
+- **The backlog is a `VecDeque<u8>`.** Dropping the oldest bytes of a full `Vec` moved up to 1 MiB on every 4 KiB read, under the sink lock. The flush copies it into one `Vec` for the `Output`. `Sink::kept()` (tests only) returns a `Vec<u8>`.
+- **After a drop the backlog starts on a line.** The bytes up to and including the next `\n` are dropped too and counted in the notice, when a newline is found in the first 64 KiB kept (`LINE_SCAN`); otherwise nothing more is cut. Tests: `after_a_drop_the_backlog_starts_on_a_line`, and the cap test now places its one newline just past the searched stretch.
+- **A stress test,** `nothing_is_lost_or_repeated_while_windows_take_turns`: a free-running feeder through `pump` while sixteen windows attach in turn; what they received, joined in attach order with the final backlog, equals the input.
+- **Comments** on `Out`, `Sink::send`, `channel_out` and `lock` say what a send can and cannot detect, and what taking a poisoned lock does and does not recover.
