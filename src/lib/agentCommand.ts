@@ -8,6 +8,14 @@ export interface LaunchOptions {
   /** Identifies the derived Ollama model, so a role keeps the same one. */
   roleId?: string;
   domainId?: string;
+  /**
+   * The agent's opening task, sent as its first prompt. Anything outside
+   * printable ASCII is collapsed to a space: the command is typed into an
+   * interactive shell, whose line editor acts on it even inside quotes (a
+   * newline submits early, ^U erases the opening quote, ESC starts an edit,
+   * and without a UTF-8 locale bash reads a byte >= 0x80 as Alt+key).
+   */
+  task?: string;
 }
 
 export type LaunchResult =
@@ -29,10 +37,19 @@ export const DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
  */
 export const DEEPSEEK_MODEL = "deepseek-v4-pro";
 
+/**
+ * Everything but printable ASCII: C0 controls and DEL, which a line editor
+ * acts on, and every non-ASCII character, whose UTF-8 bytes bash without a
+ * UTF-8 locale reads as Alt+key (0xE2 is Alt+b, backward-word).
+ */
+export const UNTYPEABLE = /[^\x20-\x7e]/;
+const UNTYPEABLE_RUNS = /[^\x20-\x7e]+/g;
+
 /** The claude invocation both the claude and deepseek providers launch. */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
-  return `claude${flags} --append-system-prompt-file ${quotedPath}`;
+  const task = opts.task ? ` ${shellQuote(opts.task.replace(UNTYPEABLE_RUNS, " "))}` : "";
+  return `claude${flags} --append-system-prompt-file ${quotedPath}${task}`;
 }
 
 /**
@@ -96,6 +113,15 @@ export function buildLaunchCommand(
     }
 
     case "ollama": {
+      // `ollama run <model> <prompt>` answers once and exits: an agent sent
+      // a task that way would never become the interactive session it should.
+      if (opts.task) {
+        return {
+          kind: "unsupported",
+          reason: "Ollama cannot start an interactive session with an opening task. Launch the developer from the agent picker and paste the story path.",
+        };
+      }
+
       // `ollama run` has no system-prompt flag; the only way to start an
       // interactive session with one is to derive a model whose Modelfile
       // carries it. ollamaModel is free text from Settings, so it is quoted
@@ -128,4 +154,14 @@ export function buildLaunchCommand(
  */
 export function supportsRoleDelivery(provider: Provider): boolean {
   return buildLaunchCommand(provider, "/dev/null").kind === "command";
+}
+
+/**
+ * Why a provider cannot be launched with an opening task, or null when it
+ * can. Derived from `buildLaunchCommand` like `supportsRoleDelivery`, so the
+ * board's disabled Dispatch cannot drift from what launching does.
+ */
+export function taskUnsupportedReason(provider: Provider): string | null {
+  const r = buildLaunchCommand(provider, "/dev/null", { task: "x" });
+  return r.kind === "unsupported" ? r.reason : null;
 }

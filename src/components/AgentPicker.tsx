@@ -9,11 +9,9 @@ import { runInNewTabPane, writePty } from "../lib/terminalCommands";
 import { hasActiveProcess } from "../hooks/useTerminal";
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { getRole } from "../data/roles";
-import { getDomain } from "../data/domains";
-import { composeRoleMarkdown, toModelfile } from "../lib/agentComposition";
-import { buildLaunchCommand, supportsRoleDelivery, type Provider } from "../lib/agentCommand";
-import { ensureRoleDir, rolePathFor, type AgentSpec } from "../lib/agentSpec";
-import { methodologyOf } from "../lib/projectSetup";
+import { supportsRoleDelivery, type Provider } from "../lib/agentCommand";
+import { type AgentSpec } from "../lib/agentSpec";
+import { prepareAgentLaunch } from "../lib/agentLaunch";
 import { AGENT_CATEGORIES } from "../data/curatedAgents";
 import {
   CURATED_ITEMS,
@@ -157,53 +155,12 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
     // say) must not outlive the attempt that replaces it.
     setLaunchError(null);
 
-    const role = getRole(spec.roleId);
-    if (!role) return null;
-    const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
-
-    // Resolve ~/.ade/roles to an absolute path before it reaches a shell.
-    let roleDir: string;
-    try {
-      roleDir = await ensureRoleDir();
-    } catch (err) {
-      setLaunchError(`Could not create the role directory: ${err}`);
+    const r = await prepareAgentLaunch(spec, cwd, { continuous: continuousMode });
+    if (!r.ok) {
+      if (r.error) setLaunchError(r.error);
       return null;
     }
-    // Only the BMAD tasks for the methodology of the project the agent starts
-    // in (v6 when it is on neither or unknown), and a role file keyed by it so
-    // a launch in a project on the other methodology never shares it.
-    const methodology = await methodologyOf(cwd);
-    const rolePath = rolePathFor(spec, roleDir, methodology);
-
-    // Build the command before writing anything. A provider without a verified
-    // role-delivery mechanism can never launch, so writing its role file first
-    // would leave a file on disk that nothing will ever read.
-    const settings = useSettingsStore.getState();
-    const result = buildLaunchCommand(spec.provider, rolePath, {
-      continuous: continuousMode,
-      ollamaModel: settings.ollamaModel,
-      roleId: spec.roleId,
-      domainId: spec.domainId,
-    });
-    if (result.kind === "unsupported") {
-      setLaunchError(result.reason);
-      return null;
-    }
-
-    try {
-      // Ollama takes a system prompt only through a Modelfile, so the file we
-      // write is one; every other provider reads the role markdown directly.
-      const roleText = composeRoleMarkdown(role, domain, methodology);
-      const content = spec.provider === "ollama"
-        ? toModelfile(roleText, settings.ollamaModel || "deepseek-r1")
-        : roleText;
-      await invoke("write_text_file", { path: rolePath, content });
-    } catch (err) {
-      setLaunchError(`Could not write the role file: ${err}`);
-      return null;
-    }
-
-    return { command: result.command };
+    return { command: r.command };
   }, [continuousMode]);
 
   // Picking an agent asks where to run it: this terminal or a new tab.

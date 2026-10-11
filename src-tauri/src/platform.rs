@@ -12,6 +12,9 @@ use std::path::PathBuf;
 /// tested for both platforms from either.
 pub const IS_WINDOWS: bool = cfg!(windows);
 
+/// Whether this build targets macOS, for the same testability reason.
+pub const IS_MACOS: bool = cfg!(target_os = "macos");
+
 /// The home directory variable, which Windows spells differently.
 ///
 /// Windows sets neither HOME nor, reliably, a POSIX-looking home. USERPROFILE is
@@ -64,6 +67,31 @@ pub fn passthrough_vars(windows: bool) -> &'static [&'static str] {
     } else {
         &["HOME", "USER", "PATH", "LANG"]
     }
+}
+
+/// The locale to give a spawned shell on macOS when the app has none.
+///
+/// A macOS app launched from Finder or the Dock has no LANG, and LANG is only
+/// passed through when the app has it. Bash without a UTF-8 locale reads each
+/// byte >= 0x80 typed into it as Alt+key (0xE2 is backward-word), so non-ASCII
+/// text typed into the terminal edits the line instead. Only when LANG, LC_ALL
+/// and LC_CTYPE are all unset or empty: a locale the user chose is kept.
+///
+/// macOS only: en_US.UTF-8 always exists there, but on minimal Linux systems it
+/// may not be generated, and naming it makes bash and perl print setlocale
+/// warnings. Other platforms get nothing.
+pub fn default_locale<F>(macos: bool, var: F) -> Option<(&'static str, &'static str)>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    if !macos {
+        return None;
+    }
+    let set = |k: &str| var(k).is_some_and(|v| !v.is_empty());
+    if set("LANG") || set("LC_ALL") || set("LC_CTYPE") {
+        return None;
+    }
+    Some(("LANG", "en_US.UTF-8"))
 }
 
 /// How to ask the system where a command lives.
@@ -146,6 +174,29 @@ mod tests {
         let w = passthrough_vars(true);
         assert!(w.contains(&"USERPROFILE"));
         assert!(!w.contains(&"HOME"));
+    }
+
+    /// A Finder- or Dock-launched macOS app has no LANG, and bash without a
+    /// UTF-8 locale reads each byte >= 0x80 typed into it as Alt+key.
+    #[test]
+    fn macos_with_no_locale_gets_utf8() {
+        assert_eq!(default_locale(true, env(&[])), Some(("LANG", "en_US.UTF-8")));
+        assert_eq!(default_locale(true, env(&[("LANG", "")])), Some(("LANG", "en_US.UTF-8")));
+    }
+
+    #[test]
+    fn linux_with_no_locale_gets_nothing() {
+        assert_eq!(default_locale(false, env(&[])), None);
+        assert_eq!(default_locale(false, env(&[("LANG", "")])), None);
+    }
+
+    #[test]
+    fn any_locale_the_user_set_is_left_alone() {
+        for macos in [true, false] {
+            assert_eq!(default_locale(macos, env(&[("LANG", "fr_FR.UTF-8")])), None);
+            assert_eq!(default_locale(macos, env(&[("LC_ALL", "C")])), None);
+            assert_eq!(default_locale(macos, env(&[("LC_CTYPE", "UTF-8")])), None);
+        }
     }
 
     #[test]

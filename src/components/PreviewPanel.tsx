@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { shortcutLabel } from "../lib/shortcuts";
+import { useDragWidth } from "../hooks/useDragWidth";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import MarkdownView from "./viewer/MarkdownView";
 import { imageMime } from "../lib/viewerKind";
@@ -46,7 +47,7 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
   const [dataUrl, setDataUrl] = useState("");
   /** Base64 of a binary file, for viewers that want the bytes themselves. */
   const [fileBytes, setFileBytes] = useState("");
-  const [width, setWidth] = useState(480);
+  const { width, onDragStart } = useDragWidth(280, 900, 480);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -141,37 +142,6 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
   }, [filePath, autoRefresh, loadContent]);
 
 
-  // Drag to resize
-  const dragCleanupRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    return () => { dragCleanupRef.current?.(); };
-  }, []);
-
-  const onDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = width;
-
-    const cleanup = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", cleanup);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      dragCleanupRef.current = null;
-    };
-
-    const onMove = (ev: MouseEvent) => {
-      setWidth(Math.min(900, Math.max(280, startWidth + startX - ev.clientX)));
-    };
-
-    dragCleanupRef.current = cleanup;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", cleanup);
-  }, [width]);
-
   const handleOpen = () => {
     openFile(inputPath);
   };
@@ -186,7 +156,9 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
         backgroundColor: "var(--bg-secondary)",
         borderLeft: "1px solid var(--border)",
         position: "relative",
-        flexShrink: 0,
+        // Gives way, down to its minimum, before the terminal area does.
+        flexShrink: 1,
+        minWidth: 280,
       }}
     >
       {/* Resize handle */}

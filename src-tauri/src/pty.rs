@@ -78,6 +78,9 @@ pub fn create_pty(
             cmd.env(*var, value);
         }
     }
+    if let Some((name, value)) = crate::platform::default_locale(crate::platform::IS_MACOS, |k| std::env::var(k).ok()) {
+        cmd.env(name, value);
+    }
     // Vault secrets, so agents and MCP servers started here can use them.
     for (name, value) in crate::vault::env_for_terminals(&app) {
         cmd.env(name, value);

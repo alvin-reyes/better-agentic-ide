@@ -88,6 +88,62 @@ function logicalLine(term: Terminal, y: number) {
   return { text, toCell, first, last };
 }
 
+// A character that can end a path on one row and continue it on the next.
+// Narrower than TOKEN: a row starting with a bullet (⏺, ⎿, ❯) is new output.
+const PATH_EDGE = /[\w.~/\\-]/;
+
+/**
+ * Rows of terminal text joined the way a reader sees them. Soft-wrapped rows
+ * join as they are. A row whose text ends in a path character joins the next
+ * row's text after its indent when that starts with one: Claude Code wraps
+ * long lines itself (carriage return, cursor down, indent), so a long path,
+ * a brainstorm document's in particular, arrives as two unrelated rows. The
+ * existence check rejects a join that names no file, and the caller keeps the
+ * unjoined line's paths too, so a wrong join costs nothing.
+ *
+ * `toCell` maps an offset in `text` to its row (an index into `rows`) and its
+ * 1-based column.
+ */
+export function stitchRows(rows: { text: string; wrapped: boolean }[]) {
+  let text = "";
+  const segments: { at: number; row: number; col: number }[] = [];
+  rows.forEach((r, i) => {
+    if (i === 0 || r.wrapped) {
+      segments.push({ at: text.length, row: i, col: 0 });
+      text += r.text;
+      return;
+    }
+    const trimmed = text.replace(/ +$/, "");
+    const indent = r.text.length - r.text.trimStart().length;
+    const rest = r.text.slice(indent);
+    if (PATH_EDGE.test(trimmed.slice(-1)) && PATH_EDGE.test(rest.charAt(0))) {
+      text = trimmed;
+      segments.push({ at: text.length, row: i, col: indent });
+      text += rest;
+    } else {
+      text += "\n";
+      segments.push({ at: text.length, row: i, col: 0 });
+      text += r.text;
+    }
+  });
+  const toCell = (offset: number) => {
+    let s = segments.length - 1;
+    while (s > 0 && segments[s].at > offset) s--;
+    return { x: offset - segments[s].at + segments[s].col + 1, row: segments[s].row };
+  };
+  return { text, toCell };
+}
+
+/** How many rows either side of the hovered one a broken path may span. */
+const STITCH_ROWS = 4;
+
+type CellRange = { start: { x: number; y: number }; end: { x: number; y: number } };
+const before = (a: CellRange["start"], b: CellRange["start"]) => a.y < b.y || (a.y === b.y && a.x < b.x);
+/** Two cell ranges share a cell. */
+function overlaps(a: CellRange, b: CellRange): boolean {
+  return !before(a.end, b.start) && !before(b.end, a.start);
+}
+
 /**
  * Register the provider on a terminal. `getCwd` gives the folder relative
  * paths resolve against; `open` receives the absolute path of a clicked file.
@@ -99,8 +155,33 @@ export function registerFileLinks(
 ): void {
   const provider: ILinkProvider = {
     provideLinks(lineNumber, callback) {
-      const { text, toCell } = logicalLine(term, lineNumber - 1);
-      const candidates = findPathCandidates(text);
+      type Found = { path: string; start: { x: number; y: number }; end: { x: number; y: number } };
+      // Each found path, as 1-based cells, kept only when it covers this row.
+      const covering = (path: string, start: Found["start"], end: Found["end"]): Found[] =>
+        lineNumber < start.y || lineNumber > end.y ? [] : [{ path, start, end }];
+
+      const line = logicalLine(term, lineNumber - 1);
+      const plain = findPathCandidates(line.text).flatMap((c) => covering(c.path, line.toCell(c.start), line.toCell(c.end - 1)));
+
+      // The same rows again, with paths Claude Code broke across rows joined.
+      const buf = term.buffer.active;
+      const first = Math.max(0, lineNumber - 1 - STITCH_ROWS);
+      const last = Math.min(buf.length - 1, lineNumber - 1 + STITCH_ROWS);
+      const rows = [];
+      for (let r = first; r <= last; r++) {
+        const row = buf.getLine(r);
+        rows.push({ text: row?.translateToString(true) ?? "", wrapped: r > first && !!row?.isWrapped });
+      }
+      const stitched = stitchRows(rows);
+      const cell = (offset: number) => {
+        const { x, row } = stitched.toCell(offset);
+        return { x, y: first + row + 1 };
+      };
+      const joined = findPathCandidates(stitched.text)
+        .flatMap((c) => covering(c.path, cell(c.start), cell(c.end - 1)))
+        .filter((j) => j.start.y !== j.end.y && !plain.some((p) => p.path === j.path));
+
+      const candidates = [...joined, ...plain];
       if (candidates.length === 0) {
         callback(undefined);
         return;
@@ -108,21 +189,15 @@ export function registerFileLinks(
       (async () => {
         const cwd = await getCwd().catch(() => null);
         const resolved = await resolveExisting(candidates.map((c) => c.path), cwd);
-        const links: ILink[] = [];
-        candidates.forEach((c, i) => {
-          const abs = resolved[i];
-          if (!abs) return;
-          const start = toCell(c.start);
-          const end = toCell(c.end - 1);
-          // Report each link once, from the row it starts on or covers.
-          if (lineNumber < start.y || lineNumber > end.y) return;
-          links.push({
-            range: { start, end },
-            text: c.path,
-            decorations: { underline: true, pointerCursor: true },
-            activate: () => open(abs),
-          });
-        });
+        const found = candidates.flatMap((c, i) => (resolved[i] ? [{ ...c, abs: resolved[i] as string, isJoined: i < joined.length }] : []));
+        // A joined path that names a file wins over the fragments it is made of.
+        const winners = found.filter((f) => f.isJoined || !found.some((j) => j.isJoined && overlaps(j, f)));
+        const links: ILink[] = winners.map((f) => ({
+          range: { start: f.start, end: f.end },
+          text: f.path,
+          decorations: { underline: true, pointerCursor: true },
+          activate: () => open(f.abs),
+        }));
         callback(links.length > 0 ? links : undefined);
       })();
     },

@@ -26,7 +26,7 @@ const BrowserTab = lazy(() => import("./components/BrowserTab"));
 const RecordingPlayer = lazy(() => import("./components/RecordingPlayer"));
 const FleetPanel = lazy(() => import("./components/fleet/FleetPanel"));
 const FleetTab = lazy(() => import("./components/fleet/FleetTab"));
-const BmadPanel = lazy(() => import("./components/BmadPanel"));
+const BoardPanel = lazy(() => import("./components/board/BoardPanel"));
 const ContractsPanel = lazy(() => import("./components/ContractsPanel"));
 const TokensPanel = lazy(() => import("./components/TokensPanel"));
 const IntegrationsPanel = lazy(() => import("./components/IntegrationsPanel"));
@@ -58,7 +58,7 @@ export default function App() {
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [fleetOpen, setFleetOpen] = useState(false);
-  const [bmadOpen, setBmadOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
   const [newTabOpen, setNewTabOpen] = useState(false);
@@ -200,15 +200,15 @@ export default function App() {
   const toggleShortcuts = useCallback(() => setShortcutsOpen((prev) => !prev), []);
   const toggleTabSwitcher = useCallback(() => setSwitcherOpen((prev) => !prev), []);
   const toggleContracts = useCallback(() => setContractsOpen((prev) => !prev), []);
+  const toggleBoard = useCallback(() => setBoardOpen((prev) => !prev), []);
 
   // Panel toggles dispatched as window events (command palette, other panels).
   useEffect(() => {
     const toggleZoom = () => setZoomedPane((prev) => !prev);
-    const toggleBmad = () => setBmadOpen((prev) => !prev);
     const toggles: [string, () => void][] = [
       ["toggle-zoom-pane", toggleZoom],
       ["toggle-fleet", toggleFleet],
-      ["toggle-bmad", toggleBmad],
+      ["toggle-board", toggleBoard],
       ["toggle-tokens", toggleTokens],
       ["toggle-integrations", toggleIntegrations],
       ["open-secrets", () => setIntegrations("secrets")],
@@ -221,7 +221,7 @@ export default function App() {
     ];
     for (const [name, fn] of toggles) window.addEventListener(name, fn);
     return () => { for (const [name, fn] of toggles) window.removeEventListener(name, fn); };
-  }, [toggleFleet, toggleTokens, toggleIntegrations, toggleShortcuts, toggleTabSwitcher, toggleContracts]);
+  }, [toggleFleet, toggleBoard, toggleTokens, toggleIntegrations, toggleShortcuts, toggleTabSwitcher, toggleContracts]);
 
   // Contract quick actions from the command palette.
   useEffect(() => {
@@ -413,6 +413,7 @@ export default function App() {
     toggleCommandPalette,
     toggleAgentPicker,
     togglePreview,
+    toggleBoard,
     toggleFleet,
     toggleFileBrowser,
     openOrchestrator,
@@ -435,7 +436,7 @@ export default function App() {
             <FileBrowser />
           </Suspense>
         )}
-        <div className="overflow-hidden" style={{ minWidth: 0, flex: 1 }}>
+        <div className="overflow-hidden" style={{ minWidth: 320, flex: 1 }}>
           {activeTab && (
             activeTab.type === "orchestrator" && activeTab.orchestratorSessionId
               ? <Suspense fallback={null}>
@@ -469,6 +470,11 @@ export default function App() {
             />
           </Suspense>
         )}
+        {boardOpen && (
+          <Suspense fallback={null}>
+            <BoardPanel cwd={activeCwd} onClose={() => setBoardOpen(false)} />
+          </Suspense>
+        )}
       </div>
       <Scratchpad ref={scratchpadRef} />
       {showShortcutBar && <ShortcutsBar />}
@@ -499,9 +505,6 @@ export default function App() {
               }}
             />
           </Suspense>
-        )}
-        {bmadOpen && (
-          <BmadPanel onClose={() => setBmadOpen(false)} />
         )}
         {contractsOpen && (
           <ContractsPanel cwd={activeCwd} onClose={() => setContractsOpen(false)} />

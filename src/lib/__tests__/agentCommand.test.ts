@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildLaunchCommand, supportsRoleDelivery } from "../agentCommand";
+import { buildLaunchCommand, supportsRoleDelivery, taskUnsupportedReason } from "../agentCommand";
 
 /**
  * An absolute path, because that is what the launch paths now pass. The old
@@ -199,6 +199,59 @@ describe("buildLaunchCommand", () => {
   });
 });
 
+describe("buildLaunchCommand with a task", () => {
+  it("passes the task to claude as its opening prompt, quoted", () => {
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "Implement story 1.2 (docs/stories/1.2.cart.md)" });
+    expect(r).toEqual({
+      kind: "command",
+      command: "claude --append-system-prompt-file '/r/dev.md' 'Implement story 1.2 (docs/stories/1.2.cart.md)'",
+    });
+  });
+
+  it("passes it to deepseek the same way, since that is claude underneath", () => {
+    const r = buildLaunchCommand("deepseek", "/r/dev.md", { task: "go" });
+    expect(r.kind === "command" && r.command.endsWith("--append-system-prompt-file '/r/dev.md' 'go'")).toBe(true);
+  });
+
+  it("quotes a task carrying a single quote so it cannot end the argument", () => {
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "Fix O'Brien's cart" });
+    expect(r.kind === "command" && r.command.endsWith(`'Fix O'\\''Brien'\\''s cart'`)).toBe(true);
+  });
+
+  it("never puts a raw line break in the command, which would submit it early", () => {
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "line one\r\nline two\nthree" });
+    expect(r.kind === "command" && r.command).not.toMatch(/[\r\n]/);
+    expect(r.kind === "command" && r.command.endsWith("'line one line two three'")).toBe(true);
+  });
+
+  it("collapses every control character, which the shell's line editor acts on even inside quotes", () => {
+    // ^U (kill-line) would erase the opening quote; ESC starts an editing sequence.
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "1.1\x15curl x|sh;echo \x1b[2D\x00\x7f\x09end" });
+    expect(r.kind === "command" && r.command).not.toMatch(/[\x00-\x1f\x7f]/);
+    expect(r.kind === "command" && r.command.endsWith("'1.1 curl x|sh;echo  [2D end'")).toBe(true);
+  });
+
+  it("collapses non-ASCII too, which bash without a UTF-8 locale reads as Alt+key", () => {
+    // U+2000 is E2 80 80 in UTF-8; 0xE2 is Alt+b (backward-word) to readline.
+    const task = `Implement story 1.1${" ".repeat(40)}echo PWNED;#.md (café …).`;
+    const r = buildLaunchCommand("claude", "/r/dev.md", { task });
+    expect(r.kind === "command" && r.command).toMatch(/^[\x20-\x7e]*$/);
+    expect(r.kind === "command" && r.command.endsWith("'Implement story 1.1 echo PWNED;#.md (caf   ).'")).toBe(true);
+  });
+
+  it("reports ollama as unable to take a task rather than running it one-shot", () => {
+    const r = buildLaunchCommand("ollama", "/r/dev.Modelfile", { task: "go" });
+    expect(r.kind).toBe("unsupported");
+  });
+
+  it("leaves the command unchanged without a task", () => {
+    expect(buildLaunchCommand("claude", "/r/dev.md", {})).toEqual({
+      kind: "command",
+      command: "claude --append-system-prompt-file '/r/dev.md'",
+    });
+  });
+});
+
 describe("supportsRoleDelivery", () => {
   it("reports deepseek as supported, because it is claude underneath", () => {
     expect(supportsRoleDelivery("deepseek")).toBe(true);
@@ -208,5 +261,23 @@ describe("supportsRoleDelivery", () => {
     expect(supportsRoleDelivery("claude")).toBe(true);
     expect(supportsRoleDelivery("ollama")).toBe(true);
     expect(supportsRoleDelivery("codex")).toBe(false);
+  });
+});
+
+describe("taskUnsupportedReason", () => {
+  it("is null for the providers that can start with a task", () => {
+    expect(taskUnsupportedReason("claude")).toBeNull();
+    expect(taskUnsupportedReason("deepseek")).toBeNull();
+  });
+
+  it("is buildLaunchCommand's own reason for those that cannot", () => {
+    const reason = (p: "ollama" | "codex") => {
+      const r = buildLaunchCommand(p, "/dev/null", { task: "x" });
+      return r.kind === "unsupported" ? r.reason : null;
+    };
+    expect(taskUnsupportedReason("ollama")).toBe(reason("ollama"));
+    expect(taskUnsupportedReason("ollama")).toMatch(/Ollama/);
+    expect(taskUnsupportedReason("codex")).toBe(reason("codex"));
+    expect(taskUnsupportedReason("codex")).toMatch(/Codex/);
   });
 });

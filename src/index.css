@@ -302,69 +302,6 @@ button, a, input, textarea, select {
   cursor: not-allowed;
 }
 
-/* BMAD panel */
-.bmad-panel-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1500;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.bmad-panel {
-  width: 480px;
-  max-height: 70vh;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.bmad-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.bmad-panel__close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--radius-sm);
-  line-height: 1;
-}
-
-.bmad-panel__close:hover { color: var(--text-primary); }
-
-.bmad-panel__phases {
-  display: flex;
-  gap: 8px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.bmad-phase {
-  font-size: 11px;
-  font-weight: 700;
-  font-family: monospace;
-  color: var(--accent);
-  background-color: var(--accent-subtle);
-  padding: 3px 8px;
-  border-radius: 3px;
-}
-
 /* Rendered documents in the file tab (markdown, .docx) */
 .doc-view {
   max-width: 860px;
