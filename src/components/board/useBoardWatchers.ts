@@ -49,8 +49,8 @@ export function useExistingFolders(candidates: string[], rebuilt: unknown, onApp
 }
 
 /** Watch the given folders; any change schedules a rebuild. Re-registers only when the list changes. */
-export function useBoardWatch(dirs: string[], onChange: () => void) {
-  const key = dirs.join("\n");
+export function useBoardWatch(dirs: string[], methodology: "v4" | "v6" | null, onChange: () => void) {
+  const key = `${methodology}\n${dirs.join("\n")}`;
   useEffect(() => {
     let cancelled = false;
     const ids: number[] = [];
@@ -59,7 +59,7 @@ export function useBoardWatch(dirs: string[], onChange: () => void) {
         if (cancelled) break;
         const channel = new Channel<{ type: string }>();
         channel.onmessage = () => { if (!cancelled) onChange(); };
-        const id = await invoke<number>("watch_directory", { dir, extensions: watchExtensions(dir), withContent: false, onEvent: channel }).catch(() => null);
+        const id = await invoke<number>("watch_directory", { dir, extensions: watchExtensions(dir, methodology ?? "v4"), withContent: false, onEvent: channel }).catch(() => null);
         if (id === null) continue;
         if (cancelled) invoke("unwatch_directory", { id }).catch(() => {});
         else ids.push(id);

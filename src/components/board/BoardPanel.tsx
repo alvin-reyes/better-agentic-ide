@@ -72,7 +72,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
     [root, methodology, board?.paths],
   );
   const existing = useExistingFolders(dirs, board, scheduleRefresh);
-  useBoardWatch(existing, scheduleRefresh);
+  useBoardWatch(existing, methodology, scheduleRefresh);
 
   const actions: BoardActions = useMemo(() => ({
     onOpen: (path) => { if (root) openFileFromTerminal(joinPath(root, path)); },

@@ -6,10 +6,12 @@ export const WATCH_EXTENSIONS = ["md", "yml", "yaml", "toml"];
  * The extensions to watch in `dir`; empty means every file. `.ade/` is
  * watched whole: `.ade/stage` and `.ade/approvals/<ref>` carry no real
  * extension (`1.2` reads as extension `2`), and an agent can write them as
- * easily as a story. The folder is small and holds only ADE's own state.
+ * easily as a story. A v6 project also watches `html`: brainstorm and forge
+ * write their reports as HTML.
  */
-export function watchExtensions(dir: string): string[] {
-  return /(^|[\\/])\.ade[\\/]*$/.test(dir) ? [] : WATCH_EXTENSIONS;
+export function watchExtensions(dir: string, methodology: "v4" | "v6"): string[] {
+  if (/(^|[\\/])\.ade[\\/]*$/.test(dir)) return [];
+  return methodology === "v6" ? [...WATCH_EXTENSIONS, "html"] : WATCH_EXTENSIONS;
 }
 
 const parent = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
@@ -57,10 +59,12 @@ const normalizePath = (rel: string): string | null => {
  * Linux) and turns `npm install` into a storm of rebuilds from vendored
  * Markdown. A file at the top level is caught by the focus refresh instead.
  */
-export function watchTargets(root: string, methodology: "v4" | "v6", paths: BmadPaths | null): string[] {
+export function watchTargets(root: string, methodology: "v4" | "v6", paths: BmadPaths | null,
+  outputFolder?: string,
+): string[] {
   const rel =
     methodology === "v6"
-      ? ["_bmad", "_bmad-output", ".ade"]
+      ? ["_bmad", outputFolder ?? "_bmad-output", ".ade"]
       : [
           ".bmad-core",
           ".ade",
