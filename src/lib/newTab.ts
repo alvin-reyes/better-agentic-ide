@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
-import { isSetupCandidate, setUpProject, setupDeclined, type Methodology } from "./projectSetup";
+import { askMethodology } from "./methodologyPrompt";
+import { bmadRootOf, isSetupCandidate, normRoot, setUpProject, setupDeclined } from "./projectSetup";
 import { useTabStore } from "../stores/tabStore";
 
 const KEY = "ade-recent-projects";
@@ -38,23 +39,38 @@ export function forgetProject(path: string) {
   }
 }
 
+/** The project that opening `path` sets up; null when it sets nothing up. */
+async function setupRootFor(path: string): Promise<string | null> {
+  if (!useSettingsStore.getState().autoProjectSetup) return null;
+  // A folder picked to be a project is the project, unless a folder above it
+  // already has BMAD: then that one is.
+  const root = normRoot((await bmadRootOf(path))?.root ?? path);
+  return isSetupCandidate(root) && !setupDeclined(root) ? root : null;
+}
+
 /**
  * Open a terminal tab in a project folder, remember it, and set the project up
  * (BMAD, the ADE methodology, the role agents) unless that's turned off.
- * `methodology` is the owner's answer from the setup prompt; without one, the
- * project's own marker decides and a new project gets the v6 default.
+ *
+ * A project with no BMAD is asked which version first, and the question must
+ * be answered: until it is, the folder is neither opened nor remembered. That
+ * also keeps the cd hook from asking about the same project at the same moment.
  */
-export function openProjectTab(path: string, methodology?: Methodology) {
+export async function openProjectTab(path: string): Promise<void> {
+  const root = await setupRootFor(path);
+  const answer = root ? await askMethodology(root) : null;
+  // Not answered: a question about another project took this one's place.
+  if (answer && answer.kind !== "chosen") return;
   rememberProject(path);
   useTabStore.getState().addTab(undefined, path);
-  if (!useSettingsStore.getState().autoProjectSetup || !isSetupCandidate(path) || setupDeclined(path)) return;
-  setUpProject(path, methodology)
+  if (!root || !answer) return;
+  // Not awaited: the terminal is usable while the files are written.
+  setUpProject(root, answer.methodology)
     .then((result) => window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result })))
-    .catch(() => {});
+    .catch((e) => window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: `Project setup failed: ${e}` } })));
 }
 
-/** Start a new project in a folder: git init, then open and set it up. */
-export async function newProjectTab(path: string, methodology?: Methodology) {
+/** Start a new project in a folder: git init. openProjectTab then opens it. */
+export async function initProject(path: string): Promise<void> {
   await invoke("project_git_init", { root: path });
-  openProjectTab(path, methodology);
 }
