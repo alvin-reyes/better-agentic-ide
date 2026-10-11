@@ -144,6 +144,24 @@ pub(crate) fn lock(sink: &Mutex<Sink>) -> MutexGuard<'_, Sink> {
     sink.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// Read a PTY to its end, handing every chunk to its sink. This is the only
+/// reader a PTY ever has. Returns true when a window was told the shell
+/// exited; false leaves the exit, and the backlog, for the next attach.
+pub(crate) fn pump(mut reader: impl std::io::Read, sink: &Mutex<Sink>) -> bool {
+    let mut buf = [0u8; 4096];
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => lock(sink).push(&buf[..n]),
+            Err(e) => {
+                lock(sink).error(e.to_string());
+                break;
+            }
+        }
+    }
+    lock(sink).finish()
+}
+
 #[cfg(test)]
 pub(crate) mod testing {
     use super::Out;
@@ -219,6 +237,51 @@ pub(crate) mod testing {
 mod tests {
     use super::testing::Window;
     use super::*;
+    use super::testing::wait_for;
+    use std::io::Read;
+    use std::sync::mpsc;
+    use std::sync::Arc;
+
+    /// A reader the test feeds one chunk at a time, so the test decides what
+    /// has been read when it swaps windows. Dropping the sender is the end of
+    /// the stream; an `Err` item is a failed read.
+    struct Feed {
+        chunks: mpsc::Receiver<std::io::Result<Vec<u8>>>,
+        left: Vec<u8>,
+    }
+
+    impl Read for Feed {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.left.is_empty() {
+                match self.chunks.recv() {
+                    Ok(Ok(chunk)) => self.left = chunk,
+                    Ok(Err(e)) => return Err(e),
+                    Err(_) => return Ok(0),
+                }
+            }
+            let n = buf.len().min(self.left.len());
+            buf[..n].copy_from_slice(&self.left[..n]);
+            self.left.drain(..n);
+            Ok(n)
+        }
+    }
+
+    type Feeder = mpsc::Sender<std::io::Result<Vec<u8>>>;
+
+    /// A pump running on its own thread over a feed, as a PTY's reader does.
+    fn pumping(sink: Sink) -> (Feeder, Arc<Mutex<Sink>>, std::thread::JoinHandle<bool>) {
+        let (feeder, chunks) = mpsc::channel();
+        let sink = Arc::new(Mutex::new(sink));
+        let for_pump = sink.clone();
+        let handle = std::thread::spawn(move || pump(Feed { chunks, left: Vec::new() }, &for_pump));
+        (feeder, sink, handle)
+    }
+
+    /// `len` bytes that differ along their length, so a swapped or repeated
+    /// chunk shows.
+    fn pattern(seed: usize, len: usize) -> Vec<u8> {
+        (0..len).map(|i| ((i * 7 + seed) % 251) as u8).collect()
+    }
 
     fn output(text: &str) -> PtyEvent {
         PtyEvent::Output { data: text.as_bytes().to_vec() }
@@ -350,5 +413,65 @@ mod tests {
         let mut alone = Sink::unattached();
         alone.error("boom".to_string());
         assert!(alone.kept().is_empty());
+    }
+
+    #[test]
+    fn bytes_arrive_once_and_in_order_across_windows() {
+        let first = Window::new();
+        let (feeder, sink, handle) = pumping(Sink::new(first.out()));
+        let (a, b, c, d) = (pattern(1, 10_000), pattern(2, 10_000), pattern(3, 10_000), pattern(4, 10_000));
+
+        feeder.send(Ok(a.clone())).unwrap();
+        wait_for("the first window to have the first chunk", || first.bytes().len() == a.len());
+
+        // The window goes away; what is read next has nowhere to go.
+        first.close();
+        feeder.send(Ok(b.clone())).unwrap();
+        wait_for("the backlog to hold the second chunk", || lock(&sink).kept().len() == b.len());
+
+        let second = Window::new();
+        assert!(!lock(&sink).attach(second.out()));
+        feeder.send(Ok(c.clone())).unwrap();
+        wait_for("the second window to have two chunks", || second.bytes().len() == b.len() + c.len());
+
+        // A third window takes over while the second is still there.
+        let third = Window::new();
+        lock(&sink).attach(third.out());
+        feeder.send(Ok(d.clone())).unwrap();
+        wait_for("the third window to have the last chunk", || third.bytes().len() == d.len());
+
+        drop(feeder);
+        assert!(handle.join().unwrap(), "the exit was delivered");
+
+        assert_eq!(first.bytes(), a);
+        assert_eq!(second.bytes(), [b, c].concat(), "nothing lost, nothing twice");
+        assert_eq!(third.bytes(), d);
+        assert!(third.exited());
+        assert!(!first.exited() && !second.exited(), "only the window attached at the end hears the exit");
+    }
+
+    #[test]
+    fn a_shell_that_ends_with_no_window_keeps_its_last_output() {
+        let (feeder, sink, handle) = pumping(Sink::unattached());
+        feeder.send(Ok(b"bye".to_vec())).unwrap();
+        drop(feeder);
+        assert!(!handle.join().unwrap(), "nobody was told, so the PTY is not forgotten");
+
+        let window = Window::new();
+        assert!(lock(&sink).attach(window.out()));
+        assert_eq!(window.events(), [output("bye"), PtyEvent::Exit {}]);
+    }
+
+    #[test]
+    fn a_read_error_is_reported_and_ends_the_pump() {
+        let window = Window::new();
+        let (feeder, _sink, handle) = pumping(Sink::new(window.out()));
+        feeder.send(Ok(b"x".to_vec())).unwrap();
+        feeder.send(Err(std::io::Error::other("gone"))).unwrap();
+        assert!(handle.join().unwrap());
+        assert_eq!(
+            window.events(),
+            [output("x"), PtyEvent::Error { message: "gone".to_string() }, PtyEvent::Exit {}],
+        );
     }
 }
