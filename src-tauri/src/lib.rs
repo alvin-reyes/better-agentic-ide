@@ -1,6 +1,7 @@
 mod antislop;
 mod bmad;
 mod bmadconfig;
+mod bmadswitch;
 // Public so `tests/bmadv6_e2e.rs` — an integration test, outside the crate —
 // can scaffold a project with the same `install` setup uses.
 pub mod bmadv6;
@@ -445,6 +446,7 @@ pub fn run() {
             list_md_files,
             list_directory,
             bmad::bmad_status,
+            bmadswitch::bmad_switch_pending,
             subagent::watch_subagents,
             subagent::unwatch_subagents,
             state::state_read_all,
