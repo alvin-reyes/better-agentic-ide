@@ -678,23 +678,40 @@ mod tests {
         std::fs::remove_dir_all(dir).ok();
     }
 
+    /// Source text as the tests below match it. A Windows checkout has `\r\n`
+    /// line ends, which a `\n}\n` would never find.
+    fn lf(text: &str) -> String {
+        text.replace("\r\n", "\n")
+    }
+
+    /// Slice a function's source out of a file: from its `fn` line to the next top-level item.
+    fn body<'a>(src: &'a str, sig: &str) -> &'a str {
+        let at = src.find(sig).unwrap_or_else(|| panic!("{sig} not found"));
+        let rest = &src[at..];
+        let end = rest.find("\n}\n").unwrap_or(rest.len());
+        &rest[..end]
+    }
+
+    #[test]
+    fn a_function_is_sliced_the_same_from_a_windows_checkout() {
+        let unix = include_str!("projectsetup.rs").replace("\r\n", "\n");
+        let windows = lf(&unix.replace('\n', "\r\n"));
+        let sliced = body(&windows, "fn apply(");
+        // Not assert_eq: a failure would print the whole function twice.
+        assert!(sliced == body(&unix, "fn apply("), "the slice of a \\r\\n checkout is not the function's own lines");
+        assert!(!sliced.contains("fn apply_or_clean("), "the slice ends where the function does");
+    }
+
     #[test]
     fn files_are_only_written_through_write_or_clean() {
-        // Slice a function's source out of a file: from its `fn` line to the next top-level item.
-        fn body<'a>(src: &'a str, sig: &str) -> &'a str {
-            let at = src.find(sig).unwrap_or_else(|| panic!("{sig} not found"));
-            let rest = &src[at..];
-            let end = rest.find("\n}\n").unwrap_or(rest.len());
-            &rest[..end]
-        }
-        let setup = include_str!("projectsetup.rs");
-        let v4 = include_str!("bmad.rs");
-        let v6 = include_str!("bmadv6.rs");
+        let setup = lf(include_str!("projectsetup.rs"));
+        let v4 = lf(include_str!("bmad.rs"));
+        let v6 = lf(include_str!("bmadv6.rs"));
         let sites = [
-            ("projectsetup apply", body(setup, "fn apply(")),
-            ("bmad copy_tree", body(v4, "pub fn copy_tree(")),
-            ("bmadv6 copy_tree", body(v6, "fn copy_tree(")),
-            ("bmadv6 copy_file", body(v6, "fn copy_file(")),
+            ("projectsetup apply", body(&setup, "fn apply(")),
+            ("bmad copy_tree", body(&v4, "pub fn copy_tree(")),
+            ("bmadv6 copy_tree", body(&v6, "fn copy_tree(")),
+            ("bmadv6 copy_file", body(&v6, "fn copy_file(")),
         ];
         for (name, text) in sites {
             assert!(text.contains("write_or_clean("), "{name} must create files through write_or_clean");
