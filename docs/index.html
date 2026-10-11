@@ -8,7 +8,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="#new"><b>NEW</b><span>BMAD v6 in every project, with ADE&rsquo;s own gate →</span></a>
+      <a class="pill" href="#new"><b>NEW</b><span>BMAD v6 or v4 per project, and a safe switch between them →</span></a>
       <p class="hero-kicker">The IDE built for Claude Code developers and architects</p>
       <h1>Verified, <span class="grad-text">not&nbsp;vibed.</span></h1>
       <p class="sub">A desktop terminal where your agents work as a team of roles: architect, developer, QA. Nothing ships until the gate says it&rsquo;s done.</p>
@@ -93,7 +93,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
   <span class="h">+ agents for your stack</span></pre></div>
           <div class="feat-text">
             <h3>Every project, set up for agents</h3>
-            <p>Every project gets BMAD v6 (or v4, if you choose it), the ADE methodology and eight core agents, plus Solidity, Solana, Go or Rust agents for its stack.</p>
+            <p>ADE asks v6 or v4 before it writes anything. Then every project gets that BMAD version, the ADE methodology and eight core agents, plus Solidity, Solana, Go or Rust agents for its stack.</p>
             
             <a class="more" href="{{ '/guide/project-setup/' | relative_url }}">How project setup works <span aria-hidden="true">→</span></a>
           </div>
@@ -185,7 +185,11 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
             ADE shows you, because they are the ones the work is actually in.</p>
           <p>BMAD v4 is still a choice for a new project: the classic <code>.bmad-core/</code> with
             21 tasks, 13 templates, 6 workflows, 6 checklists and 6 reference sets, plus 21
-            <code>/BMad:tasks:</code> commands for Claude Code. A project already on v4 stays on v4.</p>
+            <code>/BMad:tasks:</code> commands for Claude Code. A project already on v4 stays on v4 until you switch it.</p>
+          <p>Switching is one dialog, in either direction. It lists every path that would move before anything does.
+            Nothing is deleted: the old version goes to <code>.ade/archive/</code> inside the project, with a journal
+            of what moved, and your documents in <code>docs/</code> stay where they are unless you tick them.
+            If a step fails, ADE puts everything back.</p>
         </article>
         <article class="feat-card text">
           <h3>Done is a command, not an opinion</h3>
@@ -381,7 +385,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
 
     <div class="new-strip" id="new">
       <span class="badge">New</span>
-      <p><strong>BMAD v6</strong>, <strong>Project setup</strong>, <strong>Anti-slop</strong>, <strong>MCP library</strong> and <strong>Secrets vault</strong>.</p>
+      <p><strong>Switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>BMAD v6</strong>, <strong>Project setup</strong>, <strong>Anti-slop</strong>, <strong>MCP library</strong> and <strong>Secrets vault</strong>.</p>
     </div>
   </div>
 </section>
