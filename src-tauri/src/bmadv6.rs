@@ -84,9 +84,9 @@ fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), 
         } else if to.exists() {
             report.kept.push(to);
         } else {
-            crate::projectsetup::write_or_clean(&to, |to| fs::copy(&from, to).map(|_| ()))
+            let wrote = crate::projectsetup::write_or_clean(&to, |f| crate::projectsetup::copy_into(&from, f))
                 .map_err(|e| format!("{}: {e}", from.display()))?;
-            report.created.push(to);
+            if wrote { report.created.push(to) } else { report.kept.push(to) }
         }
     }
     Ok(())
@@ -97,9 +97,9 @@ fn copy_file(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), 
     if dst.exists() {
         report.kept.push(dst.to_path_buf());
     } else {
-        crate::projectsetup::write_or_clean(dst, |to| fs::copy(src, to).map(|_| ()))
+        let wrote = crate::projectsetup::write_or_clean(dst, |f| crate::projectsetup::copy_into(src, f))
             .map_err(|e| format!("{}: {e}", src.display()))?;
-        report.created.push(dst.to_path_buf());
+        if wrote { report.created.push(dst.to_path_buf()) } else { report.kept.push(dst.to_path_buf()) }
     }
     Ok(())
 }

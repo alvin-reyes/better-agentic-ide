@@ -33,9 +33,10 @@ pub fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<
             if let Some(parent) = dst.parent() {
                 crate::projectsetup::mkdirs(parent, &mut report.created_dirs)?;
             }
-            crate::projectsetup::write_or_clean(dst, |to| std::fs::copy(src, to).map(|_| ()))
+            let wrote = crate::projectsetup::write_or_clean(dst, |to| crate::projectsetup::copy_into(src, to))
                 .map_err(|e| format!("{}: {e}", dst.display()))?;
-            report.created.push(dst.to_string_lossy().to_string());
+            let list = if wrote { &mut report.created } else { &mut report.skipped };
+            list.push(dst.to_string_lossy().to_string());
         }
     }
     Ok(())

@@ -97,13 +97,39 @@ pub(crate) fn mkdirs(path: &Path, created: &mut Vec<PathBuf>) -> Result<(), Stri
     Ok(())
 }
 
-/// Run `write` for a file setup is creating at `dst`. A write that fails
-/// partway (a full disk, a lost volume) leaves a file no report names, so
-/// nothing would ever take it back: it is removed here instead.
-pub(crate) fn write_or_clean(dst: &Path, write: impl FnOnce(&Path) -> std::io::Result<()>) -> std::io::Result<()> {
-    write(dst).inspect_err(|_| {
-        let _ = std::fs::remove_file(dst);
-    })
+/// Create the file at `dst` and let `write` fill it. The create is the check:
+/// `create_new` refuses a destination that exists (a file that appeared since
+/// the caller looked, a dangling symlink) without touching it, and that is
+/// `Ok(false)`, "kept". `Ok(true)` means written.
+///
+/// A write that fails partway (a full disk, a lost volume) leaves a file no
+/// report names, so nothing would ever take it back: the file this call
+/// created is removed here, and only that file. A removal that fails is part
+/// of the returned error.
+pub(crate) fn write_or_clean(dst: &Path, write: impl FnOnce(&mut std::fs::File) -> std::io::Result<()>) -> std::io::Result<bool> {
+    let mut file = match std::fs::OpenOptions::new().write(true).create_new(true).open(dst) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    match write(&mut file) {
+        Ok(()) => Ok(true),
+        Err(e) => {
+            drop(file);
+            Err(match std::fs::remove_file(dst) {
+                Ok(()) => e,
+                Err(r) => std::io::Error::new(e.kind(), format!("{e} (and {} could not be removed: {r})", dst.display())),
+            })
+        }
+    }
+}
+
+/// Fill a file `write_or_clean` created with a copy of `src`, mode included
+/// (as `fs::copy` did: the bundled runtime keeps an executable bit).
+pub(crate) fn copy_into(src: &Path, to: &mut std::fs::File) -> std::io::Result<()> {
+    let mut from = std::fs::File::open(src)?;
+    std::io::copy(&mut from, to)?;
+    to.set_permissions(from.metadata()?.permissions())
 }
 
 fn has_import(root: &Path, marker: &str) -> bool {
@@ -194,7 +220,12 @@ pub fn apply(
         if let Some(parent) = dst.parent() {
             mkdirs(parent, &mut report.created_dirs)?;
         }
-        write_or_clean(&dst, |to| std::fs::write(to, &f.content)).map_err(|e| format!("{}: {e}", f.path))?;
+        let wrote = write_or_clean(&dst, |to| std::io::Write::write_all(to, f.content.as_bytes()))
+            .map_err(|e| format!("{}: {e}", f.path))?;
+        if !wrote {
+            // Appeared since the check above: the person's, left as it is.
+            continue;
+        }
         if f.path.starts_with(".claude/agents/") {
             report.agents += 1;
         }
@@ -262,8 +293,8 @@ fn apply_or_clean(
     match apply(dir, files, import, marker, methodology, methodology_src, &mut report) {
         Ok(()) => Ok(report),
         Err(e) => {
-            take_back(dir, &report, files, import);
-            Err(e)
+            let failed = take_back(dir, &report, files, import);
+            Err(if failed.is_empty() { e } else { format!("{e} (not taken back: {})", failed.join("; ")) })
         }
     }
 }
@@ -271,21 +302,39 @@ fn apply_or_clean(
 /// Take back what a setup wrote, as its report records it: the files still as
 /// setup wrote them, the import it appended, then the folders it created that
 /// are empty. Shared by a failed setup and a failed switch's rollback.
-pub(crate) fn take_back(dir: &Path, report: &SetupReport, files: &[SetupFile], import: Option<&str>) {
-    remove_unchanged(dir, &report.created, files);
+///
+/// "Still as setup wrote them" is by content only for the files in `files`;
+/// for the rest (the BMAD engine's) it is only "still a file". Returns what
+/// it could not undo, each naming its path; a folder that is not empty, or is
+/// already gone, is not a failure.
+pub(crate) fn take_back(dir: &Path, report: &SetupReport, files: &[SetupFile], import: Option<&str>) -> Vec<String> {
+    let mut failed = Vec::new();
+    remove_unchanged_noting(dir, &report.created, files, &mut failed);
     if let (true, Some(import)) = (report.appended_import, import) {
-        let _ = strip_import(dir, import);
+        if let Err(e) = strip_import(dir, import) {
+            failed.push(format!("CLAUDE.md: {e}"));
+        }
     }
     // Innermost first. A folder something else has written into since stays.
     for d in report.created_dirs.iter().rev() {
-        let _ = std::fs::remove_dir(d);
+        if let Err(e) = std::fs::remove_dir(d) {
+            if !matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty) {
+                failed.push(format!("{}: {e}", d.display()));
+            }
+        }
     }
+    failed
 }
 
 /// Remove the files in `created` that are still as setup wrote them (by
-/// content for `files`; BMAD's own, if still there). Returns the ones removed;
+/// content for `files`; BMAD's own, if still a file). Returns the ones removed;
 /// anything edited since is left.
 fn remove_unchanged(dir: &Path, created: &[String], files: &[SetupFile]) -> Vec<PathBuf> {
+    remove_unchanged_noting(dir, created, files, &mut Vec::new())
+}
+
+/// remove_unchanged(), noting each removal that failed in `failed`.
+fn remove_unchanged_noting(dir: &Path, created: &[String], files: &[SetupFile], failed: &mut Vec<String>) -> Vec<PathBuf> {
     let ours: std::collections::HashMap<PathBuf, &str> =
         files.iter().filter_map(|f| inside(dir, &f.path).ok().map(|p| (p, f.content.as_str()))).collect();
     let mut removed = Vec::new();
@@ -298,8 +347,11 @@ fn remove_unchanged(dir: &Path, created: &[String], files: &[SetupFile]) -> Vec<
             // BMAD files: removed only if they're still where setup put them.
             None => path.is_file(),
         };
-        if unchanged && std::fs::remove_file(&path).is_ok() {
-            removed.push(path);
+        if unchanged {
+            match std::fs::remove_file(&path) {
+                Ok(()) => removed.push(path),
+                Err(e) => failed.push(format!("{}: {e}", path.display())),
+            }
         }
     }
     removed
@@ -528,10 +580,11 @@ mod tests {
 
     #[test]
     fn a_half_written_file_is_removed() {
+        use std::io::Write;
         let dir = temp();
         let dst = dir.join("half.md");
-        let err = write_or_clean(&dst, |to| {
-            std::fs::write(to, "half")?;
+        let err = write_or_clean(&dst, |f| {
+            f.write_all(b"half")?;
             Err(std::io::Error::other("disk full"))
         })
         .unwrap_err();
@@ -539,8 +592,138 @@ mod tests {
         assert!(!dst.exists(), "the half-written file is gone");
 
         // A write that succeeds keeps its file.
-        write_or_clean(&dst, |to| std::fs::write(to, "whole")).unwrap();
+        assert!(write_or_clean(&dst, |f| f.write_all(b"whole")).unwrap());
         assert_eq!(std::fs::read_to_string(&dst).unwrap(), "whole");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_destination_that_exists_is_kept_and_not_truncated() {
+        use std::io::Write;
+        let dir = temp();
+        let dst = dir.join("mine.md");
+        std::fs::write(&dst, "mine").unwrap();
+        // The caller never checked: the create itself refuses.
+        let wrote = write_or_clean(&dst, |f| {
+            f.write_all(b"theirs")?;
+            Err(std::io::Error::other("never reached"))
+        })
+        .unwrap();
+        assert!(!wrote);
+        assert_eq!(std::fs::read_to_string(&dst).unwrap(), "mine");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_symlink_at_the_destination_is_left_alone() {
+        let dir = temp();
+        let dst = dir.join("link.md");
+        std::os::unix::fs::symlink(dir.join("missing.md"), &dst).unwrap();
+        assert!(!write_or_clean(&dst, |_| Ok(())).unwrap());
+        assert!(std::fs::symlink_metadata(&dst).unwrap().file_type().is_symlink());
+        assert!(!dir.join("missing.md").exists(), "nothing was written through the link");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_failed_removal_is_part_of_the_error() {
+        let dir = temp();
+        let dst = dir.join("stuck.md");
+        // The write fails and leaves a folder where the file was: it can't be removed as a file.
+        let err = write_or_clean(&dst, |_| {
+            std::fs::remove_file(&dst)?;
+            std::fs::create_dir(&dst)?;
+            Err(std::io::Error::other("disk full"))
+        })
+        .unwrap_err();
+        assert!(err.to_string().starts_with("disk full"), "{err}");
+        assert!(err.to_string().contains("stuck.md"), "{err}");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_that_fails_after_the_destination_exists_leaves_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let src = v4_source();
+        // A bundled file that can't be read: the copy fails once its destination was created.
+        std::fs::set_permissions(src.join("bmad-core/tasks/a.md"), std::fs::Permissions::from_mode(0o000)).unwrap();
+        let r = apply_or_clean(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, Some(&src));
+        std::fs::set_permissions(src.join("bmad-core/tasks/a.md"), std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(r.is_err());
+        assert!(names(&dir).is_empty(), "{:?}", names(&dir));
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(src).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_keeps_the_executable_bit() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let src = temp().join("run.mjs");
+        std::fs::write(&src, "x").unwrap();
+        std::fs::set_permissions(&src, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let dst = dir.join("run.mjs");
+        assert!(write_or_clean(&dst, |f| copy_into(&src, f)).unwrap());
+        assert_eq!(std::fs::metadata(&dst).unwrap().permissions().mode() & 0o777, 0o755);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn files_are_only_written_through_write_or_clean() {
+        // Slice a function's source out of a file: from its `fn` line to the next top-level item.
+        fn body<'a>(src: &'a str, sig: &str) -> &'a str {
+            let at = src.find(sig).unwrap_or_else(|| panic!("{sig} not found"));
+            let rest = &src[at..];
+            let end = rest.find("\n}\n").unwrap_or(rest.len());
+            &rest[..end]
+        }
+        let setup = include_str!("projectsetup.rs");
+        let v4 = include_str!("bmad.rs");
+        let v6 = include_str!("bmadv6.rs");
+        let sites = [
+            ("projectsetup apply", body(setup, "fn apply(")),
+            ("bmad copy_tree", body(v4, "pub fn copy_tree(")),
+            ("bmadv6 copy_tree", body(v6, "fn copy_tree(")),
+            ("bmadv6 copy_file", body(v6, "fn copy_file(")),
+        ];
+        for (name, text) in sites {
+            assert!(text.contains("write_or_clean("), "{name} must create files through write_or_clean");
+            for bare in ["fs::copy(", "fs::write("] {
+                assert!(!text.contains(bare), "{name} writes with a bare {bare}");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn take_back_reports_what_it_could_not_undo() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let sub = dir.join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        let stuck = sub.join("a.md");
+        std::fs::write(&stuck, "x").unwrap();
+        // A folder that can't be written to: its file can't be unlinked.
+        std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let report = SetupReport { created: vec![stuck.to_string_lossy().into_owned()], ..Default::default() };
+        let failed = take_back(&dir, &report, &[], None);
+        std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(failed.len(), 1, "{failed:?}");
+        assert!(failed[0].contains("a.md"), "{failed:?}");
+        assert!(stuck.exists());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn a_clean_take_back_reports_nothing() {
+        let dir = temp();
+        let mut report = SetupReport::default();
+        apply(&dir, &files(), None, "<!-- m -->", Methodology::V4, None, &mut report).unwrap();
+        assert!(take_back(&dir, &report, &files(), None).is_empty());
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -554,7 +737,7 @@ mod tests {
         // The person edits one of the files setup wrote: it stays.
         std::fs::write(dir.join(".claude/agents/qa.md"), "edited").unwrap();
 
-        take_back(&dir, &report, &files(), Some("\nIMPORT\n"));
+        assert!(take_back(&dir, &report, &files(), Some("\nIMPORT\n")).is_empty());
 
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# mine\n", "the import is stripped");
         assert!(!dir.join(".ade").exists(), "an unchanged file and the folder setup made are gone");
