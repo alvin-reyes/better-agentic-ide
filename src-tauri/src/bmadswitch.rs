@@ -400,14 +400,21 @@ pub struct SwitchPlan {
     pub documents: Vec<Document>,
     pub leftovers: Vec<Move>,
     pub left_in_place: Vec<Note>,
-    /// `None`: git is missing or failed.
+    /// The project is in a git repository: it or a folder above it holds a
+    /// `.git`. When false there is nothing to ask git, `dirty` and
+    /// `archive_ignored` are `None`, and that is no failure to report.
+    #[serde(default)]
+    pub is_git: bool,
+    /// `None`: git is missing or failed, or the project is not in a repository.
     pub dirty: Option<bool>,
     pub archive_ignored: Option<bool>,
     /// Why the switch can't go ahead.
     pub blocked: Option<String>,
 }
 
-/// What a switch needs from outside the project. Tests swap each part.
+/// What a switch needs from outside the project. Tests in this crate swap
+/// each part; a caller outside it has `Env::new`, and the two test seams are
+/// not its to set.
 pub struct Env {
     /// The git program. A name that doesn't exist is a machine without git.
     pub git: &'static str,
@@ -425,10 +432,29 @@ pub struct Env {
     pub link: fn(&Path, &Path) -> std::io::Result<()>,
     /// Test seam: fail once the rules step has run, the last point a real
     /// failure can come from (the journal's final write).
-    pub fail_after_rules: bool,
+    pub(crate) fail_after_rules: bool,
     /// Test seam: runs as a rollback starts, where a test changes the project
     /// as a person or an agent might while a switch runs. Nothing otherwise.
-    pub before_rollback: fn(&Path),
+    pub(crate) before_rollback: fn(&Path),
+}
+
+impl Env {
+    /// What the app runs a switch with, given each version's bundled
+    /// resources where they resolve: the real git, today's date, the real
+    /// rename and hard link, and neither test seam.
+    pub fn new(v4_src: Option<PathBuf>, v6_src: Option<PathBuf>) -> Self {
+        Env {
+            git: crate::git::GIT,
+            v4_src,
+            v6_src,
+            today: today(),
+            device: device_of,
+            rename: fs_rename,
+            link: fs_link,
+            fail_after_rules: false,
+            before_rollback: nothing,
+        }
+    }
 }
 
 /// Exists, a link that points nowhere included: a link is moved as the link.
@@ -1012,6 +1038,7 @@ fn planned(root: &Path, to: Methodology, ticked: &[String], env: &Env, archive: 
         documents: Vec::new(),
         leftovers: Vec::new(),
         left_in_place: Vec::new(),
+        is_git: false,
         dirty: None,
         archive_ignored: None,
         blocked: None,
@@ -1025,7 +1052,12 @@ fn planned(root: &Path, to: Methodology, ticked: &[String], env: &Env, archive: 
         return plan;
     }
     plan.archive = archive.map(str::to_string).unwrap_or_else(|| free_archive(root, from, &env.today));
-    if git_facts {
+    let real_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    // Read from the disk rather than asked of git: git fails the same way
+    // for "not a repository" as for a repository it can't read. A worktree's
+    // `.git` is a file, and a project may sit below its repository's root.
+    plan.is_git = real_root.ancestors().any(|folder| present(&folder.join(".git")));
+    if git_facts && plan.is_git {
         plan.dirty = crate::git::run(env.git, root, &["status", "--porcelain", "--", "."]).map(|out| !out.trim().is_empty());
         plan.archive_ignored = match crate::git::code(env.git, root, &["check-ignore", "-q", "--", ".ade/archive/"]) {
             Some(0) => Some(true),
@@ -1033,7 +1065,6 @@ fn planned(root: &Path, to: Methodology, ticked: &[String], env: &Env, archive: 
             _ => None,
         };
     }
-    let real_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
 
     // Every reason is collected and the first is the one shown; the rest of
     // the plan is still filled in, so the dialog shows what would move beside
@@ -1203,6 +1234,15 @@ fn planned(root: &Path, to: Methodology, ticked: &[String], env: &Env, archive: 
         device: env.device,
     };
     reasons.extend(moves.iter().chain(&leftovers).filter_map(|rel| refuse(rel, &limits)));
+    // A path a config names that is also a leftover is in both lists, and
+    // can be renamed only once: the second rename would find nothing.
+    for path in moves.iter().filter(|path| leftovers.contains(path)) {
+        let what = format!("it is also a leftover of BMAD {}, so it can't be archived as both", to.as_str());
+        reasons.push(match sources.iter().find(|(source, _)| source == path) {
+            Some((_, key)) => format!("`{path}` is where {key} points, and {what}. Change {key}."),
+            None => format!("`{path}` moves with BMAD {}, and {what}.", from.as_str()),
+        });
+    }
 
     let archive = plan.archive.clone();
     let leftovers_dir = format!("{archive}/leftovers-{}", to.as_str());
@@ -1241,17 +1281,7 @@ fn target(to: &str) -> Result<Methodology, String> {
 }
 
 fn env(app: &tauri::AppHandle) -> Env {
-    Env {
-        git: crate::git::GIT,
-        v4_src: crate::bmad::resource_root(app).ok(),
-        v6_src: crate::bmadv6::resource_root(app).ok(),
-        today: today(),
-        device: device_of,
-        rename: fs_rename,
-        link: fs_link,
-        fail_after_rules: false,
-        before_rollback: nothing,
-    }
+    Env::new(crate::bmad::resource_root(app).ok(), crate::bmadv6::resource_root(app).ok())
 }
 
 /// The dry run the confirm dialog shows. Nothing is written.
@@ -3246,6 +3276,75 @@ mod tests {
         std::fs::remove_dir_all(dir).ok();
     }
 
+    // "Couldn't check git." is for a repository git said nothing about. A
+    // folder that is no repository has nothing to check, and git isn't asked.
+    #[test]
+    fn a_folder_that_is_no_repository_is_told_apart_from_a_git_that_did_not_answer() {
+        let dir = v4_project();
+        asked();
+        let outside = plan(&dir, V6, &[], &env());
+        assert!(!outside.is_git);
+        assert_eq!((outside.dirty, outside.archive_ignored), (None, None));
+        assert_eq!(asked(), ["rev-parse --absolute-git-dir"], "nothing that is only shown is asked");
+        assert_eq!(serde_json::to_value(&outside).unwrap()["isGit"], false);
+
+        // A repository, on a machine whose git doesn't run.
+        std::fs::create_dir(dir.join(".git")).unwrap();
+        let unanswered = plan(&dir, V6, &[], &env());
+        assert!(unanswered.is_git);
+        assert_eq!((unanswered.dirty, unanswered.archive_ignored), (None, None));
+        assert!(asked().iter().any(|q| q.starts_with("status ")));
+        // A worktree's `.git` is a file, and a project may sit below the repository's root.
+        let inner = dir.join("packages").join("shop");
+        v4_project_in(&inner);
+        assert!(plan(&inner, V6, &[], &env()).is_git);
+        std::fs::remove_dir_all(dir.join(".git")).unwrap();
+        write(&dir, ".git", "gitdir: elsewhere\n");
+        assert!(plan(&dir, V6, &[], &env()).is_git);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // A plan from a webview that predates the field still reads.
+    #[test]
+    fn a_plan_without_the_repository_field_still_reads() {
+        let dir = v4_project();
+        let plan = plan(&dir, V6, &[], &env());
+        let mut json = serde_json::to_value(&plan).unwrap();
+        json.as_object_mut().unwrap().remove("isGit");
+        assert_eq!(serde_json::from_value::<SwitchPlan>(json).unwrap(), plan);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // The same path as a move and as a leftover would be renamed twice: the
+    // second rename finds nothing, and the error says "No such file".
+    #[test]
+    fn blocked_when_a_configured_path_is_also_a_leftover() {
+        let dir = v4_project();
+        write(&dir, ".bmad-core/core-config.yaml", "devDebugLog: _bmad\n");
+        write(&dir, "_bmad/config.toml", "[core]\n");
+        let to_v6 = plan(&dir, V6, &[], &env());
+        assert!(sources(&to_v6.moves).contains(&"_bmad") && sources(&to_v6.leftovers).contains(&"_bmad"), "the case: {to_v6:?}");
+        assert_eq!(
+            to_v6.blocked.as_deref(),
+            Some("`_bmad` is where `devDebugLog` in core-config.yaml points, and it is also a leftover of BMAD v6, so it can't be archived as both. Change `devDebugLog` in core-config.yaml.")
+        );
+
+        let other = v6_project();
+        write(&other, "_bmad/config.toml", "[core]\noutput_folder = \".bmad-core\"\n");
+        write(&other, ".bmad-core/tasks/a.md", "a");
+        let to_v4 = plan(&other, V4, &[], &env());
+        assert_eq!(
+            to_v4.blocked.as_deref(),
+            Some("`.bmad-core` is where `output_folder` in the _bmad config points, and it is also a leftover of BMAD v4, so it can't be archived as both. Change `output_folder` in the _bmad config.")
+        );
+        // Apply refuses it too, and nothing moves.
+        let before = tree(&other);
+        assert_eq!(switch(&other, V4, &to_v4, &env()).unwrap_err(), to_v4.blocked.clone().unwrap());
+        assert_eq!(tree(&other), before);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(other).ok();
+    }
+
     // Needs the git binary; CI has it. Says so and skips on a machine without it.
     #[test]
     fn with_git_the_plan_says_what_is_dirty_and_what_is_ignored() {
@@ -3312,7 +3411,7 @@ mod tests {
         let json = serde_json::to_value(plan(&dir, V6, &[], &env())).unwrap();
         let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["archive", "archiveIgnored", "blocked", "dirty", "documents", "from", "leftInPlace", "leftovers", "moves", "to"]);
+        assert_eq!(keys, ["archive", "archiveIgnored", "blocked", "dirty", "documents", "from", "isGit", "leftInPlace", "leftovers", "moves", "to"]);
         let mut doc: Vec<&str> = json["documents"][0].as_object().unwrap().keys().map(String::as_str).collect();
         doc.sort_unstable();
         assert_eq!(doc, ["files", "linkTo", "path", "ticked", "warning"]);
@@ -3787,6 +3886,8 @@ mod tests {
         if has_git {
             assert!(crate::git::run(env.git, &dir, &["init", "-q"]).is_some());
             write(&dir, ".gitignore", "/_bmad-output/\n");
+        } else {
+            std::fs::create_dir(dir.join(".git")).unwrap();
         }
         asked();
 

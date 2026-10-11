@@ -233,8 +233,8 @@ pub fn apply(
     }
     if append {
         use std::io::Write;
-        let mut file = std::fs::OpenOptions::new().append(true).open(dir.join("CLAUDE.md")).map_err(|e| e.to_string())?;
-        file.write_all(import.unwrap_or_default().as_bytes()).map_err(|e| e.to_string())?;
+        let mut file = std::fs::OpenOptions::new().append(true).open(dir.join("CLAUDE.md")).map_err(|e| format!("CLAUDE.md: {e}"))?;
+        file.write_all(import.unwrap_or_default().as_bytes()).map_err(|e| format!("CLAUDE.md: {e}"))?;
         report.appended_import = true;
     }
     match (methodology, methodology_src) {
@@ -956,6 +956,26 @@ mod tests {
         assert_eq!(std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap(), "# Mine\n");
         assert_eq!(std::fs::read_to_string(dir.join(".ade/rules.md")).unwrap(), "edited");
         assert!(!dir.join(".claude").exists(), "empty folders setup created are removed");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // This text becomes a failed switch's error, where "Permission denied" alone says nothing.
+    #[cfg(unix)]
+    #[test]
+    fn a_claude_md_that_cannot_be_appended_to_is_named_in_the_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp();
+        let claude = dir.join("CLAUDE.md");
+        std::fs::write(&claude, "# Mine\n").unwrap();
+        std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o444)).unwrap();
+        if std::fs::OpenOptions::new().append(true).open(&claude).is_ok() {
+            eprintln!("skipped: the mode does not bite here (running as root)");
+            return;
+        }
+        let err = run(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap_err();
+        std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(err.starts_with("CLAUDE.md: "), "{err}");
+        assert_eq!(std::fs::read_to_string(&claude).unwrap(), "# Mine\n");
         std::fs::remove_dir_all(dir).ok();
     }
 

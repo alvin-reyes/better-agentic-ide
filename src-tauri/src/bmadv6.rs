@@ -75,7 +75,7 @@ fn toml_escape(value: &str) -> String {
 
 fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), String> {
     for entry in fs::read_dir(src).map_err(|e| format!("{}: {e}", src.display()))? {
-        let entry = entry.map_err(|e| e.to_string())?;
+        let entry = entry.map_err(|e| format!("{}: {e}", src.display()))?;
         let from = entry.path();
         let to = dst.join(entry.file_name());
         if from.is_dir() {
@@ -121,14 +121,14 @@ pub fn install(src: &Path, dir: &Path, report: &mut ScaffoldReport) -> Result<()
             toml_escape(&name),
             toml_escape(&dir.to_string_lossy()),
         );
-        fs::write(&config, body).map_err(|e| e.to_string())?;
+        fs::write(&config, body).map_err(|e| format!("{}: {e}", config.display()))?;
         report.created.push(config);
     }
     let gitignore = dir.join("_bmad/custom/.gitignore");
     if gitignore.exists() {
         report.kept.push(gitignore);
     } else {
-        fs::write(&gitignore, CUSTOM_GITIGNORE).map_err(|e| e.to_string())?;
+        fs::write(&gitignore, CUSTOM_GITIGNORE).map_err(|e| format!("{}: {e}", gitignore.display()))?;
         report.created.push(gitignore);
     }
     // Runtime bundle: the patched skills call `node {project-root}/_bmad/ade-runtime.mjs`.
@@ -144,7 +144,7 @@ pub fn install(src: &Path, dir: &Path, report: &mut ScaffoldReport) -> Result<()
     if fs::read_to_string(&marker).map(|s| s.trim() == "v6").unwrap_or(false) {
         report.kept.push(marker);
     } else {
-        fs::write(&marker, "v6\n").map_err(|e| e.to_string())?;
+        fs::write(&marker, "v6\n").map_err(|e| format!("{}: {e}", marker.display()))?;
         report.created.push(marker);
     }
     Ok(())
@@ -304,6 +304,37 @@ mod tests {
         assert!(!dir.join("_bmad/ade-runtime.mjs").exists());
         fs::remove_dir_all(&dir).ok();
         fs::remove_dir_all(&src).ok();
+    }
+
+    // An install's error becomes a failed setup's, and a failed switch's:
+    // it says which file.
+    #[test]
+    fn a_marker_that_cannot_be_written_is_named_in_the_error() {
+        let dir = temp("bmadv6-marker-dir");
+        let src = fixture("bmadv6-marker-dir-src");
+        // A folder where the marker goes: writing it fails on every OS.
+        fs::create_dir_all(dir.join(".ade").join("methodology")).unwrap();
+        let err = install(&src, &dir, &mut ScaffoldReport::default()).unwrap_err();
+        assert!(err.contains("methodology"), "{err}");
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&src).ok();
+    }
+
+    // Unix only: a link that leads nowhere is how a file that doesn't exist
+    // yet can't be written either.
+    #[cfg(unix)]
+    #[test]
+    fn a_config_or_an_ignore_file_that_cannot_be_written_is_named_in_the_error() {
+        for (name, rel) in [("config.toml", "_bmad/config.toml"), (".gitignore", "_bmad/custom/.gitignore")] {
+            let dir = temp("bmadv6-unwritable");
+            let src = fixture("bmadv6-unwritable-src");
+            fs::create_dir_all(dir.join("_bmad/custom")).unwrap();
+            std::os::unix::fs::symlink(dir.join("no-such-folder").join(name), dir.join(rel)).unwrap();
+            let err = install(&src, &dir, &mut ScaffoldReport::default()).unwrap_err();
+            assert!(err.contains(name), "{name}: {err}");
+            fs::remove_dir_all(&dir).ok();
+            fs::remove_dir_all(&src).ok();
+        }
     }
 
     /// Empty folders such as `_bmad-output/` hold no file a report could name,

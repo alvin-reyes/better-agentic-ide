@@ -95,21 +95,12 @@ fn resources(name: &str) -> Resources {
     }
 }
 
-/// What the commands' own `env()` builds, with the resource roots given
-/// rather than resolved from an `AppHandle`. The rename and the link are
-/// `std::fs`'s, as there, and neither test seam is used.
+/// What the commands' own `env()` builds, through the constructor it uses,
+/// with the resource roots given rather than resolved from an `AppHandle`.
+/// Everything else is the app's: the rename and the link it really makes,
+/// and neither test seam, which nothing outside the crate can set.
 fn env(res: &Resources) -> Env {
-    Env {
-        git: "git",
-        v4_src: Some(res.v4.clone()),
-        v6_src: Some(res.v6.clone()),
-        today: bmadswitch::today(),
-        device: bmadswitch::device_of,
-        rename: |from, to| std::fs::rename(from, to),
-        link: |from, to| std::fs::hard_link(from, to),
-        fail_after_rules: false,
-        before_rollback: |_| {},
-    }
+    Env::new(Some(res.v4.clone()), Some(res.v6.clone()))
 }
 
 /// A project-relative, `/`-separated path under `root`: the plan spells every
