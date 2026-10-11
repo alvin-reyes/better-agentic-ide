@@ -13,6 +13,8 @@ const tauri = vi.hoisted(() => ({
   byDir: {} as Record<string, "v4" | "v6" | null>,
   /** What `project_root` resolves a folder to (default: the folder itself). */
   roots: {} as Record<string, string>,
+  /** What `bmad_switch_pending` answers; null makes the check itself fail. */
+  pending: [] as unknown[] | null,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -29,6 +31,9 @@ vi.mock("@tauri-apps/api/core", () => ({
           stacks: [],
           methodology: (args.root as string) in tauri.byDir ? tauri.byDir[args.root as string] : tauri.methodology,
         };
+      case "bmad_switch_pending":
+        if (tauri.pending === null) throw new Error("no such folder");
+        return tauri.pending;
       case "project_setup_apply":
         tauri.applies.push(args);
         return { created: [], appendedImport: false, agents: 0, bmadFiles: 0, bmadv6Files: 0 };
@@ -44,8 +49,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { agentCatalog } from "../projectMethodology";
 import {
-  addAgent, addStackAgents, bmadRootOf, detectOnDisk, foldersUpTo, hasBmad, isComplete, isKept, isSettingUp, isWithin, markKept, methodologyOf, migrateKept, normRoot, removeAgent,
-  removedAgents, setUpProject, setupDeclined, setupRootOf, undoSetup, wasSetUp,
+  addAgent, addStackAgents, beginSwitch, bmadRootOf, detectOnDisk, foldersUpTo, hasBmad, isComplete, isKept, isSettingUp, isWithin, markKept, methodologyOf, migrateKept, normRoot, removeAgent,
+  removedAgents, setUpProject, setupDeclined, setupRootOf, switchBlock, undoSetup, wasSetUp,
   type SetupStatus,
 } from "../projectSetup";
 
@@ -57,6 +62,7 @@ beforeEach(() => {
   tauri.methodology = null;
   tauri.byDir = {};
   tauri.roots = {};
+  tauri.pending = [];
 });
 
 describe("methodology in project setup", () => {
@@ -319,6 +325,67 @@ describe("the kept list", () => {
     // starts, or the write would never reach disk.
     expect(saving).toBeGreaterThan(hydrated);
     expect(migrated).toBeGreaterThan(saving);
+  });
+});
+
+describe("a project whose switch didn't finish", () => {
+  const PENDING = { archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" };
+  const qa = () => agentCatalog().find((a) => a.id === "qa")!;
+
+  it("is blocked, with the reason and the journal to open", async () => {
+    tauri.pending = [PENDING];
+    expect(await switchBlock("/code/shop/")).toEqual({
+      reason: "A BMAD switch in shop didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+      archiveFile: "/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md",
+    });
+  });
+
+  it("says so when the record couldn't be read", async () => {
+    tauri.pending = [{ ...PENDING, status: "unknown" }];
+    expect((await switchBlock("/code/shop"))?.reason).toBe(
+      "A BMAD switch in shop left a record that couldn't be read. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+    );
+  });
+
+  it("says how many when more than one is unfinished", async () => {
+    tauri.pending = [PENDING, { ...PENDING, archive: ".ade/archive/bmad-v6-2026-10-11" }, { ...PENDING, archive: ".ade/archive/bmad-v4-2026-10-11-2" }];
+    expect(await switchBlock("/code/shop")).toEqual({
+      reason: "3 BMAD switches in shop didn't finish. Setup waits until each one is resolved: start with .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+      archiveFile: "/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md",
+    });
+  });
+
+  it("is blocked when the check fails, or a switch is running, with no journal to open", async () => {
+    tauri.pending = null;
+    expect(await switchBlock("/code/shop")).toEqual({ reason: "Couldn't check for an unfinished BMAD switch." });
+    tauri.pending = [];
+    const end = beginSwitch("/code/shop");
+    expect(await switchBlock("/code/shop")).toEqual({ reason: "A BMAD switch is running." });
+    end();
+    expect(await switchBlock("/code/shop")).toBeNull();
+  });
+
+  it("gets no stack agents: the caller is told the reason, and nothing is written", async () => {
+    tauri.pending = [PENDING];
+    await expect(addStackAgents("/code/shop", ["evm"], "v4")).rejects.toMatch(/A BMAD switch in shop didn't finish\..*ARCHIVE\.md/);
+    tauri.pending = null;
+    await expect(addStackAgents("/code/shop", ["evm"], "v4")).rejects.toBe("Couldn't check for an unfinished BMAD switch.");
+    expect(tauri.applies).toHaveLength(0);
+  });
+
+  it("gets no single agent either, and an agent the person removed stays removed", async () => {
+    await removeAgent("/code/shop", "qa");
+    tauri.pending = [PENDING];
+    await expect(addAgent("/code/shop", qa(), "v4")).rejects.toMatch(/A BMAD switch in shop didn't finish\..*ARCHIVE\.md/);
+    expect(tauri.applies).toHaveLength(0);
+    expect(removedAgents("/code/shop")).toEqual(["qa"]);
+  });
+
+  it("gets no single agent while a switch is moving its folders", async () => {
+    const end = beginSwitch("/code/shop");
+    await expect(addAgent("/code/shop", qa(), "v4")).rejects.toBe("a BMAD switch is running");
+    end();
+    expect(tauri.applies).toHaveLength(0);
   });
 });
 

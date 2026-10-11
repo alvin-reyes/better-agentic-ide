@@ -9,6 +9,10 @@ const tauri = vi.hoisted(() => ({
   /** `.bmad-core/VERSION` is on disk. */
   bmadInstalled: false,
   applies: [] as Record<string, unknown>[],
+  /** Switches of the project that didn't finish. */
+  pending: [] as unknown[],
+  /** None of the files asked about is on disk: no agent is installed. */
+  noFiles: false,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -17,10 +21,10 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "project_root":
         return tauri.roots[args.path as string] ?? args.path;
       case "bmad_switch_pending":
-        return [];
+        return tauri.pending;
       case "project_setup_status":
         return {
-          isGit: true, missing: [], needsImport: false, bmadInstalled: tauri.bmadInstalled, stacks: [],
+          isGit: true, missing: tauri.noFiles ? args.paths : [], needsImport: false, bmadInstalled: tauri.bmadInstalled, stacks: [],
           methodology: tauri.byDir[args.root as string] ?? null,
         };
       case "project_setup_apply":
@@ -61,6 +65,8 @@ beforeEach(() => {
   tauri.roots = {};
   tauri.bmadInstalled = false;
   tauri.applies.length = 0;
+  tauri.pending = [];
+  tauri.noFiles = false;
   __resetPromptForTests();
 });
 
@@ -110,6 +116,25 @@ describe("Set up now in a folder that isn't a project", () => {
     await waitFor(() => expect(onError).toHaveBeenCalledWith("This folder isn't a project."));
     expect(question()).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(tauri.applies).toHaveLength(0);
+  });
+});
+
+describe("a project whose switch didn't finish", () => {
+  it("gets no agent added: the reason is shown, and nothing is written", async () => {
+    tauri.byDir = { "/code/shop": "v4" };
+    tauri.noFiles = true;
+    tauri.pending = [{ archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" }];
+    const onError = vi.fn();
+    const onNotice = vi.fn();
+    render(<AgentsTab root="/code/shop" onNotice={onNotice} onError={onError} />);
+    const [add] = await screen.findAllByRole("button", { name: "Add" });
+    fireEvent.click(add);
+    await waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    expect(onError.mock.calls[0][0]).toBe(
+      "A BMAD switch in shop didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+    );
+    expect(onNotice).not.toHaveBeenCalled();
     expect(tauri.applies).toHaveLength(0);
   });
 });

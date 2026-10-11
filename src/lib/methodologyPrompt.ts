@@ -3,9 +3,10 @@
  * has BMAD keeps its version without a question, and one with neither is asked.
  */
 import { create } from "zustand";
-import { otherVersion, pendingSwitches } from "./bmadSwitch";
+import { otherVersion } from "./bmadSwitch";
 import {
-  detectOnDisk, isSetupCandidate, isSwitching, markKept, normRoot, onProjectHasBmad, setUpProject, type Methodology, type SetupResult,
+  detectOnDisk, isSetupCandidate, isSwitching, markKept, normRoot, onProjectHasBmad, setUpProject, switchBlock,
+  type Methodology, type SetupResult,
 } from "./projectSetup";
 
 /**
@@ -25,9 +26,10 @@ export type MethodologyAnswer =
   /**
    * Setup can't run here: a BMAD switch is running, or an earlier one didn't
    * finish (or couldn't be checked), so the project may have neither version on
-   * disk. `reason` is for the person.
+   * disk. `reason` is for the person; `archiveFile` is the unfinished switch's
+   * journal, when that is the reason.
    */
-  | { kind: "blocked"; reason: string };
+  | { kind: "blocked"; reason: string; archiveFile?: string };
 
 /** A way to put the question to a person. The default is the dialog. */
 export type AskUi = (root: string) => Promise<MethodologyAnswer>;
@@ -57,7 +59,7 @@ export type SwitchAnswer =
   | { kind: "setUp"; done: SetupResult }
   | { kind: "dismissed" }
   /** Not asked: another project's switch is running in the dialog. `reason` is for the person. */
-  | { kind: "blocked"; reason: string };
+  | { kind: "blocked"; reason: string; archiveFile?: string };
 
 let waiting: { root: string; promise: Promise<MethodologyAnswer>; resolve: (a: MethodologyAnswer) => void } | null = null;
 let deciding: { root: string; promise: Promise<SwitchAnswer>; resolve: (a: SwitchAnswer) => void } | null = null;
@@ -149,19 +151,8 @@ export async function versionToSetUp(root: string, answer: Extract<MethodologyAn
  */
 export async function askMethodology(root: string, opts: { ask?: AskUi } = {}): Promise<MethodologyAnswer> {
   const at = normRoot(root);
-  if (isSwitching(at)) return { kind: "blocked", reason: "A BMAD switch is running." };
-  // Fails closed: a check that can't be made is not "nothing pending".
-  const pending = await pendingSwitches(at).then(([first]) => first ?? false, () => null);
-  if (pending === null) return { kind: "blocked", reason: "Couldn't check for an unfinished BMAD switch." };
-  if (pending) {
-    const where = `${pending.archive}/ARCHIVE.md`;
-    return {
-      kind: "blocked",
-      reason: pending.status === "unknown"
-        ? `A BMAD switch in ${projectName(at)} left a record that couldn't be read. Setup waits until it is resolved: see ${where}.`
-        : `A BMAD switch in ${projectName(at)} didn't finish. Setup waits until it is resolved: see ${where}.`,
-    };
-  }
+  const block = await switchBlock(at);
+  if (block) return { kind: "blocked", ...block };
   const detected = await detectOnDisk(at).catch((e) => {
     console.warn("BMAD check failed; asking which version", e);
     return null;

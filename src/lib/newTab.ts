@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore } from "../stores/settingsStore";
 import { askKeepOrSwitch, askMethodology, useMethodologyPrompt, versionToSetUp } from "./methodologyPrompt";
-import { bmadRootOf, isKept, isSetupCandidate, normRoot, setUpProject, setupDeclined } from "./projectSetup";
+import { bmadRootOf, isKept, isSetupCandidate, normRoot, setUpProject, setupDeclined, switchBlock, type SwitchBlock } from "./projectSetup";
 import { useTabStore } from "../stores/tabStore";
 
 const KEY = "ade-recent-projects";
@@ -66,14 +66,14 @@ async function setupRootFor(path: string): Promise<string | null> {
 export async function openProjectTab(path: string): Promise<void> {
   // Opened as it is, with no setup: a terminal there is how a switch that
   // didn't finish gets resolved.
-  const openBlocked = (why: string) => {
+  const openBlocked = (block: SwitchBlock) => {
     rememberProject(path);
     useTabStore.getState().addTab(undefined, path);
-    window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why } }));
+    window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: block.reason } }));
   };
   const root = await setupRootFor(path);
   const answer = root ? await askMethodology(root) : null;
-  if (answer?.kind === "blocked") return openBlocked(answer.reason);
+  if (answer?.kind === "blocked") return openBlocked(answer);
   // Not answered: a question about another project took this one's place.
   if (answer && answer.kind !== "chosen") return;
   // Only New Tab asks this, and only until it is answered: the cd hook never does.
@@ -82,8 +82,16 @@ export async function openProjectTab(path: string): Promise<void> {
     const decision = await askKeepOrSwitch(root, answer.methodology);
     if (decision.kind === "dismissed") return;
     // Another project's switch has the dialog: not asked, so not kept either.
-    if (decision.kind === "blocked") return openBlocked(decision.reason);
+    if (decision.kind === "blocked") return openBlocked(decision);
     settled = decision.kind !== "kept";
+    if (!settled) {
+      // Checked again, whatever happened while the question was open: a switch
+      // tried from it may have failed and left its journal unfinished, and
+      // setting up the old version would write over paths that journal tells
+      // the person to move back by hand.
+      const block = await switchBlock(root);
+      if (block) return openBlocked(block);
+    }
   }
   rememberProject(path);
   useTabStore.getState().addTab(undefined, path);

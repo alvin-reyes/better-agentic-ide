@@ -4,6 +4,7 @@
  * Only missing files are written; an existing CLAUDE.md gets one import line.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { joinPath } from "./bmadRuntime/paths";
 import {
   CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, agentCatalog, methodologyFiles, stackAgentFiles, type AgentEntry, type MethodologyFile, type Stack,
 } from "./projectMethodology";
@@ -340,6 +341,63 @@ export function beginSwitch(root: string): () => void {
   };
 }
 
+export interface PendingSwitch {
+  archive: string;
+  status: string;
+  phase: string;
+  from: string;
+  to: string;
+  date: string;
+}
+
+/**
+ * Switches of this project that started and didn't finish. They block setup
+ * and another switch. A failed check rejects: it is not "nothing pending", and
+ * the caller must not go on as if the project were clear.
+ */
+export async function pendingSwitches(root: string): Promise<PendingSwitch[]> {
+  const found = await invoke<unknown>("bmad_switch_pending", { root: normRoot(root) });
+  if (!Array.isArray(found)) throw new Error("bmad_switch_pending answered with something that is not a list");
+  return found as PendingSwitch[];
+}
+
+/** Why nothing may be set up in a project right now. */
+export interface SwitchBlock {
+  /** For the person. */
+  reason: string;
+  /** The journal of the first unfinished switch, as a full path. Unset when the block is anything else. */
+  archiveFile?: string;
+}
+
+/**
+ * Why setup can't write into `root`: a BMAD switch is running, or an earlier
+ * one didn't finish, so the project may have neither version on disk and its
+ * journal names paths to move back by hand. Null when it is clear.
+ *
+ * Every route that writes setup files asks here first. The backend refuses
+ * too; asked here, the person gets the reason before anything is attempted.
+ */
+export async function switchBlock(root: string): Promise<SwitchBlock | null> {
+  const at = normRoot(root);
+  if (switching.has(at)) return { reason: "A BMAD switch is running." };
+  // Fails closed: a check that can't be made is not "nothing pending".
+  const pending = await pendingSwitches(at).catch(() => null);
+  if (!pending) return { reason: "Couldn't check for an unfinished BMAD switch." };
+  if (!pending.length) return null;
+  const [first] = pending;
+  const where = `${first.archive}/ARCHIVE.md`;
+  const name = baseName(at);
+  let reason: string;
+  if (pending.length > 1) {
+    reason = `${pending.length} BMAD switches in ${name} didn't finish. Setup waits until each one is resolved: start with ${where}.`;
+  } else if (first.status === "unknown") {
+    reason = `A BMAD switch in ${name} left a record that couldn't be read. Setup waits until it is resolved: see ${where}.`;
+  } else {
+    reason = `A BMAD switch in ${name} didn't finish. Setup waits until it is resolved: see ${where}.`;
+  }
+  return { reason, archiveFile: joinPath(at, where) };
+}
+
 /** A finished switch set the project up: it is set up, kept, and no longer declined. */
 export function markSwitched(root: string, methodology: Methodology) {
   markSetUp(root, true);
@@ -388,8 +446,11 @@ export function setUpProject(root: string, methodology?: Methodology, stacks?: S
 
 /** Agents for stacks a set-up project has gained since (e.g. a new foundry.toml). */
 export async function addStackAgents(root: string, stacks: Stack[], methodology: Methodology = "v6"): Promise<SetupResult> {
-  // Not into `.claude/agents` while a switch is moving it.
+  // Not into `.claude/agents` while a switch is moving it, or after one that
+  // didn't finish: the journal may tell the person to move that folder back.
   if (switching.has(normRoot(root))) return Promise.reject(SWITCH_RUNNING);
+  const block = await switchBlock(root);
+  if (block) return Promise.reject(block.reason);
   const files = withoutRemoved(root, stackAgentFiles(stacks, methodology));
   const report = await invoke<SetupReport>("project_setup_apply", {
     root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: false,
@@ -399,6 +460,11 @@ export async function addStackAgents(root: string, stacks: Stack[], methodology:
 
 /** Add one agent to a project now. */
 export async function addAgent(root: string, agent: AgentEntry, methodology: Methodology = "v6"): Promise<void> {
+  // As addStackAgents refuses. Before anything is recorded: a refused agent
+  // the person had removed stays removed.
+  if (switching.has(normRoot(root))) return Promise.reject(SWITCH_RUNNING);
+  const block = await switchBlock(root);
+  if (block) return Promise.reject(block.reason);
   setRemoved(root, agent.id, false);
   // The entry's file was built for the catalog's default; a core role carries
   // the BMAD section for one methodology, so rebuild it for this project's.

@@ -246,6 +246,8 @@ describe("a project whose BMAD switch didn't finish", () => {
     expect(answer).toEqual({
       kind: "blocked",
       reason: "A BMAD switch in shop didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+      // The journal to open, for whoever shows the reason.
+      archiveFile: "/code/shop/.ade/archive/bmad-v4-2026-10-11/ARCHIVE.md",
     });
     expect(request()).toBeNull();
   });

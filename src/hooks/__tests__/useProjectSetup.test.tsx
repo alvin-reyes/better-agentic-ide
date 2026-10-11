@@ -9,6 +9,8 @@ const tauri = vi.hoisted(() => ({
   roots: {} as Record<string, string>,
   /** Folders with no `.git`. */
   notGit: new Set<string>(),
+  /** The stacks `project_setup_status` detects. */
+  stacks: [] as string[],
   applies: [] as Record<string, unknown>[],
   applyError: null as string | null,
   /** When set, project_setup_apply waits for it: the setup is still running. */
@@ -24,7 +26,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         return tauri.pending;
       case "project_setup_status":
         return {
-          isGit: !tauri.notGit.has(args.root as string), missing: [], needsImport: false, bmadInstalled: false, stacks: [],
+          isGit: !tauri.notGit.has(args.root as string), missing: [], needsImport: false, bmadInstalled: false, stacks: tauri.stacks,
           methodology: tauri.byDir[args.root as string] ?? null,
         };
       case "project_setup_apply":
@@ -68,6 +70,7 @@ beforeEach(() => {
   tauri.byDir = {};
   tauri.roots = {};
   tauri.notGit = new Set();
+  tauri.stacks = [];
   tauri.applies.length = 0;
   tauri.applyError = null;
   tauri.applyGate = null;
@@ -487,6 +490,27 @@ describe("when automatic setup doesn't apply", () => {
     mount("/code/shop");
     await settle();
     expect(toasts()).toHaveLength(0);
+    expect(tauri.applies).toHaveLength(0);
+  });
+});
+
+describe("a project already set up, which has gained a stack", () => {
+  beforeEach(() => {
+    localStorage.setItem("ade-project-setup-done", JSON.stringify(["/code/shop"]));
+    tauri.byDir = { "/code/shop": "v4" };
+    tauri.stacks = ["evm"];
+  });
+
+  it("gets that stack's agents", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    expect(tauri.applies[0]).toMatchObject({ root: "/code/shop", methodology: "v4", full: false });
+  });
+
+  it("gets none while its switch didn't finish", async () => {
+    tauri.pending = [{ archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" }];
+    mount("/code/shop");
+    await settle();
     expect(tauri.applies).toHaveLength(0);
   });
 });

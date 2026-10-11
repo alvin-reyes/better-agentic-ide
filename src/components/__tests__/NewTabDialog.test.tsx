@@ -24,6 +24,8 @@ const tauri = vi.hoisted(() => ({
   gitInitError: null as string | null,
   switches: [] as Record<string, unknown>[],
   switchError: null as string | null,
+  /** What a failed switch leaves behind: a rollback that couldn't finish leaves its journal. */
+  pendingAfterFailure: null as unknown[] | null,
   /** When set, bmad_switch_apply waits for it: the switch is still running. */
   switchGate: null as Promise<void> | null,
 }));
@@ -57,7 +59,10 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "bmad_switch_apply":
         tauri.switches.push(args);
         if (tauri.switchGate) await tauri.switchGate;
-        if (tauri.switchError) throw tauri.switchError;
+        if (tauri.switchError) {
+          if (tauri.pendingAfterFailure) tauri.pending = tauri.pendingAfterFailure;
+          throw tauri.switchError;
+        }
         return {
           archive: ".ade/archive/bmad-v4-2026-10-11", moved: 2,
           setup: { created: [], appendedImport: false, agents: 8, bmadFiles: 0 }, rulesAppended: true, archiveDenied: true, movedCapped: false,
@@ -106,6 +111,7 @@ beforeEach(() => {
   tauri.gitInitError = null;
   tauri.switches.length = 0;
   tauri.switchError = null;
+  tauri.pendingAfterFailure = null;
   tauri.switchGate = null;
   __resetPromptForTests();
   useSettingsStore.getState().setAutoProjectSetup(true);
@@ -452,6 +458,37 @@ describe("a project that already has BMAD", () => {
     await settle();
     expect(tabs(), "one tab for the folder").toBe(before + 1);
     expect(tauri.switches).toHaveLength(1);
+  });
+
+  it("opens without setup, and says why, when Keep follows a switch that failed and couldn't be put back", async () => {
+    tauri.switchError = "A folder is in use. The rollback didn't finish.";
+    tauri.pendingAfterFailure = [{ archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" }];
+    const failed = vi.fn();
+    window.addEventListener("project-setup-failed", failed);
+    renderDialog();
+    const before = tabs();
+    open(/Open project/);
+    await waitFor(() => expect(question()).toBe(ASK));
+    fireEvent.click(screen.getByRole("option", { name: /Switch to v6…/ }));
+    const confirm = await screen.findByRole("button", { name: "Archive and switch" });
+    await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(confirm);
+    await waitFor(() => expect(document.body.textContent).toContain("The rollback didn't finish."));
+
+    const back = screen.getByRole("button", { name: "Back" });
+    await waitFor(() => expect((back as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(back);
+    await waitFor(() => expect(question()).toBe(ASK));
+    fireEvent.keyDown(keepDialog(), { key: "Enter" });
+
+    // The folder opens, so the journal can be followed, and nothing is installed over it.
+    await waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toContain(".ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
+    await settle();
+    expect(tabs(), "one tab for the folder").toBe(before + 1);
+    expect(recentProjects()).toEqual([OLDAPP]);
+    expect(tauri.applies).toHaveLength(0);
+    window.removeEventListener("project-setup-failed", failed);
   });
 
   it("goes back to the question on Escape from the confirm step, and opens nothing", async () => {

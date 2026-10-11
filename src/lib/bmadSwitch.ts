@@ -9,6 +9,9 @@ import {
   beginSwitch, isSettingUp, isWithin, markSwitched, normRoot, setupFiles, setupStatus,
   type Methodology, type SetupReport,
 } from "./projectSetup";
+
+// The pending check lives with setup, which it blocks; it is the switch's all the same.
+export { pendingSwitches, type PendingSwitch } from "./projectSetup";
 import { useFleetStore } from "../stores/fleetStore";
 import { findAllPanes, useTabStore } from "../stores/tabStore";
 
@@ -88,15 +91,6 @@ export function movedLabel(result: Pick<SwitchResult, "moved" | "movedCapped">):
   return n === 1 ? "1 file" : `${n.toLocaleString("en-US")} files`;
 }
 
-export interface PendingSwitch {
-  archive: string;
-  status: string;
-  phase: string;
-  from: string;
-  to: string;
-  date: string;
-}
-
 /** The detail of the event a finished switch reports through. */
 export interface SwitchDone {
   root: string;
@@ -113,17 +107,6 @@ export const otherVersion = (m: Methodology): Methodology => (m === "v6" ? "v4" 
 /** The dry run. `documents` is the document paths the person ticked. */
 export function planSwitch(root: string, to: Methodology, documents: string[] = []): Promise<SwitchPlan> {
   return invoke<SwitchPlan>("bmad_switch_plan", { root: normRoot(root), to, documents });
-}
-
-/**
- * Switches of this project that started and didn't finish. They block setup
- * and another switch. A failed check rejects: it is not "nothing pending", and
- * the caller must not go on as if the project were clear.
- */
-export async function pendingSwitches(root: string): Promise<PendingSwitch[]> {
-  const found = await invoke<unknown>("bmad_switch_pending", { root: normRoot(root) });
-  if (!Array.isArray(found)) throw new Error("bmad_switch_pending answered with something that is not a list");
-  return found as PendingSwitch[];
 }
 
 const running = new Map<string, Promise<SwitchResult>>();
