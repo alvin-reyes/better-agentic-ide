@@ -4,7 +4,7 @@
  */
 import { create } from "zustand";
 import {
-  detectOnDisk, isSetupCandidate, normRoot, onProjectSetUp, setUpProject, type Methodology, type SetupResult,
+  detectOnDisk, isSetupCandidate, normRoot, onProjectHasBmad, setUpProject, type Methodology, type SetupResult,
 } from "./projectSetup";
 
 /**
@@ -16,8 +16,10 @@ export type MethodologyAnswer =
    * `asked`: a person picked it, rather than the project already being on it.
    * `done`: the project was set up on it while the question was open, so there
    * is nothing left to set up.
+   * `switched`: a BMAD switch finished while the question was open; likewise
+   * nothing to set up, and no second switch.
    */
-  | { kind: "chosen"; methodology: Methodology; asked: boolean; done?: SetupResult }
+  | { kind: "chosen"; methodology: Methodology; asked: boolean; done?: SetupResult; switched?: boolean }
   | { kind: "dismissed" };
 
 /** A way to put the question to a person. The default is the dialog. */
@@ -49,8 +51,11 @@ export function settlePrompt(answer: MethodologyAnswer) {
 
 // A project set up by another route (the cd hook's toast) while the dialog
 // asks about it has its version: the dialog closes instead of offering the other.
-onProjectSetUp((done, methodology) => {
-  if (waiting?.root === done.root) settlePrompt({ kind: "chosen", methodology, asked: false, done });
+onProjectHasBmad((root, methodology, done) => {
+  if (waiting?.root !== root) return;
+  settlePrompt(done
+    ? { kind: "chosen", methodology, asked: false, done }
+    : { kind: "chosen", methodology, asked: false, switched: true });
 });
 
 /**
@@ -94,6 +99,7 @@ export async function askAndSetUp(root: string): Promise<SetupResult | null> {
   if (answer.kind !== "chosen") return null;
   // Set up, and announced, by whoever got there first.
   if (answer.done) return answer.done;
+  if (answer.switched) return null;
   const result = await setUpProject(root, await versionToSetUp(root, answer));
   window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result }));
   return result;

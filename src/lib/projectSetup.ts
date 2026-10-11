@@ -280,16 +280,25 @@ export function isComplete(s: SetupStatus): boolean {
 
 const inFlight = new Map<string, Promise<SetupResult>>();
 
-type SetUpListener = (result: SetupResult, methodology: Methodology) => void;
-const setUpListeners = new Set<SetUpListener>();
+/** `done` is the setup's result; a finished switch has none. */
+type HasBmadListener = (root: string, methodology: Methodology, done?: SetupResult) => void;
+const hasBmadListeners = new Set<HasBmadListener>();
 
 /**
- * Hear of every setup that succeeds, whichever entry point ran it: a question
- * still open about that project is over. Returns the way to stop listening.
+ * Hear when a project now has BMAD, whichever route got it there: a setup that
+ * succeeded, or a finished switch. A question still open about that project is
+ * over. Returns the way to stop listening.
  */
-export function onProjectSetUp(listener: SetUpListener): () => void {
-  setUpListeners.add(listener);
-  return () => { setUpListeners.delete(listener); };
+export function onProjectHasBmad(listener: HasBmadListener): () => void {
+  hasBmadListeners.add(listener);
+  return () => { hasBmadListeners.delete(listener); };
+}
+
+function tellHasBmad(root: string, methodology: Methodology, done?: SetupResult) {
+  for (const listener of [...hasBmadListeners]) {
+    // The setup is done whatever a listener makes of it.
+    try { listener(root, methodology, done); } catch (e) { console.warn("A project-setup listener failed", e); }
+  }
 }
 
 /**
@@ -332,10 +341,11 @@ export function beginSwitch(root: string): () => void {
 }
 
 /** A finished switch set the project up: it is set up, kept, and no longer declined. */
-export function markSwitched(root: string) {
+export function markSwitched(root: string, methodology: Methodology) {
   markSetUp(root, true);
   writeList(DECLINED_KEY, root, false);
   markKept(root);
+  tellHasBmad(normRoot(root), methodology);
 }
 
 /** A setup for this project is running right now, or a switch, which sets it up too. */
@@ -369,10 +379,7 @@ export function setUpProject(root: string, methodology?: Methodology, stacks?: S
     markSetUp(at, true);
     writeList(DECLINED_KEY, at, false);
     const result: SetupResult = { root: at, report, files, stacks: detected };
-    for (const listener of [...setUpListeners]) {
-      // The setup is done whatever a listener makes of it.
-      try { listener(result, chosen); } catch (e) { console.warn("A project-setup listener failed", e); }
-    }
+    tellHasBmad(at, chosen, result);
     return result;
   })().finally(() => inFlight.delete(at));
   inFlight.set(at, job);
@@ -381,6 +388,8 @@ export function setUpProject(root: string, methodology?: Methodology, stacks?: S
 
 /** Agents for stacks a set-up project has gained since (e.g. a new foundry.toml). */
 export async function addStackAgents(root: string, stacks: Stack[], methodology: Methodology = "v6"): Promise<SetupResult> {
+  // Not into `.claude/agents` while a switch is moving it.
+  if (switching.has(normRoot(root))) return Promise.reject(SWITCH_RUNNING);
   const files = withoutRemoved(root, stackAgentFiles(stacks, methodology));
   const report = await invoke<SetupReport>("project_setup_apply", {
     root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: false,

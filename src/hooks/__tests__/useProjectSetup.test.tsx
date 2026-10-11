@@ -28,6 +28,8 @@ vi.mock("@tauri-apps/api/core", () => ({
         if (tauri.applyGate) await tauri.applyGate;
         if (tauri.applyError) throw new Error(tauri.applyError);
         return { created: [`${args.root}/.ade/rules.md`], appendedImport: false, agents: 0, bmadFiles: 0 };
+      case "bmad_switch_apply":
+        return { archive: ".ade/archive/bmad-v4-2026-10-11", moved: 3, setup: { created: [], appendedImport: false, agents: 0, bmadFiles: 0 }, rulesAppended: false, archiveDenied: false, movedCapped: false };
       default:
         throw new Error(`unexpected command: ${command}`);
     }
@@ -38,6 +40,7 @@ import { __resetSetupQuestionsForTests, useProjectSetup } from "../useProjectSet
 import { withdrawToast, type GuardToast } from "../useContextGuard";
 import { __resetPromptForTests, askAndSetUp, settlePrompt, useMethodologyPrompt } from "../../lib/methodologyPrompt";
 import { openProjectTab } from "../../lib/newTab";
+import { runSwitch, type SwitchPlan } from "../../lib/bmadSwitch";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useTabStore } from "../../stores/tabStore";
 
@@ -417,5 +420,43 @@ describe("after the New tab dialog", () => {
     expect(tauri.applies).toHaveLength(1);
     release();
     await settle();
+  });
+});
+
+describe("a BMAD switch finishing while the question is open", () => {
+  const dialogAsks = (root: string) => waitFor(() => expect(useMethodologyPrompt.getState().request).toEqual({ root }));
+  const PLAN: SwitchPlan = {
+    from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
+    leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+  };
+
+  it("withdraws the toast and ends its question, with no setup", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(questions("shop")).toHaveLength(1));
+    const stale = screen.toast!;
+    const fromDialog = askAndSetUp("/code/shop");
+    await dialogAsks("/code/shop");
+
+    await act(async () => { await runSwitch("/code/shop", PLAN); });
+    expect(withdraw).toHaveBeenCalledWith(stale.key);
+    expect(screen.toast).toBeNull();
+    expect(useMethodologyPrompt.getState().request).toBeNull();
+    expect(await fromDialog).toBeNull();
+
+    act(() => stale.actions![1].run!());
+    await settle();
+    expect(tauri.applies).toEqual([]);
+  });
+
+  it("leaves a question about another project alone", async () => {
+    mount("/code/shop");
+    await waitFor(() => expect(questions("shop")).toHaveLength(1));
+    const toast = screen.toast;
+    void askAndSetUp("/code/shop");
+    await dialogAsks("/code/shop");
+
+    await act(async () => { await runSwitch("/code/other", PLAN); });
+    expect(screen.toast).toBe(toast);
+    expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop" });
   });
 });

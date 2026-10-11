@@ -40,6 +40,8 @@ export interface SwitchDocument {
   files: number;
   ticked: boolean;
   warning: string | null;
+  /** The real target when the offered path is itself a link; ticking it moves only the link. */
+  linkTo: string | null;
 }
 
 export interface SwitchNote {
@@ -74,6 +76,16 @@ export interface SwitchResult {
   setup: SetupReport;
   rulesAppended: boolean;
   archiveDenied: boolean;
+  /** True when any moved path's count was capped: `moved` is then a lower bound. */
+  movedCapped: boolean;
+}
+
+/** The toast's count: "1 file", "1,234 files", "50,000+ files". */
+export function movedLabel(result: Pick<SwitchResult, "moved" | "movedCapped">): string {
+  const n = result.moved;
+  // A capped path counts as COUNT_LIMIT at least, so the total is a lower bound.
+  if (result.movedCapped) return `${Math.max(n, COUNT_LIMIT).toLocaleString("en-US")}+ files`;
+  return n === 1 ? "1 file" : `${n.toLocaleString("en-US")} files`;
 }
 
 export interface PendingSwitch {
@@ -124,6 +136,9 @@ export function runSwitch(root: string, plan: SwitchPlan): Promise<SwitchResult>
   const at = normRoot(root);
   const already = running.get(at);
   if (already) return already;
+  // The backend checks again; this is the cheap refusal first.
+  if (plan.blocked) return Promise.reject(plan.blocked);
+  if (plan.from === "") return Promise.reject("This project has no BMAD to switch.");
   if (isSettingUp(at)) return Promise.reject("Project setup is running. Try again when it has finished.");
   const end = beginSwitch(at);
   const job = (async () => {
@@ -136,7 +151,7 @@ export function runSwitch(root: string, plan: SwitchPlan): Promise<SwitchResult>
       import: CLAUDE_MD_IMPORT,
       marker: CLAUDE_MD_IMPORT_MARKER,
     });
-    markSwitched(at);
+    markSwitched(at, plan.to);
     const detail: SwitchDone = { root: at, from: otherVersion(plan.to), to: plan.to, result };
     window.dispatchEvent(new CustomEvent(SWITCH_DONE_EVENT, { detail }));
     return result;
@@ -160,12 +175,12 @@ export interface OpenInProject {
  */
 export async function openInProject(root: string): Promise<OpenInProject> {
   const { getPtyCwd } = await import("../hooks/useTerminal");
+  const asked = useTabStore.getState().tabs.flatMap((tab) =>
+    findAllPanes(tab.root).map(async (pane) => ({ tab: tab.name, cwd: await getPtyCwd(pane.id).catch(() => null) })),
+  );
   const panes: OpenInProject["panes"] = [];
-  for (const tab of useTabStore.getState().tabs) {
-    for (const pane of findAllPanes(tab.root)) {
-      const cwd = await getPtyCwd(pane.id).catch(() => null);
-      if (cwd && isWithin(cwd, root)) panes.push({ tab: tab.name, cwd });
-    }
+  for (const { tab, cwd } of await Promise.all(asked)) {
+    if (cwd && isWithin(cwd, root)) panes.push({ tab, cwd });
   }
   const agents = useFleetStore
     .getState()

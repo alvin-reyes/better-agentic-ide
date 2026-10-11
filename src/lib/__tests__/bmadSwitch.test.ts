@@ -11,6 +11,9 @@ const tauri = vi.hoisted(() => ({
   setupGate: null as Promise<void> | null,
   pending: [] as unknown,
   pendingFails: false,
+  statusFails: false,
+  /** project_setup_status reports no BMAD on disk. */
+  noBmad: false,
 }));
 
 const RESULT = {
@@ -19,6 +22,7 @@ const RESULT = {
   setup: { created: [], appendedImport: false, agents: 8, bmadFiles: 0 },
   rulesAppended: true,
   archiveDenied: true,
+  movedCapped: false,
 };
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -26,7 +30,11 @@ vi.mock("@tauri-apps/api/core", () => ({
     tauri.calls.push({ command, args });
     switch (command) {
       case "project_setup_status":
-        return { isGit: true, missing: [], needsImport: false, bmadInstalled: true, stacks: ["go"], methodology: "v4" };
+        if (tauri.statusFails) throw new Error("no status");
+        return {
+          isGit: true, missing: [], needsImport: false, bmadInstalled: !tauri.noBmad, stacks: ["go"],
+          methodology: tauri.noBmad ? null : "v4",
+        };
       case "project_setup_apply":
         if (tauri.setupGate) await tauri.setupGate;
         return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
@@ -46,15 +54,27 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 // Panes are asked for their folder; there is no terminal here.
-const pane = vi.hoisted(() => ({ cwd: "/code/shop/src" as string | null }));
-vi.mock("../../hooks/useTerminal", () => ({ getPtyCwd: vi.fn(async () => pane.cwd) }));
+const pane = vi.hoisted(() => ({
+  cwd: "/code/shop/src" as string | null,
+  /** A pane's own answer: a folder, none, or "throws". */
+  byId: {} as Record<string, string | null | "throws">,
+}));
+vi.mock("../../hooks/useTerminal", () => ({
+  getPtyCwd: vi.fn(async (id: string) => {
+    const own = pane.byId[id];
+    if (own === "throws") throw new Error("pty gone");
+    return own !== undefined ? own : pane.cwd;
+  }),
+}));
 
 import {
-  COUNT_LIMIT, SWITCH_DONE_EVENT, countLabel, openInProject, otherVersion, pendingSwitches, planSwitch, runSwitch,
+  COUNT_LIMIT, SWITCH_DONE_EVENT, countLabel, movedLabel, openInProject, otherVersion, pendingSwitches, planSwitch, runSwitch,
   type SwitchDone, type SwitchPlan,
 } from "../bmadSwitch";
-import { SWITCH_RUNNING, isKept, isSettingUp, isSwitching, onSwitchChange, setUpProject, setupDeclined, wasSetUp } from "../projectSetup";
+import { SWITCH_RUNNING, addStackAgents, isKept, isSettingUp, isSwitching, onProjectHasBmad, onSwitchChange, setUpProject, setupDeclined, wasSetUp } from "../projectSetup";
 import { useFleetStore } from "../../stores/fleetStore";
+import { useTabStore, type Tab } from "../../stores/tabStore";
+import { __resetPromptForTests, askMethodology, useMethodologyPrompt } from "../methodologyPrompt";
 
 const PLAN: SwitchPlan = {
   from: "v4",
@@ -84,7 +104,11 @@ beforeEach(() => {
   tauri.setupGate = null;
   tauri.pending = [];
   tauri.pendingFails = false;
+  tauri.statusFails = false;
+  tauri.noBmad = false;
   pane.cwd = "/code/shop/src";
+  pane.byId = {};
+  __resetPromptForTests();
   useFleetStore.setState({ subagents: [] });
 });
 
@@ -107,6 +131,14 @@ describe("planSwitch and pendingSwitches", () => {
     tauri.pending = [one];
     expect(await pendingSwitches("/code/shop/")).toEqual([one]);
     expect(called("bmad_switch_pending")[1]).toEqual({ root: "/code/shop" });
+  });
+
+  it("counts moved files for the toast, capped as a lower bound", () => {
+    expect(movedLabel({ moved: 1, movedCapped: false })).toBe("1 file");
+    expect(movedLabel({ moved: 0, movedCapped: false })).toBe("0 files");
+    expect(movedLabel({ moved: 1234, movedCapped: false })).toBe("1,234 files");
+    expect(movedLabel({ moved: 812, movedCapped: true })).toBe("50,000+ files");
+    expect(movedLabel({ moved: 75_000, movedCapped: false })).toBe("75,000 files");
   });
 
   it("rejects, rather than say nothing is pending, when the check fails or answers with something else", async () => {
@@ -206,14 +238,74 @@ describe("runSwitch", () => {
   });
 
   it("leaves the project as it was listed when the switch fails", async () => {
+    localStorage.setItem("ade-project-setup-declined", JSON.stringify(["/code/shop"]));
     tauri.applyError = "Couldn't move .ade/stage: the file is in use";
     const switchDone = vi.fn();
     window.addEventListener(SWITCH_DONE_EVENT, switchDone);
     await expect(runSwitch("/code/shop", PLAN)).rejects.toBe("Couldn't move .ade/stage: the file is in use");
     expect(isKept("/code/shop")).toBe(false);
+    expect(wasSetUp("/code/shop")).toBe(false);
+    expect(setupDeclined("/code/shop"), "a decline stands").toBe(true);
     expect(isSwitching("/code/shop")).toBe(false);
     expect(switchDone).not.toHaveBeenCalled();
     window.removeEventListener(SWITCH_DONE_EVENT, switchDone);
+  });
+
+  it("clears the switch when something throws before the backend is asked", async () => {
+    const changes: boolean[] = [];
+    const stop = onSwitchChange((_root, running) => changes.push(running));
+    tauri.statusFails = true;
+    await expect(runSwitch("/code/shop", PLAN)).rejects.toThrow("no status");
+    expect(called("bmad_switch_apply")).toHaveLength(0);
+    expect(isSwitching("/code/shop")).toBe(false);
+    expect(isSettingUp("/code/shop")).toBe(false);
+    expect(changes).toEqual([true, false]);
+    stop();
+  });
+
+  it("refuses a blocked plan, or one with no version to leave, without asking the backend", async () => {
+    await expect(runSwitch("/code/shop", { ...PLAN, blocked: "A switch is unfinished." })).rejects.toBe("A switch is unfinished.");
+    await expect(runSwitch("/code/shop", { ...PLAN, from: "" })).rejects.toBeTruthy();
+    expect(called("bmad_switch_apply")).toHaveLength(0);
+    expect(isSwitching("/code/shop")).toBe(false);
+  });
+
+  it("keeps stack agents out too while it runs", async () => {
+    const open = gate();
+    const running = runSwitch("/code/shop", PLAN);
+    await vi.waitFor(() => expect(called("bmad_switch_apply")).toHaveLength(1));
+    await expect(addStackAgents("/code/shop/", ["go"], "v6")).rejects.toBe(SWITCH_RUNNING);
+    expect(called("project_setup_apply")).toHaveLength(0);
+    open();
+    await running;
+    await addStackAgents("/code/shop", ["go"], "v6");
+    expect(called("project_setup_apply")).toHaveLength(1);
+  });
+
+  it("closes an open BMAD question for the project, and only that one", async () => {
+    const prompt = () => useMethodologyPrompt.getState().request;
+    // No BMAD on disk for these: the question is put to the dialog.
+    tauri.noBmad = true;
+    const shop = askMethodology("/code/shop");
+    await vi.waitFor(() => expect(prompt()).toEqual({ root: "/code/shop" }));
+    const open = gate();
+    const running = runSwitch("/code/other", PLAN);
+    await vi.waitFor(() => expect(called("bmad_switch_apply")).toHaveLength(1));
+    open();
+    await running;
+    expect(prompt(), "another project's switch leaves the question").toEqual({ root: "/code/shop" });
+
+    await runSwitch("/code/shop/", PLAN);
+    expect(prompt()).toBeNull();
+    expect(await shop).toEqual({ kind: "chosen", methodology: "v6", asked: false, switched: true });
+  });
+
+  it("tells onProjectHasBmad, with no setup result", async () => {
+    const heard = vi.fn();
+    const stop = onProjectHasBmad(heard);
+    await runSwitch("/code/shop/", PLAN);
+    expect(heard).toHaveBeenCalledWith("/code/shop", "v6", undefined);
+    stop();
   });
 
   it("does not start while a setup of the project is running", async () => {
@@ -228,11 +320,23 @@ describe("runSwitch", () => {
   });
 });
 
+const tabOf = (id: string, name: string, paneId: string): Tab => ({
+  id, name, activePaneId: paneId, root: { type: "pane", pane: { id: paneId, ptyId: 1 } },
+});
+
 describe("openInProject", () => {
+  beforeEach(() => {
+    useTabStore.setState({ tabs: [tabOf("t1", "shop", "p1"), tabOf("t2", "other", "p2")], activeTabId: "t1" });
+  });
+
   it("lists the terminal panes whose folder is inside the project", async () => {
-    const open = await openInProject("/code/shop");
-    expect(open.panes.length).toBeGreaterThan(0);
-    expect(open.panes.every((p) => p.cwd === "/code/shop/src")).toBe(true);
+    pane.byId = { p1: "/code/shop/src", p2: "/code/other" };
+    expect((await openInProject("/code/shop")).panes).toEqual([{ tab: "shop", cwd: "/code/shop/src" }]);
+  });
+
+  it("still lists one pane when another's folder can't be read", async () => {
+    pane.byId = { p1: "throws", p2: "/code/shop" };
+    expect((await openInProject("/code/shop")).panes).toEqual([{ tab: "other", cwd: "/code/shop" }]);
   });
 
   it("leaves out a pane in a folder that only starts with the project's name, or with no folder", async () => {

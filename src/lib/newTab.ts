@@ -69,7 +69,7 @@ export async function openProjectTab(path: string): Promise<void> {
   rememberProject(path);
   useTabStore.getState().addTab(undefined, path);
   // `done`: set up, and announced, by another route while the question was open.
-  if (!root || !answer || answer.done) return;
+  if (!root || !answer || answer.done || answer.switched) return;
   // Not awaited: the terminal is usable while the files are written.
   versionToSetUp(root, answer)
     .then((methodology) => setUpProject(root, methodology))

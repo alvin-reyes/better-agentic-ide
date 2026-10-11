@@ -4,7 +4,7 @@ import type { GuardToast } from "./useContextGuard";
 import { STACK_LABELS } from "../lib/projectMethodology";
 import { askMethodology, projectName, versionToSetUp, type AskUi, type MethodologyAnswer } from "../lib/methodologyPrompt";
 import {
-  addStackAgents, foldersUpTo, isComplete, isSettingUp, isSetupCandidate, normRoot, onProjectSetUp, setUpProject, setupDeclined,
+  addStackAgents, foldersUpTo, isComplete, isSettingUp, isSetupCandidate, normRoot, onProjectHasBmad, setUpProject, setupDeclined,
   setupRootOf, setupStatus, summarize, undoSetup, wasSetUp,
   type Methodology, type SetupResult,
 } from "../lib/projectSetup";
@@ -107,7 +107,7 @@ const askByToast = (show: (t: GuardToast) => void): AskUi => (root) => {
  */
 export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => void, withdraw: (key: string) => void) {
   const enabled = useSettingsStore((s) => s.autoProjectSetup);
-  useEffect(() => onProjectSetUp(({ root }) => {
+  useEffect(() => onProjectHasBmad((root) => {
     const open = asking.get(root);
     // An answered question is its own run's to finish; an open one is over.
     if (open && !open.answered) {
