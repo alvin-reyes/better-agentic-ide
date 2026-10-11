@@ -20,11 +20,11 @@ restored like browser windows.
 - **Restored on launch.** Quitting, or closing the last window, saves every
   window (tabs, position, size). All of them come back next launch.
 - **Closing one window of several ends it for good.** Its shells end and its
-  tabs are forgotten. If agents are running in it, ADE asks first. Closing
-  the last window quits, as today.
-- **A tab can move between windows with its shell still running:** into a
-  new full window, or into another open window. Moving a window's last tab
-  closes that window.
+  tabs are forgotten. If that would end an agent or lose an edit, ADE asks
+  first. Closing the last window quits, as today.
+- **A tab can move between windows with its shell still running** and its
+  scrollback: into a new full window, or into another open window. Moving a
+  window's last tab closes that window.
 - **The bare window goes away:** `src/DetachedApp.tsx`,
   `src/lib/detachWindow.ts` and the `?detached=` mode.
 - **File links open in the window they were clicked in.**
@@ -32,10 +32,12 @@ restored like browser windows.
   second process (`tauri-plugin-single-instance`).
 - **Shared data stays shared.** Settings, workspaces, notes, prompt history,
   the agent tracker, the orchestrator, recordings, recent projects and the
-  project-setup lists are one copy for every window. A window that changes
-  one tells the others, and they reload it.
-- **Windows and their tabs stay per machine** in cross-machine sync, as
-  `ade-session` is today.
+  project-setup lists are one copy for every window. Rust puts every change
+  in one order and every window applies it.
+- **Windows and their tabs stay on this machine.** They are not written to
+  the sync repo at all.
+- **A debug build has its own state folder,** so `tauri dev` and the
+  installed app never share windows, tabs or settings.
 
 Rejected:
 
@@ -43,131 +45,112 @@ Rejected:
   can't share the kv files, the PTY table or the sync lock.
 - **Keeping the bare window beside full ones.** Two kinds of window, two
   boot paths, and the bare one still can't be saved.
-- **Hiding the last window instead of quitting** (the usual macOS pattern).
-  The agreed behaviour is that closing the last window quits, as today.
 - **`tauri-plugin-window-state` for position and size.** It keeps state per
-  label forever, including closed windows, and the registry below has to
-  list the open windows anyway. One file is simpler than two.
-- **The DOM `storage` event to tell windows about shared changes.** It would
-  need no code, but whether one webview hears another's writes differs by
-  engine (WKWebView, WebView2, WebKitGTK) and can't be driven from a test.
+  label forever, closed windows included, and the registry has to list the
+  open windows anyway.
+- **The DOM `storage` event, or a notice sent window to window,** for shared
+  changes. Neither gives two windows that write the same key at once a
+  common order, so their stores can end up different.
 - **Stopping a PTY's reader thread and starting another on a move.** The
-  reader blocks in `read()` on the PTY and `portable-pty` offers no way to
-  interrupt it. See "The reader" below.
-- **A native menu bar on Windows and Linux.** It would add a bar inside the
-  window that ADE doesn't have today.
+  reader blocks in `read()` and `portable-pty` offers no way to interrupt it.
+- **Checking which window may write to, resize or kill a PTY.** Every
+  window is the same trusted app; the owner is recorded only so a closed
+  window's shells can be found.
+- **A native menu bar on Windows and Linux,** hiding the last window
+  instead of quitting, and exporting window sessions to the sync repo
+  (nothing ever read them back).
 
 ## Work split
 
-Four plans, built in this order. Each ships on its own.
+Six plans, in this order. Each ships on its own. The BMAD switch (plan B of
+`2026-10-11-bmad-version-choice-design.md`) lands before all of them.
 
-- **A. Shared state between windows.** The change notice, each store's
-  reload, the re-read before a list is written, the cross-window project-setup
-  guard, and "only the launch window cancels stale agent sessions". Nothing
-  in A makes a new kind of window. It goes first because the hazard exists
-  today (a bare window has the scratchpad and the settings store, so a note
-  saved there and one saved in the main window overwrite each other), and
-  because B without A would let two full windows overwrite each other's
-  settings on the day it ships.
-- **B. Full windows.** Window ids and the registry, per-window sessions and
-  drafts, the migration, launch and restore, New Window, the macOS menu,
-  quit and close, the once-per-app job owner, PTY and watcher ownership,
-  unique pane and tab ids, and the sync key changes. After B the bare window
-  still exists and "Move to New Window" still makes one.
-- **C. Tab moves.** The move protocol, the reader change in `pty.rs`,
-  "Move to Window ▸", file links, and removing `DetachedApp`,
-  `detachWindow.ts` and `?detached=`. It needs B's windows to move a tab
-  into.
-- **D. Single instance.** The plugin and what a second launch does. It goes
-  last because "open a new window" needs B, and until then a second process
-  is no worse than today.
+- **P1. One reader per PTY.** The reader with a swappable output, and
+  `reattach_pty` on top of it. It fixes a bug users have today (a tab moved
+  to a bare window loses part of its output to the old reader) and touches
+  nothing else. Everything works as before.
+- **P2. Shared state between windows.** `shared_put`, the announced keys,
+  each store's reload, the re-read before a list is written, the tracker
+  fix, and the Rust guard on project setup. The hazard exists today (a bare
+  window has the scratchpad and the settings store), and full windows
+  without P2 would overwrite each other's settings on the day they ship.
+- **P3. Single instance and the debug state folder.** A second launch
+  focuses the running app. It goes before any registry exists: two
+  processes sharing a registry would hand out the same window ids, overwrite
+  each other's sessions and delete each other's files as orphans.
+- **P4. The registry, with one window.** The registry, a Rust-built `w1`,
+  the migration from `ade-session`, sessions written straight to disk with
+  the draft inside, window-scoped ids, the sync change, the quit sequence,
+  and the Quit item and command. Nothing new is visible except that ⌘Q and
+  Ctrl+Q now save. It isolates the one step that can lose data. The bare
+  window still works; its file links go to `w1`.
+- **P5. Full windows.** New Window, restoring many, closing one of several,
+  the lead window and its hand-over, the launch gate, cleanup of a closed
+  window's PTYs and watchers, native titles. A second launch now also opens
+  a window. "Move to New Window" still makes a bare window, whose file links
+  go to the lead window.
+- **P6. Tab moves.** The protocol, "Move to Window ▸", file links in their
+  own window, and removing `DetachedApp`, `detachWindow.ts` and
+  `?detached=`.
 
 ## What the code does today
 
+Facts the sections below build on and don't repeat.
+
 - **One window,** declared in `src-tauri/tauri.conf.json` with no label, so
-  its label is `main`. `src-tauri/src/lib.rs` creates no windows, has no
-  `setup`, no window-event handler and no menu code.
-- **macOS gets Tauri's default menu** (Tauri adds it when the app sets
-  none). Its Quit item calls `terminate:`, which ends the process without a
-  close request to any window. So ⌘Q never runs `App.tsx`'s close handler
-  today: what is restored after ⌘Q is the last auto-save, up to 20 seconds
-  old. Windows and Linux have no menu.
-- **`App.tsx`'s close handler** (`onCloseRequested`) saves the session,
-  flushes auto-save, runs `syncNow(false)` for at most 4 seconds, then
-  destroys the window. Only `App` has it.
-- **`src/main.tsx`** picks the mode from `?detached=`. Only the main window
-  runs `syncBeforeLaunch`, `hydrateFromDisk`, `startPeriodicSync` and the
-  10-minute snapshots. A bare window runs `startAutoSave({ snapshots:
-  false })` only.
-- **localStorage is one store for every window** (same origin, same webview
-  data store). The bare window depends on this today: it never hydrates, and
-  reads the theme, notes and history the main window put there.
+  its label is `main`. `src-tauri/src/lib.rs` creates no windows and has no
+  `setup`, window-event handler or menu code. The only uses of a label are
+  in `src/lib/openFile.ts`.
+- **macOS gets Tauri's default menu.** Its Quit item calls `terminate:`,
+  which ends the process without a close request to any window. So ⌘Q never
+  runs `App.tsx`'s close handler (save the session, flush, sync for at most
+  4 seconds, destroy): what comes back after ⌘Q is the last auto-save, up to
+  20 seconds old. Windows and Linux have no menu.
+- **Only the main window** runs `syncBeforeLaunch`, `hydrateFromDisk`,
+  `startPeriodicSync` and the 10-minute snapshots (`src/main.tsx`). The
+  bare window never hydrates: it reads the theme, notes and history from
+  localStorage, so on macOS localStorage is one store for both webviews.
+  That has not been checked on WebView2 or WebKitGTK.
 - **`src/lib/persistence.ts`** patches `Storage.prototype` in each window and
-  writes changed keys to disk 800 ms later. The last window to flush a key
-  wins.
-- **Stores that read localStorage once, when their module loads:**
-  `settingsStore` (settings and workspaces), `orchestratorStore`,
-  `agentTrackerStore`, `fileBrowserStore`. `Scratchpad` reads its draft,
-  history and notes once when it mounts, and `Tour` reads its done flag
-  once. All of them write back from the copy in memory.
-- **Code that reads localStorage on every call,** and so is already safe to
-  share: the project-setup lists (`readList`, `readRemoved` in
-  `src/lib/projectSetup.ts`), recent projects (`src/lib/newTab.ts`), and the
-  recordings index (`readIndex` in `src/hooks/useTerminalRecording.ts`).
-- **`agentTrackerStore.loadSessions`** marks every `running` session
-  `cancelled` when the module loads, on the grounds that the app has just
-  started. A second window loading the module would do that to sessions
-  that are running in the first.
+  writes changed keys to disk 800 ms later, each window from its own batch.
+  A failed write puts the batch back and retries.
+- **Stores that read localStorage once and write back from memory:**
+  `settingsStore`, `orchestratorStore`, `agentTrackerStore`,
+  `fileBrowserStore`, and in `Scratchpad` the draft, history and notes. The
+  project-setup lists, recent projects and the recordings index are read on
+  every call instead.
 - **Pane and tab ids** come from per-window counters (`pane-1`, `tab-1`).
   The agent tracker and orchestrator tasks are keyed by pane id, in shared
-  keys. Two full windows would both have a `pane-1`.
-- **`src-tauri/src/pty.rs`** has one `PtyManager` for the process.
-  `create_pty` starts a reader thread. `reattach_pty` clones the reader and
-  starts a second thread without stopping the first, so after a tab moves
-  two threads read the same PTY and each gets part of the output. `kill_pty`,
-  `write_pty` and `resize_pty` take an id and check nothing about who asks.
-- **`WatcherManager` and `SubagentWatcherManager`** keep a watcher until
-  `unwatch_*` is called. A window that goes away without calling it leaves
-  the watcher running. Today that only happens when the app exits.
-- **PTY output and watch events** go through a Tauri `Channel`, so only the
-  window that asked receives them. The board store
-  (`createBoardPanelStore`) and `paneMetaStore` hold nothing saved and are
-  per window.
-- **The only uses of a window label** are in `src/lib/openFile.ts`
-  (`MAIN_WINDOW = "main"`, `emitTo("main", "open-file")`). The capability
-  file grants every window (`"windows": ["*"]`).
-- **The app reads no command-line arguments** and declares no document
-  types, so there is no folder argument to carry over.
-- **`src-tauri/src/sync.rs`** exports `DEVICE_KEYS` (`ade-session`,
-  `ade-scratchpad-draft`) to `devices/<device>/` and imports only
-  `SHARED_KEYS`. It strips `serializedBuffer` from the key named
-  `ade-session`.
-- **Restoring a snapshot** (`SyncSettings.tsx`) calls `suspendAutoSave()` in
-  the window that asked, so the restored files aren't overwritten before the
-  restart. Other windows would keep writing.
+  keys.
+- **PTY output and watch events** go through a Tauri `Channel`, to the
+  window that asked. Watchers live until `unwatch_*` is called; today a
+  window only goes away when the app exits. The board store and
+  `paneMetaStore` are per window and save nothing.
+- **The app reads no command-line arguments.**
 
-## What you see (plans B and C)
+## What you see
 
-### New Window
+### New Window (P5)
 
 - **macOS menu:** File → **New Window**, ⌘⇧N.
-- **Shortcut:** `newWindow: { key: "n", shift: true }` in `SHORTCUTS`
-  (`src/lib/shortcuts.ts`): ⌘⇧N on macOS, Ctrl+Alt+Shift+N elsewhere, by
-  the file's own mapping. It is listed under "Tabs & panes" in
-  `src/lib/shortcutList.ts` as "New window".
-- **Palette:** "Window: New Window", category "Window".
+- **Shortcut:** `newWindow: { key: "n", shift: true }` in `SHORTCUTS`: ⌘⇧N
+  on macOS, Ctrl+Alt+Shift+N elsewhere. Listed under "Tabs & panes" as "New
+  window".
+- **Palette:** "Window: New Window".
 - **Tab menu** (right-click a tab): **New Window**, after "Reopen Closed
   Tab".
 
-The new window has one tab, "Terminal", in the home folder, with the banner,
-as a first launch has. It is the size of the window it was opened from, 28
-points down and to the right. It does not show the New Tab dialog or the
-launch splash.
+The new window has one tab, "Terminal", in the home folder, with the banner.
+It shows neither the New Tab dialog nor the launch splash. It takes the
+normal (not maximized, not full-screen) size of the window it was opened
+from, 28 points down and to the right, and is never maximized itself. When
+that window has no normal size yet, the new one is 1200×800 where the system
+puts it.
 
-### Closing a window
+### Closing a window (P5)
 
 Closing a window while another is open ends its shells and forgets its tabs.
-ADE asks first when it would end an agent or lose an edit:
+ADE asks first when that would end an agent or lose an edit:
 
 > **Close this window?**
 > 2 agents are running. Closing the window ends them.
@@ -178,40 +161,41 @@ ADE asks first when it would end an agent or lose an edit:
 - Both: "2 agents are running and 1 file has unsaved changes. Closing the
   window ends the agents and loses the changes."
 
-Buttons: **Close Window** and **Cancel**. With no agent and no unsaved file
-the window closes without a question.
+Buttons: **Close Window** and **Cancel**. With nothing to lose the window
+closes without a question. If the close fails: toast "Couldn't close the
+window."
 
 An agent is counted once per pane: a pane with a running session in the
-agent tracker, or one where `hasActiveProcess(pane.id)` is not null (the
-check a tab close uses today).
+agent tracker, or one where `hasActiveProcess(pane.id)` is not null.
 
 Closing the last window quits. It asks nothing, as today.
 
-### Quitting
+### Quitting (P4)
 
 - **macOS:** ⌘Q, or the app menu's **Quit ADE**.
+- **Windows and Linux:** Ctrl+Q.
 - **Every platform:** palette "Window: Quit ADE".
 
 Quit saves every window and all of them come back next launch. It asks
-nothing about agents or unsaved files, as today.
+nothing about agents or unsaved files, as today. On Windows and Linux,
+closing windows with the X one at a time forgets each one's tabs; the last X
+quits and restores only that window.
 
-On Windows and Linux there is no menu, so the palette command (or closing
-the last window) is how to quit. Closing windows one at a time leaves only
-the last one to restore, as a browser does.
+Ctrl+Q is the one app shortcut on plain Ctrl. `useKeybindings` handles it
+outside `SHORTCUTS`, and `isAppShortcut` lets it through the terminal.
 
-### Moving a tab (plan C)
+### Moving a tab (P6)
 
 In the tab menu:
 
-- **Move to New Window**: the tab moves into a new full window with its
-  shell still running. Disabled when the window has one tab.
-- **Move to Window ▸**: lists the other open windows. Picking one moves the
+- **Move to New Window**: disabled when the window has one tab.
+- **Move to Window ▸**: lists the other open windows; picking one moves the
   tab there and brings that window forward. Not shown when no other window
   is open. Moving a window's last tab closes that window.
 
-A window is named by its active tab's label (`tabLabel`, as the tab bar
-shows it). Two windows with the same name are numbered in the order they
-were opened: "shop", "shop (2)".
+A window is named by its active tab's label (`tabLabel`). Two windows with
+the same name are numbered in the order they were opened: "shop",
+"shop (2)".
 
 Toasts, title "Move tab":
 
@@ -220,31 +204,189 @@ Toasts, title "Move tab":
 - An editor tab with unsaved changes isn't moved: "Save the file before
   moving this tab."
 
-### File links (plan C)
-
 A file clicked in a terminal opens in that window: documents and images in
 its preview panel, the rest in an editor tab there.
 
-## Windows and the registry (plan B)
+## One reader per PTY (P1)
+
+Each PTY gets one reader thread for its whole life, started by `create_pty`.
+It sends to whatever the PTY's sink holds:
+
+```rust
+struct Sink { channel: Option<Channel<PtyEvent>>, backlog: Vec<u8>, exited: bool }
+// PtyInstance gains: sink: Arc<Mutex<Sink>>
+```
+
+For each read the thread locks the sink. With a channel, it sends `Output`;
+if the send fails (the window is gone) it takes the channel out and keeps
+the bytes. Without a channel, it appends to `backlog`, which keeps the
+newest 1 MiB.
+
+`reattach_pty(id, on_event)` locks the sink, puts the new channel in, sends
+the backlog as one `Output` and clears it. It starts no thread. Any window
+may call it, as today.
+
+When the shell exits with no channel attached, the thread sets `exited` and
+leaves the instance in the table. The next `reattach_pty` sends the backlog,
+then `Exit`, and removes it, so a shell that ends mid-move still shows its
+last output.
+
+The loop is a function over `impl Read` and a sink whose output is a
+closure, so it is tested without a window.
+
+## Shared state between windows (P2)
+
+### `shared_put`
+
+Rust is the one place that orders changes. `state.rs` gains:
+
+```
+shared_put(key: String, value: Option<String>) -> u64      // the sequence number
+event  shared-changed { key, value: string | null, seq: number, from: string }
+```
+
+Under one lock Rust takes the next sequence number, keeps `value` as the
+newest for `key`, and emits `shared-changed` to every window, the writer
+included. It writes the newest value of each changed key to disk 800 ms
+later and, if that fails, again after 5 seconds: Rust holds the value, so a
+failed write can't bring back one that has since been removed.
+`state_read_all` and `state_snapshot` see values not yet on disk. A key
+outside the announced set is refused.
+
+**The announced keys** are an explicit list, `ANNOUNCED_KEYS`, in
+`persistence.ts` and in `state.rs` (a test compares the two): the eleven
+keys in the table below. Not "every persisted key": `ade-session` and the
+scratchpad draft are persisted and must never be broadcast.
+
+**In the webview,** `startAutoSave()`'s wrapper calls `shared_put` for an
+announced key instead of queueing it. Other persisted keys (recordings, and
+until P4 the session and draft) keep the per-window batch. Each window
+listens for `shared-changed` and:
+
+1. ignores an event whose `seq` is not above the last it applied for that
+   key;
+2. while one of its own `shared_put` calls for that key has not come back
+   as an event, holds events for the key, then applies only the newest;
+3. to apply: writes `value` into localStorage with the *unwrapped*
+   functions when it differs, then calls the key's reloader, if any.
+
+Every window, and the disk, ends on the value with the highest sequence
+number. Two windows that change one list within the same few milliseconds
+still lose one of the changes; they no longer disagree about which.
+
+No loops: the unwrapped functions queue and emit nothing, and a reloader
+(`registerSharedReload(key, fn)`) sets store state without persisting.
+
+### Each key
+
+| Key | Reload in other windows | Before writing |
+|---|---|---|
+| `better-terminal-settings` | `setState` with the parsed value over `defaults` (through `migrate`), then `applyThemeToDOM`; terminals follow through the subscription in `useKeybindings` | nothing |
+| `better-terminal-workspaces` | set `workspaces` | re-read the list |
+| `better-terminal-prompt-history` | `Scratchpad` sets `history` | re-read the list |
+| `better-terminal-saved-notes` | `Scratchpad` sets `notes` | re-read the list |
+| `better-terminal-orchestrator` | set `sessions`, keeping each one's in-memory `dispatchError` | re-read the list |
+| `better-terminal-agent-tracker` | set `sessions` | re-read the list |
+| `better-terminal-tour-done` | `Tour` hides if showing | nothing |
+| `ade-recordings-index` | `loadRecordings()` if the player is open | already re-reads |
+| `ade-recent-projects` | none: read on every use | already re-reads |
+| `ade-project-setup-done`, `ade-project-setup-declined`, `ade-project-agents-removed` | none: read on every use | already re-read |
+| `ade-file-browser` | none | nothing |
+
+"Re-read the list" means the write takes the list from localStorage, applies
+its change, writes it, and sets the store's state to the result. That covers
+`saveWorkspace` and `deleteWorkspace`; the scratchpad's history and note
+writes; `createSession` and `updateSession`; `startSession`, `endSession`
+and `clearHistory`. `deleteHistoryItem` removes by value, not by index: the
+index is from a list another window may have changed.
+
+`ade-file-browser` (open, width, show hidden) is ordered and saved like the
+rest, but a window doesn't follow another's: opening the file browser in one
+must not open it in all.
+
+Recordings (`ade-rec-<id>`) are written once, are not announced, and are
+read from localStorage when the player opens.
+
+### Stale agent sessions
+
+`loadSessions()` stops turning `running` into `cancelled`. A new
+`cancelRunning()` does it and persists. `main.tsx` calls it once per launch,
+in the window that hydrates: the main window today, the lead window from P5.
+
+### Project setup
+
+Two full windows in the same new project will both ask "Set up shop with
+BMAD?" (not possible today: the bare window runs neither the `cd` hook nor
+the palette). Answering v6 in one and v4 in the other while the first setup
+runs would start a second setup, and `APPLY` would run it after the first,
+installing v4 beside v6.
+
+The guard is in Rust, building on what the BMAD switch leaves in
+`projectsetup.rs`:
+
+- **One busy map,** `BUSY: Mutex<HashMap<PathBuf, Busy>>` with
+  `Busy::SettingUp` and `Busy::Switching`, in `projectsetup.rs`. The
+  `project_setup_apply` command and `bmad_switch_apply` each enter their
+  project before taking `APPLY` and leave when they return. It is the one
+  record of "this project is busy", shared by setup and the switch and true
+  for every window. The webview's `inFlight` map and the switch's
+  `switching` set stay as what they are: one window's way to share a
+  running promise.
+- **The `project_setup_apply` command refuses,** before taking `APPLY`, a
+  project that is busy ("shop is being set up in another window." or "A
+  BMAD switch is running in shop."), and, when `full`, a project that is on
+  the other version ("shop is already on BMAD v6."). The refusal is in the
+  command only. `apply` and `install_source` are unchanged, and the switch
+  keeps calling `apply` after it has archived the old version.
+
+Taking the question down in the other window when one window answers is
+left for later, on this map. Until then the second window's toast stays up;
+answering it does nothing (`wasSetUp` and `versionToSetUp` already see the
+first answer).
+
+## Single instance and the debug folder (P3)
+
+**The debug folder.** `state.rs` gains `data_dir(app)`: `app_data_dir()` in
+a release build, `app_data_dir()/dev` when `cfg!(debug_assertions)`.
+`state_dir` and `sync.rs`'s `app_paths` (the sync repo, config and state)
+use it. The vault index stays where it is: the keychain it lists is one per
+machine. A debug build's localStorage is already separate (its origin is the
+dev server), so its first run seeds the new folder from it.
+
+**The plugin.** `tauri-plugin-single-instance`, registered first in `run()`,
+in release builds only: debug and release share the identifier
+`com.betterterminal.dev`, and a debug build must start beside the installed
+app. When a second process starts, the plugin hands over and the second
+process exits. Arguments are ignored; ADE takes none.
+
+- **P3:** the running app brings its last focused window forward,
+  un-minimizing it.
+- **From P5:** it also opens a new window, as New Window does. While
+  quitting it does nothing.
+- **macOS:** a Dock click or opening the app again from Finder starts no
+  process; Tauri reports `RunEvent::Reopen`, and ADE only brings its last
+  focused window forward. `open -n`, or running the binary, does start one.
+- **Windows and Linux:** every start from a launcher or a terminal is a
+  second process.
+
+## Windows and the registry (P4)
 
 ### Ids and labels
 
-A window's id is `w<n>`: `w1`, `w2`, … `n` comes from the registry's
-`nextId` and is never used twice, so a closed window's keys can't be picked
-up by a later one. The Tauri label is the id. No window is labelled `main`.
+A window's id is `w<n>`. `n` comes from the registry's `nextId` and is never
+used twice. The Tauri label is the id; no window is labelled `main`.
 
 `tauri.conf.json`'s `app.windows` becomes `[]`. Windows are built in Rust
 (`src-tauri/src/windows.rs`) with what the config says today: title bar
-style Overlay, decorations, resizable, 1200×800. On macOS they also get
-`hidden_title(true)`, so the native title isn't drawn over the tab bar.
+style Overlay, decorations, resizable, 1200×800.
 
-Each window sets its native title to its name (`window_set_title`, called
-when the active tab's label changes). macOS lists them in the Window menu,
-and "Move to Window ▸" reads them.
+Pane and tab ids carry the window id: `pane-w2-7`, `tab-w2-3`.
+`AgentSession` gains `windowId?: string`, set by `startSession`. Nothing
+parses these ids.
 
 ### The registry
 
-`<app data>/state/kv/ade-windows.json`, written by Rust only.
+`<state>/kv/ade-windows.json`, written by Rust only.
 
 ```json
 {
@@ -258,677 +400,383 @@ and "Move to Window ▸" reads them.
 }
 ```
 
-- `windows` is in the order the windows were opened, oldest first. They are
-  reopened in that order, and `focused` is brought forward last.
+- `windows` is in the order the windows were opened. They are reopened in
+  that order and `focused` is brought forward last.
 - `x`, `y` are the outer position and `width`, `height` the inner size, in
-  physical pixels as Tauri reports them. While a window is maximized or full
-  screen they keep the last normal values.
-- A window with no `x` is placed by the system.
+  physical pixels. While a window is maximized or full screen they keep the
+  last normal values. A window with no `x` is placed by the system.
+- A position is used only if a point 50 pixels inside the top-left corner is
+  on a connected monitor; otherwise the size is kept and the system places
+  the window.
 
-The registry is always current while the app runs. Rust updates it when a
-window opens, closes, gains focus, moves or resizes, and writes the file
-(`state::atomic_write`) at once for open and close and at most 500 ms after
-a move or resize. Because of that, quit has nothing to "keep" and a crash
-needs no recovery: whatever the file lists is what comes back.
+The registry is always current. Rust writes it (`state::atomic_write`) at
+once when a window opens or closes and at most 500 ms after a move or
+resize. A focus change is kept in memory and goes out with the next write.
+So quit has nothing to "keep" and a crash needs no recovery: what the file
+lists is what comes back.
 
-On restore, a position is used only if a point 50 pixels inside the window's
-top-left corner is on a connected monitor. Otherwise the window is placed by
-the system at its saved size.
+### Sessions
 
-### Keys
+`ade-session-<id>`: today's `SavedSession` plus `draft?: string`, the
+window's unsent scratchpad text. It is a kv file written straight to disk.
 
-| Key | Holds | Where it lives |
-|---|---|---|
-| `ade-windows` | the registry | kv file, written by Rust |
-| `ade-session-<id>` | a window's tabs, splits, folders, scrollback | kv file, written straight to disk |
-| `ade-scratchpad-draft-<id>` | a window's unsent scratchpad text | localStorage, mirrored by auto-save |
+- A session can be 5 MB (`MAX_SESSION_SIZE`), localStorage's quota is shared
+  by every window, and when a write doesn't fit `saveSession` drops the
+  scrollback and then the session. So `saveSession()` calls `state_write`
+  with `{ "ade-session-<id>": json }`. The 5 MB tail-truncation stays; the
+  quota fallbacks go. A failed write leaves the previous file and the next
+  save tries again.
+- New command `state_read(keys: Vec<String>) -> HashMap<String, String>`.
+  `loadSession()` becomes async, reads through it, and runs in `main.tsx`
+  before the first render.
+- The draft lives in a small module (`src/lib/windowDraft.ts`). `Scratchpad`
+  starts from it and sets it on every change, which schedules a session
+  save 2 seconds later, as a tab change does. `loadSession` takes the draft
+  from a session even when it has no tabs.
+- `PERSISTED_KEYS` loses `ade-session` and `ade-scratchpad-draft`. The
+  constant in `tabStore.ts` becomes `SESSION_KEY_PREFIX = "ade-session-"`
+  and goes in the existing `LOCAL_ONLY` list in
+  `src/lib/__tests__/persistedKeys.test.ts`, with this reason. (That test
+  scans `lib/` and `stores/` only.)
 
-The format of `ade-session-<id>` is today's `SavedSession`, unchanged.
+**Snapshots** copy every kv file, so they now hold every window's session.
+Their size is bounded by 20 snapshots × the open windows × 5 MB.
 
-**Sessions don't go through localStorage any more.** A session can be 5 MB
-(`MAX_SESSION_SIZE`), localStorage's quota is shared by the whole app, and
-when a write doesn't fit `saveSession` first drops scrollback and then drops
-the session. With several windows that would lose a window's tabs.
-
-- `saveSession()` builds the JSON as today and calls `state_write` with
-  `{ "ade-session-<id>": json }`. The 5 MB tail-truncation stays; the
-  quota fallbacks go. A failed write leaves the previous file in place and
-  the next save tries again.
-- New command `state_read(keys: Vec<String>) -> HashMap<String, String>` in
-  `state.rs`. `loadSession()` becomes async and reads through it.
-- The session is loaded in `main.tsx` before the first render (see Launch),
-  not in `App`'s effect.
-
-**`src/lib/persistence.ts`:**
-
-- `PERSISTED_KEYS` loses `ade-session` and `ade-scratchpad-draft`.
-- `PERSISTED_PREFIXES` gains `ade-scratchpad-draft-`.
-- `startAutoSave()` no longer takes `snapshots`; the snapshot timer moves to
-  the job owner (below).
-
-**`src-tauri/src/sync.rs`:**
-
-- `DEVICE_KEYS` becomes `["ade-windows"]`.
-- New `DEVICE_PREFIXES = ["ade-session-", "ade-scratchpad-draft-"]`.
-  `export_state` lists the kv folder for keys with these prefixes and
-  exports each to `devices/<device>/`, and removes a file there whose key
-  has one of these prefixes and no local file (a closed window).
-- `value_for_repo` strips `serializedBuffer` from every key that starts
-  with `ade-session-`.
-- `SHARED_KEYS` and `import_state` are unchanged: nothing per-window is ever
-  applied from another machine.
-
-`src/lib/__tests__/persistedKeys.test.ts` also collects `…PREFIX… = "ade-…"`
-constants and requires each to be in `PERSISTED_PREFIXES` or in a
-`DIRECT_TO_DISK` list in the test, which names `ade-session-` with the
-reason above.
+**Sync.** `DEVICE_KEYS`, the device half of `export_state`, and the
+`ade-session` branch of `value_for_repo` are removed. Nothing per-window is
+written to the repo; the old `devices/<device>/ade-session.json` stops
+being updated. `export_state` creates an empty
+`devices/<device>/device.json` when it is missing, so the status line still
+lists the device.
 
 ### Migration
 
-In Rust, at launch, when `ade-windows.json` is missing:
+In Rust, at launch, when the registry is missing or doesn't parse:
 
-1. If `kv/ade-session.json` exists and `kv/ade-session-w1.json` doesn't,
-   copy it. The same for `ade-scratchpad-draft.json` →
-   `ade-scratchpad-draft-w1.json`.
-2. Then write the registry: `nextId: 2`, one window `w1`, maximized, no
-   position (today's config).
+1. If `ade-session-w1.json` doesn't exist: write it from `ade-session.json`
+   with `draft` set from `ade-scratchpad-draft.json`, when either exists.
+2. Write the registry: one window `w1`, maximized, no position, and `nextId`
+   one above the highest `ade-session-w<n>.json` present.
 
 The copy comes before the registry, so a crash between them repeats the
-migration. The old two files are left where they are and never written
-again: an older ADE started on the same profile still finds its session.
-The launch window removes `ade-session` and `ade-scratchpad-draft` from
-localStorage, to give the quota back.
+migration. The two old files are left where they are and never written
+again; the launch window removes both keys from localStorage, to give the
+quota back.
 
-When the registry exists but doesn't parse, it is rebuilt from the
-`ade-session-w<n>.json` files present, in number order, with no positions,
-and `nextId` one past the highest.
+A registry that parses but lists no usable window gets one new window.
+After the registry is loaded, an `ade-session-<id>.json` for an id it
+doesn't list is deleted.
 
-After the registry is loaded, kv files named `ade-session-<id>.json` or
-`ade-scratchpad-draft-<id>.json` for an id the registry doesn't list are
-deleted.
+### Launch
 
-### Unique pane and tab ids
+**Rust, in `setup`:** load the registry, create every listed window in
+order, set the macOS menu. The first window is the **lead window**.
 
-`newPaneId` and `newTabId` in `tabStore.ts` put the window id in:
-`pane-w2-7`, `tab-w2-3`. `AgentSession` gains `windowId?: string`, set by
-`startSession`. Nothing parses these ids.
+**Each window, in `boot()`:**
 
-## Launch (plan B)
-
-**Rust, in `setup`:**
-
-1. Load the registry, migrating or rebuilding it as above. Delete orphans.
-2. Create every listed window, in order. The first is the **job owner**.
-3. On macOS, set the menu.
-
-**Each window, in `main.tsx`'s `boot()`:**
-
-1. `installLinkGuard()`.
-2. `boot = await invoke("window_boot")`:
+1. `boot = await invoke("window_boot")`, an async command:
 
    ```
    BootInfo {
      id: String,               // "w2"
-     owner: bool,              // runs the once-per-app jobs
-     atLaunch: bool,           // created while restoring, not by New Window
-     incoming: Option<String>, // a tab move to take (plan C)
-     windows: Vec<String>,     // every id in the registry
+     lead: bool,               // runs the once-per-app jobs
+     atLaunch: bool,           // run the launch duties
+     launchToken: String,      // new for each process
+     incoming: Option<String>, // a tab move to take (P6)
    }
    ```
 
-   For a window that is `atLaunch` and not the owner, the call doesn't
-   return until the owner has called `launch_ready`, or 8 seconds have
-   passed. Outside Tauri (tests) the call fails and the window behaves as
-   `{ id: "w1", owner: true, atLaunch: true }`.
-3. **The owner, at launch, only:** `syncBeforeLaunch()`, then
-   `hydrateFromDisk()`, then `startAutoSave()`, then remove from
-   localStorage the two old keys and any `ade-scratchpad-draft-<id>` whose
-   id isn't in `boot.windows`, then `cancelRunning()` on the agent tracker
-   (plan A), then `invoke("launch_ready")`.
-4. Every other window: `startAutoSave()`. It never hydrates. localStorage is
-   already what the owner put there, and for a window opened later it is
-   newer than the disk (writes reach the disk 800 ms late), so hydrating
-   would put old values back.
-5. If `boot.owner`: `startOwnerJobs()`. Every window also listens for
-   `job-owner` and calls it then.
-6. Paint the theme, as today.
-7. `await initTabs(boot)`, before React renders, so the store's placeholder
-   tab never starts a shell:
-   - `boot.incoming`: take the moved tab (plan C). It is the window's only
-     tab.
-   - else a saved `ade-session-<id>`: restore it, as `loadSession` does
-     today.
-   - else: the store's default tab (a new terminal with the banner).
-8. Render `App`. A window that isn't `atLaunch` calls `hideSplash(true)`
-   first.
+   Outside Tauri the call fails and the window behaves as
+   `{ id: "w1", lead: true, atLaunch: true }`.
+2. **Launch duties,** when `lead && atLaunch`: `syncBeforeLaunch()`,
+   `hydrateFromDisk()`, `startAutoSave()`, remove the two old keys from
+   localStorage, write `launchToken` to the localStorage key
+   `ade-launch-token`, `cancelRunning()`, `invoke("launch_ready")`.
+3. Every other window: `startAutoSave()`. Then, if `ade-launch-token` in
+   its localStorage isn't `boot.launchToken`, it hydrates from disk itself:
+   this webview doesn't share localStorage with the lead's.
+4. If `boot.lead`: `startLeadJobs()`.
+5. Paint the theme. `await initTabs(boot)`: an incoming move, else the saved
+   session, else the store's default tab. It runs before React renders, so
+   the placeholder tab never starts a shell.
+6. Render `App`. A window that isn't `atLaunch` hides the splash at once.
 
-The gate in step 2 is what keeps a pre-launch sync import, and the
-hydration that follows it, ahead of every window's stores, as it is ahead
-of the one window's stores today.
-
-`App` asks for notification permission at mount today. Only the owner does
-that now, so restoring four windows doesn't ask four times.
-
-## Once-per-app jobs (plan B)
-
-The job owner is the oldest open window: the first in the registry's order.
-Rust tracks it. It runs:
-
-- `syncBeforeLaunch()`, at launch only
-- `startPeriodicSync()`: every 3 minutes, and when that window is hidden
-- the snapshot: once at launch, then every 10 minutes
-  (`startSnapshots()`, split out of `startAutoSave`)
-
-`startOwnerJobs()` starts the last two and is safe to call twice. When the
-owner closes, Rust picks the next oldest and sends it `job-owner`. A
-hand-over doesn't take a snapshot of its own; the next is 10 minutes later.
-
-Any window can still run **Sync now**. `SYNC_LOCK` in `sync.rs` already
-keeps two syncs from overlapping. After each sync, the window that ran it
-emits `sync-result` with the report or the error, and `src/lib/sync.ts` in
-every window updates what *Settings → Sync* shows.
-
-**Snapshot restore.** `state_restore_snapshot` sets a process-wide flag in
-Rust. From then until the app restarts, `state_write`, the registry writer
-and the quit sequence write nothing. That covers the windows the restore
-wasn't started from. The frontend's `suspendAutoSave()` stays.
-
-## Quit and close (plan B)
-
-### Telling them apart
-
-- **Quit:** the macOS menu's Quit ADE (a custom item with ⌘Q, replacing the
-  predefined one, so the sequence below runs), the palette's "Window: Quit
-  ADE", or a close request for the only open window.
-- **Close:** a close request while another window is open.
-
-Each window's `onCloseRequested` handler prevents the default and calls
-`window_close_request()`, which returns `"quit"` or `"close"`. On `"quit"`
-Rust has already started the quit sequence and the window does nothing more.
-
-The Dock's Quit, a log-out and a kill end the process without asking. They
-are covered the same way a crash is (below).
+`atLaunch` is true once per window per process. A webview that reloads (dev
+HMR, the error screen's Reload) gets `false`, and the launch duties run once
+per process. On a repeat `window_boot` Rust kills the PTYs and drops the
+watchers the old page had.
 
 ### Quit
 
+Triggers: the macOS menu's **Quit ADE** (a custom item with ⌘Q in place of
+the predefined one, so this sequence runs), Ctrl+Q, the palette command, and
+a close request for the only registered window. The Dock's Quit, a log-out
+and a kill end the process without asking; they are covered as a crash is.
+
 Rust runs it (`app_quit`):
 
-1. Set `quitting`. From here New Window, tab moves, close requests and
-   second launches are ignored, and any tab move still open is failed.
+1. Set `quitting`. New Window, tab moves, `window_close` and second launches
+   are refused from here; an open tab move is failed.
 2. Read every window's position and size into the registry and write it.
-3. Emit `app-quit` to every window. Each window, in parallel:
-   `stopIdlePolling()`, dispatch `ade-flush-draft` (the scratchpad writes
-   its draft now instead of after its 400 ms debounce),
-   `await saveSession()`, `await flushNow()`, then `invoke("quit_ready")`.
-4. Wait until every window has answered, at most 3 seconds.
-5. Run one sync from Rust (what `sync_now(false)` runs), at most 4 seconds,
-   as the close handler does today.
+3. Emit `app-quit` to every window. Each, in parallel: `stopIdlePolling()`,
+   `await saveSession()`, `await flushNow()`, `invoke("quit_ready")`.
+4. Wait for every registered window, at most 3 seconds. Write any shared
+   values still pending.
+5. Run one sync from Rust (what `sync_now(false)` runs), at most 4 seconds.
 6. `app.exit(0)`.
 
-**A crash or kill at any point** leaves: the registry as of the last
-change (step 2 at the latest), each session as of its last save (at most 20
-seconds old, by the existing 2-second and 20-second timers), and shared keys
-as of 800 ms before. Every file is written with a temp file and a rename, so
-none is torn. A window that doesn't answer in step 4 comes back from its
-last auto-save. Nothing in quit deletes anything, so no step can lose a
-window.
+A crash or kill at any point leaves the registry as of its last change, each
+session as of its last save (at most 20 seconds old), and shared keys as of
+800 ms before. Every file is written with a temp file and a rename. Nothing
+in quit deletes anything, so no step can lose a window.
 
-### Close
-
-In the window being closed, after `window_close_request()` returned
-`"close"`:
-
-1. Count agents and unsaved editor tabs. If either is above zero, show the
-   dialog. **Cancel** stops here.
-2. Mark the window closing: `saveSession()` becomes a no-op, and a save
-   already running is awaited.
-3. `stopIdlePolling()`. Remove `ade-scratchpad-draft-<id>` from
-   localStorage. In the agent tracker, mark this window's `running`
-   sessions `cancelled` (`windowId`).
-4. `await flushNow()`, then `suspendAutoSave()`.
-5. `invoke("window_close")`. Rust, in order: kills the PTYs this window
-   owns; drops its file and sub-agent watchers; removes its registry entry
-   and writes the registry; deletes `ade-session-<id>.json` and
-   `ade-scratchpad-draft-<id>.json`; hands the jobs on if it was the owner;
-   emits `window-closed { id }` to the other windows; destroys the window.
-
-The registry is written before the session file is deleted. A crash between
-the two leaves an orphan session, which the next launch deletes.
-
-**A window that goes away without step 5** (its webview crashed, or its
-script never loaded) is treated as a crash: Rust still kills its PTYs and
-drops its watchers when it sees the window destroyed, but its registry entry
-and session stay, and it comes back next launch. The owner, on
-`window-closed`, cancels that window's `running` tracker sessions.
-
-**Ownership.** `PtyInstance` gains `owner: String`, the label of the window
-that called `create_pty` (or last called `reattach_pty`). `kill_pty`,
-`write_pty` and `resize_pty` return an error for a PTY the calling window
-doesn't own. `get_pty_cwd` stays open to any window. `WatcherManager` and
-`SubagentWatcherManager` record the owner label beside each watcher.
-
-The webview no longer destroys or creates windows, so `default.json` loses
-`core:window:allow-destroy` in B, and `core:window:allow-create` and
-`core:webview:allow-create-webview-window` in C.
-
-### The bare window until plan C
-
-B leaves "Move to New Window" making a bare window (label
-`detached-<tabId>-<ts>`), and has to keep it working without a `main`:
-
-- It is not in the registry, is not counted as an open window, is not
-  waited for at quit, and has no close question.
-- `reattach_pty` sets `owner` to the caller already in B, with no
-  restriction on who may call it, so the bare window can write to and
-  resize the shell it took. When the bare window is destroyed Rust kills
-  the PTYs it owns, which replaces the `tauri://destroyed` handler in
-  `detachWindow.ts`.
-- File links: `openFileFromTerminal` opens in the current window unless
-  its label starts with `detached-`. A bare window emits `open-file` to
-  every window, and the job owner opens it.
+**Snapshot restore.** `state_restore_snapshot` sets a process-wide flag.
+Until the app restarts, `state_write`, `shared_put`'s disk writer, the
+registry writer and the quit sequence write nothing.
 
 ### The macOS menu
 
-Tauri's default menu, rebuilt in `windows.rs` with two changes:
+Tauri's default menu, rebuilt in `windows.rs`, with **Quit ADE** (id `quit`,
+⌘Q) as a custom item and, from P5, **New Window** (id `new-window`, ⌘⇧N)
+above Close Window in File.
 
-- **File** gains **New Window** (id `new-window`, ⌘⇧N) above Close Window.
-- The app menu's Quit is a custom item, **Quit ADE** (id `quit`, ⌘Q).
+## Full windows (P5)
 
-The webview sees a key before the menu does and ADE's key handler prevents
-the default, which is why ⌘W closes a tab today although the default menu's
-Close Window also carries ⌘W. So ⌘⇧N is handled by `useKeybindings` in the
-focused window, and the menu item covers a click and the case where no
-webview has focus. Both end in the same Rust function.
+### The lead window
 
-## Shared state between windows (plan A)
+The lead window is the oldest open window. Rust tracks it. It runs
+`syncBeforeLaunch()` (launch only), `startPeriodicSync()` (every 3 minutes
+and when that window is hidden), and the snapshot (once at launch, then
+every 10 minutes: `startSnapshots()`, split out of `startAutoSave`).
+`startLeadJobs()` starts the last two and is safe to call twice.
 
-### The notice
+When the lead closes, Rust picks the next oldest and sends it `lead-window`;
+every window listens and calls `startLeadJobs()`. Any window can still run
+**Sync now**; `SYNC_LOCK` keeps two syncs apart.
 
-`startAutoSave()`'s wrapper already sees every write to a persisted key.
-For an exact key in `PERSISTED_KEYS` (not a prefix) it also emits a Tauri
-event:
+Only the lead asks for notification permission at mount. (`sendNotification`
+in `useTerminal.ts` also asks, in whichever window first has something to
+notify, when the answer is still open. That stays.)
 
-```
-shared-key-changed { key: string, value: string | null, from: string }
-```
+### The launch gate
 
-`value` is the new string, or `null` for a removal. `from` is the writing
-window's label.
+Windows restored together must not load their stores before the lead has
+synced and hydrated.
 
-Every window listens (`listenForSharedChanges()` in `persistence.ts`,
-started by `startAutoSave`). On an event from another window it:
+- A window that is not the lead doesn't get its `BootInfo` until the lead
+  has called `launch_ready`.
+- If the lead hasn't called `window_boot` 8 seconds after it was created,
+  Rust makes the next window in order the lead and answers it.
+- Once a lead has booted, the others wait at most 15 seconds: longer than
+  the 6-second pre-launch sync plus the read of every kv file. After that
+  they go ahead, and the token check in step 3 makes them hydrate
+  themselves.
+- A window opened later is answered at once and never hydrates: for it
+  localStorage is newer than the disk.
 
-1. writes `value` into localStorage with the *unwrapped* `setItem` or
-   `removeItem`, when it differs from what is there;
-2. removes `key` from its own pending batch;
-3. calls the reloader registered for `key`, if any, with `value`.
+**What depends on shared localStorage.** With the token check, settings and
+every announced key are right either way. Recordings (`ade-rec-<id>`, not
+announced) and the single quota still assume one localStorage for all
+webviews. The by-hand check below covers WKWebView, WebView2 and WebKitGTK.
 
-**No loops.** A window ignores its own events. Step 1 uses the unwrapped
-functions, so it queues nothing and emits nothing. A reloader sets store
-state directly and never calls the store's persist function.
+### Titles
 
-**Step 2 is what keeps the disk right.** Without it: window A writes a key,
-window B writes it 100 ms later, A writes some other key and its 800 ms
-timer restarts, and A's batch, still holding the older value, reaches the
-disk after B's.
+Each window sets its native title to its name (`window_set_title`, when the
+active tab's label changes). macOS windows get `hidden_title(true)` so the
+title isn't drawn over the tab bar, and are listed in the Window menu. On
+Windows and Linux the title bar shows the tab's name where it is blank
+today; that is intended.
 
-Recordings (`ade-rec-<id>`) and scratchpad drafts are prefix keys and are
-not announced. A recording is written once and read when the player opens.
+### New Window
 
-`registerSharedReload(key, fn)` in `persistence.ts` is how a store signs up.
+`window_new()` is an async command (a window can't be created from a sync
+one on Windows). It adds a registry entry and builds the window. A second
+call within 300 ms of the last is ignored: on macOS the webview should get
+⌘⇧N before the menu does (as ⌘W closes a tab today although the default
+menu's Close Window carries ⌘W), `useKeybindings` calls `preventDefault`
+for it, and the guard covers the case where both fire.
 
-### Each key
+### Close
 
-| Key | Reload in other windows | Before writing |
-|---|---|---|
-| `better-terminal-settings` | `useSettingsStore.setState` with the parsed value over `defaults` (through `migrate`), then `applyThemeToDOM`. Open terminals follow through the existing subscription in `useKeybindings`. | nothing: the copy in memory is current |
-| `better-terminal-workspaces` | set `workspaces` | re-read the list |
-| `better-terminal-prompt-history` | `Scratchpad` sets `history` | re-read the list |
-| `better-terminal-saved-notes` | `Scratchpad` sets `notes` | re-read the list |
-| `better-terminal-orchestrator` | set `sessions`, keeping each session's in-memory `dispatchError` | re-read the list |
-| `better-terminal-agent-tracker` | set `sessions` | re-read the list |
-| `better-terminal-tour-done` | `Tour` hides if it is showing | nothing |
-| `ade-recordings-index` | `loadRecordings()` if the player is open | already re-reads |
-| `ade-recent-projects` | none: read on every use | already re-reads |
-| `ade-project-setup-done`, `ade-project-setup-declined`, `ade-project-agents-removed` | none: read on every use | already re-read |
-| `ade-file-browser` | none (see below) | nothing |
+Each window's `onCloseRequested` prevents the default and then:
 
-**"Re-read the list"** means the store's write takes the list from
-localStorage, applies its change to that, writes it, and sets its state to
-the result. It no longer writes the list it had in memory. For
-`settingsStore` that is `saveWorkspace` and `deleteWorkspace`; for
-`Scratchpad`, the two history writes and the note add, edit and delete; for
-`orchestratorStore`, `createSession` and `updateSession`; for
-`agentTrackerStore`, `startSession`, `endSession` and `clearHistory`.
+1. Counts agents and unsaved editor tabs; if either is above zero, shows the
+   dialog. **Cancel** stops here.
+2. Marks the window closing: `saveSession()` becomes a no-op and a save
+   already running is awaited.
+3. `await flushNow()`.
+4. `invoke("window_close")`.
 
-**`ade-file-browser`** (open, width, show hidden) stays one saved value, and
-a window doesn't follow another's: opening the file browser in one window
-must not open it in all. The last window to change it decides what a new
-window starts with.
+"Close or quit" is decided in step 4, not before the dialog. Under the
+registry lock, `window_close`:
 
-### The agent tracker's stale sessions
+- returns `"quit"` and closes nothing when `quitting` is set;
+- returns `"quit"` and starts the quit sequence when this is the only
+  registered window (another may have closed while the dialog was up);
+- otherwise removes the registry entry and writes the registry, deletes
+  `ade-session-<id>.json`, picks a new lead if needed, and destroys the
+  window.
 
-`loadSessions()` stops turning `running` into `cancelled`. A new
-`cancelRunning()` on the store does it and persists. `main.tsx` calls it
-once per launch, in the window that hydrates (today: the main window, never
-a bare one; after B: the owner at launch).
+On `"quit"` or an error the window clears its closing mark and carries on;
+an error also shows the toast. The registry is written before the session is
+deleted, so a crash between them leaves an orphan for the next launch.
 
-After B, a window's fleet view can hold running sessions from other
-windows. They have no tab in this window, so today they would fall under
-"Closed terminals". A running lane whose `windowId` isn't this window's
-goes under **Other windows** instead.
+**When a window is destroyed,** however it happened, Rust's handler kills
+the PTYs it owns, drops its watchers, fails any tab move it is part of, and
+emits `window-gone { id }` to the others. The lead, on `window-gone`,
+cancels that window's `running` tracker sessions. A window destroyed
+without `window_close` (its webview crashed) keeps its registry entry and
+session and comes back next launch.
+
+**Ownership.** `PtyInstance` gains `owner: String`: the label that called
+`create_pty`, or last called `reattach_pty`. `WatcherManager` and
+`SubagentWatcherManager` record the owner beside each watcher;
+`watch_directory` takes it from the injected window, next to the `exclude`
+parameter the BMAD switch adds. The owner is used for this cleanup and for
+moves, and for nothing else.
+
+`default.json` loses `core:window:allow-destroy` here, and
+`core:window:allow-create` and `core:webview:allow-create-webview-window`
+in P6.
+
+### The fleet
+
+A window's fleet view can hold running sessions from other windows. A
+running lane whose `windowId` isn't this window's goes under **Other
+windows** instead of "Closed terminals".
 
 ## Two windows on the same project
 
-How each part behaves, and what changes.
+- **BMAD question and setup:** see "Project setup" (P2).
+- **The board panel and every watcher** (board, file browser, preview,
+  sub-agents): safe. The board store is per window and saves nothing; each
+  window rebuilds from disk on its own `Channel`. An approval or a stage
+  change in one is a file write the other's watcher sees.
+- **The terminal focus guard:** safe, unchanged. It listens to its own
+  window's `focus`.
+- **Notifications:** safe. Only the window that owns a pane polls it, so one
+  finished agent makes one notification and one toast. This needs the
+  window-scoped pane ids (P4).
+- **The context guard:** unchanged. Two windows in one folder each warn
+  once about the same Claude session.
+- **The orchestrator:** tasks point at panes and tabs of the window that
+  dispatched them. After its tab moves, "go to tab" on an old task does
+  nothing.
 
-- **The BMAD question and setup: unsafe today, fixed in A.** The open
-  question (`asking` in `useProjectSetup.ts`, `waiting` in
-  `methodologyPrompt.ts`) and the running-setup map (`inFlight` in
-  `projectSetup.ts`) are per window. Two windows in the same new project
-  both show "Set up shop with BMAD?". Answering v6 in one and v4 in the
-  other while the first setup is still running starts a second setup: Rust's
-  `APPLY` lock runs them one after the other, and the second installs v4
-  into a project that is now v6. Answering the second later is harmless
-  (`wasSetUp` reads the shared list, and `versionToSetUp` checks the disk),
-  but its toast stays up. Two changes:
-  - `setUpProject` emits `project-setup { root, phase: "started" | "done" |
-    "failed", methodology, result, from }`. `result` is the `SetupResult`
-    with `files` emptied. Other windows count the project as setting up from
-    `started` until `done`, `failed`, or two minutes pass, so
-    `isSettingUp(root)` is true in every window. On `done` they run their
-    `onProjectSetUp` listeners, which is what closes the dialog, ends the
-    toast's question and withdraws the toast. Undo is offered only in the
-    window that ran the setup.
-  - `project_setup_apply`, when `full`, under `APPLY`, refuses a project
-    that already has the other version on disk: "shop is already on BMAD
-    v6." This is the guard that holds whatever the windows do.
-- **The board panel: safe.** The store is per window and holds nothing
-  saved; each window rebuilds from disk and has its own watchers. An
-  approval or a stage change in one window is a file write that the other's
-  watcher sees.
-- **The board watchers, the file browser and preview watchers, the
-  sub-agent watcher: safe while open.** Each has its own `Channel`. B makes
-  Rust drop a closed window's watchers.
-- **The terminal focus guard: safe, unchanged.** It listens to its own
-  window's `focus` and focuses that window's active terminal.
-- **Notifications: safe, unchanged.** Only the window that owns a pane polls
-  it, so one finished agent makes one system notification and one toast,
-  in that window. This relies on unique pane ids (B): with two `pane-1`s,
-  one window would end the other's tracker session.
-- **The context guard: unchanged.** Two windows in the same folder each
-  warn once about the same Claude session. Each warning is that window's
-  own toast.
-- **The scratchpad:** the draft is per window (B); history and notes are
-  shared and live (A).
-- **The orchestrator:** a session's tasks point at panes and tabs of the
-  window that dispatched them. Status changes reach every window (A). After
-  its tab moves to another window, "go to tab" on an old task does nothing.
+## Moving a tab (P6)
 
-## Moving a tab (plan C)
-
-### The reader
-
-Each PTY gets **one reader thread for its whole life**, started by
-`create_pty`. It doesn't own the output channel; it sends to whatever the
-PTY's sink holds:
-
-```rust
-struct Sink { channel: Option<Channel<PtyEvent>>, backlog: Vec<u8> }
-// PtyInstance gains: sink: Arc<Mutex<Sink>>
-```
-
-For each read, the thread locks the sink. With a channel, it sends
-`Output`. Without one, it appends to `backlog`, which keeps the newest
-1 MiB.
-
-- **`detach_pty(id)`** (owner only): locks the sink, takes the channel out,
-  and sends `PtyEvent::Detached` (`"detached"`) on it. Because sends happen
-  under the lock, `Detached` is the last thing the old window receives for
-  that PTY.
-- **`reattach_pty(id, on_event)`**: locks the sink, detaches any channel as
-  above, puts the new one in, sends the backlog as one `Output`, and clears
-  it. Sets `owner` to the calling window. Allowed for the owner, and for the
-  target of an open move that includes this PTY. It starts no thread.
-
-So there is never a second reader, which is the bug, and no output is lost
-or repeated across a move. When the shell exits while detached, the thread
-ends and removes the instance as today; a later `reattach_pty` fails with
-"PTY not found", and the pane shows `[Process exited]`.
-
-The loop is a function over `impl Read` and a sink whose output is a
-closure, so it is tested without a window.
-
-### The protocol
+`pty.rs` gains `detach_pty(id)`: it locks the sink, takes the channel out
+and sends `PtyEvent::Detached` (`"detached"`) on it. Sends happen under the
+lock, so `Detached` is the last thing the old window receives for that PTY.
 
 S is the source window, T the target.
 
 1. **S → `tab_move_begin({ target, ptyIds })`.** `target` is a window id, or
    null for a new window. Rust refuses when quitting, when `target` isn't
    open ("window-gone"), or when it is S. It detaches each PTY, records the
-   move (`{ id, from, to, ptyIds }`) and returns its id. A move not finished
-   10 seconds after this fails.
-2. **S** waits for `detached` on each pane's channel, so every byte sent
-   before the detach is in its terminal, then builds the tab: name, type,
-   color and the type's own fields (`editorFilePath`, `browserUrl`,
-   `previewPath`, `orchestratorSessionId`, `contractsRoot`), the active
-   pane, and the split tree with, per pane, its old id, PTY id, folder and
-   serialized scrollback. A recording running on one of the panes is stopped
-   and saved first.
-3. **S → `tab_move_send({ moveId, tab })`.** Rust keeps the tab. For a new
-   window it creates one now (a registry entry, S's size, 28 points down
-   and right) whose `BootInfo.incoming` is the move id. For an open one it
-   emits `tab-incoming { moveId }` to T.
-4. **T → `tab_move_take({ moveId })`** returns the tab. T adds it with new
-   tab and pane ids from its own counters and makes it active. Each terminal
-   is created with the scrollback written in, then `reattach_pty`. T renames
-   the pane in the agent tracker (`paneId`, `windowId`) and in orchestrator
-   tasks. A fleet tab, an editor tab for a file, or a contracts tab for a
-   root that T already has focuses the existing one instead.
-5. **T → `tab_move_done({ moveId })`.** Rust focuses T and emits
-   `tab-moved { moveId }` to S.
-6. **S** removes the tab (`detachInstance` for each pane, which never kills
-   the PTY). If it was S's last tab, S closes through the close sequence
-   from step 2, with no question.
+   move and returns its id. A move not finished 10 seconds later fails.
+2. **S** waits for `detached` on each pane's channel and then for xterm's
+   write callback (`term.write("", cb)`), so everything sent is in the
+   buffer. It builds the tab: name, type, color, the type's own fields, the
+   active pane, and the split tree with each pane's old id, PTY id, folder
+   and serialized scrollback. A recording running on a pane is stopped and
+   saved first.
+3. **S → `tab_move_send({ moveId, tab })`.** For a new window Rust builds
+   one now, with no registry entry, whose `BootInfo.incoming` is the move
+   id. For an open one it emits `tab-incoming { moveId }` to T.
+4. **T → `tab_move_take({ moveId })`.** T adds the tab with ids from its own
+   counters and makes it active. Each terminal is created with the
+   scrollback written in, then `reattach_pty`, which makes T the owner. T
+   renames the pane in the agent tracker (`paneId`, `windowId`) and in
+   orchestrator tasks. A fleet tab, an editor tab for a file, or a contracts
+   tab for a root that T already has focuses the existing one.
+5. **T → `tab_move_done({ moveId })`.** Rust adds a new window's registry
+   entry now, focuses T, and emits `tab-moved { moveId }` to S.
+6. **S** removes the tab (`detachInstance`, which never kills the PTY). If
+   it was S's last tab, S closes through `window_close`, with no question.
 
-S keeps the tab until step 6. Between steps 1 and 6 its terminal is still on
-screen and shows no new output.
+S keeps the tab until step 6; until then its terminal is on screen and
+shows no new output.
 
-### Failure
+**Failure.** On the timeout, on S or T closing or T failing to load, or on
+quit, Rust gives the move's PTYs back to S and detaches them, destroys a
+window made for the move, emits `tab-move-failed { moveId, why }` to S and
+T, and forgets the move. S reattaches each pane to the terminal it still
+has and shows the toast; T removes the tab if it had added it, killing
+nothing. Output that reached T before the failure is not replayed in S; the
+rest arrives from the backlog.
 
-On a timeout, on T closing or failing to load, or on quit, Rust:
+**If S is gone** when T calls `tab_move_done`, the move stands: the tab is
+T's.
 
-- sets the owner of the move's PTYs back to S and detaches them;
-- for a new window that was created for the move, removes its registry
-  entry and destroys it;
-- emits `tab-move-failed { moveId, why }` to S and T, and forgets the move.
-
-S reattaches each pane to the terminal it still has (`reattach_pty` with a
-new channel; the backlog brings what was missed) and shows the toast. T
-removes the tab if it had added it, without killing anything.
-
-T closing normally while a move to it is open fails the move first, so
-`window_close` never kills a PTY that belongs to a tab still shown in S.
-
-### What is removed
+**Removed with P6:**
 
 - `src/DetachedApp.tsx` and `src/lib/detachWindow.ts`.
-- In `src/main.tsx`: `detachedTab()`, the `?detached=` branch of `Root` and
-  of `boot()`.
-- In `tabStore.ts`: `detachTab`. `detachInstance` in `useTerminal.ts` stays
-  (step 6 uses it), and `createReattachedInstance` gains the scrollback.
-- In `src/lib/openFile.ts`: the `detached-` case, the `open-file` event and
-  `listenForFileOpens`; `openFileFromTerminal` is `openFileHere`. `App`'s
-  effect that listened for `open-file` goes.
-- `reattach_pty`'s open access: from C only the owner or a move's target may
-  call it.
-- The two window-creating permissions in `default.json`.
-
-## A second launch (plan D)
-
-`tauri-plugin-single-instance`, registered first in `run()`, in release
-builds only. A debug build doesn't register it, so `tauri dev` still starts
-beside an installed ADE (both use the identifier `com.betterterminal.dev`).
-
-When a second process starts, the plugin hands its arguments to the running
-app and the second process exits. The running app then opens a new window
-(as New Window does, placed from the last focused window) and focuses it.
-The arguments are ignored: ADE takes none today. While quitting, the
-hand-off is ignored.
-
-- **macOS.** Clicking the Dock icon or opening the app again from Finder
-  doesn't start a process; macOS activates the running app and Tauri reports
-  `RunEvent::Reopen`. ADE then only brings its last focused window forward,
-  un-minimizing it if every window is minimized. It opens no window: a Dock
-  click is not a second launch. `open -n`, or running the binary directly,
-  does start a process, and the plugin's hand-off opens a new window.
-- **Windows and Linux.** Starting ADE again from the Start menu, a launcher
-  or a terminal always starts a process, so each such launch opens a new
-  window in the running app.
+- In `src/main.tsx`: `detachedTab()` and the `?detached=` branches.
+- In `tabStore.ts`: `detachTab`. `detachInstance` stays, and
+  `createReattachedInstance` gains the scrollback.
+- In `src/lib/openFile.ts`: everything but `openFileHere`, which
+  `openFileFromTerminal` becomes. `App`'s `open-file` listener goes.
+- The two window-creating permissions.
 
 ## Docs
 
 - `docs/guide/terminal.md`: "Move to a new window" becomes a section on
-  windows: New Window, moving a tab to a new or an open window, what closing
-  a window does, and that windows come back after a quit. The page
-  description drops "detached windows".
-- `docs/guide/shortcuts.md`: New window.
-- `docs/guide/sync.md`: the per-device row reads "Windows, their tabs and
-  scratchpad drafts". "When the window is hidden" becomes "when the oldest
-  window is hidden", and "On close" becomes "On quit".
+  windows. The description drops "detached windows".
+- `docs/guide/shortcuts.md`: New window, Quit.
+- `docs/guide/sync.md`: the per-device row becomes "Windows, their tabs and
+  scratchpad drafts: stay on this machine, not in the sync repo". "When the
+  window is hidden" becomes "when the oldest window is hidden"; "On close"
+  becomes "On quit".
 
 ## Testing
 
-### Plan A
+What each plan must show; the test design is the plan's.
 
-Frontend:
-
-- a write to an exact persisted key emits `shared-key-changed` with the
-  value and the window's label; a prefix key and an unpersisted key emit
-  nothing
-- a received event writes localStorage, queues nothing and emits nothing; a
-  window ignores its own event
-- a received event drops that key from the pending batch: A writes, B's
-  event arrives, A flushes another key, and `state_write` doesn't carry the
-  first
-- two-window store tests, each with two copies of the store over one
-  localStorage and events passed between them by hand:
-  - settings: a theme change in one reaches the other's state and DOM, and
-    doesn't write again
-  - workspaces, history, notes, orchestrator sessions, tracker sessions:
-    both windows add an item without a reload in between, and both items
-    are in the list
-  - orchestrator: a reload keeps a session's `dispatchError`
-  - the tour hides when the other window finishes it
-  - the file browser doesn't follow the other window
-- `loadSessions` leaves `running` alone; `cancelRunning` cancels and
-  persists; `main.tsx` calls it only where it hydrates
-- project setup: `started` from another window makes `isSettingUp` true;
-  `done` runs the listeners (the dialog closes, the toast is withdrawn) and
-  offers no Undo; the entry expires after two minutes
-- `sync-result` updates what `onSyncResult` listeners in another window see
-
-Rust:
-
-- `project_setup_apply` with `full` refuses the other version and leaves
-  the project untouched; the same version, and a project with neither,
-  still set up
-
-### Plan B
-
-Rust, on temporary folders:
-
-- migration: the session and the draft are copied to `w1` before the
-  registry is written; a second run changes nothing; the old files stay
-- an unparseable registry is rebuilt from the session files; orphan session
-  and draft files are deleted; a listed window with no session file stays
-- ids are never reused after a close
-- a position off every monitor is dropped and the size kept (the check is a
-  pure function over monitor rectangles)
-- closing: the registry is written before the session file is deleted;
-  the owner moves to the next oldest
-- `kill_pty`, `write_pty` and `resize_pty` refuse another window's PTY
-- watchers are dropped by owner
-- `state_read` returns only the keys asked for
-- after `state_restore_snapshot`, `state_write` and the registry writer
-  write nothing
-- sync: prefix keys are exported to the device folder; a closed window's
-  file is removed there; scrollback is stripped from every `ade-session-*`;
-  nothing per-window is imported
-
-Frontend:
-
-- `saveSession` writes `ade-session-<id>` through `state_write` and nothing
-  to localStorage; `loadSession` reads through `state_read`; the existing
-  session tests pass against the mocked commands
-- `initTabs`: an incoming move, a saved session and neither
-- boot order, with the commands mocked: the owner syncs, hydrates, sweeps
-  and calls `launch_ready`; a non-owner at launch does none of them; a
-  later window never hydrates
-- `startOwnerJobs` runs once however often `job-owner` arrives
-- pane and tab ids carry the window id; `startSession` records it
-- the close dialog's five wordings; no dialog with nothing to lose; Cancel
-  leaves the window as it was
-- close: `saveSession` is a no-op once closing; the draft key is removed;
-  this window's running sessions are cancelled; `window_close` is called
-  last
-- on `app-quit`: the draft is flushed, the session saved, auto-save flushed,
-  then `quit_ready`
-- the scratchpad draft uses its window's key
-- the fleet puts another window's running lane under "Other windows"
-- `persistedKeys.test.ts` fails for a prefix that is in neither list
-- the palette has "Window: New Window" and "Window: Quit ADE"; the tab menu
-  has "New Window"
-- a file link opens in a full window whatever its label; a bare window's
-  link is opened by the job owner only
-
-By hand, on each platform: quit with three windows and relaunch; kill the
-process and relaunch; close the oldest window and see a sync and a snapshot
-still happen; a note saved in one window shows in another.
-
-### Plan C
-
-Rust:
-
-- the reader loop: output goes to the attached sink; after `detach_pty` the
-  old sink's last message is `Detached`; bytes written while detached arrive
-  first on the next sink, once and in order; the backlog keeps the newest
-  1 MiB
-- with a real PTY running a steady writer (Unix), attach, move to a second
-  sink, then a third: the three outputs joined are exactly what was written
-- `reattach_pty` is refused for a window that is neither the owner nor the
-  move's target, and sets the owner
-- a move: begin, send, take, done; a missing target is refused; a timeout,
-  and the target closing, give the PTYs back to the source and remove a
-  window created for the move
-
-Frontend:
-
-- the tab menu: "Move to New Window" is disabled with one tab; "Move to
-  Window ▸" lists the other windows with duplicate names numbered, and is
-  absent with none
-- the source keeps the tab until `tab-moved`, then removes it without
-  `kill_pty`; moving the last tab closes the window
-- on `tab-move-failed` the source reattaches and shows the toast; the
-  target removes a tab it had added
-- the target gives the tab new ids, writes the scrollback before
-  reattaching, and renames the pane in the tracker and orchestrator
-- an unsaved editor tab is refused; a fleet tab moved into a window that has
-  one focuses it
-- `openFileFromTerminal` opens in the current window whatever its label
-- nothing in `src/` mentions `detached` or the label `main`
-
-### Plan D
-
-Rust:
-
-- the hand-off handler opens a window and focuses it; it does nothing while
-  quitting (the handler is a function over the window state, tested without
-  the plugin)
-- `Reopen` focuses the last focused window and opens none
-
-By hand: `open -n` on macOS, a second start on Windows and on Linux, and a
-Dock click on macOS.
+- **P1.** Bytes read with no sink arrive first on the next one, once and in
+  order, capped at 1 MiB. With a real PTY and a steady writer (Unix), three
+  sinks in turn receive exactly what was written. A failed send falls back
+  to the backlog. A shell that exits unattached delivers its last output
+  and `Exit` on the next attach.
+- **P2.** Rust: the disk gets the newest value, also after a failed write;
+  an unannounced key is refused; the two `ANNOUNCED_KEYS` lists match; setup
+  is refused for a busy project and for the other version, and `apply`
+  still installs after an archive. Frontend, with two copies of each store
+  over one localStorage and events passed by hand: two windows writing one
+  key before hearing each other end equal; a reload writes nothing; each
+  list store keeps both windows' additions; the orchestrator keeps
+  `dispatchError`; the file browser doesn't follow; history deletes by
+  value; `cancelRunning` runs only where the window hydrates.
+- **P3.** The hand-off handler focuses the last focused window (a function
+  over the window state, tested without the plugin). `data_dir` ends in
+  `dev` only in a debug build. By hand: `open -n` on macOS, a second start
+  on Windows and Linux, `tauri dev` beside the installed app.
+- **P4.** Migration copies session and draft before the registry is
+  written, changes nothing on a second run and leaves the old files. A
+  missing, unparseable or empty registry opens one window; `nextId` never
+  goes back; orphans are deleted. The off-monitor check, as a pure
+  function. Sessions go through the commands and never touch localStorage;
+  the draft round-trips. Ids carry the window id. The sync export writes
+  nothing per-window and still lists the device. Quit's order and its
+  3-second wait; nothing is written after a snapshot restore. By hand: ⌘Q
+  and Ctrl+Q then relaunch; kill then relaunch.
+- **P5.** `window_close` decides under the lock, also when a second window
+  closed while the dialog was up; the registry is written before the
+  session is deleted; the lead moves to the next oldest. `atLaunch` is true
+  once per window per process. The gate: a lead that never boots is
+  replaced, the others wait, a window without the token hydrates. A
+  destroyed window's PTYs and watchers go and `window-gone` is emitted. Two
+  `window_new` calls within 300 ms open one window. The dialog's wordings.
+  By hand, on macOS, Windows and Linux: quit with three windows and
+  relaunch; a note saved in one window shows in another; a recording made
+  in one plays in another.
+- **P6.** `Detached` is the last message. A missing target is refused. A
+  timeout, and S or T closing, give the PTYs back and remove a window made
+  for the move; a new window is registered only at done. S keeps the tab
+  until `tab-moved` and removes it without `kill_pty`; the last tab closes
+  the window. T writes the scrollback before reattaching and renames the
+  pane in the tracker and orchestrator. An unsaved editor tab is refused.
+  Nothing in `src/` mentions `detached` or the label `main`.
 
 ## Non-goals
 
@@ -938,49 +786,35 @@ Dock click on macOS.
 - Settings that differ by window.
 - Asking about agents or unsaved files at quit.
 - A folder argument on the command line.
-- A menu bar on Windows or Linux.
+- Recovering tabs after a downgrade and re-upgrade: an older ADE writes
+  `ade-session`, which this version reads only once, at migration.
+- Showing another window's sync result in *Settings → Sync*.
+- Taking the BMAD question down in every window when one answers.
+- Merging two windows' simultaneous changes to one list.
 
 ## Decisions made while writing
 
-- **Build order: shared state first.** The agreed list put full windows
-  first. Shared state goes first here because the overwrite hazard is live
-  today with the bare window, and full windows without it would make it
-  common.
-- **Sessions are written straight to disk,** not through localStorage,
-  because the quota is shared and `saveSession`'s last fallback drops the
-  session. The key names and the format are as agreed.
-- **`ade-session` is copied to `ade-session-w1`, not used in place,** and
-  the old file is left for an older ADE. A profile with no kv files at all
-  (from before disk state) starts with one fresh tab.
-- **The scratchpad draft becomes per window.** One shared draft would have
-  each window overwrite the other's unsent text.
-- **`ade-file-browser` is shared but not live.**
-- **One reader per PTY with a swappable output,** in place of stopping the
-  old reader. It gives the agreed result (never two readers) and is the only
-  portable way to get it.
-- **A move keeps the tab in the source until the target has it,** so a
-  failure needs no undo beyond reattaching.
-- **The moved tab carries its scrollback.** Today a moved tab's terminal
-  starts blank.
-- **PTYs and watchers have an owner window,** and Rust cleans them up when a
-  window is destroyed.
-- **Pane and tab ids carry the window id,** and tracker sessions record it.
-- **The registry is kept current all the time,** so quit and crash restore
-  the same way and only an explicit close removes anything.
-- **Quit is a custom menu item on macOS,** because the predefined one ends
-  the process without telling any window. The Dock's Quit and a log-out
-  still do; they restore from the last auto-save.
-- **"Window: Quit ADE" in the palette,** because Windows and Linux have no
-  menu and no other way to quit with more than one window open.
-- **The close question also counts unsaved editor tabs.**
-- **"Move to New Window" is disabled for a window's only tab.**
-- **An editor tab with unsaved changes isn't moved.**
-- **A Dock click on macOS opens no window;** only a real second process
-  does.
-- **Single instance is release-only.**
-- **`project_setup_apply` refuses the other BMAD version.**
-- **Snapshot restore suspends writes in Rust,** for every window.
-- **Only the owner asks for notification permission at mount.**
-- **Limits:** the move backlog is 1 MiB, a move times out after 10 seconds,
-  quit waits 3 seconds for windows and 4 for sync, the launch gate opens
-  after 8 seconds, and a remote setup is forgotten after two minutes.
+| Limit | Value |
+|---|---|
+| PTY backlog while no window is attached | newest 1 MiB |
+| A tab move, from begin to done | 10 seconds |
+| Quit: waiting for windows, then for sync | 3 seconds, then 4 |
+| Launch gate: lead not booted, then `launch_ready` | 8 seconds, then 15 |
+
+New in this revision:
+
+- `shared_put` echoes to the writer too, and a window holds events for a key
+  while its own put is in flight. Skipping its own echoes would leave two
+  simultaneous writers on each other's value.
+- Every shared exact key is announced, the read-on-use ones included.
+- The debug folder is `<app data>/dev`; the vault index is not moved.
+- The sentinel is the localStorage key `ade-launch-token`.
+- The draft is saved by the session timers, so a crash can lose up to 20
+  seconds of it, where today it loses about one.
+- The sync export keeps an empty `devices/<device>/device.json`.
+- A shell that exits while detached keeps its last output for the next
+  attach.
+- A busy project is refused before `APPLY`, so a second window's setup
+  fails at once instead of queueing.
+- A repeat `window_boot` cleans up the old page's PTYs and watchers.
+- Ctrl+Q is handled outside `SHORTCUTS`.
