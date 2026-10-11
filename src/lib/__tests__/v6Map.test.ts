@@ -57,7 +57,7 @@ describe("buildV6Map", () => {
     expect(new Set(specs.map((d) => d.path)).size).toBe(2);
   });
 
-  it("a doc folder that cannot be listed is a problem, not a failure", async () => {
+  it("a doc folder that cannot be listed is not a doc, and not a failure", async () => {
     const mem = memFs();
     await seedV6Tree(mem, "/p", tree);
     await write(mem, `${I}/prd-shop/prd-shop.md`, "---\nstatus: draft\n---\n");
@@ -65,8 +65,24 @@ describe("buildV6Map", () => {
     const fs: Fs = { ...mem, list: async (p) => { if (p.endsWith("/prd-shop")) throw new Error("EACCES"); return mem.list(p); } };
     const map = await buildV6Map("/p", fs);
     expect(map.docs.analysis.map((d) => d.status)).toEqual(["complete"]);
-    expect(map.docs.planning.map((d) => [d.kind, d.path, d.status])).toEqual([["prd", null, "unreadable status"]]);
-    expect(map.problems).toContain("_bmad-output/initiative-shop/prd-shop could not be read: EACCES");
+    expect(map.docs.planning).toEqual([]);
+    expect(map.problems).toEqual([]);
+  });
+
+  it("stray files named like docs make neither a doc nor a problem", async () => {
+    const mem = memFs();
+    await seedV6Tree(mem, "/p", tree);
+    await write(mem, `${I}/ux-wireframe.png`, "binary");
+    await write(mem, "/p/_bmad-output/research-report.pdf", "binary");
+    const fs: Fs = {
+      ...mem,
+      list: async (p) => { if (/\.(png|pdf)$/.test(p)) throw new Error("ENOTDIR"); return mem.list(p); },
+      readText: async (p) => { if (/\.(png|pdf)$/.test(p)) throw new Error("invalid utf-8"); return mem.readText(p); },
+    };
+    const map = await buildV6Map("/p", fs);
+    expect(Object.values(map.docs).flat()).toEqual([]);
+    expect(map.loose).toEqual([]);
+    expect(map.problems).toEqual([]);
   });
 
   it("an epic folder that cannot be listed is a problem, not a failure", async () => {

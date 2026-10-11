@@ -113,7 +113,7 @@ On a **v6** project it is a map of BMAD v6's four phases: Analysis, Planning, Im
 
 On a **v4** project it shows where the project is in BMAD's five stages, which plan documents exist, and every story, and you move the project's stage with **Next** and **Back**. Next appears only once the current stage's documents are on disk. A project that has never had its stage set follows its files until you click **Track stage**.
 
-On both, a story or ticket that says it is done without a passing QA gate shows as **claimed**, and a waiver always shows its reason. You can **Approve** a draft and **Dispatch** an approved story, or a ticket in the active initiative, to a developer agent in a new tab.
+On both, a story or ticket that says it is done without a passing QA gate shows as **claimed**, and a waiver always shows its reason. You can **Approve** a draft and **Dispatch** an approved story, or a ticket in the active initiative, to a developer agent in a new tab. Backlog tickets are listed read-only; click one to open it.
 
 The personas themselves are roles in the [agent picker](#agent-picker) (filter to **Roles** and you have all nineteen) Analyst, Product Manager, Designer, Architect, Product Owner, Scrum Master, Developer, QA, DevOps, Adversarial Reviewer, Security Engineer, SRE, Release Manager, Engineering Manager, Support Engineer, Solutions Engineer, Brainstorming Architect, Technical Writer and Advisor, each with the accountability and owned files of its role. Launching one from there asks which provider to use and whether to run it in this terminal or a new tab, which the old persona buttons could not do. Product Owner and Scrum Master are reachable only this way, since no agent profile pairs with them.
 

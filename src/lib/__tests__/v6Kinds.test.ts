@@ -64,15 +64,20 @@ describe("readFolderDoc", () => {
     expect(read.some((p) => p.endsWith("brainstorm.html"))).toBe(false);
   });
 
-  it("skips a file named like a doc folder, and reports a folder that cannot be listed", async () => {
+  it("skips a stray file named like a doc, without reading it", async () => {
     const mem = memFs();
     await mem.mkdir(I);
-    await mem.writeText(`${I}/prd-notes.md`, "# not a folder\n");
-    expect(await readFolderDoc("/p", `${I}/prd-notes.md`, kind("prd-notes.md"), mem)).toBeNull();
-    const fs: Fs = { ...mem, list: async () => { throw new Error("EIO"); }, readText: async () => { throw new Error("EIO"); } };
-    const r = (await readFolderDoc("/p", `${I}/prd-gone`, kind("prd-gone"), fs))!;
-    expect(r.doc).toMatchObject({ path: null, status: "unreadable status" });
-    expect(r.problem).toBe("_bmad-output/initiative-demo/prd-gone could not be read: EIO");
+    await mem.writeText(`${I}/research-notes.html`, "<html>big</html>");
+    await mem.writeText(`${I}/ux-wireframe.png`, "binary");
+    const read: string[] = [];
+    const fs: Fs = {
+      ...mem,
+      list: async (p) => { if (/\.(html|png)$/.test(p)) throw new Error("ENOTDIR"); return mem.list(p); },
+      readText: async (p) => { read.push(p); if (p.endsWith(".png")) throw new Error("invalid utf-8"); return mem.readText(p); },
+    };
+    expect(await readFolderDoc("/p", `${I}/research-notes.html`, kind("research-notes.html"), fs)).toBeNull();
+    expect(await readFolderDoc("/p", `${I}/ux-wireframe.png`, kind("ux-wireframe.png"), fs)).toBeNull();
+    expect(read).toEqual([]);
   });
 
   it("a brainstorm whose run log has no status yet is in progress; a finished one says so", async () => {

@@ -73,27 +73,14 @@ export function relativeTo(root: string, path: string): string {
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
-export type Listing = { names: string[]; error: null } | { names: null; error: string; isFile: boolean };
+export type Listing = { names: string[]; error: null } | { names: null; error: string };
 
-/**
- * A folder's entries, listed once. A failure is a value, not a throw: the map
- * must survive a folder that vanishes or cannot be read. `isFile` is true when
- * the path is a readable file, as a stray `prd-notes.md` is, so a caller can
- * skip it without calling it a problem.
- */
+/** A folder's entries, listed once. A failure is a value, not a throw: the map must survive a folder that vanishes or cannot be read. */
 export async function listFolder(path: string, fs: Fs): Promise<Listing> {
   try {
     return { names: await fs.list(path), error: null };
   } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    let isFile = false;
-    try {
-      await fs.readText(path);
-      isFile = true;
-    } catch {
-      // not a file either
-    }
-    return { names: null, error, isFile };
+    return { names: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -127,17 +114,16 @@ function result(projectRoot: string, doc: Omit<V6Doc, "status">, statusPath: str
 /**
  * One doc folder's entry: the folder is listed once, the main file is the first
  * candidate the listing holds (no file is opened to probe it), and only the
- * status file is read. Null when `folder` is a file, not a folder.
+ * status file is read. Null when it cannot be listed: a stray file named like
+ * a doc, or a folder gone since the parent was listed, is not a doc folder.
+ * Nothing is read to tell which.
  */
 export async function readFolderDoc(projectRoot: string, folder: string, kind: V6Kind, fs: Fs): Promise<DocResult | null> {
   const name = pathBasename(folder);
   const sub = (s: string) => s.replaceAll("<f>", name);
   const base = { kind: kind.kind, label: kind.label, name: name.slice(kind.prefix.length) };
   const listing = await listFolder(folder, fs);
-  if (listing.names === null) {
-    if (listing.isFile) return null;
-    return { doc: { ...base, path: null, status: "unreadable status" }, problem: `${relativeTo(projectRoot, folder)} could not be read: ${listing.error}` };
-  }
+  if (listing.names === null) return null;
   const names = listing.names;
   const main = kind.main.map(sub).find((c) => names.includes(c));
   const path = main ? relativeTo(projectRoot, joinPath(folder, main)) : null;

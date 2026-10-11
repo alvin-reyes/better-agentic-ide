@@ -56,9 +56,9 @@ async function scanFolder(projectRoot: string, dir: string, names: string[], ski
   return { found };
 }
 
-/** Why a folder is unusable: null when it is simply absent (or a file), else the read error. */
+/** Why a folder is unusable: null when it is simply absent , else the read error. */
 async function unreadable(path: string, listing: Listing, fs: Fs): Promise<string | null> {
-  if (listing.names !== null || listing.isFile) return null;
+  if (listing.names !== null) return null;
   return (await fs.exists(path)) ? listing.error : null;
 }
 
