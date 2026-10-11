@@ -13,7 +13,7 @@ import MethodologyPromptHost from "./components/MethodologyPrompt";
 import { hideSplash } from "./lib/splash";
 import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
-import { useContextGuard, toastActions, type GuardToast } from "./hooks/useContextGuard";
+import { useContextGuard, toastLifetime, type GuardToast } from "./hooks/useContextGuard";
 
 // Lazy-load heavy components for faster startup
 const SettingsPanel = lazy(() => import("./components/SettingsPanel"));
@@ -161,8 +161,10 @@ export default function App() {
   const showToast = useCallback((t: GuardToast) => {
     setToast(t);
     if (toastTimer.current !== null) clearTimeout(toastTimer.current);
-    // Leave time to click an action.
-    toastTimer.current = window.setTimeout(() => setToast(null), toastActions(t).length ? 15000 : 4000);
+    // The timer of the toast this one replaces is gone either way; a sticky
+    // toast starts none of its own.
+    const ms = toastLifetime(t);
+    toastTimer.current = ms === null ? null : window.setTimeout(() => setToast(null), ms);
   }, []);
   useContextGuard(activeCwd, showToast);
   useProjectSetup(activeCwd, showToast);

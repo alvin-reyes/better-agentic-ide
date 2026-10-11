@@ -19,10 +19,18 @@ export interface GuardToast {
   action?: ToastAction;
   /** Several buttons, in order. A toast with any action is not dismissed by a click on its body. */
   actions?: ToastAction[];
+  /** A question that must be answered: it doesn't time out. Another toast still replaces it. */
+  sticky?: boolean;
 }
 
 export function toastActions(t: GuardToast): ToastAction[] {
   return t.actions ?? (t.action ? [t.action] : []);
+}
+
+/** How long a toast stays up, in ms; null for one that stays. An action gets time to be clicked. */
+export function toastLifetime(t: GuardToast): number | null {
+  if (t.sticky) return null;
+  return toastActions(t).length ? 15000 : 4000;
 }
 
 interface LatestContext {

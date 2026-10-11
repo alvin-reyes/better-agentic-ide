@@ -5,7 +5,7 @@ const terminal = vi.hoisted(() => ({ sendToActiveTerminal: vi.fn(async (_command
 vi.mock("../../lib/terminalCommands", () => terminal);
 
 import Toast from "../Toast";
-import { toastActions, type GuardToast } from "../../hooks/useContextGuard";
+import { toastActions, toastLifetime, type GuardToast } from "../../hooks/useContextGuard";
 
 beforeEach(() => terminal.sendToActiveTerminal.mockClear());
 
@@ -15,6 +15,18 @@ describe("toastActions", () => {
     expect(toastActions({ title: "t", body: "b", action: undo })).toEqual([undo]);
     expect(toastActions({ title: "t", body: "b", actions: [undo, undo] })).toHaveLength(2);
     expect(toastActions({ title: "t", body: "b" })).toEqual([]);
+  });
+});
+
+describe("toastLifetime", () => {
+  it("gives a toast with an action longer than one that only tells", () => {
+    expect(toastLifetime({ title: "t", body: "b" })).toBe(4000);
+    expect(toastLifetime({ title: "t", body: "b", action: { label: "Undo", run: vi.fn() } })).toBe(15000);
+  });
+
+  it("gives a sticky toast no end: it stays until it is answered or replaced", () => {
+    const pick = { label: "v6", run: vi.fn() };
+    expect(toastLifetime({ title: "t", body: "b", actions: [pick], sticky: true })).toBeNull();
   });
 });
 
