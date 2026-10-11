@@ -28,8 +28,8 @@ pub(crate) fn at(root: &Path, rel: &str) -> PathBuf {
 pub struct Move {
     pub from: String,
     pub to: String,
-    /// The files in it. `COUNT_LIMIT` means "at least that many": the count
-    /// stopped there, or a folder inside couldn't be read.
+    /// The files in it. `COUNT_LIMIT` means "unknown, or at least that many":
+    /// the count stopped there, or a folder inside couldn't be read.
     pub files: u32,
     /// What git ignores of it today: "none", "some" or "all".
     pub ignored: String,
@@ -282,6 +282,10 @@ const V4_TEMPLATE_OUTPUTS: [&str; 8] = [
 const STAYS: [&str; 9] =
     [".ade/rules.md", ".ade/context", ".ade/session.md", ".ade/knowledge", "CLAUDE.md", "llms.txt", ".claude/settings.json", ".claude", ".ade"];
 
+/// What a switch moves whatever the configs say, beside ADE's skills and
+/// role files.
+const ADES: [&str; 7] = [".bmad-core", ".claude/commands/BMad", ".ade/stage", "_bmad", ".ade/approvals", ".ade/gates", ".ade/methodology"];
+
 /// Where a person's own skills, agents and commands are. ADE's entries inside
 /// these move; the folders themselves never do.
 const OWN: [(&str, &str); 3] = [(".claude/agents", "agents"), (".claude/skills", "skills"), (".claude/commands", "commands")];
@@ -291,7 +295,9 @@ const RULE_FILES: [(&str, &str); 2] = [("docs/prd.md", "the PRD"), ("docs/archit
 
 /// The most entries one path's file count looks at. A moved folder can hold a
 /// `node_modules`; the dialog must not wait on it. A `files` equal to this is
-/// "at least this many", and the dialog shows it as "50,000+". The frontend
+/// "unknown, or at least this many": the count stopped here, or met a folder
+/// it couldn't read, which may hold any number. The dialog shows it as
+/// "50,000+", and a total that includes one is a lower bound. The frontend
 /// keeps the same number.
 pub(crate) const COUNT_LIMIT: u32 = 50_000;
 
@@ -300,7 +306,7 @@ pub(crate) const COUNT_LIMIT: u32 = 50_000;
 #[serde(rename_all = "camelCase")]
 pub struct Document {
     pub path: String,
-    /// As `Move.files`: `COUNT_LIMIT` means "at least that many".
+    /// As `Move.files`: `COUNT_LIMIT` means "unknown, or at least that many".
     pub files: u32,
     pub ticked: bool,
     /// What moving it would cost: it is, or holds, a file ADE's rules name.
@@ -485,22 +491,43 @@ impl Unreal {
     }
 }
 
+/// `name` as `folder` spells it. On a disk that ignores case a name reaches
+/// an entry spelled another way; where case counts, the entry found is the
+/// one asked for.
+fn disk_name(folder: &Path, name: &std::ffi::OsStr) -> std::ffi::OsString {
+    let Ok(entries) = std::fs::read_dir(folder) else { return name.to_os_string() };
+    let wanted = name.to_string_lossy().to_lowercase();
+    let mut other_case = None;
+    for entry in entries.flatten() {
+        let found = entry.file_name();
+        if found == name {
+            return found;
+        }
+        if found.to_string_lossy().to_lowercase() == wanted {
+            other_case = Some(found);
+        }
+    }
+    other_case.unwrap_or_else(|| name.to_os_string())
+}
+
 /// Where `rel` really is in the project: every link on the way resolved, and
 /// spelled as the disk spells it (`.BMAD-CORE` is `.bmad-core` on a disk that
 /// ignores case). A path that is itself a link is that link, so only its
-/// parent is resolved; so is one that doesn't exist. Everything the plan
-/// compares is one of these, so two ways to the same file are one path.
+/// parent is resolved, and its name is read from the folder; one that doesn't
+/// exist keeps the name it was given. Everything the plan compares is one of
+/// these, so two ways to the same file are one path.
 fn real_rel(root: &Path, real_root: &Path, rel: &str) -> Result<String, Unreal> {
     if rel.is_empty() {
         return Ok(String::new());
     }
     let path = at(root, rel);
-    let whole = std::fs::symlink_metadata(&path).is_ok_and(|meta| !meta.file_type().is_symlink());
-    let real = if whole {
+    let link = std::fs::symlink_metadata(&path).ok().map(|meta| meta.file_type().is_symlink());
+    let real = if link == Some(false) {
         std::fs::canonicalize(&path).map_err(|e| Unreal::Unreadable(e.to_string()))?
     } else {
         let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else { return Ok(rel.to_string()) };
         match std::fs::canonicalize(parent) {
+            Ok(parent) if link == Some(true) => parent.join(disk_name(&parent, name)),
             Ok(parent) => parent.join(name),
             // Not there yet: as far as it exists.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => resolved(parent).join(name),
@@ -553,6 +580,14 @@ fn inside(root: &Path, configured: &str, what: &str, notes: &mut Vec<Note>) -> O
     }
 }
 
+/// The first part of `rel` that is a link, as a project-relative path.
+fn first_link(root: &Path, rel: &str) -> Option<String> {
+    let parts: Vec<&str> = rel.split('/').filter(|part| !part.is_empty()).collect();
+    (1..=parts.len())
+        .map(|n| parts[..n].join("/"))
+        .find(|prefix| std::fs::symlink_metadata(at(root, prefix)).is_ok_and(|meta| meta.file_type().is_symlink()))
+}
+
 /// `path` is inside `other`. Everything is inside the root (`""`).
 fn nested(path: &str, other: &str) -> bool {
     if other.is_empty() {
@@ -576,12 +611,23 @@ struct Place {
     path: String,
     /// The core-config key that names it, when one does.
     key: Option<&'static str>,
+    /// False for the folder a linked location leads to: it is protected like
+    /// the location, but the dialog offers what the config names.
+    offered: bool,
 }
 
 /// Where a project's documents are: `docs`, the v4 configured locations and
 /// the v4 template outputs, those inside the project, each where it really
-/// is (`settle`). Each once, whatever the case.
-fn document_locations(root: &Path, paths: &V4Paths, notes: &mut Vec<Note>, settle: &mut dyn FnMut(String) -> String) -> Vec<Place> {
+/// is (`settle`). Each once, whatever the case. A location that is itself a
+/// link keeps its name, so the folder it leads to is listed too: `docs ->
+/// realdocs` makes `realdocs` the documents as much as `docs`.
+fn document_locations(
+    root: &Path,
+    real_root: &Path,
+    paths: &V4Paths,
+    notes: &mut Vec<Note>,
+    settle: &mut dyn FnMut(String) -> String,
+) -> Vec<Place> {
     let configured = [
         (&paths.prd_file, "prdFile"),
         (&paths.prd_sharded_location, "prdShardedLocation"),
@@ -595,9 +641,14 @@ fn document_locations(root: &Path, paths: &V4Paths, notes: &mut Vec<Note>, settl
         .chain(V4_TEMPLATE_OUTPUTS.into_iter().map(|location| (location, None)));
     let mut places: Vec<Place> = Vec::new();
     for (location, key) in all {
-        if let Some(path) = inside(root, location, "This document location", notes).map(&mut *settle) {
+        let Some(path) = inside(root, location, "This document location", notes).map(&mut *settle) else { continue };
+        let behind = std::fs::canonicalize(at(root, &path))
+            .ok()
+            .and_then(|real| real.strip_prefix(real_root).ok().map(slashed))
+            .filter(|real| real.to_lowercase() != path.to_lowercase());
+        for (path, offered) in std::iter::once((path, true)).chain(behind.map(|real| (real, false))) {
             if !places.iter().any(|known| known.path.to_lowercase() == path.to_lowercase()) {
-                places.push(Place { path, key });
+                places.push(Place { path, key, offered });
             }
         }
     }
@@ -610,6 +661,7 @@ fn document_locations(root: &Path, paths: &V4Paths, notes: &mut Vec<Note>, settl
 fn documents(root: &Path, places: &[Place]) -> Vec<String> {
     places
         .iter()
+        .filter(|place| place.offered)
         .map(|place| &place.path)
         .filter(|rel| !rel.is_empty() && rel.to_lowercase() != "docs")
         .filter(|rel| !places.iter().any(|other| nested(&other.path, rel)))
@@ -619,14 +671,19 @@ fn documents(root: &Path, places: &[Place]) -> Vec<String> {
 }
 
 /// What archiving `path` would cost: it is one of the files ADE's rules
-/// name, or a folder that holds one. One sentence for each.
-fn warning(root: &Path, path: &str) -> Option<String> {
+/// name, or a folder that holds one. One sentence for each. The rules read
+/// `docs/prd.md` by that name; the disk may spell it `Docs/prd.md`, or keep
+/// it behind a link, and `path` is spelled the disk's way, so each file is
+/// looked for under both spellings.
+fn warning(root: &Path, real_root: &Path, path: &str) -> Option<String> {
     let sentences: Vec<String> = RULE_FILES
         .iter()
         .filter_map(|(file, what)| {
-            if path == *file {
+            let real = real_rel(root, real_root, file).unwrap_or_else(|_| file.to_string());
+            let spellings = [*file, real.as_str()];
+            if spellings.iter().any(|spelling| spelling.to_lowercase() == path.to_lowercase()) {
                 Some(format!("ADE's rules use this file ({what}). The new version starts without it."))
-            } else if nested(file, path) && present(&at(root, file)) {
+            } else if spellings.iter().any(|spelling| within(spelling, path)) && present(&at(root, file)) {
                 Some(format!("This folder holds {file}, which ADE's rules use ({what}). The new version starts without it."))
             } else {
                 None
@@ -724,25 +781,34 @@ struct Limits<'a> {
     sources: &'a [(String, &'static str)],
     /// (where a path really is, how the project's config spelled it).
     aliases: &'a [(String, String)],
+    /// The planned paths a switch moves whatever the configs say.
+    ades: &'a [String],
     archive_device: Option<u64>,
     device: fn(&Path) -> Option<u64>,
 }
 
 impl Limits<'_> {
-    /// `rel` as a reason names it: with the config's spelling first when a
-    /// link makes that another path. Another case of the same name is not
-    /// worth a word.
-    fn shown(&self, rel: &str) -> String {
-        match self.aliases.iter().find(|(real, said)| real == rel && said.to_lowercase() != rel.to_lowercase()) {
-            Some((_, said)) => format!("{said}, which is {rel} through a link,"),
-            None => rel.to_string(),
-        }
+    /// How the config spelled `rel`, when a link makes that another path.
+    /// Another case of the same name is not worth a word.
+    fn said(&self, rel: &str) -> Option<&str> {
+        self.aliases.iter().find(|(real, said)| real == rel && said.to_lowercase() != rel.to_lowercase()).map(|(_, said)| said.as_str())
     }
 }
 
-/// Why nothing may be moved from `spot`, which the reason calls `shown`.
-/// `source` is where a config names it, when one does.
-fn forbidden(spot: &str, shown: &str, kept: &[Place], source: Option<&str>) -> Option<String> {
+/// `spot` as a reason names it: with the config's spelling first when a link
+/// makes that another path.
+fn shown(spot: &str, said: Option<&str>) -> String {
+    match said {
+        Some(said) => format!("{said}, which is {spot} through a link,"),
+        None => spot.to_string(),
+    }
+}
+
+/// Why nothing may be moved from `spot`, which the config spelled `said`
+/// when a link makes that another path. `source` is the config key to change
+/// to unblock it, when there is one.
+fn forbidden(spot: &str, said: Option<&str>, kept: &[Place], source: Option<&str>) -> Option<String> {
+    let shown = shown(spot, said);
     if within(spot, ARCHIVE_DIR) || within(ARCHIVE_DIR, spot) {
         return Some(format!("{shown} holds or is inside {ARCHIVE_DIR}/, so it can't be moved there."));
     }
@@ -770,10 +836,14 @@ fn forbidden(spot: &str, shown: &str, kept: &[Place], source: Option<&str>) -> O
     // is no tick to promise: the reason says what to change.
     if let Some(doc) = kept.iter().find(|doc| within(&doc.path, spot)) {
         let same = doc.path.to_lowercase() == name;
+        let named = match said {
+            Some(said) => format!("`{said}`, which is `{spot}` through a link,"),
+            None => format!("`{spot}`"),
+        };
         let what = if same {
-            format!("`{spot}` is a document location, so it stays.")
+            format!("{named} is a document location, so it stays.")
         } else {
-            format!("`{spot}` holds `{}`, a document location.", doc.path)
+            format!("{named} holds `{}`, a document location.", doc.path)
         };
         let to_do = match (source, doc.key) {
             (Some(source), _) => format!("Change {source}."),
@@ -791,14 +861,18 @@ fn refuse(rel: &str, limits: &Limits) -> Option<String> {
     if rel.is_empty() {
         return Some("A configured location is the project folder itself, which can't be moved.".to_string());
     }
-    let shown = limits.shown(rel);
+    let said = limits.said(rel);
+    let shown = shown(rel, said);
     // Every planned path is where it really is by now. One that has no real
     // place in the project kept the spelling it came with, and stops here.
     if let Err(unreal) = real_rel(limits.root, limits.real_root, rel) {
         return Some(unreal.why(&shown));
     }
-    let source = limits.sources.iter().find(|(path, _)| path == rel).map(|(_, source)| *source);
-    if let Some(why) = forbidden(rel, &shown, limits.kept, source) {
+    // A config key that names a path ADE moves anyway is not what to
+    // change: the path would still move.
+    let own = limits.ades.iter().any(|path| path == rel);
+    let source = limits.sources.iter().find(|(path, _)| !own && path == rel).map(|(_, source)| *source);
+    if let Some(why) = forbidden(rel, said, limits.kept, source) {
         return Some(why);
     }
     let real = at(limits.real_root, rel);
@@ -911,6 +985,12 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
     });
     let paths = crate::bmadconfig::parse_core_config(config.as_deref());
     let v6_skills = env.v6_src.as_deref().map(|src| bundled_skills(root, src)).unwrap_or_default();
+    let ades: Vec<String> = ADES
+        .iter()
+        .map(|path| path.to_string())
+        .chain(v6_skills.iter().cloned())
+        .chain(CORE_ROLES.iter().map(|role| format!(".claude/agents/{role}.md")))
+        .collect();
     let places = match from {
         Methodology::V4 => {
             moves.extend([".bmad-core".to_string(), ".claude/commands/BMad".to_string()]);
@@ -919,7 +999,7 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
                 moves.push(rel);
             }
             moves.push(".ade/stage".to_string());
-            let places = document_locations(root, &paths, &mut notes, &mut settle);
+            let places = document_locations(root, &real_root, &paths, &mut notes, &mut settle);
             offered = documents(root, &places);
             leftovers.push("_bmad".to_string());
             leftovers.extend(v6_skills);
@@ -928,7 +1008,7 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
         Methodology::V6 => {
             // Where v4 would keep documents, so an output folder among them
             // is recognised. One of those outside the project is no news here.
-            let places = document_locations(root, &paths, &mut Vec::new(), &mut settle);
+            let places = document_locations(root, &real_root, &paths, &mut Vec::new(), &mut settle);
             moves.push("_bmad".to_string());
             match crate::bmadconfig::load_central_config(root) {
                 Ok(config) => {
@@ -974,6 +1054,7 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
     };
     let mut moves = existing(moves);
     let leftovers = existing(leftovers);
+    let ades = existing(ades);
     // A document that goes with a move anyway isn't one to offer.
     offered.retain(|doc| !moves.iter().chain(&leftovers).any(|other| other == doc || nested(doc, other)));
     // A document moves only when it was ticked, and only one that is offered:
@@ -986,10 +1067,25 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
     let moves = top(moves);
     let leftovers = top(leftovers);
 
+    // A link on the way to something that moves is not moved itself, and
+    // will point nowhere afterwards.
+    for (real, said) in &aliases {
+        if said.to_lowercase() == real.to_lowercase() {
+            continue;
+        }
+        let Some(link) = first_link(root, said) else { continue };
+        let Some(leads_to) = std::fs::canonicalize(at(root, &link)).ok().and_then(|to| to.strip_prefix(&real_root).ok().map(slashed)) else { continue };
+        let planned = || moves.iter().chain(&leftovers);
+        if planned().any(|path| within(&link, path)) || !planned().any(|path| within(&leads_to, path)) || notes.iter().any(|note| note.path == link) {
+            continue;
+        }
+        notes.push(Note { reason: format!("`{link}` is a link to `{leads_to}`, which moves; the link is left in place."), path: link });
+    }
+
     // What must not be taken along: every document location that exists and
     // every offered document, unless it was ticked or is inside one that was.
     let mut kept: Vec<Place> = places.iter().filter(|place| present(&at(root, &place.path))).cloned().collect();
-    kept.extend(offered.iter().filter(|doc| !places.iter().any(|place| &place.path == *doc)).map(|doc| Place { path: doc.clone(), key: None }));
+    kept.extend(offered.iter().filter(|doc| !places.iter().any(|place| &place.path == *doc)).map(|doc| Place { path: doc.clone(), key: None, offered: true }));
     kept.retain(|place| !ticked.iter().any(|taken| within(&place.path, taken)));
     // `--absolute-git-dir` also answers for a worktree, whose `.git` is a file.
     let git_dir = crate::git::run(env.git, root, &["rev-parse", "--absolute-git-dir"])
@@ -1002,6 +1098,7 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
         kept: &kept,
         sources: &sources,
         aliases: &aliases,
+        ades: &ades,
         archive_device: at(root, &plan.archive).ancestors().find(|p| present(p)).and_then(|p| (env.device)(p)),
         device: env.device,
     };
@@ -1021,7 +1118,7 @@ pub(crate) fn plan_into(root: &Path, to: Methodology, ticked: &[String], env: &E
     plan.leftovers = leftovers.iter().map(|rel| moved(rel, &leftovers_dir)).collect();
     plan.documents = offered
         .iter()
-        .map(|rel| Document { path: rel.clone(), files: count_files(&at(root, rel)), ticked: ticked.contains(rel), warning: warning(root, rel) })
+        .map(|rel| Document { path: rel.clone(), files: count_files(&at(root, rel)), ticked: ticked.contains(rel), warning: warning(root, &real_root, rel) })
         .collect();
     plan.left_in_place = notes;
     plan.blocked = reasons.into_iter().next();
@@ -1653,10 +1750,10 @@ mod tests {
     #[test]
     fn anything_under_a_folder_named_git_is_refused() {
         for spot in [".git", ".GIT/x", ".git/hooks/pre-commit"] {
-            assert_eq!(forbidden(spot, spot, &[], None), Some(format!("{spot} is part of git's own folder.")));
+            assert_eq!(forbidden(spot, None, &[], None), Some(format!("{spot} is part of git's own folder.")));
         }
         for spot in [".github/workflows", ".gitignore", "logs/.git"] {
-            assert_eq!(forbidden(spot, spot, &[], None), None, "{spot}");
+            assert_eq!(forbidden(spot, None, &[], None), None, "{spot}");
         }
     }
 
@@ -1864,6 +1961,11 @@ mod tests {
         let plan = plan(&dir, V6, &[], &env());
         assert_eq!(plan.blocked, None);
         assert_eq!(sources(&plan.moves), [".bmad-core", ".claude/commands/BMad", ".ade/stage", ".ade/methodology", ".claude/agents/qa.md"]);
+        // The link itself is not moved, and will point nowhere afterwards.
+        assert_eq!(
+            plan.left_in_place,
+            [Note { path: "logs".into(), reason: "`logs` is a link to `.bmad-core`, which moves; the link is left in place.".into() }]
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -1895,16 +1997,143 @@ mod tests {
         write(&dir, ".bmad-core/core-config.yaml", "devDebugLog: link/stories\n");
         assert_eq!(
             plan(&dir, V6, &[], &env()).blocked.as_deref(),
-            Some("`docs/stories` is a document location, so it stays. Change `devDebugLog` in core-config.yaml.")
+            Some("`link/stories`, which is `docs/stories` through a link, is a document location, so it stays. Change `devDebugLog` in core-config.yaml.")
         );
         // Not a location, but a folder that holds one.
         write(&dir, "docs/work/stories/1.1.md", "story");
         write(&dir, ".bmad-core/core-config.yaml", "devDebugLog: link/work\ndevStoryLocation: docs/work/stories\n");
         assert_eq!(
             plan(&dir, V6, &[], &env()).blocked.as_deref(),
-            Some("`docs/work` holds `docs/work/stories`, a document location. Change `devDebugLog` in core-config.yaml.")
+            Some(
+                "`link/work`, which is `docs/work` through a link, holds `docs/work/stories`, a document location. Change `devDebugLog` in core-config.yaml."
+            )
         );
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// A project whose `docs` is a link to `realdocs`, another of its folders.
+    #[cfg(unix)]
+    fn with_linked_docs(dir: PathBuf) -> PathBuf {
+        std::fs::rename(dir.join("docs"), dir.join("realdocs")).unwrap();
+        std::os::unix::fs::symlink("realdocs", dir.join("docs")).unwrap();
+        dir
+    }
+
+    #[cfg(unix)]
+    const PRD_IN_FOLDER: &str = "This folder holds docs/prd.md, which ADE's rules use (the PRD). The new version starts without it.";
+
+    // The folder `docs` leads to is the documents as much as `docs` is.
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_docs_folder_is_still_the_documents() {
+        let dir = with_linked_docs(v6_with_output("docs/out", "docs/out"));
+        let unticked = plan(&dir, V4, &[], &env());
+        assert_eq!(unticked.blocked, None);
+        assert!(!sources(&unticked.moves).iter().any(|from| from.ends_with("/out")), "{:?}", sources(&unticked.moves));
+        assert_eq!(unticked.documents.len(), 1, "{:?}", unticked.documents);
+        assert_eq!((unticked.documents[0].path.as_str(), unticked.documents[0].ticked), ("realdocs/out", false));
+        let ticked = plan(&dir, V4, &["realdocs/out".into()], &env());
+        assert_eq!(ticked.blocked, None);
+        assert!(sources(&ticked.moves).contains(&"realdocs/out"), "{:?}", sources(&ticked.moves));
+
+        // The output folder is the link, or the folder behind it: offered
+        // either way, with the warning for the PRD it holds.
+        for output in ["docs", "realdocs"] {
+            write(&dir, "_bmad/config.toml", &format!("[core]\noutput_folder = \"{output}\"\n"));
+            let plan = plan(&dir, V4, &[], &env());
+            assert_eq!(plan.blocked, None, "{output}");
+            assert!(!sources(&plan.moves).contains(&output), "{output}: {:?}", sources(&plan.moves));
+            assert_eq!(plan.documents.len(), 1, "{output}: {:?}", plan.documents);
+            assert_eq!(plan.documents[0].path, output);
+            assert_eq!(plan.documents[0].warning.as_deref(), Some(PRD_IN_FOLDER), "{output}");
+        }
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_v4_project_with_a_linked_docs_folder_keeps_its_documents() {
+        let dir = with_linked_docs(v4_project());
+        let plan = plan(&dir, V6, &[], &env());
+        assert_eq!(plan.blocked, None);
+        assert_eq!(plan.documents.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(), ["realdocs/prd.md", "realdocs/architecture.md", "realdocs/stories"]);
+        assert_eq!(plan.documents[0].warning.as_deref(), Some("ADE's rules use this file (the PRD). The new version starts without it."));
+        assert_eq!(
+            plan.documents[1].warning.as_deref(),
+            Some("ADE's rules use this file (the verification command). The new version starts without it.")
+        );
+        assert_eq!(plan.documents[2].warning, None);
+        // The folder behind the link can't be taken as the debug log, nor the link.
+        for log in ["realdocs", "docs"] {
+            write(&dir, ".bmad-core/core-config.yaml", &format!("devDebugLog: {log}\n"));
+            let blocked = super::plan(&dir, V6, &[], &env()).blocked.unwrap_or_default();
+            assert_eq!(blocked, format!("`{log}` is a document location, so it stays. Change `devDebugLog` in core-config.yaml."));
+        }
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // The disk may spell `docs` its own way where it ignores case. ADE's rules
+    // still read docs/prd.md there, so the warning still holds.
+    #[test]
+    fn a_docs_folder_spelled_another_way_still_carries_the_warnings() {
+        let dir = v4_project();
+        std::fs::rename(dir.join("docs"), dir.join("docs-moving")).unwrap();
+        std::fs::rename(dir.join("docs-moving"), dir.join("Docs")).unwrap();
+        if !present(&at(&dir, "docs/prd.md")) {
+            eprintln!("this disk tells Docs from docs; nothing to check");
+            std::fs::remove_dir_all(dir).ok();
+            return;
+        }
+        let v4 = plan(&dir, V6, &[], &env());
+        assert_eq!(v4.blocked, None);
+        let prd = v4.documents.iter().find(|d| d.path.to_lowercase() == "docs/prd.md").expect("the PRD is offered");
+        assert_eq!(prd.warning.as_deref(), Some("ADE's rules use this file (the PRD). The new version starts without it."));
+
+        // The same folder as a v6 project's output folder.
+        std::fs::remove_dir_all(dir.join(".bmad-core")).unwrap();
+        write(&dir, ".ade/methodology", "v6\n");
+        write(&dir, "_bmad/config.toml", "[core]\noutput_folder = \"docs\"\n");
+        let v6 = plan(&dir, V4, &[], &env());
+        assert_eq!(v6.blocked, None);
+        assert_eq!(v6.documents.len(), 1, "{:?}", v6.documents);
+        assert_eq!(
+            v6.documents[0].warning.as_deref(),
+            Some(
+                "This folder holds docs/prd.md, which ADE's rules use (the PRD). The new version starts without it. \
+                 This folder holds docs/architecture.md, which ADE's rules use (the verification command). The new version starts without it."
+            )
+        );
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // R12: when the path is one ADE moves anyway, changing the key that also
+    // names it would not help; the location inside it is what to change.
+    #[test]
+    fn the_advice_names_the_key_that_would_unblock() {
+        let dir = v4_project();
+        write(&dir, ".bmad-core/core-config.yaml", "devDebugLog: .bmad-core\nqa:\n  qaLocation: .bmad-core/qa\n");
+        write(&dir, ".bmad-core/qa/gate.yml", "gate");
+        assert_eq!(
+            plan(&dir, V6, &[], &env()).blocked.as_deref(),
+            Some("`.bmad-core` holds `.bmad-core/qa`, a document location. Move it out, or change `qaLocation` in core-config.yaml.")
+        );
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    // A path that is itself a link has one name, however the config cases it.
+    #[cfg(unix)]
+    #[test]
+    fn a_second_spelling_of_a_planned_link_is_not_planned_twice() {
+        let dir = v4_project();
+        let outside = temp();
+        std::fs::remove_dir_all(dir.join(".claude/commands/BMad")).unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join(".claude/commands/BMad")).unwrap();
+        write(&dir, ".bmad-core/core-config.yaml", "devDebugLog: .claude/commands/bmad\n");
+        let plan = plan(&dir, V6, &[], &env());
+        assert_eq!(plan.blocked, None);
+        assert_eq!(sources(&plan.moves), [".bmad-core", ".claude/commands/BMad", ".ade/stage", ".ade/methodology", ".claude/agents/qa.md"]);
+        std::fs::remove_dir_all(dir).ok();
+        std::fs::remove_dir_all(outside).ok();
     }
 
     // A folder that can't be resolved is said to be that, not a link.
@@ -2193,11 +2422,22 @@ mod tests {
 
         // A name git would read as a pattern is asked about as the name it is.
         write(&dir, "_bmad/config.toml", "[core]\noutput_folder = \"out[1]\"\n");
+        // `out1` holds an ignored file; `out[1]` itself holds none. (Git reads
+        // this one as the name with or without the option; the `:(top)` case
+        // below is the one that needs it.)
         write(&dir, "out[1]/keep.md", "ticket");
-        write(&dir, "out[1]/mine.user.toml", "[core]\n");
         write(&dir, "out1/all.user.toml", "[core]\n");
         let odd = plan(&dir, V4, &[], &real);
-        assert_eq!(odd.moves.iter().find(|m| m.from == "out[1]").map(|m| m.ignored.as_str()), Some("some"), "{:?}", sources(&odd.moves));
+        assert_eq!(odd.moves.iter().find(|m| m.from == "out[1]").map(|m| m.ignored.as_str()), Some("none"), "{:?}", sources(&odd.moves));
+        write(&dir, "out[1]/mine.user.toml", "[core]\n");
+        assert_eq!(ignored_of(crate::git::GIT, &dir, "out[1]"), "some");
+        // Nor as pathspec magic: `:(top)out1/` would be the folder `out1`.
+        // (Windows has no `:` in file names.)
+        #[cfg(unix)]
+        {
+            write(&dir, ":(top)out1/keep.md", "ticket");
+            assert_eq!(ignored_of(crate::git::GIT, &dir, ":(top)out1"), "none", "ls-files runs with --literal-pathspecs");
+        }
         // The root is never a path to ask git about.
         assert_eq!(ignored_of(crate::git::GIT, &dir, ""), "none");
         std::fs::remove_dir_all(dir).ok();
