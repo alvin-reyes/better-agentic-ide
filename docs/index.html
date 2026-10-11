@@ -8,7 +8,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="#new"><b>NEW</b><span>Project setup: BMAD, methodology and agents →</span></a>
+      <a class="pill" href="#new"><b>NEW</b><span>BMAD v6 in every project, with ADE&rsquo;s own gate →</span></a>
       <p class="hero-kicker">The IDE built for Claude Code developers and architects</p>
       <h1>Verified, <span class="grad-text">not&nbsp;vibed.</span></h1>
       <p class="sub">A desktop terminal where your agents work as a team of roles: architect, developer, QA. Nothing ships until the gate says it&rsquo;s done.</p>
@@ -82,7 +82,10 @@ llms.txt
 .ade/rules.md        <span class="c"># Plan → Approve → Shard → Build → Verify</span>
 .ade/context/        <span class="c"># shared contracts + decisions (ADRs)</span>
 .ade/session.md      <span class="c"># session journal</span>
-.bmad-core/          <span class="c"># BMAD and the /BMad:tasks: commands</span>
+.ade/gates/          <span class="c"># verification gates, one per ticket</span>
+.claude/skills/      <span class="c"># BMAD v6 skills</span>
+_bmad/               <span class="c"># BMAD config and its Node runtime</span>
+_bmad-output/        <span class="c"># tickets and planning documents</span>
 .claude/agents/
   product-manager.md  architect.md  designer.md
   scrum-master.md  developer.md  qa.md
@@ -90,7 +93,7 @@ llms.txt
   <span class="h">+ agents for your stack</span></pre></div>
           <div class="feat-text">
             <h3>Every project, set up for agents</h3>
-            <p>Every project gets BMAD, the ADE methodology and eight core agents, plus Solidity, Solana, Go or Rust agents for its stack.</p>
+            <p>Every project gets BMAD v6 (or v4, if you choose it), the ADE methodology and eight core agents, plus Solidity, Solana, Go or Rust agents for its stack.</p>
             
             <a class="more" href="{{ '/guide/project-setup/' | relative_url }}">How project setup works <span aria-hidden="true">→</span></a>
           </div>
@@ -170,14 +173,19 @@ llms.txt
         <article class="feat-card text feat-card--lead">
           <span class="feat-eyebrow">The root of all of it</span>
           <h3>BMAD, in every project and actually used</h3>
-          <p>Not a nod to a methodology. The pinned <a href="https://github.com/bmad-code-org/BMAD-METHOD">BMAD-METHOD</a>
-            goes into <code>.bmad-core/</code> in every project ADE opens: 21 tasks, 13 templates,
-            6 workflows, 6 checklists and 6 reference sets, plus 21 <code>/BMad:tasks:</code> commands
-            for Claude Code. Nothing is downloaded and nothing you already have is overwritten.</p>
-          <p>The roles name the ones that do their job, so the Scrum Master shards with
-            <code>create-next-story</code> and QA traces criteria with <code>trace-requirements</code>
-            instead of improvising both. Its two phases, Planning and Dev cycle, are the phases
+          <p>Not a nod to a methodology. The pinned <a href="https://github.com/bmad-code-org/BMAD-METHOD">BMAD-METHOD</a> v6
+            goes into every project ADE opens: 33 skills in <code>.claude/skills/</code>, its config in
+            <code>_bmad/</code> and tickets in <code>_bmad-output/</code>. No Python or <code>uv</code> for setup,
+            tickets and the core workflows: those skills call a bundled Node script. v6 dropped BMAD&rsquo;s QA gate, so ADE keeps its own,
+            one verdict per ticket in <code>.ade/gates/</code>. Nothing is downloaded and nothing you
+            already have is overwritten.</p>
+          <p>The roles name the skills that do their job, so the Scrum Master runs the ticket tree with
+            <code>bmad-ticket</code> and QA reviews with <code>bmad-code-review</code> before it records
+            the verdict, instead of improvising both. BMAD&rsquo;s two phases, Planning and Dev cycle, are the phases
             ADE shows you, because they are the ones the work is actually in.</p>
+          <p>BMAD v4 is still a choice for a new project: the classic <code>.bmad-core/</code> with
+            21 tasks, 13 templates, 6 workflows, 6 checklists and 6 reference sets, plus 21
+            <code>/BMad:tasks:</code> commands for Claude Code. A project already on v4 stays on v4.</p>
         </article>
         <article class="feat-card text">
           <h3>Done is a command, not an opinion</h3>
@@ -373,7 +381,7 @@ llms.txt
 
     <div class="new-strip" id="new">
       <span class="badge">New</span>
-      <p><strong>Project setup</strong>, <strong>Anti-slop</strong>, <strong>MCP library</strong> and <strong>Secrets vault</strong>.</p>
+      <p><strong>BMAD v6</strong>, <strong>Project setup</strong>, <strong>Anti-slop</strong>, <strong>MCP library</strong> and <strong>Secrets vault</strong>.</p>
     </div>
   </div>
 </section>
