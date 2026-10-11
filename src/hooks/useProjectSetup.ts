@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { GuardToast } from "./useContextGuard";
 import { movedLabel, type SwitchDone } from "../lib/bmadSwitch";
@@ -120,13 +120,22 @@ const askByToast = (show: (t: GuardToast) => void): AskUi => (root) => {
  * is picked. On later opens, agents for a stack the project has gained since
  * are added.
  *
- * The question belongs to the project the terminal is in: `withdraw` takes its
- * toast down (by key, so no other toast goes with it) when the terminal leaves
- * the project, when automatic setup is turned off, and when the project is set
- * up some other way.
+ * The question belongs to the project the terminal is in. Its toast is taken
+ * down (by key, so no other toast goes with it) when the terminal leaves the
+ * project, when automatic setup is turned off, and when the project is set up
+ * some other way. It is the next run that takes it down, once it knows which
+ * project the new folder is in: a `cd` inside the same project leaves the
+ * toast mounted where it is, rather than withdrawing it and showing it again.
  */
 export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => void, withdraw: (key: string) => void) {
   const enabled = useSettingsStore((s) => s.autoProjectSetup);
+  // The project whose question toast this hook has put on screen, if any.
+  const questionFor = useRef<string | null>(null);
+  const withdrawQuestion = useCallback(() => {
+    const root = questionFor.current;
+    questionFor.current = null;
+    if (root) withdraw(questionKey(root));
+  }, [withdraw]);
   useEffect(() => onProjectHasBmad((root) => {
     const open = asking.get(root);
     // An answered question is its own run's to finish; an open one is over.
@@ -134,24 +143,31 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
       asking.delete(root);
       open.leave();
     }
+    if (questionFor.current && normRoot(questionFor.current) === normRoot(root)) questionFor.current = null;
     withdraw(questionKey(root));
   }), [withdraw]);
+  // The toast goes when the hook does.
+  useEffect(() => withdrawQuestion, [withdrawQuestion]);
   useEffect(() => {
-    if (!enabled || !cwd) return;
+    // No folder, or automatic setup is off: there is no project to ask about.
+    if (!enabled || !cwd) {
+      withdrawQuestion();
+      return;
+    }
     let cancelled = false;
-    // The project this run put the question up for, if it did.
-    let asked: string | null = null;
+    // This run put the question up, or put it up again.
+    let asked = false;
     const byToast = askByToast(show);
     const ask: AskUi = (root) => {
       // The terminal has left: this run has no place to ask from any more.
       if (cancelled) return Promise.resolve(LEAVE_IT);
-      asked = root;
+      asked = true;
+      questionFor.current = root;
       return byToast(root);
     };
-    (async () => {
-      const root = await setupRootOf(cwd);
+    const run = async (root: string) => {
       // Skip projects whose setup the user undid.
-      if (cancelled || !isSetupCandidate(root) || setupDeclined(root)) return;
+      if (!isSetupCandidate(root) || setupDeclined(root)) return;
       // And ones the new-tab dialog is setting up right now. That project can
       // be a folder below `root`: New tab sets up the folder that was picked,
       // and until its marker is written this hook resolves the repository
@@ -195,14 +211,23 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
         // the setup is running. After a failure the next run asks afresh.
         asking.delete(normRoot(root));
       }
+    };
+    (async () => {
+      const root = await setupRootOf(cwd);
+      if (cancelled) return;
+      // Another project's question leaves with it. The same project's stays.
+      if (questionFor.current !== null && normRoot(questionFor.current) !== normRoot(root)) withdrawQuestion();
+      await run(root);
+      // This run found nothing to ask (set up meanwhile, declined, mid-setup):
+      // a question still up for the project has had its day.
+      if (!cancelled && !asked && questionFor.current !== null && normRoot(questionFor.current) === normRoot(root)) withdrawQuestion();
     })();
     return () => {
+      // The question stays open, and so does its toast until the next run
+      // knows whether the terminal is still in the project.
       cancelled = true;
-      // The question stays open, without its toast: the next run for the
-      // project shows it again.
-      if (asked) withdraw(questionKey(asked));
     };
-  }, [cwd, enabled, show, withdraw]);
+  }, [cwd, enabled, show, withdraw, withdrawQuestion]);
 }
 
 /** Test seam: forget every open question. */

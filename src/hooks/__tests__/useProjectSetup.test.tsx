@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { useCallback, useState } from "react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 
 const tauri = vi.hoisted(() => ({
   pending: [] as unknown[],
@@ -41,6 +42,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { __resetSetupQuestionsForTests, useProjectSetup } from "../useProjectSetup";
 import { withdrawToast, type GuardToast } from "../useContextGuard";
+import Toast from "../../components/Toast";
 import { __resetPromptForTests, askAndSetUp, settlePrompt, useMethodologyPrompt } from "../../lib/methodologyPrompt";
 import { openProjectTab } from "../../lib/newTab";
 import { runSwitch, type SwitchPlan } from "../../lib/bmadSwitch";
@@ -234,7 +236,7 @@ describe("the question toast leaves with its project", () => {
     await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
 
     hook.rerender({ cwd: "/code/other" });
-    expect(screen.toast).toBeNull();
+    await waitFor(() => expect(screen.toast).toBeNull());
     await settle();
     expect(screen.toast).toBeNull();
 
@@ -285,6 +287,70 @@ describe("the question toast leaves with its project", () => {
     hook.rerender({ cwd: "/code/other" });
     await settle();
     expect(questions("shop")).toHaveLength(0);
+    expect(screen.toast).toBeNull();
+  });
+
+  it("stays where it is when the terminal changes folder inside the project", async () => {
+    tauri.roots = { "/code/shop/src": "/code/shop", "/code/shop/src/lib": "/code/shop" };
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+    const key = screen.toast!.key;
+
+    hook.rerender({ cwd: "/code/shop/src" });
+    await settle();
+    hook.rerender({ cwd: "/code/shop/src/lib" });
+    await settle();
+    // Withdrawn and shown again, it would flicker on every cd.
+    expect(withdraw).not.toHaveBeenCalled();
+    expect(screen.toast?.title).toBe(SHOP);
+    expect(screen.toast?.key).toBe(key);
+
+    // Still one question: answered once.
+    act(() => screen.toast!.actions![0].run!());
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    await settle();
+    expect(tauri.applies).toHaveLength(1);
+  });
+
+  it("keeps the same toast element mounted through a cd inside the project, and replaces it on leaving", async () => {
+    tauri.roots = { "/code/shop/src": "/code/shop" };
+    setUpBefore("/code/other");
+    // The app's own toast, driven by the hook as App drives it.
+    const Harness = ({ cwd }: { cwd: string | null }) => {
+      const [toast, setToast] = useState<GuardToast | null>(null);
+      const showIt = useCallback((t: GuardToast) => setToast(t), []);
+      const withdrawIt = useCallback((key: string) => setToast((current) => withdrawToast(current, key)), []);
+      useProjectSetup(cwd, showIt, withdrawIt);
+      return toast ? <Toast toast={toast} onDismiss={() => setToast(null)} /> : null;
+    };
+    const view = render(<Harness cwd="/code/shop" />);
+    const node = await view.findByRole("status");
+
+    view.rerender(<Harness cwd="/code/shop/src" />);
+    await settle();
+    expect(view.getByRole("status")).toBe(node);
+
+    view.rerender(<Harness cwd="/code/other" />);
+    await waitFor(() => expect(view.queryByRole("status")).toBeNull());
+
+    view.rerender(<Harness cwd="/code/shop" />);
+    expect(await view.findByRole("status")).not.toBe(node);
+  });
+
+  it("goes when a run for the same project finds nothing left to ask", async () => {
+    tauri.roots = { "/code/shop/src": "/code/shop" };
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+    // Set up meanwhile by another window: no event reached this one.
+    setUpBefore("/code/shop");
+    hook.rerender({ cwd: "/code/shop/src" });
+    await waitFor(() => expect(screen.toast).toBeNull());
+  });
+
+  it("goes when the hook does", async () => {
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(screen.toast?.title).toBe(SHOP));
+    hook.unmount();
     expect(screen.toast).toBeNull();
   });
 });
