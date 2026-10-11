@@ -392,7 +392,7 @@ mod tests {
         assert!(!r.attribution_off && !dir.join(".claude/settings.json").exists());
         let r = apply(&dir, &files(), Some("\nIMPORT\n"), "<!-- m -->", Methodology::V4, None).unwrap();
         assert!(r.attribution_off && r.settings_error.is_none());
-        let settings = dir.join(".claude/settings.json");
+        let settings = dir.join(".claude").join("settings.json");
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
         assert_eq!(v["attribution"]["commit"], "");
         assert_eq!(v["attribution"]["pr"], "");
