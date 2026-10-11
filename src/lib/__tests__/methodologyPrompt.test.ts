@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const tauri = vi.hoisted(() => ({
+  pending: [] as unknown[],
+  pendingFails: false,
   byDir: {} as Record<string, "v4" | "v6" | null>,
   applies: [] as Record<string, unknown>[],
   statusFails: false,
@@ -10,6 +12,9 @@ const tauri = vi.hoisted(() => ({
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args: Record<string, unknown> = {}) => {
     switch (command) {
+      case "bmad_switch_pending":
+        if (tauri.pendingFails) throw new Error("no such command");
+        return tauri.pending;
       case "project_setup_status":
         if (tauri.statusFails) throw new Error("not a folder");
         return { isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: tauri.byDir[args.root as string] ?? null };
@@ -28,7 +33,8 @@ import {
   type MethodologyAnswer,
 } from "../methodologyPrompt";
 import { requestNewTab } from "../newTab";
-import { setUpProject } from "../projectSetup";
+import { beginSwitch } from "../projectSetup";
+import { isKept, setUpProject } from "../projectSetup";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useTabStore } from "../../stores/tabStore";
 
@@ -36,6 +42,8 @@ const request = () => useMethodologyPrompt.getState().request;
 const asked = (root: string) => vi.waitFor(() => expect(request()).toEqual({ root }));
 
 beforeEach(() => {
+  tauri.pending = [];
+  tauri.pendingFails = false;
   localStorage.clear();
   tauri.byDir = {};
   tauri.applies.length = 0;
@@ -217,5 +225,87 @@ describe("projectName", () => {
     expect(projectName("/code/shop")).toBe("shop");
     expect(projectName("/code/shop/")).toBe("shop");
     expect(projectName("C:\\code\\shop")).toBe("shop");
+  });
+});
+
+describe("a project whose BMAD switch didn't finish", () => {
+  const PENDING = { archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" };
+
+  it("is blocked, before the disk is looked at and with no question", async () => {
+    tauri.pending = [PENDING];
+    tauri.statusFails = true;
+    const answer = await askMethodology("/code/shop/");
+    expect(answer).toEqual({
+      kind: "blocked",
+      reason: "A BMAD switch in shop didn't finish. Setup waits until it is resolved: see .ade/archive/bmad-v4-2026-10-11/ARCHIVE.md.",
+    });
+    expect(request()).toBeNull();
+  });
+
+  it("says a record it couldn't read, rather than that the switch didn't finish", async () => {
+    tauri.pending = [{ ...PENDING, status: "unknown" }];
+    const answer = await askMethodology("/code/shop");
+    expect(answer.kind).toBe("blocked");
+    const reason = (answer as { reason: string }).reason;
+    expect(reason).toMatch(/couldn't be read/);
+    expect(reason).not.toMatch(/didn't finish/);
+    expect(reason).toContain(".ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
+  });
+
+  it("is blocked, not clear, when the check itself fails", async () => {
+    tauri.pendingFails = true;
+    tauri.byDir = { "/code/shop": "v6" };
+    expect(await askMethodology("/code/shop")).toEqual({ kind: "blocked", reason: "Couldn't check for an unfinished BMAD switch." });
+    expect(request()).toBeNull();
+  });
+
+  it("is blocked while a switch is running for it", async () => {
+    const end = beginSwitch("/code/shop/");
+    try {
+      expect(await askMethodology("/code/shop")).toEqual({ kind: "blocked", reason: "A BMAD switch is running." });
+      expect(request()).toBeNull();
+    } finally {
+      end();
+    }
+  });
+
+  it("is not set up by the palette or Set up now, which say why", async () => {
+    tauri.pending = [PENDING];
+    await expect(askAndSetUp("/code/shop")).rejects.toMatch(/didn't finish.*ARCHIVE\.md/);
+    expect(tauri.applies).toHaveLength(0);
+  });
+
+  it("still returns the version of a project that has one and nothing pending", async () => {
+    tauri.byDir = { "/code/old": "v4" };
+    expect(await askMethodology("/code/old")).toEqual({ kind: "chosen", methodology: "v4", asked: false });
+  });
+});
+
+describe("the kept list", () => {
+  it("gains a project when its question is answered", async () => {
+    const answer = askMethodology("/code/shop/");
+    await asked("/code/shop");
+    expect(isKept("/code/shop")).toBe(false);
+    settlePrompt({ kind: "chosen", methodology: "v4", asked: true });
+    await answer;
+    expect(isKept("/code/shop")).toBe(true);
+  });
+
+  it("gains it when the question was put another way, such as the cd hook's toast", async () => {
+    const ask = vi.fn(async (): Promise<MethodologyAnswer> => ({ kind: "chosen", methodology: "v6", asked: true }));
+    await askMethodology("/code/shop", { ask });
+    expect(isKept("/code/shop")).toBe(true);
+  });
+
+  it("does not gain a project that merely has a version, or whose question was dismissed", async () => {
+    tauri.byDir = { "/code/old": "v4" };
+    await askMethodology("/code/old");
+    expect(isKept("/code/old")).toBe(false);
+
+    const answer = askMethodology("/code/shop");
+    await asked("/code/shop");
+    settlePrompt({ kind: "dismissed" });
+    await answer;
+    expect(isKept("/code/shop")).toBe(false);
   });
 });

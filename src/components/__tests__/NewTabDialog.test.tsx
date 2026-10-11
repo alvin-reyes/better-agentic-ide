@@ -10,6 +10,7 @@ import { useTabStore } from "../../stores/tabStore";
 // Setup is IPC only: the status command says what a folder is on, and the
 // apply calls record the root and version the dialog's answer led to.
 const tauri = vi.hoisted(() => ({
+  pending: [] as unknown[],
   /** What a folder is on when `byDir` doesn't name it. */
   methodology: null as "v4" | "v6" | null,
   byDir: {} as Record<string, "v4" | "v6" | null>,
@@ -26,6 +27,8 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "project_root":
         return tauri.roots[args.path as string] ?? args.path;
+      case "bmad_switch_pending":
+        return tauri.pending;
       case "project_setup_status":
         return {
           isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [],
@@ -67,6 +70,7 @@ const renderDialog = (onClose = vi.fn()) => {
 };
 
 beforeEach(() => {
+  tauri.pending = [];
   localStorage.clear();
   tauri.methodology = null;
   tauri.byDir = {};
@@ -262,6 +266,25 @@ describe("when something fails", () => {
     expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toContain("disk full");
     // The folder was asked for and answered about: it is open all the same.
     expect(tabs()).toBe(before + 1);
+    window.removeEventListener("project-setup-failed", failed);
+  });
+
+  it("opens a project whose switch didn't finish, without setting it up, and says why", async () => {
+    tauri.pending = [{ archive: ".ade/archive/bmad-v4-2026-10-11", status: "in-progress", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" }];
+    const failed = vi.fn();
+    window.addEventListener("project-setup-failed", failed);
+    picker.picked = NEWAPP;
+    renderDialog();
+    const before = tabs();
+
+    open(/Open project/);
+    await waitFor(() => expect(failed).toHaveBeenCalledOnce());
+    expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toContain(".ade/archive/bmad-v4-2026-10-11/ARCHIVE.md");
+    // A terminal there is how the person resolves it.
+    expect(tabs()).toBe(before + 1);
+    expect(recentProjects()).toEqual([NEWAPP]);
+    expect(question()).toBeNull();
+    expect(tauri.applies).toHaveLength(0);
     window.removeEventListener("project-setup-failed", failed);
   });
 });

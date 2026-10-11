@@ -3,8 +3,9 @@
  * has BMAD keeps its version without a question, and one with neither is asked.
  */
 import { create } from "zustand";
+import { pendingSwitches } from "./bmadSwitch";
 import {
-  detectOnDisk, isSetupCandidate, normRoot, onProjectHasBmad, setUpProject, type Methodology, type SetupResult,
+  detectOnDisk, isSetupCandidate, isSwitching, markKept, normRoot, onProjectHasBmad, setUpProject, type Methodology, type SetupResult,
 } from "./projectSetup";
 
 /**
@@ -20,7 +21,13 @@ export type MethodologyAnswer =
    * nothing to set up, and no second switch.
    */
   | { kind: "chosen"; methodology: Methodology; asked: boolean; done?: SetupResult; switched?: boolean }
-  | { kind: "dismissed" };
+  | { kind: "dismissed" }
+  /**
+   * Setup can't run here: a BMAD switch is running, or an earlier one didn't
+   * finish (or couldn't be checked), so the project may have neither version on
+   * disk. `reason` is for the person.
+   */
+  | { kind: "blocked"; reason: string };
 
 /** A way to put the question to a person. The default is the dialog. */
 export type AskUi = (root: string) => Promise<MethodologyAnswer>;
@@ -77,12 +84,28 @@ export async function versionToSetUp(root: string, answer: Extract<MethodologyAn
  */
 export async function askMethodology(root: string, opts: { ask?: AskUi } = {}): Promise<MethodologyAnswer> {
   const at = normRoot(root);
+  if (isSwitching(at)) return { kind: "blocked", reason: "A BMAD switch is running." };
+  // Fails closed: a check that can't be made is not "nothing pending".
+  const pending = await pendingSwitches(at).then(([first]) => first ?? false, () => null);
+  if (pending === null) return { kind: "blocked", reason: "Couldn't check for an unfinished BMAD switch." };
+  if (pending) {
+    const where = `${pending.archive}/ARCHIVE.md`;
+    return {
+      kind: "blocked",
+      reason: pending.status === "unknown"
+        ? `A BMAD switch in ${projectName(at)} left a record that couldn't be read. Setup waits until it is resolved: see ${where}.`
+        : `A BMAD switch in ${projectName(at)} didn't finish. Setup waits until it is resolved: see ${where}.`,
+    };
+  }
   const detected = await detectOnDisk(at).catch((e) => {
     console.warn("BMAD check failed; asking which version", e);
     return null;
   });
   if (detected) return { kind: "chosen", methodology: detected, asked: false };
-  return (opts.ask ?? askByDialog)(at);
+  const answer = await (opts.ask ?? askByDialog)(at);
+  // A version someone picked is their answer to "which one" for good.
+  if (answer.kind === "chosen" && answer.asked) markKept(at);
+  return answer;
 }
 
 /**
@@ -96,6 +119,8 @@ export async function askAndSetUp(root: string): Promise<SetupResult | null> {
   // A string, as Tauri's own rejections are: callers show it as it is.
   if (!isSetupCandidate(normRoot(root))) throw NOT_A_PROJECT;
   const answer = await askMethodology(root);
+  // Thrown as the string it is, like NOT_A_PROJECT: callers show it as it is.
+  if (answer.kind === "blocked") throw answer.reason;
   if (answer.kind !== "chosen") return null;
   // Set up, and announced, by whoever got there first.
   if (answer.done) return answer.done;

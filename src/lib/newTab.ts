@@ -64,6 +64,13 @@ async function setupRootFor(path: string): Promise<string | null> {
 export async function openProjectTab(path: string): Promise<void> {
   const root = await setupRootFor(path);
   const answer = root ? await askMethodology(root) : null;
+  if (answer?.kind === "blocked") {
+    // Opened as it is: a terminal there is how the switch gets resolved.
+    rememberProject(path);
+    useTabStore.getState().addTab(undefined, path);
+    window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: answer.reason } }));
+    return;
+  }
   // Not answered: a question about another project took this one's place.
   if (answer && answer.kind !== "chosen") return;
   rememberProject(path);

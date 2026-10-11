@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 const tauri = vi.hoisted(() => ({
+  pending: [] as unknown[],
   byDir: {} as Record<string, "v4" | "v6" | null>,
   /** What `project_root` resolves a folder to (default: the folder itself). */
   roots: {} as Record<string, string>,
@@ -18,6 +19,8 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "project_root":
         return tauri.roots[args.path as string] ?? args.path;
+      case "bmad_switch_pending":
+        return tauri.pending;
       case "project_setup_status":
         return {
           isGit: !tauri.notGit.has(args.root as string), missing: [], needsImport: false, bmadInstalled: false, stacks: [],
@@ -58,6 +61,7 @@ const questions = (name?: string) =>
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 
 beforeEach(() => {
+  tauri.pending = [];
   localStorage.clear();
   tauri.byDir = {};
   tauri.roots = {};
@@ -399,6 +403,14 @@ describe("when automatic setup doesn't apply", () => {
     mount("/code/shop");
     await settle();
     expect(show).not.toHaveBeenCalled();
+  });
+
+  it("neither asks nor sets up a project whose switch didn't finish, and shows no toast", async () => {
+    tauri.pending = [{ archive: ".ade/archive/bmad-v4-2026-10-11", status: "incomplete", phase: "moving", from: "v4", to: "v6", date: "2026-10-11" }];
+    mount("/code/shop");
+    await settle();
+    expect(toasts()).toHaveLength(0);
+    expect(tauri.applies).toHaveLength(0);
   });
 });
 

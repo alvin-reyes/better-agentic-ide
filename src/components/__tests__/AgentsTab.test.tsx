@@ -15,6 +15,8 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "project_root":
         return tauri.roots[args.path as string] ?? args.path;
+      case "bmad_switch_pending":
+        return [];
       case "project_setup_status":
         return {
           isGit: true, missing: [], needsImport: false, bmadInstalled: tauri.bmadInstalled, stacks: [],

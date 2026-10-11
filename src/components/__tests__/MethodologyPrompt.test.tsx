@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string) => {
+    if (command === "bmad_switch_pending") return [];
     if (command === "project_setup_status") {
       return { isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: null };
     }

@@ -20,6 +20,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (cmd === "project_setup_status") {
       return { isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: disk.bmad[args.root as string] ?? null };
     }
+    if (cmd === "bmad_switch_pending") return [];
     if (cmd === "path_exists") return disk.exists.has(args.path as string);
     if (cmd === "watch_directory") return 1;
     if (cmd === "project_setup_apply") return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
