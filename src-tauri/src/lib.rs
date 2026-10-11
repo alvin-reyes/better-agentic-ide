@@ -5,6 +5,7 @@ mod bmad;
 pub mod bmadv6;
 mod contracts;
 mod crashlog;
+mod git;
 mod mcp;
 mod platform;
 mod projectsetup;

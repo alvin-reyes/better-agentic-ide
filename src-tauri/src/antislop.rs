@@ -2,14 +2,12 @@
 //! in the frontend) and where the bundled ADE Claude Code plugin lives.
 
 use std::path::Path;
-use std::process::Command;
 use tauri::{AppHandle, Manager};
 
 const MAX_FILE_BYTES: u64 = 200_000;
 
 fn git(project: &str, args: &[&str]) -> Option<String> {
-    let out = Command::new("git").current_dir(project).args(args).output().ok()?;
-    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    crate::git::run(crate::git::GIT, Path::new(project), args)
 }
 
 /// A unified diff (no context) of tracked changes against HEAD, with each new
@@ -62,6 +60,7 @@ pub fn ade_plugin_marketplace(app: AppHandle) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     #[test]
     fn diff_includes_changes_and_new_files() {
