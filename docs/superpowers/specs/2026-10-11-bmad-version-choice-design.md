@@ -119,7 +119,10 @@ requires `.bmad-core/VERSION`, so every v6 project shows "Incomplete").
 ### A project that already has BMAD (plan B)
 
 Asked only from **New Tab**, and only when auto-setup is on and the project
-is not declined or kept. Never from the `cd` hook.
+is not kept. Never from the `cd` hook. A declined project that has BMAD is
+asked too (0.20.2): Keep opens it and sets nothing up; a finished switch
+sets it up, so it is no longer declined. A declined project with no BMAD is
+still not asked which version.
 
 > **shop** uses **BMAD v4**. **Keep v4** (default) · **Switch to v6…**
 

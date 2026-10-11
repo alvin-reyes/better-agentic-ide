@@ -507,20 +507,73 @@ describe("a project that already has BMAD", () => {
     expect(tabs()).toBe(before);
   });
 
-  it("is not asked with automatic setup off, or when its setup was undone", async () => {
+  it("is not asked with automatic setup off", async () => {
     useSettingsStore.getState().setAutoProjectSetup(false);
     renderDialog();
     const before = tabs();
     open(/Open project/);
     await waitFor(() => expect(tabs()).toBe(before + 1));
     expect(question()).toBeNull();
+  });
 
-    useSettingsStore.getState().setAutoProjectSetup(true);
-    localStorage.setItem("ade-project-setup-declined", JSON.stringify([OLDAPP]));
-    await openProjectTab(OLDAPP);
-    expect(tabs()).toBe(before + 2);
-    expect(question()).toBeNull();
-    expect(tauri.applies).toHaveLength(0);
+  describe("whose setup was undone", () => {
+    const declinedNow = () => JSON.parse(localStorage.getItem("ade-project-setup-declined") ?? "[]") as string[];
+
+    beforeEach(() => localStorage.setItem("ade-project-setup-declined", JSON.stringify([OLDAPP])));
+
+    it("is still asked, and Keep opens it without setting it up", async () => {
+      renderDialog();
+      const before = tabs();
+      open(/Open project/);
+      await waitFor(() => expect(question()).toBe(ASK));
+      expect(tabs()).toBe(before);
+
+      fireEvent.keyDown(keepDialog(), { key: "Enter" });
+      await waitFor(() => expect(tabs()).toBe(before + 1));
+      expect(isKeptNow()).toEqual([OLDAPP]);
+      expect(recentProjects()).toEqual([OLDAPP]);
+      await settle();
+      expect(tauri.applies, "its setup stays undone").toHaveLength(0);
+      expect(declinedNow()).toEqual([OLDAPP]);
+      expect(question()).toBeNull();
+    });
+
+    it("switches on Switch, and is no longer left alone", async () => {
+      renderDialog();
+      const before = tabs();
+      open(/Open project/);
+      await waitFor(() => expect(question()).toBe(ASK));
+      fireEvent.click(screen.getByRole("option", { name: /Switch to v6…/ }));
+      const confirm = await screen.findByRole("button", { name: "Archive and switch" });
+      await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(confirm);
+
+      await waitFor(() => expect(tabs()).toBe(before + 1));
+      expect(tauri.switches[0]).toMatchObject({ root: OLDAPP, to: "v6" });
+      expect(isKeptNow()).toEqual([OLDAPP]);
+      expect(declinedNow()).toEqual([]);
+      await settle();
+      expect(tauri.applies, "the switch set the project up").toHaveLength(0);
+    });
+
+    it("is not asked again once kept, and is still not set up", async () => {
+      kept(OLDAPP);
+      const before = tabs();
+      await openProjectTab(OLDAPP);
+      expect(tabs()).toBe(before + 1);
+      expect(question()).toBeNull();
+      await settle();
+      expect(tauri.applies).toHaveLength(0);
+    });
+
+    it("opens without a question while its switch didn't finish", async () => {
+      tauri.pending = [{ archive: ".ade/archive/bmad-v4-2026-10-11", to: "v6" }];
+      const before = tabs();
+      await openProjectTab(OLDAPP);
+      expect(tabs()).toBe(before + 1);
+      expect(question()).toBeNull();
+      expect(tauri.applies).toHaveLength(0);
+    });
   });
 
   it("opens nothing when the question is superseded", async () => {
