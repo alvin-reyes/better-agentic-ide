@@ -1,6 +1,6 @@
-//! Running git without taking its optional locks. The switch and the slop
-//! check use this; `sync.rs`, `usage.rs` and `projectsetup.rs` still call git
-//! themselves (they write, or pass their own flags).
+//! Running git without taking its optional locks. The slop check uses this,
+//! and the switch will. `sync.rs`, `usage.rs` and `projectsetup.rs` still call
+//! git directly.
 
 use std::path::Path;
 use std::process::{Command, Output};

@@ -11,8 +11,8 @@ import { memFs } from "../src/lib/bmadRuntime/fs";
  * would watch another. Both are run over the same fixtures, and both are held
  * to the same expected.json (src-tauri/src/bmadconfig.rs has the Rust half).
  *
- * The fixtures use LF. The Rust reader also accepts CRLF (a Rust-only test);
- * the TS reader does not, and is unchanged.
+ * The fixtures are LF files (see .gitattributes); the CRLF case is built from
+ * the YAML fixture inside the test, and both readers accept it.
  */
 const FIXTURES = resolve(__dirname, "..", "src-tauri/src/fixtures/switch");
 const read = (name: string) => readFileSync(resolve(FIXTURES, name), "utf8");
@@ -26,7 +26,16 @@ describe("the switch's shared config fixtures", () => {
     }
   });
 
-  it("the v6 layers: the TS reader merges them as the Rust reader does", async () => {
+  it("core-config.yaml with Windows line endings reads the same", () => {
+    const crlf = read("core-config.yaml").replace(/\r?\n/g, "\r\n");
+    const paths = parseBmadConfig(crlf);
+    expect(paths.usedDefaults).toBe(false);
+    for (const [key, value] of Object.entries(expected.yaml)) {
+      expect(paths[key as keyof typeof paths], key).toBe(value);
+    }
+  });
+
+  it("the v6 layers:the TS reader merges them as the Rust reader does", async () => {
     const root: string = expected.toml.root;
     const fs = memFs();
     await fs.mkdir(`${root}/_bmad/custom`);
@@ -38,6 +47,8 @@ describe("the switch's shared config fixtures", () => {
     expect(config.core.communication_language).toBe(expected.toml.communicationLanguage);
     expect(config.modules.demo.enabled).toBe(expected.toml.demoEnabled);
     expect(config.modules.demo.level).toBe(expected.toml.demoLevel);
+    // The test substitutes `{project-root}` itself, so this pins the merged
+    // value, not the substitution.
     expect(String(config.core.output_folder).replaceAll("{project-root}", root)).toBe(expected.toml.outputFolder);
   });
 });

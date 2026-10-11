@@ -191,8 +191,8 @@ mod tests {
         assert_eq!(p.dev_debug_log, ".ai/debug-log.md");
     }
 
-    // Rust only, on purpose (plan decision 17): the TS reader reads nothing
-    // from a CRLF file, so this is not part of the shared fixtures.
+    // The TS reader reads CRLF too; scripts/switchFixtures.test.ts holds both
+    // to the same expected.json.
     #[test]
     fn reads_a_config_with_windows_line_endings() {
         let p = parse_core_config(Some("qa:\r\n  qaLocation: quality\r\ndevDebugLog: logs/debug.md\r\n"));
