@@ -35,7 +35,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import {
   __resetPromptForTests, askAndSetUp, askKeepOrSwitch, askMethodology, askSwitch, dismissPrompts, keepVersion, leaveConfirm,
-  projectName, settlePrompt, startSwitch, switchOnDemand, useMethodologyPrompt,
+  isRefusal, projectName, settlePrompt, startSwitch, switchOnDemand, useMethodologyPrompt,
   type MethodologyAnswer,
 } from "../methodologyPrompt";
 import { runSwitch, type SwitchPlan } from "../bmadSwitch";
@@ -594,6 +594,9 @@ describe("switchOnDemand", () => {
 
   it("refuses a project with no BMAD", async () => {
     await expect(switchOnDemand("/code/shop")).rejects.toBe("This project has no BMAD to switch from.");
+    // A reason, as opposed to a step that failed.
+    expect(isRefusal("This project has no BMAD to switch from.")).toBe(true);
+    expect(isRefusal("disk full")).toBe(false);
     expect(request()).toBeNull();
   });
 });

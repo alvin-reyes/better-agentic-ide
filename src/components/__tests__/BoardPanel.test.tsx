@@ -30,6 +30,9 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (cmd === "path_exists") return disk.exists.has(args.path as string);
     if (cmd === "watch_directory") return 1;
     if (cmd === "project_setup_apply") return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
+    if (cmd === "bmad_switch_plan") {
+      return { from: "v4", to: args.to, archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [], leftInPlace: [], dirty: null, archiveIgnored: null, blocked: null };
+    }
     return null;
   }),
   Channel: class { onmessage: unknown = null; },
@@ -45,6 +48,9 @@ vi.mock("../../stores/boardPanelStore", async () => {
   return { useBoardPanel };
 });
 
+// The confirm step asks which terminals are open in the project; there are none.
+vi.mock("../../hooks/useTerminal", () => ({ getPtyCwd: vi.fn(async () => null), destroyInstance: vi.fn(), detachInstance: vi.fn() }));
+
 const launch = vi.hoisted(() => ({ dispatchAgent: vi.fn(async (_a: unknown): Promise<string | null> => null) }));
 vi.mock("../../lib/agentLaunch", () => launch);
 
@@ -56,7 +62,7 @@ vi.mock("../../lib/openFile", async (original) => ({
 
 import BoardPanel from "../board/BoardPanel";
 import MethodologyPromptHost from "../MethodologyPrompt";
-import { __resetPromptForTests } from "../../lib/methodologyPrompt";
+import { __resetPromptForTests, useMethodologyPrompt } from "../../lib/methodologyPrompt";
 import { useBoardPanel } from "../../stores/boardPanelStore";
 import { beginSwitch } from "../../lib/projectSetup";
 import { SWITCH_DONE_EVENT } from "../../lib/bmadSwitch";
@@ -544,5 +550,61 @@ describe("BoardPanel and a BMAD switch", () => {
     await waitFor(() => expect(vi.mocked(invoke).mock.calls.some(([cmd]) => cmd === "bmad_switch_pending")).toBe(true));
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("links to the switch to the other version at the bottom, and opens the confirm step", async () => {
+    disk.bmad = { "/p": "v4" };
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    render(<><BoardPanel cwd="/p" onClose={vi.fn()} /><MethodologyPromptHost /></>);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to BMAD v6…" }));
+    await waitFor(() =>
+      expect(useMethodologyPrompt.getState().request).toEqual({ root: "/p", mode: "confirm", from: "v4", to: "v6", back: false }),
+    );
+    expect(await screen.findByRole("dialog", { name: "Switch to BMAD v6" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+  });
+
+  it("links to v4 from a v6 project", async () => {
+    useBoardPanel.setState({ root: "/p", methodology: "v6", board: null, map: v6Map(), error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Switch to BMAD v4…" })).toBeTruthy();
+  });
+
+  it("has no switch link for a project with no BMAD, or while a switch runs", async () => {
+    useBoardPanel.setState({ root: "/p", methodology: null, board: null, map: null, error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await screen.findByRole("button", { name: "Set up now" });
+    expect(screen.queryByRole("button", { name: /Switch to BMAD/ })).toBeNull();
+
+    act(() => { useBoardPanel.setState({ methodology: "v4", board: v4Board() }); });
+    await screen.findByRole("button", { name: "Switch to BMAD v6…" });
+    let end!: () => void;
+    act(() => { end = beginSwitch("/p"); });
+    expect(screen.queryByRole("button", { name: /Switch to BMAD/ })).toBeNull();
+    act(() => end());
+  });
+
+  it("has no switch link while a switch is unresolved, or when that couldn't be checked", async () => {
+    disk.pending = [pendingEntry("in-progress")];
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    const first = render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: /Switch to BMAD/ })).toBeNull();
+    first.unmount();
+
+    disk.pending = [];
+    disk.pendingFails = true;
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: /Switch to BMAD/ })).toBeNull();
+  });
+
+  it("says why when the switch can't be offered after all", async () => {
+    // The board still shows v4, but the marker is gone from disk.
+    disk.bmad = {};
+    useBoardPanel.setState({ root: "/p", methodology: "v4", board: v4Board(), error: null, loading: false });
+    render(<BoardPanel cwd="/p" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to BMAD v6…" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("This project has no BMAD to switch from.");
   });
 });

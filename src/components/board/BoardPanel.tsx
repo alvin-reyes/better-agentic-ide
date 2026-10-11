@@ -11,8 +11,8 @@ import { useBoardWatch, useExistingFolders } from "./useBoardWatchers";
 import { useDragWidth } from "../../hooks/useDragWidth";
 import { tauriFs } from "../../lib/tauriFs";
 import { isSetupCandidate, isSwitching, normRoot, onSwitchChange, setupRootOf } from "../../lib/projectSetup";
-import { SWITCH_DONE_EVENT, pendingSwitches, type PendingSwitch } from "../../lib/bmadSwitch";
-import { askAndSetUp } from "../../lib/methodologyPrompt";
+import { SWITCH_DONE_EVENT, otherVersion, pendingSwitches, type PendingSwitch } from "../../lib/bmadSwitch";
+import { askAndSetUp, switchOnDemand } from "../../lib/methodologyPrompt";
 import { ROLE_ITEMS } from "../../data/pickerItems";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { joinPath } from "../../lib/bmadRuntime/paths";
@@ -51,6 +51,7 @@ export default function BoardPanel({ cwd, onClose }: Props) {
   const [root, setRoot] = useState<string | null | undefined>(undefined);
   const { root: storeRoot, methodology, board, map, stageFile, error, loading, show, refresh, scheduleRefresh } = useBoardPanel();
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const [dispatchCount, setDispatchCount] = useState(0);
   const { width, onDragStart } = useDragWidth(BOARD_WIDTH.min, BOARD_WIDTH.max, BOARD_WIDTH.initial);
   const provider = useSettingsStore((s) => s.defaultProvider);
@@ -233,6 +234,23 @@ export default function BoardPanel({ cwd, onClose }: Props) {
         </div>
       ))}
       {body}
+      {/* Not offered while a switch runs, with no BMAD, or while one is unresolved or unchecked: those block it. */}
+      {root && methodology && storeRoot === root && !switching && pending?.root === root && !pending.failed && pending.list.length === 0 && (
+        <div style={{ marginTop: "auto", padding: "8px 12px", borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-secondary)" }}>
+          <button
+            type="button"
+            style={LINK}
+            onClick={() => {
+              setSwitchError(null);
+              // Opens the confirm step; nothing moves until that is confirmed.
+              switchOnDemand(root).catch((e) => setSwitchError(String(e)));
+            }}
+          >
+            Switch to BMAD {otherVersion(methodology)}…
+          </button>
+          {switchError && <div role="alert">{switchError}</div>}
+        </div>
+      )}
     </aside>
   );
 }
