@@ -1,15 +1,19 @@
-use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
 
+use crate::ptysink::{lock, pump, Out, Sink};
+
 pub struct PtyInstance {
     writer: Box<dyn Write + Send>,
     _child: Box<dyn portable_pty::Child + Send + Sync>,
-    master: Box<dyn portable_pty::MasterPty + Send>,
+    master: Box<dyn MasterPty + Send>,
     pid: Option<u32>,
+    /// Where this PTY's output goes. The reader thread holds the other handle.
+    sink: Arc<Mutex<Sink>>,
 }
 
 pub struct PtyManager {
@@ -35,6 +39,48 @@ pub enum PtyEvent {
     Exit {},
     #[serde(rename = "error")]
     Error { message: String },
+}
+
+/// A window's channel as a sink output. `send` runs a script in the webview,
+/// so it fails only when the webview can't be reached; a webview that is
+/// alive but no longer listening takes the event and drops it.
+fn channel_out(channel: Channel<PtyEvent>) -> Out {
+    Box::new(move |event| channel.send(event).is_ok())
+}
+
+/// The reader for a PTY's output. Called once per PTY, by whoever creates it:
+/// two readers on one PTY each get part of the output.
+fn clone_reader(master: &dyn MasterPty) -> Result<Box<dyn std::io::Read + Send>, String> {
+    master.try_clone_reader().map_err(|e| format!("clone_reader failed: {}", e))
+}
+
+/// Start the thread that reads a PTY for its whole life. `forget` runs once a
+/// window has been told the shell exited. When none could be told, the PTY
+/// stays, holding its last output, until a window attaches.
+fn start_reader(
+    reader: Box<dyn std::io::Read + Send>,
+    sink: Arc<Mutex<Sink>>,
+    forget: impl FnOnce() + Send + 'static,
+) {
+    std::thread::spawn(move || {
+        if pump(reader, &sink) {
+            forget();
+        }
+    });
+}
+
+/// Point a running PTY's output at another window. It first receives what
+/// was kept while no window could take it. No reader is started: the PTY's
+/// one reader now writes here.
+fn attach(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32, out: Out) -> Result<(), String> {
+    let sink = instances.lock().unwrap().get(&id).ok_or("PTY not found")?.sink.clone();
+    // The shell ended while nobody was attached, and this window has now
+    // been told: there is nothing left to attach to.
+    let exit_delivered = lock(&sink).attach(out);
+    if exit_delivered {
+        instances.lock().unwrap().remove(&id);
+    }
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -91,7 +137,8 @@ pub fn create_pty(
     drop(pair.slave);
 
     let writer = pair.master.take_writer().map_err(|e| format!("take_writer failed: {}", e))?;
-    let mut reader = pair.master.try_clone_reader().map_err(|e| format!("clone_reader failed: {}", e))?;
+    let reader = clone_reader(pair.master.as_ref())?;
+    let sink = Arc::new(Mutex::new(Sink::new(channel_out(on_event))));
 
     let id = state.next_id.fetch_add(1, Ordering::Relaxed);
     state.instances.lock().unwrap().insert(
@@ -101,30 +148,15 @@ pub fn create_pty(
             _child: child,
             master: pair.master,
             pid: child_pid,
+            sink: sink.clone(),
         },
     );
 
-    let instances_ref = state.instances.clone();
-    std::thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    let _ = on_event.send(PtyEvent::Output {
-                        data: buf[..n].to_vec(),
-                    });
-                }
-                Err(e) => {
-                    let _ = on_event.send(PtyEvent::Error {
-                        message: e.to_string(),
-                    });
-                    break;
-                }
-            }
-        }
-        instances_ref.lock().unwrap().remove(&id);
-        let _ = on_event.send(PtyEvent::Exit {});
+    // Started after the insert, so a shell that exits at once still finds
+    // its entry to remove.
+    let instances = state.instances.clone();
+    start_reader(reader, sink, move || {
+        instances.lock().unwrap().remove(&id);
     });
 
     Ok(id)
@@ -169,40 +201,15 @@ pub fn resize_pty(
     Ok(())
 }
 
+/// A window takes over a PTY that is already running (a tab moved to it).
+/// The window that had it receives nothing more.
 #[tauri::command]
 pub fn reattach_pty(
     state: tauri::State<'_, PtyManager>,
     id: u32,
     on_event: Channel<PtyEvent>,
 ) -> Result<(), String> {
-    let instances = state.instances.lock().unwrap();
-    let instance = instances.get(&id).ok_or("PTY not found")?;
-    let mut reader = instance
-        .master
-        .try_clone_reader()
-        .map_err(|e| format!("clone_reader failed: {}", e))?;
-    drop(instances);
-
-    std::thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    if on_event
-                        .send(PtyEvent::Output {
-                            data: buf[..n].to_vec(),
-                        })
-                        .is_err()
-                    {
-                        break; // channel closed (window closed)
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    });
-    Ok(())
+    attach(&state.instances, id, channel_out(on_event))
 }
 
 #[tauri::command]
@@ -485,5 +492,101 @@ mod tests {
 
         child.kill().ok();
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    /// A real shell that prints, then waits for Enter, four times, so the test
+    /// decides what has been printed when it changes windows. Its output must
+    /// follow the window that attached last, with nothing split between two.
+    #[test]
+    fn output_follows_the_window_that_attached_last() {
+        use crate::ptysink::testing::{wait_for, Window};
+
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.args(["-c", "printf A1; read x; printf B2; read x; printf C3; read x; printf D4; read x"]);
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id();
+        let writer = pair.master.take_writer().unwrap();
+        let reader = clone_reader(pair.master.as_ref()).unwrap();
+
+        let first = Window::new();
+        let sink = Arc::new(Mutex::new(Sink::new(first.out())));
+        let id = 7;
+        let instances: Arc<Mutex<HashMap<u32, PtyInstance>>> = Arc::new(Mutex::new(HashMap::new()));
+        instances.lock().unwrap().insert(
+            id,
+            PtyInstance { writer, _child: child, master: pair.master, pid, sink: sink.clone() },
+        );
+        let table = instances.clone();
+        start_reader(reader, sink.clone(), move || {
+            table.lock().unwrap().remove(&id);
+        });
+        let enter = || {
+            let mut table = instances.lock().unwrap();
+            let writer = &mut table.get_mut(&id).unwrap().writer;
+            writer.write_all(b"\n").unwrap();
+            writer.flush().unwrap();
+        };
+        let has = |text: &[u8], word: &str| String::from_utf8_lossy(text).contains(word);
+
+        wait_for("A1 in the first window", || first.text().contains("A1"));
+
+        // The first window goes away. What the shell prints next is kept.
+        first.close();
+        enter();
+        wait_for("B2 in the backlog", || has(crate::ptysink::lock(&sink).kept(), "B2"));
+
+        let second = Window::new();
+        attach(&instances, id, second.out()).unwrap();
+        assert!(second.text().contains("B2"), "the backlog is delivered by the attach itself: {:?}", second.text());
+        assert!(!second.text().contains("A1"), "what the first window already got is not replayed");
+        assert!(!first.text().contains("B2"));
+
+        enter();
+        wait_for("C3 in the second window", || second.text().contains("C3"));
+
+        // A third window attaches while the second is still there.
+        let third = Window::new();
+        attach(&instances, id, third.out()).unwrap();
+        let second_had = second.bytes().len();
+        enter();
+        wait_for("D4 in the third window", || third.text().contains("D4"));
+
+        // The last Enter ends the shell.
+        enter();
+        wait_for("the exit in the third window", || third.exited());
+        wait_for("the PTY to be forgotten", || !instances.lock().unwrap().contains_key(&id));
+
+        assert_eq!(second.bytes().len(), second_had, "the second window got nothing after the swap");
+        assert!(!second.exited() && !first.exited());
+        assert!(!first.text().contains("C3") && !first.text().contains("D4"));
+        assert!(third.text().find("D4").is_some() && !third.text().contains("C3"));
+    }
+}
+
+#[cfg(test)]
+mod wiring_tests {
+    use super::*;
+
+    /// One reader per PTY is a property of this file: the reader is cloned in
+    /// one place and a thread is started in one place. A second of either is
+    /// how two readers came to split a terminal's output. The needles are
+    /// built here so this test doesn't count itself.
+    #[test]
+    fn a_pty_is_read_in_exactly_one_place() {
+        let source = include_str!("pty.rs");
+        assert_eq!(source.matches(concat!("try_clone", "_reader(")).count(), 1);
+        assert_eq!(source.matches(concat!("thread::", "spawn(")).count(), 1);
+    }
+
+    #[test]
+    fn attaching_to_an_unknown_pty_is_an_error() {
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        let window = crate::ptysink::testing::Window::new();
+        assert_eq!(attach(&instances, 99, window.out()), Err("PTY not found".to_string()));
+        assert!(window.events().is_empty(), "the window that asked receives nothing");
     }
 }
