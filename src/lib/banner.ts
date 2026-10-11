@@ -75,15 +75,25 @@ export function bannerLines(version?: string | null): string[] {
     `${DIM}Agentic Development Environment${RESET}`,
     version ? `${DIM}v${version.replace(/^v/, "")}${RESET}` : "",
   ];
-  const lines = [""];
+  const lines: string[] = [];
   for (let i = 0; i < MARK.length; i++) {
     lines.push(`${markRow(MARK[i])}${GAP}${right[i] ?? ""}${RESET}`.replace(/\s+(\x1b\[0m)$/, "$1"));
   }
-  lines.push("");
+  lines.push(""); // one blank line between the banner and the prompt
   return lines;
 }
 
 /** Columns the banner needs; narrower terminals skip it rather than wrap it. */
 export function bannerWidth(): number {
   return Math.max(...bannerLines("0.0.0").map(visibleWidth));
+}
+
+/**
+ * Whether a terminal opening now gets the banner: only the first pane of a
+ * newly opened tab (never a split, never a restored pane), only when the
+ * setting is on, and only when the pane, already fitted, is wide enough to
+ * draw it unwrapped. `cols` is 0 when the pane's real width isn't known.
+ */
+export function shouldShowBanner({ isNewTab, cols, enabled }: { isNewTab: boolean; cols: number; enabled: boolean }): boolean {
+  return enabled && isNewTab && cols >= bannerWidth();
 }
