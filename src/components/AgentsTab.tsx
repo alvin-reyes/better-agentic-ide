@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CLAUDE_MD_IMPORT_MARKER, STACK_AGENTS, STACK_LABELS, agentCatalog, type AgentEntry } from "../lib/projectMethodology";
-import { addAgent, isComplete, removeAgent, setupStatus, type SetupStatus } from "../lib/projectSetup";
+import { addAgent, hasBmad, isComplete, removeAgent, setupStatus, type SetupStatus } from "../lib/projectSetup";
 import { askAndSetUp } from "../lib/methodologyPrompt";
 
 interface Props {
@@ -84,7 +84,7 @@ export default function AgentsTab({ root, onNotice, onError }: Props) {
           <p>
             BMAD, the ADE methodology (.ade/rules.md, loaded from CLAUDE.md), the eight core roles and the agents for this
             project's stack. Only missing files are added.
-            {status && !status.bmadInstalled && " BMAD isn't installed."}
+            {status && !hasBmad(status) && " BMAD isn't installed."}
             {status?.needsImport && " CLAUDE.md doesn't load the methodology yet."}
           </p>
         </div>

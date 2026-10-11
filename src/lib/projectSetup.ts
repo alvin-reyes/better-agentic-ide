@@ -218,8 +218,17 @@ export function foldersUpTo(dir: string, stop: string): string[] {
   return out;
 }
 
+/**
+ * BMAD is in the project: v4's `.bmad-core/VERSION`, or the v6 marker. A v6
+ * project has no `.bmad-core/`, so `bmadInstalled` alone called every v6
+ * project incomplete.
+ */
+export function hasBmad(s: SetupStatus): boolean {
+  return s.bmadInstalled || s.methodology === "v6";
+}
+
 export function isComplete(s: SetupStatus): boolean {
-  return s.missing.length === 0 && !s.needsImport && s.bmadInstalled;
+  return s.missing.length === 0 && !s.needsImport && hasBmad(s);
 }
 
 const inFlight = new Map<string, Promise<SetupResult>>();

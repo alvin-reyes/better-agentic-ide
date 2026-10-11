@@ -101,3 +101,21 @@ describe("the Agents tab's project", () => {
     await waitFor(() => expect(document.querySelector(".contracts-panel__root")?.textContent).toBe("/code/mono/app"));
   });
 });
+
+describe("the Project setup card", () => {
+  it("shows a v6 project as set up", async () => {
+    tauri.byDir = { "/code/shop": "v6" };
+    renderTab("/code/shop");
+    expect(await screen.findByText("Set up")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Re-check" })).toBeTruthy();
+    expect(screen.queryByText("Incomplete")).toBeNull();
+    expect(screen.queryByText(/BMAD isn't installed/)).toBeNull();
+  });
+
+  it("shows a project with no BMAD as incomplete, and says BMAD isn't installed", async () => {
+    renderTab("/code/shop");
+    expect(await screen.findByText("Incomplete")).toBeTruthy();
+    expect(screen.getByText(/BMAD isn't installed/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set up now" })).toBeTruthy();
+  });
+});

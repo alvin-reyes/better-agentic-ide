@@ -42,8 +42,9 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 import { agentCatalog } from "../projectMethodology";
 import {
-  addAgent, addStackAgents, bmadRootOf, detectOnDisk, foldersUpTo, isSettingUp, methodologyOf, normRoot, removeAgent, removedAgents,
-  setUpProject, setupDeclined, setupRootOf, undoSetup, wasSetUp,
+  addAgent, addStackAgents, bmadRootOf, detectOnDisk, foldersUpTo, hasBmad, isComplete, isSettingUp, methodologyOf, normRoot, removeAgent,
+  removedAgents, setUpProject, setupDeclined, setupRootOf, undoSetup, wasSetUp,
+  type SetupStatus,
 } from "../projectSetup";
 
 const lastApply = () => tauri.applies[tauri.applies.length - 1];
@@ -246,5 +247,28 @@ describe("foldersUpTo", () => {
 
   it("is just the folder when it isn't under the stop", () => {
     expect(foldersUpTo("/elsewhere/x", "/mono")).toEqual(["/elsewhere/x"]);
+  });
+});
+
+describe("isComplete", () => {
+  const status = (over: Partial<SetupStatus>): SetupStatus => ({
+    isGit: true, missing: [], needsImport: false, bmadInstalled: false, stacks: [], methodology: null, ...over,
+  });
+
+  it("counts a v6 project as having BMAD", () => {
+    // bmadInstalled is `.bmad-core/VERSION`, which a v6 project never has.
+    expect(hasBmad(status({ methodology: "v6" }))).toBe(true);
+    expect(isComplete(status({ methodology: "v6" }))).toBe(true);
+  });
+
+  it("still needs the engine on disk for a v4 project", () => {
+    expect(isComplete(status({ methodology: "v4" }))).toBe(false);
+    expect(isComplete(status({ methodology: "v4", bmadInstalled: true }))).toBe(true);
+  });
+
+  it("is incomplete with no BMAD, a missing file, or a CLAUDE.md that doesn't load the rules", () => {
+    expect(isComplete(status({}))).toBe(false);
+    expect(isComplete(status({ methodology: "v6", missing: [".ade/rules.md"] }))).toBe(false);
+    expect(isComplete(status({ methodology: "v6", needsImport: true }))).toBe(false);
   });
 });
