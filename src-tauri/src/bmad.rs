@@ -81,17 +81,6 @@ pub fn install(res_root: &Path, project: &Path, report: &mut ScaffoldReport) -> 
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn scaffold_bmad(app: tauri::AppHandle, path: String) -> Result<ScaffoldReport, String> {
-    let project = Path::new(&path);
-    if !project.is_dir() {
-        return Err(format!("Not a directory: {}", path));
-    }
-    let mut report = ScaffoldReport::default();
-    install(&resource_root(&app)?, project, &mut report)?;
-    Ok(report)
-}
-
 pub fn read_status(project: &Path) -> BmadStatus {
     let core = project.join(".bmad-core");
     if !core.is_dir() {

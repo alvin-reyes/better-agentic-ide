@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import BoardView, { type BoardActions } from "./BoardView";
 import V6MapView from "./V6MapView";
 import { useBoardPanel } from "../../stores/boardPanelStore";
@@ -11,7 +10,8 @@ import { watchTargets } from "../../lib/boardWatch";
 import { useBoardWatch, useExistingFolders } from "./useBoardWatchers";
 import { useDragWidth } from "../../hooks/useDragWidth";
 import { tauriFs } from "../../lib/tauriFs";
-import { setUpProject, isSetupCandidate, bmadRootOf } from "../../lib/projectSetup";
+import { isSetupCandidate, setupRootOf } from "../../lib/projectSetup";
+import { askAndSetUp } from "../../lib/methodologyPrompt";
 import { ROLE_ITEMS } from "../../data/pickerItems";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { joinPath } from "../../lib/bmadRuntime/paths";
@@ -49,9 +49,8 @@ export default function BoardPanel({ cwd, onClose }: Props) {
     let live = true;
     if (!cwd) { setRoot(null); return; }
     setRoot(undefined);
-    bmadRootOf(cwd)
-      .catch(() => null)
-      .then(async (found) => found?.root ?? (await invoke<string>("project_root", { path: cwd }).catch(() => cwd)))
+    setupRootOf(cwd)
+      .catch(() => cwd)
       .then((r) => { if (live) setRoot(isSetupCandidate(r) ? r : null); });
     return () => { live = false; };
   }, [cwd]);
@@ -126,9 +125,8 @@ export default function BoardPanel({ cwd, onClose }: Props) {
             onClick={async () => {
               setSetupError(null);
               try {
-                const result = await setUpProject(root);
-                window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result }));
-                await refresh();
+                // Asks which BMAD version first; null means the question was superseded, so do nothing.
+                if (await askAndSetUp(root)) await refresh();
               } catch (e) {
                 setSetupError(String(e));
               }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CLAUDE_MD_IMPORT_MARKER, STACK_AGENTS, STACK_LABELS, agentCatalog, type AgentEntry } from "../lib/projectMethodology";
-import { addAgent, isComplete, removeAgent, setUpProject, setupStatus, type SetupStatus } from "../lib/projectSetup";
+import { addAgent, isComplete, removeAgent, setupStatus, type SetupStatus } from "../lib/projectSetup";
+import { askAndSetUp } from "../lib/methodologyPrompt";
 
 interface Props {
   root: string | null;
@@ -58,9 +59,8 @@ export default function AgentsTab({ root, onNotice, onError }: Props) {
     if (!root) return;
     setBusy("setup");
     try {
-      const r = await setUpProject(root);
-      window.dispatchEvent(new CustomEvent("project-setup-done", { detail: r }));
-      await refresh();
+      // Asks which BMAD version when the project has none; null means the question was superseded.
+      if (await askAndSetUp(root)) await refresh();
     } catch (e) {
       onError(errText(e));
     } finally {
