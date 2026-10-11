@@ -100,34 +100,15 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
         import("../hooks/useTerminal").then(({ getPtyCwd }) =>
           getPtyCwd(cwd.activePaneId).then(async (dir) => {
             // getPtyCwd is null for any pane with no live shell — an
-            // orchestrator, editor, fleet or browser tab. project_root would
-            // then reject on its argument type and the failure would vanish.
+            // orchestrator, editor, fleet or browser tab.
             if (!dir) return failed("This tab has no folder. Open a terminal in the project first.");
-            const { invoke } = await import("@tauri-apps/api/core");
-            const { setUpProject } = await import("../lib/projectSetup");
-            const root = await invoke<string>("project_root", { path: dir });
-            const result = await setUpProject(root);
-            window.dispatchEvent(new CustomEvent("project-setup-done", { detail: result }));
+            const { setupRootOf } = await import("../lib/projectSetup");
+            const { askAndSetUp } = await import("../lib/methodologyPrompt");
+            // A project with no BMAD is asked which version first; the question must be answered.
+            await askAndSetUp(await setupRootOf(dir));
           }),
         ).catch((err) => failed(`Project setup failed: ${err}`));
       } },
-      { id: "bmad-init", label: "BMAD: Initialize in current project", category: "BMAD", action: () => {
-        onClose();
-        // Same shape as project-setup above, and the same two holes: a null cwd
-        // for any pane with no live shell, and a bare .catch that threw the
-        // reason away. Pressing this on an editor or fleet tab did nothing at
-        // all, silently.
-        const failed = (why: string) =>
-          window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why } }));
-        if (!activeTab) return failed("No active tab to initialize.");
-        import("../hooks/useTerminal").then(({ getPtyCwd }) =>
-          getPtyCwd(activeTab.activePaneId).then(async (cwd) => {
-            if (!cwd) return failed("This tab has no folder. Open a terminal in the project first.");
-            const { invoke } = await import("@tauri-apps/api/core");
-            await invoke("scaffold_bmad", { path: cwd });
-          }),
-        ).catch((err) => failed(`BMAD setup failed: ${err}`));
-      }},
       { id: "board-toggle", label: "View: Toggle stage board", shortcut: L("board"), category: "Panels", action: () => { window.dispatchEvent(new CustomEvent("toggle-board")); onClose(); } },
       { id: "tab-switcher", label: "Tabs: Go to tab", shortcut: L("tabSwitcher"), category: "Tabs", action: () => { onClose(); window.dispatchEvent(new CustomEvent("toggle-tab-switcher")); } },
       { id: "tab-reopen", label: "Tabs: Reopen closed tab", shortcut: L("reopenTab"), category: "Tabs", action: () => { onClose(); useTabStore.getState().reopenClosedTab(); } },

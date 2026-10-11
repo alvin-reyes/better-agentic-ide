@@ -22,6 +22,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     }
     if (cmd === "path_exists") return disk.exists.has(args.path as string);
     if (cmd === "watch_directory") return 1;
+    if (cmd === "project_setup_apply") return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
     return null;
   }),
   Channel: class { onmessage: unknown = null; },
@@ -41,6 +42,8 @@ const launch = vi.hoisted(() => ({ dispatchAgent: vi.fn(async (_a: unknown): Pro
 vi.mock("../../lib/agentLaunch", () => launch);
 
 import BoardPanel from "../board/BoardPanel";
+import MethodologyPromptHost from "../MethodologyPrompt";
+import { __resetPromptForTests } from "../../lib/methodologyPrompt";
 import { useBoardPanel } from "../../stores/boardPanelStore";
 import { buildBoard } from "../../stores/stageBoardStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -48,6 +51,8 @@ import { taskUnsupportedReason } from "../../lib/agentCommand";
 import type { V6Map } from "../../lib/v6Map";
 
 beforeEach(() => {
+  __resetPromptForTests();
+  localStorage.clear();
   disk.bmad = {};
   disk.roots = {};
   disk.exists = new Set();
@@ -155,6 +160,44 @@ describe("BoardPanel", () => {
     expect(screen.getByRole("button", { name: "Set up now" })).toBeTruthy();
   });
 
+  const applies = () =>
+    vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "project_setup_apply").map(([, args]) => args as Record<string, unknown>);
+  const question = () => document.querySelector(".new-tab-ask")?.textContent ?? null;
+  const renderWithPrompt = () =>
+    render(
+      <>
+        <BoardPanel cwd="/p/src" onClose={vi.fn()} />
+        <MethodologyPromptHost />
+      </>,
+    );
+
+  it("asks which BMAD version before Set up now sets the project up", async () => {
+    const refresh = vi.fn(async () => {});
+    useBoardPanel.setState({ root: "/p", methodology: null, board: null, map: null, error: null, loading: false, refresh });
+    renderWithPrompt();
+    fireEvent.click(await screen.findByRole("button", { name: "Set up now" }));
+    await waitFor(() => expect(question()).toBe("Set up p with BMAD v6 (default) or BMAD v4?"));
+    expect(applies()).toHaveLength(0);
+
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Set up project" }), { key: "Enter" });
+    await waitFor(() => expect(applies()).toHaveLength(1));
+    expect(applies()[0]).toMatchObject({ root: "/p", methodology: "v6", full: true });
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it("cannot be skipped: Escape leaves the question open and sets nothing up", async () => {
+    const refresh = vi.fn(async () => {});
+    useBoardPanel.setState({ root: "/p", methodology: null, board: null, map: null, error: null, loading: false, refresh });
+    renderWithPrompt();
+    fireEvent.click(await screen.findByRole("button", { name: "Set up now" }));
+    await waitFor(() => expect(question()).not.toBeNull());
+    fireEvent.keyDown(window, { key: "Escape" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(question()).not.toBeNull();
+    expect(applies()).toHaveLength(0);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("shows the BMAD project nested below the repository root, as agent launches resolve it", async () => {
     disk.roots = { "/mono/app/src": "/mono", "/mono/app": "/mono" };
     disk.bmad = { "/mono/app": "v4" };
@@ -193,6 +236,8 @@ describe("BoardPanel", () => {
     useBoardPanel.setState({ root: null, methodology: null, board: null, error: null, loading: false });
     render(<BoardPanel cwd="/home/u" onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("No project in this pane")).toBeTruthy());
+    // So there is nothing to click that could set a home folder up.
+    expect(screen.queryByRole("button", { name: "Set up now" })).toBeNull();
   });
 
   it("falls back to the repository root when nothing is set up", async () => {

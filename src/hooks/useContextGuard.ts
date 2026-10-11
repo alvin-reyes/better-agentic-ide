@@ -5,11 +5,39 @@ import { contextWindow, fmtTokens } from "../lib/tokenUsage";
 
 const CHECK_EVERY_MS = 30_000;
 
+/** A command typed into the active terminal for review (never run), or a callback. */
+export interface ToastAction {
+  label: string;
+  command?: string;
+  run?: () => void;
+}
+
 export interface GuardToast {
   title: string;
   body: string;
-  /** A command typed into the active terminal for review (never run), or a callback. */
-  action?: { label: string; command?: string; run?: () => void };
+  /** Shorthand for a single action. */
+  action?: ToastAction;
+  /** Several buttons, in order. A toast with any action is not dismissed by a click on its body. */
+  actions?: ToastAction[];
+  /** A question that must be answered: it doesn't time out. Another toast still replaces it. */
+  sticky?: boolean;
+  /** Names the toast, so whoever showed it can take it down again (`withdrawToast`). */
+  key?: string;
+}
+
+export function toastActions(t: GuardToast): ToastAction[] {
+  return t.actions ?? (t.action ? [t.action] : []);
+}
+
+/** The toast left on screen once the one named `key` is withdrawn: any other toast stays. */
+export function withdrawToast(current: GuardToast | null, key: string): GuardToast | null {
+  return current?.key === key ? null : current;
+}
+
+/** How long a toast stays up, in ms; null for one that stays. An action gets time to be clicked. */
+export function toastLifetime(t: GuardToast): number | null {
+  if (t.sticky) return null;
+  return toastActions(t).length ? 15000 : 4000;
 }
 
 interface LatestContext {

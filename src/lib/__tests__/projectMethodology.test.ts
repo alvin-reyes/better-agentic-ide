@@ -106,6 +106,18 @@ describe("ADE methodology", () => {
     expect(claude).toMatch(/never override/i);
   });
 
+  it("names both BMAD versions in CLAUDE.md and points at the marker", () => {
+    for (const methodology of ["v4", "v6"] as const) {
+      const claude = methodologyFiles("demo", [], methodology).find((f) => f.path === "CLAUDE.md")!.content;
+      const bmad = claude.slice(claude.indexOf("- **BMAD**"), claude.indexOf("- `adversarial-reviewer`"));
+      expect(bmad).toContain("`.ade/methodology`");
+      expect(bmad).toMatch(/\*\*v4\*\*: the `\/BMad:tasks:` slash commands in `\.bmad-core\/`/);
+      expect(bmad).toMatch(/\*\*v6\*\*: the skills\s+in `\.claude\/skills\/`, with work in `_bmad-output\/`/);
+      // The rule that mattered before still closes the paragraph.
+      expect(bmad).toMatch(/never override/i);
+    }
+  });
+
   it("gives the coding standards exactly one owner", () => {
     const files = methodologyFiles("demo");
     const architect = files.find((f) => f.path === ".claude/agents/architect.md")!.content;

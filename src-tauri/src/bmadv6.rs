@@ -32,6 +32,8 @@ impl Methodology {
 pub struct ScaffoldReport {
     pub created: Vec<PathBuf>,
     pub kept: Vec<PathBuf>,
+    /// Folders the install created, outermost first.
+    pub created_dirs: Vec<PathBuf>,
 }
 
 /// The bundled v6 resources: `skills/`, `VERSION` and the runtime bundle.
@@ -77,7 +79,7 @@ fn copy_tree(src: &Path, dst: &Path, report: &mut ScaffoldReport) -> Result<(), 
         let from = entry.path();
         let to = dst.join(entry.file_name());
         if from.is_dir() {
-            fs::create_dir_all(&to).map_err(|e| e.to_string())?;
+            crate::projectsetup::mkdirs(&to, &mut report.created_dirs)?;
             copy_tree(&from, &to, report)?;
         } else if to.exists() {
             report.kept.push(to);
@@ -106,7 +108,7 @@ pub fn install(src: &Path, dir: &Path, report: &mut ScaffoldReport) -> Result<()
     // Skills: .claude/skills/*
     copy_tree(&src.join("skills"), &dir.join(".claude/skills"), report)?;
     // _bmad/ tree
-    fs::create_dir_all(dir.join("_bmad/custom")).map_err(|e| e.to_string())?;
+    crate::projectsetup::mkdirs(&dir.join("_bmad/custom"), &mut report.created_dirs)?;
     let config = dir.join("_bmad/config.toml");
     if config.exists() {
         report.kept.push(config);
@@ -129,14 +131,14 @@ pub fn install(src: &Path, dir: &Path, report: &mut ScaffoldReport) -> Result<()
     }
     // Runtime bundle: the patched skills call `node {project-root}/_bmad/ade-runtime.mjs`.
     copy_file(&src.join("ade-runtime.mjs"), &dir.join("_bmad/ade-runtime.mjs"), report)?;
-    fs::create_dir_all(dir.join("_bmad-output")).map_err(|e| e.to_string())?;
+    crate::projectsetup::mkdirs(&dir.join("_bmad-output"), &mut report.created_dirs)?;
     // Methodology marker: ADE's own file, not user content, so an explicit v6
     // install is allowed to replace it. A marker left reading "v4" beside a v6
     // tree is the mixed state that would keep every later detect_on_disk — and
     // so setup's own methodology choice — on v4. Nothing else here is
     // overwritten; everything else keeps the nothing-overwrites rule.
     let marker = dir.join(".ade/methodology");
-    fs::create_dir_all(dir.join(".ade")).map_err(|e| e.to_string())?;
+    crate::projectsetup::mkdirs(&dir.join(".ade"), &mut report.created_dirs)?;
     if fs::read_to_string(&marker).map(|s| s.trim() == "v6").unwrap_or(false) {
         report.kept.push(marker);
     } else {
@@ -298,6 +300,28 @@ mod tests {
         let mut report = ScaffoldReport::default();
         assert!(install(&src, &dir, &mut report).is_err(), "a scaffold without the bundle would ship broken skills");
         assert!(!dir.join("_bmad/ade-runtime.mjs").exists());
+        fs::remove_dir_all(&dir).ok();
+        fs::remove_dir_all(&src).ok();
+    }
+
+    /// Empty folders such as `_bmad-output/` hold no file a report could name,
+    /// so the install says which folders it made.
+    #[test]
+    fn install_records_the_folders_it_creates() {
+        let dir = temp("bmadv6-dirs");
+        let src = fixture("bmadv6-dirs-src");
+        fs::create_dir_all(src.join("skills/bmad")).unwrap();
+        fs::write(src.join("skills/bmad/SKILL.md"), "hello").unwrap();
+
+        let mut report = ScaffoldReport::default();
+        install(&src, &dir, &mut report).unwrap();
+        for d in [".claude/skills/bmad", "_bmad", "_bmad/custom", "_bmad-output", ".ade"] {
+            assert!(report.created_dirs.contains(&dir.join(d)), "{d}: {:?}", report.created_dirs);
+        }
+
+        let mut again = ScaffoldReport::default();
+        install(&src, &dir, &mut again).unwrap();
+        assert!(again.created_dirs.is_empty(), "{:?}", again.created_dirs);
         fs::remove_dir_all(&dir).ok();
         fs::remove_dir_all(&src).ok();
     }

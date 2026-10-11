@@ -150,8 +150,10 @@ verification command passes**. No agent certifies its own work.
 ## Agents and commands
 - **Sub-agents** in \`.claude/agents/\`: product-manager, architect, designer, scrum-master,
   developer, qa, devops, adversarial-reviewer. Delegate to the one that owns the work.
-- **BMAD** tasks, checklists, templates and workflows: the \`/BMad:tasks:\` slash commands
-  (\`.bmad-core/\`). These are optional helpers you may run inside the flow. BMAD's own
+- **BMAD** tasks, checklists, templates and workflows, in the version \`.ade/methodology\`
+  names. **v4**: the \`/BMad:tasks:\` slash commands in \`.bmad-core/\`. **v6**: the skills
+  in \`.claude/skills/\`, with work in \`_bmad-output/\`. Either way these are optional
+  helpers you may run inside the flow. BMAD's own
   personas are deliberately not installed — eight of them are the same jobs as the
   sub-agents above, and two definitions of Done is worse than one. The ADE rules in \`.ade/rules.md\` always
   win: a BMAD task can **never override** the verification command, the Definition of

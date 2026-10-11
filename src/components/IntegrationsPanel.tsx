@@ -4,6 +4,7 @@ import { MCP_CATALOG, MCP_CATEGORIES, envRefs, matchCatalog, type McpCategory, t
 import { useEscapeToClose } from "./useEscapeToClose";
 import AntiSlopTab from "./AntiSlopTab";
 import AgentsTab from "./AgentsTab";
+import { setupRootOf } from "../lib/projectSetup";
 
 interface Props {
   cwd: string | null;
@@ -25,6 +26,9 @@ const errText = (e: unknown) => String((e as { message?: string })?.message ?? e
 export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: Props) {
   const [tab, setTab] = useState<"agents" | "mcp" | "secrets" | "antislop">(initialTab);
   const [root, setRoot] = useState<string | null>(null);
+  // The Agents tab works on the BMAD project the pane is in, which can sit
+  // below the repository root the other tabs use.
+  const [agentsRoot, setAgentsRoot] = useState<string | null>(null);
   const [installed, setInstalled] = useState<Servers>({});
   const [secrets, setSecrets] = useState<SecretMeta[]>([]);
   const [tools, setTools] = useState<Record<string, boolean>>({});
@@ -38,6 +42,7 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
   useEffect(() => {
     if (!cwd) return;
     invoke<string>("project_root", { path: cwd }).then(setRoot).catch(() => setRoot(cwd));
+    setupRootOf(cwd).then(setAgentsRoot).catch(() => setAgentsRoot(cwd));
   }, [cwd]);
 
   const loadInstalled = useCallback(() => {
@@ -139,7 +144,7 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
             <button role="tab" aria-selected={tab === "secrets"} onClick={() => setTab("secrets")}>Secrets ({secrets.length})</button>
             <button role="tab" aria-selected={tab === "antislop"} onClick={() => setTab("antislop")}>Anti-slop</button>
           </div>
-          <span className="contracts-panel__root" title={root ?? ""}>{tab === "secrets" ? "System keychain" : root ? (tab === "mcp" ? `${root}/.mcp.json` : root) : "Open a terminal in a project"}</span>
+          <span className="contracts-panel__root" title={(tab === "agents" ? agentsRoot : root) ?? ""}>{tab === "secrets" ? "System keychain" : tab === "agents" ? (agentsRoot ?? "Open a terminal in a project") : root ? (tab === "mcp" ? `${root}/.mcp.json` : root) : "Open a terminal in a project"}</span>
           <button className="contracts-panel__close" onClick={onClose} aria-label="Close integrations" title="Close (Esc)">✕</button>
         </div>
 
@@ -285,7 +290,7 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
 
           {tab === "agents" && (
             <AgentsTab
-              root={root}
+              root={agentsRoot}
               onNotice={(t) => { setError(null); setNotice(t); }}
               onError={setError}
             />
