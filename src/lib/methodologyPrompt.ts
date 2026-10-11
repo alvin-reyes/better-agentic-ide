@@ -43,7 +43,11 @@ export type PromptRequest =
   | { root: string; mode: "keep"; methodology: Methodology }
   | { root: string; mode: "confirm"; from: Methodology; to: Methodology; back: boolean };
 
-export const useMethodologyPrompt = create<{ request: PromptRequest | null }>(() => ({ request: null }));
+/**
+ * `replans`: bumped when the project behind a confirm step changed under it, so
+ * the plan on screen is worked out again.
+ */
+export const useMethodologyPrompt = create<{ request: PromptRequest | null; replans: number }>(() => ({ request: null, replans: 0 }));
 
 /** How a keep-or-switch question, or a switch asked for on its own, ended. */
 export type SwitchAnswer =
@@ -51,7 +55,9 @@ export type SwitchAnswer =
   | { kind: "switched" }
   /** Set up on its version by another route while the question was open: nothing is left to set up. */
   | { kind: "setUp"; done: SetupResult }
-  | { kind: "dismissed" };
+  | { kind: "dismissed" }
+  /** Not asked: another project's switch is running in the dialog. `reason` is for the person. */
+  | { kind: "blocked"; reason: string };
 
 let waiting: { root: string; promise: Promise<MethodologyAnswer>; resolve: (a: MethodologyAnswer) => void } | null = null;
 let deciding: { root: string; promise: Promise<SwitchAnswer>; resolve: (a: SwitchAnswer) => void } | null = null;
@@ -65,8 +71,21 @@ function supersede() {
   decide?.resolve({ kind: "dismissed" });
 }
 
+/**
+ * Why a question about `root` can't take the dialog: another project's switch
+ * is running in it. Replaced, a switch that worked would leave New Tab with no
+ * answer, and one that failed would have nowhere to say so.
+ */
+function switchRunningElsewhere(root: string): string | null {
+  const request = useMethodologyPrompt.getState().request;
+  if (request?.mode !== "confirm" || request.root === root || !isSwitching(request.root)) return null;
+  return `A BMAD switch is running in ${projectName(request.root)}. Wait for it to finish.`;
+}
+
 const askByDialog: AskUi = (root) => {
   if (waiting?.root === root) return waiting.promise;
+  const busy = switchRunningElsewhere(root);
+  if (busy) return Promise.resolve({ kind: "blocked", reason: busy });
   supersede();
   let resolve!: (a: MethodologyAnswer) => void;
   const promise = new Promise<MethodologyAnswer>((r) => { resolve = r; });
@@ -105,8 +124,10 @@ onProjectHasBmad((root, methodology, done) => {
   // A finished switch, whichever dialog ran it: the confirm step's own included.
   if (!done) settleSwitch({ kind: "switched" });
   // A setup ends New Tab's question, which waits to open the folder. A switch
-  // asked for on its own is still what its person asked for.
+  // asked for on its own is still what its person asked for, but its plan was
+  // made before the setup.
   else if (newTabWaits()) settleSwitch({ kind: "setUp", done });
+  else useMethodologyPrompt.setState((s) => ({ replans: s.replans + 1 }));
 });
 
 /**
@@ -186,6 +207,8 @@ function newTabWaits(): boolean {
 }
 
 function decide(request: PromptRequest): Promise<SwitchAnswer> {
+  const busy = switchRunningElsewhere(request.root);
+  if (busy) return Promise.resolve({ kind: "blocked", reason: busy });
   supersede();
   let resolve!: (a: SwitchAnswer) => void;
   const promise = new Promise<SwitchAnswer>((r) => { resolve = r; });
@@ -231,7 +254,10 @@ export async function switchOnDemand(root: string): Promise<SwitchAnswer> {
   const from = await detectOnDisk(at);
   // A string, as NOT_A_PROJECT is: callers show it as it is.
   if (!from) throw NO_BMAD;
-  return askSwitch(at, from);
+  const answer = await askSwitch(at, from);
+  // Thrown as the string it is, as askAndSetUp does: callers show it as it is.
+  if (answer.kind === "blocked") throw answer.reason;
+  return answer;
 }
 
 /** Keep: the project stays on its version, and isn't asked again. */

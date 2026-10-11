@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import NewTabDialog from "../NewTabDialog";
 import MethodologyPromptHost from "../MethodologyPrompt";
-import { __resetPromptForTests, askSwitch } from "../../lib/methodologyPrompt";
+import { __resetPromptForTests, askAndSetUp, askSwitch, switchOnDemand } from "../../lib/methodologyPrompt";
 import { runSwitch, type SwitchPlan } from "../../lib/bmadSwitch";
 import { setUpProject } from "../../lib/projectSetup";
 import { openProjectTab, recentProjects } from "../../lib/newTab";
@@ -24,6 +24,8 @@ const tauri = vi.hoisted(() => ({
   gitInitError: null as string | null,
   switches: [] as Record<string, unknown>[],
   switchError: null as string | null,
+  /** When set, bmad_switch_apply waits for it: the switch is still running. */
+  switchGate: null as Promise<void> | null,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -54,6 +56,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         };
       case "bmad_switch_apply":
         tauri.switches.push(args);
+        if (tauri.switchGate) await tauri.switchGate;
         if (tauri.switchError) throw tauri.switchError;
         return {
           archive: ".ade/archive/bmad-v4-2026-10-11", moved: 2,
@@ -103,6 +106,7 @@ beforeEach(() => {
   tauri.gitInitError = null;
   tauri.switches.length = 0;
   tauri.switchError = null;
+  tauri.switchGate = null;
   __resetPromptForTests();
   useSettingsStore.getState().setAutoProjectSetup(true);
 });
@@ -415,7 +419,9 @@ describe("a project that already has BMAD", () => {
     await settle();
     expect(tauri.applies, "the switch set the project up").toHaveLength(0);
     expect(setupDone).not.toHaveBeenCalled();
-    expect(screen.queryByRole("dialog", { name: /Switch to BMAD|BMAD version/ })).toBeNull();
+    // Only the New tab dialog, which this test keeps mounted, is left.
+    expect(screen.getAllByRole("dialog").map((d) => d.getAttribute("aria-label"))).toEqual(["New tab"]);
+    expect(question()).toBeNull();
     expect(tabs(), "one tab for the folder").toBe(before + 1);
     window.removeEventListener("project-setup-done", setupDone);
   });
@@ -583,5 +589,86 @@ describe("a project that already has BMAD", () => {
     expect(tauri.applies).toHaveLength(0);
     expect(isKeptNow()).toEqual([]);
     window.removeEventListener("project-setup-failed", failed);
+  });
+
+  describe("while its switch is running", () => {
+    const REFUSED = "A BMAD switch is running in oldapp. Wait for it to finish.";
+    const confirmDialog = () => screen.queryByRole("dialog", { name: "Switch to BMAD v6" });
+
+    /** New Tab asked, Switch… was picked and Archive and switch pressed: the switch is held. */
+    const startSwitching = async () => {
+      let release!: () => void;
+      tauri.switchGate = new Promise<void>((r) => { release = r; });
+      renderDialog();
+      open(/Open project/);
+      await waitFor(() => expect(question()).toBe(ASK));
+      fireEvent.click(screen.getByRole("option", { name: /Switch to v6…/ }));
+      const confirm = await screen.findByRole("button", { name: "Archive and switch" });
+      await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(confirm);
+      await waitFor(() => expect(tauri.switches).toHaveLength(1));
+      return release;
+    };
+
+    it("refuses another project's setup, switch and New Tab question, then opens its own folder once", async () => {
+      const failed = vi.fn();
+      window.addEventListener("project-setup-failed", failed);
+      const before = tabs();
+      const release = await startSwitching();
+      tauri.byDir = { [NEWAPP]: null, [OTHER]: "v4" };
+
+      // The palette's "Set up BMAD" and both Set up now buttons.
+      await expect(askAndSetUp(NEWAPP)).rejects.toBe(REFUSED);
+      // The palette's and the board's switch.
+      await expect(switchOnDemand(OTHER)).rejects.toBe(REFUSED);
+      expect(confirmDialog()).toBeTruthy();
+      expect(tabs()).toBe(before);
+
+      // New Tab for a project that would be asked keep-or-switch: opened as a
+      // blocked project is, with the reason and no setup.
+      await openProjectTab(OTHER);
+      expect(tabs()).toBe(before + 1);
+      expect(recentProjects()).toEqual([OTHER]);
+      expect(failed).toHaveBeenCalledOnce();
+      expect((failed.mock.calls[0][0] as CustomEvent<{ why: string }>).detail.why).toBe(REFUSED);
+      expect(isKeptNow()).toEqual([]);
+      // And one that would be asked which version.
+      await openProjectTab(NEWAPP);
+      expect(tabs()).toBe(before + 2);
+      expect(failed).toHaveBeenCalledTimes(2);
+      expect(isKeptNow()).toEqual([]);
+      expect(tauri.applies).toHaveLength(0);
+      expect(confirmDialog(), "the running switch keeps its dialog").toBeTruthy();
+      expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(true);
+
+      release();
+      await waitFor(() => expect(tabs()).toBe(before + 3));
+      await settle();
+      expect(tabs(), "one tab for the switched folder").toBe(before + 3);
+      expect(recentProjects()[0]).toBe(OLDAPP);
+      expect(isKeptNow()).toEqual([OLDAPP]);
+      expect(confirmDialog()).toBeNull();
+      expect(tauri.switches).toHaveLength(1);
+      expect(tauri.applies).toHaveLength(0);
+      window.removeEventListener("project-setup-failed", failed);
+    });
+
+    it("shows a failure in its own dialog after another project's question was refused", async () => {
+      tauri.switchError = "A folder is in use.";
+      const before = tabs();
+      const release = await startSwitching();
+      tauri.byDir = { [NEWAPP]: null };
+      await expect(askAndSetUp(NEWAPP)).rejects.toBe(REFUSED);
+
+      release();
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("A folder is in use."));
+      expect(confirmDialog()).toBeTruthy();
+      expect(tabs()).toBe(before);
+      // The person can still go Back and answer.
+      const back = screen.getByRole("button", { name: "Back" });
+      await waitFor(() => expect((back as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(back);
+      await waitFor(() => expect(question()).toBe(ASK));
+    });
   });
 });

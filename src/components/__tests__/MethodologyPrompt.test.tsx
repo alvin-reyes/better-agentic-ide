@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+
+const tauri = vi.hoisted(() => ({ plans: 0 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string) => {
     if (command === "bmad_switch_pending") return [];
+    if (command === "project_setup_apply") return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
     if (command === "bmad_switch_plan") {
+      tauri.plans += 1;
       return { from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [], leftInPlace: [], dirty: null, archiveIgnored: null, blocked: null };
     }
     if (command === "project_setup_status") {
@@ -20,7 +24,7 @@ vi.mock("../../hooks/useTerminal", () => ({ getPtyCwd: vi.fn(async () => null) }
 import { useEscapeToClose } from "../useEscapeToClose";
 import MethodologyPromptHost, { MethodologyPrompt } from "../MethodologyPrompt";
 import { __resetPromptForTests, askKeepOrSwitch, askMethodology, askSwitch, useMethodologyPrompt } from "../../lib/methodologyPrompt";
-import { isKept } from "../../lib/projectSetup";
+import { isKept, setUpProject } from "../../lib/projectSetup";
 
 const dialog = () => screen.getByRole("dialog", { name: "Set up project" });
 const question = () => document.querySelector(".new-tab-ask");
@@ -199,6 +203,14 @@ describe("MethodologyPrompt, keep-or-switch mode", () => {
     expect(onKeep).not.toHaveBeenCalled();
   });
 
+  it("names the dialog and its list differently, in either mode", () => {
+    renderKeep();
+    expect(screen.getByRole("listbox").getAttribute("aria-label")).not.toBe(keepDialog().getAttribute("aria-label"));
+    cleanup();
+    render(<MethodologyPrompt root="/code/shop" onAnswer={vi.fn()} />);
+    expect(screen.getByRole("listbox").getAttribute("aria-label")).not.toBe(dialog().getAttribute("aria-label"));
+  });
+
   it("must be answered: no close button, and Escape and a click outside do nothing", () => {
     const { onKeep, onSwitch } = renderKeep();
     expect(screen.queryByRole("button")).toBeNull();
@@ -265,9 +277,12 @@ describe("MethodologyPromptHost, keeping or switching", () => {
     expect(await screen.findByRole("dialog", { name: "Switch to BMAD v6" })).toBeTruthy();
     expect(useMethodologyPrompt.getState().request).toEqual({ root: "/code/shop", mode: "confirm", from: "v4", to: "v6", back: true });
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    // The keyboard follows the dialog on screen, each way.
+    expect(document.activeElement).toBe(screen.getByRole("dialog", { name: "Switch to BMAD v6" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(await screen.findByRole("dialog", { name: "BMAD version" })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("dialog", { name: "BMAD version" }));
     expect(settled).toBe(false);
     expect(isKept("/code/shop")).toBe(false);
     // The way back is a new question: Enter keeps again.
@@ -308,6 +323,31 @@ describe("MethodologyPromptHost, keeping or switching", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Back" }));
     expect(await screen.findByRole("dialog", { name: "BMAD version" })).toBeTruthy();
     expect(settled).toBe(false);
+  });
+
+  it("shows the question's own confirm step, with Back, when a switch is asked for while it is open", async () => {
+    render(<MethodologyPromptHost />);
+    let settled = false;
+    void ask(() => askKeepOrSwitch("/code/shop", "v4")).then(() => { settled = true; });
+    await screen.findByRole("dialog", { name: "BMAD version" });
+    void ask(() => askSwitch("/code/shop", "v4"));
+    expect(await screen.findByRole("dialog", { name: "Switch to BMAD v6" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("dialog", { name: "BMAD version" })).toBeTruthy();
+    expect(settled).toBe(false);
+  });
+
+  it("plans again when the project is set up while a switch asked for on its own is open", async () => {
+    render(<MethodologyPromptHost />);
+    tauri.plans = 0;
+    void ask(() => askSwitch("/code/shop", "v4"));
+    await waitFor(() => expect(tauri.plans).toBe(1));
+    await act(async () => { await setUpProject("/code/shop", "v4"); });
+    await waitFor(() => expect(tauri.plans).toBe(2));
+    // Still the same dialog, with its Cancel.
+    expect(screen.getByRole("dialog", { name: "Switch to BMAD v6" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 
   it("settles an open keep-or-switch question as dismissed when the host unmounts", async () => {

@@ -64,15 +64,16 @@ async function setupRootFor(path: string): Promise<string | null> {
  * means a switch runs before any terminal sits in the folders it moves.
  */
 export async function openProjectTab(path: string): Promise<void> {
-  const root = await setupRootFor(path);
-  const answer = root ? await askMethodology(root) : null;
-  if (answer?.kind === "blocked") {
-    // Opened as it is: a terminal there is how the switch gets resolved.
+  // Opened as it is, with no setup: a terminal there is how a switch that
+  // didn't finish gets resolved.
+  const openBlocked = (why: string) => {
     rememberProject(path);
     useTabStore.getState().addTab(undefined, path);
-    window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why: answer.reason } }));
-    return;
-  }
+    window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why } }));
+  };
+  const root = await setupRootFor(path);
+  const answer = root ? await askMethodology(root) : null;
+  if (answer?.kind === "blocked") return openBlocked(answer.reason);
   // Not answered: a question about another project took this one's place.
   if (answer && answer.kind !== "chosen") return;
   // Only New Tab asks this, and only until it is answered: the cd hook never does.
@@ -80,6 +81,8 @@ export async function openProjectTab(path: string): Promise<void> {
   if (root && answer && !answer.asked && !settled && !isKept(root)) {
     const decision = await askKeepOrSwitch(root, answer.methodology);
     if (decision.kind === "dismissed") return;
+    // Another project's switch has the dialog: not asked, so not kept either.
+    if (decision.kind === "blocked") return openBlocked(decision.reason);
     settled = decision.kind !== "kept";
   }
   rememberProject(path);

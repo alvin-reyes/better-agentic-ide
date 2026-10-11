@@ -7,6 +7,8 @@ const tauri = vi.hoisted(() => ({
   applies: [] as Record<string, unknown>[],
   statusFails: false,
   applyFails: false,
+  /** When set, bmad_switch_apply waits for it: the switch is still running. */
+  switchGate: null as Promise<void> | null,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -23,6 +25,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         if (tauri.applyFails) throw new Error("disk full");
         return { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
       case "bmad_switch_apply":
+        if (tauri.switchGate) await tauri.switchGate;
         return { archive: ".ade/archive/bmad-v4-2026-10-11", moved: 2, setup: { created: [], appendedImport: false, agents: 8, bmadFiles: 0 }, rulesAppended: true, archiveDenied: true, movedCapped: false };
       default:
         throw new Error(`unexpected command: ${command}`);
@@ -53,6 +56,7 @@ beforeEach(() => {
   tauri.applies.length = 0;
   tauri.statusFails = false;
   tauri.applyFails = false;
+  tauri.switchGate = null;
   __resetPromptForTests();
 });
 
@@ -486,15 +490,96 @@ describe("a project that changes by another route while keep-or-switch is open",
     expect(request()).toEqual({ root: "/code/old", mode: "keep", methodology: "v4" });
   });
 
-  it("does not settle another project's question when the switch it ran finishes late", async () => {
-    // The confirm step for /code/old was replaced while its switch ran.
+  it("re-plans a switch asked for on its own after a setup: its plan was made before it", async () => {
+    const replans = () => useMethodologyPrompt.getState().replans;
     void askSwitch("/code/old", "v4");
+    const before = replans();
+    await setUpProject("/code/other", "v4");
+    expect(replans()).toBe(before);
+    await setUpProject("/code/old", "v4");
+    expect(replans()).toBe(before + 1);
+  });
+});
+
+describe("another project's question while a switch is running in the confirm step", () => {
+  const PLAN: SwitchPlan = {
+    from: "v4", to: "v6", archive: ".ade/archive/bmad-v4-2026-10-11", moves: [], documents: [], leftovers: [],
+    leftInPlace: [], dirty: false, archiveIgnored: false, blocked: null,
+  };
+  const REFUSED = { kind: "blocked", reason: "A BMAD switch is running in old. Wait for it to finish." };
+  const CONFIRM = { root: "/code/old", mode: "confirm", from: "v4", to: "v6", back: true };
+
+  /** New Tab's question for /code/old, on its confirm step, with the switch started and held. */
+  const switching = () => {
+    let release!: () => void;
+    tauri.switchGate = new Promise<void>((r) => { release = r; });
+    const newTab = askKeepOrSwitch("/code/old", "v4");
+    startSwitch();
     const running = runSwitch("/code/old", PLAN);
-    const other = askKeepOrSwitch("/code/other", "v4");
+    return { newTab, running, release };
+  };
+
+  it("refuses a setup's question, and leaves the dialog and its asker alone", async () => {
+    const { newTab, running, release } = switching();
+    let settled = false;
+    void newTab.then(() => { settled = true; });
+
+    expect(await askMethodology("/code/shop")).toEqual(REFUSED);
+    await expect(askAndSetUp("/code/shop")).rejects.toBe(REFUSED.reason);
+    expect(request()).toEqual(CONFIRM);
+    expect(settled).toBe(false);
+    expect(tauri.applies).toHaveLength(0);
+    expect(isKept("/code/shop")).toBe(false);
+
+    release();
     await running;
-    expect(request()).toEqual({ root: "/code/other", mode: "keep", methodology: "v4" });
-    keepVersion();
-    expect(await other).toEqual({ kind: "kept" });
+    expect(await newTab).toEqual({ kind: "switched" });
+  });
+
+  it("refuses a keep-or-switch question and a switch asked for on its own", async () => {
+    const { newTab, running, release } = switching();
+    tauri.byDir = { "/code/other": "v6" };
+    expect(await askKeepOrSwitch("/code/other", "v6")).toEqual(REFUSED);
+    expect(await askSwitch("/code/other", "v6")).toEqual(REFUSED);
+    await expect(switchOnDemand("/code/other")).rejects.toBe(REFUSED.reason);
+    expect(request()).toEqual(CONFIRM);
+    expect(isKept("/code/other")).toBe(false);
+
+    release();
+    await running;
+    expect(await newTab).toEqual({ kind: "switched" });
+    expect(request()).toBeNull();
+  });
+
+  it("still answers a project that needs no dialog, and one asked another way", async () => {
+    const { running, release } = switching();
+    tauri.byDir = { "/code/other": "v6" };
+    expect(await askMethodology("/code/other")).toEqual({ kind: "chosen", methodology: "v6", asked: false });
+    const ask = vi.fn(async (): Promise<MethodologyAnswer> => ({ kind: "chosen", methodology: "v4", asked: true }));
+    expect(await askMethodology("/code/shop", { ask })).toEqual({ kind: "chosen", methodology: "v4", asked: true });
+    release();
+    await running;
+  });
+
+  it("shares the running switch's question with a second asker for the same project", () => {
+    const { newTab, release } = switching();
+    expect(askKeepOrSwitch("/code/old/", "v4")).toBe(newTab);
+    expect(askSwitch("/code/old", "v4")).toBe(newTab);
+    expect(request()).toEqual(CONFIRM);
+    release();
+  });
+
+  it("is replaced as before once the switch is over, or before it starts", async () => {
+    const { newTab, running, release } = switching();
+    release();
+    await running;
+    await newTab;
+    const confirm = askSwitch("/code/old", "v6");
+    const other = askMethodology("/code/shop");
+    await asked("/code/shop");
+    expect(await confirm).toEqual({ kind: "dismissed" });
+    settlePrompt({ kind: "dismissed" });
+    await other;
   });
 });
 

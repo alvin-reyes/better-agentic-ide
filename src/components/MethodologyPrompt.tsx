@@ -33,12 +33,15 @@ export function MethodologyPrompt(props: Props) {
   const { root } = props;
   const name = projectName(root);
   let heading: string;
+  // Not the dialog's name: a screen reader would say it twice.
+  let list: string;
   let question: ReactNode;
   let rows: Row[];
   if (props.mode === "keep") {
     const { methodology, onKeep, onSwitch } = props;
     const other = otherVersion(methodology);
     heading = "BMAD version";
+    list = "Keep or switch";
     question = (
       <>
         <b>{name}</b> uses <b>BMAD {methodology}</b>. <b>Keep {methodology}</b> (default) · <b>Switch to {other}…</b>
@@ -57,6 +60,7 @@ export function MethodologyPrompt(props: Props) {
   } else {
     const { onAnswer } = props;
     heading = "Set up project";
+    list = "BMAD version";
     question = (
       <>
         Set up <b>{name}</b> with <b>BMAD v6</b> (default) or <b>BMAD v4</b>?
@@ -102,7 +106,7 @@ export function MethodologyPrompt(props: Props) {
           <span className="contracts-panel__root" title={root}>{root}</span>
         </div>
         <p className="new-tab-ask">{question}</p>
-        <ul className="new-tab-list" role="listbox" aria-label="BMAD version">
+        <ul className="new-tab-list" role="listbox" aria-label={list}>
           {rows.map((row, i) => (
             <li
               key={row.key}
@@ -125,13 +129,15 @@ export function MethodologyPrompt(props: Props) {
 /** Renders the dialog for whichever project is being asked about, in the mode it is asked in. */
 export default function MethodologyPromptHost() {
   const request = useMethodologyPrompt((s) => s.request);
+  const replans = useMethodologyPrompt((s) => s.replans);
   // Nobody is left to answer a question the host can no longer show.
   useEffect(() => () => dismissPrompts(), []);
   if (!request) return null;
   if (request.mode === "confirm") {
     return (
       <SwitchConfirm
-        key={`confirm:${request.root}`}
+        // A new dialog when the project changed under the plan: it plans again.
+        key={`confirm:${request.root}:${replans}`}
         root={request.root}
         to={request.to}
         leaveLabel={request.back ? "Back" : "Cancel"}
