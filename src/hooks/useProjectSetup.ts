@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { GuardToast } from "./useContextGuard";
+import { movedLabel, type SwitchDone } from "../lib/bmadSwitch";
+import { joinPath } from "../lib/bmadRuntime/paths";
+import { openFileFromTerminal } from "../lib/openFile";
 import { STACK_LABELS } from "../lib/projectMethodology";
 import { askMethodology, projectName, versionToSetUp, type AskUi, type MethodologyAnswer } from "../lib/methodologyPrompt";
 import {
@@ -22,6 +25,23 @@ export function announceSetup(r: SetupResult, show: (t: GuardToast) => void, sta
     title: stackOnly ? `${stacks} detected in ${projectName(r.root)}` : `Set up ${projectName(r.root)}`,
     body: [added, failed].filter(Boolean).join(" "),
     action: { label: "Undo", run: () => { void undoSetup(r); } },
+  });
+}
+
+/**
+ * Say that a switch went through. Unlike a setup's toast it offers no Undo:
+ * undoing the setup would leave the project with no BMAD at all. The way back
+ * is in ARCHIVE.md, which it links to.
+ */
+export function announceSwitch(done: SwitchDone, show: (t: GuardToast) => void) {
+  const { archive, archiveDenied } = done.result;
+  const guard = archiveDenied
+    ? "Agents can't edit the archive: a permission rule in .claude/settings.json stops them."
+    : "The permission rule that stops agents editing the archive couldn't be added to .claude/settings.json, so the archive isn't protected from edits.";
+  show({
+    title: `Switched ${projectName(done.root)} to BMAD ${done.to}`,
+    body: `Moved ${movedLabel(done.result)} to ${archive}/. ${guard} Agents already running keep their old role prompt until restarted.`,
+    action: { label: "Open ARCHIVE.md", run: () => openFileFromTerminal(joinPath(done.root, `${archive}/ARCHIVE.md`)) },
   });
 }
 
