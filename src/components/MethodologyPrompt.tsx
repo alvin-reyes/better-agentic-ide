@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { projectName, settlePrompt, useMethodologyPrompt } from "../lib/methodologyPrompt";
 import type { Methodology } from "../lib/projectSetup";
 import { useEscapeToClose } from "./useEscapeToClose";
@@ -20,16 +20,27 @@ export function MethodologyPrompt({ root, onAnswer }: Props) {
   const [cursor, setCursor] = useState(0);
   // A stable ref callback: an inline arrow would run again on every render and
   // pull focus back to the dialog.
-  const focusOnMount = useCallback((el: HTMLDivElement | null) => el?.focus(), []);
+  const dialog = useRef<HTMLDivElement | null>(null);
+  const focusOnMount = useCallback((el: HTMLDivElement | null) => { dialog.current = el; el?.focus(); }, []);
   // The question must be answered. Registered anyway so that, as the top of
   // the stack, it keeps Escape from closing a panel beneath it.
   useEscapeToClose(noop);
 
   return (
-    <div className="contracts-panel-overlay">
+    <div
+      className="contracts-panel-overlay"
+      // A press on the backdrop answers nothing, and must not take the keyboard
+      // from the dialog either: Enter and the arrows would stop working.
+      onMouseDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        e.preventDefault();
+        dialog.current?.focus();
+      }}
+    >
       <div
         className="contracts-panel new-tab-dialog"
         role="dialog"
+        aria-modal="true"
         aria-label="Set up project"
         tabIndex={-1}
         ref={focusOnMount}

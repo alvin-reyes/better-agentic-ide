@@ -52,9 +52,36 @@ describe("MethodologyPrompt, choose mode", () => {
   });
 
   it("has no close button, and a click outside does nothing", () => {
+    const onAnswer = vi.fn();
+    render(<MethodologyPrompt root="/code/shop" onAnswer={onAnswer} />);
+    expect(screen.queryByRole("button")).toBeNull();
+    const backdrop = dialog().parentElement!;
+    fireEvent.mouseDown(backdrop);
+    fireEvent.click(backdrop);
+    expect(onAnswer).not.toHaveBeenCalled();
+    expect(dialog()).toBeTruthy();
+  });
+
+  it("takes the keyboard back when the backdrop is pressed", () => {
+    const onAnswer = vi.fn();
+    render(<MethodologyPrompt root="/code/shop" onAnswer={onAnswer} />);
+    dialog().blur();
+    expect(document.activeElement).not.toBe(dialog());
+    // Not cancelled, the press would move focus to the page and Enter would go nowhere.
+    expect(fireEvent.mouseDown(dialog().parentElement!)).toBe(false);
+    expect(document.activeElement).toBe(dialog());
+    fireEvent.keyDown(document.activeElement!, { key: "Enter" });
+    expect(onAnswer).toHaveBeenCalledWith("v6");
+  });
+
+  it("leaves a press inside the dialog alone", () => {
     render(<MethodologyPrompt root="/code/shop" onAnswer={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
-    fireEvent.click(dialog().parentElement!);
+    expect(fireEvent.mouseDown(screen.getByRole("option", { name: /BMAD v4/ }))).toBe(true);
+  });
+
+  it("is a modal dialog to assistive technology", () => {
+    render(<MethodologyPrompt root="/code/shop" onAnswer={vi.fn()} />);
+    expect(dialog().getAttribute("aria-modal")).toBe("true");
   });
 
   it("ignores Escape", () => {
