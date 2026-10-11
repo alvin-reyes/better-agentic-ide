@@ -134,4 +134,14 @@ describe("buildV6Map", () => {
     await fs.writeText("/p/_bmad/config.toml", "[core\nbroken");
     await expect(buildV6Map("/p", fs)).rejects.toThrow();
   });
+
+  it("an unreadable gates folder is a problem; the docs still render", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", tree);
+    await write(fs, `${I}/prd-shop/prd-shop.md`, "---\nstatus: final\n---\n");
+    await write(fs, "/p/.ade/gates", "not a folder");
+    const map = await buildV6Map("/p", fs);
+    expect(map.docs.planning.map((d) => d.status)).toEqual(["final"]);
+    expect(map.problems.some((p) => p.startsWith("Gates could not be read: "))).toBe(true);
+  });
 });

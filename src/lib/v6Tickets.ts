@@ -61,8 +61,20 @@ export async function v6Tickets(root: string, fs: Fs): Promise<V6Tickets> {
   }
 
   // Gates are read regardless, so an orphan verdict still surfaces.
-  const gates = (await findGates(projectRoot, "v6", fs)).map((g) => parseGate(g.file, g.yaml));
-  const approved = await approvedRefs(projectRoot, fs);
+  // An unreadable `.ade/` is a problem too: only the config fails the build.
+  const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+  let gates: Gate[] = [];
+  try {
+    gates = (await findGates(projectRoot, "v6", fs)).map((g) => parseGate(g.file, g.yaml));
+  } catch (e) {
+    problems.push(`Gates could not be read: ${message(e)}`);
+  }
+  let approved = new Set<string>();
+  try {
+    approved = await approvedRefs(projectRoot, fs);
+  } catch (e) {
+    problems.push(`Approvals could not be read: ${message(e)}`);
+  }
   const tickets = (tree?.tickets ?? [])
     .map((t) => withApproval(ticketView(t, gates), approved))
     .sort((a, b) => a.story.id.localeCompare(b.story.id, undefined, { numeric: true }));

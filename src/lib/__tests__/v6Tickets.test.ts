@@ -116,4 +116,14 @@ describe("v6Tickets", () => {
     const strict = { ...fs, append: async () => { throw new Error("append"); }, delete: async () => { throw new Error("delete"); } };
     await expect(v6Tickets("/p", strict)).resolves.toBeDefined();
   });
+
+  it("an unreadable approvals folder is a problem, not a failure", async () => {
+    const fs = memFs();
+    await seedV6Tree(fs, "/p", oneTicket("ready-for-dev"));
+    await fs.mkdir("/p/.ade");
+    await fs.writeText("/p/.ade/approvals", "not a folder");
+    const r = await v6Tickets("/p", fs);
+    expect(r.tickets).toHaveLength(1);
+    expect(r.problems.some((p) => p.startsWith("Approvals could not be read: "))).toBe(true);
+  });
 });

@@ -8,7 +8,7 @@ import type { Gate } from "./bmadGates";
 import type { StoryView } from "./storyState";
 import { v6Tickets } from "./v6Tickets";
 import {
-  classifyFolder, isDirectory, isFile, readFolderDoc, readPlanFile, readRetrospective, relativeTo,
+  classifyFolder, isDirectory,readFolderDoc, readPlanFile, readRetrospective, relativeTo,
   type DocResult, type V6Doc, type V6Phase,
 } from "./v6Kinds";
 
@@ -55,9 +55,11 @@ async function scanFolder(projectRoot: string, dir: string, skip: (name: string)
 }
 
 async function initiativeTitle(folder: string, name: string, fs: Fs): Promise<string> {
-  const doc = joinPath(folder, `${name}.md`);
-  if (!(await isFile(doc, fs))) return name;
-  return readFrontmatter(await fs.readText(doc))?.title || name;
+  try {
+    return readFrontmatter(await fs.readText(joinPath(folder, `${name}.md`)))?.title || name;
+  } catch {
+    return name;
+  }
 }
 
 /**
