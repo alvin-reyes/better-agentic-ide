@@ -509,6 +509,7 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .tokens-tips li > div { flex: 1; min-width: 0; }
 .tokens-tips b { font-size: 12.5px; font-weight: 600; }
 .tokens-tips p { margin: 3px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.tokens-tips + .contracts-action { margin-top: 6px; }
 .tokens-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .tokens-table th { text-align: left; font-weight: 500; font-size: 11px; color: var(--text-muted); padding: 4px 8px; border-bottom: 1px solid var(--border); }
 .tokens-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text-secondary); }

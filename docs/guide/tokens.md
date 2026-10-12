@@ -39,6 +39,19 @@ The panel suggests savings based on your own usage:
 - **Sub-agents on the top-tier model.** Set **Sub-agent model** to Sonnet (see below). For agents that only search and read, `model: haiku` in their `.claude/agents/*.md` frontmatter saves more.
 - **Long responses.** Output costs about five times as much as input, so ask for targeted edits instead of whole files.
 - **Large `CLAUDE.md` files and many MCP servers.** Both are part of every request.
+- **Sessions that ran full.** Two or more sessions that filled 80% of the context window in the period. `/compact` at a natural break, or set **Auto-compact at** (see below) so Claude Code compacts sooner.
+- **A session compacted again and again.** Three compactions or more in one session in the period. Split the work into smaller tasks and `/clear` between them.
+- **Nearly everything on the top-tier model.** At least $5 spent, 90% of it on Opus, Fable or Mythos, with no **Default model** set. Send `/model` with one click, or set **Default model** to `opusplan`.
+- **One session that is most of the spend.** A single session at 60% or more of the period's cost, when there are three or more sessions and at least $1 spent. Give each task its own session.
+- **Many short sessions.** Five or more sessions that made three requests or fewer in the period and each wrote more to the cache than it read back, with 50,000 tokens or more written between them. Ask follow-ups in a session that is still open.
+- **Command output.** The output of the agent's shell commands, across sessions and sub-agents, once it passes about 50,000 tokens; from about 200,000 it is shown as a stronger tip. Run tests, builds and installs yourself in a split terminal and paste only the lines that matter.
+- **One very long command output.** A single result of 15,000 characters or more while **Bash output sent to the model** is at its default.
+
+Each tip quotes the figure that set it off. Dollar figures and shares of spend count only models with a published price. The panel lists the six strongest tips; **Show N more** lists the rest.
+
+In **All projects**, the tips that name a Claude Code setting leave it out, and the long-command-output tip is not shown, because settings belong to one folder.
+
+Command output is counted, not kept: ADE adds up the length of each shell result in the transcripts, at about four characters to a token, and never stores or shows the text.
 
 ## Context diet
 

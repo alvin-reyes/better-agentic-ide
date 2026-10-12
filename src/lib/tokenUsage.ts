@@ -25,6 +25,12 @@ export interface SessionUsage {
   peakContextTokens: number;
   model: string | null;
   compactions: number;
+  /** Bash tool results in the period, main conversation and sub-agents. */
+  commandRuns: number;
+  /** Their length in characters, added up. */
+  commandOutputChars: number;
+  /** The longest single one, in characters. */
+  largestCommandOutput: number;
 }
 
 export interface UsageReport {
@@ -182,7 +188,15 @@ export interface AuditLike {
   memoryFiles: { path: string; bytes: number }[];
   heavy: { path: string; denied: boolean }[];
   mcpServers: string[];
+  /** Claude Code settings the project has set, by preset key. */
+  presets?: Record<string, string>;
 }
+
+/** How a session is named in a tip: its first prompt, or the start of its id. */
+const sessionName = (s: SessionUsage) => (s.title ?? s.id.slice(0, 8)).slice(0, 40);
+
+/** "a", "a and b", "a, b and c". */
+const listOf = (names: string[]) => (names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "");
 
 const isBig = (m: string) => /opus|fable|mythos/.test(m);
 
@@ -263,6 +277,97 @@ export function tipsFor(sessions: SessionUsage[], audit: AuditLike | null): Tip[
       });
     }
   }
+
+  // The audit's presets are one folder's settings. Without them (no audit, or
+  // usage from every project) no tip names a setting or depends on one.
+  const presets = audit?.presets;
+  const unset = (key: string) => presets !== undefined && !presets[key];
+
+  const full = sessions.filter((s) => s.peakContextTokens >= 0.8 * contextWindow(s.model));
+  if (full.length >= 2) {
+    tips.push({
+      id: "ran-full",
+      level: "medium",
+      title: `${full.length} sessions filled 80% or more of the context window`,
+      detail: "A full window is resent on every turn until something compacts it. /compact at a natural break, or /clear when the task changes."
+        + (unset("env.CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE") ? " Set Auto-compact at below to have Claude Code compact sooner on its own." : ""),
+    });
+  }
+
+  const most = sessions.reduce<SessionUsage | null>((a, s) => (s.compactions > (a?.compactions ?? 0) ? s : a), null);
+  if (most && most.compactions >= 3) {
+    tips.push({
+      id: "recompacted",
+      level: "medium",
+      title: `${sessionName(most)} was compacted ${most.compactions} times`,
+      detail: "Each compaction drops detail and the session fills up again. Split the work into smaller tasks, and /clear between them instead of carrying one conversation through all of it.",
+    });
+  }
+
+  // Dollars are counted from priced models only: costOf is null for the rest,
+  // so they add nothing to a figure or to a share of one.
+  const big = all.filter((u) => isBig(u.model) && (costOf(u) ?? 0) > 0).sort((a, b) => costOf(b)! - costOf(a)!);
+  const bigCost = big.reduce((a, u) => a + costOf(u)!, 0);
+  if (t.cost >= 5 && bigCost / t.cost >= 0.9 && !presets?.model) {
+    tips.push({
+      id: "top-tier",
+      level: "info",
+      title: `${listOf([...new Set(big.map((u) => modelLabel(u.model)))])} took ${Math.round((bigCost / t.cost) * 100)}% of the ${fmtUsd(t.cost)} spent`,
+      detail: "Sonnet handles most edits, searches and test runs for less. Switch with /model for routine work and come back for the hard problems."
+        + (presets ? " Or set Default model to opusplan below: it plans with Opus, then writes the code with Sonnet." : ""),
+      command: "/model",
+    });
+  }
+
+  const dearest = sessions.reduce<SessionUsage | null>((a, s) => (a === null || sessionCost(s) > sessionCost(a) ? s : a), null);
+  if (dearest && sessions.length >= 3 && t.cost >= 1 && sessionCost(dearest) / t.cost >= 0.6) {
+    const cost = sessionCost(dearest);
+    tips.push({
+      id: "one-session",
+      level: "info",
+      title: `${sessionName(dearest)} is ${Math.round((cost / t.cost) * 100)}% of this period's spend (${fmtUsd(cost)})`,
+      detail: "Every turn of a long conversation resends everything before it. Give each task its own session, and /clear when you move on.",
+    });
+  }
+
+  // A session that read more than it wrote was already going before the
+  // period: only its last few requests fall inside, and it is not a short one.
+  const writes = (s: SessionUsage) => s.models.reduce((a, u) => a + u.cacheWrite5m + u.cacheWrite1h, 0);
+  const short = sessions.filter((s) =>
+    s.models.reduce((a, u) => a + u.requests, 0) <= 3 && writes(s) > s.models.reduce((a, u) => a + u.cacheRead, 0));
+  const written = short.reduce((a, s) => a + writes(s), 0);
+  if (short.length >= 5 && written >= 50_000) {
+    tips.push({
+      id: "short-sessions",
+      level: "info",
+      title: `${short.length} sessions made 3 requests or fewer and wrote ${fmtTokens(written)} tokens to cache`,
+      detail: "A new session writes its system prompt, tools and CLAUDE.md to cache before it answers, and a short one never reads enough back to repay that. Ask follow-ups in a session that is still open.",
+    });
+  }
+
+  // Thresholds are 50k and 200k tokens at four characters each, compared in
+  // characters so rounding cannot tip one over.
+  const outputChars = sessions.reduce((a, s) => a + s.commandOutputChars, 0);
+  if (outputChars >= 200_000) {
+    const runs = sessions.reduce((a, s) => a + s.commandRuns, 0);
+    tips.push({
+      id: "script-output",
+      level: outputChars >= 800_000 ? "medium" : "info",
+      title: `Command output added about ${fmtTokens(tokensForBytes(outputChars))} tokens over ${fmtInt(runs)} runs`,
+      detail: "Everything a command prints is read by the model and resent on later turns. Run tests, builds and installs yourself in a split terminal and paste only the lines that matter.",
+    });
+  }
+
+  const largest = sessions.reduce((a, s) => Math.max(a, s.largestCommandOutput), 0);
+  if (largest >= 15_000 && unset("env.BASH_MAX_OUTPUT_LENGTH")) {
+    tips.push({
+      id: "bash-limit",
+      level: "info",
+      title: `The largest command output was ${fmtInt(largest)} characters`,
+      detail: "Claude Code sends up to 30,000 characters of a command's output to the model. Set Bash output sent to the model below to cut long output before the agent reads it.",
+    });
+  }
+
   const rank = { high: 0, medium: 1, info: 2 };
   return tips.sort((a, b) => rank[a.level] - rank[b.level]);
 }
