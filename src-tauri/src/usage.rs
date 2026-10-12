@@ -61,9 +61,17 @@ pub struct SessionUsage {
     pub subagent_requests: u64,
     /// Prompt size of the latest main-conversation request: what the next turn resends.
     pub context_tokens: u64,
+    /// Largest prompt size of a main-conversation request in the period.
     pub peak_context_tokens: u64,
     pub model: Option<String>,
+    /// Compactions in the period, each counted once.
     pub compactions: u64,
+    /// Bash tool results in the period, main conversation and sub-agents.
+    pub command_runs: u64,
+    /// Their length in characters, added up. The text itself is never kept.
+    pub command_output_chars: u64,
+    /// The longest single one, in characters.
+    pub largest_command_output: u64,
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -146,6 +154,33 @@ fn user_prompt(v: &Value) -> Option<String> {
     Some(text.chars().take(100).collect())
 }
 
+/// The content blocks of a transcript line's message, when it has a list.
+fn blocks(v: &Value) -> &[Value] {
+    v.get("message")
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_array())
+        .map_or(&[], Vec::as_slice)
+}
+
+fn block_type(b: &Value) -> Option<&str> {
+    b.get("type").and_then(|t| t.as_str())
+}
+
+/// Characters in a tool result: a string, or the text blocks of a list.
+fn result_chars(content: &Value) -> u64 {
+    let chars = |s: &str| s.chars().count() as u64;
+    match content {
+        Value::String(s) => chars(s),
+        Value::Array(parts) => parts
+            .iter()
+            .filter(|p| block_type(p) == Some("text"))
+            .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+            .map(chars)
+            .sum(),
+        _ => 0,
+    }
+}
+
 fn is_compaction(v: &Value) -> bool {
     v.get("isCompactSummary").and_then(|x| x.as_bool()) == Some(true)
         || v.get("subtype").and_then(|x| x.as_str()) == Some("compact_boundary")
@@ -163,6 +198,9 @@ struct Scan {
     cwd: Option<String>,
     compactions: u64,
     requests: u64,
+    command_runs: u64,
+    command_output_chars: u64,
+    largest_command_output: u64,
 }
 
 /// Responses counted: at or after `since` and at or before `until` (ISO-8601).
@@ -172,10 +210,24 @@ struct Window<'a> {
     until: Option<&'a str>,
 }
 
+impl Window<'_> {
+    /// Whether a line stamped `ts` is inside; one with no timestamp always is.
+    fn holds(&self, ts: Option<&str>) -> bool {
+        // ISO-8601 UTC timestamps compare correctly as text.
+        ts.is_none_or(|ts| !(self.since.is_some_and(|x| ts < x) || self.until.is_some_and(|x| ts > x)))
+    }
+}
+
 fn scan_file(path: &Path, w: Window) -> Option<Scan> {
     let file = std::fs::File::open(path).ok()?;
     let mut seen = HashSet::new();
+    // Ids of the Bash calls so far; their results arrive on later user lines.
+    let mut bash_calls = HashSet::new();
     let mut s = Scan::default();
+    // Claude Code writes a boundary line and a summary line for each
+    // compaction; older transcripts have only one kind. The larger count is
+    // the number of compactions either way.
+    let (mut boundaries, mut summaries) = (0u64, 0u64);
     for line in BufReader::new(file).lines() {
         let Ok(line) = line else { continue };
         let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
@@ -185,8 +237,37 @@ fn scan_file(path: &Path, w: Window) -> Option<Scan> {
         if s.title.is_none() {
             s.title = user_prompt(&v);
         }
-        if is_compaction(&v) {
-            s.compactions += 1;
+        if is_compaction(&v) && w.holds(v.get("timestamp").and_then(|t| t.as_str())) {
+            if v.get("isCompactSummary").and_then(|x| x.as_bool()) == Some(true) {
+                summaries += 1;
+            }
+            if v.get("subtype").and_then(|x| x.as_str()) == Some("compact_boundary") {
+                boundaries += 1;
+            }
+        }
+        match v.get("type").and_then(|t| t.as_str()) {
+            Some("assistant") => {
+                for b in blocks(&v) {
+                    if block_type(b) == Some("tool_use") && b.get("name").and_then(|n| n.as_str()) == Some("Bash") {
+                        if let Some(id) = b.get("id").and_then(|i| i.as_str()) {
+                            bash_calls.insert(id.to_string());
+                        }
+                    }
+                }
+            }
+            Some("user") if w.holds(v.get("timestamp").and_then(|t| t.as_str())) => {
+                for b in blocks(&v) {
+                    let ours = block_type(b) == Some("tool_result")
+                        && b.get("tool_use_id").and_then(|i| i.as_str()).is_some_and(|id| bash_calls.contains(id));
+                    if ours {
+                        let n = b.get("content").map_or(0, result_chars);
+                        s.command_runs += 1;
+                        s.command_output_chars += n;
+                        s.largest_command_output = s.largest_command_output.max(n);
+                    }
+                }
+            }
+            _ => {}
         }
         let Some(e) = parse_entry(&v) else { continue };
         if !seen.insert(e.id.clone()) {
@@ -194,14 +275,11 @@ fn scan_file(path: &Path, w: Window) -> Option<Scan> {
         }
         let context = e.usage.input + e.usage.cache_write_5m + e.usage.cache_write_1h + e.usage.cache_read;
         s.last_context = context;
-        s.peak_context = s.peak_context.max(context);
         s.last_model = Some(e.usage.model.clone());
-        if let Some(ts) = e.timestamp.as_deref() {
-            // ISO-8601 UTC timestamps compare correctly as text.
-            if w.since.is_some_and(|x| ts < x) || w.until.is_some_and(|x| ts > x) {
-                continue;
-            }
+        if !w.holds(e.timestamp.as_deref()) {
+            continue;
         }
+        s.peak_context = s.peak_context.max(context);
         if s.first_at.is_none() {
             s.first_at = e.timestamp.clone();
         }
@@ -211,6 +289,7 @@ fn scan_file(path: &Path, w: Window) -> Option<Scan> {
         s.requests += 1;
         ModelUsage::tally(&mut s.by_model, &e.usage);
     }
+    s.compactions = boundaries.max(summaries);
     Some(s)
 }
 
@@ -243,10 +322,14 @@ fn scan_project(dir: &Path, w: Window, cutoff: Option<SystemTime>, files: &mut u
         let mut by_model = m.by_model;
         let mut sub_requests = 0;
         let mut last_at = m.last_at.clone();
+        let (mut runs, mut chars, mut largest) = (m.command_runs, m.command_output_chars, m.largest_command_output);
         for p in subs {
             *files += 1;
             if let Some(s) = scan_file(&p, w) {
                 sub_requests += s.requests;
+                runs += s.command_runs;
+                chars += s.command_output_chars;
+                largest = largest.max(s.largest_command_output);
                 for u in s.by_model.values() {
                     ModelUsage::tally(&mut by_model, u);
                 }
@@ -270,6 +353,9 @@ fn scan_project(dir: &Path, w: Window, cutoff: Option<SystemTime>, files: &mut u
             peak_context_tokens: m.peak_context,
             model: m.last_model,
             compactions: m.compactions,
+            command_runs: runs,
+            command_output_chars: chars,
+            largest_command_output: largest,
         });
     }
     out
@@ -822,6 +908,133 @@ mod tests {
         let w = Window { since: None, until: Some("2026-09-27T23:59:59.999Z") };
         let s = &scan_project(&d, w, None, &mut files)[0];
         assert_eq!((s.models[0].requests, s.models[0].output), (1, 50));
+    }
+
+    /// An assistant line calling `tool` with this id.
+    fn call(id: &str, tool: &str) -> String {
+        format!(r#"{{"type":"assistant","timestamp":"2026-09-27T10:00:00.000Z","message":{{"role":"assistant","content":[{{"type":"tool_use","id":"{id}","name":"{tool}","input":{{}}}}]}}}}"#)
+    }
+
+    /// A user line carrying the result of call `id`; `content` is raw JSON.
+    fn result(id: &str, at: &str, content: &str) -> String {
+        format!(r#"{{"type":"user","timestamp":"{at}","message":{{"role":"user","content":[{{"type":"tool_result","tool_use_id":"{id}","content":{content}}}]}}}}"#)
+    }
+
+    #[test]
+    fn counts_command_output_by_characters() {
+        let d = tmp("commands");
+        let at = "2026-09-27T10:00:02.000Z";
+        let lines = [
+            A1.to_string(),
+            call("b1", "Bash"),
+            call("b2", "Bash"),
+            call("r1", "Read"),
+            // A plain string, counted by characters rather than bytes.
+            result("b1", at, r#""héllo""#),
+            "{ not json".to_string(),
+            // Text blocks are added up; a block that is not text adds nothing.
+            result("b2", at, r#"[{"type":"text","text":"abc"},{"type":"image","source":{}},{"type":"text","text":"de"}]"#),
+            // Another tool's result, and one whose call is not in this file.
+            result("r1", at, r#""the contents of a long file""#),
+            result("gone", at, r#""output of a call made elsewhere""#),
+        ]
+        .join("\n");
+        std::fs::write(d.join("sess.jsonl"), lines).unwrap();
+        std::fs::create_dir_all(d.join("sess").join("subagents")).unwrap();
+        let sub = [SUB.to_string(), call("s1", "Bash"), result("s1", at, r#""1234567""#)].join("\n");
+        std::fs::write(d.join("sess").join("subagents").join("agent-1.jsonl"), sub).unwrap();
+        let mut files = 0;
+        let s = &scan_project(&d, Window::default(), None, &mut files)[0];
+        // Main session and sub-agent together; the largest is one result's size.
+        assert_eq!((s.command_runs, s.command_output_chars, s.largest_command_output), (3, 17, 7));
+        let json = serde_json::to_value(s).unwrap();
+        assert_eq!((&json["commandRuns"], &json["commandOutputChars"], &json["largestCommandOutput"]), (&3.into(), &17.into(), &7.into()));
+    }
+
+    #[test]
+    fn command_output_outside_the_period_is_not_counted() {
+        let d = tmp("commands_since");
+        let lines = [
+            A1.to_string(),
+            call("b1", "Bash"),
+            result("b1", "2026-09-27T10:00:02.000Z", r#""a long run from the day before""#),
+            A2.to_string(),
+            call("b2", "Bash"),
+            result("b2", "2026-09-28T10:00:02.000Z", r#""today""#),
+        ]
+        .join("\n");
+        std::fs::write(d.join("s.jsonl"), lines).unwrap();
+        let mut files = 0;
+        let w = Window { since: Some("2026-09-28T00:00:00.000Z"), until: None };
+        let s = &scan_project(&d, w, None, &mut files)[0];
+        assert_eq!((s.command_runs, s.command_output_chars, s.largest_command_output), (1, 5, 5));
+        let w = Window { since: None, until: Some("2026-09-27T23:59:59.999Z") };
+        let s = &scan_project(&d, w, None, &mut files)[0];
+        assert_eq!((s.command_runs, s.command_output_chars, s.largest_command_output), (1, 30, 30));
+    }
+
+    #[test]
+    fn a_command_called_before_the_period_counts_when_its_result_is_inside() {
+        let d = tmp("commands_straddle");
+        // `call` stamps the call on the 27th; the result lands on the 28th.
+        let lines = [call("b1", "Bash"), A2.to_string(), result("b1", "2026-09-28T10:00:02.000Z", r#""late""#)].join("\n");
+        std::fs::write(d.join("s.jsonl"), lines).unwrap();
+        let mut files = 0;
+        let w = Window { since: Some("2026-09-28T00:00:00.000Z"), until: None };
+        let s = &scan_project(&d, w, None, &mut files)[0];
+        assert_eq!((s.command_runs, s.command_output_chars), (1, 4));
+    }
+
+    fn boundary(at: &str) -> String {
+        format!(r#"{{"type":"system","subtype":"compact_boundary","timestamp":"{at}"}}"#)
+    }
+
+    fn summary(at: &str) -> String {
+        format!(r#"{{"type":"user","isCompactSummary":true,"timestamp":"{at}","message":{{"role":"user","content":"<summary>"}}}}"#)
+    }
+
+    #[test]
+    fn a_compaction_is_counted_once() {
+        let d = tmp("compact_once");
+        let at = "2026-09-27T11:00:00.000Z";
+        // Claude Code writes a boundary line and a summary line for each one.
+        std::fs::write(d.join("pair.jsonl"), [A1.to_string(), boundary(at), summary(at)].join("\n")).unwrap();
+        // Transcripts with only one kind of line still count.
+        std::fs::write(d.join("old.jsonl"), [A1.to_string(), summary(at), summary(at)].join("\n")).unwrap();
+        std::fs::write(d.join("bare.jsonl"), [A1, r#"{"type":"system","subtype":"compact_boundary"}"#].join("\n")).unwrap();
+        let mut files = 0;
+        let all = scan_project(&d, Window::default(), None, &mut files);
+        let count = |id: &str| all.iter().find(|s| s.id == id).unwrap().compactions;
+        assert_eq!((count("pair"), count("old"), count("bare")), (1, 2, 1));
+    }
+
+    #[test]
+    fn peak_and_compactions_cover_the_period() {
+        let d = tmp("period_peak");
+        // A1 (the 27th) carries 6002 prompt tokens, A2 (the 28th) 6203.
+        let lines = [
+            A1.to_string(),
+            boundary("2026-09-27T11:00:00.000Z"),
+            summary("2026-09-27T11:00:00.000Z"),
+            A2.to_string(),
+            boundary("2026-09-28T11:00:00.000Z"),
+            summary("2026-09-28T11:00:00.000Z"),
+            boundary("2026-09-28T12:00:00.000Z"),
+            summary("2026-09-28T12:00:00.000Z"),
+        ]
+        .join("\n");
+        std::fs::write(d.join("s.jsonl"), lines).unwrap();
+        let mut files = 0;
+        let w = Window { since: None, until: Some("2026-09-27T23:59:59.999Z") };
+        let s = &scan_project(&d, w, None, &mut files)[0];
+        assert_eq!((s.peak_context_tokens, s.compactions), (6002, 1));
+        // The latest request and its model are reported whatever the period.
+        assert_eq!((s.context_tokens, s.model.as_deref()), (6203, Some("claude-opus-5-5")));
+        let w = Window { since: Some("2026-09-28T00:00:00.000Z"), until: None };
+        let s = &scan_project(&d, w, None, &mut files)[0];
+        assert_eq!((s.peak_context_tokens, s.compactions), (6203, 2));
+        let s = &scan_project(&d, Window::default(), None, &mut files)[0];
+        assert_eq!((s.peak_context_tokens, s.compactions), (6203, 3));
     }
 
     #[test]

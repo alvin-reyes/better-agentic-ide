@@ -137,6 +137,7 @@ describe("withUsage", () => {
   const usage = (id: string, firstAt: number, output = 1_000_000): SessionUsage => ({
     id, cwd: "/proj", title: null, firstAt: iso(firstAt), lastAt: iso(firstAt), subagentRequests: 0,
     contextTokens: 0, peakContextTokens: 0, model: "claude-sonnet-5", compactions: 0,
+    commandRuns: 0, commandOutputChars: 0, largestCommandOutput: 0,
     models: [{ model: "claude-sonnet-5", requests: 1, input: 1000, output, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 9000 }],
   });
 

@@ -57,6 +57,9 @@ const RANGES = [
   { id: "30", label: "30 days", days: 30 },
 ] as const;
 
+/** Tips listed before "Show N more". */
+const TIPS_SHOWN = 6;
+
 function ago(iso: string | null): string {
   if (!iso) return "";
   const m = Math.round((Date.now() - Date.parse(iso)) / 60_000);
@@ -84,6 +87,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
   const [audit, setAudit] = useState<ContextAudit | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [note, setNote] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(() => {
     const days = RANGES.find((r) => r.id === range)!.days;
@@ -111,12 +115,17 @@ export default function TokensPanel({ cwd, onClose }: Props) {
 
   useEffect(loadAudit, [loadAudit]);
 
+  useEffect(() => setShowAll(false), [scope, range]);
+
   useEscapeToClose(onClose);
 
   const sessions = report?.sessions ?? [];
   const models = useMemo(() => sumModels(sessions.flatMap((s) => s.models)).sort((a, b) => (costOf(b) ?? 0) - (costOf(a) ?? 0)), [sessions]);
   const t = useMemo(() => totals(models), [models]);
-  const tips = useMemo(() => tipsFor(sessions, audit), [sessions, audit]);
+  // The audit's settings are this folder's; usage from every project is not judged by them.
+  const tips = useMemo(() => tipsFor(sessions, scope === "all" && audit ? { ...audit, presets: undefined } : audit), [sessions, audit, scope]);
+  // Tips arrive strongest first, so the cut keeps those in front.
+  const shownTips = showAll ? tips : tips.slice(0, TIPS_SHOWN);
 
   const sendCommand = async (command: string) => {
     if (await sendToActiveTerminal(command, false)) onClose();
@@ -201,7 +210,7 @@ export default function TokensPanel({ cwd, onClose }: Props) {
             <div className="contracts-section">
               <h3>Ways to save</h3>
               <ul className="tokens-tips">
-                {tips.map((tip) => (
+                {shownTips.map((tip) => (
                   <li key={tip.id} data-level={tip.level}>
                     <div>
                       <b>{tip.title}</b>
@@ -215,6 +224,11 @@ export default function TokensPanel({ cwd, onClose }: Props) {
                   </li>
                 ))}
               </ul>
+              {tips.length > TIPS_SHOWN && (
+                <button className="contracts-action" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>
+                  {showAll ? "Show fewer" : `Show ${tips.length - TIPS_SHOWN} more`}
+                </button>
+              )}
             </div>
           )}
 
