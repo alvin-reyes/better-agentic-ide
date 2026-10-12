@@ -25,11 +25,11 @@ A project with no BMAD is asked which version to use before anything is written:
 
 A project that already has BMAD is never asked which version to set up. One with `.ade/methodology` follows it; one with `.bmad-core/` and no marker is treated as v4 and stays that way. A v4 project keeps its QA gates in `docs/qa/gates/`; v6 projects use `.ade/gates/`, same format.
 
-There are two ways not to have BMAD in a project. Turn off **Set up every project I open** in *Settings → Terminal*: then the New tab dialog and the terminal neither set up nor ask. Or click **Undo** after a setup: that project is declined, and they leave it alone from then on. The palette command and **Set up now** work either way.
+There are two ways not to have BMAD in a project. Turn off **Set up every project I open** in *Settings → Terminal*: then the New tab dialog and the terminal neither set up nor ask. Or click **Undo** after a setup: that project is declined, and they set nothing up there from then on. The palette command and **Set up now** work either way.
 
 ### Keeping or switching
 
-The first time you open a project that already has BMAD from the New tab dialog, ADE asks once: *shop uses BMAD v4.* **Keep v4** (default) · **Switch to v6…** Press <kbd>Enter</kbd> to keep the version. Like the version question, this one has to be answered, and the folder isn't opened until it is. ADE doesn't ask that project again, and it never asks from a terminal `cd`. A project ADE had set up before this question existed is asked too when it is on v4, the first time you open it from the New tab dialog after updating; one already on v6 isn't. A project you declined with **Undo** isn't asked: use the palette commands for it. With **Set up every project I open** turned off, it isn't asked either.
+The first time you open a project that already has BMAD from the New tab dialog, ADE asks once: *shop uses BMAD v4.* **Keep v4** (default) · **Switch to v6…** Press <kbd>Enter</kbd> to keep the version. Like the version question, this one has to be answered, and the folder isn't opened until it is. ADE doesn't ask that project again, and it never asks from a terminal `cd`. A project ADE had set up before this question existed is asked too when it is on v4, the first time you open it from the New tab dialog after updating; one already on v6 isn't. A project you declined with **Undo** is asked too, when it still has BMAD: **Keep** opens it and sets nothing up, and a switch sets it up on the new version, so it is no longer declined. With **Set up every project I open** turned off, it isn't asked either.
 
 You can switch a project at any time:
 
