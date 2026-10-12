@@ -13,7 +13,27 @@ The first time ADE opens a project, it adds whatever the project is missing:
 - **Eight core roles** as Claude Code sub-agents in `.claude/agents/`: product manager, architect, designer, scrum master, developer, QA, DevOps and adversarial reviewer.
 - **Agents for your stack**: see [By project type](#by-project-type).
 
-**Only missing files are written.** A file that already exists is left alone. If the project already has a `CLAUDE.md`, ADE adds one import line that loads `.ade/rules.md` and never replaces the file.
+**Only missing files are written.** A file that already exists is left alone, with one exception: a `CLAUDE.md` the project already has. ADE never replaces that file. It adds one import line that loads `.ade/rules.md`, and it keeps the file's BMAD paragraph on the project's version.
+
+### CLAUDE.md and the BMAD version
+
+The `CLAUDE.md` ADE writes has one BMAD paragraph, under *Agents and commands*, and it names only the version the project is on.
+
+- **On v6** it tells the project's agents that BMAD v6 is how work is done: for planning, stories, builds and reviews they use the skills in `.claude/skills/` (`bmad-prd`, `bmad-architecture`, `bmad-ux`, `bmad-ticket`, `bmad-build`, `bmad-code-review`, and `bmad` when unsure which applies), not ad-hoc steps. The skills' work lives in `_bmad-output/`, and where that differs from the layout section of `CLAUDE.md`, the BMAD location is the one to use. Done is not theirs to give: a story is Done only when the verification command passes, whatever state a ticket is in.
+- **On v4** it names the `/BMad:tasks:` slash commands in `.bmad-core/`, as optional helpers.
+
+A `CLAUDE.md` that was already there is brought to that paragraph by a full setup (**Set up now** or **Re-check** on the Agents tab, or the first setup of the project) and by a [switch](#keeping-or-switching). Adding agents never touches the file. Opening a project this copy of ADE has already set up doesn't edit it either. A project it has no record of (a fresh clone, or one set up on another machine) gets a full setup the first time you open it or a terminal `cd`s into it, and that brings the paragraph up to date, with a toast and **Undo**.
+
+| What `CLAUDE.md` holds | What ADE does |
+|---|---|
+| A BMAD paragraph exactly as some ADE release wrote it | Replaces that paragraph. Every other byte of the file stays, line endings included. |
+| A BMAD paragraph you edited, or none at all | Keeps your text and adds a section at the end, between `<!-- ade:bmad -->` and `<!-- /ade:bmad -->`. If a `- **BMAD` line of yours is still in the file, the toast says the old BMAD lines need removing by hand. |
+| That marked section, from an earlier setup or switch | Replaces the section, unless you edited what is inside it. |
+| The right paragraph or section already | Nothing. The file isn't written. |
+
+ADE leaves the BMAD paragraph as it is, and the toast says why, when the file is a link, is read-only, isn't UTF-8 text, holds the paragraph more than once, or holds a marked section you edited. That is about the paragraph only: the import line is still added to a file that doesn't load the rules yet.
+
+Every edit is announced in a toast, also when it is the only thing a setup did. **Undo** on a setup's toast puts the file back as it was, but only while it still reads as the setup left it: if you saved `CLAUDE.md` in between, your version is kept.
 
 ## Choosing and switching the BMAD version
 
@@ -50,7 +70,9 @@ Nothing is deleted. The old version's files move into a folder inside the projec
 | v6 → v4 | `_bmad/`, the output folder (`_bmad-output/`, or the one your config names) unless it holds your documents, the skills in `.claude/skills/` that share a name with one of ADE's BMAD skills (a skill of your own with the same name moves too), `.ade/approvals/`, `.ade/gates/` |
 | Both | `.ade/methodology`, and the eight core role files in `.claude/agents/`, edited or not |
 
-Everything else stays: `.ade/rules.md`, `.ade/context/`, `.ade/session.md`, `.ade/knowledge/`, `CLAUDE.md`, `llms.txt`, `.claude/settings.json`, your own skills and agents, and your documents. `docs/` (the PRD, the architecture, stories, QA) is used by both versions, so a switch never moves it as a whole. The dialog lists your documents unticked, and one moves only if you tick it (*Archive this too*):
+`CLAUDE.md` stays where it is, and its BMAD paragraph is brought to the new version, so after a switch to v6 it tells the agents to use the v6 skills, and a paragraph ADE wrote no longer names v4: see [CLAUDE.md and the BMAD version](#claudemd-and-the-bmad-version). The toast of a finished switch says what was done to it.
+
+Everything else stays: `.ade/rules.md`, `.ade/context/`, `.ade/session.md`, `.ade/knowledge/`, `llms.txt`, `.claude/settings.json`, your own skills and agents, and your documents. `docs/` (the PRD, the architecture, stories, QA) is used by both versions, so a switch never moves it as a whole. The dialog lists your documents unticked, and one moves only if you tick it (*Archive this too*):
 
 - Leaving v4, it offers the document places that exist, such as `docs/stories`, `docs/qa`, `docs/prd.md` and `docs/architecture.md`. It never offers `docs` itself.
 - Leaving v6, it offers only the output folder, and only when that folder is `docs`, is inside a documents location, or contains one. The row reads *Output folder: `<path>`*. This is the one case where `docs` can move, and only if you tick it. No other document folder is offered.
@@ -67,7 +89,7 @@ Agents are told the archive is read-only history. The rule is added to `.ade/rul
 
 If a step fails, ADE puts everything back and removes the archive.
 
-- **It puts back** each moved path, but only when nothing has taken its place; and `.claude/settings.json` and `.ade/methodology`, but only if they are still as the switch left them.
+- **It puts back** each moved path, but only when nothing has taken its place; and `.claude/settings.json`, `.ade/methodology` and the BMAD paragraph of `CLAUDE.md`, but only if they are still as the switch left them. A `CLAUDE.md` you saved while the switch ran keeps your version.
 - **It leaves, and reports,** anything it can't put back: a file that is locked, something written into a folder that had moved, or a file changed since. The error names each one and `ARCHIVE.md` lists them. `ARCHIVE.md` then reads `status: incomplete`, the stage board shows a warning that links to it, and ADE neither sets the project up nor switches it until you resolve it. When you open the project or a terminal is in it, a toast with an **Open ARCHIVE.md** button says so; from a terminal it shows once per session.
 - **If it can't record the rollback** in `ARCHIVE.md` (a full disk, for example), it undoes nothing and says so. `ARCHIVE.md` then still describes the project as it is, at `status: in-progress`, and you follow it by hand.
 

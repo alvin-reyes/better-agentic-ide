@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // absence used to be invisible until the Rust command rejected the call.
 const tauri = vi.hoisted(() => ({
   applies: [] as Record<string, unknown>[],
+  undos: [] as Record<string, unknown>[],
   /** What `project_setup_status` reports the project is already on. */
   methodology: null as "v4" | "v6" | null,
   /** Per-folder override of `methodology`, for folders inside a project. */
@@ -38,6 +39,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         tauri.applies.push(args);
         return { created: [], appendedImport: false, agents: 0, bmadFiles: 0, bmadv6Files: 0 };
       case "project_setup_undo":
+        tauri.undos.push(args);
         return 0;
       case "project_agent_remove":
         return true;
@@ -47,11 +49,11 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-import { agentCatalog } from "../projectMethodology";
+import { BMAD_PARAGRAPH, BMAD_SHIPPED, agentCatalog, bmadSection } from "../projectMethodology";
 import {
   addAgent, addStackAgents, beginSwitch, bmadRootOf, detectOnDisk, foldersUpTo, hasBmad, isComplete, isKept, isSettingUp, isWithin, markKept, methodologyOf, migrateKept, normRoot, reaskV4Projects, removeAgent,
-  removedAgents, setUpProject, setupDeclined, setupRootOf, switchBlock, undoSetup, wasSetUp,
-  type SetupStatus,
+  removedAgents, setUpProject, setupDeclined, setupRootOf, summarize, switchBlock, undoSetup, wasSetUp, claudeMdNote,
+  type ClaudeEdit, type SetupReport, type SetupStatus,
 } from "../projectSetup";
 
 const lastApply = () => tauri.applies[tauri.applies.length - 1];
@@ -59,6 +61,7 @@ const lastApply = () => tauri.applies[tauri.applies.length - 1];
 beforeEach(() => {
   localStorage.clear();
   tauri.applies.length = 0;
+  tauri.undos.length = 0;
   tauri.methodology = null;
   tauri.byDir = {};
   tauri.roots = {};
@@ -151,6 +154,80 @@ describe("methodology in project setup", () => {
     tauri.byDir = { "C:\\p": "v4", "C:\\p\\src": null };
     tauri.roots = { "C:\\p\\src": "C:\\p" };
     expect(await methodologyOf("C:\\p\\src")).toBe("v4");
+  });
+});
+
+describe("the BMAD paragraph of an existing CLAUDE.md", () => {
+  const report = (claudeMd?: ClaudeEdit | null): SetupReport => ({ created: [], appendedImport: false, agents: 0, bmadFiles: 0, claudeMd });
+  const edit = (status: ClaudeEdit["status"], reason: string | null = null): ClaudeEdit =>
+    status === "skipped" ? { status, reason, before: "", after: "" } : { status, reason, before: "# old\n", after: "# new\n" };
+
+  it("is sent with a full setup: the project's version's, and every text ADE has shipped", async () => {
+    for (const methodology of ["v6", "v4"] as const) {
+      await setUpProject(`/tmp/${methodology}`, methodology, []);
+      const sent = lastApply();
+      expect(sent.full).toBe(true);
+      expect(sent.bmad).toEqual({
+        paragraph: BMAD_PARAGRAPH[methodology],
+        section: bmadSection(methodology),
+        paragraphs: BMAD_SHIPPED,
+        sections: expect.arrayContaining([bmadSection("v4"), bmadSection("v6")]),
+        open: "<!-- ade:bmad -->",
+        close: "<!-- /ade:bmad -->",
+      });
+      expect((sent.bmad as { sections: string[] }).sections).toHaveLength(BMAD_SHIPPED.length);
+    }
+  });
+
+  it("is not sent when agents are added on their own: CLAUDE.md is not theirs to edit", async () => {
+    await addStackAgents("/tmp/proj", ["go"], "v6");
+    expect(lastApply().full).toBe(false);
+    expect(lastApply()).not.toHaveProperty("bmad");
+    await addAgent("/tmp/proj", agentCatalog().find((a) => a.id === "qa")!, "v6");
+    expect(lastApply().full).toBe(false);
+    expect(lastApply()).not.toHaveProperty("bmad");
+  });
+
+  it("is summarized when it was updated or added, and not when the file was left", () => {
+    expect(summarize(report(edit("replaced")))).toBe("an updated BMAD paragraph in CLAUDE.md");
+    expect(summarize(report(edit("appended")))).toBe("a BMAD section in CLAUDE.md");
+    expect(summarize({ ...report(edit("appended")), appendedImport: true, agents: 2 }))
+      .toBe("2 agents, a line in CLAUDE.md and a BMAD section in CLAUDE.md");
+    expect(summarize(report(edit("skipped", "link")))).toBeNull();
+    expect(summarize(report(null))).toBeNull();
+  });
+
+  it("says when old BMAD lines need removing by hand", () => {
+    expect(claudeMdNote(report(edit("appended", "edited")))).toBe("CLAUDE.md still has older BMAD lines: remove them by hand.");
+    expect(claudeMdNote(report(edit("replaced", "edited")))).toBe("CLAUDE.md still has older BMAD lines: remove them by hand.");
+    expect(claudeMdNote(report(edit("appended")))).toBeNull();
+    expect(claudeMdNote(report(edit("replaced")))).toBeNull();
+    expect(claudeMdNote(report())).toBeNull();
+  });
+
+  it("says why a file was left alone", () => {
+    const why = (reason: string | null) => claudeMdNote(report(edit("skipped", reason)));
+    expect(why("link")).toBe("CLAUDE.md is a link, so its BMAD paragraph was left as it is.");
+    expect(why("read-only")).toBe("CLAUDE.md is read-only, so its BMAD paragraph was left as it is.");
+    expect(why("not-utf8")).toBe("CLAUDE.md isn't UTF-8 text, so its BMAD paragraph was left as it is.");
+    expect(why("twice")).toBe("CLAUDE.md holds the BMAD paragraph more than once, so its BMAD paragraph was left as it is.");
+    // About the paragraph only: the same toast may say a line was added to the file.
+    for (const reason of ["link", "read-only", "not-utf8", "twice", "some error"]) expect(why(reason)).toMatch(/BMAD paragraph.* was left as it is/);
+    expect(why("edited-section")).toBe("The BMAD section in CLAUDE.md was edited, so it was left as it is.");
+    expect(why("it couldn't be written: disk full")).toBe("The BMAD paragraph in CLAUDE.md was left as it is: it couldn't be written: disk full.");
+    expect(why(null)).toBe("The BMAD paragraph in CLAUDE.md was left as it is: it couldn't be updated.");
+  });
+
+  it("is handed back to Undo as the setup recorded it, and not when the file was left", async () => {
+    const result = await setUpProject("/tmp/proj", "v6", []);
+    await undoSetup({ ...result, report: report(edit("replaced")) });
+    expect(tauri.undos[0].claudeMd).toEqual(edit("replaced"));
+    await undoSetup({ ...result, report: report(edit("appended", "edited")) });
+    expect(tauri.undos[1].claudeMd).toEqual(edit("appended", "edited"));
+    await undoSetup({ ...result, report: report(edit("skipped", "link")) });
+    expect(tauri.undos[2].claudeMd).toBeNull();
+    await undoSetup(result);
+    expect(tauri.undos[3].claudeMd).toBeNull();
   });
 });
 

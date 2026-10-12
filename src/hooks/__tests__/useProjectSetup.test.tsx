@@ -16,6 +16,8 @@ const tauri = vi.hoisted(() => ({
   applyError: null as string | null,
   /** When set, project_setup_apply waits for it: the setup is still running. */
   applyGate: null as Promise<void> | null,
+  /** What a setup reports: by default one rules file created. */
+  report: null as Record<string, unknown> | null,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -35,7 +37,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         tauri.applies.push(args);
         if (tauri.applyGate) await tauri.applyGate;
         if (tauri.applyError) throw new Error(tauri.applyError);
-        return { created: [`${args.root}/.ade/rules.md`], appendedImport: false, agents: 0, bmadFiles: 0 };
+        return tauri.report ?? { created: [`${args.root}/.ade/rules.md`], appendedImport: false, agents: 0, bmadFiles: 0 };
       case "bmad_switch_apply":
         return { archive: ".ade/archive/bmad-v4-2026-10-11", moved: 3, setup: { created: [], appendedImport: false, agents: 0, bmadFiles: 0 }, rulesAppended: false, archiveDenied: false, movedCapped: false };
       default:
@@ -77,6 +79,7 @@ beforeEach(() => {
   tauri.applies.length = 0;
   tauri.applyError = null;
   tauri.applyGate = null;
+  tauri.report = null;
   show.mockClear();
   withdraw.mockClear();
   screen.toast = null;
@@ -431,6 +434,56 @@ describe("a project that has BMAD", () => {
     expect(tauri.applies[0]).toMatchObject({ root: "/code/old", methodology: "v4" });
     expect(questions()).toHaveLength(0);
     expect(useMethodologyPrompt.getState().request).toBeNull();
+  });
+
+  it("is told when the setup changed only the BMAD paragraph of its CLAUDE.md, with Undo", async () => {
+    // Complete already: such a setup is otherwise quiet.
+    tauri.byDir["/code/shop"] = "v6";
+    const claudeMd = { status: "replaced", reason: null, before: "# old\n", after: "# new\n" };
+    tauri.report = { created: [], appendedImport: false, agents: 0, bmadFiles: 0, claudeMd };
+    mount("/code/shop");
+    await waitFor(() => expect(toasts()).toHaveLength(1));
+    expect(toasts()[0].title).toBe("Set up shop");
+    expect(toasts()[0].body).toContain("an updated BMAD paragraph in CLAUDE.md");
+    expect(toasts()[0].action!.label).toBe("Undo");
+  });
+
+  it("is told about an edit to its CLAUDE.md even when the terminal moved on while the setup ran", async () => {
+    tauri.byDir["/code/shop"] = "v6";
+    const claudeMd = { status: "replaced", reason: null, before: "# old\n", after: "# new\n" };
+    tauri.report = { created: [], appendedImport: false, agents: 0, bmadFiles: 0, claudeMd };
+    let release!: () => void;
+    tauri.applyGate = new Promise<void>((r) => { release = r; });
+    const hook = mount("/code/shop");
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    // The terminal leaves before the setup finishes.
+    hook.rerender({ cwd: null });
+    tauri.applyGate = null;
+    await act(async () => { release(); });
+    await waitFor(() => expect(toasts().filter((t) => t.title === "Set up shop")).toHaveLength(1));
+    expect(toasts().find((t) => t.title === "Set up shop")!.action!.label).toBe("Undo");
+  });
+
+  it("says nothing about a setup the terminal left that didn't touch CLAUDE.md", async () => {
+    tauri.byDir["/code/old"] = "v4";
+    let release!: () => void;
+    tauri.applyGate = new Promise<void>((r) => { release = r; });
+    const hook = mount("/code/old");
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    hook.rerender({ cwd: null });
+    tauri.applyGate = null;
+    await act(async () => { release(); });
+    await settle();
+    expect(toasts()).toHaveLength(0);
+  });
+
+  it("stays quiet when its setup had nothing to write, CLAUDE.md included", async () => {
+    tauri.byDir["/code/shop"] = "v6";
+    tauri.report = { created: [], appendedImport: false, agents: 0, bmadFiles: 0 };
+    mount("/code/shop");
+    await waitFor(() => expect(tauri.applies).toHaveLength(1));
+    await settle();
+    expect(toasts()).toHaveLength(0);
   });
 
   it("is set up where it sits, below the repository root", async () => {

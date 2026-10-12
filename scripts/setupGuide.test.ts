@@ -25,6 +25,28 @@ describe("the project setup guide", () => {
     }
   });
 
+  it("says a v6 project's agents are told to use the v6 skills, and what happens to an existing CLAUDE.md", () => {
+    const section = guide.slice(guide.indexOf("### CLAUDE.md and the BMAD version"), guide.indexOf("## Choosing and switching the BMAD version"));
+    expect(section).toMatch(/\*\*On v6\*\* it tells the project's agents that BMAD v6 is how work is done/);
+    // The skills it names are the ones the paragraph names.
+    const paragraph = read("src/lib/projectMethodology.ts");
+    for (const skill of ["bmad-prd", "bmad-architecture", "bmad-ux", "bmad-ticket", "bmad-build", "bmad-code-review"]) {
+      expect(section).toContain(`\`${skill}\``);
+      expect(paragraph).toContain(`\\\`${skill}\\\``);
+    }
+    expect(section).toMatch(/a story is Done only when the verification command passes/);
+    expect(guide).toContain("ADE never replaces that file.");
+    expect(section).toMatch(/exactly as some ADE release wrote it \| Replaces that paragraph/);
+    expect(section).toContain("`<!-- ade:bmad -->` and `<!-- /ade:bmad -->`");
+    expect(paragraph).toContain('"<!-- ade:bmad -->"');
+    expect(section).toMatch(/the old BMAD lines need removing by hand/);
+    expect(section).toMatch(/a link, is read-only, isn't UTF-8 text, holds the paragraph more than once/);
+    expect(section).toContain("Adding agents never touches the file.");
+    expect(section).toMatch(/\*\*Undo\*\*[^\n]*only while it still reads as the setup left it/);
+    // And the landing page says the same in short.
+    expect(read("docs/index.html")).toMatch(/On v6, <code>CLAUDE\.md<\/code> tells the project&rsquo;s agents to use the v6 skills/);
+  });
+
   it("says how each entry point asks", () => {
     expect(guide).toContain("## Choosing and switching the BMAD version");
     const section = guide.slice(guide.indexOf("## Choosing and switching the BMAD version"), guide.indexOf("## When it runs"));
@@ -153,7 +175,8 @@ describe("the project setup guide", () => {
     const text = section();
     expect(text).toContain("If a step fails, ADE puts everything back and removes the archive.");
     expect(text).toMatch(/but only when nothing has taken its place/);
-    expect(text).toMatch(/`\.claude\/settings\.json` and `\.ade\/methodology`, but only if they are still as the switch left them/);
+    expect(text).toMatch(/`\.claude\/settings\.json`, `\.ade\/methodology` and the BMAD paragraph of `CLAUDE\.md`, but only if they are still as the switch left them/);
+    expect(text).toContain("A `CLAUDE.md` you saved while the switch ran keeps your version.");
     expect(text).toMatch(/\*\*It puts back\*\*/);
     expect(text).toMatch(/\*\*It leaves, and reports,\*\* anything it can't put back/);
     expect(text).toMatch(/or a file changed since/);

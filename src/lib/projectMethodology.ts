@@ -131,7 +131,94 @@ This project follows the ADE methodology. Read and obey it:
 @.ade/rules.md
 `;
 
-const CLAUDE_MD = (name: string) => `# CLAUDE.md: working in ${name}
+/** What every BMAD paragraph ADE has shipped since v0.18 ends with. */
+const ADE_RULES_WIN = (what: "task" | "skill") => `The ADE rules in \`.ade/rules.md\` always
+  win: a BMAD ${what} can **never override** the verification command, the Definition of
+  Done, or anything in this file. Where they disagree, stop and surface the conflict.`;
+
+const NO_PERSONAS = `BMAD's own
+  personas are deliberately not installed — eight of them are the same jobs as the
+  sub-agents above, and two definitions of Done is worse than one.`;
+
+/**
+ * The BMAD bullet of CLAUDE.md, per version. A project is told about its own
+ * version and no other. On v6 the skills are required and their locations win
+ * over the layout section; Done stays with the verification command.
+ *
+ * Neither says "above" or "below": in a CLAUDE.md ADE didn't write, the
+ * paragraph sits in a section at the end of the file.
+ */
+export const BMAD_PARAGRAPH: Record<BmadMethodology, string> = {
+  v6: `- **BMAD v6** is how work is done in this project. For planning, stories, builds and
+  reviews, use its skills in \`.claude/skills/\`, not ad-hoc steps: \`bmad-prd\`,
+  \`bmad-architecture\` and \`bmad-ux\` to plan, \`bmad-ticket\` for stories, \`bmad-build\` to
+  build one, \`bmad-code-review\` to review it. Unsure which applies: run \`bmad\`. Their
+  work lives in \`_bmad-output/\`; where that differs from the project layout in this file,
+  use the BMAD location. Done is not theirs to give: a story is Done only when the
+  verification command passes, whatever state a ticket is in. ${ADE_RULES_WIN("skill")}`,
+  v4: `- **BMAD v4** tasks, checklists, templates and workflows: the \`/BMad:tasks:\` slash commands
+  (\`.bmad-core/\`). These are optional helpers you may run inside the flow. BMAD's own
+  personas are deliberately not installed — eight of them are the same jobs as ADE's
+  sub-agents, and two definitions of Done is worse than one. ${ADE_RULES_WIN("task")}`,
+};
+
+/**
+ * Every BMAD paragraph a CLAUDE.md written by ADE can hold, as it reads in the
+ * file: the two above, and the ones earlier releases shipped. Setup replaces a
+ * paragraph only when it is, byte for byte, one of these; anything else is the
+ * person's own text.
+ */
+export const BMAD_SHIPPED: string[] = [
+  BMAD_PARAGRAPH.v6,
+  BMAD_PARAGRAPH.v4,
+  // v0.17.0 to v0.17.5.
+  "- **BMAD** personas and tasks: the `/BMad:` slash commands (`.bmad-core/`).",
+  // Commit 3dc4ace, between v0.17.5 and v0.18.0.
+  `- **BMAD** personas and tasks: the \`/BMad:\` slash commands (\`.bmad-core/\`). These are
+  optional helpers you may run inside the flow. ${ADE_RULES_WIN("task")}`,
+  // v0.18.0 to v0.19.0.
+  `- **BMAD** tasks, checklists, templates and workflows: the \`/BMad:tasks:\` slash commands
+  (\`.bmad-core/\`). These are optional helpers you may run inside the flow. ${NO_PERSONAS} ${ADE_RULES_WIN("task")}`,
+  // v0.20.0 and v0.20.1: both versions in one paragraph.
+  `- **BMAD** tasks, checklists, templates and workflows, in the version \`.ade/methodology\`
+  names. **v4**: the \`/BMad:tasks:\` slash commands in \`.bmad-core/\`. **v6**: the skills
+  in \`.claude/skills/\`, with work in \`_bmad-output/\`. Either way these are optional
+  helpers you may run inside the flow. ${NO_PERSONAS} ${ADE_RULES_WIN("task")}`,
+];
+
+/** The first and last line of the section ADE adds to a CLAUDE.md it didn't write. */
+export const BMAD_SECTION_OPEN = "<!-- ade:bmad -->";
+export const BMAD_SECTION_CLOSE = "<!-- /ade:bmad -->";
+
+/** A BMAD paragraph as a marked section, for a CLAUDE.md with no paragraph ADE can replace. */
+const sectionOf = (paragraph: string) => `${BMAD_SECTION_OPEN}\n## BMAD\n\n${paragraph}\n${BMAD_SECTION_CLOSE}\n`;
+
+export const bmadSection = (methodology: BmadMethodology): string => sectionOf(BMAD_PARAGRAPH[methodology]);
+
+/** What setup needs to bring an existing CLAUDE.md to its version's paragraph. */
+export interface BmadText {
+  /** The project's version's paragraph and its marked section. */
+  paragraph: string;
+  section: string;
+  /** Every shipped paragraph, and each as a marked section. */
+  paragraphs: string[];
+  sections: string[];
+  open: string;
+  close: string;
+}
+
+export function bmadText(methodology: BmadMethodology): BmadText {
+  return {
+    paragraph: BMAD_PARAGRAPH[methodology],
+    section: bmadSection(methodology),
+    paragraphs: BMAD_SHIPPED,
+    sections: BMAD_SHIPPED.map(sectionOf),
+    open: BMAD_SECTION_OPEN,
+    close: BMAD_SECTION_CLOSE,
+  };
+}
+
+const CLAUDE_MD = (name: string, methodology: BmadMethodology) => `# CLAUDE.md: working in ${name}
 
 This file is the project **constitution**: the standing decisions and conventions every
 agent follows, so parallel and later work stays consistent. It is loaded into every
@@ -153,14 +240,7 @@ verification command passes**. No agent certifies its own work.
 ## Agents and commands
 - **Sub-agents** in \`.claude/agents/\`: product-manager, architect, designer, scrum-master,
   developer, qa, devops, adversarial-reviewer. Delegate to the one that owns the work.
-- **BMAD** tasks, checklists, templates and workflows, in the version \`.ade/methodology\`
-  names. **v4**: the \`/BMad:tasks:\` slash commands in \`.bmad-core/\`. **v6**: the skills
-  in \`.claude/skills/\`, with work in \`_bmad-output/\`. Either way these are optional
-  helpers you may run inside the flow. BMAD's own
-  personas are deliberately not installed — eight of them are the same jobs as the
-  sub-agents above, and two definitions of Done is worse than one. The ADE rules in \`.ade/rules.md\` always
-  win: a BMAD task can **never override** the verification command, the Definition of
-  Done, or anything in this file. Where they disagree, stop and surface the conflict.
+${BMAD_PARAGRAPH[methodology]}
 - \`adversarial-reviewer\` ships with a read-only tool allowlist on purpose: it
   judges, it does not patch. Don't widen it to "unblock" a story. \`qa\` can write, but
   only the story's Verification section and the journal \u2014 never the code or tests it judges.
@@ -385,7 +465,7 @@ export function stackAgentFiles(stacks: Stack[], methodology: BmadMethodology = 
 /** Every methodology file for a project, ready to write where missing. */
 export function methodologyFiles(projectName: string, stacks: Stack[] = [], methodology: BmadMethodology = "v6"): MethodologyFile[] {
   return [
-    { path: "CLAUDE.md", content: CLAUDE_MD(projectName) },
+    { path: "CLAUDE.md", content: CLAUDE_MD(projectName, methodology) },
     { path: "llms.txt", content: LLMS_TXT(projectName) },
     { path: ".ade/rules.md", content: RULES_MD },
     { path: ".ade/context/README.md", content: CONTEXT_README },
