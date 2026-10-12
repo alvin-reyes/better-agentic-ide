@@ -7,24 +7,32 @@ import { openFileFromTerminal } from "../lib/openFile";
 import { STACK_LABELS } from "../lib/projectMethodology";
 import { askMethodology, projectName, versionToSetUp, type AskUi, type MethodologyAnswer } from "../lib/methodologyPrompt";
 import {
-  addStackAgents, foldersUpTo, isComplete, isSettingUp, isSetupCandidate, normRoot, onProjectHasBmad, setUpProject, setupDeclined,
-  setupRootOf, setupStatus, summarize, switchBlock, undoSetup, wasSetUp,
+  addStackAgents, claudeMdNote, editedClaudeMd, foldersUpTo, isComplete, isSettingUp, isSetupCandidate, normRoot, onProjectHasBmad,
+  setUpProject, setupDeclined, setupRootOf, setupStatus, summarize, switchBlock, undoSetup, wasSetUp,
   type Methodology, type SetupFailure, type SetupResult, type SwitchBlock,
 } from "../lib/projectSetup";
 
-/** Show what a setup wrote, with Undo. */
+/**
+ * Show what a setup wrote, with Undo. An edit to a CLAUDE.md that was already
+ * there is always said, also when it is all the setup did, and so is why one
+ * that needed the edit was left alone.
+ */
 export function announceSetup(r: SetupResult, show: (t: GuardToast) => void, stackOnly = false) {
   const what = summarize(r.report);
   const failed = r.report.settingsError ? `AI attribution is still on: ${r.report.settingsError}.` : "";
-  if (!what && !failed) return;
+  const claudeMd = claudeMdNote(r.report) ?? "";
+  if (!what && !failed && !claudeMd) return;
   const stacks = r.stacks.map((s) => STACK_LABELS[s]).join(", ");
+  // CLAUDE.md is the one existing file a setup edits beyond adding a line.
+  const kept = editedClaudeMd(r.report) ? "Other existing files were left as they were." : "Existing files were left as they were.";
   const added = !what ? "" : stackOnly
     ? `Added ${what} for it. Remove any in Integrations > Agents.`
-    : `Added ${what}${stacks ? ` (${stacks} project)` : ""}. Existing files were left as they were.`;
+    : `Added ${what}${stacks ? ` (${stacks} project)` : ""}. ${kept}`;
   show({
     title: stackOnly ? `${stacks} detected in ${projectName(r.root)}` : `Set up ${projectName(r.root)}`,
-    body: [added, failed].filter(Boolean).join(" "),
-    action: { label: "Undo", run: () => { void undoSetup(r); } },
+    body: [added, claudeMd, failed].filter(Boolean).join(" "),
+    // Undo only what there is to undo: it also marks the project declined.
+    ...(what ? { action: { label: "Undo", run: () => { void undoSetup(r); } } } : {}),
   });
 }
 
@@ -38,9 +46,15 @@ export function announceSwitch(done: SwitchDone, show: (t: GuardToast) => void) 
   const guard = archiveDenied
     ? "Agents can't edit the archive: a permission rule in .claude/settings.json stops them."
     : "The permission rule that stops agents editing the archive couldn't be added to .claude/settings.json, so the archive isn't protected from edits.";
+  const edit = done.result.setup.claudeMd;
+  const claudeMd = [
+    edit?.status === "replaced" ? `The BMAD paragraph in CLAUDE.md is now the ${done.to} one.` : "",
+    edit?.status === "appended" ? `CLAUDE.md has a new BMAD ${done.to} section.` : "",
+    claudeMdNote(done.result.setup) ?? "",
+  ].filter(Boolean).join(" ");
   show({
     title: `Switched ${projectName(done.root)} to BMAD ${done.to}`,
-    body: `Moved ${movedLabel(done.result)} to ${archive}/. ${guard} Agents already running keep their old role prompt until restarted.`,
+    body: `Moved ${movedLabel(done.result)} to ${archive}/. ${claudeMd ? `${claudeMd} ` : ""}${guard} Agents already running keep their old role prompt until restarted.`,
     action: { label: "Open ARCHIVE.md", run: () => openFileFromTerminal(joinPath(done.root, `${archive}/ARCHIVE.md`)) },
   });
 }
@@ -223,7 +237,8 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
         if (cancelled) return;
         // Not asked for, so a failure stays quiet: the next cd tries again.
         const result = await setUpProject(root, answer.methodology, status.stacks).catch(() => null);
-        if (result && !cancelled && !quiet) announceSetup(result, show);
+        // An edit to CLAUDE.md is said even if the terminal has moved on since.
+        if (result && (result.report.claudeMd || (!cancelled && !quiet))) announceSetup(result, show);
         return;
       }
       // An answer someone clicked stands even if the terminal has moved on
@@ -236,7 +251,7 @@ export function useProjectSetup(cwd: string | null, show: (t: GuardToast) => voi
           show({ title: "Project setup", body: `Project setup failed: ${e}` });
           return null;
         });
-        if (result && !quiet) announceSetup(result, show);
+        if (result && (!quiet || result.report.claudeMd)) announceSetup(result, show);
       } finally {
         // Kept until here so a run already under way doesn't ask again while
         // the setup is running. After a failure the next run asks afresh.

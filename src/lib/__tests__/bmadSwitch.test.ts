@@ -181,6 +181,12 @@ describe("runSwitch", () => {
     expect(sent.plan).toEqual(PLAN);
     expect(sent.import).toContain("@.ade/rules.md");
     expect(sent.marker).toBe("<!-- ade:methodology -->");
+    // The paragraphs of the version switched to, for the CLAUDE.md already there.
+    const bmad = sent.bmad as { paragraph: string; section: string; paragraphs: string[]; sections: string[] };
+    expect(bmad.paragraph).toMatch(/^- \*\*BMAD v6\*\*/);
+    expect(bmad.section).toContain(bmad.paragraph);
+    expect(bmad.paragraphs).toContain(bmad.paragraph);
+    expect(bmad.sections).toHaveLength(bmad.paragraphs.length);
     const paths = (sent.files as { path: string }[]).map((f) => f.path);
     expect(paths).toContain(".ade/rules.md");
     expect(paths).toContain(".claude/agents/architect.md");

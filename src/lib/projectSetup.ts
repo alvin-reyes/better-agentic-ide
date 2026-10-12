@@ -6,7 +6,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { joinPath } from "./bmadRuntime/paths";
 import {
-  CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, agentCatalog, methodologyFiles, stackAgentFiles, type AgentEntry, type MethodologyFile, type Stack,
+  CLAUDE_MD_IMPORT, CLAUDE_MD_IMPORT_MARKER, agentCatalog, bmadText, methodologyFiles, stackAgentFiles,
+  type AgentEntry, type MethodologyFile, type Stack,
 } from "./projectMethodology";
 
 /** The two BMAD lines a project can be set up on; v6 is the default. */
@@ -22,6 +23,25 @@ export interface SetupStatus {
   methodology: Methodology | null;
 }
 
+/** What a setup did to the BMAD paragraph of a CLAUDE.md that was already there. */
+export interface ClaudeEdit {
+  /**
+   * "replaced": a paragraph ADE shipped, or its marked section, now reads as
+   * the project's version. "appended": the file had neither and gained a
+   * marked section. "skipped": the file needed the edit and was left.
+   */
+  status: "replaced" | "appended" | "skipped";
+  /**
+   * Skipped: why ("link", "read-only", "not-utf8", "twice", "edited-section",
+   * or what reading or writing failed with). Otherwise "edited" when the file
+   * still holds BMAD lines that are not ADE's, else null.
+   */
+  reason: string | null;
+  /** The whole file before and after: what Undo compares and restores. */
+  before: string;
+  after: string;
+}
+
 export interface SetupReport {
   created: string[];
   appendedImport: boolean;
@@ -31,6 +51,8 @@ export interface SetupReport {
   attributionOff?: boolean;
   /** .claude/settings.json couldn't be updated; the rest of setup still ran. */
   settingsError?: string | null;
+  /** Unset when CLAUDE.md was already right, was written new, or isn't there. */
+  claudeMd?: ClaudeEdit | null;
 }
 
 export interface SetupResult {
@@ -207,6 +229,8 @@ export function setupFiles(root: string, stacks: Stack[], methodology: Methodolo
 function apply(root: string, files: MethodologyFile[], methodology: Methodology): Promise<SetupReport> {
   return invoke<SetupReport>("project_setup_apply", {
     root, files, import: CLAUDE_MD_IMPORT, marker: CLAUDE_MD_IMPORT_MARKER, methodology, full: true,
+    // Only a full setup brings an existing CLAUDE.md to the project's version.
+    bmad: bmadText(methodology),
   });
 }
 
@@ -522,12 +546,42 @@ export async function undoSetup(r: SetupResult): Promise<number> {
     created: r.report.created,
     files: r.files,
     import: r.report.appendedImport ? CLAUDE_MD_IMPORT : null,
+    // Put back only while the file still reads as the setup left it.
+    claudeMd: editedClaudeMd(r.report) ? r.report.claudeMd : null,
   });
   // Stays "set up" so it isn't redone, and declined so stack agents aren't
   // added either. "Set up now" in Integrations > Agents undoes this.
   markSetUp(r.root, true);
   writeList(DECLINED_KEY, r.root, true);
   return removed;
+}
+
+/** The setup changed the BMAD paragraph of a CLAUDE.md that was already there. */
+export function editedClaudeMd(r: SetupReport): boolean {
+  return r.claudeMd?.status === "replaced" || r.claudeMd?.status === "appended";
+}
+
+const LEFT_ALONE: Record<string, string> = {
+  link: "CLAUDE.md is a link, so its BMAD paragraph was left as it is.",
+  "read-only": "CLAUDE.md is read-only, so its BMAD paragraph was left as it is.",
+  "not-utf8": "CLAUDE.md isn't UTF-8 text, so its BMAD paragraph was left as it is.",
+  twice: "CLAUDE.md holds the BMAD paragraph more than once, so its BMAD paragraph was left as it is.",
+  "edited-section": "The BMAD section in CLAUDE.md was edited, so it was left as it is.",
+};
+
+/**
+ * What the person has to know about CLAUDE.md beyond "it was updated": old
+ * BMAD lines of their own that are still in it, or why its BMAD paragraph
+ * was left as it is. Each is about the paragraph only: the import line is
+ * added to such a file all the same. Null when there is nothing to add.
+ */
+export function claudeMdNote(r: SetupReport): string | null {
+  const edit = r.claudeMd;
+  if (!edit) return null;
+  if (edit.status === "skipped") {
+    return LEFT_ALONE[edit.reason ?? ""] ?? `The BMAD paragraph in CLAUDE.md was left as it is: ${edit.reason ?? "it couldn't be updated"}.`;
+  }
+  return edit.reason === "edited" ? "CLAUDE.md still has older BMAD lines: remove them by hand." : null;
 }
 
 /** A short summary of what a setup wrote, or null when it wrote nothing. */
@@ -540,6 +594,8 @@ export function summarize(r: SetupReport): string | null {
   const other = r.created.length - r.bmadFiles - r.agents - settings;
   if (other > 0) parts.push("the methodology");
   if (r.appendedImport) parts.push("a line in CLAUDE.md");
+  if (r.claudeMd?.status === "replaced") parts.push("an updated BMAD paragraph in CLAUDE.md");
+  if (r.claudeMd?.status === "appended") parts.push("a BMAD section in CLAUDE.md");
   if (r.attributionOff) parts.push("settings that turn off AI attribution");
   if (!parts.length) return null;
   return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;

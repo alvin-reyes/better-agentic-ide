@@ -50,6 +50,18 @@ describe("announceSwitch", () => {
     expect(announced(done()).body).toContain("Agents already running keep their old role prompt until restarted.");
   });
 
+  it("says what happened to the BMAD paragraph of CLAUDE.md", () => {
+    const setup = { created: [], appendedImport: false, agents: 8, bmadFiles: 0 };
+    const withEdit = (status: "replaced" | "appended" | "skipped", reason: string | null = null) =>
+      announced(done({ setup: { ...setup, claudeMd: { status, reason, before: "", after: "" } } })).body;
+    expect(withEdit("replaced")).toContain("/. The BMAD paragraph in CLAUDE.md is now the v6 one. Agents can't edit the archive");
+    expect(withEdit("appended")).toContain("/. CLAUDE.md has a new BMAD v6 section. Agents can't edit the archive");
+    expect(withEdit("appended", "edited")).toContain("CLAUDE.md has a new BMAD v6 section. CLAUDE.md still has older BMAD lines: remove them by hand. Agents");
+    expect(withEdit("skipped", "not-utf8")).toContain("/. CLAUDE.md isn't UTF-8 text, so its BMAD paragraph was left as it is. Agents");
+    // Already right, or written new: nothing to say.
+    expect(announced(done()).body).not.toContain("CLAUDE.md");
+  });
+
   it("links to ARCHIVE.md and offers no Undo", () => {
     const toast = announced(done());
     const actions = toastActions(toast);
