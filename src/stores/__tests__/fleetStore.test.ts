@@ -125,6 +125,49 @@ describe("useFleetStore", () => {
     expect(useFleetStore.getState().subagents).toHaveLength(1);
   });
 
+  it("keeps a background sub-agent running until its notification, then ends it", () => {
+    const apply = useFleetStore.getState().applyEvent;
+    apply({ kind: "Spawn", id: "toolu_bg", agent_type: "developer", description: "d",
+            model: null, started_at: "2026-10-12T23:45:47.000Z" }, "/proj");
+    // The launch acknowledgement a second later is not a completion.
+    apply({ kind: "Launched", id: "toolu_bg", agent_id: "a01a" }, "/proj");
+    const running = useFleetStore.getState().subagents[0];
+    expect(running.endTime).toBeNull();
+    expect(buildLanes([], [running], {})[0].status).toBe("running");
+
+    apply({ kind: "Complete", id: "toolu_bg", agent_id: "a01a", finished_at: "2026-10-12T23:56:23.000Z" }, "/proj");
+    const done = useFleetStore.getState().subagents[0];
+    expect(done.endTime).toBe(Date.parse("2026-10-12T23:56:23.000Z"));
+    expect(buildLanes([], [done], {})[0].status).toBe("completed");
+  });
+
+  it("moves the end later when a resumed sub-agent reports again, by its agent id", () => {
+    const apply = useFleetStore.getState().applyEvent;
+    apply({ kind: "Spawn", id: "toolu_bg", agent_type: "developer", description: "d",
+            model: null, started_at: "2026-10-11T10:30:00.000Z" }, "/proj");
+    apply({ kind: "Launched", id: "toolu_bg", agent_id: "a91e" }, "/proj");
+    apply({ kind: "Complete", id: "toolu_bg", agent_id: "a91e", finished_at: "2026-10-11T10:43:31.000Z" }, "/proj");
+    // After a follow-up the notification names the follow-up call, or none.
+    apply({ kind: "Complete", id: "toolu_send", agent_id: "a91e", finished_at: "2026-10-11T11:22:00.000Z" }, "/proj");
+    apply({ kind: "Complete", id: "", agent_id: "a91e", finished_at: "2026-10-11T11:36:37.000Z" }, "/proj");
+    expect(useFleetStore.getState().subagents[0].endTime).toBe(Date.parse("2026-10-11T11:36:37.000Z"));
+    // A replayed earlier notification does not pull it back.
+    apply({ kind: "Complete", id: "toolu_bg", agent_id: "a91e", finished_at: "2026-10-11T10:43:31.000Z" }, "/proj");
+    expect(useFleetStore.getState().subagents[0].endTime).toBe(Date.parse("2026-10-11T11:36:37.000Z"));
+  });
+
+  it("ignores a notification for a task that is not a sub-agent", () => {
+    const apply = useFleetStore.getState().applyEvent;
+    apply({ kind: "Spawn", id: "toolu_bg", agent_type: "developer", description: "d",
+            model: null, started_at: "2026-10-12T23:45:47.000Z" }, "/proj");
+    // A background shell command: its own call, its own task id.
+    apply({ kind: "Complete", id: "toolu_bash", agent_id: "b87x", finished_at: "2026-10-12T23:50:00.000Z" }, "/proj");
+    apply({ kind: "Complete", id: "", agent_id: null, finished_at: "2026-10-12T23:50:00.000Z" }, "/proj");
+    // No agent id at all must not match a record that has none either.
+    apply({ kind: "Complete", id: "toolu_other", finished_at: "2026-10-12T23:50:00.000Z" }, "/proj");
+    expect(useFleetStore.getState().subagents[0].endTime).toBeNull();
+  });
+
   it("ignores a complete for an unknown id", () => {
     useFleetStore.getState().applyEvent(
       { kind: "Complete", id: "nope", finished_at: "2026-08-07T05:31:00.000Z" }, "/proj");

@@ -7,7 +7,10 @@ import { promptTokens, sessionCost, type SessionUsage } from "../lib/tokenUsage"
 export type SubagentEvent =
   | { kind: "Spawn"; id: string; agent_type: string; description: string;
       model: string | null; started_at: string | null }
-  | { kind: "Complete"; id: string; finished_at: string | null };
+  /** A background sub-agent was launched: ties the call to the agent its notifications name. */
+  | { kind: "Launched"; id: string; agent_id: string }
+  /** `id` is empty when the line names no call; `agent_id` is set when it names the agent. */
+  | { kind: "Complete"; id: string; agent_id?: string | null; finished_at: string | null };
 
 export interface SubagentRecord {
   id: string;
@@ -17,6 +20,8 @@ export interface SubagentRecord {
   startTime: number;
   endTime: number | null;
   cwd: string;
+  /** Claude Code's id for a background sub-agent, once its launch is seen. */
+  agentId?: string;
 }
 
 export interface PaneMeta {
@@ -343,11 +348,22 @@ export const useFleetStore = create<FleetStore>((set) => ({
           ],
         };
       }
-      if (!state.subagents.some((s) => s.id === ev.id)) return state;
-      const endTime = parseTime(ev.finished_at);
+      if (ev.kind === "Launched") {
+        if (!state.subagents.some((s) => s.id === ev.id && s.agentId !== ev.agent_id)) return state;
+        return {
+          subagents: state.subagents.map((s) => (s.id === ev.id ? { ...s, agentId: ev.agent_id } : s)),
+        };
+      }
+      // A notification names the call that started the sub-agent, or, after a
+      // follow-up, only the agent itself.
+      const done = (s: SubagentRecord) =>
+        (ev.id !== "" && s.id === ev.id) || (!!ev.agent_id && s.agentId === ev.agent_id);
+      if (!state.subagents.some(done)) return state;
+      const finished = parseTime(ev.finished_at);
       return {
+        // A sub-agent that is sent a follow-up reports again: its end only moves later.
         subagents: state.subagents.map((s) =>
-          s.id === ev.id ? { ...s, endTime } : s,
+          done(s) ? { ...s, endTime: Math.max(s.endTime ?? 0, finished) } : s,
         ),
       };
     }),

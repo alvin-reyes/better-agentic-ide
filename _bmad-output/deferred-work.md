@@ -10,3 +10,9 @@
 - source_plan: `_bmad-output/plan-force-v6-after-switch.md`
   summary: Setup appends the import line to a `CLAUDE.md` that is a link (writing through it) or is not UTF-8.
   evidence: Pre-existing in `projectsetup::apply`; the paragraph edit skips both, the import append does not, and a test pins the non-UTF-8 case.
+- source_plan: `_bmad-output/plan-fleet-background-agents.md`
+  summary: The fleet watcher keeps one byte offset for whichever transcript is newest, so with two Claude sessions in one folder lines can be skipped.
+  evidence: Pre-existing in `watch_subagents` (`src-tauri/src/subagent.rs`); a skipped finish notification now leaves a lane running until the 30-minute quiet check, which runs only when the folder's watcher next starts (every fleet view on it closed and one reopened). Per-file offsets would fix it.
+- source_plan: `_bmad-output/plan-fleet-background-agents.md`
+  summary: Agent launches acknowledged with `remote_launched` or `teammate_spawned` are still completed at the acknowledgement.
+  evidence: Unverified: the statuses appear as strings in the Claude Code binary, no transcript with one was found, and it is not known what line marks their finish. A real transcript of either would settle it.
