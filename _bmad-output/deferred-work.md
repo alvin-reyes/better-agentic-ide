@@ -16,3 +16,12 @@
 - source_plan: `_bmad-output/plan-fleet-background-agents.md`
   summary: Agent launches acknowledged with `remote_launched` or `teammate_spawned` are still completed at the acknowledgement.
   evidence: Unverified: the statuses appear as strings in the Claude Code binary, no transcript with one was found, and it is not known what line marks their finish. A real transcript of either would settle it.
+- source_plan: `_bmad-output/plan-fleet-background-agents.md`
+  summary: A background sub-agent whose own transcript is missing is never concluded by the quiet check, so its lane stays running on every replay.
+  evidence: From the review of PR #54. `stale_background` (`src-tauri/src/subagent.rs`) needs `<session>/subagents/agent-<id>.jsonl`; a session killed before that file is written, or a different transcript layout, leaves none. Falling back to the session transcript's last timestamp would bound it.
+- source_plan: `_bmad-output/plan-fleet-background-agents.md`
+  summary: A background sub-agent completes only at a `queue-operation` / `enqueue` line; if a finish is ever written without one, the lane never completes.
+  evidence: Unverified, from the review of PR #54. The 223-of-223 check covered id matching, not whether every finish has an enqueue line. Counting launches against enqueue notifications in real transcripts would settle it.
+- source_plan: `_bmad-output/plan-fleet-background-agents.md`
+  summary: With the session-still-writing guard, a background sub-agent that is lost without a notification stays running for as long as its session keeps writing.
+  evidence: Introduced by the PR #54 review fix that stops the quiet check ending a sub-agent blocked on a long command. The session's transcript time is the only sign of life used; a check that the Claude Code process is alive would be exact.

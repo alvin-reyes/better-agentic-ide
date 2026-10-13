@@ -10,7 +10,9 @@ export type SubagentEvent =
   /** A background sub-agent was launched: ties the call to the agent its notifications name. */
   | { kind: "Launched"; id: string; agent_id: string }
   /** `id` is empty when the line names no call; `agent_id` is set when it names the agent. */
-  | { kind: "Complete"; id: string; agent_id?: string | null; finished_at: string | null };
+  | { kind: "Complete"; id: string; agent_id?: string | null; finished_at: string | null }
+  /** A sub-agent that had reported was sent a follow-up and runs again. */
+  | { kind: "Resumed"; agent_id: string; resumed_at: string };
 
 export interface SubagentRecord {
   id: string;
@@ -22,6 +24,8 @@ export interface SubagentRecord {
   cwd: string;
   /** Claude Code's id for a background sub-agent, once its launch is seen. */
   agentId?: string;
+  /** When a follow-up last started it again after it had reported. */
+  resumedAt?: number;
 }
 
 export interface PaneMeta {
@@ -354,12 +358,24 @@ export const useFleetStore = create<FleetStore>((set) => ({
           subagents: state.subagents.map((s) => (s.id === ev.id ? { ...s, agentId: ev.agent_id } : s)),
         };
       }
+      if (ev.kind === "Resumed") {
+        const at = Date.parse(ev.resumed_at);
+        // Only a follow-up sent after the last report starts a new run.
+        const reopened = (s: SubagentRecord) =>
+          s.agentId === ev.agent_id && s.endTime !== null && at >= s.endTime;
+        if (!state.subagents.some(reopened)) return state;
+        return {
+          subagents: state.subagents.map((s) => (reopened(s) ? { ...s, endTime: null, resumedAt: at } : s)),
+        };
+      }
       // A notification names the call that started the sub-agent, or, after a
-      // follow-up, only the agent itself.
-      const done = (s: SubagentRecord) =>
-        (ev.id !== "" && s.id === ev.id) || (!!ev.agent_id && s.agentId === ev.agent_id);
-      if (!state.subagents.some(done)) return state;
+      // follow-up, only the agent itself. A report from before the last
+      // follow-up belongs to an earlier run.
       const finished = parseTime(ev.finished_at);
+      const done = (s: SubagentRecord) =>
+        ((ev.id !== "" && s.id === ev.id) || (!!ev.agent_id && s.agentId === ev.agent_id)) &&
+        finished >= (s.resumedAt ?? 0);
+      if (!state.subagents.some(done)) return state;
       return {
         // A sub-agent that is sent a follow-up reports again: its end only moves later.
         subagents: state.subagents.map((s) =>

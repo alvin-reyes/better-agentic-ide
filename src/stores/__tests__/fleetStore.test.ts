@@ -156,6 +156,33 @@ describe("useFleetStore", () => {
     expect(useFleetStore.getState().subagents[0].endTime).toBe(Date.parse("2026-10-11T11:36:37.000Z"));
   });
 
+  it("reopens a finished sub-agent that is sent a follow-up", () => {
+    const apply = useFleetStore.getState().applyEvent;
+    const record = () => useFleetStore.getState().subagents[0];
+    apply({ kind: "Spawn", id: "toolu_bg", agent_type: "developer", description: "d",
+            model: null, started_at: "2026-10-11T10:40:00.000Z" }, "/proj");
+    apply({ kind: "Launched", id: "toolu_bg", agent_id: "a91e" }, "/proj");
+    // A resume before any report changes nothing.
+    apply({ kind: "Resumed", agent_id: "a91e", resumed_at: "2026-10-11T10:41:00.000Z" }, "/proj");
+    expect(record().endTime).toBeNull();
+    apply({ kind: "Complete", id: "toolu_bg", agent_id: "a91e", finished_at: "2026-10-11T10:43:31.000Z" }, "/proj");
+    expect(record().endTime).toBe(Date.parse("2026-10-11T10:43:31.000Z"));
+    // A resume of some other agent leaves it finished.
+    apply({ kind: "Resumed", agent_id: "b22b", resumed_at: "2026-10-11T10:50:00.000Z" }, "/proj");
+    expect(record().endTime).toBe(Date.parse("2026-10-11T10:43:31.000Z"));
+    // The follow-up: running again until it reports.
+    apply({ kind: "Resumed", agent_id: "a91e", resumed_at: "2026-10-11T10:50:00.000Z" }, "/proj");
+    expect(record().endTime).toBeNull();
+    // A replayed report from before the follow-up does not end the new run.
+    apply({ kind: "Complete", id: "toolu_bg", agent_id: "a91e", finished_at: "2026-10-11T10:43:31.000Z" }, "/proj");
+    expect(record().endTime).toBeNull();
+    apply({ kind: "Complete", id: "", agent_id: "a91e", finished_at: "2026-10-11T11:36:37.000Z" }, "/proj");
+    expect(record().endTime).toBe(Date.parse("2026-10-11T11:36:37.000Z"));
+    // A replayed follow-up from before that report does not reopen it.
+    apply({ kind: "Resumed", agent_id: "a91e", resumed_at: "2026-10-11T10:50:00.000Z" }, "/proj");
+    expect(record().endTime).toBe(Date.parse("2026-10-11T11:36:37.000Z"));
+  });
+
   it("ignores a notification for a task that is not a sub-agent", () => {
     const apply = useFleetStore.getState().applyEvent;
     apply({ kind: "Spawn", id: "toolu_bg", agent_type: "developer", description: "d",

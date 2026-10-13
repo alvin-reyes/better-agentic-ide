@@ -62,7 +62,17 @@ Pass 1, quick lens, 9 findings. Pass 2, 8 findings.
 | 2 | Contract file inaccurate in three places | low | patched |
 | 2 | Plan drift | rejected | filled in at this step |
 | 2 | Nested foreground run could look quiet | maybe-false | rejected as low: not observed, self-correcting; noted above |
-Closing verification (2026-10-13, after the pass 2 fixes): `cargo test` 387 + 12 + 2 passed, 0 failed; `npx tsc --noEmit` exit 0; `npm test` 136 files, 1506 tests passed. Not tried in the running app.
+| PR | A follow-up never reopens a finished lane | medium | patched: `Resumed` event from `toolUseResult.resumedAgentId` (163 of 215 follow-up calls in real transcripts carry it; the rest were queued for a running agent); the store reopens the record |
+| PR | Quiet check ends a live agent blocked on a long command | medium | patched: nothing concluded while the session transcript was written in the last 30 minutes |
+| PR | Notification tags read from the free-text body | low | patched: ids and status read from the header only |
+| PR | `last_timestamp` blind behind a last line over 256 KB | low | patched: the tail grows until a timestamp is found or the file is read |
+| PR | Quiet check runs only at watcher start | low | already rejected in pass 2; unchanged |
+| PR | No sub-agent transcript, no conclusion | low | deferred |
+| PR | Completion relies on the `enqueue` line alone | maybe-false | deferred: unverified |
+
+PR review (2026-10-13, `/code-review` on #54), 7 findings: rows marked PR above. Their tests were written first and seen failing (5 in Rust, 1 in the store). Verification after these fixes: `cargo test` 392 + 12 + 2 passed, 0 failed; `npx tsc --noEmit` exit 0; `npm test` 136 files, 1507 tests passed. Not tried in the running app.
+
+Earlier closing verification (2026-10-13, after the pass 2 fixes): `cargo test` 387 + 12 + 2 passed, 0 failed; `npx tsc --noEmit` exit 0; `npm test` 136 files, 1506 tests passed. Not tried in the running app.
 
 ## Verification
 
