@@ -7,3 +7,6 @@
 - source_plan: `_bmad-output/initiative-phone-remote/plan-agent-status.md`
   summary: Writing `.claude/settings.local.json` (presets and Agent status hooks) re-sorts its keys and reformats it, because serde_json is built without `preserve_order`.
   evidence: Pre-existing in `save_settings`; found again in the agent-status review (pass 1, finding 1b). Fixing it means enabling `preserve_order` for the crate and checking every other JSON writer.
+- source_plan: `_bmad-output/initiative-phone-remote/plan-agent-status-fixes.md`
+  summary: An `ade-created` record left by an enable whose settings write then failed could later let disable remove an empty settings file the user created; and projects enabled before the record existed leave an empty file or `"hooks": {}` behind on disable.
+  evidence: Reported by the implementer after review pass 1 on 2026-10-14; both need an unlikely sequence and are harmless or untidy, so they were not patched.

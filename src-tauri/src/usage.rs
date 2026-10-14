@@ -6,7 +6,7 @@
 // content block, each repeating the same usage, so lines are deduplicated by
 // message id. Prices are applied in the frontend.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -761,7 +761,7 @@ pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) ->
             }
         }
     }
-    edit_local_settings(root, false, |obj| {
+    edit_local_settings(root, Created::Ignore, |obj| {
         for (key, value) in changes {
             let (map, name) = match key.strip_prefix("env.") {
                 Some(name) => {
@@ -797,20 +797,22 @@ pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) ->
 /// The folder for settings lock files: per user, and the same for the
 /// installed app and a dev build. Nothing is added to the project.
 fn lock_dir() -> PathBuf {
-    if crate::platform::IS_MACOS {
-        return std::env::temp_dir();
-    }
-    if let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty()) {
-        return PathBuf::from(dir);
-    }
-    match crate::env_home() {
-        Some(home) if !crate::platform::IS_WINDOWS => home.join(".cache").join("ade"),
+    lock_dir_of(crate::platform::IS_WINDOWS, crate::env_home())
+}
+
+/// `~/.cache/ade` on macOS and Linux: never `$TMPDIR`, which macOS purges
+/// (losing the record of what ADE created), nor the session's runtime
+/// folder, which the app and a dev build can see differently. Windows keeps
+/// the temp folder.
+fn lock_dir_of(is_windows: bool, home: Option<PathBuf>) -> PathBuf {
+    match home {
+        Some(home) if !is_windows => home.join(".cache").join("ade"),
         _ => std::env::temp_dir(),
     }
 }
 
-/// The lock file for one settings file, named from a hash of its path.
-fn lock_path(settings: &Path) -> PathBuf {
+/// The hash in the names of one settings file's lock and record.
+fn settings_hash(settings: &Path) -> String {
     use sha2::Digest;
     // From the project folder, which exists, so the name is the same before
     // and after `.claude/` is created.
@@ -821,8 +823,45 @@ fn lock_path(settings: &Path) -> PathBuf {
         _ => settings.to_path_buf(),
     };
     let hash = sha2::Sha256::digest(full.to_string_lossy().as_bytes());
-    let hex: String = hash.iter().take(8).map(|b| format!("{b:02x}")).collect();
-    lock_dir().join(format!("ade-settings-{hex}.lock"))
+    hash.iter().take(8).map(|b| format!("{b:02x}")).collect()
+}
+
+/// The lock file for one settings file, named from a hash of its path.
+fn lock_path(settings: &Path) -> PathBuf {
+    lock_dir().join(format!("ade-settings-{}.lock", settings_hash(settings)))
+}
+
+/// Beside the lock: what turning Agent status on created, so turning it off
+/// removes only that and never the user's own empty file or folder. One name
+/// per line: `CREATED_FILE`, `CREATED_DIR`, `CREATED_HOOKS`.
+fn created_record_path(settings: &Path) -> PathBuf {
+    lock_dir().join(format!("ade-created-{}", settings_hash(settings)))
+}
+
+const CREATED_FILE: &str = "settings.local.json";
+const CREATED_DIR: &str = ".claude";
+/// The top-level `hooks` key: removed when empty only if ADE added it.
+const CREATED_HOOKS: &str = "hooks";
+
+fn read_created(record: &Path) -> BTreeSet<String> {
+    std::fs::read_to_string(record).unwrap_or_default().lines().map(str::to_string).filter(|l| !l.is_empty()).collect()
+}
+
+/// Write the record, without following a symlink, with mode 0600.
+fn write_created(record: &Path, names: &BTreeSet<String>) -> Result<(), String> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+    }
+    let text: String = names.iter().map(|n| format!("{n}\n")).collect();
+    options
+        .open(record)
+        .and_then(|mut f| f.write_all(text.as_bytes()))
+        .map_err(|e| format!("can't write {}: {e}", record.display()))
 }
 
 /// Held while a settings file is read, changed and written.
@@ -866,33 +905,70 @@ fn write_settings_through(path: &Path, v: &Value) -> Result<(), String> {
     save_settings(&target, v)
 }
 
+/// What an edit of settings.local.json does about the file and `.claude/`
+/// existing.
+#[derive(Clone, Copy, PartialEq)]
+enum Created {
+    /// Nothing beyond the edit.
+    Ignore,
+    /// Record which of the two this edit created (turning Agent status on).
+    Record,
+    /// Remove those the record names when empty, then delete the record
+    /// (turning it off).
+    Remove,
+}
+
 /// Change the project's settings.local.json under the lock: read it afresh,
 /// let `change` edit the top-level object, and write it if `change` says it
-/// changed. Nothing is created when nothing changes. With `remove_if_empty`,
-/// a change that leaves the object empty removes the file (and `.claude/` if
-/// that leaves it empty) instead of writing `{}`; a symlinked file is still
-/// written through. A file that isn't a JSON object is an error and is left
-/// alone.
+/// changed. Nothing is created when nothing changes. See `Created` for what
+/// happens to a file or folder ADE created; one ADE didn't create is never
+/// removed, and a symlinked file is always written through. A file that
+/// isn't a JSON object is an error and is left alone.
 fn edit_local_settings(
     root: &Path,
-    remove_if_empty: bool,
+    created: Created,
     change: impl FnOnce(&mut serde_json::Map<String, Value>) -> Result<bool, String>,
 ) -> Result<bool, String> {
     let path = local_settings_path(root);
     let _lock = lock_settings(&path)?;
     let mut v = load_settings(&path)?;
     let obj = v.as_object_mut().ok_or("settings.local.json is not a JSON object")?;
+    let had_hooks = obj.contains_key(CREATED_HOOKS);
     if !change(obj)? {
         return Ok(false);
     }
+    let record = created_record_path(&path);
+    let dir = path.parent().unwrap();
     let is_link = std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink());
-    if remove_if_empty && obj.is_empty() && !is_link {
-        if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| format!("can't remove {}: {e}", path.display()))?;
+    if created == Created::Remove {
+        let ours = read_created(&record);
+        if obj.is_empty() && !is_link && ours.contains(CREATED_FILE) {
+            if path.exists() {
+                std::fs::remove_file(&path).map_err(|e| format!("can't remove {}: {e}", path.display()))?;
+            }
+            if ours.contains(CREATED_DIR) {
+                // Only when empty: remove_dir refuses a folder with anything in it.
+                let _ = std::fs::remove_dir(dir);
+            }
+            let _ = std::fs::remove_file(&record);
+            return Ok(true);
         }
-        // Only when empty: remove_dir refuses a folder with anything in it.
-        let _ = std::fs::remove_dir(path.parent().unwrap());
-        return Ok(true);
+        let _ = std::fs::remove_file(&record);
+    }
+    let made: BTreeSet<String> = [
+        (CREATED_DIR, !dir.exists()),
+        (CREATED_FILE, std::fs::symlink_metadata(&path).is_err()),
+        (CREATED_HOOKS, !had_hooks && obj.contains_key(CREATED_HOOKS)),
+    ]
+    .into_iter()
+    .filter(|(_, new)| *new)
+    .map(|(name, _)| name.to_string())
+    .collect();
+    // The record first: if it can't be written, nothing is changed.
+    if created == Created::Record && !made.is_empty() {
+        let mut names = read_created(&record);
+        names.extend(made);
+        write_created(&record, &names)?;
     }
     write_settings_through(&path, &v)?;
     keep_out_of_git(root);
@@ -960,7 +1036,7 @@ pub fn agent_hooks_enabled(root: &Path) -> Result<bool, String> {
 /// Register ADE's hook for every Agent status event, with no matcher and a
 /// 5 second timeout, beside the user's own hooks. Adding twice adds nothing.
 pub fn agent_hooks_enable(root: &Path) -> Result<bool, String> {
-    edit_local_settings(root, false, |obj| {
+    edit_local_settings(root, Created::Record, |obj| {
         check_hooks_shape(obj)?;
         let hooks = obj.entry("hooks").or_insert_with(|| Value::Object(Default::default()));
         let hooks = hooks.as_object_mut().expect("checked above");
@@ -983,7 +1059,8 @@ pub fn agent_hooks_enable(root: &Path) -> Result<bool, String> {
 /// empty, and `hooks` if it is empty. The user's hooks, in the same group or
 /// not, stay.
 pub fn agent_hooks_disable(root: &Path) -> Result<bool, String> {
-    edit_local_settings(root, true, |obj| {
+    let record = created_record_path(&local_settings_path(root));
+    edit_local_settings(root, Created::Remove, |obj| {
         check_hooks_shape(obj)?;
         let Some(hooks) = obj.get_mut("hooks").and_then(|h| h.as_object_mut()) else { return Ok(false) };
         let mut emptied = Vec::new();
@@ -1012,7 +1089,8 @@ pub fn agent_hooks_disable(root: &Path) -> Result<bool, String> {
                 hooks.remove(&event);
             }
         }
-        if hooks.is_empty() {
+        // Read under the lock, before the edit deletes the record.
+        if hooks.is_empty() && read_created(&record).contains(CREATED_HOOKS) {
             obj.remove("hooks");
         }
         Ok(true)
@@ -1590,6 +1668,64 @@ mod tests {
         agent_hooks_disable(&e).unwrap();
         assert!(!local_settings_path(&e).exists());
         assert!(e.join(".claude").join("settings.json").exists());
+    }
+
+    #[test]
+    fn on_then_off_leaves_the_users_own_empty_file_and_folder() {
+        for text in ["{}", r#"{"hooks":{}}"#] {
+            let d = tmp(&format!("hooks_own_empty_{}", text.len()));
+            write_local(&d, text);
+            agent_hooks_enable(&d).unwrap();
+            assert!(agent_hooks_disable(&d).unwrap());
+            assert!(local_settings_path(&d).exists(), "{text}: the user's own file stays");
+            assert_eq!(local(&d), serde_json::from_str::<Value>(text).unwrap(), "{text}: as it was");
+            assert!(d.join(".claude").is_dir(), "{text}: the user's folder stays");
+            assert!(!agent_hooks_enabled(&d).unwrap());
+            assert!(!created_record_path(&local_settings_path(&d)).exists(), "the record goes");
+        }
+        // The user's own empty .claude/, with no file: ADE created only the file.
+        let e = tmp("hooks_own_empty_dir");
+        std::fs::create_dir_all(e.join(".claude")).unwrap();
+        agent_hooks_enable(&e).unwrap();
+        agent_hooks_disable(&e).unwrap();
+        assert!(!local_settings_path(&e).exists(), "ADE's file goes");
+        assert!(e.join(".claude").is_dir(), "the user's folder stays");
+    }
+
+    #[test]
+    fn what_enable_created_is_recorded_beside_the_lock_not_in_the_settings() {
+        let d = tmp("hooks_record");
+        agent_hooks_enable(&d).unwrap();
+        let path = local_settings_path(&d);
+        let record = created_record_path(&path);
+        assert_eq!(record.parent(), lock_path(&path).parent());
+        assert!(record.file_name().unwrap().to_string_lossy().starts_with("ade-created-"));
+        assert_eq!(read_created(&record), BTreeSet::from([CREATED_DIR.into(), CREATED_FILE.into(), CREATED_HOOKS.into()]));
+        assert_eq!(local(&d).as_object().unwrap().keys().collect::<Vec<_>>(), ["hooks"]);
+        agent_hooks_disable(&d).unwrap();
+        assert!(!record.exists());
+        // A project whose file was already there: only the `hooks` key.
+        let e = tmp("hooks_record_key");
+        write_local(&e, r#"{"model":"sonnet"}"#);
+        agent_hooks_enable(&e).unwrap();
+        assert_eq!(read_created(&created_record_path(&local_settings_path(&e))), BTreeSet::from([CREATED_HOOKS.to_string()]));
+        // One that had `hooks` too gets no record.
+        let f = tmp("hooks_record_none");
+        write_local(&f, USER_SETTINGS);
+        agent_hooks_enable(&f).unwrap();
+        assert!(!created_record_path(&local_settings_path(&f)).exists());
+    }
+
+    #[test]
+    fn the_lock_folder_is_the_same_for_every_ade_and_not_purged() {
+        let home = PathBuf::from("/home/u");
+        // macOS and Linux alike: not `$TMPDIR`, which macOS purges.
+        assert_eq!(lock_dir_of(false, Some(home.clone())), home.join(".cache").join("ade"));
+        assert_ne!(lock_dir_of(false, Some(home)), std::env::temp_dir());
+        // Not from the session's runtime folder: the app and a dev build can
+        // see different ones. The needle is built so this test doesn't count.
+        let source = include_str!("usage.rs");
+        assert!(!source.contains(concat!("XDG_RUNTIME", "_DIR\"")));
     }
 
     #[test]

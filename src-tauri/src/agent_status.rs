@@ -34,12 +34,14 @@ pub enum AgentState {
 }
 
 /// One event as the helper forwards it: the fields the state uses (the
-/// others it forwards, `source`, `reason` and `agent_type`, are ignored).
+/// others it forwards, `reason` and `agent_type`, are ignored).
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct HookEvent {
     pub hook_event_name: String,
     pub session_id: String,
     pub cwd: Option<String>,
+    /// `SessionStart`'s cause: `startup`, `resume`, `clear` or `compact`.
+    pub source: Option<String>,
     pub notification_type: Option<String>,
     pub tool_name: Option<String>,
     pub agent_id: Option<String>,
@@ -95,6 +97,8 @@ struct KeyRule {
     armed: bool,
     /// The call of the prompt the last key removed: its result re-arms.
     removed: Option<CallKey>,
+    /// The session that prompt was in: its `Stop` re-arms too.
+    removed_from: Option<String>,
 }
 
 /// Every session's state. No I/O: the endpoint, the key command and the
@@ -158,7 +162,17 @@ impl Core {
             return;
         }
         let pane_had_pending = self.pane_has_pending(pty);
-        let session = self.sessions.entry(key).or_insert_with(Session::new);
+        // Only these start a session: any other event for one ADE doesn't
+        // know (ended, or dropped by turning off) is ignored.
+        let (session, known) = match self.sessions.entry(key) {
+            std::collections::btree_map::Entry::Occupied(e) => (e.into_mut(), true),
+            std::collections::btree_map::Entry::Vacant(e) => {
+                if !matches!(name, "SessionStart" | "UserPromptSubmit" | "PermissionRequest") {
+                    return;
+                }
+                (e.insert(Session::new()), false)
+            }
+        };
         if ev.cwd.is_some() {
             session.cwd = ev.cwd.clone();
         }
@@ -166,16 +180,21 @@ impl Core {
             session.process = Some((pid, start));
         }
         match name {
+            // Compaction restarts a known session mid-turn: it keeps going. A
+            // session ADE didn't know starts ready, whatever the source.
+            "SessionStart" if known && ev.source.as_deref() == Some("compact") => {}
             "SessionStart" => session.phase = AgentState::Ready,
             "UserPromptSubmit" => {
                 session.phase = AgentState::Working;
                 session.pending.clear();
+                // A sub-agent whose SubagentStop was lost would hold Stop at working.
+                session.subagents.clear();
             }
             "PermissionRequest" => {
                 self.next_prompt += 1;
                 session.pending.push(Pending { id: self.next_prompt, call: call_key(ev) });
                 if !pane_had_pending {
-                    self.keys.insert(pty, KeyRule { armed: true, removed: None });
+                    self.keys.insert(pty, KeyRule { armed: true, ..Default::default() });
                 }
             }
             "PostToolUse" | "PostToolUseFailure" => {
@@ -185,7 +204,7 @@ impl Core {
                 }
                 if let Some(rule) = self.keys.get_mut(&pty) {
                     if rule.removed.as_ref() == Some(&call) {
-                        *rule = KeyRule { armed: true, removed: None };
+                        *rule = KeyRule { armed: true, ..Default::default() };
                     }
                 }
             }
@@ -193,6 +212,7 @@ impl Core {
                 if ev.notification_type.as_deref() == Some("idle_prompt") {
                     session.phase = AgentState::Waiting;
                     session.pending.clear();
+                    session.subagents.clear();
                 }
             }
             "SubagentStart" => {
@@ -205,7 +225,19 @@ impl Core {
                     session.subagents.remove(id);
                 }
             }
-            "Stop" => session.phase = AgentState::Finished,
+            "Stop" => {
+                session.phase = AgentState::Finished;
+                // The main agent's prompt a key removed got no result and the
+                // turn is over, so the next key belongs to the next prompt. A
+                // sub-agent's prompt doesn't count: it may still be running.
+                let pending = self.pane_has_pending(pty);
+                if let Some(rule) = self.keys.get_mut(&pty) {
+                    let main_agents = rule.removed.as_ref().is_some_and(|call| call.1.is_none());
+                    if !rule.armed && pending && main_agents && rule.removed_from.as_deref() == Some(ev.session_id.as_str()) {
+                        *rule = KeyRule { armed: true, ..Default::default() };
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -228,7 +260,7 @@ impl Core {
         let session = self.sessions.get_mut(&key).expect("found above");
         let i = session.pending.iter().position(|p| p.id == id).expect("found above");
         let removed = session.pending.remove(i);
-        self.keys.insert(pty, KeyRule { armed: false, removed: Some(removed.call) });
+        self.keys.insert(pty, KeyRule { armed: false, removed: Some(removed.call), removed_from: Some(key.1) });
         true
     }
 
@@ -264,8 +296,15 @@ impl Core {
     /// gives a pid's start time, None once it has gone. A reused pid has
     /// another start time and counts as exited. A session with no known
     /// process is never dropped here. Returns the panes affected.
+    #[cfg(test)]
     pub fn drop_dead(&mut self, start_of: impl Fn(u32) -> Option<u64>) -> BTreeSet<u32> {
-        let dead: BTreeSet<(u32, u64)> = self.tracked().into_iter().filter(|(pid, start)| start_of(*pid) != Some(*start)).collect();
+        let dead = dead_of(&self.tracked(), start_of);
+        self.drop_processes(&dead)
+    }
+
+    /// Drop the sessions whose Claude Code process is one of `dead`. Returns
+    /// the panes affected.
+    pub fn drop_processes(&mut self, dead: &BTreeSet<(u32, u64)>) -> BTreeSet<u32> {
         let gone: Vec<(u32, String)> = self
             .sessions
             .iter()
@@ -286,6 +325,12 @@ impl Core {
         }
         panes
     }
+}
+
+/// The processes of `tracked` that have exited: `start_of` gives a pid's
+/// start time, None once it has gone; a reused pid has another start time.
+fn dead_of(tracked: &BTreeSet<(u32, u64)>, start_of: impl Fn(u32) -> Option<u64>) -> BTreeSet<(u32, u64)> {
+    tracked.iter().copied().filter(|(pid, start)| start_of(*pid) != Some(*start)).collect()
 }
 
 /// A pane's state as the windows receive it; `state` is null once the pane
@@ -458,10 +503,12 @@ impl AgentStatus {
     }
 
     pub fn check_processes(&self, start_of: impl Fn(u32) -> Option<u64>) {
-        // The OS is asked outside the lock; only the tracked pids are looked at.
+        // The OS is asked outside the lock; only the tracked pids are looked
+        // at. A pid first reported meanwhile wasn't looked up, so it is
+        // not taken for dead: only processes found gone are dropped.
         let tracked = self.0.core.lock().unwrap().tracked();
-        let starts: HashMap<u32, Option<u64>> = tracked.iter().map(|(pid, _)| (*pid, start_of(*pid))).collect();
-        self.update(&[], |core| ((), core.drop_dead(|pid| starts.get(&pid).copied().flatten())))
+        let dead = dead_of(&tracked, start_of);
+        self.update(&[], |core| ((), core.drop_processes(&dead)))
     }
 
     /// Stream every pane's state to `sink`: the current ones now, then each
@@ -476,8 +523,10 @@ impl AgentStatus {
         self.0.watchers.lock().unwrap().push(Box::new(sink));
     }
 
-    #[cfg(test)]
-    pub fn snapshot(&self) -> BTreeMap<u32, AgentState> {
+    /// Every pane with a live session, and its state. Not test-only: piece
+    /// 2a's bridge reads it.
+    #[allow(dead_code)]
+    pub fn current(&self) -> BTreeMap<u32, AgentState> {
         self.0.core.lock().unwrap().snapshot()
     }
 
@@ -877,6 +926,95 @@ mod tests {
     }
 
     #[test]
+    fn compaction_keeps_a_working_session_working() {
+        let mut c = working();
+        c.apply(P, &HookEvent { source: Some("compact".into()), ..named("SessionStart", S) });
+        assert_eq!(c.pane_state(P), Some(AgentState::Working));
+        // Any other source is a fresh start.
+        c.apply(P, &event("session-start-clear.json", S));
+        assert_eq!(c.pane_state(P), Some(AgentState::Ready));
+    }
+
+    #[test]
+    fn compaction_of_an_unknown_session_starts_it_ready() {
+        let mut c = Core::default();
+        c.apply(P, &HookEvent { source: Some("compact".into()), ..named("SessionStart", S) });
+        assert_eq!(c.pane_state(P), Some(AgentState::Ready));
+    }
+
+    #[test]
+    fn the_main_stop_does_not_re_arm_after_a_subagents_prompt() {
+        let mut c = working();
+        c.apply(P, &tool("PermissionRequest", S, "Bash", Some("sub"), "a"));
+        c.apply(P, &ask(S, "b"));
+        assert!(c.answer_key(P)); // The sub-agent's prompt, denied.
+        c.apply(P, &event("stop.json", S));
+        assert!(!c.answer_key(P), "the sub-agent may still be running");
+        assert_eq!(hashes(&c, S), ["b"]);
+    }
+
+    #[test]
+    fn a_new_prompt_or_idle_prompt_clears_a_lost_subagent() {
+        for clear in [event("user-prompt-submit.json", S), event("notification-idle-prompt.json", S)] {
+            let mut c = working();
+            c.apply(P, &event("subagent-start.json", S));
+            // Its SubagentStop never arrives.
+            c.apply(P, &clear);
+            c.apply(P, &event("stop.json", S));
+            assert_eq!(c.pane_state(P), Some(AgentState::Finished), "{}", clear.hook_event_name);
+        }
+    }
+
+    #[test]
+    fn the_sessions_stop_re_arms_after_a_denied_prompt() {
+        let mut c = working();
+        c.apply(P, &ask(S, "a"));
+        c.apply(P, &ask(S, "b"));
+        assert!(c.answer_key(P)); // "No" with feedback: no result for a.
+        assert!(!c.answer_key(P));
+        // Another session's Stop in the same pane does not end this turn.
+        c.apply(P, &event("session-start.json", "print"));
+        c.apply(P, &event("stop.json", "print"));
+        assert!(!c.answer_key(P));
+        c.apply(P, &event("stop.json", S));
+        assert!(c.answer_key(P), "the next key belongs to b");
+        assert!(c.pending(P, S).is_empty());
+    }
+
+    #[test]
+    fn only_a_start_a_prompt_or_a_request_creates_a_session() {
+        for name in ["PostToolUse", "PostToolUseFailure", "Notification", "SubagentStart", "SubagentStop", "Stop"] {
+            let mut c = working();
+            c.apply(P, &event("session-end-exit.json", S));
+            c.apply(P, &HookEvent { notification_type: Some("idle_prompt".into()), agent_id: Some("x".into()), ..named(name, S) });
+            assert_eq!(c.pane_state(P), None, "{name} after SessionEnd");
+            // After turning off, too.
+            let mut c = Core::default();
+            c.apply(P, &HookEvent { cwd: Some("/work/app".into()), ..named("SessionStart", S) });
+            c.drop_project(Path::new("/work/app"));
+            c.apply(P, &named(name, S));
+            assert_eq!(c.pane_state(P), None, "{name} after turning off");
+        }
+        for (name, want) in [("SessionStart", AgentState::Ready), ("UserPromptSubmit", AgentState::Working), ("PermissionRequest", AgentState::NeedsYou)] {
+            let mut c = Core::default();
+            c.apply(P, &named(name, S));
+            assert_eq!(c.pane_state(P), Some(want), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_wire_format() {
+        let json = |u: AgentStatusUpdate| serde_json::to_value(u).unwrap();
+        assert_eq!(json(AgentStatusUpdate { pty_id: 3, state: Some(AgentState::NeedsYou) }), serde_json::json!({"ptyId":3,"state":"needsYou"}));
+        assert_eq!(json(AgentStatusUpdate { pty_id: 3, state: None }), serde_json::json!({"ptyId":3,"state":null}));
+        let names: Vec<_> = [AgentState::Finished, AgentState::Ready, AgentState::Working, AgentState::Waiting, AgentState::NeedsYou]
+            .into_iter()
+            .map(|s| serde_json::to_value(s).unwrap())
+            .collect();
+        assert_eq!(names, ["finished", "ready", "working", "waiting", "needsYou"]);
+    }
+
+    #[test]
     fn an_unknown_event_or_no_session_changes_nothing() {
         let mut c = Core::default();
         c.apply(P, &named("Elicitation", S));
@@ -927,7 +1065,7 @@ mod tests {
         assert!(status_line(&ok).contains(" 200"), "{ok}");
         assert_eq!(body_of(&ok), "{}");
         assert!(!ok.to_ascii_lowercase().contains("access-control"), "no CORS headers");
-        assert_eq!(st.snapshot(), BTreeMap::from([(9, AgentState::Ready)]));
+        assert_eq!(st.current(), BTreeMap::from([(9, AgentState::Ready)]));
     }
 
     #[test]
@@ -957,7 +1095,7 @@ mod tests {
             assert!(!status_line(&answer).contains(" 200"), "{name}: {answer}");
             assert_eq!(body_of(&answer), "{}", "{name}");
         }
-        assert_eq!(st.snapshot(), BTreeMap::new());
+        assert_eq!(st.current(), BTreeMap::new());
     }
 
     #[test]
@@ -1025,7 +1163,30 @@ mod tests {
         });
         st.check_processes(crate::hook_forward::start_time);
         assert_eq!(got.lock().unwrap().last(), Some(&AgentStatusUpdate { pty_id: P, state: None }));
-        assert_eq!(st.snapshot(), BTreeMap::new());
+        assert_eq!(st.current(), BTreeMap::new());
+    }
+
+    #[test]
+    fn a_pid_first_reported_during_the_check_keeps_its_session() {
+        let st = started();
+        st.apply(P, &with_pid(event("session-start.json", "alive"), 100, 10));
+        st.apply(P, &event("session-start.json", S));
+        st.apply(P, &event("user-prompt-submit.json", S));
+        let during = st.clone();
+        // While the OS is asked about 100, S's first event with a pid lands.
+        st.check_processes(move |pid| {
+            during.apply(P, &with_pid(ask(S, "a"), 200, 20));
+            (pid == 100).then_some(10)
+        });
+        assert_eq!(st.current(), BTreeMap::from([(P, AgentState::NeedsYou)]));
+        assert_eq!(st.0.core.lock().unwrap().pending(P, S).len(), 1, "the pending prompt is still there");
+        // The next check looks 200 up, and it is alive.
+        st.check_processes(|pid| match pid {
+            100 => Some(10),
+            200 => Some(20),
+            _ => None,
+        });
+        assert_eq!(st.current(), BTreeMap::from([(P, AgentState::NeedsYou)]));
     }
 
     #[test]

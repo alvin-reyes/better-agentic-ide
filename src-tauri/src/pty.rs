@@ -74,16 +74,28 @@ fn start_reader(
     });
 }
 
+/// Forget a PTY: its instance and its Agent status state. Every removal
+/// goes through here.
+fn remove(instances: &Mutex<HashMap<u32, PtyInstance>>, agent: &crate::agent_status::AgentStatus, id: u32) {
+    instances.lock().unwrap().remove(&id);
+    agent.forget_pty(id);
+}
+
 /// Point a running PTY's output at another window. It first receives what
 /// was kept while no window could take it. No reader is started: the PTY's
 /// one reader now writes here.
-fn attach(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32, out: Out) -> Result<(), String> {
+fn attach(
+    instances: &Mutex<HashMap<u32, PtyInstance>>,
+    agent: &crate::agent_status::AgentStatus,
+    id: u32,
+    out: Out,
+) -> Result<(), String> {
     let sink = instances.lock().unwrap().get(&id).ok_or("PTY not found")?.sink.clone();
     // The shell ended while nobody was attached, and this window has now
     // been told: there is nothing left to attach to.
     let exit_delivered = lock(&sink).attach(out);
     if exit_delivered {
-        instances.lock().unwrap().remove(&id);
+        remove(instances, agent, id);
     }
     Ok(())
 }
@@ -182,10 +194,7 @@ pub fn create_pty(
     // its entry to remove.
     let instances = state.instances.clone();
     let agent = agent.inner().clone();
-    start_reader(reader, sink, move || {
-        instances.lock().unwrap().remove(&id);
-        agent.forget_pty(id);
-    });
+    start_reader(reader, sink, move || remove(&instances, &agent, id));
 
     Ok(id)
 }
@@ -234,16 +243,26 @@ pub fn resize_pty(
 #[tauri::command]
 pub fn reattach_pty(
     state: tauri::State<'_, PtyManager>,
+    agent: tauri::State<'_, crate::agent_status::AgentStatus>,
     id: u32,
     on_event: Channel<PtyEvent>,
 ) -> Result<(), String> {
-    attach(&state.instances, id, channel_out(on_event))
+    attach(&state.instances, &agent, id, channel_out(on_event))
 }
 
 #[tauri::command]
-pub fn kill_pty(state: tauri::State<'_, PtyManager>, id: u32) -> Result<(), String> {
-    state.instances.lock().unwrap().remove(&id);
+pub fn kill_pty(
+    state: tauri::State<'_, PtyManager>,
+    agent: tauri::State<'_, crate::agent_status::AgentStatus>,
+    id: u32,
+) -> Result<(), String> {
+    kill(&state.instances, &agent, id);
     Ok(())
+}
+
+/// What `kill_pty` does: forget the PTY and its Agent status state.
+fn kill(instances: &Mutex<HashMap<u32, PtyInstance>>, agent: &crate::agent_status::AgentStatus, id: u32) {
+    remove(instances, agent, id);
 }
 
 #[tauri::command(async)]
@@ -539,6 +558,7 @@ mod tests {
         let sink = Arc::new(Mutex::new(Sink::new(first.out())));
         let id = 7;
         let instances: Arc<Mutex<HashMap<u32, PtyInstance>>> = Arc::new(Mutex::new(HashMap::new()));
+        let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
         instances.lock().unwrap().insert(
             id,
             PtyInstance { writer, _child: child, master: pair.master, pid, sink: sink.clone() },
@@ -563,7 +583,7 @@ mod tests {
         wait_for("B2 in the backlog", || has(&crate::ptysink::lock(&sink).kept(), "B2"));
 
         let second = Window::new();
-        attach(&instances, id, second.out()).unwrap();
+        attach(&instances, &agent, id, second.out()).unwrap();
         assert!(second.text().contains("B2"), "the backlog is delivered by the attach itself: {:?}", second.text());
         assert!(!second.text().contains("A1"), "what the first window already got is not replayed");
         assert!(!first.text().contains("B2"));
@@ -573,7 +593,7 @@ mod tests {
 
         // A third window attaches while the second is still there.
         let third = Window::new();
-        attach(&instances, id, third.out()).unwrap();
+        attach(&instances, &agent, id, third.out()).unwrap();
         let second_had = second.bytes().len();
         enter();
         wait_for("D4 in the third window", || third.text().contains("D4"));
@@ -632,6 +652,53 @@ mod hook_env_tests {
         assert_eq!(reserve_id(&next), 42, "an id is never handed out twice");
     }
 
+    /// A PTY whose shell ended while no window was attached: its exit waits
+    /// for the next attach.
+    fn ended_unattached(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32) {
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.args(["-c", "sleep 5"]);
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id();
+        let writer = pair.master.take_writer().unwrap();
+        let sink = Arc::new(Mutex::new(Sink::unattached()));
+        assert!(!lock(&sink).finish(), "no window was told");
+        instances.lock().unwrap().insert(id, PtyInstance { writer, _child: child, master: pair.master, pid, sink });
+    }
+
+    fn agent_with_a_session(id: u32) -> crate::agent_status::AgentStatus {
+        let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
+        let ev = crate::agent_status::HookEvent { hook_event_name: "SessionStart".into(), session_id: "s".into(), ..Default::default() };
+        agent.apply(id, &ev);
+        assert!(agent.current().contains_key(&id));
+        agent
+    }
+
+    #[test]
+    fn attaching_to_an_ended_pty_forgets_its_agent_state() {
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        ended_unattached(&instances, 5);
+        let agent = agent_with_a_session(5);
+        let window = Window::new();
+        attach(&instances, &agent, 5, window.out()).unwrap();
+        wait_for("the exit delivered", || window.exited());
+        assert!(!instances.lock().unwrap().contains_key(&5));
+        assert!(!agent.current().contains_key(&5), "the PTY's agent state goes with it");
+    }
+
+    #[test]
+    fn killing_a_pty_forgets_its_agent_state() {
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        ended_unattached(&instances, 6);
+        let agent = agent_with_a_session(6);
+        kill(&instances, &agent, 6);
+        assert!(!instances.lock().unwrap().contains_key(&6));
+        assert!(!agent.current().contains_key(&6));
+    }
+
     #[test]
     fn with_no_endpoint_none_of_the_four_are_set() {
         let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
@@ -659,7 +726,8 @@ mod wiring_tests {
     fn attaching_to_an_unknown_pty_is_an_error() {
         let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
         let window = crate::ptysink::testing::Window::new();
-        assert_eq!(attach(&instances, 99, window.out()), Err("PTY not found".to_string()));
+        let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
+        assert_eq!(attach(&instances, &agent, 99, window.out()), Err("PTY not found".to_string()));
         assert!(window.events().is_empty(), "the window that asked receives nothing");
     }
 }

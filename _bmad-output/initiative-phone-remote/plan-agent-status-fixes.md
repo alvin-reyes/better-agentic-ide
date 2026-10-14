@@ -3,14 +3,14 @@ title: 'Agent status fixes from the PR #55 review, and a current-state read for 
 type: 'bugfix'
 ticket: ''
 created: '2026-10-14'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '651afb447393d11b778ec57fc7b76aaf0cec4cc3'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context: ['{project-root}/docs/superpowers/specs/2026-10-14-agent-status-design.md']
 ---
@@ -67,19 +67,19 @@ context: ['{project-root}/docs/superpowers/specs/2026-10-14-agent-status-design.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `src-tauri/src/agent_status.rs` -- in `drop_dead`/`check_processes`, treat a pid not looked up as alive. -- This is the confirmed defect.
-- [ ] `src-tauri/src/agent_status.rs` -- add `source` to `HookEvent`; `SessionStart` with `source: compact` keeps the phase. -- The compaction suspicion.
-- [ ] `src-tauri/src/agent_status.rs` -- clear `subagents` on `UserPromptSubmit` and `idle_prompt`. -- The lost-`SubagentStop` suspicion.
-- [ ] `src-tauri/src/agent_status.rs` -- the session's `Stop` re-arms a disarmed key rule while prompts are still pending. Rationale: no tool result arrived, so the turn is over, and the next key belongs to the next prompt. -- The re-arm suspicion.
-- [ ] `src-tauri/src/agent_status.rs` -- create sessions only on `SessionStart`, `UserPromptSubmit` and `PermissionRequest`; other events for unknown sessions are ignored. -- The resurrection suspicion.
-- [ ] `src-tauri/src/agent_status.rs` -- `pub fn current(&self) -> BTreeMap<u32, AgentState>`, not test-only. The test helper uses it. -- Piece 2a needs it.
-- [ ] `src-tauri/src/pty.rs` -- call `forget_pty` wherever an instance is removed (`attach` on exit, `kill_pty`), keeping exactly one `thread::spawn(` in the file. -- The stale-PTY suspicion.
-- [ ] `src-tauri/src/hook_forward.rs` -- read stdin to EOF. Parse only the forwarded keys and `tool_input`, skipping other values without holding them, so a huge `tool_response` neither fails the parse nor fills memory. -- The 4 MB suspicion.
-- [ ] `src-tauri/src/usage.rs` -- on Linux, `lock_dir` always uses `~/.cache/ade`. -- The lock-folder suspicion.
-- [ ] `src-tauri/src/usage.rs` -- remove the file or `.claude/` only when ADE's own enable created them. When enable creates either one, it writes a record `ade-created-<same hash>` beside the lock file, naming which it created. Disable removes the file only if the record names it and the object is empty, and `.claude/` only if the record names it and the folder is empty, then deletes the record. Nothing is written into the user's settings for this. -- The "deletes the user's own empty file" suspicion.
-- [ ] `src-tauri/src/agent_status.rs` tests -- a wire-format test asserting the JSON shape. -- A verification gap.
-- [ ] Tests for every matrix row, inline in each touched file. Where a suspicion can't be reproduced, keep its test and add a "not reproducible: <why>" line to Implementation Notes.
-- [ ] `.ade/context/agent-events.md` -- update the transitions (compaction, session creation, re-arm on `Stop`, clearing the sub-agent set) and `current()`.
+- [x] `src-tauri/src/agent_status.rs` -- in `drop_dead`/`check_processes`, treat a pid not looked up as alive. -- This is the confirmed defect.
+- [x] `src-tauri/src/agent_status.rs` -- add `source` to `HookEvent`; `SessionStart` with `source: compact` keeps the phase. -- The compaction suspicion.
+- [x] `src-tauri/src/agent_status.rs` -- clear `subagents` on `UserPromptSubmit` and `idle_prompt`. -- The lost-`SubagentStop` suspicion.
+- [x] `src-tauri/src/agent_status.rs` -- the session's `Stop` re-arms a disarmed key rule while prompts are still pending. Rationale: no tool result arrived, so the turn is over, and the next key belongs to the next prompt. -- The re-arm suspicion.
+- [x] `src-tauri/src/agent_status.rs` -- create sessions only on `SessionStart`, `UserPromptSubmit` and `PermissionRequest`; other events for unknown sessions are ignored. -- The resurrection suspicion.
+- [x] `src-tauri/src/agent_status.rs` -- `pub fn current(&self) -> BTreeMap<u32, AgentState>`, not test-only. The test helper uses it. -- Piece 2a needs it.
+- [x] `src-tauri/src/pty.rs` -- call `forget_pty` wherever an instance is removed (`attach` on exit, `kill_pty`), keeping exactly one `thread::spawn(` in the file. -- The stale-PTY suspicion.
+- [x] `src-tauri/src/hook_forward.rs` -- read stdin to EOF. Parse only the forwarded keys and `tool_input`, skipping other values without holding them, so a huge `tool_response` neither fails the parse nor fills memory. -- The 4 MB suspicion.
+- [x] `src-tauri/src/usage.rs` -- on Linux, `lock_dir` always uses `~/.cache/ade`. -- The lock-folder suspicion.
+- [x] `src-tauri/src/usage.rs` -- remove the file or `.claude/` only when ADE's own enable created them. When enable creates either one, it writes a record `ade-created-<same hash>` beside the lock file, naming which it created. Disable removes the file only if the record names it and the object is empty, and `.claude/` only if the record names it and the folder is empty, then deletes the record. Nothing is written into the user's settings for this. -- The "deletes the user's own empty file" suspicion.
+- [x] `src-tauri/src/agent_status.rs` tests -- a wire-format test asserting the JSON shape. -- A verification gap.
+- [x] Tests for every matrix row, inline in each touched file. Where a suspicion can't be reproduced, keep its test and add a "not reproducible: <why>" line to Implementation Notes.
+- [x] `.ade/context/agent-events.md` -- update the transitions (compaction, session creation, re-arm on `Stop`, clearing the sub-agent set) and `current()`.
 
 **Acceptance Criteria:**
 - Given a live session whose Claude Code pid is first reported while a liveness check runs, when the check finishes, then the session and its pending prompt are still there.
@@ -88,9 +88,33 @@ context: ['{project-root}/docs/superpowers/specs/2026-10-14-agent-status-design.
 
 ## Implementation Notes
 
+- Pid mid-check (confirmed): reproduced by `a_pid_first_reported_during_the_check_keeps_its_session` (failed: the session and its prompt were dropped). `check_processes` now computes the dead set from the snapshot it looked up (`dead_of`) and calls `Core::drop_processes`; a pid not looked up is never in it. `Core::drop_dead` is now test-only.
+- Compaction: reproduced (`compaction_keeps_a_working_session_working` failed: went ready). `HookEvent.source` added; `SessionStart` with `source: compact` keeps a known session's phase; a new session starts ready. This tightens the spec's "ready (any source)" row, as the plan directs.
+- Lost `SubagentStop`: reproduced for both `UserPromptSubmit` and `idle_prompt`; both now clear the set.
+- Re-arm: reproduced. `KeyRule` gains `removed_from` (the removed prompt's session); only that session's `Stop`, with prompts still pending in the pane and the removed prompt the main agent's (no `agent_id`), re-arms. A `claude -p` session's `Stop` in the same pane does not.
+- Resurrection: reproduced for all six non-creating events after `SessionEnd` and after turning off.
+- Stale PTY: reproduced by mutation (tests fail when removal doesn't forget). All removals go through `pty::remove`, which also calls `forget_pty`; `reattach_pty` and `kill_pty` now take the `AgentStatus` state (no JS argument change). Still one `thread::spawn(` in pty.rs.
+- 4 MB: reproduced (only 4194304 bytes read, nothing forwarded). The helper now streams the payload through serde (`Kept` visitor; `IgnoredAny` for other values) behind a `BufReader`, then drains stdin. `ade-hook` gains a direct `serde = "1"` dependency (already in the lock as a transitive one).
+- Lock folder: the Linux branch can't run on macOS, so it is covered by a pure `lock_dir_of` test plus a source guard that the file no longer reads `XDG_RUNTIME_DIR` (the guard fails on the old code).
+- User's empty settings: reproduced by mutation (the `{}` case's file was deleted). `edit_local_settings` takes `Created::{Ignore, Record, Remove}`; the record is `ade-created-<hash>` beside the lock (0600, `O_NOFOLLOW`), written before the settings, naming the file, `.claude` and/or the `hooks` key. Disable removes an empty `hooks` only if recorded, so `{"hooks":{}}` survives on→off. Lock and record live in `~/.cache/ade` on macOS too ($TMPDIR is purged).
+- Wire format: a verification gap, not a defect; the test passed at once.
+- Not reproducible: none.
+
 ## Plan Change Log
 
 ## Review Triage Log
+
+Pass 1 (quick lens), 2026-10-14. Verdicts: 0 high, 3 medium, 4 low, 0 false, 0 maybe-false. Includes the implementer's own flagged risk (row 7).
+
+| # | Finding | Verdict | Route | Evidence / action |
+|---|---|---|---|---|
+| 1 | Piece-1 spec now contradicts the code (compact row, third re-arm trigger, lock folder) | low | patch | The owner-approved plan ordered both behaviours; its Boundaries line conflicts with its own tasks. Update the piece-1 spec to the approved behaviour and surface it to the owner. |
+| 2 | Compaction `SessionStart` for an unknown session stays Working | medium | patch | `Session::new` starts Working and the compact arm leaves it. A new session starts Ready; only a known session keeps its phase. |
+| 3 | `{"hooks":{}}` comes back as `{}` | low | patch | Matrix row says "as they were". Record whether ADE created `hooks`; test compares content. |
+| 4 | Enable can report failure with hooks already written | low | patch | Record is written after the settings; write it first. |
+| 5 | `kill_pty` path untested | low | patch | Test calls `remove` directly; move `kill_pty`'s body into a function the test calls. |
+| 6 | Record in macOS `$TMPDIR` can be purged | medium | patch | Purge leaves ADE's own file behind; use `~/.cache/ade` on macOS too. |
+| 7 | Sub-agent's denied prompt re-arms on the main `Stop` | medium | patch | Re-arm on `Stop` only when the removed prompt had no `agent_id`. |
 
 ## Verification
 
