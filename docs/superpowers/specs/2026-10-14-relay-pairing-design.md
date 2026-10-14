@@ -108,7 +108,8 @@ The registry's shape is recorded in `.ade/context/remote-tabs.md`.
 - **Tab contents:** remote id, title, project, state, and `age_s`, the seconds
   since that state began, measured on the Mac. Phone and Mac clocks are never
   compared.
-- **Caps:** at most 200 tabs, titles cut to 120 characters, projects to 80.
+- **Caps:** at most 200 tabs, titles cut to 120 code points, projects to 80.
+  The plaintext limit below wins; see the snapshot layout under App messages.
 - **The phone** ignores a snapshot whose `seq` is not above the last one it
   saw.
 
@@ -122,8 +123,16 @@ The registry's shape is recorded in `.ade/context/remote-tabs.md`.
 ## Wire format
 
 All relay traffic runs over WebSocket on `wss://` only; the phone refuses a
-QR code with any other scheme. Every message is a JSON text frame
-`{"v":1,"t":<type>,...}`, with bytes in unpadded base64url.
+QR code with any other scheme.
+
+- **Control messages** are JSON text frames, `{"v":1,"t":<type>,...}`, with
+  bytes in unpadded base64url.
+- **Session traffic** (`hs1`, `hs2`, transport frames) uses binary WebSocket
+  messages, so it pays no base64 overhead:
+  `u8 type (1 hs1, 2 hs2, 3 frame) || 32-byte peer identity key || body`.
+  The peer key is the recipient when sending to the relay, and the sender when
+  the relay delivers.
+- **The relay's limit is 64 KiB per WebSocket message**, of either kind.
 
 **Signed and sealed structures** use one encoding:
 
@@ -150,15 +159,26 @@ registered. The relay refuses:
 
 ### Login and presence
 
-1. **Relay → device:** `challenge {c: 32 random bytes, host}`. The challenge
-   is single-use, fresh for each connection, and carries no timestamp.
+1. **Relay → device:** `challenge {c: 32 random bytes}`. The challenge is
+   single-use, fresh for each connection, and carries no timestamp.
 2. **Device → relay:** `login {id: I, role, sig}`, where
    `sig = Sign(I, enc("ade-remote/v1/login", c, host, role))`.
+   - `host` is the host name the device itself dialled, taken from
+     `remote.relayUrl` or the QR code, never anything the relay sent.
+   - The relay checks the signature against its own configured host name, so a
+     login relayed through another server fails.
 3. **Relay → device:** `welcome {pairs: [{pair_id, peer_id, peer_role}], online: [peer_id]}`.
 
-The device reconciles with `welcome`. A local pair the relay doesn't list is
-shown as "no longer paired" and removed. This covers unpairs that happened
-while the device was offline, the 90-day cleanup and a lost database.
+The device reconciles with `welcome`, in both directions:
+
+- **A local pair the relay doesn't list** is shown as "no longer paired" and
+  removed. This covers unpairs made by the peer while this device was offline,
+  the 90-day cleanup and a lost database.
+- **A pair the relay lists but the device doesn't hold** is sent
+  `unpair {pair_id}` at once. This covers an unpair the user made while this
+  device couldn't reach the relay.
+- **Unpairs made offline** are also kept in a persisted queue and sent on the
+  next login.
 
 **Presence.** The relay sends `presence {peer, online}` to every paired peer
 when a device logs in, and when it leaves. A device has left when its socket
@@ -189,7 +209,8 @@ carry no further signatures.
    The Mac checks the reveal against `H`, and checks `sig_P`.
 7. **Both sides show the code:**
    `SHA-256(enc("ade-remote/v1/pair/sas", slot, I_M, S_M, I_P, S_P, N_M, N_P, s))`,
-   read as a big-endian u64, modulo 10^6, shown as 6 digits. The phone computes
+   Its first 8 bytes are read as a big-endian u64, taken modulo 10^6 and shown
+   as 6 digits. The phone computes
    it from its own keys only. Because the phone commits before it sees `N_M`,
    no one can grind keys to match the code, not even a relay that also saw the
    QR code.
@@ -200,8 +221,14 @@ carry no further signatures.
    - The relay checks both signatures and both roles, stores the pair with
      `pair_id = SHA-256(R)[..16]`, and sends the phone
      `paired {record fields, sig_M, pair_id}`.
-   - The phone checks that the record names its own keys and that `sig_M` is
-     valid, and only then shows "Paired".
+   - Before it shows "Paired", the phone checks that:
+     - `I_P` and `S_P` are its own keys;
+     - `I_M` and `S_M` equal the QR code's;
+     - `slot` is its own slot;
+     - `sig_M` is valid over `R`, which it rebuilds itself.
+
+     It also computes `pair_id` itself and uses that, never the relay's
+     copy.
    - On decline, the phone gets `pair_declined`.
 
 **Slots.** The first `pair_commit` holds the slot until confirm, decline or
@@ -221,41 +248,64 @@ unpair can't remove a newer pair.
 The pattern is `Noise_IK_25519_ChaChaPoly_SHA256`. The prologue is
 `enc("ade-remote/v1/noise", I_M, I_P)`. The phone initiates.
 
-- **Message 1 (`hs1`).** Its payload is only an 8-byte big-endian millisecond
-  timestamp. The Mac refuses it unless the timestamp is above the last one it
-  accepted from that phone, and, after a Mac restart, no more than 5 minutes
-  old. The Mac also refuses it unless the remote static equals the `S_P` it
-  paired with, for the `I_P` the relay names as sender.
+- **Message 1 (`hs1`).** Its payload is only an 8-byte big-endian counter.
+  - **The phone sends** `max(now_ms, last_sent + 1)`, with `last_sent` stored
+    for each Mac, so a clock that steps backwards still moves the counter
+    forward.
+  - **The Mac refuses it** unless it is above the last value it accepted from
+    that phone. That last value is stored for each phone in ADE's app state, so
+    no age window is needed after a restart, and the two clocks are never
+    compared.
+  - **The Mac also refuses it** unless the remote static key equals the `S_P`
+    it paired with, for the `I_P` the relay names as the sender.
   Message 1 carries no content, because it has no forward secrecy.
 - **Message 2 (`hs2`).** Empty payload. Content travels only in transport
   frames, which are forward secret.
-- **Transport frames.** `frame {data: u64be(nonce) || ciphertext}`, using
-  `snow`'s stateless transport on the Mac and the same scheme on the phone.
+- **Transport frames.** A frame body is
+  `8-byte session id || u64be(nonce) || ciphertext`. The session id is the
+  first 8 bytes of the handshake hash. The Mac uses `snow`'s stateless
+  transport, and the phone the same scheme.
   - Each direction counts from 0.
   - A receiver accepts only a nonce above the last one it accepted. Gaps from
     frames the relay dropped are fine.
-  - A frame that fails to open is dropped.
+  - A frame for any session other than the current one is dropped silently.
+  - A frame for the current session that fails to open is dropped. That side
+    then restarts the session: the phone handshakes, and the Mac sends
+    `rehandshake`.
+  - Each side restarts at most once every 10 seconds.
 - **When the phone starts a handshake:**
   - on `welcome` or `presence` showing its Mac online;
   - when the app comes to the foreground;
   - on receiving `rehandshake` (below);
   - after 24 hours or 2^32 frames in one session.
-- **When the Mac asks for one.** If the Mac has a frame to send and no session,
-  or a frame fails to open, it sends the phone a plaintext
-  `rehandshake {}` through the relay. A forged one costs only a handshake.
+- **When the Mac asks for one.** If the Mac has a frame to send and no
+  session, or a current-session frame fails to open, it sends the phone a
+  plaintext `rehandshake {}` through the relay, at most once every 10 seconds.
+  A forged one costs only a handshake.
 - **The Mac sends its first snapshot** right after `hs2`.
 - **Two handshakes at once.** The newest completed one wins, and frames for the
   older session are dropped.
-- **Size.** A plaintext is at most 60,000 bytes, which fits one Noise message
-  and the relay's 64 KB cap.
+- **Size.** A plaintext is at most 60,000 bytes. With the 33-byte binary
+  header, the 8-byte session id, the 8-byte nonce and the 16-byte tag, a frame
+  stays under the relay's 64 KiB.
 
 ### App messages (inside frames)
 
 | Message | Direction | Meaning |
 |---|---|---|
-| `snapshot {seq, tabs:[{id, title, project, state, age_s}]}` | Mac → phone | full state, padded with zeros to the next 4 KiB |
-| `want_snapshot {}` | phone → Mac | pull to refresh |
+| `snapshot {seq, truncated, tabs:[{id, title, project, state, age_s}]}` | Mac → phone | full state (encoding below) |
+| `want_snapshot {}` | phone → Mac | pull to refresh; also on coming to the foreground, and every 60 s while there |
 | `foreground {on}` | phone → Mac | sent on change, and every 30 s while on |
+
+**How a snapshot plaintext is laid out:** `u32be(len) || JSON || zero bytes`.
+- **Padding.** Zeros pad it to the next multiple of 4 KiB, but never past
+  60,000 bytes.
+- **Too big.** If it would still exceed 60,000 bytes, the Mac drops the least
+  urgent tabs (and the oldest among equals) until it fits, and sets
+  `truncated: true`.
+- **Text lengths** are counted in Unicode code points, and text is cut at a
+  code-point boundary.
+- **Vectors** include a snapshot at the maximum size.
 
 The Mac treats a phone as **in the background** by default. It also does so
 when the phone's presence is offline, or when no `foreground {on:true}` has
@@ -297,7 +347,10 @@ arrived for 60 s.
 `com.betterterminal.remote.dev`, so dev and release builds have separate
 identities and don't keep replacing each other's connection. This service is
 separate from the vault's. Keys are read only while Remote is on. The pair
-list and peer keys live in ADE's app state. The bridge reaches keys through a
+list, peer keys and the last `hs1` value per phone live in ADE's app state,
+keyed by relay URL and the Mac's own identity key. The dev and release builds
+share one app-data folder, and pointing at another relay is allowed;
+reconciling with a `welcome` touches only the entries under its own key. The bridge reaches keys through a
 `KeyStore` trait; the tests use an in-memory implementation, so CI needs no
 keychain.
 
@@ -329,7 +382,7 @@ Hermes has `crypto.getRandomValues`.
 
 | What | Limit |
 |---|---|
-| Frames | 20/s per device, bursts to 100; 64 KB each |
+| Frames | 20/s per device, bursts to 100; 64 KiB each. A refused frame is answered with `rate_limited {retry_ms}`, and the Mac resends its latest snapshot after `retry_ms` |
 | Push | 1 per 30 s per phone; 30 per hour |
 | Slots | 5 per hour per Mac |
 | New identity keys | 20 per hour per IP |
@@ -384,18 +437,28 @@ builds the app and submits it to TestFlight. The bundle id is
 
 ## Code layout
 
-- **`relay/`**: a virtual Cargo workspace with four crates. `relay/protocol/`
-  holds encodings, labels, pairing seals and Noise wiring. `relay/core/` holds
-  the pairing and session state machines and the snapshot builder, all
-  Tauri-free. `relay/server/` is the relay. `relay/cli/` is the test client.
+- **`relay/`**: a virtual Cargo workspace with five crates:
+  - `relay/protocol/`: encodings, labels, pairing seals and Noise wiring.
+  - `relay/core/`: the pairing and session state machines and the snapshot
+    builder, all Tauri-free.
+  - `relay/server/`: the relay.
+  - `relay/cli/`: the test client.
+  - `relay/e2e/`: a package whose `tests/` hold the end-to-end test. A virtual
+    workspace builds no tests from its own root, so the test needs a package.
+
   `src-tauri` depends on `protocol` and `core` by path, so the Mac and the CLI
   share one Rust implementation.
-- **`relay/tests/`**: the end-to-end test.
 - **`packages/protocol/`**: the TypeScript protocol and Noise IK.
   `packages/protocol/vectors/` holds the vectors that the Rust tests read too.
-- **`mobile/`**: the Expo app, with its own `package-lock.json`. It depends on
-  `packages/protocol` as `file:../packages/protocol`, and Metro's
-  `watchFolders` includes it.
+- **`mobile/`**: the Expo app, with its own `package-lock.json`.
+  - It depends on `packages/protocol` as `file:../packages/protocol`.
+  - `@noble/*` and `react-native-get-random-values` are **peer dependencies**
+    of `packages/protocol`, installed in both the root and `mobile/`.
+  - Metro's `watchFolders` includes `../packages/protocol`, and
+    `resolver.nodeModulesPaths` points at `mobile/node_modules`, so the package
+    resolves its imports from the app.
+  - Jest's `moduleDirectories` and `transformIgnorePatterns` do the same, and
+    Jest compiles the package's TypeScript.
 - **`src-tauri/src/remote_bridge.rs`**: the bridge, plus `remote_tabs_set`, the
   Remote settings and the pairing UI in `src/`.
 
@@ -415,16 +478,22 @@ plus two.
   `packages/protocol`.
 - `npm test`. The vitest `include` adds `packages/protocol/**/*.test.ts`.
 - `cd src-tauri && cargo test`
-- `cd relay && cargo test`. This covers all four crates and the end-to-end
-  test.
+- `cd relay && cargo test`. This covers all five crates, including the
+  end-to-end test.
 - `cd mobile && npx tsc --noEmit && npx jest`
 
 **Install steps**, for CI and a fresh checkout: `npm ci` at the root, and
 `npm ci` in `mobile/`. Cargo fetches the rest.
 
-**First story.** The first 2a story scaffolds `relay/` (four crates),
+**First story.** The first 2a story scaffolds `relay/` (five crates),
 `packages/protocol` and `mobile/`, each with one passing test, plus a CI job
-for each new check. Every later story can then run the full command.
+for each new check. Every later story can then run the full command. That
+story also proves:
+
+- The end-to-end package's placeholder test appears by name in the output of
+  `cd relay && cargo test`.
+- An EAS-style install bundles: `npm ci` in `mobile/` alone, then
+  `npx expo export`, resolving `packages/protocol` and its peers.
 
 ### Tests
 
@@ -436,7 +505,8 @@ for each new check. Every later story can then run the full command.
     a different code;
   - the IK handshake against the cacophony vectors and `snow`;
   - transport frames, where tampered, truncated, replayed and lower-nonce
-    frames are refused, and a gap is accepted.
+    frames are refused, and a gap is accepted;
+  - frames carrying another session's id, which are dropped silently.
 - **Pairing:**
   - the right secret pairs;
   - refused: a wrong secret, an expired slot, a second commit, a reveal that
@@ -445,15 +515,24 @@ for each new check. Every later story can then run the full command.
   - the phone refuses a `paired` record naming other keys;
   - unpair works from either side;
   - a replayed old unpair leaves a newer pair alone;
-  - `welcome` reconciles an unpair that happened while the device was offline.
+  - `welcome` reconciles in both directions: an unpair made by the peer while
+    this device was offline, and an unpair made on this device while it was
+    offline (queued);
+  - the phone refuses a `paired` record whose Mac keys or slot differ from
+    the QR code;
+  - two identities sharing one state file each keep their own pairs.
 - **Sessions:**
   - a replayed `hs1` is refused;
+  - a phone clock set back, or skewed against the Mac's, still connects;
+  - frames still in flight from an old session don't start a handshake
+    loop;
   - a remote static that differs from the paired one is refused;
   - the Mac asks for a handshake when it has no session;
   - a dropped frame doesn't break the session;
   - two handshakes at once leave the newest.
 - **Relay:**
-  - login with a single-use challenge, a replayed login refused;
+  - login with a single-use challenge, a replayed login refused, and a login
+    signed for another host refused;
   - role enforcement;
   - routing only between paired keys;
   - presence on login, close and ping timeout;
@@ -463,12 +542,13 @@ for each new check. Every later story can then run the full command.
     environment fallback, and deletion on 410.
 - **No plaintext at the relay.** A canary string in a tab title never appears
   in bytes the relay received, in its logs, or in its SQLite file.
-- **End to end, in `relay/tests/`.** Start the relay on a random port, then
+- **End to end, in `relay/e2e/tests/`.** Start the relay on a random port, then
   `core`'s Mac side fed tab registry and piece-1 states, then the CLI client as
   the phone. Check pairing, the first snapshot, a change, `seq` ordering, the
   3-second push rules with an injected clock (including re-entry and a second
   pane), no push while the app reports foreground, push again after the
-  foreground signal lapses, and recovery after the relay restarts.
+  foreground signal lapses, recovery after the relay restarts, and the latest
+state arriving after the burst's last frame was rate-limited.
 - **The bridge in `src-tauri`:**
   - `remote_tabs_set`, including two windows that both have `tab-1`, and a
     window closing;
