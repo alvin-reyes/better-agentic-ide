@@ -1,267 +1,501 @@
 # Relay and pairing: watching ADE's agents from an iPhone (piece 2a)
 
 Piece 1 (`2026-10-14-agent-status-design.md`) taught ADE what each pane's
-Claude Code agent is doing. This spec is piece 2a of the phone remote: a
-relay on Fly.io, QR pairing, end-to-end encryption, a minimal Expo app on
-TestFlight that shows each tab's state, and a push when an agent needs you.
+Claude Code agent is doing. This spec is piece 2a of the phone remote:
+- a relay on Fly.io;
+- QR pairing;
+- end-to-end encryption;
+- a minimal Expo app on TestFlight that shows each tab's state;
+- a push when an agent needs you.
+
 It is **read-only**: nothing the phone sends can run anything on the Mac.
 Steering (approve or deny, prompts, `!` commands) is piece 2b.
 
-The standing constraints of the whole system, set in piece 1's spec, apply:
-the Mac is the host and makes outbound connections only; content leaves a
-device only encrypted end to end; offline, ADE works as before; remote is off
-by default.
+The standing constraints from piece 1's spec still apply:
+- The Mac is the host and makes outbound connections only.
+- Content leaves a device only encrypted end to end.
+- Offline, ADE works as before.
+
+Piece 1 also said remote control is off by default, per tab. 2a has a single
+**Remote** switch for watching, off by default. Per-tab opt-in applies to
+*control*, which arrives in 2b.
 
 ## Decisions
 
 The owner settled these on 2026-10-14:
 
-- The relay is a **Rust** server on **Fly.io**.
-- Pairing is by **QR code, keys only**: each device's key pair is its
-  identity. No accounts, no email. Accounts are piece 4.
-- **Watch first, then steer**: 2a is read-only; 2b adds actions.
-- 2a's phone side is a **minimal Expo app on TestFlight**, plus a **CLI
-  client** that the automated tests use as the phone.
-- Push goes through **APNs** with the owner's Apple Developer account.
-- Encryption: **Noise IK** with standard primitives on both sides (approach A
-  below).
-- The verification command grows (see Verification).
+- **Relay:** a Rust server on Fly.io.
+- **Pairing:** by QR code, keys only. Each device's key pair is its identity.
+  There are no accounts and no email; accounts are piece 4.
+- **Watch first, then steer:** 2a is read-only; 2b adds actions.
+- **Phone side:** a minimal Expo app on TestFlight, plus a CLI client that the
+  automated tests use as the phone.
+- **Push:** APNs direct, with the owner's Apple Developer account.
+- **Encryption:** Noise IK on standard primitives (approach A below).
+- **Verification:** the command grows (see Verification).
 
 Approaches considered for encryption:
 
-- **A (chosen).** Noise `Noise_IK_25519_ChaChaPoly_SHA256`: `snow` on the Mac
-  and the relay's test client; a small TypeScript implementation of that one
-  pattern on `@noble/curves`, `@noble/ciphers` and `@noble/hashes` on the
-  phone, held to `snow` by shared test vectors.
-- **B.** A Noise library on the phone too. React Native's Noise libraries are
-  thin and less tested; the phone side would carry the risk.
-- **C.** TLS only, the relay reading messages. Breaks the end-to-end rule.
+- **A (chosen).** `Noise_IK_25519_ChaChaPoly_SHA256`. Rust uses `snow`. The
+  phone uses a small TypeScript implementation of that one pattern on
+  `@noble/curves`, `@noble/ciphers` and `@noble/hashes`, tested against the
+  published cacophony IK vectors and against `snow` through shared vectors.
+- **B.** A Noise library on the phone. React Native's Noise libraries are thin
+  and less tested.
+- **C.** TLS only, with the relay reading messages. This breaks the end-to-end
+  rule.
 
-## Before 2a: piece 1 review fixes
+## Depends on
 
-The review of PR #55 (piece 1) found defects that 2a would carry to the
-phone. Each is verified against the code, then fixed with a test, before 2a's
-bridge relies on piece 1's state. Confirmed so far:
+**Piece 1 merged, and its review findings closed.** The review of PR #55
+found defects that 2a would carry to the phone. One is confirmed:
+`check_processes` treats a pid missing from its lookup as exited, so a session
+that gets its first pid during a check is dropped (`agent_status.rs`
+`drop_dead`).
 
-- `check_processes` treats a pid missing from its lookup map as exited, so a
-  session that gets its first pid between `tracked()` and the update is
-  dropped at once (`agent_status.rs`, `drop_dead` called from
-  `check_processes`).
-
-To verify, and fix where real: `SessionStart` with `source: compact` setting
-ready mid-turn; the sub-agent set never cleared when a `SubagentStop` is lost;
-the answer-key rule never re-arming after a removed prompt is denied; any
-event re-creating a dropped session; `forget_pty` missing on `attach`'s
-removal path; a hook payload over 4 MB dropped by the helper; the Linux lock
-folder differing between processes; a user's own empty settings file or
-`.claude/` being deleted on turn-off; no test of the state's wire format.
+Those findings are their own piece-1 follow-up plan in this initiative. Each
+one ends in either a failing-then-passing test, or a written "not
+reproducible". 2a's build starts after that plan is Done. This spec does not
+fix them.
 
 ## Components and data flow
 
 ```
- ADE (Mac)                          Relay (Rust, Fly.io)                Phone
- agent_status watch -> remote       routes sealed frames by device      Expo app (TestFlight)
- bridge: per-tab snapshot -seal->   key; stores keys, pairs, APNs  ->   or CLI test client:
-   {tab id, title, project, state}  tokens; no content                  opens frames, shows tabs
- needs-you for 3 s -> "push P"  ->  APNs: "An agent needs you"     ->   notification
+ ADE (Mac)                            Relay (Rust, Fly.io)            Phone
+ tabStore -> remote_tabs_set ---.     routes sealed frames by         Expo app (TestFlight)
+ agent_status current() --------+->   identity key; stores keys,  ->  or CLI test client:
+ remote bridge: snapshot -seal----->  pairs, push tokens; no      ->  opens frames, shows tabs
+ needs-you 3 s -> push request ---->  content; APNs "An agent         notification
+                                      needs you"
 ```
 
-- **ADE's remote bridge** (new module in `src-tauri`) subscribes to piece 1's
-  per-pane state (`AgentStatus::watch`). It rolls panes up into tabs, using
-  ADE's tab id, title and project folder name. Pane and PTY ids never leave
-  the Mac. It holds one outbound WebSocket to the relay while Remote is on and
-  at least one phone is paired. It sends each paired phone a sealed snapshot
-  on every change, and a full snapshot when the relay reports that phone
-  online.
-- **Tab titles and project names are content**: they travel only inside
-  sealed frames.
-- **The relay** routes sealed frames between paired keys. It has no mailbox: a
-  frame for an offline device is dropped, and the Mac resends a snapshot when
-  the device returns.
-- **Remote is off by default** in ADE. Turning it on shows **Pair a phone**.
-  ADE lists paired phones with **Unpair**. Turning Remote off closes the
-  connection; pairs are kept until unpaired.
+### Tabs reach the backend
 
-## Pairing and the handshake
+Tabs, titles and cwds live only in each window's frontend `tabStore`. Their
+ids come from a counter per window, so two windows can both have `tab-1`.
+
+- **`remote_tabs_set`.** Each window calls a new command,
+  `remote_tabs_set(window_label, tabs)`. Each entry in `tabs` is
+  `{ tab_id, title, project, pty_ids }`. The window calls it on every tab
+  change that touches those fields, debounced to 200 ms, and with `[]` before
+  it unloads. The backend also clears a window's entries on its Tauri
+  `Destroyed` event.
+- **`project`** is the base name of the tab's active pane's cwd: the live cwd
+  (`usePaneCwd`), else `savedCwd`, else `initialCwd`, else empty.
+- **Remote ids.** The bridge keys tabs by `(window_label, tab_id)` and gives
+  each one an opaque random remote id for its lifetime. Remote ids, not ADE's
+  ids, go to the phone. PTY ids never leave the Mac.
+
+The registry's shape is recorded in `.ade/context/remote-tabs.md`.
+
+### State
+
+- **Reading piece 1's state.** Piece 1 gains a non-test
+  `AgentStatus::current()`, which returns each PTY's state.
+- **The bridge's sink only signals a wake-up.** It does no I/O, takes no lock
+  of its own and runs no timer. The bridge thread then reads `current()`.
+  Update order and piece 1's watcher lock therefore don't matter.
+- **A tab's state** is the most urgent state among its PTYs, ranked in piece
+  1's order.
+
+### Snapshots
+
+- **Always full, never deltas.** After any change the bridge waits 250 ms
+  (coalescing), then sends each paired phone that has a live session a full
+  snapshot.
+- **Snapshot contents:** `seq`, which rises by one per snapshot and survives
+  reconnects within one ADE run, plus the tabs.
+- **Tab contents:** remote id, title, project, state, and `age_s`, the seconds
+  since that state began, measured on the Mac. Phone and Mac clocks are never
+  compared.
+- **Caps:** at most 200 tabs, titles cut to 120 characters, projects to 80.
+- **The phone** ignores a snapshot whose `seq` is not above the last one it
+  saw.
+
+### Remote switch and connection
+
+- **Remote** is off by default and stored as setting `remote.enabled`.
+- While on, ADE keeps one connection to the relay, whether or not a phone is
+  paired, because pairing needs it.
+- Off closes the connection. Pairs are kept until unpaired.
+
+## Wire format
+
+All relay traffic runs over WebSocket on `wss://` only; the phone refuses a
+QR code with any other scheme. Every message is a JSON text frame
+`{"v":1,"t":<type>,...}`, with bytes in unpadded base64url.
+
+**Signed and sealed structures** use one encoding:
+
+```
+enc(label, f1, ..., fn) = label_ascii || u32be(len f1) || f1 || ... || u32be(len fn) || fn
+```
+
+Every label is distinct and starts with `ade-remote/v1/`. A signature or seal
+made for one label never checks under another; a test proves this.
 
 **Keys.** Each device has:
+- an identity key `I`, Ed25519;
+- a static key `S`, X25519.
 
-- an **identity key** (Ed25519), which signs the relay's login challenge;
-- a **static encryption key** (X25519), signed by its identity key.
+The static key is bound to the identity key by the pair record and the Noise
+prologue, not by a separate signature.
 
-The Mac keeps both in the OS keychain through the `keyring` crate, as the
-vault already does. The phone keeps them in `expo-secure-store` (iOS
-Keychain).
+**Roles.** A device's role (`mac` or `phone`) is fixed when its key is first
+registered. The relay refuses:
+- slot requests from phones;
+- push tokens from Macs;
+- push requests from anyone but a Mac, and from a Mac for phones it isn't
+  paired with.
 
-**Pairing.**
+### Login and presence
 
-1. **Pair a phone** in ADE asks the relay for a one-time slot: random id,
-   valid 5 minutes, used once. ADE shows a QR code:
-   `ade-pair://v1?relay=<wss url>&slot=<id>&id=<Mac identity key>&x=<Mac encryption key>&s=<32-byte secret>`
-   (keys and secret base64url).
-2. The phone scans it, logs in to the relay with its own identity key, and
-   sends the slot a pairing request: its two public keys and its device name.
-   The request is sealed with a key derived (HKDF-SHA256) from the QR's
-   secret, so the relay can neither read nor forge it.
-3. ADE opens the request; only a holder of the QR could seal it. ADE shows
-   **"Pair '<device name>'?"** with a 6-digit code derived from the exchange.
-   The phone shows the same code.
-4. The user confirms in ADE. ADE sends the relay a pair record signed by both
-   identity keys (the phone's signature came in the request). The slot closes.
-   Declining, or 5 minutes passing, closes it with no pair.
+1. **Relay → device:** `challenge {c: 32 random bytes, host}`. The challenge
+   is single-use, fresh for each connection, and carries no timestamp.
+2. **Device → relay:** `login {id: I, role, sig}`, where
+   `sig = Sign(I, enc("ade-remote/v1/login", c, host, role))`.
+3. **Relay → device:** `welcome {pairs: [{pair_id, peer_id, peer_role}], online: [peer_id]}`.
 
-Someone who photographs the QR code can't pair without the user's click
-beside a matching code.
+The device reconciles with `welcome`. A local pair the relay doesn't list is
+shown as "no longer paired" and removed. This covers unpairs that happened
+while the device was offline, the 90-day cleanup and a lost database.
 
-**Each connection** between a paired Mac and phone runs Noise IK, with the
-phone as initiator (it knows the Mac's static key from the QR). Every session
-has fresh keys, so a key stolen later doesn't open past traffic. Transport
-frames carry Noise's counter nonce. A frame that fails to open, or replays a
-counter, is dropped and the session is restarted.
+**Presence.** The relay sends `presence {peer, online}` to every paired peer
+when a device logs in, and when it leaves. A device has left when its socket
+closes, or when 30 s pass with no pong; the relay pings every 15 s. One live
+connection per device: a new login replaces the old, whose peers see offline
+then online.
 
-**Many to many.** A Mac may pair with several phones and a phone with
-several Macs. Each pair has its own session.
+Messages after `login` are authorised by the authenticated connection and
+carry no further signatures.
 
-**Unpairing.** Either device sends the relay a signed unpair. The relay
-deletes the pair and notifies the other side, which deletes its copy of that
-peer's keys.
+### Pairing: commit, then reveal
 
-## The relay
+1. **Mac → relay:** `slot_open`. **Relay → Mac:** `slot {slot: 16 bytes, expires}`.
+   The slot lasts 5 minutes.
+2. **ADE shows the QR code:**
+   `ade-pair://v1?relay=<wss url>&slot=..&id=<I_M>&x=<S_M>&s=<32-byte secret>`.
+3. **Both sides derive two keys:**
+   `k_pm = HKDF-SHA256(ikm=s, salt=slot, info="ade-remote/v1/pair/phone-to-mac")`,
+   and `k_mp` the same with `info=".../mac-to-phone"`. Every pairing message is
+   sealed with XChaCha20-Poly1305 under its direction's key, with a random
+   24-byte nonce.
+4. **Phone → relay → Mac:** `pair_commit {slot, sealed(k_pm, enc("ade-remote/v1/pair/commit", H))}`.
+   `H = SHA-256(enc("ade-remote/v1/pair/commit-hash", I_P, S_P, name, N_P))`,
+   with `N_P` a random 32-byte nonce.
+5. **Mac → relay → phone:** `pair_nonce {slot, sealed(k_mp, enc("ade-remote/v1/pair/nonce", N_M))}`.
+6. **Phone → relay → Mac:** `pair_reveal {slot, sealed(k_pm, enc("ade-remote/v1/pair/reveal", I_P, S_P, name, N_P, sig_P))}`.
+   `sig_P = Sign(I_P, enc("ade-remote/v1/pair/phone-sig", slot, I_M, S_M, I_P, S_P))`.
+   The Mac checks the reveal against `H`, and checks `sig_P`.
+7. **Both sides show the code:**
+   `SHA-256(enc("ade-remote/v1/pair/sas", slot, I_M, S_M, I_P, S_P, N_M, N_P, s))`,
+   read as a big-endian u64, modulo 10^6, shown as 6 digits. The phone computes
+   it from its own keys only. Because the phone commits before it sees `N_M`,
+   no one can grind keys to match the code, not even a relay that also saw the
+   QR code.
+8. **The user confirms in ADE.**
+   - The Mac builds `R = enc("ade-remote/v1/pair/record", I_M, S_M, I_P, S_P, slot, u64be(paired_at))`
+     and `sig_M = Sign(I_M, R)`, then sends
+     `pair_confirm {slot, record fields, sig_M, sig_P}`.
+   - The relay checks both signatures and both roles, stores the pair with
+     `pair_id = SHA-256(R)[..16]`, and sends the phone
+     `paired {record fields, sig_M, pair_id}`.
+   - The phone checks that the record names its own keys and that `sig_M` is
+     valid, and only then shows "Paired".
+   - On decline, the phone gets `pair_declined`.
 
-**Storage**, SQLite on a Fly volume:
+**Slots.** The first `pair_commit` holds the slot until confirm, decline or
+expiry; any other commit is refused. A racer can therefore block a slot. The
+user then opens a new one, and that is the only effect.
 
-| Table | Holds |
-|---|---|
-| `devices` | identity public key, first seen, last seen |
-| `pairs` | Mac key, phone key, when paired |
-| `push_tokens` | phone key, APNs token, environment (sandbox / production), updated |
+**Device name.** At most 40 characters, printable only, and ADE renders it as
+text.
 
-Pairing slots live in memory only. The relay never stores or logs frame
-content; logs carry counts and error codes only. Devices unseen for 90 days
-are deleted with their pairs and tokens. Losing the database means pairing
-again, nothing more. Backup is Fly's daily volume snapshot.
+**Unpair.** Either side sends `unpair {pair_id}`. The relay deletes the pair
+and tells the peer if it is online; an offline peer learns at its next
+`welcome`. Because each pairing has its own `pair_id`, replaying an old
+unpair can't remove a newer pair.
 
-**Login.** Over WSS the relay sends a random challenge. The device signs it,
-together with the relay's host name and the time, with its identity key. A
-key not seen before is registered on first login. One live connection per
-device: a new one replaces the old.
+### Sessions
 
-**Routing.** A frame (at most 64 KB) is forwarded only between keys that are
-paired; anything else is refused with an error code. When a paired phone
-connects, the relay tells its Macs it is online.
+The pattern is `Noise_IK_25519_ChaChaPoly_SHA256`. The prologue is
+`enc("ade-remote/v1/noise", I_M, I_P)`. The phone initiates.
 
-**Limits** (piece 4 tightens them):
+- **Message 1 (`hs1`).** Its payload is only an 8-byte big-endian millisecond
+  timestamp. The Mac refuses it unless the timestamp is above the last one it
+  accepted from that phone, and, after a Mac restart, no more than 5 minutes
+  old. The Mac also refuses it unless the remote static equals the `S_P` it
+  paired with, for the `I_P` the relay names as sender.
+  Message 1 carries no content, because it has no forward secrecy.
+- **Message 2 (`hs2`).** Empty payload. Content travels only in transport
+  frames, which are forward secret.
+- **Transport frames.** `frame {data: u64be(nonce) || ciphertext}`, using
+  `snow`'s stateless transport on the Mac and the same scheme on the phone.
+  - Each direction counts from 0.
+  - A receiver accepts only a nonce above the last one it accepted. Gaps from
+    frames the relay dropped are fine.
+  - A frame that fails to open is dropped.
+- **When the phone starts a handshake:**
+  - on `welcome` or `presence` showing its Mac online;
+  - when the app comes to the foreground;
+  - on receiving `rehandshake` (below);
+  - after 24 hours or 2^32 frames in one session.
+- **When the Mac asks for one.** If the Mac has a frame to send and no session,
+  or a frame fails to open, it sends the phone a plaintext
+  `rehandshake {}` through the relay. A forged one costs only a handshake.
+- **The Mac sends its first snapshot** right after `hs2`.
+- **Two handshakes at once.** The newest completed one wins, and frames for the
+  older session are dropped.
+- **Size.** A plaintext is at most 60,000 bytes, which fits one Noise message
+  and the relay's 64 KB cap.
 
-- frames: 20 per second per device, bursts to 100;
-- push: 1 per 30 seconds per phone, 30 per hour;
-- pairing slots: 5 per hour per Mac;
-- new device keys: 20 per hour per IP;
-- connections: 1 per device.
+### App messages (inside frames)
 
-**What the relay can see.** IP addresses, connection times, which keys are
-paired, and when a push is sent. The app's privacy note says so.
+| Message | Direction | Meaning |
+|---|---|---|
+| `snapshot {seq, tabs:[{id, title, project, state, age_s}]}` | Mac → phone | full state, padded with zeros to the next 4 KiB |
+| `want_snapshot {}` | phone → Mac | pull to refresh |
+| `foreground {on}` | phone → Mac | sent on change, and every 30 s while on |
 
-**Known gap until piece 4.** Keys are anonymous: someone can pair two of
-their own devices and use the relay as a pipe. The size and rate limits bound
-the cost.
-
-**Operations.** TLS from Fly. `/health`. `/metrics` with counts only, behind
-a token. A Dockerfile in `relay/`. APNs key, key id and team id are Fly
-secrets. Starts as one machine.
+The Mac treats a phone as **in the background** by default. It also does so
+when the phone's presence is offline, or when no `foreground {on:true}` has
+arrived for 60 s.
 
 ## Push
 
-- The app gets its APNs device token with `getDevicePushTokenAsync` (APNs
-  direct, not Expo's push service, so no third party is in the path) and
-  sends it to the relay in a signed control message, with its environment.
-- The relay sends through APNs over HTTP/2 (`a2` crate) with token-based
-  auth.
-- **The notification is fixed: "An agent needs you"**, with no custom data.
-  Opening it opens the app, which connects and gets a snapshot over the
-  encrypted channel.
-- **When:** ADE's bridge asks the relay to push to its paired phones when a
-  tab enters **needs you** and is still there 3 seconds later. Not while that
-  phone's app is in the foreground: the app tells the Mac, sealed, when it
-  comes to the foreground and leaves it. The relay's limits apply on top.
+- **The app's token.** The app registers for notifications through
+  `expo-notifications` and its config plugin, asking for permission after the
+  first successful pairing. It sends `push_token {token, env}` on every launch.
+  `env` is a build-time constant from the EAS profile: `production` for
+  TestFlight and store builds, `sandbox` for dev builds.
+- **The relay** sends through APNs over HTTP/2 (`a2`), with token auth from
+  Fly secrets.
+  - Headers: `apns-topic` is the bundle id, `apns-push-type: alert`,
+    `apns-priority: 10`, `apns-collapse-id: ade-needs-you`.
+  - On `BadDeviceToken` it tries the other environment once and updates the
+    record.
+  - On `410 Unregistered` it deletes the token.
+- **The notification** has a fixed body, "An agent needs you", and no custom
+  data. Opening it opens the app, which connects and handshakes.
+- **When ADE asks for a push.** For each tab, separately:
+  - When the tab's state becomes **needs you**, a 3-second timer starts.
+  - If the tab still needs you when the timer ends, the Mac sends
+    `push {phones: [I_P...]}`, naming its paired phones that are in the
+    background.
+  - Leaving needs you cancels the timer. Entering it again starts a new one.
+  - Another pane of the same tab needing you doesn't start a second timer.
+  - Tabs that already need you when Remote turns on don't push. Only changes
+    push.
+  - The timer uses an injectable clock.
+- **The relay's limits apply on top.** It also refuses a push to any phone not
+  paired with the requesting Mac.
+
+## Keys and storage
+
+**Mac.** The keys live in the OS keychain through `keyring`, under service
+`com.betterterminal.remote`. A debug build uses
+`com.betterterminal.remote.dev`, so dev and release builds have separate
+identities and don't keep replacing each other's connection. This service is
+separate from the vault's. Keys are read only while Remote is on. The pair
+list and peer keys live in ADE's app state. The bridge reaches keys through a
+`KeyStore` trait; the tests use an in-memory implementation, so CI needs no
+keychain.
+
+**Phone.** Keys and the pair list live in `expo-secure-store` with
+`keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY`, so they don't move to
+another device through a backup. Keys and pairs share that store, so they
+survive or vanish together, and `welcome` corrects anything stale.
+`react-native-get-random-values` is imported before any `@noble` module, so
+Hermes has `crypto.getRandomValues`.
+
+## The relay
+
+**Storage**, in SQLite on a Fly volume:
+
+| Table | Holds |
+|---|---|
+| `devices` | identity key, role, first seen, last seen |
+| `pairs` | pair id, Mac key, phone key, both static keys, slot, paired at |
+| `push_tokens` | phone key, APNs token, environment, updated |
+
+- Slots and presence live in memory only.
+- No frame or pairing content is stored or logged. Logs carry counts and error
+  codes.
+- Devices unseen for 90 days are deleted, with their pairs and tokens.
+- Losing the database means pairing again.
+- Backup is Fly's daily volume snapshot.
+
+**Limits.** Piece 4 tightens these.
+
+| What | Limit |
+|---|---|
+| Frames | 20/s per device, bursts to 100; 64 KB each |
+| Push | 1 per 30 s per phone; 30 per hour |
+| Slots | 5 per hour per Mac |
+| New identity keys | 20 per hour per IP |
+| Connections | 1 per device |
+
+**Operations.**
+- Fly runs one machine with `auto_stop_machines = false` and
+  `min_machines_running = 1`.
+- TLS comes from Fly.
+- `/health` is public; `/metrics` serves counts only, behind a token.
+- A Dockerfile lives in `relay/`.
+- APNs key, key id and team id are Fly secrets.
+- Clients reconnect with backoff from 1 s to 60 s, with full jitter. Every
+  deploy drops all connections.
+
+**Relay address.** ADE setting `remote.relayUrl`, defaulting to the deployed
+`wss://` host. `ADE_RELAY_URL` overrides it in dev and tests. Both are recorded
+in the Context Store.
+
+`docs/ops.md` gets a relay section from devops before the relay ships:
+deploy, rollback, the `/health` alert, and where the `.p8` lives.
+
+## Known limits
+
+- **Metadata.** The relay sees IP addresses, connection times, which keys are
+  paired, when pushes are sent, and frame sizes and timing. Padding hides exact
+  title lengths, not tab activity. The app's privacy note says so.
+- **Forged status.** Piece 1's limit still holds: any process started in an ADE
+  terminal can forge status. In 2a a forged **needs you** can trigger a push.
+  The relay's push limits bound it. 2b must close this before the phone can act
+  on anything.
+- **Anonymous keys.** Someone can pair two of their own devices and use the
+  relay as a pipe. The new-key limit per IP is easily dodged by rotating IPv6
+  addresses. Size and rate limits bound the cost until piece 4.
+- **Push timing.** Push timing shows *when* an agent needs you, though not
+  which one.
 
 ## The minimal app
 
-Expo SDK, TypeScript, `expo-router`:
+Built with Expo SDK, TypeScript and `expo-router`.
 
-1. **Pair**: scan the QR code (`expo-camera`), show the 6-digit code, wait
-   for the Mac's confirmation.
-2. **Macs**: paired Macs with an online or offline mark.
-3. **Tabs**: one Mac's tabs: title, project, state dot in ADE's colours, and
-   when the state last changed. Pull to refresh.
-4. **Settings**: unpair a Mac; app version.
+1. **Pair.** Scan the QR code with `expo-camera`, show the 6-digit code, and
+   wait for `paired` or `pair_declined`.
+2. **Macs.** The paired Macs, each with an online or offline mark from presence.
+3. **Tabs.** For one Mac: title, project, a state dot in ADE's colours, and the
+   age of the state. Pull to refresh sends `want_snapshot`.
+4. **Settings.** Unpair, and the app version.
 
-No analytics, and no crash reporter that could capture content. EAS builds
-and submits to TestFlight for internal testers. The bundle id is
+There are no analytics, and no crash reporter that could capture content. EAS
+builds the app and submits it to TestFlight. The bundle id is
 `com.betterterminal.remote` unless the owner names another.
 
 ## Code layout
 
-- `relay/`: the Rust relay (its own crate, not in the `src-tauri` workspace).
-- `packages/protocol/`: frame types, the pairing seal and the Noise IK
-  implementation in TypeScript, used by the app and its tests;
-  `packages/protocol/vectors/`: test vectors shared with Rust.
-- `mobile/`: the Expo app.
-- `src-tauri/src/remote_bridge.rs` (or a module folder): ADE's bridge, plus
-  the Remote section of the UI in `src/`.
-- `relay/` also builds the CLI test client (a second binary), used by the end
-  to end test.
+- **`relay/`**: a virtual Cargo workspace with four crates. `relay/protocol/`
+  holds encodings, labels, pairing seals and Noise wiring. `relay/core/` holds
+  the pairing and session state machines and the snapshot builder, all
+  Tauri-free. `relay/server/` is the relay. `relay/cli/` is the test client.
+  `src-tauri` depends on `protocol` and `core` by path, so the Mac and the CLI
+  share one Rust implementation.
+- **`relay/tests/`**: the end-to-end test.
+- **`packages/protocol/`**: the TypeScript protocol and Noise IK.
+  `packages/protocol/vectors/` holds the vectors that the Rust tests read too.
+- **`mobile/`**: the Expo app, with its own `package-lock.json`. It depends on
+  `packages/protocol` as `file:../packages/protocol`, and Metro's
+  `watchFolders` includes it.
+- **`src-tauri/src/remote_bridge.rs`**: the bridge, plus `remote_tabs_set`, the
+  Remote settings and the pairing UI in `src/`.
 
 ## Shared contract
 
-`.ade/context/remote-protocol.md` records the QR format, the login challenge,
-the pairing messages, the snapshot and presence frame shapes, the control
-messages, error codes and limits, with the vectors as the reference. An ADR
-records the relay and protocol choices.
+- `.ade/context/remote-protocol.md`: everything under Wire format, with the
+  vectors as the reference.
+- `.ade/context/remote-tabs.md`: the tab registry.
+- An ADR for the relay and protocol choices.
 
 ## Verification
 
-Approved by the owner on 2026-10-14 for piece 2a: the three existing checks,
+The owner approved this on 2026-10-14 for piece 2a: the three existing checks,
 plus two.
 
-- `npx tsc --noEmit`
-- `npm test` (now also runs `packages/protocol`'s tests)
+- `npx tsc --noEmit`. The root `tsconfig.json` `include` adds
+  `packages/protocol`.
+- `npm test`. The vitest `include` adds `packages/protocol/**/*.test.ts`.
 - `cd src-tauri && cargo test`
-- `cd relay && cargo test`
+- `cd relay && cargo test`. This covers all four crates and the end-to-end
+  test.
 - `cd mobile && npx tsc --noEmit && npx jest`
 
-CI gets a job for each new check.
+**Install steps**, for CI and a fresh checkout: `npm ci` at the root, and
+`npm ci` in `mobile/`. Cargo fetches the rest.
+
+**First story.** The first 2a story scaffolds `relay/` (four crates),
+`packages/protocol` and `mobile/`, each with one passing test, plus a CI job
+for each new check. Every later story can then run the full command.
 
 ### Tests
 
-- **Protocol, both languages.** Rust and TypeScript run the same vectors: a
-  handshake and a frame sealed on one side open on the other; a tampered,
-  truncated or replayed frame is refused on both.
-- **Pairing.** The right secret pairs. A wrong secret, an expired slot or a
-  reused slot is refused. The 6-digit code matches on both sides. Nothing
-  pairs without the Mac's confirmation. Unpairing from either side removes the
-  pair on both.
-- **Relay.** Login by signed challenge, a bad or stale signature refused;
-  routing only between paired keys; each limit; the 90-day cleanup; no frame
-  bytes in the logs (asserted); push through a fake APNs sink, whose payload
-  is exactly the fixed text with no custom data.
-- **End to end**, in one test. Start the relay on a random port, ADE's bridge
-  in-process fed piece-1 states, and the CLI client as the phone. Check:
-  pairing; the snapshot arriving; a change arriving; a push after 3 seconds of
-  needs you and none for a prompt answered within 3 seconds; none while the
-  app reports foreground; the relay never holding plaintext.
-- **ADE's bridge.** Panes rolled up into tabs; the 3-second rule; keys kept in
-  the keychain; Remote off closing the connection.
-- **App.** Parsing the QR code; the tab list rendering each state; unpair.
+- **Protocol vectors**, shared by Rust and TypeScript:
+  - the `enc` encoding;
+  - each label, including that a signature under one label fails under
+    another;
+  - the pairing seals and the 6-digit code, where a different phone key gives
+    a different code;
+  - the IK handshake against the cacophony vectors and `snow`;
+  - transport frames, where tampered, truncated, replayed and lower-nonce
+    frames are refused, and a gap is accepted.
+- **Pairing:**
+  - the right secret pairs;
+  - refused: a wrong secret, an expired slot, a second commit, a reveal that
+    doesn't match its commit, and a bad `sig_P` or `sig_M`;
+  - nothing pairs without confirmation;
+  - the phone refuses a `paired` record naming other keys;
+  - unpair works from either side;
+  - a replayed old unpair leaves a newer pair alone;
+  - `welcome` reconciles an unpair that happened while the device was offline.
+- **Sessions:**
+  - a replayed `hs1` is refused;
+  - a remote static that differs from the paired one is refused;
+  - the Mac asks for a handshake when it has no session;
+  - a dropped frame doesn't break the session;
+  - two handshakes at once leave the newest.
+- **Relay:**
+  - login with a single-use challenge, a replayed login refused;
+  - role enforcement;
+  - routing only between paired keys;
+  - presence on login, close and ping timeout;
+  - each limit;
+  - the 90-day cleanup;
+  - push through a fake APNs sink: fixed body, no data, the right headers, the
+    environment fallback, and deletion on 410.
+- **No plaintext at the relay.** A canary string in a tab title never appears
+  in bytes the relay received, in its logs, or in its SQLite file.
+- **End to end, in `relay/tests/`.** Start the relay on a random port, then
+  `core`'s Mac side fed tab registry and piece-1 states, then the CLI client as
+  the phone. Check pairing, the first snapshot, a change, `seq` ordering, the
+  3-second push rules with an injected clock (including re-entry and a second
+  pane), no push while the app reports foreground, push again after the
+  foreground signal lapses, and recovery after the relay restarts.
+- **The bridge in `src-tauri`:**
+  - `remote_tabs_set`, including two windows that both have `tab-1`, and a
+    window closing;
+  - panes rolled up into tabs;
+  - the sink only signalling;
+  - `KeyStore` in memory;
+  - the dev and release services differing;
+  - Remote off closing the connection.
+- **App:**
+  - QR parsing, refusing a scheme other than `wss://`;
+  - the tab list rendering each state and ignoring a stale `seq`;
+  - unpair;
+  - `getRandomValues` coming from the polyfill.
 
 ### Manual check before Done
 
-Install the TestFlight build, pair it with a dev build of ADE on the Fly
-relay, and trigger a prompt in a background tab. Within about 3 seconds the
-phone gets "An agent needs you"; the app shows the tab as needs you; answering
-at the Mac updates the phone; unpairing from the phone updates ADE's list.
+1. Install the TestFlight build and pair it with a dev build of ADE on the Fly
+   relay.
+2. Trigger a prompt in a background tab. Within about 3 seconds the phone gets
+   "An agent needs you", and the app shows that tab as needs you.
+3. Answer at the Mac. The phone updates.
+4. Unpair from the phone. ADE's list updates.
 
 ## Not in 2a
 
-Approve or deny, prompts and `!` commands (2b, which first settles piece 1's
-forgeable-token limit); accounts and abuse controls beyond the limits above
-(piece 4); Android; the full app design (piece 3).
+- Approve or deny, prompts and `!` commands. These are 2b, which first closes
+  the forgeable-status limit.
+- Accounts and abuse controls beyond the limits above (piece 4).
+- Android.
+- The full app design (piece 3).
