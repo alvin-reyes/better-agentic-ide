@@ -208,7 +208,8 @@ dialog is not a hook event.
   prompt, but only for the first such key since the rule was last armed. One
   answer often takes several of those keys (a digit then Enter, or typed
   feedback after "No"), and they must not eat the next queued prompt. Only
-  two things re-arm it: a new `PermissionRequest` in that pane, or a
+  two things re-arm it: a new `PermissionRequest` in a pane that had no
+  pending prompts, or a
   `PostToolUse` / `PostToolUseFailure` matching (tool name, `agent_id`, input
   hash) the prompt the key removed, which shows that prompt was approved.
   Other tools finishing, from the main agent or other sub-agents, never
@@ -223,8 +224,12 @@ dialog is not a hook event.
   or `idle_prompt`.
 - **Dropping state.** All state for a PTY goes when its shell exits (the
   reader's exit callback in `pty.rs`). The helper also forwards the pid of
-  the Claude Code process it runs under, found by walking up from its parent
-  to the first process recognised as Claude Code (below). A session is
+  the Claude Code process it runs under, with that process's start time, so
+  a reused pid is never taken for a live session. It finds the process by
+  walking up the parent chain from its own parent, at most five levels
+  (`proc_pidinfo` on macOS, `/proc/<pid>/stat` on Linux), to the first process
+  recognised as Claude Code (below); it never scans the whole process table,
+  since it runs on every tool call. A session is
   dropped once that pid has exited, which covers a `claude` that crashed or
   was killed while its shell lives on. When a pane's shell has had no child
   processes for two polls in a row (below), that pane's sessions are dropped
@@ -365,8 +370,10 @@ tool-use id.
   the oldest; a digit then Enter, and "No" plus typed feedback containing
   `y`, `n` and digits, each removing exactly one; two queued prompts with an
   unrelated sub-agent `PostToolUse` arriving during typed feedback, leaving
-  the second prompt pending; a focus report, a mouse report and a scratchpad send removing
-  nothing; `/clear`; PTY exit; the Claude Code pid exiting; a shell with no
+  the second prompt pending; a third prompt's `PermissionRequest` arriving
+  during feedback not re-arming the key; a focus report, a mouse report and a scratchpad send removing
+  nothing; `/clear`; PTY exit; the Claude Code pid exiting, and a reused pid
+  with a different start time counting as exited; a shell with no
   children for two polls;
   sessions kept when Claude Code isn't recognised; turning off.
 - **PTY:** the `ADE_PTY_ID` a child sees equals the id `create_pty` returns;
