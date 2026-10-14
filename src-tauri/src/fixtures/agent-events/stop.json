@@ -1,0 +1,16 @@
+{
+  "session_id": "d8e471aa-97ce-4048-9de6-a8969726cf24",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "6bf7ff90-7dc1-4ad6-9add-d28c22092496",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "I ran `touch ade-one.txt` and it completed with no output, so `ade-one.txt` shou",
+  "background_tasks": [],
+  "session_crons": []
+}

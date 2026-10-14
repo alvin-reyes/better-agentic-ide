@@ -1,0 +1,8 @@
+{
+  "session_id": "2686f2f7-89d5-4817-b4e1-714286fae8f7",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "hook_event_name": "SessionStart",
+  "source": "clear"
+}

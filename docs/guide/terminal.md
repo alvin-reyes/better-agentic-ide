@@ -72,6 +72,19 @@ Click **REC** in a pane's corner to record its output. Stop it the same way, the
 
 When an agent finishes in a terminal you aren't looking at, ADE shows a system notification and an in-app toast.
 
+## Agent status
+
+ADE can show, tab by tab, when a Claude Code agent needs you. Turn on **Agent status** for a project in the Tokens panel (macOS and Linux). Then:
+
+- A red dot on the tab, and on its Fleet card, means an agent there **needs you**: a permission prompt, a plan to approve, or a question to answer. A blue dot means it has finished and is **waiting for you**.
+- When an agent in a tab you aren't looking at starts needing you, a toast offers to open that tab. You get one toast per pane, and no other until that pane stops needing you.
+
+Turning it on adds ADE's hooks to the project's `.claude/settings.local.json`, beside your own hooks; turning it off removes only ADE's. The file stays out of git. Sessions already running pick the change up from their next prompt; nothing needs a restart.
+
+The hooks run a small helper that ships with ADE. It tells ADE which event happened, never your prompts, the commands an agent runs or their output. Outside ADE (iTerm, a plain terminal) the same hooks do nothing and show no error. The project is the folder's git checkout, so a session in any subfolder counts; a git worktree is turned on separately.
+
+If the panel says the helper is missing, ADE can't receive events and your terminals work as before. In a development build, run `cargo build -p ade-hook` in `src-tauri` and restart ADE.
+
 ## Your shell keys
 
 On **Linux**, app shortcuts use <kbd>Ctrl+Shift</kbd>, so plain <kbd>Ctrl</kbd> keys always reach your shell: <kbd>Ctrl+R</kbd> searches history, <kbd>Ctrl+W</kbd> deletes a word, <kbd>Ctrl+D</kbd> sends end-of-file. On **macOS**, app shortcuts use <kbd>⌘</kbd> and <kbd>Ctrl</kbd> is left entirely to the terminal.

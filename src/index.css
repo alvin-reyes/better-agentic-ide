@@ -576,6 +576,9 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .tab-group-chip:hover { background: color-mix(in srgb, var(--group-color) 24%, transparent); }
 .tab-group-chip[aria-expanded="false"] { opacity: .85; }
 .tab-attention { width: 6px; height: 6px; border-radius: 50%; background: var(--accent, #ff8a3d); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #ff8a3d) 25%, transparent); flex-shrink: 0; }
+.agent-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.agent-dot[data-state="needsYou"] { background: #f85149; box-shadow: 0 0 0 2px color-mix(in srgb, #f85149 30%, transparent); }
+.agent-dot[data-state="waiting"] { background: #58a6ff; }
 .tab-menu-colors { display: flex; gap: 6px; padding: 6px 12px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .tab-menu-swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(255,255,255,.15); cursor: pointer; padding: 0; }
 .tab-menu-swatch[data-none] { background: linear-gradient(135deg, transparent 45%, #ff7b72 45%, #ff7b72 55%, transparent 55%), var(--bg-tertiary); }

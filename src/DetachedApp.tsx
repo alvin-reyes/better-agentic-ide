@@ -5,6 +5,7 @@ import { useTabStore } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import type { Tab } from "./stores/tabStore";
 import { SHORTCUTS, matches } from "./lib/shortcuts";
+import { watchAgentStatus } from "./stores/agentStatusStore";
 
 interface DetachedAppProps {
   tab: Tab;
@@ -22,6 +23,9 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
     });
     setIsReady(true);
   }, [tab]);
+
+  // Agent status, so an answering key in this window's terminals counts.
+  useEffect(() => watchAgentStatus(), []);
 
   useEffect(() => {
     const colors = useSettingsStore.getState().getActiveTheme();

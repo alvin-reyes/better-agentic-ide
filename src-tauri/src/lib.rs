@@ -1,3 +1,4 @@
+mod agent_status;
 mod antislop;
 mod bmad;
 mod bmadconfig;
@@ -15,6 +16,7 @@ mod platform;
 // Public so `tests/bmadswitch_e2e.rs` can set a project up with the same
 // `apply` the setup command and the switch use.
 pub mod projectsetup;
+mod hook_forward;
 mod pty;
 mod ptysink;
 mod state;
@@ -420,6 +422,13 @@ pub fn run() {
         .manage(pty::PtyManager::new())
         .manage(watcher::WatcherManager::new())
         .manage(subagent::SubagentWatcherManager::new())
+        // Agent status's endpoint is listening before the first terminal is
+        // created, so every PTY gets its variables (or none, if it can't).
+        .setup(|app| {
+            use tauri::Manager;
+            app.manage(agent_status::AgentStatus::start(agent_status::helper_beside_exe()));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             pty::create_pty,
             pty::write_pty,
@@ -427,6 +436,10 @@ pub fn run() {
             pty::reattach_pty,
             pty::kill_pty,
             pty::get_pty_cwd,
+            agent_status::agent_status_get,
+            agent_status::agent_status_toggle,
+            agent_status::agent_status_watch,
+            agent_status::agent_status_key,
             watcher::watch_directory,
             watcher::unwatch_directory,
             check_command_exists,

@@ -1,0 +1,89 @@
+{
+  "_note": "Captured 2026-10-14 from Claude Code 2.1.299 on macOS: each shape is the hook's parent process (kernel name from proc_name, exe from proc_pidpath, args from ps) and its parent (the pty driver script where Claude Code was started directly). native: the native installer. npm-global: `npm i -g --prefix <tmp>` then `<tmp>/bin/claude`. npx: `npx -y @anthropic-ai/claude-code`. Both npm installs run a native `claude.exe` from the package, reached through a `claude` link, so argv[0] ends in `claude`. Paths anonymised. not.*: shapes that must not count.",
+  "native": {
+    "name": "2.1.299",
+    "exe": "/Users/u/.local/share/claude/versions/2.1.299",
+    "args": [
+      "claude",
+      "--model",
+      "haiku",
+      "--permission-mode",
+      "default"
+    ],
+    "parent": {
+      "name": "Python",
+      "exe": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+      "args": [
+        "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+        "drive.py"
+      ]
+    }
+  },
+  "npm-global": {
+    "name": "claude.exe",
+    "exe": "/tmp/npm-global/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+    "args": [
+      "/tmp/npm-global/bin/claude",
+      "--model",
+      "haiku"
+    ],
+    "parent": {
+      "name": "Python",
+      "exe": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+      "args": [
+        "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python",
+        "shape.py",
+        "/tmp/npm-global/bin/claude",
+        "--model",
+        "haiku"
+      ]
+    }
+  },
+  "npx": {
+    "name": "claude.exe",
+    "exe": "/Users/u/.npm/_npx/becf7b9e49303068/node_modules/@anthropic-ai/claude-code/bin/claude.exe",
+    "args": [
+      "claude",
+      "--model",
+      "haiku"
+    ],
+    "parent": {
+      "name": "node",
+      "exe": "/opt/homebrew/Cellar/node/24.4.1/bin/node",
+      "args": [
+        "npm",
+        "exec",
+        "@anthropic-ai/claude-code",
+        "--model",
+        "haiku"
+      ]
+    }
+  },
+  "not": {
+    "shell": {
+      "name": "zsh",
+      "exe": "/bin/zsh",
+      "args": [
+        "-zsh"
+      ]
+    },
+    "other-node": {
+      "name": "node",
+      "exe": "/usr/local/bin/node",
+      "args": [
+        "node",
+        "/Users/u/project/node_modules/.bin/vite",
+        "--port",
+        "1420"
+      ]
+    },
+    "version-named-elsewhere": {
+      "name": "2.1.299",
+      "exe": "/Users/u/.local/share/other-tool/versions/2.1.299",
+      "args": [
+        "/Users/u/.local/share/other-tool/versions/2.1.299",
+        "serve"
+      ]
+    }
+  }
+}

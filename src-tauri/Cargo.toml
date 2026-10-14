@@ -11,6 +11,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "better-terminal"
 path = "src/main.rs"
 
+# `ade-hook` is the small helper Claude Code's hooks run (see
+# `.ade/context/agent-events.md`). Its forwarding logic is `src/hook_forward.rs`,
+# which this crate also compiles, so `cargo test` here covers it.
+[workspace]
+members = ["ade-hook"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -35,3 +41,14 @@ tauri-plugin-clipboard-manager = "2.3.2"
 # compiles on Windows and then fails at runtime with no store behind it.
 keyring = { version = "3", features = ["apple-native", "sync-secret-service", "crypto-rust", "windows-native"] }
 tauri-plugin-dialog = "2"
+# Agent status: the hook endpoint, the helper's keyed input hash, the endpoint
+# token, and the lock around settings.local.json writes.
+tiny_http = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+getrandom = "0.2"
+fs4 = { version = "0.13", features = ["sync"] }
+
+[target.'cfg(unix)'.dependencies]
+# O_NOFOLLOW for the settings lock file.
+libc = "0.2"

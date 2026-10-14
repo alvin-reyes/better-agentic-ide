@@ -1,0 +1,9 @@
+{
+  "session_id": "d8e471aa-97ce-4048-9de6-a8969726cf24",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "19d101ed-13e9-4e1b-bcd5-f35f9c51dbf6",
+  "hook_event_name": "SessionEnd",
+  "reason": "prompt_input_exit"
+}

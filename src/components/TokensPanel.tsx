@@ -7,6 +7,7 @@ import {
 import { sendToActiveTerminal } from "../lib/terminalCommands";
 import { useEscapeToClose } from "./useEscapeToClose";
 import { useSettingsStore } from "../stores/settingsStore";
+import AgentStatusToggle from "./AgentStatusToggle";
 
 interface Props {
   cwd: string | null;
@@ -400,6 +401,8 @@ export default function TokensPanel({ cwd, onClose }: Props) {
               <p className="contracts-note">Saved to your personal project settings, which Claude Code keeps out of git, so your teammates' models don't change.</p>
             </div>
           )}
+
+          {cwd && <AgentStatusToggle cwd={cwd} />}
 
           {note && <div className="contracts-note">{note}</div>}
         </div>

@@ -142,9 +142,21 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # The Agent status helper ships beside the app's own executable. Tauri's
+      # externalBin wants it at binaries/ade-hook-<target triple> before the
+      # app is compiled, so it is built first and named in a release-only
+      # config: `tauri dev` and `cargo test` never reference it.
+      - name: Build the Agent status helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --manifest-path src-tauri/Cargo.toml -p ade-hook --target ${{ matrix.target }}
+          mkdir -p src-tauri/binaries
+          cp src-tauri/target/${{ matrix.target }}/release/ade-hook src-tauri/binaries/ade-hook-${{ matrix.target }}
+
       - name: Build Tauri app
         if: ${{ !(startsWith(matrix.platform, 'macos') && env.MAC_SIGNING == 'true') }}
-        run: npx tauri build --target ${{ matrix.target }}
+        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
 
       # Signed with the Developer ID certificate and notarized by Apple, so the
       # app passes Gatekeeper without `xattr -cr` (required by homebrew/cask).
@@ -157,7 +169,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx tauri build --target ${{ matrix.target }}
+        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
 
       - name: List bundle output (debug)
         if: always()

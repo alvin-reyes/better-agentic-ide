@@ -14,3 +14,5 @@ src-tauri/gen/
 **/__pycache__/
 # Per-machine Claude Code permissions.
 .claude/settings.local.json
+# The Agent status helper, copied here by the release workflow before `tauri build`.
+src-tauri/binaries/

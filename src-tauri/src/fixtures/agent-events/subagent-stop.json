@@ -1,0 +1,27 @@
+{
+  "session_id": "d8e471aa-97ce-4048-9de6-a8969726cf24",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "865c04ec-ade2-4a11-ab72-877022d101bc",
+  "permission_mode": "default",
+  "agent_id": "a78efacac40010482",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "last_assistant_message": "Succeeded: `touch ade-sub.txt` ran with no error.",
+  "background_tasks": [
+    {
+      "id": "a78efacac40010482",
+      "type": "subagent",
+      "status": "running",
+      "description": "Create ade-sub.txt file",
+      "agent_type": "general-purpose"
+    }
+  ],
+  "session_crons": []
+}

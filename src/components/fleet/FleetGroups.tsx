@@ -1,4 +1,5 @@
 import FleetTimeline from "./FleetTimeline";
+import AgentDot from "../AgentDot";
 import type { LaneGroup, FleetLane } from "../../stores/fleetStore";
 
 interface FleetGroupsProps {
@@ -38,6 +39,7 @@ export default function FleetGroups({ groups, from, to, onSelect, onOpenTab }: F
               display: "flex", alignItems: "center", gap: "10px",
               fontSize: "11px", marginBottom: "6px", color: "var(--text-secondary)",
             }}>
+              {g.key && <AgentDot tabId={g.key} />}
               <b style={{ color: "var(--text-primary)", fontSize: "12px" }}>{g.name}</b>
               {g.paths.length > 0 && (
                 <span style={{ opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
