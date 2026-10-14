@@ -125,9 +125,9 @@ dialog is not a hook event.
   `PermissionRequest`, `PostToolUse`, `PostToolUseFailure`, `Notification`,
   `SubagentStart`, `SubagentStop`, `Stop` and `SessionEnd`. Each of these was
   seen firing in the spikes. Other events, such as `Elicitation` for MCP
-  servers asking the user, are added only after the fixture task has seen them
-  fire on the pinned Claude Code version, so an event name Claude Code doesn't
-  know never lands in the user's settings file.
+  servers asking the user, are not registered in piece 1 (see Known limits),
+  so an event name Claude Code might not know never lands in the user's
+  settings file.
 - **Outside ADE** the variable is unset, so the hook runs `true`: nothing is
   sent, nothing printed, no error.
 - **Inside ADE** every terminal gets, beside the vault variables:
@@ -150,7 +150,8 @@ dialog is not a hook event.
 
 - A small Rust executable shipped inside the app bundle, beside ADE's main
   binary.
-- It reads the hook JSON on stdin and forwards only `hook_event_name`,
+- It reads the hook JSON on stdin and forwards only the Claude Code pid (see
+  Dropping state), `hook_event_name`,
   `session_id`, `cwd`, `source`, `reason`, `notification_type`, `tool_name`,
   `agent_id`, `agent_type`, and an input hash: HMAC-SHA-256 of `tool_input`,
   keyed with `ADE_HOOK_TOKEN`, over its canonical JSON (keys sorted, no
@@ -204,11 +205,14 @@ dialog is not a hook event.
   several can be pending and only the oldest is on screen. When the user
   presses a key that answers a prompt (Enter, Esc, a digit, `y` or `n`) in a
   pane with pending prompts, ADE removes that pane's **oldest** pending
-  prompt, but only for the first such key since the pane's last
-  `PermissionRequest`, `PostToolUse` or `PostToolUseFailure`. One answer often
-  takes several of those keys (a digit then Enter, or typed feedback after
-  "No"), and they must not eat the next queued prompt. Any of those events
-  re-arms it. When this guesses wrong, it errs toward still showing **needs
+  prompt, but only for the first such key since the rule was last armed. One
+  answer often takes several of those keys (a digit then Enter, or typed
+  feedback after "No"), and they must not eat the next queued prompt. Only
+  two things re-arm it: a new `PermissionRequest` in that pane, or a
+  `PostToolUse` / `PostToolUseFailure` matching (tool name, `agent_id`, input
+  hash) the prompt the key removed, which shows that prompt was approved.
+  Other tools finishing, from the main agent or other sub-agents, never
+  re-arm it. When this guesses wrong, it errs toward still showing **needs
   you**, which the next `UserPromptSubmit` or `idle_prompt` clears.
 - Only real key presses count. They are taken from xterm's key-event handler
   (`attachCustomKeyEventHandler`), not from `onData`, which also carries bytes
@@ -218,10 +222,13 @@ dialog is not a hook event.
 - Pending prompts clear in any case on the session's next `UserPromptSubmit`
   or `idle_prompt`.
 - **Dropping state.** All state for a PTY goes when its shell exits (the
-  reader's exit callback in `pty.rs`). When a pane's shell has had no child
+  reader's exit callback in `pty.rs`). The helper also forwards the pid of
+  the Claude Code process it runs under, found by walking up from its parent
+  to the first process recognised as Claude Code (below). A session is
+  dropped once that pid has exited, which covers a `claude` that crashed or
+  was killed while its shell lives on. When a pane's shell has had no child
   processes for two polls in a row (below), that pane's sessions are dropped
-  too, which covers a `claude` that crashed or was killed while its shell
-  lives on. Sessions are never dropped because Claude Code wasn't
+  too, as a backstop for a session whose pid wasn't found. Sessions are never dropped because Claude Code wasn't
   recognised: recognition can miss (a wrapper, an unusual install), and a
   miss must not delete live state. Turning Agent status off drops the state
   of sessions whose `cwd` is in that project.
@@ -325,6 +332,9 @@ config.
   not ADE's, so the "not receiving events" check can't see it. Over ssh the
   remote machine has no helper. Neither is covered in piece 1.
 - **Forgeable status.** See the endpoint's known limit above.
+- **MCP servers asking the user** (elicitation) are out of scope for piece 1:
+  they show no "needs you". The fixture task records whether `Elicitation`
+  fires on the pinned version, and a later change decides its states.
 
 ### Shared contract
 
@@ -353,8 +363,11 @@ tool-use id.
   sub-agent's `PostToolUse` not clearing a main-session prompt; `Stop` with a
   sub-agent pending; two queued prompts and one answering key removing only
   the oldest; a digit then Enter, and "No" plus typed feedback containing
-  `y`, `n` and digits, each removing exactly one; a focus report, a mouse report and a scratchpad send removing
-  nothing; `/clear`; PTY exit; a shell with no children for two polls;
+  `y`, `n` and digits, each removing exactly one; two queued prompts with an
+  unrelated sub-agent `PostToolUse` arriving during typed feedback, leaving
+  the second prompt pending; a focus report, a mouse report and a scratchpad send removing
+  nothing; `/clear`; PTY exit; the Claude Code pid exiting; a shell with no
+  children for two polls;
   sessions kept when Claude Code isn't recognised; turning off.
 - **PTY:** the `ADE_PTY_ID` a child sees equals the id `create_pty` returns;
   inherited `ADE_HOOK_*` and `ADE_PTY_ID` values are replaced; with no
