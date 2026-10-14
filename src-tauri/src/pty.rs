@@ -88,10 +88,30 @@ fn attach(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32, out: Out) -> Re
     Ok(())
 }
 
+/// Take the next PTY id. It is taken before the shell is spawned, so the
+/// shell's `ADE_PTY_ID` is the id returned; one lost to a failed spawn is
+/// never reused.
+fn reserve_id(next: &AtomicU32) -> u32 {
+    next.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Agent status's variables: the ones a PTY would inherit from ADE's own
+/// environment (an ADE started from an ADE terminal) are removed, then this
+/// ADE's are set, when it has them.
+fn apply_hook_env(cmd: &mut CommandBuilder, vars: Option<Vec<(&'static str, String)>>) {
+    for name in crate::hook_forward::ADE_VARS {
+        cmd.env_remove(name);
+    }
+    for (name, value) in vars.into_iter().flatten() {
+        cmd.env(name, value);
+    }
+}
+
 #[tauri::command(async)]
 pub fn create_pty(
     app: tauri::AppHandle,
     state: tauri::State<'_, PtyManager>,
+    agent: tauri::State<'_, crate::agent_status::AgentStatus>,
     rows: u16,
     cols: u16,
     cwd: Option<String>,
@@ -136,6 +156,8 @@ pub fn create_pty(
     for (name, value) in crate::vault::env_for_terminals(&app) {
         cmd.env(name, value);
     }
+    let id = reserve_id(&state.next_id);
+    apply_hook_env(&mut cmd, agent.terminal_env(id));
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| format!("spawn failed: {}", e))?;
     let child_pid = child.process_id();
@@ -145,7 +167,6 @@ pub fn create_pty(
     let reader = clone_reader(pair.master.as_ref())?;
     let sink = Arc::new(Mutex::new(Sink::new(channel_out(on_event))));
 
-    let id = state.next_id.fetch_add(1, Ordering::Relaxed);
     state.instances.lock().unwrap().insert(
         id,
         PtyInstance {
@@ -160,8 +181,10 @@ pub fn create_pty(
     // Started after the insert, so a shell that exits at once still finds
     // its entry to remove.
     let instances = state.instances.clone();
+    let agent = agent.inner().clone();
     start_reader(reader, sink, move || {
         instances.lock().unwrap().remove(&id);
+        agent.forget_pty(id);
     });
 
     Ok(id)
@@ -564,6 +587,56 @@ mod tests {
         assert!(!second.exited() && !first.exited());
         assert!(!first.text().contains("C3") && !first.text().contains("D4"));
         assert!(third.text().find("D4").is_some() && !third.text().contains("C3"));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod hook_env_tests {
+    use super::*;
+    use crate::ptysink::testing::{wait_for, Window};
+
+    /// What a shell started with `vars` sees of the four variables.
+    fn seen_by_a_child(inherited: bool, vars: Option<Vec<(&'static str, String)>>) -> String {
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 200, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.args(["-c", "printf '<%s|%s|%s|%s>' \"${ADE_HOOK_BIN-unset}\" \"${ADE_HOOK_PORT-unset}\" \"${ADE_HOOK_TOKEN-unset}\" \"${ADE_PTY_ID-unset}\"; sleep 1"]);
+        if inherited {
+            // An outer ADE's values, as a dev build started in an ADE terminal has them.
+            for name in crate::hook_forward::ADE_VARS {
+                cmd.env(name, "outer");
+            }
+        }
+        apply_hook_env(&mut cmd, vars);
+        let _child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let window = Window::new();
+        let sink = Arc::new(Mutex::new(Sink::new(window.out())));
+        let reader = clone_reader(pair.master.as_ref()).unwrap();
+        start_reader(reader, sink, || {});
+        wait_for("the variables printed", || window.text().contains('>'));
+        let text = window.text();
+        text[text.find('<').unwrap()..=text.find('>').unwrap()].to_string()
+    }
+
+    #[test]
+    fn the_child_sees_the_reserved_id_and_this_ades_values() {
+        let next = AtomicU32::new(41);
+        let agent = crate::agent_status::AgentStatus::start(Ok(std::path::PathBuf::from("/Apps/Better Terminal.app/ade-hook")));
+        let id = reserve_id(&next);
+        let env = agent.terminal_env(id).unwrap();
+        let seen = seen_by_a_child(true, Some(env.clone()));
+        assert_eq!(seen, format!("<{}|{}|{}|{}>", env[0].1, env[1].1, env[2].1, id));
+        assert_eq!(id, 41);
+        assert_eq!(reserve_id(&next), 42, "an id is never handed out twice");
+    }
+
+    #[test]
+    fn with_no_endpoint_none_of_the_four_are_set() {
+        let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
+        assert_eq!(seen_by_a_child(true, agent.terminal_env(1)), "<unset|unset|unset|unset>");
+        assert_eq!(seen_by_a_child(false, None), "<unset|unset|unset|unset>");
     }
 }
 

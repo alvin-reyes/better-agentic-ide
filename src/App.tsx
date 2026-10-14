@@ -49,6 +49,8 @@ import { useKeybindings } from "./hooks/useKeybindings";
 import { hasActiveProcess, stopIdlePolling } from "./hooks/useTerminal";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { watchAgentStatus } from "./stores/agentStatusStore";
+import { useAgentStatusToasts } from "./hooks/useAgentStatusToasts";
 
 /** How often the active terminal's folder is re-read to follow `cd`. */
 const CWD_POLL_MS = 3000;
@@ -189,6 +191,9 @@ export default function App() {
     };
   }, [showToast]);
   useTerminalFocusGuard();
+  // Agent status: each pane's state, and a toast when one out of view needs you.
+  useEffect(() => watchAgentStatus(), []);
+  useAgentStatusToasts(showToast);
 
   // Agent completion notifications, shown as an in-app toast.
   useEffect(() => {

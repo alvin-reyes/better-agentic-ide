@@ -6,6 +6,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { isPaneActive } from "../hooks/useTerminal";
 import { usePaneCwd, baseName } from "../stores/paneMetaStore";
 import { DEFAULT_NAME, TAB_COLORS, groupRuns, projectColor, tabCwd, tabLabel, tabProject } from "../lib/tabDisplay";
+import AgentDot from "./AgentDot";
 
 // App owns closing, so it can confirm first (unsaved editor, live process).
 function requestCloseTab(tabId: string) {
@@ -215,6 +216,8 @@ export default function TabBar() {
               setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
             }}
           >
+            {/* An agent in this tab needs you, or is waiting for you */}
+            <AgentDot tabId={tab.id} />
             {/* Finished while you were in another tab */}
             {attention[tab.id] && !isActive && !activeTabs.has(tab.id) && (
               <span className="tab-attention" title="New output finished while you were away" />

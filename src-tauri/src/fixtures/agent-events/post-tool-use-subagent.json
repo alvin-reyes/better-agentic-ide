@@ -1,0 +1,27 @@
+{
+  "session_id": "d8e471aa-97ce-4048-9de6-a8969726cf24",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "865c04ec-ade2-4a11-ab72-877022d101bc",
+  "permission_mode": "default",
+  "agent_id": "a78efacac40010482",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "touch ade-sub.txt",
+    "description": "Create empty file ade-sub.txt"
+  },
+  "tool_response": {
+    "stdout": "",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false
+  },
+  "tool_use_id": "toolu_01Pgbz59XWoAatsXem4mxMpv",
+  "duration_ms": 350
+}

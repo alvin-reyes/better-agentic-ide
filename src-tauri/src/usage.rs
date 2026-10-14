@@ -761,33 +761,262 @@ pub fn apply_presets(root: &Path, changes: &BTreeMap<String, Option<String>>) ->
             }
         }
     }
+    edit_local_settings(root, false, |obj| {
+        for (key, value) in changes {
+            let (map, name) = match key.strip_prefix("env.") {
+                Some(name) => {
+                    let env = obj.entry("env").or_insert_with(|| Value::Object(Default::default()));
+                    (env.as_object_mut().ok_or("env is not an object")?, name)
+                }
+                None => (&mut *obj, key.as_str()),
+            };
+            match value {
+                Some(val) => {
+                    map.insert(name.to_string(), Value::String(val.clone()));
+                }
+                None => {
+                    map.remove(name);
+                }
+            }
+        }
+        // Don't leave an empty "env" behind.
+        if obj.get("env").and_then(|e| e.as_object()).is_some_and(|e| e.is_empty()) {
+            obj.remove("env");
+        }
+        Ok(true)
+    })?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Writing settings.local.json safely. Claude Code writes this file too ("don't
+// ask again" adds to `permissions.allow`), and two ADE processes (the app and a
+// dev build) may write it at once: every ADE write holds a lock and re-reads
+// the file under it, so a lost write needs a writer in the same moment.
+
+/// The folder for settings lock files: per user, and the same for the
+/// installed app and a dev build. Nothing is added to the project.
+fn lock_dir() -> PathBuf {
+    if crate::platform::IS_MACOS {
+        return std::env::temp_dir();
+    }
+    if let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty()) {
+        return PathBuf::from(dir);
+    }
+    match crate::env_home() {
+        Some(home) if !crate::platform::IS_WINDOWS => home.join(".cache").join("ade"),
+        _ => std::env::temp_dir(),
+    }
+}
+
+/// The lock file for one settings file, named from a hash of its path.
+fn lock_path(settings: &Path) -> PathBuf {
+    use sha2::Digest;
+    // From the project folder, which exists, so the name is the same before
+    // and after `.claude/` is created.
+    let dir = settings.parent();
+    let root = dir.and_then(|d| d.parent()).map(|r| r.canonicalize().unwrap_or_else(|_| r.to_path_buf()));
+    let full = match (root, dir.and_then(|d| d.file_name()), settings.file_name()) {
+        (Some(r), Some(d), Some(name)) => r.join(d).join(name),
+        _ => settings.to_path_buf(),
+    };
+    let hash = sha2::Sha256::digest(full.to_string_lossy().as_bytes());
+    let hex: String = hash.iter().take(8).map(|b| format!("{b:02x}")).collect();
+    lock_dir().join(format!("ade-settings-{hex}.lock"))
+}
+
+/// Held while a settings file is read, changed and written.
+struct SettingsLock(std::fs::File);
+
+impl Drop for SettingsLock {
+    fn drop(&mut self) {
+        let _ = fs4::fs_std::FileExt::unlock(&self.0);
+    }
+}
+
+/// Take the exclusive lock for `settings`, waiting for another holder. The
+/// lock file is opened without following a symlink, with mode 0600.
+fn lock_settings(settings: &Path) -> Result<SettingsLock, String> {
+    let path = lock_path(settings);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("can't create {}: {e}", dir.display()))?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+    }
+    let file = options.open(&path).map_err(|e| format!("can't open the settings lock {}: {e}", path.display()))?;
+    fs4::fs_std::FileExt::lock_exclusive(&file).map_err(|e| format!("can't lock {}: {e}", path.display()))?;
+    Ok(SettingsLock(file))
+}
+
+/// Write a settings file, through a symlink to its target rather than
+/// replacing the link with a regular file.
+fn write_settings_through(path: &Path, v: &Value) -> Result<(), String> {
+    let target = match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_symlink() => path.canonicalize().or_else(|_| {
+            // A link to a file that doesn't exist yet.
+            std::fs::read_link(path).map(|t| if t.is_absolute() { t } else { path.parent().unwrap().join(t) })
+        }).map_err(|e| format!("can't follow {}: {e}", path.display()))?,
+        _ => path.to_path_buf(),
+    };
+    save_settings(&target, v)
+}
+
+/// Change the project's settings.local.json under the lock: read it afresh,
+/// let `change` edit the top-level object, and write it if `change` says it
+/// changed. Nothing is created when nothing changes. With `remove_if_empty`,
+/// a change that leaves the object empty removes the file (and `.claude/` if
+/// that leaves it empty) instead of writing `{}`; a symlinked file is still
+/// written through. A file that isn't a JSON object is an error and is left
+/// alone.
+fn edit_local_settings(
+    root: &Path,
+    remove_if_empty: bool,
+    change: impl FnOnce(&mut serde_json::Map<String, Value>) -> Result<bool, String>,
+) -> Result<bool, String> {
     let path = local_settings_path(root);
+    let _lock = lock_settings(&path)?;
     let mut v = load_settings(&path)?;
     let obj = v.as_object_mut().ok_or("settings.local.json is not a JSON object")?;
-    for (key, value) in changes {
-        let (map, name) = match key.strip_prefix("env.") {
-            Some(name) => {
-                let env = obj.entry("env").or_insert_with(|| Value::Object(Default::default()));
-                (env.as_object_mut().ok_or("env is not an object")?, name)
-            }
-            None => (&mut *obj, key.as_str()),
-        };
-        match value {
-            Some(val) => {
-                map.insert(name.to_string(), Value::String(val.clone()));
-            }
-            None => {
-                map.remove(name);
+    if !change(obj)? {
+        return Ok(false);
+    }
+    let is_link = std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink());
+    if remove_if_empty && obj.is_empty() && !is_link {
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| format!("can't remove {}: {e}", path.display()))?;
+        }
+        // Only when empty: remove_dir refuses a folder with anything in it.
+        let _ = std::fs::remove_dir(path.parent().unwrap());
+        return Ok(true);
+    }
+    write_settings_through(&path, &v)?;
+    keep_out_of_git(root);
+    Ok(true)
+}
+
+/// The command of every hook ADE adds: the helper when ADE set the variable,
+/// `true` (nothing) anywhere else. The quotes keep a path with a space whole.
+pub const ADE_HOOK_COMMAND: &str = "\"${ADE_HOOK_BIN:-true}\"";
+
+/// The events ADE registers, each seen firing on the pinned Claude Code.
+pub const AGENT_EVENTS: [&str; 10] = [
+    "SessionStart",
+    "UserPromptSubmit",
+    "PermissionRequest",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "Notification",
+    "SubagentStart",
+    "SubagentStop",
+    "Stop",
+    "SessionEnd",
+];
+
+fn is_ade_hook(hook: &Value) -> bool {
+    hook.get("command").and_then(|c| c.as_str()) == Some(ADE_HOOK_COMMAND)
+}
+
+/// `hooks` as Claude Code reads it: an object of events, each a list of
+/// matcher groups, each an object whose `hooks` is a list of objects.
+/// Anything else is refused, and nothing is changed.
+fn check_hooks_shape(obj: &serde_json::Map<String, Value>) -> Result<(), String> {
+    let bad = |what: String| Err(format!("{what} in .claude/settings.local.json has an unexpected shape; fix it by hand, then try again"));
+    let Some(hooks) = obj.get("hooks") else { return Ok(()) };
+    let Some(events) = hooks.as_object() else { return bad("\"hooks\"".into()) };
+    for (event, groups) in events {
+        let Some(groups) = groups.as_array() else { return bad(format!("hooks.{event}")) };
+        for group in groups {
+            let Some(group) = group.as_object() else { return bad(format!("a matcher group of hooks.{event}")) };
+            if let Some(list) = group.get("hooks") {
+                let Some(list) = list.as_array() else { return bad(format!("a matcher group of hooks.{event}")) };
+                if list.iter().any(|h| !h.is_object()) {
+                    return bad(format!("a matcher group of hooks.{event}"));
+                }
             }
         }
     }
-    // Don't leave an empty "env" behind.
-    if obj.get("env").and_then(|e| e.as_object()).is_some_and(|e| e.is_empty()) {
-        obj.remove("env");
-    }
-    save_settings(&path, &v)?;
-    keep_out_of_git(root);
     Ok(())
+}
+
+fn has_ade_hook(groups: &Value) -> bool {
+    groups.as_array().is_some_and(|gs| {
+        gs.iter().any(|g| g.get("hooks").and_then(|h| h.as_array()).is_some_and(|hs| hs.iter().any(is_ade_hook)))
+    })
+}
+
+/// Whether ADE's hook is registered for every Agent status event.
+pub fn agent_hooks_enabled(root: &Path) -> Result<bool, String> {
+    let v = load_settings(&local_settings_path(root))?;
+    let obj = v.as_object().ok_or("settings.local.json is not a JSON object")?;
+    check_hooks_shape(obj)?;
+    Ok(AGENT_EVENTS.iter().all(|e| obj.get("hooks").and_then(|h| h.get(*e)).is_some_and(has_ade_hook)))
+}
+
+/// Register ADE's hook for every Agent status event, with no matcher and a
+/// 5 second timeout, beside the user's own hooks. Adding twice adds nothing.
+pub fn agent_hooks_enable(root: &Path) -> Result<bool, String> {
+    edit_local_settings(root, false, |obj| {
+        check_hooks_shape(obj)?;
+        let hooks = obj.entry("hooks").or_insert_with(|| Value::Object(Default::default()));
+        let hooks = hooks.as_object_mut().expect("checked above");
+        let mut changed = false;
+        for event in AGENT_EVENTS {
+            let groups = hooks.entry(event).or_insert_with(|| Value::Array(vec![]));
+            if has_ade_hook(groups) {
+                continue;
+            }
+            groups.as_array_mut().expect("checked above").push(serde_json::json!({
+                "hooks": [{ "type": "command", "command": ADE_HOOK_COMMAND, "timeout": 5 }]
+            }));
+            changed = true;
+        }
+        Ok(changed)
+    })
+}
+
+/// Remove ADE's hooks, then any matcher group that left empty, any event left
+/// empty, and `hooks` if it is empty. The user's hooks, in the same group or
+/// not, stay.
+pub fn agent_hooks_disable(root: &Path) -> Result<bool, String> {
+    edit_local_settings(root, true, |obj| {
+        check_hooks_shape(obj)?;
+        let Some(hooks) = obj.get_mut("hooks").and_then(|h| h.as_object_mut()) else { return Ok(false) };
+        let mut emptied = Vec::new();
+        for (event, groups) in hooks.iter_mut() {
+            let groups = groups.as_array_mut().expect("checked above");
+            let mut removed = false;
+            groups.retain_mut(|group| {
+                let Some(list) = group.get_mut("hooks").and_then(|h| h.as_array_mut()) else { return true };
+                let before = list.len();
+                list.retain(|h| !is_ade_hook(h));
+                if list.len() == before {
+                    return true;
+                }
+                removed = true;
+                !list.is_empty()
+            });
+            if removed {
+                emptied.push((event.clone(), groups.is_empty()));
+            }
+        }
+        if emptied.is_empty() {
+            return Ok(false);
+        }
+        for (event, empty) in emptied {
+            if empty {
+                hooks.remove(&event);
+            }
+        }
+        if hooks.is_empty() {
+            obj.remove("hooks");
+        }
+        Ok(true)
+    })
 }
 
 /// Claude Code ignores settings.local.json in git only when it creates the file
@@ -1263,5 +1492,257 @@ mod tests {
         assert!(!valid_rule(ARCHIVE_DENY_RULE));
         assert!(add_deny_rules(&d, &[ARCHIVE_DENY_RULE.to_string()]).is_err());
         assert!(!settings_path(&d).exists());
+    }
+
+    // -- Agent status hooks and the settings lock --------------------------
+
+    fn local(d: &Path) -> Value {
+        read_json::<Value>(&local_settings_path(d)).unwrap()
+    }
+
+    fn write_local(d: &Path, text: &str) {
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        std::fs::write(local_settings_path(d), text).unwrap();
+    }
+
+    fn ade_hook() -> Value {
+        serde_json::json!({ "type": "command", "command": "\"${ADE_HOOK_BIN:-true}\"", "timeout": 5 })
+    }
+
+    #[test]
+    fn agent_hooks_are_added_for_the_ten_events_with_a_five_second_timeout() {
+        let d = tmp("hooks_add");
+        assert!(!agent_hooks_enabled(&d).unwrap());
+        assert!(agent_hooks_enable(&d).unwrap());
+        let v = local(&d);
+        let events = v["hooks"].as_object().unwrap();
+        assert_eq!(events.len(), 10);
+        for e in AGENT_EVENTS {
+            assert_eq!(v["hooks"][e], serde_json::json!([{ "hooks": [ade_hook()] }]), "{e}");
+        }
+        assert!(!events.contains_key("Elicitation"));
+        assert!(agent_hooks_enabled(&d).unwrap());
+        // The exact command, quotes included.
+        assert_eq!(ADE_HOOK_COMMAND, "\"${ADE_HOOK_BIN:-true}\"");
+    }
+
+    #[test]
+    fn adding_agent_hooks_twice_adds_nothing() {
+        let d = tmp("hooks_idem");
+        agent_hooks_enable(&d).unwrap();
+        let once = std::fs::read_to_string(local_settings_path(&d)).unwrap();
+        assert!(!agent_hooks_enable(&d).unwrap());
+        assert_eq!(std::fs::read_to_string(local_settings_path(&d)).unwrap(), once);
+    }
+
+    const USER_SETTINGS: &str = r#"{
+  "permissions": { "allow": ["Bash(npm test)"] },
+  "env": { "FOO": "1" },
+  "hooks": {
+    "Stop": [ { "hooks": [ { "type": "command", "command": "say done" } ] } ],
+    "PreToolUse": [ { "matcher": "Bash", "hooks": [ { "type": "command", "command": "./guard.sh" } ] } ]
+  }
+}"#;
+
+    #[test]
+    fn agent_hooks_keep_the_users_hooks_and_keys() {
+        let d = tmp("hooks_keep");
+        write_local(&d, USER_SETTINGS);
+        agent_hooks_enable(&d).unwrap();
+        let v = local(&d);
+        assert_eq!(v["permissions"]["allow"][0], "Bash(npm test)");
+        assert_eq!(v["env"]["FOO"], "1");
+        assert_eq!(v["hooks"]["PreToolUse"][0]["hooks"][0]["command"], "./guard.sh");
+        assert_eq!(v["hooks"]["Stop"][0]["hooks"][0]["command"], "say done");
+        assert_eq!(v["hooks"]["Stop"][1]["hooks"][0], ade_hook());
+    }
+
+    #[test]
+    fn turning_agent_hooks_on_then_off_leaves_the_file_as_it_was() {
+        let d = tmp("hooks_roundtrip");
+        write_local(&d, USER_SETTINGS);
+        let before = local(&d);
+        agent_hooks_enable(&d).unwrap();
+        assert!(agent_hooks_disable(&d).unwrap());
+        assert_eq!(local(&d), before);
+        assert!(!agent_hooks_disable(&d).unwrap(), "nothing left to remove");
+        // A project that had no hooks: `hooks` goes entirely.
+        let e = tmp("hooks_roundtrip_bare");
+        write_local(&e, r#"{"model":"sonnet"}"#);
+        agent_hooks_enable(&e).unwrap();
+        agent_hooks_disable(&e).unwrap();
+        assert_eq!(local(&e), serde_json::json!({ "model": "sonnet" }));
+    }
+
+    #[test]
+    fn on_then_off_in_a_project_with_no_settings_file_leaves_nothing() {
+        let d = tmp("hooks_roundtrip_none");
+        agent_hooks_enable(&d).unwrap();
+        assert!(local_settings_path(&d).exists());
+        assert!(agent_hooks_disable(&d).unwrap());
+        assert!(!local_settings_path(&d).exists(), "no `{{}}` left behind");
+        assert!(!d.join(".claude").exists(), "the empty .claude/ goes too");
+        // .claude/ with other files in it stays.
+        let e = tmp("hooks_roundtrip_none_dir");
+        std::fs::create_dir_all(e.join(".claude")).unwrap();
+        std::fs::write(e.join(".claude").join("settings.json"), "{}").unwrap();
+        agent_hooks_enable(&e).unwrap();
+        agent_hooks_disable(&e).unwrap();
+        assert!(!local_settings_path(&e).exists());
+        assert!(e.join(".claude").join("settings.json").exists());
+    }
+
+    #[test]
+    fn off_in_a_project_never_turned_on_creates_nothing() {
+        let d = tmp("hooks_off_never_on");
+        assert!(!agent_hooks_disable(&d).unwrap());
+        assert!(!d.join(".claude").exists());
+        let e = tmp("hooks_off_never_on_file");
+        write_local(&e, r#"{"model":"sonnet"}"#);
+        assert!(!agent_hooks_disable(&e).unwrap());
+        assert_eq!(std::fs::read_to_string(local_settings_path(&e)).unwrap(), r#"{"model":"sonnet"}"#);
+    }
+
+    #[test]
+    fn removing_agent_hooks_keeps_a_user_hook_in_the_same_group() {
+        let d = tmp("hooks_same_group");
+        let shared = serde_json::json!({
+            "hooks": {
+                "Stop": [ { "hooks": [ { "type": "command", "command": "say done" }, ade_hook() ] } ],
+                "SessionEnd": [ { "hooks": [ ade_hook() ] } ]
+            }
+        });
+        write_local(&d, &shared.to_string());
+        agent_hooks_disable(&d).unwrap();
+        assert_eq!(local(&d), serde_json::json!({ "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "say done" } ] } ] } }));
+    }
+
+    #[test]
+    fn an_unexpected_hooks_shape_is_refused_and_nothing_written() {
+        for (i, text) in [
+            r#"{"hooks": []}"#,
+            r#"{"hooks": {"Stop": {"command": "x"}}}"#,
+            r#"{"hooks": {"Stop": ["say done"]}}"#,
+            r#"{"hooks": {"Stop": [{"hooks": "say done"}]}}"#,
+            r#"{"hooks": {"Stop": [{"hooks": ["say done"]}]}}"#,
+            r#"["not", "an", "object"]"#,
+            "{ not json",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let d = tmp(&format!("hooks_shape_{i}"));
+            write_local(&d, text);
+            assert!(agent_hooks_enable(&d).is_err(), "{text}");
+            assert!(agent_hooks_disable(&d).is_err(), "{text}");
+            assert!(agent_hooks_enabled(&d).is_err(), "{text}");
+            assert_eq!(std::fs::read_to_string(local_settings_path(&d)).unwrap(), *text);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_settings_file_is_written_through() {
+        let d = tmp("hooks_symlink");
+        let real = d.join("dotfiles").join("claude-local.json");
+        std::fs::create_dir_all(real.parent().unwrap()).unwrap();
+        std::fs::write(&real, r#"{"model":"sonnet"}"#).unwrap();
+        std::fs::create_dir_all(d.join(".claude")).unwrap();
+        std::os::unix::fs::symlink(&real, local_settings_path(&d)).unwrap();
+        agent_hooks_enable(&d).unwrap();
+        assert!(std::fs::symlink_metadata(local_settings_path(&d)).unwrap().file_type().is_symlink(), "still a link");
+        let v = read_json::<Value>(&real).unwrap();
+        assert_eq!(v["model"], "sonnet");
+        assert_eq!(v["hooks"]["Stop"][0]["hooks"][0], ade_hook());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_lock_file_is_private_and_outside_the_project() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tmp("hooks_lock");
+        agent_hooks_enable(&d).unwrap();
+        let lock = lock_path(&local_settings_path(&d));
+        assert!(!lock.starts_with(&d));
+        assert_eq!(std::fs::metadata(&lock).unwrap().permissions().mode() & 0o777, 0o600);
+        let names: Vec<_> = std::fs::read_dir(d.join(".claude")).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("settings.local.json")]);
+        // A symlink planted at the lock's path is not followed.
+        let e = tmp("hooks_lock_link");
+        std::fs::create_dir_all(e.join(".claude")).unwrap();
+        let planted = lock_path(&local_settings_path(&e));
+        let _ = std::fs::remove_file(&planted);
+        std::os::unix::fs::symlink(e.join("victim"), &planted).unwrap();
+        assert!(agent_hooks_enable(&e).is_err());
+        assert!(!e.join("victim").exists());
+        std::fs::remove_file(&planted).unwrap();
+    }
+
+    const PRESET_KEY: &str = "env.BASH_MAX_OUTPUT_LENGTH";
+
+    /// Toggle a preset `n` times, ending on 8000.
+    fn churn_presets(d: &Path, n: usize) {
+        for i in 0..n {
+            let value = if i % 2 == 0 { "15000" } else { "8000" };
+            apply_presets(d, &[(PRESET_KEY.to_string(), Some(value.to_string()))].into()).unwrap();
+        }
+    }
+
+    /// Toggle the hooks `n` times, ending on.
+    fn churn_hooks(d: &Path, n: usize) {
+        for _ in 0..n {
+            agent_hooks_disable(d).unwrap();
+            agent_hooks_enable(d).unwrap();
+        }
+    }
+
+    fn both_survived(d: &Path) {
+        let v = local(d);
+        assert_eq!(v["env"]["BASH_MAX_OUTPUT_LENGTH"], "8000");
+        assert!(agent_hooks_enabled(d).unwrap());
+        assert_eq!(v["permissions"]["allow"][0], "Bash(npm test)");
+    }
+
+    #[test]
+    fn a_preset_and_a_hooks_change_in_parallel_both_survive() {
+        let d = tmp("lock_threads");
+        write_local(&d, USER_SETTINGS);
+        let other = d.clone();
+        let presets = std::thread::spawn(move || churn_presets(&other, 40));
+        churn_hooks(&d, 20);
+        presets.join().unwrap();
+        both_survived(&d);
+    }
+
+    /// Not a test: `scripts/agent-status-check.sh` runs it to write ADE's
+    /// hooks into its scratch project exactly as the toggle does.
+    #[test]
+    #[ignore]
+    fn enable_agent_hooks_for_the_check_script() {
+        let root = std::env::var("ADE_CHECK_PROJECT").expect("ADE_CHECK_PROJECT names the project");
+        agent_hooks_enable(Path::new(&root)).unwrap();
+    }
+
+    /// The other process of the test below: it churns presets when asked to.
+    #[test]
+    fn lock_child_process() {
+        if let Ok(root) = std::env::var("ADE_LOCK_TEST_ROOT") {
+            churn_presets(Path::new(&root), 40);
+        }
+    }
+
+    #[test]
+    fn a_preset_and_a_hooks_change_from_two_processes_both_survive() {
+        let d = tmp("lock_processes");
+        write_local(&d, USER_SETTINGS);
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "usage::tests::lock_child_process", "--test-threads", "1"])
+            .env("ADE_LOCK_TEST_ROOT", &d)
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        churn_hooks(&d, 20);
+        assert!(child.wait().unwrap().success());
+        both_survived(&d);
     }
 }

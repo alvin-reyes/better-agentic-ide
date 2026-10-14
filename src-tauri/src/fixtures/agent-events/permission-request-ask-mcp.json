@@ -1,0 +1,30 @@
+{
+  "session_id": "94ee5f16-25b2-45d5-bc02-cd84df13127a",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "af0ef6e6-449a-432c-8657-8a17cd19473f",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "mcp__elicit__ask_color",
+  "tool_input": {},
+  "permission_suggestions": [
+    {
+      "type": "addRules",
+      "rules": [
+        {
+          "toolName": "mcp__elicit__ask_color"
+        }
+      ],
+      "behavior": "allow",
+      "destination": "localSettings"
+    }
+  ],
+  "mcp_server": {
+    "name": "elicit",
+    "source": "project"
+  }
+}

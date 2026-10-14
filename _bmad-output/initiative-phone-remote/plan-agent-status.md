@@ -3,14 +3,14 @@ title: 'Agent status: each tab shows when its Claude Code agent needs you'
 type: 'feature'
 ticket: ''
 created: '2026-10-14'
-status: 'in-progress'
+status: 'built'
 baseline_revision: '98993e71870fbc5bf8fd83918ea005c55788e831'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context: ['{project-root}/docs/superpowers/specs/2026-10-14-agent-status-design.md']
 ---
@@ -136,6 +136,19 @@ context: ['{project-root}/docs/superpowers/specs/2026-10-14-agent-status-design.
 ## Plan Change Log
 
 ## Review Triage Log
+
+Pass 1 (quick lens), 2026-10-14. Verdicts: 0 high, 2 medium, 5 low, 0 false, 0 maybe-false.
+
+| # | Finding | Verdict | Route | Evidence / action |
+|---|---|---|---|---|
+| 1 | On then off with no prior settings.local.json leaves `.claude/` and `{}`; off on a never-enabled project creates `.claude/` | medium | patch | `edit_local_settings` calls `create_dir_all` before reading; `agent_hooks_disable` writes even when the object ends empty. Fix: off on a missing file is a no-op; an object left empty removes the file and an empty `.claude/`. Test the absent-before case. |
+| 1b | Rewrite changes key order and formatting | low | defer | Pre-existing: `save_settings` already reorders for presets; changing it means `preserve_order` crate-wide. |
+| 2 | No toast for a pane in a detached window | low | reject | Real, but detached windows are single bare tabs the multi-window spec removes; the fix adds a toast host to `DetachedApp`. |
+| 3 | Guide says one toast per prompt | low | patch | `needsYouToasts` toasts once per pane until it leaves needs you; correct the sentence. |
+| 4 | PTY test bypasses `create_pty` | low | reject | Real test gap; the diff shows `reserve_id` before `spawn_command` in `create_pty`. Covering it needs the command build extracted. |
+| 5 | npm-global and npx process shapes guessed | medium | patch | `processes.json` `_note` says so. Capture real shapes (npx and a temp-prefix npm global) and test against them. |
+| 6 | Manual check builds the settings itself | low | patch | `scripts/agent-status-check.sh` uses Python `json.dump`; make it write through `agent_hooks_enable`. |
+| 7 | No ADR for workspace, bundled helper, loopback endpoint | low | patch | `.ade/rules.md` asks for an ADR for significant lasting decisions; add one. |
 
 ## Design Notes
 

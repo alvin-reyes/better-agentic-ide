@@ -1,0 +1,10 @@
+{
+  "session_id": "94ee5f16-25b2-45d5-bc02-cd84df13127a",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "f46ae289-f378-4e77-8784-a8f3dbecfc85",
+  "hook_event_name": "Notification",
+  "message": "Claude is waiting for your input",
+  "notification_type": "idle_prompt"
+}

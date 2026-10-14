@@ -1,0 +1,21 @@
+{
+  "session_id": "94ee5f16-25b2-45d5-bc02-cd84df13127a",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "c08bcf42-91da-471e-b52f-a009c0aec631",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls /nonexistent-ade-dir",
+    "description": "List nonexistent directory to check error output"
+  },
+  "tool_use_id": "toolu_01HSnTZv59r5apyuUXfrUSSJ",
+  "error": "Exit code 1\nls: /nonexistent-ade-dir: No such file or directory",
+  "is_interrupt": false,
+  "duration_ms": 94
+}

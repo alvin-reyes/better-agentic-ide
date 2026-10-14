@@ -1,0 +1,10 @@
+{
+  "session_id": "d8e471aa-97ce-4048-9de6-a8969726cf24",
+  "transcript_path": "~/.claude/projects/ade-spike/transcript.jsonl",
+  "cwd": "/tmp/ade-spike/proj",
+  "scratchpad_dir": "/tmp/ade-spike/scratchpad",
+  "prompt_id": "6bf7ff90-7dc1-4ad6-9add-d28c22092496",
+  "hook_event_name": "Notification",
+  "message": "Claude needs your permission",
+  "notification_type": "permission_prompt"
+}

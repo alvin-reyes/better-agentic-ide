@@ -16,6 +16,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { isAnsweringKey, reportAnsweringKey } from "../stores/agentStatusStore";
 
 interface PtyEvent {
   type: "output" | "exit" | "error";
@@ -264,10 +265,18 @@ function ptyChannel(paneId: string, term: Terminal): Channel<PtyEvent> {
   return onEvent;
 }
 
-/** Keys and resizes go to the PTY; app shortcuts pass through to the window's handler. */
-function wireInput(inst: TerminalInstance) {
+/**
+ * Keys and resizes go to the PTY; app shortcuts pass through to the window's
+ * handler. A real key press that answers an agent's prompt is reported to
+ * Agent status from here, never from onData: that also carries bytes xterm
+ * generates itself (focus, mouse and device reports).
+ */
+export function wireInput(inst: TerminalInstance) {
   // Every other key, including plain Ctrl combos, goes to the shell.
-  inst.term.attachCustomKeyEventHandler((e) => !isAppShortcut(e));
+  inst.term.attachCustomKeyEventHandler((e) => {
+    if (inst.ptyId !== null && isAnsweringKey(e)) reportAnsweringKey(inst.ptyId);
+    return !isAppShortcut(e);
+  });
   inst.term.onData((data) => {
     if (inst.ptyId !== null) writePty(inst.ptyId, data);
   });
