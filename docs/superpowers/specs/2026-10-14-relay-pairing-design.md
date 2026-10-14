@@ -229,20 +229,27 @@ carry no further signatures.
      - `sig_M` is valid over `R`, which it rebuilds itself.
 
      It also computes `pair_id` itself and uses that, never the relay's
-     copy.
+     copy. Then it sends `paired_ack {pair_id}`.
+   - The relay answers the Mac's `pair_confirm` with `pair_confirmed {pair_id}`.
+   - On decline, the phone gets `pair_declined`.
 
 **Pending pairs.** A dropped connection at confirm must not silently undo a
 pairing.
 - **Saving early.** The Mac saves the pair as *pending* before it sends
   `pair_confirm`. The phone saves it as pending when it sends the reveal.
-- **Promoting.** Each side promotes the pair to paired when `paired` arrives
-  (phone), or when the relay acknowledges `pair_confirm` (Mac).
-- **Reconciling.** A `welcome` listing a pair that a device holds as pending
-  completes it; it is not unpaired. The relay sends the phone `paired` again on
-  its next login while the phone hasn't acknowledged it.
+- **Promoting.** The phone promotes the pair once a `paired` message passes
+  the checks in step 8. The Mac promotes it on `pair_confirmed`.
+- **The Mac reconciling.** A `welcome` that lists a pair the Mac holds as
+  pending completes it on the Mac; the Mac does not unpair it.
+- **The phone reconciling.** The phone can't match a pending pair from
+  `welcome` alone, because `pair_id` depends on `paired_at`, which only
+  `paired` carries. It completes a pending pair only through `paired`, checked
+  as in step 8. Until then it neither unpairs nor promotes a `welcome` pair it
+  can't match.
+- **Re-sending `paired`.** While the phone hasn't sent `paired_ack`, the relay
+  sends `paired` again on each of its logins.
 - **Expiry.** A pending pair the relay never lists is dropped after 10
   minutes.
-   - On decline, the phone gets `pair_declined`.
 
 **Slots.** The first `pair_commit` holds the slot until confirm, decline or
 expiry; any other commit is refused. A racer can therefore block a slot. The
