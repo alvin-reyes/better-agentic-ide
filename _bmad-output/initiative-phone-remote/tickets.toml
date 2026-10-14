@@ -1,0 +1,35 @@
+# Epics of the phone remote, in build order.
+
+[[epic]]
+id = 1
+slug = "epic-agent-status"
+title = "Agent status in ADE"
+covers = []
+
+[[epic]]
+id = 2
+slug = "epic-phone-watch"
+title = "Watch ADE's agents from the phone"
+covers = []
+after = [{ epic = 1, needs = "AgentStatus::current() and the per-pane state contract (.ade/context/agent-events.md)" }]
+
+[[epic]]
+id = 3
+slug = "epic-phone-steer"
+title = "Steer ADE's agents from the phone"
+covers = []
+after = [{ epic = 2, needs = "pairing, sessions and the relay" }]
+
+[[epic]]
+id = 4
+slug = "epic-phone-app"
+title = "The full phone app"
+covers = []
+after = [{ epic = 3, needs = "watch and steer messages" }]
+
+[[epic]]
+id = 5
+slug = "epic-public-service"
+title = "A public free service"
+covers = []
+after = [{ epic = 2, needs = "the relay" }]

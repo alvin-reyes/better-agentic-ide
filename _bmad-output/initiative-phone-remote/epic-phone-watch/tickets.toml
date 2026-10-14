@@ -1,0 +1,166 @@
+# Watch ADE's agents from the phone: stories in build order.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Scaffold relay, protocol package and app with CI"
+description = "Creates relay/ (protocol, core, server, cli, e2e crates), packages/protocol and mobile/ with one passing test each, the include changes and a CI job per new check."
+verify = "All five verification lines pass on a fresh checkout, the e2e placeholder test appears by name in `cd relay && cargo test`, and `npm ci` in mobile/ then `npx expo export` bundles."
+covers = []
+after = ["epic-agent-status"]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 2
+type = "story"
+title = "Login and presence through the relay"
+description = "Tracer bullet: the relay server, the signed single-use challenge login with roles in core, presence both ways with ping, and the CLI client logging in."
+verify = "An e2e test has two keys log in and see each other online, then offline on close; a replayed login and one signed for another host are refused."
+covers = []
+after = [1]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 3
+type = "story"
+title = "Encoding, labels and signatures in Rust and TypeScript"
+description = "Implements enc(), the ade-remote/v1 labels and Ed25519 signing in relay/protocol and packages/protocol against shared vectors."
+verify = "Both languages pass the same vectors, and a signature made under one label fails under every other."
+covers = []
+after = [1]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Noise IK sessions in Rust and TypeScript"
+description = "Adds Noise_IK_25519_ChaChaPoly_SHA256 with the spec's prologue, hs1 counter, empty hs2, session ids, explicit nonces and rehandshake rules on both sides."
+verify = "The cacophony IK vectors and Rust-TypeScript cross vectors pass, and the replay, gap, other-session and no-loop tests pass."
+covers = []
+after = [3]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Pairing in Rust and TypeScript"
+description = "Implements commit-then-reveal pairing, the 6-digit code, pair records, pending pairs, unpair and two-way welcome reconciliation, end to end through the relay."
+verify = "An e2e test pairs the CLI with core's Mac side, and every refusal and reconciliation case in the spec's pairing tests passes."
+covers = []
+after = [2, 4]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Snapshots over the session"
+description = "Adds the snapshot builder with the frame layout, padding, truncation, seq, want_snapshot, foreground expiry and the rate_limited resend in core and the CLI."
+verify = "An e2e test shows the paired CLI receiving the first snapshot and each change in seq order, the latest state after a rate-limited last frame, and the canary title never at the relay."
+covers = []
+after = [5]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 7
+type = "story"
+title = "Relay storage, limits and cleanup"
+description = "Adds SQLite storage, every limit in the spec, the 90-day cleanup and the token-guarded /metrics to the relay."
+verify = "A test per limit and for the cleanup passes, and no frame bytes appear in logs or the database file."
+covers = []
+after = [2]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 8
+type = "story"
+title = "ADE's Remote bridge"
+description = "Adds remote_tabs_set and the tab registry, the KeyStore with per-build keychain services, the remote.enabled and remote.relayUrl settings, and the bridge reading AgentStatus::current() through core."
+verify = "The spec's bridge tests pass, including two windows that both have tab-1 and a closing window."
+covers = []
+after = [6, "epic-agent-status"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 9
+type = "story"
+title = "ADE's Remote panel: pair, confirm, unpair"
+description = "Adds the Remote switch, the QR code, the confirm dialog with the 6-digit code and the paired-phones list with Unpair."
+verify = "In a dev build against a local relay, the CLI pairs after the user confirms a matching code, and unpairing from either side updates the list."
+covers = []
+after = [8]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 10
+type = "story"
+title = "Push"
+description = "Adds APNs sending through a2 with the spec's headers and token lifecycle, push_token registration and the Mac's per-tab 3-second rule with the foreground signal."
+verify = "An e2e test with a fake APNs sink passes every push rule in the spec, using an injected clock."
+covers = []
+after = [6, 7]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = 11
+type = "story"
+title = "Deploy the relay to Fly.io"
+description = "Adds the Dockerfile, fly.toml (one machine, auto-stop off), the APNs secrets and the relay section of docs/ops.md, and deploys it."
+verify = "/health answers at the deployed wss host, and the e2e test passes against it."
+covers = []
+after = [7]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 12
+type = "story"
+title = "The minimal Expo app"
+description = "Builds the Pair, Macs, Tabs and Settings screens on packages/protocol, with keys and pairs in expo-secure-store and the random-values polyfill first."
+verify = "The jest-expo tests pass, and the app on a simulator pairs with core's Mac side through a local relay and shows its tabs."
+covers = []
+after = [5, 6]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = 13
+type = "story"
+title = "Push on the phone and the TestFlight build"
+description = "Adds expo-notifications with the build-time APNs environment and the token on each launch, and builds and submits with EAS to TestFlight."
+verify = "The TestFlight build installs on the owner's iPhone and receives a push through the Fly relay."
+covers = []
+after = [10, 11, 12]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 14
+type = "story"
+title = "Refactor sweep"
+description = "Cleans up what the epic's plans and deferred review findings name; scope is set when it starts and takes cleanup only."
+verify = "The verification command passes and each cleanup item is closed or recorded."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = 15
+type = "story"
+title = "Manual check on TestFlight"
+description = "Runs the spec's manual check with the TestFlight build, a dev ADE and the Fly relay, and records the result."
+verify = "The four manual steps pass and are recorded in the story's Verification section."
+covers = []
+after = [14]
+hitl = true
+risk = "low"
