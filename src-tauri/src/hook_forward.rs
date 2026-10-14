@@ -5,7 +5,7 @@
 //!
 //! This file is the `ade-hook` crate's logic and is also compiled into ADE as
 //! a module, so ADE's `cargo test` covers it. It depends only on crates both
-//! have: `serde_json`, `hmac`, `sha2` and `sysinfo`. The contract is
+//! have: `serde`, `serde_json`, `hmac`, `sha2` and `sysinfo`. The contract is
 //! `.ade/context/agent-events.md`.
 
 // ADE compiles this file for its tests and for `ADE_VARS`; the helper uses
@@ -50,9 +50,6 @@ pub const DEADLINE: Duration = Duration::from_secs(2);
 
 /// How far up the parent chain Claude Code is looked for.
 pub const MAX_LEVELS: usize = 5;
-
-/// A hook payload is small; anything larger is not read past this.
-const MAX_STDIN: u64 = 4 << 20;
 
 /// `value` as JSON with object keys sorted and no whitespace, so the same
 /// input gives the same hash whatever order its keys arrived in.
@@ -113,6 +110,47 @@ pub fn forwarded(payload: &Value, key: &[u8]) -> Map<String, Value> {
         out.insert("input_hash".into(), Value::String(input_hash(input, key)));
     }
     out
+}
+
+/// A hook payload with only the forwarded fields and `tool_input` kept.
+/// Every other value, a `tool_response` of any size included, is skipped as
+/// it is read and never held.
+struct Kept(Map<String, Value>);
+
+impl<'de> serde::Deserialize<'de> for Kept {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Fields;
+        impl<'de> serde::de::Visitor<'de> for Fields {
+            type Value = Kept;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a hook payload object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Kept, A::Error> {
+                let mut out = Map::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if key == "tool_input" || FORWARDED.contains(&key.as_str()) {
+                        let value = map.next_value::<Value>()?;
+                        out.insert(key, value);
+                    } else {
+                        map.next_value::<serde::de::IgnoredAny>()?;
+                    }
+                }
+                Ok(Kept(out))
+            }
+        }
+        d.deserialize_map(Fields)
+    }
+}
+
+/// Read a hook payload from `stdin` to its end, so Claude Code's write never
+/// blocks, keeping only what `forwarded` uses. None when it isn't a JSON
+/// object.
+fn read_payload(stdin: impl Read) -> Option<Value> {
+    use serde::Deserialize;
+    let mut reader = std::io::BufReader::new(stdin);
+    let kept = Kept::deserialize(&mut serde_json::Deserializer::from_reader(&mut reader));
+    let _ = std::io::copy(&mut reader, &mut std::io::sink());
+    kept.ok().map(|k| Value::Object(k.0))
 }
 
 /// What the helper knows of one process on the way up its parent chain.
@@ -250,11 +288,7 @@ pub fn forward(
     if token.is_empty() || pty.parse::<u32>().is_err() {
         return;
     }
-    let mut text = String::new();
-    if stdin.take(MAX_STDIN).read_to_string(&mut text).is_err() {
-        return;
-    }
-    let Ok(payload) = serde_json::from_str::<Value>(&text) else { return };
+    let Some(payload) = read_payload(stdin) else { return };
     let mut body = forwarded(&payload, token.as_bytes());
     if let Some((pid, start)) = find_claude(parent, lookup) {
         body.insert("pid".into(), Value::from(pid));
@@ -536,6 +570,68 @@ mod tests {
         assert_eq!(body["hook_event_name"], "PermissionRequest");
         assert!(body["input_hash"].as_str().is_some());
         assert!(body.get("tool_input").is_none() && body.get("pid").is_none());
+    }
+
+    /// Counts what is read through it.
+    struct Counted<R> {
+        inner: R,
+        read: usize,
+    }
+
+    impl<R: Read> Read for Counted<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.inner.read(buf)?;
+            self.read += n;
+            Ok(n)
+        }
+    }
+
+    /// Accept one request and return its body.
+    fn one_body(listener: TcpListener) -> std::thread::JoinHandle<Value> {
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut got = Vec::new();
+            let mut buf = [0u8; 4096];
+            while let Ok(n) = s.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                got.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&got);
+                if let Some(head_end) = text.find("\r\n\r\n") {
+                    let len: usize = text[..head_end].lines().find_map(|l| l.strip_prefix("Content-Length: ")).unwrap().parse().unwrap();
+                    if got.len() >= head_end + 4 + len {
+                        break;
+                    }
+                }
+            }
+            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}").unwrap();
+            let text = String::from_utf8(got).unwrap();
+            serde_json::from_str(text.split("\r\n\r\n").nth(1).unwrap()).unwrap()
+        })
+    }
+
+    #[test]
+    fn a_payload_over_four_megabytes_is_still_forwarded_and_drained() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = one_body(listener);
+        let huge = 5 << 20;
+        let head = br#"{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"cat big.log"},"tool_response":{"stdout":""#;
+        let tail = br#"","nested":[1,{"a":[true,null]}]},"session_id":"s1","cwd":"/work"}"#;
+        let mut stdin = Counted { inner: (&head[..]).chain(std::io::repeat(b'x').take(huge)).chain(&tail[..]), read: 0 };
+        let mut out = Vec::new();
+        assert_eq!(run(&mut stdin, &mut out, env(port), 0, no_procs), 0);
+        assert_eq!(out, b"{}");
+        assert_eq!(stdin.read, head.len() + huge as usize + tail.len(), "stdin is read to the end");
+        let body = server.join().unwrap();
+        assert_eq!(body["hook_event_name"], "PostToolUse");
+        assert_eq!(body["session_id"], "s1", "a field after the huge value");
+        assert_eq!(body["cwd"], "/work");
+        let input: Value = serde_json::json!({"command":"cat big.log"});
+        assert_eq!(body["input_hash"], input_hash(&input, b"tok"));
+        assert!(body.get("tool_response").is_none());
     }
 
     #[test]

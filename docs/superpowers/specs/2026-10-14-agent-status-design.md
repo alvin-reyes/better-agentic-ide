@@ -98,6 +98,10 @@ dialog is not a hook event.
 
 ### Decisions
 
+The compaction row, the third re-arm and the lock and record folder below
+follow the owner-approved fixes plan of 2026-10-14
+(`_bmad-output/initiative-phone-remote/plan-agent-status-fixes.md`).
+
 **Turning it on.**
 
 - ADE never writes hooks unasked. The user turns on **Agent status** for a
@@ -191,7 +195,7 @@ dialog is not a hook event.
 
   | Event | Effect on that session |
   |---|---|
-  | `SessionStart` | ready (any `source`) |
+  | `SessionStart` | ready; with `source: compact` a session ADE already knows keeps its state (a new one starts ready) |
   | `UserPromptSubmit` | working; clears its pending prompts and "waiting" |
   | `PermissionRequest` | adds a pending prompt: an id minted by ADE, tool name, `agent_id`, input hash. While any is pending: **needs you** |
   | `PostToolUse`, `PostToolUseFailure` | removes the pending prompt with the same tool name, `agent_id` and input hash, if any |
@@ -208,10 +212,14 @@ dialog is not a hook event.
   prompt, but only for the first such key since the rule was last armed. One
   answer often takes several of those keys (a digit then Enter, or typed
   feedback after "No"), and they must not eat the next queued prompt. Only
-  two things re-arm it: a new `PermissionRequest` in a pane that had no
-  pending prompts, or a
+  three things re-arm it: a new `PermissionRequest` in a pane that had no
+  pending prompts; a
   `PostToolUse` / `PostToolUseFailure` matching (tool name, `agent_id`, input
-  hash) the prompt the key removed, which shows that prompt was approved.
+  hash) the prompt the key removed, which shows that prompt was approved; or,
+  while the pane still has prompts pending, the `Stop` of the removed
+  prompt's own session when that prompt was the main agent's (no `agent_id`),
+  since no result came and the turn is over. A sub-agent's prompt doesn't
+  count: the sub-agent may still be running.
   Other tools finishing, from the main agent or other sub-agents, never
   re-arm it. When this guesses wrong, it errs toward still showing **needs
   you**, which the next `UserPromptSubmit` or `idle_prompt` clears.
@@ -278,8 +286,11 @@ dialog is not a hook event.
 - Every ADE write to `settings.local.json`, presets and hooks alike, holds an
   exclusive file lock, so two ADE processes can't interleave. The lock file
   lives in a per-user folder that both the installed app and a dev build use
-  (`$TMPDIR` on macOS, `$XDG_RUNTIME_DIR` or else `~/.cache/ade` on Linux),
-  named from a hash of the settings file's path. It is opened without
+  (`~/.cache/ade` on macOS and Linux; not `$TMPDIR`, which macOS purges, nor
+  `$XDG_RUNTIME_DIR`, which can differ between the two), named from a hash of
+  the settings file's path. Beside it, `ade-created-<same hash>` records what
+  turning Agent status on created (the file, `.claude/`, the `hooks` key), so
+  turning it off removes only those, and only when empty. It is opened without
   following symlinks and with mode 0600, and nothing is added to the
   project. ADE re-reads the file under the
   lock, just before writing.
