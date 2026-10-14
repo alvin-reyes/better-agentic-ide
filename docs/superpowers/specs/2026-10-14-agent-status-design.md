@@ -123,8 +123,11 @@ dialog is not a hook event.
   listening.
 - ADE registers it, with no matcher, for `SessionStart`, `UserPromptSubmit`,
   `PermissionRequest`, `PostToolUse`, `PostToolUseFailure`, `Notification`,
-  `SubagentStart`, `SubagentStop`, `Stop`, `SessionEnd`, `Elicitation` and
-  `ElicitationResult`.
+  `SubagentStart`, `SubagentStop`, `Stop` and `SessionEnd`. Each of these was
+  seen firing in the spikes. Other events, such as `Elicitation` for MCP
+  servers asking the user, are added only after the fixture task has seen them
+  fire on the pinned Claude Code version, so an event name Claude Code doesn't
+  know never lands in the user's settings file.
 - **Outside ADE** the variable is unset, so the hook runs `true`: nothing is
   sent, nothing printed, no error.
 - **Inside ADE** every terminal gets, beside the vault variables:
@@ -194,8 +197,6 @@ dialog is not a hook event.
   | `Notification` `idle_prompt` | waiting for you; clears pending prompts |
   | `SubagentStart` / `SubagentStop` | adds / removes a running sub-agent |
   | `Stop` | finished, but stays **working** while sub-agents run and **needs you** while prompts are pending |
-  | `Elicitation` | adds a pending prompt (an MCP server asking the user) |
-  | `ElicitationResult` | removes the oldest pending elicitation |
   | `SessionEnd` | the session is dropped (after `/clear` a new one starts) |
 
 - **Esc fires nothing**, so a prompt dismissed in the terminal would stay
@@ -203,8 +204,12 @@ dialog is not a hook event.
   several can be pending and only the oldest is on screen. When the user
   presses a key that answers a prompt (Enter, Esc, a digit, `y` or `n`) in a
   pane with pending prompts, ADE removes that pane's **oldest** pending
-  prompt. If that answer was an approval, the matching `PostToolUse` would
-  have removed it anyway.
+  prompt, but only for the first such key since the pane's last
+  `PermissionRequest`, `PostToolUse` or `PostToolUseFailure`. One answer often
+  takes several of those keys (a digit then Enter, or typed feedback after
+  "No"), and they must not eat the next queued prompt. Any of those events
+  re-arms it. When this guesses wrong, it errs toward still showing **needs
+  you**, which the next `UserPromptSubmit` or `idle_prompt` clears.
 - Only real key presses count. They are taken from xterm's key-event handler
   (`attachCustomKeyEventHandler`), not from `onData`, which also carries bytes
   xterm generates itself (focus reports, cursor and device replies, mouse
@@ -213,11 +218,13 @@ dialog is not a hook event.
 - Pending prompts clear in any case on the session's next `UserPromptSubmit`
   or `idle_prompt`.
 - **Dropping state.** All state for a PTY goes when its shell exits (the
-  reader's exit callback in `pty.rs`). When a pane's foreground process has
-  not been Claude Code for two polls in a row (below), that pane's sessions
-  are dropped too, which covers a `claude` that crashed or was killed while
-  its shell lives on. Turning Agent status off drops the state of sessions
-  whose `cwd` is in that project.
+  reader's exit callback in `pty.rs`). When a pane's shell has had no child
+  processes for two polls in a row (below), that pane's sessions are dropped
+  too, which covers a `claude` that crashed or was killed while its shell
+  lives on. Sessions are never dropped because Claude Code wasn't
+  recognised: recognition can miss (a wrapper, an unusual install), and a
+  miss must not delete live state. Turning Agent status off drops the state
+  of sessions whose `cwd` is in that project.
 
 **What the user sees.**
 
@@ -229,12 +236,19 @@ dialog is not a hook event.
 
 **No silent failure.**
 
-- ADE already reads a PTY's foreground process (`get_foreground_pid` in
-  `pty.rs`). For panes in an agent-status project, ADE polls it every 2
-  seconds. The process counts as Claude Code when its executable's file name
-  is `claude`, or when it is `node` and its arguments include
-  `@anthropic-ai/claude-code`.
-- When a pane's foreground process is Claude Code and no event has come from
+- For panes in an agent-status project, ADE polls every 2 seconds for Claude
+  Code anywhere in the shell's process tree. Today's `get_foreground_pid`
+  (`pty.rs`) is not enough: it takes only the shell's newest direct child, so
+  `npx`, `caffeinate claude` or `op run -- claude` would be missed.
+- A process counts as Claude Code when its process name or the base name of
+  its `argv[0]` is `claude`; or its executable sits under a
+  `claude/versions/` folder (the native installer runs
+  `~/.local/share/claude/versions/<version>`, so the executable's own file
+  name is the version); or it is `node` and an argument's base name is
+  `claude`, or is `cli.js` under `@anthropic-ai/claude-code`. The fixture task
+  records what a native, an npm-global and an `npx` install look like, and the
+  tests use those.
+- When a pane's shell has Claude Code under it and no event has come from
   that PTY id within 10 seconds, the pane shows "Agent status isn't receiving
   events". `SessionStart` reaches the helper within about a second of launch,
   so this doesn't misfire on a slow start. The note goes away as soon as an
@@ -251,8 +265,11 @@ dialog is not a hook event.
 
 - Every ADE write to `settings.local.json`, presets and hooks alike, holds an
   exclusive file lock, so two ADE processes can't interleave. The lock file
-  lives in the system temp folder, named from a hash of the settings file's
-  path, so nothing is added to the project. ADE re-reads the file under the
+  lives in a per-user folder that both the installed app and a dev build use
+  (`$TMPDIR` on macOS, `$XDG_RUNTIME_DIR` or else `~/.cache/ade` on Linux),
+  named from a hash of the settings file's path. It is opened without
+  following symlinks and with mode 0600, and nothing is added to the
+  project. ADE re-reads the file under the
   lock, just before writing.
   Claude Code also writes this file ("don't ask again" adds to
   `permissions.allow`), so the window for a lost write is kept to the
@@ -275,12 +292,26 @@ the toggle.
 
 ### Packaging
 
-The helper is a second binary of the `src-tauri` crate, bundled with Tauri's
-`externalBin` (named with the target triple, as Tauri requires). On macOS it
-is signed and notarized with the app. A dev build points `ADE_HOOK_BIN` at
-the helper in its own `target` folder. The release workflow
-(`.github/workflows/release.yml`) is checked for the extra binary on each
-platform it builds.
+A fresh checkout's checks (`npx tsc --noEmit`, `npm test`, and `cargo test`
+in `src-tauri`) must keep passing with no extra step, and they don't change.
+Tauri's `externalBin` needs the binary to exist before `src-tauri` itself is
+compiled, so the helper can't be a binary of that crate listed in the main
+config.
+
+- **Its own crate.** The helper is a small crate, `src-tauri/ade-hook`, in a
+  Cargo workspace with `src-tauri`. Its forwarding logic (the field filter,
+  the keyed hash, the always-`{}` rule) is one source file that `src-tauri`
+  also compiles as a module, so the existing `cargo test` covers it.
+- **Bundled at release only.** `externalBin` (`binaries/ade-hook-<target
+  triple>`) is set in a release-only config file passed to `tauri build`, and
+  the release workflow (`.github/workflows/release.yml`) builds the helper and
+  copies it there first, on each platform it builds. `tauri dev` and
+  `cargo test` never reference it. On macOS the helper is signed and
+  notarized with the app.
+- **Found at run time.** A release build sets `ADE_HOOK_BIN` to the helper
+  beside its own executable. A dev build uses `target/debug/ade-hook`, built
+  by `cargo build -p ade-hook`. If the helper isn't there, ADE leaves the four
+  variables out and Agent status says the helper is missing.
 
 ### Known limits
 
@@ -321,14 +352,17 @@ tool-use id.
   `claude -p` session's `SessionEnd` leaving the interactive one alone; a
   sub-agent's `PostToolUse` not clearing a main-session prompt; `Stop` with a
   sub-agent pending; two queued prompts and one answering key removing only
-  the oldest; a focus report, a mouse report and a scratchpad send removing
-  nothing; `/clear`; PTY exit; Claude Code gone from the foreground for two
-  polls; turning off.
+  the oldest; a digit then Enter, and "No" plus typed feedback containing
+  `y`, `n` and digits, each removing exactly one; a focus report, a mouse report and a scratchpad send removing
+  nothing; `/clear`; PTY exit; a shell with no children for two polls;
+  sessions kept when Claude Code isn't recognised; turning off.
 - **PTY:** the `ADE_PTY_ID` a child sees equals the id `create_pty` returns;
   inherited `ADE_HOOK_*` and `ADE_PTY_ID` values are replaced; with no
   endpoint, none of the four are set.
-- **Foreground detection:** `claude`, and `node` with `@anthropic-ai/claude-code`
-  in its arguments, count; a plain shell or another `node` program doesn't.
+- **Recognising Claude Code:** the recorded native, npm-global and `npx`
+  process shapes count, also under a wrapper (`caffeinate`, `op run --`); a
+  plain shell, another `node` program and an unrelated binary named after a
+  version folder elsewhere don't.
 - **Settings:** adds with `"timeout": 5`; keeps the user's hooks and other
   keys, including a user hook in the same matcher group; idempotent; removes
   exactly ADE's entries and empty containers; refuses an unexpected shape; a
@@ -342,7 +376,8 @@ tool-use id.
 - **Against real Claude Code:** a manual check script, run before release,
   that starts Claude Code in a scratch project with ADE's entries, with the
   helper at a path containing a space, and asserts the events arrive and no
-  hook error shows. It also answers one prompt with "don't ask again" and
+  hook error shows. It confirms Claude Code starts with no settings error or
+  warning on screen, so the file as ADE wrote it is accepted. It also answers one prompt with "don't ask again" and
   confirms ADE's `hooks` survive Claude Code's own write to the file. Its result and the version go in the story's
   Verification section.
 
