@@ -165,8 +165,9 @@ registered. The relay refuses:
    `sig = Sign(I, enc("ade-remote/v1/login", c, host, role))`.
    - `host` is the host name the device itself dialled, taken from
      `remote.relayUrl` or the QR code, never anything the relay sent.
-   - The relay checks the signature against its own configured host name, so a
-     login relayed through another server fails.
+   - The relay checks the signature against its configured host names, a list
+     (for example the `fly.dev` name and a custom domain). A login relayed
+     through another server fails.
 3. **Relay → device:** `welcome {pairs: [{pair_id, peer_id, peer_role}], online: [peer_id]}`.
 
 The device reconciles with `welcome`, in both directions:
@@ -229,6 +230,18 @@ carry no further signatures.
 
      It also computes `pair_id` itself and uses that, never the relay's
      copy.
+
+**Pending pairs.** A dropped connection at confirm must not silently undo a
+pairing.
+- **Saving early.** The Mac saves the pair as *pending* before it sends
+  `pair_confirm`. The phone saves it as pending when it sends the reveal.
+- **Promoting.** Each side promotes the pair to paired when `paired` arrives
+  (phone), or when the relay acknowledges `pair_confirm` (Mac).
+- **Reconciling.** A `welcome` listing a pair that a device holds as pending
+  completes it; it is not unpaired. The relay sends the phone `paired` again on
+  its next login while the phone hasn't acknowledged it.
+- **Expiry.** A pending pair the relay never lists is dropped after 10
+  minutes.
    - On decline, the phone gets `pair_declined`.
 
 **Slots.** The first `pair_commit` holds the slot until confirm, decline or
@@ -297,7 +310,10 @@ The pattern is `Noise_IK_25519_ChaChaPoly_SHA256`. The prologue is
 | `want_snapshot {}` | phone → Mac | pull to refresh; also on coming to the foreground, and every 60 s while there |
 | `foreground {on}` | phone → Mac | sent on change, and every 30 s while on |
 
-**How a snapshot plaintext is laid out:** `u32be(len) || JSON || zero bytes`.
+**How every frame plaintext is laid out:** `u32be(len) || JSON || zero bytes`.
+The JSON carries its message type as `"t"`, for example
+`{"t":"snapshot",...}` or `{"t":"want_snapshot"}`. The vectors include one
+plaintext for each type.
 - **Padding.** Zeros pad it to the next multiple of 4 KiB, but never past
   60,000 bytes.
 - **Too big.** If it would still exceed 60,000 bytes, the Mac drops the least
@@ -354,12 +370,14 @@ reconciling with a `welcome` touches only the entries under its own key. The bri
 `KeyStore` trait; the tests use an in-memory implementation, so CI needs no
 keychain.
 
-**Phone.** Keys and the pair list live in `expo-secure-store` with
+**Phone.** Each pair records the relay URL it was made on. The phone keeps
+one connection per relay in use, and reconciles a `welcome` only against that
+relay's pairs. Keys and the pair list live in `expo-secure-store` with
 `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY`, so they don't move to
 another device through a backup. Keys and pairs share that store, so they
 survive or vanish together, and `welcome` corrects anything stale.
-`react-native-get-random-values` is imported before any `@noble` module, so
-Hermes has `crypto.getRandomValues`.
+`react-native-get-random-values` is imported first in the app's entry file,
+before any `@noble` module, so Hermes has `crypto.getRandomValues`.
 
 ## The relay
 
@@ -382,7 +400,7 @@ Hermes has `crypto.getRandomValues`.
 
 | What | Limit |
 |---|---|
-| Frames | 20/s per device, bursts to 100; 64 KiB each. A refused frame is answered with `rate_limited {retry_ms}`, and the Mac resends its latest snapshot after `retry_ms` |
+| Frames | 20/s per device, bursts to 100; 64 KiB each. A refused frame is answered with `rate_limited {peer, retry_ms}`, and the Mac resends its latest snapshot to that peer after `retry_ms` |
 | Push | 1 per 30 s per phone; 30 per hour |
 | Slots | 5 per hour per Mac |
 | New identity keys | 20 per hour per IP |
@@ -452,8 +470,13 @@ builds the app and submits it to TestFlight. The bundle id is
   `packages/protocol/vectors/` holds the vectors that the Rust tests read too.
 - **`mobile/`**: the Expo app, with its own `package-lock.json`.
   - It depends on `packages/protocol` as `file:../packages/protocol`.
-  - `@noble/*` and `react-native-get-random-values` are **peer dependencies**
-    of `packages/protocol`, installed in both the root and `mobile/`.
+  - `@noble/*` are **peer dependencies** of `packages/protocol`, installed in
+    both the root and `mobile/`.
+  - `packages/protocol` takes randomness only from
+    `globalThis.crypto.getRandomValues` (Node 20 and jsdom provide it) and
+    never imports a polyfill.
+  - `react-native-get-random-values` is a plain dependency of `mobile/` only,
+    imported first in the app's entry file.
   - Metro's `watchFolders` includes `../packages/protocol`, and
     `resolver.nodeModulesPaths` points at `mobile/node_modules`, so the package
     resolves its imports from the app.
@@ -520,7 +543,10 @@ story also proves:
     offline (queued);
   - the phone refuses a `paired` record whose Mac keys or slot differ from
     the QR code;
-  - two identities sharing one state file each keep their own pairs.
+  - two identities sharing one state file each keep their own pairs;
+  - a phone paired on two relays keeps both after a `welcome` from one;
+  - a connection dropped between `pair_confirm` and `paired` leaves the pair
+    in place on both sides after the next login.
 - **Sessions:**
   - a replayed `hs1` is refused;
   - a phone clock set back, or skewed against the Mac's, still connects;
