@@ -39,7 +39,7 @@ spec on 2026-10-15. The owner decided: the QR code carries the Mac's name;
 the phone keeps snapshots in memory only; tabs with no agent show as "No
 agent" and sort last; scanning an already paired Mac offers to pair again.
 The rest of that amendment closes pairing gaps the review found (refusals,
-cancel, expiry). It needs the owner's approval again before the build uses it.
+cancel, expiry). The owner approved the amendment on 2026-10-15.
 One consequence to note: the `ade-pair` URL scheme is registered in dev builds
 only, so in release the iOS Camera app can't start a pairing; only the app's
 own scanner can.
