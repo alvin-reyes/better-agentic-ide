@@ -34,6 +34,13 @@ The owner settled these on 2026-10-14:
 - **Encryption:** Noise IK on standard primitives (approach A below).
 - **Verification:** the command grows (see Verification).
 
+The review of the phone app UX (`2026-10-15-phone-app-ux.md`) amended this
+spec on 2026-10-15. The owner decided: the QR code carries the Mac's name;
+the phone keeps snapshots in memory only; tabs with no agent show as "No
+agent" and sort last; scanning an already paired Mac offers to pair again.
+The rest of that amendment closes pairing gaps the review found (refusals,
+cancel, expiry). It needs the owner's approval again before the build uses it.
+
 Approaches considered for encryption:
 
 - **A (chosen).** `Noise_IK_25519_ChaChaPoly_SHA256`. Rust uses `snow`. The
@@ -104,14 +111,31 @@ The registry's shape is recorded in `.ade/context/remote-tabs.md`.
   (coalescing), then sends each paired phone that has a live session a full
   snapshot.
 - **Snapshot contents:** `seq`, which rises by one per snapshot and survives
-  reconnects within one ADE run, plus the tabs.
-- **Tab contents:** remote id, title, project, state, and `age_s`, the seconds
-  since that state began, measured on the Mac. Phone and Mac clocks are never
-  compared.
+  reconnects within one ADE run; `total`, the number of tabs the Mac has,
+  before any are left out; `truncated`; and the tabs, in no particular
+  order (the phone sorts).
+- **Tab contents:** remote id, title, project, state, and `age_s`, the whole
+  seconds since that state began, measured on the Mac. Phone and Mac clocks
+  are never compared.
+  - `state` is one of piece 1's strings (`needsYou`, `waiting`, `working`,
+    `ready`, `finished`), or `null` for a tab with no agent.
+  - **Tabs with no agent are included**, so the phone's list matches ADE's
+    tabs. Their `state` and `age_s` are both `null`. They rank below
+    `finished`.
+  - **A state the phone doesn't know** (a later version's, a missing field,
+    a wrong type) is shown like `null` but labelled "Unknown", and the rest of
+    the snapshot is used. Adding a state is a protocol change.
 - **Caps:** at most 200 tabs, titles cut to 120 code points, projects to 80.
   The plaintext limit below wins; see the snapshot layout under App messages.
+  Leaving tabs out for either reason uses the same order and sets
+  `truncated: true`; `truncated` is false only when every tab is sent.
 - **The phone** ignores a snapshot whose `seq` is not above the last one it
-  saw.
+  saw **in the current session**. A new session starts that afresh, so a
+  restarted ADE, whose `seq` starts again at 1, is not ignored.
+- **The phone keeps snapshots in memory only.** It never writes titles,
+  projects or states to its storage or logs, or puts them in a notification;
+  a relaunched app shows nothing until a new snapshot arrives. The iOS
+  app-switcher image is covered in the UX spec.
 
 ### Remote switch and connection
 
@@ -195,7 +219,8 @@ carry no further signatures.
 1. **Mac → relay:** `slot_open`. **Relay → Mac:** `slot {slot: 16 bytes, expires}`.
    The slot lasts 5 minutes.
 2. **ADE shows the QR code:**
-   `ade-pair://v1?relay=<wss url>&slot=..&id=<I_M>&x=<S_M>&s=<32-byte secret>`.
+   `ade-pair://v1?relay=<wss url>&slot=..&id=<I_M>&x=<S_M>&s=<32-byte secret>&n=<Mac name>`.
+   `n` is the Mac's name (see Names below), UTF-8 then percent-encoded.
 3. **Both sides derive two keys:**
    `k_pm = HKDF-SHA256(ikm=s, salt=slot, info="ade-remote/v1/pair/phone-to-mac")`,
    and `k_mp` the same with `info=".../mac-to-phone"`. Every pairing message is
@@ -220,7 +245,8 @@ carry no further signatures.
      and `sig_M = Sign(I_M, R)`, then sends
      `pair_confirm {slot, record fields, sig_M, sig_P}`.
    - The relay checks both signatures and both roles, stores the pair with
-     `pair_id = SHA-256(R)[..16]`, and sends the phone
+     `pair_id = SHA-256(R)[..16]` (replacing any older pair between the same
+     two keys; see Pairing again), and sends the phone
      `paired {record fields, sig_M, pair_id}`.
    - Before it shows "Paired", the phone checks that:
      - `I_P` and `S_P` are its own keys;
@@ -247,16 +273,108 @@ pairing.
   as in step 8. Until then it neither unpairs nor promotes a `welcome` pair it
   can't match.
 - **Re-sending `paired`.** While the phone hasn't sent `paired_ack`, the relay
-  sends `paired` again on each of its logins.
-- **Expiry.** A pending pair the relay never lists is dropped after 10
-  minutes.
+  sends `paired` again on each of its logins, **before** `welcome`. Messages
+  on one connection arrive in order, so once `welcome` arrives the phone has
+  every `paired` the relay holds for it. A `paired` for a pair the phone
+  already holds (its ack was lost) is checked and acked again.
+- **What a pending pair keeps.** The relay URL, slot, `I_M`, `S_M` and Mac
+  name from the QR code, everything the step-8 checks need, plus a deadline:
+  the wall-clock time the reveal was sent (the Mac: `pair_confirm`) plus 10
+  minutes, stored with it. `s`, `k_pm`, `k_mp` and `N_P` are wiped once the
+  reveal is sent.
+- **Dropping a pending pair.** Only on a definitive answer: `pair_refused`,
+  `pair_ended` or `pair_declined` for its slot, or a `welcome` that arrives
+  after the deadline and hasn't completed it (the phone: no `paired` for its
+  slot came before that `welcome`; the Mac: it doesn't list its `pair_id`). Never
+  on a timer alone, so an offline phone keeps showing "Finishing pairing"
+  until it reaches the relay. A slot can't be confirmed later than 5 minutes
+  after its commit (below), so by the deadline any confirmed pair is already
+  stored and is sent before that `welcome`. The 5 minutes between the two
+  absorb a phone clock that steps forward; a larger step can end the pairing,
+  but cleanly through the `welcome` rule (the relay's pair is unpaired and
+  both sides show it), never half done.
 
-**Slots.** The first `pair_commit` holds the slot until confirm, decline or
-expiry; any other commit is refused. A racer can therefore block a slot. The
-user then opens a new one, and that is the only effect.
+**Slots.** A slot belongs to the Mac's identity, not to its connection.
+- **Lifetime.** 5 minutes from `slot`. The first `pair_commit` holds it, and
+  from then on it lasts until 5 minutes after that commit, so the user has
+  that long to compare codes. It ends on confirm, decline, `pair_abort`,
+  expiry, or a disconnect before the reveal (below). Any other commit is
+  refused. A racer can therefore block a slot; the user then opens a new one,
+  and that is the only effect.
+- **Disconnects.** Pairing messages are never queued. Until the reveal
+  reaches the Mac, the slot ends when the Mac's connection closes, or the
+  committed phone's, and the other side, if connected, gets
+  `pair_ended {slot, reason: "disconnected"}`. So a commit never waits on an
+  offline Mac: it is refused `closed`. After the reveal, a disconnect doesn't
+  end the slot, and the pending-pair rules above apply; the Mac may confirm
+  or decline after it reconnects. When ADE reconnects with its pairing view
+  open before a reveal, it opens a new slot and redraws the QR code.
+- **Ending the slot on purpose.** Either side may send `pair_abort {slot}`
+  until the confirm. The relay ends the slot and sends the other side
+  `pair_ended {slot, reason: "cancelled"}`. ADE sends it when its pairing view
+  closes before the reveal; closing it after the reveal is a decline. The
+  phone sends it on Cancel, and when 30 s pass after its commit with no
+  `pair_nonce`.
+- **Expiry.** When a slot runs out after a commit, the relay sends both
+  sides `pair_ended {slot, reason: "expired"}`. ADE closes its confirm view.
+- **Refusals.** A pairing message (`pair_commit`, `pair_nonce`,
+  `pair_reveal`, `pair_confirm`, decline) for a slot that can't take it is
+  answered with `pair_refused {slot, reason}`, and nothing is stored:
+  - `unknown`: the relay has no record of the slot (never opened, or the
+    relay restarted, since slots live in memory);
+  - `expired`: it ran out;
+  - `taken`: another phone's commit holds it, or it already paired;
+  - `closed`: it was aborted, declined, or ended by a disconnect.
+  The relay keeps an ended slot's id and how it ended for 1 hour, so
+  `expired` and `taken` are told apart within that hour; after it, or after a
+  relay restart, the answer is `unknown`. The relay handles one slot's
+  messages one at a time, so a confirm and an abort or expiry can't both
+  take effect: the loser is refused. A Mac whose `pair_confirm` is refused
+  drops its pending pair.
+- **Cancel on the phone after the reveal.** The phone sends `pair_abort` if
+  it can, and keeps the pending pair, marked cancelled, under the same
+  deadline and drop rules. If a `paired` for it arrives anyway (the Mac
+  confirmed first, or the phone was offline), the phone runs the step-8
+  checks and, if they pass, sends `unpair {pair_id}` at once instead of
+  `paired_ack`. Cancel before the reveal stores nothing; the phone sends
+  `pair_abort` if connected, and otherwise the disconnect rule ends the slot.
+- **No push before the ack.** The relay sends a push only to a phone that
+  has sent `paired_ack` for its pair with the requesting Mac. A phone that
+  cancelled while offline therefore gets no notification from that Mac
+  before it unpairs.
 
-**Device name.** At most 40 characters, printable only, and ADE renders it as
-text.
+**Pairing again.** There is at most one pair between a Mac key and a phone
+key. When the phone scans a QR code whose relay and `I_M` match a pair it
+holds, it asks before pairing (the UX spec's "Already paired"). Pairing
+again is an ordinary pairing; the old pair stays until the new one is
+confirmed, so a failed or declined attempt leaves the user paired. When the
+relay stores the new pair it deletes the old one in the same step and sends
+each online side `unpair {old pair_id}`. The phone drops its old pair when
+it promotes the new one, and the Mac when it gets `pair_confirmed`; an
+offline side catches up through `welcome`. The `hs1` counters are per key
+pair and carry over.
+
+**Names.** The phone's name (in the reveal) and the Mac's name (`n` in the
+QR code) follow one rule:
+- At most 40 Unicode code points, cut at a code-point boundary.
+- Printable only: no code point of general category C (control, format,
+  surrogate, private use, unassigned), Zl or Zp, except U+200D (zero-width
+  joiner, for emoji). This also excludes bidi overrides.
+- Leading and trailing whitespace trimmed.
+- Rendered as plain text only.
+- The sender applies the rule, and the receiver applies it again and never
+  refuses a pairing over a name. A name that ends up empty shows as "iPhone"
+  on the Mac and "Mac" on the phone.
+
+ADE's name is the macOS Computer Name, else the host name. A later rename
+doesn't reach paired phones in 2a; pairing again updates it. The phone stores
+the Mac's name with the pair.
+
+The Mac's name is **not** in the code, the pair record or any signature, and
+needs no other cover. The QR code travels by camera, never through the
+relay, so whoever could change `n` could change `I_M` and `s` beside it. The
+name only labels a pair whose keys the code already checks. Keeping it out of
+the record also keeps it off the relay, which sees records in plaintext.
 
 **Unpair.** Either side sends `unpair {pair_id}`. The relay deletes the pair
 and tells the peer if it is online; an offline peer learns at its next
@@ -313,7 +431,7 @@ The pattern is `Noise_IK_25519_ChaChaPoly_SHA256`. The prologue is
 
 | Message | Direction | Meaning |
 |---|---|---|
-| `snapshot {seq, truncated, tabs:[{id, title, project, state, age_s}]}` | Mac → phone | full state (encoding below) |
+| `snapshot {seq, total, truncated, tabs:[{id, title, project, state, age_s}]}` | Mac → phone | full state (encoding below) |
 | `want_snapshot {}` | phone → Mac | pull to refresh; also on coming to the foreground, and every 60 s while there |
 | `foreground {on}` | phone → Mac | sent on change, and every 30 s while on |
 
@@ -325,7 +443,8 @@ plaintext for each type.
   60,000 bytes.
 - **Too big.** If it would still exceed 60,000 bytes, the Mac drops the least
   urgent tabs (and the oldest among equals) until it fits, and sets
-  `truncated: true`.
+  `truncated: true`. Tabs with no agent go first; among them, and among
+  equal ages, by remote id descending, so the order is fixed.
 - **Text lengths** are counted in Unicode code points, and text is cut at a
   code-point boundary.
 - **Vectors** include a snapshot at the maximum size.
@@ -350,6 +469,11 @@ arrived for 60 s.
   - On `410 Unregistered` it deletes the token.
 - **The notification** has a fixed body, "An agent needs you", and no custom
   data. Opening it opens the app, which connects and handshakes.
+- **In the foreground.** A push can still arrive while the app is open (the
+  foreground signal lapsed, or it raced the app opening). The app's
+  notification handler then shows no banner and plays no sound, and sends
+  `want_snapshot` to each Mac with a session; the open screen shows the
+  state.
 - **When ADE asks for a push.** For each tab, separately:
   - When the tab's state becomes **needs you**, a 3-second timer starts.
   - If the tab still needs you when the timer ends, the Mac sends
@@ -361,7 +485,8 @@ arrived for 60 s.
     push.
   - The timer uses an injectable clock.
 - **The relay's limits apply on top.** It also refuses a push to any phone not
-  paired with the requesting Mac.
+  paired with the requesting Mac, or that hasn't sent `paired_ack` for that
+  pair.
 
 ## Keys and storage
 
@@ -382,7 +507,10 @@ one connection per relay in use, and reconciles a `welcome` only against that
 relay's pairs. Keys and the pair list live in `expo-secure-store` with
 `keychainAccessible: WHEN_UNLOCKED_THIS_DEVICE_ONLY`, so they don't move to
 another device through a backup. Keys and pairs share that store, so they
-survive or vanish together, and `welcome` corrects anything stale.
+survive or vanish together, and `welcome` corrects anything stale. The same
+store holds each pair's Mac name, pending and cancelled pairs with their
+deadlines, the queued unpairs and the `hs1` counters. Snapshots are never
+stored (see Snapshots).
 `react-native-get-random-values` is imported first in the app's entry file,
 before any `@noble` module, so Hermes has `crypto.getRandomValues`.
 
@@ -451,6 +579,15 @@ Built with Expo SDK, TypeScript and `expo-router`.
 
 1. **Pair.** Scan the QR code with `expo-camera`, show the 6-digit code, and
    wait for `paired` or `pair_declined`.
+   - **The `ade-pair` URL scheme.** The app registers `ade-pair`, so the
+     iOS Camera can open a pairing code in the app, and
+     `xcrun simctl openurl booted 'ade-pair://v1?...'` can on a simulator,
+     which has no camera. A URL goes through the same parser and screens as
+     a scan; a URL arriving while a pairing is under way is ignored. Release
+     and dev builds handle it the same, and it is story 12's simulator test
+     path. It adds no risk over a scan: nothing pairs until the user
+     confirms a matching code on a Mac, and a QR code on a poster could
+     start the same flow.
 2. **Macs.** The paired Macs, each with an online or offline mark from presence.
 3. **Tabs.** For one Mac: title, project, a state dot in ADE's colours, and the
    age of the state. Pull to refresh sends `want_snapshot`.
@@ -498,6 +635,8 @@ builds the app and submits it to TestFlight. The bundle id is
   vectors as the reference.
 - `.ade/context/remote-tabs.md`: the tab registry.
 - An ADR for the relay and protocol choices.
+- ADR 0004 (`.ade/context/decisions/0004-pairing-ends-explicitly.md`): how a
+  pairing attempt ends, and when a pending pair may be dropped.
 
 ## Verification
 
@@ -536,7 +675,13 @@ story also proves:
   - the IK handshake against the cacophony vectors and `snow`;
   - transport frames, where tampered, truncated, replayed and lower-nonce
     frames are refused, and a gap is accepted;
-  - frames carrying another session's id, which are dropped silently.
+  - frames carrying another session's id, which are dropped silently;
+  - QR codes and what they parse to, which ADE's QR builder and the app's
+    parser both use: `n` with non-ASCII text and reserved characters, over
+    40 code points, with control and bidi-override characters, empty, and
+    missing;
+  - a snapshot plaintext with a tab with no agent and one with an unknown
+    state.
 - **Pairing:**
   - the right secret pairs;
   - refused: a wrong secret, an expired slot, a second commit, a reveal that
@@ -553,7 +698,23 @@ story also proves:
   - two identities sharing one state file each keep their own pairs;
   - a phone paired on two relays keeps both after a `welcome` from one;
   - a connection dropped between `pair_confirm` and `paired` leaves the pair
-    in place on both sides after the next login.
+    in place on both sides after the next login;
+  - `pair_refused` gives `unknown`, `expired`, `taken` and `closed` in their
+    cases, `unknown` after a relay restart, and a refused `pair_confirm`
+    stores nothing and drops the Mac's pending pair;
+  - a slot committed at 4:59 stays open 5 minutes from the commit; its
+    expiry sends `pair_ended` to both sides and refuses a later confirm;
+  - either side disconnecting before the reveal ends the slot, and a commit
+    while the Mac is offline is refused;
+  - a cancel before the reveal, and one after it, each tell the Mac and
+    leave no pair; a cancel the Mac's confirm beat, and one made offline,
+    end in the phone's `unpair`, with no push to that phone before it;
+  - a pending pair survives a `welcome` before its deadline; a phone that
+    returns after the deadline still completes a pair the Mac confirmed,
+    because `paired` precedes `welcome`; a `welcome` after the deadline with
+    no `paired` drops it;
+  - pairing again leaves one pair at the relay and on both sides, and a
+    declined second attempt leaves the first.
 - **Sessions:**
   - a replayed `hs1` is refused;
   - a phone clock set back, or skewed against the Mac's, still connects;
@@ -580,8 +741,11 @@ story also proves:
   the phone. Check pairing, the first snapshot, a change, `seq` ordering, the
   3-second push rules with an injected clock (including re-entry and a second
   pane), no push while the app reports foreground, push again after the
-  foreground signal lapses, recovery after the relay restarts, and the latest
-state arriving after the burst's last frame was rate-limited.
+  foreground signal lapses, recovery after the relay restarts, the latest
+state arriving after the burst's last frame was rate-limited, a tab with no
+agent sent with `null` state, 201 tabs setting `truncated` with `total`
+201, and a restarted Mac side whose `seq` starts again still reaching the
+phone.
 - **The bridge in `src-tauri`:**
   - `remote_tabs_set`, including two windows that both have `tab-1`, and a
     window closing;
@@ -592,8 +756,13 @@ state arriving after the burst's last frame was rate-limited.
   - Remote off closing the connection.
 - **App:**
   - QR parsing, refusing a scheme other than `wss://`;
-  - the tab list rendering each state and ignoring a stale `seq`;
+  - the tab list rendering each state, no agent and an unknown state, and
+    ignoring a stale `seq`;
   - unpair;
+  - "Already paired" on a QR code for a Mac it holds;
+  - an `ade-pair://` URL starting the same flow as a scan;
+  - a push in the foreground showing no banner;
+  - nothing from a snapshot written to storage;
   - `getRandomValues` coming from the polyfill.
 
 ### Manual check before Done

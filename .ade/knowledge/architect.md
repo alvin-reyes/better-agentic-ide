@@ -1,0 +1,1 @@
+- 2026-10-15: Phone remote specs live in docs/superpowers/specs/ (2a: 2026-10-14-relay-pairing-design.md), not docs/architecture.md; epic-phone-watch stories exist only as entries in its tickets.toml. ADR 0002 was used and later removed from the tree, so number new ADRs after the highest in git history.
