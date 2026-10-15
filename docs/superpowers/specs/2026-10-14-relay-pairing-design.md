@@ -547,7 +547,11 @@ unpair can't remove a newer pair.
   sends it for its pair with that Mac and for every id it recorded as
   replaced by it, and drops those records. ADE also discards any pending
   pair with that phone, which stops its confirm re-sends. All of these go
-  in the queue if the device is offline.
+  in the queue if the device is offline. Likewise the phone's Unpair of a
+  Mac discards any pending pair with that Mac by the discard-by-hand rule:
+  it keeps the pair hidden with its cancelled mark, sends `pair_abort` now
+  or after its next login, and unpairs a late `paired` at once. (A
+  follow-up to the 2026-10-15 approval; needs the owner's OK.)
 - **Unpairs the protocol makes** (a cancelled pairing, a pair that failed
   its checks, `welcome` reconciliation) name one pair only, so undoing a
   second attempt leaves the first.
@@ -586,6 +590,9 @@ The pattern is `Noise_IK_25519_ChaChaPoly_SHA256`. The prologue is
   - on `welcome` or `presence` showing its Mac online;
   - when the app comes to the foreground;
   - on receiving `rehandshake` (below);
+  - on a pull to refresh while it has no session, within the limit of one
+    restart every 10 seconds (a follow-up to the 2026-10-15 approval;
+    needs the owner's OK);
   - after 24 hours or 2^32 frames in one session.
 - **When the Mac asks for one.** If the Mac has a frame to send and no
   session, or a current-session frame fails to open, it sends the phone a
@@ -974,6 +981,8 @@ story also proves:
   - an `unpair` lost on the socket is sent again at the next `welcome`;
   - ADE's Unpair while it holds two pairs with one phone removes both, and
     the phone's Unpair also removes the ids it recorded as replaced;
+  - the phone's Unpair of a Mac with a pending re-pair cancels it, and a
+    later `paired` is unpaired;
   - a pending pair discarded on the phone, then confirmed on the Mac, is
     unpaired as soon as the `paired` arrives;
   - ADE closing its view after the user confirmed sends no decline, and the
