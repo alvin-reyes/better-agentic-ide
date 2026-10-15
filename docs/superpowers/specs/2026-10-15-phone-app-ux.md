@@ -399,5 +399,6 @@ include a screenshot."
 
 ## Open questions for the owner
 
-None. (The phone's Unpair also stopping a pending re-pair with that Mac is
-being added to the 2a spec, owner, 2026-10-15.)
+None here. The phone's Unpair stopping a pending pair with that Mac, and a
+pull to refresh starting a handshake, are follow-ups in the 2a spec that
+still need the owner's OK there; this design assumes both.
