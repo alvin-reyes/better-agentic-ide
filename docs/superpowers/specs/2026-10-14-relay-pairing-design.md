@@ -551,7 +551,7 @@ unpair can't remove a newer pair.
   Mac discards any pending pair with that Mac by the discard-by-hand rule:
   it keeps the pair hidden with its cancelled mark, sends `pair_abort` now
   or after its next login, and unpairs a late `paired` at once. (A
-  follow-up to the 2026-10-15 approval; needs the owner's OK.)
+  follow-up to the 2026-10-15 approval; approved by the owner the same day.)
 - **Unpairs the protocol makes** (a cancelled pairing, a pair that failed
   its checks, `welcome` reconciliation) name one pair only, so undoing a
   second attempt leaves the first.
@@ -592,7 +592,7 @@ The pattern is `Noise_IK_25519_ChaChaPoly_SHA256`. The prologue is
   - on receiving `rehandshake` (below);
   - on a pull to refresh while it has no session, within the limit of one
     restart every 10 seconds (a follow-up to the 2026-10-15 approval;
-    needs the owner's OK);
+    approved by the owner the same day);
   - after 24 hours or 2^32 frames in one session.
 - **When the Mac asks for one.** If the Mac has a frame to send and no
   session, or a current-session frame fails to open, it sends the phone a

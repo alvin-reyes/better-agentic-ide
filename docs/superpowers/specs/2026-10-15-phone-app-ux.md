@@ -6,6 +6,8 @@ approved on 2026-10-15 (ADR 0004). That spec owns every protocol rule; this
 one only says what the user sees. Where a UX need would change the protocol,
 it is listed under Open questions, not decided here.
 
+Approved by the owner on 2026-10-15.
+
 The mockup is `2026-10-15-phone-app-mockup.html` beside this file. It keeps the
 look of the sketch the owner approved on 2026-10-15. Names in it (Macs, tabs,
 projects) are placeholders.
@@ -399,6 +401,6 @@ include a screenshot."
 
 ## Open questions for the owner
 
-None here. The phone's Unpair stopping a pending pair with that Mac, and a
-pull to refresh starting a handshake, are follow-ups in the 2a spec that
-still need the owner's OK there; this design assumes both.
+None. The phone's Unpair stopping a pending pair with that Mac, and a pull
+to refresh starting a handshake, are follow-ups in the 2a spec, approved by
+the owner on 2026-10-15 with this design.
