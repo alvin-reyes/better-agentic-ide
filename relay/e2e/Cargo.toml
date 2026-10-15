@@ -1,0 +1,10 @@
+# Holds the end-to-end test in tests/. A virtual workspace builds no tests from
+# its own root, so the test needs a package.
+[package]
+name = "relay-e2e"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+relay-core = { path = "../core" }

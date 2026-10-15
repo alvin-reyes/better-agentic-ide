@@ -1,3 +1,4 @@
 # Adversarial reviewer: project knowledge
 
 - 2026-10-11: The CLAUDE.md BMAD bullet has shipped in four texts; diff them with `git show <rev>:src/lib/projectMethodology.ts` at v0.17.0, 3dc4ace, v0.19.0 and HEAD. `project_setup_apply` is invoked from three places in src/lib/projectSetup.ts (apply, addStackAgents, addAgent), two with `full: false`. The cd hook runs a full setup only while `wasSetUp(root)` is false (localStorage), and shows no toast when `isComplete(status)`.
+- 2026-10-15: To test the EAS-style mobile install, rsync `mobile/` (no node_modules) and `packages/protocol` into the scratchpad and `npm ci` there (~1 min). A decoy `@noble/hashes` in a parent `node_modules` is not picked up by Metro, Jest or the app tsc: all three resolve from the `mobile/node_modules/@ade/protocol` symlink path. To check the two-week pin, fetch registry `time` for every lockfile entry; npm times out at 24 parallel requests, so retry the failures one by one.
