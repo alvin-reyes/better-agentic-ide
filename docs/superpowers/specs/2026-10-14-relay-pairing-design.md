@@ -210,9 +210,15 @@ The device reconciles with `welcome`, in both directions:
   `unpair {pair_id}` at once. This covers an unpair the user made while this
   device couldn't reach the relay. The one exception is on the phone: an
   old pair it dropped when it acked a replacement is recorded as replaced,
-  until `pair_replaced` arrives or a `welcome` no longer lists it. Such a
-  pair is waiting for the relay to replace it (the ack was lost), so the
-  phone leaves it alone.
+  together with the id of the pair that replaced it. While the phone still
+  holds that replacing pair, the old one is waiting for the relay to
+  replace it (the ack was lost), and the phone leaves it alone. Once the
+  phone no longer holds the replacing pair (it was unpaired, on either
+  side), the record is void: the phone sends `unpair` for the old id and
+  drops the record. The phone handles `welcome`'s removals first, so a
+  replacing pair unpaired while the phone was offline voids the record in
+  the same `welcome`. The record is also dropped when `pair_replaced`
+  arrives or a `welcome` no longer lists the old pair.
 - **Order.** On login the relay sends any re-sent `paired` messages before
   `welcome`, so the phone re-acks a replacement before it reconciles.
 - **Unpairs made offline** are also kept in a persisted queue and sent on the
@@ -297,7 +303,7 @@ carry no further signatures.
 | `pair_state {slot, state, reason}` | relay → asker | `state` is `open`, `paired` or `ended`; `reason` only with `ended` |
 | `pair_ended {slot, reason}` | relay → a party | the slot ended without that party asking |
 | `pair_refused {slot, reason}` | relay → sender | a commit, nonce, reveal or confirm was not taken, and nothing was stored |
-| `rate_limited {retry_ms}` | relay → sender | a control message over the limit was dropped unprocessed (see Limits) |
+| `control_limited {msg, slot, pair_id, retry_ms}` | relay → sender | a control message over the limit was dropped unprocessed: `msg` is its type, and `slot` or `pair_id` is given when it carried one. The sender re-sends it after `retry_ms` (see Limits) |
 | `pair_replaced {old_pair_id, pair_id}` | relay → Mac and phone | a new pair replaced the old one (Pairing again) |
 
 **Reasons**, shared by `pair_state`, `pair_ended` and `pair_refused`:
@@ -357,8 +363,12 @@ through its 1-hour record.
   sender always learns the outcome. The answer is computed exactly as for
   `pair_status` (below), pairs table first, so it holds after a relay
   restart too; if a confirm won the race, `paired` or `pair_confirmed` comes
-  first. ADE aborts when its pairing view closes before the reveal (after it, closing is a decline) and as above on
-  reconnect. The phone aborts on Cancel, and when 30 s pass after its commit
+  first. ADE aborts when its pairing view closes before the reveal, and as
+  above on reconnect. Closing it after the reveal but before the user
+  confirms is a decline. Once the user has confirmed, closing the view
+  sends nothing: the confirm stands, and ADE keeps re-sending it as a
+  pending pair until the relay answers. The confirm is the intended
+  winner. The phone aborts on Cancel, and when 30 s pass after its commit
   with no `pair_nonce`.
 - **Decline** works like an abort: if the slot is open the relay ends it as
   `declined` and sends the phone `pair_declined`, and it always answers the
@@ -429,11 +439,15 @@ pairing.
   its own on that slot, or failing the checks) is ignored and not acked. Once
   the phone holds no pending pair on that relay, `welcome` lists it as a
   pair the phone doesn't hold, and the phone unpairs it.
-- **Discarding by hand.** If the relay can't be reached for good (a QR
-  code naming a dead relay), the user may discard a pending pair. The phone
-  queues a `pair_abort` for that slot, and ADE an `unpair {pair_id}`, sent if
-  the relay ever answers again. On the phone, a later `paired` for it is
-  then unmatched and is cleaned up as above.
+- **Discarding by hand.** The user may discard a pending pair at any time,
+  for example when its relay is gone for good (a QR code naming a dead
+  relay). It leaves the lists at once.
+  - On the phone, a discard is a cancel after the reveal (below): the pair
+    is kept, hidden, with its cancelled mark, so a later `paired` for it is
+    unpaired at once.
+  - ADE stops re-sending its confirm and queues `unpair {pair_id}`.
+
+  Either is sent if the relay ever answers again.
 - **Cancel on the phone.** Before the reveal nothing is stored; the phone
   sends `pair_abort` if connected, and otherwise the disconnect rule ends the
   slot. After the reveal the phone marks the pending pair cancelled and
@@ -466,8 +480,8 @@ longer paired".
   remains.
 - So a declined, expired or cancelled second attempt, or a new `paired` that
   fails its checks, leaves the old pair in place.
-- While both exist, ADE shows the phone once. Both pairs name the same keys,
-  so sessions don't change.
+- While both exist, ADE shows the phone once, and its Unpair unpairs both
+  (see Unpair). Both pairs name the same keys, so sessions don't change.
 
 **`hs1` across pairs.** The Mac's last accepted `hs1` is kept per (its own
 identity key, phone identity key), and the phone's `last_sent` per Mac
@@ -503,7 +517,10 @@ a malformed `%` escape makes `n` count as missing.
 
 The sender cleans the name before sending; the receiver cleans it again
 before showing or storing it, and never refuses a pairing over a name. The
-Mac checks `H` over the name as received, then cleans it. A name that ends
+Mac checks `H` over the name's bytes as received, then decodes them as
+UTF-8 with each invalid sequence replaced by U+FFFD (Rust's
+`String::from_utf8_lossy`, never `from_utf8`, which refuses), then cleans
+it. A name that ends
 up empty shows as "iPhone" on the Mac and "Mac" on the phone. Names are
 rendered as plain text only.
 
@@ -522,6 +539,14 @@ records in plaintext.
 and tells the peer if it is online; an offline peer learns at its next
 `welcome`. Because each pairing has its own `pair_id`, replaying an old
 unpair can't remove a newer pair.
+- **The user's Unpair covers every pair with that peer.** ADE, which may
+  briefly hold two pairs with one phone, sends `unpair` for each. The phone
+  sends it for its pair with that Mac and for every id it recorded as
+  replaced by it, and drops those records. All of them go in the queue if
+  the device is offline.
+- **Unpairs the protocol makes** (a cancelled pairing, a pair that failed
+  its checks, `welcome` reconciliation) name one pair only, so undoing a
+  second attempt leaves the first.
 
 ### Sessions
 
@@ -655,7 +680,7 @@ relay's pairs. Keys and the pair list live in `expo-secure-store` with
 another device through a backup. Keys and pairs share that store, so they
 survive or vanish together, and `welcome` corrects anything stale. The same
 store holds each pair's Mac name, pending pairs (with their 6 digits and
-cancelled mark), pair ids recorded as replaced, the queued unpairs and
+cancelled mark), pair ids recorded as replaced (each with the id that replaced it), the queued unpairs and
 aborts, and the `hs1` counters, one
 per Mac identity key whatever the relay. Snapshots are never
 stored (see Snapshots).
@@ -683,12 +708,21 @@ before any `@noble` module, so Hermes has `crypto.getRandomValues`.
 
 **Limits.** Piece 4 tightens these.
 
+Frames over their limit get `rate_limited {peer, retry_ms}`, and control
+messages over theirs get `control_limited`, so the two are never confused.
+A device re-sends any control message named in a `control_limited` after
+`retry_ms`, whatever its kind: so a Cancel tapped just after the automatic
+`pair_status`, or ADE's abort or decline, is delayed by seconds, not lost.
+At login a device sends its queued unpairs and aborts at no more than 10
+per second, and keeps each queued until it has gone out without a
+`control_limited`.
+
 | What | Limit |
 |---|---|
 | Frames | 20/s per device, bursts to 100; 64 KiB each. A refused frame is answered with `rate_limited {peer, retry_ms}`, and the Mac resends its latest snapshot to that peer after `retry_ms` |
 | Push | 1 per 30 s per phone; 30 per hour |
 | Slots | 30 opened per hour per Mac, one open at a time |
-| Control messages | 10/s per device, bursts to 30, and at most one `pair_status` or `pair_abort` per slot per 5 s. Checked before any lookup; excess is dropped unprocessed and answered `rate_limited {retry_ms}`. The 60 s polls stay far below it |
+| Control messages | 10/s per device, bursts to 30, and at most one `pair_status` or `pair_abort` per slot per 5 s. Checked before any lookup; excess is dropped unprocessed and answered `control_limited`. The 60 s polls stay far below it |
 | New identity keys | 20 per hour per IP |
 | Connections | 1 per device |
 
@@ -918,6 +952,18 @@ story also proves:
     offline side catches up silently through `welcome`; a declined, expired
     or cancelled second attempt, or a new `paired` that fails its checks,
     leaves the old pair working, its session live and nothing shown;
+  - a re-pair whose `paired_ack` was lost, after which the new pair is
+    unpaired (from the phone's queue, and separately from ADE) before the
+    phone logs in: at that login the phone unpairs the old pair and drops
+    its record, and no pair remains and no push reaches the phone;
+  - ADE's Unpair while it holds two pairs with one phone removes both, and
+    the phone's Unpair also removes the ids it recorded as replaced;
+  - a pending pair discarded on the phone, then confirmed on the Mac, is
+    unpaired as soon as the `paired` arrives;
+  - ADE closing its view after the user confirmed sends no decline, and the
+    pair completes; closing it before the confirm declines;
+  - a phone name with invalid UTF-8 in the reveal still pairs, with `H`
+    checked over the raw bytes;
   - a re-pair whose `paired_ack` was lost after the phone dropped the old
     pair: at the next login the re-sent `paired` comes before `welcome`, the
     phone re-acks, the relay sends `pair_replaced`, and the phone never
@@ -942,7 +988,9 @@ story also proves:
   - routing only between paired keys;
   - presence on login, close and ping timeout;
   - each limit, including control messages: a `pair_status` flood is
-    answered `rate_limited` before any lookup;
+    answered `control_limited` before any lookup; a `pair_abort` sent
+    within 5 s of a `pair_status` is re-sent after `retry_ms` and takes
+    effect; 40 queued unpairs all reach the relay after a login;
   - no push to a phone that hasn't acked, including after a relay restart;
   - the 90-day cleanup;
   - push through a fake APNs sink: fixed body, no data, the right headers, the
