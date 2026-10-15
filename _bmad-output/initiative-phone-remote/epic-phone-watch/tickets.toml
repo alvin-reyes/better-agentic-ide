@@ -1,4 +1,6 @@
 # Watch ADE's agents from the phone: stories in build order.
+# Re-sharded 2026-10-15 for the 2a amendment (docs/superpowers/specs/2026-10-14-relay-pairing-design.md, ADR 0004).
+# Each test named in a description maps to a line of the spec's "Verification > Tests" list.
 
 [[entry]]
 id = 1
@@ -25,20 +27,38 @@ risk = "medium"
 [[entry]]
 id = 3
 type = "story"
-title = "Encoding, labels and signatures in Rust and TypeScript"
-description = "Implements enc(), the ade-remote/v1 labels and Ed25519 signing in relay/protocol and packages/protocol against shared vectors."
-verify = "Both languages pass the same vectors, and a signature made under one label fails under every other."
+title = "Encoding, labels, signatures, seals and QR codes in Rust and TypeScript"
+description = '''Implements in relay/protocol (Rust) and packages/protocol (TypeScript), against shared vectors in packages/protocol/vectors/: enc() and every ade-remote/v1/ label; Ed25519 signing and checking over enc(); the pairing seals (HKDF-SHA256 for k_pm and k_mp, XChaCha20-Poly1305 with a random 24-byte nonce) and the 6-digit SAS code; the ade-pair://v1 QR builder and parser; and the Names procedure (fixed removal list, trims, cut to 40 code points, trim again) with the percent-decoding of n to bytes and UTF-8 decoding with each invalid sequence replaced by U+FFFD.
+Acceptance, each a shared vector run in both languages unless stated:
+(1) enc, each label, signatures, seals and the SAS code match the vectors; a different phone key gives a different SAS code.
+(2) A signature or seal made under one label fails under every other label.
+(3) Every QR case in the spec's "Protocol vectors" list parses to the stated result: n with non-ASCII text and reserved characters; over 40 code points; control and bidi-override characters; whitespace the cut leaves at the end; cleaning to empty (n left out, so the phone says "Mac"); Hangul fillers; tag characters; invalid UTF-8 (n=%FF and a cut-off sequence); a malformed % escape (counts as missing); n missing (valid; "Mac").
+(4) The name cleaning cases give the same output in both languages.
+(5) The parser refuses any scheme other than wss://.
+(6) The builder cleans the name before writing n, and parsing the built code gives back the cleaned name.
+Scope note: the Mac's and the phone's use of these (H over the raw name bytes, the step 8 checks) is story 5's; the app's use is story 12's.
+Known uncertainty: the QR and Names vectors moved here from story 5 so that both languages and both apps share one implementation.'''
+verify = "The approved verification command passes; the shared vectors pass in Rust and in TypeScript, including every QR and Names case; a signature or seal made under one label fails under every other label."
 covers = []
 after = [1]
 hitl = false
-risk = "low"
+risk = "medium"
 
 [[entry]]
 id = 4
 type = "story"
 title = "Noise IK sessions in Rust and TypeScript"
-description = "Adds Noise_IK_25519_ChaChaPoly_SHA256 with the spec's prologue, hs1 counter, empty hs2, session ids, explicit nonces and rehandshake rules on both sides."
-verify = "The cacophony IK vectors and Rust-TypeScript cross vectors pass, and the replay, gap, other-session and no-loop tests pass."
+description = '''Adds Noise_IK_25519_ChaChaPoly_SHA256 with the prologue enc("ade-remote/v1/noise", I_M, I_P), the phone as initiator, hs1 (an 8-byte counter payload and nothing else), an empty hs2, transport frames (8-byte session id, u64be nonce, ciphertext) with explicit nonces, and the rehandshake rules, on the Mac (snow) and the phone (TypeScript on @noble).
+Acceptance:
+(1) The cacophony IK vectors and the Rust-TypeScript cross vectors pass.
+(2) hs1 counters are kept by identity keys, not by pair or relay: the Mac refuses an hs1 not above the last value it accepted from that phone, kept per (Mac identity key, phone identity key) in an injected store; the phone sends max(now_ms, last_sent + 1), with last_sent kept per Mac identity key.
+(3) Spec "Pairing" tests against the in-memory store: hs1 counters carry over a re-pair; an hs1 from before an unpair, or recorded on another relay, is refused; one phone paired with two Macs keeps a separate counter per Mac.
+(4) Spec "Sessions" tests: a replayed hs1 is refused; a phone clock set back, or skewed against the Mac's, still connects; frames still in flight from an old session don't start a handshake loop; a remote static that differs from the paired S_P is refused (the pair lookup is an injected trait; pair records come in story 5); the Mac asks for a handshake when it has no session; a dropped frame doesn't break the session; two handshakes at once leave the newest.
+(5) Frames for any session other than the current one are dropped silently; a frame that fails to open restarts the session; each side restarts at most once every 10 s; the phone starts a handshake on welcome or presence showing its Mac online, on foreground, on rehandshake, and after 24 h or 2^32 frames.
+(6) A receiver accepts only a nonce above the last one it accepted; gaps are accepted.
+(7) A plaintext over 60,000 bytes is rejected before sealing.
+Known uncertainty: persisting the counters is story 8 (Mac) and story 12 (phone); this story proves the rule against an in-memory store.'''
+verify = "The approved verification command passes; the cacophony IK and Rust-TypeScript cross vectors pass; the replay, gap, other-session, no-loop, static-key and hs1 keying tests pass."
 covers = []
 after = [3]
 hitl = false
@@ -48,10 +68,25 @@ risk = "high"
 id = 5
 type = "story"
 title = "Pairing in Rust and TypeScript"
-description = "Implements commit-then-reveal pairing, the 6-digit code, pair records, pending pairs, unpair and two-way welcome reconciliation, end to end through the relay."
-verify = "An e2e test pairs the CLI with core's Mac side, and every refusal and reconciliation case in the spec's pairing tests passes."
+description = '''Implements commit-then-reveal pairing, the slot state machine, pending pairs, cancel, discard, unpair, pairing again and welcome reconciliation, end to end through the relay: the relay's slot handling and the Mac side in Rust (relay/core, relay/server, src-tauri via core), the CLI as the Rust test phone, and the phone side in packages/protocol (TypeScript). Uses story 3's seals, SAS and QR parser, story 4's sessions and story 7's pairs table with its acked column. Each item below is a test named after its line in the spec's "Verification > Tests > Pairing" list.
+(A) Steps 1 to 8 of "Pairing: commit, then reveal": the right secret pairs; nothing pairs without the user's confirm; the phone refuses a paired record naming other keys, or Mac keys or a slot that differ from the QR code; the phone computes pair_id itself and sends paired_ack; the relay marks the pair acked.
+(B) Refusals, each answered pair_refused with its reason and storing nothing: a wrong secret; an expired slot; a second commit; a reveal that doesn't match its commit; a bad sig_P; a bad sig_M.
+(C) Reasons, each in its own case: unknown (never opened; after a relay restart; after the 1-hour record lapses); expired; taken; cancelled; declined; disconnected; unpaired. The relay keeps an ended slot's id, reason and parties for 1 hour.
+(D) Party rule: a third device's nonce, reveal or confirm gets pair_refused unknown, and its abort, status or decline gets pair_state ended unknown, leaving the slot as it was; a second phone's commit gets taken; a fresh commit to a committed slot that has since expired gets expired.
+(E) Lifetime: 300 s from slot until the first commit, then 300 s from the commit; ttl_s is in the delivered pair_commit and pair_nonce, and both sides count from it; a slot committed just before it runs out lasts 300 s from the commit; expiry sends pair_ended to both and refuses a later confirm.
+(F) Disconnects: either side disconnecting before the reveal ends the slot and the other side gets pair_ended disconnected; a commit while the Mac is offline is refused; a disconnect after the reveal doesn't end the slot and the Mac confirms after reconnecting; a new slot_open ends the Mac's previous slot as cancelled and sends pair_ended to its committed phone.
+(G) Abort and decline: ADE closing its view after the reveal declines; closing it before the reveal aborts; ADE reconnecting with no reveal sends pair_abort for the old slot, then opens a new one, and the phone learns at once; the phone aborts on Cancel and 30 s after its commit with no pair_nonce; pair_abort and pair_decline always get pair_state, including when a confirm won (paired or pair_confirmed first) and after a relay restart (pairs table first); a lost abort or decline is re-sent after each welcome until pair_state answers; a cancelled phone whose slot is still open ends it by re-sending its abort; a pair_abort sent within 5 s of a pair_status is re-sent after retry_ms and takes effect.
+(H) Confirm: a repeated identical pair_confirm gets pair_confirmed again, also after the slot has gone; a refused confirm means the relay holds no such pair, and the Mac drops its pending pair; the Mac saves its pending pair before sending pair_confirm; a pair_confirm lost on a dying socket is re-sent after the reconnect and pairs before the slot runs out.
+(I) Pending pairs: the phone saves its pending pair when it sends the reveal (6 digits, relay URL, slot, I_M, S_M, Mac name) and wipes s, k_pm, k_mp and N_P once the reveal is sent; it survives an app relaunch with its 6 digits; the phone promotes on a paired that passes step 8 and the Mac on pair_confirmed; a welcome listing a pair the Mac holds as pending completes it on the Mac; the phone neither unpairs nor promotes a welcome pair it cannot match; a paired the phone cannot match is not acked and is unpaired at the first welcome with no pending pair; a phone clock stepped forward or back changes nothing; pending pairs are dropped only on the relay's answer (pair_state ended, pair_ended, pair_declined, a refused reveal or confirm, or pair_state paired after the paired failed the checks); a pending pair on a live connection is settled by pair_status: open, paired (the paired re-sent first) or ended after a restart; a re-sent paired before welcome is checked and acked again.
+(J) Cancel and discard: a cancel before the reveal, and one after it, each tell the Mac and leave no pair; a cancel that the Mac's confirm beat, and one made offline, end in the phone's unpair, with no push to that phone before it; a pending pair discarded on the phone is kept hidden with its cancelled mark and unpaired at once if a paired arrives later; a pending pair discarded on the Mac queues an unpair and stops confirm re-sends, and the unpair is sent when the relay answers again.
+(K) Unpair and welcome: unpair works from either side; a replayed old unpair leaves a newer pair alone; the user's Unpair covers every pair with that peer (ADE sends one unpair per pair it holds and discards its pending pairs with that phone; the phone sends its pair and each replaced id, and drops those records; all queue while offline); welcome reconciles both ways, a removed pair going silently when another pair with that key remains; two identities sharing one state file each keep their own pairs; a phone paired on two relays keeps both after a welcome from one.
+(L) Pairing again: at most one acked pair per Mac key and phone key; the old pair stays until the phone's paired_ack; that ack makes the relay delete the old pair and send pair_replaced to each online side, never unpair; an offline side catches up silently through welcome; a declined, expired or cancelled second attempt, or a new paired that fails its checks, leaves the old pair working, its session live and nothing shown; a re-pair whose ack was lost, then unpaired from the phone's queue and separately from ADE before the phone logs in, leaves no pair and no push, and the phone drops its record; a lost ack, then ADE discarding the new pending pair: at the next login the replaced record is void and the phone restores the old pair silently, session live; a re-pair whose ack was lost after the phone dropped the old pair: the re-sent paired comes before welcome, the phone re-acks, the relay sends pair_replaced, and the phone never unpairs the old pair.
+(M) Names in the reveal: a phone name with invalid UTF-8 still pairs, with H checked over the raw bytes; the Mac decodes the name lossily, cleans it, and shows "iPhone" if it is empty; a name is never a reason to refuse.
+(N) Control messages on the client: queued unpairs and aborts are sent at no more than 10 per second at login, and each stays queued until it has gone out without control_limited; a control_limited message is re-sent after retry_ms, except push (the push rule itself is tested in story 10).
+Known uncertainty: this entry carries the whole of the spec's pairing test list and is too large for one Dev agent; a split is proposed to the owner and is not applied. Until it is decided, every item A to N must pass with its own named test.'''
+verify = "The approved verification command passes, with one named test for each item A to N; the e2e test in relay/e2e/tests/ pairs the CLI with core's Mac side and covers a refused commit, a cancel, a re-pair and a lost ack."
 covers = []
-after = [2, 4]
+after = [2, 4, 7]
 hitl = false
 risk = "high"
 
@@ -59,8 +94,19 @@ risk = "high"
 id = 6
 type = "story"
 title = "Snapshots over the session"
-description = "Adds the snapshot builder with the frame layout, padding, truncation, seq, want_snapshot, foreground expiry and the rate_limited resend in core and the CLI."
-verify = "An e2e test shows the paired CLI receiving the first snapshot and each change in seq order, the latest state after a rate-limited last frame, and the canary title never at the relay."
+description = '''Adds the snapshot builder, the Mac's snapshot sending and the foreground mode in core and the CLI test phone, with the frame layout.
+Acceptance:
+(1) The snapshot is {seq, total, truncated, tabs:[{id, title, project, state, age_s}]}. state is one of needsYou, waiting, working, ready, finished, or null for a tab with no agent; age_s is null beside a null state (the Mac always sends both fields). total counts every tab before any are left out. truncated is true only when tabs were left out.
+(2) Caps: at most 200 tabs; titles cut to 120 code points; projects cut to 80; cuts land on code-point boundaries.
+(3) Frame plaintext is u32be(len) || JSON || zero bytes, zero-padded to the next multiple of 4 KiB and never past 60,000 bytes. The JSON carries its type as "t". The vectors include one plaintext per frame type, a snapshot with a tab with no agent, a snapshot with a tab whose state is an unknown string, and a maximum-size snapshot.
+(4) Too big: the Mac drops the least urgent tabs until it fits, in this order (first dropped first): tabs with no agent, then finished, ready, working, waiting, needsYou; within a state the largest age_s first; then the largest remote id; and sets truncated.
+(5) seq rises by one per snapshot, starts at 1 in each ADE run, and survives reconnects within that run.
+(6) After a change the bridge waits 250 ms (coalescing) and sends each paired phone with a live session a full snapshot; the first snapshot follows hs2; want_snapshot is answered with a snapshot.
+(7) Foreground: the Mac treats a phone as in the background by default, when its presence is offline, or when no foreground {on:true} has arrived for 60 s. foreground {on} is accepted on change and every 30 s.
+(8) A frame refused with rate_limited is followed by a resend of the latest snapshot to that peer after retry_ms.
+(9) The CLI test phone ignores a snapshot whose seq is not above the last one it saw in the current session, and accepts a restarted seq.
+E2E in relay/e2e/tests/: the paired CLI gets the first snapshot and each change in seq order; the latest state arrives after the burst's last frame was rate-limited; a tab with no agent arrives with null state and age_s; 201 tabs give truncated true, total 201, and the least urgent tab dropped; the size limit drops tabs in the order in (4); a restarted Mac side whose seq starts again still reaches the phone. Snapshots are never stored by the Mac's relay-facing code.'''
+verify = "The approved verification command passes; the vectors in (3) pass in both languages; each e2e check named in the description passes."
 covers = []
 after = [5]
 hitl = false
@@ -70,8 +116,19 @@ risk = "medium"
 id = 7
 type = "story"
 title = "Relay storage, limits and cleanup"
-description = "Adds SQLite storage, every limit in the spec, the 90-day cleanup and the token-guarded /metrics to the relay."
-verify = "A test per limit and for the cleanup passes, and no frame bytes appear in logs or the database file."
+description = '''Adds SQLite storage, every limit in the spec, the 90-day cleanup and the token-guarded /metrics to the relay. The slot machine itself is story 5's; this story provides the storage and the limiters it uses.
+Acceptance:
+(1) Tables: devices (identity key, role, first seen, last seen); pairs (pair id, Mac key, phone key, both static keys, slot, paired at, acked); push_tokens (phone key, APNs token, environment, updated). acked is written by story 5's paired_ack handling. After a restart the pairs and acked values are still there; slots and presence are not.
+(2) Frames: 20 per second per device, bursts to 100, 64 KiB each; a refused frame is answered rate_limited {peer, retry_ms}.
+(3) Control messages: 10 per second per device, bursts to 30, checked before any lookup; an excess message is dropped unprocessed and answered control_limited {msg, slot, pair_id, retry_ms}. A pair_status flood is answered control_limited before any lookup.
+(4) Slots: 30 opened per hour per Mac, counted when opened, one open at a time; 30 fit in an hour and the 31st is refused.
+(5) New identity keys: 20 per hour per IP. Connections: one live connection per device; a new login replaces the old.
+(6) Cleanup: devices unseen for 90 days are deleted with their pairs and tokens.
+(7) /health is public; /metrics serves counts only and needs its token.
+(8) No frame or pairing content is stored or logged; logs carry counts and error codes only.
+(9) The 40 queued unpairs of a device, sent at 10 per second after a login, all reach the relay (the device-side pacing is story 5's).
+Not here: push limits (1 per 30 s per phone, 30 per hour) are story 10's; the per-slot 5 s rule for pair_status and pair_abort is story 5's.'''
+verify = "A test per limit in (2) to (5), the cleanup test, the /metrics token test, and the canary test (a string in a tab title never appears in bytes the relay received, its logs or its SQLite file) pass, under the approved verification command."
 covers = []
 after = [2]
 hitl = false
@@ -81,8 +138,18 @@ risk = "medium"
 id = 8
 type = "story"
 title = "ADE's Remote bridge"
-description = "Adds remote_tabs_set and the tab registry, the KeyStore with per-build keychain services, the remote.enabled and remote.relayUrl settings, and the bridge reading AgentStatus::current() through core."
-verify = "The spec's bridge tests pass, including two windows that both have tab-1 and a closing window."
+description = '''Adds remote_tabs_set and the tab registry, the KeyStore with per-build keychain services, the remote.enabled and remote.relayUrl settings, the bridge reading AgentStatus::current() through core, and the Mac's pairing data in ADE's app state, driven through core's Mac side.
+Acceptance:
+(1) remote_tabs_set takes (window_label, tabs); each tab is keyed by (window_label, tab_id) with an opaque random remote id; two windows that both have tab-1 stay distinct; a closing window's entries are cleared on its Destroyed event; panes roll up into their tab; PTY ids never leave the Mac.
+(2) A tab with no agent is in the registry and goes out with state null.
+(3) The bridge's sink only signals: no I/O, no lock of its own, no timer; the bridge thread reads current().
+(4) KeyStore is in memory for the tests; the dev and release keychain services differ; keys are read only while Remote is on; Remote off closes the connection and keeps the pairs.
+(5) App state holds: the Mac's pair list keyed by relay URL and the Mac's identity key; pending pairs (pair id, record fields, sig_M, sig_P, the phone's name, slot); replaced records (each old pair with the id that replaced it); queued unpairs and aborts; and the hs1 counter per (Mac identity key, phone identity key). All survive an app restart. Two identities sharing one state file each keep their own pairs.
+(6) The bridge sends a stored pair_confirm again after each welcome and every 60 s while the pair is pending (injected clock), and re-sends a lost pair_abort or pair_decline after each welcome until pair_state answers.
+(7) On reconnect with the pairing view open and no reveal received, the bridge sends pair_abort for the old slot, opens a new slot and redraws the QR (the UI is story 9's).
+(8) welcome reconciliation touches only the entries under its own relay URL and identity key.
+Spec tests: remote_tabs_set including two windows that both have tab-1 and a window closing; panes rolled up into tabs; the sink only signalling; KeyStore in memory; the dev and release services differing; Remote off closing the connection; and the state-file and re-send tests in (5) and (6).'''
+verify = "The approved verification command passes; the bridge tests above pass, including two windows that both have tab-1 and a closing window; the app-state tests show each record surviving a restart."
 covers = []
 after = [6, "epic-agent-status"]
 hitl = false
@@ -92,8 +159,17 @@ risk = "medium"
 id = 9
 type = "story"
 title = "ADE's Remote panel: pair, confirm, unpair"
-description = "Adds the Remote switch, the QR code, the confirm dialog with the 6-digit code and the paired-phones list with Unpair."
-verify = "In a dev build against a local relay, the CLI pairs after the user confirms a matching code, and unpairing from either side updates the list."
+description = '''Adds the Remote switch, the QR code, the pairing view, the confirm dialog with the 6-digit code and the paired-phones list with Unpair and Discard. Uses story 8's bridge and pair data, and story 3's QR builder and Names cleaning.
+Acceptance:
+(1) The QR code's n is the Mac's Computer Name, else the host name, cleaned by the shared procedure; if that leaves nothing, n is left out.
+(2) The confirm dialog shows the 6 digits and counts down from ttl_s as the bridge gives it. The phone's name is shown as plain text, cleaned, and as "iPhone" when empty.
+(3) Closing the view after the reveal and before the confirm sends pair_decline. Closing it after the confirm sends nothing, and the pair completes. Closing it before the reveal sends pair_abort.
+(4) pair_ended with expired closes the confirm view. The reasons taken, cancelled, declined and disconnected are shown as plain text. pair_declined closes the QR view.
+(5) pair_replaced makes the Mac drop the old pair and shows nothing about it; no "no longer paired" text is shown for it.
+(6) The paired list has one row per phone even when two pairs with it exist, and marks a pending pair as finishing. Unpair removes every pair with that phone and discards its pending pairs. Discard on a pending pair removes it from the list at once and queues its unpair.
+(7) Spec manual check, the dev part: in a dev build against a local relay, the CLI pairs after the user confirms a matching code, and unpairing from either side updates the list.
+Spec tests: the confirm-view rules in (3) (closing after confirm sends no decline and the pair completes; closing before the confirm declines); the Unpair rule in (6).'''
+verify = "In a dev build against a local relay, the CLI pairs after the user confirms a matching code, and unpairing from either side updates the list; the view-close and Unpair rules in (3) and (6) have passing tests under the approved verification command."
 covers = []
 after = [8]
 hitl = false
@@ -103,8 +179,17 @@ risk = "medium"
 id = 10
 type = "story"
 title = "Push"
-description = "Adds APNs sending through a2 with the spec's headers and token lifecycle, push_token registration and the Mac's per-tab 3-second rule with the foreground signal."
-verify = "An e2e test with a fake APNs sink passes every push rule in the spec, using an injected clock."
+description = '''Adds APNs sending through a2 in the relay with the spec's headers and token lifecycle, push_token handling, the push limits, and the Mac's per-tab 3-second rule with the foreground signal, with injected clocks. The push gate uses story 7's acked column and story 5's pairs.
+Acceptance:
+(1) Relay: APNs over HTTP/2 with token auth from Fly secrets; headers apns-topic (the bundle id), apns-push-type alert, apns-priority 10, apns-collapse-id ade-needs-you; fixed body "An agent needs you" and no custom data.
+(2) BadDeviceToken tries the other environment once and updates the record; 410 Unregistered deletes the token; push_token is accepted only from phones.
+(3) A push is sent only to a phone paired with the requesting Mac and only once that phone has acked that pair, including after a relay restart. A Mac may not push to a phone it is not paired with.
+(4) Push limits: 1 per 30 s per phone, 30 per hour. A push answered control_limited is not re-sent by the Mac.
+(5) Mac, for each tab: a 3-second timer starts when the tab becomes needs you; when it ends with the tab still needing you, the Mac sends push naming its paired phones that are in the background; leaving needs you cancels the timer; entering it again starts a new one; another pane of the same tab needing you does not start a second timer; tabs that already need you when Remote turns on do not push.
+(6) The background rule is story 6's (background by default, presence offline, or no foreground {on:true} for 60 s).
+(7) E2E in relay/e2e/tests/, with a fake APNs sink and an injected clock: the 3-second rules including re-entry and a second pane; no push while the app reports foreground; push again after the foreground signal lapses; the environment fallback; deletion on 410; no push to a phone that hasn't acked, including after a restart.
+Known uncertainty: none beyond the spec.'''
+verify = "The approved verification command passes; the e2e test with the fake APNs sink passes every push rule in (1) to (7), using an injected clock."
 covers = []
 after = [6, 7]
 hitl = false
@@ -125,8 +210,21 @@ risk = "medium"
 id = 12
 type = "story"
 title = "The minimal Expo app"
-description = "Builds the Pair, Macs, Tabs and Settings screens on packages/protocol, with keys and pairs in expo-secure-store and the random-values polyfill first."
-verify = "The jest-expo tests pass, and the app on a simulator pairs with core's Mac side through a local relay and shows its tabs."
+description = '''Builds the Pair, Macs, Tabs and Settings screens on packages/protocol, with keys and pairs in expo-secure-store (keychainAccessible WHEN_UNLOCKED_THIS_DEVICE_ONLY), the random-values polyfill imported first in the entry file, and story 3's QR parser. Screen rules are the UX spec's, referenced by path only: docs/superpowers/specs/2026-10-15-phone-app-ux.md (being revised in parallel; read it when the story starts).
+Acceptance:
+(1) Pair: scan with expo-camera; a code whose scheme is not wss:// is refused. A code for a Mac the phone already holds (same relay and I_M) asks "Already paired" and offers to pair again; the old pair stays until the new one is acked. The Mac's name from n is shown; "Mac" when n is missing. The 6 digits are shown with Cancel, which sends pair_abort; the screen waits for paired or pair_declined. The phone aborts 30 s after its commit when no pair_nonce arrives.
+(2) Pending pairs, with their 6 digits, survive a relaunch. Discard of a pending pair after the reveal is a cancel: kept hidden with its cancelled mark, sent as pair_abort now or after the next login.
+(3) Dev-only URL scheme: dev builds (EAS development profile) register ade-pair; an ade-pair:// URL starts the same flow as a scan, and one arriving mid-pairing is ignored. The release app config registers no ade-pair scheme, and the release link handler ignores such a URL (both tested). This is story 12's simulator test path only.
+(4) Macs screen: each paired Mac, online or offline from presence.
+(5) Tabs screen for one Mac: title, project, state dot in ADE's colours, and the age of the state. Tabs with state null show "No agent" and rank below finished; an unknown state shows "Unknown" and the rest of the snapshot is used. A snapshot whose seq is not above the last one seen in this session is ignored. A non-null age_s beside a null state is ignored.
+(6) Pull to refresh sends want_snapshot; so does coming to the foreground and every 60 s while there. foreground {on} is sent on change and every 30 s while on.
+(7) Snapshots are kept in memory only: nothing from a snapshot is written to storage, logs or a notification.
+(8) Pending pairs send pair_status after each welcome and every 60 s; cancelled ones send pair_abort. Recorded replaced ids are kept hidden and dropped by story 5's rules.
+(9) Settings: Unpair removes every pair with that Mac, discards its pending pairs and queues the unpairs; the app version is shown.
+(10) The QR parse uses the shared parser from story 3 and never decodeURIComponent, so a malformed % escape in n counts as missing.
+(11) crypto.getRandomValues comes from the polyfill, imported before any @noble module.
+Known uncertainty: this story is too large for one Dev agent (screens, pair store, snapshots and the dev scheme); a split is proposed to the owner and is not applied.'''
+verify = "The jest-expo tests for (1) to (11) pass under the approved verification command, and on a simulator a dev build pairs with core's Mac side through a local relay and shows its tabs, including No agent and Unknown rows."
 covers = []
 after = [5, 6]
 hitl = false
@@ -136,8 +234,15 @@ risk = "high"
 id = 13
 type = "story"
 title = "Push on the phone and the TestFlight build"
-description = "Adds expo-notifications with the build-time APNs environment and the token on each launch, and builds and submits with EAS to TestFlight."
-verify = "The TestFlight build installs on the owner's iPhone and receives a push through the Fly relay."
+description = '''Adds expo-notifications with its config plugin and the build-time APNs environment, the token on each launch, the foreground handling, and builds and submits with EAS to TestFlight.
+Acceptance:
+(1) Permission is asked after the first successful pairing.
+(2) push_token {token, env} is sent on every launch; env is a build-time constant from the EAS profile: production for TestFlight and store builds, sandbox for development builds.
+(3) A push that arrives while the app is open shows no banner and plays no sound, and sends want_snapshot to each Mac with a session (notification handler test).
+(4) Tapping the notification opens the app, which connects and handshakes. The notification has the fixed body "An agent needs you" and no custom data.
+(5) EAS builds and submits the app to TestFlight; no analytics and no crash reporter that could capture content.
+Moved here from story 12: the foreground handler needs expo-notifications, which this story adds.'''
+verify = "The jest tests for (1) to (4) pass under the approved verification command, and the TestFlight build installs on the owner's iPhone and receives a push through the Fly relay."
 covers = []
 after = [10, 11, 12]
 hitl = true

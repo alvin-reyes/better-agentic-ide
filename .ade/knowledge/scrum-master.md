@@ -1,0 +1,1 @@
+- 2026-10-15: The phone-remote epics keep their stories as `[[entry]]` rows in `tickets.toml` with no pulled files; the full acceptance criteria go inline in `description` and `verify` (TOML literal strings `'''`), because a `bmad-build-auto` run gets only the entry. `tickets.py status` on the epic is the check.
