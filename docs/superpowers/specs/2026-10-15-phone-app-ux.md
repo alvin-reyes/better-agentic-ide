@@ -74,9 +74,10 @@ lightened from the sketch's `#5A616D` to pass 3:1.
 
 A single stack (`expo-router`), with Pair as a modal once a Mac is listed.
 
-**Entries** are the Macs the app lists: each paired Mac once, plus each
-pending pair with a Mac it holds no pair with. A pending re-pair of a paired
-Mac is not a separate entry (see Pairing again).
+**Entries** are the Macs the app lists, one per Mac key: each paired Mac,
+plus each Mac the phone holds only a pending pair with. A pending re-pair of
+a paired Mac is not a separate entry (see Already paired), and neither is a
+second pending attempt with the same Mac (see Pairings off screen).
 
 ```
 Launch (cold start, including from a notification)
@@ -99,7 +100,7 @@ Mac it is about.
 - **Warm start** (the app was in the background) keeps the current screen,
   which reconnects and refreshes like any return to the foreground. Macs
   shows each Mac's needs-you count once its session is live.
-- **In the foreground**, a push shows no banner and plays no sound; the app
+- **In the foreground [S13]**, a push shows no banner and plays no sound; the app
   sends `want_snapshot` to each Mac with a session (the spec's rule), and the
   open screen updates.
 
@@ -118,11 +119,12 @@ left.
 |---|---|
 | Camera not yet asked | iOS asks as the screen opens. Purpose string: "ADE Remote uses the camera to scan the pairing code ADE shows on your Mac." |
 | Camera denied or restricted | The frame shows "Camera access is off" / "Turn it on in Settings to scan the pairing code." with **Open Settings** (`Linking.openSettings`). No manual entry: the code carries keys. |
-| Not a pairing code | Under the frame, in `danger`: "This isn't an ADE pairing code." Covers another scheme, a missing or malformed field and an unreadable QR. Scanning continues; it clears after 4 s or on the next scan. |
+| Not a pairing code | Under the frame, in `danger`: "This isn't an ADE pairing code." Covers another scheme, a missing or malformed required field and an unreadable QR. `n` is exempt: missing, or with a malformed `%` escape, it counts as missing and the code stays valid (the spec's rule). Scanning continues; it clears after 4 s or on the next scan. |
 | Relay not `wss://` | Same place: "This code points at an insecure relay. ADE Remote only connects over wss://." |
 | Newer code version | `ade-pair://v2` or later: "This code is from a newer ADE. Update ADE Remote in TestFlight to pair." |
 | The code just refused | During one visit to this screen, the code whose pairing just failed is ignored if scanned again, with the hint "That code can't be used. Wait for a new one on your Mac." |
 | Mac already paired | The code's relay and Mac key match a pair the phone holds: go to Already paired. |
+| Mac with only a pending pair | No question: go to Pair: code. The new attempt takes over that Mac's one entry; the older one carries on hidden (see Pairings off screen). |
 | Valid code | Scanning stops; go to Pair: code. One code is read once. |
 
 **Dev builds only:** an `ade-pair://` URL (for example from
@@ -140,7 +142,8 @@ working." **Pair again** (go to Pair: code) and **Cancel** (back to scan).
 The old pair stays until the phone acks the new one; the replacement
 (`pair_replaced`) is silent. A pairing again that fails, is declined or is
 stopped leaves the old pair working, and shows only the attempt's own
-ending screen. The Mac's name updates to the new code's `n`.
+ending screen. The Mac's name updates to the new code's `n` only when the
+new pair is acked; a re-pair that fails keeps the old name.
 
 ### 3. Pair: code
 
@@ -158,7 +161,7 @@ left (leave the screen; the pending pair keeps going, shown in Macs) and
 | State | What the user sees |
 |---|---|
 | Connecting | Until `pair_nonce`: a spinner and "Reaching your Mac…". Bounded: 30 s after the commit with no `pair_nonce` the phone aborts and shows "Your Mac didn't answer". |
-| Waiting for confirm | Digits; "Waiting for you to confirm on the Mac"; under it "Code expires in 4:12", counted down from the `ttl_s` in `pair_nonce`. At 0:00 it reads "Waiting for the relay's answer" until `pair_ended` arrives. VoiceOver: "Code 4 8 2, 9 1 7. Confirm on your Mac if it matches." |
+| Waiting for confirm | Digits; "Waiting for you to confirm on the Mac"; under it "Code expires in 4:12", counted down from the `ttl_s` in `pair_nonce` with the same wall clock as ages (`Date.now()` since `pair_nonce` arrived, never negative). At 0:00 it reads "Waiting for the relay's answer" until `pair_ended` arrives. The countdown is not a live region; VoiceOver reads it only on focus. VoiceOver on arrival: "Code 4 8 2, 9 1 7. Confirm on your Mac if it matches." |
 | Can't reach the relay | The phone's connection drops after the digits. The digits stay; status "Can't reach the relay. Reconnecting…"; body "Your pairing is saved. If you confirm on the Mac, it finishes when this phone reconnects." It stays here, unbounded by design, until the relay answers or the user stops it. |
 | Paired | A `paired` that passes the spec's step-8 checks: a check mark, "Paired with *Mac name*", announced to VoiceOver, then after 1 s the next screen. |
 | Ended | Any ending in the table below: its title and body, and **Scan again**. |
@@ -184,7 +187,8 @@ The phone's own connection dropping before the digits is `disconnected` (the
 spec's disconnect rule); the phone shows it at once.
 
 **Stop pairing** (any time, from this screen, Finishing pairing or Settings,
-no confirmation). Before the reveal: the phone sends `pair_abort` and nothing
+no confirmation). It is a `danger` text button at the bottom of the screen,
+apart from Close at the top left, so the two aren't confused. Before the reveal: the phone sends `pair_abort` and nothing
 is stored. After it: the pending pair leaves every list at once and is kept,
 hidden, marked cancelled; a late `paired` for it is unpaired at once (the
 spec's cancel rule). Back to scan, or to Macs if the screen was reopened.
@@ -200,15 +204,39 @@ too when the name cleans to empty.
 ### 4. Finishing pairing
 
 What a pending pair shows when reopened from Macs or Settings, including
-after a relaunch. Back (Close), title "Finishing pairing", "with *Mac
-name*", the stored digits, and one status line from the last answer:
+after a relaunch. Close (top left), title "Finishing pairing", the stored
+digits with "with *Mac name*" under them, and one status line from the last
+answer:
 - slot open: "Confirm on your Mac if the codes match.";
 - no connection: "Can't reach the relay. It finishes when this phone
   reconnects.";
 - asking: "Checking with the relay…".
 
-**Stop pairing** at the bottom. A `paired` or an ending replaces the screen
-as on Pair: code.
+**Stop pairing** at the bottom. A `paired` or an ending for this attempt
+replaces the screen as on Pair: code. No expiry is shown here: `ttl_s` isn't
+stored, so after a relaunch the phone doesn't know it.
+
+### Pairings off screen
+
+Every pairing message names its slot, and the app applies it to that
+attempt only. An attempt is **on screen** while its Pair: code or Finishing
+pairing screen is the top screen; only then do its endings and `paired`
+change what is shown, as above. Otherwise:
+
+| What arrives | What the user sees |
+|---|---|
+| An ending, for a first pairing | The row leaves Macs and Settings. A non-modal notice at the top of whatever screen is open, for 6 s or until tapped: "Pairing with *Mac name* didn't finish: *title from the endings table*." VoiceOver announces it. |
+| An ending, for a re-pair | The attempt leaves Settings. Notice: "Pairing again with *Mac name* didn't finish. The current pairing still works." |
+| `cancelled`, while a newer attempt with the same Mac exists | Silent: ADE opened a new code, and that attempt is the one that matters. This is how closing attempt A and scanning B from the same Mac ends: A's ending never touches B's screen. |
+| An ending of an attempt this phone stopped | Silent. |
+| `paired` that passes the checks, first pairing | The pending row becomes an ordinary row in place, and a notice: "Paired with *Mac name*." No navigation. |
+| `paired`, re-pair | Silent; the name updates (see Already paired). |
+| `paired` for an older attempt with a Mac whose newer attempt is on screen | The Mac is now paired; the attempt on screen carries on as a re-pair, and its success replaces the older pair silently. |
+
+**Notifications [S13] after a pairing off screen.** If the first pairing
+ever completes off screen (or while the app wasn't running), the
+Notifications screen is shown once, as a sheet, the first time a Tabs screen
+opens afterwards.
 
 ### 5. Notifications [S13]
 
@@ -217,7 +245,8 @@ spent only when the user wants it (the spec asks after the first pairing).
 Title "Know when an agent needs you". Body: "Get a notification when an
 agent on your Mac needs your answer. It says only 'An agent needs you',
 never which tab or what it's doing." **Turn on notifications** (the iOS
-prompt) and **Not now**. Either leads to Tabs for the new Mac.
+prompt) and **Not now**. On screen, either leads to Tabs for the new Mac; as
+a sheet (see Pairings off screen), either closes it.
 
 ### 6. Macs
 
@@ -233,7 +262,7 @@ a chevron.
 | Online (session live, a snapshot this session) | green dot, "Online" | yes | Tabs |
 | Connecting (relay or handshake under way, or no snapshot yet this session) | spinner, "Connecting…" | no | Tabs |
 | Offline (presence offline) | hollow ring, "Offline" | no | Tabs |
-| Pending | spinner, "Finishing pairing" | no | Finishing pairing |
+| Pending | spinner, "Finishing pairing" | no | Finishing pairing (the newest attempt with that Mac) |
 
 - **The count** is the number of tabs that need you, from a snapshot of the
   current session only, shown only when above 0: red dot with halo and
@@ -281,7 +310,7 @@ VoiceOver reads the full text.
 | Connecting, nothing in memory | Status "Connecting…" with spinner; the list area says "Loading tabs…". |
 | Connecting or offline, earlier snapshot in memory | **Past tense.** The list stays; status "Connecting… · last update 3 min ago" or "Offline · last update 3 min ago"; ages freeze at the last update; the banner reads "Last seen: 1 tab needed you" on `card`. A new snapshot returns to live. |
 | Online | As above. A new snapshot re-sorts the list in place. |
-| Pull to refresh | Sends `want_snapshot`; the spinner stops on the next snapshot. With no session but the Mac online, it starts a handshake at once. Either way after 10 s with no snapshot: "Couldn't refresh. Showing the last update from 2 min ago." (or "Couldn't reach *Mac name*." with nothing in memory). With the Mac offline the spinner stops at once. |
+| Pull to refresh | Sends `want_snapshot`; the spinner stops on the next snapshot. With no session but the Mac online, it starts a handshake, within the spec's limit of one restart per 10 s (if one was just made, it waits for that one). Either way after 10 s with no snapshot: "Couldn't refresh. Showing the last update from 2 min ago." (or "Couldn't reach *Mac name*." with nothing in memory). With the Mac offline the spinner stops at once. |
 | No tabs | `total` 0: "No tabs open" / "Tabs open in ADE on this Mac appear here." |
 | Truncated | `truncated: true`: status "Online · 200 of 312 tabs" and a last row "Showing 200 of 312 tabs. The least urgent are left out." (counts from the tab list and `total`). |
 | Offline, nothing in memory | "*Mac name* is offline" / "It appears here when ADE is running with Remote on. It may be closed, asleep or offline." |
@@ -308,16 +337,16 @@ name, or "Pair"), title "Settings", then three groups.
 **Unpair.** An action sheet: "Unpair *Mac name*?" / "This phone stops seeing
 its tabs and getting its notifications. To watch it again, pair from ADE."
 **Unpair** (destructive) and Cancel. It removes every pair the phone holds
-with that Mac (the spec's rule) and stops any pairing under way with it (see
-Open question 1). It takes effect on the phone at once; offline it is
+with that Mac and stops any pairing under way with it (the spec's rule). It takes effect on the phone at once; offline it is
 queued. Settings stays open with the list updated, and any Tabs screen for
 that Mac is removed from the stack, so Back leads to Macs. If no entries
 remain, the app goes to Pair (root).
 
 **Privacy note**, as the spec's Known limits require: "Tab titles and
 states are encrypted end to end; the relay can't read them. It can see
-your IP address, when your devices connect, which devices are paired, and
-the size and timing of updates, which shows when your tabs are busy. It
+your IP address, when your devices connect, which devices are paired, the
+size and timing of updates, which shows when your tabs are busy, and when a
+notification is sent, which shows when an agent needs you. It
 stores this phone's notification token so it can send notifications, which
 Apple delivers; a notification says only 'An agent needs you'. ADE Remote
 has no analytics and no crash reporter of its own. As a TestFlight build,
@@ -370,7 +399,5 @@ include a screenshot."
 
 ## Open questions for the owner
 
-1. **Unpair and a pairing under way.** ADE's Unpair discards a pending pair
-   with that phone; the spec doesn't say the same for the phone. This design
-   has the phone's Unpair also stop (cancel) a pending re-pair with that
-   Mac, so the user isn't paired again a moment later. Confirm.
+None. (The phone's Unpair also stopping a pending re-pair with that Mac is
+being added to the 2a spec, owner, 2026-10-15.)
