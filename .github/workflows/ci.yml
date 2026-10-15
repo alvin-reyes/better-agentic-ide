@@ -147,6 +147,58 @@ jobs:
         working-directory: src-tauri
         run: cargo test --locked
 
+  # The phone remote's relay: a separate Cargo workspace from src-tauri.
+  relay:
+    name: Relay (cargo test)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: relay -> target
+
+      - name: Tests
+        working-directory: relay
+        run: cargo test --locked
+
+  # The phone app. Only mobile/ is installed, as on EAS, so @ade/protocol's
+  # @noble peers have to resolve from mobile/node_modules for every step.
+  mobile:
+    name: Mobile (typecheck, test, export)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        working-directory: mobile
+        run: npx jest
+
+      - name: Bundle for iOS
+        working-directory: mobile
+        run: npx expo export --platform ios
+
   # The PowerShell installer cannot be executed on a developer Mac: the only
   # PowerShell container images are amd64, and qemu crashes running them under
   # Rosetta. So a real Windows runner checks it instead of nobody checking it.

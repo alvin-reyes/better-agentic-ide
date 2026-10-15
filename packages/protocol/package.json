@@ -1,0 +1,13 @@
+{
+  "name": "@ade/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ADE's phone-remote protocol and Noise IK, shared by the app and the tests",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": {
+    "@noble/ciphers": "^1.3.0",
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "ADE Remote",
+    "slug": "ade-remote",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.betterterminal.remote",
+      "supportsTablet": false
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bed1e40e-5ef1-4f9e-a435-be75d1d46502"
+      }
+    },
+    "owner": "areyesonl"
+  }
+}

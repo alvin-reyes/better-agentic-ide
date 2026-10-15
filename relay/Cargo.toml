@@ -1,0 +1,10 @@
+# A virtual workspace: it has no root package, so it builds no tests of its
+# own. The end-to-end test lives in the `e2e` package for that reason.
+[workspace]
+resolver = "2"
+members = ["protocol", "core", "server", "cli", "e2e"]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+publish = false

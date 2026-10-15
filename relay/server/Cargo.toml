@@ -1,0 +1,12 @@
+[package]
+name = "relay-server"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "relay-server"
+path = "src/main.rs"
+
+[dependencies]
+relay-core = { path = "../core" }

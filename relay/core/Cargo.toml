@@ -1,0 +1,12 @@
+# Named relay-core because `core` is Rust's own built-in crate.
+[package]
+name = "relay-core"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "relay_core"
+
+[dependencies]
+relay-protocol = { path = "../protocol" }

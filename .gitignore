@@ -16,3 +16,11 @@ src-tauri/gen/
 .claude/settings.local.json
 # The Agent status helper, copied here by the release workflow before `tauri build`.
 src-tauri/binaries/
+# The relay's own Cargo workspace.
+relay/target/
+# Expo outputs; ios/ and android/ come from prebuild and are not committed.
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+mobile/expo-env.d.ts
