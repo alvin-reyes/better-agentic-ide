@@ -210,12 +210,13 @@ The device reconciles with `welcome`, in both directions:
   `unpair {pair_id}` at once. This covers an unpair the user made while this
   device couldn't reach the relay. The one exception is on the phone: an
   old pair it dropped when it acked a replacement is recorded as replaced,
-  together with the id of the pair that replaced it. While the phone still
+  kept whole (hidden) together with the id of the pair that replaced it. While the phone still
   holds that replacing pair, the old one is waiting for the relay to
   replace it (the ack was lost), and the phone leaves it alone. Once the
   phone no longer holds the replacing pair (it was unpaired, on either
-  side), the record is void: the phone sends `unpair` for the old id and
-  drops the record. The phone handles `welcome`'s removals first, so a
+  side), the record is void. If the relay still lists the old pair, the
+  phone restores it, silently, so undoing a second attempt keeps the first
+  even after a lost ack; otherwise it drops the record. The phone handles `welcome`'s removals first, so a
   replacing pair unpaired while the phone was offline voids the record in
   the same `welcome`. The record is also dropped when `pair_replaced`
   arrives or a `welcome` no longer lists the old pair.
@@ -447,7 +448,9 @@ pairing.
     unpaired at once.
   - ADE stops re-sending its confirm and queues `unpair {pair_id}`.
 
-  Either is sent if the relay ever answers again.
+  Either is sent if the relay ever answers again. A discarded pair for a
+  relay that never returns is kept, hidden, indefinitely; each is a few
+  hundred bytes.
 - **Cancel on the phone.** Before the reveal nothing is stored; the phone
   sends `pair_abort` if connected, and otherwise the disconnect rule ends the
   slot. After the reveal the phone marks the pending pair cancelled and
@@ -468,8 +471,8 @@ both sides, until the phone acks the new one. On that `paired_ack` the
 relay deletes the old pair in the same step and sends each online side
 `pair_replaced {old_pair_id, pair_id}`, never `unpair`, so neither shows "no
 longer paired".
-- The phone drops its old pair when it sends the ack, recording its id as
-  replaced (see `welcome`), and the Mac drops it when it gets
+- The phone drops its old pair when it sends the ack, keeping it hidden as
+  a replaced record (see `welcome`), and the Mac drops it when it gets
   `pair_replaced`.
 - An offline side catches up through `welcome`, whose rules cover both
   directions: a removed pair with another pair left for that peer key goes
@@ -542,8 +545,9 @@ unpair can't remove a newer pair.
 - **The user's Unpair covers every pair with that peer.** ADE, which may
   briefly hold two pairs with one phone, sends `unpair` for each. The phone
   sends it for its pair with that Mac and for every id it recorded as
-  replaced by it, and drops those records. All of them go in the queue if
-  the device is offline.
+  replaced by it, and drops those records. ADE also discards any pending
+  pair with that phone, which stops its confirm re-sends. All of these go
+  in the queue if the device is offline.
 - **Unpairs the protocol makes** (a cancelled pairing, a pair that failed
   its checks, `welcome` reconciliation) name one pair only, so undoing a
   second attempt leaves the first.
@@ -680,8 +684,8 @@ relay's pairs. Keys and the pair list live in `expo-secure-store` with
 another device through a backup. Keys and pairs share that store, so they
 survive or vanish together, and `welcome` corrects anything stale. The same
 store holds each pair's Mac name, pending pairs (with their 6 digits and
-cancelled mark), pair ids recorded as replaced (each with the id that replaced it), the queued unpairs and
-aborts, and the `hs1` counters, one
+cancelled mark), replaced records (each old pair with the id that replaced it), the queued
+unpairs and aborts, and the `hs1` counters, one
 per Mac identity key whatever the relay. Snapshots are never
 stored (see Snapshots).
 `react-native-get-random-values` is imported first in the app's entry file,
@@ -711,11 +715,15 @@ before any `@noble` module, so Hermes has `crypto.getRandomValues`.
 Frames over their limit get `rate_limited {peer, retry_ms}`, and control
 messages over theirs get `control_limited`, so the two are never confused.
 A device re-sends any control message named in a `control_limited` after
-`retry_ms`, whatever its kind: so a Cancel tapped just after the automatic
+`retry_ms`, except `push`: a dropped push is not re-sent, because the tab
+may no longer need you, and the next needs-you change starts a new timer.
+So a Cancel tapped just after the automatic
 `pair_status`, or ADE's abort or decline, is delayed by seconds, not lost.
 At login a device sends its queued unpairs and aborts at no more than 10
 per second, and keeps each queued until it has gone out without a
-`control_limited`.
+`control_limited`. `unpair` has no acknowledgement, so one lost on a dying
+socket is recovered by the next `welcome`: the relay still lists the pair,
+and the device unpairs it again.
 
 | What | Limit |
 |---|---|
@@ -956,6 +964,14 @@ story also proves:
     unpaired (from the phone's queue, and separately from ADE) before the
     phone logs in: at that login the phone unpairs the old pair and drops
     its record, and no pair remains and no push reaches the phone;
+  - a lost `paired_ack`, then ADE discarding the new pending pair: at the
+    phone's next login its replaced record is void, the relay still lists
+    the old pair, and the phone restores it, with the session live and
+    nothing shown;
+  - ADE's Unpair of a phone with a pending pair to it discards that pair
+    and stops the confirm re-sends;
+  - a `push` answered `control_limited` is not re-sent;
+  - an `unpair` lost on the socket is sent again at the next `welcome`;
   - ADE's Unpair while it holds two pairs with one phone removes both, and
     the phone's Unpair also removes the ids it recorded as replaced;
   - a pending pair discarded on the phone, then confirmed on the Mac, is
