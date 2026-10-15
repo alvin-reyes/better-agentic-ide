@@ -193,7 +193,8 @@ no confirmation). It is a `danger` text button at the bottom of the screen,
 apart from Close at the top left, so the two aren't confused. Before the reveal: the phone sends `pair_abort` and nothing
 is stored. After it: the pending pair leaves every list at once and is kept,
 hidden, marked cancelled; a late `paired` for it is unpaired at once (the
-spec's cancel rule). Back to scan, or to Macs if the screen was reopened.
+spec's cancel rule). Back to scan, or to Macs if the screen was reopened, or
+to Pair (root) if no entries remain.
 
 **Device name** sent to the Mac: `expo-device`'s `deviceName`, cleaned by the
 spec's Names rule (40 code points). On iOS 16 and later this is the model
@@ -227,13 +228,19 @@ change what is shown, as above. Otherwise:
 
 | What arrives | What the user sees |
 |---|---|
-| An ending, for a first pairing | The row leaves Macs and Settings. A non-modal notice at the top of whatever screen is open, for 6 s or until tapped: "Pairing with *Mac name* didn't finish: *title from the endings table*." VoiceOver announces it. |
+| An ending, for a first pairing | The row leaves Macs and Settings; if it was the only entry, the app goes to Pair (root), as after Unpair. A non-modal notice at the top of whatever screen is open, for 6 s or until tapped: "Pairing with *Mac name* didn't finish: *title from the endings table*." VoiceOver announces it. |
 | An ending, for a re-pair | The attempt leaves Settings. Notice: "Pairing again with *Mac name* didn't finish. The current pairing still works." |
-| `cancelled`, while a newer attempt with the same Mac exists | Silent: ADE opened a new code, and that attempt is the one that matters. This is how closing attempt A and scanning B from the same Mac ends: A's ending never touches B's screen. |
+| Any ending of an older attempt, while a newer attempt with the same Mac exists | Silent, whatever the reason: the newer attempt is the one that matters. This is how closing attempt A and scanning B from the same Mac ends: A's ending never touches B's screen. |
 | An ending of an attempt this phone stopped | Silent. |
 | `paired` that passes the checks, first pairing | The pending row becomes an ordinary row in place, and a notice: "Paired with *Mac name*." No navigation. |
 | `paired`, re-pair | Silent; the name updates (see Already paired). |
 | `paired` for an older attempt with a Mac whose newer attempt is on screen | The Mac is now paired; the attempt on screen carries on as a re-pair, and its success replaces the older pair silently. |
+
+**Known edge case: one Mac key on two relays** (ADE pointed at another relay
+and paired again). It is still one entry, by Mac key. Tabs and the count
+show the session on the relay of the most recently paired pair; the other
+pair stays and its pushes still arrive. Unpair removes the pairs on both
+relays.
 
 **Notifications [S13] after a pairing off screen.** If the first pairing
 ever completes off screen (or while the app wasn't running), the
