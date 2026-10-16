@@ -187,6 +187,19 @@ Each names the test that covers it; the developer writes it failing first.
 - Open the agent picker: pills and badges neutral; tiles bordered in role colors.
 - In a new project set up by ADE, delegate to `qa` in Claude Code: it shows in yellow.
 
+**Results (A), QA, 2026-10-16, build commit d00deb9 (HEAD at verification), run one after another:**
+- `cd relay && cargo test` -- pass: 91 passed, 0 failed (9+2+20+14+40+1+5 across the unit, integration and e2e binaries).
+- `npx tsc --noEmit` -- pass: exit 0.
+- `npm test` -- pass on the first run: 145 files, 1577 tests passed, 0 failed (no flaky file failed, no rerun needed), including agentColors, projectMethodology, pluginContent, pickerItems, AgentPicker, FleetTimeline, fleetMotion, FleetSummary, FleetGroups and fleetAttribution.
+- `cd src-tauri && cargo test` -- pass: 456 passed, 0 failed, 1 ignored (plus 12 and 2 in the other binaries).
+- `cd mobile && npx tsc --noEmit && npx jest` -- pass: tsc exit 0; 1 suite, 5 tests passed.
+
+**A-AC coverage (tests read, each fails if its criterion were false):** AC1 to AC15 are each proven by the test the criterion names. AC5 and AC6 are proven by the existing plugin-files test and the new own-sub-agents test (the files on disk carry the lines). Notes, not defects: the selected row's 2px left border in the role color (a Design Note) has no assertion; the picker "All" pill keeps the theme accent when active (a theme token, not an agent or category color, and not a category pill).
+
+**Deviations judged acceptable:** A-AC7 test checks for no literal color value and no hex in `curatedAgents.ts` (stricter than "no `color:` key", since `CatalogAgent.color` lives there); the gradient test accepts hex or rgb (jsdom's form varies); four corner-radius longhands (the plan's own no shorthand/longhand mixing intent); two existing format checks allow an optional `color:` line (the new tests pin it); added test ids; FleetSummary/FleetGroups count always `text-secondary` (the plan's no-green rule).
+
+**Slice:** `git diff d69eac7..d00deb9 --stat` touches 30 files, none of the website files, no dependency or lockfile; `.ade/context/agent-colors.md` records the contract. **Verdict: PASS.**
+
 ---
 
 # Story B: the website, tested against the map
