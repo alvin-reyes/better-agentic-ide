@@ -24,3 +24,6 @@ hkdf = "0.12.4"
 chacha20poly1305 = "0.10.1"
 sha2 = "0.10.9"
 hex = "0.4.3"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+subtle = "2.6.1"
+tempfile = "3.27.0"
