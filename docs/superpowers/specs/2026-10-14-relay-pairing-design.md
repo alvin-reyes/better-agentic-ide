@@ -304,7 +304,7 @@ carry no further signatures.
 | `pair_state {slot, state, reason}` | relay → asker | `state` is `open`, `paired` or `ended`; `reason` only with `ended` |
 | `pair_ended {slot, reason}` | relay → a party | the slot ended without that party asking |
 | `pair_refused {slot, reason}` | relay → sender | a commit, nonce, reveal or confirm was not taken, and nothing was stored |
-| `control_limited {msg, slot, pair_id, retry_ms}` | relay → sender | a control message over the limit was dropped unprocessed: `msg` is its type, and `slot` or `pair_id` is given when it carried one. The sender re-sends it after `retry_ms` (see Limits) |
+| `control_limited {msg, slot, pair_id, peer, retry_ms}` | relay → sender | a control message over the limit was dropped unprocessed: `msg` is its type, and `slot`, `pair_id` or `peer` is given when it carried one (a malformed one counts as absent). The sender re-sends it after `retry_ms` (see Limits). `peer` was added by the owner on 2026-10-16 (ADR 0005) |
 | `pair_replaced {old_pair_id, pair_id}` | relay → Mac and phone | a new pair replaced the old one (Pairing again) |
 
 **Reasons**, shared by `pair_state`, `pair_ended` and `pair_refused`:
@@ -596,8 +596,17 @@ The pattern is `Noise_IK_25519_ChaChaPoly_SHA256`. The prologue is
   - after 24 hours or 2^32 frames in one session.
 - **When the Mac asks for one.** If the Mac has a frame to send and no
   session, or a current-session frame fails to open, it sends the phone a
-  plaintext `rehandshake {}` through the relay, at most once every 10 seconds.
-  A forged one costs only a handshake.
+  plaintext `rehandshake {peer}` through the relay, at most once every 10
+  seconds. A forged one costs only a handshake.
+  - **Its shape** is `{"v":1,"t":"rehandshake","peer":<32 bytes>}`. Like the
+    binary envelope, `peer` is the recipient (the phone) when sent to the relay,
+    and the sender (the Mac) when the relay delivers it. The relay routes it
+    only between paired, online keys, as it routes frames.
+  - **It is a control message for the limits.** It spends a control token, not
+    a frame token. Over the limit it is answered `control_limited {msg:
+    "rehandshake", peer, retry_ms}`.
+  - The owner amended this on 2026-10-16, replacing `rehandshake {}`; see ADR
+    0005 (`.ade/context/decisions/0005-sessions-are-noise-ik-relayed-as-opaque-envelopes.md`).
 - **The Mac sends its first snapshot** right after `hs2`.
 - **Two handshakes at once.** The newest completed one wins, and frames for the
   older session are dropped.
@@ -722,8 +731,11 @@ before any `@noble` module, so Hermes has `crypto.getRandomValues`.
 Frames over their limit get `rate_limited {peer, retry_ms}`, and control
 messages over theirs get `control_limited`, so the two are never confused.
 A device re-sends any control message named in a `control_limited` after
-`retry_ms`, except `push`: a dropped push is not re-sent, because the tab
+`retry_ms`, except `push` and `rehandshake`. A dropped push is not re-sent, because the tab
 may no longer need you, and the next needs-you change starts a new timer.
+A dropped `rehandshake` is not re-sent, because the Mac's session machine
+asks again at its next trigger after the 10 s window (owner, 2026-10-16;
+ADR 0005).
 So a Cancel tapped just after the automatic
 `pair_status`, or ADE's abort or decline, is delayed by seconds, not lost.
 At login a device sends its queued unpairs and aborts at no more than 10
@@ -737,7 +749,7 @@ and the device unpairs it again.
 | Frames | 20/s per device, bursts to 100; 64 KiB each. A refused frame is answered with `rate_limited {peer, retry_ms}`, and the Mac resends its latest snapshot to that peer after `retry_ms` |
 | Push | 1 per 30 s per phone; 30 per hour |
 | Slots | 30 opened per hour per Mac, one open at a time |
-| Control messages | 10/s per device, bursts to 30, and at most one `pair_status` or `pair_abort` per slot per 5 s. Checked before any lookup; excess is dropped unprocessed and answered `control_limited`. The 60 s polls stay far below it |
+| Control messages | 10/s per device, bursts to 30, and at most one `pair_status` or `pair_abort` per slot per 5 s. `rehandshake` counts here, not against frames (ADR 0005). Checked before any lookup; excess is dropped unprocessed and answered `control_limited`. The 60 s polls stay far below it |
 | New identity keys | 20 per hour per IP |
 | Connections | 1 per device |
 
@@ -854,7 +866,10 @@ builds the app and submits it to TestFlight. The bundle id is
 - `.ade/context/remote-protocol.md`: everything under Wire format, with the
   vectors as the reference.
 - `.ade/context/remote-tabs.md`: the tab registry.
-- An ADR for the relay and protocol choices.
+- ADR 0005 (`.ade/context/decisions/0005-sessions-are-noise-ik-relayed-as-opaque-envelopes.md`):
+  the relay and protocol choices: Noise IK sessions, the one binary envelope,
+  and the owner's 2026-10-16 amendments (`rehandshake {peer}`, and `peer` in
+  `control_limited`).
 - ADR 0004 (`.ade/context/decisions/0004-pairing-ends-explicitly.md`): how a
   pairing attempt ends, and when a pending pair may be dropped.
 

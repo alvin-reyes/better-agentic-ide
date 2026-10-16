@@ -16,6 +16,12 @@
 - source_plan: `_bmad-output/initiative-phone-remote/epic-phone-watch/story-login-and-presence-through-the-relay-plan.md`
   summary: A connection replaced by a newer login of the same device is dropped without a close frame. Define a close code for "replaced" in remote-protocol.md and add an e2e test for replacement (story 7, AC 5).
   evidence: Review of story 2. `connection` ends the old loop when its sender is dropped and returns without `Message::Close`. The spec and plan define no signal, and replacement is unit-tested only in core.
+- source_plan: `_bmad-output/initiative-phone-remote/epic-phone-watch/story-relay-limits-routing-and-replacement-plan.md`
+  summary: No per-key login limit: a key that can log in may reconnect without limit, and each login costs two steps in the peer task (ADR 0006). Owner deferred it on 2026-10-16; revisit with real traffic on Fly (story 11 or later).
+  evidence: ADR 0006 review. The same load already fell on the store lock before ADR 0006; the per-IP new-key limit covers unknown keys only.
+- source_plan: `_bmad-output/initiative-phone-remote/epic-phone-watch/story-relay-limits-routing-and-replacement-plan.md`
+  summary: For story 5a: only a current connection's leave ends a Mac's pairing slot. A leave from a replaced connection (`on_leave` with `current: false`) must not end a slot the new connection opened. Owner decision, 2026-10-16.
+  evidence: ADR 0006 review; `on_leave` takes `current: bool` in 7b's plan.
 - source_plan: `_bmad-output/initiative-phone-remote/epic-phone-watch/story-relay-storage-cleanup-and-metrics-plan.md`
   summary: `a_call_waiting_during_cleanup_gets_in_between_batches` only guards the first `hand_over()` (after the touch). Removing the `hand_over()` inside the batch loop leaves every test green. Make the probe call queue after batch 1 has committed (a helper thread once `batches >= 1`, or a test-only park hook) and assert it gets in by batch 2. Also pin the `drop(store)` before `drop(busy)` order in `StoreHandle::call`. Take it up in 7b, which adds hold helpers to the same test file.
   evidence: 7a re-review of 7e391f6 (2026-10-16): mutant D (in-loop `hand_over` removed) survives; mutant E (post-touch `hand_over` removed) is killed 10/10.
