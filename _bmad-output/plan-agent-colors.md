@@ -3,7 +3,7 @@ title: 'Color-coded agents in ADE and on its website'
 type: 'feature'
 ticket: ''
 created: '2026-10-16'
-status: 'ready-for-dev'
+status: 'done'
 baseline_revision: '25157f637e0780d7b013042755a5c3b8a547145e'
 route: 'full'
 route_source: 'auto'
@@ -237,6 +237,19 @@ All in `scripts/agentColorsSite.test.ts`, which imports the map from Story A.
 **Commands (unchanged):** the same five lines as Story A; expected all pass, with `npm test` including `agentColorsSite.test.ts`.
 
 **Manual checks:** serve `docs/` and view the home page in light and dark themes and with reduced motion on: org-chart borders, the eight file names and the demo bars are colored and legible; the running lanes' ends pulse, or hold still with reduced motion.
+
+**Results (B), QA, 2026-10-16, at adcbea3 (build 25ec8b9 plus the review fix round), run one after another:**
+- `cd relay && cargo test` -- pass: 91 passed, 0 failed.
+- `npx tsc --noEmit` -- pass: exit 0.
+- `npm test` -- pass on the first run: 146 files, 1584 tests passed, 0 failed, including `agentColorsSite.test.ts`, `siteClaims`, `siteThemeContrast` and `siteCsp` (no flaky rerun needed).
+- `cd src-tauri && cargo test` -- pass: 456 passed, 0 failed, 1 ignored (plus 12 and 2 in the other binaries).
+- `cd mobile && npx tsc --noEmit && npx jest` -- pass: tsc exit 0; 1 suite, 5 tests passed.
+
+**Code review rounds:** PASS at 25ec8b9 with minors; all minors fixed in adcbea3 (the edge grows with the bar, a wider no-literal check); re-review PASS at adcbea3. One minor remains, not blocking: the test does not tie the count of `.fleetx-lane.is-running` (2) to the aria-label's running count.
+
+**B-AC coverage:** B-AC1 to B-AC6 are each proven by the test the criterion names in `scripts/agentColorsSite.test.ts`, which reads the map from Story A, so a changed hex or role fails the site test; B-AC7 by the existing site tests, all green. Slice: 25ec8b9 and adcbea3 touch only `docs/index.html`, `docs/assets/css/site.css` and `scripts/agentColorsSite.test.ts`; no dependency or lockfile.
+
+**Deviations judged acceptable:** the running edge is a `.is-running .fleetx-bar::after` in `currentColor` (the bar's inherited light text color, a neutral, not an agent color) rather than a `.fleetx-edge` element: it grows and fades with the bar, which `fleetx-grow` animates, and the test pins its geometry, its pulse and its reduced-motion override and forbids any other bar pseudo-element; B-AC6's "contains `.fleetx-edge`" is met by the selector rule, and the test asserts no separate element exists. The rewritten demo aria-label names the role colors and the running lanes, as the Design Notes ask, and is asserted. The four exact `color: #8b8f9a` exemptions (`.fleetx-path`, `.fleetx-run`, `.fleetx-cost`, `.fleetx-lane--sub .fleetx-name`) are grey terminal labels, not agent colors; the check matches each exact selector and declaration, so any other literal still fails. **Verdict: PASS at adcbea3.** Manual check still to do by the owner: serve `docs/` and view the home page in light and dark themes and with reduced motion on.
 
 ---
 
