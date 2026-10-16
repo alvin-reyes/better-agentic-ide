@@ -3,7 +3,7 @@ title: 'Relay storage, cleanup and metrics'
 type: 'feature'
 ticket: '7a'
 created: '2026-10-16'
-status: 'in-progress'
+status: 'done'
 baseline_revision: '57b626b9adbaf30a243b4801eee250b3a4db1970'
 route: 'full'
 route_source: 'auto'
@@ -255,6 +255,16 @@ push_tokens(phone BLOB PRIMARY KEY REFERENCES devices ON DELETE CASCADE, token T
 - `git diff --stat main` shows only `relay/`, `.ade/context/` and this initiative's `_bmad-output` files.
 - `cargo tree -p relay-core -e normal` shows no `rusqlite`, `libsqlite3-sys`, `tokio` or `axum`.
 - `cargo tree -p relay-server -e normal | grep rusqlite` shows 0.40.2 with `bundled`.
+
+**Results (QA, 2026-10-16, at 7e391f6, lines run one after another):**
+- `cd relay && cargo test` -- exit 0, nothing failed. relay-core 29, relay-server lib 29 and bin 8, relay-protocol 40, relay-cli 9 and 2, e2e.rs 14 (story 2, all kept), storage.rs 11.
+- `npx tsc --noEmit` -- exit 0.
+- `npm test` -- exit 0, 143 files, 1559/1559.
+- `cd src-tauri && cargo test` -- exit 0, 456 passed.
+- `cd mobile && npx tsc --noEmit && npx jest` -- exit 0, jest 5/5.
+- `cargo tree -p relay-core` -- no `rusqlite`, `libsqlite3-sys`, `tokio` or `axum`. `relay-server` has `rusqlite` 0.40.2 with `bundled`.
+- Diff `09ce7a6..7e391f6`: only `relay/` (new `sha2.workspace` line in `relay/server/Cargo.toml`, already in the lock file), `.ade/context/` (remote-protocol.md, relay-storage.md), this plan and `.ade/knowledge/developer.md`. No `src/`, `src-tauri/`, `mobile/` or `packages/protocol` change.
+- AC to test: AC 1 `storage_survives_a_restart_but_presence_does_not`; AC 6 `devices_unseen_for_90_days_are_deleted_with_their_pairs_and_tokens`, `cleanup_cutoff_is_none_before_90_days`, the store boundary tests, and new `an_online_device_is_spared_even_when_the_touch_cannot_save_it` and `a_call_waiting_during_cleanup_gets_in_between_batches`; AC 7 `metrics_need_their_token_and_carry_counts_only` and new `the_token_is_compared_as_sha256_digests`; AC 8 `the_canary_never_reaches_logs_or_the_database`. Contract tests: `a_store_error_at_login_closes_1011_without_welcome`, `a_store_error_at_leave_sends_no_presence`, `a_held_store_lock_does_not_stall_the_relay`, and new `a_leave_tells_peers_before_its_touch_write`, `a_failed_touch_at_leave_still_tells_peers`, `a_leave_touches_last_seen`, `shutdown_waits_for_store_work_in_flight`.
 
 ## Implementation Notes
 
