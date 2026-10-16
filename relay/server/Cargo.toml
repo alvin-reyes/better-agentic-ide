@@ -4,9 +4,16 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lib]
+name = "relay_server"
+
 [[bin]]
 name = "relay-server"
 path = "src/main.rs"
 
 [dependencies]
 relay-core = { path = "../core" }
+relay-protocol = { path = "../protocol" }
+tokio.workspace = true
+axum.workspace = true
+futures-util.workspace = true

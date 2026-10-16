@@ -8,3 +8,11 @@ publish.workspace = true
 
 [dev-dependencies]
 relay-core = { path = "../core" }
+relay-protocol = { path = "../protocol" }
+relay-server = { path = "../server" }
+relay-cli = { path = "../cli" }
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+ed25519-dalek.workspace = true
+rand.workspace = true
