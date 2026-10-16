@@ -358,15 +358,38 @@ describe("the phone session against the responder", () => {
     await w.act(w.phone.onHs2(hs2A, 11000));
     expect(toHex(w.phone.sessionId!)).not.toBe(macOnB);
     expect(await w.framesFlow(11001)).toBe(false);
-    expect(w.phone.nextDeadline()).toBe(20000);
+    // max(B's start + 10 s, 11 s + A's 11 s round trip) = 22 s.
+    expect(w.phone.nextDeadline()).toBe(22000);
     await w.tick(20000);
+    expect(w.starts).toEqual([1, 2]);
+    await w.tick(22000);
     expect(w.starts).toEqual([1, 2, 3]);
-    await w.run(20000);
+    await w.run(22000);
     expect(toHex(w.phone.sessionId!)).toBe(toHex(w.mac.session!.id));
-    expect(await w.framesFlow(20001)).toBe(true);
-    await w.tick(30000);
+    expect(await w.framesFlow(22001)).toBe(true);
+    await w.tick(32000);
     await w.tick(60000);
     expect(w.starts).toEqual([1, 2, 3]);
+  });
+
+  it("AC4: a constant 12 s round trip gives at most 2 starts and converges", async () => {
+    // A one-way delay of 6 s: every hs2 arrives 12 s after its hs1 was sent.
+    const w = new World();
+    await w.trigger("mac_online", 0);
+    const hs2A = w.mac.onHs1(w.iP, w.toMac.splice(0)[0].body)!; // at 6 s
+    await w.tick(10000);
+    const b = w.toMac.splice(0)[0];
+    await w.act(w.phone.onHs2(hs2A, 12000));
+    const hs2B = w.mac.onHs1(w.iP, b.body)!; // at 16 s
+    // B's hanging deadline scales to A's 12 s round trip: not at 20 s.
+    expect(w.phone.nextDeadline()).toBe(24000);
+    await w.tick(20000);
+    expect(w.starts).toEqual([1, 2]);
+    await w.act(w.phone.onHs2(hs2B, 22000));
+    for (const t of [24000, 60000, 600000]) await w.tick(t);
+    expect(w.starts).toEqual([1, 2]);
+    expect(toHex(w.phone.sessionId!)).toBe(toHex(w.mac.session!.id));
+    expect(await w.framesFlow(600001)).toBe(true);
   });
 
   it("AC4: if C's hs2 is lost too, C gets one retry and then the phone waits", async () => {
@@ -401,7 +424,7 @@ describe("the phone session against the responder", () => {
     expect(await w.framesFlow(21001)).toBe(true);
   });
 
-  it("AC5: each trigger starts a handshake; pull to refresh only with no session", async () => {
+  it("AC5: each trigger starts a handshake; pull to refresh with or without a session", async () => {
     for (const kind of ["mac_online", "foreground", "rehandshake", "pull_to_refresh"] as const) {
       const w = new World();
       await w.trigger(kind, 0);
@@ -409,10 +432,15 @@ describe("the phone session against the responder", () => {
       await w.run(0);
       expect(await w.framesFlow(1), kind).toBe(true);
     }
+    // With a session too (owner decision, 2026-10-16), through the same window.
     const w = new World();
     await w.connect(0);
-    await w.trigger("pull_to_refresh", 20000);
+    await w.trigger("pull_to_refresh", 5000);
     expect(w.starts.length).toBe(1);
+    await w.trigger("pull_to_refresh", 20000);
+    expect(w.starts.length).toBe(2);
+    await w.run(20000);
+    expect(await w.framesFlow(20001)).toBe(true);
   });
 
   it("AC5: after 24 h, and at both frame ceilings", async () => {

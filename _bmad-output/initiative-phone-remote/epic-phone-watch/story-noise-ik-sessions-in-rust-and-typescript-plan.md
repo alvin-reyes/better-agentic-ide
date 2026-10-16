@@ -56,6 +56,8 @@ context:
 - Decision (owner, 2026-10-16): stories 7a (storage, after [2]) and 7b (limits, routing, replacement, after ["7a"]) are tickets; 5a is after [2, 4, "7a", "7b"]. Story 7b owns binary routing over `Routed`, the `rehandshake` `Control` variant and the CLI's handling of it.
 - Decision (owner, 2026-10-16, a spec amendment made on the 7b side): `rehandshake` is `{"v":1,"t":"rehandshake","peer":<32 bytes>}` and counts against the control limit. Story 4 emits only the `Rehandshake(phone)` action.
 - Decision (owner, 2026-10-16): if story 7b starts before story 4 merges, 7b creates `relay/protocol/src/routed.rs` exactly to this plan's definition, and story 4 rebases onto it.
+- Decision (owner, 2026-10-16, after story 4's code review, amending the hanging-handshake decision above): the hanging trigger's deadline is `max(started_at + 10 s, adopted_at + (adopted_at − adopted.started_at))`, scaled to the round trip just measured on the adopted handshake, so a round trip over 10 s cannot loop (a constant 12 s round trip gives at most 2 starts). ADR 0005 records the same wording.
+- Decision (owner, 2026-10-16, after story 4's code review, widening the pull-to-refresh decision above): pull to refresh starts a handshake with or without a session, through the same 10 s window. Two lost messages can leave the sides on different sessions until the next trigger, and pull to refresh is the user's way out.
 
 **Never:**
 - No relay changes: no `relay/server` code, no routing of binary messages or `rehandshake`, no storage, no limits, no SQLite. Storage is story 7a's; limits, routing and replacement are story 7b's.
@@ -142,7 +144,7 @@ context:
   - **`--differential`** reads JSON cases on stdin and prints transcripts, for the TypeScript differential test.
   - **`--check`** covers `noise.json` and the excerpt's pinned digest.
 - [x] `packages/protocol/vectors/schedule.json` -- written by hand from Design Notes ("Restart rules"), with no crypto: step scripts `{at_mono_ms, event, expect}` for the phone's handshake scheduler and its `hs2` adoption rule. Events are abstract (`trigger:<kind>`, `hs2_ok:<counter>`, `bad_frame`, `sent_nonce:<n>`, `recv_nonce:<n>`, `tick`). The scripts cover:
-  - each trigger, including pull to refresh with no session (a start) and with a session (nothing);
+  - each trigger, including pull to refresh with no session and with a session (a start either way, through the window; owner decision after the code review);
   - the 10 s window and coalescing;
   - a deferred trigger satisfied by a later-completing session;
   - the one retry with no `hs2`, which counts as a start and opens a new window, and whose deadline colliding with a deferred start gives one start, not two;
@@ -186,15 +188,15 @@ context:
   - **`PhoneSession`** (one per Mac and relay): `trigger(kind, now)`, `on_hs2`, `on_frame`, `send`, `end`, `poll` and `next_deadline`.
     - **Outstanding initiators.** It keeps at most 4, dropping the oldest. An `hs2` is tried against them newest first, only those whose counter is above the current session's. On adoption, every outstanding initiator with a lower counter is dropped; those with higher counters stay. An outstanding initiator expires after 24 h.
     - **The adoption rule:** an `hs2` is adopted only if its counter is above the current session's.
-    - **A newer handshake left hanging** (owner decisions): the trigger is armed for an outstanding initiator only when an older handshake's `hs2` is adopted after that initiator started. That is the lost-newer-`hs2` case, and it is evidence that the Mac is answering. If the armed initiator gets no `hs2` within 10 s of its start, it raises one trigger through the window, once. With no adopted session, nothing is armed, and the ordinary single retry applies. A hanging trigger and a retry due together give one start. It is a scheduler event (`hanging:<counter>`) in `schedule.json`.
+    - **A newer handshake left hanging** (owner decisions): the trigger is armed for an outstanding initiator only when an older handshake's `hs2` is adopted after that initiator started. That is the lost-newer-`hs2` case, and it is evidence that the Mac is answering. If the armed initiator gets no `hs2` by `max(its start + 10 s, adoption time + the adopted handshake's round trip)` (owner decision after the code review), it raises one trigger through the window, once. With no adopted session, nothing is armed, and the ordinary single retry applies. A hanging trigger and a retry due together give one start. It is a scheduler event (`hanging:<counter>`) in `schedule.json`.
     - **When a start counts:** when `StartHandshake` is emitted, not when `begin` runs. So a failed store write still opens the window and still gets its one retry.
     - `send` with no session or at the ceiling returns an error and raises the trigger.
     - **Two-step start (same shape in both languages, for the async store):** when a start is due, `poll`/`trigger` returns `StartHandshake { token }`. The driver gets a counter from the store and calls `begin(token, counter) -> Option<hs1>`. `begin` returns nothing if the token is stale, meaning `end()` ran or a newer session was adopted in between; the counter is then simply skipped, which is harmless because counters only need to rise. A failed store write produces no `begin`, so no `hs1`.
   - **The `Scheduler`** (pure, shared by both) holds the 10 s window, coalescing, the retry, 24 h and the adoption rule. The ceilings and the time limits are fields of the machines, compared before calling `seal`. Only `pub(crate)` test constructors in `relay-core` can lower them, so no protocol hook crosses crates. `end(peer)` drops the session and its outstanding handshakes; story 5a calls it when no pair remains.
 - [x] `relay/core/src/session.rs` tests -- one test per line of AC2–AC6, named after its spec line, running Mac against phone in-process with in-memory stores. Also:
-  - **Two relays, one store:** the `Hs1Counters` trait has no separate read method, so a check-then-act is impossible through it. Two `MacSessions` sharing the in-memory store, fed one replayed `hs1` on two threads behind a barrier, are looped 1,000 times: exactly one accepts each time. The same threaded loop runs for two Rust `PhoneSession`s on one `LastSent`: their counters are always distinct.
+  - **Two relays, one store:** the `Hs1Counters` trait has no separate read method, so a check-then-act is impossible through it. Two `MacSessions` sharing the in-memory store, fed one replayed `hs1` on two threads behind a barrier, are looped 1,000 times: exactly one accepts each time. (Fix round: that end-to-end loop does not catch a check-then-act store, so a direct test runs 8 threads at `accept_if_above` itself, 2,000 times.) The same threaded loop runs for two Rust `PhoneSession`s on one `LastSent`: their counters are always distinct.
   - **Cross-relay collision:** two relays, triggered together, can deliver the lower counter second, and it is refused. The test shows the 10 s retry heals it.
-  - **The lost-`hs2` sequence:** A, then retry B; the Mac accepts both and is on B; `hs2_A` arrives and `hs2_B` is lost. The phone adopts A; 10 s after B's start it raises one trigger, starts C through the window, and both sides end on C with frames flowing both ways. If C's `hs2` is also lost, nothing older was adopted after C started, so C is not armed: it gets the ordinary single retry, then the phone waits for the next trigger, and B raises no second one. The same sequence is a TypeScript test against the internal responder, and a `schedule.json` script (both).
+  - **The lost-`hs2` sequence:** A, then retry B; the Mac accepts both and is on B; `hs2_A` arrives and `hs2_B` is lost. The phone adopts A; at B's hanging deadline (B's start + 10 s, or later if A's round trip was longer) it raises one trigger, starts C through the window, and both sides end on C with frames flowing both ways. If C's `hs2` is also lost, nothing older was adopted after C started, so C is not armed: it gets the ordinary single retry, then the phone waits for the next trigger, and B raises no second one. The same sequence is a TypeScript test against the internal responder, and a `schedule.json` script (both).
   - **The stuck-state sequence:** A sent, retry B sent, the Mac adopts A, B lost. The phone adopts A and has a session.
   - **`schedule.json`**, read through `include_str!`. `relay-core` gains `serde_json` and `hex` as dev-dependencies from the workspace.
 - [x] `packages/protocol/src/noise.ts` -- a hand-rolled IK on `@noble`.
@@ -244,7 +246,7 @@ context:
 - AC2 (ticket 2): Given in-memory stores, when a phone handshakes, then it sends `max(now_ms, last_sent + 1)` and records it per Mac key before sending (both, `schedule.json`). The Mac accepts only a counter above the one recorded for (its key, that phone's key), and records it before sending `hs2` (Rust). A store whose write fails stops the handshake on either side. Two Mac machines sharing a store on two threads accept a replayed `hs1` once at most. Two phone sessions for one Mac key, triggered together, send distinct counters (both).
 - AC3 (ticket 3): Given the in-memory stores and pair lookup, when a pair is removed and paired again, then the counter carries over. An `hs1` captured before an unpair, or accepted through another `MacSessions` sharing the store (another relay), is refused. One phone with two Macs keeps two counters (Rust both sides; TypeScript phone side).
 - AC4 (ticket 4): Given a Mac and a phone in-process, then each spec "Sessions" line is a named test that passes: replayed `hs1` refused; clock set back and skewed still connect; old-session frames start no handshake; a wrong static is refused; the Mac emits `Rehandshake` when it has no session; a dropped frame doesn't break the session; two handshakes at once leave the newest completed on both sides, including when the newer `hs1` is lost (the stuck-state sequence) and when the newer `hs2` is lost (the lost-`hs2` sequence, which converges on a fresh handshake).
-- AC5 (ticket 5): Given a live session, then a frame with another session id is dropped with no action. A bad frame on the current session makes the phone handshake and the Mac emit `Rehandshake`. Each side starts at most one restart per 10 s per (peer, relay). The phone starts a handshake on Mac online, foreground, `rehandshake`, after 24 h, and at the frame ceiling, and (owner decision) on pull to refresh only while it has no session, all through the same window (both, `schedule.json` plus in-process tests).
+- AC5 (ticket 5): Given a live session, then a frame with another session id is dropped with no action. A bad frame on the current session makes the phone handshake and the Mac emit `Rehandshake`. Each side starts at most one restart per 10 s per (peer, relay). The phone starts a handshake on Mac online, foreground, `rehandshake`, after 24 h, and at the frame ceiling, and (owner decision, widened after the code review) on pull to refresh with or without a session, all through the same window (both, `schedule.json` plus in-process tests).
 - AC6 (ticket 6): Given a receiver, when frames arrive with nonces 0, 2, 2, 1, 5, then 0, 2 and 5 are accepted and the others are dropped (both, receiver scripts).
 - AC7 (ticket 7): Given a 60,001-byte plaintext, when it is sealed, then it is refused and no nonce is used up. A 60,000-byte one seals, and its envelope is ≤ 65,536 bytes (both).
 
@@ -267,7 +269,7 @@ context:
 
 **Deviations.**
 1. `relay-core` does not gain `hex` as a dev-dependency. No test uses it, and an unused dependency is noise.
-2. `begin(token, counter)` returns the hs1 *envelope* (`Option<Routed>` / `Routed | null`, kind 1, peer `I_M`), not bare hs1 bytes, so the driver only forwards it.
+2. `begin(token, counter)` returns the hs1 *envelope* (Rust `Result<Option<Routed>, HandshakeError>`, TypeScript `Routed | null`; kind 1, peer `I_M`), not bare hs1 bytes, so the driver only forwards it. A counter above 2^53 − 1 is an error in both (Rust `Err(CounterRange)`, TypeScript `RangeError`), never a stale-token `None` (fix round).
 3. `PhoneSession::new` returns `Result` (TypeScript throws): it refuses a low-order Mac static up front, by a dry `Initiator::start`.
 4. The TypeScript low-order rule checks the u-value against the five order-dividing-8 values, after masking the top bit and reducing mod p, rather than computing X25519 itself. That is the plan's "explicitly, never by catching noble's throw". The test "the low-order rule agrees with noble's all-zero X25519 output" shows equivalence on every vector u and on 200 random keys. Rust computes `mul_clamped` with the local static, as planned.
 5. Rust's `StoreError` is an enum, `Failed(String)` or `Exhausted`, so `LastSent::next_counter` can report 2^53 − 1 passing. `HandshakeError` is `Length | LowOrder | Decrypt | CounterRange | Finished`.
@@ -286,16 +288,47 @@ context:
 - The surface test passes by construction. It was seen failing by temporarily exporting `readHs1`.
 
 **Mutation checks** (one rule disabled at a time, then the suite run):
-- Rust: each low-order check; the replay drop; the 2^32 receive check; a fresh retry; adoption clearing the deferred trigger; never arming the hanging trigger; a check-then-act `accept_if_above`. Each was caught.
+- Rust: each low-order check; the replay drop; the 2^32 receive check; a fresh retry; adoption clearing the deferred trigger; never arming the hanging trigger. Each was caught.
+- **Corrected in the fix round:** the first round also claimed a check-then-act `accept_if_above` was caught. That mutant had a `yield_now()` between check and record; the review showed that without it (one lock to read, another to insert) `two_mac_machines_sharing_a_store_accept_a_replayed_hs1_once_at_most` still passes, because the X25519 work after the barrier pulls the threads apart. The new `the_hs1_counter_store_checks_and_records_in_one_atomic_step` (8 threads, 2,000 rounds, straight at the store) fails against that exact mutant, 3 runs of 3.
 - TypeScript: the same scheduler rules, the replay drop, the low-order checks, the counter-range check and the allocator chain's isolation. Each was caught.
-- Two mutants first survived: re-arming a fired hanging handshake, and removing the adoption floor. `schedule.json` gained steps that catch them: the at-most-4 script continues past a second adoption, and a new script, "an hs2 at or below the session's counter is never adopted".
+- Two mutants first survived: re-arming a fired hanging handshake, and removing the adoption floor. `schedule.json` gained scripts that catch them: "an hs2 at or below the session's counter is never adopted" and (after the fix round reshaped the at-most-4 script) "a fired hanging trigger is never armed again".
 
-**Verification** (all five, run in this worktree):
+**Verification, first round** (all five, run in this worktree; superseded by the fix round below):
 - `cd relay && cargo test`: passed. `relay-protocol` 61, `relay-core` 55, e2e 14, cli 9 + 2, server 1 + 5.
 - `npx tsc --noEmit`: clean.
 - `npm test`: 144 files, 1,619 tests passed. `session.test.ts` 31, `vectors.test.ts` 54, `index.test.ts` 4.
 - `cd src-tauri && cargo test`: 456 passed, 1 ignored; 12; 2.
 - `cd mobile && npx tsc --noEmit && npx jest`: 6 passed.
+- `cargo fmt --check` and `cargo clippy --all-targets` in `relay/` are clean.
+
+**Fix round, 2026-10-16** (adversarial code review of 2a41d1a: BLOCK; the cryptography held, and a 6,300-case Rust/TypeScript differential found no differences. The owner ruled A and B; both are recorded under Boundaries.)
+- **A. The hanging deadline scales to the round trip.** It is now `max(started_at + 10 s, adopted_at + (adopted_at − adopted.started_at))` in `Scheduler::adopt` (Rust) and `Scheduler.adopt` (TypeScript).
+  - New tests, each seen failing first: the `schedule.json` script "a constant 12 s round trip: at most 2 starts, and it converges", `core::session::a_constant_12_s_round_trip_gives_at_most_2_starts_and_converges`, and "AC4: a constant 12 s round trip gives at most 2 starts and converges".
+  - Under the new rule, the existing lost-`hs2` scripts and tests (Rust and TypeScript) now fire at 22 s, not 20 s. The "hanging and retry together" script adopts at 10 s so the two still coincide. The at-most-4 script was reshaped.
+  - Re-arming is now pinned by its own script, "a fired hanging trigger is never armed again".
+- **The reviewer's simulator** (`sim.rs`), run against the fix, copied in temporarily and adapted only to the new `begin` signature:
+  - With a constant delay, 5.1, 6 and 8 s one way (and 15 s) each give 2 starts in 10 minutes and converge. Before the fix, 6 s gave 61.
+  - With random one-way delays up to 30 s (round trips up to 60 s, beyond the window), `sim_reliable_reordering_converges` still fails its "≤ 6 extra starts" bound on 23 of 400 seeds, down from 186 of 400 before the fix. Every one of those 23 converges; before the fix, 29 did not.
+  - Lossy runs: 23 of 400 flagged, down from 191 of 400.
+  - That residual is outside the ruling and is reported here, not changed.
+- **B. Pull to refresh starts with or without a session,** through the window. The scheduler's special case is gone in both languages. `schedule.json`'s "each trigger" script now starts at 80 s with a session, and defers at 85 s. The AC5 tests in both languages were changed and seen failing first.
+- **Major 1, the atomicity test.** Added `core::session::the_hs1_counter_store_checks_and_records_in_one_atomic_step` (8 threads at `accept_if_above`, 2,000 rounds).
+  - It fails against the reviewer's mutant (read under one lock, insert under another), 3 runs of 3. The end-to-end two-relay test passes against that mutant, as the review said.
+  - The earlier mutation claim is corrected above, and the contract wording in `remote-protocol.md` too.
+- **Minor 2.** Rust `PhoneSession::begin` now returns `Result<Option<Routed>, HandshakeError>`: `Err(CounterRange)` above 2^53 − 1, as TypeScript throws `RangeError`. The test is `begin_refuses_a_counter_above_2_pow_53_minus_1_as_an_error_not_a_stale_token`; it first failed to compile against the old `Option` signature.
+- **Minor 3.** `MacSessions` makes an entry only for a phone it is paired with (`send` checks `PairedStatics`) or has a session with (`on_hs1`). `raise` uses `get_mut`. An unpaired key gets `NoSession` with no `Rehandshake`.
+  - The test is `unpaired_keys_leave_no_state_on_the_mac`: 1,000 strangers, the map stays at 1. It failed first.
+- **Counts:** `relay-core` 59 (was 55), `session.test.ts` 32 (was 31).
+
+**Verification, fix round** (the five lines run one after another, in this worktree):
+- `cd relay && cargo test`: exit 0. cli 9 + 2, core 59, e2e 14, protocol 61, server 1 + 5.
+- `npx tsc --noEmit`: exit 0, no output.
+- `npm test`:
+  - The first run exited 1: 1,619 passed and 1 failed, `src/components/__tests__/BoardPanel.test.tsx` "does not refresh on the done event while its own switch is still registered" ("expected spy to be called once, but got 0 times", 1,014 ms).
+  - That file is outside this story; nothing under `src/` changed. It passed 46 of 46 on three solo runs.
+  - A full rerun exited 0: 144 files, 1,620 tests passed (`session.test.ts` 32, `vectors.test.ts` 54, `index.test.ts` 4).
+- `cd src-tauri && cargo test`: exit 0. 456 passed (1 ignored), 12, 2.
+- `cd mobile && npx tsc --noEmit && npx jest`: exit 0, 6 passed.
 - `cargo fmt --check` and `cargo clippy --all-targets` in `relay/` are clean.
 
 ## Plan Change Log
@@ -322,6 +355,15 @@ context:
 - 2026-10-16, the owner's final rulings: the hanging-handshake trigger (with its test in Rust, TypeScript and `schedule.json`), one window per (peer, relay), the 7a/7b tickets and 5a's order, the `rehandshake` wire form owned by 7b, and the rule that 7b creates `routed.rs` to this definition if it starts first. All are recorded under Boundaries, and Open Questions is cleared.
 - 2026-10-16, round 3 fixes: window scope made per (peer, relay) everywhere (decision text, AC5, Design Notes). The hanging trigger is written to the recommended scope (Open Question 1), with tests for a silent Mac (2 starts in 60 s), a simultaneous hanging trigger and retry (one start), and a failed store write. A start counts when `StartHandshake` is emitted. Stale "twelve rulings" fixed.
 - 2026-10-16, the owner picked option (a) for the hanging-handshake trigger. It is recorded under Boundaries, the waiting-on-ruling marker is gone, and Open Questions is cleared. Nothing else changed.
+
+- 2026-10-16, fix round after the adversarial code review of 2a41d1a (BLOCK). Owner rulings recorded under Boundaries:
+  - the hanging deadline scales to the measured round trip, amending the hanging-handshake decision;
+  - pull to refresh starts with or without a session, widening the pull-to-refresh decision.
+  The tasks, AC5 and the Design Notes were reworded to match, and `schedule.json` was updated.
+  Also fixed:
+  - a direct store-atomicity test (and the false mutation claim corrected);
+  - Rust `begin` errors on an out-of-range counter;
+  - `MacSessions` keeps no state for unpaired keys.
 
 ## Review Triage Log
 
@@ -367,7 +409,7 @@ Through all of this the current session stays usable until a newer one completes
 
 **Restart rules (owner decisions).** One scheduler per (peer, relay) on each side.
 - Any trigger inside 10 s of the last start is coalesced into one deferred start at the window's end. A deferred start is dropped if a session completed after the trigger was raised, so the burst of welcome, presence and foreground at launch gives one handshake, not two.
-- The phone's triggers are: Mac online (`welcome` or `presence`), foreground, `rehandshake`, a `bad` frame, 24 h since the session completed, its send nonce reaching 2^32, or a received nonce of 2^32−1. Pull to refresh while it has no session is also a trigger (owner decision); with a session it starts nothing.
+- The phone's triggers are: Mac online (`welcome` or `presence`), foreground, `rehandshake`, a `bad` frame, 24 h since the session completed, its send nonce reaching 2^32, or a received nonce of 2^32−1. Pull to refresh is also a trigger, with or without a session (owner decision, widened after the code review).
 - A started handshake with no `hs2` gets one automatic retry 10 s later, then waits for the next trigger. The retry is a start, so it opens a new window. If a deferred start falls due at the same moment, there is one start, not two.
 - The Mac's trigger is `send` with no session or a `bad` frame, and its action is `Rehandshake`.
 

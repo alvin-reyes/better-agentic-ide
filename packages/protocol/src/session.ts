@@ -140,9 +140,9 @@ export class Scheduler {
     return this.lastStart === null || now >= this.lastStart + this.limits.windowMs;
   }
 
-  /** A trigger. Pull to refresh starts nothing while there is a session. */
-  trigger(cause: Cause, now: number): number | null {
-    if (cause === "pull_to_refresh" && this.session) return null;
+  /** A trigger, of any cause, through the window. Pull to refresh starts one with or
+   *  without a session (owner decision, 2026-10-16). */
+  trigger(_cause: Cause, now: number): number | null {
     if (this.open(now)) return this.start(now, true);
     this.deferred = now;
     return null;
@@ -184,16 +184,20 @@ export class Scheduler {
   /** An hs2 completed the handshake with `counter`: adopted only if that counter is
    *  above the session's. Adoption drops the deferred trigger, every outstanding
    *  handshake not above it (and any not yet begun), and arms the hanging trigger of
-   *  each newer one still outstanding. */
+   *  each newer one still outstanding, due at max(its start + 10 s, now + the adopted
+   *  handshake's round trip) (owner decision, 2026-10-16), so a round trip over 10 s
+   *  cannot loop. */
   adopt(counter: number, now: number): boolean {
     this.expire(now);
-    if (!this.outstanding.some((p) => p.counter === counter)) return false;
+    const adopted = this.outstanding.find((p) => p.counter === counter);
+    if (!adopted) return false;
     if (this.session && counter <= this.session.counter) return false;
     this.session = { counter, completedAt: now, aged: false };
     this.deferred = null;
     this.outstanding = this.outstanding.filter((p) => p.counter !== null && p.counter > counter);
+    const roundTripEnd = now + (now - adopted.startedAt);
     for (const p of this.outstanding) {
-      if (p.hangingDue === null && !p.hangingDone) p.hangingDue = p.startedAt + this.limits.hangingMs;
+      if (p.hangingDue === null && !p.hangingDone) p.hangingDue = Math.max(p.startedAt + this.limits.hangingMs, roundTripEnd);
     }
     this.dropStaleRetry();
     return true;

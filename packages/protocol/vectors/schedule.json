@@ -1,5 +1,5 @@
 {
-  "note": "Written by hand from the story 4 plan's Design Notes (Restart rules, Two handshakes at once), with no crypto. One scheduler per (peer, relay). Each step happens at at_mono_ms. The runner numbers starts 1, 2, 3 in order and begins each with that number as its counter (or with the step's begin_counter), unless the step says store_fails (no begin, so no hs1). hs2_ok:N is a completed hs2 for the handshake with counter N. tick polls the scheduler. expect.start is the start number emitted in the step, or null; expect.hanging lists the counters whose hanging trigger fired in the step (empty when absent); expect.session (the adopted counter) and expect.deadline (the next deadline) are checked when present.",
+  "note": "Written by hand from the story 4 plan's Design Notes (Restart rules, Two handshakes at once), with no crypto. One scheduler per (peer, relay). A newer handshake armed by an adoption raises its hanging trigger at max(its start + 10 s, the adoption time + the adopted handshake's round trip). Each step happens at at_mono_ms. The runner numbers starts 1, 2, 3 in order and begins each with that number as its counter (or with the step's begin_counter), unless the step says store_fails (no begin, so no hs1). hs2_ok:N is a completed hs2 for the handshake with counter N. tick polls the scheduler. expect.start is the start number emitted in the step, or null; expect.hanging lists the counters whose hanging trigger fired in the step (empty when absent); expect.session (the adopted counter) and expect.deadline (the next deadline) are checked when present.",
   "constants": {
     "window_ms": 10000,
     "retry_ms": 10000,
@@ -17,7 +17,7 @@
       ]
     },
     {
-      "name": "each trigger starts a handshake once the window is open; pull to refresh only with no session",
+      "name": "each trigger starts a handshake once the window is open, pull to refresh too, with or without a session",
       "steps": [
         { "at_mono_ms": 0, "event": "trigger:mac_online", "expect": { "start": 1, "deadline": 10000 } },
         { "at_mono_ms": 1000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 86401000 } },
@@ -27,9 +27,10 @@
         { "at_mono_ms": 41000, "event": "hs2_ok:3", "expect": { "start": null, "session": 3 } },
         { "at_mono_ms": 60000, "event": "trigger:bad_frame", "expect": { "start": 4 } },
         { "at_mono_ms": 61000, "event": "hs2_ok:4", "expect": { "start": null, "session": 4, "deadline": 86461000 } },
-        { "at_mono_ms": 80000, "event": "trigger:pull_to_refresh", "expect": { "start": null, "session": 4, "deadline": 86461000 } },
+        { "at_mono_ms": 80000, "event": "trigger:pull_to_refresh", "expect": { "start": 5, "session": 4, "deadline": 90000 } },
+        { "at_mono_ms": 85000, "event": "trigger:pull_to_refresh", "expect": { "start": null, "session": 4, "deadline": 90000 } },
         { "at_mono_ms": 90000, "event": "end", "expect": { "start": null, "session": null, "deadline": null } },
-        { "at_mono_ms": 100000, "event": "trigger:pull_to_refresh", "expect": { "start": 5, "deadline": 110000 } }
+        { "at_mono_ms": 100000, "event": "trigger:pull_to_refresh", "expect": { "start": 6, "deadline": 110000 } }
       ]
     },
     {
@@ -79,9 +80,10 @@
       "steps": [
         { "at_mono_ms": 0, "event": "trigger:mac_online", "expect": { "start": 1 } },
         { "at_mono_ms": 10000, "event": "tick", "expect": { "start": 2 } },
-        { "at_mono_ms": 11000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 20000 } },
-        { "at_mono_ms": 20000, "event": "tick", "expect": { "start": 3, "hanging": [2], "deadline": 30000 } },
-        { "at_mono_ms": 30000, "event": "tick", "expect": { "start": 4, "hanging": [], "deadline": 86411000 } },
+        { "at_mono_ms": 11000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 22000 } },
+        { "at_mono_ms": 20000, "event": "tick", "expect": { "start": null, "hanging": [] } },
+        { "at_mono_ms": 22000, "event": "tick", "expect": { "start": 3, "hanging": [2], "deadline": 32000 } },
+        { "at_mono_ms": 32000, "event": "tick", "expect": { "start": 4, "hanging": [], "deadline": 86411000 } },
         { "at_mono_ms": 40000, "event": "tick", "expect": { "start": null, "hanging": [] } },
         { "at_mono_ms": 60000, "event": "tick", "expect": { "start": null, "hanging": [], "session": 1 } }
       ]
@@ -92,9 +94,9 @@
         { "at_mono_ms": 0, "event": "trigger:mac_online", "expect": { "start": 1 } },
         { "at_mono_ms": 10000, "event": "tick", "expect": { "start": 2 } },
         { "at_mono_ms": 11000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1 } },
-        { "at_mono_ms": 20000, "event": "tick", "expect": { "start": 3, "hanging": [2] } },
-        { "at_mono_ms": 21000, "event": "hs2_ok:3", "expect": { "start": null, "session": 3, "deadline": 86421000 } },
-        { "at_mono_ms": 30000, "event": "tick", "expect": { "start": null } },
+        { "at_mono_ms": 22000, "event": "tick", "expect": { "start": 3, "hanging": [2] } },
+        { "at_mono_ms": 23000, "event": "hs2_ok:3", "expect": { "start": null, "session": 3, "deadline": 86423000 } },
+        { "at_mono_ms": 32000, "event": "tick", "expect": { "start": null } },
         { "at_mono_ms": 40000, "event": "tick", "expect": { "start": null, "session": 3 } }
       ]
     },
@@ -104,9 +106,9 @@
         { "at_mono_ms": 0, "event": "trigger:foreground", "expect": { "start": 1 } },
         { "at_mono_ms": 5000, "event": "trigger:mac_online", "expect": { "start": null } },
         { "at_mono_ms": 10000, "event": "tick", "expect": { "start": 2, "deadline": 20000 } },
-        { "at_mono_ms": 12000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 20000 } },
+        { "at_mono_ms": 10000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 20000 } },
         { "at_mono_ms": 20000, "event": "tick", "expect": { "start": 3, "hanging": [2], "deadline": 30000 } },
-        { "at_mono_ms": 30000, "event": "tick", "expect": { "start": 4, "deadline": 86412000 } }
+        { "at_mono_ms": 30000, "event": "tick", "expect": { "start": 4, "deadline": 86410000 } }
       ]
     },
     {
@@ -140,7 +142,7 @@
       "steps": [
         { "at_mono_ms": 0, "event": "trigger:mac_online", "expect": { "start": 1 } },
         { "at_mono_ms": 10000, "event": "tick", "expect": { "start": 2 } },
-        { "at_mono_ms": 11000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 20000 } },
+        { "at_mono_ms": 11000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 22000 } },
         { "at_mono_ms": 11500, "event": "hs2_ok:2", "expect": { "start": null, "session": 2, "deadline": 86411500 } },
         { "at_mono_ms": 20000, "event": "tick", "expect": { "start": null, "hanging": [], "session": 2 } }
       ]
@@ -202,12 +204,9 @@
         { "at_mono_ms": 30000, "event": "tick", "expect": { "start": 4 } },
         { "at_mono_ms": 40000, "event": "trigger:foreground", "expect": { "start": 5 } },
         { "at_mono_ms": 41000, "event": "hs2_ok:1", "expect": { "start": null, "session": null } },
-        { "at_mono_ms": 42000, "event": "hs2_ok:2", "expect": { "start": null, "session": 2, "deadline": 30000 } },
-        { "at_mono_ms": 43000, "event": "tick", "expect": { "start": null, "hanging": [3, 4], "deadline": 50000 } },
-        { "at_mono_ms": 50000, "event": "tick", "expect": { "start": 6, "hanging": [5], "deadline": 60000 } },
-        { "at_mono_ms": 51000, "event": "hs2_ok:3", "expect": { "start": null, "session": 3, "deadline": 60000 } },
-        { "at_mono_ms": 52000, "event": "tick", "expect": { "start": null, "hanging": [] } },
-        { "at_mono_ms": 60000, "event": "tick", "expect": { "start": 7, "hanging": [6], "deadline": 70000 } }
+        { "at_mono_ms": 42000, "event": "hs2_ok:2", "expect": { "start": null, "session": 2, "deadline": 50000 } },
+        { "at_mono_ms": 50000, "event": "tick", "expect": { "start": 6, "hanging": [], "deadline": 74000 } },
+        { "at_mono_ms": 74000, "event": "tick", "expect": { "start": 7, "hanging": [3, 4, 5], "deadline": 84000 } }
       ]
     },
     {
@@ -218,6 +217,29 @@
         { "at_mono_ms": 20000, "event": "trigger:foreground", "begin_counter": 7, "expect": { "start": 2 } },
         { "at_mono_ms": 21000, "event": "hs2_ok:7", "expect": { "start": null, "session": 10 } },
         { "at_mono_ms": 22000, "event": "hs2_ok:10", "expect": { "start": null, "session": 10 } }
+      ]
+    },
+    {
+      "name": "a fired hanging trigger is never armed again",
+      "steps": [
+        { "at_mono_ms": 0, "event": "trigger:mac_online", "begin_counter": 10, "expect": { "start": 1 } },
+        { "at_mono_ms": 10000, "event": "tick", "begin_counter": 30, "expect": { "start": 2 } },
+        { "at_mono_ms": 10000, "event": "hs2_ok:10", "expect": { "start": null, "session": 10, "deadline": 20000 } },
+        { "at_mono_ms": 20000, "event": "tick", "begin_counter": 20, "expect": { "start": 3, "hanging": [30] } },
+        { "at_mono_ms": 21000, "event": "hs2_ok:20", "expect": { "start": null, "session": 20, "deadline": 86421000 } },
+        { "at_mono_ms": 30000, "event": "tick", "expect": { "start": null, "hanging": [] } }
+      ]
+    },
+    {
+      "name": "a constant 12 s round trip: at most 2 starts, and it converges",
+      "steps": [
+        { "at_mono_ms": 0, "event": "trigger:mac_online", "expect": { "start": 1, "deadline": 10000 } },
+        { "at_mono_ms": 10000, "event": "tick", "expect": { "start": 2, "deadline": null } },
+        { "at_mono_ms": 12000, "event": "hs2_ok:1", "expect": { "start": null, "session": 1, "deadline": 24000 } },
+        { "at_mono_ms": 20000, "event": "tick", "expect": { "start": null, "hanging": [] } },
+        { "at_mono_ms": 22000, "event": "hs2_ok:2", "expect": { "start": null, "session": 2, "deadline": 86422000 } },
+        { "at_mono_ms": 24000, "event": "tick", "expect": { "start": null, "hanging": [] } },
+        { "at_mono_ms": 600000, "event": "tick", "expect": { "start": null, "hanging": [], "session": 2 } }
       ]
     },
     {

@@ -325,11 +325,9 @@ impl Scheduler {
         }
     }
 
-    /// A trigger. Pull to refresh starts nothing while there is a session.
-    pub(crate) fn trigger(&mut self, cause: Cause, now: u64) -> Option<u64> {
-        if cause == Cause::PullToRefresh && self.session.is_some() {
-            return None;
-        }
+    /// A trigger, of any cause, through the window. Pull to refresh starts one with or
+    /// without a session (owner decision, 2026-10-16).
+    pub(crate) fn trigger(&mut self, _cause: Cause, now: u64) -> Option<u64> {
         if self.window.raise(now, self.limits.window_ms) {
             Some(self.start(now, true))
         } else {
@@ -387,12 +385,19 @@ impl Scheduler {
     /// An `hs2` completed the handshake with `counter`. It is adopted only if that
     /// counter is above the session's. Adoption drops the deferred trigger, every
     /// outstanding handshake not above it (and any not yet begun), and arms the
-    /// hanging trigger of each newer one still outstanding.
+    /// hanging trigger of each newer one still outstanding, due at
+    /// `max(its start + 10 s, now + the adopted handshake's round trip)` (owner
+    /// decision, 2026-10-16), so a round trip over 10 s cannot loop.
     pub(crate) fn adopt(&mut self, counter: u64, now: u64) -> bool {
         self.expire(now);
-        if !self.outstanding.iter().any(|p| p.counter == Some(counter)) {
+        let Some(adopted_start) = self
+            .outstanding
+            .iter()
+            .find(|p| p.counter == Some(counter))
+            .map(|p| p.started_at)
+        else {
             return false;
-        }
+        };
         if self.session.is_some_and(|s| counter <= s.counter) {
             return false;
         }
@@ -405,9 +410,10 @@ impl Scheduler {
         self.outstanding
             .retain(|p| p.counter.is_some_and(|c| c > counter));
         let hanging_ms = self.limits.hanging_ms;
+        let round_trip_end = now.saturating_add(now.saturating_sub(adopted_start));
         for p in &mut self.outstanding {
             if p.hanging_due.is_none() && !p.hanging_done {
-                p.hanging_due = Some(p.started_at.saturating_add(hanging_ms));
+                p.hanging_due = Some(p.started_at.saturating_add(hanging_ms).max(round_trip_end));
             }
         }
         self.drop_stale_retry();
@@ -518,7 +524,7 @@ pub enum Trigger {
     Foreground,
     /// The Mac asked, with `rehandshake` (its wire form is story 7b's).
     Rehandshake,
-    /// Pull to refresh: a start only while there is no session.
+    /// Pull to refresh, with or without a session (owner decision, 2026-10-16).
     PullToRefresh,
 }
 
@@ -627,23 +633,27 @@ impl PhoneSession {
     }
 
     /// The second step of a start: `hs1` with `counter`, as an envelope to the Mac.
-    /// `None` if the token is stale (`end()` ran, or a newer session was adopted, since
-    /// the start); the counter is then simply skipped.
-    pub fn begin(&mut self, token: u64, counter: u64) -> Option<Routed> {
+    /// `Ok(None)` if the token is stale (`end()` ran, or a newer session was adopted,
+    /// since the start); the counter is then simply skipped. A counter above
+    /// 2^53 - 1 is an error, as TypeScript's `RangeError` is.
+    pub fn begin(&mut self, token: u64, counter: u64) -> Result<Option<Routed>, HandshakeError> {
+        if counter > MAX_COUNTER {
+            return Err(HandshakeError::CounterRange);
+        }
         if !self.sched.is_outstanding(token) {
-            return None;
+            return Ok(None);
         }
         let (init, hs1) =
-            Initiator::start(&self.own, &self.i_m, &self.i_p, &self.mac_static, counter).ok()?;
+            Initiator::start(&self.own, &self.i_m, &self.i_p, &self.mac_static, counter)?;
         if !self.sched.begin(token, counter) {
-            return None;
+            return Ok(None);
         }
         self.initiators.push((token, init));
-        Some(Routed {
+        Ok(Some(Routed {
             kind: RoutedKind::Hs1,
             peer: self.i_m,
             body: hs1,
-        })
+        }))
     }
 
     /// An `hs2` from the Mac: tried against the outstanding handshakes newest first,
@@ -855,9 +865,11 @@ impl MacSessions {
         ])
     }
 
+    /// Raises `Rehandshake` for a phone the Mac already holds state for; no entry is
+    /// made here, so unpaired keys can't grow the map.
     fn raise(&mut self, phone: DeviceKey, now: u64) -> Option<MacAction> {
         let window_ms = self.limits.window_ms;
-        let peer = self.peers.entry(phone).or_default();
+        let peer = self.peers.get_mut(&phone)?;
         peer.window
             .raise(now, window_ms)
             .then_some(MacAction::Rehandshake(phone))
@@ -889,7 +901,15 @@ impl MacSessions {
             return Err(SendError::TooLarge);
         }
         let ceiling = self.limits.frame_ceiling;
-        let peer = self.peers.entry(phone).or_default();
+        // A phone gets an entry only once it is paired; an unpaired key gets
+        // `NoSession` and nothing is kept.
+        if !self.peers.contains_key(&phone) {
+            if self.statics.statics(&self.i_m, &phone).is_empty() {
+                return Err(SendError::NoSession);
+            }
+            self.peers.insert(phone, MacPeer::default());
+        }
+        let peer = self.peers.get_mut(&phone).expect("just ensured");
         if peer
             .session
             .as_ref()
@@ -1153,7 +1173,7 @@ mod tests {
                     PhoneAction::StartHandshake { token } => {
                         self.phone_starts.push(token);
                         match self.last_sent.next_counter(&self.i_m, self.wall_ms) {
-                            Ok(c) => self.to_mac.extend(self.phone.begin(token, c)),
+                            Ok(c) => self.to_mac.extend(self.phone.begin(token, c).unwrap()),
                             Err(_) => self.store_errors += 1,
                         }
                     }
@@ -1448,17 +1468,54 @@ mod tests {
         assert!(!w.frames_flow(11_001));
         w.to_mac.clear();
         w.to_phone.clear();
-        // 10 s after B's start: one trigger, C, and both sides end on C.
-        assert_eq!(w.phone.next_deadline(), Some(20_000));
+        // At max(B's start + 10 s, 11 s + A's 11 s round trip) = 22 s: one trigger, C,
+        // and both sides end on C.
+        assert_eq!(w.phone.next_deadline(), Some(22_000));
         w.tick(20_000);
+        assert_eq!(w.phone_starts.len(), 2);
+        w.tick(22_000);
         assert_eq!(w.phone_starts.len(), 3);
-        w.run(20_000);
+        w.run(22_000);
         assert_eq!(w.phone.session_id(), w.mac.session_id(&w.i_p));
         assert_ne!(w.phone.session_id(), mac_on_b);
-        assert!(w.frames_flow(20_001));
-        w.tick(30_000);
+        assert!(w.frames_flow(22_001));
+        w.tick(32_000);
         w.tick(60_000);
         assert_eq!(w.phone_starts.len(), 3);
+    }
+
+    #[test]
+    fn a_constant_12_s_round_trip_gives_at_most_2_starts_and_converges() {
+        // A one-way delay of 6 s: every hs2 arrives 12 s after its hs1 was sent.
+        let mut w = world();
+        w.trigger(Trigger::MacOnline, 0);
+        let a = w.to_mac.remove(0);
+        let hs2_a = w.mac.on_hs1(w.i_p, &a.body, 6_000).unwrap();
+        w.tick(10_000);
+        let b = w.to_mac.remove(0);
+        for act in hs2_a {
+            if let MacAction::Send(r) = act {
+                let p = w.phone.on_hs2(&r.body, 12_000);
+                w.phone_actions(p);
+            }
+        }
+        let hs2_b = w.mac.on_hs1(w.i_p, &b.body, 16_000).unwrap();
+        // B's hanging deadline scales to A's 12 s round trip: not at 20 s.
+        assert_eq!(w.phone.next_deadline(), Some(24_000));
+        w.tick(20_000);
+        assert_eq!(w.phone_starts.len(), 2);
+        for act in hs2_b {
+            if let MacAction::Send(r) = act {
+                let p = w.phone.on_hs2(&r.body, 22_000);
+                w.phone_actions(p);
+            }
+        }
+        for t in [24_000, 60_000, 600_000] {
+            w.tick(t);
+        }
+        assert_eq!(w.phone_starts.len(), 2);
+        assert_eq!(w.phone.session_id(), w.mac.session_id(&w.i_p));
+        assert!(w.frames_flow(600_001));
     }
 
     #[test]
@@ -1542,8 +1599,7 @@ mod tests {
     }
 
     #[test]
-    fn the_phone_starts_on_mac_online_foreground_rehandshake_and_pull_to_refresh_without_a_session()
-    {
+    fn the_phone_starts_on_mac_online_foreground_rehandshake_and_pull_to_refresh() {
         for kind in [
             Trigger::MacOnline,
             Trigger::Foreground,
@@ -1556,11 +1612,16 @@ mod tests {
             w.run(0);
             assert!(w.frames_flow(1), "{kind:?}");
         }
-        // Pull to refresh with a session starts nothing.
+        // Pull to refresh with a session starts one too (owner decision, 2026-10-16),
+        // through the same window.
         let mut w = world();
         w.connect(0);
-        w.trigger(Trigger::PullToRefresh, 20_000);
+        w.trigger(Trigger::PullToRefresh, 5_000);
         assert_eq!(w.phone_starts.len(), 1);
+        w.trigger(Trigger::PullToRefresh, 20_000);
+        assert_eq!(w.phone_starts.len(), 2);
+        w.run(20_000);
+        assert!(w.frames_flow(20_001));
     }
 
     #[test]
@@ -1772,6 +1833,30 @@ mod tests {
     }
 
     #[test]
+    fn the_hs1_counter_store_checks_and_records_in_one_atomic_step() {
+        // Eight threads offer the same counter at once, 2,000 times: exactly one is
+        // accepted each time. A store that checks under one lock and records under
+        // another fails this.
+        let counters = MemoryHs1Counters::new();
+        let (mac, phone) = (key(1), key(2));
+        for v in 0..2_000u64 {
+            let barrier = Barrier::new(8);
+            let accepted: usize = std::thread::scope(|s| {
+                let handles: Vec<_> = (0..8)
+                    .map(|_| {
+                        s.spawn(|| {
+                            barrier.wait();
+                            counters.accept_if_above(&mac, &phone, v).unwrap() as usize
+                        })
+                    })
+                    .collect();
+                handles.into_iter().map(|h| h.join().unwrap()).sum()
+            });
+            assert_eq!(accepted, 1, "counter {v}");
+        }
+    }
+
+    #[test]
     fn two_phone_sessions_for_one_mac_key_send_distinct_counters() {
         let mac_key = StaticKeypair::generate();
         let store: Arc<dyn LastSent> = Arc::new(MemoryLastSent::new());
@@ -1796,7 +1881,7 @@ mod tests {
                     panic!("a start");
                 };
                 let c = store.next_counter(&i_m, 1_000).unwrap();
-                phone.begin(token, c).expect("hs1");
+                phone.begin(token, c).unwrap().expect("hs1");
                 c
             };
             let (a, b) = std::thread::scope(|s| {
@@ -1881,7 +1966,7 @@ mod tests {
                 panic!("{actions:?}");
             };
             let c = last_sent.next_counter(&i_m, 1_000).unwrap();
-            phone.begin(*token, c).unwrap().body
+            phone.begin(*token, c).unwrap().unwrap().body
         };
         let a = phone_a.trigger(Trigger::MacOnline, 0);
         let hs1_a = start(&mut phone_a, a);
@@ -1918,7 +2003,7 @@ mod tests {
             panic!()
         };
         w.phone.end();
-        assert_eq!(w.phone.begin(token, 1), None);
+        assert_eq!(w.phone.begin(token, 1), Ok(None));
 
         // After a newer session was adopted.
         let mut w = world();
@@ -1930,7 +2015,38 @@ mod tests {
         };
         w.run(10_001);
         assert!(w.phone.session_id().is_some());
-        assert_eq!(w.phone.begin(token, 1_760_000_000_005), None);
+        assert_eq!(w.phone.begin(token, 1_760_000_000_005), Ok(None));
+    }
+
+    #[test]
+    fn begin_refuses_a_counter_above_2_pow_53_minus_1_as_an_error_not_a_stale_token() {
+        let mut w = world();
+        let [PhoneAction::StartHandshake { token }] = w.phone.trigger(Trigger::MacOnline, 0)[..]
+        else {
+            panic!()
+        };
+        assert_eq!(
+            w.phone.begin(token, MAX_COUNTER + 1),
+            Err(HandshakeError::CounterRange)
+        );
+        assert!(matches!(w.phone.begin(token, MAX_COUNTER), Ok(Some(_))));
+    }
+
+    #[test]
+    fn unpaired_keys_leave_no_state_on_the_mac() {
+        let mut w = world();
+        w.connect(0);
+        for i in 0..1_000u32 {
+            let mut k = [0xee; 32];
+            k[..4].copy_from_slice(&i.to_be_bytes());
+            let stranger = Bytes(k);
+            assert_eq!(w.mac.send(stranger, b"x", 1), Err(SendError::NoSession));
+            assert_eq!(w.mac.on_frame(stranger, &[0; 40], 1), vec![]);
+            assert_eq!(w.mac.on_hs1(stranger, &[0; 104], 1).unwrap(), vec![]);
+        }
+        assert_eq!(w.mac.peers.len(), 1);
+        assert_eq!(w.mac.poll(1), vec![]);
+        assert_eq!(w.mac.next_deadline(), None);
     }
 
     #[test]

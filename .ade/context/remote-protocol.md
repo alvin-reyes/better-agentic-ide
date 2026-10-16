@@ -274,9 +274,14 @@ recipient when a device sends and the sender when the relay delivers. Rust
 **The stores** (`relay_core`), each `&self + Send + Sync`, with in-memory implementations over a
 `Mutex`. Counters are keyed only by identity keys, never by pair id or relay URL:
 - `Hs1Counters::accept_if_above(mac, phone, v) -> Result<bool, StoreError>`: check and record
-  in one step; there is no separate read. Two `MacSessions` (two relays) sharing it accept a
-  replayed `hs1` at most once, over 1,000 threaded runs
-  (`core::session::two_mac_machines_sharing_a_store_accept_a_replayed_hs1_once_at_most`).
+  in one atomic step; there is no separate read. An implementation must hold one lock (or one
+  transaction) across the check and the record: eight threads offering the same counter at
+  once get exactly one `true`, over 2,000 rounds, and a store that checks under one lock and
+  records under another fails that
+  (`core::session::the_hs1_counter_store_checks_and_records_in_one_atomic_step`). End to end,
+  two `MacSessions` (two relays) sharing it accept a replayed `hs1` at most once
+  (`core::session::two_mac_machines_sharing_a_store_accept_a_replayed_hs1_once_at_most`; that
+  test alone does not catch a check-then-act store).
   The Mac records the counter before writing `hs2`, and a failed write sends no `hs2`
   (`core::session::the_mac_accepts_only_a_counter_above_the_last_and_records_it_before_hs2`,
   `core::session::a_store_whose_write_fails_stops_the_handshake_on_either_side`).
@@ -307,7 +312,13 @@ phone's counter).
   from the store and calls `begin(token, counter)`, which returns the `hs1` envelope, or
   nothing if the token is stale (`end()` ran, or a newer session was adopted), and the
   counter is skipped (`core::session::a_stale_begin_token_returns_nothing`; "a stale begin
-  token returns null…"). A failed store write means no `begin`, so no `hs1`.
+  token returns null…"). A counter above 2^53 − 1 is an error, never a stale-token nothing:
+  Rust `Err(HandshakeError::CounterRange)`, TypeScript `RangeError`
+  (`core::session::begin_refuses_a_counter_above_2_pow_53_minus_1_as_an_error_not_a_stale_token`).
+  A failed store write means no `begin`, so no `hs1`.
+- `MacSessions` keeps state only for phones it is paired with or has a session with: `send`,
+  `on_frame` and `on_hs1` for an unpaired key return nothing (`send`: `NoSession`, with no
+  `Rehandshake`) and add no entry (`core::session::unpaired_keys_leave_no_state_on_the_mac`).
 - `send` with no session (or at the ceiling) returns an error and raises the trigger, whose
   action comes from the next `poll` (`core::session::send_with_no_session_raises_the_phone_trigger`,
   `core::session::the_mac_asks_for_a_handshake_when_it_has_no_session`).
@@ -323,8 +334,10 @@ every script"):
   `core::session::a_deferred_rehandshake_is_dropped_when_a_session_completes_first`).
 - The phone starts on: Mac online (`welcome` or `presence`), foreground, `rehandshake`, a `bad`
   frame, 24 h after its session completed, its send nonce reaching 2^32, a received nonce of
-  2^32 − 1, and pull to refresh only while it has no session
-  (`core::session::the_phone_starts_on_mac_online_foreground_rehandshake_and_pull_to_refresh_without_a_session`,
+  2^32 − 1, and pull to refresh with or without a session (widened by the owner on
+  2026-10-16 after the code review: two lost messages can leave the sides on different
+  sessions until the next trigger, and pull to refresh is the user's way out)
+  (`core::session::the_phone_starts_on_mac_online_foreground_rehandshake_and_pull_to_refresh`,
   `core::session::the_phone_starts_after_24_h`,
   `core::session::the_phone_starts_at_its_send_ceiling_and_at_a_received_nonce_of_ceiling_minus_1`).
 - The Mac's triggers are `send` with no session, its own send ceiling (which drops the
@@ -344,8 +357,13 @@ every script"):
   (`core::session::two_handshakes_at_once_leave_the_newest`,
   `core::session::two_handshakes_at_once_the_stuck_state_newer_hs1_lost`).
 - **The hanging trigger (owner decision, option (a)).** Adoption arms each newer outstanding
-  handshake; one with no `hs2` 10 s after its start raises one trigger through the window,
-  once per handshake. With no adoption, nothing is armed: a silent Mac gets the start and its
+  handshake; one with no `hs2` by `max(started_at + 10 s, adopted_at + (adopted_at −
+  adopted.started_at))` raises one trigger through the window, once per handshake. The
+  deadline scales to the round trip just measured on the adopted handshake (amended by the
+  owner on 2026-10-16 after the code review), so a round trip over 10 s cannot loop: a
+  constant 12 s round trip gives at most 2 starts
+  (`core::session::a_constant_12_s_round_trip_gives_at_most_2_starts_and_converges`; "AC4: a
+  constant 12 s round trip…"; `schedule.json` "a constant 12 s round trip…"). With no adoption, nothing is armed: a silent Mac gets the start and its
   one retry, 2 starts in 60 s (`core::session::two_handshakes_at_once_the_lost_newer_hs2_converges`,
   `core::session::the_lost_newer_hs2_then_c_lost_too_gets_one_retry_and_b_no_second_trigger`).
 - A cross-relay collision (two relays' counters reaching the Mac out of order) heals on the
