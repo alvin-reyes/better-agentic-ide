@@ -1,6 +1,7 @@
 ---
 name: designer
 description: "Owns docs/ux-spec.md and docs/mockup.html. Use for user flows, screens and a working HTML mockup."
+color: pink
 ---
 
 # Designer

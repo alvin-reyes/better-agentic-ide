@@ -1,6 +1,7 @@
 ---
 name: architect
 description: "Owns docs/architecture.md and the verification command. Use to design the build from the PRD, or to settle a technical decision and record it as an ADR."
+color: blue
 ---
 
 # Architect

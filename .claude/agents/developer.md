@@ -1,6 +1,7 @@
 ---
 name: developer
 description: "Implements exactly one story from docs/stories/, test-first. Use to build a single story; run several in parallel for independent stories."
+color: green
 ---
 
 # Developer (Dev)

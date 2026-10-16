@@ -1,6 +1,7 @@
 ---
 name: devops
 description: "Owns docs/ops.md: CI/CD, environments, release, rollback and monitoring. Use for delivery and operations planning."
+color: orange
 ---
 
 # DevOps / Release Engineer
