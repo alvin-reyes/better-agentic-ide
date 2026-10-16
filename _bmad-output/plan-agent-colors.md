@@ -11,7 +11,7 @@ risk: 'low'
 review: 'quick'
 review_source: 'pinned'
 lenses_ran: []
-review_loop_iteration: 2
+review_loop_iteration: 3
 context: ['.ade/context/decisions/0007-agent-colors-live-in-ade-keyed-by-role.md']
 ---
 
@@ -141,7 +141,7 @@ The dark hexes stay below 4.5:1 on Nord's surfaces (and fall to about 3.4 when d
 - Cancelled: `background-color: transparent` and `background-image: repeating-linear-gradient(135deg, <role hex> 0 3px, transparent 3px 6px)`, so the track shows between the stripes: a hatched fill in the role's color. A solid background under the stripes would hide the hatch. The stripes keep the fill's 3:1 against the track.
 - Completed: solid fill, both ends rounded, no edge.
 - Text: each bar's `title` and `aria-label` are `"<label>, <role title or 'not an ADE role'>[, <detail>], <running|completed|cancelled>"`: the lane's `detail` is kept when present, as today (`FleetTimeline.tsx:141`), and the status word is always last.
-- Keyboard: when `onSelect` is set (FleetTab always sets it, `FleetTab.tsx:112,116`), the bar is a real `<button type="button">` (reset styles, same geometry), so Tab reaches it and Enter or Space selects it, with a visible `:focus-visible` outline (`outline: 2px solid var(--text-primary); outline-offset: 1px`, class `fleet-lane-bar` in `src/index.css`). Without `onSelect` it stays a `<div role="img">`.
+- Keyboard: when `onSelect` is set (FleetTab always sets it, `FleetTab.tsx:112,116`), the bar is a real `<button type="button">` (reset styles, same geometry, still `data-testid="lane-bar"`), with `onClick` calling `onSelect` and no `onKeyDown`: the browser's native button activation turns Enter and Space into that click, and a key handler would fire `onSelect` twice. Tab reaches it, with a visible `:focus-visible` outline (`outline: 2px solid var(--text-primary); outline-offset: 1px`, class `fleet-lane-bar` in `src/index.css`). Without `onSelect` it stays a `<div role="img">`.
 - Reduced motion: `src/index.css` has `@media (prefers-reduced-motion: reduce) { .fleet-live-edge { animation: none; } }`.
 - Attributes for tests: `data-agent-color` (name or `none`) and `data-status`.
 - `STATUS_COLOR`, the `#a855f7` literal and both opacities are removed.
@@ -167,8 +167,8 @@ Each names the test that covers it; the developer writes it failing first.
 8. `PICKER_ITEMS`: a curated item and a bare-role item each carry their role's dark hex. -- `src/data/__tests__/pickerItems.test.ts` › "picker items are colored by role" (new case)
 9. Picker: no category pill or badge has an agent or category hex in `color`, `border` or `background`; the icon tile's border is the role hex and its glyph's `color` is `var(--text-primary)`; "Run X in" shows the name in `var(--text-primary)` with a dot in the role hex. -- `src/components/__tests__/AgentPicker.test.tsx` › "categories are neutral and role color is never text"
 10. `FleetTimeline` with `roleId` "qa", "developer" and null: bars carry `data-agent-color` yellow, green, none, backgrounds equal to the hexes (compared as jsdom's `rgb(...)`), full opacity, and a dot of the same color by each label whose text `color` is not a role hex. -- `src/components/fleet/__tests__/FleetTimeline.test.tsx` › "fills each lane in its role's color, neutral when it has none"
-11. Running, completed and cancelled lanes of one role: running and completed bars have the role hex as `backgroundColor`; the cancelled bar's `backgroundColor` is `transparent` and its `backgroundImage` is a `repeating-linear-gradient` containing the role hex (as jsdom reports it); only running has `lane-live-edge` and a square right end; each bar's `title` and `aria-label` end with its status word, and a lane with a `detail` has that detail in both before the status word. -- `FleetTimeline.test.tsx` › "shows status by shape and text, not color"
-12. With `onSelect` set, a bar is a `<button>`: focusing it and pressing Enter (and, separately, Space) calls `onSelect` with that lane; without `onSelect` it is not a button. -- `FleetTimeline.test.tsx` › "a lane bar is reachable and selectable by keyboard"
+11. Running, completed and cancelled lanes of one role: running and completed bars have the role hex as `backgroundColor`; the cancelled bar's `backgroundColor` is `transparent` and its `backgroundImage` is a `repeating-linear-gradient` containing the role hex (as jsdom reports it); only running has `lane-live-edge` and a square right end; each bar's `title` and `aria-label` end with its status word, and a lane with a `detail` has that detail in both before the status word. Read colors from `el.style`, not `getComputedStyle`, which reports `transparent` as `rgba(0, 0, 0, 0)`. -- `FleetTimeline.test.tsx` › "shows status by shape and text, not color"
+12. With `onSelect` set, `getByTestId("lane-bar")` is an `HTMLButtonElement` with `type="button"`, class `fleet-lane-bar`, not disabled and with no `tabIndex` of -1, and `fireEvent.click` on it calls `onSelect` exactly once with that lane; without `onSelect` it is a `div` with `role="img"`. Enter and Space are not simulated: jsdom does not perform native activation, and the code adds no key handler for it. No new dev dependency. -- `FleetTimeline.test.tsx` › "a selectable lane bar is a native button"
 13. `src/index.css` has a `prefers-reduced-motion: reduce` block that sets `animation: none` on `.fleet-live-edge`, and a `:focus-visible` outline on `.fleet-lane-bar`. -- `scripts/fleetMotion.test.ts` › "the live edge stops under reduced motion and bars show focus"
 14. `FleetSummary` and `FleetGroups` draw "running" with no green and no role hex. -- `src/components/fleet/__tests__/FleetSummary.test.tsx` › "running is not green"; `FleetGroups.test.tsx` › "running is not green"
 15. `buildLanes` gives a sub-agent of type `ade:web3-auditor` roleId adversarial-reviewer, `Explore` null, `foo:Explore` null. -- `src/stores/__tests__/fleetAttribution.test.ts` › "a plugin-namespaced agent type resolves to its role"
@@ -245,7 +245,8 @@ None. The earlier three were decided on 2026-10-16 (decisions 5 and 8).
   - The owner's decisions 5–8 resolve the previous open questions.
 - 2026-10-16, re-review of a43ce4f: earlier findings confirmed fixed; BLOCKED on two majors, three minors. Fixed in this revision:
   - N1: a cancelled bar's background color is transparent so the hatch shows; A-AC11 asserts it.
-  - N2: a selectable bar is a real `<button>` with a focus outline; A-AC12 asserts keyboard selection.
+  - N2: a selectable bar is a real `<button>` with a focus outline; A-AC12 asserts it.
   - n1: the role border survives `.org-node:hover`; B-AC2 and B-AC3 check it.
   - n2: the bar's title keeps `detail`; A-AC11 asserts it.
   - n3: A-AC13 asserts the reduced-motion override.
+- 2026-10-16, third re-review: BLOCKED on R1. jsdom does not turn Enter or Space into a click, and a key handler would double-fire `onSelect` in a browser, so A-AC12 now tests the native button (type, class, test id, focusable, one click → one `onSelect`) and the plan states no `onKeyDown` is added (R1–R3). A-AC11 notes reading `el.style`.
