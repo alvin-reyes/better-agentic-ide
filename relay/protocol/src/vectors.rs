@@ -2,6 +2,7 @@
 //! TypeScript suite reads too. The crypto files come from `generate.mjs` (on
 //! `node:crypto`); `names.json` and `qr.json` are written by hand from the spec.
 
+use crate::seal::seal_with_nonce;
 use crate::*;
 use ed25519_dalek::SigningKey;
 use serde_json::Value;
@@ -118,6 +119,11 @@ fn vectors_signatures() {
         key.verifying_key().to_bytes().to_vec(),
         bytes(&anchor["public"])
     );
+    // enc("", no fields) is the empty message, so sign() reproduces RFC 8032 test 1.
+    assert_eq!(text(&anchor["message"]), "");
+    let anchor_sig = sign(&key, "", &[]);
+    assert_eq!(anchor_sig, arr::<64>(&anchor["sig"]));
+    assert!(verify(&arr(&anchor["public"]), "", &[], &anchor_sig));
 
     let cases = list(&file, "cases");
     assert_eq!(cases.len(), ALL_LABELS.len());
@@ -133,7 +139,7 @@ fn vectors_signatures() {
     }
 
     let refused = list(&file, "refused");
-    assert_eq!(refused.len(), 3);
+    assert_eq!(refused.len(), 4);
     for case in refused {
         let f = fields(&case["fields"]);
         let ok = verify(
@@ -232,8 +238,10 @@ fn vectors_sas() {
         sas_inputs(&cases[1]),
         sas_inputs(&cases[2]),
     );
-    assert!(a.i_p != b.i_p && (a.slot, a.s_m, a.s_p, a.n_p) == (b.slot, b.s_m, b.s_p, b.n_p));
-    assert!(a.s_p != c.s_p && (a.i_p, a.n_m, a.s) == (c.i_p, c.n_m, c.s));
+    assert_ne!(a.i_p, b.i_p);
+    assert_eq!(SasInputs { i_p: a.i_p, ..b }, a, "only I_P differs");
+    assert_ne!(a.s_p, c.s_p);
+    assert_eq!(SasInputs { s_p: a.s_p, ..c }, a, "only S_P differs");
     assert_ne!(codes[0], codes[1]);
     assert_ne!(codes[0], codes[2]);
 }

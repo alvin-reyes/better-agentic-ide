@@ -25,7 +25,7 @@ pub use labels::*;
 pub use names::{clean_name, name_from_bytes};
 pub use qr::{build_pair_code, parse_pair_code, PairCode, PairCodeError};
 pub use sas::{sas_code, SasInputs};
-pub use seal::{open, pair_keys, seal, seal_with_nonce, PairKeys, NONCE_LEN, TAG_LEN};
+pub use seal::{open, pair_keys, seal, PairKeys, NONCE_LEN, TAG_LEN};
 pub use sign::{sign, verify};
 
 /// Fixed-length bytes, carried on the wire as unpadded base64url.

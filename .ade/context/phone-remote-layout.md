@@ -33,18 +33,20 @@ The wire contract is in `remote-protocol.md`.
 - Story 3 added, one module each, re-exported from `src/index.ts`:
   - `bytes.ts`: `toHex`, `fromHex`, `concatBytes`, `base64UrlEncode`, `base64UrlDecode`
     (strict, `null` on bad input), `utf8Encode`, `utf8DecodeLossy`, `percentEncode`,
-    `percentDecode` (strict, `null` on bad input), `randomBytes`;
+    `percentDecode` (strict, `null` on bad input), `expectLength` (throws `RangeError`),
+    `randomBytes`;
   - `enc.ts`: `enc`, `dec`;
   - `labels.ts`: the eleven label constants and `ALL_LABELS`;
   - `sign.ts`: `sign(seed, label, fields)`, `verify(id, label, fields, sig)`;
-  - `seal.ts`: `pairKeys`, `sealWithNonce`, `seal`, `open`, `NONCE_LEN`, `TAG_LEN`, type `PairKeys`;
+  - `seal.ts`: `pairKeys`, `seal`, `open`, `NONCE_LEN`, `TAG_LEN`, type `PairKeys` (its
+    `sealWithNonce` is not exported from `index.ts`; the tests import it from `./seal`);
   - `sas.ts`: `sasCode`, type `SasInputs`;
   - `names.ts`: `cleanName`, `nameFromBytes`;
   - `qr.ts`: `buildPairCode`, `parsePairCode`, types `PairCode`, `PairCodeInput`,
     `PairCodeError`, `PairCodeResult`.
 
   The Rust twins are at the `relay_protocol` crate root: `enc`, `dec`, the label constants,
-  `ALL_LABELS`, `sign`, `verify`, `pair_keys`, `PairKeys`, `seal_with_nonce`, `seal`, `open`,
+  `ALL_LABELS`, `sign`, `verify`, `pair_keys`, `PairKeys`, `seal`, `open`,
   `NONCE_LEN`, `TAG_LEN`, `sas_code`, `SasInputs`, `clean_name`, `name_from_bytes`,
   `build_pair_code`, `parse_pair_code`, `PairCode`, `PairCodeError`.
 - **Import rule:** the package's non-test `src/` modules take randomness only from

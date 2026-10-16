@@ -174,6 +174,17 @@
       "why": "non-canonical A, y = p + 1 (which reduces to the identity), with R the identity and S = 0",
       "public": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
       "sig": "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "label": "ade-remote/v1/login",
+      "fields": [
+        "2995dd3b5e16dc2f1036e501511359c6b213bb08f5da5332213a5eef5ca5f7a1",
+        "72656c61792e6578616d706c652e636f6d",
+        "70686f6e65"
+      ],
+      "why": "non-canonical A, y = p + 3 (a large-order point whose canonical y is 3), with a good signature's R and S",
+      "public": "f0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "sig": "84d3a7df53728b0538b8b87afbc3a778761bd682b83d195148c54fd97ee52c38c38b2b5e84e5db893f3a319adf84b6985b8baede0c0e2577673d55051f0cbf02"
     }
   ]
 }

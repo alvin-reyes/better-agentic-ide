@@ -171,6 +171,12 @@ export function percentDecode(text: string): Uint8Array | null {
   return Uint8Array.from(out);
 }
 
+/** Throws a RangeError unless `bytes` is exactly `len` long. A wrong length is a
+ *  caller's bug, which Rust's fixed-size arrays rule out at compile time. */
+export function expectLength(bytes: Uint8Array, len: number, what: string): void {
+  if (bytes.length !== len) throw new RangeError(`${what} must be ${len} bytes, not ${bytes.length}`);
+}
+
 /** Bytes from globalThis.crypto.getRandomValues, the only source of randomness. */
 export function randomBytes(n: number): Uint8Array {
   const c = (globalThis as { crypto?: { getRandomValues<T extends Uint8Array>(a: T): T } }).crypto;

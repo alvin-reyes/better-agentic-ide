@@ -72,9 +72,7 @@ pub fn build_pair_code(
 /// Parses a code. Structure errors win over `InsecureRelay`.
 pub fn parse_pair_code(code: &str) -> Result<PairCode, PairCodeError> {
     use PairCodeError::*;
-    if code.is_empty() || !code.bytes().all(|b| (0x21..=0x7E).contains(&b)) {
-        return Err(NotPairingCode);
-    }
+    // The version comes first: v2 and up are `NewerVersion` whatever follows.
     let after = code.strip_prefix(PREFIX).ok_or(NotPairingCode)?;
     let digits = after.bytes().take_while(u8::is_ascii_digit).count();
     let (version, rest) = after.split_at(digits);
@@ -83,6 +81,9 @@ pub fn parse_pair_code(code: &str) -> Result<PairCode, PairCodeError> {
     }
     if version != "1" {
         return Err(NewerVersion);
+    }
+    if !code.bytes().all(|b| (0x21..=0x7E).contains(&b)) {
+        return Err(NotPairingCode);
     }
     let query = rest.strip_prefix('?').ok_or(NotPairingCode)?;
 
@@ -137,10 +138,10 @@ pub fn parse_pair_code(code: &str) -> Result<PairCode, PairCodeError> {
     })
 }
 
-/// A relay is characters 0x21-0x7E (else `NotPairingCode`), then exactly `wss://`
-/// and at least one more character (else `InsecureRelay`).
+/// A relay is one or more characters 0x21-0x7E (else `NotPairingCode`), then
+/// exactly `wss://` and at least one more character (else `InsecureRelay`).
 fn check_relay(relay: &[u8]) -> Result<(), PairCodeError> {
-    if !relay.iter().all(|b| (0x21..=0x7E).contains(b)) {
+    if relay.is_empty() || !relay.iter().all(|b| (0x21..=0x7E).contains(b)) {
         return Err(PairCodeError::NotPairingCode);
     }
     if relay.len() <= SECURE_SCHEME.len() || !relay.starts_with(SECURE_SCHEME.as_bytes()) {

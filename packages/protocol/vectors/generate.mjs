@@ -231,6 +231,7 @@ function signaturesFile() {
   const sPlusL = Buffer.from((s + L).toString(16).padStart(64, "0"), "hex").reverse();
   const p = (1n << 255n) - 19n;
   const yIsPPlusOne = Buffer.from((p + 1n).toString(16).padStart(64, "0"), "hex").reverse();
+  const yIsPPlusThree = Buffer.from((p + 3n).toString(16).padStart(64, "0"), "hex").reverse();
   const refused = [
     {
       why: "small-order A (the identity), with R the identity and S = 0, which a cofactorless or lax check accepts",
@@ -246,6 +247,15 @@ function signaturesFile() {
       why: "non-canonical A, y = p + 1 (which reduces to the identity), with R the identity and S = 0",
       public: hex(yIsPPlusOne),
       sig: identity + "00".repeat(32),
+    },
+    {
+      // y = 3 is a point of large order, so only the encoding is wrong. Nobody knows
+      // its private key, so no signature can check under it, canonical or not; the
+      // case pins that both languages refuse the key itself, and Rust's unit test
+      // shows its canonical check is what refuses it.
+      why: "non-canonical A, y = p + 3 (a large-order point whose canonical y is 3), with a good signature's R and S",
+      public: hex(yIsPPlusThree),
+      sig: hex(good),
     },
   ].map((r) => ({ label: lbl, fields: fields.map(hex), ...r }));
   return { anchors: { rfc8032_test1: ANCHORS.rfc8032_test1 }, cases, refused };

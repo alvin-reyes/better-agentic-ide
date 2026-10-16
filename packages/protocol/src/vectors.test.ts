@@ -31,13 +31,14 @@ import {
   parsePairCode,
   sasCode,
   seal,
-  sealWithNonce,
   sign,
   toHex,
   utf8DecodeLossy,
   verify,
   type SasInputs,
 } from "./index";
+import * as protocol from "./index";
+import { sealWithNonce } from "./seal";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any;
@@ -112,7 +113,7 @@ describe("protocol vectors", () => {
       expect(toHex(sig), c.label).toBe(c.sig);
       expect(verify(fromHex(c.public), c.label, fields(c.fields), sig)).toBe(true);
     }
-    expect(file.refused).toHaveLength(3);
+    expect(file.refused).toHaveLength(4);
     for (const c of file.refused) {
       expect(verify(fromHex(c.public), c.label, fields(c.fields), fromHex(c.sig)), c.why).toBe(false);
     }
@@ -272,3 +273,46 @@ describe("protocol vectors", () => {
 });
 
 const publicKeyOf = (seed: Uint8Array) => ed25519.getPublicKey(seed);
+
+describe("the package's surface", () => {
+  it("does not export sealWithNonce: real seals take a random nonce", () => {
+    expect("sealWithNonce" in protocol).toBe(false);
+    expect(typeof protocol.seal).toBe("function");
+  });
+});
+
+describe("input lengths", () => {
+  const ok = {
+    relay: "wss://relay.example.com",
+    slot: new Uint8Array(16),
+    id: new Uint8Array(32),
+    x: new Uint8Array(32),
+    s: new Uint8Array(32),
+    name: "Mac",
+  };
+
+  it("buildPairCode accepts the right lengths", () => {
+    expect(buildPairCode(ok).ok).toBe(true);
+  });
+
+  it.each([
+    ["slot", 15],
+    ["slot", 32],
+    ["id", 31],
+    ["id", 33],
+    ["x", 16],
+    ["x", 0],
+    ["s", 31],
+    ["s", 64],
+  ] as const)("buildPairCode throws on a %s of %i bytes", (field, len) => {
+    expect(() => buildPairCode({ ...ok, [field]: new Uint8Array(len) })).toThrow(RangeError);
+  });
+
+  it("pairKeys throws unless s is 32 bytes and slot is 16", () => {
+    expect(() => pairKeys(new Uint8Array(32), new Uint8Array(16))).not.toThrow();
+    expect(() => pairKeys(new Uint8Array(31), new Uint8Array(16))).toThrow(RangeError);
+    expect(() => pairKeys(new Uint8Array(33), new Uint8Array(16))).toThrow(RangeError);
+    expect(() => pairKeys(new Uint8Array(32), new Uint8Array(15))).toThrow(RangeError);
+    expect(() => pairKeys(new Uint8Array(32), new Uint8Array(32))).toThrow(RangeError);
+  });
+});

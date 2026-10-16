@@ -16,5 +16,5 @@ export * from "./labels";
 export * from "./names";
 export * from "./qr";
 export * from "./sas";
-export * from "./seal";
+export { NONCE_LEN, TAG_LEN, open, pairKeys, seal, type PairKeys } from "./seal";
 export * from "./sign";

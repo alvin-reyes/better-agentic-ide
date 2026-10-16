@@ -3,7 +3,7 @@
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha2";
-import { concatBytes, randomBytes, utf8Encode } from "./bytes";
+import { concatBytes, expectLength, randomBytes, utf8Encode } from "./bytes";
 import { dec, enc } from "./enc";
 import { PAIR_MAC_TO_PHONE_INFO, PAIR_PHONE_TO_MAC_INFO } from "./labels";
 
@@ -20,16 +20,19 @@ export interface PairKeys {
   mp: Uint8Array;
 }
 
-/** `k_pm` and `k_mp` from the QR code's secret `s` and its `slot`. */
+/** `k_pm` and `k_mp` from the QR code's 32-byte secret `s` and its 16-byte `slot`.
+ *  Throws a RangeError on any other length. */
 export function pairKeys(s: Uint8Array, slot: Uint8Array): PairKeys {
+  expectLength(s, 32, "s");
+  expectLength(slot, 16, "slot");
   return {
     pm: hkdf(sha256, s, slot, utf8Encode(PAIR_PHONE_TO_MAC_INFO), 32),
     mp: hkdf(sha256, s, slot, utf8Encode(PAIR_MAC_TO_PHONE_INFO), 32),
   };
 }
 
-/** Seals `enc(label, fields)` under `key` with the given nonce. Tests and vectors
- *  only; real seals take a random nonce from `seal`. */
+/** Seals `enc(label, fields)` under `key` with the given nonce. Not exported from
+ *  the package: only `seal` (with a random nonce) and the tests call it. */
 export function sealWithNonce(key: Uint8Array, nonce: Uint8Array, label: string, fields: Uint8Array[]): Uint8Array {
   return concatBytes(nonce, xchacha20poly1305(key, nonce).encrypt(enc(label, fields)));
 }

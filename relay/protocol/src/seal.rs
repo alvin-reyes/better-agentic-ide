@@ -38,9 +38,9 @@ pub fn pair_keys(s: &[u8; 32], slot: &[u8; 16]) -> PairKeys {
     keys
 }
 
-/// Seals `enc(label, fields)` under `key` with the given nonce. Tests and vectors
-/// only; real seals take a random nonce from `seal`.
-pub fn seal_with_nonce(
+/// Seals `enc(label, fields)` under `key` with the given nonce. Crate-private:
+/// only `seal` (with a random nonce) and the tests call it.
+pub(crate) fn seal_with_nonce(
     key: &[u8; 32],
     nonce: &[u8; NONCE_LEN],
     label: &str,

@@ -1,6 +1,6 @@
 // The pairing QR code: ade-pair://v1?relay=..&slot=..&id=..&x=..&s=..&n=..
 // The grammar, its errors and their precedence are in .ade/context/remote-protocol.md.
-import { base64UrlDecode, base64UrlEncode, percentDecode, percentEncode, utf8Encode } from "./bytes";
+import { base64UrlDecode, base64UrlEncode, expectLength, percentDecode, percentEncode, utf8Encode } from "./bytes";
 import { cleanName, nameFromBytes } from "./names";
 
 const PREFIX = "ade-pair://v";
@@ -46,16 +46,21 @@ const isVisibleAscii = (text: string) => {
   return true;
 };
 
-/** A relay is characters 0x21-0x7E (else not_pairing_code), then exactly
- *  `wss://` and at least one more character (else insecure_relay). */
+/** A relay is one or more characters 0x21-0x7E (else not_pairing_code), then
+ *  exactly `wss://` and at least one more character (else insecure_relay). */
 function checkRelay(relay: string): PairCodeError | null {
-  if (!isVisibleAscii(relay)) return "not_pairing_code";
+  if (relay === "" || !isVisibleAscii(relay)) return "not_pairing_code";
   if (relay.length <= SECURE_SCHEME.length || !relay.startsWith(SECURE_SCHEME)) return "insecure_relay";
   return null;
 }
 
-/** Builds a code: relay, slot, id, x, s, then n. Refuses a relay that isn't wss://. */
+/** Builds a code: relay, slot, id, x, s, then n. Refuses a relay that isn't wss://.
+ *  Throws a RangeError unless slot is 16 bytes and id, x and s are 32. */
 export function buildPairCode(input: PairCodeInput): PairCodeResult<string> {
+  expectLength(input.slot, 16, "slot");
+  expectLength(input.id, 32, "id");
+  expectLength(input.x, 32, "x");
+  expectLength(input.s, 32, "s");
   const bad = checkRelay(input.relay);
   if (bad) return fail(bad);
   let code =
@@ -78,9 +83,9 @@ function field(value: string, len: number): Uint8Array | null {
   return raw && raw.length === len ? raw : null;
 }
 
-/** Parses a code. Structure errors win over insecure_relay. */
+/** Parses a code. The version comes first; then structure errors win over
+ *  insecure_relay. */
 export function parsePairCode(code: string): PairCodeResult<PairCode> {
-  if (code === "" || !isVisibleAscii(code)) return fail("not_pairing_code");
   if (!code.startsWith(PREFIX)) return fail("not_pairing_code");
   const after = code.slice(PREFIX.length);
   let digits = 0;
@@ -88,6 +93,7 @@ export function parsePairCode(code: string): PairCodeResult<PairCode> {
   const version = after.slice(0, digits);
   if (version === "" || version.startsWith("0")) return fail("not_pairing_code");
   if (version !== "1") return fail("newer_version");
+  if (!isVisibleAscii(code)) return fail("not_pairing_code");
   if (after[digits] !== "?") return fail("not_pairing_code");
 
   const required: Record<string, string | undefined> = { relay: undefined, slot: undefined, id: undefined, x: undefined, s: undefined };

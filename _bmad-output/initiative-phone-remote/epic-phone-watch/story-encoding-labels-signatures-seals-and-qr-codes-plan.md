@@ -47,6 +47,9 @@ context:
 - Decision (owner, 2026-10-16): the spec-gap choices in Design Notes are accepted as written and become the contract in `remote-protocol.md`: the sealed layout, the base64url QR byte fields, the QR grammar and its error precedence, a duplicate `n` counting as missing, exact lower-case `wss://`, and the verify strictness.
 - Decision (owner, 2026-10-16): the TypeScript signed host is story 5b's; story 2's note in `remote-protocol.md` is corrected to say so.
 - Decision (owner, 2026-10-16): the plan is kept whole.
+- Decision (owner, 2026-10-16, after the code review of 143279d): in a QR code the version comes first. `ade-pair://v` followed by an integer N ≥ 2 is `newer_version`, whatever follows, characters outside 0x21–0x7E included. The printable-ASCII check applies only once the version is known to be v1.
+- Decision (owner, 2026-10-16, after the code review of 143279d): an empty `relay=` is `not_pairing_code`, like an empty byte field. `wss://` with nothing after it stays `insecure_relay`.
+- Decision (owner, 2026-10-16, after the code review of 143279d): Rust refuses a non-canonical public key, one whose decompressed point doesn't compress back to the same 32 bytes, matching noble's `zip215: false`. `signatures.json` gains a refused y = p + 3 case, and keeps y = p + 1.
 
 **Never:**
 - No use of these pieces: `H`, `pair_id`, the step-8 checks, the reveal and the pending pairs are stories 5a and 5b; ADE's QR view is story 9; the scanner is story 12a.
@@ -151,9 +154,9 @@ context:
 **Generator.** `vectors/generate.mjs` reproduces RFC 5869 case 1, RFC 8032 test 1, HChaCha20 (draft-irtf-cfrg-xchacha 2.2.1) and XChaCha20-Poly1305 A.3.1 before it writes anything. The SAS search landed on code `019793`.
 
 **Choices where the plan left room.** These are recorded in `remote-protocol.md`:
-- **QR check order.** The 0x21–0x7E check on the whole code runs before the version check, as the grammar lists it. So `ade-pair://v2 x` is `not_pairing_code`, and `newer_version` covers any visible-ASCII tail.
+- **QR check order.** Superseded by the owner's ruling (see Boundaries): the version is read first, so `ade-pair://v2 x` is `newer_version`. The first build (143279d) checked the characters first.
 - **Percent-decoding of byte fields.** Strict percent-decoding applies to every value, the byte fields included: `slot=%41...` is accepted.
-- **Empty relay.** `relay=` is `insecure_relay`. It passes the character rule vacuously, then fails the `wss://` rule.
+- **Empty relay.** Superseded by the owner's ruling: `relay=` is `not_pairing_code`. The first build made it `insecure_relay`.
 - **Builder escaping.** The builder escapes `relay` as well as `n`, giving `relay=wss%3A%2F%2F...`. It refuses a relay under the parser's relay rule, with the same error.
 - **HKDF info constant names.** The two HKDF `info` constants are named `PAIR_PHONE_TO_MAC_INFO` and `PAIR_MAC_TO_PHONE_INFO`, so they can't be taken for `enc` labels. The other nine are `*_LABEL`.
 - **SAS inputs.** `sas_code` takes a `SasInputs` struct, and `sasCode` an object, rather than eight positional arguments.
@@ -162,6 +165,17 @@ context:
 - **Extra Rust test.** `vectors_seal_anchor_xchacha` also pins the RustCrypto crates to the A.3.1 and RFC 5869 anchors.
 
 **Test-first.** Each Rust test (vectors and units) ran red against `todo!()` stubs: 22 failed. The TypeScript vector test ran red (13 failed) before the modules existed. The three mobile smoke cases were written after the package code, so they were never seen red.
+
+**Review round (2026-10-16).** The fixes after the review of 143279d:
+- **Rulings 1 and 2.** In `qr.rs` and `qr.ts`, the version check now comes before the character check, and `check_relay` / `checkRelay` refuse an empty relay as `not_pairing_code`. In `qr.json`, "a character outside 0x21-0x7E in a newer version" now expects `newer_version`, and "empty relay" expects `not_pairing_code`. Four cases were added: v2 then non-ASCII; v3 then a tab and a line feed; a space inside the prefix; and `v1` then non-ASCII.
+- **Ruling 3.** `sign.rs` has a new `canonical_key`, which refuses an `id` unless `to_edwards().compress()` gives back the same bytes. Its doc comment and the contract now list exactly what each side refuses.
+  - `generate.mjs` writes a fourth refused case: A with y = p + 3. That is a large-order point (checked with noble), so only the encoding is wrong.
+  - No one knows that point's private key, so no signature can check under it. The vector therefore passed even before the fix. The new Rust unit test `a_non_canonical_key_is_refused_by_the_canonical_check` is what proves the canonical check refuses the key: it failed with the old lax decoding and passes now.
+- **`seal_with_nonce` hidden.** It is `pub(crate)` in Rust and no longer re-exported. In TypeScript, `index.ts` exports `seal.ts` by name, without `sealWithNonce`; `vectors.test.ts` imports it from `./seal`, and a test checks that the index doesn't export it. Nothing outside the tests and `seal` itself calls it.
+- **TypeScript lengths.** `buildPairCode` and `pairKeys` throw a `RangeError` on a wrong length, through the new `expectLength` in `bytes.ts`. Throwing, rather than returning an error, matches Rust, where a wrong length can't compile. There are 9 new tests.
+- **Rust test gaps.** `vectors_signatures` now signs the empty message and compares the result with the RFC 8032 anchor signature. `vectors_sas` now checks that the I_P case and the S_P case each equal the first case in every other field, as the TypeScript test does.
+- **Contract labels.** "Owner decision" now marks only what the owner decided: the approved spec-gap choices and rulings 1–3. The following are plain facts of the contract: strict percent-decoding of the byte fields, the builder escaping `relay`, the constant names, the SAS argument shapes and the `sign` signatures.
+- **Red before green.** Rust failed 2 tests (the QR parse vector and the canonical-key unit test) with a lax `canonical_key` stub. TypeScript failed 11 (the QR parse vector, the surface test, and 9 length tests).
 
 **Housekeeping.** `packages/protocol/vectors/.gitkeep` was removed, because the folder now has files. The worktree's `mobile/node_modules` is an untracked symlink farm onto the main checkout's install, with `@ade/protocol` pointing at this worktree. It is not committed.
 
@@ -172,6 +186,16 @@ context:
   - Added lossy UTF-8, Ed25519 and Names boundary vectors.
   - Tightened the QR grammar, made the byte fields' encoding explicit, and set HKDF's L = 32.
   - Added a fork-point rebase, the scope of the import rule, a mobile seal round trip, and the fix to story 2's note on the signed host.
+- 2026-10-16, adversarial review of the code (143279d), which blocked it. The owner's rulings and the approved fixes:
+  - Rulings, recorded under Boundaries:
+    - In a QR code the version is read first, so the Design Notes' order is superseded.
+    - An empty `relay` is `not_pairing_code`.
+    - Rust refuses a non-canonical key, with a y = p + 3 vector.
+  - Fixes:
+    - `seal_with_nonce` is no longer public.
+    - TypeScript checks the lengths in `buildPairCode` and `pairKeys`.
+    - The Rust tests now check the RFC 8032 anchor signature and every SAS field.
+    - Owner labels in the contract now mark only owner decisions.
 
 ## Review Triage Log
 

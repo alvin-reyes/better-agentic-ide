@@ -44,12 +44,26 @@ only ever HKDF `info` strings.
 `sign(key, label, fields)` is Ed25519 over `enc(label, fields)`; `verify(id, label, fields, sig)
 -> bool`.
 
-**Verify strictness** (owner decision, 2026-10-16). Rust uses `verify_strict`; TypeScript uses
-`@noble/curves` `ed25519.verify(sig, msg, pub, { zip215: false })`. Both refuse a small-order
-`A`, a non-canonical encoding (`y >= p`) and `S >= L`; `signatures.json` carries one refused
-vector for each. They can differ only on a crafted small-order `R` or a mixed-order point
-(cofactored vs cofactorless check). Only the signer can make those, and the cost falls only on
-its own pairing.
+**Verify strictness** (owner decision, 2026-10-16: Rust `verify_strict`, TypeScript
+`zip215: false`; and, by ruling, Rust refuses a non-canonical key). What each side refuses:
+
+- **Rust** (`relay_protocol::verify`): an `id` that is no point, or whose point does not
+  compress back to the same 32 bytes (a non-canonical encoding, such as y ≥ p). Then, by
+  `verify_strict`: `S` not a canonical scalar (`S ≥ L`), an `R` that is no point, a small-order
+  `id` or `R`, and an `R` that is not its canonical encoding (the check compares encodings).
+  The equation is cofactorless.
+- **TypeScript** (`verify`, `@noble/curves` `ed25519.verify(sig, msg, pub, { zip215: false })`):
+  an `A` or `R` whose y ≥ p (or with x = 0 and the sign bit set), `S ≥ L`, and a small-order
+  `A`. The equation is cofactored. A small-order `R` is not refused by this check itself.
+
+Both refuse a small-order `A`, a non-canonical `A`, a non-canonical `R` and `S ≥ L`.
+`signatures.json` carries four refused vectors: a small-order `A` (the identity, with R the
+identity and S = 0, which a lax check accepts), `S ≥ L`, `A` with y = p + 1 (the identity,
+non-canonically) and `A` with y = p + 3 (the large-order point with y = 3, non-canonically;
+nobody knows its key, so the vector pins the key's refusal, and a Rust unit test shows the
+canonical check is what refuses it). The two sides can differ only on a crafted small-order
+`R` or a mixed-order point (cofactorless vs cofactored equation). Only the signer can make
+those, and the cost falls only on its own pairing.
 
 ## Pairing keys and seals
 
@@ -61,7 +75,10 @@ its own pairing.
   `enc(label, fields)`. A seal is at least 40 bytes.
 - `seal(key, label, fields)` takes a random 24-byte nonce (Rust `OsRng`, TypeScript
   `globalThis.crypto.getRandomValues`). `seal_with_nonce` / `sealWithNonce` takes the nonce as
-  an argument, for vectors and tests only.
+  an argument. It is not public: `pub(crate)` in Rust, and not exported from `@ade/protocol`'s
+  `index.ts`; only `seal` and the tests call it.
+- `pairKeys` (TypeScript) throws a `RangeError` unless `s` is 32 bytes and `slot` 16; Rust's
+  array types rule the wrong lengths out.
 - **Open rule:** `open(key, sealed, label, n_fields)` decrypts, then `dec(label)` must succeed
   with exactly `n_fields` fields; otherwise `None` / `null`. A label that is a prefix of another
   (`pair/commit`, `pair/commit-hash`) can't be read as it: the next 4 bytes would be ASCII,
@@ -101,12 +118,16 @@ slot, id, x, s, name})`, `parsePairCode(code)`, each `{ok: true, value} | {ok: f
 **Errors:** `not_pairing_code`, `insecure_relay`, `newer_version` (Rust `PairCodeError::
 {NotPairingCode, InsecureRelay, NewerVersion}`, `as_str()` gives the snake-case name).
 
-**Grammar** (owner decision, 2026-10-16), checked in this order:
-1. **The whole code** is characters 0x21–0x7E only, and not empty. Otherwise
-   `not_pairing_code`. This is checked first, so `ade-pair://v2 x` is `not_pairing_code`.
-2. **The prefix** is exactly `ade-pair://v`, then a decimal with no leading zero. N >= 2 is
-   `newer_version`, whatever follows (any length of digits). `v0`, `v01`, `V1`, `v` with no
-   digits, and `v1` not followed by `?`, are `not_pairing_code`.
+**Grammar.** Owner decisions (2026-10-16): the plan's grammar, its three errors and their
+precedence, the base64url byte fields, a duplicate `n` counting as missing, and exact
+lower-case `wss://`; and two later rulings, that the version is read first (rule 1) and that
+an empty `relay` is `not_pairing_code` (rule 7). Checked in this order:
+1. **The version comes first.** The code must start with exactly `ade-pair://v`, then a decimal
+   with no leading zero. N ≥ 2 is `newer_version`, whatever follows (any length of digits, and
+   characters outside 0x21–0x7E included). `v0`, `v01`, `V1`, `v` with no digits, and anything
+   else, are `not_pairing_code`.
+2. **Once the version is 1, the whole code** is characters 0x21–0x7E only, and `v1` is followed
+   by `?`. Otherwise `not_pairing_code`.
 3. **Parameters** split on `&`, then each on its first `=`. A segment with no `=`, or an empty
    key (so also an empty query, an empty segment, a trailing `&`), is `not_pairing_code`.
    `+` is literal.
@@ -114,21 +135,23 @@ slot, id, x, s, name})`, `parsePairCode(code)`, each `{ok: true, value} | {ok: f
    the same value. A duplicate `n` counts as a missing `n`, and the code stays valid. Unknown
    keys, duplicated or malformed, are ignored.
 5. **Values** are percent-decoded strictly: every `%` is followed by two hex digits, either case.
-   This applies to every value, the byte fields included.
+   This applies to every value, the byte fields included (so `slot=%41...` is read as `A...`).
 6. **Byte fields** `slot` (16 bytes), `id`, `x`, `s` (32 bytes each) are unpadded base64url, as in
-   control messages. A missing field, a malformed `%`, padding, another alphabet, non-zero
-   trailing bits or a wrong length is `not_pairing_code`.
-7. **`relay`** decodes to characters 0x21–0x7E only (otherwise `not_pairing_code`). It must then
-   start with exactly, lower-case, `wss://` plus at least one character (otherwise
-   `insecure_relay`; so `ws://`, `https://`, `WSS://`, `wss://` alone and an empty relay).
-8. **Precedence.** Every structure error above wins over `insecure_relay`.
+   control messages. A missing or empty field, a malformed `%`, padding, another alphabet,
+   non-zero trailing bits or a wrong length is `not_pairing_code`.
+7. **`relay`** decodes to one or more characters 0x21–0x7E (otherwise `not_pairing_code`, so an
+   empty `relay=` too). It must then start with exactly, lower-case, `wss://` plus at least one
+   character (otherwise `insecure_relay`: `ws://`, `https://`, `WSS://`, `wss://` alone).
+8. **Precedence.** After the version, every structure error above wins over `insecure_relay`.
 9. **`n`** is valid when missing. Present once, it is percent-decoded to bytes, then decoded and
    cleaned as in Names. A malformed `%`, a duplicate, or a name that cleans to empty gives no
    name (`None` / `null`), shown as "Mac".
 
-**The builder** writes `relay, slot, id, x, s, n` in that order, escapes every byte of `relay`
-and `n` outside `A–Z a–z 0–9 - . _ ~` as upper-case `%XX`, cleans the name first and leaves `n`
-out when it cleans to empty. It refuses a relay that fails rule 7, with the same error. A
+**The builder** writes `relay, slot, id, x, s, n` in that order, cleans the name first and
+leaves `n` out when it cleans to empty. It escapes every byte outside `A–Z a–z 0–9 - . _ ~` as
+upper-case `%XX`, in `n` and in `relay` alike (`relay=wss%3A%2F%2F...`). It refuses a relay that
+fails rule 7, with the same error. TypeScript's `buildPairCode` throws a `RangeError` unless
+`slot` is 16 bytes and `id`, `x` and `s` are 32; Rust's array types rule those out. A
 worst-case `n` (40 four-byte code points) is 480 characters.
 
 There is no `ws://` override: story 5a's CLI phone takes the relay URL from `--url`, not from a

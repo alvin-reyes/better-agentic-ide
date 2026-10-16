@@ -341,9 +341,9 @@
       "error": "insecure_relay"
     },
     {
-      "why": "empty relay",
+      "why": "empty relay (like an empty byte field)",
       "code": "ade-pair://v1?relay=&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
-      "error": "insecure_relay"
+      "error": "not_pairing_code"
     },
     {
       "why": "a structure error wins over insecure_relay",
@@ -593,6 +593,26 @@
     {
       "why": "a character outside 0x21-0x7E in a newer version",
       "code": "ade-pair://v2 x",
+      "error": "newer_version"
+    },
+    {
+      "why": "a newer version followed by non-ASCII",
+      "code": "ade-pair://v2?n=Caf\u00e9",
+      "error": "newer_version"
+    },
+    {
+      "why": "a newer version followed by a control character",
+      "code": "ade-pair://v3\t\n",
+      "error": "newer_version"
+    },
+    {
+      "why": "a character outside 0x21-0x7E inside the prefix",
+      "code": "ade-pair:// v2",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v1 followed by a character outside 0x21-0x7E",
+      "code": "ade-pair://v1\u00e9?x",
       "error": "not_pairing_code"
     }
   ],
