@@ -731,8 +731,11 @@ before any `@noble` module, so Hermes has `crypto.getRandomValues`.
 Frames over their limit get `rate_limited {peer, retry_ms}`, and control
 messages over theirs get `control_limited`, so the two are never confused.
 A device re-sends any control message named in a `control_limited` after
-`retry_ms`, except `push`: a dropped push is not re-sent, because the tab
+`retry_ms`, except `push` and `rehandshake`. A dropped push is not re-sent, because the tab
 may no longer need you, and the next needs-you change starts a new timer.
+A dropped `rehandshake` is not re-sent, because the Mac's session machine
+asks again at its next trigger after the 10 s window (owner, 2026-10-16;
+ADR 0005).
 So a Cancel tapped just after the automatic
 `pair_status`, or ADE's abort or decline, is delayed by seconds, not lost.
 At login a device sends its queued unpairs and aborts at no more than 10

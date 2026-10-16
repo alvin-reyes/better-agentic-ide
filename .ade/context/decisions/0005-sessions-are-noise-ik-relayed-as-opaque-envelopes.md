@@ -1,9 +1,9 @@
 # 0005: Sessions are Noise IK, and the relay carries them as opaque envelopes
 
-- Status: Proposed (2026-10-16). This is the ADR for the relay and protocol choices that the 2a spec's "Shared contract" calls for (`docs/superpowers/specs/2026-10-14-relay-pairing-design.md`). It records decisions the owner has already made:
+- Status: Accepted by the owner as a faithful record (2026-10-16). This is the ADR for the relay and protocol choices that the 2a spec's "Shared contract" calls for (`docs/superpowers/specs/2026-10-14-relay-pairing-design.md`). It records decisions the owner has already made:
   - the spec's approach A (2026-10-14);
   - the 18 decisions in story 4's approved plan (`_bmad-output/initiative-phone-remote/epic-phone-watch/story-noise-ik-sessions-in-rust-and-typescript-plan.md`, 2026-10-16), numbered here in the order that plan's Boundaries lists them. Decisions 11 (this ADR is the architect's) and 12 (the plan is kept whole) are about process, so they aren't restated;
-  - two spec amendments made on the 7b side (2026-10-16): `rehandshake {peer}`, and `peer` in `control_limited`.
+  - three spec amendments made on the 7b side (2026-10-16): `rehandshake {peer}`; `peer` in `control_limited`; and a `rehandshake` refused with `control_limited` is not re-sent, because the Mac's session machine asks again at its next trigger after the 10 s window.
 
   The owner approves this record. The wire contract is `.ade/context/remote-protocol.md`, "Sessions". How the relay keeps the paired keys it routes between is ADR 0006.
 

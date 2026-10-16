@@ -1,6 +1,6 @@
 # 0006: One task owns the relay's peer sets, and routing needs both ends to agree
 
-- Status: Proposed (2026-10-16), awaiting the owner's approval.
+- Status: Accepted by the owner (2026-10-16).
   - It governs story 7b's in-memory peer sets (`_bmad-output/initiative-phone-remote/epic-phone-watch/story-relay-limits-routing-and-replacement-plan.md`), and every later story that changes pairs, 5a first.
   - It builds on story 7a's `Store`, `StoreHandle::call` (`spawn_blocking`) and cleanup, as recorded in `.ade/context/relay-storage.md`, and changes none of them.
 
