@@ -67,7 +67,8 @@ The wire contract is in `remote-protocol.md`.
   `FrameError`, `HandshakeError`, `Routed`, `RoutedKind`, `HS1_LEN`, `HS2_LEN`,
   `SESSION_ID_LEN`, `MAX_PLAINTEXT`, `NONCE_CEILING`, `MAX_COUNTER`. `relay_core` exports the
   machines and stores: `MacSessions`, `MacAction`, `PhoneSession`, `PhoneAction`, `Trigger`,
-  `SendError`, `Hs1Counters`, `PairedStatics`, `LastSent`, `StoreError`,
+  `SendError`, `Hs1Counters`, `PairedStatics`, `LastSent`, `SessionStoreError` (the session
+  stores' error, `session::StoreError`, renamed at the crate root because 7a's `StoreError` is there),
   `MemoryHs1Counters`, `MemoryPairedStatics`, `MemoryLastSent`, `next_counter_value` and the
   limit constants.
 - **Import rule:** the package's non-test `src/` modules take randomness only from
