@@ -3,14 +3,14 @@ title: 'Login and presence through the relay'
 type: 'feature'
 ticket: '2'
 created: '2026-10-16'
-status: 'draft'
-baseline_revision: ''
+status: 'built'
+baseline_revision: 'dc8700325218901b62336d291f6fa8880585edf3'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/docs/superpowers/specs/2026-10-14-relay-pairing-design.md'
@@ -103,6 +103,18 @@ context:
 ## Plan Change Log
 
 ## Review Triage Log
+
+Pass 1 (quick lens, 2026-10-16). Counts: high 0, medium 3, low 3, false 0, maybe-false 0, plus 1 rejected for editing the plan.
+
+| Finding | Verdict | Route | Evidence |
+|---|---|---|---|
+| The ping timeout is checked only on ping ticks, so a dead device is seen as gone at about timeout + interval (45 s), not 30 s | medium | patch | Read `connection`: `last_pong` is set after the first tick is used up, and `elapsed` at the 30 s tick is just under 30 s. The e2e test checks only a lower bound. |
+| The signed host keeps its case and IPv6 brackets, so a valid mixed-case dial is refused | medium | patch | `host_of` returns `Uri::host()` as is, and `verify_login` compares bytes. Story 3's TypeScript twin needs a fixed rule. Fix: lower-case and strip brackets, and record it in remote-protocol.md. |
+| A replaced connection is dropped with no close frame, and replacement has no e2e test | medium | defer | Neither the spec nor the plan defines a close code for "replaced". Story 7 AC(5) owns one live connection per device. |
+| `libc 0.2.190` in Cargo.lock is 13 days old | low | patch | crates.io shows 2026-10-02T19:33Z. Fix: pin it back with `--precise`. |
+| An empty `RELAY_HOSTS` starts a relay that refuses every login | low | patch | `parse_hosts` can return `[]`, so `any()` is false for every login. The bin already exits 2 on a bad `RELAY_LISTEN`. |
+| The leave fan-out reuses the `peers` list taken at login | low | defer | Pairs are fixed in story 2, so it's harmless here. It becomes wrong once stories 5a and 7 change pairs at runtime. |
+| `futures-util` is not in the plan's dependency list | n/a | reject | The fix edits this build's plan. The crate is needed for `SinkExt`/`StreamExt`, and it is 2 weeks old or more. |
 
 ## Design Notes
 

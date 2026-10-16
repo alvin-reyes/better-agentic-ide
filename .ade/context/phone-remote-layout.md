@@ -9,9 +9,12 @@ Set by the scaffold story (piece 2a, story 1). Layout follows the spec's "Code l
 |------------------|------------------|------------------|------|
 | `relay/protocol` | `relay-protocol` | `relay_protocol` | lib  |
 | `relay/core`     | `relay-core`     | `relay_core`     | lib (not `core`: that is Rust's built-in crate) |
-| `relay/server`   | `relay-server`   | binary `relay-server` | bin |
-| `relay/cli`      | `relay-cli`      | binary `relay-cli`    | bin |
+| `relay/server`   | `relay-server`   | `relay_server`; binary `relay-server` | lib + bin |
+| `relay/cli`      | `relay-cli`      | `relay_cli`; binary `relay-cli`    | lib + bin |
 | `relay/e2e`      | `relay-e2e`      | tests in `relay/e2e/tests/` | test holder |
+
+Server and CLI became lib plus thin bin in story 2, so the e2e test drives them in-process.
+The wire contract is in `remote-protocol.md`.
 
 `src-tauri` should depend on `relay-protocol` and `relay-core` by path once stories 5a and 8 land.
 

@@ -4,9 +4,19 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lib]
+name = "relay_cli"
+
 [[bin]]
 name = "relay-cli"
 path = "src/main.rs"
 
 [dependencies]
 relay-core = { path = "../core" }
+relay-protocol = { path = "../protocol" }
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+ed25519-dalek.workspace = true
+rand.workspace = true
+base64.workspace = true
