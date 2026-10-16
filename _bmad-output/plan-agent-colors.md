@@ -11,7 +11,7 @@ risk: 'low'
 review: 'quick'
 review_source: 'pinned'
 lenses_ran: []
-review_loop_iteration: 1
+review_loop_iteration: 2
 context: ['.ade/context/decisions/0007-agent-colors-live-in-ade-keyed-by-role.md']
 ---
 
@@ -136,11 +136,13 @@ The dark hexes stay below 4.5:1 on Nord's surfaces (and fall to about 3.4 when d
 **Picker (decision 6).** `CATEGORY_COLORS` is removed. Every category pill, the "Roles" pill included, is neutral: inactive as today; active with a `var(--text-secondary)` border and `var(--text-primary)` text on `var(--bg-tertiary)`. The suggested badge and row badges use a neutral style (`var(--text-muted)` on `var(--bg-tertiary)`). Role color appears only as: the icon tile's 1px solid border and its 0x20 tint, with the glyph in `var(--text-primary)`; the selected row's 2px left border; an 8px dot before the name in "Run X in", whose name is now `var(--text-primary)`. Bare-role items (`ROLE_ITEMS`) take their role's color; `ROLE_COLOR` is removed.
 
 **Fleet lanes (decision 5).**
-- Fill: every bar, agent and sub-agent lane alike, is `roleColorHex(lane.roleId)` at full opacity; the neutral when `roleId` is null. An 8px dot of the same color precedes the label; the label text stays in theme colors.
+- Fill: every running or completed bar, agent and sub-agent lane alike, has `background-color: roleColorHex(lane.roleId)` at full opacity; the neutral when `roleId` is null. An 8px dot of the same color precedes the label; the label text stays in theme colors.
 - Running: the bar's right end is square (no right radius) and carries a 3px child, `data-testid="lane-live-edge"`, in `var(--text-primary)` with a CSS pulse (class `fleet-live-edge` in `src/index.css`, `@keyframes fleet-pulse`); under `prefers-reduced-motion` it is shown without animation.
-- Cancelled: `background-image: repeating-linear-gradient(135deg, <role hex> 0 3px, transparent 3px 6px)` over the track: a hatched fill in the role's color. The stripes keep the fill's 3:1 against the track.
+- Cancelled: `background-color: transparent` and `background-image: repeating-linear-gradient(135deg, <role hex> 0 3px, transparent 3px 6px)`, so the track shows between the stripes: a hatched fill in the role's color. A solid background under the stripes would hide the hatch. The stripes keep the fill's 3:1 against the track.
 - Completed: solid fill, both ends rounded, no edge.
-- Text: each bar's `title` and `aria-label` are `"<label>, <role title or 'not an ADE role'>, <running|completed|cancelled>"`. The bar gets `role="button"` when `onSelect` is set, else `role="img"`, so the label is announced.
+- Text: each bar's `title` and `aria-label` are `"<label>, <role title or 'not an ADE role'>[, <detail>], <running|completed|cancelled>"`: the lane's `detail` is kept when present, as today (`FleetTimeline.tsx:141`), and the status word is always last.
+- Keyboard: when `onSelect` is set (FleetTab always sets it, `FleetTab.tsx:112,116`), the bar is a real `<button type="button">` (reset styles, same geometry), so Tab reaches it and Enter or Space selects it, with a visible `:focus-visible` outline (`outline: 2px solid var(--text-primary); outline-offset: 1px`, class `fleet-lane-bar` in `src/index.css`). Without `onSelect` it stays a `<div role="img">`.
+- Reduced motion: `src/index.css` has `@media (prefers-reduced-motion: reduce) { .fleet-live-edge { animation: none; } }`.
 - Attributes for tests: `data-agent-color` (name or `none`) and `data-status`.
 - `STATUS_COLOR`, the `#a855f7` literal and both opacities are removed.
 - `FleetSummary` and `FleetGroups`: "● N running" is drawn in `var(--text-secondary)`, and its dot uses the same `fleet-live-edge` pulse when N > 0. No green.
@@ -165,9 +167,11 @@ Each names the test that covers it; the developer writes it failing first.
 8. `PICKER_ITEMS`: a curated item and a bare-role item each carry their role's dark hex. -- `src/data/__tests__/pickerItems.test.ts` › "picker items are colored by role" (new case)
 9. Picker: no category pill or badge has an agent or category hex in `color`, `border` or `background`; the icon tile's border is the role hex and its glyph's `color` is `var(--text-primary)`; "Run X in" shows the name in `var(--text-primary)` with a dot in the role hex. -- `src/components/__tests__/AgentPicker.test.tsx` › "categories are neutral and role color is never text"
 10. `FleetTimeline` with `roleId` "qa", "developer" and null: bars carry `data-agent-color` yellow, green, none, backgrounds equal to the hexes (compared as jsdom's `rgb(...)`), full opacity, and a dot of the same color by each label whose text `color` is not a role hex. -- `src/components/fleet/__tests__/FleetTimeline.test.tsx` › "fills each lane in its role's color, neutral when it has none"
-11. Running, completed and cancelled lanes of one role: same fill color; only running has `lane-live-edge` and a square right end; only cancelled has a `repeating-linear-gradient` background image; each bar's `title` and `aria-label` end with its status word. -- `FleetTimeline.test.tsx` › "shows status by shape and text, not color"
-12. `FleetSummary` and `FleetGroups` draw "running" with no green and no role hex. -- `src/components/fleet/__tests__/FleetSummary.test.tsx` › "running is not green"; `FleetGroups.test.tsx` › "running is not green"
-13. `buildLanes` gives a sub-agent of type `ade:web3-auditor` roleId adversarial-reviewer, `Explore` null, `foo:Explore` null. -- `src/stores/__tests__/fleetAttribution.test.ts` › "a plugin-namespaced agent type resolves to its role"
+11. Running, completed and cancelled lanes of one role: running and completed bars have the role hex as `backgroundColor`; the cancelled bar's `backgroundColor` is `transparent` and its `backgroundImage` is a `repeating-linear-gradient` containing the role hex (as jsdom reports it); only running has `lane-live-edge` and a square right end; each bar's `title` and `aria-label` end with its status word, and a lane with a `detail` has that detail in both before the status word. -- `FleetTimeline.test.tsx` › "shows status by shape and text, not color"
+12. With `onSelect` set, a bar is a `<button>`: focusing it and pressing Enter (and, separately, Space) calls `onSelect` with that lane; without `onSelect` it is not a button. -- `FleetTimeline.test.tsx` › "a lane bar is reachable and selectable by keyboard"
+13. `src/index.css` has a `prefers-reduced-motion: reduce` block that sets `animation: none` on `.fleet-live-edge`, and a `:focus-visible` outline on `.fleet-lane-bar`. -- `scripts/fleetMotion.test.ts` › "the live edge stops under reduced motion and bars show focus"
+14. `FleetSummary` and `FleetGroups` draw "running" with no green and no role hex. -- `src/components/fleet/__tests__/FleetSummary.test.tsx` › "running is not green"; `FleetGroups.test.tsx` › "running is not green"
+15. `buildLanes` gives a sub-agent of type `ade:web3-auditor` roleId adversarial-reviewer, `Explore` null, `foo:Explore` null. -- `src/stores/__tests__/fleetAttribution.test.ts` › "a plugin-namespaced agent type resolves to its role"
 
 ## Verification (A)
 
@@ -199,7 +203,7 @@ Depends on Story A (imports `src/data/agentColors.ts`).
 ## Design Notes (B)
 
 - **Tokens.** `--agent-red` … `--agent-cyan` and `--agent-none`: light hexes on `:root`, dark hexes in both dark blocks, and dark hexes again on `.feat-media--live` and `.feat-media.tree` (dark in both themes). One rule per name plus `none`: `[data-agent-color="<name>"] { --agent-c: var(--agent-<name>); }`.
-- **Org chart.** Each of the 19 `.org-node`s gets `data-role="<id>"` and `data-agent-color="<name>"`; `.org-node[data-agent-color] { border-left: 3px solid var(--agent-c); }`. The "You" node (`.org-node--you`) is unchanged. Node text keeps its colors.
+- **Org chart.** Each of the 19 `.org-node`s gets `data-role="<id>"` and `data-agent-color="<name>"`; `.org-node[data-agent-color] { border-left: 3px solid var(--agent-c); }`, placed after `.org-node:hover` (`site.css:864`), plus `.org-node[data-agent-color]:hover { border-left-color: var(--agent-c); }`, so the hover rule's `border-color: var(--line-3)` never replaces the role border. The "You" node (`.org-node--you`) is unchanged. Node text keeps its colors.
 - **Listing.** Each of the eight file names is wrapped in `<span data-agent-color="<name>">`; `.feat-media.tree [data-agent-color] { color: var(--agent-c); }`. This is text on the terminal surface: 7.37:1 or more.
 - **Fleet demo.** Each `.fleetx-lane` gets `data-agent-color`: developer green, qa yellow, Explore and Plan `none`. "Code reviewer" becomes "adversarial-reviewer" (red), a real ADE sub-agent. `.fleetx-bar { background: var(--agent-c); }`; the `#6e40c9`, `#3d444d` and `.is-running` green rules are removed. Because `fleetx-grow` owns the bar's opacity, status is shown by shape (decision 5), not opacity: each `.is-running` lane's track holds an `<i class="fleetx-edge">` positioned at the bar's end, pulsing with `fleetx-pulse` (static under reduced motion). The demo has no cancelled lane. `.fleetx-run i` (the "2 running" dot) becomes `var(--agent-none)`, keeping its pulse. The `aria-label` names each lane's role and which are running.
 
@@ -208,8 +212,8 @@ Depends on Story A (imports `src/data/agentColors.ts`).
 All in `scripts/agentColorsSite.test.ts`, which imports the map from Story A.
 
 1. In `site.css`, `--agent-<name>` and `--agent-none` equal the map's light hex on `:root`, its dark hex in both dark blocks and on `.feat-media--live` and `.feat-media.tree`. -- › "tokens equal the map in both themes and on terminal surfaces"
-2. `site.css` has a `[data-agent-color="<name>"]` rule setting `--agent-c: var(--agent-<name>)` for each of the eight names and `none`; `.fleetx-bar` sets `background: var(--agent-c)`; `.org-node[data-agent-color]` sets `border-left` using `var(--agent-c)`; `.feat-media.tree [data-agent-color]` sets `color: var(--agent-c)`; `.fleetx-run i` sets `background: var(--agent-none)`. -- › "every agent-colored element takes its color from the token"
-3. No rule whose selector contains `.fleetx-bar`, `.fleetx-edge`, `.fleetx-run i`, `.org-node[data-agent-color]` or `.feat-media.tree [data-agent-color]` has a `#hex`, `rgb(` or `rgba(` value in `background`, `background-color`, `border`, `border-left`, `border-color` or `color`. `.org-node--you` is outside this check. -- › "no hard-coded agent color on the site"
+2. `site.css` has a `[data-agent-color="<name>"]` rule setting `--agent-c: var(--agent-<name>)` for each of the eight names and `none`; `.fleetx-bar` sets `background: var(--agent-c)`; `.org-node[data-agent-color]` sets `border-left` using `var(--agent-c)` and comes after `.org-node:hover` in the file; `.org-node[data-agent-color]:hover` sets `border-left-color: var(--agent-c)`; `.feat-media.tree [data-agent-color]` sets `color: var(--agent-c)`; `.fleetx-run i` sets `background: var(--agent-none)`. -- › "every agent-colored element takes its color from the token"
+3. No rule whose selector contains `.fleetx-bar`, `.fleetx-edge`, `.fleetx-run i`, `.org-node[data-agent-color]` (including its `:hover` rule) or `.feat-media.tree [data-agent-color]` has a `#hex`, `rgb(` or `rgba(` value in `background`, `background-color`, `border`, `border-left`, `border-color` or `color`. `.org-node--you` is outside this check. -- › "no hard-coded agent color on the site"
 4. The org chart has one `.org-node[data-role]` per role id (all nineteen); each node's `<b>` text equals `getRole(id).title`, and its `data-agent-color` equals the map. -- › "org chart nodes are the nineteen roles, named and colored by the map"
 5. The `.claude/agents/` listing has eight spans whose text is `<id>.md` and whose `data-agent-color` is the map's for that id. -- › "the agents listing is colored by the map"
 6. Every `.fleetx-lane` has `data-agent-color` equal to the map for its name, `none` for Explore and Plan; every `.is-running` lane contains `.fleetx-edge` and no other lane does; `.fleetx-edge` has an `animation` using `fleetx-pulse` and a reduced-motion override; no rule sets a static `opacity` on `.fleetx-lane` or `.fleetx-bar` by status. -- › "fleet demo shows role by color and running by shape"
@@ -239,3 +243,9 @@ None. The earlier three were decided on 2026-10-16 (decisions 5 and 8).
   - m3: the no-hex selectors and properties are named (B-AC3); `.fleetx-run i` becomes neutral.
   - m4: `CatalogAgent` gains `color`. The line references are corrected. The unchecked "nothing else holds a role color" claim is dropped in favour of A-AC7.
   - The owner's decisions 5–8 resolve the previous open questions.
+- 2026-10-16, re-review of a43ce4f: earlier findings confirmed fixed; BLOCKED on two majors, three minors. Fixed in this revision:
+  - N1: a cancelled bar's background color is transparent so the hatch shows; A-AC11 asserts it.
+  - N2: a selectable bar is a real `<button>` with a focus outline; A-AC12 asserts keyboard selection.
+  - n1: the role border survives `.org-node:hover`; B-AC2 and B-AC3 check it.
+  - n2: the bar's title keeps `detail`; A-AC11 asserts it.
+  - n3: A-AC13 asserts the reduced-motion override.
