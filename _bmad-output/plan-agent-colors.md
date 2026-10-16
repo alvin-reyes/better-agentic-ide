@@ -238,7 +238,7 @@ None. The earlier three were decided on 2026-10-16 (decisions 5 and 8).
   - B2: agent-colored text fell below 4.5:1 on Nord's tertiary surface and over its own tint. Agent colors are no longer used as text in the app (rule plus A-AC9, A-AC10), and A-AC2 tests 3:1 for fills on every theme surface.
   - B3: added B-AC2 (token rules and `var(--agent-c)` use) and the `none` fallback.
   - M3: the demo shows status by shape, since `fleetx-grow` owns opacity (B-AC6).
-  - m1: namespaced plugin types resolve (A-AC13).
+  - m1: namespaced plugin types resolve (A-AC15).
   - m2: org nodes are checked by visible name (B-AC4).
   - m3: the no-hex selectors and properties are named (B-AC3); `.fleetx-run i` becomes neutral.
   - m4: `CatalogAgent` gains `color`. The line references are corrected. The unchecked "nothing else holds a role color" claim is dropped in favour of A-AC7.
