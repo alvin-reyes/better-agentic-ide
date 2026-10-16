@@ -119,7 +119,7 @@ context:
   - a lone-surrogate name case, which only TypeScript can represent;
   - a check that `labels.json` equals the 11 labels listed under Always;
   - a test with `// @vitest-environment node` that runs `generate.mjs --check` through `spawnSync`, so drift from the oracle fails `npm test` and CI.
-- [x] `mobile/__tests__/protocol.test.ts` -- add one QR parse case, one SAS case, and a `seal`-then-`open` round trip, to prove the package and `getRandomValues` work under the app's toolchain.
+- [x] `mobile/__tests__/protocol.test.ts` -- add one QR parse case, one SAS case, and a `seal`-then-`open` round trip, to prove the package works under the app's Jest toolchain. Jest runs on Node's `globalThis.crypto`, not the `react-native-get-random-values` polyfill, so the Hermes randomness path is covered only by a device check or `expo export` (review round 2, finding 6c).
 - [x] `.ade/context/remote-protocol.md`, `phone-remote-layout.md` -- record the following:
   - the 11 labels, with the two HKDF `info` strings marked;
   - the sealed layout and the open rule;
@@ -243,3 +243,11 @@ None. The four were settled by the owner on 2026-10-16 (see the decisions under 
 - `npx tsc --noEmit` -- clean
 - `cd src-tauri && cargo test` -- unchanged and passing
 - `cd mobile && npx tsc --noEmit && npx jest` -- passes, including the new smoke cases
+
+**Results** (QA, 2026-10-16, HEAD f1a74f1, after the review-fix round; run in the worktree):
+- `cd relay && cargo test` -- pass. `relay-protocol` 40 passed (was 39; new: `sign::tests::a_non_canonical_key_is_refused_by_the_canonical_check`), including the 12 `vectors::` tests. Other suites 9, 2, 20, 14, 1, 5 passed; 0 failed.
+- `npx tsc --noEmit` -- exit 0, clean.
+- `npm test` -- 143 files, 1559 tests passed (was 1548). `packages/protocol/src/vectors.test.ts` 25 passed (was 14), including the `generate.mjs --check` test. New: `does not export sealWithNonce: real seals take a random nonce`, `buildPairCode accepts the right lengths`, `pairKeys throws unless s is 32 bytes and slot is 16`, plus new refused-signature and QR vector cases.
+- `cd src-tauri && cargo test` -- 456 passed, 0 failed, 1 ignored (plus 12 and 2 in other suites). No src-tauri change.
+- `cd mobile && npx tsc --noEmit && npx jest` -- tsc clean; jest 5/5 passed.
+- Criteria to tests (unchanged names): AC1 `vectors_enc`/`vectors_story_2_enc_case_is_included`/`vectors_signatures`/`vectors_seals`/`vectors_sas` and TS `enc and dec`, `includes story 2's enc case`, `signatures, and the refused ones`, `seals`, `the 6-digit code`. AC2 `vectors_cross_label_signatures_and_seals_fail` and TS `... under every other (11x10 each)`. AC3 `vectors_qr_parse` and TS `QR codes parse to their fields and name, or their error`. AC4 `vectors_names` and TS `names`. AC5 `vectors_qr_insecure_relays` and TS `QR codes: any relay scheme but wss:// is insecure_relay`. AC6 `vectors_qr_build` and TS `QR codes: the builder`.
