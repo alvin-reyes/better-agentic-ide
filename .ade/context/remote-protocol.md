@@ -423,8 +423,15 @@ too.
 
 ## Roles
 
-A key's role is fixed the first time it logs in (`relay_core::DeviceRoles`). A later login
-with the other role is refused as above. Held in memory until story 7.
+A key's role is fixed the first time it logs in, and stored (story 7a: the `devices` table,
+see `relay-storage.md`). At login the relay runs `verify_login`, then
+`relay_core::admit(stored_role, who)` over `Store::device`, then `Store::register` (one atomic
+upsert that sets `last_seen` and refuses the other role). A login with the other role is
+refused as above (4401, log code `role_conflict`). Roles survive a restart.
+
+**Store error at login** (owner decision, 2026-10-16): if any of those store calls fails, the
+relay closes the WebSocket with **1011** and reason **`internal_error`**, sends no `welcome`,
+and logs `login_store_error code=<code>`.
 
 ## Presence
 
@@ -437,24 +444,57 @@ with the other role is refused as above. Held in memory until story 7.
   then `online`; the old socket is dropped (no close code yet, story 7) and its later close
   is ignored.
 - A leave fans out to the device's peers as the pair directory lists them at that moment.
+  After the connection ends, off the async workers, a leave reads `peers_of`, fans the
+  offline out at once, and only then writes the device's `last_seen` (`touch`), so
+  presence never waits on a write. If `peers_of` fails, presence and the sender are still
+  cleared, but nobody is told (story 7a). **Decision (owner, 2026-10-16):** only a failed
+  `peers_of` suppresses presence; if the `touch` fails, the peers are still told the
+  device is offline. Either failure is logged as `leave_store_error code=<code>`.
 - Each device has a queue of 64 messages. A device whose queue is full, or whose socket
   send doesn't finish before its pong deadline, is dropped and counts as left.
 - `welcome` is sent before any presence on the same connection.
 
 ## Pair directory
 
-`relay_core::PairDirectory` (`peers_of(id) -> Vec<PairInfo>`, `Send + Sync`) is how the
-relay learns pairs. `InMemoryPairs` seeds it for now; story 7 adds the SQLite one behind
-the same trait.
+`relay_core::PairDirectory` (`peers_of(id) -> Result<Vec<PairInfo>, StoreError>`, `Send +
+Sync`) is how the relay learns pairs. A failed read is an error, never `[]`: a `welcome`
+with no pairs makes devices drop theirs. `relay_core::Store: PairDirectory` is the
+relay's storage, and `relay_server::SqliteStore` implements it (story 7a, see
+`relay-storage.md`). `InMemoryPairs` remains for `relay-core`'s own tests.
 
 ## Relay endpoints and configuration
 
-- `GET /` upgrades to the WebSocket; `GET /health` answers `200 ok`.
+- `GET /` upgrades to the WebSocket; `GET /health` answers `200 ok`, with no token.
+- `GET /metrics` (story 7a): counts only, Prometheus text format
+  (`text/plain; version=0.0.4`). **404** when no token is configured; **401** (with
+  `WWW-Authenticate: Bearer`) unless `Authorization: Bearer <token>` carries it. The scheme
+  name matches in any letter case (RFC 7235); the token must match exactly. The SHA-256
+  digests of the given and the configured token are compared with `subtle`'s `ct_eq`, so
+  neither a matching prefix nor the token's length shows in the timing. Every line is a `# ` comment or matches
+  `relay_[a-z_]+({[a-z_]+="[a-z_]+"})? [0-9]+`. Gauges: `relay_online`, `relay_devices`,
+  `relay_pairs`, `relay_pairs_acked`, `relay_push_tokens`. Counters:
+  `relay_logins_total{result="ok"|"refused"}` (refused = every 4401 close, a timeout
+  included; a 1011 close counts as neither), `relay_cleanup_deleted_devices_total`.
+  Story 7b adds its own.
+- **Logs** go through `relay_server::LogSink` as a typed `LogEvent`, whose fields are only
+  `&'static str` codes and counts. Each line matches `^relay: [a-z_]+( [a-z_]+=[0-9a-z_]+)*$`.
+  The binary's start-up lines (hosts, listen address, settings errors) are the only other
+  output.
 - `relay-server` bin: `RELAY_HOSTS` is **required**: comma-separated, each a bare host
   name or a bracketed IPv6 literal (no scheme, port, path or user). `RELAY_LISTEN`
-  defaults to `0.0.0.0:8080`. A missing, malformed or non-Unicode value exits 2; the
-  effective host list is printed at start. A relay that can't listen, or whose server
-  stops, exits 1. `serve()` refuses ping settings unless `0 < ping_interval < ping_timeout`.
+  defaults to `0.0.0.0:8080`. **`RELAY_DB` is required** (the SQLite file's path).
+  **`RELAY_METRICS_TOKEN`** is optional; when set it must be at least 32 characters.
+  A missing, malformed or non-Unicode value exits 2; the effective host list is printed
+  at start. A database that won't open (or has a newer schema), a relay that can't
+  listen, or a server that stops, exits 1. `serve()` refuses ping settings unless
+  `0 < ping_interval < ping_timeout`, and a zero `cleanup_interval`.
+- `serve(Config) -> io::Result<relay_server::Relay>`. `Relay` has `addr`,
+  `run_cleanup().await -> CleanupCounts`, `shutdown().await` (stop accepting, close every
+  connection, wait for every leave, any running cleanup and every store call still
+  running, a cancelled login's included; when it returns, the relay holds no reference to
+  the store), `abort()` (a simulated crash: no leave, no touch), and `wait().await` (for the
+  bin). `Config::new(listen, hosts, store)` defaults: ping 15 s / 30 s, `SystemClock`,
+  `StderrLog`, no metrics token, cleanup every hour (first run one interval after start).
 - `relay-cli` bin: `--url`, `--role mac|phone`, `--key-file` (32-byte seed as unpadded
   base64url, written to a temporary file and renamed into place with mode 0600 if missing;
   on unix an existing file that group or others can access is refused). The client skips

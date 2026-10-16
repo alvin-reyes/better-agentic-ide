@@ -1,17 +1,26 @@
 //! The pairing and session state machines and the snapshot builder, free of Tauri.
 //!
-//! Story 2: login, the role registry, the pair directory and presence. All of it is
-//! pure: `relay-server` does the I/O and asks this crate for every decision.
+//! Story 2: login, the pair directory and presence. Story 7a: the clock, and the
+//! storage contract with admission over the stored role and the cleanup cutoff. All of
+//! it is pure: `relay-server` does the I/O and asks this crate for every decision.
 //!
-//! Story 4: the Noise session machines and their store traits (`session`).
+//! Story 4: the Noise session machines and their store traits (`session`). Their store
+//! error is exported as `SessionStoreError`, since `StoreError` is 7a's.
 
+pub mod clock;
 mod session;
+pub mod store;
 
+pub use clock::{Clock, ManualClock, SystemClock};
 pub use session::{
     next_counter_value, Hs1Counters, LastSent, MacAction, MacSessions, MemoryHs1Counters,
     MemoryLastSent, MemoryPairedStatics, PairedStatics, PhoneAction, PhoneSession, SendError,
-    StoreError, Trigger, HANGING_MS, MAX_OUTSTANDING, MAX_SESSION_AGE_MS, OUTSTANDING_TTL_MS,
-    RESTART_WINDOW_MS, RETRY_MS,
+    StoreError as SessionStoreError, Trigger, HANGING_MS, MAX_OUTSTANDING, MAX_SESSION_AGE_MS,
+    OUTSTANDING_TTL_MS, RESTART_WINDOW_MS, RETRY_MS,
+};
+pub use store::{
+    admit, cleanup_cutoff, Admit, CleanupCounts, DeviceRecord, PairRecord, Registered, Store,
+    StoreCounts, StoreError,
 };
 
 use std::collections::HashMap;
@@ -148,37 +157,15 @@ pub fn verify_login(
     })
 }
 
-/// Each key's role, fixed the first time the key logs in. Held in memory until story 7.
-#[derive(Debug, Default)]
-pub struct DeviceRoles {
-    roles: HashMap<DeviceKey, Role>,
-}
-
-impl DeviceRoles {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Registers a first login's role, or refuses a login with the other role.
-    pub fn admit(&mut self, who: &Identity) -> Result<(), LoginError> {
-        match self.roles.get(&who.id) {
-            Some(role) if *role != who.role => Err(LoginError::RoleConflict),
-            Some(_) => Ok(()),
-            None => {
-                self.roles.insert(who.id, who.role);
-                Ok(())
-            }
-        }
-    }
-}
-
-/// Where the relay learns who is paired with whom. Story 7 adds the SQLite one.
+/// Where the relay learns who is paired with whom. A `Store` is one; `InMemoryPairs`
+/// is another, for tests.
 pub trait PairDirectory: Send + Sync {
-    /// Every pair `id` is in, each seen from `id`'s side.
-    fn peers_of(&self, id: &DeviceKey) -> Vec<PairInfo>;
+    /// Every pair `id` is in, each seen from `id`'s side. A read that fails is an
+    /// error, never an empty list: a `welcome` with no pairs makes devices drop theirs.
+    fn peers_of(&self, id: &DeviceKey) -> Result<Vec<PairInfo>, StoreError>;
 }
 
-/// Pairs held in memory, seeded by hand until pairing (story 5a) exists.
+/// Pairs held in memory, for tests of the pure code.
 #[derive(Debug, Default)]
 pub struct InMemoryPairs {
     pairs: Mutex<Vec<(PairId, DeviceKey, DeviceKey)>>,
@@ -196,8 +183,9 @@ impl InMemoryPairs {
 }
 
 impl PairDirectory for InMemoryPairs {
-    fn peers_of(&self, id: &DeviceKey) -> Vec<PairInfo> {
-        self.pairs
+    fn peers_of(&self, id: &DeviceKey) -> Result<Vec<PairInfo>, StoreError> {
+        Ok(self
+            .pairs
             .lock()
             .unwrap()
             .iter()
@@ -218,7 +206,7 @@ impl PairDirectory for InMemoryPairs {
                     None
                 }
             })
-            .collect()
+            .collect())
     }
 }
 
@@ -243,6 +231,11 @@ impl Presence {
     /// Whether `id` has a live connection.
     pub fn is_online(&self, id: &DeviceKey) -> bool {
         self.online.contains_key(id)
+    }
+
+    /// Every device online now.
+    pub fn online_ids(&self) -> Vec<DeviceKey> {
+        self.online.keys().copied().collect()
     }
 
     /// The connection `id` is live on, if any.
@@ -479,47 +472,12 @@ mod tests {
     }
 
     #[test]
-    fn a_role_is_fixed_on_first_login() {
-        let mut roles = DeviceRoles::new();
-        let id = id_of(&key(1));
-        assert_eq!(
-            roles.admit(&Identity {
-                id,
-                role: Role::Phone
-            }),
-            Ok(())
-        );
-        assert_eq!(
-            roles.admit(&Identity {
-                id,
-                role: Role::Phone
-            }),
-            Ok(())
-        );
-        assert_eq!(
-            roles.admit(&Identity {
-                id,
-                role: Role::Mac
-            }),
-            Err(LoginError::RoleConflict)
-        );
-        let other = id_of(&key(2));
-        assert_eq!(
-            roles.admit(&Identity {
-                id: other,
-                role: Role::Mac
-            }),
-            Ok(())
-        );
-    }
-
-    #[test]
     fn the_in_memory_directory_lists_pairs_from_each_side() {
         let (mac, phone, stranger) = (Bytes([1; 32]), Bytes([2; 32]), Bytes([3; 32]));
         let dir = InMemoryPairs::new();
         dir.add(Bytes([9; 16]), mac, phone);
         assert_eq!(
-            dir.peers_of(&mac),
+            dir.peers_of(&mac).unwrap(),
             vec![PairInfo {
                 pair_id: Bytes([9; 16]),
                 peer_id: phone,
@@ -527,14 +485,28 @@ mod tests {
             }]
         );
         assert_eq!(
-            dir.peers_of(&phone),
+            dir.peers_of(&phone).unwrap(),
             vec![PairInfo {
                 pair_id: Bytes([9; 16]),
                 peer_id: mac,
                 peer_role: Role::Mac
             }]
         );
-        assert!(dir.peers_of(&stranger).is_empty());
+        assert!(dir.peers_of(&stranger).unwrap().is_empty());
+    }
+
+    #[test]
+    fn online_ids_lists_who_is_online() {
+        let (mac, phone) = (Bytes([1; 32]), Bytes([2; 32]));
+        let mut p = Presence::new();
+        assert!(p.online_ids().is_empty());
+        p.login(mac, 1, &[]);
+        p.login(phone, 2, &[]);
+        let mut ids = p.online_ids();
+        ids.sort();
+        assert_eq!(ids, vec![mac, phone]);
+        p.leave(mac, 1, &[]);
+        assert_eq!(p.online_ids(), vec![phone]);
     }
 
     fn presence(peer: DeviceKey, online: bool) -> Control {
@@ -549,23 +521,27 @@ mod tests {
         let mut p = Presence::new();
 
         // The Mac logs in first: its peer is offline, so nobody is told.
-        assert!(p.login(mac, 1, &dir.peers_of(&mac)).is_empty());
+        assert!(p.login(mac, 1, &dir.peers_of(&mac).unwrap()).is_empty());
         // An unpaired key logs in: nobody is paired with it.
-        assert!(p.login(stranger, 2, &dir.peers_of(&stranger)).is_empty());
+        assert!(p
+            .login(stranger, 2, &dir.peers_of(&stranger).unwrap())
+            .is_empty());
         // The phone's welcome lists the Mac online, and the Mac hears about the phone.
-        match p.welcome(dir.peers_of(&phone)) {
+        match p.welcome(dir.peers_of(&phone).unwrap()) {
             Control::Welcome { online, .. } => assert_eq!(online, vec![mac]),
             other => panic!("{other:?}"),
         }
         assert_eq!(
-            p.login(phone, 3, &dir.peers_of(&phone)),
+            p.login(phone, 3, &dir.peers_of(&phone).unwrap()),
             vec![(mac, presence(phone, true))]
         );
         // The stranger leaves: nobody is told.
-        assert!(p.leave(stranger, 2, &dir.peers_of(&stranger)).is_empty());
+        assert!(p
+            .leave(stranger, 2, &dir.peers_of(&stranger).unwrap())
+            .is_empty());
         // The phone leaves: the Mac is told.
         assert_eq!(
-            p.leave(phone, 3, &dir.peers_of(&phone)),
+            p.leave(phone, 3, &dir.peers_of(&phone).unwrap()),
             vec![(mac, presence(phone, false))]
         );
         assert!(!p.is_online(&phone));
@@ -577,14 +553,14 @@ mod tests {
         let dir = InMemoryPairs::new();
         dir.add(Bytes([9; 16]), mac, phone);
         let mut p = Presence::new();
-        p.login(mac, 1, &dir.peers_of(&mac));
-        p.login(phone, 2, &dir.peers_of(&phone));
+        p.login(mac, 1, &dir.peers_of(&mac).unwrap());
+        p.login(phone, 2, &dir.peers_of(&phone).unwrap());
 
         assert_eq!(
-            p.login(phone, 3, &dir.peers_of(&phone)),
+            p.login(phone, 3, &dir.peers_of(&phone).unwrap()),
             vec![(mac, presence(phone, false)), (mac, presence(phone, true))]
         );
-        assert!(p.leave(phone, 2, &dir.peers_of(&phone)).is_empty());
+        assert!(p.leave(phone, 2, &dir.peers_of(&phone).unwrap()).is_empty());
         assert_eq!(p.conn_of(&phone), Some(3));
     }
 
@@ -595,18 +571,18 @@ mod tests {
         dir.add(Bytes([8; 16]), mac, phone_a);
         dir.add(Bytes([9; 16]), mac, phone_b);
         let mut p = Presence::new();
-        p.login(phone_a, 1, &dir.peers_of(&phone_a));
-        p.login(phone_b, 2, &dir.peers_of(&phone_b));
+        p.login(phone_a, 1, &dir.peers_of(&phone_a).unwrap());
+        p.login(phone_b, 2, &dir.peers_of(&phone_b).unwrap());
 
         assert_eq!(
-            p.login(mac, 3, &dir.peers_of(&mac)),
+            p.login(mac, 3, &dir.peers_of(&mac).unwrap()),
             vec![
                 (phone_a, presence(mac, true)),
                 (phone_b, presence(mac, true))
             ]
         );
         assert_eq!(
-            p.leave(mac, 3, &dir.peers_of(&mac)),
+            p.leave(mac, 3, &dir.peers_of(&mac).unwrap()),
             vec![
                 (phone_a, presence(mac, false)),
                 (phone_b, presence(mac, false))
@@ -621,9 +597,9 @@ mod tests {
         dir.add(Bytes([8; 16]), mac, phone);
         dir.add(Bytes([9; 16]), mac, phone);
         let mut p = Presence::new();
-        p.login(mac, 1, &dir.peers_of(&mac));
+        p.login(mac, 1, &dir.peers_of(&mac).unwrap());
 
-        match p.welcome(dir.peers_of(&phone)) {
+        match p.welcome(dir.peers_of(&phone).unwrap()) {
             Control::Welcome { pairs, online } => {
                 assert_eq!(pairs.len(), 2);
                 assert_eq!(online, vec![mac]);
@@ -631,7 +607,7 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(
-            p.login(phone, 2, &dir.peers_of(&phone)),
+            p.login(phone, 2, &dir.peers_of(&phone).unwrap()),
             vec![(mac, presence(phone, true))]
         );
     }

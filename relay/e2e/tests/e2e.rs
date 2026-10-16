@@ -8,9 +8,10 @@ use std::time::Duration;
 use ed25519_dalek::{Signer, SigningKey};
 use futures_util::{SinkExt, StreamExt};
 use relay_cli::{Client, Event};
-use relay_core::{login_message, InMemoryPairs};
+use relay_core::Clock;
+use relay_core::{login_message, PairRecord, Store, SystemClock};
 use relay_protocol::{Bytes, Control, DeviceKey, PairInfo, Role};
-use relay_server::{serve, Config};
+use relay_server::{serve, Config, SqliteStore};
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -21,6 +22,9 @@ struct Relay {
     addr: SocketAddr,
     mac: SigningKey,
     phone: SigningKey,
+    /// Keeps the database's directory, and the relay, for the test's lifetime.
+    _dir: tempfile::TempDir,
+    _running: relay_server::Relay,
 }
 
 impl Relay {
@@ -33,22 +37,44 @@ fn id_of(k: &SigningKey) -> DeviceKey {
     Bytes(k.verifying_key().to_bytes())
 }
 
-/// A relay on 127.0.0.1:0 with hosts `["localhost"]`, short ping times, and the Mac
-/// and the phone seeded as a pair.
+/// A relay on 127.0.0.1:0 with hosts `["localhost"]`, short ping times, and a SQLite
+/// store on a temp file with the Mac and the phone seeded as devices and as a pair.
 async fn relay() -> Relay {
     let mac = SigningKey::generate(&mut rand::rngs::OsRng);
     let phone = SigningKey::generate(&mut rand::rngs::OsRng);
-    let pairs = Arc::new(InMemoryPairs::new());
-    pairs.add(PAIR, id_of(&mac), id_of(&phone));
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(SqliteStore::open(&dir.path().join("relay.db")).unwrap());
+    let now = SystemClock.now_ms();
+    store.register(&id_of(&mac), Role::Mac, now).unwrap();
+    store.register(&id_of(&phone), Role::Phone, now).unwrap();
+    store
+        .insert_pair(&PairRecord {
+            pair_id: PAIR,
+            mac: id_of(&mac),
+            phone: id_of(&phone),
+            mac_static: Bytes([1; 32]),
+            phone_static: Bytes([2; 32]),
+            slot: Bytes([3; 16]),
+            paired_at: now,
+            sig_m: Bytes([4; 64]),
+            acked: false,
+        })
+        .unwrap();
     let mut config = Config::new(
         "127.0.0.1:0".parse().unwrap(),
         vec!["localhost".into()],
-        pairs,
+        store,
     );
     config.ping_interval = Duration::from_millis(100);
     config.ping_timeout = Duration::from_millis(1000);
-    let (addr, _handle) = serve(config).await.expect("relay starts");
-    Relay { addr, mac, phone }
+    let running = serve(config).await.expect("relay starts");
+    Relay {
+        addr: running.addr,
+        mac,
+        phone,
+        _dir: dir,
+        _running: running,
+    }
 }
 
 async fn next(client: &mut Client) -> Event {
