@@ -3,7 +3,7 @@ title: 'Scaffold relay, protocol package and app with CI'
 type: 'chore'
 ticket: '1'
 created: '2026-10-15'
-status: 'built'
+status: 'done'
 baseline_revision: '0141666041637fbe481a1dd645b2b1fa8cf381ce'
 route: 'full'
 route_source: 'auto'
@@ -124,3 +124,14 @@ The e2e test sits in its own package because a virtual workspace has no root pac
 - `cd relay && cargo test` -- passes, and lists `e2e_placeholder`
 - `cd mobile && npx tsc --noEmit && npx jest` -- passes
 - `cd mobile && rm -rf node_modules && npm ci && npx expo export --platform ios` -- bundles without errors
+
+**Result (QA, 2026-10-16, main at 8444446): PASS.**
+- `npx tsc --noEmit` -- exit 0
+- `npm test` -- exit 0, 142 files, 1534 tests passed; includes `packages/protocol/src/index.test.ts` (4 tests). No flake seen (one run)
+- `cd src-tauri && cargo test` -- exit 0, 470 passed, 0 failed
+- `cd relay && cargo test` -- exit 0; output lists `test e2e_placeholder ... ok`; protocol, core, server, cli and e2e all ok
+- `cd mobile && npx tsc --noEmit && npx jest` -- exit 0, 1 suite, 2 tests passed
+- Fresh install: `mobile/` (no node_modules) plus `packages/protocol` copied to a scratch dir with no node_modules above it; `npm ci` exit 0, `npx expo export --platform ios` exit 0, ios .hbc bundle (2.5MB) exported
+- `gh pr checks 58` -- 10 of 10 pass, including Relay and Mobile
+- `mobile/app.json` has the EAS projectId (owner's hitl step done)
+- Acceptance criteria: all five map to the runs above; the CI-workflow criterion is shown by the passing Relay and Mobile jobs. No gaps found.
