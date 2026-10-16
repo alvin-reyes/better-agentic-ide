@@ -61,7 +61,7 @@
       - a bad frame;
       - 24 h since the session completed;
       - either frame ceiling;
-      - pull to refresh, only while there is no session (owner decision 10).
+      - pull to refresh, with or without a session, through the same 10 s window (owner decision 10, widened by the owner on 2026-10-16 after story 4's code review: two lost messages can leave the sides on different sessions until the next trigger, and pull to refresh is the user's way out).
     - **The Mac's triggers** are `send` with no session, and a bad frame. Its action is `Rehandshake(phone)`.
     - **A handshake with no `hs2`** gets one automatic retry 10 s later, then waits for the next trigger (owner decision 6).
     - **A start counts** when it is emitted, so a failed counter write still opens the window and still gets its retry.
@@ -69,6 +69,7 @@
     - **The Mac** takes each accepted `hs1` as its current session.
     - **The phone** keeps at most 4 outstanding initiators. It adopts an `hs2` only if its counter is above the current session's.
     - **A newer handshake left hanging** raises one trigger, once, if it has no `hs2` within 10 s of its start (owner decision 13). This is armed only when an older handshake's `hs2` was adopted after the newer one started (owner decision 14, option (a)), so a silent Mac gets only the ordinary single retry.
+      Amended by the owner on 2026-10-16 after story 4's code review: the deadline is `max(started_at + 10 s, adopted_at + (adopted_at − adopted.started_at))`, scaled to the round trip just measured on the adopted handshake, so a round trip over 10 s cannot loop (a constant 12 s round trip gives at most 2 starts).
   - **The machines are sans-IO.** They live in `relay-core`, with injected clocks and stores:
     - `MacSessions`;
     - a Rust `PhoneSession`, used by the in-process tests and by story 5a's CLI phone (owner decision 1);
