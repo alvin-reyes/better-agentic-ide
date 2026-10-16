@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "label": "ade-remote/v1/x",
+      "fields": [
+        "6162",
+        "",
+        "ffffff"
+      ],
+      "out": "6164652d72656d6f74652f76312f780000000261620000000000000003ffffff"
+    },
+    {
+      "label": "ade-remote/v1/pair/sas",
+      "fields": [],
+      "out": "6164652d72656d6f74652f76312f706169722f736173"
+    },
+    {
+      "label": "ade-remote/v1/login",
+      "fields": [
+        "883c0a3a897029d21832acdcbb4a98c54bf9d7c568fe45d345367bc3f8a2ee54",
+        "72656c61792e6578616d706c652e636f6d",
+        "70686f6e65"
+      ],
+      "out": "6164652d72656d6f74652f76312f6c6f67696e00000020883c0a3a897029d21832acdcbb4a98c54bf9d7c568fe45d345367bc3f8a2ee540000001172656c61792e6578616d706c652e636f6d0000000570686f6e65"
+    },
+    {
+      "label": "ade-remote/v1/pair/record",
+      "fields": [
+        "80d5e30bbe4289fdde4abe51244db9c5ec79c723328528aabc53cc975041896337b17e03d54fe80af44bb057b7dee35aaa573b16a7ffb88083cc458dac9984efdbae21397f4ff8eb0f36b1485a34c8bd2b4ce2875629aca6b0dd43e2c55bcb46677795bc3d2221221e1e90dc234c0a116e9a60904ae96a3957787076eb010aad9a4506103b5787beb5056e62612346662947dbceba1a19adcd8977a7f848e51b5847802dd70c2679ac686e3de0039ad036812fa4c81f832cc6ff37c681f0feb6f3132e2076de55c07ee8c0c1af0f6a524bd3c54997562f2cf452128809c544f9bca5a3bcc7900666e4af20b9e1badaadb4dfbe48b2bc1c9774319e9d22bdeb7c973d4d7b8e5e860f0bbdaee289225903a87cbe307fc921e682939ae8083b8492a96caf504bbd211c8e6fc557",
+        "00"
+      ],
+      "out": "6164652d72656d6f74652f76312f706169722f7265636f72640000012c80d5e30bbe4289fdde4abe51244db9c5ec79c723328528aabc53cc975041896337b17e03d54fe80af44bb057b7dee35aaa573b16a7ffb88083cc458dac9984efdbae21397f4ff8eb0f36b1485a34c8bd2b4ce2875629aca6b0dd43e2c55bcb46677795bc3d2221221e1e90dc234c0a116e9a60904ae96a3957787076eb010aad9a4506103b5787beb5056e62612346662947dbceba1a19adcd8977a7f848e51b5847802dd70c2679ac686e3de0039ad036812fa4c81f832cc6ff37c681f0feb6f3132e2076de55c07ee8c0c1af0f6a524bd3c54997562f2cf452128809c544f9bca5a3bcc7900666e4af20b9e1badaadb4dfbe48b2bc1c9774319e9d22bdeb7c973d4d7b8e5e860f0bbdaee289225903a87cbe307fc921e682939ae8083b8492a96caf504bbd211c8e6fc5570000000100"
+    }
+  ],
+  "dec": [
+    {
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d6974",
+      "fields": []
+    },
+    {
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d697400000002aabb",
+      "fields": [
+        "aabb"
+      ]
+    },
+    {
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d6974000000000000000101",
+      "fields": [
+        "",
+        "01"
+      ]
+    }
+  ],
+  "dec_refused": [
+    {
+      "why": "another label",
+      "label": "ade-remote/v1/pair/nonce",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d697400000002aabb"
+    },
+    {
+      "why": "a label that is a prefix of the one used",
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d69742d6861736800000002aabb"
+    },
+    {
+      "why": "the longer label over the shorter",
+      "label": "ade-remote/v1/pair/commit-hash",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d697400000002aabb"
+    },
+    {
+      "why": "a trailing byte",
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d697400000002aabb00"
+    },
+    {
+      "why": "a field shorter than its length",
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d697400000002aa"
+    },
+    {
+      "why": "a cut-off length",
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d69740000"
+    },
+    {
+      "why": "the label alone, cut short",
+      "label": "ade-remote/v1/pair/commit",
+      "bytes": "6164652d72656d6f74652f76312f706169722f636f6d6d69"
+    }
+  ]
+}

@@ -1,0 +1,269 @@
+{
+  "strings": [
+    {
+      "why": "plain",
+      "input": "Alvin's MacBook Pro",
+      "output": "Alvin's MacBook Pro"
+    },
+    {
+      "why": "non-ASCII text",
+      "input": "Caf\u00e9 \u2615 \u6771\u4eac",
+      "output": "Caf\u00e9 \u2615 \u6771\u4eac"
+    },
+    {
+      "why": "controls removed, U+009F the last of them",
+      "input": "a\u0000b\u001fc\u007fd\u0080e\u009ff",
+      "output": "abcdef"
+    },
+    {
+      "why": "U+00A0 trimmed at the ends, kept inside",
+      "input": "\u00a0in\u00a0side\u00a0",
+      "output": "in\u00a0side"
+    },
+    {
+      "why": "soft hyphen removed",
+      "input": "soft\u00adhyphen",
+      "output": "softhyphen"
+    },
+    {
+      "why": "bidi override removed",
+      "input": "evil\u202egpj.exe",
+      "output": "evilgpj.exe"
+    },
+    {
+      "why": "U+2028-202E removed, U+202F trimmed at the ends but kept inside",
+      "input": "\u202fa\u2028b\u2029c\u202ad\u202fe\u202f",
+      "output": "abcd\u202fe"
+    },
+    {
+      "why": "U+200D (emoji joiner) kept; U+200B, 200C, 200E, 200F removed",
+      "input": "\ud83d\udc69\u200d\ud83d\udcbb\u200b\u200c\u200e\u200f!",
+      "output": "\ud83d\udc69\u200d\ud83d\udcbb!"
+    },
+    {
+      "why": "U+2060-206F and U+061C, U+180E removed",
+      "input": "a\u2060b\u206fc\u061cd\u180ee",
+      "output": "abcde"
+    },
+    {
+      "why": "Hangul fillers removed",
+      "input": "\u3164\u115f\u1160\uffa0Mac",
+      "output": "Mac"
+    },
+    {
+      "why": "U+FEFF and U+FFF0-FFFF removed, U+FFEF kept",
+      "input": "\ufeffx\uffefy\ufff0\ufffd\uffff",
+      "output": "x\uffefy"
+    },
+    {
+      "why": "private use removed",
+      "input": "\ue000a\uf8ff",
+      "output": "a"
+    },
+    {
+      "why": "tag characters removed, U+E007F the last of them",
+      "input": "flag\udb40\udc67\udb40\udc62\udb40\udc7f",
+      "output": "flag"
+    },
+    {
+      "why": "U+E0080 and U+EFFFF kept, U+F0000 and U+10FFFF removed",
+      "input": "a\udb40\udc80b\udb7f\udfffc\udb80\udc00d\udbff\udfff",
+      "output": "a\udb40\udc80b\udb7f\udfffcd"
+    },
+    {
+      "why": "all the trim characters trimmed at both ends",
+      "input": " \u00a0\u1680\u2000\u2005\u200a\u202f\u205f\u3000Mac mini\u3000\u205f\u202f\u200a\u1680\u00a0 ",
+      "output": "Mac mini"
+    },
+    {
+      "why": "spaces inside kept",
+      "input": "Mac  \u3000 mini",
+      "output": "Mac  \u3000 mini"
+    },
+    {
+      "why": "a line feed and a tab are removed, not trimmed",
+      "input": "\tMac\nmini\r",
+      "output": "Macmini"
+    },
+    {
+      "why": "cleans to empty",
+      "input": "\u200b \u202e\u00a0\u3164",
+      "output": ""
+    },
+    {
+      "why": "empty",
+      "input": "",
+      "output": ""
+    },
+    {
+      "why": "over 40 code points, all astral: cut to 40 code points",
+      "input": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00",
+      "output": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00"
+    },
+    {
+      "why": "the cut leaves a space at the end, which is trimmed",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbb",
+      "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "why": "the cut leaves several trim characters at the end",
+      "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \u3000\u00a0bbb",
+      "output": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "why": "removed code points do not count toward 40",
+      "input": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy",
+      "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "why": "leading trim before the cut",
+      "input": "   zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "output": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    },
+    {
+      "why": "combining marks count as code points",
+      "input": "e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301",
+      "output": "e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301"
+    }
+  ],
+  "bytes": [
+    {
+      "why": "plain",
+      "input": "4d6163",
+      "output": "Mac"
+    },
+    {
+      "why": "E2 then a valid byte",
+      "input": "e241",
+      "output": "A"
+    },
+    {
+      "why": "a cut-off four-byte sequence then a valid byte",
+      "input": "f09f9841",
+      "output": "A"
+    },
+    {
+      "why": "overlong C0 80",
+      "input": "c08041",
+      "output": "A"
+    },
+    {
+      "why": "overlong E0 80 80",
+      "input": "e0808041",
+      "output": "A"
+    },
+    {
+      "why": "a surrogate ED A0 80",
+      "input": "eda08041",
+      "output": "A"
+    },
+    {
+      "why": "above U+10FFFF",
+      "input": "f490808041",
+      "output": "A"
+    },
+    {
+      "why": "F5 to FF",
+      "input": "f5f6f7f8f9fafbfcfdfeff41",
+      "output": "A"
+    },
+    {
+      "why": "valid sequences after invalid ones survive",
+      "input": "ffe282ace2f09f9880",
+      "output": "\u20ac\ud83d\ude00"
+    },
+    {
+      "why": "a cut-off sequence at the end",
+      "input": "4d6163e282",
+      "output": "Mac"
+    },
+    {
+      "why": "only invalid bytes",
+      "input": "ff",
+      "output": ""
+    },
+    {
+      "why": "valid UTF-8 with controls, cleaned",
+      "input": "e280ae4d61630a",
+      "output": "Mac"
+    }
+  ],
+  "lossy": [
+    {
+      "input": "e241",
+      "output": "\ufffdA"
+    },
+    {
+      "input": "f09f9841",
+      "output": "\ufffdA"
+    },
+    {
+      "input": "c080",
+      "output": "\ufffd\ufffd"
+    },
+    {
+      "input": "e08080",
+      "output": "\ufffd\ufffd\ufffd"
+    },
+    {
+      "input": "eda080",
+      "output": "\ufffd\ufffd\ufffd"
+    },
+    {
+      "input": "f4908080",
+      "output": "\ufffd\ufffd\ufffd\ufffd"
+    },
+    {
+      "input": "f5",
+      "output": "\ufffd"
+    },
+    {
+      "input": "ff",
+      "output": "\ufffd"
+    },
+    {
+      "input": "80",
+      "output": "\ufffd"
+    },
+    {
+      "input": "c241",
+      "output": "\ufffdA"
+    },
+    {
+      "input": "f080",
+      "output": "\ufffd\ufffd"
+    },
+    {
+      "input": "e282",
+      "output": "\ufffd"
+    },
+    {
+      "input": "ffe282ace2f09f9880",
+      "output": "\ufffd\u20ac\ufffd\ud83d\ude00"
+    },
+    {
+      "input": "efbfbd",
+      "output": "\ufffd"
+    },
+    {
+      "input": "e0a080",
+      "output": "\u0800"
+    },
+    {
+      "input": "f0908080",
+      "output": "\ud800\udc00"
+    },
+    {
+      "input": "f48fbfbf",
+      "output": "\udbff\udfff"
+    },
+    {
+      "input": "c2a0",
+      "output": "\u00a0"
+    },
+    {
+      "input": "",
+      "output": ""
+    }
+  ]
+}

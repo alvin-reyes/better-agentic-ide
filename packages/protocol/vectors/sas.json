@@ -1,0 +1,43 @@
+{
+  "cases": [
+    {
+      "why": "a code under 100000 keeps its leading zero",
+      "slot": "f15f4e76b5bdb314cb41ca03156f1585",
+      "i_m": "6f7c3a78bac7cbf8b08cf1e464cabeb6d0588f370369384daeaaa32fa5dedcb6",
+      "s_m": "10647585c7932c92e3e952387b897204bd95c54a42a59ed4ebccb4709e848219",
+      "i_p": "bf1ac0cce71da6a8452a664823446d47fcf2e95a77e501b281dbe1406ac34bd5",
+      "s_p": "a4a1777db458117e062a966995cc749e2396a099866a808c63b4f069ea61ded4",
+      "n_m": "09390679a31193e567ca54d369758d3b5e61f7f29757bc33abcdae9ad64f2a69",
+      "n_p": "b4dcc067d48595ad5818b6183971f9eae64085653f0c5aea6e6ff2c823c0533f",
+      "s": "10fc414c10446ef73121fa0d1f27e161a8a10388ce2e99cb93fd233a68c0bd09",
+      "digest": "3a032846b1b23351777d039c62c82beacb00f3d52330b1484fbc8dccab870db6",
+      "code": "019793"
+    },
+    {
+      "why": "the first case with another I_P",
+      "slot": "f15f4e76b5bdb314cb41ca03156f1585",
+      "i_m": "6f7c3a78bac7cbf8b08cf1e464cabeb6d0588f370369384daeaaa32fa5dedcb6",
+      "s_m": "10647585c7932c92e3e952387b897204bd95c54a42a59ed4ebccb4709e848219",
+      "i_p": "47c47ec3fcffbe4dc2e1f002ae682eef78cd8e84aa1ab73314b1e5b8d5d63308",
+      "s_p": "a4a1777db458117e062a966995cc749e2396a099866a808c63b4f069ea61ded4",
+      "n_m": "09390679a31193e567ca54d369758d3b5e61f7f29757bc33abcdae9ad64f2a69",
+      "n_p": "b4dcc067d48595ad5818b6183971f9eae64085653f0c5aea6e6ff2c823c0533f",
+      "s": "10fc414c10446ef73121fa0d1f27e161a8a10388ce2e99cb93fd233a68c0bd09",
+      "digest": "53bc6d880331837e79de32986bc49bd3941a683ac33fd6a1731dd38030fdb05e",
+      "code": "178430"
+    },
+    {
+      "why": "the first case with another S_P",
+      "slot": "f15f4e76b5bdb314cb41ca03156f1585",
+      "i_m": "6f7c3a78bac7cbf8b08cf1e464cabeb6d0588f370369384daeaaa32fa5dedcb6",
+      "s_m": "10647585c7932c92e3e952387b897204bd95c54a42a59ed4ebccb4709e848219",
+      "i_p": "bf1ac0cce71da6a8452a664823446d47fcf2e95a77e501b281dbe1406ac34bd5",
+      "s_p": "5b50eafaaa10e6496a96c8d3ba7f5906653586bc7878be3ba3f60e9488c443b9",
+      "n_m": "09390679a31193e567ca54d369758d3b5e61f7f29757bc33abcdae9ad64f2a69",
+      "n_p": "b4dcc067d48595ad5818b6183971f9eae64085653f0c5aea6e6ff2c823c0533f",
+      "s": "10fc414c10446ef73121fa0d1f27e161a8a10388ce2e99cb93fd233a68c0bd09",
+      "digest": "a22682e9849f865ad10b777f86202843c266f0f845b230d5794d21917c3dbebf",
+      "code": "368538"
+    }
+  ]
+}

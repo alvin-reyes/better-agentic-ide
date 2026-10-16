@@ -1,0 +1,59 @@
+{
+  "labels": [
+    {
+      "constant": "LOGIN_LABEL",
+      "value": "ade-remote/v1/login",
+      "use": "enc"
+    },
+    {
+      "constant": "NOISE_LABEL",
+      "value": "ade-remote/v1/noise",
+      "use": "enc"
+    },
+    {
+      "constant": "PAIR_PHONE_TO_MAC_INFO",
+      "value": "ade-remote/v1/pair/phone-to-mac",
+      "use": "hkdf_info"
+    },
+    {
+      "constant": "PAIR_MAC_TO_PHONE_INFO",
+      "value": "ade-remote/v1/pair/mac-to-phone",
+      "use": "hkdf_info"
+    },
+    {
+      "constant": "PAIR_COMMIT_LABEL",
+      "value": "ade-remote/v1/pair/commit",
+      "use": "enc"
+    },
+    {
+      "constant": "PAIR_COMMIT_HASH_LABEL",
+      "value": "ade-remote/v1/pair/commit-hash",
+      "use": "enc"
+    },
+    {
+      "constant": "PAIR_NONCE_LABEL",
+      "value": "ade-remote/v1/pair/nonce",
+      "use": "enc"
+    },
+    {
+      "constant": "PAIR_REVEAL_LABEL",
+      "value": "ade-remote/v1/pair/reveal",
+      "use": "enc"
+    },
+    {
+      "constant": "PAIR_PHONE_SIG_LABEL",
+      "value": "ade-remote/v1/pair/phone-sig",
+      "use": "enc"
+    },
+    {
+      "constant": "PAIR_SAS_LABEL",
+      "value": "ade-remote/v1/pair/sas",
+      "use": "enc"
+    },
+    {
+      "constant": "PAIR_RECORD_LABEL",
+      "value": "ade-remote/v1/pair/record",
+      "use": "enc"
+    }
+  ]
+}

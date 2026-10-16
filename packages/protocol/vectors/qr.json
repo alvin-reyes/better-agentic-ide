@@ -1,0 +1,728 @@
+{
+  "keys": {
+    "slot": "000102030405060708090a0b0c0d0e0f",
+    "id": "1111111111111111111111111111111111111111111111111111111111111111",
+    "x": "2222222222222222222222222222222222222222222222222222222222222222",
+    "s": "3333333333333333333333333333333333333333333333333333333333333333",
+    "slot_b64": "AAECAwQFBgcICQoLDA0ODw",
+    "id_b64": "ERERERERERERERERERERERERERERERERERERERERERE",
+    "x_b64": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+    "s_b64": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM"
+  },
+  "parse": [
+    {
+      "why": "n missing",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "non-ASCII n",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Alvin%E2%80%99s%20MacBook",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "Alvin\u2019s MacBook"
+      }
+    },
+    {
+      "why": "n with reserved characters",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=a%26b%3Dc%2Bd%25e%3Ff%23g",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "a&b=c+d%e?f#g"
+      }
+    },
+    {
+      "why": "+ is literal",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=a+b",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "a+b"
+      }
+    },
+    {
+      "why": "lower-case hex",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=%c3%a9t%C3%A9",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "\u00e9t\u00e9"
+      }
+    },
+    {
+      "why": "n empty",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "n with a malformed escape",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac%ZZ",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "n with a cut-off escape",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac%E",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "n ending in %",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac%",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "n duplicated counts as missing",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=A&n=B",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "n=%FF cleans to empty",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=%FF",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "invalid UTF-8 in n",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac%FF%E2%82%AC",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "Mac\u20ac"
+      }
+    },
+    {
+      "why": "a cut-off sequence in n",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac%E2%82",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "Mac"
+      }
+    },
+    {
+      "why": "n over 40 code points",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00"
+      }
+    },
+    {
+      "why": "n with control and bidi-override characters",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=%E2%80%AEMac%07%E2%80%8F%20mini%00",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "Mac mini"
+      }
+    },
+    {
+      "why": "n with whitespace that the cut leaves at the end",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm%E3%80%80xyz",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+      }
+    },
+    {
+      "why": "n that cleans to empty",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=%E2%80%8B%C2%A0%E2%80%AE",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "n of Hangul fillers",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=%E3%85%A4%E1%85%9F%EF%BE%A0Mac%E1%85%A0",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "Mac"
+      }
+    },
+    {
+      "why": "n with tag characters",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac%F3%A0%81%81%F3%A0%81%BF",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "Mac"
+      }
+    },
+    {
+      "why": "unknown keys, duplicated or malformed, are ignored",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&foo=1&foo=2&zz=%ZZ",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "any order",
+      "code": "ade-pair://v1?n=Mac&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&id=ERERERERERERERERERERERERERERERERERERERERERE&slot=AAECAwQFBgcICQoLDA0ODw&relay=wss%3A%2F%2Frelay.example.com",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "Mac"
+      }
+    },
+    {
+      "why": "relay not escaped",
+      "code": "ade-pair://v1?relay=wss://relay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "relay with port and path",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com%3A8443%2Fws&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "ok": {
+        "relay": "wss://relay.example.com:8443/ws",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "a byte field percent-encoded",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=%41AECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": null
+      }
+    },
+    {
+      "why": "a value holding =",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=a=b",
+      "ok": {
+        "relay": "wss://relay.example.com",
+        "slot": "000102030405060708090a0b0c0d0e0f",
+        "id": "1111111111111111111111111111111111111111111111111111111111111111",
+        "x": "2222222222222222222222222222222222222222222222222222222222222222",
+        "s": "3333333333333333333333333333333333333333333333333333333333333333",
+        "name": "a=b"
+      }
+    },
+    {
+      "why": "ws:// relay",
+      "code": "ade-pair://v1?relay=ws%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "https:// relay",
+      "code": "ade-pair://v1?relay=https%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "WSS:// relay",
+      "code": "ade-pair://v1?relay=WSS%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "Wss:// relay",
+      "code": "ade-pair://v1?relay=Wss://relay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "wss:// with nothing after",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2F&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "wss:/ (one slash)",
+      "code": "ade-pair://v1?relay=wss:/relay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "empty relay (like an empty byte field)",
+      "code": "ade-pair://v1?relay=&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a structure error wins over insecure_relay",
+      "code": "ade-pair://v1?relay=ws%3A%2F%2Fx&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a relay with a space after decoding",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Fa%20b&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a relay with a non-ASCII byte after decoding",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Fa%C3%A9&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a ws:// relay with a space is a structure error",
+      "code": "ade-pair://v1?relay=ws%3A%2F%2Fa%20b&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a malformed escape in relay",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Fa%ZZ&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v2",
+      "code": "ade-pair://v2?relay=x",
+      "error": "newer_version"
+    },
+    {
+      "why": "v2 with nothing after",
+      "code": "ade-pair://v2",
+      "error": "newer_version"
+    },
+    {
+      "why": "v10",
+      "code": "ade-pair://v10?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "newer_version"
+    },
+    {
+      "why": "a version too big for any integer",
+      "code": "ade-pair://v99999999999999999999999999?x",
+      "error": "newer_version"
+    },
+    {
+      "why": "v2 then anything",
+      "code": "ade-pair://v2/other#stuff",
+      "error": "newer_version"
+    },
+    {
+      "why": "another scheme",
+      "code": "https://example.com/?relay=x",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "ade-pair:/ (one slash)",
+      "code": "ade-pair:/v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "upper-case scheme",
+      "code": "ADE-PAIR://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v0",
+      "code": "ade-pair://v0?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v01",
+      "code": "ade-pair://v01?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "V1",
+      "code": "ade-pair://V1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v with no number",
+      "code": "ade-pair://v?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v1 without ?",
+      "code": "ade-pair://v1",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v1 then something other than ?",
+      "code": "ade-pair://v1&relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v1 then a letter",
+      "code": "ade-pair://v1x?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v1? with nothing after",
+      "code": "ade-pair://v1?",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "the empty string",
+      "code": "",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "relay missing",
+      "code": "ade-pair://v1?slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "slot missing",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "id missing",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "x missing",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "s missing",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "relay duplicated, even with the same value",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&relay=wss%3A%2F%2Frelay.example.com",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "slot duplicated",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&slot=AAECAwQFBgcICQoLDA0ODw",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "id duplicated",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&id=ERERERERERERERERERERERERERERERERERERERERERE",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "x duplicated",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "s duplicated",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "slot of 15 bytes",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0O&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "id of 33 bytes",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=EREREREREREREREREREREREREREREREREREREREREREx&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "x empty",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "padded base64",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw%3D%3D&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "padded base64, unescaped",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw==&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "non-canonical base64 (non-zero trailing bits)",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERF&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "standard base64 alphabet",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=+RERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a malformed escape in slot",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=%ZZAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a parameter with no =",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&flag",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a parameter with an empty key",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&=x",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a trailing &",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "an empty parameter between two &",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a space",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac mini",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a non-ASCII character",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Caf\u00e9",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a tab",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM\t",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "DEL",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM\u007f",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a line feed",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM\n",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a character outside 0x21-0x7E in a newer version",
+      "code": "ade-pair://v2 x",
+      "error": "newer_version"
+    },
+    {
+      "why": "a newer version followed by non-ASCII",
+      "code": "ade-pair://v2?n=Caf\u00e9",
+      "error": "newer_version"
+    },
+    {
+      "why": "a newer version followed by a control character",
+      "code": "ade-pair://v3\t\n",
+      "error": "newer_version"
+    },
+    {
+      "why": "a character outside 0x21-0x7E inside the prefix",
+      "code": "ade-pair:// v2",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "v1 followed by a character outside 0x21-0x7E",
+      "code": "ade-pair://v1\u00e9?x",
+      "error": "not_pairing_code"
+    }
+  ],
+  "build": [
+    {
+      "why": "a dirty name is cleaned then escaped",
+      "relay": "wss://relay.example.com",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "  Alvin\u2019s MacBook\u202e\u3000",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Alvin%E2%80%99s%20MacBook",
+      "parsed_name": "Alvin\u2019s MacBook"
+    },
+    {
+      "why": "a name that cleans to empty leaves n out",
+      "relay": "wss://relay.example.com",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "\u200b\u3000\u3164",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "parsed_name": null
+    },
+    {
+      "why": "every byte outside the unreserved set is escaped",
+      "relay": "wss://relay.example.com",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "a&b=c+d%e/~_.-Z9?#",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=a%26b%3Dc%2Bd%25e%2F~_.-Z9%3F%23",
+      "parsed_name": "a&b=c+d%e/~_.-Z9?#"
+    },
+    {
+      "why": "the worst case: 40 four-byte code points is 480 characters of n",
+      "relay": "wss://relay.example.com",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80",
+      "parsed_name": "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00"
+    },
+    {
+      "why": "a relay with a port and path is escaped",
+      "relay": "wss://relay.example.com:8443/ws?a=b",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "Mac",
+      "code": "ade-pair://v1?relay=wss%3A%2F%2Frelay.example.com%3A8443%2Fws%3Fa%3Db&slot=AAECAwQFBgcICQoLDA0ODw&id=ERERERERERERERERERERERERERERERERERERERERERE&x=IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI&s=MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM&n=Mac",
+      "parsed_name": "Mac"
+    }
+  ],
+  "build_refused": [
+    {
+      "why": "ws:// relay",
+      "relay": "ws://relay.example.com",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "Mac",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "WSS:// relay",
+      "relay": "WSS://relay.example.com",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "Mac",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "wss:// alone",
+      "relay": "wss://",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "Mac",
+      "error": "insecure_relay"
+    },
+    {
+      "why": "a relay with a space",
+      "relay": "wss://a b",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "Mac",
+      "error": "not_pairing_code"
+    },
+    {
+      "why": "a relay with a non-ASCII character",
+      "relay": "wss://caf\u00e9.example",
+      "slot": "000102030405060708090a0b0c0d0e0f",
+      "id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "x": "2222222222222222222222222222222222222222222222222222222222222222",
+      "s": "3333333333333333333333333333333333333333333333333333333333333333",
+      "name": "Mac",
+      "error": "not_pairing_code"
+    }
+  ]
+}
