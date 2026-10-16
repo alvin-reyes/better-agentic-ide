@@ -4,7 +4,7 @@ type: 'feature'
 ticket: '3'
 created: '2026-10-16'
 status: 'approved'
-baseline_revision: ''
+baseline_revision: 'c13904bb9873523c36200dcc6ebfdd88c155c8df'
 route: 'full'
 route_source: 'auto'
 risk: 'medium'
@@ -85,9 +85,9 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Branch -- start from `origin/main` once PR #60 (story 2) has merged (see Design Notes, "Order with story 2"). Set `baseline_revision` then.
-- [ ] `relay/Cargo.toml`, `relay/protocol/Cargo.toml` -- add the workspace dependencies `hkdf = "0.12.4"` (2023-12-13), `chacha20poly1305 = "0.10.1"` (2022-08-10) and `sha2 = "0.10.9"` (2025-04-30, already locked via dalek), and dev-dependency `hex = "0.4.3"` (2021-03-03). `relay-protocol` also gains `ed25519-dalek` and `rand` from the workspace. Then run `cargo tree -p relay-protocol` and check each new lock entry's date.
-- [ ] `packages/protocol/vectors/generate.mjs` + `*.json` -- a generator on `node:crypto` only, whose output is committed.
+- [x] Branch -- start from `origin/main` once PR #60 (story 2) has merged (see Design Notes, "Order with story 2"). Set `baseline_revision` then.
+- [x] `relay/Cargo.toml`, `relay/protocol/Cargo.toml` -- add the workspace dependencies `hkdf = "0.12.4"` (2023-12-13), `chacha20poly1305 = "0.10.1"` (2022-08-10) and `sha2 = "0.10.9"` (2025-04-30, already locked via dalek), and dev-dependency `hex = "0.4.3"` (2021-03-03). `relay-protocol` also gains `ed25519-dalek` and `rand` from the workspace. Then run `cargo tree -p relay-protocol` and check each new lock entry's date.
+- [x] `packages/protocol/vectors/generate.mjs` + `*.json` -- a generator on `node:crypto` only, whose output is committed.
   - It produces `enc.json`, `labels.json`, `signatures.json`, `seals.json` and `sas.json` from fixed seeds and nonces.
   - For XChaCha it uses HChaCha20 derived from Node's `chacha20` keystream, then `chacha20-poly1305`.
   - It checks itself against draft-irtf-cfrg-xchacha A.3.1, RFC 5869 case 1 and RFC 8032 test 1, and writes those into the files as anchors.
@@ -98,7 +98,7 @@ context:
   `names.json` and `qr.json` are written by hand from the spec, with one case for each matrix line, each ticket item and each grammar rule below. They include the lossy UTF-8 byte cases. The names cases are:
   - over 40 code points, built from astral code points;
   - the boundaries: U+009F removed; U+00A0 trimmed but kept inside; U+200D and U+FFEF kept; U+202F trimmed; U+E007F removed; U+EFFFF kept.
-- [ ] `relay/protocol/src/{enc,labels,sign,seal,sas,names,qr}.rs` -- add the following:
+- [x] `relay/protocol/src/{enc,labels,sign,seal,sas,names,qr}.rs` -- add the following:
   - `dec(label, bytes) -> Option<Vec<&[u8]>>`: an exact label prefix, the whole input consumed;
   - the 11 labels and `ALL_LABELS`;
   - `sign(&SigningKey, label, fields)` and `verify(id, label, fields, sig) -> bool`, which uses `verify_strict`;
@@ -108,16 +108,16 @@ context:
   - `sas_code(...) -> String`;
   - `clean_name(&str)` and `name_from_bytes(&[u8])`;
   - `build_pair_code` and `parse_pair_code`, with `PairCodeError { NotPairingCode, InsecureRelay, NewerVersion }`.
-- [ ] `relay/protocol/src/vectors.rs` (`#[cfg(test)]`) -- reads every vector file through `include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../packages/protocol/vectors/…"))` and asserts each case. Vectors check `seal_with_nonce`; the random `seal` gets a round-trip test, and two calls give different nonces.
-- [ ] `packages/protocol/src/{enc,labels,bytes,sign,seal,sas,names,qr}.ts` -- the twins, with camelCase names (`sealWithNonce`, `seal`, `open`, …).
+- [x] `relay/protocol/src/vectors.rs` (`#[cfg(test)]`) -- reads every vector file through `include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../packages/protocol/vectors/…"))` and asserts each case. Vectors check `seal_with_nonce`; the random `seal` gets a round-trip test, and two calls give different nonces.
+- [x] `packages/protocol/src/{enc,labels,bytes,sign,seal,sas,names,qr}.ts` -- the twins, with camelCase names (`sealWithNonce`, `seal`, `open`, …).
   - `bytes.ts` holds hex, strict unpadded base64url, the UTF-8 encoder and the lossy decoder, and percent coding.
   - `verify` uses `ed25519.verify(sig, msg, pub, { zip215: false })`.
-- [ ] `packages/protocol/src/vectors.test.ts` -- the same assertions as the Rust file, plus:
+- [x] `packages/protocol/src/vectors.test.ts` -- the same assertions as the Rust file, plus:
   - a lone-surrogate name case, which only TypeScript can represent;
   - a check that `labels.json` equals the 11 labels listed under Always;
   - a test with `// @vitest-environment node` that runs `generate.mjs --check` through `spawnSync`, so drift from the oracle fails `npm test` and CI.
-- [ ] `mobile/__tests__/protocol.test.ts` -- add one QR parse case, one SAS case, and a `seal`-then-`open` round trip, to prove the package and `getRandomValues` work under the app's toolchain.
-- [ ] `.ade/context/remote-protocol.md`, `phone-remote-layout.md` -- record the following:
+- [x] `mobile/__tests__/protocol.test.ts` -- add one QR parse case, one SAS case, and a `seal`-then-`open` round trip, to prove the package and `getRandomValues` work under the app's toolchain.
+- [x] `.ade/context/remote-protocol.md`, `phone-remote-layout.md` -- record the following:
   - the 11 labels, with the two HKDF `info` strings marked;
   - the sealed layout and the open rule;
   - HKDF's 32-byte output;
@@ -141,6 +141,29 @@ context:
 - AC6: Given builder cases with dirty names, when a code is built, then it equals the vector's string, `n` holds the cleaned name (left out when the name cleans to empty), and parsing it gives back the cleaned name and the same keys.
 
 ## Implementation Notes
+
+2026-10-16, Dev. Built on `origin/main` at c13904b (PR #60 squash-merged), so no fork-point rebase was needed.
+
+**Dependencies.** The 11 new `Cargo.lock` entries and their crates.io `created_at`: aead 0.5.2 (2023-04-02), chacha20 0.9.1 (2023-04-01), chacha20poly1305 0.10.1 (2022-08-10), cipher 0.4.4 (2023-03-09), hex 0.4.3 (2021-03-03), hkdf 0.12.4 (2023-12-13), hmac 0.12.1 (2022-02-17), inout 0.1.4 (2025-02-21), opaque-debug 0.3.1 (2024-03-01), poly1305 0.8.0 (2022-07-31), universal-hash 0.5.1 (2023-05-19). sha2 0.10.9 (2025-04-30) was already locked. All are before 2026-10-02 and none is yanked, so nothing was pinned back. No existing lock entry changed. No npm dependency, `mobile/package.json`, its lockfile or `src-tauri` changed.
+
+**Story 2's `enc`.** It moved verbatim to `relay/protocol/src/enc.rs`, and `LOGIN_LABEL` to `labels.rs`. Both are re-exported at the crate root. Story 2's tests in `lib.rs` are unchanged and pass, and `relay-core` is untouched.
+
+**Generator.** `vectors/generate.mjs` reproduces RFC 5869 case 1, RFC 8032 test 1, HChaCha20 (draft-irtf-cfrg-xchacha 2.2.1) and XChaCha20-Poly1305 A.3.1 before it writes anything. The SAS search landed on code `019793`.
+
+**Choices where the plan left room.** These are recorded in `remote-protocol.md`:
+- **QR check order.** The 0x21–0x7E check on the whole code runs before the version check, as the grammar lists it. So `ade-pair://v2 x` is `not_pairing_code`, and `newer_version` covers any visible-ASCII tail.
+- **Percent-decoding of byte fields.** Strict percent-decoding applies to every value, the byte fields included: `slot=%41...` is accepted.
+- **Empty relay.** `relay=` is `insecure_relay`. It passes the character rule vacuously, then fails the `wss://` rule.
+- **Builder escaping.** The builder escapes `relay` as well as `n`, giving `relay=wss%3A%2F%2F...`. It refuses a relay under the parser's relay rule, with the same error.
+- **HKDF info constant names.** The two HKDF `info` constants are named `PAIR_PHONE_TO_MAC_INFO` and `PAIR_MAC_TO_PHONE_INFO`, so they can't be taken for `enc` labels. The other nine are `*_LABEL`.
+- **SAS inputs.** `sas_code` takes a `SasInputs` struct, and `sasCode` an object, rather than eight positional arguments.
+- **Signing key types.** Rust `sign` takes a `SigningKey`. TypeScript `sign` takes the 32-byte seed.
+- **Lossy decoder vectors.** `names.json` also has a `lossy` section that pins the decoder alone, before cleaning, with each maximal subpart as one U+FFFD. Rust checks it against `String::from_utf8_lossy`, and TypeScript against `utf8DecodeLossy`.
+- **Extra Rust test.** `vectors_seal_anchor_xchacha` also pins the RustCrypto crates to the A.3.1 and RFC 5869 anchors.
+
+**Test-first.** Each Rust test (vectors and units) ran red against `todo!()` stubs: 22 failed. The TypeScript vector test ran red (13 failed) before the modules existed. The three mobile smoke cases were written after the package code, so they were never seen red.
+
+**Housekeeping.** `packages/protocol/vectors/.gitkeep` was removed, because the folder now has files. The worktree's `mobile/node_modules` is an untracked symlink farm onto the main checkout's install, with `@ade/protocol` pointing at this worktree. It is not committed.
 
 ## Plan Change Log
 

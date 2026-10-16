@@ -10,18 +10,23 @@ pub const NOISE_PATTERN: &str = "Noise_IK_25519_ChaChaPoly_SHA256";
 /// The wire version every control message carries as `v`.
 pub const VERSION: u8 = 1;
 
-/// The label a login signature is made under.
-pub const LOGIN_LABEL: &str = "ade-remote/v1/login";
+mod enc;
+mod labels;
+mod names;
+mod qr;
+mod sas;
+mod seal;
+mod sign;
+#[cfg(test)]
+mod vectors;
 
-/// `enc(label, f1, ..., fn) = label_ascii || u32be(len f1) || f1 || ... || u32be(len fn) || fn`.
-pub fn enc(label: &str, fields: &[&[u8]]) -> Vec<u8> {
-    let mut out = label.as_bytes().to_vec();
-    for field in fields {
-        out.extend_from_slice(&(field.len() as u32).to_be_bytes());
-        out.extend_from_slice(field);
-    }
-    out
-}
+pub use enc::{dec, enc};
+pub use labels::*;
+pub use names::{clean_name, name_from_bytes};
+pub use qr::{build_pair_code, parse_pair_code, PairCode, PairCodeError};
+pub use sas::{sas_code, SasInputs};
+pub use seal::{open, pair_keys, seal, seal_with_nonce, PairKeys, NONCE_LEN, TAG_LEN};
+pub use sign::{sign, verify};
 
 /// Fixed-length bytes, carried on the wire as unpadded base64url.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
