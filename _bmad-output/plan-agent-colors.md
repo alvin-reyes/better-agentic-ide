@@ -186,19 +186,19 @@ Each names the test that covers it; the developer writes it failing first.
 - In the running app on Nord and on Precision, open the Fleet view while a role sub-agent and an Explore sub-agent run, then cancel one: role lane in its color, Explore grey, running end pulsing, cancelled lane hatched.
 - Open the agent picker: pills and badges neutral; tiles bordered in role colors.
 - In a new project set up by ADE, delegate to `qa` in Claude Code: it shows in yellow.
+- A running bar under about 3px wide shows only its live edge: check the role color is identifiable on short or new lanes.
+- The absolutely positioned `<button>` lane bar stretches to the full lane height in the macOS app (WKWebView).
 
-**Results (A), QA, 2026-10-16, build commit d00deb9 (HEAD at verification), run one after another:**
-- `cd relay && cargo test` -- pass: 91 passed, 0 failed (9+2+20+14+40+1+5 across the unit, integration and e2e binaries).
+**Results (A), QA, 2026-10-16, re-verified at ba639b5 (HEAD), run one after another:**
+- `cd relay && cargo test` -- pass: 91 passed, 0 failed.
 - `npx tsc --noEmit` -- pass: exit 0.
-- `npm test` -- pass on the first run: 145 files, 1577 tests passed, 0 failed (no flaky file failed, no rerun needed), including agentColors, projectMethodology, pluginContent, pickerItems, AgentPicker, FleetTimeline, fleetMotion, FleetSummary, FleetGroups and fleetAttribution.
+- `npm test` -- pass on the first run: 145 files, 1578 tests passed, 0 failed (no flaky rerun needed).
 - `cd src-tauri && cargo test` -- pass: 456 passed, 0 failed, 1 ignored (plus 12 and 2 in the other binaries).
 - `cd mobile && npx tsc --noEmit && npx jest` -- pass: tsc exit 0; 1 suite, 5 tests passed.
 
-**A-AC coverage (tests read, each fails if its criterion were false):** AC1 to AC15 are each proven by the test the criterion names. AC5 and AC6 are proven by the existing plugin-files test and the new own-sub-agents test (the files on disk carry the lines). Notes, not defects: the selected row's 2px left border in the role color (a Design Note) has no assertion; the picker "All" pill keeps the theme accent when active (a theme token, not an agent or category color, and not a category pill).
+**Code review rounds:** adversarial code review of d00deb9 -- BLOCK on test gaps (7 surviving mutants). Fix round ba639b5 (tests plus `docs/guide/agents.md` wording only). Re-review at ba639b5 -- PASS, all 7 mutants killed. An earlier QA pass at d00deb9 (all five lines green there too, 1577 tests) was premature, as the review was still open.
 
-**Deviations judged acceptable:** A-AC7 test checks for no literal color value and no hex in `curatedAgents.ts` (stricter than "no `color:` key", since `CatalogAgent.color` lives there); the gradient test accepts hex or rgb (jsdom's form varies); four corner-radius longhands (the plan's own no shorthand/longhand mixing intent); two existing format checks allow an optional `color:` line (the new tests pin it); added test ids; FleetSummary/FleetGroups count always `text-secondary` (the plan's no-green rule).
-
-**Slice:** `git diff d69eac7..d00deb9 --stat` touches 30 files, none of the website files, no dependency or lockfile; `.ade/context/agent-colors.md` records the contract. **Verdict: PASS.**
+**A-AC coverage:** AC1 to AC15 are each proven by the test the criterion names (read at d00deb9, extended by ba639b5). Deviations judged acceptable: A-AC7 test forbids literal color values and hexes in `curatedAgents.ts`; gradient test accepts hex or rgb; four corner-radius longhands; two format checks allow an optional `color:` line; added test ids; FleetSummary/FleetGroups count always `text-secondary`; the picker "All" pill keeps the theme accent. Slice: no website files, no dependency or lockfile; contract in `.ade/context/agent-colors.md`. **Verdict: PASS at ba639b5.**
 
 ---
 
