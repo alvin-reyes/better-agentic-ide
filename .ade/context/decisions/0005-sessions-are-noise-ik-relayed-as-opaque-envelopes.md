@@ -93,6 +93,6 @@
   - **No new npm dependency, and one new Rust dependency** (`snow`). `curve25519-dalek` was already in the lock file.
   - **Wire format changes.**
     - `rehandshake` now names its peer, in line with the binary envelope.
-    - Under the spec's general rule, a device re-sends a `rehandshake` that was answered `control_limited` after `retry_ms`, as it does any control message but `push`.
+    - A `rehandshake` answered `control_limited` is not re-sent, an exception to the spec's general rule like `push` (owner, 2026-10-16). The Mac's session machine asks again at its next trigger after the 10 s window.
     - `peer` in `control_limited` lets the Mac match the refusal to the right phone.
   - **Persistence is later stories' work.** Persisting counters is stories 8 (ADE) and 12a/12b (the phone's secure store). This ADR fixes the keying and atomicity those stories must keep.
