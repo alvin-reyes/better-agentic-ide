@@ -1,0 +1,14 @@
+# 0007: Agent colors live in ADE, keyed by role id
+
+- Status: Proposed (2026-10-16). Part of the draft plan `_bmad-output/plan-agent-colors.md`; becomes Accepted when the owner approves that plan.
+- Context: The owner wants every agent colored by its role: in the `color:` line of the Claude Code sub-agent files ADE writes, in the fleet view's lanes, in the agent picker, and on the website. Claude Code accepts only eight color names (red, blue, green, yellow, purple, orange, pink, cyan), so the nineteen roles share them. The role definitions are vendored from ade-setup (`vendor/ade-setup/agents/*.md`) and carry no frontmatter at all; ADE already composes each sub-agent's frontmatter itself and keeps the per-role `tools` and `model` in `ROLES` in `src/lib/projectMethodology.ts`. Merging to main in ade-setup tags and publishes a release, so any change there is a release. Today the 47 curated profiles each carry a hand-written hex chosen by category, and the website has no agent colors.
+- Decision:
+  - **One map in ADE, keyed by role id**: `src/data/agentColors.ts` holds the role-to-color-name table for all nineteen roles, the hex for each of the eight names (a dark-surface value and a light-surface value), and a neutral for anything that is not a role. Everything else derives from it: the `color:` line in generated sub-agent files, each curated profile's color (from its `roleId`; the 47 literal hexes are deleted), the picker, the fleet lanes.
+  - **No color in the vendored role files.** ade-setup is not changed. A test fails when a vendored role has no entry in the map, the same way `ROLE_ORDER` is guarded.
+  - **The website is checked against the map, not copied by hand**: a test reads `docs/assets/css/site.css` and `docs/index.html` and fails on any difference.
+- Consequences:
+  - No cross-repo change and no ade-setup release; the colors ship with ADE alone.
+  - Color is presentation and frontmatter, like `tools` and `model`, which already live in ADE. The prose stays single-sourced in ade-setup (`scripts/agentSource.test.ts`, `scripts/subAgentSource.test.ts` unchanged).
+  - ade-setup's own copies of the roles, and anything ade-setup installs by itself, stay uncolored. Giving ade-setup colors later is a separate change that needs the owner's go-ahead, and should read this map's table rather than invent another.
+  - A new role vendored from ade-setup fails `npm test` until it is given a color here.
+  - Curated profiles lose their category colors: the 14 developer profiles are all green. That is the owner's choice (color means role); the category filter pills keep their own colors.
