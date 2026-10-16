@@ -125,18 +125,33 @@ describe("the website's agent colors follow the map", () => {
   });
 
   it("no hard-coded agent color on the site", () => {
-    const watched = [".fleetx-bar", ".fleetx-edge", ".fleetx-run i", ".org-node[data-agent-color]", ".feat-media.tree [data-agent-color]"];
-    const props = ["background", "background-color", "border", "border-left", "border-color", "color"];
+    const watched = ["[data-agent-color]", ".fleetx-"];
+    const props = ["background", "background-color", "background-image", "border", "border-left", "border-color", "color"];
     const literal = /#[0-9a-f]{3,8}\b|rgba?\(/i;
+    // The demo's grey labels on the terminal surface: text, not an agent color.
+    const neutralText = new Set([".fleetx-path", ".fleetx-run", ".fleetx-cost", ".fleetx-lane--sub .fleetx-name"].map((s) => `${s} { color: #8b8f9a }`));
     const offenders: string[] = [];
     for (const r of RULES) {
       if (!r.selectors.some((s) => watched.some((w) => s.includes(w)))) continue;
       for (const p of props) {
         const v = decl(r.body, p);
-        if (v && literal.test(v)) offenders.push(`${r.selectors.join(", ")} { ${p}: ${v} }`);
+        const found = `${r.selectors.join(", ")} { ${p}: ${v} }`;
+        if (v && literal.test(v) && !neutralText.has(found)) offenders.push(found);
       }
     }
     expect(offenders).toEqual([]);
+
+    // Every fill of a bar is the role's token; nothing later may override it.
+    // The running edge (a ::after) is not the fill and is checked below.
+    const fills: string[] = [];
+    for (const r of RULES) {
+      if (!r.selectors.some((s) => s.includes(".fleetx-bar") && !s.includes("::"))) continue;
+      for (const p of ["background", "background-color"]) {
+        const v = decl(r.body, p);
+        if (v !== undefined && v !== "var(--agent-c)") fills.push(`${r.selectors.join(", ")} { ${p}: ${v} }`);
+      }
+    }
+    expect(fills).toEqual([]);
   });
 
   it("org chart nodes are the nineteen roles, named and colored by the map", () => {
@@ -173,8 +188,6 @@ describe("the website's agent colors follow the map", () => {
       const expected = name === "Explore" || name === "Plan" ? "none" : roleColor(name);
       expect(expected, `${name} is a role or a Claude Code built-in`).not.toBeNull();
       expect(lane.dataset.agentColor, name).toBe(expected);
-      const edges = lane.querySelectorAll(".fleetx-track .fleetx-edge").length;
-      expect(edges, `${name} edge`).toBe(lane.classList.contains("is-running") ? 1 : 0);
     }
     expect(names).toContain("adversarial-reviewer");
     expect(lanes.some((l) => l.classList.contains("is-running"))).toBe(true);
@@ -183,8 +196,18 @@ describe("the website's agent colors follow the map", () => {
     expect(label).toMatch(/adversarial-reviewer/);
     expect(label).toMatch(/running/);
 
-    expect(valueOf(".fleetx-edge", "animation")).toMatch(/\bfleetx-pulse\b/);
-    expect(valueOf(".fleetx-edge", "animation", REDUCED)).toBe("none");
+    // The running edge is drawn on the bar itself, so it grows and fades with it:
+    // running lanes, and only those, get it.
+    expect(doc.querySelector(".fleetx-edge"), "no separate edge element").toBeNull();
+    const EDGE = ".fleetx-lane.is-running .fleetx-bar::after";
+    expect(valueOf(EDGE, "content")).toBe('""');
+    expect(valueOf(EDGE, "right")).toBe("0");
+    expect(valueOf(EDGE, "top")).toBe("-2px");
+    expect(valueOf(EDGE, "bottom")).toBe("-2px");
+    expect(valueOf(EDGE, "animation")).toMatch(/\bfleetx-pulse\b/);
+    expect(valueOf(EDGE, "animation", REDUCED)).toBe("none");
+    const pseudo = RULES.flatMap((r) => r.selectors).filter((s) => /\.fleetx-bar::?(after|before)/.test(s));
+    expect(pseudo.filter((s) => !s.includes(".is-running"))).toEqual([]);
 
     const statusOpacity = RULES.filter(
       (r) =>

@@ -982,11 +982,11 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
   transform: scaleX(0); opacity: 0;
   animation: fleetx-grow 9s cubic-bezier(.2, .7, .2, 1) var(--d) infinite;
 }
-/* Color is the role; running is shape: a pulsing edge at the bar's open end.
-   fleetx-grow owns the bar's opacity, so status is never shown by opacity. */
-.fleetx-edge {
-  position: absolute; top: -2px; bottom: -2px; width: 3px; border-radius: 1px;
-  left: calc(var(--start) + var(--w) - 3px);
+/* Color is the role; running is shape: a pulsing edge at the bar's open end,
+   drawn on the bar so it grows and fades with it. fleetx-grow owns the bar's
+   opacity, so status is never shown by opacity. */
+.fleetx-lane.is-running .fleetx-bar::after {
+  content: ""; position: absolute; top: -2px; bottom: -2px; right: 0; width: 3px; border-radius: 1px;
   background: currentColor;
   animation: fleetx-pulse 1.4s ease-in-out infinite;
 }
@@ -1005,7 +1005,7 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
 @media (prefers-reduced-motion: reduce) {
   .fleetx-bar { animation: none; transform: scaleX(1); opacity: 1; }
   .fleetx-run i { animation: none; }
-  .fleetx-edge { animation: none; }
+  .fleetx-lane.is-running .fleetx-bar::after { animation: none; }
 }
 
 @media (max-width: 560px) {
