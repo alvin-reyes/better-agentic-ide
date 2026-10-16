@@ -1,0 +1,211 @@
+//! `/metrics`: counts only, in the Prometheus text format, behind a Bearer token.
+
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use relay_core::StoreCounts;
+use subtle::ConstantTimeEq;
+
+/// The relay's counters. 7b adds its own.
+#[derive(Debug, Default)]
+pub struct Counters {
+    pub logins_ok: AtomicU64,
+    pub logins_refused: AtomicU64,
+    pub cleanup_deleted_devices: AtomicU64,
+}
+
+impl Counters {
+    /// Adds one to a counter.
+    pub fn bump(counter: &AtomicU64) {
+        Self::add(counter, 1);
+    }
+
+    /// Adds `n` to a counter.
+    pub fn add(counter: &AtomicU64, n: u64) {
+        counter.fetch_add(n, Ordering::Relaxed);
+    }
+}
+
+/// Renders the gauges and counters as Prometheus text.
+pub fn render(counters: &Counters, online: usize, store: &StoreCounts) -> String {
+    let read = |c: &AtomicU64| c.load(Ordering::Relaxed);
+    let mut out = String::new();
+    let mut gauge = |name: &str, help: &str, value: u64| {
+        out.push_str(&format!(
+            "# HELP {name} {help}\n# TYPE {name} gauge\n{name} {value}\n"
+        ));
+    };
+    gauge("relay_online", "Devices online now.", online as u64);
+    gauge("relay_devices", "Devices stored.", store.devices);
+    gauge("relay_pairs", "Pairs stored.", store.pairs);
+    gauge(
+        "relay_pairs_acked",
+        "Pairs stored and acked.",
+        store.pairs_acked,
+    );
+    gauge(
+        "relay_push_tokens",
+        "Push tokens stored.",
+        store.push_tokens,
+    );
+    out.push_str(&format!(
+        "# HELP relay_logins_total Logins, by result.\n\
+         # TYPE relay_logins_total counter\n\
+         relay_logins_total{{result=\"ok\"}} {}\n\
+         relay_logins_total{{result=\"refused\"}} {}\n",
+        read(&counters.logins_ok),
+        read(&counters.logins_refused),
+    ));
+    out.push_str(&format!(
+        "# HELP relay_cleanup_deleted_devices_total Devices deleted by the 90-day cleanup.\n\
+         # TYPE relay_cleanup_deleted_devices_total counter\n\
+         relay_cleanup_deleted_devices_total {}\n",
+        read(&counters.cleanup_deleted_devices),
+    ));
+    out
+}
+
+/// Whether an `Authorization` header carries `Bearer <token>`. The scheme name matches
+/// in any letter case (RFC 7235); the token must match exactly, compared in constant
+/// time.
+pub fn authorized(header: Option<&[u8]>, token: &str) -> bool {
+    let Some(header) = header else {
+        return false;
+    };
+    let Some(space) = header.iter().position(|b| *b == b' ') else {
+        return false;
+    };
+    let (scheme, given) = (&header[..space], &header[space + 1..]);
+    if !scheme.eq_ignore_ascii_case(b"bearer") {
+        return false;
+    }
+    bool::from(given.ct_eq(token.as_bytes()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TOKEN: &str = "0123456789abcdef0123456789abcdef";
+
+    /// Matches `^(# .*|relay_[a-z_]+(\{[a-z_]+="[a-z_]+"\})? [0-9]+)$`.
+    pub(crate) fn well_formed(line: &str) -> bool {
+        if line.starts_with("# ") {
+            return true;
+        }
+        let Some((name, value)) = line.rsplit_once(' ') else {
+            return false;
+        };
+        if value.is_empty() || !value.chars().all(|c| c.is_ascii_digit()) {
+            return false;
+        }
+        let snake =
+            |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c == '_');
+        let (metric, label) = match name.split_once('{') {
+            Some((m, rest)) => (m, Some(rest)),
+            None => (name, None),
+        };
+        let Some(metric) = metric.strip_prefix("relay_") else {
+            return false;
+        };
+        if !snake(metric) {
+            return false;
+        }
+        match label {
+            None => true,
+            Some(l) => {
+                let Some(l) = l.strip_suffix("\"}") else {
+                    return false;
+                };
+                match l.split_once("=\"") {
+                    Some((k, v)) => snake(k) && snake(v),
+                    None => false,
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_matcher_is_strict() {
+        assert!(well_formed("# TYPE relay_online gauge"));
+        assert!(well_formed("relay_online 1"));
+        assert!(well_formed("relay_logins_total{result=\"ok\"} 2"));
+        assert!(!well_formed("relay_online -1"));
+        assert!(!well_formed("relay_online 1.5"));
+        assert!(!well_formed("relay_online"));
+        assert!(!well_formed("online 1"));
+        assert!(!well_formed("relay_x{id=\"AB\"} 1"));
+        assert!(!well_formed("relay_x{id=\"a\",b=\"c\"} 1"));
+        assert!(!well_formed(""));
+    }
+
+    #[test]
+    fn metrics_render_as_prometheus_counts() {
+        let c = Counters::default();
+        Counters::add(&c.logins_ok, 2);
+        Counters::bump(&c.logins_refused);
+        Counters::add(&c.cleanup_deleted_devices, 7);
+        let text = render(
+            &c,
+            3,
+            &StoreCounts {
+                devices: 4,
+                pairs: 5,
+                pairs_acked: 6,
+                push_tokens: 8,
+            },
+        );
+        for line in text.lines() {
+            assert!(well_formed(line), "{line:?}");
+        }
+        let values: Vec<&str> = text.lines().filter(|l| !l.starts_with('#')).collect();
+        assert_eq!(
+            values,
+            vec![
+                "relay_online 3",
+                "relay_devices 4",
+                "relay_pairs 5",
+                "relay_pairs_acked 6",
+                "relay_push_tokens 8",
+                "relay_logins_total{result=\"ok\"} 2",
+                "relay_logins_total{result=\"refused\"} 1",
+                "relay_cleanup_deleted_devices_total 7",
+            ]
+        );
+        assert!(text.contains("# TYPE relay_online gauge"));
+        assert!(text.contains("# TYPE relay_logins_total counter"));
+        assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn the_bearer_scheme_matches_in_any_case() {
+        for scheme in ["Bearer", "bearer", "BEARER", "bEaReR"] {
+            let header = format!("{scheme} {TOKEN}");
+            assert!(authorized(Some(header.as_bytes()), TOKEN), "{scheme}");
+        }
+    }
+
+    #[test]
+    fn the_token_must_match_exactly() {
+        let upper = TOKEN.to_ascii_uppercase();
+        let short = &TOKEN[..31];
+        let long = format!("{TOKEN}0");
+        let bad: Vec<String> = vec![
+            String::new(),
+            "Bearer".into(),
+            "Bearer ".into(),
+            format!("Bearer {upper}"),
+            format!("Bearer {short}"),
+            format!("Bearer {long}"),
+            format!("Bearer  {TOKEN}"),
+            format!("Bearer {TOKEN} "),
+            format!("Basic {TOKEN}"),
+            format!("Bearerx {TOKEN}"),
+            TOKEN.to_string(),
+        ];
+        for h in &bad {
+            assert!(!authorized(Some(h.as_bytes()), TOKEN), "{h:?}");
+        }
+        assert!(!authorized(None, TOKEN));
+        assert!(!authorized(Some(&[0xff, 0xfe]), TOKEN));
+    }
+}

@@ -3,7 +3,7 @@ title: 'Relay storage, cleanup and metrics'
 type: 'feature'
 ticket: '7a'
 created: '2026-10-16'
-status: 'ready-for-dev'
+status: 'in-progress'
 baseline_revision: '57b626b9adbaf30a243b4801eee250b3a4db1970'
 route: 'full'
 route_source: 'auto'
@@ -83,13 +83,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution** (each task's tests are written and seen red first):
-- [ ] **Dependencies** (`relay/Cargo.toml`, `relay/server/Cargo.toml`, `relay/e2e/Cargo.toml`):
+- [x] **Dependencies** (`relay/Cargo.toml`, `relay/server/Cargo.toml`, `relay/e2e/Cargo.toml`):
   - Add `rusqlite = { version = "0.40.2", features = ["bundled"] }`, published 2026-08-08. Through `libsqlite3-sys` 0.38.2, published the same day, it bundles SQLite.
   - Add `subtle = "2.6.1"`, published 2024-06-24 and already in the lock file.
   - Add the dev-dependency `tempfile = "3.27.0"`, published 2026-03-11.
   - Check every new `Cargo.lock` entry on crates.io, and use `cargo update --precise` on any dated 2026-10-02 or later.
-- [ ] **The clock** (`relay/core/src/clock.rs`, new) -- A `Clock` trait (`now_ms() -> u64`, Unix ms), with `SystemClock` and a public, shareable `ManualClock`. `ManualClock::new()` starts at a realistic time, 2026-01-01T00:00Z, never at 0. 7b's limiters use it too.
-- [ ] **The store contract** (`relay/core/src/store.rs`, new):
+- [x] **The clock** (`relay/core/src/clock.rs`, new) -- A `Clock` trait (`now_ms() -> u64`, Unix ms), with `SystemClock` and a public, shareable `ManualClock`. `ManualClock::new()` starts at a realistic time, 2026-01-01T00:00Z, never at 0. 7b's limiters use it too.
+- [x] **The store contract** (`relay/core/src/store.rs`, new):
   - The trait is `Store: PairDirectory + Send + Sync`, with:
     - `device(id)`;
     - `register(id, role, now) -> Result<Registered{new}, StoreError>`, one atomic upsert that sets `last_seen = now` and refuses a role mismatch;
@@ -107,7 +107,7 @@ context:
   - `CleanupCounts` carries the counts, plus `deleted: Vec<DeviceKey>` and `deleted_pairs: Vec<PairId>`. Each batch reads the pair ids it is about to cascade away, in the same transaction as the delete. 7b uses `deleted_pairs` to strip its in-memory peer sets by pair id. The store test checks both lists.
   - `DeviceRoles` is removed, and its tests become `admit` tests.
   - 5a extends the trait with what it needs.
-- [ ] **The SQLite store** (`relay/server/src/store.rs`, new) -- `SqliteStore::open(path)` turns on WAL, `foreign_keys=ON` and `busy_timeout`, sets `user_version` 1, refuses a newer schema, and holds the schema in the Design Notes. Tests on a temp file:
+- [x] **The SQLite store** (`relay/server/src/store.rs`, new) -- `SqliteStore::open(path)` turns on WAL, `foreign_keys=ON` and `busy_timeout`, sets `user_version` 1, refuses a newer schema, and holds the schema in the Design Notes. Tests on a temp file:
   - values survive a reopen, `acked` included;
   - the tables are exactly `devices`, `pairs` and `push_tokens`;
   - a newer `user_version` is refused;
@@ -116,17 +116,17 @@ context:
   - an online device is spared;
   - a role conflict is refused;
   - `touch` on a missing row returns false.
-- [ ] **Typed logs** (`relay/server/src/log.rs`, new):
+- [x] **Typed logs** (`relay/server/src/log.rs`, new):
   - `LogEvent` is an enum whose fields are only `&'static str` codes and counts.
   - `LogSink` is a trait, with `StderrLog` as the default.
   - A test renders every variant and matches `^relay: [a-z_]+( [a-z_]+=[0-9a-z_]+)*$`.
   - Every `eprintln!` in `lib.rs` moves to it.
-- [ ] **Metrics** (`relay/server/src/metrics.rs`, new):
+- [x] **Metrics** (`relay/server/src/metrics.rs`, new):
   - `Counters` are atomics, rendered in the Prometheus text format.
   - The gauges are `relay_online`, `relay_devices`, `relay_pairs`, `relay_pairs_acked` and `relay_push_tokens`.
   - The counters are `relay_logins_total{result="ok|refused"}` and `relay_cleanup_deleted_devices_total`. 7b adds its own.
   - The handler reads `Authorization: Bearer <token>`. The scheme name matches in any case, as RFC 7235 says, and the token must match exactly. It is compared in constant time, with `subtle`.
-- [ ] **The server** (`relay/server/src/lib.rs`):
+- [x] **The server** (`relay/server/src/lib.rs`):
   - **`Config`** -- `store: Arc<dyn Store>` replaces `pairs`. The new fields are `clock`, `log`, `metrics_token` and `cleanup_interval`, the last defaulting to 1 h.
   - **`serve()`** -- returns a `Relay` handle with `addr` and three methods:
     - `run_cleanup().await -> CleanupCounts`.
@@ -138,15 +138,15 @@ context:
   - **Leave** -- touches the device. Presence and the sender are always cleared. If `peers_of` fails, only the fan-out is skipped, and the code is logged.
   - **Cleanup** -- runs first one interval after start, then every interval, and on `run_cleanup`. Each run happens on `spawn_blocking`. It first touches the online devices in one transaction, then deletes in batches of 500 devices, each its own transaction, so the lock is released between batches. Each batch picks its devices again, with the cutoff and the online list applied inside the delete itself: `DELETE FROM devices WHERE id IN (SELECT id FROM devices WHERE last_seen <= ?cutoff AND id NOT IN (online) LIMIT 500)`. It repeats until a batch deletes nothing. A device that logs in during a long cleanup has a fresh `last_seen` by then, so it is never deleted.
   - **`/metrics`** -- answers 401 without its token, and 404 when no token is set.
-- [ ] **Settings** (`relay/server/src/main.rs`):
+- [x] **Settings** (`relay/server/src/main.rs`):
   - `RELAY_DB` is required. A missing value exits 2; a file that won't open exits 1.
   - `RELAY_METRICS_TOKEN` is optional, but when set it must be 32 characters or more, or the binary exits 2.
   - Unit tests cover each rule.
-- [ ] **Existing e2e tests** (`relay/e2e/tests/e2e.rs`) -- `relay()` switches to `SqliteStore` on a temp file, with devices and pairs seeded. Every existing test is kept.
-- [ ] **Shared test helper** (`relay/e2e/tests/common/mod.rs`, new) -- `CountingStore` wraps a `Store`. It counts calls per method, can be made to fail one method at a time with `fail(method)`, and has a gate that holds every call until it is released. 7b reuses it, and 7b's register-fails test relies on the per-method switch: `device()` succeeds while `register` fails.
-- [ ] **New e2e tests** (`relay/e2e/tests/storage.rs`, new) -- the Acceptance Criteria tests and the contract tests below, using `ManualClock` and `run_cleanup()`.
-- [ ] **Shared contract** (`.ade/context/remote-protocol.md`) -- record the stored roles, the 1011 close, `/metrics`, and `RELAY_DB` and `RELAY_METRICS_TOKEN`.
-- [ ] **Storage contract** (`.ade/context/relay-storage.md`, new) -- the schema, the `Store` API, the clock, and the cleanup rules.
+- [x] **Existing e2e tests** (`relay/e2e/tests/e2e.rs`) -- `relay()` switches to `SqliteStore` on a temp file, with devices and pairs seeded. Every existing test is kept.
+- [x] **Shared test helper** (`relay/e2e/tests/common/mod.rs`, new) -- `CountingStore` wraps a `Store`. It counts calls per method, can be made to fail one method at a time with `fail(method)`, and has a gate that holds every call until it is released. 7b reuses it, and 7b's register-fails test relies on the per-method switch: `device()` succeeds while `register` fails.
+- [x] **New e2e tests** (`relay/e2e/tests/storage.rs`, new) -- the Acceptance Criteria tests and the contract tests below, using `ManualClock` and `run_cleanup()`.
+- [x] **Shared contract** (`.ade/context/remote-protocol.md`) -- record the stored roles, the 1011 close, `/metrics`, and `RELAY_DB` and `RELAY_METRICS_TOKEN`.
+- [x] **Storage contract** (`.ade/context/relay-storage.md`, new) -- the schema, the `Store` API, the clock, and the cleanup rules.
 
 **Acceptance Criteria** (ticket 7a's ACs, in its order):
 1. **Storage survives a restart (ticket AC 1).** Given a pair stored un-acked, then `set_acked`, with both devices online. When the relay is shut down and served again on the same file, then `welcome` still lists the pair and `pair()` shows it acked, but `online` is empty. (`storage_survives_a_restart_but_presence_does_not`)
@@ -245,3 +245,77 @@ push_tokens(phone BLOB PRIMARY KEY REFERENCES devices ON DELETE CASCADE, token T
 - `git diff --stat main` shows only `relay/`, `.ade/context/` and this initiative's `_bmad-output` files.
 - `cargo tree -p relay-core -e normal` shows no `rusqlite`, `libsqlite3-sys`, `tokio` or `axum`.
 - `cargo tree -p relay-server -e normal | grep rusqlite` shows 0.40.2 with `bundled`.
+
+## Implementation Notes
+
+**2026-10-16, Dev (ticket 7a).** Branch `phone-relay-storage`. Every task above is built. Done is not claimed here: QA runs the verification and decides.
+
+**What was built:**
+- `relay/core/src/clock.rs`: `Clock`, `SystemClock` and `ManualClock` (starts at 2026-01-01T00:00Z).
+- `relay/core/src/store.rs`: the `Store` trait, `PairRecord`, `DeviceRecord`, `Registered`, `CleanupCounts` (with `deleted` and `deleted_pairs`), `StoreCounts`, `StoreError`, `admit`, `cleanup_cutoff` and `CLEANUP_AGE_MS`.
+- `relay/core/src/lib.rs`:
+  - `DeviceRoles` is removed; its test became the `admit` tests.
+  - `peers_of` returns a `Result`.
+  - `Presence::online_ids()` is new.
+- `relay/server/src/store.rs`: `SqliteStore`, with the Design Notes schema, WAL, `foreign_keys`, a 5 s busy timeout, `user_version` 1, and batched cleanup.
+- `relay/server/src/log.rs`: `LogEvent`, `LogSink` and `StderrLog`.
+- `relay/server/src/metrics.rs`: `Counters`, `render` and `authorized`, which uses `subtle`.
+- `relay/server/src/lib.rs`:
+  - The `Config` fields.
+  - `StoreHandle::call`, which runs on `spawn_blocking`.
+  - The `Relay` handle: `run_cleanup`, `shutdown` and `abort`.
+  - Login through `device`, then `admit`, then `register`, then `peers_of`. A store error closes with 1011.
+  - `Leave`, which spawns its store work, checks `aborted`, and on a `peers_of` error clears presence without fanning out.
+  - The cleanup timer.
+  - `/metrics`.
+  - Every `eprintln!` now goes through `LogSink`.
+- `relay/server/src/main.rs`: `RELAY_DB` and `RELAY_METRICS_TOKEN`.
+- `relay/e2e/tests/common/mod.rs`: `CountingStore` (counts, `fail`/`heal(method)`, the `hold`/`release` gate, `waiting`, `until`) and `CaptureLog`.
+- `relay/e2e/tests/storage.rs`: the 4 AC tests and 3 contract tests.
+- `relay/e2e/tests/e2e.rs`: `relay()` now seeds a `SqliteStore` on a temp file. All 14 story-2 tests still pass.
+- Contracts: `.ade/context/remote-protocol.md` (updated) and `.ade/context/relay-storage.md` (new).
+
+**Dependencies.** Each new `Cargo.lock` entry was checked on crates.io by full `created_at`.
+- `cc` resolved to 1.8.0, published 2026-10-11, and was pinned back with `--precise` to 1.5.1, published 2026-09-25.
+- The newest of the rest are all on 2026-09-25: `js-sys` 0.3.106, the `wasm-bindgen` family 0.2.129, and `find-msvc-tools` 0.1.14.
+- `rusqlite` 0.40.2 and `libsqlite3-sys` 0.38.2: 2026-08-08.
+- `tempfile` 3.27.0: 2026-03-11.
+- `subtle` 2.6.1: 2024-06-24, already in the lock file.
+
+**Choices the plan left open, or where it differs:**
+1. Every `Store` method returns `Result<_, StoreError>`, `touch`, `set_acked`, `delete_pair` and `cleanup` included. SQLite can fail on any call, and `CountingStore::fail(method)` needs every method to be able to fail.
+2. `Store::cleanup(now, cutoff, online)` also takes `now`, so that it can touch the online devices to now. `CleanupCounts` also carries `touched`.
+3. `Relay` has a fourth method, `wait()`. The binary needs something to await, as it did with the old `JoinHandle`.
+4. `Presence::online_ids()` was added to `relay-core`. It gives cleanup's online list and the `relay_online` gauge.
+5. The schema adds `NOT NULL` to every column and writes `INTEGER` for `INT` (the same affinity). Otherwise it is the Design Notes schema, indexes included.
+6. Cleanup keeps the online list and the current batch in two per-connection TEMP tables, rather than binding a `NOT IN (?, …)` list, which would hit SQLite's variable limit. Each batch's `DELETE … RETURNING id` re-applies the cutoff and the online list.
+7. `register` works in one transaction under the lock: it checks whether the key exists, upserts with `ON CONFLICT DO UPDATE … WHERE devices.role = excluded.role`, then reads the role back. A mismatch rolls back and gives `RoleConflict`.
+8. The 1011 close reason is `internal_error`.
+9. `relay_logins_total{result="refused"}` counts every 4401 close, timeouts included. A 1011 close counts as neither ok nor refused.
+10. While `cleanup_cutoff` is `None`, the server doesn't call the store at all, so nothing is touched.
+11. `a_held_store_lock_does_not_stall_the_relay` is a plain `#[test]`. It runs its body on its own thread, on a `current_thread` runtime, under a 5 s `recv_timeout`. A tokio `timeout` on the same runtime could never fire if a store call blocked that runtime.
+
+**Test-first record.** The unit tests in `relay-core` and `relay-server` (store, log, metrics, settings and lib) were each written first, against `todo!()` stubs, and seen red. These were not seen red:
+- `store_errors_have_log_codes` passed at once, because `code()` was written with the type.
+- The two matcher self-tests passed at once; they test test helpers.
+- The 7 e2e tests in `storage.rs` were written after the server code and passed on their first run.
+
+Each e2e test was then mutation-checked: break the code it guards, see it fail, restore the code.
+- Remove cleanup's touch of online devices: `devices_unseen…` fails.
+- Remove the `aborted` checks in `Leave`: `devices_unseen…` fails, because the touch count changes.
+- Skip `/metrics` auth: `metrics_need…` fails.
+- Make store calls inline instead of on `spawn_blocking`: `a_held_store_lock…` fails at 5 s.
+- Close a store error with 4401 instead of 1011: `a_store_error_at_login…` fails.
+- Return early on a `peers_of` error at leave: `a_store_error_at_leave…` fails.
+- Delete the file on open: `storage_survives…` fails.
+- Plant the canary in the database: `the_canary…` fails, finding it in the `-wal`.
+
+**Checks:**
+- `cargo clippy --workspace --all-targets -D warnings` is clean, and `cargo fmt --check` is clean.
+- `cargo test --locked` builds.
+- `cargo tree -p relay-core -e normal` shows no `rusqlite`, `libsqlite3-sys`, `tokio` or `axum`.
+- `cargo tree -p relay-server -e normal,features -i rusqlite` shows 0.40.2 with feature `bundled`.
+- No `src/`, `src-tauri/`, `mobile/` or `packages/protocol` changes.
+
+**Follow-ups, not done here:** none.
+

@@ -17,3 +17,8 @@ relay-protocol = { path = "../protocol" }
 tokio.workspace = true
 axum.workspace = true
 futures-util.workspace = true
+rusqlite.workspace = true
+subtle.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
