@@ -5,7 +5,8 @@ The relay's wire contract, as built so far. Source of truth for intent is the sp
 presence"); this file records what the code does. Story 2 (login and presence) set the
 login, control-message and relay entries. Story 3 added the labels, signatures, seals, the
 6-digit code, names and the QR code, each in Rust (`relay_protocol`) and TypeScript
-(`@ade/protocol`), pinned to the shared vectors in `packages/protocol/vectors/`.
+(`@ade/protocol`), pinned to the shared vectors in `packages/protocol/vectors/`. Story 4
+added the Noise IK sessions, the binary envelope and the session machines (see Sessions).
 
 ## `enc`
 
@@ -28,7 +29,7 @@ only ever HKDF `info` strings.
 | Constant | Value | Use |
 |---|---|---|
 | `LOGIN_LABEL` | `ade-remote/v1/login` | signs a login |
-| `NOISE_LABEL` | `ade-remote/v1/noise` | reserved for the Noise session (story 4); unused |
+| `NOISE_LABEL` | `ade-remote/v1/noise` | the Noise prologue, `enc(NOISE_LABEL, I_M, I_P)` (see Sessions) |
 | `PAIR_PHONE_TO_MAC_INFO` | `ade-remote/v1/pair/phone-to-mac` | **HKDF info** for `k_pm` |
 | `PAIR_MAC_TO_PHONE_INFO` | `ade-remote/v1/pair/mac-to-phone` | **HKDF info** for `k_mp` |
 | `PAIR_COMMIT_LABEL` | `ade-remote/v1/pair/commit` | seals `pair_commit` |
@@ -166,6 +167,218 @@ test 1, and HChaCha20 2.2.1 and XChaCha20-Poly1305 A.3.1 of draft-irtf-cfrg-xcha
 `qr.json` are written by hand from the spec. Rust reads them in
 `relay/protocol/src/vectors.rs`, TypeScript in `packages/protocol/src/vectors.test.ts`.
 
+Story 4 added three:
+- `cacophony-ik.json`: the one `Noise_IK_25519_ChaChaPoly_SHA256` entry of cacophony's
+  `vectors/cacophony.txt` (public domain), copied verbatim, with its source URL, commit
+  `18b7348c` and the upstream file's SHA-256 (`3bde7c09…6cae`, the same file `snow` 0.10.0
+  ships). `generate.mjs` pins the excerpt's own SHA-256 and checks it on every run.
+- `noise.json`: written by `generate.mjs`'s own IK oracle on `node:crypto` (X25519 through
+  raw-key DER, `chacha20-poly1305`, HKDF over HMAC-SHA256), which must reproduce
+  `cacophony-ik.json` byte for byte before it writes anything. `--check` covers it.
+  `generate.mjs --differential` reads IK cases on stdin and prints one SHA-256 per case.
+- `schedule.json`: written by hand from the story 4 plan's restart rules, with no crypto:
+  step scripts for the phone's scheduler, and the counter cases. Rust reads it in
+  `relay/core/src/session.rs`'s tests, TypeScript in `packages/protocol/src/session.test.ts`.
+
+## Sessions
+
+Story 4. Spec: "Sessions", "Wire format", "`hs1` across pairs", "Keys and storage". Owner
+decisions are the story 4 plan's (2026-10-16) and are marked **(owner decision)**. Each
+rule names a test that fails if it is false: Rust `relay_protocol` tests as
+`protocol::<test>`, `relay_core` as `core::session::<test>`, TypeScript as
+`vectors.test.ts` / `session.test.ts` "<describe> > <it>".
+
+**The pattern** is `Noise_IK_25519_ChaChaPoly_SHA256`; the phone is the initiator.
+- Rust: `snow =0.10.0` (`default-features = false`, features `default-resolver`,
+  `use-chacha20poly1305`, `use-sha2`, `use-curve25519`, `use-getrandom`; no `std`, which
+  would turn on `ring`), its stateless transport. TypeScript: hand-rolled on the `@noble`
+  peers (`noise.ts`), randomness only from `globalThis.crypto.getRandomValues`.
+- Both run cacophony's IK vector through their raw layer (`protocol::vectors::vectors_cacophony_ik`;
+  "Noise IK vectors > cacophony's IK vector runs through the raw layer"), and TypeScript
+  equals the `node:crypto` oracle on 64 seeded random cases ("differential: 64 seeded random
+  cases equal generate.mjs --differential").
+- **The prologue** is `enc(NOISE_LABEL, I_M, I_P)` (`noise_prologue` / `noisePrologue`;
+  `protocol::vectors::vectors_noise_handshakes`). An `hs1` made by phone A but delivered as
+  from B is refused (`core::session::an_hs1_from_one_phone_delivered_as_from_another_is_refused`).
+
+**`hs1`** is 104 bytes: `e(32) || s(32+16) || payload(8+16)`. Its payload is exactly an 8-byte
+big-endian counter. **`hs2`** is 48 bytes: `e(32) || tag(16)`, an empty payload. Neither carries
+content (`protocol::vectors::vectors_noise_handshakes`).
+- **The Mac refuses an `hs1` silently** (no answer) **(owner decision)** when: its length isn't
+  104 (so a 0- or 9-byte payload), a low-order `e` or `s`, it doesn't decrypt (truncated,
+  tampered, another prologue, another Mac's static), or its counter is above 2^53 − 1
+  (`protocol::vectors::vectors_noise_refused_hs1`); its remote static isn't one of the `S_P` paired for
+  the sending `I_P`, with nothing recorded
+  (`core::session::a_remote_static_that_differs_from_the_paired_one_is_refused`); or its
+  counter isn't above the last accepted (`core::session::a_replayed_hs1_is_refused`).
+- **The phone refuses an `hs2`** whose length isn't exactly 48 **(owner decision)**, that has a
+  low-order `e`, that is tampered or for another handshake; the handshake stays usable and
+  the right `hs2` still completes (`protocol::vectors::vectors_noise_refused_hs2_leave_the_handshake_usable`;
+  "every crypto-layer refused hs2 is refused, and the right hs2 still completes").
+- An `e` with the top bit set (masked by X25519, hashed as sent) completes, both ways
+  (`protocol::vectors::vectors_noise_high_bit_e_completes`).
+
+**The low-order rule (owner decision).** A remote `e` or `s` is refused when X25519 of it
+with the local static secret is all zeros. `noise.json` lists the 14 low-order u-values (0,
+1, p − 1, the two order-8 points, p and p + 1, and each with the top bit set), each refused
+as an `hs1` `e`, an `hs1` `s` and an `hs2` `e`.
+- Rust computes it with `curve25519-dalek`'s `MontgomeryPoint::mul_clamped` (as `snow` does
+  DH; `snow` itself refuses none of these). TypeScript checks the u-value against that set
+  after masking and reducing mod p, never by catching noble's throw; a test shows the two
+  agree with noble's all-zero error ("the low-order rule agrees with noble's all-zero X25519
+  output"; `protocol::vectors::vectors_noise_low_order_keys_are_refused_by_the_rule`).
+- The `e` check runs before the message is read. A Mac static that is low order is refused
+  before anything is sent (`protocol::noise::tests::a_low_order_mac_static_is_refused_by_start`).
+
+**Session id** is the first 8 bytes of the handshake hash (`protocol::vectors::vectors_noise_handshakes`).
+
+**A frame body** is `session_id(8) || u64be(nonce) || ciphertext`, the ciphertext
+ChaCha20-Poly1305 under the direction's key, Noise nonce `0x00000000 || u64le(nonce)`, empty
+AAD (`protocol::vectors::vectors_noise_frames`). A plaintext is at most 60,000 bytes; 60,001
+is refused before sealing and uses no nonce (Rust `FrameError::TooLarge`, TypeScript
+`RangeError`), and a full frame's envelope is 60,065 bytes, under 64 KiB
+(`protocol::noise::tests::a_60001_byte_plaintext_is_refused_and_uses_no_nonce`; "AC7: …").
+
+**Counter and nonce domains (owner decision).** `hs1` counters are integers 0 to 2^53 − 1:
+the phone errors above it (`protocol::noise::tests::a_counter_above_2_pow_53_minus_1_is_refused_by_start`,
+`core::session::schedule_json_counters`), and the Mac refuses an `hs1` carrying 2^53
+(`protocol::vectors::vectors_noise_refused_hs1`). Nonces are below 2^32 on both sides; a sender never
+uses 2^32 (`protocol::noise::tests::nonce_2_pow_32_is_refused_on_send_and_on_receive`).
+TypeScript uses no BigInt: nonces are read and written as two u32 halves.
+
+**What the receiver does with a frame** (`open`), in this order
+(`protocol::vectors::vectors_noise_receiver_scripts`; "receiver scripts: every frame row of the matrix"):
+
+| Check | Outcome | Restart? |
+|---|---|---|
+| body under 8 bytes, or another session's id | `drop` | no |
+| this session's id, body under 32 or over 60,032 bytes | `bad` | yes |
+| nonce ≤ last accepted (replay or lower), not decrypted | `drop` | no **(owner decision)** |
+| nonce ≥ 2^32, or the decrypt fails | `bad` | yes **(owner decision)** |
+| otherwise | `accept`; last-accepted moves only now | no |
+
+A gap is accepted: nonces 0, 2, 2, 1, 5 give accept, accept, drop, drop, accept
+(`protocol::vectors::vectors_noise_ac6_nonces_0_2_2_1_5`; "AC6: …"). The current session stays usable until
+a newer one completes **(owner decision)**
+(`core::session::a_bad_frame_makes_the_phone_handshake_and_the_mac_emit_rehandshake`).
+
+**The binary envelope** is one type, shared with the relay (story 7b routes it):
+`u8 type (1 hs1, 2 hs2, 3 frame) || 32-byte peer identity key || body`. The peer is the
+recipient when a device sends and the sender when the relay delivers. Rust
+`relay_protocol::Routed { kind: RoutedKind, peer: DeviceKey, body: Vec<u8> }` with
+`Routed::parse(&[u8]) -> Option<Routed>` (`None` under 33 bytes or for a type other than 1, 2,
+3), `encode()` and `with_peer(peer)` (`routed.rs`); TypeScript `encodeRouted` /
+`parseRouted` (`frame.ts`) (`protocol::vectors::vectors_noise_envelopes`,
+`protocol::routed::tests::short_or_unknown_envelopes_are_refused`). There is no second parser.
+
+**The stores** (`relay_core`), each `&self + Send + Sync`, with in-memory implementations over a
+`Mutex`. Counters are keyed only by identity keys, never by pair id or relay URL:
+- `Hs1Counters::accept_if_above(mac, phone, v) -> Result<bool, StoreError>`: check and record
+  in one atomic step; there is no separate read. An implementation must hold one lock (or one
+  transaction) across the check and the record: eight threads offering the same counter at
+  once get exactly one `true`, over 2,000 rounds, and a store that checks under one lock and
+  records under another fails that
+  (`core::session::the_hs1_counter_store_checks_and_records_in_one_atomic_step`). End to end,
+  two `MacSessions` (two relays) sharing it accept a replayed `hs1` at most once
+  (`core::session::two_mac_machines_sharing_a_store_accept_a_replayed_hs1_once_at_most`; that
+  test alone does not catch a check-then-act store).
+  The Mac records the counter before writing `hs2`, and a failed write sends no `hs2`
+  (`core::session::the_mac_accepts_only_a_counter_above_the_last_and_records_it_before_hs2`,
+  `core::session::a_store_whose_write_fails_stops_the_handshake_on_either_side`).
+- `PairedStatics::statics(mac, phone) -> Vec<[u8; 32]>`.
+- `LastSent::next_counter(mac, wall_ms) -> Result<u64, StoreError>`: `max(wall_ms, last + 1)`
+  (or `wall_ms` if nothing was sent), recorded and returned in one step; `StoreError::Exhausted`
+  past 2^53 − 1 (`core::session::schedule_json_counters`). Two phone machines for one Mac
+  key get distinct counters (`core::session::two_phone_sessions_for_one_mac_key_send_distinct_counters`).
+  TypeScript: `LastSentStore` (async `get` / `set`), `memoryLastSentStore()`, and
+  `CounterAllocator`, one per app, a promise chain per Mac key; a rejected `set` rejects only
+  its own caller ("AC2: two sessions for one Mac key…", "AC2: a rejected set rejects only its
+  own caller; the chain goes on").
+- So a counter survives an unpair and pairing again, an `hs1` from before an unpair or
+  accepted through another relay is refused, and one phone with two Macs keeps two counters
+  (`core::session::the_counter_carries_over_an_unpair_and_pair_again_and_an_older_hs1_is_refused`,
+  `core::session::an_hs1_accepted_through_another_relay_is_refused`,
+  `core::session::one_phone_with_two_macs_keeps_two_counters`).
+
+**The machines** are sans-IO, time passed in (`now`, monotonic ms; `wall_ms` only for the
+phone's counter).
+- `relay_core::MacSessions` (one per Mac identity and relay): `on_hs1`, `on_frame`, `send`,
+  `end(phone)`, `poll`, `next_deadline`; actions `Send(Routed)`, `Rehandshake(phone)`,
+  `Started(phone)`, `Deliver(phone, bytes)`.
+- `relay_core::PhoneSession` and TypeScript `PhoneSession` (one per Mac and relay):
+  `trigger`, `begin`, `on_hs2`, `on_frame`, `send`, `end`, `poll`, `next_deadline`; actions
+  `StartHandshake { token }`, `Send`, `Started`, `Deliver`.
+- **Two-step start:** a start emits `StartHandshake { token }`; the driver gets a counter
+  from the store and calls `begin(token, counter)`, which returns the `hs1` envelope, or
+  nothing if the token is stale (`end()` ran, or a newer session was adopted), and the
+  counter is skipped (`core::session::a_stale_begin_token_returns_nothing`; "a stale begin
+  token returns null…"). A counter above 2^53 − 1 is an error, never a stale-token nothing:
+  Rust `Err(HandshakeError::CounterRange)`, TypeScript `RangeError`
+  (`core::session::begin_refuses_a_counter_above_2_pow_53_minus_1_as_an_error_not_a_stale_token`).
+  A failed store write means no `begin`, so no `hs1`.
+- `MacSessions` keeps state only for phones it is paired with or has a session with: `send`,
+  `on_frame` and `on_hs1` for an unpaired key return nothing (`send`: `NoSession`, with no
+  `Rehandshake`) and add no entry (`core::session::unpaired_keys_leave_no_state_on_the_mac`).
+- `send` with no session (or at the ceiling) returns an error and raises the trigger, whose
+  action comes from the next `poll` (`core::session::send_with_no_session_raises_the_phone_trigger`,
+  `core::session::the_mac_asks_for_a_handshake_when_it_has_no_session`).
+- **`Rehandshake(phone)` is only an action here.** Its wire form,
+  `{"v":1,"t":"rehandshake","peer":<32 bytes>}`, its `Control` variant and its routing are
+  story 7b's **(owner decision)**; `Control` is unchanged by story 4.
+
+**The restart rules (owner decisions)** (`core::session::schedule_json_scripts`; "schedule.json >
+every script"):
+- One 10 s restart window per (peer, relay) on each side, shared by every trigger. A trigger
+  inside it is coalesced into one deferred start at the window's end, dropped if a session
+  completed after the trigger (`core::session::each_side_restarts_at_most_once_per_10_s_per_peer_and_relay`,
+  `core::session::a_deferred_rehandshake_is_dropped_when_a_session_completes_first`).
+- The phone starts on: Mac online (`welcome` or `presence`), foreground, `rehandshake`, a `bad`
+  frame, 24 h after its session completed, its send nonce reaching 2^32, a received nonce of
+  2^32 − 1, and pull to refresh with or without a session (widened by the owner on
+  2026-10-16 after the code review: two lost messages can leave the sides on different
+  sessions until the next trigger, and pull to refresh is the user's way out)
+  (`core::session::the_phone_starts_on_mac_online_foreground_rehandshake_and_pull_to_refresh`,
+  `core::session::the_phone_starts_after_24_h`,
+  `core::session::the_phone_starts_at_its_send_ceiling_and_at_a_received_nonce_of_ceiling_minus_1`).
+- The Mac's triggers are `send` with no session, its own send ceiling (which drops the
+  session) and a `bad` frame; its action is `Rehandshake`
+  (`core::session::the_mac_at_its_send_ceiling_drops_the_session_and_emits_rehandshake`).
+  Frames still in flight from an old session start nothing on either side
+  (`core::session::frames_from_an_old_session_start_no_handshake`).
+- A start counts when `StartHandshake` is emitted, whether or not `begin` follows. A fresh
+  start with no `hs2` gets one retry 10 s later; the retry is a start (a new window) with no
+  retry of its own. Causes due at the same moment give one start, fresh unless only the retry
+  was due.
+- **Two handshakes at once.** The Mac takes each accepted `hs1` as its current session. The
+  phone keeps at most 4 outstanding handshakes (the oldest dropped; each expires after 24 h),
+  tries an `hs2` against them newest first, only those above the current session's counter,
+  and adopts it only if its counter is above the session's; adoption drops every outstanding
+  handshake not above it (and any not yet begun)
+  (`core::session::two_handshakes_at_once_leave_the_newest`,
+  `core::session::two_handshakes_at_once_the_stuck_state_newer_hs1_lost`).
+- **The hanging trigger (owner decision, option (a)).** Adoption arms each newer outstanding
+  handshake; one with no `hs2` by `max(started_at + 10 s, adopted_at + (adopted_at −
+  adopted.started_at))` raises one trigger through the window, once per handshake. The
+  deadline scales to the round trip just measured on the adopted handshake (amended by the
+  owner on 2026-10-16 after the code review), so a round trip over 10 s cannot loop: a
+  constant 12 s round trip gives at most 2 starts
+  (`core::session::a_constant_12_s_round_trip_gives_at_most_2_starts_and_converges`; "AC4: a
+  constant 12 s round trip…"; `schedule.json` "a constant 12 s round trip…"). With no adoption, nothing is armed: a silent Mac gets the start and its
+  one retry, 2 starts in 60 s (`core::session::two_handshakes_at_once_the_lost_newer_hs2_converges`,
+  `core::session::the_lost_newer_hs2_then_c_lost_too_gets_one_retry_and_b_no_second_trigger`).
+- A cross-relay collision (two relays' counters reaching the Mac out of order) heals on the
+  retry (`core::session::a_cross_relay_collision_heals_on_the_retry`).
+- The limits are constants (`RESTART_WINDOW_MS`, `RETRY_MS`, `HANGING_MS`,
+  `MAX_SESSION_AGE_MS`, `OUTSTANDING_TTL_MS`, `MAX_OUTSTANDING`) that only crate-private test
+  constructors lower (Rust `with_limits`, TypeScript `phoneSessionWithLimits`, not exported).
+
+**Test hooks stay private.** Rust: the raw layer, fixed ephemerals (`Initiator::start_with`,
+`read_hs1_with`) and `Session::preset` are `pub(crate)` or `#[cfg(test)]`. TypeScript:
+`handshakeRaw`, `startHandshakeWith`, `readHs1`/`readHs1With` (the responder), `presetNonces`,
+`createSession`, `isLowOrder`, `Scheduler` and `phoneSessionWithLimits` are not exported from
+`index.ts` ("the package's surface > exports none of the Noise test hooks, the raw layer or
+the responder").
+
 ## Control messages
 
 JSON text frames, `{"v":1,"t":<type>,...}`. Bytes are unpadded base64url
@@ -210,8 +423,15 @@ too.
 
 ## Roles
 
-A key's role is fixed the first time it logs in (`relay_core::DeviceRoles`). A later login
-with the other role is refused as above. Held in memory until story 7.
+A key's role is fixed the first time it logs in, and stored (story 7a: the `devices` table,
+see `relay-storage.md`). At login the relay runs `verify_login`, then
+`relay_core::admit(stored_role, who)` over `Store::device`, then `Store::register` (one atomic
+upsert that sets `last_seen` and refuses the other role). A login with the other role is
+refused as above (4401, log code `role_conflict`). Roles survive a restart.
+
+**Store error at login** (owner decision, 2026-10-16): if any of those store calls fails, the
+relay closes the WebSocket with **1011** and reason **`internal_error`**, sends no `welcome`,
+and logs `login_store_error code=<code>`.
 
 ## Presence
 
@@ -224,24 +444,57 @@ with the other role is refused as above. Held in memory until story 7.
   then `online`; the old socket is dropped (no close code yet, story 7) and its later close
   is ignored.
 - A leave fans out to the device's peers as the pair directory lists them at that moment.
+  After the connection ends, off the async workers, a leave reads `peers_of`, fans the
+  offline out at once, and only then writes the device's `last_seen` (`touch`), so
+  presence never waits on a write. If `peers_of` fails, presence and the sender are still
+  cleared, but nobody is told (story 7a). **Decision (owner, 2026-10-16):** only a failed
+  `peers_of` suppresses presence; if the `touch` fails, the peers are still told the
+  device is offline. Either failure is logged as `leave_store_error code=<code>`.
 - Each device has a queue of 64 messages. A device whose queue is full, or whose socket
   send doesn't finish before its pong deadline, is dropped and counts as left.
 - `welcome` is sent before any presence on the same connection.
 
 ## Pair directory
 
-`relay_core::PairDirectory` (`peers_of(id) -> Vec<PairInfo>`, `Send + Sync`) is how the
-relay learns pairs. `InMemoryPairs` seeds it for now; story 7 adds the SQLite one behind
-the same trait.
+`relay_core::PairDirectory` (`peers_of(id) -> Result<Vec<PairInfo>, StoreError>`, `Send +
+Sync`) is how the relay learns pairs. A failed read is an error, never `[]`: a `welcome`
+with no pairs makes devices drop theirs. `relay_core::Store: PairDirectory` is the
+relay's storage, and `relay_server::SqliteStore` implements it (story 7a, see
+`relay-storage.md`). `InMemoryPairs` remains for `relay-core`'s own tests.
 
 ## Relay endpoints and configuration
 
-- `GET /` upgrades to the WebSocket; `GET /health` answers `200 ok`.
+- `GET /` upgrades to the WebSocket; `GET /health` answers `200 ok`, with no token.
+- `GET /metrics` (story 7a): counts only, Prometheus text format
+  (`text/plain; version=0.0.4`). **404** when no token is configured; **401** (with
+  `WWW-Authenticate: Bearer`) unless `Authorization: Bearer <token>` carries it. The scheme
+  name matches in any letter case (RFC 7235); the token must match exactly. The SHA-256
+  digests of the given and the configured token are compared with `subtle`'s `ct_eq`, so
+  neither a matching prefix nor the token's length shows in the timing. Every line is a `# ` comment or matches
+  `relay_[a-z_]+({[a-z_]+="[a-z_]+"})? [0-9]+`. Gauges: `relay_online`, `relay_devices`,
+  `relay_pairs`, `relay_pairs_acked`, `relay_push_tokens`. Counters:
+  `relay_logins_total{result="ok"|"refused"}` (refused = every 4401 close, a timeout
+  included; a 1011 close counts as neither), `relay_cleanup_deleted_devices_total`.
+  Story 7b adds its own.
+- **Logs** go through `relay_server::LogSink` as a typed `LogEvent`, whose fields are only
+  `&'static str` codes and counts. Each line matches `^relay: [a-z_]+( [a-z_]+=[0-9a-z_]+)*$`.
+  The binary's start-up lines (hosts, listen address, settings errors) are the only other
+  output.
 - `relay-server` bin: `RELAY_HOSTS` is **required**: comma-separated, each a bare host
   name or a bracketed IPv6 literal (no scheme, port, path or user). `RELAY_LISTEN`
-  defaults to `0.0.0.0:8080`. A missing, malformed or non-Unicode value exits 2; the
-  effective host list is printed at start. A relay that can't listen, or whose server
-  stops, exits 1. `serve()` refuses ping settings unless `0 < ping_interval < ping_timeout`.
+  defaults to `0.0.0.0:8080`. **`RELAY_DB` is required** (the SQLite file's path).
+  **`RELAY_METRICS_TOKEN`** is optional; when set it must be at least 32 characters.
+  A missing, malformed or non-Unicode value exits 2; the effective host list is printed
+  at start. A database that won't open (or has a newer schema), a relay that can't
+  listen, or a server that stops, exits 1. `serve()` refuses ping settings unless
+  `0 < ping_interval < ping_timeout`, and a zero `cleanup_interval`.
+- `serve(Config) -> io::Result<relay_server::Relay>`. `Relay` has `addr`,
+  `run_cleanup().await -> CleanupCounts`, `shutdown().await` (stop accepting, close every
+  connection, wait for every leave, any running cleanup and every store call still
+  running, a cancelled login's included; when it returns, the relay holds no reference to
+  the store), `abort()` (a simulated crash: no leave, no touch), and `wait().await` (for the
+  bin). `Config::new(listen, hosts, store)` defaults: ping 15 s / 30 s, `SystemClock`,
+  `StderrLog`, no metrics token, cleanup every hour (first run one interval after start).
 - `relay-cli` bin: `--url`, `--role mac|phone`, `--key-file` (32-byte seed as unpadded
   base64url, written to a temporary file and renamed into place with mode 0600 if missing;
   on unix an existing file that group or others can access is refused). The client skips

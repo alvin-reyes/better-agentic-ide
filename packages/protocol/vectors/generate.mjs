@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Writes the crypto vectors (enc, labels, signatures, seals, sas) that the Rust
+// Writes the crypto vectors (enc, labels, signatures, seals, sas, noise) that the Rust
 // and TypeScript suites both read. It uses node:crypto only, so the expected
 // values come from neither library under test. It checks itself against the
 // published vectors first (RFC 5869 case 1, RFC 8032 test 1, HChaCha20 and
@@ -7,8 +7,12 @@
 //
 //   node packages/protocol/vectors/generate.mjs           writes the files
 //   node packages/protocol/vectors/generate.mjs --check   writes nothing; exits 1 on drift
+//   node packages/protocol/vectors/generate.mjs --differential   IK cases on stdin, digests out
 //
-// names.json and qr.json are written by hand from the spec, not here.
+// noise.json comes from a Noise IK oracle on node:crypto, which first reproduces
+// cacophony-ik.json (an excerpt of cacophony's vectors, its digest pinned below).
+//
+// names.json, qr.json and schedule.json are written by hand from the spec, not here.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -343,15 +347,440 @@ function sasFile() {
   };
 }
 
+// --- Noise IK oracle on node:crypto (story 4) -------------------------------------
+//
+// A third Noise implementation, independent of snow and of @noble: X25519 through
+// raw-key DER, chacha20-poly1305 with the Noise nonce 0x00000000 || u64le(n), and
+// HKDF over HMAC-SHA256. It must reproduce the cacophony IK vector first.
+
+const PATTERN = "Noise_IK_25519_ChaChaPoly_SHA256";
+const CACOPHONY_FILE = "cacophony-ik.json";
+/** SHA-256 of cacophony-ik.json, the excerpt copied from cacophony's vectors. */
+const CACOPHONY_SHA256 = "c477fb7eac61e4aaf6cf447571d02714409ea3fd946f220246548b08b6e78dfd";
+const MAX_COUNTER = 2 ** 53 - 1;
+const MAX_PLAINTEXT = 60000;
+
+const sha256 = (d) => crypto.createHash("sha256").update(d).digest();
+const hmac = (k, d) => crypto.createHmac("sha256", k).update(d).digest();
+
+const X25519_PKCS8 = unhex("302e020100300506032b656e04220420");
+const X25519_SPKI = unhex("302a300506032b656e032100");
+const xPrivate = (secret) =>
+  crypto.createPrivateKey({ key: Buffer.concat([X25519_PKCS8, secret]), format: "der", type: "pkcs8" });
+const xPublicOf = (secret) =>
+  crypto.createPublicKey(xPrivate(secret)).export({ format: "der", type: "spki" }).subarray(-32);
+
+// The low-order u-values: 0, 1, p-1, the two order-8 points, the +p encodings below
+// 2^255 (p and p+1), and each with the top bit set (which RFC 7748 masks).
+const P = (1n << 255n) - 19n;
+const ORDER8_A = 325606250916557431795983626356110631294008115727848805560023387167927233504n;
+const ORDER8_B = 39382357235489614581723060781553021112529911719440698176882885853963445705823n;
+const le32 = (n) => Buffer.from(n.toString(16).padStart(64, "0"), "hex").reverse();
+const LOW_ORDER_BASE = [
+  ["0", 0n],
+  ["1", 1n],
+  ["p-1", P - 1n],
+  ["order-8 point a", ORDER8_A],
+  ["order-8 point b", ORDER8_B],
+  ["p, the +p encoding of 0", P],
+  ["p+1, the +p encoding of 1", P + 1n],
+];
+const LOW_ORDER = [
+  ...LOW_ORDER_BASE.map(([name, n]) => ({ name, u: le32(n) })),
+  ...LOW_ORDER_BASE.map(([name, n]) => ({ name: `${name}, top bit set`, u: le32(n | (1n << 255n)) })),
+];
+const isLowOrder = (u) => {
+  const n = BigInt("0x" + hex(Buffer.from(u).reverse())) & ((1n << 255n) - 1n);
+  return [0n, 1n, P - 1n, ORDER8_A, ORDER8_B].includes(n % P);
+};
+
+/** X25519. An all-zero result (a low-order u) is returned as zeros, where node
+ *  throws, and the throw is checked to agree with the low-order table. */
+function x25519(secret, pub) {
+  try {
+    const out = crypto.diffieHellman({
+      privateKey: xPrivate(secret),
+      publicKey: crypto.createPublicKey({ key: Buffer.concat([X25519_SPKI, pub]), format: "der", type: "spki" }),
+    });
+    if (isLowOrder(pub)) throw new Error(`x25519 accepted low-order ${hex(pub)}`);
+    return out;
+  } catch (e) {
+    if (!isLowOrder(pub)) throw e;
+    return Buffer.alloc(32);
+  }
+}
+
+const noiseNonce = (n) => {
+  const b = Buffer.alloc(12);
+  b.writeBigUInt64LE(BigInt(n), 4);
+  return b;
+};
+
+function aeadEncrypt(key, n, ad, plain) {
+  const c = crypto.createCipheriv("chacha20-poly1305", key, noiseNonce(n), { authTagLength: 16 });
+  c.setAAD(ad, { plaintextLength: plain.length });
+  return Buffer.concat([c.update(plain), c.final(), c.getAuthTag()]);
+}
+
+/** HKDF as Noise defines it, two outputs. */
+function hkdf2(ck, ikm) {
+  const temp = hmac(ck, ikm);
+  const one = hmac(temp, Buffer.from([1]));
+  return [one, hmac(temp, Buffer.concat([one, Buffer.from([2])]))];
+}
+
+class SymmetricState {
+  constructor(prologue) {
+    // The protocol name is exactly 32 bytes, so h starts as the name itself.
+    this.h = ascii(PATTERN);
+    if (this.h.length !== 32) throw new Error("pattern name is not 32 bytes");
+    this.ck = this.h;
+    this.k = null;
+    this.n = 0;
+    this.mixHash(prologue);
+  }
+  mixHash(data) {
+    this.h = sha256(Buffer.concat([this.h, data]));
+  }
+  mixKey(ikm) {
+    [this.ck, this.k] = hkdf2(this.ck, ikm);
+    this.n = 0;
+  }
+  encryptAndHash(plain) {
+    const c = this.k ? aeadEncrypt(this.k, this.n++, this.h, plain) : Buffer.from(plain);
+    this.mixHash(c);
+    return c;
+  }
+}
+
+/** One IK handshake, the oracle writing both messages. `t` overrides a wire key
+ *  (e1, s1, e2) or a DH result (es, ss, ee, se), always as the reader computes it,
+ *  for the refused and edge cases. k1 is initiator to responder, k2 the reverse. */
+function ik({ prologue, iStatic, iEph, rStaticPub, rEph, payload1, payload2 = Buffer.alloc(0), t = {} }) {
+  const sym = new SymmetricState(prologue);
+  sym.mixHash(rStaticPub);
+  const e1 = t.e1 ?? xPublicOf(iEph);
+  sym.mixHash(e1);
+  sym.mixKey(t.es ?? x25519(iEph, rStaticPub));
+  const s1 = sym.encryptAndHash(t.s1 ?? xPublicOf(iStatic));
+  sym.mixKey(t.ss ?? x25519(iStatic, rStaticPub));
+  const hs1 = Buffer.concat([e1, s1, sym.encryptAndHash(payload1)]);
+  const e2 = t.e2 ?? xPublicOf(rEph);
+  sym.mixHash(e2);
+  sym.mixKey(t.ee ?? x25519(rEph, xPublicOf(iEph)));
+  sym.mixKey(t.se ?? x25519(rEph, xPublicOf(iStatic)));
+  const hs2 = Buffer.concat([e2, sym.encryptAndHash(payload2)]);
+  const [k1, k2] = hkdf2(sym.ck, Buffer.alloc(0));
+  return { hs1, hs2, h: sym.h, k1, k2 };
+}
+
+function checkCacophony() {
+  const raw = fs.readFileSync(path.join(DIR, CACOPHONY_FILE));
+  assertEq(hex(sha256(raw)), CACOPHONY_SHA256, `${CACOPHONY_FILE} digest`);
+  const v = JSON.parse(raw.toString("utf8")).vector;
+  assertEq(v.protocol_name, PATTERN, "cacophony protocol name");
+  assertEq(hex(xPublicOf(unhex(v.resp_static))), v.init_remote_static, "cacophony responder static");
+  const out = ik({
+    prologue: unhex(v.init_prologue),
+    iStatic: unhex(v.init_static),
+    iEph: unhex(v.init_ephemeral),
+    rStaticPub: unhex(v.init_remote_static),
+    rEph: unhex(v.resp_ephemeral),
+    payload1: unhex(v.messages[0].payload),
+    payload2: unhex(v.messages[1].payload),
+  });
+  assertEq(hex(out.hs1), v.messages[0].ciphertext, "cacophony hs1");
+  assertEq(hex(out.hs2), v.messages[1].ciphertext, "cacophony hs2");
+  assertEq(hex(out.h), v.handshake_hash, "cacophony handshake hash");
+  v.messages.slice(2).forEach((m, i) => {
+    const key = i % 2 === 0 ? out.k1 : out.k2;
+    const got = aeadEncrypt(key, Math.floor(i / 2), Buffer.alloc(0), unhex(m.payload));
+    assertEq(hex(got), m.ciphertext, `cacophony message ${i + 2}`);
+  });
+}
+
+// --- noise.json -------------------------------------------------------------------
+
+const noisePrologue = (iM, iP) => enc(label("NOISE_LABEL"), [iM, iP]);
+const u64be = (n) => {
+  const b = Buffer.alloc(8);
+  b.writeBigUInt64BE(BigInt(n));
+  return b;
+};
+/** Every frame plaintext in the vectors: byte i is i % 251. */
+const plaintextOf = (len) => Buffer.from(Array.from({ length: len }, (_, i) => i % 251));
+const frameBody = (sid, key, nonce, plain) =>
+  Buffer.concat([sid, u64be(nonce), aeadEncrypt(key, nonce, Buffer.alloc(0), plain)]);
+const withTopBit = (b) => {
+  const out = Buffer.from(b);
+  out[31] |= 0x80;
+  return out;
+};
+const flip = (b, i) => {
+  const out = Buffer.from(b);
+  out[i] ^= 0x01;
+  return out;
+};
+
+function noiseKeys() {
+  const key = (tag) => {
+    const secret = fixed(tag, 32);
+    return { secret, public: xPublicOf(secret) };
+  };
+  return {
+    mac: key("noise-mac-static"),
+    phone: key("noise-phone-static"),
+    otherMac: key("noise-other-mac-static"),
+    iM: fixed("noise-I_M", 32),
+    iP: fixed("noise-I_P", 32),
+    otherIP: fixed("noise-I_P-other", 32),
+  };
+}
+
+/** A handshake between the file's phone and Mac with fixed ephemerals `i`. */
+function noiseHandshake(K, counter, i, t = {}, extra = {}) {
+  const iEph = fixed(`noise-phone-e-${i}`, 32);
+  const rEph = fixed(`noise-mac-e-${i}`, 32);
+  const out = ik({
+    prologue: noisePrologue(K.iM, K.iP),
+    iStatic: K.phone.secret,
+    iEph,
+    rStaticPub: K.mac.public,
+    rEph,
+    payload1: u64be(counter),
+    t,
+    ...extra,
+  });
+  return { ...out, iEph, rEph, sid: out.h.subarray(0, 8) };
+}
+
+function receiverScript(direction, hs, older) {
+  const key = direction === "phone_to_mac" ? hs.k1 : hs.k2;
+  const olderKey = direction === "phone_to_mac" ? older.k1 : older.k2;
+  const sid = hs.sid;
+  const other = flip(sid, 0);
+  const good = (n, len = 3) => frameBody(sid, key, n, plaintextOf(len));
+  const steps = [];
+  let last = null;
+  const step = (why, body, outcome, len) => {
+    if (outcome === "accept") last = Number(body.readBigUInt64BE(8));
+    const s = { why, outcome, last_recv: last };
+    if (body.fill) s.body = hex(body);
+    else s.body_fill = body;
+    if (outcome === "accept") s.plaintext_len = len;
+    steps.push(s);
+  };
+  step("an empty body", Buffer.alloc(0), "drop");
+  step("7 bytes, under a session id", sid.subarray(0, 7), "drop");
+  step("8 bytes: the current id alone", Buffer.from(sid), "bad");
+  step("8 bytes: another session's id", Buffer.from(other), "drop");
+  step("15 bytes on the current id", Buffer.concat([sid, Buffer.alloc(7)]), "bad");
+  step("31 bytes on the current id", Buffer.concat([sid, u64be(0), Buffer.alloc(15)]), "bad");
+  step("32 bytes on the current id that fail to decrypt", Buffer.concat([sid, u64be(0), Buffer.alloc(16)]), "bad");
+  step("a 32-byte frame, empty plaintext, nonce 0", good(0, 0), "accept", 0);
+  step("nonce 2 (a gap)", good(2), "accept", 3);
+  step("nonce 2 again (a replay)", good(2), "drop");
+  step("nonce 1 (lower)", good(1), "drop");
+  step("nonce 5 (a gap)", good(5), "accept", 3);
+  step(
+    "a forged nonce 100 that fails to decrypt",
+    Buffer.concat([sid, u64be(100), Buffer.alloc(20, 0xab)]),
+    "bad",
+  );
+  step("nonce 6: the forged frame did not move last-accepted", good(6), "accept", 3);
+  step("nonce 7 tampered", flip(good(7), 20), "bad");
+  step("nonce 7, untampered", good(7), "accept", 3);
+  step("nonce 2^32, which decrypts", frameBody(sid, key, 2 ** 32, plaintextOf(3)), "bad");
+  step("nonce 2^64-1", Buffer.concat([sid, Buffer.alloc(8, 0xff), Buffer.alloc(16)]), "bad");
+  step("60,033 bytes on the current id", { prefix: hex(sid), len: 60033 }, "bad");
+  step("another session's id on a frame under the current keys", frameBody(other, key, 8, plaintextOf(3)), "drop");
+  step("a frame from the older session", frameBody(older.sid, olderKey, 9, plaintextOf(3)), "drop");
+  step("nonce 8, a full 60,000-byte plaintext (60,032 bytes)", good(8, MAX_PLAINTEXT), "accept", MAX_PLAINTEXT);
+  step("nonce 2^32-1, the last a sender uses", good(2 ** 32 - 1), "accept", 3);
+  return { direction, steps };
+}
+
+function noiseFile() {
+  const K = noiseKeys();
+  const counters = [0, 1760000000000, MAX_COUNTER];
+  const hss = counters.map((c, i) => noiseHandshake(K, c, i));
+  const handshakes = hss.map((o, i) => ({
+    counter: counters[i],
+    phone_ephemeral: hex(o.iEph),
+    mac_ephemeral: hex(o.rEph),
+    hs1: hex(o.hs1),
+    hs2: hex(o.hs2),
+    handshake_hash: hex(o.h),
+    session_id: hex(o.sid),
+  }));
+  for (const o of hss) {
+    if (o.hs1.length !== 104 || o.hs2.length !== 48) throw new Error("hs1/hs2 lengths");
+  }
+
+  const hs = hss[0];
+  const frames = [];
+  for (const direction of ["phone_to_mac", "mac_to_phone"]) {
+    for (const nonce of [0, 1, 7]) {
+      for (const len of [0, 1, MAX_PLAINTEXT]) {
+        const body = frameBody(hs.sid, direction === "phone_to_mac" ? hs.k1 : hs.k2, nonce, plaintextOf(len));
+        const f = { direction, nonce, plaintext_len: len, body_len: body.length };
+        if (body.length <= 64) f.body = hex(body);
+        else f.body_sha256 = hex(sha256(body));
+        frames.push(f);
+      }
+    }
+  }
+
+  const firstFrame = frameBody(hs.sid, hs.k1, 0, plaintextOf(1));
+  const envelopes = [
+    { kind: 1, peer: hex(K.iM), body: hex(hs.hs1) },
+    { kind: 2, peer: hex(K.iP), body: hex(hs.hs2) },
+    { kind: 3, peer: hex(K.iM), body: hex(firstFrame) },
+  ].map((e) => ({ ...e, bytes: hex(Buffer.concat([Buffer.from([e.kind]), unhex(e.peer), unhex(e.body)])) }));
+
+  const sweep = Array.from({ length: 16 }, (_, i) => {
+    const phone = fixed(`noise-sweep-${i}-phone`, 32);
+    const mac = fixed(`noise-sweep-${i}-mac`, 32);
+    const iEph = fixed(`noise-sweep-${i}-phone-e`, 32);
+    const rEph = fixed(`noise-sweep-${i}-mac-e`, 32);
+    const iM = fixed(`noise-sweep-${i}-I_M`, 32);
+    const iP = fixed(`noise-sweep-${i}-I_P`, 32);
+    const counter = i * 123456789013 + i;
+    const o = ik({ prologue: noisePrologue(iM, iP), iStatic: phone, iEph, rStaticPub: xPublicOf(mac), rEph, payload1: u64be(counter) });
+    const sid = o.h.subarray(0, 8);
+    const lens = [(i * 61) % 300, (i * 97 + 5) % 300];
+    return {
+      phone_secret: hex(phone),
+      mac_secret: hex(mac),
+      phone_ephemeral: hex(iEph),
+      mac_ephemeral: hex(rEph),
+      i_m: hex(iM),
+      i_p: hex(iP),
+      counter,
+      hs1: hex(o.hs1),
+      hs2: hex(o.hs2),
+      handshake_hash: hex(o.h),
+      session_id: hex(sid),
+      frames: [
+        { direction: "phone_to_mac", nonce: i, plaintext_len: lens[0], body: hex(frameBody(sid, o.k1, i, plaintextOf(lens[0]))) },
+        { direction: "mac_to_phone", nonce: i * 3 + 1, plaintext_len: lens[1], body: hex(frameBody(sid, o.k2, i * 3 + 1, plaintextOf(lens[1]))) },
+      ],
+    };
+  });
+
+  // hs1 the Mac must refuse at the crypto layer. The Mac's own key is `keys.mac`.
+  const refusedHs1 = [];
+  const hs1Case = (why, hs1, senderIP = K.iP) => refusedHs1.push({ why, layer: "crypto", sender_i_p: hex(senderIP), hs1: hex(hs1) });
+  const viaPayload = (payload1) => noiseHandshake(K, 0, 0, {}, { payload1 }).hs1;
+  hs1Case("a payload of 0 bytes", viaPayload(Buffer.alloc(0)));
+  hs1Case("a payload of 9 bytes", viaPayload(Buffer.alloc(9, 1)));
+  hs1Case("counter 2^53", viaPayload(u64be(2n ** 53n)));
+  hs1Case("made by phone A, sent as phone B (prologue)", hs.hs1, K.otherIP);
+  hs1Case("truncated to 103 bytes", hs.hs1.subarray(0, 103));
+  hs1Case("truncated to 32 bytes", hs.hs1.subarray(0, 32));
+  hs1Case("empty", Buffer.alloc(0));
+  hs1Case("made for another Mac's static", noiseHandshake(K, 0, 0, {}, { rStaticPub: K.otherMac.public }).hs1);
+  hs1Case("tampered", flip(hs.hs1, 50));
+  for (const { name, u } of LOW_ORDER) {
+    hs1Case(`a low-order e: ${name}`, noiseHandshake(K, 0, 0, { e1: u, es: x25519(K.mac.secret, u) }).hs1);
+  }
+  for (const { name, u } of LOW_ORDER) {
+    hs1Case(`a low-order s: ${name}`, noiseHandshake(K, 0, 0, { s1: u, ss: x25519(K.mac.secret, u) }).hs1);
+  }
+
+  // hs2 the phone must refuse, each read by handshakes[0]'s initiator; the right hs2
+  // still completes after each.
+  const refusedHs2 = [];
+  const hs2Case = (why, hs2) => refusedHs2.push({ why, layer: "crypto", hs2: hex(hs2) });
+  hs2Case("a 1-byte payload (49 bytes)", noiseHandshake(K, 0, 0, {}, { payload2: Buffer.from([0]) }).hs2);
+  hs2Case("tampered e", flip(hs.hs2, 3));
+  hs2Case("tampered tag", flip(hs.hs2, 40));
+  hs2Case("truncated to 47 bytes", hs.hs2.subarray(0, 47));
+  hs2Case("empty", Buffer.alloc(0));
+  hs2Case("for another handshake", hss[1].hs2);
+  for (const { name, u } of LOW_ORDER) {
+    const t = { e2: u, ee: x25519(hs.iEph, u), se: x25519(K.phone.secret, u) };
+    hs2Case(`a low-order e: ${name}`, noiseHandshake(K, 0, 0, t).hs2);
+  }
+
+  // A high-bit e: the top bit is masked by X25519 but hashed as sent, so it completes.
+  const hiE1 = withTopBit(xPublicOf(hs.iEph));
+  const es = x25519(K.mac.secret, hiE1);
+  if (!es.equals(x25519(hs.iEph, K.mac.public))) throw new Error("top bit not masked");
+  const hi1 = noiseHandshake(K, 0, 0, { e1: hiE1, es });
+  const hiE2 = withTopBit(xPublicOf(hs.rEph));
+  const ee = x25519(hs.iEph, hiE2);
+  const se = x25519(K.phone.secret, hiE2);
+  if (!ee.equals(x25519(hs.rEph, xPublicOf(hs.iEph)))) throw new Error("top bit not masked");
+  const hi2 = noiseHandshake(K, 0, 0, { e2: hiE2, ee, se });
+  const highBit = [
+    { why: "hs1 whose e has the top bit set", counter: 0, hs1: hex(hi1.hs1), hs2: hex(hi1.hs2), session_id: hex(hi1.sid) },
+    { why: "hs2 whose e has the top bit set", counter: 0, hs1: hex(hi2.hs1), hs2: hex(hi2.hs2), session_id: hex(hi2.sid) },
+  ];
+
+  return {
+    pattern: PATTERN,
+    note:
+      "Written by generate.mjs's node:crypto IK oracle, which reproduces cacophony-ik.json first. Frame plaintexts are byte i = i % 251. Handshakes use the phone's ephemeral phone_ephemeral and the Mac's mac_ephemeral.",
+    keys: {
+      mac_static_secret: hex(K.mac.secret),
+      mac_static_public: hex(K.mac.public),
+      phone_static_secret: hex(K.phone.secret),
+      phone_static_public: hex(K.phone.public),
+      other_mac_static_public: hex(K.otherMac.public),
+      i_m: hex(K.iM),
+      i_p: hex(K.iP),
+      other_i_p: hex(K.otherIP),
+    },
+    prologue: hex(noisePrologue(K.iM, K.iP)),
+    handshakes,
+    frames,
+    envelopes,
+    sweep,
+    low_order: LOW_ORDER.map(({ name, u }) => ({ name, u: hex(u) })),
+    refused: { hs1: refusedHs1, hs2: refusedHs2 },
+    high_bit_e: highBit,
+    receiver_scripts: [receiverScript("phone_to_mac", hs, hss[1]), receiverScript("mac_to_phone", hs, hss[1])],
+  };
+}
+
+/** --differential: JSON cases on stdin, one SHA-256 digest per case on stdout, of
+ *  hs1 || hs2 || handshake hash || each frame body. */
+function differential(cases) {
+  return cases.map((c) => {
+    const o = ik({
+      prologue: noisePrologue(unhex(c.i_m), unhex(c.i_p)),
+      iStatic: unhex(c.phone_secret),
+      iEph: unhex(c.phone_ephemeral),
+      rStaticPub: xPublicOf(unhex(c.mac_secret)),
+      rEph: unhex(c.mac_ephemeral),
+      payload1: u64be(c.counter),
+    });
+    const sid = o.h.subarray(0, 8);
+    const parts = [o.hs1, o.hs2, o.h];
+    for (const f of c.frames) {
+      parts.push(frameBody(sid, f.direction === "phone_to_mac" ? o.k1 : o.k2, f.nonce, plaintextOf(f.plaintext_len)));
+    }
+    return hex(sha256(Buffer.concat(parts)));
+  });
+}
+
 // --- Main -------------------------------------------------------------------------
 
 checkAnchors();
+checkCacophony();
+if (process.argv.includes("--differential")) {
+  const input = fs.readFileSync(0, "utf8");
+  process.stdout.write(JSON.stringify(differential(JSON.parse(input))) + "\n");
+  process.exit(0);
+}
 const files = {
   "enc.json": encFile(),
   "labels.json": { labels: LABELS },
   "signatures.json": signaturesFile(),
   "seals.json": sealsFile(),
   "sas.json": sasFile(),
+  "noise.json": noiseFile(),
 };
 
 const check = process.argv.includes("--check");
