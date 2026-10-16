@@ -87,9 +87,9 @@ llms.txt
 _bmad/               <span class="c"># BMAD config and its Node runtime</span>
 _bmad-output/        <span class="c"># tickets and planning documents</span>
 .claude/agents/
-  product-manager.md  architect.md  designer.md
-  scrum-master.md  developer.md  qa.md
-  devops.md  adversarial-reviewer.md
+  <span data-agent-color="purple">product-manager.md</span>  <span data-agent-color="blue">architect.md</span>  <span data-agent-color="pink">designer.md</span>
+  <span data-agent-color="cyan">scrum-master.md</span>  <span data-agent-color="green">developer.md</span>  <span data-agent-color="yellow">qa.md</span>
+  <span data-agent-color="orange">devops.md</span>  <span data-agent-color="red">adversarial-reviewer.md</span>
   <span class="h">+ agents for your stack</span></pre></div>
           <div class="feat-text">
             <h3>Every project, set up for agents</h3>
@@ -105,7 +105,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
         </article>
         <article class="feat-card">
           <div class="feat-media feat-media--live">
-            <div class="fleetx" role="img" aria-label="The fleet view: a developer agent running with Explore, Plan and Code reviewer sub-agents beneath it, then a QA agent still running, with a live count and spend for the project.">
+            <div class="fleetx" role="img" aria-label="The fleet view, each lane colored by its role: a developer agent with Explore, Plan and adversarial-reviewer sub-agents beneath it, then a qa agent and an Explore sub-agent beneath it, both still running, with a live count and spend for the project.">
               <div class="fleetx-head">
                 <b>acme-api</b>
                 <span class="fleetx-path">~/code/acme-api</span>
@@ -113,29 +113,29 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
                 <span class="fleetx-cost">$2.75</span>
               </div>
               <ul class="fleetx-lanes">
-                <li class="fleetx-lane" style="--start:2%;--w:64%;--d:0s">
+                <li class="fleetx-lane" data-agent-color="green" style="--start:2%;--w:64%;--d:0s">
                   <span class="fleetx-name">developer</span>
                   <span class="fleetx-track"><i class="fleetx-bar"></i></span>
                 </li>
-                <li class="fleetx-lane fleetx-lane--sub" style="--start:6%;--w:14%;--d:0.45s">
+                <li class="fleetx-lane fleetx-lane--sub" data-agent-color="none" style="--start:6%;--w:14%;--d:0.45s">
                   <span class="fleetx-name">&#8627; Explore</span>
                   <span class="fleetx-track"><i class="fleetx-bar"></i></span>
                 </li>
-                <li class="fleetx-lane fleetx-lane--sub" style="--start:22%;--w:16%;--d:0.9s">
+                <li class="fleetx-lane fleetx-lane--sub" data-agent-color="none" style="--start:22%;--w:16%;--d:0.9s">
                   <span class="fleetx-name">&#8627; Plan</span>
                   <span class="fleetx-track"><i class="fleetx-bar"></i></span>
                 </li>
-                <li class="fleetx-lane fleetx-lane--sub" style="--start:44%;--w:22%;--d:1.35s">
-                  <span class="fleetx-name">&#8627; Code reviewer</span>
+                <li class="fleetx-lane fleetx-lane--sub" data-agent-color="red" style="--start:44%;--w:22%;--d:1.35s">
+                  <span class="fleetx-name">&#8627; adversarial-reviewer</span>
                   <span class="fleetx-track"><i class="fleetx-bar"></i></span>
                 </li>
-                <li class="fleetx-lane is-running" style="--start:70%;--w:28%;--d:1.8s">
+                <li class="fleetx-lane is-running" data-agent-color="yellow" style="--start:70%;--w:28%;--d:1.8s">
                   <span class="fleetx-name">qa</span>
-                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i><i class="fleetx-edge"></i></span>
                 </li>
-                <li class="fleetx-lane fleetx-lane--sub is-running" style="--start:76%;--w:18%;--d:2.25s">
+                <li class="fleetx-lane fleetx-lane--sub is-running" data-agent-color="none" style="--start:76%;--w:18%;--d:2.25s">
                   <span class="fleetx-name">&#8627; Explore</span>
-                  <span class="fleetx-track"><i class="fleetx-bar"></i></span>
+                  <span class="fleetx-track"><i class="fleetx-bar"></i><i class="fleetx-edge"></i></span>
                 </li>
               </ul>
             </div>
@@ -273,35 +273,35 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
           <div class="org-tier">
             <span class="org-tier-label">Delivery</span>
             <div class="org-nodes">
-            <div class="org-node"><b>Analyst</b><span>reads the problem</span></div>
-            <div class="org-node"><b>Product Manager</b><span>owns the PRD</span></div>
-            <div class="org-node"><b>Designer</b><span>owns the UX spec</span></div>
-            <div class="org-node"><b>Architect</b><span>names the verification command</span></div>
-            <div class="org-node"><b>Product Owner</b><span>accepts the work</span></div>
-            <div class="org-node"><b>Scrum Master</b><span>shards the plan</span></div>
-            <div class="org-node"><b>Developer</b><span>writes the test first</span></div>
-            <div class="org-node"><b>QA</b><span>judges, cannot edit</span></div>
-            <div class="org-node"><b>DevOps</b><span>owns the ops plan</span></div>
-            <div class="org-node"><b>Adversarial Reviewer</b><span>read-only, defaults to block</span></div>
+            <div class="org-node" data-role="analyst" data-agent-color="purple"><b>Analyst</b><span>reads the problem</span></div>
+            <div class="org-node" data-role="product-manager" data-agent-color="purple"><b>Product Manager</b><span>owns the PRD</span></div>
+            <div class="org-node" data-role="designer" data-agent-color="pink"><b>Designer</b><span>owns the UX spec</span></div>
+            <div class="org-node" data-role="architect" data-agent-color="blue"><b>Architect</b><span>names the verification command</span></div>
+            <div class="org-node" data-role="product-owner" data-agent-color="cyan"><b>Product Owner</b><span>accepts the work</span></div>
+            <div class="org-node" data-role="scrum-master" data-agent-color="cyan"><b>Scrum Master</b><span>shards the plan</span></div>
+            <div class="org-node" data-role="developer" data-agent-color="green"><b>Developer</b><span>writes the test first</span></div>
+            <div class="org-node" data-role="qa" data-agent-color="yellow"><b>QA</b><span>judges, cannot edit</span></div>
+            <div class="org-node" data-role="devops" data-agent-color="orange"><b>DevOps</b><span>owns the ops plan</span></div>
+            <div class="org-node" data-role="adversarial-reviewer" data-agent-color="red"><b>Adversarial Reviewer</b><span>read-only, defaults to block</span></div>
             </div>
           </div>
           <div class="org-tier">
             <span class="org-tier-label">Around it</span>
             <div class="org-nodes">
-            <div class="org-node"><b>Security Engineer</b><span>threat surface</span></div>
-            <div class="org-node"><b>Site Reliability Engineer</b><span>runbooks</span></div>
-            <div class="org-node"><b>Release Manager</b><span>what ships, when</span></div>
-            <div class="org-node"><b>Engineering Manager</b><span>load and sequencing</span></div>
-            <div class="org-node"><b>Support Engineer</b><span>what users hit</span></div>
-            <div class="org-node"><b>Solutions Engineer</b><span>what buyers need</span></div>
+            <div class="org-node" data-role="security-engineer" data-agent-color="red"><b>Security Engineer</b><span>threat surface</span></div>
+            <div class="org-node" data-role="sre" data-agent-color="orange"><b>Site Reliability Engineer</b><span>runbooks</span></div>
+            <div class="org-node" data-role="release-manager" data-agent-color="orange"><b>Release Manager</b><span>what ships, when</span></div>
+            <div class="org-node" data-role="engineering-manager" data-agent-color="cyan"><b>Engineering Manager</b><span>load and sequencing</span></div>
+            <div class="org-node" data-role="support-engineer" data-agent-color="yellow"><b>Support Engineer</b><span>what users hit</span></div>
+            <div class="org-node" data-role="solutions-engineer" data-agent-color="blue"><b>Solutions Engineer</b><span>what buyers need</span></div>
             </div>
           </div>
           <div class="org-tier">
             <span class="org-tier-label">Advisory</span>
             <div class="org-nodes">
-            <div class="org-node"><b>Brainstorming Architect</b><span>shapes the idea</span></div>
-            <div class="org-node"><b>Technical Writer</b><span>owns the docs</span></div>
-            <div class="org-node"><b>Advisor</b><span>second opinion</span></div>
+            <div class="org-node" data-role="brainstorming-architect" data-agent-color="blue"><b>Brainstorming Architect</b><span>shapes the idea</span></div>
+            <div class="org-node" data-role="technical-writer" data-agent-color="purple"><b>Technical Writer</b><span>owns the docs</span></div>
+            <div class="org-node" data-role="advisor" data-agent-color="purple"><b>Advisor</b><span>second opinion</span></div>
             </div>
           </div>
         </div>

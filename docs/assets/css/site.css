@@ -38,6 +38,16 @@
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --wrap: 1180px;
+  /* Agent colors, by role: held to src/data/agentColors.ts by scripts/agentColorsSite.test.ts */
+  --agent-red: #cf222e;
+  --agent-blue: #0969da;
+  --agent-green: #1a7f37;
+  --agent-yellow: #9a6700;
+  --agent-purple: #8250df;
+  --agent-orange: #bc4c00;
+  --agent-pink: #bf3989;
+  --agent-cyan: #1b7c83;
+  --agent-none: #59636e;
   color-scheme: light;
 }
 
@@ -67,6 +77,15 @@
     --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.045) inset, 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 32px -16px rgba(0, 0, 0, 0.6);
     --shot-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 30px 60px -20px rgba(0, 0, 0, 0.8), 0 80px 140px -40px rgba(0, 0, 0, 0.9);
     --code-bg: #15161b;
+    --agent-red: #ff7b72;
+    --agent-blue: #58a6ff;
+    --agent-green: #3fb950;
+    --agent-yellow: #d29922;
+    --agent-purple: #bc8cff;
+    --agent-orange: #f0883e;
+    --agent-pink: #f778ba;
+    --agent-cyan: #39c5cf;
+    --agent-none: #9da5ae;
     color-scheme: dark;
   }
 }
@@ -95,8 +114,39 @@
   --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.045) inset, 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 32px -16px rgba(0, 0, 0, 0.6);
   --shot-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 30px 60px -20px rgba(0, 0, 0, 0.8), 0 80px 140px -40px rgba(0, 0, 0, 0.9);
   --code-bg: #15161b;
+  --agent-red: #ff7b72;
+  --agent-blue: #58a6ff;
+  --agent-green: #3fb950;
+  --agent-yellow: #d29922;
+  --agent-purple: #bc8cff;
+  --agent-orange: #f0883e;
+  --agent-pink: #f778ba;
+  --agent-cyan: #39c5cf;
+  --agent-none: #9da5ae;
   color-scheme: dark;
 }
+
+/* The terminal surfaces are dark in both themes, so they take the dark agent colors. */
+.feat-media--live, .feat-media.tree {
+  --agent-red: #ff7b72;
+  --agent-blue: #58a6ff;
+  --agent-green: #3fb950;
+  --agent-yellow: #d29922;
+  --agent-purple: #bc8cff;
+  --agent-orange: #f0883e;
+  --agent-pink: #f778ba;
+  --agent-cyan: #39c5cf;
+  --agent-none: #9da5ae;
+}
+[data-agent-color="red"] { --agent-c: var(--agent-red); }
+[data-agent-color="blue"] { --agent-c: var(--agent-blue); }
+[data-agent-color="green"] { --agent-c: var(--agent-green); }
+[data-agent-color="yellow"] { --agent-c: var(--agent-yellow); }
+[data-agent-color="purple"] { --agent-c: var(--agent-purple); }
+[data-agent-color="orange"] { --agent-c: var(--agent-orange); }
+[data-agent-color="pink"] { --agent-c: var(--agent-pink); }
+[data-agent-color="cyan"] { --agent-c: var(--agent-cyan); }
+[data-agent-color="none"] { --agent-c: var(--agent-none); }
 
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -299,6 +349,7 @@ code { font-size: .9em; }
 .feat-media.tree pre { margin: 0; padding: 22px 22px; font: 13px/1.7 var(--mono); color: #d7d8de; white-space: pre; overflow-x: auto; }
 .feat-media.tree .c { color: #7b7d88; }
 .feat-media.tree .h { color: #ffb27a; }
+.feat-media.tree [data-agent-color] { color: var(--agent-c); }
 .feat-card .more { display: inline-block; margin-top: 14px; font-weight: 600; font-size: 15px; }
 .new-strip {
   display: flex; align-items: flex-start; gap: 14px; margin-top: 16px; padding: 18px 22px; border-radius: 16px;
@@ -862,6 +913,9 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
   transition: border-color .2s, transform .2s;
 }
 .org-node:hover { border-color: var(--line-3); transform: translateY(-2px); }
+/* After :hover, so the hover border never replaces the role's. */
+.org-node[data-agent-color] { border-left: 3px solid var(--agent-c); }
+.org-node[data-agent-color]:hover { border-left-color: var(--agent-c); }
 .org-node b { display: block; font-size: 14px; color: var(--text); margin-bottom: 3px; }
 .org-node span { display: block; font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
 
@@ -909,7 +963,7 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
 .fleetx-path { color: #8b8f9a; }
 .fleetx-run { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: #8b8f9a; }
 .fleetx-run i {
-  width: 6px; height: 6px; border-radius: 50%; background: #3fb950;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--agent-none);
   animation: fleetx-pulse 2s ease-in-out infinite;
 }
 .fleetx-cost { color: #8b8f9a; font-variant-numeric: tabular-nums; }
@@ -923,13 +977,19 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
 .fleetx-bar {
   position: absolute; top: 0; height: 100%;
   left: var(--start); width: var(--w);
-  border-radius: 3px; background: #6e40c9;
+  border-radius: 3px; background: var(--agent-c);
   transform-origin: left center;
   transform: scaleX(0); opacity: 0;
   animation: fleetx-grow 9s cubic-bezier(.2, .7, .2, 1) var(--d) infinite;
 }
-.fleetx-lane:not(.fleetx-lane--sub) .fleetx-bar { background: #3d444d; }
-.fleetx-lane.is-running .fleetx-bar { background: #3fb950; }
+/* Color is the role; running is shape: a pulsing edge at the bar's open end.
+   fleetx-grow owns the bar's opacity, so status is never shown by opacity. */
+.fleetx-edge {
+  position: absolute; top: -2px; bottom: -2px; width: 3px; border-radius: 1px;
+  left: calc(var(--start) + var(--w) - 3px);
+  background: currentColor;
+  animation: fleetx-pulse 1.4s ease-in-out infinite;
+}
 
 @keyframes fleetx-grow {
   0%   { transform: scaleX(0); opacity: 0; }
@@ -945,6 +1005,7 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
 @media (prefers-reduced-motion: reduce) {
   .fleetx-bar { animation: none; transform: scaleX(1); opacity: 1; }
   .fleetx-run i { animation: none; }
+  .fleetx-edge { animation: none; }
 }
 
 @media (max-width: 560px) {
