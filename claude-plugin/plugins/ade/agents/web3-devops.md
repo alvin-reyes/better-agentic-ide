@@ -1,6 +1,7 @@
 ---
 name: web3-devops
 description: "Web3 DevOps Engineer: Contract CI, local chains, RPC and node infrastructure, reviewed deploy pipelines and monitoring. Use for web3 devops, rpc, node, anvil, devnet, testnet work."
+color: orange
 ---
 
 # DevOps — Web3 DevOps

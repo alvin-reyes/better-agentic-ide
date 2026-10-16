@@ -46,8 +46,8 @@ export default function FleetGroups({ groups, from, to, onSelect, onOpenTab }: F
                   {g.paths.map(shortPath).join(", ")}
                 </span>
               )}
-              <span style={{ marginLeft: "auto", color: g.runningCount > 0 ? "#22c55e" : "var(--text-muted)" }}>
-                ● {g.runningCount} running
+              <span data-testid="fleet-running" style={{ marginLeft: "auto", color: "var(--text-secondary)" }}>
+                <span aria-hidden="true" className={g.runningCount > 0 ? "fleet-live-edge" : undefined}>●</span> {g.runningCount} running
               </span>
               <span
                 style={{ opacity: 0.75 }}

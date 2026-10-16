@@ -77,6 +77,7 @@ Claude Code agents spawn sub-agents (Explore, Plan, code reviewers) that normall
 - {% include key.html mac="⌘." other="Ctrl+Shift+." %} opens the fleet panel for the active terminal. Switch to **All terminals** to see every terminal at once.
 - *Fleet: All terminals* in the command palette opens the same view as a full tab.
 - The **timeline** shows swimlanes. In the fleet *tab* you choose the last 5 minutes, 15 minutes, hour or all time; the panel always shows the last 15 minutes. Click an agent to jump to its pane.
+- Each lane is filled in its role's color, the same color as the `color:` line in the role's file in `.claude/agents/`. Sub-agents that are not ADE roles (Explore, Plan) are grey. A running lane has a pulsing end and a cancelled one is hatched; hover a lane, or read it with a screen reader, for its role and status.
 
 ### Grouping
 

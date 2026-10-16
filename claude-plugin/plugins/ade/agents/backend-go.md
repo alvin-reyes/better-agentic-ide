@@ -1,6 +1,7 @@
 ---
 name: backend-go
 description: "Senior Go Engineer: Idiomatic Go services and tools: clear packages, context-aware concurrency, table-driven tests. Use for go, golang, goroutine, channel, grpc, go service work."
+color: green
 ---
 
 # Developer — Go

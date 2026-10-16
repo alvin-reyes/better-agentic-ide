@@ -8,6 +8,7 @@
 import { AGENT_CATALOG, type CatalogAgent } from "../data/curatedAgents";
 import { getRole } from "../data/roles";
 import { getDomain } from "../data/domains";
+import { roleColor } from "../data/agentColors";
 import { composeRoleMarkdown } from "./agentComposition";
 
 export interface PluginFile {
@@ -63,9 +64,10 @@ const yaml = (s: string) => JSON.stringify(s);
 /** Engineers outside the Web3 category that also ship as sub-agents. */
 export const SUB_AGENT_IDS = new Set(["backend-go", "backend-rust"]);
 
-/** An agent as a Claude Code sub-agent file (frontmatter + role prompt). */
+/** An agent as a Claude Code sub-agent file (frontmatter, with its role's color, + role prompt). */
 export function agentMarkdown(p: CatalogAgent): string {
-  return `---\nname: ${p.id}\ndescription: ${yaml(`${p.name}: ${p.description}. Use for ${p.keywords.slice(0, 6).join(", ")} work.`)}\n---\n\n${rolePrompt(p)}\n`;
+  const color = roleColor(p.roleId);
+  return `---\nname: ${p.id}\ndescription: ${yaml(`${p.name}: ${p.description}. Use for ${p.keywords.slice(0, 6).join(", ")} work.`)}\n${color ? `color: ${color}\n` : ""}---\n\n${rolePrompt(p)}\n`;
 }
 
 function agentFile(p: CatalogAgent): PluginFile {

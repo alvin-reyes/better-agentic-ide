@@ -58,6 +58,14 @@ describe("a lane knows which role it is", () => {
     expect(lanes[0].roleId).toBe("qa");
   });
 
+  it("a plugin-namespaced agent type resolves to its role", () => {
+    // The ADE plugin's agents arrive as `ade:<profile id>`.
+    const roleOf = (agentType: string) => buildLanes([], [sub({ agentType })], {})[0].roleId;
+    expect(roleOf("ade:web3-auditor")).toBe("adversarial-reviewer");
+    expect(roleOf("Explore")).toBeNull();
+    expect(roleOf("foo:Explore")).toBeNull();
+  });
+
   it("leaves an unrecognised sub-agent type unattributed", () => {
     // Claude Code allows arbitrary sub-agent names; only the nineteen roles map.
     const lanes = buildLanes([], [sub({ agentType: "general-purpose" })], {});

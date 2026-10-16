@@ -3,6 +3,9 @@ import { render, screen, fireEvent, act, waitFor } from "@testing-library/react"
 import AgentPicker from "../AgentPicker";
 import { useTabStore } from "../../stores/tabStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { AGENT_CATEGORIES } from "../../data/curatedAgents";
+import { ROLES_FILTER } from "../../data/pickerItems";
+import { AGENT_COLOR_HEX } from "../../data/agentColors";
 
 // AgentPicker's mount effect calls invoke("check_command_exists", ...) for
 // each provider to detect installed CLIs. Outside a real Tauri runtime there
@@ -222,5 +225,51 @@ describe("AgentPicker", () => {
     });
     await clickRow("Auth Architect");
     await waitFor(() => expect(screen.queryByRole("alert")).toBe(null));
+  });
+
+  it("categories are neutral and role color is never text", async () => {
+    // jsdom reports a hex set in a style as rgb(...), so any literal color
+    // shows up as one or the other; the neutral styles use only var(...).
+    const literal = /#[0-9a-f]{3,8}\b|rgba?\(/i;
+    const rgb = (hex: string) =>
+      `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+    const green = rgb(AGENT_COLOR_HEX.green.dark);
+
+    await renderPicker();
+    for (const cat of [...AGENT_CATEGORIES, ROLES_FILTER]) {
+      const inactive = pill(cat);
+      expect(inactive.getAttribute("style") ?? "", `${cat} inactive`).not.toMatch(literal);
+      fireEvent.click(inactive);
+      const active = pill(cat);
+      expect(active.getAttribute("style") ?? "", `${cat} active`).not.toMatch(literal);
+      expect(active.style.color, `${cat} active text`).toBe("var(--text-primary)");
+      fireEvent.click(active);
+    }
+
+    // Row badges: the category label on each curated row and "Role" on the bare roles.
+    const badges = screen.getAllByText((_, el) =>
+      el?.tagName === "SPAN" && [...AGENT_CATEGORIES, "Role"].includes(el.textContent ?? "") && !el.closest("button"),
+    );
+    expect(badges.length).toBeGreaterThan(0);
+    for (const b of badges) expect(b.getAttribute("style") ?? "", b.textContent ?? "").not.toMatch(literal);
+
+    // The icon tile: bordered and tinted in the role's color, glyph in the theme's text color.
+    const row = screen.getByText("API Builder").closest("[data-testid='agent-row']") as HTMLElement;
+    const tile = row.querySelector("[data-testid='agent-tile']") as HTMLElement;
+    expect(tile.style.border).toBe(`1px solid ${green}`);
+    expect(tile.style.color).toBe("var(--text-primary)");
+
+    // "Run X in": the name in the theme's text color, the role color only as a dot.
+    await act(async () => {
+      fireEvent.click(screen.getByText("API Builder"));
+      await flush();
+    });
+    const where = screen.getByRole("group", { name: "Where to run API Builder" });
+    const name = where.querySelector(".agent-where__title b") as HTMLElement;
+    expect(name.textContent).toBe("API Builder");
+    expect(name.style.color).toBe("var(--text-primary)");
+    const dot = where.querySelector("[data-testid='agent-where-dot']") as HTMLElement;
+    expect(dot.style.backgroundColor).toBe(green);
+    expect(dot.style.width).toBe("8px");
   });
 });

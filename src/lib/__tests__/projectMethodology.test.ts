@@ -12,7 +12,7 @@ describe("ADE methodology", () => {
       "product-manager", "architect", "designer", "scrum-master", "developer", "qa", "devops", "adversarial-reviewer",
     ]);
     for (const f of methodologyFiles("demo").filter((f) => f.path.startsWith(".claude/agents/"))) {
-      expect(f.content).toMatch(/^---\nname: [a-z-]+\ndescription: ".+"\n(tools: .+\n)?(model: .+\n)?---\n/);
+      expect(f.content).toMatch(/^---\nname: [a-z-]+\ndescription: ".+"\n(tools: .+\n)?(model: .+\n)?(color: [a-z]+\n)?---\n/);
     }
   });
 
@@ -248,7 +248,7 @@ describe("agents by project type", () => {
     expect(c[0].group).toBe("Core");
     expect(c.some((a) => a.group === "Architects")).toBe(false);
     expect(new Set(c.map((a) => a.file.path)).size).toBe(c.length);
-    for (const a of c) expect(a.file.content).toMatch(/^---\nname: [a-z0-9-]+\ndescription: ".+"\n(tools: .+\n)?(model: .+\n)?---\n/);
+    for (const a of c) expect(a.file.content).toMatch(/^---\nname: [a-z0-9-]+\ndescription: ".+"\n(tools: .+\n)?(model: .+\n)?(color: [a-z]+\n)?---\n/);
   });
 });
 
@@ -294,5 +294,38 @@ describe("core role files per methodology", () => {
     expect(RULES_MD.endsWith(rule)).toBe(true);
     // New projects get it with the rest of the rules.
     expect(methodologyFiles("demo").find((f) => f.path === ".ade/rules.md")!.content).toBe(RULES_MD);
+  });
+});
+
+describe("agent colors in generated files", () => {
+  const frontmatterKeys = (content: string) =>
+    content.split("---\n")[1].trimEnd().split("\n").map((line) => line.split(":")[0]);
+
+  it("role files carry their role's color last in the frontmatter", async () => {
+    const { roleColor } = await import("../../data/agentColors");
+    for (const methodology of ["v6", "v4"] as const) {
+      const files = methodologyFiles("demo", [], methodology).filter((f) => f.path.startsWith(".claude/agents/"));
+      expect(files).toHaveLength(8);
+      for (const f of files) {
+        const id = f.path.replace(/^\.claude\/agents\/|\.md$/g, "");
+        const name = roleColor(id);
+        expect(name, id).not.toBeNull();
+        const keys = frontmatterKeys(f.content);
+        expect(keys[keys.length - 1], `${methodology} ${id}`).toBe("color");
+        expect(f.content, `${methodology} ${id}`).toMatch(new RegExp(`\\ncolor: ${name}\\n---\\n`));
+      }
+    }
+  });
+
+  it("profile files carry their role's color", async () => {
+    const { agentCatalog } = await import("../projectMethodology");
+    const { AGENT_CATALOG } = await import("../../data/curatedAgents");
+    const { roleColor } = await import("../../data/agentColors");
+    const profiles = agentCatalog().filter((a) => a.group !== "Core");
+    expect(profiles.length).toBeGreaterThan(0);
+    for (const a of profiles) {
+      const roleId = AGENT_CATALOG.find((p) => p.id === a.id)!.roleId;
+      expect(a.file.content, a.id).toMatch(new RegExp(`^---\\nname: ${a.id}\\ndescription: ".+"\\ncolor: ${roleColor(roleId)}\\n---\\n`));
+    }
   });
 });

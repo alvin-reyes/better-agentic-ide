@@ -1,4 +1,7 @@
+import type { CSSProperties } from "react";
 import type { FleetLane } from "../../stores/fleetStore";
+import { roleColor, roleColorHex } from "../../data/agentColors";
+import { getRole } from "../../data/roles";
 
 interface FleetTimelineProps {
   lanes: FleetLane[];
@@ -14,14 +17,41 @@ interface FleetTimelineProps {
   cwd?: string | null;
 }
 
-const STATUS_COLOR: Record<FleetLane["status"], string> = {
-  running: "#22c55e",
-  completed: "#4a4a4a",
-  cancelled: "#ef4444",
-};
-
 function pct(n: number): string {
   return `${Math.round(n * 1000) / 10}%`;
+}
+
+/**
+ * The bar's name for a tooltip and a screen reader: who, which role, what, and
+ * its status last, since status is not carried by color.
+ */
+function laneName(lane: FleetLane): string {
+  const role = lane.roleId ? getRole(lane.roleId)?.title : undefined;
+  return [lane.label, role ?? "not an ADE role", lane.detail, lane.status].filter(Boolean).join(", ");
+}
+
+/**
+ * Fill in the role's color (ADR 0007). Status is shape, not color: a running
+ * bar has a square, pulsing open end; a cancelled one is hatched in the role's
+ * color over the bare track; a completed one is solid and rounded.
+ */
+function barFill(lane: FleetLane): CSSProperties {
+  const hex = roleColorHex(lane.roleId);
+  // Longhands only, the same four for every status, so a lane that changes
+  // status never mixes a shorthand with its longhands.
+  const openEnd = lane.status === "running" ? 0 : "3px";
+  const corners: CSSProperties = {
+    borderTopLeftRadius: "3px", borderBottomLeftRadius: "3px",
+    borderTopRightRadius: openEnd, borderBottomRightRadius: openEnd,
+  };
+  if (lane.status === "cancelled") {
+    return {
+      ...corners,
+      backgroundColor: "transparent",
+      backgroundImage: `repeating-linear-gradient(135deg, ${hex} 0 3px, transparent 3px 6px)`,
+    };
+  }
+  return { ...corners, backgroundColor: hex };
 }
 
 /** Clamp a lane to the visible range and express it as left/width percentages. */
@@ -115,6 +145,29 @@ export default function FleetTimeline({ lanes, from, to, onSelect, cwd }: FleetT
           {group.lanes.map((lane) => {
             const { left, width } = geometry(lane, from, to);
             const isSub = lane.kind === "subagent";
+            const name = laneName(lane);
+            const barProps = {
+              "data-testid": "lane-bar",
+              "data-lane-id": lane.id,
+              "data-agent-color": roleColor(lane.roleId) ?? "none",
+              "data-status": lane.status,
+              title: name,
+              "aria-label": name,
+            };
+            const barStyle: CSSProperties = {
+              position: "absolute", top: 0, bottom: 0, left, width,
+              ...barFill(lane),
+            };
+            const liveEdge = lane.status === "running" && (
+              <span
+                data-testid="lane-live-edge"
+                className="fleet-live-edge"
+                style={{
+                  position: "absolute", top: 0, bottom: 0, right: 0, width: "3px",
+                  backgroundColor: "var(--text-primary)",
+                }}
+              />
+            );
             return (
               <div
                 key={lane.id}
@@ -124,28 +177,54 @@ export default function FleetTimeline({ lanes, from, to, onSelect, cwd }: FleetT
               >
                 <div style={{
                   width: "120px", flexShrink: 0, paddingLeft: isSub ? "14px" : 0,
-                  fontSize: isSub ? "10px" : "11px",
-                  color: isSub ? "var(--text-muted)" : "var(--text-secondary)",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }} title={lane.detail || lane.label}>
-                  {isSub ? `↳ ${lane.label}` : lane.label}
+                  display: "flex", alignItems: "center", gap: "6px",
+                }}>
+                  <span
+                    data-testid="lane-dot"
+                    aria-hidden="true"
+                    style={{
+                      width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0,
+                      backgroundColor: roleColorHex(lane.roleId),
+                    }}
+                  />
+                  <span
+                    data-testid="lane-label"
+                    title={lane.detail || lane.label}
+                    style={{
+                      fontSize: isSub ? "10px" : "11px",
+                      color: isSub ? "var(--text-muted)" : "var(--text-secondary)",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isSub ? `↳ ${lane.label}` : lane.label}
+                  </span>
                 </div>
                 <div style={{
                   flex: 1, height: isSub ? "9px" : "14px",
                   backgroundColor: "var(--bg-primary)", borderRadius: "3px", position: "relative",
                 }}>
-                  <div
-                    data-testid="lane-bar"
-                    data-lane-id={lane.id}
-                    onClick={() => onSelect?.(lane)}
-                    title={`${lane.label}${lane.detail ? ` — ${lane.detail}` : ""}`}
-                    style={{
-                      position: "absolute", top: 0, bottom: 0, left, width,
-                      backgroundColor: isSub ? "#a855f7" : STATUS_COLOR[lane.status],
-                      opacity: lane.status === "completed" ? 0.55 : 0.85,
-                      borderRadius: "3px", cursor: onSelect ? "pointer" : "default",
-                    }}
-                  />
+                  {onSelect ? (
+                    // A native button: Tab reaches it and Enter or Space
+                    // activate it as a click. No key handler, or a key press
+                    // would select twice.
+                    <button
+                      type="button"
+                      className="fleet-lane-bar"
+                      {...barProps}
+                      onClick={() => onSelect(lane)}
+                      style={{
+                        ...barStyle,
+                        border: "none", padding: 0, margin: 0, font: "inherit",
+                        appearance: "none", cursor: "pointer",
+                      }}
+                    >
+                      {liveEdge}
+                    </button>
+                  ) : (
+                    <div role="img" {...barProps} style={barStyle}>
+                      {liveEdge}
+                    </div>
+                  )}
                 </div>
               </div>
             );

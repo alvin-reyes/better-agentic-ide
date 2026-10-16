@@ -1,5 +1,6 @@
 import { AGENT_CATALOG } from "./curatedAgents";
 import { ROLES, type Role } from "./roles";
+import { roleColorHex } from "./agentColors";
 
 /**
  * One selectable row in AgentPicker.
@@ -19,6 +20,7 @@ export interface PickerItem {
   name: string;
   description: string;
   icon: string;
+  /** The role's dark hex (ADR 0007): fills, borders and dots only, never text. */
   color: string;
   /** The domain's category for a curated pair, or "Role" for a bare role. */
   badge: string;
@@ -29,9 +31,6 @@ export interface PickerItem {
 
 /** Pill value that filters the list down to the bare roles. */
 export const ROLES_FILTER = "Roles";
-
-/** Bare roles are shown in one neutral colour; the curated pairs keep theirs. */
-const ROLE_COLOR = "#8b949e";
 
 /**
  * A short description for a role row. The mission's opening paragraph already
@@ -69,7 +68,7 @@ export const ROLE_ITEMS: PickerItem[] = ROLES.map((role) => ({
   name: role.title,
   description: roleSummary(role),
   icon: roleInitials(role.title),
-  color: ROLE_COLOR,
+  color: roleColorHex(role.id),
   badge: "Role",
   roleId: role.id,
   group: "role",
