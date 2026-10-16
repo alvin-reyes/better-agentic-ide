@@ -46,9 +46,12 @@
     - **`Refresh {keys, out, reply}`** reads `peers_of` for every key in `keys` that has an entry, in one store call. Then, in one lock step, it installs all of those sets and delivers `out`, the handler's messages, and replies. Delivering `out` in this step means a peer told about a change (for example `paired`) can already route over it when it reacts.
     - **`Leave {id, conn, busy}`** is sent from `Leave::drop`, which needs no await to send on an unbounded channel. What it does depends on the connection:
       - **A connection the task joined:**
-        1. One store call runs 7a's leave call (`touch` and `peers_of`) and 5a's `on_leave`. The handler is told whether `conn` is still the current connection.
+        1. One store call runs 5a's `on_leave`, then 7a's fan-out read (`peers_of`). The handler is told whether `conn` is still the current connection.
         2. If `on_leave` returned `refresh` keys, a second store call in the same step reads them.
         3. In one lock step, the task clears presence and fans it out, installs any refreshed sets, delivers `on_leave`'s `out`, and removes the entry if `conn` is still current.
+        4. Last, a separate store call writes 7a's `touch`. Presence never waits on it, and its failure is only logged (7a's order and the owner's 2026-10-16 ruling: only a failed `peers_of` suppresses presence).
+
+      The leaving connection's sender is removed synchronously in `Leave::drop`, as 7a built it. Like 7a's `deliver` removing a sender whose queue is full, this is an exception to "only the peer task writes the peer sets": it removes a sender, never a set.
       - **A connection the task never joined** (its join failed, or it was cancelled before the join was handled): the step does nothing.
 
       The task keeps the id of each joined connection until that connection's `Leave` arrives. The `Leave` guard is created before the `Join` is sent, with no await between, so a connection's `Leave` is always queued after its `Join`.
@@ -56,7 +59,7 @@
     1. **Name both keys.** A store write that adds or removes a pair is followed, after it commits, by a `Refresh` naming both of the pair's keys. The handler returns them in `refresh`.
     2. **Include the sender.** A handler writes only pairs that include the key of the device whose message it is handling. 5a's writes do: confirm, unpair and ack all come from a party.
     3. **Recover from a failed call.** If a `control` call returns `Err` (a store error, or a panic reported as `Failed("store_task")`), the connection sends `Refresh [sender]`, waits for it, then closes with 1011. Any write that committed before the failure involved the sender (rule 2), so the sender's set is re-read. The two-sided check below then refuses every pair that write removed.
-       The same holds for a leave: if a replaced connection's `touch` or `on_leave` call fails and another connection of that key is current, the `Leave` step re-reads the current connection's set (closing it with 1011 if that read fails) and skips the presence fan-out. Any read error fails the whole `Refresh` and closes every key it names with 1011.
+       The same holds for a leave: if a replaced connection's `on_leave` call fails and another connection of that key is current, the `Leave` step re-reads the current connection's set (closing it with 1011 if that read fails). The fan-out is skipped only if `peers_of` itself fails; a failed `touch` never affects it. Any read error fails the whole `Refresh` and closes every key it names with 1011.
     4. **`on_login` writes no pairs.** It only re-sends `paired`.
     5. **`on_leave` returns its own `refresh`,** which the Leave step handles as above.
     6. **Cleanup sends nothing** (see the routing rule).
@@ -85,7 +88,7 @@
     - A failed `Join` read closes the connection with 1011. No `welcome` is sent, and nothing is installed (7a's rule).
     - A failed `Refresh` read, whether a handler's or a Leave step's, closes each device it was refreshing with 1011, using 7a's `STORE_ERROR_CODE` and `STORE_ERROR_REASON`. In the same step their sets become unroutable. Each device recovers by logging in again, which reads afresh. Keeping the old set is never allowed, because a refresh usually follows an unpair.
     - A failed `control` call follows writers' rule 3.
-    - A failed Leave call follows 7a's rule: presence and the entry are cleared, and no presence is fanned out.
+    - A failed Leave `peers_of` read follows 7a's rule: presence and the entry are cleared, and no presence is fanned out. A failed `touch` at leave is only logged, and presence is still fanned out (owner, 2026-10-16).
     - Cleanup errors are 7a's alone; the routing rule keeps routing safe after a partial cleanup.
   - **Liveness.**
     - A request is a message, which the peer task completes whether or not its sender is still waiting. Cancelling a connection can't lose a change.
@@ -124,13 +127,13 @@
     - **Measured:**
       - A `peers_of` read, one at a time through `spawn_blocking`, took 8.0–8.6 µs.
       - The same read, with 64 in flight at once, took 11.4–11.9 µs, because the concurrent reads only contend for the same lock.
-      - A Leave step (a committed `touch`, then a read) took about 44 µs.
+      - A Leave step's store work (a read, plus the committed `touch` that now follows the fan-out) took about 44 µs.
     - **Estimated:**
       - macOS `fsync` doesn't flush the disk cache, so a commit on a Fly volume may take 1–5 ms.
       - A mass disconnect of 10,000 devices then costs about 10–50 s of serialized leaves, during which joins and refreshes wait.
       - Joins and refreshes alone (reads only) run at about 10,000 a second, allowing for a 10× slower CPU.
     - **Why the task adds no store work:** those writes were already serialized by the store lock, so the old design paid the same cost. The task only turns the lock's arbitrary order (a `std` mutex isn't fair) into first-come, first-served.
-    - **A follow-up:** measure a Leave step on the Fly volume once the relay is deployed (devops). If it is slow, move `touch` out of the Leave step, and leave the fan-out read in.
+    - **A follow-up:** measure a Leave step on the Fly volume once the relay is deployed (devops). The `touch` already follows the fan-out, so a slow commit delays later steps but never presence. If it is slow, move `touch` out of the peer task entirely.
   - **A slow or held store holds up every join, leave and refresh.** It never holds up routing, pings, `/health` or `/metrics`. A device waiting on its own `Refresh` reads no pongs until the reply comes.
   - **A bounded staleness window remains.** Between a write's commit and the handling of its `Refresh`, routing may still use the old sets. The writer's own next message, and every message the handler sent about the change, come after the `Refresh` is installed.
   - **A `welcome` can name a pair that was deleted while the join was in progress.** The device catches up at its next `welcome`, as the spec allows for an offline peer, and routing over the pair is refused at once.
