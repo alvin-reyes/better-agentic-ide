@@ -3,7 +3,7 @@ title: 'Noise IK sessions in Rust and TypeScript'
 type: 'feature'
 ticket: '4'
 created: '2026-10-16'
-status: 'in-progress'
+status: 'done'
 baseline_revision: '57b626b9adbaf30a243b4801eee250b3a4db1970'
 route: 'full'
 route_source: 'auto'
@@ -436,3 +436,16 @@ Through all of this the current session stays usable until a newer one completes
 - Diff `relay/Cargo.lock`: only `snow 0.10.0` is new. Neither `package-lock.json` changed.
 - `relay/protocol/src/` has one envelope type, `routed.rs`, and no second parser.
 - `git diff --stat` touches no `relay/server`, `src-tauri` or `mobile/package*.json`.
+
+**Results** (QA, 2026-10-16, HEAD a55247a, after the code-review fix round; the five lines run one after another in the worktree):
+- `cd relay && cargo test` -- pass, exit 0. `relay-protocol` 61 passed (`vectors_cacophony_ik` and the ten `vectors_noise_*` tests); `relay-core` 59 passed (was 55); e2e 14, cli 9 and 2, server 1 and 5; 0 failed.
+- `npx tsc --noEmit` -- exit 0, clean.
+- `npm test` -- exit 0, first run: 144 files, 1620 tests passed, 0 failed (was 1619). The developer's flaky `BoardPanel.test.tsx` failure did not occur in this run, so there was nothing to rerun.
+- `cd src-tauri && cargo test` -- 456 passed, 0 failed, 1 ignored (plus 12 and 2). No src-tauri change.
+- `cd mobile && npx tsc --noEmit && npx jest` -- tsc clean; jest 6/6 passed.
+- Manual checks: `git diff 9f40261..a55247a` touches no `src-tauri`, `relay/server`, `package.json` or lockfile. The fix round changed only `.ade/context/remote-protocol.md`, `.ade/knowledge/developer.md`, this plan, `session.ts`, `session.test.ts`, `schedule.json` and `relay/core/src/session.rs`; `Cargo.lock`, `Cargo.toml` and the npm files are untouched since 2a41d1a, so `snow 0.10.0` is still the only new package. The contract is in `.ade/context/` (Sessions section, updated for the new hanging deadline and pull to refresh).
+- Criteria to tests: unchanged from the first round (AC1 `vectors_cacophony_ik` and `vectors_noise_*` with the TypeScript "Noise IK vectors" describe; AC2, AC3, AC4, AC5, AC6, AC7 as the named `session::tests` and `session.test.ts` tests), with these fix-round changes:
+  - AC4/AC5 (hanging deadline scales to the round trip): new `a_constant_12_s_round_trip_gives_at_most_2_starts_and_converges` / `AC4: a constant 12 s round trip gives at most 2 starts and converges`, plus the new `schedule.json` script of the same name and "a fired hanging trigger is never armed again".
+  - AC5 (pull to refresh with or without a session): renamed `the_phone_starts_on_mac_online_foreground_rehandshake_and_pull_to_refresh` / `AC5: each trigger starts a handshake; pull to refresh with or without a session`, and the "each trigger" script in `schedule.json`.
+  - AC2 (atomic store): new `the_hs1_counter_store_checks_and_records_in_one_atomic_step` (8 threads), beside `two_mac_machines_sharing_a_store_accept_a_replayed_hs1_once_at_most`.
+  - New, outside the AC list: `begin_refuses_a_counter_above_2_pow_53_minus_1_as_an_error_not_a_stale_token`, `unpaired_keys_leave_no_state_on_the_mac`.
