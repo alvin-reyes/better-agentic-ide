@@ -148,3 +148,13 @@ Ping uses WebSocket ping and pong frames, not JSON messages. iOS's WebSocket ans
 **Commands:**
 - `cd relay && cargo test` -- passes; the e2e tests for login and presence are listed by name
 - `npx tsc --noEmit`; `npm test`; `cd src-tauri && cargo test`; `cd mobile && npx tsc --noEmit && npx jest` -- unchanged and passing
+
+**Results (QA, 2026-10-16, HEAD f1c325c, PR #60):**
+- `cd relay && cargo test` -- pass. cli 9+2, core 20, e2e 14, protocol 13, server 1+5; 0 failed. e2e tests: both_log_in_and_see_each_other, a_close_is_seen_as_offline, a_client_that_stops_answering_pings_goes_offline, a_replayed_login_is_refused, a_login_signed_for_another_host_is_refused, a_phone_key_cannot_log_in_as_a_mac, an_unpaired_key_is_invisible_to_the_pair, plus health_answers_ok, a_new_login_replaces_the_old_connection, a_silent_client_is_refused_after_the_timeout, a_binary_first_frame_is_refused, a_first_frame_that_is_not_a_login_is_refused, a_login_with_another_version_is_refused, a_first_frame_over_64_kib_gets_no_welcome.
+- `npx tsc --noEmit` -- pass (exit 0).
+- `npm test` -- pass, 142 files, 1534/1534 tests. No failure seen on this run.
+- `cd src-tauri && cargo test` -- pass, 456 + 12 + 2 passed, 0 failed (1 ignored).
+- `cd mobile && npx tsc --noEmit && npx jest` -- pass, 1 suite, 2 tests.
+- Acceptance criteria to tests: AC1 both_log_in_and_see_each_other; AC2 a_close_is_seen_as_offline; AC3 a_client_that_stops_answering_pings_goes_offline; AC4 a_replayed_login_is_refused (4401 login_refused, no welcome); AC5 a_login_signed_for_another_host_is_refused (plus core a_login_for_another_host_is_refused); AC6 a_phone_key_cannot_log_in_as_a_mac (plus core a_role_is_fixed_on_first_login); AC7 an_unpaired_key_is_invisible_to_the_pair (plus core presence_goes_only_to_online_paired_peers).
+- Slice: the diff against main touches only relay/, .ade/context, the plan, deferred-work and two knowledge files; no src/ or src-tauri/ changes. The contract is recorded in `.ade/context/remote-protocol.md` (enc, login label, messages, role rule, presence, 4401 login_refused, unknown t, 64 KiB).
+- CI (`gh pr checks 60`): all 10 checks pass, including Relay, Mobile, Frontend, Backend on Linux, macOS and Windows.
