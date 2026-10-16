@@ -211,6 +211,16 @@ async fn a_replayed_login_is_refused() {
         Ok(Control::Welcome { .. })
     ));
 
+    // A second login on the authenticated connection is ignored, like any message the
+    // relay doesn't act on after login: no second welcome, no close.
+    first.send(Message::text(login.to_json())).await.unwrap();
+    assert!(
+        timeout(Duration::from_millis(300), raw_next(&mut first))
+            .await
+            .is_err(),
+        "the relay answered a second login"
+    );
+
     let (mut second, _) = raw_challenge(&r.url()).await;
     second.send(Message::text(login.to_json())).await.unwrap();
     assert_eq!(
@@ -312,4 +322,140 @@ async fn health_answers_ok() {
         .unwrap();
     assert!(body.starts_with("HTTP/1.1 200"), "{body}");
     assert!(body.ends_with("ok"), "{body}");
+}
+
+/// Reads until the socket closes or fails, panicking on a `welcome`. Returns the close
+/// code and reason if a close frame came.
+async fn no_welcome(ws: &mut Raw) -> Option<(u16, String)> {
+    loop {
+        match timeout(WAIT, ws.next())
+            .await
+            .expect("the relay ends it in time")
+        {
+            Some(Ok(Message::Text(text))) => {
+                if let Ok(Control::Welcome { .. }) = Control::from_json(&text) {
+                    panic!("got a welcome");
+                }
+            }
+            Some(Ok(Message::Close(frame))) => {
+                return frame.map(|f| (u16::from(f.code), f.reason.to_string()))
+            }
+            Some(Ok(_)) => continue,
+            None | Some(Err(_)) => return None,
+        }
+    }
+}
+
+fn login_refused() -> Result<Control, (u16, String)> {
+    Err((4401, "login_refused".to_string()))
+}
+
+#[tokio::test]
+async fn a_silent_client_is_refused_after_the_timeout() {
+    let r = relay().await;
+    let (mut ws, _) = raw_challenge(&r.url()).await;
+    let started = tokio::time::Instant::now();
+    assert_eq!(raw_next(&mut ws).await, login_refused());
+    assert!(started.elapsed() >= Duration::from_millis(900));
+}
+
+#[tokio::test]
+async fn a_binary_first_frame_is_refused() {
+    let r = relay().await;
+    let (mut ws, _) = raw_challenge(&r.url()).await;
+    ws.send(Message::binary(vec![1, 2, 3])).await.unwrap();
+    assert_eq!(raw_next(&mut ws).await, login_refused());
+}
+
+#[tokio::test]
+async fn a_login_with_another_version_is_refused() {
+    let r = relay().await;
+    let (mut ws, c) = raw_challenge(&r.url()).await;
+    let text = signed_login(&r.phone, &c, "localhost", Role::Phone)
+        .to_json()
+        .replace("\"v\":1", "\"v\":2");
+    ws.send(Message::text(text)).await.unwrap();
+    assert_eq!(raw_next(&mut ws).await, login_refused());
+}
+
+#[tokio::test]
+async fn a_first_frame_that_is_not_a_login_is_refused() {
+    let r = relay().await;
+    let (mut ws, _) = raw_challenge(&r.url()).await;
+    let presence = Control::Presence {
+        peer: id_of(&r.mac),
+        online: true,
+    };
+    ws.send(Message::text(presence.to_json())).await.unwrap();
+    assert_eq!(raw_next(&mut ws).await, login_refused());
+}
+
+#[tokio::test]
+async fn a_first_frame_over_64_kib_gets_no_welcome() {
+    let r = relay().await;
+    let (mut ws, c) = raw_challenge(&r.url()).await;
+    // A good login, padded with JSON whitespace to 65 KiB: only the size limit stops it.
+    let json = signed_login(&r.phone, &c, "localhost", Role::Phone).to_json();
+    let padded = format!("{{{}{}", " ".repeat(65 * 1024), &json[1..]);
+    let _ = ws.send(Message::text(padded)).await;
+    if let Some(close) = no_welcome(&mut ws).await {
+        assert_ne!(close.0, 1000, "{close:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_new_login_replaces_the_old_connection() {
+    let r = relay().await;
+    let mut mac = Client::connect(&r.url(), Role::Mac, &r.mac).await.unwrap();
+    next(&mut mac).await; // welcome
+    let mut first = Client::connect(&r.url(), Role::Phone, &r.phone)
+        .await
+        .unwrap();
+    next(&mut first).await; // welcome
+    next(&mut mac).await; // phone online
+
+    let mut second = Client::connect(&r.url(), Role::Phone, &r.phone)
+        .await
+        .unwrap();
+    assert!(matches!(next(&mut second).await, Event::Welcome { .. }));
+    let phone = id_of(&r.phone);
+    assert_eq!(
+        next(&mut mac).await,
+        Event::Presence {
+            peer: phone,
+            online: false
+        }
+    );
+    assert_eq!(
+        next(&mut mac).await,
+        Event::Presence {
+            peer: phone,
+            online: true
+        }
+    );
+
+    // The first connection's stream ends.
+    let ended = timeout(WAIT, async {
+        loop {
+            match first.next_event().await {
+                Err(_) | Ok(Event::Closed { .. }) => break,
+                Ok(_) => continue,
+            }
+        }
+    })
+    .await;
+    assert!(ended.is_ok(), "the replaced connection stayed open");
+
+    // Closing it gives the Mac no extra offline; the second phone stays online.
+    first.close().await;
+    let quiet = Duration::from_millis(300);
+    let (heard_by_mac, heard_by_phone) = tokio::join!(
+        timeout(quiet, mac.next_event()),
+        timeout(quiet, second.next_event())
+    );
+    assert!(heard_by_mac.is_err(), "the Mac heard {heard_by_mac:?}");
+    assert!(
+        heard_by_phone.is_err(),
+        "the phone heard {heard_by_phone:?}"
+    );
 }

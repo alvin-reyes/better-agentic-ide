@@ -86,13 +86,14 @@ impl LoginError {
 }
 
 /// The host name as a login signs it: lower-cased, with an IPv6 literal's surrounding
-/// `[` `]` removed. The client applies it to the host it dialled, and the relay to each
-/// configured host before comparing.
+/// `[` `]` removed and one trailing dot dropped. The client applies it to the host it
+/// dialled, and the relay to each configured host before comparing.
 pub fn signed_host(host: &str) -> String {
     let host = host
         .strip_prefix('[')
         .and_then(|h| h.strip_suffix(']'))
         .unwrap_or(host);
+    let host = host.strip_suffix('.').unwrap_or(host);
     host.to_ascii_lowercase()
 }
 
@@ -349,6 +350,8 @@ mod tests {
         assert_eq!(signed_host("[::1]"), "::1");
         assert_eq!(signed_host("[FE80::1]"), "fe80::1");
         assert_eq!(signed_host("localhost"), "localhost");
+        assert_eq!(signed_host("relay.fly.dev."), "relay.fly.dev");
+        assert_eq!(signed_host("Relay.Fly.Dev."), "relay.fly.dev");
     }
 
     #[test]
@@ -357,6 +360,30 @@ mod tests {
         let mut c = Challenge::new();
         let msg = login(&k, &c, "relay.fly.dev", Role::Mac);
         assert!(verify_login(&mut c, &msg, &["Relay.Fly.Dev".to_string()]).is_ok());
+    }
+
+    #[test]
+    fn a_login_signed_for_a_trailing_dot_host_is_accepted() {
+        let mut c = Challenge::new();
+        let msg = login(&key(1), &c, &signed_host("relay.fly.dev."), Role::Mac);
+        assert!(verify_login(&mut c, &msg, &["relay.fly.dev".to_string()]).is_ok());
+    }
+
+    #[test]
+    fn an_id_that_is_not_a_curve_point_is_refused() {
+        // y = 2 has no x on Ed25519, so these bytes don't decompress.
+        let mut id = [0u8; 32];
+        id[0] = 2;
+        let mut c = Challenge::new();
+        let msg = Control::Login {
+            id: Bytes(id),
+            role: Role::Mac,
+            sig: Bytes([0; 64]),
+        };
+        assert_eq!(
+            verify_login(&mut c, &msg, &hosts()),
+            Err(LoginError::BadKey)
+        );
     }
 
     #[test]
@@ -548,5 +575,53 @@ mod tests {
         );
         assert!(p.leave(phone, 2, &dir.peers_of(&phone)).is_empty());
         assert_eq!(p.conn_of(&phone), Some(3));
+    }
+
+    #[test]
+    fn presence_reaches_every_paired_peer() {
+        let (mac, phone_a, phone_b) = (Bytes([1; 32]), Bytes([2; 32]), Bytes([3; 32]));
+        let dir = InMemoryPairs::new();
+        dir.add(Bytes([8; 16]), mac, phone_a);
+        dir.add(Bytes([9; 16]), mac, phone_b);
+        let mut p = Presence::new();
+        p.login(phone_a, 1, &dir.peers_of(&phone_a));
+        p.login(phone_b, 2, &dir.peers_of(&phone_b));
+
+        assert_eq!(
+            p.login(mac, 3, &dir.peers_of(&mac)),
+            vec![
+                (phone_a, presence(mac, true)),
+                (phone_b, presence(mac, true))
+            ]
+        );
+        assert_eq!(
+            p.leave(mac, 3, &dir.peers_of(&mac)),
+            vec![
+                (phone_a, presence(mac, false)),
+                (phone_b, presence(mac, false))
+            ]
+        );
+    }
+
+    #[test]
+    fn two_pairs_with_the_same_peer_are_told_once() {
+        let (mac, phone) = (Bytes([1; 32]), Bytes([2; 32]));
+        let dir = InMemoryPairs::new();
+        dir.add(Bytes([8; 16]), mac, phone);
+        dir.add(Bytes([9; 16]), mac, phone);
+        let mut p = Presence::new();
+        p.login(mac, 1, &dir.peers_of(&mac));
+
+        match p.welcome(dir.peers_of(&phone)) {
+            Control::Welcome { pairs, online } => {
+                assert_eq!(pairs.len(), 2);
+                assert_eq!(online, vec![mac]);
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            p.login(phone, 2, &dir.peers_of(&phone)),
+            vec![(mac, presence(phone, true))]
+        );
     }
 }

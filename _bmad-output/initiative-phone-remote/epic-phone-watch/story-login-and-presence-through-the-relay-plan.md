@@ -3,7 +3,7 @@ title: 'Login and presence through the relay'
 type: 'feature'
 ticket: '2'
 created: '2026-10-16'
-status: 'built'
+status: 'in-progress'
 baseline_revision: 'dc8700325218901b62336d291f6fa8880585edf3'
 route: 'full'
 route_source: 'auto'
@@ -40,6 +40,7 @@ context:
 - Ping interval and timeout are injectable, so tests can use short times.
 - The relay logs no message contents, only counts and error codes.
 - Decision (owner, 2026-10-16): a refused login is signalled by closing the WebSocket with code 4401 and reason `login_refused`. No `welcome` is sent, and nothing says which check failed.
+- Decision (owner, 2026-10-16, after the PR #60 review): a control message with `v: 1` and an unknown `t` is ignored by devices and by the relay, and recorded as such in remote-protocol.md.
 - Decision (owner, 2026-10-16): the plan is kept whole at about 1,700 tokens. It is one goal, and a split would leave a relay that nobody logs in to.
 
 **Never:**
@@ -62,9 +63,9 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `relay/Cargo.toml` and the crate manifests -- add workspace dependencies: `tokio`, `axum` (ws), `tokio-tungstenite` (client), `ed25519-dalek` (with `rand_core`), `rand`, `serde`, `serde_json` and `base64`. Every version must be at least two weeks old, and `Cargo.lock` is updated.
-- [ ] `relay/protocol` -- add `enc(label, fields)` and the `LOGIN_LABEL` constant. Add serde types for `challenge`, `login`, `welcome` and `presence`, with base64url bytes and `v: 1`. Unit tests: `enc` layout; JSON round trip of each message; a message with `v` ≠ 1 is rejected.
-- [ ] `relay/core` -- add the following pieces:
+- [x] `relay/Cargo.toml` and the crate manifests -- add workspace dependencies: `tokio`, `axum` (ws), `tokio-tungstenite` (client), `ed25519-dalek` (with `rand_core`), `rand`, `serde`, `serde_json` and `base64`. Every version must be at least two weeks old, and `Cargo.lock` is updated.
+- [x] `relay/protocol` -- add `enc(label, fields)` and the `LOGIN_LABEL` constant. Add serde types for `challenge`, `login`, `welcome` and `presence`, with base64url bytes and `v: 1`. Unit tests: `enc` layout; JSON round trip of each message; a message with `v` ≠ 1 is rejected.
+- [x] `relay/core` -- add the following pieces:
   - `Challenge::new()`;
   - `verify_login(challenge, login, hosts) -> Result<Identity, LoginError>`;
   - a `DeviceRoles` registry that fixes a role on first login;
@@ -78,10 +79,10 @@ context:
   - a reused challenge;
   - a role switch refused;
   - presence fan-out going only to paired peers.
-- [ ] `relay/server` (lib + bin) -- add `serve(config) -> (addr, handle)`. `Config` holds the listen address, the hosts, the ping interval and timeout, and an `Arc<dyn PairDirectory>`. The server answers `GET /` with a WebSocket upgrade and `/health` with `200 ok`. Per connection it sends the challenge, waits for the login, sends the welcome, then sends presence and pings. The bin reads `RELAY_LISTEN` and `RELAY_HOSTS` (comma-separated).
-- [ ] `relay/cli` (lib + bin) -- add `Client::connect(url, role, signing_key)`, which signs over the host it dialled. Add `next_event()`, which yields welcome and presence. The bin takes `--url`, `--role`, and `--key-file`; the key file is created if it's missing.
-- [ ] `relay/e2e/tests/e2e.rs` -- remove `e2e_placeholder` and add the tests listed under Acceptance Criteria, against `serve()` on `127.0.0.1:0` with hosts `["localhost"]` and a pair seeded in the in-memory directory.
-- [ ] `.ade/context/remote-protocol.md` -- record:
+- [x] `relay/server` (lib + bin) -- add `serve(config) -> (addr, handle)`. `Config` holds the listen address, the hosts, the ping interval and timeout, and an `Arc<dyn PairDirectory>`. The server answers `GET /` with a WebSocket upgrade and `/health` with `200 ok`. Per connection it sends the challenge, waits for the login, sends the welcome, then sends presence and pings. The bin reads `RELAY_LISTEN` and `RELAY_HOSTS` (comma-separated).
+- [x] `relay/cli` (lib + bin) -- add `Client::connect(url, role, signing_key)`, which signs over the host it dialled. Add `next_event()`, which yields welcome and presence. The bin takes `--url`, `--role`, and `--key-file`; the key file is created if it's missing.
+- [x] `relay/e2e/tests/e2e.rs` -- remove `e2e_placeholder` and add the tests listed under Acceptance Criteria, against `serve()` on `127.0.0.1:0` with hosts `["localhost"]` and a pair seeded in the in-memory directory.
+- [x] `.ade/context/remote-protocol.md` -- record:
   - the `enc` encoding;
   - the login label;
   - the four messages and their field encodings;
@@ -100,7 +101,22 @@ context:
 
 ## Implementation Notes
 
+- 2026-10-16, PR #60 review round:
+  - **Tests added.** e2e: the refusal paths (silence until the login timeout, a binary first frame, a `v:2` login, a non-login first frame, a 65 KiB first frame), replacement of a live connection, and a second login on an authenticated connection being ignored. core: an `id` off the curve (`BadKey`), a Mac with two phones, two pairs with the same peer. Most of these pass on the earlier code: they close gaps a mutation run found. Red first: the 65 KiB frame, ping-setting validation, trailing-dot hosts, unknown `t` (protocol and CLI), the CLI's early close, and key-file mode.
+  - **Server.**
+    - The guard `Leave` runs sender removal, leave and fan-out on drop, and re-queries `peers_of` at leave.
+    - Queues are bounded at 64; a full queue drops that device.
+    - Each send is bounded by the pong deadline, and messages are limited to 64 KiB.
+    - `serve()` refuses unless `0 < ping_interval < ping_timeout`, and its handle returns the serve result.
+  - **Binary.** `RELAY_HOSTS` is required and checked for bare names. Non-Unicode values exit 2. A stopped server exits 1.
+  - **Host rule.** One trailing dot is dropped.
+  - **Unknown `t`.** It is ignored per the owner's decision, with `DecodeError::UnknownType` in `relay-protocol`.
+  - **CLI.** `close()` waits at most 5 s. A close that comes before the challenge is returned as `Closed`. The key file is written via temp + rename, and an open mode is refused.
+  - **Records.** All of it is in `.ade/context/remote-protocol.md`. The deferred "leave uses the peer list taken at login" entry is removed.
+
 ## Plan Change Log
+
+- 2026-10-16, PR #60 review (three lenses, findings in the session's pr60-review.json). The owner approved a fix round on the same branch. It adds tests for the refusal paths, multi-peer presence and replacement; a send timeout and a bounded queue; the 64 KiB limit before login; re-querying peers at leave; validated `RELAY_HOSTS` and ping settings; the unknown-`t` rule; and the smaller CLI and bin fixes. KEEP: the core/server split, the `gone` deadline, the host normalisation, and every existing e2e test.
 
 ## Review Triage Log
 

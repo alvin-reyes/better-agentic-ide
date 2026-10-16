@@ -98,6 +98,9 @@ pub enum Control {
     Presence { peer: DeviceKey, online: bool },
 }
 
+/// Every `t` in `Control`, so an unknown one can be told apart from a malformed one.
+const KNOWN_TYPES: [&str; 4] = ["challenge", "login", "welcome", "presence"];
+
 #[derive(Serialize, Deserialize)]
 struct Envelope<T> {
     v: u8,
@@ -112,6 +115,8 @@ pub enum DecodeError {
     Malformed(serde_json::Error),
     /// The frame carries a `v` other than 1.
     Version(u64),
+    /// A `v: 1` frame whose `t` this side doesn't know. Devices and the relay ignore it.
+    UnknownType(String),
 }
 
 impl std::fmt::Display for DecodeError {
@@ -119,6 +124,7 @@ impl std::fmt::Display for DecodeError {
         match self {
             DecodeError::Malformed(e) => write!(f, "malformed control message: {e}"),
             DecodeError::Version(v) => write!(f, "unsupported version {v}"),
+            DecodeError::UnknownType(_) => write!(f, "unknown message type"),
         }
     }
 }
@@ -138,12 +144,18 @@ impl Control {
     /// Reads a JSON text frame, refusing any `v` other than 1.
     pub fn from_json(text: &str) -> Result<Control, DecodeError> {
         #[derive(Deserialize)]
-        struct VersionOnly {
+        struct Head {
             v: u64,
+            t: Option<String>,
         }
-        let head: VersionOnly = serde_json::from_str(text).map_err(DecodeError::Malformed)?;
+        let head: Head = serde_json::from_str(text).map_err(DecodeError::Malformed)?;
         if head.v != u64::from(VERSION) {
             return Err(DecodeError::Version(head.v));
+        }
+        if let Some(t) = head.t {
+            if !KNOWN_TYPES.contains(&t.as_str()) {
+                return Err(DecodeError::UnknownType(t));
+            }
         }
         let env: Envelope<Control> = serde_json::from_str(text).map_err(DecodeError::Malformed)?;
         Ok(env.msg)
@@ -259,12 +271,56 @@ mod tests {
     }
 
     #[test]
+    fn an_unknown_type_is_told_apart_from_a_malformed_message() {
+        let text = "{\"v\":1,\"t\":\"from_the_future\",\"x\":[1,2]}";
+        match Control::from_json(text) {
+            Err(DecodeError::UnknownType(t)) => assert_eq!(t, "from_the_future"),
+            other => panic!("{other:?}"),
+        }
+        // A known type with bad fields is still malformed.
+        let bad = "{\"v\":1,\"t\":\"presence\",\"peer\":\"AAAA\",\"online\":true}";
+        assert!(matches!(
+            Control::from_json(bad),
+            Err(DecodeError::Malformed(_))
+        ));
+        // An unknown type under another version is a version error.
+        let v2 = "{\"v\":2,\"t\":\"from_the_future\"}";
+        assert!(matches!(
+            Control::from_json(v2),
+            Err(DecodeError::Version(2))
+        ));
+    }
+
+    #[test]
     fn bytes_of_the_wrong_length_are_rejected() {
         let text = "{\"v\":1,\"t\":\"challenge\",\"c\":\"AAAA\"}";
         assert!(matches!(
             Control::from_json(text),
             Err(DecodeError::Malformed(_))
         ));
+    }
+
+    #[test]
+    fn known_types_match_the_enum() {
+        let all = [
+            Control::Challenge { c: Bytes([0; 32]) },
+            Control::Login {
+                id: Bytes([0; 32]),
+                role: Role::Mac,
+                sig: Bytes([0; 64]),
+            },
+            Control::Welcome {
+                pairs: vec![],
+                online: vec![],
+            },
+            Control::Presence {
+                peer: Bytes([0; 32]),
+                online: true,
+            },
+        ];
+        for (msg, t) in all.iter().zip(KNOWN_TYPES) {
+            assert!(msg.to_json().contains(&format!("\"t\":\"{t}\"")), "{t}");
+        }
     }
 
     #[test]

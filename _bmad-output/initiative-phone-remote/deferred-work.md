@@ -16,6 +16,3 @@
 - source_plan: `_bmad-output/initiative-phone-remote/epic-phone-watch/story-login-and-presence-through-the-relay-plan.md`
   summary: A connection replaced by a newer login of the same device is dropped without a close frame. Define a close code for "replaced" in remote-protocol.md and add an e2e test for replacement (story 7, AC 5).
   evidence: Review of story 2. `connection` ends the old loop when its sender is dropped and returns without `Message::Close`. The spec and plan define no signal, and replacement is unit-tested only in core.
-- source_plan: `_bmad-output/initiative-phone-remote/epic-phone-watch/story-login-and-presence-through-the-relay-plan.md`
-  summary: The relay's leave presence uses the peer list taken at login. Once pairs change at runtime (stories 5a and 7), a leave must fan out to the device's current peers.
-  evidence: Review of story 2. `connection` calls `peers_of` once before its loop and reuses it at leave. That is harmless while pairs are seeded before startup.
