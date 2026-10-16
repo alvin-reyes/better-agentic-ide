@@ -13,7 +13,9 @@ pub const VERSION: u8 = 1;
 mod enc;
 mod labels;
 mod names;
+mod noise;
 mod qr;
+mod routed;
 mod sas;
 mod seal;
 mod sign;
@@ -23,7 +25,12 @@ mod vectors;
 pub use enc::{dec, enc};
 pub use labels::*;
 pub use names::{clean_name, name_from_bytes};
+pub use noise::{
+    noise_prologue, read_hs1, FrameError, HandshakeError, Hs1Read, Initiator, Opened, Session,
+    StaticKeypair, HS1_LEN, HS2_LEN, MAX_COUNTER, MAX_PLAINTEXT, NONCE_CEILING, SESSION_ID_LEN,
+};
 pub use qr::{build_pair_code, parse_pair_code, PairCode, PairCodeError};
+pub use routed::{Routed, RoutedKind};
 pub use sas::{sas_code, SasInputs};
 pub use seal::{open, pair_keys, seal, PairKeys, NONCE_LEN, TAG_LEN};
 pub use sign::{sign, verify};

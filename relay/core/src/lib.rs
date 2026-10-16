@@ -3,11 +3,21 @@
 //! Story 2: login, the pair directory and presence. Story 7a: the clock, and the
 //! storage contract with admission over the stored role and the cleanup cutoff. All of
 //! it is pure: `relay-server` does the I/O and asks this crate for every decision.
+//!
+//! Story 4: the Noise session machines and their store traits (`session`). Their store
+//! error is exported as `SessionStoreError`, since `StoreError` is 7a's.
 
 pub mod clock;
+mod session;
 pub mod store;
 
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use session::{
+    next_counter_value, Hs1Counters, LastSent, MacAction, MacSessions, MemoryHs1Counters,
+    MemoryLastSent, MemoryPairedStatics, PairedStatics, PhoneAction, PhoneSession, SendError,
+    StoreError as SessionStoreError, Trigger, HANGING_MS, MAX_OUTSTANDING, MAX_SESSION_AGE_MS,
+    OUTSTANDING_TTL_MS, RESTART_WINDOW_MS, RETRY_MS,
+};
 pub use store::{
     admit, cleanup_cutoff, Admit, CleanupCounts, DeviceRecord, PairRecord, Registered, Store,
     StoreCounts, StoreError,
