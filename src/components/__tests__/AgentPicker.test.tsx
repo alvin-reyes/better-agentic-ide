@@ -258,6 +258,8 @@ describe("AgentPicker", () => {
     const tile = row.querySelector("[data-testid='agent-tile']") as HTMLElement;
     expect(tile.style.border).toBe(`1px solid ${green}`);
     expect(tile.style.color).toBe("var(--text-primary)");
+    // API Builder is the first row, selected on open: its left border is the role color.
+    expect(row.style.borderLeft).toBe(`2px solid ${green}`);
 
     // "Run X in": the name in the theme's text color, the role color only as a dot.
     await act(async () => {
@@ -271,5 +273,14 @@ describe("AgentPicker", () => {
     const dot = where.querySelector("[data-testid='agent-where-dot']") as HTMLElement;
     expect(dot.style.backgroundColor).toBe(green);
     expect(dot.style.width).toBe("8px");
+
+    // The suggested-agent bar appears only for a task description; its badge is neutral too.
+    fireEvent.change(screen.getByPlaceholderText("Search agents or describe a task..."), {
+      target: { value: "set up docker containers for deploy" },
+    });
+    const suggested = screen.getByText(/Suggested:/).parentElement as HTMLElement;
+    const spans = [...suggested.querySelectorAll<HTMLElement>("span")];
+    expect(spans.some((sp) => AGENT_CATEGORIES.includes(sp.textContent as never)), "a category badge is shown").toBe(true);
+    for (const sp of spans) expect(sp.getAttribute("style") ?? "", sp.textContent ?? "").not.toMatch(literal);
   });
 });

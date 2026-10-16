@@ -137,13 +137,16 @@ describe("FleetTimeline agent colors", () => {
       lane({ id: "a1", roleId: "qa", label: "qa" }),
       lane({ id: "a2", roleId: "developer", label: "developer", paneId: "p2" }),
       lane({ id: "a3", roleId: null, label: "Explore", paneId: "p3" }),
+      lane({ id: "sub:s1", kind: "subagent", parentId: "a3", roleId: "qa", label: "qa" }),
     ];
     render(<FleetTimeline lanes={lanes} from={0} to={2000} />);
     const rows = screen.getAllByTestId("lane-row");
+    expect(rows.map((r) => r.getAttribute("data-kind"))).toEqual(["agent", "agent", "agent", "subagent"]);
     const expected = [
       ["yellow", AGENT_COLOR_HEX.yellow.dark],
       ["green", AGENT_COLOR_HEX.green.dark],
       ["none", NEUTRAL_HEX.dark],
+      ["yellow", AGENT_COLOR_HEX.yellow.dark],
     ] as const;
     rows.forEach((row, i) => {
       const [name, hex] = expected[i];
@@ -216,6 +219,11 @@ describe("FleetTimeline agent colors", () => {
     fireEvent.click(bar);
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(l);
+    // jsdom does not turn a key press into a click, so these reach only a key
+    // handler; there must be none, or a real browser would select twice.
+    fireEvent.keyDown(bar, { key: "Enter" });
+    fireEvent.keyDown(bar, { key: " " });
+    expect(onSelect).toHaveBeenCalledTimes(1);
     unmount();
 
     render(<FleetTimeline lanes={[l]} from={0} to={2000} />);

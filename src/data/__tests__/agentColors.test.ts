@@ -73,6 +73,20 @@ describe("the agent color map", () => {
     });
   });
 
+  it("pins the approved hexes", () => {
+    expect(AGENT_COLOR_HEX).toEqual({
+      red: { dark: "#ff7b72", light: "#cf222e" },
+      blue: { dark: "#58a6ff", light: "#0969da" },
+      green: { dark: "#3fb950", light: "#1a7f37" },
+      yellow: { dark: "#d29922", light: "#9a6700" },
+      purple: { dark: "#bc8cff", light: "#8250df" },
+      orange: { dark: "#f0883e", light: "#bc4c00" },
+      pink: { dark: "#f778ba", light: "#bf3989" },
+      cyan: { dark: "#39c5cf", light: "#1b7c83" },
+    });
+    expect(NEUTRAL_HEX).toEqual({ dark: "#9da5ae", light: "#59636e" });
+  });
+
   it("fills reach 3:1 on every app theme surface", () => {
     expect(themePresets.length).toBeGreaterThan(0);
     const fills = [...AGENT_COLOR_NAMES.map((n) => [n, AGENT_COLOR_HEX[n].dark] as const), ["neutral", NEUTRAL_HEX.dark] as const];
