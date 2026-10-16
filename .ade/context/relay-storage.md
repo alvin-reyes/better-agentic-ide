@@ -71,7 +71,10 @@ Story 5a extends the trait with what pairing needs.
 `relay_server::StoreHandle::call(|s| ...) -> Result<T, StoreError>` runs each call on
 `spawn_blocking`, so a held store lock never blocks a tokio worker (the bin is a plain
 `#[tokio::main]`, a single worker on a 1-vCPU machine). A panicked call is
-`Failed("store_task")`. `SqliteStore` is one `Mutex<Connection>`.
+`Failed("store_task")`. Each call is counted until its blocking work ends, even when the
+caller was cancelled, and `Relay::shutdown()` waits for the count to reach zero, so a
+relay that has shut down holds no reference to the store. `SqliteStore` is one
+`Mutex<Connection>`; it counts the calls waiting for it, so cleanup can hand it over.
 
 ## Cleanup rules
 
@@ -82,7 +85,10 @@ Story 5a extends the trait with what pairing needs.
   (1 h by default), and on `Relay::run_cleanup()`.
 - One run: first touch every online device to `now` in one transaction (a crash skips the
   leave that would have written `last_seen`). Then delete in **batches of 500 devices, one
-  transaction each**, so the lock is free between batches. Each batch picks its devices
+  transaction each**. After the touch and after each batch, the connection is **handed
+  over**: every call already waiting for it gets it before the next batch (`std::sync::
+  Mutex` is not fair, so simply unlocking isn't enough). Later arrivals don't extend the
+  wait. Each batch picks its devices
   again, and the delete itself re-applies the cutoff and the online list. It repeats until
   a batch deletes nothing. Pairs and push tokens go by `ON DELETE CASCADE`.
 - Cleanup sends nothing to a deleted device's online peers. They reconcile at their next
@@ -92,6 +98,7 @@ Story 5a extends the trait with what pairing needs.
 
 `CountingStore::new(Arc<dyn Store>)` wraps a store. `count(method)`; `fail(method)` /
 `heal(method)` make one method return `Failed("injected")` while the others still work;
-`hold()` / `release()` gate every call, and `waiting()` says how many are parked;
+`hold()` gates every call and `hold_only(method)` one method's calls, until `release()`;
+`waiting()` says how many are parked;
 `until(what, cond)` polls up to 5 s. Method names are the `Store` method names (`METHODS`).
 `CaptureLog` is a `LogSink` that keeps every rendered line.

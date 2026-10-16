@@ -54,6 +54,7 @@ context:
   - In `Authorization: Bearer <token>`, the scheme name matches in any letter case, and the token must match exactly.
   - Cleanup deletes in batches of 500 devices, one transaction per batch.
   - Ticket 7a keeps story 7's AC numbers, gaps included, and this plan's size is accepted.
+- **Decision (owner, 2026-10-16):** at leave, only a failed `peers_of` suppresses presence. If the `touch` (the `last_seen` write) fails but `peers_of` succeeds, the peers are still told the device is offline. This narrows "a leave that hits a store error sends no presence" above. Test: `a_failed_touch_at_leave_still_tells_peers`.
 
 **Never:**
 - Nothing from 7b: no limits, no routing, no `rate_limited`, `control_limited` or `rehandshake`, no 4409 or 4429 close, no 1009 close, and no client IP.
@@ -231,6 +232,15 @@ push_tokens(phone BLOB PRIMARY KEY REFERENCES devices ON DELETE CASCADE, token T
   - **Major 2.** `CountingStore` can fail one method at a time.
   - **Minors.** Exact values for `relay_devices` and `relay_online`. Each cleanup batch re-applies the cutoff. The stall test runs under a 5 s timeout.
 - **2026-10-16, from 7b's fourth review.** `CleanupCounts` gains `deleted_pairs`, read in each batch's transaction, so 7b can strip peer sets by pair id.
+- **2026-10-16, fix round after the code review of 5c877d6** (pass, with 6 minor findings):
+  1. The leave fans out from its `peers_of` read before it writes the `touch`, so offline presence no longer waits on a SQLite write.
+  2. Cleanup hands the connection over, fairly, to every call already waiting, after the touch and after each batch.
+  3. A test for the online-list exclusion in cleanup's delete.
+  4. A test for the `touch` at leave.
+  5. `shutdown()` also waits for store calls still in flight, a cancelled login's included, and tests pin the order.
+  6. The `/metrics` token is compared as SHA-256 digests, so its length doesn't leak through timing.
+
+  The owner's decision on a failed `touch` at leave is recorded in Boundaries.
 
 ## Verification
 
@@ -316,6 +326,22 @@ Each e2e test was then mutation-checked: break the code it guards, see it fail, 
 - `cargo tree -p relay-core -e normal` shows no `rusqlite`, `libsqlite3-sys`, `tokio` or `axum`.
 - `cargo tree -p relay-server -e normal,features -i rusqlite` shows 0.40.2 with feature `bundled`.
 - No `src/`, `src-tauri/`, `mobile/` or `packages/protocol` changes.
+
+**Fix round, 2026-10-16** (code review of 5c877d6: pass, with 6 minor findings):
+1. **Presence no longer waits on a write.** `Leave`'s task, now the `leave()` fn, makes two store calls: `peers_of`, then the fan-out, then `touch`. `a_client_that_stops_answering_pings_goes_offline` keeps its 1050 ms bound.
+   - New test: `a_leave_tells_peers_before_its_touch_write`. It holds `touch` with the new `CountingStore::hold_only`, and the offline must still arrive. It was red before the fix.
+2. **Cleanup hands the lock over fairly.** `SqliteStore` counts the calls that have asked for its connection and the calls that have got it. After the touch transaction and after each batch, `hand_over()` yields until every call that was already waiting has got the connection; later arrivals don't extend the wait.
+   - New test: `a_call_waiting_during_cleanup_gets_in_between_batches`, a unit test built on the review's probe. It is deterministic, not timed: the probe call is queued on the connection before cleanup starts, and reads the batch count while it holds the connection. It was red before the fix, on every run: "got in only after 21 of 21 batches". It is now 0 on 5 of 5 runs.
+   - The review's probe, run unchanged against the fix: 102,913 concurrent `device()` calls during a 1.86 s cleanup of 100,000 devices, with a worst wait of 32.7 ms.
+3. **The online-list exclusion is tested.** New test: `an_online_device_is_spared_even_when_the_touch_cannot_save_it`, where `now == cutoff`. It fails with both `NOT IN (… cleanup_online)` clauses removed, a mutant that the older online test survives.
+4. **The leave touch is tested.** New test: `a_leave_touches_last_seen`. It fails with `s.touch(&id, now)` replaced by `Ok(true)`.
+5. **The shutdown order is tested, and in-flight calls are waited for.** `StoreHandle::call` now counts each call on the relay's tracker until its blocking work ends, even when the caller was cancelled. It drops its store reference before the count, and the connection and leave tasks drop the hub before theirs.
+   - New test: `shutdown_waits_for_store_work_in_flight`. It covers two cases: a leave held at the gate, and a login cancelled mid-call. In each, `shutdown()` must not return until the gate is released, and afterwards only the test holds the store (`Arc::strong_count`).
+   - The leave case fails with `tasks.idle().await` removed. The login case was red before the fix.
+6. **The token's length no longer leaks.** `authorized` compares `Sha256::digest` of each token with `ct_eq`. `sha2` 0.10.9 is already in the lock file, and only a dependency edge was added.
+   - New test: `the_token_is_compared_as_sha256_digests`, a source guard in the style of `pty.rs`. Timing itself isn't asserted. It was red before the fix.
+
+**The owner's ruling.** New test: `a_failed_touch_at_leave_still_tells_peers`. It pins behaviour the code already had, so it passed at once. It fails against a mutant that returns early after a `touch` error.
 
 **Follow-ups, not done here:** none.
 

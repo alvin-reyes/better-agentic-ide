@@ -19,6 +19,7 @@ axum.workspace = true
 futures-util.workspace = true
 rusqlite.workspace = true
 subtle.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

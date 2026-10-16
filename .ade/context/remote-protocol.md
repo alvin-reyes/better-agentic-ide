@@ -231,9 +231,12 @@ and logs `login_store_error code=<code>`.
   then `online`; the old socket is dropped (no close code yet, story 7) and its later close
   is ignored.
 - A leave fans out to the device's peers as the pair directory lists them at that moment.
-  A leave also touches the device's `last_seen`. Both store calls run after the
-  connection ends, off the async workers. If `peers_of` fails, presence and the sender are
-  still cleared, but nobody is told (story 7a); the code is logged.
+  After the connection ends, off the async workers, a leave reads `peers_of`, fans the
+  offline out at once, and only then writes the device's `last_seen` (`touch`), so
+  presence never waits on a write. If `peers_of` fails, presence and the sender are still
+  cleared, but nobody is told (story 7a). **Decision (owner, 2026-10-16):** only a failed
+  `peers_of` suppresses presence; if the `touch` fails, the peers are still told the
+  device is offline. Either failure is logged as `leave_store_error code=<code>`.
 - Each device has a queue of 64 messages. A device whose queue is full, or whose socket
   send doesn't finish before its pong deadline, is dropped and counts as left.
 - `welcome` is sent before any presence on the same connection.
@@ -252,8 +255,9 @@ relay's storage, and `relay_server::SqliteStore` implements it (story 7a, see
 - `GET /metrics` (story 7a): counts only, Prometheus text format
   (`text/plain; version=0.0.4`). **404** when no token is configured; **401** (with
   `WWW-Authenticate: Bearer`) unless `Authorization: Bearer <token>` carries it. The scheme
-  name matches in any letter case (RFC 7235); the token must match exactly, compared in
-  constant time (`subtle`). Every line is a `# ` comment or matches
+  name matches in any letter case (RFC 7235); the token must match exactly. The SHA-256
+  digests of the given and the configured token are compared with `subtle`'s `ct_eq`, so
+  neither a matching prefix nor the token's length shows in the timing. Every line is a `# ` comment or matches
   `relay_[a-z_]+({[a-z_]+="[a-z_]+"})? [0-9]+`. Gauges: `relay_online`, `relay_devices`,
   `relay_pairs`, `relay_pairs_acked`, `relay_push_tokens`. Counters:
   `relay_logins_total{result="ok"|"refused"}` (refused = every 4401 close, a timeout
@@ -273,8 +277,9 @@ relay's storage, and `relay_server::SqliteStore` implements it (story 7a, see
   `0 < ping_interval < ping_timeout`, and a zero `cleanup_interval`.
 - `serve(Config) -> io::Result<relay_server::Relay>`. `Relay` has `addr`,
   `run_cleanup().await -> CleanupCounts`, `shutdown().await` (stop accepting, close every
-  connection, wait for each leave's store work and any running cleanup, then drop the
-  store), `abort()` (a simulated crash: no leave, no touch), and `wait().await` (for the
+  connection, wait for every leave, any running cleanup and every store call still
+  running, a cancelled login's included; when it returns, the relay holds no reference to
+  the store), `abort()` (a simulated crash: no leave, no touch), and `wait().await` (for the
   bin). `Config::new(listen, hosts, store)` defaults: ping 15 s / 30 s, `SystemClock`,
   `StderrLog`, no metrics token, cleanup every hour (first run one interval after start).
 - `relay-cli` bin: `--url`, `--role mac|phone`, `--key-file` (32-byte seed as unpadded

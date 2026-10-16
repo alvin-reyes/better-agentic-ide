@@ -2,7 +2,7 @@
 //!
 //! - `CountingStore` wraps a `Store`: it counts calls per method, can fail one method at
 //!   a time (`fail("register")` while `device` still succeeds), and has a gate that holds
-//!   every call until it is released.
+//!   every call (`hold`), or one method's calls (`hold_only`), until it is released.
 //! - `CaptureLog` keeps every log line the relay writes.
 
 #![allow(dead_code)]
@@ -38,8 +38,17 @@ pub const METHODS: [&str; 11] = [
 
 #[derive(Default)]
 struct Gate {
-    held: bool,
+    /// Every call waits.
+    all: bool,
+    /// Calls to these methods wait.
+    methods: HashSet<&'static str>,
     waiting: usize,
+}
+
+impl Gate {
+    fn holds(&self, method: &str) -> bool {
+        self.all || self.methods.contains(method)
+    }
 }
 
 /// A `Store` that counts, fails and holds calls on request.
@@ -87,12 +96,21 @@ impl CountingStore {
 
     /// Closes the gate: every call from now on waits until `release`.
     pub fn hold(&self) {
-        self.gate.lock().unwrap().held = true;
+        self.gate.lock().unwrap().all = true;
     }
 
-    /// Opens the gate.
+    /// Closes the gate for `method` only: its calls wait until `release`.
+    pub fn hold_only(&self, method: &str) {
+        let method = Self::known(method);
+        self.gate.lock().unwrap().methods.insert(method);
+    }
+
+    /// Opens the gate, for every method.
     pub fn release(&self) {
-        self.gate.lock().unwrap().held = false;
+        let mut gate = self.gate.lock().unwrap();
+        gate.all = false;
+        gate.methods.clear();
+        drop(gate);
         self.opened.notify_all();
     }
 
@@ -117,9 +135,9 @@ impl CountingStore {
     fn enter(&self, method: &'static str) -> Result<(), StoreError> {
         *self.calls.lock().unwrap().entry(method).or_default() += 1;
         let mut gate = self.gate.lock().unwrap();
-        if gate.held {
+        if gate.holds(method) {
             gate.waiting += 1;
-            while gate.held {
+            while gate.holds(method) {
                 gate = self.opened.wait(gate).unwrap();
             }
             gate.waiting -= 1;

@@ -3,6 +3,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use relay_core::StoreCounts;
+use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 /// The relay's counters. 7b adds its own.
@@ -65,8 +66,9 @@ pub fn render(counters: &Counters, online: usize, store: &StoreCounts) -> String
 }
 
 /// Whether an `Authorization` header carries `Bearer <token>`. The scheme name matches
-/// in any letter case (RFC 7235); the token must match exactly, compared in constant
-/// time.
+/// in any letter case (RFC 7235); the token must match exactly. The SHA-256 digests of
+/// the given and the configured token are compared in constant time, so neither the
+/// matching prefix nor the token's length shows in the timing.
 pub fn authorized(header: Option<&[u8]>, token: &str) -> bool {
     let Some(header) = header else {
         return false;
@@ -78,7 +80,9 @@ pub fn authorized(header: Option<&[u8]>, token: &str) -> bool {
     if !scheme.eq_ignore_ascii_case(b"bearer") {
         return false;
     }
-    bool::from(given.ct_eq(token.as_bytes()))
+    let given = Sha256::digest(given);
+    let token = Sha256::digest(token.as_bytes());
+    bool::from(given.as_slice().ct_eq(token.as_slice()))
 }
 
 #[cfg(test)]
@@ -174,6 +178,21 @@ mod tests {
         assert!(text.contains("# TYPE relay_online gauge"));
         assert!(text.contains("# TYPE relay_logins_total counter"));
         assert!(text.ends_with('\n'));
+    }
+
+    /// The token's length must not leak through timing: `ct_eq` on slices of different
+    /// lengths returns early, so the comparison is over fixed-length SHA-256 digests.
+    #[test]
+    fn the_token_is_compared_as_sha256_digests() {
+        let src = include_str!("metrics.rs");
+        let body = src
+            .split("pub fn authorized")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap();
+        assert!(body.contains("Sha256::digest(given)"), "{body}");
+        assert!(body.contains("Sha256::digest(token.as_bytes())"), "{body}");
+        assert!(!body.contains("given.ct_eq(token"), "{body}");
     }
 
     #[test]

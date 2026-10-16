@@ -807,3 +807,167 @@ async fn held_lock_body(store: Arc<CountingStore>) {
     let (_c, _, _) = timeout(WAIT, waiting).await.unwrap().unwrap();
     relay.shutdown().await;
 }
+
+// ---------------------------------------------------------------------------------------
+// Leave and shutdown (review fixes, 2026-10-16)
+// ---------------------------------------------------------------------------------------
+
+/// Seeds a Mac and a phone as a pair, registered now.
+fn seed_pair(
+    store: &CountingStore,
+    clock: &ManualClock,
+    pair_id: PairId,
+) -> (SigningKey, SigningKey) {
+    let (mac, phone) = (key(), key());
+    let now = clock.now_ms();
+    store.register(&id_of(&mac), Role::Mac, now).unwrap();
+    store.register(&id_of(&phone), Role::Phone, now).unwrap();
+    store
+        .insert_pair(&pair_record(pair_id, id_of(&mac), id_of(&phone), now))
+        .unwrap();
+    (mac, phone)
+}
+
+/// Offline presence fans out from the `peers_of` read, without waiting for the leave's
+/// `touch` write.
+#[tokio::test]
+async fn a_leave_tells_peers_before_its_touch_write() {
+    let db = Db::new();
+    let store = db.open();
+    let _release = Release(store.clone());
+    let clock = Arc::new(ManualClock::new());
+    let (mac, phone) = seed_pair(&store, &clock, Bytes([11; 16]));
+    let relay = start(store.clone(), clock, CaptureLog::new(), None).await;
+    let (mut mac_c, _, _) = login(relay.addr, Role::Mac, &mac).await;
+    let (phone_c, _, _) = login(relay.addr, Role::Phone, &phone).await;
+    next(&mut mac_c).await; // phone online
+
+    store.hold_only("touch");
+    phone_c.close().await;
+    assert_eq!(
+        next(&mut mac_c).await,
+        Event::Presence {
+            peer: id_of(&phone),
+            online: false
+        },
+        "the offline waited for the touch write"
+    );
+    store.until("the held touch", |s| s.waiting() >= 1).await;
+    store.release();
+    relay.shutdown().await;
+}
+
+/// Owner decision, 2026-10-16: only a failed `peers_of` suppresses presence at leave. A
+/// failed `touch` is logged, and the peers are still told.
+#[tokio::test]
+async fn a_failed_touch_at_leave_still_tells_peers() {
+    let db = Db::new();
+    let store = db.open();
+    let clock = Arc::new(ManualClock::new());
+    let log = CaptureLog::new();
+    let (mac, phone) = seed_pair(&store, &clock, Bytes([12; 16]));
+    let relay = start(store.clone(), clock, log.clone(), None).await;
+    let (mut mac_c, _, _) = login(relay.addr, Role::Mac, &mac).await;
+    let (phone_c, _, _) = login(relay.addr, Role::Phone, &phone).await;
+    next(&mut mac_c).await; // phone online
+
+    store.fail("touch");
+    phone_c.close().await;
+    assert_eq!(
+        next(&mut mac_c).await,
+        Event::Presence {
+            peer: id_of(&phone),
+            online: false
+        }
+    );
+    store
+        .until("the failed touch to be logged", |_| {
+            log.has("relay: leave_store_error code=injected")
+        })
+        .await;
+    relay.shutdown().await;
+}
+
+/// A leave writes `last_seen` = now.
+#[tokio::test]
+async fn a_leave_touches_last_seen() {
+    let db = Db::new();
+    let store = db.open();
+    let clock = Arc::new(ManualClock::new());
+    let phone = key();
+    let relay = start(store.clone(), clock.clone(), CaptureLog::new(), None).await;
+    let (phone_c, _, _) = login(relay.addr, Role::Phone, &phone).await;
+    let logged_in = clock.now_ms();
+    assert_eq!(
+        store.device(&id_of(&phone)).unwrap().unwrap().last_seen,
+        logged_in
+    );
+
+    clock.advance(DAY);
+    let left = clock.now_ms();
+    phone_c.close().await;
+    let id = id_of(&phone);
+    store
+        .until("last_seen to be the leave's time", |s| {
+            s.device(&id).unwrap().map(|d| d.last_seen) == Some(left)
+        })
+        .await;
+    relay.shutdown().await;
+}
+
+/// `shutdown()` waits for every store call in flight: a leave's, and a login's that the
+/// shutdown cancelled mid-call. Afterwards the relay holds no reference to the store.
+#[tokio::test]
+async fn shutdown_waits_for_store_work_in_flight() {
+    // A leave's store call, held at the gate.
+    let db = Db::new();
+    let store = db.open();
+    let _release = Release(store.clone());
+    let clock = Arc::new(ManualClock::new());
+    let relay = start(store.clone(), clock.clone(), CaptureLog::new(), None).await;
+    let (_phone_c, _, _) = login(relay.addr, Role::Phone, &key()).await;
+    store.hold();
+    let stopping = tokio::spawn(relay.shutdown());
+    store
+        .until("the leave at the gate", |s| s.waiting() >= 1)
+        .await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !stopping.is_finished(),
+        "shutdown returned before the leave's store work"
+    );
+    store.release();
+    timeout(WAIT, stopping).await.unwrap().unwrap();
+    assert_eq!(
+        Arc::strong_count(&store),
+        2,
+        "the relay still holds the store"
+    );
+
+    // A login's store call, in flight when shutdown cancels the login.
+    let db = Db::new();
+    let store = db.open();
+    let _release = Release(store.clone());
+    let relay = start(store.clone(), clock, CaptureLog::new(), None).await;
+    store.hold();
+    let addr = relay.addr;
+    let phone = key();
+    let _login =
+        tokio::spawn(async move { Client::connect(&url(addr), Role::Phone, &phone).await });
+    store
+        .until("the login at the gate", |s| s.waiting() >= 1)
+        .await;
+    let stopping = tokio::spawn(relay.shutdown());
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !stopping.is_finished(),
+        "shutdown returned before the login's store call"
+    );
+    store.release();
+    timeout(WAIT, stopping).await.unwrap().unwrap();
+    assert_eq!(
+        Arc::strong_count(&store),
+        2,
+        "the relay still holds the store"
+    );
+}

@@ -99,15 +99,21 @@ pub const MAX_MESSAGE: usize = 64 * 1024;
 const QUEUE: usize = 64;
 
 /// The store, called off the async workers: each call runs on `spawn_blocking`, so a
-/// held store lock never blocks a tokio worker.
+/// held store lock never blocks a tokio worker. Each call is counted until its blocking
+/// work ends, even if the caller is cancelled, so `Relay::shutdown` can wait for it.
 #[derive(Clone)]
 pub struct StoreHandle {
     store: Arc<dyn Store>,
+    tasks: Arc<Tracker>,
 }
 
 impl StoreHandle {
     pub fn new(store: Arc<dyn Store>) -> Self {
-        StoreHandle { store }
+        Self::tracked(store, Arc::new(Tracker::default()))
+    }
+
+    fn tracked(store: Arc<dyn Store>, tasks: Arc<Tracker>) -> Self {
+        StoreHandle { store, tasks }
     }
 
     /// Runs `f` on the store, on a blocking thread.
@@ -117,7 +123,16 @@ impl StoreHandle {
         T: Send + 'static,
     {
         let store = self.store.clone();
-        match tokio::task::spawn_blocking(move || f(&*store)).await {
+        let busy = self.tasks.enter();
+        let work = move || {
+            let result = f(&*store);
+            // The store reference goes before the count, so a relay that has shut down
+            // holds none.
+            drop(store);
+            drop(busy);
+            result
+        };
+        match tokio::task::spawn_blocking(work).await {
             Ok(result) => result,
             Err(_) => Err(StoreError::Failed("store_task")),
         }
@@ -155,7 +170,8 @@ impl Live {
     }
 }
 
-/// Counts the relay's running connections and leaves, so `shutdown` can wait for them.
+/// Counts the relay's running connections, leaves and store calls, so `shutdown` can
+/// wait for them.
 #[derive(Default)]
 struct Tracker {
     running: Mutex<usize>,
@@ -292,7 +308,8 @@ impl Relay {
     }
 
     /// Stops cleanly, in this order: stop accepting; close every connection; wait for
-    /// each leave's store work (and a running cleanup) to finish; then drop the store.
+    /// each leave, a running cleanup, and every store call still running (a cancelled
+    /// login's included) to finish; then drop the relay's last reference to the store.
     pub async fn shutdown(self) {
         let _ = self.stop.send(true);
         let _ = self.server.await;
@@ -324,13 +341,14 @@ pub async fn serve(config: Config) -> std::io::Result<Relay> {
     let listener = tokio::net::TcpListener::bind(config.listen).await?;
     let addr = listener.local_addr()?;
     let (stop_tx, stop_rx) = watch::channel(false);
+    let tasks = Arc::new(Tracker::default());
     let hub = Arc::new(Hub {
-        store: StoreHandle::new(config.store.clone()),
+        store: StoreHandle::tracked(config.store.clone(), tasks.clone()),
         config,
         live: Mutex::new(Live::default()),
         next_conn: AtomicU64::new(1),
         counters: Counters::default(),
-        tasks: Arc::new(Tracker::default()),
+        tasks,
         aborted: AtomicBool::new(false),
         stop: stop_rx.clone(),
     });
@@ -413,13 +431,16 @@ async fn upgrade(ws: WebSocketUpgrade, State(hub): State<Arc<Hub>>) -> impl Into
     ws.max_message_size(MAX_MESSAGE)
         .max_frame_size(MAX_MESSAGE)
         .on_upgrade(move |socket| async move {
-            let _busy = hub.tasks.enter();
+            let busy = hub.tasks.enter();
             let mut stop = hub.stop.clone();
             // Stopping drops the connection, and with it its leave guard.
             tokio::select! {
                 _ = connection(socket, hub.clone()) => {}
                 _ = stopped(&mut stop) => {}
             }
+            // The hub goes before the count, so a relay that has shut down holds none.
+            drop(hub);
+            drop(busy);
         })
 }
 
@@ -478,38 +499,45 @@ impl Drop for Leave {
         };
         let busy = hub.tasks.enter();
         runtime.spawn(async move {
-            let _busy = busy;
-            if hub.aborted() {
-                return;
-            }
-            let now = hub.config.clock.now_ms();
-            // Pairs can change while a device is online, so its peers are asked again.
-            let (touched, peers) = match hub
-                .store
-                .call(move |s| Ok((s.touch(&id, now), s.peers_of(&id))))
-                .await
-            {
-                Ok(both) => both,
-                Err(e) => (Err(e), Err(e)),
-            };
-            if hub.aborted() {
-                return;
-            }
-            if let Err(e) = touched {
-                hub.log(LogEvent::LeaveStoreError { code: e.code() });
-            }
-            let peers = peers.unwrap_or_else(|e| {
-                hub.log(LogEvent::LeaveStoreError { code: e.code() });
-                Vec::new()
-            });
-            // Presence is cleared whatever the store said; without peers, nobody is told.
-            let mut live = hub.live();
-            let out = live.presence.leave(id, conn, &peers);
-            live.deliver(out, &*hub.config.log);
-            let online = live.online();
-            drop(live);
-            hub.log(LogEvent::DeviceLeft { online });
+            leave(&hub, id, conn).await;
+            // The hub goes before the count, so a relay that has shut down holds none.
+            drop(hub);
+            drop(busy);
         });
+    }
+}
+
+/// A leave's work, off the connection: tell the peers, then write `last_seen`. The
+/// peers are read first and told at once, so presence never waits on a write.
+/// Only a failed `peers_of` keeps the peers from being told (owner decision,
+/// 2026-10-16); a failed `touch` is logged.
+async fn leave(hub: &Hub, id: DeviceKey, conn: ConnId) {
+    if hub.aborted() {
+        return;
+    }
+    let now = hub.config.clock.now_ms();
+    // Pairs can change while a device is online, so its peers are asked again.
+    let peers = hub.store.call(move |s| s.peers_of(&id)).await;
+    if hub.aborted() {
+        return;
+    }
+    let peers = peers.unwrap_or_else(|e| {
+        hub.log(LogEvent::LeaveStoreError { code: e.code() });
+        Vec::new()
+    });
+    // Presence is cleared whatever the store said; without peers, nobody is told.
+    let online = {
+        let mut live = hub.live();
+        let out = live.presence.leave(id, conn, &peers);
+        live.deliver(out, &*hub.config.log);
+        live.online()
+    };
+    hub.log(LogEvent::DeviceLeft { online });
+    if hub.aborted() {
+        return;
+    }
+    if let Err(e) = hub.store.call(move |s| s.touch(&id, now)).await {
+        hub.log(LogEvent::LeaveStoreError { code: e.code() });
     }
 }
 

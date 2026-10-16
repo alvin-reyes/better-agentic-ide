@@ -7,6 +7,7 @@
 //! (`ON DELETE CASCADE`). Errors carry only a code.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -102,6 +103,12 @@ fn role_of(text: &str) -> Result<Role, StoreError> {
 /// SQLite behind `relay_core::Store`.
 pub struct SqliteStore {
     conn: Mutex<Connection>,
+    /// Calls that have asked for `conn`, and calls that have got it. The difference is
+    /// how many are waiting; cleanup lets those in between its batches.
+    entered: AtomicU64,
+    acquired: AtomicU64,
+    /// Cleanup batches committed, ever.
+    batches: AtomicU64,
     /// Held for a whole cleanup, so two cleanups never share its temp tables.
     cleanup: Mutex<()>,
 }
@@ -135,12 +142,35 @@ impl SqliteStore {
         conn.execute_batch(CLEANUP_TABLES).map_err(code)?;
         Ok(SqliteStore {
             conn: Mutex::new(conn),
+            entered: AtomicU64::new(0),
+            acquired: AtomicU64::new(0),
+            batches: AtomicU64::new(0),
             cleanup: Mutex::new(()),
         })
     }
 
     fn conn(&self) -> MutexGuard<'_, Connection> {
-        self.conn.lock().unwrap_or_else(PoisonError::into_inner)
+        self.entered.fetch_add(1, Ordering::SeqCst);
+        let guard = self.conn.lock().unwrap_or_else(PoisonError::into_inner);
+        self.acquired.fetch_add(1, Ordering::SeqCst);
+        guard
+    }
+
+    /// Lets in every call that was already waiting for the connection, before the
+    /// caller takes it again. `std::sync::Mutex` is not fair: without this, a cleanup
+    /// that re-locks straight after a batch can keep a login waiting through every
+    /// batch. Calls that arrive later don't extend the wait.
+    fn hand_over(&self) {
+        let queued = self.entered.load(Ordering::SeqCst);
+        while self.acquired.load(Ordering::SeqCst) < queued {
+            std::thread::yield_now();
+        }
+    }
+
+    /// How many calls are waiting for the connection.
+    #[cfg(test)]
+    fn waiting(&self) -> u64 {
+        self.entered.load(Ordering::SeqCst) - self.acquired.load(Ordering::SeqCst)
     }
 }
 
@@ -356,10 +386,11 @@ impl Store for SqliteStore {
             }
             tx.commit().map_err(code)?;
         }
+        self.hand_over();
 
-        // Then batches, each its own transaction, so the lock is free between them. Each
-        // batch picks its devices again, and the delete applies the cutoff and the
-        // online list itself.
+        // Then batches, each its own transaction. Between batches the connection is
+        // handed over to every call already waiting for it. Each batch picks its devices
+        // again, and the delete applies the cutoff and the online list itself.
         loop {
             let mut conn = self.conn();
             let tx = conn.transaction().map_err(code)?;
@@ -409,9 +440,12 @@ impl Store for SqliteStore {
                 rows.collect::<Result<_, _>>().map_err(code)?
             };
             tx.commit().map_err(code)?;
+            drop(conn);
+            self.batches.fetch_add(1, Ordering::SeqCst);
             if deleted.is_empty() {
                 break;
             }
+            self.hand_over();
             counts.devices += deleted.len() as u64;
             counts.pairs += pair_ids.len() as u64;
             counts.push_tokens += tokens as u64;
@@ -450,6 +484,7 @@ mod tests {
     use relay_core::Clock;
     use relay_core::{cleanup_cutoff, ManualClock};
     use relay_protocol::Bytes;
+    use std::sync::Arc;
 
     const NOW: u64 = relay_core::clock::MANUAL_CLOCK_START_MS + 200 * 24 * 3600 * 1000;
 
@@ -651,6 +686,81 @@ mod tests {
         assert!(s.pair(&pid(2)).unwrap().is_some());
         assert_eq!(s.peers_of(&mac).unwrap().len(), 1);
         assert_eq!(s.counts().unwrap().push_tokens, 1);
+    }
+
+    #[test]
+    fn an_online_device_is_spared_even_when_the_touch_cannot_save_it() {
+        // With now == cutoff, the touch moves last_seen only to the cutoff itself, which
+        // is still deletable: only the online exclusion in the delete keeps the device.
+        let (_dir, path) = temp();
+        let s = SqliteStore::open(&path).unwrap();
+        s.register(&key(1), Role::Phone, NOW - 10).unwrap();
+        s.register(&key(2), Role::Phone, NOW - 10).unwrap();
+        let counts = s.cleanup(NOW, NOW, &[key(1)]).unwrap();
+        assert_eq!(counts.touched, 1);
+        assert_eq!(counts.deleted, vec![key(2)]);
+        assert_eq!(s.device(&key(1)).unwrap().unwrap().last_seen, NOW);
+    }
+
+    /// Built on the review's probe: a call that is waiting while cleanup runs gets the
+    /// connection between batches, not after the whole cleanup. Deterministic: the probe
+    /// is queued before cleanup starts, and reads the batch count while it holds the
+    /// connection, as `device()` would.
+    #[test]
+    fn a_call_waiting_during_cleanup_gets_in_between_batches() {
+        let (_dir, path) = temp();
+        let s = Arc::new(SqliteStore::open(&path).unwrap());
+        let stale = (CLEANUP_BATCH * 20) as u16;
+        {
+            let mut conn = s.conn();
+            let tx = conn.transaction().unwrap();
+            for n in 0..stale {
+                tx.execute(
+                    "INSERT INTO devices (id, role, first_seen, last_seen) VALUES (?1, 'phone', 0, 0)",
+                    [&key(n).0[..]],
+                )
+                .unwrap();
+            }
+            tx.commit().unwrap();
+        }
+
+        let held = s.conn();
+        let cleaner = {
+            let s = s.clone();
+            std::thread::spawn(move || s.cleanup(NOW, cleanup_cutoff(NOW).unwrap(), &[]))
+        };
+        wait_until(|| s.waiting() == 1);
+        let prober = {
+            let s = s.clone();
+            std::thread::spawn(move || {
+                let _conn = s.conn();
+                s.batches.load(Ordering::SeqCst)
+            })
+        };
+        wait_until(|| s.waiting() == 2);
+        drop(held);
+
+        let batches_seen = prober.join().unwrap();
+        let counts = cleaner.join().unwrap().unwrap();
+        assert_eq!(counts.devices, u64::from(stale));
+        assert_eq!(
+            batches_seen,
+            0,
+            "the waiting call got in only after {batches_seen} of {} batches",
+            s.batches.load(Ordering::SeqCst)
+        );
+        assert_eq!(s.device(&key(60_000)).unwrap(), None);
+    }
+
+    fn wait_until(cond: impl Fn() -> bool) {
+        let started = std::time::Instant::now();
+        while !cond() {
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(5),
+                "timed out"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
     }
 
     #[test]

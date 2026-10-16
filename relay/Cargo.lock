@@ -801,6 +801,7 @@ dependencies = [
  "relay-core",
  "relay-protocol",
  "rusqlite",
+ "sha2",
  "subtle",
  "tempfile",
  "tokio",
