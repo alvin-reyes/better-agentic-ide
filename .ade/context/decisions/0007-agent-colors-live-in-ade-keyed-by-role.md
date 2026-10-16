@@ -6,9 +6,10 @@
   - **One map in ADE, keyed by role id**: `src/data/agentColors.ts` holds the role-to-color-name table for all nineteen roles, the hex for each of the eight names (a dark-surface value and a light-surface value), and a neutral for anything that is not a role. Everything else derives from it: the `color:` line in generated sub-agent files, each curated profile's color (from its `roleId`; the 47 literal hexes are deleted), the picker, the fleet lanes.
   - **No color in the vendored role files.** ade-setup is not changed. A test fails when a vendored role has no entry in the map, the same way `ROLE_ORDER` is guarded.
   - **The website is checked against the map, not copied by hand**: a test reads `docs/assets/css/site.css` and `docs/index.html` and fails on any difference.
+  - **Agent colors are never drawn as text in the app**: only as fills, borders and dots, which need 3:1 against every theme surface. The dark hexes measure 4.41–4.46 on Nord, below the 4.5:1 that text needs. The picker's category colors become neutral, so role is the only color system there (owner, 2026-10-16).
 - Consequences:
   - No cross-repo change and no ade-setup release; the colors ship with ADE alone.
   - Color is presentation and frontmatter, like `tools` and `model`, which already live in ADE. The prose stays single-sourced in ade-setup (`scripts/agentSource.test.ts`, `scripts/subAgentSource.test.ts` unchanged).
-  - ade-setup's own copies of the roles, and anything ade-setup installs by itself, stay uncolored. Giving ade-setup colors later is a separate change that needs the owner's go-ahead, and should read this map's table rather than invent another.
-  - A new role vendored from ade-setup fails `npm test` until it is given a color here.
-  - Curated profiles lose their category colors: the 14 developer profiles are all green. That is the owner's choice (color means role); the category filter pills keep their own colors.
+  - ade-setup's own copies of the roles, and anything ade-setup installs by itself, stay uncolored. Giving ade-setup colors is deferred (`_bmad-output/deferred-work.md`); it needs the owner's go-ahead because it publishes a release, and should use this map's table rather than invent another.
+  - A new role vendored from ade-setup fails `npm test` until it is given a color here. A new app theme is checked for 3:1 automatically.
+  - Curated profiles lose their category colors: the 14 developer profiles are all green. That is the owner's choice (color means role); category pills and badges are neutral.
