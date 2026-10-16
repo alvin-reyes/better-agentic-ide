@@ -4,7 +4,7 @@
 
 /** Signs a login: `enc(LOGIN_LABEL, c, host, role)`. */
 export const LOGIN_LABEL = "ade-remote/v1/login";
-/** Reserved for the Noise session (story 4). Nothing uses it yet. */
+/** The Noise prologue: `enc(NOISE_LABEL, I_M, I_P)`. */
 export const NOISE_LABEL = "ade-remote/v1/noise";
 /** HKDF info for `k_pm`, the phone-to-Mac pairing key. Not an enc label. */
 export const PAIR_PHONE_TO_MAC_INFO = "ade-remote/v1/pair/phone-to-mac";

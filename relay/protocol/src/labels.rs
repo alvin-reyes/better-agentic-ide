@@ -3,7 +3,7 @@
 
 /// Signs a login: `enc(LOGIN_LABEL, c, host, role)`.
 pub const LOGIN_LABEL: &str = "ade-remote/v1/login";
-/// Reserved for the Noise session (story 4). Nothing uses it yet.
+/// The Noise prologue: `enc(NOISE_LABEL, I_M, I_P)`.
 pub const NOISE_LABEL: &str = "ade-remote/v1/noise";
 /// HKDF `info` for `k_pm`, the phone-to-Mac pairing key. Not an `enc` label.
 pub const PAIR_PHONE_TO_MAC_INFO: &str = "ade-remote/v1/pair/phone-to-mac";

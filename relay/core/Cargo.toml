@@ -12,3 +12,6 @@ name = "relay_core"
 relay-protocol = { path = "../protocol" }
 ed25519-dalek.workspace = true
 rand.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

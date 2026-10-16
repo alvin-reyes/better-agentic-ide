@@ -3,7 +3,7 @@ title: 'Noise IK sessions in Rust and TypeScript'
 type: 'feature'
 ticket: '4'
 created: '2026-10-16'
-status: 'ready-for-dev'
+status: 'in-progress'
 baseline_revision: '57b626b9adbaf30a243b4801eee250b3a4db1970'
 route: 'full'
 route_source: 'auto'
@@ -105,12 +105,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `relay/Cargo.toml`, `relay/protocol/Cargo.toml` -- add the workspace dependency `snow = { version = "=0.10.0", default-features = false, features = ["default-resolver", "use-chacha20poly1305", "use-sha2", "use-curve25519", "use-getrandom"] }` (crates.io 2025-07-19, MIT/Apache-2.0, MSRV 1.85; rustc here is 1.93.1). Also add `curve25519-dalek = "4.1.3"` (2024-06-18, already locked), used to derive static public keys and to check for low-order points. Run `cargo tree -p relay-protocol` and diff `Cargo.lock`: the only new package is `snow 0.10.0`. If anything else appears, check its date and pin it back with `cargo update --precise`.
-- [ ] `packages/protocol/vectors/cacophony-ik.json` -- the one `Noise_IK_25519_ChaChaPoly_SHA256` entry, copied verbatim from cacophony's `vectors/cacophony.txt`.
+- [x] `relay/Cargo.toml`, `relay/protocol/Cargo.toml` -- add the workspace dependency `snow = { version = "=0.10.0", default-features = false, features = ["default-resolver", "use-chacha20poly1305", "use-sha2", "use-curve25519", "use-getrandom"] }` (crates.io 2025-07-19, MIT/Apache-2.0, MSRV 1.85; rustc here is 1.93.1). Also add `curve25519-dalek = "4.1.3"` (2024-06-18, already locked), used to derive static public keys and to check for low-order points. Run `cargo tree -p relay-protocol` and diff `Cargo.lock`: the only new package is `snow 0.10.0`. If anything else appears, check its date and pin it back with `cargo update --precise`.
+- [x] `packages/protocol/vectors/cacophony-ik.json` -- the one `Noise_IK_25519_ChaChaPoly_SHA256` entry, copied verbatim from cacophony's `vectors/cacophony.txt`.
   - **Source:** public domain (Unlicense). The upstream file's SHA-256 is `3bde7c09…6cae`, identical to `snow` 0.10.0's `tests/vectors/cacophony.txt`. Record the source URL, the commit and that file hash in the JSON as provenance.
   - **Contents:** prologue "John Galt"; the initiator's static and ephemeral and the responder's static and ephemeral; `hs1` of 112 bytes (16-byte payload) and `hs2` of 63 bytes (15-byte payload); four transport messages with implicit nonces 0, 0, 1, 1; and `handshake_hash`.
   - **Pinning:** `generate.mjs` holds the SHA-256 of the excerpt file itself as a constant, and `--check` compares against it.
-- [ ] `packages/protocol/vectors/generate.mjs` + `noise.json` -- an IK oracle on `node:crypto` only: X25519 through raw-key DER, `chacha20-poly1305` with the Noise nonce `0x00000000 || u64le(n)`, and HMAC-SHA256 HKDF.
+- [x] `packages/protocol/vectors/generate.mjs` + `noise.json` -- an IK oracle on `node:crypto` only: X25519 through raw-key DER, `chacha20-poly1305` with the Noise nonce `0x00000000 || u64le(n)`, and HMAC-SHA256 HKDF.
   - **Anchor first.** It reproduces `cacophony-ik.json` byte for byte (every message and the handshake hash) and fails before writing anything if it can't.
   - **`noise.json`** comes from fixed seeds, as in story 3:
     - the keys and the prologue;
@@ -141,7 +141,7 @@ context:
   - **A high-bit `e`** (top bit set, which RFC 7748 masks) that completes.
   - **`--differential`** reads JSON cases on stdin and prints transcripts, for the TypeScript differential test.
   - **`--check`** covers `noise.json` and the excerpt's pinned digest.
-- [ ] `packages/protocol/vectors/schedule.json` -- written by hand from Design Notes ("Restart rules"), with no crypto: step scripts `{at_mono_ms, event, expect}` for the phone's handshake scheduler and its `hs2` adoption rule. Events are abstract (`trigger:<kind>`, `hs2_ok:<counter>`, `bad_frame`, `sent_nonce:<n>`, `recv_nonce:<n>`, `tick`). The scripts cover:
+- [x] `packages/protocol/vectors/schedule.json` -- written by hand from Design Notes ("Restart rules"), with no crypto: step scripts `{at_mono_ms, event, expect}` for the phone's handshake scheduler and its `hs2` adoption rule. Events are abstract (`trigger:<kind>`, `hs2_ok:<counter>`, `bad_frame`, `sent_nonce:<n>`, `recv_nonce:<n>`, `tick`). The scripts cover:
   - each trigger, including pull to refresh with no session (a start) and with a session (nothing);
   - the 10 s window and coalescing;
   - a deferred trigger satisfied by a later-completing session;
@@ -155,7 +155,7 @@ context:
   - both frame ceilings.
 
   It also holds counter cases `{wall_ms, last_sent, expect}`: `last_sent` absent, a clock set back, a clock equal to `last_sent`, and `last_sent` at 2^53−2 and at 2^53−1 (an error).
-- [ ] `relay/protocol/src/noise.rs` -- on `snow`:
+- [x] `relay/protocol/src/noise.rs` -- on `snow`:
   - **The raw layer** (`pub(crate)`): `handshake_raw` for each role, taking the prologue, the payload, the local keys and an optional fixed ephemeral. The public wrapper calls it, and the cacophony test drives it with cacophony's own prologue and payloads.
   - **Keys and prologue:** `StaticKeypair::{generate, from_secret}` and `noise_prologue(i_m, i_p)`.
   - **Phone side:**
@@ -168,8 +168,8 @@ context:
   - **Constants:** `HS1_LEN = 104`, `HS2_LEN = 48`, `SESSION_ID_LEN = 8`, `MAX_PLAINTEXT = 60_000`, `NONCE_CEILING = 1 << 32`, `MAX_COUNTER = (1 << 53) - 1`.
   - **Low-order keys:** it refuses a low-order remote `e` or `s` by the low-order rule, computed with `curve25519-dalek`'s `MontgomeryPoint::mul_clamped` and the local static secret, as `snow` itself computes DH. `snow` doesn't refuse these. The `e` check runs on `hs1[0..32]` / `hs2[0..32]` before `read_message`, because a successful `snow` read can't be undone. The remote `s` (only in `hs1`, on the Mac) is checked after the read; a refused `hs1` discards its responder state, which is never reused.
   - **Hooks,** all `pub(crate)`: a fixed ephemeral key, and a preset send nonce and last-accepted.
-- [ ] `relay/protocol/src/routed.rs` -- the shared envelope type (see Code Map), with byte-equal vectors from `noise.json` and the no-panic loop.
-- [ ] `relay/protocol/src/vectors.rs` -- add these tests:
+- [x] `relay/protocol/src/routed.rs` -- the shared envelope type (see Code Map), with byte-equal vectors from `noise.json` and the no-panic loop.
+- [x] `relay/protocol/src/vectors.rs` -- add these tests:
   - `vectors_cacophony_ik`: the raw layer reproduces every message and the handshake hash;
   - `vectors_noise_*`: `hs1`, `hs2`, frames and envelopes byte-equal; every crypto-layer refused case refused; every receiver script; the sweep.
   - **Unit tests in `noise.rs`:**
@@ -177,7 +177,7 @@ context:
     - `seal` of 60,001 bytes refused with the nonce unchanged;
     - a low-order Mac static refused by `Initiator::start`;
     - a loop of 2,000 random bodies through `open` and `Routed::parse` that never panics.
-- [ ] `relay/core/src/session.rs` -- sans-IO, with time passed in (`mono_ms`, plus `wall_ms` for the phone counter).
+- [x] `relay/core/src/session.rs` -- sans-IO, with time passed in (`mono_ms`, plus `wall_ms` for the phone counter).
   - **Traits**, all `&self + Send + Sync`, with in-memory implementations over a `Mutex`:
     - `Hs1Counters { accept_if_above(mac, phone, v) -> Result<bool> }` checks and records in one atomic step;
     - `PairedStatics { statics(mac, phone) -> Vec<[u8; 32]> }`;
@@ -191,31 +191,31 @@ context:
     - `send` with no session or at the ceiling returns an error and raises the trigger.
     - **Two-step start (same shape in both languages, for the async store):** when a start is due, `poll`/`trigger` returns `StartHandshake { token }`. The driver gets a counter from the store and calls `begin(token, counter) -> Option<hs1>`. `begin` returns nothing if the token is stale, meaning `end()` ran or a newer session was adopted in between; the counter is then simply skipped, which is harmless because counters only need to rise. A failed store write produces no `begin`, so no `hs1`.
   - **The `Scheduler`** (pure, shared by both) holds the 10 s window, coalescing, the retry, 24 h and the adoption rule. The ceilings and the time limits are fields of the machines, compared before calling `seal`. Only `pub(crate)` test constructors in `relay-core` can lower them, so no protocol hook crosses crates. `end(peer)` drops the session and its outstanding handshakes; story 5a calls it when no pair remains.
-- [ ] `relay/core/src/session.rs` tests -- one test per line of AC2–AC6, named after its spec line, running Mac against phone in-process with in-memory stores. Also:
+- [x] `relay/core/src/session.rs` tests -- one test per line of AC2–AC6, named after its spec line, running Mac against phone in-process with in-memory stores. Also:
   - **Two relays, one store:** the `Hs1Counters` trait has no separate read method, so a check-then-act is impossible through it. Two `MacSessions` sharing the in-memory store, fed one replayed `hs1` on two threads behind a barrier, are looped 1,000 times: exactly one accepts each time. The same threaded loop runs for two Rust `PhoneSession`s on one `LastSent`: their counters are always distinct.
   - **Cross-relay collision:** two relays, triggered together, can deliver the lower counter second, and it is refused. The test shows the 10 s retry heals it.
   - **The lost-`hs2` sequence:** A, then retry B; the Mac accepts both and is on B; `hs2_A` arrives and `hs2_B` is lost. The phone adopts A; 10 s after B's start it raises one trigger, starts C through the window, and both sides end on C with frames flowing both ways. If C's `hs2` is also lost, nothing older was adopted after C started, so C is not armed: it gets the ordinary single retry, then the phone waits for the next trigger, and B raises no second one. The same sequence is a TypeScript test against the internal responder, and a `schedule.json` script (both).
   - **The stuck-state sequence:** A sent, retry B sent, the Mac adopts A, B lost. The phone adopts A and has a session.
   - **`schedule.json`**, read through `include_str!`. `relay-core` gains `serde_json` and `hex` as dev-dependencies from the workspace.
-- [ ] `packages/protocol/src/noise.ts` -- a hand-rolled IK on `@noble`.
+- [x] `packages/protocol/src/noise.ts` -- a hand-rolled IK on `@noble`.
   - It has `CipherState` with an explicit nonce and `SymmetricState`. The protocol name is exactly 32 bytes, so `h` starts as the name itself.
   - **Raw layer:** `handshakeRaw`, which is not exported from `index.ts`.
   - **Initiator:** `startHandshake(...) -> {hs1, counter, finish(hs2)}`. `finish` checks for 48 bytes first, returns a `Session` or `null`, and leaves the state usable.
   - **Responder:** `readHs1`/`reply`, not exported.
   - **Keys:** `generateStaticKeypair` and `staticFromSecret`.
   - **Low-order keys:** it applies the low-order rule explicitly, before mutating `SymmetricState`, and doesn't rely on catching noble's throw.
-- [ ] `packages/protocol/src/frame.ts` -- `Session` with private state:
+- [x] `packages/protocol/src/frame.ts` -- `Session` with private state:
   - `seal(plaintext)`: a `RangeError` above 60,000 bytes; `{ok: false, error: "ceiling"}` at the nonce ceiling;
   - `open(body) -> {kind: "accept", plaintext} | {kind: "drop"} | {kind: "bad"}`;
   - nonces are numbers below 2^32, written and read as two u32 halves, with no BigInt (Hermes);
   - `encodeRouted` / `parseRouted`, the twins of `Routed`.
-- [ ] `packages/protocol/src/session.ts` -- the counter store, the `Scheduler` and `PhoneSession`:
+- [x] `packages/protocol/src/session.ts` -- the counter store, the `Scheduler` and `PhoneSession`:
   - `LastSentStore` (async `get(macId)` / `set(macId, v)`, because `expo-secure-store` is async) and `memoryLastSentStore()`;
   - `CounterAllocator`, one per app, wrapping the store with a promise chain per Mac key, so that every `PhoneSession` for that Mac (one per relay) gets distinct, rising counters. A rejected `set` rejects only its own link; the chain continues for the next caller;
   - the `Scheduler`, with the same rules as Rust;
   - `PhoneSession`, with the same outstanding-initiator and adoption rules as Rust.
-- [ ] `packages/protocol/src/index.ts` -- export the public names only. Extend the surface test: `handshakeRaw`, the responder, the fixed-ephemeral entry and the preset-nonce hooks are absent.
-- [ ] `packages/protocol/src/vectors.test.ts`, `session.test.ts` -- the same vector assertions as Rust (cacophony through `handshakeRaw`, the crypto layer of `noise.json`, `schedule.json`), plus:
+- [x] `packages/protocol/src/index.ts` -- export the public names only. Extend the surface test: `handshakeRaw`, the responder, the fixed-ephemeral entry and the preset-nonce hooks are absent.
+- [x] `packages/protocol/src/vectors.test.ts`, `session.test.ts` -- the same vector assertions as Rust (cacophony through `handshakeRaw`, the crypto layer of `noise.json`, `schedule.json`), plus:
   - the phone-side AC2–AC6 tests against the internal responder;
   - the stuck-state sequence;
   - two `PhoneSession`s for one Mac key triggered at once, which send distinct counters;
@@ -224,8 +224,8 @@ context:
   - a **differential** test: 64 seeded random cases (keys, counters, payload lengths 0–60,000), whose TypeScript transcripts must equal `generate.mjs --differential`'s, run through `spawnSync` like `--check`. The comparison uses per-case SHA-256 digests, so the output stays far under `spawnSync`'s 1 MiB `maxBuffer`;
   - 2,000 random bodies through `open` and `parseRouted`, none of which throws;
   - a `RangeError` for each wrong input length.
-- [ ] `mobile/__tests__/protocol.test.ts` -- one smoke test: a handshake against the responder (imported from `@ade/protocol/src/noise`, as tests do) and one frame each way, under the app's Jest. Jest runs on Node's crypto, not Hermes; as in story 3, the Hermes path is covered only by `expo export` or a device.
-- [ ] `.ade/context/remote-protocol.md`, `phone-remote-layout.md` -- add a "Sessions" section covering:
+- [x] `mobile/__tests__/protocol.test.ts` -- one smoke test: a handshake against the responder (imported from `@ade/protocol/src/noise`, as tests do) and one frame each way, under the app's Jest. Jest runs on Node's crypto, not Hermes; as in story 3, the Hermes path is covered only by `expo export` or a device.
+- [x] `.ade/context/remote-protocol.md`, `phone-remote-layout.md` -- add a "Sessions" section covering:
   - the pattern and the prologue;
   - `hs1` and `hs2`;
   - the frame layout and the shared `Routed` envelope;
@@ -249,6 +249,54 @@ context:
 - AC7 (ticket 7): Given a 60,001-byte plaintext, when it is sealed, then it is refused and no nonce is used up. A 60,000-byte one seals, and its envelope is ≤ 65,536 bytes (both).
 
 ## Implementation Notes
+
+2026-10-16, developer (worktree `agent-a4c63180ba3a5db79`, branch `phone-noise-sessions`, on plan commit 9f40261 / main 57b626b; `origin/main` still has no `routed.rs`, so no rebase).
+
+**Built.**
+- `relay/protocol`: `noise.rs` (the `pub(crate)` raw layer on `snow`, `StaticKeypair`, `noise_prologue`, `Initiator`, `read_hs1`/`Hs1Read`, `Session` with `seal`/`open`, the low-order rule on `curve25519-dalek`) and `routed.rs` (`Routed`, `RoutedKind`, `parse`/`encode`/`with_peer`).
+- `relay/core`: `session.rs` (the three store traits and their in-memory implementations, `next_counter_value`, the shared `RestartWindow`, the pure `Scheduler`, `PhoneSession`, `MacSessions`).
+- `packages/protocol`: `noise.ts`, `frame.ts`, `session.ts`, and the explicit exports in `index.ts`.
+- Vectors: `cacophony-ik.json` (upstream commit `18b7348c`, file hash `3bde7c09…6cae` checked against GitHub and snow's copy); `noise.json` from the new `node:crypto` IK oracle in `generate.mjs`, which reproduces cacophony first, plus `--differential`; and `schedule.json`, written by hand.
+- Context: a "Sessions" section in `remote-protocol.md`, with each rule naming its test, and `phone-remote-layout.md`. The mobile smoke test.
+
+**Dependencies.**
+- `snow =0.10.0` (crates.io 2025-07-19T17:00:59Z, Apache-2.0 OR MIT), with exactly the plan's features and no `std`. It is the only new `Cargo.lock` package; its dependencies, including `rustc_version`, were already locked.
+- `curve25519-dalek 4.1.3`, already locked.
+- `relay-core` gained the dev-dependency `serde_json`.
+- No npm change; neither `package-lock.json` changed.
+
+**Deviations.**
+1. `relay-core` does not gain `hex` as a dev-dependency. No test uses it, and an unused dependency is noise.
+2. `begin(token, counter)` returns the hs1 *envelope* (`Option<Routed>` / `Routed | null`, kind 1, peer `I_M`), not bare hs1 bytes, so the driver only forwards it.
+3. `PhoneSession::new` returns `Result` (TypeScript throws): it refuses a low-order Mac static up front, by a dry `Initiator::start`.
+4. The TypeScript low-order rule checks the u-value against the five order-dividing-8 values, after masking the top bit and reducing mod p, rather than computing X25519 itself. That is the plan's "explicitly, never by catching noble's throw". The test "the low-order rule agrees with noble's all-zero X25519 output" shows equivalence on every vector u and on 200 random keys. Rust computes `mul_clamped` with the local static, as planned.
+5. Rust's `StoreError` is an enum, `Failed(String)` or `Exhausted`, so `LastSent::next_counter` can report 2^53 − 1 passing. `HandshakeError` is `Length | LowOrder | Decrypt | CounterRange | Finished`.
+6. In `schedule.json`, the hanging trigger is an expectation (`expect.hanging: [counters]`), not an input event. It is an output of `poll`, so the scripts pin "exactly one per handshake" as an observed result.
+   - Steps may also carry `begin_counter`. It was added after a mutation check showed nothing pinned the adoption floor; see below.
+7. `NOISE_PATTERN` moved from `index.ts` into `noise.ts`, re-exported unchanged.
+8. The internal TypeScript responder's `reply()` also returns `handshakeHash`, which the differential test needs.
+9. TypeScript's "two sessions for one Mac key" runs 50 rounds of `Promise.all` (JavaScript is single-threaded; the allocator's chain is what is under test). The 1,000-round threaded loops are in Rust, as planned.
+10. The doc comments on `NOISE_LABEL` in `labels.rs` and `labels.ts` no longer say "unused".
+11. Extra refused cases: a tampered hs1, an empty hs1, and an empty or truncated hs2.
+
+**Test-first record.** Each test or vector was written and seen failing before its code, except:
+- `mobile/__tests__/protocol.test.ts`'s handshake test passed on its first run, because `noise.ts` already existed.
+- `session.ts` (TypeScript) was written before `session.test.ts`. `schedule.json`, which drives it, was written by hand before either scheduler. The test file's first run failed only on the missing `index.ts` exports.
+- One Rust session test failed first on a wrong expectation of mine (a 24 h deadline, not 30,000), not a code fault; the test was corrected.
+- The surface test passes by construction. It was seen failing by temporarily exporting `readHs1`.
+
+**Mutation checks** (one rule disabled at a time, then the suite run):
+- Rust: each low-order check; the replay drop; the 2^32 receive check; a fresh retry; adoption clearing the deferred trigger; never arming the hanging trigger; a check-then-act `accept_if_above`. Each was caught.
+- TypeScript: the same scheduler rules, the replay drop, the low-order checks, the counter-range check and the allocator chain's isolation. Each was caught.
+- Two mutants first survived: re-arming a fired hanging handshake, and removing the adoption floor. `schedule.json` gained steps that catch them: the at-most-4 script continues past a second adoption, and a new script, "an hs2 at or below the session's counter is never adopted".
+
+**Verification** (all five, run in this worktree):
+- `cd relay && cargo test`: passed. `relay-protocol` 61, `relay-core` 55, e2e 14, cli 9 + 2, server 1 + 5.
+- `npx tsc --noEmit`: clean.
+- `npm test`: 144 files, 1,619 tests passed. `session.test.ts` 31, `vectors.test.ts` 54, `index.test.ts` 4.
+- `cd src-tauri && cargo test`: 456 passed, 1 ignored; 12; 2.
+- `cd mobile && npx tsc --noEmit && npx jest`: 6 passed.
+- `cargo fmt --check` and `cargo clippy --all-targets` in `relay/` are clean.
 
 ## Plan Change Log
 

@@ -2,6 +2,8 @@ import {
   NOISE_PATTERN,
   PAIR_COMMIT_LABEL,
   fromHex,
+  generateStaticKeypair,
+  startHandshake,
   open,
   pairKeys,
   parsePairCode,
@@ -10,6 +12,8 @@ import {
   suite,
   toHex,
 } from "@ade/protocol";
+// The responder is not part of the package's surface; tests import it from its module.
+import { readHs1 } from "@ade/protocol/src/noise";
 
 // Proves Jest resolves the file: dependency, compiles its TypeScript, and finds
 // its @noble peers in the app's node_modules.
@@ -62,5 +66,30 @@ describe("@ade/protocol from the app", () => {
     expect(toHex(a.subarray(0, 24))).not.toBe(toHex(b.subarray(0, 24)));
     expect(open(keys.pm, a, PAIR_COMMIT_LABEL, 1)?.map(toHex)).toEqual(["010203"]);
     expect(open(keys.mp, a, PAIR_COMMIT_LABEL, 1)).toBeNull();
+  });
+
+  // Jest runs on Node's crypto, not Hermes; the Hermes path is covered by expo export
+  // or a device.
+  it("runs a Noise IK handshake and one frame each way", () => {
+    const phone = generateStaticKeypair();
+    const mac = generateStaticKeypair();
+    const iM = new Uint8Array(32).fill(1);
+    const iP = new Uint8Array(32).fill(2);
+    const init = startHandshake(phone, iM, iP, mac.public, 1760000000000);
+    const read = readHs1(mac, iM, iP, init.hs1);
+    expect(read?.counter).toBe(1760000000000);
+    const { hs2, session: macSession } = read!.reply();
+    const phoneSession = init.finish(hs2);
+    expect(phoneSession).not.toBeNull();
+    expect(toHex(phoneSession!.id)).toBe(toHex(macSession.id));
+
+    const up = phoneSession!.seal(Uint8Array.from([1, 2, 3]));
+    if (!up.ok) throw new Error(up.error);
+    const got = macSession.open(up.body);
+    expect(got.kind === "accept" && toHex(got.plaintext)).toBe("010203");
+    const down = macSession.seal(Uint8Array.from([4, 5]));
+    if (!down.ok) throw new Error(down.error);
+    const back = phoneSession!.open(down.body);
+    expect(back.kind === "accept" && toHex(back.plaintext)).toBe("0405");
   });
 });

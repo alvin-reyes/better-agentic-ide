@@ -2,6 +2,17 @@
 //!
 //! Story 2: login, the role registry, the pair directory and presence. All of it is
 //! pure: `relay-server` does the I/O and asks this crate for every decision.
+//!
+//! Story 4: the Noise session machines and their store traits (`session`).
+
+mod session;
+
+pub use session::{
+    next_counter_value, Hs1Counters, LastSent, MacAction, MacSessions, MemoryHs1Counters,
+    MemoryLastSent, MemoryPairedStatics, PairedStatics, PhoneAction, PhoneSession, SendError,
+    StoreError, Trigger, HANGING_MS, MAX_OUTSTANDING, MAX_SESSION_AGE_MS, OUTSTANDING_TTL_MS,
+    RESTART_WINDOW_MS, RETRY_MS,
+};
 
 use std::collections::HashMap;
 use std::sync::Mutex;

@@ -28,8 +28,8 @@ The wire contract is in `remote-protocol.md`.
   (`moduleDirectories`) and the app's tsc (`preserveSymlinks`) all resolve its imports from
   `mobile/node_modules`.
 - Exports so far: `NOISE_PATTERN` (`"Noise_IK_25519_ChaChaPoly_SHA256"`, the same string as
-  `relay_protocol::NOISE_PATTERN`), and `suite` (`dh` = x25519, `cipher` = chacha20poly1305,
-  `hash` = sha256).
+  `relay_protocol::NOISE_PATTERN`; since story 4 it is defined in `noise.ts`), and `suite`
+  (`dh` = x25519, `cipher` = chacha20poly1305, `hash` = sha256).
 - Story 3 added, one module each, re-exported from `src/index.ts`:
   - `bytes.ts`: `toHex`, `fromHex`, `concatBytes`, `base64UrlEncode`, `base64UrlDecode`
     (strict, `null` on bad input), `utf8Encode`, `utf8DecodeLossy`, `percentEncode`,
@@ -45,13 +45,39 @@ The wire contract is in `remote-protocol.md`.
   - `qr.ts`: `buildPairCode`, `parsePairCode`, types `PairCode`, `PairCodeInput`,
     `PairCodeError`, `PairCodeResult`.
 
+- Story 4 added, each with an explicit export list in `src/index.ts` (the wire rules are in
+  `remote-protocol.md`, "Sessions"):
+  - `noise.ts`: `HS1_LEN`, `HS2_LEN`, `MAX_COUNTER`, `NOISE_PATTERN`, `generateStaticKeypair`,
+    `staticFromSecret`, `noisePrologue`, `startHandshake`, types `StaticKeypair`, `Initiator`.
+    Not exported: `handshakeRaw`, `startHandshakeWith`, `readHs1`, `readHs1With` (the
+    responder, for tests), `isLowOrder`.
+  - `frame.ts`: `MAX_PLAINTEXT`, `NONCE_CEILING`, `SESSION_ID_LEN`, `encodeRouted`,
+    `parseRouted`, types `Session`, `Opened`, `Routed`, `RoutedKind`. Not exported:
+    `CipherState`, `createSession`, `presetNonces`, `u64be`.
+  - `session.ts`: `PhoneSession`, `CounterAllocator`, `memoryLastSentStore`,
+    `nextCounterValue`, `RESTART_WINDOW_MS`, `RETRY_MS`, `HANGING_MS`, `MAX_SESSION_AGE_MS`,
+    `OUTSTANDING_TTL_MS`, `MAX_OUTSTANDING`, types `LastSentStore`, `PhoneAction`, `Trigger`.
+    Not exported: `Scheduler`, `phoneSessionWithLimits`, types `Limits`, `Cause`.
+
   The Rust twins are at the `relay_protocol` crate root: `enc`, `dec`, the label constants,
   `ALL_LABELS`, `sign`, `verify`, `pair_keys`, `PairKeys`, `seal`, `open`,
   `NONCE_LEN`, `TAG_LEN`, `sas_code`, `SasInputs`, `clean_name`, `name_from_bytes`,
-  `build_pair_code`, `parse_pair_code`, `PairCode`, `PairCodeError`.
+  `build_pair_code`, `parse_pair_code`, `PairCode`, `PairCodeError`; and, from story 4,
+  `StaticKeypair`, `noise_prologue`, `Initiator`, `read_hs1`, `Hs1Read`, `Session`, `Opened`,
+  `FrameError`, `HandshakeError`, `Routed`, `RoutedKind`, `HS1_LEN`, `HS2_LEN`,
+  `SESSION_ID_LEN`, `MAX_PLAINTEXT`, `NONCE_CEILING`, `MAX_COUNTER`. `relay_core` exports the
+  machines and stores: `MacSessions`, `MacAction`, `PhoneSession`, `PhoneAction`, `Trigger`,
+  `SendError`, `Hs1Counters`, `PairedStatics`, `LastSent`, `StoreError`,
+  `MemoryHs1Counters`, `MemoryPairedStatics`, `MemoryLastSent`, `next_counter_value` and the
+  limit constants.
 - **Import rule:** the package's non-test `src/` modules take randomness only from
   `globalThis.crypto.getRandomValues` and import nothing but the `@noble` peers (and each
   other). Tests and `vectors/generate.mjs` may use `node:` modules.
 - `relay-protocol` depends on `ed25519-dalek`, `rand`, `hkdf 0.12.4`, `chacha20poly1305 0.10.1`
   and `sha2 0.10.9` (the RustCrypto 0.10 line, so `sha2` isn't duplicated), and `hex 0.4.3` for
-  tests.
+  tests. Story 4 added `snow =0.10.0` (2025-07-19; `default-features = false`, features
+  `default-resolver`, `use-chacha20poly1305`, `use-sha2`, `use-curve25519`, `use-getrandom`;
+  not `std`, which pulls in `ring` and `cc` 1.8.0, too new for the pin rule) and
+  `curve25519-dalek 4.1.3` (already locked through `ed25519-dalek`). `snow 0.10.0` is the only
+  new `Cargo.lock` package. `relay-core` gained `serde_json` as a dev-dependency (it reads
+  `schedule.json`).

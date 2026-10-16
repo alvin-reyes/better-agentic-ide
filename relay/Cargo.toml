@@ -24,3 +24,6 @@ hkdf = "0.12.4"
 chacha20poly1305 = "0.10.1"
 sha2 = "0.10.9"
 hex = "0.4.3"
+# No `std`: it turns on `ring`, whose `cc` 1.8.0 is too new for the pin rule.
+snow = { version = "=0.10.0", default-features = false, features = ["default-resolver", "use-chacha20poly1305", "use-sha2", "use-curve25519", "use-getrandom"] }
+curve25519-dalek = "4.1.3"

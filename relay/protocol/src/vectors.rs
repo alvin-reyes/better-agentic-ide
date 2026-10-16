@@ -388,3 +388,384 @@ fn vectors_cross_label_signatures_and_seals_fail() {
     }
     assert_eq!(checked, (110, 110));
 }
+
+// --- Noise IK (story 4) ---------------------------------------------------------
+
+use crate::noise::{handshake_raw, read_hs1_with, RawRole};
+use sha2::{Digest, Sha256};
+
+#[test]
+fn vectors_cacophony_ik() {
+    let file = load(vector!("cacophony-ik.json"));
+    let v = &file["vector"];
+    assert_eq!(text(&v["protocol_name"]), NOISE_PATTERN);
+    let prologue = bytes(&v["init_prologue"]);
+    assert_eq!(prologue, bytes(&v["resp_prologue"]));
+    let msgs = list(v, "messages");
+    assert_eq!(msgs.len(), 6);
+
+    let mut init = handshake_raw(
+        RawRole::Initiator {
+            remote_static: arr(&v["init_remote_static"]),
+        },
+        &prologue,
+        &arr(&v["init_static"]),
+        Some(arr(&v["init_ephemeral"])),
+    );
+    let mut resp = handshake_raw(
+        RawRole::Responder,
+        &prologue,
+        &arr(&v["resp_static"]),
+        Some(arr(&v["resp_ephemeral"])),
+    );
+
+    // hs1 and hs2, each written by one side and read by the other.
+    let hs1 = init.write(&bytes(&msgs[0]["payload"]));
+    assert_eq!(hs1, bytes(&msgs[0]["ciphertext"]));
+    assert_eq!(hs1.len(), 112);
+    assert_eq!(resp.read(&hs1).unwrap(), bytes(&msgs[0]["payload"]));
+    let hs2 = resp.write(&bytes(&msgs[1]["payload"]));
+    assert_eq!(hs2, bytes(&msgs[1]["ciphertext"]));
+    assert_eq!(hs2.len(), 63);
+    assert_eq!(init.read(&hs2).unwrap(), bytes(&msgs[1]["payload"]));
+    assert_eq!(init.handshake_hash(), bytes(&v["handshake_hash"]));
+    assert_eq!(resp.handshake_hash(), bytes(&v["handshake_hash"]));
+
+    // Transport: initiator first, implicit nonces 0, 0, 1, 1.
+    let init = init.into_transport();
+    let resp = resp.into_transport();
+    for (i, m) in msgs[2..].iter().enumerate() {
+        let nonce = (i / 2) as u64;
+        let (from, to) = if i % 2 == 0 {
+            (&init, &resp)
+        } else {
+            (&resp, &init)
+        };
+        let ct = from.encrypt(nonce, &bytes(&m["payload"]));
+        assert_eq!(ct, bytes(&m["ciphertext"]), "message {}", i + 2);
+        assert_eq!(to.decrypt(nonce, &ct).unwrap(), bytes(&m["payload"]));
+    }
+}
+
+/// Byte i is i % 251: every frame plaintext in noise.json.
+fn plaintext_of(len: usize) -> Vec<u8> {
+    (0..len).map(|i| (i % 251) as u8).collect()
+}
+
+fn u64_of(v: &Value) -> u64 {
+    v.as_u64().expect("a u64")
+}
+
+struct NoiseFile {
+    file: Value,
+    mac: StaticKeypair,
+    phone: StaticKeypair,
+    i_m: DeviceKey,
+    i_p: DeviceKey,
+}
+
+fn noise_file() -> NoiseFile {
+    let file = load(vector!("noise.json"));
+    let k = &file["keys"];
+    let mac = StaticKeypair::from_secret(arr(&k["mac_static_secret"]));
+    let phone = StaticKeypair::from_secret(arr(&k["phone_static_secret"]));
+    assert_eq!(mac.public(), arr::<32>(&k["mac_static_public"]));
+    assert_eq!(phone.public(), arr::<32>(&k["phone_static_public"]));
+    let (i_m, i_p) = (Bytes(arr(&k["i_m"])), Bytes(arr(&k["i_p"])));
+    NoiseFile {
+        file,
+        mac,
+        phone,
+        i_m,
+        i_p,
+    }
+}
+
+impl NoiseFile {
+    /// The phone's initiator for handshakes[i], with its fixed ephemeral.
+    fn initiator(&self, i: usize) -> (Initiator, Vec<u8>) {
+        let h = &self.file["handshakes"][i];
+        Initiator::start_with(
+            &self.phone,
+            &self.i_m,
+            &self.i_p,
+            &self.mac.public(),
+            u64_of(&h["counter"]),
+            Some(arr(&h["phone_ephemeral"])),
+        )
+        .expect("starts")
+    }
+
+    /// Both sessions of handshakes[i]: (phone, Mac).
+    fn sessions(&self, i: usize) -> (Session, Session) {
+        let h = &self.file["handshakes"][i];
+        let (mut init, hs1) = self.initiator(i);
+        let read = read_hs1_with(
+            &self.mac,
+            &self.i_m,
+            &self.i_p,
+            &hs1,
+            Some(arr(&h["mac_ephemeral"])),
+        )
+        .expect("hs1 reads");
+        let (hs2, mac) = read.reply();
+        (init.finish(&hs2).expect("hs2 reads"), mac)
+    }
+}
+
+#[test]
+fn vectors_noise_handshakes() {
+    let n = noise_file();
+    assert_eq!(text(&n.file["pattern"]), NOISE_PATTERN);
+    assert_eq!(noise_prologue(&n.i_m, &n.i_p), bytes(&n.file["prologue"]));
+    let hss = list(&n.file, "handshakes");
+    let counters: Vec<u64> = hss.iter().map(|h| u64_of(&h["counter"])).collect();
+    assert_eq!(counters, vec![0, 1_760_000_000_000, MAX_COUNTER]);
+    for (i, h) in hss.iter().enumerate() {
+        let (mut init, hs1) = n.initiator(i);
+        assert_eq!(hs1, bytes(&h["hs1"]), "hs1 {i}");
+        assert_eq!(hs1.len(), HS1_LEN);
+        assert_eq!(init.counter(), counters[i]);
+        let read = read_hs1_with(&n.mac, &n.i_m, &n.i_p, &hs1, Some(arr(&h["mac_ephemeral"])))
+            .expect("hs1 reads");
+        assert_eq!(read.counter(), counters[i]);
+        assert_eq!(read.remote_static(), n.phone.public());
+        let (hs2, mac) = read.reply();
+        assert_eq!(hs2, bytes(&h["hs2"]), "hs2 {i}");
+        assert_eq!(hs2.len(), HS2_LEN);
+        let phone = init.finish(&hs2).expect("hs2 reads");
+        let id: [u8; SESSION_ID_LEN] = arr(&h["session_id"]);
+        assert_eq!(id[..], bytes(&h["handshake_hash"])[..8]);
+        assert_eq!(phone.id(), id);
+        assert_eq!(mac.id(), id);
+    }
+}
+
+#[test]
+fn vectors_noise_frames() {
+    let n = noise_file();
+    let (mut phone, mut mac) = n.sessions(0);
+    for f in list(&n.file, "frames") {
+        let nonce = u64_of(&f["nonce"]);
+        let plain = plaintext_of(u64_of(&f["plaintext_len"]) as usize);
+        let (from, to) = match text(&f["direction"]) {
+            "phone_to_mac" => (&mut phone, &mut mac),
+            _ => (&mut mac, &mut phone),
+        };
+        from.preset(nonce, None);
+        let body = from.seal(&plain).expect("seals");
+        assert_eq!(from.send_nonce(), nonce + 1);
+        assert_eq!(body.len() as u64, u64_of(&f["body_len"]));
+        match f.get("body") {
+            Some(want) => assert_eq!(body, bytes(want), "{f}"),
+            None => assert_eq!(Sha256::digest(&body).to_vec(), bytes(&f["body_sha256"])),
+        }
+        to.preset(0, None);
+        assert_eq!(to.open(&body), Opened::Accept(plain));
+        assert_eq!(to.last_recv(), Some(nonce));
+    }
+}
+
+#[test]
+fn vectors_noise_envelopes() {
+    let n = noise_file();
+    let kinds = [RoutedKind::Hs1, RoutedKind::Hs2, RoutedKind::Frame];
+    for (e, kind) in list(&n.file, "envelopes").iter().zip(kinds) {
+        assert_eq!(u64_of(&e["kind"]), kind as u64);
+        let routed = Routed {
+            kind,
+            peer: Bytes(arr(&e["peer"])),
+            body: bytes(&e["body"]),
+        };
+        assert_eq!(routed.encode(), bytes(&e["bytes"]));
+        assert_eq!(Routed::parse(&bytes(&e["bytes"])), Some(routed));
+    }
+}
+
+#[test]
+fn vectors_noise_sweep() {
+    let n = noise_file();
+    let sweep = list(&n.file, "sweep");
+    assert_eq!(sweep.len(), 16);
+    for c in sweep {
+        let phone = StaticKeypair::from_secret(arr(&c["phone_secret"]));
+        let mac = StaticKeypair::from_secret(arr(&c["mac_secret"]));
+        let (i_m, i_p) = (Bytes(arr(&c["i_m"])), Bytes(arr(&c["i_p"])));
+        let (mut init, hs1) = Initiator::start_with(
+            &phone,
+            &i_m,
+            &i_p,
+            &mac.public(),
+            u64_of(&c["counter"]),
+            Some(arr(&c["phone_ephemeral"])),
+        )
+        .unwrap();
+        assert_eq!(hs1, bytes(&c["hs1"]));
+        let read = read_hs1_with(&mac, &i_m, &i_p, &hs1, Some(arr(&c["mac_ephemeral"]))).unwrap();
+        let (hs2, mut m) = read.reply();
+        assert_eq!(hs2, bytes(&c["hs2"]));
+        let mut p = init.finish(&hs2).unwrap();
+        assert_eq!(p.id(), arr::<8>(&c["session_id"]));
+        for f in list(c, "frames") {
+            let nonce = u64_of(&f["nonce"]);
+            let plain = plaintext_of(u64_of(&f["plaintext_len"]) as usize);
+            let (from, to) = match text(&f["direction"]) {
+                "phone_to_mac" => (&mut p, &mut m),
+                _ => (&mut m, &mut p),
+            };
+            from.preset(nonce, None);
+            let body = from.seal(&plain).unwrap();
+            assert_eq!(body, bytes(&f["body"]));
+            assert_eq!(to.open(&body), Opened::Accept(plain));
+        }
+    }
+}
+
+#[test]
+fn vectors_noise_refused_hs1() {
+    let n = noise_file();
+    let cases = list(&n.file["refused"], "hs1");
+    let low_order = list(&n.file, "low_order");
+    assert_eq!(low_order.len(), 14);
+    assert_eq!(cases.len(), 9 + 2 * low_order.len());
+    for c in cases {
+        assert_eq!(text(&c["layer"]), "crypto");
+        let sender = Bytes(arr(&c["sender_i_p"]));
+        let got = read_hs1(&n.mac, &n.i_m, &sender, &bytes(&c["hs1"]));
+        assert!(got.is_err(), "{}", text(&c["why"]));
+    }
+}
+
+#[test]
+fn vectors_noise_refused_hs2_leave_the_handshake_usable() {
+    let n = noise_file();
+    let good = bytes(&n.file["handshakes"][0]["hs2"]);
+    let id: [u8; 8] = arr(&n.file["handshakes"][0]["session_id"]);
+    let cases = list(&n.file["refused"], "hs2");
+    assert_eq!(cases.len(), 6 + 14);
+    for c in cases {
+        assert_eq!(text(&c["layer"]), "crypto");
+        let (mut init, _) = n.initiator(0);
+        assert!(
+            init.finish(&bytes(&c["hs2"])).is_err(),
+            "{}",
+            text(&c["why"])
+        );
+        let session = init.finish(&good).expect("the right hs2 still completes");
+        assert_eq!(session.id(), id, "{}", text(&c["why"]));
+    }
+}
+
+#[test]
+fn vectors_noise_low_order_keys_are_refused_by_the_rule() {
+    let n = noise_file();
+    for u in list(&n.file, "low_order") {
+        let u: [u8; 32] = arr(&u["u"]);
+        assert!(crate::noise::is_low_order(&n.mac, &u));
+        assert!(crate::noise::is_low_order(&n.phone, &u));
+        // A low-order Mac static is refused before anything is sent.
+        let got = Initiator::start(&n.phone, &n.i_m, &n.i_p, &u, 0);
+        assert!(matches!(got, Err(HandshakeError::LowOrder)));
+    }
+    assert!(!crate::noise::is_low_order(&n.phone, &n.mac.public()));
+}
+
+#[test]
+fn vectors_noise_high_bit_e_completes() {
+    let n = noise_file();
+    let h0 = &n.file["handshakes"][0];
+    let cases = list(&n.file, "high_bit_e");
+    assert_eq!(cases.len(), 2);
+    // hs1 with a top-bit e: the Mac reads it and replies as the vector says.
+    let c = &cases[0];
+    let read = read_hs1_with(
+        &n.mac,
+        &n.i_m,
+        &n.i_p,
+        &bytes(&c["hs1"]),
+        Some(arr(&h0["mac_ephemeral"])),
+    )
+    .expect("a top-bit e is read");
+    let (hs2, mac) = read.reply();
+    assert_eq!(hs2, bytes(&c["hs2"]));
+    assert_eq!(mac.id(), arr::<8>(&c["session_id"]));
+    // hs2 with a top-bit e: the phone completes.
+    let c = &cases[1];
+    let (mut init, hs1) = n.initiator(0);
+    assert_eq!(hs1, bytes(&c["hs1"]));
+    let phone = init.finish(&bytes(&c["hs2"])).expect("a top-bit e is read");
+    assert_eq!(phone.id(), arr::<8>(&c["session_id"]));
+}
+
+fn script_body(step: &Value) -> Vec<u8> {
+    match step.get("body") {
+        Some(b) => bytes(b),
+        None => {
+            let fill = &step["body_fill"];
+            let mut out = bytes(&fill["prefix"]);
+            out.resize(u64_of(&fill["len"]) as usize, 0);
+            out
+        }
+    }
+}
+
+#[test]
+fn vectors_noise_receiver_scripts() {
+    let n = noise_file();
+    let scripts = list(&n.file, "receiver_scripts");
+    assert_eq!(scripts.len(), 2);
+    for script in scripts {
+        let (phone, mac) = n.sessions(0);
+        let mut to = match text(&script["direction"]) {
+            "phone_to_mac" => mac,
+            _ => phone,
+        };
+        for step in list(script, "steps") {
+            let why = text(&step["why"]);
+            let got = to.open(&script_body(step));
+            match text(&step["outcome"]) {
+                "accept" => assert_eq!(
+                    got,
+                    Opened::Accept(plaintext_of(u64_of(&step["plaintext_len"]) as usize)),
+                    "{why}"
+                ),
+                "drop" => assert_eq!(got, Opened::Drop, "{why}"),
+                "bad" => assert_eq!(got, Opened::Bad, "{why}"),
+                other => panic!("unknown outcome {other}"),
+            }
+            assert_eq!(to.last_recv(), step["last_recv"].as_u64(), "{why}");
+        }
+    }
+}
+
+#[test]
+fn vectors_noise_ac6_nonces_0_2_2_1_5() {
+    // AC6, read from the receiver scripts: nonces 0, 2, 2, 1, 5 give accept, accept,
+    // drop, drop, accept.
+    let n = noise_file();
+    let steps = list(&n.file["receiver_scripts"][0], "steps");
+    let outcomes: Vec<(u64, &str)> = steps
+        .iter()
+        .map(|s| (script_body(s), text(&s["outcome"])))
+        .filter(|(b, _)| {
+            b.len() >= 32 && b[..8] == bytes(&n.file["handshakes"][0]["session_id"])[..]
+        })
+        .map(|(b, o)| (u64::from_be_bytes(b[8..16].try_into().unwrap()), o))
+        .collect();
+    let window: Vec<_> = outcomes
+        .iter()
+        .skip_while(|(nonce, o)| !(*nonce == 0 && *o == "accept"))
+        .take(5)
+        .copied()
+        .collect();
+    assert_eq!(
+        window,
+        vec![
+            (0, "accept"),
+            (2, "accept"),
+            (2, "drop"),
+            (1, "drop"),
+            (5, "accept")
+        ]
+    );
+}
