@@ -3,49 +3,97 @@
 //! - `RELAY_HOSTS` (required): comma-separated host names a login may be signed for, each
 //!   a bare name or a bracketed IPv6 literal, with no scheme, port, path or user.
 //! - `RELAY_LISTEN` (default `0.0.0.0:8080`): where it listens.
+//! - `RELAY_DB` (required): the SQLite file's path.
+//! - `RELAY_METRICS_TOKEN` (optional): the Bearer token for `/metrics`, at least 32
+//!   characters. Without one, `/metrics` answers 404.
 //!
-//! A bad or non-Unicode value exits 2; a relay that can't listen, or whose server
-//! stops, exits 1.
+//! A missing, bad or non-Unicode value exits 2; a database that won't open, a relay that
+//! can't listen, or a server that stops, exits 1.
 
 use std::ffi::OsString;
+use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use relay_core::InMemoryPairs;
-use relay_server::{serve, Config};
+use relay_server::{serve, Config, SqliteStore};
+
+/// The shortest `/metrics` token accepted.
+const MIN_METRICS_TOKEN: usize = 32;
+
+struct Settings {
+    listen: SocketAddr,
+    hosts: Vec<String>,
+    db: PathBuf,
+    metrics_token: Option<String>,
+}
 
 #[tokio::main]
 async fn main() {
-    let (listen, hosts) = settings().unwrap_or_else(|e| {
+    let settings = settings().unwrap_or_else(|e| {
         eprintln!("relay: {e}");
         std::process::exit(2);
     });
-    eprintln!("relay: hosts {}", hosts.join(","));
-    // Pairs are held in memory until story 7 adds the database.
-    let config = Config::new(listen, hosts, Arc::new(InMemoryPairs::new()));
-    let handle = match serve(config).await {
-        Ok((addr, handle)) => {
-            eprintln!("relay: listening on {addr}");
-            handle
+    eprintln!("relay: hosts {}", settings.hosts.join(","));
+    let store = SqliteStore::open(&settings.db).unwrap_or_else(|e| {
+        eprintln!("relay: cannot open RELAY_DB: {}", e.code());
+        std::process::exit(1);
+    });
+    let mut config = Config::new(settings.listen, settings.hosts, Arc::new(store));
+    config.metrics_token = settings.metrics_token;
+    let relay = match serve(config).await {
+        Ok(relay) => {
+            eprintln!("relay: listening on {}", relay.addr);
+            relay
         }
         Err(e) => {
             eprintln!("relay: cannot listen: {}", e.kind());
             std::process::exit(1);
         }
     };
-    // The server task ends only on a fatal error.
-    let _ = handle.await;
+    // The server ends only on a fatal error.
+    let _ = relay.wait().await;
     eprintln!("relay: server stopped");
     std::process::exit(1);
 }
 
-fn settings() -> Result<(std::net::SocketAddr, Vec<String>), String> {
+fn settings() -> Result<Settings, String> {
     let listen = env_text("RELAY_LISTEN", std::env::var_os("RELAY_LISTEN"))?
         .unwrap_or_else(|| "0.0.0.0:8080".into());
     let listen = listen
         .parse()
         .map_err(|_| "RELAY_LISTEN is not an address".to_string())?;
     let hosts = hosts_from(env_text("RELAY_HOSTS", std::env::var_os("RELAY_HOSTS"))?)?;
-    Ok((listen, hosts))
+    let db = db_from(env_text("RELAY_DB", std::env::var_os("RELAY_DB"))?)?;
+    let metrics_token = metrics_token_from(env_text(
+        "RELAY_METRICS_TOKEN",
+        std::env::var_os("RELAY_METRICS_TOKEN"),
+    )?)?;
+    Ok(Settings {
+        listen,
+        hosts,
+        db,
+        metrics_token,
+    })
+}
+
+/// `RELAY_DB` is required: a default would quietly lose every pair on a restart.
+fn db_from(value: Option<String>) -> Result<PathBuf, String> {
+    match value {
+        Some(path) if !path.is_empty() => Ok(PathBuf::from(path)),
+        _ => Err("RELAY_DB is required (the SQLite file's path)".into()),
+    }
+}
+
+/// `RELAY_METRICS_TOKEN` is optional; when set it must be long enough to guess at no
+/// better than chance. The message never repeats the value.
+fn metrics_token_from(value: Option<String>) -> Result<Option<String>, String> {
+    match value {
+        None => Ok(None),
+        Some(token) if token.chars().count() >= MIN_METRICS_TOKEN => Ok(Some(token)),
+        Some(_) => Err(format!(
+            "RELAY_METRICS_TOKEN must be at least {MIN_METRICS_TOKEN} characters"
+        )),
+    }
 }
 
 /// An environment value as text: unset is `None`, and a non-Unicode value is an error
@@ -134,6 +182,40 @@ mod tests {
             env_text("RELAY_HOSTS", Some("localhost".into())),
             Ok(Some("localhost".to_string()))
         );
+    }
+
+    #[test]
+    fn the_database_path_is_required() {
+        assert!(db_from(None).is_err());
+        assert!(db_from(Some(String::new())).is_err());
+        assert_eq!(
+            db_from(Some("/data/relay.db".into())),
+            Ok(PathBuf::from("/data/relay.db"))
+        );
+    }
+
+    #[test]
+    fn a_metrics_token_is_optional_but_at_least_32_characters() {
+        assert_eq!(metrics_token_from(None), Ok(None));
+        let ok = "x".repeat(32);
+        assert_eq!(metrics_token_from(Some(ok.clone())), Ok(Some(ok)));
+        for short in [String::new(), "x".repeat(31)] {
+            let err = metrics_token_from(Some(short.clone())).unwrap_err();
+            assert!(err.contains("RELAY_METRICS_TOKEN"), "{err}");
+            if !short.is_empty() {
+                assert!(!err.contains(&short), "the message repeats the token");
+            }
+        }
+        // Characters, not bytes: 31 two-byte characters are still too short.
+        assert!(metrics_token_from(Some("é".repeat(31))).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_database_that_will_not_open_is_an_error() {
+        // The bin exits 1 on this error; here, the store refuses a directory.
+        let dir = std::env::temp_dir();
+        assert!(SqliteStore::open(&dir).is_err());
     }
 
     #[test]

@@ -68,22 +68,22 @@ risk = "high"
 id = "5a"
 type = "story"
 title = "Pairing on the relay and the Mac, in Rust"
-description = '''Implements commit-then-reveal pairing on the Rust side: the relay's slot machine (slot_open, commit, nonce, reveal, confirm, decline, abort, status, the 1-hour ended-slot record with its parties, expiry, the disconnect rules), the relay's pairs handling (acked on paired_ack, one acked pair per Mac key and phone key, deletion of the replaced pair, pair_replaced), unpair and welcome on the relay, and the Mac side in relay/core and src-tauri through core. The CLI is the Rust test phone. Uses story 3's seals, SAS, QR builder and Names procedure, story 4's sessions, and story 7's storage and limiters. The phone's TypeScript side is story 5b. Each item is a test named after its line in the spec's Verification > Tests > Pairing list.
+description = '''Implements commit-then-reveal pairing on the Rust side: the relay's slot machine (slot_open, commit, nonce, reveal, confirm, decline, abort, status, the 1-hour ended-slot record with its parties, expiry, the disconnect rules), the relay's pairs handling (acked on paired_ack, one acked pair per Mac key and phone key, deletion of the replaced pair, pair_replaced), unpair and welcome on the relay, and the Mac side in relay/core and src-tauri through core. The CLI is the Rust test phone. Uses story 3's seals, SAS, QR builder and Names procedure, story 4's sessions, and story 7a's storage and 7b's limiters and routing. The phone's TypeScript side is story 5b. Each item is a test named after its line in the spec's Verification > Tests > Pairing list.
 (A) Steps 1 to 8 of "Pairing: commit, then reveal" as the relay and the Mac run them: the right secret pairs; nothing pairs without the Mac's confirm; the relay checks both signatures and both roles and stores the pair not yet acked; pair_confirmed answers the Mac; paired_ack marks the pair acked.
 (B) Refusals, each answered pair_refused with its reason and storing nothing: a wrong secret; an expired slot; a second commit; a reveal that doesn't match its commit; a bad sig_P; a bad sig_M.
 (C) Reasons, each in its own case: unknown (never opened; after a relay restart; after the 1-hour record lapses); expired; taken; cancelled; declined; disconnected; unpaired. The relay keeps an ended slot's id, reason and parties for 1 hour.
 (D) Party rule: a third device's nonce, reveal or confirm gets pair_refused unknown, and its abort, status or decline gets pair_state ended unknown, leaving the slot as it was; a second phone's commit gets taken; a fresh commit to a committed slot that has since expired gets expired.
 (E) Lifetime: 300 s from slot until the first commit, then 300 s from the commit; ttl_s is in the delivered pair_commit and pair_nonce; a slot committed just before it runs out lasts 300 s from the commit; expiry sends pair_ended to both parties and refuses a later confirm.
-(F) Disconnects: either side disconnecting before the reveal ends the slot and the other side gets pair_ended disconnected; a commit while the Mac is offline is refused; a disconnect after the reveal doesn't end the slot, and the Mac confirms after reconnecting; a new slot_open ends the Mac's previous slot as cancelled and sends pair_ended to its committed phone.
+(F) Disconnects: either side disconnecting before the reveal ends the slot and the other side gets pair_ended disconnected; a commit while the Mac is offline is refused; a disconnect after the reveal doesn't end the slot, and the Mac confirms after reconnecting; a new slot_open ends the Mac's previous slot as cancelled and sends pair_ended to its committed phone; one slot open per Mac at a time (moved from story 7, owner 2026-10-16); a slot_open refused by story 7b's SlotLimiter is answered control_limited {msg: "slot_open", retry_ms} (owner 2026-10-16).
 (G) Abort and decline: a Mac closing its view after the reveal sends pair_decline; before the reveal it sends pair_abort; a Mac reconnecting with no reveal sends pair_abort for the old slot, then opens a new one; pair_abort and pair_decline always get pair_state, including when a confirm won (paired or pair_confirmed first) and after a relay restart (pairs table first); a lost decline or abort is re-sent after each welcome until pair_state answers; a pair_abort sent within 5 s of a pair_status is re-sent after retry_ms and takes effect.
 (H) Confirm: a repeated identical pair_confirm gets pair_confirmed again, also after the slot has gone; a refused confirm means the relay holds no such pair, and the Mac drops its pending pair; the Mac saves its pending pair before sending pair_confirm; a pair_confirm lost on a dying socket is re-sent after reconnect and pairs before the slot runs out.
 (K, Rust parts) Unpair on the relay and the Mac: unpair works from either side; a replayed old unpair leaves a newer pair alone; the Mac's Unpair sends one unpair per pair it holds with that phone and discards its pending pairs with that phone; welcome reconciles on the Mac in both directions, a removed pair going silently when another pair with that key remains; two identities sharing one state file each keep their own pairs.
 (L, Rust parts) Pairing again on the relay and the Mac: at most one acked pair per Mac key and phone key; the old pair stays until the phone's paired_ack; that ack deletes the old pair in the same step and sends pair_replaced to each online side, never unpair; the Mac drops its old pair on pair_replaced and shows nothing; a re-sent paired comes before welcome on login.
 (M) Names on the Mac: a phone name with invalid UTF-8 in the reveal still pairs, with H checked over the raw bytes; the Mac decodes the name lossily, cleans it, and shows "iPhone" when it is empty; a name is never a reason to refuse a pairing.
-Known uncertainty: this is the largest single piece of the relay; the memory bound of the 1-hour record is the slot limit in story 7.'''
+Known uncertainty: this is the largest single piece of the relay; the memory bound of the 1-hour record is the slot limit in story 7b.'''
 verify = "The approved verification command passes, with one named test for each item A to H and the Rust parts of K, L and M; the e2e test in relay/e2e/tests/ pairs the CLI with core's Mac side and covers a refused commit, a cancel, a re-pair and a lost ack."
 covers = []
-after = [2, 4, 7]
+after = [2, 4, "7a", "7b"]
 hitl = false
 risk = "high"
 
@@ -121,34 +121,48 @@ Acceptance:
 (7) Foreground: the Mac treats a phone as in the background by default, when its presence is offline, or when no foreground {on:true} has arrived for 60 s. foreground {on} is accepted on change and every 30 s.
 (8) A frame refused with rate_limited is followed by a resend of the latest snapshot to that peer after retry_ms.
 (9) The CLI test phone ignores a snapshot whose seq is not above the last one it saw in the current session, and accepts a restarted seq.
+(10) The canary test: a canary string in a tab title never appears in the bytes the relay received (moved from story 7, owner 2026-10-16).
 E2E in relay/e2e/tests/: the paired CLI gets the first snapshot and each change in seq order; the latest state arrives after the burst's last frame was rate-limited; a tab with no agent arrives with null state and age_s; 201 tabs give truncated true, total 201, and the least urgent tab dropped; the size limit drops tabs in the order in (4); a restarted Mac side whose seq starts again still reaches the phone. Snapshots are never stored by the Mac's relay-facing code.'''
-verify = "The approved verification command passes; the vectors in (3) pass in both languages; each e2e check named in the description passes."
+verify = "The approved verification command passes; the vectors in (3) pass in both languages; each e2e check named in the description passes. The canary test: a canary string in a tab title never appears in the bytes the relay received (moved from story 7, owner 2026-10-16)."
 covers = []
 after = ["5b"]
 hitl = false
 risk = "medium"
 
 [[entry]]
-id = 7
+id = "7a"
 type = "story"
-title = "Relay storage, limits and cleanup"
-description = '''Adds SQLite storage, every limit in the spec, the 90-day cleanup and the token-guarded /metrics to the relay. The slot machine itself is story 5's; this story provides the storage and the limiters it uses.
-Acceptance:
-(1) Tables: devices (identity key, role, first seen, last seen); pairs (pair id, Mac key, phone key, both static keys, slot, paired at, acked); push_tokens (phone key, APNs token, environment, updated). acked is written by story 5's paired_ack handling. After a restart the pairs and acked values are still there; slots and presence are not.
-(2) Frames: 20 per second per device, bursts to 100, 64 KiB each; a refused frame is answered rate_limited {peer, retry_ms}.
-(3) Control messages: 10 per second per device, bursts to 30, checked before any lookup; an excess message is dropped unprocessed and answered control_limited {msg, slot, pair_id, retry_ms}. A pair_status flood is answered control_limited before any lookup.
-(4) Slots: 30 opened per hour per Mac, counted when opened, one open at a time; 30 fit in an hour and the 31st is refused.
-(5) New identity keys: 20 per hour per IP. Connections: one live connection per device; a new login replaces the old.
+title = "Relay storage, cleanup and metrics"
+description = '''Adds SQLite storage behind a Store trait to the relay: devices, pairs (with sig_M and acked) and push_tokens; roles stored; the 90-day cleanup; the token-guarded /metrics; and typed logs with counts and error codes only. The slot machine is story 5a's; the limiters are story 7b's; this story provides the storage they use.
+Acceptance (numbering kept from story 7):
+(1) Tables: devices (identity key, role, first seen, last seen); pairs (pair id, Mac key, phone key, both static keys, slot, paired at, sig_M, acked); push_tokens (phone key, APNs token, environment, updated). acked is written by story 5's paired_ack handling. sig_M is stored so that `paired` can be re-sent after a restart. After a restart the pairs and acked values are still there; slots and presence are not.
 (6) Cleanup: devices unseen for 90 days are deleted with their pairs and tokens.
 (7) /health is public; /metrics serves counts only and needs its token.
-(8) No frame or pairing content is stored or logged; logs carry counts and error codes only.
-(9) The 40 queued unpairs of a device, sent at 10 per second after a login, all reach the relay (the device-side pacing is story 5's).
-Not here: push limits (1 per 30 s per phone, 30 per hour) are story 10's; the per-slot 5 s rule for pair_status and pair_abort is story 5's.'''
-verify = "A test per limit in (2) to (5), the cleanup test, the /metrics token test, and the canary test (a string in a tab title never appears in bytes the relay received, its logs or its SQLite file) pass, under the approved verification command."
+(8) No frame or pairing content is stored or logged; logs carry counts and error codes only (the canary covers logs and the SQLite file; the bytes-received clause is story 6's).'''
+verify = "The restart test, the cleanup test, the /metrics token test, and the canary test (a canary string never appears in the relay's logs or its SQLite file) pass under the approved verification command."
 covers = []
 after = [2]
 hitl = false
-risk = "medium"
+risk = "high"
+
+[[entry]]
+id = "7b"
+type = "story"
+title = "Relay limits, routing and replacement"
+description = '''Adds the spec's frame, control, slot and new-key limiters with their signals (rate_limited, control_limited, 4429), routing of binary hs1, hs2 and frames and of the rehandshake control message between paired online keys, and one live connection per device with close 4409 replaced. The storage is story 7a's.
+Acceptance:
+(2) Frames: 20 per second per device, bursts to 100, 64 KiB each; a refused frame is answered rate_limited {peer, retry_ms}.
+(3) Control messages: 10 per second per device, bursts to 30, checked before any lookup; an excess message is dropped unprocessed and answered control_limited {msg, slot, pair_id, retry_ms}. A pair_status flood is answered control_limited before any lookup.
+(4) Slots: 30 opened per hour per Mac, counted when opened; 30 fit in an hour and the 31st is refused (one open at a time is story 5a's slot machine, owner 2026-10-16).
+(5) New identity keys: 20 per hour per IP. Connections: one live connection per device; a new login replaces the old. A new key refused by the per-IP limit closes 4429 too_many_new_keys (this amends story 2's 4401 rule for that case only). A replaced connection closes 4409 replaced.
+(9) The 40 queued unpairs of a device, sent at 10 per second after a login, all reach the relay (the device-side pacing is story 5's).
+(10) Routing: hs1, hs2, frames and `rehandshake {peer}` reach a paired online peer with the peer field rewritten to the sender, and are dropped silently to an unpaired or offline key.
+Not here: push limits (1 per 30 s per phone, 30 per hour) are story 10's; the per-slot 5 s rule for pair_status and pair_abort is story 5's.'''
+verify = "A test per limit in (2) to (5), the 40-unpairs test, the routing test, and the replacement close test pass under the approved verification command."
+covers = []
+after = ["7a"]
+hitl = false
+risk = "high"
 
 [[entry]]
 id = 8
@@ -195,7 +209,7 @@ risk = "medium"
 id = 10
 type = "story"
 title = "Push"
-description = '''Adds APNs sending through a2 in the relay with the spec's headers and token lifecycle, push_token handling, the push limits, and the Mac's per-tab 3-second rule with the foreground signal, with injected clocks. The push gate uses story 7's acked column and story 5's pairs.
+description = '''Adds APNs sending through a2 in the relay with the spec's headers and token lifecycle, push_token handling, the push limits, and the Mac's per-tab 3-second rule with the foreground signal, with injected clocks. The push gate uses story 7a's acked column and push_tokens table, and story 5's pairs.
 Acceptance:
 (1) Relay: APNs over HTTP/2 with token auth from Fly secrets; headers apns-topic (the bundle id), apns-push-type alert, apns-priority 10, apns-collapse-id ade-needs-you; fixed body "An agent needs you" and no custom data.
 (2) BadDeviceToken tries the other environment once and updates the record; 410 Unregistered deletes the token; push_token is accepted only from phones.
@@ -207,7 +221,7 @@ Acceptance:
 Known uncertainty: none beyond the spec.'''
 verify = "The approved verification command passes; the e2e test with the fake APNs sink passes every push rule in (1) to (7), using an injected clock."
 covers = []
-after = [6, 7]
+after = [6, "7a"]
 hitl = false
 risk = "medium"
 
@@ -218,7 +232,7 @@ title = "Deploy the relay to Fly.io"
 description = "Adds the Dockerfile, fly.toml (one machine, auto-stop off), the APNs secrets and the relay section of docs/ops.md, and deploys it."
 verify = "/health answers at the deployed wss host, and the e2e test passes against it."
 covers = []
-after = [7]
+after = ["7b"]
 hitl = true
 risk = "medium"
 
@@ -298,7 +312,7 @@ title = "Refactor sweep"
 description = "Cleans up what the epic's plans and deferred review findings name; scope is set when it starts and takes cleanup only."
 verify = "The verification command passes and each cleanup item is closed or recorded."
 covers = []
-after = [1, 2, 3, 4, "5a", "5b", 6, 7, 8, 9, 10, 11, "12a", "12b", 13]
+after = [1, 2, 3, 4, "5a", "5b", 6, "7a", "7b", 8, 9, 10, 11, "12a", "12b", 13]
 hitl = false
 risk = "low"
 
