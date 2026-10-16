@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { CURATED_ITEMS, PICKER_ITEMS, ROLE_ITEMS, roleInitials, roleSummary } from "../pickerItems";
 import { ROLES, getRole } from "../roles";
 import { CURATED_AGENTS } from "../curatedAgents";
+import { AGENT_COLOR_HEX } from "../agentColors";
 
 describe("picker items", () => {
   it("keeps every curated pair", () => {
@@ -64,5 +65,15 @@ describe("picker items", () => {
     expect(roleInitials("QA")).toBe("QA");
     expect(roleInitials("UX Expert")).toBe("UX");
     expect(roleInitials("Architect")).toBe("ARC");
+  });
+
+  it("picker items are colored by role", () => {
+    const curated = PICKER_ITEMS.find((i) => i.id === "web3-auditor")!;
+    expect(curated.roleId).toBe("adversarial-reviewer");
+    expect(curated.color).toBe(AGENT_COLOR_HEX.red.dark);
+    const bare = PICKER_ITEMS.find((i) => i.id === "role:qa")!;
+    expect(bare.color).toBe(AGENT_COLOR_HEX.yellow.dark);
+    const pm = PICKER_ITEMS.find((i) => i.id === "role:product-manager")!;
+    expect(pm.color).toBe(AGENT_COLOR_HEX.purple.dark);
   });
 });

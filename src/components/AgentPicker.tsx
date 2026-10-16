@@ -22,37 +22,30 @@ import {
 } from "../data/pickerItems";
 import { PROVIDERS, binaryFor } from "../data/providers";
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Backend: "#3fb950",
-  Frontend: "#58a6ff",
-  DevOps: "#bc8cff",
-  Testing: "#d29922",
-  Web3: "#f0883e",
-  Architects: "#a371f7",
-  // The bare-roles pill is deliberately neutral, not a category colour.
-  [ROLES_FILTER]: "#8b949e",
-};
-
-const categoryPillStyle = (active: boolean, color: string, activeBg = color + "20"): React.CSSProperties => ({
+/**
+ * Category pills and badges are neutral: role is the only color system in the
+ * picker (ADR 0007), and an agent color is never drawn as text.
+ */
+const categoryPillStyle = (active: boolean): React.CSSProperties => ({
   padding: "3px 8px",
   borderRadius: "12px",
   fontSize: "10px",
   fontWeight: 600,
-  border: `1px solid ${active ? color : "var(--border)"}`,
-  backgroundColor: active ? activeBg : "transparent",
-  color: active ? color : "var(--text-muted)",
+  border: `1px solid ${active ? "var(--text-secondary)" : "var(--border)"}`,
+  backgroundColor: active ? "var(--bg-tertiary)" : "transparent",
+  color: active ? "var(--text-primary)" : "var(--text-muted)",
   cursor: "pointer",
 });
 
-const categoryBadgeStyle = (color: string): React.CSSProperties => ({
+const categoryBadgeStyle: React.CSSProperties = {
   fontSize: "9px",
   fontWeight: 700,
   fontFamily: "monospace",
-  color,
-  backgroundColor: color + "20",
+  color: "var(--text-muted)",
+  backgroundColor: "var(--bg-tertiary)",
   padding: "1px 5px",
   borderRadius: "3px",
-});
+};
 
 interface AgentPickerProps {
   onClose: () => void;
@@ -396,7 +389,10 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "flex-end" }}>
               <button
                 onClick={() => setActiveCategory(null)}
-                style={categoryPillStyle(!activeCategory, "var(--accent)", "var(--accent-subtle)")}
+                style={{
+                  ...categoryPillStyle(!activeCategory),
+                  ...(!activeCategory && { border: "1px solid var(--accent)", backgroundColor: "var(--accent-subtle)", color: "var(--accent)" }),
+                }}
               >
                 All
               </button>
@@ -406,7 +402,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(isActive ? null : cat)}
-                    style={categoryPillStyle(isActive, CATEGORY_COLORS[cat] ?? "#ff7b72")}
+                    style={categoryPillStyle(isActive)}
                   >
                     {cat}
                   </button>
@@ -564,7 +560,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
             <span style={{ fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>
               {suggestedAgent.name}
             </span>
-            <span style={categoryBadgeStyle(suggestedAgent.color)}>
+            <span style={categoryBadgeStyle}>
               {suggestedAgent.category}
             </span>
             <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "auto" }}>
@@ -594,6 +590,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
               return (
                 <div
                   key={profile.id}
+                  data-testid="agent-row"
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -611,19 +608,20 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                   onClick={() => launchItem(profile)}
                 >
                   <div
+                    data-testid="agent-tile"
                     style={{
                       width: "32px",
                       height: "32px",
                       borderRadius: "8px",
                       backgroundColor: profile.color + "20",
-                      border: `1px solid ${profile.color}40`,
+                      border: `1px solid ${profile.color}`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       fontSize: "12px",
                       fontWeight: 700,
                       fontFamily: "monospace",
-                      color: profile.color,
+                      color: "var(--text-primary)",
                       flexShrink: 0,
                     }}
                   >
@@ -649,7 +647,7 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
                       >
                         {profile.name}
                       </span>
-                      <span style={categoryBadgeStyle(profile.color)}>
+                      <span style={categoryBadgeStyle}>
                         {profile.badge}
                       </span>
                       {role && profile.group === "agent" && (
@@ -736,7 +734,16 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
         {choice && (
           <div className="agent-where" role="group" aria-label={`Where to run ${choice.name}`}>
             <span className="agent-where__title">
-              Run <b style={{ color: choice.color }}>{choice.name}</b> in
+              Run{" "}
+              <span
+                data-testid="agent-where-dot"
+                aria-hidden="true"
+                style={{
+                  display: "inline-block", width: "8px", height: "8px", borderRadius: "50%",
+                  backgroundColor: choice.color, marginRight: "4px", verticalAlign: "middle",
+                }}
+              />
+              <b style={{ color: "var(--text-primary)" }}>{choice.name}</b> in
             </span>
             <button
               className="agent-where__opt"

@@ -25,3 +25,12 @@
 - source_plan: `_bmad-output/plan-fleet-background-agents.md`
   summary: With the session-still-writing guard, a background sub-agent that is lost without a notification stays running for as long as its session keeps writing.
   evidence: Introduced by the PR #54 review fix that stops the quiet check ending a sub-agent blocked on a long command. The session's transcript time is the only sign of life used; a check that the Claude Code process is alive would be exact.
+- source_plan: `_bmad-output/plan-agent-colors.md`
+  summary: Add the `color:` line to existing projects' ADE agent files that are still byte-identical to a version ADE shipped, the way setup brings the `CLAUDE.md` BMAD paragraph up to date.
+  evidence: Owner decision 8a (2026-10-16). Setup writes only missing files, so projects set up before Story A get colors only after a BMAD switch or re-adding an agent.
+- source_plan: `_bmad-output/plan-agent-colors.md`
+  summary: Color ade-setup's own role files with the table in `src/data/agentColors.ts`.
+  evidence: Owner decision 8b (2026-10-16). ADR 0007 keeps colors out of the vendored files. Merging to main in ade-setup tags and publishes a release, so this needs the owner's go-ahead at the time.
+- source_plan: `_bmad-output/plan-agent-colors.md`
+  summary: Bump the ADE Claude Code plugin's version so existing installs pick up the colored agent files.
+  evidence: Owner decision 8c (2026-10-16). Story A regenerates `claude-plugin/plugins/ade/agents/*.md` but leaves `plugin.json` at 1.1.0.

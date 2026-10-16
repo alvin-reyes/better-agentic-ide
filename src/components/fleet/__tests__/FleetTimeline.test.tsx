@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import FleetTimeline from "../FleetTimeline";
 import type { FleetLane } from "../../../stores/fleetStore";
+import { AGENT_COLOR_HEX, NEUTRAL_HEX } from "../../../data/agentColors";
 
 function lane(over: Partial<FleetLane> = {}): FleetLane {
   return {
@@ -118,5 +119,116 @@ describe("FleetTimeline empty state", () => {
   it("falls back to a plain message when there is no folder", () => {
     render(<FleetTimeline lanes={[]} from={0} to={1000} />);
     expect(screen.getByText(/No agent activity/)).toBeTruthy();
+  });
+});
+
+/**
+ * Agent colors (ADR 0007): a lane is filled in its role's color, and status is
+ * shown by shape and text rather than by color or opacity.
+ */
+describe("FleetTimeline agent colors", () => {
+  // jsdom reports a hex set in a style as rgb(...).
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+  const ROLE_RGBS = [...Object.values(AGENT_COLOR_HEX).map((h) => rgb(h.dark)), rgb(NEUTRAL_HEX.dark)];
+
+  it("fills each lane in its role's color, neutral when it has none", () => {
+    const lanes = [
+      lane({ id: "a1", roleId: "qa", label: "qa" }),
+      lane({ id: "a2", roleId: "developer", label: "developer", paneId: "p2" }),
+      lane({ id: "a3", roleId: null, label: "Explore", paneId: "p3" }),
+      lane({ id: "sub:s1", kind: "subagent", parentId: "a3", roleId: "qa", label: "qa" }),
+    ];
+    render(<FleetTimeline lanes={lanes} from={0} to={2000} />);
+    const rows = screen.getAllByTestId("lane-row");
+    expect(rows.map((r) => r.getAttribute("data-kind"))).toEqual(["agent", "agent", "agent", "subagent"]);
+    const expected = [
+      ["yellow", AGENT_COLOR_HEX.yellow.dark],
+      ["green", AGENT_COLOR_HEX.green.dark],
+      ["none", NEUTRAL_HEX.dark],
+      ["yellow", AGENT_COLOR_HEX.yellow.dark],
+    ] as const;
+    rows.forEach((row, i) => {
+      const [name, hex] = expected[i];
+      const bar = row.querySelector("[data-testid='lane-bar']") as HTMLElement;
+      expect(bar.getAttribute("data-agent-color")).toBe(name);
+      expect(bar.style.backgroundColor).toBe(rgb(hex));
+      expect(["", "1"]).toContain(bar.style.opacity);
+      const dot = row.querySelector("[data-testid='lane-dot']") as HTMLElement;
+      expect(dot.style.backgroundColor).toBe(rgb(hex));
+      expect(dot.style.width).toBe("8px");
+      const label = row.querySelector("[data-testid='lane-label']") as HTMLElement;
+      expect(ROLE_RGBS).not.toContain(label.style.color);
+      expect(label.style.color).toMatch(/^var\(--text-/);
+    });
+  });
+
+  it("shows status by shape and text, not color", () => {
+    const hex = AGENT_COLOR_HEX.yellow.dark;
+    const lanes = [
+      lane({ id: "r", roleId: "qa", label: "qa", status: "running", endTime: null }),
+      lane({ id: "c", roleId: "qa", label: "qa", status: "completed", paneId: "p2", detail: "verify story 3" }),
+      lane({ id: "x", roleId: "qa", label: "qa", status: "cancelled", paneId: "p3" }),
+    ];
+    render(<FleetTimeline lanes={lanes} from={0} to={3000} />);
+    const bars = screen.getAllByTestId("lane-bar");
+    const byStatus: Record<string, HTMLElement> = Object.fromEntries(bars.map((b) => [b.getAttribute("data-status") ?? "", b]));
+    const { running, completed, cancelled } = byStatus;
+
+    expect(running.style.backgroundColor).toBe(rgb(hex));
+    expect(completed.style.backgroundColor).toBe(rgb(hex));
+    expect(cancelled.style.backgroundColor).toBe("transparent");
+    expect(cancelled.style.backgroundImage).toMatch(/^repeating-linear-gradient\(/);
+    // jsdom keeps a hex inside a gradient as written, where a plain color becomes rgb(...).
+    const image = cancelled.style.backgroundImage.toLowerCase();
+    expect(image.includes(hex) || image.includes(rgb(hex)), image).toBe(true);
+
+    expect(running.querySelector("[data-testid='lane-live-edge']")).not.toBeNull();
+    expect(completed.querySelector("[data-testid='lane-live-edge']")).toBeNull();
+    expect(cancelled.querySelector("[data-testid='lane-live-edge']")).toBeNull();
+    expect(running.style.borderTopRightRadius).toMatch(/^0(px)?$/);
+    expect(running.style.borderBottomRightRadius).toMatch(/^0(px)?$/);
+    for (const b of [completed, cancelled]) {
+      expect(b.style.borderTopRightRadius).not.toMatch(/^0(px)?$/);
+    }
+
+    for (const [status, bar] of Object.entries(byStatus)) {
+      expect(bar.getAttribute("title"), status).toMatch(new RegExp(`, ${status}$`));
+      expect(bar.getAttribute("aria-label"), status).toMatch(new RegExp(`, ${status}$`));
+      expect(bar.getAttribute("title"), status).toMatch(/^qa, QA, /);
+    }
+    expect(completed.getAttribute("title")).toBe("qa, QA, verify story 3, completed");
+    expect(completed.getAttribute("aria-label")).toBe("qa, QA, verify story 3, completed");
+  });
+
+  it("names a lane with no role as not an ADE role", () => {
+    render(<FleetTimeline lanes={[lane({ roleId: null, label: "Explore" })]} from={0} to={2000} />);
+    expect(screen.getByTestId("lane-bar").getAttribute("aria-label")).toBe("Explore, not an ADE role, completed");
+  });
+
+  it("a selectable lane bar is a native button", () => {
+    const onSelect = vi.fn();
+    const l = lane();
+    const { unmount } = render(<FleetTimeline lanes={[l]} from={0} to={2000} onSelect={onSelect} />);
+    const bar = screen.getByTestId("lane-bar");
+    expect(bar).toBeInstanceOf(HTMLButtonElement);
+    expect(bar.getAttribute("type")).toBe("button");
+    expect(bar.classList.contains("fleet-lane-bar")).toBe(true);
+    expect((bar as HTMLButtonElement).disabled).toBe(false);
+    expect(bar.tabIndex).not.toBe(-1);
+    fireEvent.click(bar);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith(l);
+    // jsdom does not turn a key press into a click, so these reach only a key
+    // handler; there must be none, or a real browser would select twice.
+    fireEvent.keyDown(bar, { key: "Enter" });
+    fireEvent.keyDown(bar, { key: " " });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    unmount();
+
+    render(<FleetTimeline lanes={[l]} from={0} to={2000} />);
+    const plain = screen.getByTestId("lane-bar");
+    expect(plain.tagName).toBe("DIV");
+    expect(plain.getAttribute("role")).toBe("img");
   });
 });

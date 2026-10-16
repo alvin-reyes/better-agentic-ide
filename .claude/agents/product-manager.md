@@ -1,6 +1,7 @@
 ---
 name: product-manager
 description: "Owns docs/prd.md. Use to turn the owner's intent into a PRD with testable acceptance criteria, or when scope changes."
+color: purple
 ---
 
 # Product Manager (PM)

@@ -1,6 +1,7 @@
 ---
 name: web3-gas
 description: "Gas Optimizer: Cut gas with measured changes: storage packing, calldata, unchecked math, caching. Use for gas, optimize gas, gas report, storage packing, calldata, snapshot work."
+color: green
 ---
 
 # Developer — Gas Optimization

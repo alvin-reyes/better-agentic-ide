@@ -1,6 +1,7 @@
 ---
 name: web3-solana
 description: "Solana / Anchor Engineer: Build Solana programs with Anchor: accounts, PDAs, CPIs, and TypeScript tests. Use for solana, anchor, program, pda, cpi, spl work."
+color: green
 ---
 
 # Developer — Solana & Anchor

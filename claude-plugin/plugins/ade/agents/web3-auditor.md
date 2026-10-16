@@ -1,6 +1,7 @@
 ---
 name: web3-auditor
 description: "Smart Contract Auditor: Security review: reentrancy, access control, oracle and MEV risks, with proof-of-concept tests. Use for audit, security review, vulnerability, reentrancy, exploit, slither work."
+color: red
 ---
 
 # Adversarial Reviewer — Contract Security Audit

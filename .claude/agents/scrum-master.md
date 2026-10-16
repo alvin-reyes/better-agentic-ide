@@ -2,6 +2,7 @@
 name: scrum-master
 description: "Shards the approved plan into small, independently testable stories under docs/stories/. Use once the owner has approved the plan."
 model: haiku
+color: cyan
 ---
 
 # Scrum Master (SM)

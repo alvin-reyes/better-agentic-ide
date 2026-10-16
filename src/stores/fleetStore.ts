@@ -110,12 +110,16 @@ const CURATED_ROLE_BY_ID = new Map(AGENT_CATALOG.map((a) => [a.id, a.roleId]));
  * shares an id with a role, so matching role ids alone left the other 46
  * unattributed even though each declares the role it is.
  *
+ * A plugin's agents arrive namespaced (`ade:web3-auditor`), so one leading
+ * `<plugin>:` segment is stripped before matching.
+ *
  * Anything else - Claude Code's own `general-purpose`, `Explore` - stays null.
  * Guessing would put cost against work that never ran.
  */
 function roleIdOf(agentType: string): string | null {
-  if (ROLE_IDS.has(agentType)) return agentType;
-  return CURATED_ROLE_BY_ID.get(agentType) ?? null;
+  const id = agentType.replace(/^[^:]+:/, "");
+  if (ROLE_IDS.has(id)) return id;
+  return CURATED_ROLE_BY_ID.get(id) ?? null;
 }
 
 /**

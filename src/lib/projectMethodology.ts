@@ -7,6 +7,7 @@
 
 import { AGENT_CATALOG } from "../data/curatedAgents";
 import { getRole } from "../data/roles";
+import { roleColor } from "../data/agentColors";
 import { agentMarkdown, rolePrompt } from "./pluginContent";
 import { filterBmadSection, type BmadMethodology } from "./agentComposition";
 import KNOWLEDGE_README from "../../vendor/ade-setup/templates/knowledge/README.md?raw";
@@ -395,6 +396,12 @@ Append-only: one dated line when a plan is approved, a story is sharded or a sto
 
 `;
 
+/** Claude Code's `color:` line for a role, from the agent color map (ADR 0007). */
+const colorLine = (roleId: string) => {
+  const name = roleColor(roleId);
+  return name ? `color: ${name}\n` : "";
+};
+
 /**
  * A core role as a sub-agent file, carrying only the BMAD tasks section for the
  * project's methodology: a v4 project's agents must never be pointed at v6
@@ -404,7 +411,7 @@ export function roleFile(r: Role, methodology: BmadMethodology = "v6"): Methodol
   const body = filterBmadSection(r.body, methodology).trim();
   return {
     path: `.claude/agents/${r.name}.md`,
-    content: `---\nname: ${r.name}\ndescription: ${JSON.stringify(r.description)}\n${r.tools ? `tools: ${r.tools}\n` : ""}${r.model ? `model: ${r.model}\n` : ""}---\n\n# ${r.title}\n\nFollow the project rules in .ade/rules.md and the constitution in CLAUDE.md.\n\n${body}\n`,
+    content: `---\nname: ${r.name}\ndescription: ${JSON.stringify(r.description)}\n${r.tools ? `tools: ${r.tools}\n` : ""}${r.model ? `model: ${r.model}\n` : ""}${colorLine(r.name)}---\n\n# ${r.title}\n\nFollow the project rules in .ade/rules.md and the constitution in CLAUDE.md.\n\n${body}\n`,
   };
 }
 

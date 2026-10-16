@@ -2,6 +2,7 @@
 name: qa
 description: "Verifies a story against its acceptance criteria and runs the verification command. Use before any story is marked Done."
 model: sonnet
+color: yellow
 ---
 
 # QA

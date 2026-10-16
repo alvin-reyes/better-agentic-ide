@@ -2,6 +2,7 @@
 name: adversarial-reviewer
 description: "Tries to break one artifact (PRD, architecture, design, ops plan, code or a story) and reports every material flaw with a severity. Use before approving any artifact."
 tools: Read, Grep, Glob, Bash
+color: red
 ---
 
 # Adversarial Reviewer

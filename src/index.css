@@ -207,6 +207,22 @@ button, a, input, textarea, select {
   animation: activity-pulse 1.5s ease-in-out infinite;
 }
 
+/* Fleet lanes: a running lane's open end pulses; status is shape, not color */
+@keyframes fleet-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.fleet-live-edge {
+  animation: fleet-pulse 1.4s ease-in-out infinite;
+}
+.fleet-lane-bar:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fleet-live-edge { animation: none; }
+}
+
 @keyframes voice-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
   50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
