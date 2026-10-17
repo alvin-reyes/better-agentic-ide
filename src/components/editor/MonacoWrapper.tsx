@@ -52,6 +52,8 @@ interface MonacoWrapperProps {
   autoFocus?: boolean;
   /** Monaco's `ariaLabel`, what a screen reader calls the editor. */
   ariaLabel?: string;
+  /** Called each time `autoFocus` has focused the editor. */
+  onFocused?: () => void;
 }
 
 const BASE_OPTIONS = {
@@ -91,6 +93,7 @@ export default function MonacoWrapper({
   readOnly = false,
   autoFocus = true,
   ariaLabel,
+  onFocused,
 }: MonacoWrapperProps) {
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const language = detectLanguage(filePath);
@@ -109,6 +112,8 @@ export default function MonacoWrapper({
   // Latest, so a mount that lands late still sees a focus asked for meanwhile.
   const autoFocusRef = useRef(autoFocus);
   autoFocusRef.current = autoFocus;
+  const onFocusedRef = useRef(onFocused);
+  onFocusedRef.current = onFocused;
 
   const handleMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
@@ -122,13 +127,19 @@ export default function MonacoWrapper({
         run: () => onSaveRef.current?.(),
       });
     }
-    if (autoFocusRef.current) editor.focus();
+    if (autoFocusRef.current) {
+      editor.focus();
+      onFocusedRef.current?.();
+    }
   }, [readOnlyAtMount]);
 
   // Off to on after mount: focus once. Before mount, onMount does it.
   const prevAutoFocus = useRef(autoFocus);
   useEffect(() => {
-    if (autoFocus && !prevAutoFocus.current) editorRef.current?.focus();
+    if (autoFocus && !prevAutoFocus.current && editorRef.current) {
+      editorRef.current.focus();
+      onFocusedRef.current?.();
+    }
     prevAutoFocus.current = autoFocus;
   }, [autoFocus]);
 

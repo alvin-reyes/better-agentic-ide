@@ -53,6 +53,17 @@ function statusWith(text: string) {
   return status;
 }
 
+/**
+ * The module specifiers of every value import, multi-line ones included;
+ * `import type` is erased at build time, so it doesn't count.
+ */
+export function staticImportSpecifiers(src: string): string[] {
+  const out: string[] = [];
+  const re = /^\s*import\s+(type\s+)?(?:[\s\S]*?\sfrom\s+)?["']([^"']+)["']/gm;
+  for (const m of src.matchAll(re)) if (!m[1]) out.push(m[2]);
+  return out;
+}
+
 const calls = (cmd: string) => vi.mocked(invoke).mock.calls.filter((c) => c[0] === cmd);
 
 beforeEach(() => {
@@ -82,9 +93,10 @@ describe("code in the side panel", () => {
 
   it("Monaco loads lazily", () => {
     const src = readFileSync(resolve(__dirname, "../PreviewPanel.tsx"), "utf8");
-    const staticImports = src.split("\n").filter((l) => /^\s*import\b/.test(l) && !/^\s*import\s+type\b/.test(l));
-    for (const l of staticImports) {
-      expect(l).not.toMatch(/CodeView|MonacoWrapper|monaco-editor|@monaco-editor\/react/);
+    const specifiers = staticImportSpecifiers(src);
+    expect(specifiers).toContain("./viewer/BinaryView");
+    for (const spec of specifiers) {
+      expect(spec).not.toMatch(/CodeView|MonacoWrapper|monaco-editor|@monaco-editor\/react/);
     }
     expect(src).toMatch(/lazy\(\(\) => import\("\.\/viewer\/CodeView"\)\)/);
   });
@@ -174,6 +186,32 @@ describe("code in the side panel", () => {
     expect(screen.getByTestId("monaco-stub")).toBeTruthy();
     expect(stub.editors.map((e) => e.getValue())).toEqual(["B text"]);
     expect(stub.renders.some((p) => p.defaultValue === "A text")).toBe(false);
+    expect(stub.editors[0].calls).not.toContain("setValue");
+  });
+
+  it("finds a multi-line import", () => {
+    const src = 'import {\n  a,\n  b,\n} from "../editor/MonacoWrapper";\nimport type { X } from "monaco-editor";\nimport "./side-effect";\n';
+    expect(staticImportSpecifiers(src)).toEqual(["../editor/MonacoWrapper", "./side-effect"]);
+  });
+
+  it("an older read of the same file never overwrites a newer one", async () => {
+    const reads: { path: string; d: ReturnType<typeof deferred<ReturnType<typeof head>>> }[] = [];
+    h.handlers.read_text_head = ({ path }) => {
+      const d = deferred<ReturnType<typeof head>>();
+      reads.push({ path: String(path), d });
+      return d.promise;
+    };
+    openInPanel("/r/A.ts");
+    render(<PreviewPanel onClose={vi.fn()} />);
+    openInPanel("/r/B.ts");
+    openInPanel("/r/A.ts");
+    expect(reads.map((r) => r.path)).toEqual(["/r/A.ts", "/r/B.ts", "/r/A.ts"]);
+    await act(async () => { reads[2].d.resolve(head("A new")); });
+    await screen.findByTestId("monaco-stub");
+    await act(async () => { reads[0].d.resolve(head("A old")); });
+    await act(async () => { reads[1].d.resolve(head("B text")); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(stub.editors.map((e) => e.getValue())).toEqual(["A new"]);
     expect(stub.editors[0].calls).not.toContain("setValue");
   });
 

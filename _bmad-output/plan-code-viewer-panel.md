@@ -539,6 +539,8 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 ## Implementation Notes
 
 - size = max(metadata len, bytes read); owner approved 2026-10-17, from the Story 1 review.
+- Story 2 review, 2026-10-17: the Story 2 text "code files get no live updates until then" is superseded: the kept `watch_directory` effect also reloads code files live (any kind with an extension) until Story 3 replaces it.
+- Story 2 review, 2026-10-17: Story 3 must make `BinaryView`'s error in the panel a `role="status"` "Can't open <name>: <reason>" message, as the panel's other messages are (Story 2 left `BinaryView` unchanged).
 
 ## Review Triage Log
 

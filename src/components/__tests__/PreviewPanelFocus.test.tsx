@@ -2,11 +2,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
 
 type Handler = (args: Record<string, unknown>) => unknown;
-const h = vi.hoisted(() => ({ handlers: {} as Record<string, Handler> }));
+const h = vi.hoisted(() => ({
+  handlers: {} as Record<string, Handler>,
+  channels: [] as { onmessage: ((e: unknown) => void) | null }[],
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args: Record<string, unknown>) => (h.handlers[cmd] ? h.handlers[cmd](args) : null)),
-  Channel: class { onmessage: unknown = null; },
+  Channel: class {
+    onmessage: ((e: unknown) => void) | null = null;
+    constructor() { h.channels.push(this); }
+  },
 }));
 vi.mock("@monaco-editor/react", () => import("../editor/__tests__/monacoStub"));
 vi.mock("../editor/monacoSetup", () => ({}));
@@ -37,6 +43,7 @@ let outside: HTMLButtonElement;
 beforeEach(() => {
   stub.reset();
   stub.asyncMount = true;
+  h.channels = [];
   h.handlers = {
     read_text_head: async ({ path }) => head(`// ${String(path)}`),
     read_file: async () => "# Doc",
@@ -118,6 +125,31 @@ describe("keyboard and the side panel", () => {
     openInPanel("/r/plan.md");
     rerender(<PreviewPanel onClose={vi.fn()} focusRequest={1} />);
     await tick();
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("a served request is spent: later reloads of the same file never move focus", async () => {
+    h.handlers.watch_directory = async () => 3;
+    openInPanel("/r/src/A.ts");
+    render(<PreviewPanel onClose={vi.fn()} focusRequest={1} />);
+    await waitFor(() => expect(stub.editors).toHaveLength(1));
+    expect(stub.editors[0].focusCount).toBe(1);
+    outside.focus();
+
+    // The file changes and the re-read fails: an error, not a focus move.
+    h.handlers.read_text_head = async () => { throw "Failed to read /r/src/A.ts: gone"; };
+    await act(async () => { h.channels[0].onmessage?.({ type: "changed", path: "/r/src/A.ts" }); });
+    await screen.findByText(/Can't open A.ts/);
+    await tick();
+    expect(document.activeElement).toBe(outside);
+
+    // It comes back: a fresh editor, which doesn't take focus either.
+    h.handlers.read_text_head = async () => head("// back");
+    await act(async () => { h.channels[0].onmessage?.({ type: "changed", path: "/r/src/A.ts" }); });
+    await waitFor(() => expect(stub.editors).toHaveLength(2));
+    await tick();
+    expect(stub.editors[1].getValue()).toBe("// back");
+    expect(stub.editors[1].focusCount).toBe(0);
     expect(document.activeElement).toBe(outside);
   });
 

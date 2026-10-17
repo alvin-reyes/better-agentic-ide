@@ -54,7 +54,7 @@ Saved the report to ./out/report.pdf
 
 - Relative paths resolve against the terminal's **current folder**, so they keep working after `cd`.
 - `~/…` and absolute paths work too. A trailing `:line` or `:line:col` is ignored.
-- **Every file** opens in the [preview panel]({{ '/guide/files/' | relative_url }}#preview-panel) beside the terminal: code read-only with highlighting, Markdown, HTML, PDFs, Word documents and images. The terminal keeps focus, so you can go on typing. To edit the file, use *Open in tab* in the panel.
+- **Every file** opens in the [preview panel]({{ '/guide/files/' | relative_url }}#preview-panel) beside the terminal: code read-only with highlighting, Markdown, HTML, PDFs, Word documents and images. The terminal keeps focus, so you can go on typing. To edit code, use *Open in tab* in the panel. Markdown, HTML and the other rendered files have no *Open in tab* button; open those in a tab from the file browser.
 - A path that wraps onto the next line is still one link.
 - Words that only look like files (`v1.2.3`, a path that doesn't exist) are not links.
 

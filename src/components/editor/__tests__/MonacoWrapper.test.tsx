@@ -94,6 +94,36 @@ describe("MonacoWrapper read-only", () => {
     expect(ed.focusCount).toBe(1);
   });
 
+  it("save uses the latest onSave after a re-render", () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const { rerender } = render(<MonacoWrapper filePath="/r/a.ts" content="x" onChange={vi.fn()} onSave={first} />);
+    rerender(<MonacoWrapper filePath="/r/a.ts" content="x" onChange={vi.fn()} onSave={latest} />);
+    (stub.editors[0].actions[0] as { run: () => void }).run();
+    expect(latest).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it("reports once the editor has taken focus", async () => {
+    const onFocused = vi.fn();
+    stub.asyncMount = true;
+    const { rerender } = render(<MonacoWrapper filePath="/r/a.ts" content="x" readOnly autoFocus onFocused={onFocused} />);
+    expect(onFocused).not.toHaveBeenCalled();
+    await tick();
+    expect(stub.editors[0].focusCount).toBe(1);
+    expect(onFocused).toHaveBeenCalledTimes(1);
+
+    const late = vi.fn();
+    stub.reset();
+    const second = render(<MonacoWrapper filePath="/r/b.ts" content="x" readOnly autoFocus={false} onFocused={late} />);
+    await tick();
+    expect(late).not.toHaveBeenCalled();
+    second.rerender(<MonacoWrapper filePath="/r/b.ts" content="x" readOnly autoFocus onFocused={late} />);
+    expect(late).toHaveBeenCalledTimes(1);
+    rerender(<MonacoWrapper filePath="/r/a.ts" content="y" readOnly autoFocus onFocused={onFocused} />);
+    expect(onFocused).toHaveBeenCalledTimes(1);
+  });
+
   it("focuses once when autoFocus turns on after mount", () => {
     const { rerender } = render(<MonacoWrapper filePath="/r/a.ts" content="x" readOnly autoFocus={false} />);
     const ed = stub.editors[0];

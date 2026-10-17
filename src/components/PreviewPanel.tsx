@@ -131,7 +131,8 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
   }, [filePath, loadContent]);
 
   // ⌘⇧B focus. A new request is remembered for the file shown when it came
-  // and served once that file can take it; another file drops it.
+  // and served once that file can take it, then spent: the editor reports
+  // that it took focus, or the body is focused. Another file drops it.
   const servedFocus = useRef(0);
   const [focusFor, setFocusFor] = useState<string | null>(null);
   useEffect(() => {
@@ -151,6 +152,8 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
     bodyRef.current?.focus();
     setFocusFor(null);
   }, [wantsFocus, kind, current, editorTakesFocus]);
+
+  const focusServed = useCallback(() => setFocusFor(null), []);
 
   const openInTab = useCallback(() => {
     if (filePath) useTabStore.getState().addEditorTab(filePath);
@@ -461,6 +464,7 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
               path={filePath}
               head={current.head}
               focusOnMount={wantsFocus}
+              onFocused={focusServed}
               onOpenInTab={openInTab}
             />
           </Suspense>

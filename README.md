@@ -71,7 +71,7 @@ Only missing files are written, and the toast that lists them has Undo. Add or r
 
 ## Also in ADE
 
-- **Clickable files, live preview and an editor**: Markdown with Mermaid, PDF, Word, images and HTML open beside the terminal; a source file opens in a Monaco editor tab that saves back to disk, with a live diagram pane for `.mmd` files.
+- **Clickable files, live preview and an editor**: any file clicked in the terminal opens beside it: Markdown with Mermaid, PDF, Word, images, HTML, and source code read-only in Monaco. *Open in tab* opens code in a Monaco editor tab that saves back to disk, with a live diagram pane for `.mmd` files.
 - **Voice dictation**: talk into the scratchpad instead of typing a long prompt.
 - **Auto-save and sync**: sessions restore after a crash; settings, notes and Claude memory sync through your own private git repo.
 - **Precision**, the default theme, with eight more presets (GitHub Dark, Dracula, Monokai Pro, Nord, Catppuccin Mocha, Solarized Dark, Tokyo Night, One Dark), per-colour overrides and a terminal palette that stays legible against the UI. The saved theme paints before the first frame, so a cold start never flashes.

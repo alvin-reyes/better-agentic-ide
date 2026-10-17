@@ -28,13 +28,15 @@ In rendered documents, links behave the way you'd expect: web links open in your
 
 ## Preview panel
 
-Click a file path in the terminal and the file opens in the preview panel beside it, whatever kind of file it is. The terminal keeps focus. Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to show or hide the panel; opening it this way moves focus into it, and <kbd>Esc</kbd> gives focus back to the terminal. Each tab has its own file in the panel.
+Click a file path in the terminal and the file opens in the preview panel beside it, whatever kind of file it is. The terminal keeps focus. Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to show or hide the panel; opening it this way moves focus into it, and <kbd>Esc</kbd> gives focus back to the terminal. (With text selected in the panel's editor, the first <kbd>Esc</kbd> clears the selection and a second one returns to the terminal.) Each tab has its own file in the panel.
 
-- **Code and other text** shows read-only in the same Monaco editor as the file tab, with syntax highlighting. *Open in tab* opens the file in a tab, where you can edit and save it.
+- **Code and other text** shows read-only in the same Monaco editor as the file tab, with syntax highlighting. *Open in tab* opens the file in a tab, where you can edit and save it. That includes Mermaid (`.mmd`) files and contract ABI/IDL `.json` files, which the panel shows as code: their diagram and ABI views are in the tab.
 - **Large files:** a text file over 2 MB shows its first 2 MB ("Showing the first 2.0 MB of 48.3 MB."). It has no *Open in tab*.
 - **Not UTF-8:** text that isn't valid UTF-8 shows with the unreadable bytes replaced. It has no *Open in tab*, because the tab can't edit it.
 - **Binary files** (a NUL byte near the start, as in a `.zip` or UTF-16 text) aren't shown: the panel says "Binary file, not shown" with its size.
-- **Markdown, HTML, PDFs, Word documents and images** render as they do in the file tab. They refresh whenever the file is saved, handy for watching an agent write a spec. PDFs page and zoom with the same viewer the file tab uses, so they render the same on macOS and Linux.
+- **Markdown, HTML, PDFs, Word documents and images** render as they do in the file tab. PDFs page and zoom with the same viewer the file tab uses, so they render the same on macOS and Linux.
+
+With **LIVE** on (the button in the panel's header), the panel refreshes whenever the file is saved, handy for watching an agent write a spec or a source file.
 
 HTML in the preview may run scripts, for pages that need them. They run isolated from the app.
 

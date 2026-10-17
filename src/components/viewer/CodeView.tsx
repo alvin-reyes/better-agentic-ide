@@ -14,12 +14,15 @@ export default function CodeView({
   path,
   head,
   focusOnMount,
+  onFocused,
   onOpenInTab,
 }: {
   path: string;
   head: TextHead;
   /** Focus the editor once it has mounted (⌘⇧B), never on a plain open. */
   focusOnMount: boolean;
+  /** The editor has taken that focus: the request is spent. */
+  onFocused?: () => void;
   onOpenInTab: () => void;
 }) {
   const name = path.split("/").pop() || path;
@@ -78,6 +81,7 @@ export default function CodeView({
           content={head.text}
           readOnly
           autoFocus={focusOnMount}
+          onFocused={onFocused}
           ariaLabel={`${name}, read-only`}
         />
       </div>
