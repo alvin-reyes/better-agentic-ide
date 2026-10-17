@@ -891,6 +891,9 @@ async fn routing_reaches_only_paired_online_peers() {
     x.routed(RoutedKind::Hs1, m.id, &[8]).await;
     x.frame(m.id, &[8]).await;
     x.rehandshake(m.id).await;
+    // X's messages go out on X's own connection: a round trip on it shows they were
+    // handled before the sentinel from another connection is sent and the counters read.
+    round_trip(&h, &mut x).await;
     devs[0].frame(p.id, b"sentinel").await;
     assert_eq!(
         devs[1].next_skipping_presence().await,
@@ -1076,6 +1079,7 @@ async fn a_change_made_during_a_held_read_wins() {
         round_trip(&h, &mut phone).await;
 
         mac.frame(p.id, b"must not arrive").await;
+        round_trip(&h, &mut mac).await; // handled before the other connection's sentinel
         sentinel.frame(p.id, b"sentinel").await;
         assert_eq!(
             phone.next_skipping_presence().await,
@@ -1109,6 +1113,7 @@ async fn routing_needs_both_sets_to_name_the_pair() {
 
     mac.frame(p.id, b"no").await;
     mac.rehandshake(p.id).await;
+    round_trip(&h, &mut mac).await; // handled before the other connection's sentinel
     to_phone.frame(p.id, b"sentinel").await;
     assert_eq!(
         phone.next_skipping_presence().await,
@@ -1116,6 +1121,7 @@ async fn routing_needs_both_sets_to_name_the_pair() {
     );
     phone.frame(m.id, b"no").await;
     phone.rehandshake(m.id).await;
+    round_trip(&h, &mut phone).await;
     to_mac.frame(m.id, b"sentinel").await;
     assert_eq!(
         mac.next_skipping_presence().await,
@@ -1191,6 +1197,7 @@ async fn a_key_deleted_by_cleanup_is_unreachable_when_it_returns() {
         round_trip(&h, &mut q_dev).await;
 
         mac.frame(p.id, b"must not arrive").await;
+        round_trip(&h, &mut mac).await; // handled before the other connection's sentinel
         q_dev.frame(p.id, b"sentinel").await;
         assert_eq!(
             phone.next_skipping_presence().await,
@@ -1646,6 +1653,7 @@ async fn a_pair_routes_after_refresh() {
     let mut to_mac = login(&h, &qm).await;
 
     async fn both_dropped(
+        h: &H,
         mac: &mut Dev,
         phone: &mut Dev,
         to_phone: &mut Dev,
@@ -1653,6 +1661,8 @@ async fn a_pair_routes_after_refresh() {
         what: &str,
     ) {
         mac.frame(phone.id, b"no").await;
+        // Handled before the sentinel, which goes out on another connection.
+        round_trip(h, mac).await;
         to_phone.frame(phone.id, b"sentinel").await;
         assert_eq!(
             phone.next_skipping_presence().await,
@@ -1660,6 +1670,7 @@ async fn a_pair_routes_after_refresh() {
             "{what}"
         );
         phone.frame(mac.id, b"no").await;
+        round_trip(h, phone).await;
         to_mac.frame(mac.id, b"sentinel").await;
         assert_eq!(
             mac.next_skipping_presence().await,
@@ -1676,6 +1687,7 @@ async fn a_pair_routes_after_refresh() {
     .await;
     round_trip(&h, &mut mac).await;
     both_dropped(
+        &h,
         &mut mac,
         &mut phone,
         &mut to_phone,
@@ -1687,7 +1699,15 @@ async fn a_pair_routes_after_refresh() {
     mac.text(msg("test_noop", json!({ "refresh": keys(&[m.id]) })))
         .await;
     round_trip(&h, &mut mac).await;
-    both_dropped(&mut mac, &mut phone, &mut to_phone, &mut to_mac, "one key").await;
+    both_dropped(
+        &h,
+        &mut mac,
+        &mut phone,
+        &mut to_phone,
+        &mut to_mac,
+        "one key",
+    )
+    .await;
     // Both keys: routes both ways.
     mac.text(msg("test_noop", json!({ "refresh": keys(&[m.id, p.id]) })))
         .await;
