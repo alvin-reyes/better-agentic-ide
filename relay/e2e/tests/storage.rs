@@ -566,6 +566,42 @@ async fn the_canary_never_reaches_logs_or_the_database() {
         ws.send(Message::text(text)).await.unwrap();
     }
 
+    // Story 7b: a routed frame, a dropped frame, a `rehandshake`, frames over the frame
+    // limit and control messages over the control limit, each carrying the canary. The
+    // clock is frozen, so the limits are reached.
+    let frame = |to: DeviceKey| {
+        relay_protocol::Routed {
+            kind: relay_protocol::RoutedKind::Frame,
+            peer: to,
+            body: CANARY.as_bytes().to_vec(),
+        }
+        .encode()
+    };
+    ws.send(Message::binary(frame(id_of(&phone))))
+        .await
+        .unwrap();
+    ws.send(Message::binary(frame(id_of(&key()))))
+        .await
+        .unwrap();
+    ws.send(Message::text(format!(
+        "{{\"v\":1,\"t\":\"rehandshake\",\"peer\":\"{}\",\"x\":\"{CANARY}\"}}",
+        base64_url(&id_of(&phone).0)
+    )))
+    .await
+    .unwrap();
+    for _ in 0..101 {
+        ws.send(Message::binary(frame(id_of(&phone))))
+            .await
+            .unwrap();
+    }
+    for _ in 0..31 {
+        ws.send(Message::text(format!(
+            "{{\"v\":1,\"t\":\"pair_status\",\"slot\":\"{CANARY}\",\"x\":\"{CANARY}\"}}"
+        )))
+        .await
+        .unwrap();
+    }
+
     // The WebSocket path, and the Authorization header of a refused /metrics call.
     assert!(
         tokio_tungstenite::connect_async(format!("ws://localhost:{}/{CANARY}", addr.port()))
@@ -581,15 +617,25 @@ async fn the_canary_never_reaches_logs_or_the_database() {
 
     // The Mac's socket still answers after all of it, so the frames above were read and
     // ignored; then the phone leaves, so a leave is logged and stored too.
+    // It was answered `rate_limited` and `control_limited`, so the limits were reached.
+    let (mut rate_limited, mut control_limited) = (false, false);
     let pong = timeout(WAIT, async {
         loop {
-            if let Some(Ok(Message::Ping(_))) = sockets[0].next().await {
-                return;
+            match sockets[0].next().await {
+                Some(Ok(Message::Ping(_))) if rate_limited && control_limited => return,
+                Some(Ok(Message::Text(text))) => match Control::from_json(&text) {
+                    Ok(Control::RateLimited { .. }) => rate_limited = true,
+                    Ok(Control::ControlLimited { .. }) => control_limited = true,
+                    _ => {}
+                },
+                Some(Ok(_)) => {}
+                _ => return,
             }
         }
     })
     .await;
     assert!(pong.is_ok(), "the Mac's connection died");
+    assert!(rate_limited && control_limited, "a limit was not reached");
     sockets[1].close(None).await.ok();
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -621,6 +667,11 @@ async fn the_canary_never_reaches_logs_or_the_database() {
         }
     }
     relay.shutdown().await;
+}
+
+fn base64_url(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
 fn sibling(path: &Path, suffix: &str) -> PathBuf {

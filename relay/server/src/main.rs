@@ -6,6 +6,9 @@
 //! - `RELAY_DB` (required): the SQLite file's path.
 //! - `RELAY_METRICS_TOKEN` (optional): the Bearer token for `/metrics`, at least 32
 //!   characters. Without one, `/metrics` answers 404.
+//! - `RELAY_CLIENT_IP` (default `socket`): where a connection's IP comes from, for the
+//!   new-key limit: `socket`, or `fly-client-ip` to trust Fly's `Fly-Client-IP` header
+//!   (falling back to the socket address).
 //!
 //! A missing, bad or non-Unicode value exits 2; a database that won't open, a relay that
 //! can't listen, or a server that stops, exits 1.
@@ -15,7 +18,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use relay_server::{serve, Config, SqliteStore};
+use relay_server::{serve, ClientIp, Config, SqliteStore};
 
 /// The shortest `/metrics` token accepted.
 const MIN_METRICS_TOKEN: usize = 32;
@@ -25,6 +28,7 @@ struct Settings {
     hosts: Vec<String>,
     db: PathBuf,
     metrics_token: Option<String>,
+    client_ip: ClientIp,
 }
 
 #[tokio::main]
@@ -40,6 +44,7 @@ async fn main() {
     });
     let mut config = Config::new(settings.listen, settings.hosts, Arc::new(store));
     config.metrics_token = settings.metrics_token;
+    config.client_ip = settings.client_ip;
     let relay = match serve(config).await {
         Ok(relay) => {
             eprintln!("relay: listening on {}", relay.addr);
@@ -68,12 +73,27 @@ fn settings() -> Result<Settings, String> {
         "RELAY_METRICS_TOKEN",
         std::env::var_os("RELAY_METRICS_TOKEN"),
     )?)?;
+    let client_ip = client_ip_from(env_text(
+        "RELAY_CLIENT_IP",
+        std::env::var_os("RELAY_CLIENT_IP"),
+    )?)?;
     Ok(Settings {
         listen,
         hosts,
         db,
         metrics_token,
+        client_ip,
     })
+}
+
+/// `RELAY_CLIENT_IP`: `socket` (the default) or `fly-client-ip`. Anything else is an
+/// error, so a typo can't quietly trust or ignore the header.
+fn client_ip_from(value: Option<String>) -> Result<ClientIp, String> {
+    match value.as_deref() {
+        None | Some("socket") => Ok(ClientIp::Socket),
+        Some("fly-client-ip") => Ok(ClientIp::FlyClientIp),
+        Some(_) => Err("RELAY_CLIENT_IP must be socket or fly-client-ip".into()),
+    }
 }
 
 /// `RELAY_DB` is required: a default would quietly lose every pair on a restart.
@@ -216,6 +236,20 @@ mod tests {
         // The bin exits 1 on this error; here, the store refuses a directory.
         let dir = std::env::temp_dir();
         assert!(SqliteStore::open(&dir).is_err());
+    }
+
+    #[test]
+    fn the_client_ip_source_is_socket_or_fly_client_ip() {
+        assert_eq!(client_ip_from(None), Ok(ClientIp::Socket));
+        assert_eq!(client_ip_from(Some("socket".into())), Ok(ClientIp::Socket));
+        assert_eq!(
+            client_ip_from(Some("fly-client-ip".into())),
+            Ok(ClientIp::FlyClientIp)
+        );
+        for bad in ["", "Socket", "fly", "x-forwarded-for", "fly-client-ip "] {
+            let err = client_ip_from(Some(bad.into())).unwrap_err();
+            assert!(err.contains("RELAY_CLIENT_IP"), "{bad:?}: {err}");
+        }
     }
 
     #[test]

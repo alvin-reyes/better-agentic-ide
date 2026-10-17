@@ -84,6 +84,13 @@ async fn main() {
                     if online { "online" } else { "offline" }
                 )
             }
+            Ok(Event::RateLimited { peer, retry_ms }) => {
+                println!("rate_limited {} retry_ms {retry_ms}", b64(&peer.0))
+            }
+            Ok(Event::ControlLimited { msg, retry_ms, .. }) => {
+                println!("control_limited {msg} retry_ms {retry_ms}")
+            }
+            Ok(Event::Rehandshake { peer }) => println!("rehandshake {}", b64(&peer.0)),
             Ok(Event::Closed { code, reason }) => {
                 println!("closed {code} {reason}");
                 std::process::exit(if code == 4401 { 3 } else { 0 });

@@ -6,12 +6,21 @@
 //!
 //! Story 4: the Noise session machines and their store traits (`session`). Their store
 //! error is exported as `SessionStoreError`, since `StoreError` is 7a's.
+//!
+//! Story 7b: the limiters (`limits`) and the `ControlHandler` seam (`control`).
 
 pub mod clock;
+pub mod control;
+pub mod limits;
 mod session;
 pub mod store;
 
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use control::{ControlHandler, ControlOutcome, IgnoreControl};
+pub use limits::{
+    ip_key, ControlLimiter, FrameLimiter, HourWindow, KeyedLimits, Limiter, Limits, NewKeyLimiter,
+    SlotLimiter, TokenBucket,
+};
 pub use session::{
     next_counter_value, Hs1Counters, LastSent, MacAction, MacSessions, MemoryHs1Counters,
     MemoryLastSent, MemoryPairedStatics, PairedStatics, PhoneAction, PhoneSession, SendError,

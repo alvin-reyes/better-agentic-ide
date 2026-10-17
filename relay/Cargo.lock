@@ -766,6 +766,7 @@ dependencies = [
 name = "relay-e2e"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "ed25519-dalek",
  "futures-util",
  "rand 0.8.8",
@@ -773,6 +774,7 @@ dependencies = [
  "relay-core",
  "relay-protocol",
  "relay-server",
+ "serde_json",
  "tempfile",
  "tokio",
  "tokio-tungstenite 0.28.0",
@@ -808,6 +810,7 @@ dependencies = [
  "subtle",
  "tempfile",
  "tokio",
+ "tungstenite 0.29.0",
 ]
 
 [[package]]
