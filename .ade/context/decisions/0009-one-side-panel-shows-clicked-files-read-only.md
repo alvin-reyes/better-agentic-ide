@@ -7,12 +7,13 @@
   - **Read-only.** The panel never edits or saves. Its editor is uncontrolled (`defaultValue`); reloads restore the view state around `setValue`. Editing happens in the file tab, reached by *Open in tab* or a modifier-click (⌘ on macOS, Ctrl on Linux).
   - **A click lands in the panel.** Files clicked in the terminal and in the file browser open in the active tab's panel; a modifier-click opens a tab.
   - **Bounded reads, decided in Rust.** `read_text_head` reads only regular files, at most 2 MiB, calls a file binary when its first 8 KiB hold a NUL byte, and decodes invalid UTF-8 lossily, which is safe only because the panel never writes back.
-  - **One file, one watch.** `watch_file` canonicalises the path, watches its folder non-recursively off the main thread, and matches events to the file itself. Any event means "re-read"; whether the file is gone is decided by the read.
+  - **One file, one watch, recovery in the panel.** `watch_file` canonicalises the path, watches its folder non-recursively off the main thread, and matches events to the file itself; events on the watched folder itself (deleted, moved) are reported as the file's removal. Any event means "re-read"; whether the file is gone is decided by the read. A not-found read drops the watch and the panel re-checks with backoff; the first good read re-arms it. A failed watch is per-file state, shown as "Not live", and never changes the user's LIVE/STATIC choice.
 - Consequences:
   - Two defaults change: a terminal click on a code file, and every file-browser click, used to open a tab and now open the panel. Users who want a tab use ⌘-click / Ctrl-click or *Open in tab*. A setting to restore the old default is deferred to the owner (plan, Open question 7).
   - A clicked file has one destination, and the terminal stays in view and keeps focus.
   - There is no second dirty buffer: an agent's writes and the user's edits never race in the panel, and the panel never asks about unsaved changes.
   - Truncated, lossily decoded and binary files have no *Open in tab*, because the tab still reads whole files as UTF-8 with `read_file`; only the panel is bounded.
   - Anything that later wants to edit beside the terminal must revisit this ADR, since the lossy decode and the truncation both assume read-only.
+  - Following a file through a deleted and re-created folder costs a short re-check loop (2 s doubling to 30 s) while the file is missing and shown; it never relies on a watch the OS has already dropped. A symlinked file is watched at its target, so retargeting the link is seen only on Refresh.
   - `MonacoWrapper`'s cursor-keeping branch for the file tab stays dead (the library resets the view first); fixing the tab is separate work.
   - The panel keeps the name "Preview" for now; renaming it is presentation, not a change to this decision.

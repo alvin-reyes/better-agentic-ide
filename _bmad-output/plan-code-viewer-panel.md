@@ -11,11 +11,11 @@ risk: 'low'
 review: 'quick'
 review_source: 'pinned'
 lenses_ran: []
-review_loop_iteration: 1
+review_loop_iteration: 2
 context: ['.ade/context/decisions/0009-one-side-panel-shows-clicked-files-read-only.md']
 ---
 
-Six small stories. Order: **1** (Rust: bounded read and single-file watch) → **2** (code in the panel; terminal clicks land there) → **3** (live follow) and **4** (go to line) → **5** (file browser clicks, modifier-click for a tab). **6** (the panel's file survives a restart and a reopened tab) touches only `tabStore` and can run in parallel with 2–5. Each story has its own acceptance criteria and verification. The shared intent, decisions and architecture come first.
+Six small stories. Order: **1** (Rust: bounded read and single-file watch) → **2** (code in the panel; terminal clicks land there) → **4** (go to line) → **3** (live follow) → **5** (file browser clicks, modifier-click for a tab). Story 4 comes before Story 3 because both edit `PreviewPanel` and `MonacoWrapper`, and Story 3 tests Story 4's reveal. **6** (the panel's file survives a restart and a reopened tab) touches only `tabStore` and can run in parallel with 2–5. Each story has its own acceptance criteria and verification. The shared intent, decisions and architecture come first.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -31,7 +31,7 @@ Six small stories. Order: **1** (Rust: bounded read and single-file watch) → *
 2. **Read-only in the panel.** Editing stays in the file tab (⌘S).
 3. **Click lands in the panel, modifier-click in a tab**, for the terminal and the file browser. This is a default change in two places: terminal clicks on code files, and every file-browser click, used to open a tab.
 4. **The panel belongs to the tab**, as `previewPath` already does: every pane of a split shares it, switching tab switches the file, and "switching project" in ADE is switching tab, so it follows too.
-5. **Live by default** (the existing LIVE/STATIC toggle), keeping the reader's scroll and cursor across reloads. LIVE turns itself off, visibly, when the file cannot be watched.
+5. **Live by default** (the existing LIVE/STATIC toggle, which stays the user's choice), keeping the reader's scroll and cursor across reloads. When the file cannot be watched the panel says "Not live" for that file and keeps retrying; it never flips the user's toggle.
 6. **Text over 2 MiB shows its first 2 MiB**; a NUL byte in the first 8 KiB means binary, not shown as text.
 7. **Persisted:** the tab's panel file (fixing a gap: `previewPath` is restored on launch but never saved, and a reopened closed tab drops it). **Not persisted:** whether the panel is open, its width, scroll, target line.
 
@@ -64,13 +64,14 @@ Six small stories. Order: **1** (Rust: bounded read and single-file watch) → *
 | ⌘-click / Ctrl-click | Story 5: opens a tab instead (`addEditorTab`, which focuses an existing tab for that file). |
 | *Open in tab* button | Opens the panel's file in a tab, which becomes the active tab. The panel belongs to the tab, so it now shows the editor tab's own (empty) state; switching back to the terminal tab shows the file again. Hidden when the file is binary, truncated or decoded lossily, with a note saying why ("Too large to open in a tab" / "Not UTF-8 text, can't be edited in a tab"), since the tab reads the whole file as UTF-8 (`EditorTab.tsx:73`). |
 | Click a file while an editor, fleet or browser tab is active | It opens in that tab's panel: the panel sits beside any tab type. |
-| ⌘⇧B | Shows or hides the panel. Opening it this way moves focus into it (the editor for a code file, else the panel's region, `tabIndex={-1}`). Closing it with focus inside returns focus to the terminal. |
+| ⌘⇧B | Shows or hides the panel. Opening it this way moves focus into it (the editor for a code file, once Monaco has mounted; else the panel's region, `tabIndex={-1}`). Closing it with focus inside returns focus to the terminal. |
 | Esc with focus in the panel | Returns focus to the terminal (the existing global handler, `useKeybindings.ts:139-148`). |
 | Resize | Drag the panel's left edge (existing `useDragWidth`, 280–900 px, default 480). Not persisted. |
 | Splits | The panel sits beside the whole tab. A click in any pane sets the tab's file. Zooming a pane keeps the panel. |
 | Tab switch / project switch | The panel shows the new tab's file, or its empty state. A load or reload in flight for the old file is discarded. Open/closed is app-wide, as today. |
-| Agent edits the file | With LIVE on, any watch event for the file schedules a re-read: 150 ms after the last event, and at most 1 s after the first while events keep coming (continuous appends). Scroll, cursor and selection are kept. If the re-read fails with not-found, a "Deleted on disk" banner sits over the last content; the next successful read clears it. |
-| Watch fails | LIVE switches to STATIC, with "Not live: <reason>". Refresh still works. |
+| Agent edits the file | With LIVE on, any watch event for the file schedules a re-read: 150 ms after the last event, and at most 1 s after the first while events keep coming (continuous appends). Scroll, cursor and selection are kept. |
+| File or its folder deleted, then re-created (build clean of `dist/`, `git checkout`, `rm -rf` and regenerate) | The re-read fails with not-found: a "Deleted on disk" banner sits over the last content, the old watch is dropped, and the panel re-checks the file every 2 s (doubling to at most 30 s) while it is the panel's file and LIVE is on. The first successful read clears the banner, shows the new content and re-arms the watch. |
+| Watch fails (e.g. a restored file that is gone) | "Not live: <reason>" for that file; the user's LIVE/STATIC choice is untouched. The panel retries the watch after its next successful read of that file (Refresh, or the 2 s re-check). Opening another file starts fresh. |
 | `path:line` / `path:line:col` | Story 4: once that file's content is in the editor, the line is revealed centered with the cursor on it. Re-clicking re-reveals. A line past the end goes to the last line; a line past the truncated part shows "Line N is past the part shown (first 2.0 MB)". Rendered views (Markdown, HTML, PDF) ignore the line. |
 | Large text file (> 2 MiB) | "Showing the first 2.0 MB of 48.3 MB." No promise that a tab shows more. |
 | Binary file | "Binary file (3.2 MB), not shown." PDF, Word and images are not "binary" here: they have their viewers. UTF-16 text contains NULs, so it counts as binary. |
@@ -125,25 +126,40 @@ flowchart LR
   3. Otherwise continue with `take(max_bytes + 1)`; `truncated` is whether more than `max_bytes` bytes arrived; keep the first `max_bytes`.
   4. If truncated, drop an incomplete trailing UTF-8 sequence (`Utf8Error::error_len() == None` at the end). Then `String::from_utf8_lossy`; `lossy` is whether it replaced anything.
   5. `size` is `max(metadata.len(), bytes read)` when not truncated (files under `/proc` report 0), else `metadata.len()`.
-- **`watch_file(path: String, on_event: Channel<WatchEvent>) -> Result<u32, String>`** in `src-tauri/src/watcher.rs`, `#[tauri::command(async)]` (off the main thread, unlike the sync `watch_directory`). It canonicalises the path (following symlinks), watches the canonical parent folder **non-recursively**, and forwards only events whose path names the canonical file, compared component by component with the existing `same_component` (case-insensitive on macOS). It sends `changed`/`created`/`removed` without content and `error` on watcher errors. Stopped with the existing `unwatch_directory` (same `WatcherManager`). The pure pieces, `watch_target(path) -> (dir, name)` and `is_target(event_path, dir, name)`, carry the tests. Because the panel re-reads on any event (below), the event kind does not matter: `watcher.rs:186-190` maps every `Modify`, renames included, to `changed`, and FSEvents can merge flags so `removed` arrives after `created`.
+- **`watch_file(path: String, on_event: Channel<WatchEvent>) -> Result<u32, String>`** in `src-tauri/src/watcher.rs`, `#[tauri::command(async)]` (off the main thread, unlike the sync `watch_directory`). It canonicalises the path (following symlinks), watches the canonical parent folder with the mode from a pure `watch_file_mode()` that returns `RecursiveMode::NonRecursive`, and sorts each event path with a pure `classify(event_path, dir, name) -> Target | Folder | Other`, comparing component by component with the existing `same_component` (case-insensitive on macOS):
+  - `Target` (the file): forwarded as `changed`/`created`/`removed`, without content.
+  - `Folder` (the watched folder itself: inotify's `IN_DELETE_SELF`, `IN_MOVE_SELF` and `IN_IGNORED` arrive under the folder's own path, and the watch is dead afterwards): forwarded as `removed` **for the file's path**, so the panel re-reads and, finding nothing, drops the watch and starts its re-check (below). This is the one approach chosen for N1: the folder's disappearance is reported as the file's, and recovery lives in one place, the panel, which works the same on every platform.
+  - `Other`: dropped.
+  - Watcher errors are sent as `error`.
+  Stopped with the existing `unwatch_directory` (same `WatcherManager`). The event kind is not relied on: `watcher.rs:186-190` maps every `Modify`, renames included, to `changed`, and FSEvents can merge flags so `removed` arrives after `created`.
+- **Symlinked files** are watched at their target. Retargeting the link, or an atomic rename onto the link itself, is not seen; Refresh picks it up. Out of scope.
 - `read_file`, `read_file_base64` and `watch_directory` are unchanged.
 
 ### Frontend
 
 - **`MonacoWrapper.tsx`** (Story 2, Story 4): `onChange`/`onSave` become optional; new optional props whose defaults keep the file tab's behavior byte for byte:
   - `readOnly` (default false). When true: the `<Editor>` gets `defaultValue={content}` and **no `value` prop**; options add `readOnly: true`, `domReadOnly: true`, `minimap: { enabled: false }`, `renderValidationDecorations: "off"` (no false red squiggles from a TS worker that cannot see the project); no save action is registered. A later `content` change is applied by the wrapper itself: `const vs = editor.saveViewState(); editor.setValue(content); if (vs) editor.restoreViewState(vs);`, only when `content !== editor.getValue()`.
+  - The latest `content` is also kept in a ref. In `onMount`, if the editor's value differs from it (a write arrived between the first render and the asynchronous mount), the wrapper applies it.
   - `autoFocus` (default true): whether `editor.focus()` runs on mount.
   - `ariaLabel` (passed to Monaco's `ariaLabel` option). The panel passes `"<file name>, read-only"`.
-  - Story 4: `reveal?: { line: number; col?: number; nonce: number }`. The wrapper keeps the last applied nonce in a ref and applies a new one once, after mount and with content in the model: clamp to `1..lineCount`, `setPosition`, `revealLineInCenter`.
-- **`viewer/CodeView.tsx`** (new, Story 2), default export, loaded with `React.lazy` from `PreviewPanel`. Props `{ path, head: TextHead, reveal?, onOpenInTab }`. Renders the status messages and `MonacoWrapper` with `readOnly`, `autoFocus={false}`, `ariaLabel`, keyed by `path` so another file is a fresh editor. It passes `reveal` on only when `reveal.path === path`.
+  - Story 4: `reveal?: { line: number; col?: number; nonce: number }` and `onRevealed?(nonce)`. A reveal is applied once, after mount and with content in the model: clamp to `1..lineCount`, `setPosition`, `revealLineInCenter`, then `onRevealed(nonce)`.
+- **`viewer/CodeView.tsx`** (new, Story 2), default export, loaded with `React.lazy` from `PreviewPanel`. Props `{ path, head: TextHead, reveal?, onRevealed?, focusOnMount, onOpenInTab }`. Renders the status messages and `MonacoWrapper` with `readOnly`, `autoFocus={focusOnMount}`, `ariaLabel`, keyed by `path` so another file is a fresh editor. It passes `reveal` on only when `reveal.path === path`. `onRevealed` calls `clearPreviewReveal(tabId, nonce)`, so a remount (tab A → B → A) finds no reveal to re-apply.
+- **Focus on ⌘⇧B** (Story 2): `App` holds `previewFocusRequest`, a counter incremented **only** when ⌘⇧B (or the palette's toggle) opens the panel, and passes it to `PreviewPanel` as `focusRequest`. The panel remembers the last request it served; a new one is served once, after the lazy `PreviewPanel` and `CodeView` chunks load and Monaco mounts: as `focusOnMount` to `CodeView` for a code file, else by focusing its body region. Closing with focus inside goes through a helper `closePreviewFocus(panelEl)` in `src/lib/previewFocus.ts`, which focuses `.xterm-helper-textarea` when `document.activeElement` is inside `panelEl`.
 - **`PreviewPanel.tsx`**:
-  - Story 2: dispatch on `viewerKind(filePath)`. `pdf`/`docx`/`image` → `BinaryView` (replacing the panel's own image and PDF code; adds Word). `markdown` → `MarkdownView` via `read_file`, as today. `html` → the existing sandboxed iframe via `read_file`, as today. `text` → `read_text_head(path, 2097152)` then lazy `CodeView`. Each load carries a request id; a result is applied only if it is the latest request **and** for the current `filePath`. On a `filePath` change the old head is cleared (so the old editor unmounts) and any pending reload timer is cleared. The panel root gets `role="complementary"` and `aria-label="Preview"`, and `tabIndex={-1}` on its body region. *Open in tab* rules as in User flows. The mode badge says `CODE`; the empty state and placeholder list code.
-  - Story 3: live follow uses `watch_file` (the old `watch_directory` call goes). Any event → re-read after 150 ms quiet, max wait 1 s. A not-found read error → "Deleted on disk" over the last content; a successful read clears it. Watch error (from the `invoke` or an `error` event) → LIVE off, "Not live: <reason>". Binary kinds reload by bumping `BinaryView`'s `reloadKey`.
+  - Story 2 keeps today's `watch_directory` effect as it is, so live Markdown, HTML, PDF and image previews keep working until Story 3 replaces it; code files get no live updates until then. Story 2 dispatches on `viewerKind(filePath)`. `pdf`/`docx`/`image` → `BinaryView` (replacing the panel's own image and PDF code; adds Word). `markdown` → `MarkdownView` via `read_file`, as today. `html` → the existing sandboxed iframe via `read_file`, as today. `text` → `read_text_head(path, 2097152)` then lazy `CodeView`. Each load carries a request id; a result is applied only if it is the latest request **and** for the current `filePath`. On a `filePath` change the old head is cleared (so the old editor unmounts) and any pending reload timer is cleared. The panel root gets `role="complementary"` and `aria-label="Preview"`, and `tabIndex={-1}` on its body region. *Open in tab* rules as in User flows. The mode badge says `CODE`; the empty state and placeholder list code.
+  - Story 3: live follow uses `watch_file` (the old `watch_directory` call goes). Watch health is **per-path state**, `watch: { path, status: "live" | "failed" | "off", reason? }`, separate from the user's `autoRefresh` toggle; the LIVE badge shows only when the toggle is on and `watch.status` is `"live"` for the current path, otherwise "Not live: <reason>". Rules:
+    - Any event → re-read after 150 ms quiet, max wait 1 s.
+    - A not-found read → "Deleted on disk" over the last content; unwatch, `status: "off"`; start the re-check (read every 2 s, doubling to 30 s) while the path is current and the toggle on.
+    - A successful read clears the banner; if `status` is not `"live"`, it stops the re-check and re-arms `watch_file` (unwatching any old id first).
+    - Watch error (the `invoke` rejects, or an `error` event) → `status: "failed"` with the reason, and the same re-check, so a later good read retries the watch.
+    - A new path resets `watch` and the re-check timer, and tries `watch_file` at once.
+    - The "unwatch on late resolve" pattern stays: if the effect was cleaned up before `watch_file` resolved, the returned id is unwatched at once.
+    - Binary kinds reload by bumping `BinaryView`'s `reloadKey`.
 - **`BinaryView.tsx`** (Story 3): when only `reloadKey` changes (same `path`), keep the current data on screen until the new bytes arrive; a new `path` still clears. PDF page and zoom reset on reload as they do today in both the panel and the tab (`PdfView` resets on new data); keeping them is out of scope.
 - **`src/lib/terminalFileLinks.ts`**: Story 2 removes `opensInPreview`. Story 4: `findPathCandidates` returns the `line`/`col` of the `:line[:col]` suffix it already strips, and `registerFileLinks`' `open` callback takes `(path, { line?, col?, inTab? })`. Story 5 sets `inTab` from the `MouseEvent` xterm passes to `activate(event, text)`. tsc's `file(line,col)` format is out of scope.
 - **`src/lib/openFile.ts`**: `openFileFromTerminal(path, opts?)`, `opts = { line?, col?, inTab? }`. `inTab` → `addEditorTab`; otherwise `open-preview` with `{ path, line, col }`. The detached-window `emitTo` payload and `listenForFileOpens` carry all three fields (Story 4 for line/col, Story 5 for `inTab`). Story 5 adds `opensInTab(e: { metaKey, ctrlKey }, mac = IS_MAC)`.
-- **`src/stores/tabStore.ts`**: Story 4 adds `previewReveal?: { path: string; line: number; col?: number; nonce: number } | null` and an optional third argument `setPreviewPath(id, path, at?)` that sets it with a fresh nonce, or clears it without `at`. Never saved. Story 6 writes `previewPath` in both branches of `saveSession` (restore already reads it, `tabStore.ts:633`) and adds it to `ClosedTab` so `reopenClosedTab` brings it back.
-- **`src/App.tsx`**: Story 4 passes `line`/`col` from `open-preview` to `setPreviewPath`. Story 2: `togglePreview` moves focus into the panel when opening and back to the terminal (`.xterm-helper-textarea`) when closing with focus inside. No layout change: the panel keeps `minWidth: 280`, so `sidePanelLayout.test.tsx`'s 1200 px budget holds.
+- **`src/stores/tabStore.ts`**: Story 4 adds `previewReveal?: { path: string; line: number; col?: number; nonce: number } | null`, an optional third argument `setPreviewPath(id, path, at?)` that sets it with a fresh nonce (or clears it without `at`), and `clearPreviewReveal(id, nonce)`, which clears it only when the nonce still matches. Never saved. Story 6 writes `previewPath` in both branches of `saveSession` (restore already reads it, `tabStore.ts:633`) and adds it to `ClosedTab` so `reopenClosedTab` brings it back.
+- **`src/App.tsx`**: Story 4 passes `line`/`col` from `open-preview` to `setPreviewPath`. Story 2: `togglePreview` increments `previewFocusRequest` when opening and calls `closePreviewFocus` when closing (above). No layout change: the panel keeps `minWidth: 280`, so `sidePanelLayout.test.tsx`'s 1200 px budget holds.
 - **`src/components/FileBrowser.tsx`** (Story 5): `handleClick(e)` opens files with `openFileFromTerminal(path, { inTab: opensInTab(e) })`.
 - **Docs**: `docs/guide/files.md` and `docs/guide/terminal.md` per story; `docs/guide/shortcuts.md` and `ShortcutsOverlay` unchanged.
 
@@ -212,10 +228,13 @@ sequenceDiagram
 | Library resets the view on `value` change | The panel never passes `value`; the wrapper restores the view state around `setValue`. |
 | Rapid or continuous writes | 150 ms quiet or 1 s max wait; only the latest request for the current path is applied. |
 | Rename-writes, merged FSEvents flags | Any event re-reads; "deleted" is decided by the read, not by the event kind. |
+| Watched folder deleted, moved or re-created (the inotify watch dies) | Events on the folder itself are reported as the file's `removed`; the not-found read drops the watch and starts the 2 s re-check; the first good read re-arms. Recovery never depends on the dead watch. |
 | Path spelled differently from what the OS reports (`./`, `../`, `/tmp` vs `/private/tmp`, case on macOS, symlinks) | Rust canonicalises once and matches events itself. |
-| Watching a huge tree, inotify limits, main-thread stalls | One non-recursive watch of the file's folder, in an async command. |
-| Watch fails | LIVE off, "Not live: <reason>"; Refresh still works. |
-| Reveal racing the load | Pending per nonce, applied once to the editor of the matching path, after content. |
+| Watching a huge tree, inotify limits, main-thread stalls | One non-recursive watch of the file's folder, in an async command; both pinned by tests. |
+| Watch fails | Per-path "Not live: <reason>"; the user's toggle untouched; retried after the next good read; another file starts fresh. |
+| Watch resolves after the panel moved on | Its id is unwatched at once. |
+| A write lands before Monaco mounts | `onMount` applies the latest content from a ref. |
+| Reveal racing the load, or re-applied on remount | Pending per nonce, applied once to the editor of the matching path after content, then cleared on the tab. |
 | Focus stolen | `autoFocus={false}`; tested. |
 | Same file open in an editor tab with unsaved edits | The panel shows the file on disk. |
 
@@ -243,12 +262,14 @@ All in Rust unit tests; the developer writes each failing first. Temp files unde
 4. A NUL within the first 8 KiB: `binary: true`, empty text; a UTF-16 LE file (BOM + text) is binary. -- › `read_text_head_binary`
 5. Invalid UTF-8 (`0xff`) mid-file: text contains U+FFFD, `lossy: true`. -- › `read_text_head_lossy`
 6. `read_text_head_in("~/x.txt", n, home)` reads `<home>/x.txt` (no `HOME` mutation). -- › `read_text_head_expands_tilde`
-7. Missing path, a directory, and (on unix) a FIFO made with `mkfifo` are each `Err`, and the FIFO case returns (the test would hang if the FIFO were opened). -- › `read_text_head_refuses_non_files`
-8. `watch_target` of a path given through a symlinked folder and with `./` and `../` segments returns the canonical folder and name; `is_target` is true for that folder + name, false for a sibling and for the same name in a subfolder; on macOS true for a different case. -- `watcher.rs` › `watch_target_canonicalises`, `is_target_matches_only_the_file`
-9. `watch_file` on a temp file, then writing it, delivers at least one event on the channel within 2 s; writing a sibling delivers none for 500 ms; `watch_file` on a missing path is `Err`. If a `Channel` cannot be built in a unit test, the test drives the same closure through a `fn(WatchEvent)` sink extracted for it. -- › `watch_file_reports_only_its_file`
-10. Both commands are registered; the existing contract test passes. -- `tauriCommandContract.test.ts` (existing)
+7. Missing path, a directory, and (on unix) a FIFO made with `mkfifo` are each `Err`. The FIFO call runs on its own thread and the test waits with `recv_timeout(2 s)`, so a regression that opens the FIFO fails the test instead of hanging `cargo test`. -- › `read_text_head_refuses_non_files`
+8. `watch_target` of a path given through a symlinked folder and with `./` and `../` segments returns the canonical folder and name. `classify` gives `Target` for that folder + name, `Folder` for the folder itself, `Other` for a sibling and for the same name in a subfolder; on macOS `Target` for a different case. -- `watcher.rs` › `watch_target_canonicalises`, `classify_sorts_event_paths`
+9. `watch_file` on a temp file, then writing it, delivers at least one event within 2 s; writing a sibling delivers none for 500 ms; `watch_file` on a missing path is `Err`. If a `Channel` cannot be built in a unit test, the test drives the same closure through a `fn(WatchEvent)` sink extracted for it. -- › `watch_file_reports_only_its_file`
+10. **Folder removal (N1), real file system, runs on macOS and Linux:** with `dir/f` watched, `rm -rf dir` (via `std::fs::remove_dir_all`) delivers a `removed` for `dir/f` within 2 s. On both platforms the child's deletion is reported before the folder's, and on Linux the folder's own events are also mapped to `removed` (pinned by 1-AC8's `Folder` case). Re-creation is deliberately not expected from the old watch, whose inotify watch is dead; recovery is the panel's job (3-AC5). -- › `watch_file_reports_the_folder_going`
+11. `watch_file_mode()` returns `RecursiveMode::NonRecursive`, and `watch_file` uses it (the test reads `include_str!("watcher.rs")` and asserts the line above `pub fn watch_file` is `#[tauri::command(async)]` and that `watch_file`'s body calls `watch_file_mode()`). Making it recursive or sync fails this test. -- › `watch_file_is_async_and_non_recursive`
+12. Both commands are registered; the existing contract test passes. -- `tauriCommandContract.test.ts` (existing)
 
-**Contract (1):** add `.ade/context/side-panel-files.md`: `read_text_head` (fields, 8 KiB binary rule, lossy, regular files only) and `watch_file` (canonical, non-recursive, stop with `unwatch_directory`).
+**Contract (1):** add `.ade/context/side-panel-files.md`: `read_text_head` (fields, 8 KiB binary rule, lossy, regular files only) and `watch_file` (canonical, non-recursive, async, folder events reported as the file's `removed`, symlinks watched at their target, stop with `unwatch_directory`).
 
 ## Verification (1)
 
@@ -265,7 +286,7 @@ All in Rust unit tests; the developer writes each failing first. Temp files unde
 
 # Story 2: Code in the side panel; terminal clicks land there
 
-Depends on Story 1. Loads once per open (and on Refresh); live follow is Story 3.
+Depends on Story 1. Code loads once per open (and on Refresh); live follow for code is Story 3. Today's `watch_directory` effect stays in place, so Markdown, HTML, PDF and image previews stay live in between.
 
 ## Code Map (2)
 
@@ -283,6 +304,7 @@ Component tests mock `@tauri-apps/api/core`. `MonacoWrapper`/`CodeView` tests mo
 
 1. With `readOnly`, the stub never receives a `value` prop on any render (initial or after `content` changes) and receives `defaultValue` equal to the first content. -- `src/components/editor/__tests__/MonacoWrapper.test.tsx` › "read-only content never goes through value"
 2. With `readOnly`, a `content` change calls `saveViewState`, then `setValue`, then `restoreViewState` with the saved state, in that order, and the fake's scroll top and position afterwards equal those before. Against today's code the stub's `value` path resets them, so the test fails. -- › "a reload keeps the reader's place"
+2b. A write that arrives between the first render and `onMount`: the stub calls `onMount` asynchronously (after a `content` change), and afterwards the fake editor holds the newer content. Without the ref it would hold the first. -- › "a write before mount is not lost"
 3. With `readOnly`: options include `readOnly: true`, `domReadOnly: true`, `minimap.enabled: false`, `renderValidationDecorations: "off"` and the given `ariaLabel`; no action is registered; with `autoFocus={false}` `focus()` is never called. Without the new props the stub gets `value`, the original options, the save action, and `focus()`. -- › "read-only mode", "defaults are the file tab's"
 4. With `previewPath` `/r/src/App.tsx` the panel calls `read_text_head` with `{ path, maxBytes: 2097152 }` and renders the editor stub (after the lazy load) with language `typescript` and `ariaLabel` "App.tsx, read-only"; no `<pre>`. -- `src/components/__tests__/PreviewPanelCode.test.tsx` › "shows source files in a read-only editor"
 5. `PreviewPanel.tsx` has no static import of `CodeView`, `MonacoWrapper`, `monaco-editor` or `@monaco-editor/react` (source read), and `sidePanelLayout.test.tsx` passes unchanged, with no Monaco mock added to it. -- › "Monaco loads lazily"; `sidePanelLayout.test.tsx` (existing, unchanged)
@@ -291,8 +313,15 @@ Component tests mock `@tauri-apps/api/core`. `MonacoWrapper`/`CodeView` tests mo
 8. PDF, `.docx` and image paths render `BinaryView`; `.md` renders `MarkdownView`; `.html` renders the sandboxed iframe. `PreviewPanel.tsx` no longer contains `detectMode` and imports `viewerKind`. -- › "each kind gets its viewer"
 9. Switching from `A.ts` to `B.ts` while A's read is pending: when A's read resolves after B's, A's text is never shown and B's is. -- › "a stale read never wins"
 10. `openFileFromTerminal("/r/src/App.tsx")` in the main window dispatches `open-preview` with that path and adds no tab; likewise `.docx`, `.md`, `.png`. `opensInPreview` is gone. -- `src/lib/__tests__/openFile.test.ts` › "every clicked file opens in the panel"
-11. Keyboard: toggling the panel open (the `togglePreview` path) moves `document.activeElement` inside the panel; toggling it closed with focus inside focuses `.xterm-helper-textarea`; an `open-preview` event never moves focus. An Escape keydown dispatched from inside the panel focuses `.xterm-helper-textarea`. The panel root has `role="complementary"` and `aria-label="Preview"`. -- `src/components/__tests__/PreviewPanelFocus.test.tsx` › "keyboard into and out of the panel", "opening a file never takes focus"
-12. Existing guards still pass: `previewSecurity.test.ts`, `previewPerTab.test.ts`, `tauriCommandContract.test.ts`, `viewerKind.test.ts`, `terminalFileLinks.test.ts` (minus the removed `opensInPreview` case).
+11. Keyboard, tested on the components, not through `App`:
+    - `PreviewPanel` rendered with a code file and `focusRequest` going from 0 to 1, with the lazy `CodeView` and a stub whose `onMount` fires asynchronously: the fake editor's `focus()` is called once, after mount. With a Markdown file: the body region becomes `document.activeElement`.
+    - Re-rendering with the same `focusRequest` (e.g. a new `previewPath` from `open-preview`) never calls `focus()` or moves `document.activeElement`.
+    - `closePreviewFocus(panelEl)` focuses `.xterm-helper-textarea` when focus is inside `panelEl`, and does nothing when it is elsewhere.
+    - An Escape keydown dispatched from inside the panel, with `useKeybindings` mounted, focuses `.xterm-helper-textarea`.
+    - The panel root has `role="complementary"` and `aria-label="Preview"`.
+    -- `src/components/__tests__/PreviewPanelFocus.test.tsx` › "⌘⇧B focus survives the lazy mount", "opening a file never takes focus", "Esc returns to the terminal"; `src/lib/__tests__/previewFocus.test.ts` › "closing returns focus to the terminal"
+12. With a `.md` file, a `changed` event from the existing `watch_directory` channel for that path still reloads it (today's live preview is not broken before Story 3). -- `PreviewPanelCode.test.tsx` › "documents stay live"
+13. Existing guards still pass: `previewSecurity.test.ts`, `previewPerTab.test.ts`, `tauriCommandContract.test.ts`, `viewerKind.test.ts`, `terminalFileLinks.test.ts` (minus the removed `opensInPreview` case).
 
 **Docs (2):** `files.md`: the Preview panel shows source code read-only with highlighting; large, non-UTF-8 and binary files; *Open in tab*. `terminal.md` Clickable files: every file opens in the panel. **Contract (2):** extend `.ade/context/side-panel-files.md`: every clicked file opens in the tab's panel; read-only; *Open in tab* rules.
 
@@ -306,44 +335,9 @@ Component tests mock `@tauri-apps/api/core`. `MonacoWrapper`/`CodeView` tests mo
 
 ---
 
-# Story 3: Follow the file live
-
-Depends on Story 2.
-
-## Code Map (3)
-
-- `src/components/PreviewPanel.tsx:104-142` -- today's `watch_directory` effect (`extensions: [ext]`, default `withContent`, errors swallowed, reloads only on `changed` with `event.path === filePath`).
-- `src-tauri/src/watcher.rs:186-190` -- every `Modify`, renames included, becomes `changed`.
-- `src/components/viewer/BinaryView.tsx:17-25` -- `setData(null)` on every `reloadKey` change.
-
-## Acceptance Criteria (3)
-
-Fake timers; `watch_file` mocked to capture the channel.
-
-1. The panel calls `watch_file` with the path and never `watch_directory`. -- `PreviewPanelCode.test.tsx` › "watches only its file"
-2. Three events 50 ms apart cause one `read_text_head` call, 150 ms after the last. -- › "debounces bursts"
-3. An event every 50 ms for 3 s causes a re-read at least every 1 s (at least 3 calls). -- › "continuous appends still refresh"
-4. Each of `changed`, `created`, `removed` schedules a re-read. Sequence `removed` then `created` with the file present: no "Deleted on disk" after the re-read. Sequence `created` then `removed` with the file gone (read rejects with not-found): "Deleted on disk" in a `role="status"` element and the editor keeps its last text; a later successful read clears it. -- › "removed then created", "created then removed"
-5. `watch_file` rejecting, or an `error` event, switches the toggle to STATIC and shows "Not live: <reason>" in a `role="status"` element. -- › "a failed watch is not shown as live"
-6. Switching tab (another `previewPath`) with a re-read timer pending: the timer is cleared, the old watch is stopped with `unwatch_directory`, and no read for the old path happens. -- › "a tab switch mid-reload"
-7. A content reload does not re-apply an earlier reveal (no `setPosition` call after the reload). -- `MonacoWrapper.test.tsx` › "a reload does not jump back to the target line" (with the Story 4 prop; if Story 4 is not merged yet, this AC moves to Story 4)
-8. `BinaryView`: changing only `reloadKey` keeps the current view rendered (no "Loading…") until the new bytes resolve; changing `path` shows "Loading…". -- `src/components/viewer/__tests__/BinaryView.test.tsx` › "a reload keeps the current view"
-
-**Docs (3):** `files.md`: live updates, the deleted banner, "Not live".
-
-## Verification (3)
-
-**Commands:** the same five lines; expected all pass.
-
-**Manual checks:** scroll halfway down a file and let an agent edit it: the view does not move. `while true; do date >> /tmp/x.log; sleep 0.05; done` with `/tmp/x.log` open: the panel updates about once a second (macOS reports `/private/tmp`). Save from vim (rename-write): updates, no lasting deleted banner. Delete the file: banner. Open a file at a repo root: no noticeable CPU or watch growth during `npm install`. A live PDF still updates.
-
-**Results (3):** _QA fills this in._
-
----
-
 # Story 4: Go to line from `path:line`
 
-Depends on Story 2.
+Depends on Story 2. Built before Story 3.
 
 ## Code Map (4)
 
@@ -356,10 +350,12 @@ Depends on Story 2.
 2. A link's `activate` passes line and column to `open`. -- › "a clicked link carries its line" (fake `Terminal` with one buffer line, `resolve_file_paths` mocked)
 3. `openFileFromTerminal(p, { line: 42, col: 7 })` dispatches `open-preview` with `{ path: p, line: 42, col: 7 }`; from a detached window the emitted payload has the same fields; `listenForFileOpens` passes them on. -- `openFile.test.ts` › "the line travels with the file"
 4. `setPreviewPath(id, p, { line: 42 })` sets `previewReveal` `{ path: p, line: 42 }` with a nonce different from the previous one, also for identical repeated calls; `setPreviewPath(id, p)` clears it; it is not in the saved session. -- `previewPerTab.test.ts` › "a target line is per open request and never saved"
+4b. `clearPreviewReveal(id, n)` clears `previewReveal` when its nonce is `n` and leaves a newer one alone. -- `previewPerTab.test.ts` › "a reveal is cleared once applied, not a newer one"
 5. `MonacoWrapper` with `reveal { line: 42, nonce: 1 }` calls `setPosition({ lineNumber: 42, column: 1 })` and `revealLineInCenter(42)` once content is set; a new nonce with the same line reveals again; the same nonce after a content change does not; a line past the model's end is clamped. -- `MonacoWrapper.test.tsx` › "reveals the target line once per click", "clamps a line past the end"
 6. The panel shows `A.ts`; `setPreviewPath(tab, B.ts, { line: 300 })` with B's `read_text_head` resolving later: A's fake editor never gets `setPosition`/`revealLineInCenter`; B's gets line 300 after B's content is in it. -- `PreviewPanelCode.test.tsx` › "a path:line link to another file lands in that file"
 7. A truncated head whose shown text has 1,000 lines and `reveal.line` 5,000: "Line 5000 is past the part shown (first 2.0 MB)" in a `role="status"` element, and the cursor goes to the last shown line. -- › "a line past the truncated part says so"
 8. Markdown, HTML and PDF ignore `previewReveal` (no error, normal render). -- › "rendered views ignore the line"
+9. Remount: reveal `A.ts:42` (applied), switch to tab B, back to tab A (the `CodeView` remounts): `setPosition` is not called again, because `onRevealed` cleared the tab's `previewReveal`. -- › "a remount does not re-apply an old reveal"
 
 **Docs (4):** `terminal.md`: replace "A trailing `:line` or `:line:col` is ignored" with: it opens the file at that line in the panel.
 
@@ -373,9 +369,46 @@ Depends on Story 2.
 
 ---
 
+# Story 3: Follow the file live
+
+Depends on Stories 1, 2 and 4.
+
+## Code Map (3)
+
+- `src/components/PreviewPanel.tsx:104-142` -- today's `watch_directory` effect (`extensions: [ext]`, default `withContent`, errors swallowed, reloads only on `changed` with `event.path === filePath`).
+- `src-tauri/src/watcher.rs:186-190` -- every `Modify`, renames included, becomes `changed`.
+- `src/components/viewer/BinaryView.tsx:17-25` -- `setData(null)` on every `reloadKey` change.
+
+## Acceptance Criteria (3)
+
+Fake timers; `watch_file` mocked to capture the channel and return ids; `read_text_head` mocked per call.
+
+1. The panel calls `watch_file` with the path and never `watch_directory`. -- `PreviewPanelCode.test.tsx` › "watches only its file"
+2. Three events 50 ms apart cause one `read_text_head` call, 150 ms after the last. -- › "debounces bursts"
+3. An event every 50 ms for 3 s causes a re-read at least every 1 s (at least 3 calls). -- › "continuous appends still refresh"
+4. Each of `changed`, `created`, `removed` schedules a re-read. Sequence `removed` then `created` with the file present: no "Deleted on disk" after the re-read. Sequence `created` then `removed` with the file gone (read rejects with not-found): "Deleted on disk" in a `role="status"` element and the editor keeps its last text; a later successful read clears it. -- › "removed then created", "created then removed"
+5. **Folder deleted and re-created (N1):** after a `removed` whose re-read rejects with not-found, the panel unwatches the old id and makes no further `watch_file` call while reads keep failing; it re-reads at 2 s, 4 s, 8 s… (capped at 30 s). When a read succeeds (the folder and file are back), the banner clears, the new text is shown, `watch_file` is called again, and an event on the **new** channel triggers a reload. This is platform-independent by design: recovery never relies on the old watch. -- › "a deleted folder that comes back is followed again"
+6. **Per-path watch failure (N2):** `watch_file` rejects for `A` (e.g. a restored file that is gone): "Not live: <reason>" in a `role="status"` element, and the LIVE/STATIC toggle still reads LIVE (the user's choice). Opening `B`: `watch_file(B)` is called, B shows LIVE with no "Not live". Back on `A` with the file now present: the next successful read calls `watch_file(A)` again. An `error` event on a live watch behaves like the rejection. With the user's toggle on STATIC, no watch and no re-check run. -- › "a failed watch is per file and never flips the toggle"
+7. Switching tab (another `previewPath`) with a re-read or re-check timer pending: the timers are cleared, the old watch is stopped with `unwatch_directory`, and no read for the old path happens. -- › "a tab switch mid-reload"
+8. A `watch_file` that resolves after the panel moved to another path (or unmounted): its id is passed to `unwatch_directory` at once, and its events are ignored. -- › "a late watch is unwatched"
+9. A content reload does not re-apply an earlier reveal (no `setPosition` call after the reload). -- `MonacoWrapper.test.tsx` › "a reload does not jump back to the target line"
+10. `BinaryView`: changing only `reloadKey` keeps the current view rendered (no "Loading…") until the new bytes resolve; changing `path` shows "Loading…". -- `src/components/viewer/__tests__/BinaryView.test.tsx` › "a reload keeps the current view"
+
+**Docs (3):** `files.md`: live updates, the deleted banner, "Not live".
+
+## Verification (3)
+
+**Commands:** the same five lines; expected all pass.
+
+**Manual checks:** scroll halfway down a file and let an agent edit it: the view does not move. `while true; do date >> /tmp/x.log; sleep 0.05; done` with `/tmp/x.log` open: the panel updates about once a second (macOS reports `/private/tmp`). Save from vim (rename-write): updates, no lasting deleted banner. Delete the file: banner. On macOS and Linux: open `dist/x.js`, `rm -rf dist`, regenerate it: the banner shows, then clears within the re-check interval and later edits are followed live. `git checkout` a branch without the file's folder and back: same. Open a file at a repo root: no noticeable CPU or watch growth during `npm install`. A live PDF still updates.
+
+**Results (3):** _QA fills this in._
+
+---
+
 # Story 5: File browser clicks land in the panel; modifier-click opens a tab
 
-Depends on Story 4 (shares `openFile.ts` and the `open` callback's options).
+Depends on Story 4 (shares `openFile.ts` and the `open` callback's options); built after Story 3.
 
 ## Code Map (5)
 
@@ -416,7 +449,6 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 
 1. `saveSession` writes `previewPath` for terminal and non-terminal tabs; save then restore gives each tab the same `previewPath`. -- `src/stores/__tests__/session.test.ts` › "the panel's file survives a restart"
 2. Closing a terminal tab with a `previewPath` and reopening it with `reopenClosedTab` restores the `previewPath`. -- `session.test.ts` › "a reopened tab keeps its panel file"
-3. `previewReveal` is never written to the saved session. -- `session.test.ts` › "the target line is not saved" (skipped with a TODO naming Story 4 if Story 4 is not merged; un-skipped by whichever lands second)
 
 ## Verification (6)
 
@@ -435,6 +467,7 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 - Keeping a PDF's page and zoom across a live reload (they reset today in both the panel and the tab).
 - Relative links in Markdown shown in the panel opening in the panel (they open a tab, as today; `MarkdownView` is shared with the tab).
 - tsc's `file(line,col)` link format.
+- Following a symlinked file's link itself: it is watched at its target, so retargeting the link or an atomic rename onto the link is not seen (Refresh shows it).
 - Highlighting what an agent changed, "follow the end" for logs, a history of files viewed, several files inside the panel, a per-pane panel.
 - Persisting the panel's open state, width or scroll.
 - A setting for the default click target (Open question 7).
@@ -467,3 +500,7 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
   - M9: keyboard into and out of the panel, `role="status"` on every message, Monaco `ariaLabel` (2-AC3, 2-AC6, 2-AC7, 2-AC11, 3-AC4, 3-AC5, 4-AC7).
   - m1: 8 KiB read first with early stop, `max + 1` read decides `truncated`, cut before decode, UTF-16 is binary (1-AC2–1-AC5). m2: pure `read_text_head_in` with a `home` argument (1-AC6). m3: moot: `watch_file` watches one file by name, so dotfiles and extensionless files need no extension rule (1-AC8). m4: tab switch mid-load and mid-reload, timer cleared (2-AC9, 3-AC6). m5: `BinaryView` keeps the view during a reload (3-AC8); page/zoom reset is pre-existing, out of scope. m6: manual check uses `grep -Hn`; tsc format out of scope. m7: `inTab` through the detached payload (5-AC2). m8: *Open in tab* activating the editor tab, and clicks with non-terminal tabs active, spelled out (User flows, 5-AC4). m9: Markdown links still open a tab, out of scope. m10: `renderValidationDecorations: "off"` (2-AC3). m11: ADR 0009 names the terminal-click change. m12: line past the truncated part (4-AC7). m13: focus claim corrected (Boundaries). m14: persistence split into Story 6, with closed-tab reopen.
   - Open question 7 added (a setting for the default click target).
+- 2026-10-17, re-review of 7fa9447: B1 and M1–M9 confirmed fixed; BLOCKED on two new majors. Fixed in this revision:
+  - N1: a deleted watched folder killed the Linux watch silently. Events on the watched folder itself are now reported as the file's `removed` (`classify` → `Folder`, 1-AC8); a not-found re-read drops the watch and re-checks every 2 s doubling to 30 s; the first good read re-arms `watch_file` (3-AC5). One approach, chosen because recovery then never depends on a dead watch and is the same on macOS and Linux; 1-AC10 checks on a real file system, on both, that removing the folder is reported.
+  - N2: watch failure is per-path state separate from the user's LIVE toggle, retried after the next good read; opening another file starts fresh (3-AC6).
+  - m-a: `watch_file_mode()` plus an `include_str!` source check for `#[tauri::command(async)]` (1-AC11). m-b: the FIFO call runs on a thread with `recv_timeout` (1-AC7). m-c: a `focusRequest` counter set only on the ⌘⇧B path, served after the lazy chunks and Monaco mount; tested on `PreviewPanel` and a `closePreviewFocus` helper, not through `App` (2-AC11). m-d: `onMount` applies the latest content from a ref; stub mounts asynchronously (2-AC2b). m-e: `onRevealed` → `clearPreviewReveal(tab, nonce)`, so a remount does not re-reveal (4-AC4b, 4-AC9). m-f: symlink retargeting documented out of scope. m-g: a late `watch_file` is unwatched at once (3-AC8). m-h: 6-AC3 dropped; 4-AC4 already covers it. m-i: Story 2 keeps today's `watch_directory` effect, tested (2-AC12). m-j: order is 1 → 2 → 4 → 3 → 5, 6 in parallel; 3-AC7 (now 3-AC9) is unconditional.
