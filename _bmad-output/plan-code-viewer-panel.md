@@ -11,11 +11,11 @@ risk: 'low'
 review: 'quick'
 review_source: 'pinned'
 lenses_ran: []
-review_loop_iteration: 0
+review_loop_iteration: 1
 context: ['.ade/context/decisions/0009-one-side-panel-shows-clicked-files-read-only.md']
 ---
 
-Three stories, built in order: **Story 1** (code in the side panel, terminal clicks land there), **Story 2** (go to line from `path:line`) and **Story 3** (file browser clicks land there, modifier-click opens a tab, the panel's file survives a restart). Each has its own acceptance criteria and verification. The shared intent, decisions and architecture come first.
+Six small stories. Order: **1** (Rust: bounded read and single-file watch) → **2** (code in the panel; terminal clicks land there) → **3** (live follow) and **4** (go to line) → **5** (file browser clicks, modifier-click for a tab). **6** (the panel's file survives a restart and a reopened tab) touches only `tabStore` and can run in parallel with 2–5. Each story has its own acceptance criteria and verification. The shared intent, decisions and architecture come first.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -23,51 +23,59 @@ Three stories, built in order: **Story 1** (code in the side panel, terminal cli
 
 **Problem:** The owner's words: "There needs to be a code viewer here", in "a panel in ADE"; asked which panel, they chose "A side panel by the terminal". Today a clicked source file always opens in a new tab, which hides the terminal the agent is working in. The Preview panel (⌘⇧B) already sits beside the terminal, but only for Markdown, HTML, PDFs and images: any other file it is given shows as a plain unhighlighted `<pre>`, and terminal clicks on code never reach it (`opensInPreview`, `src/lib/terminalFileLinks.ts:209`).
 
-**Approach:** Grow the existing Preview panel into the code viewer rather than add a second panel beside it. Source files render in a **read-only** Monaco, through the same `MonacoWrapper` the file tab uses. Every file clicked in the terminal or the file browser opens in the panel; ⌘-click (Ctrl-click on Linux) and an *Open in tab* button open it in a tab, where it can be edited. The panel follows the file live as an agent writes it, keeping the reader's scroll position, and a `path:line` link jumps to that line. Large files are shown truncated and binary files are refused, both by one small new Rust command.
+**Approach:** Grow the existing Preview panel into the code viewer rather than add a second panel beside it. Source files render in a **read-only** Monaco, through the same `MonacoWrapper` the file tab uses. Every file clicked in the terminal or the file browser opens in the panel; ⌘-click (Ctrl-click on Linux) and an *Open in tab* button open it in a tab, where it can be edited. The panel follows the file live as an agent writes it, keeping the reader's place, and a `path:line` link jumps to that line. Large files are shown truncated and binary files are refused, both decided in Rust.
 
 ## Decisions proposed for the owner (recommended defaults; see Open questions)
 
-1. **One side panel, not two.** The Preview panel becomes the viewer for every file kind. Same place, same shortcut (⌘⇧B / Ctrl+Alt+Shift+B), same per-tab document, same live watcher, same resize handle. No new shortcut is added.
-2. **Read-only in the panel.** Editing stays in the file tab (⌘S). *Open in tab* is one click away.
-3. **Click lands in the panel, modifier-click in a tab**, for both the terminal and the file browser.
+1. **One side panel, not two.** The Preview panel becomes the viewer for every file kind. Same place, same shortcut (⌘⇧B / Ctrl+Alt+Shift+B), same per-tab document, same resize handle. No new shortcut.
+2. **Read-only in the panel.** Editing stays in the file tab (⌘S).
+3. **Click lands in the panel, modifier-click in a tab**, for the terminal and the file browser. This is a default change in two places: terminal clicks on code files, and every file-browser click, used to open a tab.
 4. **The panel belongs to the tab**, as `previewPath` already does: every pane of a split shares it, switching tab switches the file, and "switching project" in ADE is switching tab, so it follows too.
-5. **Live by default** (the panel's existing LIVE/STATIC toggle), with scroll and cursor kept across reloads.
-6. **Text files over 2 MiB show their first 2 MiB** with a banner; files with a NUL byte in their first 8 KiB are binary and not shown as text.
-7. **Persisted:** the tab's panel file (fixing a gap: `previewPath` is restored on launch but never saved). **Not persisted:** whether the panel is open, its width, the scroll position, the target line.
+5. **Live by default** (the existing LIVE/STATIC toggle), keeping the reader's scroll and cursor across reloads. LIVE turns itself off, visibly, when the file cannot be watched.
+6. **Text over 2 MiB shows its first 2 MiB**; a NUL byte in the first 8 KiB means binary, not shown as text.
+7. **Persisted:** the tab's panel file (fixing a gap: `previewPath` is restored on launch but never saved, and a reopened closed tab drops it). **Not persisted:** whether the panel is open, its width, scroll, target line.
 
 ## Boundaries & Constraints (all stories)
 
 **Always:**
 - One editor component: the panel uses `src/components/editor/MonacoWrapper.tsx`; no second Monaco setup, no other editor library.
-- One kind dispatch: the panel picks its view with `viewerKind()` from `src/lib/viewerKind.ts`, the same function the file tab uses. `PreviewPanel`'s private `detectMode` is removed.
-- The panel never takes keyboard focus when a file is opened into it from the terminal or the file browser: the user keeps typing in the terminal.
-- HTML in the panel keeps today's sandboxed-scripts iframe (`sandbox="allow-scripts"`, pinned by `previewSecurity.test.ts`); Markdown keeps the sanitized `MarkdownView`.
+- One kind dispatch: the panel picks its view with `viewerKind()` (`src/lib/viewerKind.ts`), as the file tab does. `PreviewPanel`'s private `detectMode` is removed.
+- Monaco is never in `PreviewPanel`'s static import graph: `CodeView` is loaded with `React.lazy`. This keeps Monaco out of the panel's chunk and lets jsdom tests that render `PreviewPanel` (e.g. `sidePanelLayout.test.tsx`) run without Monaco mocks, since importing `monaco-editor` under jsdom throws (`document.queryCommandSupported is not a function`).
+- Opening a file into the panel never moves keyboard focus into it. After a terminal click focus stays in the terminal; after a file-browser click it stays in the file browser.
+- HTML keeps today's sandboxed-scripts iframe (`sandbox="allow-scripts"`, pinned by `previewSecurity.test.ts`); Markdown keeps the sanitized `MarkdownView`.
+- Every message the panel shows in place of content (truncated, binary, error, deleted, not live, line past the part shown) is in an element with `role="status"` and `aria-live="polite"`.
 - The verification command is unchanged.
 
 **Never:**
 - No editing, saving or dirty state in the panel.
 - No new dependency or lockfile change.
 - No change to `relay/`, `mobile/` or `packages/`.
-- No change to what the file tab does or how it loads files.
-- No new keyboard shortcut (decision 1).
+- No change to how the file tab loads, edits or saves files. The only shared component whose behavior changes is `BinaryView` (Story 3: it keeps the current view while a reload is in flight instead of flashing "Loading…"), which the tab's Reload button also benefits from.
+- No new keyboard shortcut.
+
+**Known and left alone:** `@monaco-editor/react` 4.7.0 applies a changed `value` prop itself, in the child `<Editor>`'s effect, before `MonacoWrapper`'s own effect runs: with `readOnly` it calls `setValue` (cursor to line 1, scroll to top), otherwise a full-range `executeEdits`. So `MonacoWrapper`'s "keep the cursor" branch (`MonacoWrapper.tsx:62-69`) is dead code today. The panel no longer drives content through `value` (Story 2). The file tab's behavior is not changed by this plan; recorded under Out of scope.
 
 ## User flows
 
 | Flow | Behavior |
 |---|---|
-| Click a file path in the terminal | Opens in the panel (opening the panel if closed) for the active tab. All kinds: code, Markdown, HTML, PDF, Word, images. Detached windows forward it to the main window, as today. |
-| Click a file in the file browser (⌘B) | Story 3: opens in the panel, as above. Until then it still opens a tab. |
-| ⌘-click / Ctrl-click | Story 3: opens a tab instead (`addEditorTab`, which focuses an existing tab for that file). |
-| *Open in tab* button in the panel header | Opens the panel's file in a tab. Hidden for binary files the tab cannot show. |
-| ⌘⇧B | Shows or hides the panel, as today. Esc behavior is unchanged. |
+| Click a file path in the terminal | Opens in the active tab's panel, opening the panel if closed. All kinds: code, Markdown, HTML, PDF, Word, images. Focus stays in the terminal. Detached windows forward the click (with its line, column and `inTab`) to the main window. |
+| Click a file in the file browser (⌘B) | Story 5: opens in the panel, as above; focus stays in the file browser. Until then it still opens a tab. |
+| ⌘-click / Ctrl-click | Story 5: opens a tab instead (`addEditorTab`, which focuses an existing tab for that file). |
+| *Open in tab* button | Opens the panel's file in a tab, which becomes the active tab. The panel belongs to the tab, so it now shows the editor tab's own (empty) state; switching back to the terminal tab shows the file again. Hidden when the file is binary, truncated or decoded lossily, with a note saying why ("Too large to open in a tab" / "Not UTF-8 text, can't be edited in a tab"), since the tab reads the whole file as UTF-8 (`EditorTab.tsx:73`). |
+| Click a file while an editor, fleet or browser tab is active | It opens in that tab's panel: the panel sits beside any tab type. |
+| ⌘⇧B | Shows or hides the panel. Opening it this way moves focus into it (the editor for a code file, else the panel's region, `tabIndex={-1}`). Closing it with focus inside returns focus to the terminal. |
+| Esc with focus in the panel | Returns focus to the terminal (the existing global handler, `useKeybindings.ts:139-148`). |
 | Resize | Drag the panel's left edge (existing `useDragWidth`, 280–900 px, default 480). Not persisted. |
-| Splits | The panel sits beside the whole tab, not a pane. A click in any pane sets the tab's file. Zooming a pane keeps the panel. |
-| Tab switch / project switch | The panel shows the new tab's file, or its empty state. Open/closed is app-wide, as today. |
-| Agent edits the file | With LIVE on, the panel reloads within ~150 ms of the last write, keeping scroll and cursor. A delete shows a "Deleted on disk" banner over the last content; a re-create (atomic rename-writes) reloads it. |
-| `path:line` / `path:line:col` | Story 2: the panel reveals that line, centered, with the cursor on it. Re-clicking the same link re-reveals it. Rendered views (Markdown, HTML, PDF) ignore the line. |
-| Large text file (> 2 MiB) | First 2 MiB shown, banner: "Showing the first 2.0 MB of 48.3 MB. Open in tab to see it all." |
-| Binary file | "Binary file (3.2 MB), not shown." PDF, Word and images are not "binary" here: they have their viewers. |
-| Missing or unreadable file (e.g. restored after a restart) | "Can't open <name>: <reason>", in the panel body. |
+| Splits | The panel sits beside the whole tab. A click in any pane sets the tab's file. Zooming a pane keeps the panel. |
+| Tab switch / project switch | The panel shows the new tab's file, or its empty state. A load or reload in flight for the old file is discarded. Open/closed is app-wide, as today. |
+| Agent edits the file | With LIVE on, any watch event for the file schedules a re-read: 150 ms after the last event, and at most 1 s after the first while events keep coming (continuous appends). Scroll, cursor and selection are kept. If the re-read fails with not-found, a "Deleted on disk" banner sits over the last content; the next successful read clears it. |
+| Watch fails | LIVE switches to STATIC, with "Not live: <reason>". Refresh still works. |
+| `path:line` / `path:line:col` | Story 4: once that file's content is in the editor, the line is revealed centered with the cursor on it. Re-clicking re-reveals. A line past the end goes to the last line; a line past the truncated part shows "Line N is past the part shown (first 2.0 MB)". Rendered views (Markdown, HTML, PDF) ignore the line. |
+| Large text file (> 2 MiB) | "Showing the first 2.0 MB of 48.3 MB." No promise that a tab shows more. |
+| Binary file | "Binary file (3.2 MB), not shown." PDF, Word and images are not "binary" here: they have their viewers. UTF-16 text contains NULs, so it counts as binary. |
+| Missing, unreadable or not a regular file | "Can't open <name>: <reason>". FIFOs, sockets and devices are refused without being opened. |
+| Relative link inside Markdown shown in the panel | Opens a tab, as it does today (`MarkdownView.tsx:93`); unchanged, see Out of scope. |
 
 ## Architecture
 
@@ -85,19 +93,18 @@ flowchart LR
   TS[("tabStore<br/>previewPath, previewReveal")]
   PP["PreviewPanel.tsx"]
   VK["viewerKind.ts"]
-  CV["viewer/CodeView.tsx (new)"]
-  MW["editor/MonacoWrapper.tsx<br/>+ readOnly, autoFocus, reveal"]
+  CV["viewer/CodeView.tsx (new, lazy)"]
+  MW["editor/MonacoWrapper.tsx<br/>+ readOnly (uncontrolled), autoFocus, reveal, ariaLabel"]
   BV["viewer/BinaryView.tsx<br/>PDF, Word, image"]
   MV["viewer/MarkdownView.tsx"]
   IF["sandboxed iframe (HTML)"]
   RS["Rust: read_text_head (new)"]
-  W["Rust: watch_directory<br/>withContent: false"]
+  W["Rust: watch_file (new)<br/>parent folder, non-recursive"]
   ET["EditorTab (tab)"]
 
   T --> OF
   BP --> OF
-  FB -- "click (Story 3)" --> OF
-  FB -- "modifier-click" --> ET
+  FB -- "click (Story 5)" --> OF
   OF -- "inTab" --> ET
   OF --> APP --> TS --> PP
   PP --> VK
@@ -106,47 +113,55 @@ flowchart LR
   PP --> MV
   PP --> IF
   PP -- "Open in tab" --> ET
-  CV -. text .-> RS
+  PP -. text .-> RS
   PP -. changes .-> W
 ```
 
-### What changes, by file
+### Rust (Story 1)
 
-- **`src-tauri/src/lib.rs`** (Story 1): new command `read_text_head(path: String, max_bytes: u64) -> Result<TextHead, String>`, registered in the handler list. `TextHead` is `{ text: String, size: u64, truncated: bool, binary: bool }`, serialized camelCase. It expands `~` like `read_file`, reads at most `max_bytes`, sets `binary` when the first 8 KiB contain a NUL byte (then `text` is empty), otherwise decodes lossily (invalid UTF-8 becomes U+FFFD, which is safe because the panel never writes back), cuts a truncated read at the last whole UTF-8 character, and sets `size` from the file's metadata. A directory or missing file is an `Err`. `read_file` is unchanged.
-- **`src/lib/viewerKind.ts`**: unchanged; the panel now uses it.
-- **`src/components/editor/MonacoWrapper.tsx`** (Story 1, Story 2): `onChange` and `onSave` become optional; new optional props, defaults keep the file tab's behavior exactly:
-  - `readOnly` (default false): sets Monaco's `readOnly` and `domReadOnly`, turns the minimap off, and registers no save action.
+- **`read_text_head(path: String, max_bytes: u64) -> Result<TextHead, String>`** in `src-tauri/src/lib.rs`, `#[tauri::command(async)]`, registered in the handler list. The work is in a pure inner function `read_text_head_in(path, max_bytes, home)` that expands `~` with the existing `expand_tilde(path, home)`, so tests pass a home instead of mutating `HOME`. `TextHead` is `{ text: String, size: u64, truncated: bool, binary: bool, lossy: bool }`, camelCase.
+  1. `std::fs::metadata` (follows symlinks); anything but `is_file()` is `Err("Not a regular file: …")`, **before any open**, so a FIFO cannot block the call.
+  2. Open, read up to 8 KiB. A NUL byte there: return `binary: true`, empty text, without reading further.
+  3. Otherwise continue with `take(max_bytes + 1)`; `truncated` is whether more than `max_bytes` bytes arrived; keep the first `max_bytes`.
+  4. If truncated, drop an incomplete trailing UTF-8 sequence (`Utf8Error::error_len() == None` at the end). Then `String::from_utf8_lossy`; `lossy` is whether it replaced anything.
+  5. `size` is `max(metadata.len(), bytes read)` when not truncated (files under `/proc` report 0), else `metadata.len()`.
+- **`watch_file(path: String, on_event: Channel<WatchEvent>) -> Result<u32, String>`** in `src-tauri/src/watcher.rs`, `#[tauri::command(async)]` (off the main thread, unlike the sync `watch_directory`). It canonicalises the path (following symlinks), watches the canonical parent folder **non-recursively**, and forwards only events whose path names the canonical file, compared component by component with the existing `same_component` (case-insensitive on macOS). It sends `changed`/`created`/`removed` without content and `error` on watcher errors. Stopped with the existing `unwatch_directory` (same `WatcherManager`). The pure pieces, `watch_target(path) -> (dir, name)` and `is_target(event_path, dir, name)`, carry the tests. Because the panel re-reads on any event (below), the event kind does not matter: `watcher.rs:186-190` maps every `Modify`, renames included, to `changed`, and FSEvents can merge flags so `removed` arrives after `created`.
+- `read_file`, `read_file_base64` and `watch_directory` are unchanged.
+
+### Frontend
+
+- **`MonacoWrapper.tsx`** (Story 2, Story 4): `onChange`/`onSave` become optional; new optional props whose defaults keep the file tab's behavior byte for byte:
+  - `readOnly` (default false). When true: the `<Editor>` gets `defaultValue={content}` and **no `value` prop**; options add `readOnly: true`, `domReadOnly: true`, `minimap: { enabled: false }`, `renderValidationDecorations: "off"` (no false red squiggles from a TS worker that cannot see the project); no save action is registered. A later `content` change is applied by the wrapper itself: `const vs = editor.saveViewState(); editor.setValue(content); if (vs) editor.restoreViewState(vs);`, only when `content !== editor.getValue()`.
   - `autoFocus` (default true): whether `editor.focus()` runs on mount.
-  - The content effect keeps scroll (`getScrollTop`/`getScrollLeft`, restored after `setValue`) as well as the cursor, so a live reload does not jump.
-  - Story 2: `reveal?: { line: number; col?: number; nonce: number }`. When `nonce` changes, or content first arrives, it clamps the line to `1..getModel().getLineCount()`, calls `setPosition` and `revealLineInCenter`. Monaco's current-line highlight marks it.
-- **`src/components/viewer/CodeView.tsx`** (new, Story 1): `{ path, head: TextHead, reveal? }`. Renders the truncation banner when `head.truncated`, the binary message when `head.binary`, else `MonacoWrapper` with `readOnly`, `autoFocus={false}` and the path (for the language).
-- **`src/components/PreviewPanel.tsx`** (Story 1): dispatches on `viewerKind(filePath)`:
-  - `pdf`, `docx`, `image`: `BinaryView` with a `reloadKey` bumped by the watcher (replaces the panel's own image and PDF code; adds Word).
-  - `markdown`: `MarkdownView`, via `read_file` as today.
-  - `html`: the existing sandboxed iframe, via `read_file` as today.
-  - `text`: `CodeView`, via `read_text_head(path, 2 * 1024 * 1024)`.
-  - The watch passes `withContent: false` (the panel reloads by itself; today every matching change re-reads the file in Rust and ships it over IPC for nothing) and `extensions: []` for a file with no extension (`Makefile`, `Dockerfile`; today their changes never match). Reload happens on `changed` or `created` for the path, debounced 150 ms trailing; `removed` sets the "Deleted on disk" banner.
-  - The header gains *Open in tab* (`addEditorTab(filePath)`), hidden for `head.binary`. The mode badge shows `CODE` for text. The empty state lists Code among the kinds, and the path input's placeholder no longer lists only document types.
-- **`src/lib/terminalFileLinks.ts`**: Story 1 removes `opensInPreview` (everything goes to the panel). Story 2 makes `findPathCandidates` return the parsed `line` and `col` from the `:line[:col]` suffix it already strips, and `registerFileLinks`' `open` callback takes `(path, { line?, col?, inTab? })`. Story 3 sets `inTab` from the click's `MouseEvent` (`activate(event, text)`).
-- **`src/lib/openFile.ts`**: `openFileFromTerminal(path, opts?)` with `opts = { line?, col?, inTab? }`. `inTab` calls `addEditorTab`; otherwise it dispatches `open-preview` with `{ path, line, col }`. The detached-window `emitTo` payload carries the same fields. A helper `opensInTab(e: { metaKey, ctrlKey }, mac = IS_MAC)` (⌘ on macOS, Ctrl on Linux) lives here, used by the terminal and the file browser.
-- **`src/stores/tabStore.ts`**: Story 2 adds `previewReveal?: { line: number; col?: number; nonce: number } | null` to `Tab` and an optional third argument to `setPreviewPath(id, path, at?)`, which sets `previewReveal` with a fresh nonce (or clears it when `at` is absent). Not saved with the session. Story 3 adds `previewPath` to both branches of `saveSession` (it is already read back on restore, `tabStore.ts:633`).
-- **`src/App.tsx`**: the `open-preview` handler passes `line`/`col` through to `setPreviewPath` (Story 2). No layout change: the panel keeps its slot and its `minWidth: 280`, so `sidePanelLayout.test.tsx`'s 1200 px budget is untouched.
-- **`src/components/FileBrowser.tsx`** (Story 3): `handleClick(e)` opens files with `openFileFromTerminal(path, { inTab: opensInTab(e) })`.
-- **Docs**: `docs/guide/files.md` (Preview panel section and the "Click a file" sentence), `docs/guide/terminal.md` (Clickable files: everything opens in the panel; `:line` jumps; ⌘-click for a tab). `docs/guide/shortcuts.md` and `ShortcutsOverlay` are unchanged: no shortcut is added.
+  - `ariaLabel` (passed to Monaco's `ariaLabel` option). The panel passes `"<file name>, read-only"`.
+  - Story 4: `reveal?: { line: number; col?: number; nonce: number }`. The wrapper keeps the last applied nonce in a ref and applies a new one once, after mount and with content in the model: clamp to `1..lineCount`, `setPosition`, `revealLineInCenter`.
+- **`viewer/CodeView.tsx`** (new, Story 2), default export, loaded with `React.lazy` from `PreviewPanel`. Props `{ path, head: TextHead, reveal?, onOpenInTab }`. Renders the status messages and `MonacoWrapper` with `readOnly`, `autoFocus={false}`, `ariaLabel`, keyed by `path` so another file is a fresh editor. It passes `reveal` on only when `reveal.path === path`.
+- **`PreviewPanel.tsx`**:
+  - Story 2: dispatch on `viewerKind(filePath)`. `pdf`/`docx`/`image` → `BinaryView` (replacing the panel's own image and PDF code; adds Word). `markdown` → `MarkdownView` via `read_file`, as today. `html` → the existing sandboxed iframe via `read_file`, as today. `text` → `read_text_head(path, 2097152)` then lazy `CodeView`. Each load carries a request id; a result is applied only if it is the latest request **and** for the current `filePath`. On a `filePath` change the old head is cleared (so the old editor unmounts) and any pending reload timer is cleared. The panel root gets `role="complementary"` and `aria-label="Preview"`, and `tabIndex={-1}` on its body region. *Open in tab* rules as in User flows. The mode badge says `CODE`; the empty state and placeholder list code.
+  - Story 3: live follow uses `watch_file` (the old `watch_directory` call goes). Any event → re-read after 150 ms quiet, max wait 1 s. A not-found read error → "Deleted on disk" over the last content; a successful read clears it. Watch error (from the `invoke` or an `error` event) → LIVE off, "Not live: <reason>". Binary kinds reload by bumping `BinaryView`'s `reloadKey`.
+- **`BinaryView.tsx`** (Story 3): when only `reloadKey` changes (same `path`), keep the current data on screen until the new bytes arrive; a new `path` still clears. PDF page and zoom reset on reload as they do today in both the panel and the tab (`PdfView` resets on new data); keeping them is out of scope.
+- **`src/lib/terminalFileLinks.ts`**: Story 2 removes `opensInPreview`. Story 4: `findPathCandidates` returns the `line`/`col` of the `:line[:col]` suffix it already strips, and `registerFileLinks`' `open` callback takes `(path, { line?, col?, inTab? })`. Story 5 sets `inTab` from the `MouseEvent` xterm passes to `activate(event, text)`. tsc's `file(line,col)` format is out of scope.
+- **`src/lib/openFile.ts`**: `openFileFromTerminal(path, opts?)`, `opts = { line?, col?, inTab? }`. `inTab` → `addEditorTab`; otherwise `open-preview` with `{ path, line, col }`. The detached-window `emitTo` payload and `listenForFileOpens` carry all three fields (Story 4 for line/col, Story 5 for `inTab`). Story 5 adds `opensInTab(e: { metaKey, ctrlKey }, mac = IS_MAC)`.
+- **`src/stores/tabStore.ts`**: Story 4 adds `previewReveal?: { path: string; line: number; col?: number; nonce: number } | null` and an optional third argument `setPreviewPath(id, path, at?)` that sets it with a fresh nonce, or clears it without `at`. Never saved. Story 6 writes `previewPath` in both branches of `saveSession` (restore already reads it, `tabStore.ts:633`) and adds it to `ClosedTab` so `reopenClosedTab` brings it back.
+- **`src/App.tsx`**: Story 4 passes `line`/`col` from `open-preview` to `setPreviewPath`. Story 2: `togglePreview` moves focus into the panel when opening and back to the terminal (`.xterm-helper-textarea`) when closing with focus inside. No layout change: the panel keeps `minWidth: 280`, so `sidePanelLayout.test.tsx`'s 1200 px budget holds.
+- **`src/components/FileBrowser.tsx`** (Story 5): `handleClick(e)` opens files with `openFileFromTerminal(path, { inTab: opensInTab(e) })`.
+- **Docs**: `docs/guide/files.md` and `docs/guide/terminal.md` per story; `docs/guide/shortcuts.md` and `ShortcutsOverlay` unchanged.
 
 ### Data
 
 ```mermaid
 erDiagram
-  TAB ||--o| PANEL_DOCUMENT : "previewPath (saved, Story 3)"
-  TAB ||--o| REVEAL_TARGET : "previewReveal (transient, Story 2)"
+  TAB ||--o| PANEL_DOCUMENT : "previewPath (saved, Story 6)"
+  TAB ||--o| REVEAL_TARGET : "previewReveal (transient, Story 4)"
   PANEL_DOCUMENT ||--|| TEXT_HEAD : "read_text_head (text kind)"
+  CLOSED_TAB ||--o| PANEL_DOCUMENT : "previewPath (Story 6)"
   TAB {
     string id
     string type
     string previewPath
   }
   REVEAL_TARGET {
+    string path
     int line
     int col
     int nonce
@@ -156,191 +171,299 @@ erDiagram
     int size
     bool truncated
     bool binary
+    bool lossy
   }
 ```
 
-The panel's open/closed state stays in `App` (`previewOpen`), app-wide and unsaved.
-
-### Key flow: an agent prints `src/App.tsx:42:7` and the user clicks it
+### Key flow: the panel shows `A.ts`; the user clicks `src/B.ts:300` while an agent writes B
 
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant X as xterm link provider
   participant O as openFile.ts
-  participant A as App.tsx
   participant S as tabStore
   participant P as PreviewPanel
+  participant C as CodeView/MonacoWrapper
   participant R as Rust
-  U->>X: click "src/App.tsx:42:7"
-  X->>R: resolve_file_paths (cached)
-  X->>O: openFileFromTerminal("/repo/src/App.tsx", {line 42, col 7})
-  O->>A: open-preview {path, line, col}
-  A->>S: setPreviewPath(activeTab, path, {line 42, col 7})
-  A->>A: setPreviewOpen(true)
-  S-->>P: previewPath, previewReveal {nonce}
-  P->>R: read_text_head(path, 2 MiB)
-  R-->>P: {text, size, truncated false, binary false}
-  P->>P: MonacoWrapper readOnly, no focus, reveal line 42
-  P->>R: watch_directory(dir, ["tsx"], withContent false)
-  Note over P,R: agent writes the file
-  R-->>P: changed {path}
-  P->>R: read_text_head (after 150 ms quiet)
-  P->>P: setValue, scroll and cursor kept
+  U->>O: click "src/B.ts:300" (activate)
+  O->>S: setPreviewPath(tab, B, {line 300}) via open-preview
+  S-->>P: previewPath B, previewReveal {path B, 300, nonce 7}
+  P->>P: clear A's head (A's editor unmounts), cancel A's reload timer
+  P->>R: read_text_head(B, 2 MiB) [request 12]
+  P->>R: watch_file(B)
+  R-->>P: head for B [request 12, still latest, path matches]
+  P->>C: mount editor for B, defaultValue = text
+  C->>C: nonce 7 not yet applied, content present: reveal line 300
+  Note over R,P: agent appends to B continuously
+  R-->>P: events (every 50 ms)
+  P->>R: read_text_head(B) at 1 s max wait
+  P->>C: content changes
+  C->>C: saveViewState, setValue, restoreViewState (no jump, no re-reveal)
 ```
 
 ### Failure modes
 
 | Failure | Handling |
 |---|---|
-| Huge file (logs, bundles) | `read_text_head` caps at 2 MiB in Rust, so the webview never receives more; banner offers the tab. |
-| Binary file without a viewer | NUL in the first 8 KiB: message instead of garbage; *Open in tab* hidden. |
-| Non-UTF-8 text (Latin-1, mixed) | Lossy decode; shown with U+FFFD. Safe because the panel never saves. |
-| Rapid agent writes | 150 ms trailing debounce; a stale read is dropped by a request counter (only the latest read's result is applied). |
-| Atomic writes (temp file + rename) | `created` for the path reloads; `removed` alone shows the banner. |
-| File deleted, or gone after restart | Banner over last content; on a fresh open, the error state. |
-| `:line` past the end, or past the truncated part | Clamped to the last line shown. |
-| Focus stolen from the terminal | `autoFocus={false}` in the panel; tested. |
-| Same file open in an editor tab with unsaved edits | The panel shows the file on disk. Documented, no merge. |
-| Watch of a large folder | Unchanged scope (the watch is recursive on the file's folder, as today); `withContent: false` makes each event cheap. A file with no extension watches all events in its folder and filters by path; accepted. |
+| Huge file | Rust reads at most 2 MiB + 1 byte; banner; no *Open in tab*. |
+| Binary file | Stops after 8 KiB; message; no *Open in tab*. |
+| Non-UTF-8 text | Lossy decode, safe because read-only; no *Open in tab* (the tab would fail to decode it). |
+| FIFO, socket, device | Refused on metadata, never opened. |
+| Library resets the view on `value` change | The panel never passes `value`; the wrapper restores the view state around `setValue`. |
+| Rapid or continuous writes | 150 ms quiet or 1 s max wait; only the latest request for the current path is applied. |
+| Rename-writes, merged FSEvents flags | Any event re-reads; "deleted" is decided by the read, not by the event kind. |
+| Path spelled differently from what the OS reports (`./`, `../`, `/tmp` vs `/private/tmp`, case on macOS, symlinks) | Rust canonicalises once and matches events itself. |
+| Watching a huge tree, inotify limits, main-thread stalls | One non-recursive watch of the file's folder, in an async command. |
+| Watch fails | LIVE off, "Not live: <reason>"; Refresh still works. |
+| Reveal racing the load | Pending per nonce, applied once to the editor of the matching path, after content. |
+| Focus stolen | `autoFocus={false}`; tested. |
+| Same file open in an editor tab with unsaved edits | The panel shows the file on disk. |
 
 </frozen-after-approval>
 
 ---
 
-# Story 1: Code in the side panel, terminal clicks land there
+# Story 1: Rust: bounded read and single-file watch
+
+No UI change. Foundation for Stories 2 and 3.
 
 ## Code Map (1)
 
-- `src/components/PreviewPanel.tsx` -- `detectMode` :21-28 (removed); `loadContent` :61-86; watcher effect :104-142 (`extensions: [ext]`, default `withContent`); header :179-272; content dispatch :326-449, including the `<pre>` fallback :428-448.
-- `src/components/editor/MonacoWrapper.tsx` -- `handleMount` :51-60 (save action, `editor.focus()`); content effect :62-69 (keeps cursor, not scroll); options :79-91.
-- `src/components/viewer/BinaryView.tsx` -- `{ path, reloadKey }`, PDF, Word, image.
-- `src/lib/viewerKind.ts` -- `viewerKind`, `isBinaryKind`.
-- `src/lib/openFile.ts:10-16` -- `openFileHere` routes by `opensInPreview`.
-- `src/lib/terminalFileLinks.ts:208-211` -- `opensInPreview`; its test at `src/lib/__tests__/terminalFileLinks.test.ts:58-65`.
-- `src-tauri/src/lib.rs:342-372` -- `read_file_base64`, `read_file`; handler list :443-465. `src-tauri/src/watcher.rs` -- `with_content`, extension filter :167-173.
-- `src/lib/__tests__/tauriCommandContract.test.ts` -- checks every `invoke` names a registered command with matching argument names (`maxBytes` ↔ `max_bytes`).
-- `src/components/__tests__/previewSecurity.test.ts`, `sidePanelLayout.test.tsx` -- existing guards on the panel.
+- `src-tauri/src/lib.rs:40-54` -- `expand_tilde` (pure), `expand_home`; `read_file` :369-372; handler list :443-465.
+- `src-tauri/src/watcher.rs` -- `WatcherManager`, `WatchEvent`, `same_component`, `watch_directory` (sync, recursive) :152-200, `unwatch_directory`.
+- `src/lib/__tests__/tauriCommandContract.test.ts` -- every `invoke` must name a registered command with matching argument names.
 
 ## Acceptance Criteria (1)
 
-Each names the test that covers it; the developer writes it failing first. Component tests mock `@tauri-apps/api/core` as `sidePanelLayout.test.tsx` does, and mock `@monaco-editor/react` with a stub `Editor` that records its props and calls `onMount` with a fake editor (plus `vi.mock` of `monacoSetup`, whose `?worker` imports vitest cannot load).
+All in Rust unit tests; the developer writes each failing first. Temp files under `std::env::temp_dir()` with unique names, as `watcher.rs` tests do.
 
-1. `read_text_head` returns the whole text, `size`, `truncated: false`, `binary: false` for a small UTF-8 file; for a file larger than `max_bytes` returns `truncated: true`, the true `size`, and text no longer than `max_bytes` that ends on a whole character when the cut falls inside a multi-byte character; returns `binary: true` and empty text for a file with a NUL in its first 8 KiB; decodes invalid UTF-8 lossily; expands `~`; and returns `Err` for a missing path and a directory. -- `src-tauri/src/lib.rs` tests › `read_text_head_*` (one test per case)
-2. With `previewPath` `/r/src/App.tsx`, the panel calls `read_text_head` with that path and `maxBytes` 2097152 and renders the Monaco stub with `readOnly` true, the file's text, and language `typescript`; no `<pre>` is rendered. -- `src/components/__tests__/PreviewPanelCode.test.tsx` › "shows source files in a read-only editor"
-3. `MonacoWrapper` with `readOnly` passes `readOnly: true`, `domReadOnly: true` and `minimap.enabled: false` in its options, registers no action, and with `autoFocus={false}` never calls `focus()`; without the new props its options, save action and focus are as before. -- `src/components/editor/__tests__/MonacoWrapper.test.tsx` › "read-only mode", "defaults are the file tab's"
-4. A content change keeps the editor's scroll top, scroll left and cursor. -- `MonacoWrapper.test.tsx` › "a reload keeps the reader's place"
-5. A truncated head shows the banner with both sizes and *Open in tab*; a binary head shows the binary message, no editor, and no *Open in tab*. -- `PreviewPanelCode.test.tsx` › "large files are truncated", "binary files are not shown"
-6. PDF, `.docx` and image paths render `BinaryView`; `.md` renders `MarkdownView`; `.html` renders the sandboxed iframe, unchanged. -- `PreviewPanelCode.test.tsx` › "each kind gets its viewer"
-7. The watch is started with `withContent: false`; with `extensions: ["tsx"]` for `App.tsx` and `[]` for `Makefile`. A `changed` or `created` event for the path reloads once after 150 ms of quiet (fake timers: three events 50 ms apart cause one `read_text_head` call); an event for another path does not; `removed` shows "Deleted on disk" and keeps the editor's text. When two reads overlap, only the later one's result is shown. -- `PreviewPanelCode.test.tsx` › "follows the file live", "a deleted file keeps its last content", "a stale read never wins"
-8. *Open in tab* calls `addEditorTab` with the panel's path. -- `PreviewPanelCode.test.tsx` › "opens the file in a tab"
-9. `openFileFromTerminal("/r/src/App.tsx")` in the main window dispatches `open-preview` with that path and does not add a tab; the same for `.docx`, `.md` and `.png`. `opensInPreview` no longer exists. -- `src/lib/__tests__/openFile.test.ts` › "every clicked file opens in the panel"
-10. `PreviewPanel.tsx` no longer contains `detectMode`, and imports `viewerKind`. -- `PreviewPanelCode.test.tsx` › "uses the shared kind dispatch" (source read, like `sidePanelLayout`'s)
-11. Existing guards still pass: `previewSecurity.test.ts`, `sidePanelLayout.test.tsx`, `previewPerTab.test.ts`, `tauriCommandContract.test.ts`, `viewerKind.test.ts`.
+1. Small UTF-8 file: whole text, true `size`, `truncated`, `binary`, `lossy` all false. -- `lib.rs` › `read_text_head_small_file`
+2. File of `max_bytes + 1` bytes: `truncated: true`; file of exactly `max_bytes`: `truncated: false`. -- › `read_text_head_truncates_only_past_the_cap`
+3. A cut inside a multi-byte character (e.g. `max_bytes` = 4 over `"abc€"`): text is `"abc"`, `lossy: false`. -- › `read_text_head_cuts_on_a_character`
+4. A NUL within the first 8 KiB: `binary: true`, empty text; a UTF-16 LE file (BOM + text) is binary. -- › `read_text_head_binary`
+5. Invalid UTF-8 (`0xff`) mid-file: text contains U+FFFD, `lossy: true`. -- › `read_text_head_lossy`
+6. `read_text_head_in("~/x.txt", n, home)` reads `<home>/x.txt` (no `HOME` mutation). -- › `read_text_head_expands_tilde`
+7. Missing path, a directory, and (on unix) a FIFO made with `mkfifo` are each `Err`, and the FIFO case returns (the test would hang if the FIFO were opened). -- › `read_text_head_refuses_non_files`
+8. `watch_target` of a path given through a symlinked folder and with `./` and `../` segments returns the canonical folder and name; `is_target` is true for that folder + name, false for a sibling and for the same name in a subfolder; on macOS true for a different case. -- `watcher.rs` › `watch_target_canonicalises`, `is_target_matches_only_the_file`
+9. `watch_file` on a temp file, then writing it, delivers at least one event on the channel within 2 s; writing a sibling delivers none for 500 ms; `watch_file` on a missing path is `Err`. If a `Channel` cannot be built in a unit test, the test drives the same closure through a `fn(WatchEvent)` sink extracted for it. -- › `watch_file_reports_only_its_file`
+10. Both commands are registered; the existing contract test passes. -- `tauriCommandContract.test.ts` (existing)
 
-**Docs (1):** `docs/guide/files.md`: the Preview panel shows source code read-only, with highlighting, live; large and binary files. `docs/guide/terminal.md` Clickable files: every file opens in the panel. **Contract (1):** add `.ade/context/side-panel-files.md`: every clicked file opens in the tab's side panel; read-only; `read_text_head` and its 2 MiB cap and binary rule; `withContent: false` for the panel's watch.
+**Contract (1):** add `.ade/context/side-panel-files.md`: `read_text_head` (fields, 8 KiB binary rule, lossy, regular files only) and `watch_file` (canonical, non-recursive, stop with `unwatch_directory`).
 
 ## Verification (1)
 
 **Commands (the repo's verification command, unchanged):**
 - `npx tsc --noEmit` -- expected: exit 0
-- `npm test` -- expected: all pass, including `PreviewPanelCode.test.tsx`, `MonacoWrapper.test.tsx`, `openFile.test.ts`
-- `cd src-tauri && cargo test` -- expected: all pass, including `read_text_head_*`
+- `npm test` -- expected: all pass
+- `cd src-tauri && cargo test` -- expected: all pass, including the tests above
 - `cd relay && cargo test` -- expected: all pass (no change)
 - `cd mobile && npx tsc --noEmit && npx jest` -- expected: all pass (no change)
-
-**Manual checks (running app, macOS and Linux):** click a `.ts` path printed by `ls` or Claude: the panel opens with highlighted code and the terminal keeps focus (type straight away). Let an agent edit that file: the panel updates without jumping. Open a 50 MB log: banner, no stall. Open a `.zip`: binary message. Open a `.docx` from the terminal: it renders in the panel.
 
 **Results (1):** _QA fills this in._
 
 ---
 
-# Story 2: Go to line from `path:line`
+# Story 2: Code in the side panel; terminal clicks land there
 
-Depends on Story 1.
+Depends on Story 1. Loads once per open (and on Refresh); live follow is Story 3.
 
 ## Code Map (2)
 
-- `src/lib/terminalFileLinks.ts:22,32` -- `LINE_COL` is matched and discarded; `PathCandidate` :10-16; `registerFileLinks` :151-206 (`activate: () => open(f.abs)` :199).
-- `src/hooks/useTerminal.ts:238` -- `registerFileLinks(term, …, openFileFromTerminal)`.
-- `src/lib/openFile.ts` -- `open-preview` dispatch and the detached-window payload.
-- `src/App.tsx:144-156` -- `open-preview` handler.
-- `src/stores/tabStore.ts:50,83,331` -- `previewPath`, `setPreviewPath`.
+- `src/components/PreviewPanel.tsx` -- `detectMode` :21-28 (removed); `loadContent` :61-86; header :179-272; dispatch :326-449, `<pre>` fallback :428-448.
+- `src/components/editor/MonacoWrapper.tsx` -- `handleMount` :51-60; dead restore branch :62-69; options :79-91.
+- `node_modules/@monaco-editor/react` 4.7.0 -- applies a changed `value` in its own effect (`setValue` when read-only, `executeEdits` otherwise).
+- `src/components/viewer/BinaryView.tsx`, `src/lib/viewerKind.ts`.
+- `src/lib/openFile.ts:10-16`, `src/lib/terminalFileLinks.ts:208-211` (`opensInPreview`) and its test :58-65.
+- `src/App.tsx:322` -- `togglePreview`; `src/hooks/useKeybindings.ts:139-148` -- Esc focuses `.xterm-helper-textarea`.
+- `src/components/__tests__/sidePanelLayout.test.tsx` -- renders `PreviewPanel` with only Tauri and `useTerminal` mocked.
 
 ## Acceptance Criteria (2)
 
-1. `findPathCandidates("src/App.tsx:42:7")` gives path `src/App.tsx`, line 42, col 7; `"a.ts:9"` gives line 9 and no col; `"a.ts"` gives neither; existing cases keep their paths and offsets. -- `src/lib/__tests__/terminalFileLinks.test.ts` › "keeps the line and column of a path:line link"
-2. A link's `activate` passes the line and column to `open`. -- `terminalFileLinks.test.ts` › "a clicked link carries its line" (fake `Terminal` with one buffer line, `resolve_file_paths` mocked)
-3. `openFileFromTerminal(p, { line: 42, col: 7 })` dispatches `open-preview` with `{ path: p, line: 42, col: 7 }`; from a detached window the emitted payload has the same fields; `listenForFileOpens` passes them on. -- `openFile.test.ts` › "the line travels with the file"
-4. `setPreviewPath(id, p, { line: 42 })` sets `previewReveal.line` 42 with a nonce different from the previous one, also when called twice with the same arguments; `setPreviewPath(id, p)` clears it; `previewReveal` is not in the saved session. -- `src/stores/__tests__/previewPerTab.test.ts` › "a target line is per open request and never saved"
-5. `MonacoWrapper` with `reveal` `{ line: 42, nonce: 1 }` calls `setPosition({ lineNumber: 42, column: 1 })` and `revealLineInCenter(42)` once content is set; a new nonce with the same line reveals again; a line past the model's last line is clamped to it. -- `MonacoWrapper.test.tsx` › "reveals the target line", "clamps a line past the end"
-6. The panel passes the tab's `previewReveal` to `CodeView` for text files and ignores it for other kinds. -- `PreviewPanelCode.test.tsx` › "a path:line link opens at that line"
+Component tests mock `@tauri-apps/api/core`. `MonacoWrapper`/`CodeView` tests mock `@monaco-editor/react` with a stub `Editor` that **emulates the library**: it records every prop, calls `onMount` with a fake editor, and when its `value` prop changes calls the fake's `setValue`, which resets the fake's scroll and position to the top as the real one does. `monacoSetup` is mocked (its `?worker` imports do not load in vitest).
 
-**Docs (2):** `docs/guide/terminal.md`: replace "A trailing `:line` or `:line:col` is ignored" with: it opens the file at that line in the panel.
+1. With `readOnly`, the stub never receives a `value` prop on any render (initial or after `content` changes) and receives `defaultValue` equal to the first content. -- `src/components/editor/__tests__/MonacoWrapper.test.tsx` › "read-only content never goes through value"
+2. With `readOnly`, a `content` change calls `saveViewState`, then `setValue`, then `restoreViewState` with the saved state, in that order, and the fake's scroll top and position afterwards equal those before. Against today's code the stub's `value` path resets them, so the test fails. -- › "a reload keeps the reader's place"
+3. With `readOnly`: options include `readOnly: true`, `domReadOnly: true`, `minimap.enabled: false`, `renderValidationDecorations: "off"` and the given `ariaLabel`; no action is registered; with `autoFocus={false}` `focus()` is never called. Without the new props the stub gets `value`, the original options, the save action, and `focus()`. -- › "read-only mode", "defaults are the file tab's"
+4. With `previewPath` `/r/src/App.tsx` the panel calls `read_text_head` with `{ path, maxBytes: 2097152 }` and renders the editor stub (after the lazy load) with language `typescript` and `ariaLabel` "App.tsx, read-only"; no `<pre>`. -- `src/components/__tests__/PreviewPanelCode.test.tsx` › "shows source files in a read-only editor"
+5. `PreviewPanel.tsx` has no static import of `CodeView`, `MonacoWrapper`, `monaco-editor` or `@monaco-editor/react` (source read), and `sidePanelLayout.test.tsx` passes unchanged, with no Monaco mock added to it. -- › "Monaco loads lazily"; `sidePanelLayout.test.tsx` (existing, unchanged)
+6. Truncated head: "Showing the first 2.0 MB of 48.3 MB." and "Too large to open in a tab", no *Open in tab*. Lossy head: "Not UTF-8 text, can't be edited in a tab", no *Open in tab*. Binary head: binary message, no editor, no *Open in tab*. Plain head: *Open in tab* present and calls `addEditorTab` with the path. Every message is in a `role="status"` `aria-live="polite"` element. -- › "large, lossy and binary files", "opens the file in a tab"
+7. A failed read (e.g. `Not a regular file`) shows "Can't open <name>: <reason>" in a `role="status"` element. -- › "a file that can't be read says so"
+8. PDF, `.docx` and image paths render `BinaryView`; `.md` renders `MarkdownView`; `.html` renders the sandboxed iframe. `PreviewPanel.tsx` no longer contains `detectMode` and imports `viewerKind`. -- › "each kind gets its viewer"
+9. Switching from `A.ts` to `B.ts` while A's read is pending: when A's read resolves after B's, A's text is never shown and B's is. -- › "a stale read never wins"
+10. `openFileFromTerminal("/r/src/App.tsx")` in the main window dispatches `open-preview` with that path and adds no tab; likewise `.docx`, `.md`, `.png`. `opensInPreview` is gone. -- `src/lib/__tests__/openFile.test.ts` › "every clicked file opens in the panel"
+11. Keyboard: toggling the panel open (the `togglePreview` path) moves `document.activeElement` inside the panel; toggling it closed with focus inside focuses `.xterm-helper-textarea`; an `open-preview` event never moves focus. An Escape keydown dispatched from inside the panel focuses `.xterm-helper-textarea`. The panel root has `role="complementary"` and `aria-label="Preview"`. -- `src/components/__tests__/PreviewPanelFocus.test.tsx` › "keyboard into and out of the panel", "opening a file never takes focus"
+12. Existing guards still pass: `previewSecurity.test.ts`, `previewPerTab.test.ts`, `tauriCommandContract.test.ts`, `viewerKind.test.ts`, `terminalFileLinks.test.ts` (minus the removed `opensInPreview` case).
+
+**Docs (2):** `files.md`: the Preview panel shows source code read-only with highlighting; large, non-UTF-8 and binary files; *Open in tab*. `terminal.md` Clickable files: every file opens in the panel. **Contract (2):** extend `.ade/context/side-panel-files.md`: every clicked file opens in the tab's panel; read-only; *Open in tab* rules.
 
 ## Verification (2)
 
 **Commands:** the same five lines as Story 1; expected all pass.
 
-**Manual checks:** run `grep -n useState src/App.tsx` and click a result: the panel opens at that line, centered. Click a second result in the same file: it moves there. Click a `.md:10` link: the document renders, no error.
+**Manual checks (running app, macOS and Linux):** click a `.ts` path in the terminal: highlighted code, no red squiggles, and typing goes straight to the terminal. ⌘⇧B twice: focus goes into the panel and back. In the panel editor with no find widget open, Esc returns to the terminal (real Monaco may consume Esc; if so, record it). A 50 MB log: banner, no stall. A `.zip`: binary message. A `.docx` from the terminal renders. VoiceOver reads the editor as "<file>, read-only".
 
 **Results (2):** _QA fills this in._
 
 ---
 
-# Story 3: File browser clicks land in the panel; modifier-click opens a tab; the file survives a restart
+# Story 3: Follow the file live
 
-Depends on Story 2 (shares `openFile.ts` and the `open` callback's options).
+Depends on Story 2.
 
 ## Code Map (3)
 
-- `src/components/FileBrowser.tsx:70-82` -- `handleClick` opens every file with `addEditorTab`.
-- `src/lib/terminalFileLinks.ts:199` -- `activate` (xterm passes the `MouseEvent`).
-- `src/lib/shortcuts.ts:14` -- `IS_MAC`.
-- `src/stores/tabStore.ts:520-562` -- `saveSession`: neither branch writes `previewPath`; restore reads it at :633.
+- `src/components/PreviewPanel.tsx:104-142` -- today's `watch_directory` effect (`extensions: [ext]`, default `withContent`, errors swallowed, reloads only on `changed` with `event.path === filePath`).
+- `src-tauri/src/watcher.rs:186-190` -- every `Modify`, renames included, becomes `changed`.
+- `src/components/viewer/BinaryView.tsx:17-25` -- `setData(null)` on every `reloadKey` change.
 
 ## Acceptance Criteria (3)
 
-1. `opensInTab` is true for `{ metaKey: true }` on macOS and `{ ctrlKey: true }` on Linux, false for a plain click on either, and false for Ctrl on macOS and ⌘ on Linux. -- `openFile.test.ts` › "which click opens a tab"
-2. `openFileFromTerminal(p, { inTab: true })` adds an editor tab for `p` and dispatches no `open-preview`. -- `openFile.test.ts` › "a modifier-click opens a tab"
-3. A terminal link activated with the platform modifier passes `inTab: true`. -- `terminalFileLinks.test.ts` › "a modifier-click link opens a tab"
-4. Clicking a file in the file browser dispatches `open-preview` for it and adds no tab; ⌘-clicking (macOS) adds the tab; clicking a folder still expands it. -- `src/components/__tests__/FileBrowserOpen.test.tsx` › "a file opens in the panel, modifier-click in a tab"
-5. `saveSession` writes each tab's `previewPath` (terminal and non-terminal tabs), and a save-then-restore round trip gives the tab the same `previewPath`. -- `src/stores/__tests__/session.test.ts` › "the panel's file survives a restart"
-6. A restored `previewPath` whose file is gone shows the panel's error state naming the file, not a blank panel. -- `PreviewPanelCode.test.tsx` › "a missing file says so"
+Fake timers; `watch_file` mocked to capture the channel.
 
-**Docs (3):** `docs/guide/files.md`: "Click a file in the browser… and it opens in the panel beside the terminal; ⌘-click (Ctrl-click on Linux) or *Open in tab* opens it in a tab, where you can edit it." Same sentence in `terminal.md` Clickable files. Update `.ade/context/side-panel-files.md` with the modifier rule.
+1. The panel calls `watch_file` with the path and never `watch_directory`. -- `PreviewPanelCode.test.tsx` › "watches only its file"
+2. Three events 50 ms apart cause one `read_text_head` call, 150 ms after the last. -- › "debounces bursts"
+3. An event every 50 ms for 3 s causes a re-read at least every 1 s (at least 3 calls). -- › "continuous appends still refresh"
+4. Each of `changed`, `created`, `removed` schedules a re-read. Sequence `removed` then `created` with the file present: no "Deleted on disk" after the re-read. Sequence `created` then `removed` with the file gone (read rejects with not-found): "Deleted on disk" in a `role="status"` element and the editor keeps its last text; a later successful read clears it. -- › "removed then created", "created then removed"
+5. `watch_file` rejecting, or an `error` event, switches the toggle to STATIC and shows "Not live: <reason>" in a `role="status"` element. -- › "a failed watch is not shown as live"
+6. Switching tab (another `previewPath`) with a re-read timer pending: the timer is cleared, the old watch is stopped with `unwatch_directory`, and no read for the old path happens. -- › "a tab switch mid-reload"
+7. A content reload does not re-apply an earlier reveal (no `setPosition` call after the reload). -- `MonacoWrapper.test.tsx` › "a reload does not jump back to the target line" (with the Story 4 prop; if Story 4 is not merged yet, this AC moves to Story 4)
+8. `BinaryView`: changing only `reloadKey` keeps the current view rendered (no "Loading…") until the new bytes resolve; changing `path` shows "Loading…". -- `src/components/viewer/__tests__/BinaryView.test.tsx` › "a reload keeps the current view"
+
+**Docs (3):** `files.md`: live updates, the deleted banner, "Not live".
 
 ## Verification (3)
 
 **Commands:** the same five lines; expected all pass.
 
-**Manual checks:** in the file browser, click a file (panel), ⌘-click it (tab); on Linux, Ctrl-click. Quit and relaunch: ⌘⇧B shows the tab's last file. Check ⌘-click in the terminal does not also trigger xterm's own selection or a browser link.
+**Manual checks:** scroll halfway down a file and let an agent edit it: the view does not move. `while true; do date >> /tmp/x.log; sleep 0.05; done` with `/tmp/x.log` open: the panel updates about once a second (macOS reports `/private/tmp`). Save from vim (rename-write): updates, no lasting deleted banner. Delete the file: banner. Open a file at a repo root: no noticeable CPU or watch growth during `npm install`. A live PDF still updates.
 
 **Results (3):** _QA fills this in._
+
+---
+
+# Story 4: Go to line from `path:line`
+
+Depends on Story 2.
+
+## Code Map (4)
+
+- `src/lib/terminalFileLinks.ts:22,32` -- `LINE_COL` matched and discarded; `PathCandidate` :10-16; `activate` :199.
+- `src/hooks/useTerminal.ts:238`, `src/lib/openFile.ts`, `src/App.tsx:144-156`, `src/stores/tabStore.ts:50,83,331`.
+
+## Acceptance Criteria (4)
+
+1. `findPathCandidates("src/App.tsx:42:7")` gives path `src/App.tsx`, line 42, col 7; `"a.ts:9"` line 9, no col; `"a.ts"` neither; existing cases keep their paths and offsets. -- `terminalFileLinks.test.ts` › "keeps the line and column of a path:line link"
+2. A link's `activate` passes line and column to `open`. -- › "a clicked link carries its line" (fake `Terminal` with one buffer line, `resolve_file_paths` mocked)
+3. `openFileFromTerminal(p, { line: 42, col: 7 })` dispatches `open-preview` with `{ path: p, line: 42, col: 7 }`; from a detached window the emitted payload has the same fields; `listenForFileOpens` passes them on. -- `openFile.test.ts` › "the line travels with the file"
+4. `setPreviewPath(id, p, { line: 42 })` sets `previewReveal` `{ path: p, line: 42 }` with a nonce different from the previous one, also for identical repeated calls; `setPreviewPath(id, p)` clears it; it is not in the saved session. -- `previewPerTab.test.ts` › "a target line is per open request and never saved"
+5. `MonacoWrapper` with `reveal { line: 42, nonce: 1 }` calls `setPosition({ lineNumber: 42, column: 1 })` and `revealLineInCenter(42)` once content is set; a new nonce with the same line reveals again; the same nonce after a content change does not; a line past the model's end is clamped. -- `MonacoWrapper.test.tsx` › "reveals the target line once per click", "clamps a line past the end"
+6. The panel shows `A.ts`; `setPreviewPath(tab, B.ts, { line: 300 })` with B's `read_text_head` resolving later: A's fake editor never gets `setPosition`/`revealLineInCenter`; B's gets line 300 after B's content is in it. -- `PreviewPanelCode.test.tsx` › "a path:line link to another file lands in that file"
+7. A truncated head whose shown text has 1,000 lines and `reveal.line` 5,000: "Line 5000 is past the part shown (first 2.0 MB)" in a `role="status"` element, and the cursor goes to the last shown line. -- › "a line past the truncated part says so"
+8. Markdown, HTML and PDF ignore `previewReveal` (no error, normal render). -- › "rendered views ignore the line"
+
+**Docs (4):** `terminal.md`: replace "A trailing `:line` or `:line:col` is ignored" with: it opens the file at that line in the panel.
+
+## Verification (4)
+
+**Commands:** the same five lines; expected all pass.
+
+**Manual checks:** `grep -Hn useState src/App.tsx` and click a result (`-H` makes grep print the file name, which plain `grep -n` on one file omits): the panel opens at that line. Click another result in the same file: it moves. From `A.ts`, click a `B.ts:300` link: it lands in B. Click a `.md:10` link: the document renders.
+
+**Results (4):** _QA fills this in._
+
+---
+
+# Story 5: File browser clicks land in the panel; modifier-click opens a tab
+
+Depends on Story 4 (shares `openFile.ts` and the `open` callback's options).
+
+## Code Map (5)
+
+- `src/components/FileBrowser.tsx:70-82` -- `handleClick` opens every file with `addEditorTab`.
+- `src/lib/terminalFileLinks.ts:199` -- `activate(event, text)`.
+- `src/lib/openFile.ts:32,37-39` -- `emitTo` payload, `listenForFileOpens`.
+- `src/lib/shortcuts.ts:14` -- `IS_MAC`.
+
+## Acceptance Criteria (5)
+
+1. `opensInTab` is true for `{ metaKey: true }` on macOS and `{ ctrlKey: true }` on Linux; false for a plain click on either, Ctrl on macOS and ⌘ on Linux. -- `openFile.test.ts` › "which click opens a tab"
+2. `openFileFromTerminal(p, { inTab: true })` adds an editor tab for `p` and dispatches no `open-preview`; from a detached window the emitted payload has `inTab: true`, and `listenForFileOpens` receiving it adds a tab. -- › "a modifier-click opens a tab, also from a detached window"
+3. A terminal link activated with the platform modifier passes `inTab: true`. -- `terminalFileLinks.test.ts` › "a modifier-click link opens a tab"
+4. Clicking a file in the file browser dispatches `open-preview` and adds no tab; ⌘-clicking (macOS) adds the tab; clicking a folder still expands it; with an editor tab active, a plain click sets that tab's `previewPath`. -- `src/components/__tests__/FileBrowserOpen.test.tsx` › "a file opens in the panel, modifier-click in a tab"
+
+**Docs (5):** `files.md`: "Click a file in the browser and it opens in the panel beside the terminal; ⌘-click (Ctrl-click on Linux) or *Open in tab* opens it in a tab, where you can edit it." Same in `terminal.md`. Extend `.ade/context/side-panel-files.md` with the modifier rule.
+
+## Verification (5)
+
+**Commands:** the same five lines; expected all pass.
+
+**Manual checks:** in the file browser click a file (panel), ⌘-click it (tab); on Linux, Ctrl-click. ⌘-click in the terminal opens a tab and does not also select text. In a detached window, ⌘-click a path: a tab opens in the main window.
+
+**Results (5):** _QA fills this in._
+
+---
+
+# Story 6: The panel's file survives a restart and a reopened tab
+
+Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
+
+## Code Map (6)
+
+- `src/stores/tabStore.ts:520-562` -- `saveSession`: neither branch writes `previewPath`; restore reads it at :633.
+- `src/stores/tabStore.ts:57-62,300-305,336-340` -- `ClosedTab`, pushing on close, `reopenClosedTab`.
+
+## Acceptance Criteria (6)
+
+1. `saveSession` writes `previewPath` for terminal and non-terminal tabs; save then restore gives each tab the same `previewPath`. -- `src/stores/__tests__/session.test.ts` › "the panel's file survives a restart"
+2. Closing a terminal tab with a `previewPath` and reopening it with `reopenClosedTab` restores the `previewPath`. -- `session.test.ts` › "a reopened tab keeps its panel file"
+3. `previewReveal` is never written to the saved session. -- `session.test.ts` › "the target line is not saved" (skipped with a TODO naming Story 4 if Story 4 is not merged; un-skipped by whichever lands second)
+
+## Verification (6)
+
+**Commands:** the same five lines; expected all pass.
+
+**Manual checks:** open a file in the panel, quit, relaunch, ⌘⇧B: it is there. Close the tab, ⌘⇧T: the reopened tab has it. Delete the file before relaunch: the panel says it can't open it.
+
+**Results (6):** _QA fills this in._
 
 ---
 
 ## Out of scope
 
 - Editing in the panel, or any save from it.
-- Highlighting what an agent changed (diff decorations), "follow the end" for logs, or a history of files viewed.
-- Several files or sub-tabs inside the panel.
-- A per-pane panel, or one panel per split.
+- The file tab's dead "keep the cursor" branch in `MonacoWrapper` (a changed `value` already reset the view in the library); the file tab's uncapped `read_file` (a 48 MB log stalls it, non-UTF-8 fails).
+- Keeping a PDF's page and zoom across a live reload (they reset today in both the panel and the tab).
+- Relative links in Markdown shown in the panel opening in the panel (they open a tab, as today; `MarkdownView` is shared with the tab).
+- tsc's `file(line,col)` link format.
+- Highlighting what an agent changed, "follow the end" for logs, a history of files viewed, several files inside the panel, a per-pane panel.
 - Persisting the panel's open state, width or scroll.
-- A setting to choose panel-or-tab as the default click target.
-- Go-to-line when a file opens in a tab, and the file tab's own large-file behavior (`read_file` has no cap).
-- Renaming the Preview panel (see Open questions).
-- A Rendered/Source toggle for Markdown and HTML in the panel (the tab has it).
+- A setting for the default click target (Open question 7).
+- Go-to-line when a file opens in a tab.
+- Renaming the Preview panel (Open question 4).
+- A Rendered/Source toggle for Markdown and HTML in the panel.
 
 ## Open questions for the owner
 
-1. **Grow the Preview panel, or add a second panel beside it?** Recommended: **grow it**. It is already the docked panel beside the terminal and already holds a per-tab file with a live watcher. A second right-hand panel would compete for width with Preview and the board, and give a clicked file two possible destinations. If you want a separate panel anyway, its shortcut would be ⌘⇧E / Ctrl+Alt+Shift+E, which nothing in ADE uses.
-2. **Should a plain click in the file browser open the panel instead of a tab?** Recommended: **yes**, with ⌘-click (Ctrl-click on Linux) and *Open in tab* for a tab. That is how your request reads ("instead of opening a new tab").
-3. **Read-only or editable in the panel?** Recommended: **read-only**. One place edits a file, so there's no second dirty buffer racing the agent's writes and no close prompt for a panel. Editing is one click away, in a tab.
-4. **Keep the name "Preview panel"?** Recommended: **keep it for now**: the shortcut list, guide and palette already use it. Renaming it to "Viewer" later is a small change.
-5. **Large-file cap of 2 MiB?** Recommended: **yes**. It shows any normal source file whole and keeps a 50 MB log from stalling the window.
-6. **Persist the panel's open state and width?** Recommended: **no**. Persist only the tab's file (Story 3), which fixes a gap where it was read back on launch but never saved.
+1. **Grow the Preview panel, or add a second panel?** Recommended: **grow it**. It is already the docked panel beside the terminal with a per-tab file and live updates. A second right-hand panel would compete for width with Preview and the board, and give a clicked file two destinations. If you want a separate panel anyway, ⌘⇧E / Ctrl+Alt+Shift+E is free.
+2. **Should a plain click in the file browser open the panel instead of a tab?** Recommended: **yes**, with ⌘-click (Ctrl-click on Linux) for a tab. That is how your request reads ("instead of opening a new tab").
+3. **Read-only or editable in the panel?** Recommended: **read-only**. One place edits a file, so no second dirty buffer races the agent's writes; it is also what makes truncated and lossily decoded views safe.
+4. **Keep the name "Preview panel"?** Recommended: **keep it for now**; renaming to "Viewer" later is a small change.
+5. **Large-file cap of 2 MiB?** Recommended: **yes**.
+6. **Persist the panel's open state and width?** Recommended: **no**. Persist the tab's file (Story 6).
+7. **A setting to keep clicks opening a tab, since this changes a default in two places?** Recommended: **no setting at first**. ⌘-click gives a tab every time, and the change is what you asked for. If it chafes in use, a single "Open clicked files in: panel / tab" option in *Settings → Terminal* is a small follow-up story: one setting read by `openFileFromTerminal` and `FileBrowser`, and one test each.
 
 ## Review Triage Log
 
-_Empty: not yet reviewed._
+- 2026-10-17, adversarial review of 2bc17fd: BLOCKED. Fixed in this revision:
+  - B1: `@monaco-editor/react` 4.7.0 applies `value` in its own effect, so the wrapper's restore was dead and live reload would jump to the top. Read-only content is now uncontrolled (`defaultValue`, never `value`) and reloads go through `saveViewState`/`setValue`/`restoreViewState`; the test stub emulates the library (2-AC1, 2-AC2). The tab's dead branch is recorded, not fixed.
+  - M1: `CodeView` is lazy; `sidePanelLayout.test.tsx` passes unchanged with no Monaco mock (2-AC5).
+  - M2: reveal carries its path and nonce and is applied once, after that file's content is in its editor; A → `B.ts:300` test with async content (4-AC5, 4-AC6).
+  - M3: any event re-reads; "deleted" is decided by a not-found read and cleared by a good one (3-AC4, both orders).
+  - M4: Rust canonicalises and matches events itself (`watch_file`, 1-AC8, 1-AC9); the panel compares no paths.
+  - M5: 1 s max wait (3-AC3).
+  - M6: `watch_file` is async and non-recursive on the file's folder; a failed watch turns LIVE off visibly (1-AC9, 3-AC5).
+  - M7: `read_text_head` refuses anything but a regular file before opening; `mkfifo` test (1-AC7); `size` handles `/proc`'s 0.
+  - M8: wording promises nothing about the tab; *Open in tab* hidden for truncated, lossy and binary files, with the reason (2-AC6).
+  - M9: keyboard into and out of the panel, `role="status"` on every message, Monaco `ariaLabel` (2-AC3, 2-AC6, 2-AC7, 2-AC11, 3-AC4, 3-AC5, 4-AC7).
+  - m1: 8 KiB read first with early stop, `max + 1` read decides `truncated`, cut before decode, UTF-16 is binary (1-AC2–1-AC5). m2: pure `read_text_head_in` with a `home` argument (1-AC6). m3: moot: `watch_file` watches one file by name, so dotfiles and extensionless files need no extension rule (1-AC8). m4: tab switch mid-load and mid-reload, timer cleared (2-AC9, 3-AC6). m5: `BinaryView` keeps the view during a reload (3-AC8); page/zoom reset is pre-existing, out of scope. m6: manual check uses `grep -Hn`; tsc format out of scope. m7: `inTab` through the detached payload (5-AC2). m8: *Open in tab* activating the editor tab, and clicks with non-terminal tabs active, spelled out (User flows, 5-AC4). m9: Markdown links still open a tab, out of scope. m10: `renderValidationDecorations: "off"` (2-AC3). m11: ADR 0009 names the terminal-click change. m12: line past the truncated part (4-AC7). m13: focus claim corrected (Boundaries). m14: persistence split into Story 6, with closed-tab reopen.
+  - Open question 7 added (a setting for the default click target).
