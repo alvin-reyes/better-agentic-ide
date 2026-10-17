@@ -14,7 +14,7 @@ type TextHead = { text: string; size: number; truncated: boolean; binary: boolea
 - **Binary:** a NUL byte in the first 8 KiB (whatever `maxBytes` is) gives `binary: true`, `text: ""`, `truncated: false`; nothing past 8 KiB is read. UTF-16 counts as binary only when its first 8 KiB hold a NUL, as mostly-ASCII UTF-16 does; UTF-16 without NULs there (e.g. CJK text) comes back as lossy text.
 - **Truncated:** at most `maxBytes + 1` bytes are read; `truncated` is whether more than `maxBytes` arrived. The text keeps the first `maxBytes`, minus an incomplete UTF-8 character at the cut.
 - **Lossy:** invalid UTF-8 is replaced with U+FFFD and `lossy: true`. A character cut at the cap is dropped, not counted as lossy.
-- **size:** the file's length in bytes; when not truncated, `max(metadata length, bytes read)` (files under `/proc` report 0).
+- **size:** `max(metadata length, bytes read)`, for text (truncated or not) and binary results alike, so files under `/proc` (which report 0) and files that grow mid-read never report less than was read. Owner approved 2026-10-17 (plan, Implementation Notes).
 - `~` and `~/…` expand to the home folder.
 
 ## `watch_file(path, onEvent) -> id`

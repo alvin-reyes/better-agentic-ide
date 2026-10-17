@@ -431,7 +431,7 @@ fn read_head_from(mut reader: impl std::io::Read, len: u64, max_bytes: u64) -> s
     (&mut reader).take(want).read_to_end(&mut buf)?;
     let read = buf.len() as u64;
     let truncated = read > max_bytes;
-    let size = if truncated { len } else { len.max(read) };
+    let size = len.max(read);
     if truncated {
         buf.truncate(max_bytes as usize);
         trim_partial_char(&mut buf);
@@ -755,6 +755,30 @@ mod tests {
         let head = read_head_from(&mut reader, text.len() as u64, 20_000).unwrap();
         assert!(head.truncated);
         assert_eq!(reader.taken, 20_001);
+    }
+
+    /// Files under `/proc` report a length of 0, and a file can grow between
+    /// the metadata call and the read: `size` is never less than was read.
+    #[test]
+    fn read_text_head_size_is_at_least_what_was_read() {
+        let text = vec![b'y'; 100];
+        let head = read_head_from(&text[..], 0, 10).unwrap();
+        assert!(head.truncated);
+        assert_eq!(head.size, 100, "truncated: all of it was read in the 8 KiB sniff");
+        let long = vec![b'y'; 20_000];
+        let head = read_head_from(&long[..], 0, 10_000).unwrap();
+        assert!(head.truncated);
+        assert_eq!(head.size, 10_001, "truncated past the sniff: the cap plus the byte that proved it");
+        let head = read_head_from(&text[..], 5, 1000).unwrap();
+        assert!(!head.truncated);
+        assert_eq!(head.size, 100);
+        let binary = vec![0u8; 50];
+        let head = read_head_from(&binary[..], 0, 10).unwrap();
+        assert!(head.binary);
+        assert_eq!(head.size, 50);
+        // A true length larger than what was read is kept.
+        let head = read_head_from(&text[..], 48_000, 10).unwrap();
+        assert_eq!(head.size, 48_000);
     }
 
     #[test]

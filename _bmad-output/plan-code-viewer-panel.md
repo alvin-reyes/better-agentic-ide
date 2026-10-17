@@ -499,6 +499,10 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 6. **Persist the panel's open state and width?** Recommended: **no**. Persist the tab's file (Story 6).
 7. **A setting to keep clicks opening a tab, since this changes a default in two places?** Recommended: **no setting at first**. ⌘-click gives a tab every time, and the change is what you asked for. If it chafes in use, a single "Open clicked files in: panel / tab" option in *Settings → Terminal* is a small follow-up story: one setting read by `openFileFromTerminal` and `FileBrowser`, and one test each.
 
+## Implementation Notes
+
+- size = max(metadata len, bytes read); owner approved 2026-10-17, from the Story 1 review.
+
 ## Review Triage Log
 
 - 2026-10-17, adversarial review of 2bc17fd: BLOCKED. Fixed in this revision:
