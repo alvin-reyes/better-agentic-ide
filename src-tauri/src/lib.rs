@@ -371,6 +371,78 @@ fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))
 }
 
+/// The start of a text file, as the side panel shows it (ADR 0009).
+#[derive(serde::Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct TextHead {
+    text: String,
+    size: u64,
+    truncated: bool,
+    binary: bool,
+    lossy: bool,
+}
+
+/// How much of a file is looked at for a NUL byte to call it binary.
+const BINARY_SNIFF_BYTES: u64 = 8 * 1024;
+
+/// Drops an incomplete UTF-8 sequence at the end of `buf`, left by a cut.
+/// Invalid bytes elsewhere are left for the lossy decode.
+fn trim_partial_char(buf: &mut Vec<u8>) {
+    let tail = buf.len().saturating_sub(4);
+    if let Some(start) = (tail..buf.len()).rev().find(|&i| buf[i] & 0xC0 != 0x80) {
+        if let Err(e) = std::str::from_utf8(&buf[start..]) {
+            if e.error_len().is_none() {
+                buf.truncate(start);
+            }
+        }
+    }
+}
+
+/// `read_text_head` with the home folder given, so tests need not touch `HOME`.
+/// Only regular files are opened (checked after following links), so a FIFO
+/// or device can't block the call.
+fn read_text_head_in(path: &str, max_bytes: u64, home: &str) -> Result<TextHead, String> {
+    use std::io::Read;
+    let resolved = expand_tilde(path, home);
+    let meta = std::fs::metadata(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
+    if !meta.is_file() {
+        return Err(format!("Not a regular file: {}", resolved));
+    }
+    let mut file = std::fs::File::open(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
+    let read_err = |e: std::io::Error| format!("Failed to read {}: {}", resolved, e);
+    let mut buf = Vec::new();
+    (&mut file).take(BINARY_SNIFF_BYTES).read_to_end(&mut buf).map_err(read_err)?;
+    if buf.contains(&0) {
+        return Ok(TextHead {
+            text: String::new(),
+            size: meta.len().max(buf.len() as u64),
+            truncated: false,
+            binary: true,
+            lossy: false,
+        });
+    }
+    let want = max_bytes.saturating_add(1).saturating_sub(buf.len() as u64);
+    (&mut file).take(want).read_to_end(&mut buf).map_err(read_err)?;
+    let read = buf.len() as u64;
+    let truncated = read > max_bytes;
+    let size = if truncated { meta.len() } else { meta.len().max(read) };
+    if truncated {
+        buf.truncate(max_bytes as usize);
+        trim_partial_char(&mut buf);
+    }
+    let decoded = String::from_utf8_lossy(&buf);
+    let lossy = matches!(decoded, std::borrow::Cow::Owned(_));
+    Ok(TextHead { text: decoded.into_owned(), size, truncated, binary: false, lossy })
+}
+
+/// The first `max_bytes` of a text file for the side panel: binary files (a NUL
+/// in the first 8 KiB) come back empty, invalid UTF-8 is decoded lossily.
+#[tauri::command(async)]
+fn read_text_head(path: String, max_bytes: u64) -> Result<TextHead, String> {
+    let home = if path.starts_with('~') { get_home_dir() } else { String::new() };
+    read_text_head_in(&path, max_bytes, &home)
+}
+
 /// Whether a path exists (file or directory). The board's `Fs` needs this to
 /// tell "missing" from "unreadable"; read_file alone conflates the two.
 #[tauri::command(async)]
@@ -441,6 +513,7 @@ pub fn run() {
             agent_status::agent_status_watch,
             agent_status::agent_status_key,
             watcher::watch_directory,
+            watcher::watch_file,
             watcher::unwatch_directory,
             check_command_exists,
             check_claude_plugin,
@@ -448,6 +521,7 @@ pub fn run() {
             write_text_file,
             save_temp_image,
             read_file,
+            read_text_head,
             path_exists,
             path_is_symlink,
             read_file_base64,
@@ -551,6 +625,138 @@ mod tests {
         assert_eq!(expand_tilde("~/a/b", "/h"), "/h/a/b");
         assert_eq!(expand_tilde("~user/a", "/h"), "~user/a");
         assert_eq!(expand_tilde("/a/~/b", "/h"), "/a/~/b");
+    }
+
+    /// A fresh, empty folder under the temp dir for one test.
+    fn head_dir(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("ade-head-{}-{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn head_of(path: &std::path::Path, max_bytes: u64) -> Result<TextHead, String> {
+        read_text_head_in(&path.to_string_lossy(), max_bytes, "/nonexistent-home")
+    }
+
+    #[test]
+    fn read_text_head_small_file() {
+        let d = head_dir("small");
+        std::fs::write(d.join("a.ts"), "const a = 1;\n").unwrap();
+        let head = head_of(&d.join("a.ts"), 1024).unwrap();
+        assert_eq!(
+            head,
+            TextHead { text: "const a = 1;\n".into(), size: 13, truncated: false, binary: false, lossy: false }
+        );
+    }
+
+    #[test]
+    fn read_text_head_truncates_only_past_the_cap() {
+        let d = head_dir("cap");
+        std::fs::write(d.join("over"), "0123456789X").unwrap();
+        std::fs::write(d.join("exact"), "0123456789").unwrap();
+        let over = head_of(&d.join("over"), 10).unwrap();
+        assert!(over.truncated);
+        assert_eq!(over.text, "0123456789");
+        assert_eq!(over.size, 11);
+        let exact = head_of(&d.join("exact"), 10).unwrap();
+        assert!(!exact.truncated);
+        assert_eq!(exact.text, "0123456789");
+        assert_eq!(exact.size, 10);
+        // A cap above the 8 KiB sniff window, crossed past it.
+        let big = "x".repeat(20_001);
+        std::fs::write(d.join("big"), &big).unwrap();
+        let head = head_of(&d.join("big"), 20_000).unwrap();
+        assert!(head.truncated);
+        assert_eq!(head.text.len(), 20_000);
+        assert_eq!(head.size, 20_001);
+    }
+
+    #[test]
+    fn read_text_head_cuts_on_a_character() {
+        let d = head_dir("char");
+        std::fs::write(d.join("euro"), "abc€").unwrap();
+        let head = head_of(&d.join("euro"), 4).unwrap();
+        assert_eq!(head.text, "abc");
+        assert!(head.truncated);
+        assert!(!head.lossy, "a cut character is not a decoding error");
+        assert_eq!(head.size, 6);
+        // An invalid byte before the cut is still lossy, and the cut still trims.
+        std::fs::write(d.join("both"), b"a\xffb\xe2\x82\xac").unwrap();
+        let head = head_of(&d.join("both"), 5).unwrap();
+        assert_eq!(head.text, "a\u{FFFD}b");
+        assert!(head.lossy);
+    }
+
+    #[test]
+    fn read_text_head_binary() {
+        let d = head_dir("binary");
+        std::fs::write(d.join("nul"), b"abc\0def").unwrap();
+        let head = head_of(&d.join("nul"), 1024).unwrap();
+        assert!(head.binary);
+        assert_eq!(head.text, "");
+        assert_eq!(head.size, 7);
+        assert!(!head.truncated);
+        // UTF-16 LE: a BOM, then "hi" with a NUL after each ASCII byte.
+        std::fs::write(d.join("utf16"), [0xFF, 0xFE, b'h', 0, b'i', 0]).unwrap();
+        assert!(head_of(&d.join("utf16"), 1024).unwrap().binary);
+        // The window is 8 KiB even when the cap is smaller.
+        let mut late = vec![b'x'; 5000];
+        late.push(0);
+        std::fs::write(d.join("small-cap"), &late).unwrap();
+        let head = head_of(&d.join("small-cap"), 100).unwrap();
+        assert!(head.binary, "a NUL inside 8 KiB but past the cap is binary");
+        assert_eq!(head.size, 5001);
+        // A NUL past the first 8 KiB is not looked for.
+        let mut past = vec![b'x'; 9000];
+        past.push(0);
+        std::fs::write(d.join("past"), &past).unwrap();
+        let head = head_of(&d.join("past"), 1 << 20).unwrap();
+        assert!(!head.binary);
+        assert_eq!(head.text.len(), 9001);
+    }
+
+    #[test]
+    fn read_text_head_lossy() {
+        let d = head_dir("lossy");
+        std::fs::write(d.join("bad"), b"ab\xffcd").unwrap();
+        let head = head_of(&d.join("bad"), 1024).unwrap();
+        assert_eq!(head.text, "ab\u{FFFD}cd");
+        assert!(head.lossy);
+        assert!(!head.binary);
+    }
+
+    #[test]
+    fn read_text_head_expands_tilde() {
+        let home = head_dir("home");
+        std::fs::write(home.join("x.txt"), "from home").unwrap();
+        let head = read_text_head_in("~/x.txt", 1024, &home.to_string_lossy()).unwrap();
+        assert_eq!(head.text, "from home");
+    }
+
+    #[test]
+    fn read_text_head_refuses_non_files() {
+        let d = head_dir("refuse");
+        assert!(head_of(&d.join("missing"), 1024).is_err());
+        let err = head_of(&d, 1024).unwrap_err();
+        assert!(err.contains("Not a regular file"), "{err}");
+        #[cfg(unix)]
+        {
+            let fifo = d.join("pipe");
+            let made = std::process::Command::new("mkfifo").arg(&fifo).status().unwrap();
+            assert!(made.success());
+            // Opening a FIFO for reading blocks until a writer appears, so a
+            // regression would hang: run it on its own thread and time out.
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(head_of(&fifo, 1024));
+            });
+            let got = rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("read_text_head blocked on a FIFO: it must refuse before opening");
+            let err = got.unwrap_err();
+            assert!(err.contains("Not a regular file"), "{err}");
+        }
     }
 
     #[test]
