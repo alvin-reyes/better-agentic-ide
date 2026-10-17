@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: win
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }));
 
 import { emitTo, listen } from "@tauri-apps/api/event";
-import { listenForFileOpens, openFileFromTerminal, revealTargetOf } from "../openFile";
+import { handlePreviewOpen, listenForFileOpens, openFileFromTerminal, revealTargetOf } from "../openFile";
 import { useTabStore } from "../../stores/tabStore";
 
 describe("openFileFromTerminal", () => {
@@ -74,9 +74,35 @@ describe("openFileFromTerminal", () => {
     expect(revealTargetOf({ path: "/r/a.ts", line: 9 })).toEqual({ line: 9 });
     expect(revealTargetOf({ path: "/r/a.ts", line: 9 })).not.toHaveProperty("col");
     expect(revealTargetOf({ path: "/r/a.ts", line: 9, col: 0 })).toEqual({ line: 9 });
-    for (const bad of [{ path: "/r/a.ts" }, { line: 0 }, { line: -1 }, { line: 1.5 }, { line: "4" }, { line: NaN }, null, undefined]) {
+    expect(revealTargetOf({ path: "/r/a.ts", line: 9, col: 1e23 })).toEqual({ line: 9 });
+    for (const bad of [{ line: 1e23 }, { line: Number.MAX_SAFE_INTEGER + 1 }, { path: "/r/a.ts" }, { line: 0 }, { line: -1 }, { line: 1.5 }, { line: "4" }, { line: NaN }, null, undefined]) {
       expect(revealTargetOf(bad)).toBeUndefined();
     }
+  });
+
+  it("App's open-preview handler sets the file and its line on the active tab, then opens the panel", () => {
+    const setPreviewPath = vi.fn();
+    const openPanel = vi.fn();
+    const deps = { activeTabId: "t1", setPreviewPath, openPanel };
+    handlePreviewOpen({ path: "/r/B.ts", line: 300, col: 2 }, deps);
+    expect(setPreviewPath.mock.calls).toEqual([["t1", "/r/B.ts", { line: 300, col: 2 }]]);
+    handlePreviewOpen({ path: "/r/C.ts" }, deps);
+    expect(setPreviewPath.mock.calls[1]).toEqual(["t1", "/r/C.ts", undefined]);
+    expect(openPanel).toHaveBeenCalledTimes(2);
+    // No path: the panel still opens, the tab is untouched.
+    handlePreviewOpen(undefined, deps);
+    expect(setPreviewPath).toHaveBeenCalledTimes(2);
+    expect(openPanel).toHaveBeenCalledTimes(3);
+
+    // End to end through the store: the reveal lands on the active tab.
+    const tab = useTabStore.getState().activeTabId;
+    const { setPreviewPath: real } = useTabStore.getState();
+    handlePreviewOpen({ path: "/r/B.ts", line: 300 }, { activeTabId: tab, setPreviewPath: real, openPanel });
+    expect(useTabStore.getState().tabs.find((t) => t.id === tab)?.previewReveal).toMatchObject({ path: "/r/B.ts", line: 300 });
+
+    // App hands the whole event detail to it.
+    const app = readFileSync(resolve(__dirname, "../../App.tsx"), "utf8");
+    expect(app).toMatch(/handlePreviewOpen\(\(e as CustomEvent\)\.detail,/);
   });
 
   it("opensInPreview is gone", () => {

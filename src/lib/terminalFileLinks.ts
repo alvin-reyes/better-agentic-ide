@@ -47,7 +47,12 @@ export function findPathCandidates(text: string): PathCandidate[] {
     let line: number | undefined;
     let col: number | undefined;
     if (suffix) {
-      [line, col] = suffix[0].slice(1).split(":").map(Number);
+      // A number too big to be exact (a.ts:99999999999999999999999) is no line.
+      const [l, c] = suffix[0].slice(1).split(":").map(Number);
+      if (Number.isSafeInteger(l)) {
+        line = l;
+        if (c !== undefined && Number.isSafeInteger(c)) col = c;
+      }
       token = token.slice(0, suffix.index);
     }
     token = token.replace(TRAILING, "");

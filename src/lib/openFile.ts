@@ -54,7 +54,7 @@ export function listenForFileOpens(): Promise<UnlistenFn> {
   return listen<OpenFilePayload>(OPEN_FILE_EVENT, (e) => openFileHere(e.payload.path, e.payload));
 }
 
-const isLine = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 1;
+const isLine = (n: unknown): n is number => typeof n === "number" && Number.isSafeInteger(n) && n >= 1;
 
 /**
  * The line (and column) an "open-preview" detail asks the panel to land on,
@@ -64,4 +64,24 @@ export function revealTargetOf(detail: unknown): { line: number; col?: number } 
   const { line, col } = (detail ?? {}) as OpenFileOptions;
   if (!isLine(line)) return undefined;
   return isLine(col) ? { line, col } : { line };
+}
+
+/**
+ * App's "open-preview" handler: put the file, and the line a `path:line`
+ * click asked for, on the active tab, then open the panel. A detail without
+ * a path just opens the panel.
+ */
+export function handlePreviewOpen(
+  detail: unknown,
+  deps: {
+    activeTabId: string;
+    setPreviewPath: (id: string, path: string, at?: { line: number; col?: number }) => void;
+    openPanel: () => void;
+  },
+): void {
+  const path = (detail as { path?: unknown } | null | undefined)?.path;
+  if (typeof path === "string" && path) {
+    deps.setPreviewPath(deps.activeTabId, path, revealTargetOf(detail));
+  }
+  deps.openPanel();
 }

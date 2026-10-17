@@ -39,6 +39,16 @@ describe("findPathCandidates", () => {
     expect({ path: c.path, line: c.line, col: c.col }).toEqual({ path: "src/App.tsx", line: 42, col: 7 });
     expect(text.slice(c.start, c.end)).toBe("src/App.tsx");
   });
+  it("a line or column too big to be exact is dropped, the path kept", () => {
+    const [c] = findPathCandidates("a.ts:99999999999999999999999");
+    expect(c.path).toBe("a.ts");
+    expect(c.line).toBeUndefined();
+    expect(c.col).toBeUndefined();
+    const [d] = findPathCandidates("a.ts:12:99999999999999999999999");
+    expect(d.path).toBe("a.ts");
+    expect(d.line).toBe(12);
+    expect(d.col).toBeUndefined();
+  });
   it("ignores URLs, flags, numbers and plain words", () => {
     expect(paths("https://example.com/a.md --output=x 3.14 v0.15.0 hello world")).toEqual([]);
   });
@@ -48,12 +58,12 @@ describe("findPathCandidates", () => {
 });
 
 describe("registerFileLinks", () => {
-  /** A terminal with one row of text, enough for the link provider. */
-  function fakeTerminal(row: string) {
+  /** A terminal with these rows of text (none soft-wrapped), enough for the link provider. */
+  function fakeTerminal(...rows: string[]) {
     let provider: ILinkProvider | null = null;
-    const line = { isWrapped: false, translateToString: () => row };
+    const lines = rows.map((row) => ({ isWrapped: false, translateToString: () => row }));
     const term = {
-      buffer: { active: { length: 1, getLine: (i: number) => (i === 0 ? line : undefined) } },
+      buffer: { active: { length: lines.length, getLine: (i: number) => lines[i] } },
       registerLinkProvider: (p: ILinkProvider) => { provider = p; return { dispose() {} }; },
     } as unknown as Terminal;
     const links = () => new Promise<ILink[] | undefined>((r) => provider!.provideLinks(1, r));
@@ -77,6 +87,19 @@ describe("registerFileLinks", () => {
     expect(open.mock.calls[1][1]).not.toHaveProperty("col");
     expect(open.mock.calls[2]).toEqual(["/r/c.md", {}]);
     expect(open.mock.calls[2][1]).not.toHaveProperty("line");
+  });
+
+  it("a path Claude Code broke across rows keeps its line and column", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) =>
+      cmd === "resolve_file_paths" ? (args as { paths: string[] }).paths.map((p) => (p.startsWith("/") ? p : `/r/${p}`)) : null);
+    const open = vi.fn();
+    const { term, links } = fakeTerminal("  /Users/me/demo/_bmad-output/initiative-s ", "  hop/src/App.tsx:42:7");
+    registerFileLinks(term, async () => "/r", open);
+    const found = await links();
+    const joined = found!.find((l) => l.text.endsWith("initiative-shop/src/App.tsx"))!;
+    expect(joined).toBeTruthy();
+    joined.activate(new MouseEvent("click"), joined.text);
+    expect(open.mock.calls).toEqual([["/Users/me/demo/_bmad-output/initiative-shop/src/App.tsx", { line: 42, col: 7 }]]);
   });
 });
 

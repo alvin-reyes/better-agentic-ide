@@ -189,7 +189,7 @@ describe("MonacoWrapper reveal", () => {
     const ed = stub.editors[0];
     ed.calls = [];
     rerender(<MonacoWrapper filePath="/r/a.ts" content={lines(300)} readOnly autoFocus={false} reveal={{ line: 300, nonce: 7 }} />);
-    expect(ed.calls).toEqual(["saveViewState", "setValue", "restoreViewState", "setPosition", "revealLineInCenter"]);
+    expect(ed.calls).toEqual(["saveViewState", "setValue", "restoreViewState", "layout", "setPosition", "revealLineInCenter"]);
     expect(ed.position).toEqual({ lineNumber: 300, column: 1 });
     rerender(<MonacoWrapper filePath="/r/a.ts" content={lines(301)} readOnly autoFocus={false} reveal={{ line: 300, nonce: 7 }} />);
     expect(ed.position).toEqual({ lineNumber: 300, column: 1 });
@@ -208,11 +208,20 @@ describe("MonacoWrapper reveal", () => {
     expect(onRevealed).not.toHaveBeenCalled();
     await tick();
     const ed = stub.editors[0];
-    expect(ed.calls).toEqual(["saveViewState", "setValue", "restoreViewState", "setPosition", "revealLineInCenter"]);
+    expect(ed.calls).toEqual(["saveViewState", "setValue", "restoreViewState", "layout", "setPosition", "revealLineInCenter"]);
     // Not clamped to the first content's 5 lines: it waited for the 300.
     expect(ed.positions).toEqual([{ lineNumber: 250, column: 1 }]);
     expect(onRevealed.mock.calls).toEqual([[4]]);
     expect(ed.focusCount).toBe(0);
+  });
+
+  it("lays the editor out before revealing, so the line is centered in the real viewport", () => {
+    // @monaco-editor/react creates the editor in a display:none container, so
+    // at onMount its layout is a few pixels tall; centering then puts the line
+    // on the top row. layout() first measures the real size.
+    render(<MonacoWrapper filePath="/r/a.ts" content={lines(400)} readOnly autoFocus={false} reveal={{ line: 300, nonce: 1 }} />);
+    const ed = stub.editors[0];
+    expect(ed.calls).toEqual(["layout", "setPosition", "revealLineInCenter"]);
   });
 
   it("clamps a line past the end", () => {

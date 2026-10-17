@@ -325,6 +325,33 @@ describe("go to line from path:line", () => {
     expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
   });
 
+  it("the last shown line of a truncated file is not past it; the next one is", async () => {
+    h.handlers.read_text_head = async () => head(lines(1000), { size: 48 * MiB, truncated: true });
+    openAt("/r/big.log", 1000);
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    expect(stub.editors[0].revealed).toEqual([1000]);
+    expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
+    openAt("/r/big.log", 1001);
+    await waitFor(() => expect(stub.editors[0].revealed).toEqual([1000, 1000]));
+    statusWith("Line 1001 is past the part shown (first 2.0 MB)");
+  });
+
+  it("a whole file that grows past 2 MiB does not claim an earlier line is past the part shown", async () => {
+    let big = false;
+    h.handlers.read_text_head = async () => (big ? head(lines(40000), { size: 3 * MiB, truncated: true }) : head(lines(1000)));
+    h.handlers.watch_directory = async () => 7;
+    openAt("/r/app.log", 5000);
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    expect(stub.editors[0].positions).toEqual([{ lineNumber: 1000, column: 1 }]);
+    big = true;
+    const watch = h.channels[h.channels.length - 1];
+    await act(async () => { watch.onmessage?.({ type: "changed", path: "/r/app.log" }); });
+    await waitFor(() => expect(stub.editors[0].getValue()).toBe(lines(40000)));
+    expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
+  });
+
   it("a line past the end of a whole file goes to the last line without a message", async () => {
     h.handlers.read_text_head = async () => head(lines(20));
     openAt("/r/small.ts", 999);

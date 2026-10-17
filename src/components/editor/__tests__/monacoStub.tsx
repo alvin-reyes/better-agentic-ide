@@ -28,6 +28,7 @@ export interface FakeEditor {
   getPosition(): Position;
   setPosition(p: Position): void;
   revealLineInCenter(line: number): void;
+  layout(): void;
   getModel(): { getLineCount(): number };
   setScrollTop(n: number): void;
   getScrollTop(): number;
@@ -71,6 +72,7 @@ export function makeFakeEditor(initial: string): FakeEditor {
     getPosition() { return { ...ed.position }; },
     setPosition(p) { ed.calls.push("setPosition"); ed.positions.push({ ...p }); ed.position = { ...p }; },
     revealLineInCenter(line) { ed.calls.push("revealLineInCenter"); ed.revealed.push(line); },
+    layout() { ed.calls.push("layout"); },
     getModel() { return { getLineCount: () => ed.value.split("\n").length }; },
     setScrollTop(n) { ed.scrollTop = n; },
     getScrollTop() { return ed.scrollTop; },

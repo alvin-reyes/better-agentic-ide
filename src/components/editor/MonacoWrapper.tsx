@@ -145,6 +145,10 @@ export default function MonacoWrapper({
     const r = revealRef.current;
     if (!editor || !r || r.nonce === appliedNonce.current) return;
     appliedNonce.current = r.nonce;
+    // @monaco-editor/react creates the editor in a display:none container, so
+    // on a fresh mount its layout is a few pixels tall and centering would
+    // put the line on the top row. Measure the real size first.
+    editor.layout();
     const lineCount = editor.getModel()?.getLineCount() ?? 1;
     const lineNumber = Math.min(atLeastOne(r.line), lineCount);
     editor.setPosition({ lineNumber, column: atLeastOne(r.col) });

@@ -585,6 +585,7 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 - size = max(metadata len, bytes read); owner approved 2026-10-17, from the Story 1 review.
 - Story 2 review, 2026-10-17: the Story 2 text "code files get no live updates until then" is superseded: the kept `watch_directory` effect also reloads code files live (any kind with an extension) until Story 3 replaces it.
 - Story 2 review, 2026-10-17: Story 3 must make `BinaryView`'s error in the panel a `role="status"` "Can't open <name>: <reason>" message, as the panel's other messages are (Story 2 left `BinaryView` unchanged).
+- Story 4 review, 2026-10-18 (minor 6, left to Story 3): re-clicking a `path:line` on the file already shown does not re-read it. The reveal is applied to the text the editor holds and is consumed, so if an agent appended lines and no watch event has arrived yet, a line past the stale text's end lands on its last line. Story 3 should re-read on such a click, or keep the reveal pending, when `line` > the line count of a whole (not truncated) file.
 
 ## Review Triage Log
 
