@@ -542,7 +542,7 @@ The window that remains (ADR 0006, Consequences) is that routing can use the old
 2. **Two routing tests beyond the plan's list**, because the owner asked for a mutation check on every routing rule and two conditions of `Live::route` had no test that failed without them: `a_replaced_connection_routes_nothing` (the sender's entry must be current for its connection) and `a_closing_entry_routes_nothing` (a set that is `None` routes nothing). Both close the writer gate, so the connection keeps reading while its 4409 or 1011 waits on its queue.
 3. **Writers' rules 2 and 4 are handler obligations**, so their mutants are the relay code that depends on them. Rule 2: the recovery `Refresh` names the sender (the only key rule 2 guarantees every committed write involved). Rule 4: `on_login` runs before the `Join` read and its messages are queued ahead of the `welcome`.
 4. **The writer gate** re-checks the gate if it closes while the writer is waiting on its queue (`next_out`), so a closed gate leaves exactly `queue` items of room, as the plan asks. Without that, one item slipped past a gate closed mid-wait.
-5. **Counting and wording the plan left open:** 1009's reason is `message_too_big`; a 4429 is logged `login_refused code=too_many_new_keys` and counted in `relay_new_keys_refused_total`, not in `relay_logins_total{result="refused"}` (which stays "every 4401"); an unreadable text that was also over the control limit counts as unreadable (no answer); a frame or `rehandshake` that meets a full queue counts as dropped (the `rehandshake` also drops the device, as any text item does); a message over the WebSocket layer's 128 KiB is dropped by that layer with no 1009.
+5. **Counting and wording the plan left open:** 1009's reason is `message_too_big`; a 4429 is logged `login_refused code=too_many_new_keys` and counted in `relay_new_keys_refused_total`, not in `relay_logins_total{result="refused"}` (which stays "every 4401"); an unreadable text that was also over the control limit counts as unreadable (no answer); a frame or `rehandshake` that meets a full queue counts as dropped (the `rehandshake` also drops the device, as any text item does). (Corrected 2026-10-17, see the review fixes below: a message over the WebSocket layer's 128 KiB is also closed 1009, before login too.)
 6. **`e2e` dev-dependencies** gain `serde_json` and `base64`, both already workspace dependencies in `Cargo.lock`: no crate or version is added (the lock gains two dependency edges only).
 7. **A stand-in for `paired`:** `Control` has no `paired` yet (5a's), so the counting handler's messages are `control_limited` with a `test_…` `msg`.
 8. **`a_failed_replaced_leave_still_refreshes_the_current_connection`** asserts a `peers_of` delta of 4 from before the replacing login: M's `Join` read, Q's barrier read, and the leave's two (the fan-out read and the re-read). That is the plan's "+2 excluding Q's read", with M's `Join` read counted from the same base.
@@ -582,6 +582,24 @@ Mutant D was also run 5 times on its own against the final test, and was killed 
 - `grep -n "generation\|installed_gen" relay/server/src` finds nothing.
 - `cargo fmt --check` in `relay/` is clean.
 - No crate or package was added or upgraded: `Cargo.lock` gains only the two `relay-e2e` dependency edges (`base64`, `serde_json`), already locked.
+
+**2026-10-17, review fixes (adversarial review of cdb9d14: BLOCK, 1 major, 4 minor).** This is a new commit on top of cdb9d14, test-first.
+- **Major 1, the 1009 rule above 128 KiB.** Before this fix, a message over the WebSocket layer's own limit ended the socket with no close after login (the client saw 1006), and before login it got 4401 and was counted as a refused login. Now the relay recognises that layer's capacity error (`too_big`, through the error's `source()`) and closes 1009 `message_too_big` in both places. Before login it is not a refused login. To name the error type, `relay-server` now depends directly on `tungstenite = "=0.29.0"` (`default-features = false`), the exact version axum 0.8.9 already pulls in (published 2026-03-17). `Cargo.lock` gains one dependency edge and no crate. Tests: `a_message_over_128_kib_after_login_is_closed_1009` (binary and text) and `a_message_over_128_kib_before_login_is_closed_1009` (text and binary; `relay_logins_total{result="refused"}` stays 0). Deviation 5 and `remote-protocol.md`'s size entry are corrected.
+- **Minor 2.** `unreadable_messages_are_counted_and_unanswered` now shows that the three unreadable texts each spent a control token: of 30 tokens, 27 readable messages are handled and the 28th is limited.
+- **Minor 3.** `a_closing_entry_routes_nothing` now sends a second `Refresh` naming M. It asserts that no `peers_of` read happens and that M's frame is still dropped.
+- **Minor 4.** `on_binary` now holds `Live`'s lock across the check and the `try_send`, as `route_text` does. No deterministic test is added. The window being closed is the gap between two statements on one connection's task: a peer-task step would have to run inside it, and nothing can stop a task there. (The writer gate holds a queue, not a lock section, and a test hook inside `on_binary` would be production code for a race that no longer exists.) The fix is checked by review.
+- **Minor 5.** `remote-protocol.md` (Presence) now states that "replaced" and `on_leave(current: false)` also cover a device that reconnects before its old `Leave` step runs. In that case `relay_replaced_total` rises and the 4409 goes to a sender that is already gone. Story 5a's slot rule depends on this.
+
+**Mutation record, added by the review fixes** (same method; all killed):
+
+| Id | Mutant (rule removed) | Result | Killed by |
+|---|---|---|---|
+| O1 | the control token is taken after the head is read (an unreadable text spends none) | KILLED | `unreadable_messages_are_counted_and_unanswered` |
+| O3 | a Refresh re-reads a closing (None) entry | KILLED | `a_closing_entry_routes_nothing` |
+| S1 | 1009 rule after login: a message over the socket limit just drops the connection | KILLED | `a_message_over_128_kib_after_login_is_closed_1009` |
+| S2 | 1009 rule before login: a message over the socket limit is a refused login (4401) | KILLED | `a_message_over_128_kib_before_login_is_closed_1009` |
+
+After the fixes, all 24 mutants (the 20 above plus these 4) were run again against the final code. Each was killed by the same tests as before.
 
 ## Verification
 

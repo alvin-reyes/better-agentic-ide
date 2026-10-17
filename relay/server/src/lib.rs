@@ -704,6 +704,13 @@ async fn store_failed(hub: &Hub, mut socket: WebSocket, e: StoreError) {
     close(&mut socket, STORE_ERROR_CODE, STORE_ERROR_REASON).await;
 }
 
+/// Whether a read failed because the message was over the WebSocket layer's own limit
+/// (`SOCKET_LIMIT`). Such a message is over 64 KiB too, so it is closed 1009 like any other.
+fn too_big(e: &axum::Error) -> bool {
+    let inner = std::error::Error::source(e).and_then(|s| s.downcast_ref::<tungstenite::Error>());
+    matches!(inner, Some(tungstenite::Error::Capacity(_)))
+}
+
 /// What came instead of the challenge's answer.
 enum First {
     Login(Control),
@@ -726,6 +733,7 @@ async fn read_login(socket: &mut WebSocket) -> First {
                 }
             }
             Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
+            Some(Err(e)) if too_big(&e) => return First::TooBig,
             _ => return First::NotLogin,
         }
     }
@@ -876,6 +884,12 @@ async fn connection(mut socket: WebSocket, hub: Arc<Hub>, ip: IpAddr) {
             Step::In(incoming) => {
                 let msg = match incoming {
                     Some(Ok(msg)) => msg,
+                    Some(Err(e)) if too_big(&e) => {
+                        let _ =
+                            timeout_at(deadline, close(&mut socket, TOO_BIG_CODE, TOO_BIG_REASON))
+                                .await;
+                        break;
+                    }
                     None | Some(Err(_)) => break,
                 };
                 let action = match msg {
@@ -1068,12 +1082,15 @@ fn on_binary(hub: &Hub, who: &Identity, conn: ConnId, bytes: &[u8]) -> Action {
         });
     }
     let to = routed.peer;
-    let target = hub.live().route(&who.id, conn, &to);
-    let delivered = match target {
-        Some((_, tx)) => tx
-            .try_send(Outgoing::Binary(routed.with_peer(who.id).encode()))
-            .is_ok(),
-        None => false,
+    let bytes = routed.with_peer(who.id).encode();
+    // The check and the send happen under one hold of the lock, as in `route_text`, so
+    // no peer-task step can change the sets between them.
+    let delivered = {
+        let live = hub.live();
+        match live.route(&who.id, conn, &to) {
+            Some((_, tx)) => tx.try_send(Outgoing::Binary(bytes)).is_ok(),
+            None => false,
+        }
     };
     Counters::bump(if delivered {
         &hub.counters.frames_routed

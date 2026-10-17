@@ -1794,6 +1794,22 @@ async fn unreadable_messages_are_counted_and_unanswered() {
         })
     );
     assert_eq!(h.metric("relay_frames_routed_total").await, 1 + 98);
+    // The three unreadable texts each spent a control token before their head was read:
+    // of 30, 27 readable messages are handled and the 28th is limited.
+    for _ in 0..28 {
+        mac.text(msg("test_noop", json!({}))).await;
+    }
+    assert_eq!(
+        mac.next().await,
+        In::Text(Control::ControlLimited {
+            msg: "test_noop".into(),
+            slot: None,
+            pair_id: None,
+            peer: None,
+            retry_ms: 100
+        })
+    );
+    assert_eq!(h.handler.handled_by(m.id, "test_noop"), 27);
     h.shutdown().await;
 }
 
@@ -1941,6 +1957,21 @@ async fn a_closing_entry_routes_nothing() {
     h.metric_reaches("relay_frames_dropped_total", dropped + 1)
         .await;
     assert_eq!(h.metric("relay_frames_routed_total").await, routed);
+    // A later Refresh naming M doesn't re-read a closing entry: still dropped.
+    let reads = h.store.count("peers_of");
+    phone
+        .text(msg("test_noop", json!({ "refresh": keys(&[m.id]) })))
+        .await;
+    round_trip(&h, &mut phone).await;
+    assert_eq!(
+        h.store.count("peers_of"),
+        reads,
+        "a closing entry was re-read"
+    );
+    mac.frame(qm.id, b"still closing").await;
+    h.metric_reaches("relay_frames_dropped_total", dropped + 2)
+        .await;
+    assert_eq!(h.metric("relay_frames_routed_total").await, routed);
     h.gate.open();
     assert_eq!(mac.next().await, In::Closed(1011, "internal_error".into()));
     assert_eq!(
@@ -1948,5 +1979,55 @@ async fn a_closing_entry_routes_nothing() {
         Some(m.id),
         "Q heard something before M's offline"
     );
+    h.shutdown().await;
+}
+
+/// The owner's 1009 rule covers every message over 64 KiB, so also one over the
+/// WebSocket layer's own 128 KiB limit, which that layer refuses: after login it is still
+/// closed 1009, not dropped.
+#[tokio::test]
+async fn a_message_over_128_kib_after_login_is_closed_1009() {
+    let h = harness().await;
+    let (m, p) = (key(Role::Mac), key(Role::Phone));
+    h.pair(pid(1), &m, &p);
+    let mut mac = login(&h, &m).await;
+    mac.frame(p.id, &vec![0x11; 129 * 1024]).await;
+    assert_eq!(
+        mac.next_skipping_presence().await,
+        In::Closed(1009, "message_too_big".into())
+    );
+    let mut phone = login(&h, &p).await;
+    phone.text(format!("\"{}\"", "x".repeat(129 * 1024))).await;
+    assert_eq!(
+        phone.next_skipping_presence().await,
+        In::Closed(1009, "message_too_big".into())
+    );
+    h.shutdown().await;
+}
+
+/// Before login too: closed 1009, not 4401, and not counted as a refused login.
+#[tokio::test]
+async fn a_message_over_128_kib_before_login_is_closed_1009() {
+    let h = harness().await;
+    for binary in [false, true] {
+        let (mut ws, _) = open(&h.url(), None).await;
+        let big = vec![b'x'; 129 * 1024];
+        let msg = if binary {
+            Message::binary(big)
+        } else {
+            Message::text(String::from_utf8(big).unwrap())
+        };
+        let _ = ws.send(msg).await;
+        let mut dev = Dev {
+            ws,
+            id: Bytes([0; 32]),
+        };
+        assert_eq!(
+            dev.next().await,
+            In::Closed(1009, "message_too_big".into()),
+            "binary: {binary}"
+        );
+    }
+    assert_eq!(h.metric("relay_logins_total{result=\"refused\"}").await, 0);
     h.shutdown().await;
 }

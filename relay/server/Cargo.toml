@@ -20,6 +20,8 @@ futures-util.workspace = true
 rusqlite.workspace = true
 subtle.workspace = true
 sha2.workspace = true
+# The version axum 0.8.9 already uses, named only to recognise its size error (1009).
+tungstenite = { version = "=0.29.0", default-features = false }
 
 [dev-dependencies]
 tempfile.workspace = true

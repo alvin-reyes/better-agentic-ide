@@ -395,11 +395,14 @@ login: the relay refuses anything but a `login` (4401). After login the relay ig
 text frame it doesn't act on, a second `login` included.
 
 **Size:** the relay accepts at most 64 KiB (65,536 bytes) per WebSocket message, of either
-kind, the 33-byte envelope header included, before login too. Story 7b: a larger message
-(up to the WebSocket layer's own 128 KiB) is closed with **1009** `message_too_big`, with
-no `rate_limited` (`a_frame_over_64_kib_is_closed_1009`,
-`a_first_frame_over_64_kib_gets_no_welcome`). Above 128 KiB the socket layer refuses it and
-the connection is dropped.
+kind, the 33-byte envelope header included, before login too. Story 7b: any larger
+message is closed with **1009** `message_too_big`, with no `rate_limited`, and before
+login it is not a refused login (no 4401, not counted in `relay_logins_total`). Up to
+128 KiB the relay reads the message and checks its size; above that the WebSocket layer
+refuses it with a capacity error, which the relay closes with the same 1009
+(`a_frame_over_64_kib_is_closed_1009`, `a_first_frame_over_64_kib_gets_no_welcome`,
+`a_message_over_128_kib_after_login_is_closed_1009`,
+`a_message_over_128_kib_before_login_is_closed_1009`).
 
 | `t` | Direction | Fields |
 |---|---|---|
@@ -455,6 +458,15 @@ and logs `login_store_error code=<code>`.
   queue loses the close, and the old socket is dropped), and its later leave sends no
   presence (`a_new_login_replaces_the_old_connection`,
   `a_late_leave_after_replacement_keeps_routing`).
+- **"Replaced" also covers a device that reconnects before its old `Leave` step runs.**
+  "Older connection" means the one presence still names when the new `Join` step runs.
+  If the old socket has already closed but its `Leave` is still queued behind the new
+  `Join` (say it was waiting on the store), the new `Join` still counts it as replaced:
+  `relay_replaced_total` rises, and the 4409 goes to a sender that is already gone, so
+  nobody receives it. That old connection's `Leave` then runs with
+  `on_leave(current: false)`. Story 5a's slot rule (only a current connection's leave
+  ends a Mac's pairing slot) relies on this: such a leave must not end a slot the new
+  connection may have opened.
 - A leave fans out to the device's peers as the pair directory lists them at that moment.
   After the connection ends, the peer task's `Leave` step (story 7b, ADR 0006) runs
   `on_leave` and reads `peers_of` in one store call, fans the offline out at once, and only
