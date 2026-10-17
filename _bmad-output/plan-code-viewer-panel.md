@@ -453,7 +453,48 @@ Depends on Story 2. Built before Story 3.
 
 **Manual checks:** `grep -Hn useState src/App.tsx` and click a result (`-H` makes grep print the file name, which plain `grep -n` on one file omits): the panel opens at that line. Click another result in the same file: it moves. From `A.ts`, click a `B.ts:300` link: it lands in B. Click a `.md:10` link: the document renders.
 
-**Results (4):** _QA fills this in._
+**Results (4):**
+
+### Story 4 verification
+
+QA, 2026-10-18, at 1d622db (two commits on f3affc5; adversarial review blocked f7c8aee on the uncentered reveal in a freshly mounted real Monaco, the untested App wiring and test gaps; re-review passed 1d622db). The five lines were run one after another from the worktree root. Verdict: **PASS**.
+
+| Line | Result (real output tail) |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| `npm test` | `Test Files 153 passed (153)`, `Tests 1702 passed (1702)` |
+| `cd src-tauri && cargo test` | `test result: ok. 474 passed; 0 failed; 1 ignored` (lib), then 12 and 2 passed in the later binaries; no failures |
+| `cd relay && cargo test` | every `test result: ok`, 0 failed |
+| `cd mobile && npx tsc --noEmit && npx jest` | tsc exit 0; `Tests: 6 passed, 6 total` |
+
+**AC to test map (all passing in the run above):**
+
+| AC | Test |
+|---|---|
+| 4-AC1 | `terminalFileLinks.test.ts` > "keeps the line and column of a path:line link" (also "strips :line:col and trailing punctuation, keeps the offsets", "a line or column too big to be exact is dropped, the path kept") |
+| 4-AC2 | `terminalFileLinks.test.ts` > "a clicked link carries its line", "a path Claude Code broke across rows keeps its line and column" |
+| 4-AC3 | `openFile.test.ts` > "the line travels with the file", "the panel's target line comes from the event, only when it is a real line", "App's open-preview handler sets the file and its line on the active tab, then opens the panel" (the App wiring, via `handlePreviewOpen`) |
+| 4-AC4 | `previewPerTab.test.ts` > "a target line is per open request and never saved" |
+| 4-AC4b | `previewPerTab.test.ts` > "a reveal is cleared once applied, not a newer one" |
+| 4-AC5 | `MonacoWrapper.test.tsx` > "reveals the target line once per click", "clamps a line past the end", "lays the editor out before revealing, so the line is centered in the real viewport", "a reveal waits for an asynchronous mount and lands after the latest content", "a reveal and a reload in the same render: content first, then the line, and the next reload keeps it" |
+| 4-AC6 | `PreviewPanelCode.test.tsx` > "a path:line link to another file lands in that file", "CodeView hands its editor only a reveal for its own file" |
+| 4-AC7 | `PreviewPanelCode.test.tsx` > "a line past the truncated part says so", "the last shown line of a truncated file is not past it; the next one is", "a whole file that grows past 2 MiB does not claim an earlier line is past the part shown", "a line past the end of a whole file goes to the last line without a message" |
+| 4-AC8 | `PreviewPanelCode.test.tsx` > "rendered views ignore the line" |
+| 4-AC9 | `PreviewPanelCode.test.tsx` > "a remount does not re-apply an old reveal", "closing and reopening the panel does not jump again" |
+
+**Slice:** `git diff --name-only f3affc5` lists only Story 4 source and tests (`terminalFileLinks.ts`, `openFile.ts`, `tabStore.ts`, `App.tsx`, `PreviewPanel.tsx`, `CodeView.tsx`, `MonacoWrapper.tsx`, `monacoStub.tsx` and their tests), `docs/guide/terminal.md`, the contract `.ade/context/side-panel-files.md`, this plan (Implementation Notes) and the developer's knowledge line. No `package.json` or lockfile change.
+
+**Known and accepted:** two contrived `App` mutants survive (a wrapper lambda for `setPreviewPath`, an empty `openPanel`); the reviewer judged them minor. Centering in real Monaco was confirmed by the reviewer in a headless-Chrome harness, not by an automated test in the suite (the suite uses the stub, which asserts `layout()` is called before the reveal).
+
+**Carried to Story 3:** the stale-text reveal note in Implementation Notes (minor 6).
+
+**Manual, pending the owner (the running app is needed; this session cannot drive the GUI, so none is claimed):**
+- `grep -Hn useState src/App.tsx`, click a result: the panel opens at that line, centered
+- click another result in the same file: it moves
+- from `A.ts`, click a `B.ts:300` link: it lands in B
+- click a `.md:10` link: the document renders
+
+**Environment note:** the worktree had no `node_modules`; root was symlinked to the main checkout's, and `mobile/node_modules` was a per-entry symlink farm with `@ade/protocol` pointing at the worktree's `packages/protocol`. Both were removed afterwards.
 
 ---
 
