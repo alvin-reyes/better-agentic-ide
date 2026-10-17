@@ -31,3 +31,16 @@ type TextHead = { text: string; size: number; truncated: boolean; binary: boolea
 - Watcher errors are sent as `{ type: "error", message }`.
 - Don't rely on the event kind: renames arrive as `changed`, and FSEvents can merge flags so `removed` follows `created`. Decide "deleted" by reading.
 - A symlinked file is watched at its target; retargeting the link is not seen.
+
+## The panel (Story 2)
+
+- **Every file clicked in the terminal opens in the active tab's panel** (`openFileFromTerminal` dispatches `open-preview` for all kinds; `opensInPreview` is gone). Focus stays where it was. The file browser still opens a tab until Story 5.
+- **One kind dispatch:** `PreviewPanel` picks its view with `viewerKind()`: `pdf`/`docx`/`image` → `BinaryView`; `markdown` → `MarkdownView` and `html` → the `sandbox="allow-scripts"` iframe, both via `read_file`; `text` → `read_text_head(path, PANEL_TEXT_MAX_BYTES)` then `viewer/CodeView`, loaded with `React.lazy` (Monaco is never in `PreviewPanel`'s static imports).
+- **Read-only editor:** `MonacoWrapper` with `readOnly` is uncontrolled: `defaultValue`, never `value`; a later `content` is applied with `saveViewState` → `setValue` → `restoreViewState`; options add `readOnly`, `domReadOnly`, no minimap, `renderValidationDecorations: "off"`; no save action. `autoFocus` (default true) and `ariaLabel` (`"<file name>, read-only"` in the panel). The file tab's props and behavior are unchanged.
+- **Open in tab** (`addEditorTab(path)`) shows only for a plain text head. Truncated: "Showing the first 2.0 MB of N MB." and "Too large to open in a tab". Lossy: "Not UTF-8 text, can't be edited in a tab". Binary: "Binary file (N MB), not shown." and no editor. A failed read: "Can't open <name>: <reason>". Every such message is `role="status"` `aria-live="polite"` (`Status` in `viewer/shared.tsx`).
+- `TextHead`, `PANEL_TEXT_MAX_BYTES` (2 MiB) and `formatSize` live in `src/lib/textHead.ts`.
+- **Focus:** the panel root is `role="complementary"` `aria-label="Preview"`; its body region has `tabIndex={-1}`. `App` passes `focusRequest`, bumped only when ⌘⇧B or the palette opens the panel and reset to 0 on close; the panel serves a new value once, to the code editor after it mounts (else the body), and drops it when the file changes. Closing goes through `closePreviewFocus(panelEl)` (`src/lib/previewFocus.ts`), which focuses `.xterm-helper-textarea` when focus is inside the panel.
+- Live follow is still today's `watch_directory` effect until Story 3. With LIVE on it reloads every kind, code included, on a `changed` event for the path (it filters by the file's extension, so a file without one isn't followed).
+- Tab-only views: a terminal click on a `.mmd` or a contract ABI/IDL `.json` now shows it as code in the panel; the diagram and ABI views are reached with *Open in tab*.
+- **Focus rules in code:** `usePreviewPanel()` in `src/lib/previewFocus.ts` holds `open` and `focusRequest` for App: `toggle` (⌘⇧B, palette) bumps the request when opening, `openForFile` (the `open-preview` event) opens without one, `close` runs `closePreviewFocus` and resets the request to 0. In the panel a served request is spent: `MonacoWrapper`'s `onFocused` (through `CodeView`) or focusing the body clears it, so a later reload or remount of the same file never takes focus.
+

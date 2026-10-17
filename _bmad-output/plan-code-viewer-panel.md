@@ -375,7 +375,51 @@ Component tests mock `@tauri-apps/api/core`. `MonacoWrapper`/`CodeView` tests mo
 
 **Manual checks (running app, macOS and Linux):** click a `.ts` path in the terminal: highlighted code, no red squiggles, and typing goes straight to the terminal. ⌘⇧B twice: focus goes into the panel and back. In the panel editor with no find widget open, Esc returns to the terminal (real Monaco may consume Esc; if so, record it). A 50 MB log: banner, no stall. A `.zip`: binary message. A `.docx` from the terminal renders. VoiceOver reads the editor as "<file>, read-only".
 
-**Results (2):** _QA fills this in._
+**Results (2):**
+
+### Story 2 verification
+
+QA, 2026-10-17, at b8285eb (two commits on aa79621; adversarial review blocked 9e0562e on M-A, the ⌘⇧B request never spent for code files, and M-B, the close wiring untested; re-review passed b8285eb). The five lines were run one after another from the worktree root. Verdict: **PASS**.
+
+| Line | Result (real output tail) |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| `npm test` | `Test Files 153 passed (153)`, `Tests 1679 passed (1679)` |
+| `cd src-tauri && cargo test` | `test result: ok. 474 passed; 0 failed; 1 ignored` (lib), then 12 and 2 passed in the later binaries; no failures |
+| `cd relay && cargo test` | every `test result: ok`, 0 failed (86, 11, 14, 32, 11, 68, 33, 9 passed among others) |
+| `cd mobile && npx tsc --noEmit && npx jest` | tsc exit 0; `Tests: 6 passed, 6 total` |
+
+**AC to test map (all passing in the run above):**
+
+| AC | Test |
+|---|---|
+| 2-AC1 | `MonacoWrapper.test.tsx` › "read-only content never goes through value" |
+| 2-AC2 | `MonacoWrapper.test.tsx` › "a reload keeps the reader's place" |
+| 2-AC2b | `MonacoWrapper.test.tsx` › "a write before mount is not lost" |
+| 2-AC3 | `MonacoWrapper.test.tsx` › "read-only mode", "defaults are the file tab's" (focus: "focuses once when autoFocus turns on after mount", "...before an asynchronous mount") |
+| 2-AC4 | `PreviewPanelCode.test.tsx` › "shows source files in a read-only editor" |
+| 2-AC5 | `PreviewPanelCode.test.tsx` › "Monaco loads lazily"; `sidePanelLayout.test.tsx` (2 tests, unchanged) |
+| 2-AC6 | `PreviewPanelCode.test.tsx` › "large, lossy and binary files", "opens the file in a tab" |
+| 2-AC7 | `PreviewPanelCode.test.tsx` › "a file that can't be read says so" |
+| 2-AC8 | `PreviewPanelCode.test.tsx` › "each kind gets its viewer" (includes the `detectMode` absence and `viewerKind` import source checks) |
+| 2-AC9 | `PreviewPanelCode.test.tsx` › "a stale read never wins" (also "an older read of the same file never overwrites a newer one") |
+| 2-AC10 | `openFile.test.ts` › "every clicked file opens in the panel", "opensInPreview is gone" |
+| 2-AC11 | `PreviewPanelFocus.test.tsx` › "⌘⇧B focus survives the lazy mount", "⌘⇧B on a closed panel focuses the editor once it has mounted", "⌘⇧B with a document focuses the panel's body", "opening a file never takes focus", "a served request is spent...", "a panel opened by a click, not ⌘⇧B, takes no focus", "Esc returns to the terminal", "is a labelled complementary region"; `previewFocus.test.ts` › "closing returns focus to the terminal"; `PreviewPanelOpenClose.test.tsx` (the M-A/M-B fixes: only ⌘⇧B asks for focus, close and the close button return focus) |
+| 2-AC12 | `PreviewPanelCode.test.tsx` › "documents stay live" |
+| 2-AC13 | `previewSecurity.test.ts`, `stores/__tests__/previewPerTab.test.ts` (19 passed with security), `tauriCommandContract.test.ts` (4), `viewerKind.test.ts`, `terminalFileLinks.test.ts` all pass; the `opensInPreview` case is removed |
+
+**Slice:** `git diff --name-only aa79621` lists the Story 2 source and tests (`PreviewPanel.tsx`, `App.tsx`, `MonacoWrapper.tsx`, `CodeView.tsx`, `viewer/shared.tsx`, `openFile.ts`, `previewFocus.ts`, `terminalFileLinks.ts`, `textHead.ts` and their tests), `README.md`, the Story 2 docs the plan asks for (`docs/guide/files.md`, `docs/guide/terminal.md`), the contract `.ade/context/side-panel-files.md`, this plan (Implementation Notes) and the developer's knowledge line. No `package.json` or lockfile change.
+
+**Known and accepted:** three one-line `App.tsx` JSX mutants survive because no test renders `App` (reviewer: minor, not blocking). The helpers and the panel they call are tested directly.
+
+**Manual, pending the owner (the running app is needed; this session cannot drive the GUI, so none is claimed):**
+- no red squiggles on a clicked `.ts` file; typing goes straight to the terminal
+- ⌘⇧B focus into the panel and back out
+- Esc in real Monaco (two presses with a selection)
+- a 50 MB log (banner, no stall), a `.zip` (binary message) and a `.docx` from the terminal
+- VoiceOver reads the editor as "<file>, read-only"
+
+**Environment note:** the worktree had no `node_modules`; root was symlinked to the main checkout's, and `mobile/node_modules` was a per-entry symlink farm with `@ade/protocol` pointing at the worktree's `packages/protocol`. Both were removed afterwards.
 
 ---
 
@@ -539,6 +583,8 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 ## Implementation Notes
 
 - size = max(metadata len, bytes read); owner approved 2026-10-17, from the Story 1 review.
+- Story 2 review, 2026-10-17: the Story 2 text "code files get no live updates until then" is superseded: the kept `watch_directory` effect also reloads code files live (any kind with an extension) until Story 3 replaces it.
+- Story 2 review, 2026-10-17: Story 3 must make `BinaryView`'s error in the panel a `role="status"` "Can't open <name>: <reason>" message, as the panel's other messages are (Story 2 left `BinaryView` unchanged).
 
 ## Review Triage Log
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-import { findPathCandidates, opensInPreview, stitchRows } from "../terminalFileLinks";
+import { findPathCandidates, stitchRows } from "../terminalFileLinks";
 
 const paths = (t: string) => findPathCandidates(t).map((c) => c.path);
 
@@ -52,15 +52,5 @@ describe("stitchRows", () => {
   it("does not join across a blank row or onto a row that starts with a bullet", () => {
     expect(paths(stitchRows([{ text: "see docs/", wrapped: false }, { text: "", wrapped: false }, { text: "a.md", wrapped: false }]).text)).not.toContain("docs/a.md");
     expect(paths(stitchRows([{ text: "Wrote docs/a.md", wrapped: false }, { text: "⏺ next.md", wrapped: false }]).text)).toEqual(["docs/a.md", "next.md"]);
-  });
-});
-
-describe("opensInPreview", () => {
-  it("documents and images go to the preview; code and docx to a tab", () => {
-    expect(opensInPreview("/a/plan.md")).toBe(true);
-    expect(opensInPreview("/a/r.PDF")).toBe(true);
-    expect(opensInPreview("/a/shot.png")).toBe(true);
-    expect(opensInPreview("/a/App.tsx")).toBe(false);
-    expect(opensInPreview("/a/spec.docx")).toBe(false);
   });
 });
