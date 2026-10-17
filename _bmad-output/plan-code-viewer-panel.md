@@ -287,7 +287,44 @@ All in Rust unit tests; the developer writes each failing first. Temp files unde
 - `cd relay && cargo test` -- expected: all pass (no change)
 - `cd mobile && npx tsc --noEmit && npx jest` -- expected: all pass (no change)
 
-**Results (1):** _QA fills this in._
+**Results (1):**
+
+### Story 1 verification
+
+QA, 2026-10-17, at 7e6562f (three commits on cfa4c82; adversarial review blocked 3108997 on the untested read filter, re-review passed 7e6562f). The five lines were run one after another from the worktree root. Verdict: **PASS**.
+
+| Line | Result (real output tail) |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| `npm test` | `Test Files 147 passed (147)`, `Tests 1645 passed (1645)` |
+| `cd src-tauri && cargo test` | `test result: ok. 474 passed; 0 failed; 1 ignored` (lib), then 12, 2 passed in the later binaries; no failures |
+| `cd relay && cargo test` | every `test result: ok`, 0 failed; 266 passed in total |
+| `cd mobile && npx tsc --noEmit && npx jest` | tsc exit 0; `Tests: 6 passed, 6 total` |
+
+**AC to test map (all passing in the run above):**
+
+| AC | Test |
+|---|---|
+| 1-AC1 | `tests::read_text_head_small_file` |
+| 1-AC2 | `tests::read_text_head_truncates_only_past_the_cap` (also `read_text_head_trims_only_when_truncated`) |
+| 1-AC3 | `tests::read_text_head_cuts_on_a_character` |
+| 1-AC4 | `tests::read_text_head_binary` (also `read_text_head_stops_after_8_kib_for_binary`) |
+| 1-AC5 | `tests::read_text_head_lossy` |
+| 1-AC6 | `tests::read_text_head_expands_tilde` |
+| 1-AC7 | `tests::read_text_head_refuses_non_files` (missing, directory, FIFO on a thread with `recv_timeout`) |
+| 1-AC8 | `watcher::tests::watch_target_canonicalises`, `watcher::tests::classify_sorts_event_paths` |
+| 1-AC9 | `watcher::tests::watch_file_reports_only_its_file`; the read-silence half bites on Linux only, and the pure `watcher::tests::file_events_drop_reads` covers it on every platform (with `file_events_map_the_files_own_events`) |
+| 1-AC10 | `watcher::tests::watch_file_reports_the_folder_going` |
+| 1-AC11 | `watcher::tests::watch_file_is_async_and_non_recursive` |
+| 1-AC12 | `read_text_head` and `watcher::watch_file` are in the handler list (lib.rs); `src/lib/__tests__/tauriCommandContract.test.ts` 4 passed |
+
+The approved size rule (max of metadata length and bytes read) is covered by `read_text_head_size_is_at_least_what_was_read`.
+
+**Slice:** `git diff --name-only cfa4c82` lists only `src-tauri/src/lib.rs`, `src-tauri/src/watcher.rs`, `.ade/context/side-panel-files.md`, this plan (Implementation Notes) and `.ade/knowledge/developer.md`. No `Cargo.toml` or `Cargo.lock` change. The contract is recorded in `.ade/context/side-panel-files.md`.
+
+**Known and accepted:** MINOR 7 (a FIFO swapped in between the regular-file check and the open) is a deliberate race, accepted at review. The Linux read-filter check was confirmed by the reviewer in Docker, not re-run here (macOS).
+
+**Environment note:** the worktree had a real `node_modules/` holding only a stray `.vite` cache; it was replaced by symlinks for the run and removed afterwards. `mobile/node_modules` was a per-entry symlink farm with `@ade/protocol` pointing at the worktree's `packages/protocol`, since a plain symlink to the main checkout resolved the older protocol package and failed `tsc`.
 
 ---
 
@@ -498,6 +535,10 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 5. **Large-file cap of 2 MiB?** Recommended: **yes**.
 6. **Persist the panel's open state and width?** Recommended: **no**. Persist the tab's file (Story 6).
 7. **A setting to keep clicks opening a tab, since this changes a default in two places?** Recommended: **no setting at first**. ⌘-click gives a tab every time, and the change is what you asked for. If it chafes in use, a single "Open clicked files in: panel / tab" option in *Settings → Terminal* is a small follow-up story: one setting read by `openFileFromTerminal` and `FileBrowser`, and one test each.
+
+## Implementation Notes
+
+- size = max(metadata len, bytes read); owner approved 2026-10-17, from the Story 1 review.
 
 ## Review Triage Log
 
