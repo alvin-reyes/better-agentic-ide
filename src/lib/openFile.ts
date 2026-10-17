@@ -1,18 +1,15 @@
 import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useTabStore } from "../stores/tabStore";
-import { opensInPreview } from "./terminalFileLinks";
 
 const MAIN_WINDOW = "main";
 const OPEN_FILE_EVENT = "open-file";
 
-/** Show a file: documents and images beside the terminal, the rest in a tab. */
+/**
+ * Show a file in the active tab's side panel, whatever its kind: code,
+ * documents, images (ADR 0009). App owns the "open-preview" event.
+ */
 function openFileHere(path: string): void {
-  if (opensInPreview(path)) {
-    window.dispatchEvent(new CustomEvent("open-preview", { detail: { path } }));
-  } else {
-    useTabStore.getState().addEditorTab(path);
-  }
+  window.dispatchEvent(new CustomEvent("open-preview", { detail: { path } }));
 }
 
 /**

@@ -51,6 +51,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { watchAgentStatus } from "./stores/agentStatusStore";
 import { useAgentStatusToasts } from "./hooks/useAgentStatusToasts";
+import { closePreviewFocus, PREVIEW_PANEL_SELECTOR } from "./lib/previewFocus";
 
 /** How often the active terminal's folder is re-read to follow `cd`. */
 const CWD_POLL_MS = 3000;
@@ -63,6 +64,12 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Bumped only when ⌘⇧B (or the palette) opens the panel, so that opening
+  // moves focus into it; back to 0 on close, so a panel later opened by a
+  // file click mounts with no request to serve.
+  const [previewFocusRequest, setPreviewFocusRequest] = useState(0);
+  const previewOpenRef = useRef(previewOpen);
+  previewOpenRef.current = previewOpen;
   const [fleetOpen, setFleetOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
@@ -319,7 +326,20 @@ export default function App() {
   }, []);
 
   const toggleAgentPicker = useCallback(() => setAgentPickerOpen((prev) => !prev), []);
-  const togglePreview = useCallback(() => setPreviewOpen((prev) => !prev), []);
+  const closePreview = useCallback(() => {
+    // Focus inside the panel would be lost with it: give it to the terminal.
+    closePreviewFocus(document.querySelector(PREVIEW_PANEL_SELECTOR));
+    setPreviewOpen(false);
+    setPreviewFocusRequest(0);
+  }, []);
+  const togglePreview = useCallback(() => {
+    if (previewOpenRef.current) {
+      closePreview();
+    } else {
+      setPreviewFocusRequest((n) => n + 1);
+      setPreviewOpen(true);
+    }
+  }, [closePreview]);
   const toggleFileBrowser = useCallback(() => useFileBrowserStore.getState().toggle(), []);
   const sendScratchpad = useCallback(() => scratchpadRef.current?.send(), []);
   const copyScratchpad = useCallback(() => scratchpadRef.current?.copy(), []);
@@ -485,7 +505,8 @@ export default function App() {
         {previewOpen && (
           <Suspense fallback={null}>
             <PreviewPanel
-              onClose={() => setPreviewOpen(false)}
+              onClose={closePreview}
+              focusRequest={previewFocusRequest}
             />
           </Suspense>
         )}

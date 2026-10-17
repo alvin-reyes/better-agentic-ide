@@ -1,7 +1,7 @@
 ---
 title: Files & preview
-lead: Browse the project, open any file in a viewer that fits it, and watch documents update while an agent writes them.
-description: ADE's file browser, file viewer for PDF, Word, Markdown, images and code, and the live preview panel.
+lead: Browse the project, open any file in a viewer that fits it, and read code or watch documents update beside the terminal while an agent works.
+description: ADE's file browser, file viewer for PDF, Word, Markdown, images and code, and the preview panel that shows any file beside the terminal.
 ---
 
 ## File browser
@@ -10,7 +10,7 @@ Press {% include key.html mac="⌘B" other="Ctrl+Shift+B" %} to show the folder 
 
 ## File viewer
 
-Click a file in the browser (or a [file path in the terminal]({{ '/guide/terminal/' | relative_url }}#clickable-files)) and it opens in a tab with the right view:
+Click a file in the browser and it opens in a tab with the right view. (A [file path clicked in the terminal]({{ '/guide/terminal/' | relative_url }}#clickable-files) opens in the [preview panel](#preview-panel) instead.)
 
 | File | How it opens |
 |---|---|
@@ -28,7 +28,13 @@ In rendered documents, links behave the way you'd expect: web links open in your
 
 ## Preview panel
 
-Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to open a preview beside the terminal, or click a document path in the terminal. It shows Markdown, HTML, PDFs and images, and refreshes whenever the file is saved, handy for watching an agent write a spec. PDFs page and zoom here with the same viewer the file tab uses, so they render the same on macOS and Linux.
+Click a file path in the terminal and the file opens in the preview panel beside it, whatever kind of file it is. The terminal keeps focus. Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to show or hide the panel; opening it this way moves focus into it, and <kbd>Esc</kbd> gives focus back to the terminal. Each tab has its own file in the panel.
+
+- **Code and other text** shows read-only in the same Monaco editor as the file tab, with syntax highlighting. *Open in tab* opens the file in a tab, where you can edit and save it.
+- **Large files:** a text file over 2 MB shows its first 2 MB ("Showing the first 2.0 MB of 48.3 MB."). It has no *Open in tab*.
+- **Not UTF-8:** text that isn't valid UTF-8 shows with the unreadable bytes replaced. It has no *Open in tab*, because the tab can't edit it.
+- **Binary files** (a NUL byte near the start, as in a `.zip` or UTF-16 text) aren't shown: the panel says "Binary file, not shown" with its size.
+- **Markdown, HTML, PDFs, Word documents and images** render as they do in the file tab. They refresh whenever the file is saved, handy for watching an agent write a spec. PDFs page and zoom with the same viewer the file tab uses, so they render the same on macOS and Linux.
 
 HTML in the preview may run scripts, for pages that need them. They run isolated from the app.
 

@@ -3,11 +3,15 @@ import { shortcutLabel } from "../lib/shortcuts";
 import { useDragWidth } from "../hooks/useDragWidth";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import MarkdownView from "./viewer/MarkdownView";
-import { imageMime } from "../lib/viewerKind";
+import BinaryView from "./viewer/BinaryView";
+import { Status } from "./viewer/shared";
+import { isBinaryKind, viewerKind, type ViewerKind } from "../lib/viewerKind";
+import { PANEL_TEXT_MAX_BYTES, type TextHead } from "../lib/textHead";
 import { useTabStore } from "../stores/tabStore";
 
-// pdf.js is heavy: load it only when a PDF is actually previewed.
-const PdfView = lazy(() => import("./viewer/PdfView"));
+// Monaco is heavy and throws on import under jsdom: keep it out of this
+// module's static graph (and chunk), loaded only when a text file is shown.
+const CodeView = lazy(() => import("./viewer/CodeView"));
 
 interface WatchEvent {
   type: "changed" | "created" | "removed" | "error";
@@ -16,22 +20,35 @@ interface WatchEvent {
   message?: string;
 }
 
-type PreviewMode = "html" | "image" | "pdf" | "markdown" | "none";
+/** The mode badge for each kind: label, background, text color. */
+const BADGE: Record<ViewerKind, [string, string, string]> = {
+  html: ["HTML", "rgba(59,130,246,0.15)", "#3b82f6"],
+  image: ["IMAGE", "rgba(34,197,94,0.15)", "#22c55e"],
+  pdf: ["PDF", "rgba(239,68,68,0.15)", "#ef4444"],
+  docx: ["DOCX", "rgba(59,130,246,0.15)", "#3b82f6"],
+  markdown: ["MARKDOWN", "rgba(168,85,247,0.15)", "#a855f7"],
+  text: ["CODE", "rgba(234,179,8,0.15)", "#eab308"],
+};
 
-function detectMode(filePath: string): PreviewMode {
-  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "html" || ext === "htm") return "html";
-  if (["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"].includes(ext)) return "image";
-  if (ext === "pdf") return "pdf";
-  if (ext === "md" || ext === "markdown") return "markdown";
-  return "none";
+/** What was read for a path: the text of a document, a text head, or why not. */
+interface Loaded {
+  path: string;
+  text?: string;
+  head?: TextHead;
+  error?: string;
 }
 
 interface PreviewPanelProps {
   onClose: () => void;
+  /**
+   * Bumped by App only when ⌘⇧B (or the palette) opens the panel. A new value
+   * is served once: the editor of a code file once it has mounted, else the
+   * panel's body. Opening a file never moves focus.
+   */
+  focusRequest?: number;
 }
 
-export default function PreviewPanel({ onClose }: PreviewPanelProps) {
+export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanelProps) {
   /**
    * The document belongs to the tab, not to this component. That is what makes
    * it survive both a tab switch and the panel being closed, and it is why the
@@ -42,15 +59,22 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
   const filePath = useTabStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.previewPath ?? "");
   const setPreviewPath = useTabStore((s) => s.setPreviewPath);
   const [inputPath, setInputPath] = useState("");
-  const [mode, setMode] = useState<PreviewMode>("none");
-  const [content, setContent] = useState("");
-  const [dataUrl, setDataUrl] = useState("");
-  /** Base64 of a binary file, for viewers that want the bytes themselves. */
-  const [fileBytes, setFileBytes] = useState("");
+  const kind: ViewerKind | null = filePath ? viewerKind(filePath) : null;
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  /** Bumped to make BinaryView read its file again. */
+  const [reloadKey, setReloadKey] = useState(0);
   const { width, onDragStart } = useDragWidth(280, 900, 480);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Each load has an id; a result is applied only if it is the latest load
+  // and still for the file shown, so a slow read of the last file never wins.
+  const requestRef = useRef(0);
+  const pathRef = useRef(filePath);
+  pathRef.current = filePath;
+  // Only what was read for the file shown now; never a previous file's.
+  const current = loaded && loaded.path === filePath ? loaded : null;
 
   /** Opening a document means setting it on the tab; the effect below loads it. */
   const openFile = useCallback((path: string) => {
@@ -59,46 +83,78 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
   }, [activeTabId, setPreviewPath]);
 
   const loadContent = useCallback(async (path: string) => {
-    if (!path.trim()) return;
     const resolved = path.trim();
-    const fileMode = detectMode(resolved);
-    setMode(fileMode);
+    if (!resolved) return;
+    const fileKind = viewerKind(resolved);
+    const id = ++requestRef.current;
+    const stillWanted = () => id === requestRef.current && resolved === pathRef.current;
 
+    // PDF, Word and images: BinaryView reads the bytes itself.
+    if (isBinaryKind(fileKind)) {
+      setReloadKey((n) => n + 1);
+      setLastUpdate(new Date());
+      return;
+    }
     try {
-      if (fileMode === "image" || fileMode === "pdf") {
-        const base64 = await invoke<string>("read_file_base64", { path: resolved });
-        setFileBytes(base64);
-        // Images render fine from a data: URL — img-src allows it. A PDF does
-        // not: frame-src forbids data:, so it goes to pdf.js below instead.
-        setDataUrl(fileMode === "image" ? `data:${imageMime(resolved)};base64,${base64}` : "");
-        setContent("");
+      if (fileKind === "text") {
+        const head = await invoke<TextHead>("read_text_head", { path: resolved, maxBytes: PANEL_TEXT_MAX_BYTES });
+        if (!stillWanted()) return;
+        setLoaded({ path: resolved, head });
       } else {
         const text = await invoke<string>("read_file", { path: resolved });
-        setContent(text);
-        setDataUrl("");
-        setFileBytes("");
+        if (!stillWanted()) return;
+        setLoaded({ path: resolved, text });
       }
       setLastUpdate(new Date());
     } catch (err) {
-      setContent(`Error loading file: ${err}`);
-      setMode("none");
+      if (!stillWanted()) return;
+      setLoaded({ path: resolved, error: String(err) });
     }
   }, []);
 
   // Follow the active tab's document: on mount, when it changes, and when the
-  // user switches to a tab holding a different one.
+  // user switches to a tab holding a different one. The old file's content
+  // goes at once, so its editor unmounts, and any read in flight for it is
+  // dropped.
   useEffect(() => {
+    requestRef.current++;
+    setLoaded(null);
     if (filePath) {
       setInputPath(filePath);
-      loadContent(filePath);
+      // BinaryView reads a new path by itself; bumping reloadKey too would
+      // read it twice.
+      if (isBinaryKind(viewerKind(filePath))) setLastUpdate(new Date());
+      else loadContent(filePath);
     } else {
       setInputPath("");
-      setMode("none");
-      setContent("");
-      setDataUrl("");
-      setFileBytes("");
     }
   }, [filePath, loadContent]);
+
+  // ⌘⇧B focus. A new request is remembered for the file shown when it came
+  // and served once that file can take it; another file drops it.
+  const servedFocus = useRef(0);
+  const [focusFor, setFocusFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusRequest || focusRequest === servedFocus.current) return;
+    servedFocus.current = focusRequest;
+    setFocusFor(pathRef.current);
+  }, [focusRequest]);
+  useEffect(() => {
+    setFocusFor((f) => (f !== null && f !== filePath ? null : f));
+  }, [filePath]);
+  const wantsFocus = focusFor !== null && focusFor === filePath;
+  const editorTakesFocus = kind === "text" && !!current?.head && !current.head.binary;
+  useEffect(() => {
+    if (!wantsFocus) return;
+    // A text file still loading: wait. One with an editor: CodeView focuses it.
+    if (kind === "text" && (!current || editorTakesFocus)) return;
+    bodyRef.current?.focus();
+    setFocusFor(null);
+  }, [wantsFocus, kind, current, editorTakesFocus]);
+
+  const openInTab = useCallback(() => {
+    if (filePath) useTabStore.getState().addEditorTab(filePath);
+  }, [filePath]);
 
   // Set up file watcher for auto-refresh
   useEffect(() => {
@@ -148,6 +204,8 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
 
   return (
     <div
+      role="complementary"
+      aria-label="Preview"
       style={{
         width: `${width}px`,
         height: "100%",
@@ -196,23 +254,17 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
         <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)" }}>
           Preview
         </span>
-        {mode !== "none" && (
+        {kind && (
           <span style={{
             fontSize: "9px",
             fontWeight: 700,
             fontFamily: "monospace",
             padding: "2px 6px",
             borderRadius: "4px",
-            backgroundColor: mode === "html" ? "rgba(59,130,246,0.15)" :
-                           mode === "image" ? "rgba(34,197,94,0.15)" :
-                           mode === "pdf" ? "rgba(239,68,68,0.15)" :
-                           "rgba(168,85,247,0.15)",
-            color: mode === "html" ? "#3b82f6" :
-                   mode === "image" ? "#22c55e" :
-                   mode === "pdf" ? "#ef4444" :
-                   "#a855f7",
+            backgroundColor: BADGE[kind][1],
+            color: BADGE[kind][2],
           }}>
-            {mode.toUpperCase()}
+            {BADGE[kind][0]}
           </span>
         )}
         <div style={{ flex: 1 }} />
@@ -289,7 +341,7 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
             if (e.key === "Enter") handleOpen();
             if (e.key === "Escape") inputRef.current?.blur();
           }}
-          placeholder="/path/to/file.html or .png or .pdf or .md"
+          placeholder="/path/to/any/file (code, .md, .html, .pdf, images)"
           style={{
             flex: 1,
             backgroundColor: "var(--bg-primary)",
@@ -323,8 +375,8 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
       </div>
 
       {/* Preview content */}
-      <div style={{ flex: 1, overflow: "auto", position: "relative" }}>
-        {mode === "none" && !filePath && (
+      <div ref={bodyRef} tabIndex={-1} style={{ flex: 1, overflow: "auto", position: "relative", outline: "none" }}>
+        {!filePath && (
           <div style={{
             display: "flex",
             flexDirection: "column",
@@ -340,10 +392,10 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
               <path d="M1 5H15" stroke="currentColor" strokeWidth="1"/>
             </svg>
             <div style={{ textAlign: "center", fontSize: "13px" }}>
-              <p style={{ fontWeight: 600, color: "var(--text-secondary)", marginBottom: "8px" }}>Live Preview</p>
+              <p style={{ fontWeight: 600, color: "var(--text-secondary)", marginBottom: "8px" }}>Preview</p>
               <p style={{ fontSize: "12px", lineHeight: 1.6 }}>
-                Enter a file path above or use<br/>
-                the terminal to open a file.
+                Enter a file path above or click<br/>
+                a file path in the terminal.
               </p>
               <div style={{
                 display: "flex",
@@ -352,7 +404,7 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
                 justifyContent: "center",
                 marginTop: "12px",
               }}>
-                {["HTML", "Images", "PDF", "Markdown"].map((t) => (
+                {["Code", "Markdown", "HTML", "PDF", "Word", "Images"].map((t) => (
                   <span key={t} style={{
                     fontSize: "10px",
                     fontWeight: 600,
@@ -370,9 +422,13 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
           </div>
         )}
 
-        {mode === "html" && (
+        {kind && current?.error && (
+          <Status>Can't open {filePath.split("/").pop() || filePath}: {current.error}</Status>
+        )}
+
+        {kind === "html" && current?.text !== undefined && (
           <iframe
-            srcDoc={content}
+            srcDoc={current.text}
             style={{
               width: "100%",
               height: "100%",
@@ -386,65 +442,28 @@ export default function PreviewPanel({ onClose }: PreviewPanelProps) {
           />
         )}
 
-        {mode === "image" && dataUrl && (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            padding: "16px",
-            backgroundColor: "var(--bg-primary)",
-          }}>
-            <img
-              src={dataUrl}
-              alt="Preview"
-              style={{
-                maxWidth: "100%",
-                maxHeight: "100%",
-                objectFit: "contain",
-                borderRadius: "var(--radius)",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.3)",
-              }}
-            />
-          </div>
+        {kind && isBinaryKind(kind) && (
+          // PDF, Word and images, with the file tab's viewers. PDFs go to
+          // pdf.js: frame-src is 'self', so a framed data: URL is blocked, and
+          // WebKitGTK ships no built-in PDF viewer.
+          <BinaryView path={filePath} reloadKey={reloadKey} />
         )}
 
-        {mode === "pdf" && fileBytes && (
-          // pdf.js, not an <iframe src="data:...">: frame-src is 'self', so a
-          // framed data: URL is blocked and the pane renders empty. This is
-          // also the viewer the file tab uses, and the only one that works on
-          // WebKitGTK, which ships no built-in PDF viewer.
-          <Suspense fallback={<div style={{ padding: "20px", color: "var(--text-muted)" }}>Loading viewer…</div>}>
-            <PdfView data={fileBytes} />
-          </Suspense>
-        )}
-
-        {mode === "markdown" && (
+        {kind === "markdown" && current?.text !== undefined && (
           // The same sanitized renderer as file tabs: raw HTML in a README
           // must not run with access to the app.
-          <MarkdownView content={content} filePath={filePath} />
+          <MarkdownView content={current.text} filePath={filePath} />
         )}
 
-        {mode === "none" && filePath && (
-          <div style={{
-            padding: "20px",
-            color: "var(--text-muted)",
-            fontSize: "12px",
-            fontFamily: "monospace",
-          }}>
-            <pre style={{
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
-              backgroundColor: "var(--bg-primary)",
-              padding: "12px",
-              borderRadius: "var(--radius)",
-              border: "1px solid var(--border)",
-              maxHeight: "100%",
-              overflow: "auto",
-            }}>
-              {content}
-            </pre>
-          </div>
+        {kind === "text" && current?.head && (
+          <Suspense fallback={<div style={{ padding: "20px", color: "var(--text-muted)", fontSize: "12px" }}>Loading editor…</div>}>
+            <CodeView
+              path={filePath}
+              head={current.head}
+              focusOnMount={wantsFocus}
+              onOpenInTab={openInTab}
+            />
+          </Suspense>
         )}
       </div>
 

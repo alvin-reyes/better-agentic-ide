@@ -204,8 +204,3 @@ export function registerFileLinks(
   };
   term.registerLinkProvider(provider);
 }
-
-/** Kinds the preview panel renders beside the terminal. */
-export function opensInPreview(path: string): boolean {
-  return /\.(md|markdown|html?|pdf|png|jpe?g|gif|svg|webp|bmp|ico)$/i.test(path);
-}
