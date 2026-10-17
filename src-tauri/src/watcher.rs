@@ -246,10 +246,34 @@ fn watch_file_mode() -> RecursiveMode {
     RecursiveMode::NonRecursive
 }
 
+/// What `watch_file` sends for one event, for the file `file` (`name` in
+/// `dir`), without content. Reads (`Access`) are dropped, or the panel's own
+/// re-read would loop. Events on the folder itself (deleted, moved: the watch
+/// may be dead afterwards) are sent as the file's `removed`. An event with no
+/// paths (inotify's queue overflow, `Rescan`) may hide a change: `changed`.
+fn file_events(event: &notify::Event, dir: &Path, name: &std::ffi::OsStr, file: &str) -> Vec<WatchEvent> {
+    if matches!(event.kind, EventKind::Access(_)) {
+        return Vec::new();
+    }
+    let path = || file.to_string();
+    if event.paths.is_empty() {
+        return vec![WatchEvent::Changed { path: path(), content: String::new() }];
+    }
+    event
+        .paths
+        .iter()
+        .filter_map(|p| match (classify(p, dir, name), event.kind) {
+            (Hit::Target, EventKind::Create(_)) => Some(WatchEvent::Created { path: path() }),
+            (Hit::Target, EventKind::Remove(_)) => Some(WatchEvent::Removed { path: path() }),
+            (Hit::Target, _) => Some(WatchEvent::Changed { path: path(), content: String::new() }),
+            (Hit::Folder, _) => Some(WatchEvent::Removed { path: path() }),
+            (Hit::Other, _) => None,
+        })
+        .collect()
+}
+
 /// Watches the folder of the file at `path` with `mode` and sends `sink` the
-/// file's own events, without content. Events on the folder itself (deleted,
-/// moved: the watch is dead afterwards) are sent as the file's `removed`.
-/// Reads (`Access`) are dropped, or the panel's own re-read would loop.
+/// file's own events (`file_events`), and watcher errors.
 fn file_watcher(
     path: &str,
     mode: RecursiveMode,
@@ -259,25 +283,9 @@ fn file_watcher(
     let file = dir.join(&name).to_string_lossy().into_owned();
     let watched = dir.clone();
     let mut watcher = RecommendedWatcher::new(
-        move |res: Result<notify::Event, notify::Error>| {
-            let event = match res {
-                Ok(event) => event,
-                Err(e) => return sink(WatchEvent::Error { message: e.to_string() }),
-            };
-            if matches!(event.kind, EventKind::Access(_)) {
-                return;
-            }
-            for p in &event.paths {
-                let path = file.clone();
-                let ev = match (classify(p, &watched, &name), event.kind) {
-                    (Hit::Target, EventKind::Create(_)) => WatchEvent::Created { path },
-                    (Hit::Target, EventKind::Remove(_)) => WatchEvent::Removed { path },
-                    (Hit::Target, _) => WatchEvent::Changed { path, content: String::new() },
-                    (Hit::Folder, _) => WatchEvent::Removed { path },
-                    (Hit::Other, _) => continue,
-                };
-                sink(ev);
-            }
+        move |res: Result<notify::Event, notify::Error>| match res {
+            Ok(event) => file_events(&event, &watched, &name, &file).into_iter().for_each(&sink),
+            Err(e) => sink(WatchEvent::Error { message: e.to_string() }),
         },
         Config::default(),
     )
@@ -535,6 +543,67 @@ mod tests {
         }
     }
 
+    fn mapped(kind: EventKind, paths: &[&str]) -> Vec<WatchEvent> {
+        let mut event = notify::Event::new(kind);
+        for p in paths {
+            event = event.add_path(PathBuf::from(p));
+        }
+        file_events(&event, Path::new("/p/src"), std::ffi::OsStr::new("a.ts"), "/p/src/a.ts")
+    }
+
+    fn json(events: &[WatchEvent]) -> Vec<String> {
+        events.iter().map(|e| serde_json::to_string(e).unwrap()).collect()
+    }
+
+    #[test]
+    fn file_events_map_the_files_own_events() {
+        use notify::event::{CreateKind, MetadataKind, ModifyKind, RemoveKind, RenameMode};
+        let changed = r#"{"type":"changed","path":"/p/src/a.ts","content":""}"#;
+        let created = r#"{"type":"created","path":"/p/src/a.ts"}"#;
+        let removed = r#"{"type":"removed","path":"/p/src/a.ts"}"#;
+        assert_eq!(json(&mapped(EventKind::Create(CreateKind::File), &["/p/src/a.ts"])), [created]);
+        assert_eq!(json(&mapped(EventKind::Remove(RemoveKind::File), &["/p/src/a.ts"])), [removed]);
+        assert_eq!(json(&mapped(EventKind::Modify(ModifyKind::Any), &["/p/src/a.ts"])), [changed]);
+        assert_eq!(
+            json(&mapped(EventKind::Modify(ModifyKind::Name(RenameMode::Both)), &["/p/src/b.ts", "/p/src/a.ts"])),
+            [changed],
+            "a rename onto the file is a change; the other path is a sibling"
+        );
+        assert!(mapped(EventKind::Modify(ModifyKind::Any), &["/p/src/b.ts"]).is_empty());
+        // Any non-read event on the folder itself is the file's removal.
+        assert_eq!(json(&mapped(EventKind::Remove(RemoveKind::Folder), &["/p/src"])), [removed]);
+        assert_eq!(
+            json(&mapped(EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any)), &["/p/src"])),
+            [removed]
+        );
+    }
+
+    /// inotify (notify 7 watches with OPEN) reports reads: opening the file
+    /// is `Access` on the file, listing the folder is `Access` on the folder.
+    /// Forwarded, the panel's own re-read would trigger another, forever.
+    #[test]
+    fn file_events_drop_reads() {
+        use notify::event::{AccessKind, AccessMode};
+        for kind in [
+            EventKind::Access(AccessKind::Open(AccessMode::Any)),
+            EventKind::Access(AccessKind::Close(AccessMode::Read)),
+            EventKind::Access(AccessKind::Any),
+        ] {
+            assert!(mapped(kind, &["/p/src/a.ts"]).is_empty(), "{kind:?} on the file");
+            assert!(mapped(kind, &["/p/src"]).is_empty(), "{kind:?} on the folder");
+            assert!(mapped(kind, &[]).is_empty(), "{kind:?} with no path");
+        }
+    }
+
+    /// inotify's queue overflow arrives as `Other` + `Rescan` with no paths:
+    /// events may have been lost, so the file may have changed.
+    #[test]
+    fn file_events_without_paths_are_a_change() {
+        let event = notify::Event::new(EventKind::Other).set_flag(notify::event::Flag::Rescan);
+        let got = file_events(&event, Path::new("/p/src"), std::ffi::OsStr::new("a.ts"), "/p/src/a.ts");
+        assert_eq!(json(&got), [r#"{"type":"changed","path":"/p/src/a.ts","content":""}"#]);
+    }
+
     /// Every event arriving within `wait`, from a sink fed by the watcher.
     fn collect(rx: &std::sync::mpsc::Receiver<WatchEvent>, wait: std::time::Duration) -> Vec<WatchEvent> {
         let deadline = std::time::Instant::now() + wait;
@@ -576,6 +645,15 @@ mod tests {
         let noise = collect(&rx, Duration::from_millis(500));
         assert!(noise.is_empty(), "a sibling's write leaked: {:?}", noise.iter().map(event_path).collect::<Vec<_>>());
 
+        // Reading the file and listing its folder must stay silent, or the
+        // panel's re-read on every event loops. Only Linux reports reads
+        // (inotify OPEN/CLOSE), so a broken read filter fails here only on
+        // Linux (CI's ubuntu run); `file_events_drop_reads` pins it everywhere.
+        let _ = std::fs::read(d.join("f.ts")).unwrap();
+        let _ = std::fs::read_dir(&d).unwrap().count();
+        let noise = collect(&rx, Duration::from_millis(500));
+        assert!(noise.is_empty(), "a read leaked: {:?}", noise.iter().map(event_path).collect::<Vec<_>>());
+
         std::fs::write(d.join("f.ts"), "two").unwrap();
         let first = rx.recv_timeout(Duration::from_secs(2)).expect("no event for the watched file within 2 s");
         let want = std::fs::canonicalize(d.join("f.ts")).unwrap().to_string_lossy().into_owned();
@@ -588,6 +666,11 @@ mod tests {
         std::fs::remove_dir_all(d).ok();
     }
 
+    /// What each platform reports for `rm -rf dir`: on Linux the child's
+    /// deletion, then the folder's own `DELETE_SELF`; on macOS (FSEvents,
+    /// non-recursive) only the folder's own events, no event for the child.
+    /// Either way a `removed` for the file must arrive; on macOS it comes
+    /// only from reporting folder events as the file's removal.
     #[test]
     fn watch_file_reports_the_folder_going() {
         use std::time::Duration;

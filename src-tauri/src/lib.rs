@@ -402,30 +402,36 @@ fn trim_partial_char(buf: &mut Vec<u8>) {
 /// Only regular files are opened (checked after following links), so a FIFO
 /// or device can't block the call.
 fn read_text_head_in(path: &str, max_bytes: u64, home: &str) -> Result<TextHead, String> {
-    use std::io::Read;
     let resolved = expand_tilde(path, home);
     let meta = std::fs::metadata(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
     if !meta.is_file() {
         return Err(format!("Not a regular file: {}", resolved));
     }
-    let mut file = std::fs::File::open(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
-    let read_err = |e: std::io::Error| format!("Failed to read {}: {}", resolved, e);
+    let file = std::fs::File::open(&resolved).map_err(|e| format!("Failed to read {}: {}", resolved, e))?;
+    read_head_from(file, meta.len(), max_bytes).map_err(|e| format!("Failed to read {}: {}", resolved, e))
+}
+
+/// The head of an opened file whose metadata says it is `len` bytes long:
+/// the first 8 KiB, stopping there if they hold a NUL, else up to
+/// `max_bytes + 1` bytes in all.
+fn read_head_from(mut reader: impl std::io::Read, len: u64, max_bytes: u64) -> std::io::Result<TextHead> {
+    use std::io::Read;
     let mut buf = Vec::new();
-    (&mut file).take(BINARY_SNIFF_BYTES).read_to_end(&mut buf).map_err(read_err)?;
+    (&mut reader).take(BINARY_SNIFF_BYTES).read_to_end(&mut buf)?;
     if buf.contains(&0) {
         return Ok(TextHead {
             text: String::new(),
-            size: meta.len().max(buf.len() as u64),
+            size: len.max(buf.len() as u64),
             truncated: false,
             binary: true,
             lossy: false,
         });
     }
     let want = max_bytes.saturating_add(1).saturating_sub(buf.len() as u64);
-    (&mut file).take(want).read_to_end(&mut buf).map_err(read_err)?;
+    (&mut reader).take(want).read_to_end(&mut buf)?;
     let read = buf.len() as u64;
     let truncated = read > max_bytes;
-    let size = if truncated { meta.len() } else { meta.len().max(read) };
+    let size = if truncated { len } else { len.max(read) };
     if truncated {
         buf.truncate(max_bytes as usize);
         trim_partial_char(&mut buf);
@@ -648,6 +654,7 @@ mod tests {
             head,
             TextHead { text: "const a = 1;\n".into(), size: 13, truncated: false, binary: false, lossy: false }
         );
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
@@ -670,6 +677,7 @@ mod tests {
         assert!(head.truncated);
         assert_eq!(head.text.len(), 20_000);
         assert_eq!(head.size, 20_001);
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
@@ -686,6 +694,7 @@ mod tests {
         let head = head_of(&d.join("both"), 5).unwrap();
         assert_eq!(head.text, "a\u{FFFD}b");
         assert!(head.lossy);
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
@@ -714,6 +723,50 @@ mod tests {
         let head = head_of(&d.join("past"), 1 << 20).unwrap();
         assert!(!head.binary);
         assert_eq!(head.text.len(), 9001);
+        std::fs::remove_dir_all(&d).ok();
+    }
+
+    /// A reader that counts the bytes taken from it.
+    struct Counting<'a> {
+        inner: &'a [u8],
+        taken: usize,
+    }
+
+    impl std::io::Read for Counting<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = std::io::Read::read(&mut self.inner, buf)?;
+            self.taken += n;
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn read_text_head_stops_after_8_kib_for_binary() {
+        let mut bytes = vec![b'x'; 100_000];
+        bytes[10] = 0;
+        let mut reader = Counting { inner: &bytes, taken: 0 };
+        let head = read_head_from(&mut reader, bytes.len() as u64, 1 << 20).unwrap();
+        assert!(head.binary);
+        assert_eq!(head.size, 100_000);
+        assert!(reader.taken <= 8 * 1024, "read {} bytes of a binary file", reader.taken);
+        // Text is read on, up to the cap plus one byte and no further.
+        let text = vec![b'y'; 100_000];
+        let mut reader = Counting { inner: &text, taken: 0 };
+        let head = read_head_from(&mut reader, text.len() as u64, 20_000).unwrap();
+        assert!(head.truncated);
+        assert_eq!(reader.taken, 20_001);
+    }
+
+    #[test]
+    fn read_text_head_trims_only_when_truncated() {
+        let d = head_dir("trim");
+        // Ends inside "€" (e2 82 ac) and is not cut: that is a decoding error.
+        std::fs::write(d.join("unfinished"), b"abc\xe2\x82").unwrap();
+        let head = head_of(&d.join("unfinished"), 1024).unwrap();
+        assert!(!head.truncated);
+        assert_eq!(head.text, "abc\u{FFFD}");
+        assert!(head.lossy);
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
@@ -724,6 +777,7 @@ mod tests {
         assert_eq!(head.text, "ab\u{FFFD}cd");
         assert!(head.lossy);
         assert!(!head.binary);
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
@@ -732,6 +786,7 @@ mod tests {
         std::fs::write(home.join("x.txt"), "from home").unwrap();
         let head = read_text_head_in("~/x.txt", 1024, &home.to_string_lossy()).unwrap();
         assert_eq!(head.text, "from home");
+        std::fs::remove_dir_all(&home).ok();
     }
 
     #[test]
@@ -757,6 +812,7 @@ mod tests {
             let err = got.unwrap_err();
             assert!(err.contains("Not a regular file"), "{err}");
         }
+        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
