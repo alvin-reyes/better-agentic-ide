@@ -111,6 +111,10 @@ pub struct SqliteStore {
     batches: AtomicU64,
     /// Held for a whole cleanup, so two cleanups never share its temp tables.
     cleanup: Mutex<()>,
+    /// Tests only: called at the start of each cleanup batch, with the connection held
+    /// and the number of batches committed so far.
+    #[cfg(test)]
+    batch_hook: Mutex<Option<Box<dyn Fn(u64) + Send>>>,
 }
 
 impl SqliteStore {
@@ -146,6 +150,8 @@ impl SqliteStore {
             acquired: AtomicU64::new(0),
             batches: AtomicU64::new(0),
             cleanup: Mutex::new(()),
+            #[cfg(test)]
+            batch_hook: Mutex::new(None),
         })
     }
 
@@ -393,6 +399,10 @@ impl Store for SqliteStore {
         // again, and the delete applies the cutoff and the online list itself.
         loop {
             let mut conn = self.conn();
+            #[cfg(test)]
+            if let Some(hook) = &*self.batch_hook.lock().unwrap() {
+                hook(self.batches.load(Ordering::SeqCst));
+            }
             let tx = conn.transaction().map_err(code)?;
             tx.execute("DELETE FROM temp.cleanup_batch", [])
                 .map_err(code)?;
@@ -750,6 +760,63 @@ mod tests {
             s.batches.load(Ordering::SeqCst)
         );
         assert_eq!(s.device(&key(60_000)).unwrap(), None);
+    }
+
+    /// 7a's deferred gap, closed in 7b: the `hand_over()` inside the batch loop. A call
+    /// queues for the connection while batch 2 holds it (a test-only hook at each batch's
+    /// start), and is let in 100 ms after batch 2 has committed. Batch 3 must not start
+    /// before it is in. The queued call is the store's own count of callers that have
+    /// asked for the connection and got it, which is what `hand_over` waits on; a real
+    /// thread on the mutex can win the lock between batches even without `hand_over`, so
+    /// it can't show the hand-over is there.
+    #[test]
+    fn a_call_queued_during_a_later_batch_gets_in_before_the_next_batch() {
+        let (_dir, path) = temp();
+        let s = Arc::new(SqliteStore::open(&path).unwrap());
+        let stale = (CLEANUP_BATCH * 4) as u16;
+        {
+            let mut conn = s.conn();
+            let tx = conn.transaction().unwrap();
+            for n in 0..stale {
+                tx.execute(
+                    "INSERT INTO devices (id, role, first_seen, last_seen) VALUES (?1, 'phone', 0, 0)",
+                    [&key(n).0[..]],
+                )
+                .unwrap();
+            }
+            tx.commit().unwrap();
+        }
+
+        let let_in = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let in_at_batch_3 = Arc::new(Mutex::new(None));
+        {
+            let weak = Arc::downgrade(&s);
+            let (let_in, in_at_batch_3) = (let_in.clone(), in_at_batch_3.clone());
+            *s.batch_hook.lock().unwrap() = Some(Box::new(move |committed| match committed {
+                // Batch 2 holds the connection: a call asks for it.
+                1 => {
+                    let s = weak.upgrade().unwrap();
+                    s.entered.fetch_add(1, Ordering::SeqCst);
+                    let let_in = let_in.clone();
+                    std::thread::spawn(move || {
+                        wait_until(|| s.batches.load(Ordering::SeqCst) >= 2);
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        let_in.store(true, Ordering::SeqCst);
+                        s.acquired.fetch_add(1, Ordering::SeqCst);
+                    });
+                }
+                2 => *in_at_batch_3.lock().unwrap() = Some(let_in.load(Ordering::SeqCst)),
+                _ => {}
+            }));
+        }
+        let counts = s.cleanup(NOW, cleanup_cutoff(NOW).unwrap(), &[]).unwrap();
+        *s.batch_hook.lock().unwrap() = None;
+        assert_eq!(counts.devices, u64::from(stale));
+        assert_eq!(
+            *in_at_batch_3.lock().unwrap(),
+            Some(true),
+            "batch 3 started before the call queued during batch 2 got the connection"
+        );
     }
 
     fn wait_until(cond: impl Fn() -> bool) {

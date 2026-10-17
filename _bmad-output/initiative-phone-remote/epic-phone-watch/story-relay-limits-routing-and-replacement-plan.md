@@ -4,7 +4,7 @@ type: 'feature'
 ticket: '7b'
 created: '2026-10-16'
 status: 'ready-for-dev'
-baseline_revision: '' # set when 7b starts, from main after 7a has merged
+baseline_revision: '0b8e9fd' # set when 7b started, from origin/main after 7a had merged
 route: 'full'
 route_source: 'auto'
 risk: 'high'
@@ -521,6 +521,67 @@ The window that remains (ADR 0006, Consequences) is that routing can use the old
 | 5 (at 09ce7a6) | BLOCK | 3 major, 6 minor | All patched as above. The early-batch window (minor 3) was closed in 7b rather than accepted. No 7a change was needed |
 | 5, check of fixes | BLOCK | 4 major, 3 minor | Patched, then superseded: the owner asked for a simpler design, and the peer sets were redesigned around ADR 0006 (see the Plan Change Log) |
 | 6 (ADR 0006 with this plan) | BLOCK | 3 major, 10 minor | All patched; see the Plan Change Log. The reviewer found the core design sound. Two questions went to the owner: whether a replaced connection's leave ends that Mac's slot, and whether to add a per-key login limit. Not re-reviewed yet |
+
+## Implementation Notes
+
+**2026-10-17, Dev (ticket 7b).** Branch `phone-relay-limits-routing`, from `origin/main` at 0b8e9fd (7a and story 4 merged; ADRs 0005 and 0006 accepted). Every task above is built. Done is not claimed here: QA runs the verification and decides.
+
+**What was built:**
+- `relay/protocol/src/lib.rs`: `Control::RateLimited`, `ControlLimited` (absent options left out of the JSON) and `Rehandshake`, in `KNOWN_TYPES`; `ControlHead::read`, with unit tests for a malformed `slot`, `pair_id` and `peer` and for unreadable heads. Story 4's `routed.rs` is reused unchanged, so `routed_envelope_parses_and_round_trips` isn't needed (its cases are story 4's `routed::tests`).
+- `relay/cli/src/lib.rs`: `Event::RateLimited`, `ControlLimited`, `Rehandshake` and `Client::send_rehandshake`, each tested; the bin prints them.
+- `relay/core/src/limits.rs`: `Limiter`, `TokenBucket`, `HourWindow`, `KeyedLimits`, `Limits`, `FrameLimiter`, `ControlLimiter`, `SlotLimiter`, `NewKeyLimiter`, `ip_key`, with the listed tests (`thirty_slots_fit_in_an_hour_and_the_31st_is_refused` is here).
+- `relay/core/src/control.rs`: `ControlHandler`, `ControlOutcome`, `IgnoreControl`, with the writers' rule in the module doc.
+- `relay/server/src/peers.rs`: the peer task (`Join`, `Refresh`, `Leave`), as ADR 0006 orders it, `on_leave` under `catch_unwind`.
+- `relay/server/src/lib.rs`: the `Config` fields (`limits`, `client_ip`, `control`, `queue` = 192, `writer_gate`), `Outgoing`, `Live::route`, the limits before any store call, the 4409 / 4429 / 1009 closes, `Relay::peer_requests_received`, `Relay::wait` failing if the peer task ends, the limiter prune on the cleanup tick, and the new counters and log events (`control_store_error`, `refresh_store_error`).
+- `relay/server/src/main.rs`: `RELAY_CLIENT_IP`.
+- Tests: `relay/e2e/tests/limits_and_routing.rs` (every AC and contract test), `fail_nth` / `hold_nth` / `Held` / `total` in `common/mod.rs`, the 4409 and 1009 assertions in `e2e.rs`, and the canary's 7b traffic in `storage.rs`.
+- `.ade/context/remote-protocol.md` ("Limits and routing", and the message, size, presence, queue, metrics and env entries) and `relay-storage.md` (the `deleted_pairs` correction, the writers' rule for 5a, the new test helpers). `deferred-work.md`: the replaced-close and 7a test-gap entries removed.
+
+**Deviations and choices (none changes an owner decision):**
+1. **7a's test gap lives in `relay-server`, not `relay/e2e`.** `a_call_waiting_during_cleanup_gets_in_between_batches` is a unit test in `relay/server/src/store.rs`, so the new guard is beside it: `store::tests::a_call_queued_during_a_later_batch_gets_in_before_the_next_batch`. It is a sibling test rather than an edit of 7a's test, which still guards the first `hand_over`. It uses a `#[cfg(test)]` hook at the start of each cleanup batch. A first version, with a real thread queued on the mutex during batch 2, let mutant D survive: on macOS that thread wins the lock between batches even without `hand_over`. So the queued call is now the store's own `entered` / `acquired` count, which is exactly what `hand_over` waits on, let in 100 ms after batch 2 commits; batch 3 must not start before it. A correct store can't fail it. The `drop(store)` before `drop(busy)` order is pinned by `tests::a_store_call_drops_the_store_before_its_count` in `relay/server/src/lib.rs`.
+2. **Two routing tests beyond the plan's list**, because the owner asked for a mutation check on every routing rule and two conditions of `Live::route` had no test that failed without them: `a_replaced_connection_routes_nothing` (the sender's entry must be current for its connection) and `a_closing_entry_routes_nothing` (a set that is `None` routes nothing). Both close the writer gate, so the connection keeps reading while its 4409 or 1011 waits on its queue.
+3. **Writers' rules 2 and 4 are handler obligations**, so their mutants are the relay code that depends on them. Rule 2: the recovery `Refresh` names the sender (the only key rule 2 guarantees every committed write involved). Rule 4: `on_login` runs before the `Join` read and its messages are queued ahead of the `welcome`.
+4. **The writer gate** re-checks the gate if it closes while the writer is waiting on its queue (`next_out`), so a closed gate leaves exactly `queue` items of room, as the plan asks. Without that, one item slipped past a gate closed mid-wait.
+5. **Counting and wording the plan left open:** 1009's reason is `message_too_big`; a 4429 is logged `login_refused code=too_many_new_keys` and counted in `relay_new_keys_refused_total`, not in `relay_logins_total{result="refused"}` (which stays "every 4401"); an unreadable text that was also over the control limit counts as unreadable (no answer); a frame or `rehandshake` that meets a full queue counts as dropped (the `rehandshake` also drops the device, as any text item does); a message over the WebSocket layer's 128 KiB is dropped by that layer with no 1009.
+6. **`e2e` dev-dependencies** gain `serde_json` and `base64`, both already workspace dependencies in `Cargo.lock`: no crate or version is added (the lock gains two dependency edges only).
+7. **A stand-in for `paired`:** `Control` has no `paired` yet (5a's), so the counting handler's messages are `control_limited` with a `test_…` `msg`.
+8. **`a_failed_replaced_leave_still_refreshes_the_current_connection`** asserts a `peers_of` delta of 4 from before the replacing login: M's `Join` read, Q's barrier read, and the leave's two (the fan-out read and the re-read). That is the plan's "+2 excluding Q's read", with M's `Join` read counted from the same base.
+9. **`.ade/knowledge/developer.md`** is not committed: the slice for this story is `relay/`, `.ade/context/` and this initiative's `_bmad-output` files.
+
+**Mutation record (owner decision).** Each mutant was applied to an rsync copy of `relay/` in a scratchpad (`CARGO_TARGET_DIR` there too), run with `cargo test -p relay-e2e -p relay-server --no-fail-fast` (the protocol tests read `../../packages/protocol/vectors`, which the copy doesn't have), and restored. All were run against the final code. Every mutant was killed.
+
+| Id | Mutant (rule removed) | Result | Killed by |
+|---|---|---|---|
+| W1 | writers' rule 1: a Refresh installs only the first key it names | KILLED | `a_failed_peer_read_closes_1011`, `a_key_deleted_by_cleanup_is_unreachable_when_it_returns`, `a_pair_routes_after_refresh`, `handler_messages_wait_for_their_refresh`, `on_leave_is_told_whether_its_connection_was_current` |
+| W2 | writers' rule 2: a failed call's Refresh doesn't name the sender | KILLED | `a_failed_handler_call_still_refreshes_the_sender` |
+| W3 | writers' rule 3: a failed call closes 1011 with no Refresh | KILLED | `a_failed_handler_call_still_refreshes_the_sender` |
+| W3L | writers' rule 3, leave half: a failed replaced on_leave doesn't re-read the current connection | KILLED | `a_failed_replaced_leave_still_refreshes_the_current_connection` |
+| W4 | writers' rule 4: on_login's messages are queued after the welcome | KILLED | `on_login_messages_come_before_welcome_and_on_leave_runs_once` |
+| RF | Refresh failure rule: a failed read keeps the old sets and closes nobody | KILLED | `a_closing_entry_routes_nothing`, `a_failed_peer_read_closes_1011` |
+| OUT | handler messages delivered before the Refresh step, not inside it | KILLED | `handler_messages_wait_for_their_refresh` |
+| WAIT | the writer doesn't wait for its Refresh | KILLED | `a_failed_handler_call_still_refreshes_the_sender`, `a_writer_waits_for_its_refresh` |
+| CUR | on_leave is always told current: true | KILLED | `a_failed_replaced_leave_still_refreshes_the_current_connection`, `a_late_leave_after_replacement_keeps_routing`, `on_leave_is_told_whether_its_connection_was_current` |
+| CU | on_leave not under catch_unwind | KILLED | `a_failed_replaced_leave_still_refreshes_the_current_connection` |
+| R1 | routing: the sender's entry need not be current for its connection | KILLED | `a_replaced_connection_routes_nothing` |
+| R2 | routing: a closing entry (set None) counts as naming every key | KILLED | `a_closing_entry_routes_nothing` |
+| R3 | routing: the sender's set need not name the recipient | KILLED | `a_change_made_during_a_held_read_wins`, `a_closing_entry_routes_nothing`, `a_failed_replaced_leave_still_refreshes_the_current_connection`, `a_pair_routes_after_refresh`, `routing_needs_both_sets_to_name_the_pair` |
+| R4 | routing: the recipient's set need not name the sender | KILLED | `a_key_deleted_by_cleanup_is_unreachable_when_it_returns`, `a_pair_routes_after_refresh`, `routing_needs_both_sets_to_name_the_pair` |
+| R5 | routing: the envelope's peer is not rewritten to the sender | KILLED | `a_change_made_during_a_held_read_wins`, `a_frame_over_64_kib_is_closed_1009`, `a_full_queue_drops_frames_not_the_device`, `a_key_deleted_by_cleanup_is_unreachable_when_it_returns`, `a_late_leave_after_replacement_keeps_routing`, `a_login_after_login_is_ignored_and_counted`, `a_pair_routes_after_refresh`, `frames_are_limited_per_device`, `handler_messages_wait_for_their_refresh`, `on_leave_is_told_whether_its_connection_was_current`, `rehandshake_counts_against_the_control_limit`, `routing_needs_both_sets_to_name_the_pair`, `routing_reaches_only_paired_online_peers`, `routing_survives_a_held_store_lock`, `unreadable_messages_are_counted_and_unanswered` |
+| R6 | routing: a rehandshake skips the two-sided check (any online key) | KILLED | `routing_needs_both_sets_to_name_the_pair`, `routing_reaches_only_paired_online_peers` |
+| R7 | routing: a rehandshake's peer is not rewritten to the sender | KILLED | `routing_reaches_only_paired_online_peers`, `routing_survives_a_held_store_lock` |
+| D | 7a mutant D: the hand_over() inside the cleanup batch loop removed | KILLED | `store::tests::a_call_queued_during_a_later_batch_gets_in_before_the_next_batch` |
+| E2 | StoreHandle::call drops its count before its store reference | KILLED | `tests::a_store_call_drops_the_store_before_its_count` |
+| X4409 | replacement closes the old connection with no 4409 | KILLED | `a_failed_replaced_leave_still_refreshes_the_current_connection`, `a_late_leave_after_replacement_keeps_routing`, `a_new_login_replaces_the_old_connection`, `a_replaced_connection_routes_nothing`, `on_leave_is_told_whether_its_connection_was_current` |
+
+Mutant D was also run 5 times on its own against the final test, and was killed 5 times out of 5. The first version of that test (a real thread queued on the mutex) let D survive, which is why the test changed (deviation 1).
+
+**Manual checks:**
+- The slice: `git diff --stat 0b8e9fd` (the branch point) lists only `relay/`, `.ade/context/` and this initiative's `_bmad-output` files. `origin/main` has since moved to 4051950 (#66, release 0.21.0), so `git diff --stat origin/main` also lists that commit's `docs/index.html` and `src-tauri/tauri.conf.json`, reversed; this branch doesn't touch them.
+- `cargo tree -p relay-core -e normal` shows no `rusqlite`, `tokio` or `axum`.
+- `relay/protocol/src/` has one envelope parser (`routed.rs`'s `Routed::parse`); the server calls only it.
+- `grep -n "generation\|installed_gen" relay/server/src` finds nothing.
+- `cargo fmt --check` in `relay/` is clean.
+- No crate or package was added or upgraded: `Cargo.lock` gains only the two `relay-e2e` dependency edges (`base64`, `serde_json`), already locked.
 
 ## Verification
 

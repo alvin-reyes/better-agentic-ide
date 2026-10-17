@@ -7,6 +7,8 @@ login, control-message and relay entries. Story 3 added the labels, signatures, 
 6-digit code, names and the QR code, each in Rust (`relay_protocol`) and TypeScript
 (`@ade/protocol`), pinned to the shared vectors in `packages/protocol/vectors/`. Story 4
 added the Noise IK sessions, the binary envelope and the session machines (see Sessions).
+Story 7b added the limits, routing, `rehandshake`, replacement's 4409 and the
+`ControlHandler` seam (see Limits and routing).
 
 ## `enc`
 
@@ -324,7 +326,8 @@ phone's counter).
   `core::session::the_mac_asks_for_a_handshake_when_it_has_no_session`).
 - **`Rehandshake(phone)` is only an action here.** Its wire form,
   `{"v":1,"t":"rehandshake","peer":<32 bytes>}`, its `Control` variant and its routing are
-  story 7b's **(owner decision)**; `Control` is unchanged by story 4.
+  story 7b's **(owner decision)**; `Control` is unchanged by story 4. Story 7b added them:
+  see Limits and routing.
 
 **The restart rules (owner decisions)** (`core::session::schedule_json_scripts`; "schedule.json >
 every script"):
@@ -391,8 +394,12 @@ as `DecodeError::UnknownType`, apart from a malformed message. The one exception
 login: the relay refuses anything but a `login` (4401). After login the relay ignores every
 text frame it doesn't act on, a second `login` included.
 
-**Size:** the relay accepts at most 64 KiB per WebSocket message and frame, before login
-too.
+**Size:** the relay accepts at most 64 KiB (65,536 bytes) per WebSocket message, of either
+kind, the 33-byte envelope header included, before login too. Story 7b: a larger message
+(up to the WebSocket layer's own 128 KiB) is closed with **1009** `message_too_big`, with
+no `rate_limited` (`a_frame_over_64_kib_is_closed_1009`,
+`a_first_frame_over_64_kib_gets_no_welcome`). Above 128 KiB the socket layer refuses it and
+the connection is dropped.
 
 | `t` | Direction | Fields |
 |---|---|---|
@@ -400,6 +407,9 @@ too.
 | `login` | device → relay | `id`: 32-byte Ed25519 identity key; `role`: `"mac"` or `"phone"`; `sig`: 64 bytes |
 | `welcome` | relay → device | `pairs`: `[{pair_id: 16 bytes, peer_id: 32 bytes, peer_role}]`; `online`: `[peer_id]` (paired peers online now) |
 | `presence` | relay → device | `peer`: 32 bytes; `online`: bool |
+| `rate_limited` | relay → device | `peer`: 32 bytes (the refused frame's recipient); `retry_ms`: u64 (story 7b) |
+| `control_limited` | relay → device | `msg`: the refused message's `t`; `slot` (16 bytes), `pair_id` (16 bytes), `peer` (32 bytes), each only when the refused message carried a well-formed one, and left out of the JSON otherwise; `retry_ms`: u64 (story 7b; `peer` is the owner's 2026-10-16 amendment, ADR 0005) |
+| `rehandshake` | Mac → relay → phone | `peer`: 32 bytes, the recipient when sent and the sender when delivered (story 7b; the owner's 2026-10-16 amendment of the spec's `rehandshake {}`, ADR 0005) |
 
 ## Login
 
@@ -441,17 +451,24 @@ and logs `login_store_error code=<code>`.
   pong, counted from login or the last pong (not rounded up to a ping tick). The relay sends WebSocket ping frames (not JSON) every 15 s. Both times are
   `relay_server::Config` fields, so tests shorten them.
 - One live connection per device: a new login replaces the old, whose peers see `offline`
-  then `online`; the old socket is dropped (no close code yet, story 7) and its later close
-  is ignored.
+  then `online`. The old connection is closed with **4409** `replaced` (story 7b; a full
+  queue loses the close, and the old socket is dropped), and its later leave sends no
+  presence (`a_new_login_replaces_the_old_connection`,
+  `a_late_leave_after_replacement_keeps_routing`).
 - A leave fans out to the device's peers as the pair directory lists them at that moment.
-  After the connection ends, off the async workers, a leave reads `peers_of`, fans the
-  offline out at once, and only then writes the device's `last_seen` (`touch`), so
-  presence never waits on a write. If `peers_of` fails, presence and the sender are still
+  After the connection ends, the peer task's `Leave` step (story 7b, ADR 0006) runs
+  `on_leave` and reads `peers_of` in one store call, fans the offline out at once, and only
+  then writes the device's `last_seen` (`touch`), so presence never waits on a write. If `peers_of` fails, presence and the sender are still
   cleared, but nobody is told (story 7a). **Decision (owner, 2026-10-16):** only a failed
   `peers_of` suppresses presence; if the `touch` fails, the peers are still told the
   device is offline. Either failure is logged as `leave_store_error code=<code>`.
-- Each device has a queue of 64 messages. A device whose queue is full, or whose socket
-  send doesn't finish before its pong deadline, is dropped and counts as left.
+- Each device has a queue of `Config.queue` messages (**192** by default, story 7b). On a
+  full queue a **binary** item (a routed frame) is dropped and counted in
+  `relay_frames_dropped_total`, and the device stays; a **text** item (a control message,
+  presence, `rehandshake`) drops the device, which counts as left; a **close** item is
+  lost, and the device's sender is removed anyway
+  (`a_full_queue_drops_frames_not_the_device`). A device whose socket send doesn't finish
+  before its pong deadline is dropped and counts as left.
 - `welcome` is sent before any presence on the same connection.
 
 ## Pair directory
@@ -474,8 +491,12 @@ relay's storage, and `relay_server::SqliteStore` implements it (story 7a, see
   `relay_[a-z_]+({[a-z_]+="[a-z_]+"})? [0-9]+`. Gauges: `relay_online`, `relay_devices`,
   `relay_pairs`, `relay_pairs_acked`, `relay_push_tokens`. Counters:
   `relay_logins_total{result="ok"|"refused"}` (refused = every 4401 close, a timeout
-  included; a 1011 close counts as neither), `relay_cleanup_deleted_devices_total`.
-  Story 7b adds its own.
+  included; a 1011 or 4429 close counts as neither), `relay_cleanup_deleted_devices_total`.
+  Story 7b's: `relay_rate_limited_total`, `relay_control_limited_total`,
+  `relay_new_keys_refused_total`, `relay_replaced_total`, `relay_frames_routed_total`,
+  `relay_frames_dropped_total` (unpaired, offline, or a full queue),
+  `relay_rehandshakes_routed_total`, `relay_rehandshakes_dropped_total`,
+  `relay_unreadable_total`, `relay_ignored_total` (later `login`s).
 - **Logs** go through `relay_server::LogSink` as a typed `LogEvent`, whose fields are only
   `&'static str` codes and counts. Each line matches `^relay: [a-z_]+( [a-z_]+=[0-9a-z_]+)*$`.
   The binary's start-up lines (hosts, listen address, settings errors) are the only other
@@ -484,10 +505,15 @@ relay's storage, and `relay_server::SqliteStore` implements it (story 7a, see
   name or a bracketed IPv6 literal (no scheme, port, path or user). `RELAY_LISTEN`
   defaults to `0.0.0.0:8080`. **`RELAY_DB` is required** (the SQLite file's path).
   **`RELAY_METRICS_TOKEN`** is optional; when set it must be at least 32 characters.
+  **`RELAY_CLIENT_IP`** (story 7b) is `socket` (the default: the socket's peer address) or
+  `fly-client-ip` (trust Fly's `Fly-Client-IP` header, falling back to the socket address
+  when it is missing or isn't an IP); any other value exits 2. It is the IP the new-key
+  limit counts.
   A missing, malformed or non-Unicode value exits 2; the effective host list is printed
   at start. A database that won't open (or has a newer schema), a relay that can't
   listen, or a server that stops, exits 1. `serve()` refuses ping settings unless
-  `0 < ping_interval < ping_timeout`, and a zero `cleanup_interval`.
+  `0 < ping_interval < ping_timeout`, a zero `cleanup_interval`, a zero `queue` and any zero
+  limit (story 7b).
 - `serve(Config) -> io::Result<relay_server::Relay>`. `Relay` has `addr`,
   `run_cleanup().await -> CleanupCounts`, `shutdown().await` (stop accepting, close every
   connection, wait for every leave, any running cleanup and every store call still
@@ -500,3 +526,128 @@ relay's storage, and `relay_server::SqliteStore` implements it (story 7a, see
   on unix an existing file that group or others can access is refused). The client skips
   unknown types, reports a close that came instead of the challenge as `Closed{code,
   reason}`, and waits at most 5 s when closing. `ws://` only for now: the client has no TLS.
+
+## Limits and routing
+
+Story 7b (`_bmad-output/initiative-phone-remote/epic-phone-watch/story-relay-limits-routing-and-replacement-plan.md`).
+Spec: "Limits", "Wire format", "Login and presence". The peer sets and the writers' rule
+are **ADR 0006** (`.ade/context/decisions/0006-one-task-owns-the-relays-peer-sets.md`); the
+`rehandshake {peer}` shape and `control_limited`'s `peer` are **ADR 0005**. Tests are in
+`relay/e2e/tests/limits_and_routing.rs` unless named otherwise.
+
+**The limits** (`relay_core::Limits`, the server's `Config.limits`: every one a field, the
+spec's values by default). All live in memory, keyed by identity key or IP, and each is
+checked before any store call. There is no limit before login
+(`there_is_no_limit_before_login`); the `login` that authenticates a connection spends
+nothing.
+
+| What | Limit | Refusal |
+|---|---|---|
+| Frames (every binary message, even an unreadable one) | 20 a second per device, bursts to 100 (token bucket) | a readable one: `rate_limited {peer, retry_ms}` (`frames_are_limited_per_device`); an unreadable one: no answer |
+| Control messages after login (`rehandshake` and a later `login` included) | 10 a second per device, bursts to 30 (token bucket) | dropped unprocessed, answered `control_limited {msg, slot?, pair_id?, peer?, retry_ms}`; an unreadable head: no answer (`a_pair_status_flood_is_control_limited_before_any_lookup`, `forty_queued_unpairs_at_ten_per_second_all_reach_the_relay`) |
+| Slots | 30 opened per hour per Mac (sliding window), counted only when allowed | `relay_core::SlotLimiter::try_open(mac, now) -> Result<(), retry_ms>`; story 5a calls it and answers `control_limited {msg: "slot_open", retry_ms}` (`core::limits::thirty_slots_fit_in_an_hour_and_the_31st_is_refused`) |
+| New identity keys | 20 per hour per IP (sliding window); the token is spent before `register`, even if `register` then fails | closed **4429** `too_many_new_keys` (amends story 2's 4401 for this case only) (`new_keys_are_limited_per_ip`, `a_new_key_token_is_spent_when_register_fails`) |
+| Connections | 1 per device | the older is closed **4409** `replaced` |
+
+- **Numbers.** Buckets count integer millitokens (1 token = 1000) and refill against the
+  latest time they have seen, so a clock that steps back refills nothing until it passes
+  that time again. `retry_ms` is rounded up and measured on the relay's clock: a frame
+  token is 50 ms away, a control token 100 ms. A window allows a take at exactly the oldest
+  entry plus the hour.
+- **Limits survive a reconnect** (`limits_survive_a_reconnect`). The cleanup tick prunes
+  every limiter entry that is back to full; a part-used one stays.
+- **IPs** count alone, IPv6 included (no /64 grouping); an IPv4-mapped IPv6 address counts
+  as its IPv4 address (`relay_core::ip_key`). Where the IP comes from is `RELAY_CLIENT_IP`
+  (`the_client_ip_comes_from_the_configured_source`).
+- **Re-sending.** A device re-sends a control message named in a `control_limited` after
+  `retry_ms`, except `push` and `rehandshake`. **A `rehandshake` answered `control_limited`
+  is not re-sent**: the Mac's session machine asks again at its next trigger (owner,
+  2026-10-16; ADR 0005) (`rehandshake_counts_against_the_control_limit`). The relay doesn't
+  depend on this.
+- The API: `TokenBucket`, `HourWindow` (both `Limiter`: `take(now) -> Result<(), retry_ms>`,
+  `is_full(now)`), `KeyedLimits<K, L>` (`take`, `prune`), and `FrameLimiter`,
+  `ControlLimiter`, `SlotLimiter`, `NewKeyLimiter` over them, all in `relay_core::limits`.
+
+**`ControlHead`** (`relay_protocol::ControlHead::read(text) -> Option<ControlHead {t, slot,
+pair_id, peer}>`): what the relay reads before acting. `None` (unreadable) unless the text
+is a JSON object with `v: 1` and a string `t`. `slot`, `pair_id` and `peer` are read at best
+effort: a missing or malformed one is `None`.
+
+**A text message after login**, in this order: take a control token; read the head
+(unreadable: counted in `relay_unreadable_total`, no answer); refused: `control_limited`;
+then a later `login` is ignored, unanswered, counted in `relay_ignored_total`
+(`a_login_after_login_is_ignored_and_counted`); a `rehandshake` is routed (below), and one
+with a missing or malformed `peer` is unreadable; anything else goes to the
+`ControlHandler`.
+
+**A binary message after login:** take a frame token; `Routed::parse` (unreadable:
+counted, no answer, the token still spent: `unreadable_messages_are_counted_and_unanswered`);
+refused: `rate_limited`; else route it with the peer rewritten to the sender
+(`Routed::with_peer`). `relay_protocol::Routed` (story 4's `routed.rs`) is the only envelope
+parser.
+
+**Routing** (ADR 0006). `hs1`, `hs2`, frames and `rehandshake` go from A to B only when,
+under `Live`'s lock (no await, no store call): A's entry is current for A's connection; both
+entries have a set (a set is `None` while its entry is closing after a failed read); A's set
+names B; B's set names A; and B has a sender. Any stored pair counts, acked or not. Anything
+else is dropped silently and counted (`routing_reaches_only_paired_online_peers`,
+`routing_needs_both_sets_to_name_the_pair`, `a_replaced_connection_routes_nothing`,
+`a_closing_entry_routes_nothing`). A routed `rehandshake` spends only its control token,
+not a frame token. Routing never waits on the peer task or the store
+(`routing_survives_a_held_store_lock`).
+
+**The peer task** (`relay_server`'s `peers.rs`, ADR 0006) is the one task that writes each
+online device's peer set, presence and sender (`Live::deliver` on a full queue and
+`Leave::drop` only ever remove a sender). Requests come on one unbounded channel, one at a
+time, each with its store work inside its own step:
+- **`Join`**: read `peers_of`; on an error the connection closes 1011 and nothing is
+  installed; else in one lock step close any older connection with 4409, install the
+  sender, queue the `on_login` messages then `welcome`, join presence and fan it out, and
+  install the set (`on_login_messages_come_before_welcome_and_on_leave_runs_once`). The
+  connection's loop starts only after the reply.
+- **`Refresh {keys, out}`**: one store call reads every named key that has an entry; one
+  lock step installs every set, then delivers `out`, then replies. Any read error fails the
+  whole `Refresh`: each device in it is queued `Close(1011)`, its set becomes `None` and its
+  sender is removed, and `out` is delivered except to them
+  (`a_failed_peer_read_closes_1011`, `handler_messages_wait_for_their_refresh`).
+- **`Leave`**, for a connection the task joined only (a failed join's leave does nothing:
+  `a_failed_peer_read_closes_1011`): one store call runs `on_leave(current)` under
+  `catch_unwind`, then `peers_of`, each result kept apart; a second reads `on_leave`'s
+  `refresh` keys, plus the current connection's key when a replaced connection's
+  `on_leave` failed (writers' rule 3, leave half); one lock step fans presence out (skipped
+  only if `peers_of` failed), installs the sets, delivers `on_leave`'s `out` and removes the
+  entry if its connection is still current; last, a separate `touch`, whose failure is
+  only logged (`a_failed_replaced_leave_still_refreshes_the_current_connection`,
+  `shutdown_during_a_held_login_read_finishes`).
+- `shutdown` waits for every leave (each carries a tracker `Busy`), then stops the task. If
+  the task ends while the relay runs, `Relay::wait` returns an error and a request sent to
+  it closes its connection with 1011. `Relay::peer_requests_received()` and
+  `Config::writer_gate` are test-only.
+
+**`ControlHandler`** (`relay_core::control`): story 5a's seam. Every method is synchronous,
+called inside one `StoreHandle::call` with the relay's store, outside the `Live` lock.
+`on_login(store, who) -> Vec<Control>` (queued before `welcome`); `control(store, who,
+head, text, now) -> Result<ControlOutcome {out, refresh}, StoreError>`; `on_leave(store,
+who, current) -> Result<ControlOutcome, StoreError>`, once for every connection the task
+joined, a replaced one included (`current: false`). The `current` flag exists so that 5a
+can end a Mac's pairing slot only on a current connection's leave; that rule is 5a's
+(`deferred-work.md`) (`on_leave_is_told_whether_its_connection_was_current`). The default,
+`IgnoreControl`, ignores everything. After a `control` call: an empty `refresh` delivers
+`out` at once; a non-empty one sends `Refresh {refresh, out}` and waits for it before
+reading the next message (`a_writer_waits_for_its_refresh`); an `Err` (a panic is
+`Failed("store_task")`) sends `Refresh [sender]`, waits, then closes 1011
+(`a_failed_handler_call_still_refreshes_the_sender`). The call and its `Refresh` run in
+the loop body, so only the relay stopping can cancel them.
+
+**The writers' rule** (ADR 0006), for every handler: a call that adds or removes a pair
+returns both its keys in `refresh` (`a_pair_routes_after_refresh`); it writes only pairs
+that include the sender's key; a failed call is recovered by re-reading the sender;
+`on_login` writes no pairs; `on_leave` returns its own `refresh`. A change committed while a
+peer-task read is held is installed after that read, never under it
+(`a_change_made_during_a_held_read_wins`). Cleanup sends no `Refresh` and strips nothing: a
+returning deleted key's own set refuses the route
+(`a_key_deleted_by_cleanup_is_unreachable_when_it_returns`).
+
+**Close codes:** 4401 `login_refused`, 4409 `replaced`, 4429 `too_many_new_keys`, 1009
+`message_too_big`, 1011 `internal_error` (a store error at login, a failed refresh read, a
+failed handler call).

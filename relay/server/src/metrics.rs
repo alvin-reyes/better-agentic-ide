@@ -6,12 +6,88 @@ use relay_core::StoreCounts;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
-/// The relay's counters. 7b adds its own.
+/// The relay's counters.
 #[derive(Debug, Default)]
 pub struct Counters {
     pub logins_ok: AtomicU64,
     pub logins_refused: AtomicU64,
     pub cleanup_deleted_devices: AtomicU64,
+    /// Story 7b: frames answered `rate_limited`.
+    pub rate_limited: AtomicU64,
+    /// Control messages answered `control_limited`.
+    pub control_limited: AtomicU64,
+    /// New keys closed with 4429.
+    pub new_keys_refused: AtomicU64,
+    /// Connections closed with 4409 by a newer login.
+    pub replaced: AtomicU64,
+    /// Frames delivered to a peer's queue.
+    pub frames_routed: AtomicU64,
+    /// Frames to an unpaired or offline key, or to a full queue.
+    pub frames_dropped: AtomicU64,
+    /// `rehandshake` messages delivered to a peer's queue.
+    pub rehandshakes_routed: AtomicU64,
+    /// `rehandshake` messages to an unpaired or offline key, or to a full queue.
+    pub rehandshakes_dropped: AtomicU64,
+    /// Text or binary messages the relay couldn't read, dropped unanswered.
+    pub unreadable: AtomicU64,
+    /// Later `login` messages on a logged-in connection.
+    pub ignored: AtomicU64,
+}
+
+/// Story 7b's counters, by name, in the order `/metrics` lists them.
+fn story_7b_counters(c: &Counters) -> [(&'static str, &'static str, &AtomicU64); 10] {
+    [
+        (
+            "relay_rate_limited_total",
+            "Frames answered rate_limited.",
+            &c.rate_limited,
+        ),
+        (
+            "relay_control_limited_total",
+            "Control messages answered control_limited.",
+            &c.control_limited,
+        ),
+        (
+            "relay_new_keys_refused_total",
+            "New keys refused by the per-IP limit.",
+            &c.new_keys_refused,
+        ),
+        (
+            "relay_replaced_total",
+            "Connections replaced by a newer login.",
+            &c.replaced,
+        ),
+        (
+            "relay_frames_routed_total",
+            "Frames routed to a peer.",
+            &c.frames_routed,
+        ),
+        (
+            "relay_frames_dropped_total",
+            "Frames dropped.",
+            &c.frames_dropped,
+        ),
+        (
+            "relay_rehandshakes_routed_total",
+            "Rehandshakes routed to a peer.",
+            &c.rehandshakes_routed,
+        ),
+        (
+            "relay_rehandshakes_dropped_total",
+            "Rehandshakes dropped.",
+            &c.rehandshakes_dropped,
+        ),
+        (
+            "relay_unreadable_total",
+            "Messages that could not be read.",
+            &c.unreadable,
+        ),
+        (
+            "relay_ignored_total",
+            "Later logins on a logged-in connection.",
+            &c.ignored,
+        ),
+    ]
 }
 
 impl Counters {
@@ -62,6 +138,12 @@ pub fn render(counters: &Counters, online: usize, store: &StoreCounts) -> String
          relay_cleanup_deleted_devices_total {}\n",
         read(&counters.cleanup_deleted_devices),
     ));
+    for (name, help, counter) in story_7b_counters(counters) {
+        out.push_str(&format!(
+            "# HELP {name} {help}\n# TYPE {name} counter\n{name} {}\n",
+            read(counter)
+        ));
+    }
     out
 }
 
@@ -148,6 +230,9 @@ mod tests {
         Counters::add(&c.logins_ok, 2);
         Counters::bump(&c.logins_refused);
         Counters::add(&c.cleanup_deleted_devices, 7);
+        for (n, (_, _, counter)) in story_7b_counters(&c).into_iter().enumerate() {
+            Counters::add(counter, 10 + n as u64);
+        }
         let text = render(
             &c,
             3,
@@ -173,8 +258,19 @@ mod tests {
                 "relay_logins_total{result=\"ok\"} 2",
                 "relay_logins_total{result=\"refused\"} 1",
                 "relay_cleanup_deleted_devices_total 7",
+                "relay_rate_limited_total 10",
+                "relay_control_limited_total 11",
+                "relay_new_keys_refused_total 12",
+                "relay_replaced_total 13",
+                "relay_frames_routed_total 14",
+                "relay_frames_dropped_total 15",
+                "relay_rehandshakes_routed_total 16",
+                "relay_rehandshakes_dropped_total 17",
+                "relay_unreadable_total 18",
+                "relay_ignored_total 19",
             ]
         );
+        assert!(text.contains("# TYPE relay_frames_routed_total counter"));
         assert!(text.contains("# TYPE relay_online gauge"));
         assert!(text.contains("# TYPE relay_logins_total counter"));
         assert!(text.ends_with('\n'));
