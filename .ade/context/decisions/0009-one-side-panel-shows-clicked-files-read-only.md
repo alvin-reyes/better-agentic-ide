@@ -1,6 +1,6 @@
 # 0009: One side panel shows clicked files, read-only
 
-- Status: Proposed (architect, 2026-10-17), with the plan `_bmad-output/plan-code-viewer-panel.md`. Becomes Accepted when the owner approves the plan.
+- Status: Accepted (owner, 2026-10-17), with the plan `_bmad-output/plan-code-viewer-panel.md`.
 - Context: The owner wants a code viewer in "a side panel by the terminal" that shows the file you click instead of opening a new tab. ADE already has one docked panel there, the Preview panel (⌘⇧B), which holds a per-tab file (`Tab.previewPath`), watches it and resizes by its left edge, but renders only Markdown, HTML, PDFs and images: any other file shows as a plain `<pre>`, and terminal clicks on code go to a tab (`opensInPreview`). The file tab (`EditorTab`) picks a viewer with `viewerKind()` and edits text in `MonacoWrapper`. `@monaco-editor/react` 4.7.0 applies a changed `value` prop itself, resetting the cursor and scroll of a read-only editor. The panel's current watch (`watch_directory`) is a sync, recursive command that compares event paths with the spelling the terminal gave, which the OS often reports differently.
 - Decision:
   - **One side panel.** The Preview panel becomes the viewer for every file kind, choosing its view with the shared `viewerKind()`. Source files render in the existing `MonacoWrapper`, loaded lazily, not a second editor. No second panel and no new shortcut.

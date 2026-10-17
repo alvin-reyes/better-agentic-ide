@@ -3,7 +3,7 @@ title: 'Code viewer in the side panel beside the terminal'
 type: 'feature'
 ticket: ''
 created: '2026-10-17'
-status: 'draft'
+status: 'ready-for-dev'
 baseline_revision: '40519509023668a50b459b85e8b46a29552d7660'
 route: 'full'
 route_source: 'auto'
@@ -147,12 +147,13 @@ flowchart LR
 - **Focus on ⌘⇧B** (Story 2): `App` holds `previewFocusRequest`, a counter incremented **only** when ⌘⇧B (or the palette's toggle) opens the panel, and passes it to `PreviewPanel` as `focusRequest`. The panel remembers the last request it served; a new one is served once, after the lazy `PreviewPanel` and `CodeView` chunks load and Monaco mounts: as `focusOnMount` to `CodeView` for a code file, else by focusing its body region. Closing with focus inside goes through a helper `closePreviewFocus(panelEl)` in `src/lib/previewFocus.ts`, which focuses `.xterm-helper-textarea` when `document.activeElement` is inside `panelEl`.
 - **`PreviewPanel.tsx`**:
   - Story 2 keeps today's `watch_directory` effect as it is, so live Markdown, HTML, PDF and image previews keep working until Story 3 replaces it; code files get no live updates until then. Story 2 dispatches on `viewerKind(filePath)`. `pdf`/`docx`/`image` → `BinaryView` (replacing the panel's own image and PDF code; adds Word). `markdown` → `MarkdownView` via `read_file`, as today. `html` → the existing sandboxed iframe via `read_file`, as today. `text` → `read_text_head(path, 2097152)` then lazy `CodeView`. Each load carries a request id; a result is applied only if it is the latest request **and** for the current `filePath`. On a `filePath` change the old head is cleared (so the old editor unmounts) and any pending reload timer is cleared. The panel root gets `role="complementary"` and `aria-label="Preview"`, and `tabIndex={-1}` on its body region. *Open in tab* rules as in User flows. The mode badge says `CODE`; the empty state and placeholder list code.
-  - Story 3: live follow uses `watch_file` (the old `watch_directory` call goes). Watch health is **per-path state**, `watch: { path, status: "live" | "failed" | "off", reason? }`, separate from the user's `autoRefresh` toggle; the LIVE badge shows only when the toggle is on and `watch.status` is `"live"` for the current path, otherwise "Not live: <reason>". Rules:
+  - Story 3: live follow uses `watch_file` (the old `watch_directory` call goes). Watch health is **per-path state**, `watch: { path, status: "live" | "failed" | "off", reason? }`, separate from the user's `autoRefresh` toggle; the LIVE badge shows when the toggle is on and `watch.status` is `"live"`, `"stale"` or `"arming"` for the current path (brief re-arm cycles do not flicker); "Not live: <reason>" shows only for `"failed"`, and for `"off"` while the file is missing. Rules:
     - Any event → re-read after 150 ms quiet, max wait 1 s.
     - Any `removed` event → `status: "stale"` (Rust also reports events on the watched folder itself as `removed`). The watch may already be dead, so it must be replaced even if the file is back before the re-read. No separate Rust event kind is needed: re-arming after a plain file deletion is cheap and harmless.
     - A not-found read → "Deleted on disk" over the last content; unwatch, `status: "off"`; start the re-check while the path is current and the toggle on.
     - A successful read clears the banner and stops the re-check; if `status` is anything but `"live"` (`stale`, `off`, `failed`), it re-arms: unwatch the old id, then `watch_file`.
     - Watch error (the `invoke` rejects, or an `error` event) → `status: "failed"` with the reason, and the re-check, so a later good read retries the watch.
+    - **Re-read after every successful arm**, the first one included: a write that lands between the read and the watch registering would otherwise never be seen. The re-read goes through the normal path (request id, current-path check).
     - **Re-check backoff:** reads at 2 s, then doubling to 30 s. The interval doubles on every failed read **and every failed re-arm** (e.g. inotify `ENOSPC`), and goes back to 2 s only when an arm succeeds, so a watch that keeps failing costs one read every 30 s, not a 2 MiB read every 2 s.
     - **One arm at a time:** `status: "arming"` while a `watch_file` call is in flight, with an arm generation counter. A re-arm requested meanwhile only sets a `rearmAgain` flag, served once when the in-flight call settles. A `watch_file` result whose generation is not the current one, or that arrives after the path changed or the panel unmounted, is unwatched at once. So at most one watcher per panel is ever registered in `WatcherManager`.
     - A new path, or the panel unmounting, clears the re-read and re-check timers, unwatches, and bumps the generation; a new path then arms at once.
@@ -232,6 +233,8 @@ sequenceDiagram
 | Rename-writes, merged FSEvents flags | Any event re-reads; "deleted" is decided by the read, not by the event kind. |
 | Watched folder deleted, moved or re-created (the inotify watch dies) | Events on the folder itself are reported as the file's `removed`, which marks the watch stale; the next good read re-arms, whether the file came back within the debounce or after the re-check. Recovery never depends on the dead watch. |
 | macOS: the folder is moved away (`mv dist dist.old`) and nothing replaces it | FSEvents may report nothing for a non-recursive watch's own folder being renamed, so no "Deleted on disk" banner appears while the folder is gone and the panel shows the last content as live. When a file appears at the path again, its creation is reported, the re-read succeeds and the panel follows it. Accepted gap; Refresh shows the true state at any time. |
+| Re-arming before a rebuilt folder is fully repopulated (the file is back, siblings still being written) | Harmless: the watch is on the folder and matches only the file, so later writes to it are reported; the re-read after the arm (m1) picks up anything written in between. |
+| A write between the read and the watch registering | One re-read after every successful arm, including the first. |
 | Two re-arms racing, or a watch failing repeatedly | One arm in flight, generation-checked; late results unwatched. Backoff to 30 s across failed reads and failed arms. |
 | Path spelled differently from what the OS reports (`./`, `../`, `/tmp` vs `/private/tmp`, case on macOS, symlinks) | Rust canonicalises once and matches events itself. |
 | Watching a huge tree, inotify limits, main-thread stalls | One non-recursive watch of the file's folder, in an async command; both pinned by tests. |
@@ -397,6 +400,8 @@ Fake timers; `watch_file` mocked to capture the channel and return ids; `read_te
 7. Switching tab (another `previewPath`), or unmounting the panel (closing it), with a re-read or re-check timer pending: the timers are cleared, the watch is stopped with `unwatch_directory`, and no read for the old path happens afterwards (advance fake timers 60 s: zero `read_text_head` calls). -- › "a tab switch mid-reload", "closing the panel stops the re-check"
 8. A `watch_file` that resolves after the panel moved to another path (or unmounted): its id is passed to `unwatch_directory` at once, and its events are ignored. -- › "a late watch is unwatched"
 8b. Two re-arm triggers while the first `watch_file` is pending: only one `watch_file` call is in flight at a time; when it resolves, exactly one more arm runs (the `rearmAgain` flag); at the end every id returned except the last has been passed to `unwatch_directory`, so one watcher stays registered. -- › "re-arms never leak a watcher"
+8d. **Re-read after arming:** on opening a file, `watch_file` resolving triggers exactly one more `read_text_head` for the path (two in total for the open, with no events); likewise after each re-arm in 3-AC4b and 3-AC5. If the file changed between the first read and the arm, the newer text is shown. -- › "a write before the watch registers is not missed"
+8e. **Badge:** the badge reads LIVE (no "Not live") while `status` is `stale` or `arming` during a re-arm (`watch_file` held pending); it reads "Not live: <reason>" when `watch_file` rejects (`failed`), and when a read fails with not-found (`off`); after a successful re-arm it reads LIVE again. -- › "the badge does not flicker during a re-arm"
 8c. `watch_file` rejecting on every arm while reads succeed: re-check reads happen at 2, 4, 8, 16, 30, 30 s… (not every 2 s); a successful arm resets the interval. -- › "a watch that keeps failing backs off"
 9. A content reload does not re-apply an earlier reveal (no `setPosition` call after the reload). -- `MonacoWrapper.test.tsx` › "a reload does not jump back to the target line"
 10. `BinaryView`: changing only `reloadKey` keeps the current view rendered (no "Loading…") until the new bytes resolve; changing `path` shows "Loading…". -- `src/components/viewer/__tests__/BinaryView.test.tsx` › "a reload keeps the current view"
@@ -484,6 +489,8 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
 
 ## Open questions for the owner
 
+**Owner: approved as recommended, 2026-10-17.** All seven answers below are decided as recommended.
+
 1. **Grow the Preview panel, or add a second panel?** Recommended: **grow it**. It is already the docked panel beside the terminal with a per-tab file and live updates. A second right-hand panel would compete for width with Preview and the board, and give a clicked file two destinations. If you want a separate panel anyway, ⌘⇧E / Ctrl+Alt+Shift+E is free.
 2. **Should a plain click in the file browser open the panel instead of a tab?** Recommended: **yes**, with ⌘-click (Ctrl-click on Linux) for a tab. That is how your request reads ("instead of opening a new tab").
 3. **Read-only or editable in the panel?** Recommended: **read-only**. One place edits a file, so no second dirty buffer races the agent's writes; it is also what makes truncated and lossily decoded views safe.
@@ -517,3 +524,5 @@ Independent of Stories 1–5 (only `tabStore`); can be built in parallel.
   - One arm in flight with a generation counter and a `rearmAgain` flag; stale results unwatched, so no watcher leaks (3-AC8b).
   - Backoff kept across failed re-arms, reset only by a successful arm (3-AC8c).
   - macOS `mv` gap written into Failure modes: no banner while the folder is moved away, recovery when a file returns.
+- 2026-10-17, fourth review of 09212c2: PASS with three minors, folded in at approval: m1 one re-read after every successful arm, the first included (3-AC8d); m2 "Not live" only for `failed`, and `off` while missing, never during `stale`/`arming` (3-AC8e); m3 re-arming before a rebuilt folder is repopulated is harmless (Failure modes).
+- 2026-10-17: Owner approved the plan with all seven open questions as recommended; ADR 0009 accepted; status ready-for-dev.
