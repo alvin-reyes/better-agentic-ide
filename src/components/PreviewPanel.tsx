@@ -58,6 +58,11 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
   const activeTabId = useTabStore((s) => s.activeTabId);
   const filePath = useTabStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.previewPath ?? "");
   const setPreviewPath = useTabStore((s) => s.setPreviewPath);
+  // Where a path:line click asked to land; CodeView hands it to the editor of
+  // that file, which applies it once and clears it here.
+  const reveal = useTabStore((s) => s.tabs.find((t) => t.id === s.activeTabId)?.previewReveal ?? null);
+  const clearPreviewReveal = useTabStore((s) => s.clearPreviewReveal);
+  const revealApplied = useCallback((nonce: number) => clearPreviewReveal(activeTabId, nonce), [activeTabId, clearPreviewReveal]);
   const [inputPath, setInputPath] = useState("");
   const kind: ViewerKind | null = filePath ? viewerKind(filePath) : null;
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -463,6 +468,8 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
             <CodeView
               path={filePath}
               head={current.head}
+              reveal={reveal}
+              onRevealed={revealApplied}
               focusOnMount={wantsFocus}
               onFocused={focusServed}
               onOpenInTab={openInTab}

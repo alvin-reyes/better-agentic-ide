@@ -54,6 +54,15 @@ interface MonacoWrapperProps {
   ariaLabel?: string;
   /** Called each time `autoFocus` has focused the editor. */
   onFocused?: () => void;
+  /**
+   * A line to land on (a `path:line` click). Applied once per `nonce`, after
+   * mount and with the latest content in the model: the line is clamped to
+   * the model, the cursor put on it and the line scrolled to the center.
+   * Never takes focus.
+   */
+  reveal?: { line: number; col?: number; nonce: number };
+  /** Called with the nonce once a reveal has been applied. */
+  onRevealed?: (nonce: number) => void;
 }
 
 const BASE_OPTIONS = {
@@ -78,6 +87,11 @@ const READ_ONLY_OPTIONS = {
   renderValidationDecorations: "off" as const,
 };
 
+/** A whole number of at least 1; anything else (NaN, 0, -3) is 1. */
+function atLeastOne(n: number | undefined): number {
+  return n !== undefined && Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
 /** Replace the text without moving the reader: scroll, cursor, selection. */
 function setKeepingView(editor: monacoEditor.IStandaloneCodeEditor, content: string) {
   const vs = editor.saveViewState();
@@ -94,6 +108,8 @@ export default function MonacoWrapper({
   autoFocus = true,
   ariaLabel,
   onFocused,
+  reveal,
+  onRevealed,
 }: MonacoWrapperProps) {
   const editorRef = useRef<monacoEditor.IStandaloneCodeEditor | null>(null);
   const language = detectLanguage(filePath);
@@ -114,6 +130,31 @@ export default function MonacoWrapper({
   autoFocusRef.current = autoFocus;
   const onFocusedRef = useRef(onFocused);
   onFocusedRef.current = onFocused;
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  const onRevealedRef = useRef(onRevealed);
+  onRevealedRef.current = onRevealed;
+  // The nonce last applied: a reveal is applied once, never again on a reload.
+  const appliedNonce = useRef<number | null>(null);
+
+  // Called on mount and after the content effect, so the model already holds
+  // the latest content: a reload never undoes a reveal it raced, and the
+  // reveal is clamped to the text it lands in.
+  const applyReveal = useCallback(() => {
+    const editor = editorRef.current;
+    const r = revealRef.current;
+    if (!editor || !r || r.nonce === appliedNonce.current) return;
+    appliedNonce.current = r.nonce;
+    // @monaco-editor/react creates the editor in a display:none container, so
+    // on a fresh mount its layout is a few pixels tall and centering would
+    // put the line on the top row. Measure the real size first.
+    editor.layout();
+    const lineCount = editor.getModel()?.getLineCount() ?? 1;
+    const lineNumber = Math.min(atLeastOne(r.line), lineCount);
+    editor.setPosition({ lineNumber, column: atLeastOne(r.col) });
+    editor.revealLineInCenter(lineNumber);
+    onRevealedRef.current?.(r.nonce);
+  }, []);
 
   const handleMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
@@ -127,11 +168,12 @@ export default function MonacoWrapper({
         run: () => onSaveRef.current?.(),
       });
     }
+    applyReveal();
     if (autoFocusRef.current) {
       editor.focus();
       onFocusedRef.current?.();
     }
-  }, [readOnlyAtMount]);
+  }, [readOnlyAtMount, applyReveal]);
 
   // Off to on after mount: focus once. Before mount, onMount does it.
   const prevAutoFocus = useRef(autoFocus);
@@ -154,6 +196,12 @@ export default function MonacoWrapper({
       if (pos) editor.setPosition(pos);
     }
   }, [content, readOnlyAtMount]);
+
+  // After the content effect above, which has to run first.
+  const revealNonce = reveal?.nonce;
+  useEffect(() => {
+    applyReveal();
+  }, [revealNonce, applyReveal]);
 
   const contentProps = readOnlyAtMount ? { defaultValue: initialContent } : { value: content };
   const options = {
