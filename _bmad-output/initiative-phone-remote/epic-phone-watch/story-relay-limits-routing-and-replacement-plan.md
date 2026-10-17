@@ -3,7 +3,7 @@ title: 'Relay limits, routing and replacement'
 type: 'feature'
 ticket: '7b'
 created: '2026-10-16'
-status: 'ready-for-dev'
+status: 'done'
 baseline_revision: '0b8e9fd' # set when 7b started, from origin/main after 7a had merged
 route: 'full'
 route_source: 'auto'
@@ -613,3 +613,33 @@ After the fixes, all 24 mutants (the 20 above plus these 4) were run again again
 - `relay/protocol/src/` has one envelope parser.
 - `grep -n "generation\|installed_gen" relay/server/src` finds nothing (ADR 0006).
 - **Mutation record (owner decision).** The Implementation Notes list one mutant for each rule in the mutation-checks task, plus 7a's mutant D, each with the test that kills it. The code review checks that the list is complete and that every mutant was killed.
+
+**QA run, 2026-10-17, at d47a24e** (two commits on origin/main 4051950). The five lines were run in sequence from the worktree root. `node_modules` was a stub, so the main checkout's was symlinked for the run and removed afterwards.
+
+| Line | Result (real output tails) |
+|---|---|
+| `cd relay && cargo test` | exit 0, 266 tests `ok`, no `FAILED`, none ignored. Suites: relay-e2e `limits_and_routing` 32 passed, `storage` 11 passed, `e2e` 14 passed; relay-server unit 86 passed; relay-core 68 passed; relay-protocol 33 passed; relay-cli 9 passed. |
+| `npx tsc --noEmit` | exit 0, no output |
+| `npm test` | exit 0. `Test Files 147 passed (147)`, `Tests 1645 passed (1645)` |
+| `cd src-tauri && cargo test` | exit 0. `test result: ok. 456 passed; 0 failed; 1 ignored`, then 12 passed and 2 passed |
+| `cd mobile && npx tsc --noEmit && npx jest` | tsc exit 0. `Test Suites: 1 passed, 1 total`, `Tests: 6 passed, 6 total` |
+
+**Criteria to tests** (each named in the `cd relay && cargo test` output, `ok`):
+- AC1 Frames: `frames_are_limited_per_device`, `a_frame_over_64_kib_is_closed_1009`.
+- AC2 Control: `a_pair_status_flood_is_control_limited_before_any_lookup`.
+- AC3 Slots: `limits::tests::thirty_slots_fit_in_an_hour_and_the_31st_is_refused`.
+- AC4 New keys and replacement: `new_keys_are_limited_per_ip`, `the_client_ip_comes_from_the_configured_source`, `a_new_login_replaces_the_old_connection`.
+- AC5 Unpairs: `forty_queued_unpairs_at_ten_per_second_all_reach_the_relay`.
+- AC6 Routing: `routing_reaches_only_paired_online_peers`.
+- All 24 contract tests in the table (including `limits_survive_a_reconnect` through `a_login_after_login_is_ignored_and_counted`) appear `ok`. `routed_envelope_parses_and_round_trips` is not required, as 7b creates no `routed.rs`.
+- Review-fix and mutant-kill tests also `ok`: `a_message_over_128_kib_after_login_is_closed_1009`, `a_message_over_128_kib_before_login_is_closed_1009`, `store::tests::a_call_queued_during_a_later_batch_gets_in_before_the_next_batch`, `tests::a_store_call_drops_the_store_before_its_count`, `a_replaced_connection_routes_nothing`, `a_closing_entry_routes_nothing`.
+
+**Manual checks (all clean):**
+- `git diff --name-only origin/main` touches only `relay/`, `.ade/context/` and `_bmad-output/initiative-phone-remote/`.
+- `cargo tree -p relay-core -e normal | grep -E "rusqlite|tokio|axum"` prints nothing.
+- One envelope parser: `Routed::parse` in `relay/protocol/src/routed.rs` (story 4); `ControlHead::read` is a best-effort head reader for text control messages, not an envelope parser.
+- `grep -n "generation\|installed_gen" relay/server/src -r` prints nothing.
+- `cd relay && cargo fmt --check` exit 0.
+- Mutation record complete: W1, W2, W3, W3L, W4 (writers' rules 1 to 4 and the leave half), RF (Refresh failure), OUT (handler messages inside the Refresh step), WAIT (writer waits), CUR (`current`), CU (`catch_unwind`), R1 to R7 (routing), D, E2, X4409, plus review-fix O1, O3, S1, S2. Each is KILLED by a named test that is `ok` in the run above. QA did not re-apply the mutants; the review re-ran O1, O3, S1 and S2.
+
+**Verdict: PASS.** The wall-clock-sensitive tests (`a_writer_waits_for_its_refresh`, ping-timeout tests) passed in this single run, with no flakiness seen.
