@@ -1,4 +1,7 @@
 import { modelTagFor } from "./agentComposition";
+import { shellQuote } from "./shellQuote";
+
+export { shellQuote };
 
 export type Provider = "claude" | "codex" | "deepseek" | "ollama";
 
@@ -21,11 +24,6 @@ export interface LaunchOptions {
 export type LaunchResult =
   | { kind: "command"; command: string }
   | { kind: "unsupported"; reason: string };
-
-/** Single-quote for POSIX shells, escaping any embedded single quote. */
-export function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
 export const DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
 /**

@@ -1,5 +1,6 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import { bytesToHex } from "@noble/hashes/utils";
+import { shellQuote as quoteWord } from "./shellQuote";
 
 /**
  * Smart contract support: the actions each toolchain offers, and parsing of
@@ -42,9 +43,9 @@ export interface ContractAction {
   needs?: string;
 }
 
-/** Quote a word for a POSIX shell (single quotes, so nothing expands). */
+/** A plain word is left bare; anything else goes through the one quoter (ADR 0008). */
 export function shellQuote(s: string): string {
-  return /^[\w./-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
+  return /^[\w./-]+$/.test(s) ? s : quoteWord(s);
 }
 const q = shellQuote;
 

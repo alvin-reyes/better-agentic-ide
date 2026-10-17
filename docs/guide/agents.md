@@ -14,6 +14,7 @@ Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an a
 - **Roles**: the last pill filters the list down to the core roles on their own, with no domain. Product Manager, Product Owner and Scrum Master live only here, since no profile pairs with them.
 - **Describe a task** in the search box and the picker suggests the best match.
 - **Provider**: switch between Claude Code, Codex, DeepSeek and Ollama with <kbd>Tab</kbd>. Claude Code, DeepSeek and Ollama each accept a composed role; Codex is shown unavailable, because it has no verified way to take one and a guessed flag would fail silently at launch. Set the one the picker starts on in *Settings &rarr; AI API &rarr; Default agent provider*.
+- **Shells**: the command ADE types to launch an agent is quoted so it means the same in sh, bash, zsh and fish. In fish, DeepSeek needs fish 3.1 or later for its `VAR=value` prefix.
 - **Senior Go Engineer** writes idiomatic Go with table-driven tests and runs `go vet` and `go test -race`. **Senior Rust Engineer** models the domain with types, avoids stray `unwrap`s and runs `cargo fmt`, `cargo clippy` and `cargo test`. Both are also added to Go and Rust projects as sub-agents.
 - **Continuous mode** runs the agent without permission prompts (Claude Code's `--dangerously-skip-permissions`). ADE asks you to confirm first; use it only in projects you trust.
 

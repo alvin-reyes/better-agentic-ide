@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { checkDiff, fixPrompt, type SlopFinding } from "../lib/slopCheck";
+import { shellQuote } from "../lib/shellQuote";
 import { runInNewTab, sendToActiveTerminal } from "../lib/terminalCommands";
 
 interface Props {
@@ -11,6 +12,14 @@ interface Props {
 
 const PLUGIN_ID = "ade@ade";
 const errText = (e: unknown) => String((e as { message?: string })?.message ?? e);
+
+/** The command that installs (or updates) the plugin from the bundled marketplace folder. */
+export function pluginInstallCommand(marketplace: string, update: boolean): string {
+  // `;` so an already-added marketplace doesn't stop the install.
+  return update
+    ? `claude plugin marketplace update ade; claude plugin update ${PLUGIN_ID}`
+    : `claude plugin marketplace add ${shellQuote(marketplace)}; claude plugin install ${PLUGIN_ID} --scope user`;
+}
 
 /** The ADE Claude Code plugin, and the slop check on a project's changes. */
 export default function AntiSlopTab({ root, onNotice, onError }: Props) {
@@ -26,11 +35,7 @@ export default function AntiSlopTab({ root, onNotice, onError }: Props) {
   const installPlugin = async (update: boolean) => {
     try {
       const marketplace = await invoke<string>("ade_plugin_marketplace");
-      const q = `"${marketplace.replace(/"/g, '\\"')}"`;
-      // `;` so an already-added marketplace doesn't stop the install.
-      const cmd = update
-        ? `claude plugin marketplace update ade; claude plugin update ${PLUGIN_ID}`
-        : `claude plugin marketplace add ${q}; claude plugin install ${PLUGIN_ID} --scope user`;
+      const cmd = pluginInstallCommand(marketplace, update);
       if (!(await runInNewTab("ADE plugin", root ?? undefined, cmd))) {
         onError("The new terminal didn't start, so the plugin command wasn't run. Try again.");
         return;

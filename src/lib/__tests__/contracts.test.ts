@@ -1,4 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { runContractAction } from "../contractRunner";
+import { sendToActiveTerminal } from "../terminalCommands";
+import { tokenizeFish } from "./shellTokenize";
+
+vi.mock("../terminalCommands", () => ({
+  runInNewTab: vi.fn(async () => true),
+  sendToActiveTerminal: vi.fn(async () => true),
+}));
 import {
   actionsFor, toolsFor, shellQuote, parseAbi, signature, selector, groupAbi, formatParams, parseIdl, idlType,
   type ContractsProject,
@@ -105,5 +113,17 @@ describe("shellQuote", () => {
     expect(shellQuote("/tmp/my proj")).toBe("'/tmp/my proj'");
     expect(shellQuote("/tmp/$(rm -rf ~)")).toBe("'/tmp/$(rm -rf ~)'");
     expect(shellQuote("it's")).toBe("'it'\\''s'");
+  });
+});
+
+describe("fish", () => {
+  it("contract commands are fish-safe", async () => {
+    const root = "/Users/x/proj\\'; touch X; #";
+    const project: ContractsProject = { root, toolchains: [{ kind: "foundry", config: "foundry.toml" }], sources: [], scripts: [], artifacts: [] };
+    const build = actionsFor("foundry", project).find((a) => a.id === "build")!;
+    await runContractAction(project, build, "/somewhere/else");
+    const typed = vi.mocked(sendToActiveTerminal).mock.calls[0][0];
+    expect(tokenizeFish(typed)).toEqual(["cd", root, "&&", "forge", "build"]);
+    expect(tokenizeFish(shellQuote(root))).toEqual([root]);
   });
 });

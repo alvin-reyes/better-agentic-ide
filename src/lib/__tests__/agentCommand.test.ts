@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildLaunchCommand, supportsRoleDelivery, taskUnsupportedReason } from "../agentCommand";
+import { tokenizeFish } from "./shellTokenize";
 
 /**
  * An absolute path, because that is what the launch paths now pass. The old
@@ -279,5 +280,25 @@ describe("taskUnsupportedReason", () => {
     expect(taskUnsupportedReason("ollama")).toMatch(/Ollama/);
     expect(taskUnsupportedReason("codex")).toBe(reason("codex"));
     expect(taskUnsupportedReason("codex")).toMatch(/Codex/);
+  });
+});
+
+describe("fish", () => {
+  it("every provider's command is fish-safe", () => {
+    // A backslash before a quote ended the old quoter's string in fish (ADR 0008).
+    const rolePath = "/Users/x/.ade/roles/a\\'; touch X; #.md";
+    const task = "fix it\\'s bug; touch X";
+    for (const provider of ["claude", "deepseek"] as const) {
+      const r = buildLaunchCommand(provider, rolePath, { task });
+      if (r.kind !== "command") throw new Error(`${provider}: expected a command`);
+      // deepseek's env prefix holds a double-quoted "$DEEPSEEK_API_KEY", which the tokenizer does not model.
+      const claude = r.command.slice(r.command.indexOf("claude"));
+      expect(tokenizeFish(claude), provider).toEqual(["claude", "--append-system-prompt-file", rolePath, task]);
+    }
+    const ollama = buildLaunchCommand("ollama", rolePath);
+    if (ollama.kind !== "command") throw new Error("ollama: expected a command");
+    const words = tokenizeFish(ollama.command);
+    expect(words.slice(0, 2)).toEqual(["ollama", "create"]);
+    expect(words.slice(3, 6)).toEqual(["-f", rolePath, "&&"]);
   });
 });

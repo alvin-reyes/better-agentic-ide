@@ -6,8 +6,14 @@ import {
   constructorOf, callSignature, parseCallOutput, decodeRevert, decodeLogs, etherHint, normalizeValue,
   type Artifact, type CompileError, type TestResult, type TestSuite, type DecodedEvent, type ExecResult,
 } from "../lib/contractBench";
+import { shellQuote } from "../lib/shellQuote";
 import { runInNewTab } from "../lib/terminalCommands";
 import { useTabStore } from "../stores/tabStore";
+
+/** forge's trace run for one test. The names come from the project's sources, so they are quoted. */
+export function traceCommand(contract: string, test: string): string {
+  return `forge test --match-contract ${shellQuote(`^${contract}$`)} --match-test ${shellQuote(`^${test}\\(`)} -vvvv`;
+}
 
 interface Instance {
   id: string;
@@ -142,7 +148,7 @@ export default function ContractsWorkbench({ root }: { root: string }) {
   }, [root, suites]);
 
   const traces = (contract: string, test: string) => {
-    void runInNewTab(`trace ${test}`, root, `forge test --match-contract '^${contract}$' --match-test '^${test}\\(' -vvvv`);
+    void runInNewTab(`trace ${test}`, root, traceCommand(contract, test));
   };
 
   const summary = useMemo(() => {
