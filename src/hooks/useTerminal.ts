@@ -17,6 +17,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isAnsweringKey, reportAnsweringKey } from "../stores/agentStatusStore";
+import { decideBusy, type Fg } from "../lib/paneBusy";
 
 interface PtyEvent {
   type: "output" | "exit" | "error";
@@ -556,6 +557,7 @@ async function getPtyCwd(paneId: string): Promise<string | null> {
 }
 
 // "Claude" when the last 50 lines of a pane look like a running Claude session.
+// Only paneBusy's fallback uses it, for when the terminal cannot say what runs.
 function hasActiveProcess(paneId: string): string | null {
   const inst = instances.get(paneId);
   if (!inst) return null;
@@ -570,6 +572,24 @@ function hasActiveProcess(paneId: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * What is running in a pane, by name, or null when it is free for an agent.
+ * Any provider counts, not only Claude: see decideBusy.
+ */
+async function paneBusy(paneId: string): Promise<string | null> {
+  const { useAgentTrackerStore } = await import("../stores/agentTrackerStore");
+  return decideBusy({
+    sessions: useAgentTrackerStore.getState().sessions.filter((s) => s.paneId === paneId),
+    sample: async () => {
+      const ptyId = instances.get(paneId)?.ptyId ?? null;
+      if (ptyId === null) throw new Error("no terminal");
+      return invoke<Fg>("pty_foreground_job", { id: ptyId });
+    },
+    wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+    fallback: () => hasActiveProcess(paneId),
+  });
 }
 
 // Scrollback as escape sequences, for session persistence.
@@ -607,4 +627,4 @@ function focusActiveTerminal(): boolean {
   return true;
 }
 
-export { focusActiveTerminal, destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };
+export { focusActiveTerminal, destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, paneBusy, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };
