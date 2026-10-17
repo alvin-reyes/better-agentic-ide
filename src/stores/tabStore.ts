@@ -48,11 +48,30 @@ export interface Tab {
    * closing the panel discarded it.
    */
   previewPath?: string | null;
+  /**
+   * Where a `path:line` click asked the panel to land. Applied once, by the
+   * editor showing `path`, then cleared with `clearPreviewReveal`. Never saved.
+   */
+  previewReveal?: PreviewReveal | null;
   /** Accent chosen from the tab's context menu. */
   color?: string;
   root: PaneNode;
   activePaneId: string;
 }
+
+/**
+ * A line to reveal in the side panel. `nonce` is new for every open request,
+ * so clicking the same `path:line` twice reveals twice, and a reveal already
+ * applied is never applied again.
+ */
+export interface PreviewReveal {
+  path: string;
+  line: number;
+  col?: number;
+  nonce: number;
+}
+
+let revealNonce = 0;
 
 /** What reopening a closed terminal tab brings back. */
 export interface ClosedTab {
@@ -80,7 +99,13 @@ interface TabStore {
   setActiveTab: (id: string) => void;
   renameTab: (id: string, name: string) => void;
   setTabColor: (id: string, color: string | undefined) => void;
-  setPreviewPath: (id: string, path: string | null) => void;
+  /**
+   * Set the tab's panel file. With `at`, also ask the panel to land on that
+   * line (a fresh `previewReveal`); without it, any pending reveal is cleared.
+   */
+  setPreviewPath: (id: string, path: string | null, at?: { line: number; col?: number }) => void;
+  /** Clear the tab's reveal once applied, only if it is still the one with `nonce`. */
+  clearPreviewReveal: (id: string, nonce: number) => void;
   /** Reopen the most recently closed terminal tab in its folder. */
   reopenClosedTab: () => void;
   /** Stable-sort tabs so each project's tabs sit together. */
@@ -328,10 +353,21 @@ export const useTabStore = create<TabStore>((set, get) => {
         tabs: s.tabs.map((t) => (t.id === id ? { ...t, color } : t)),
       })),
 
-    setPreviewPath: (id, previewPath) =>
+    setPreviewPath: (id, previewPath, at) => {
+      const previewReveal: PreviewReveal | null = previewPath && at
+        ? { path: previewPath, line: at.line, ...(at.col !== undefined ? { col: at.col } : {}), nonce: ++revealNonce }
+        : null;
       set((s) => ({
-        tabs: s.tabs.map((t) => (t.id === id ? { ...t, previewPath } : t)),
-      })),
+        tabs: s.tabs.map((t) => (t.id === id ? { ...t, previewPath, previewReveal } : t)),
+      }));
+    },
+
+    clearPreviewReveal: (id, nonce) =>
+      set((s) => {
+        const match = (t: Tab) => t.id === id && t.previewReveal?.nonce === nonce;
+        if (!s.tabs.some(match)) return s;
+        return { tabs: s.tabs.map((t) => (match(t) ? { ...t, previewReveal: null } : t)) };
+      }),
 
     reopenClosedTab: () => {
       const closed = get().closedTabs;

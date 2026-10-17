@@ -1,5 +1,10 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { useTabStore } from "../tabStore";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+// saveSession reads each terminal pane's buffer and folder from here.
+vi.mock("../../hooks/useTerminal", () => ({
+  serializeTerminalBuffer: () => "",
+  getPtyCwd: async () => "/repo",
+}));
+import { useTabStore, saveSession } from "../tabStore";
 
 /**
  * The preview used to hold its path in component state, on a single instance
@@ -86,5 +91,71 @@ describe("the preview document belongs to a tab", () => {
     useTabStore.getState().setPreviewPath("gone", "/repo/x.md");
     expect(useTabStore.getState().tabs).toHaveLength(1);
     expect(useTabStore.getState().tabs.find((t) => t.id === a)?.previewPath).toBeFalsy();
+  });
+});
+
+describe("a target line from a path:line click", () => {
+  beforeEach(() => useTabStore.setState({ tabs: [], activeTabId: "" }));
+  const tab = (id: string) => useTabStore.getState().tabs.find((t) => t.id === id)!;
+
+  it("a target line is per open request and never saved", async () => {
+    const [a, b] = freshTabs(2);
+    const { setPreviewPath } = useTabStore.getState();
+    setPreviewPath(a, "/repo/src/App.tsx", { line: 42 });
+    const first = tab(a).previewReveal!;
+    expect(first).toMatchObject({ path: "/repo/src/App.tsx", line: 42 });
+    expect(first.col).toBeUndefined();
+    expect(typeof first.nonce).toBe("number");
+
+    // The same click again is a new request: a new nonce.
+    setPreviewPath(a, "/repo/src/App.tsx", { line: 42 });
+    const second = tab(a).previewReveal!;
+    expect(second).toMatchObject({ path: "/repo/src/App.tsx", line: 42 });
+    expect(second.nonce).not.toBe(first.nonce);
+
+    setPreviewPath(a, "/repo/src/App.tsx", { line: 42, col: 7 });
+    expect(tab(a).previewReveal).toMatchObject({ path: "/repo/src/App.tsx", line: 42, col: 7 });
+    expect(tab(b).previewReveal).toBeFalsy();
+
+    // Opening without a line clears it; so does clearing the document.
+    setPreviewPath(a, "/repo/src/App.tsx");
+    expect(tab(a).previewPath).toBe("/repo/src/App.tsx");
+    expect(tab(a).previewReveal).toBeFalsy();
+    setPreviewPath(a, "/repo/src/App.tsx", { line: 3 });
+    setPreviewPath(a, null);
+    expect(tab(a).previewReveal).toBeFalsy();
+
+    // Never in the saved session, for a terminal tab or any other kind.
+    setPreviewPath(a, "/repo/src/App.tsx", { line: 42, col: 7 });
+    const browser = useTabStore.getState().addBrowserTab("https://example.com");
+    setPreviewPath(browser, "/repo/src/B.ts", { line: 300 });
+    localStorage.removeItem("ade-session");
+    await saveSession();
+    const saved = localStorage.getItem("ade-session");
+    expect(saved).toBeTruthy();
+    expect(saved).not.toContain("previewReveal");
+    expect(saved).not.toContain("nonce");
+    for (const t of JSON.parse(saved!).tabs) expect(t).not.toHaveProperty("previewReveal");
+  });
+
+  it("a reveal is cleared once applied, not a newer one", () => {
+    const [a] = freshTabs(1);
+    const { setPreviewPath, clearPreviewReveal } = useTabStore.getState();
+    setPreviewPath(a, "/repo/a.ts", { line: 1 });
+    const old = tab(a).previewReveal!.nonce;
+    setPreviewPath(a, "/repo/a.ts", { line: 2 });
+    const newer = tab(a).previewReveal!.nonce;
+
+    clearPreviewReveal(a, old);
+    expect(tab(a).previewReveal).toMatchObject({ line: 2, nonce: newer });
+
+    clearPreviewReveal(a, newer);
+    expect(tab(a).previewReveal).toBeFalsy();
+    expect(tab(a).previewPath).toBe("/repo/a.ts");
+
+    // Nothing to clear, or a tab that is gone: no change, no throw.
+    clearPreviewReveal(a, newer);
+    clearPreviewReveal("gone", newer);
+    expect(tab(a).previewPath).toBe("/repo/a.ts");
   });
 });

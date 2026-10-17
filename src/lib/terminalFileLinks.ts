@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ILink, ILinkProvider, Terminal } from "@xterm/xterm";
+import type { OpenFileOptions } from "./openFile";
 
 /**
  * Clickable file paths in terminal output: whatever Claude (or any command)
@@ -13,6 +14,18 @@ export interface PathCandidate {
   /** Offset just past the path (before any :line:col suffix). */
   end: number;
   path: string;
+  /** The 1-based line of a `:line` or `:line:col` suffix. */
+  line?: number;
+  /** The 1-based column of a `:line:col` suffix. */
+  col?: number;
+}
+
+/** `{ line, col }` with only the keys that are set. */
+function lineColOf(c: { line?: number; col?: number }): Pick<PathCandidate, "line" | "col"> {
+  return {
+    ...(c.line !== undefined ? { line: c.line } : {}),
+    ...(c.col !== undefined ? { col: c.col } : {}),
+  };
 }
 
 // Runs of characters that can be part of a path. Brackets, quotes and commas
@@ -29,13 +42,21 @@ export function findPathCandidates(text: string): PathCandidate[] {
     let token = m[0];
     const start = m.index ?? 0;
     if (token.includes("://") || token.startsWith("-") || token.startsWith("@")) continue;
-    token = token.replace(TRAILING, "").replace(LINE_COL, "").replace(TRAILING, "");
+    token = token.replace(TRAILING, "");
+    const suffix = LINE_COL.exec(token);
+    let line: number | undefined;
+    let col: number | undefined;
+    if (suffix) {
+      [line, col] = suffix[0].slice(1).split(":").map(Number);
+      token = token.slice(0, suffix.index);
+    }
+    token = token.replace(TRAILING, "");
     if (token.length < 3) continue;
     // A path has a folder separator or a file extension. Anything else
     // ("hello", "3.14") is left to the existence check to reject.
     const looksLikePath = token.includes("/") || HAS_EXT.test(token);
     if (!looksLikePath || /^v?[\d.]+$/.test(token)) continue;
-    out.push({ start, end: start + token.length, path: token });
+    out.push({ start, end: start + token.length, path: token, ...lineColOf({ line, col }) });
   }
   return out;
 }
@@ -146,22 +167,23 @@ function overlaps(a: CellRange, b: CellRange): boolean {
 
 /**
  * Register the provider on a terminal. `getCwd` gives the folder relative
- * paths resolve against; `open` receives the absolute path of a clicked file.
+ * paths resolve against; `open` receives the absolute path of a clicked file
+ * and the line and column of its `:line:col` suffix, when it had one.
  */
 export function registerFileLinks(
   term: Terminal,
   getCwd: () => Promise<string | null>,
-  open: (path: string) => void,
+  open: (path: string, opts: OpenFileOptions) => void,
 ): void {
   const provider: ILinkProvider = {
     provideLinks(lineNumber, callback) {
-      type Found = { path: string; start: { x: number; y: number }; end: { x: number; y: number } };
+      type Found = { path: string; line?: number; col?: number; start: { x: number; y: number }; end: { x: number; y: number } };
       // Each found path, as 1-based cells, kept only when it covers this row.
-      const covering = (path: string, start: Found["start"], end: Found["end"]): Found[] =>
-        lineNumber < start.y || lineNumber > end.y ? [] : [{ path, start, end }];
+      const covering = (c: PathCandidate, start: Found["start"], end: Found["end"]): Found[] =>
+        lineNumber < start.y || lineNumber > end.y ? [] : [{ path: c.path, ...lineColOf(c), start, end }];
 
       const line = logicalLine(term, lineNumber - 1);
-      const plain = findPathCandidates(line.text).flatMap((c) => covering(c.path, line.toCell(c.start), line.toCell(c.end - 1)));
+      const plain = findPathCandidates(line.text).flatMap((c) => covering(c, line.toCell(c.start), line.toCell(c.end - 1)));
 
       // The same rows again, with paths Claude Code broke across rows joined.
       const buf = term.buffer.active;
@@ -178,7 +200,7 @@ export function registerFileLinks(
         return { x, y: first + row + 1 };
       };
       const joined = findPathCandidates(stitched.text)
-        .flatMap((c) => covering(c.path, cell(c.start), cell(c.end - 1)))
+        .flatMap((c) => covering(c, cell(c.start), cell(c.end - 1)))
         .filter((j) => j.start.y !== j.end.y && !plain.some((p) => p.path === j.path));
 
       const candidates = [...joined, ...plain];
@@ -196,7 +218,7 @@ export function registerFileLinks(
           range: { start: f.start, end: f.end },
           text: f.path,
           decorations: { underline: true, pointerCursor: true },
-          activate: () => open(f.abs),
+          activate: () => open(f.abs, lineColOf(f)),
         }));
         callback(links.length > 0 ? links : undefined);
       })();

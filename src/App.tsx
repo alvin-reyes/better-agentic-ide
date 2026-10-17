@@ -41,7 +41,7 @@ const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"))
 
 import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
 import { flushNow } from "./lib/persistence";
-import { listenForFileOpens } from "./lib/openFile";
+import { listenForFileOpens, revealTargetOf } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
@@ -152,10 +152,12 @@ export default function App() {
   // follows it.
   useEffect(() => {
     const handler = (e: Event) => {
-      const path = (e as CustomEvent).detail?.path;
+      const detail = (e as CustomEvent).detail;
+      const path = detail?.path;
       if (path) {
         const { activeTabId, setPreviewPath } = useTabStore.getState();
-        setPreviewPath(activeTabId, path);
+        // A path:line link also asks the panel to land on that line.
+        setPreviewPath(activeTabId, path, revealTargetOf(detail));
       }
       openPreviewForFile();
     };
