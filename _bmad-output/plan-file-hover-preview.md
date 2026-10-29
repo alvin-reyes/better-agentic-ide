@@ -3,7 +3,7 @@ title: 'Hover card previews for file paths in terminal output'
 type: 'feature'
 ticket: ''
 created: '2026-10-29'
-status: 'draft'
+status: 'approved'
 baseline_revision: '5d73348eeb80677a8adb2d2e4a59bfd6105320f4'
 route: 'full'
 route_source: 'auto'
@@ -25,7 +25,7 @@ Five stories, built in order:
 
 Story 1 has no visible effect. It is the bounded backend read and the frontend client, split out so Story 2 stays reviewable. Each story from 3 on adds one kind of body to Story 2's card. The shared intent, contract, limits and hover lifecycle come first.
 
-Both files in `context` are new. The architect writes the ADR when the owner approves; Story 1 writes the contract file.
+Both files in `context` are new. The architect wrote the ADR at the owner's approval (2026-10-29); Story 1 writes the contract file.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -49,6 +49,11 @@ The card follows the existing viewers' safety rules. Text is rendered as text. A
    - HTML: a rendered snapshot.
 
    Every card shows the file's size and modified time.
+3. **The setting is on by default**, with a checkbox in Settings to turn it off.
+4. **Markdown shows its raw first lines**, not a rendered view.
+5. **Reduced HTML fidelity is accepted.** A snapshot shows only text and inline styles: no external CSS, no images. A page built by JavaScript falls back to its source lines.
+6. **The hover delay is a fixed 350 ms**, with no setting for it.
+7. **Story 1 is accepted as a non-vertical, no-UI slice:** `peek_file`, its contract and the TypeScript client, with Story 2 as the slice that makes it visible.
 
 ## Boundaries & Constraints (all stories)
 
@@ -400,7 +405,7 @@ It returns a disposer, which `useTerminal` calls when it disposes the terminal.
 
 ## Setting
 
-- **Key:** `fileHoverPreview: boolean` in `src/stores/settingsStore.ts`, default **true** (open question 1), with `setFileHoverPreview`.
+- **Key:** `fileHoverPreview: boolean` in `src/stores/settingsStore.ts`, default **true** (owner's decision 3), with `setFileHoverPreview`.
 - **Control:** a checkbox in `SettingsPanel.tsx` next to the ADE banner option, labelled "Preview a file when hovering its path in the terminal".
 - **When it takes effect:** the controller reads the setting at every hover, so a change applies at once in the window where it was made. An already open detached window keeps its value until it is reopened, because `settingsStore` has no cross-window sync for any setting today. Adding that sync is deferred.
 
@@ -418,7 +423,7 @@ It returns a disposer, which `useTerminal` calls when it disposes the terminal.
   - **Context:** `read_file*` read whole files and return base64, hovers fire constantly on arbitrary agent output, and HTML from agents is untrusted.
   - **Decision:** hover previews read only through `peek_file`, whose size and pixel limits are enforced in Rust and whose bytes travel raw. They render inertly: text as text, SVG as `<img>`, HTML sanitized to a fixed point inside an empty sandbox with a deny-all CSP. Never `allow-scripts`.
   - **Consequences:**
-    - HTML snapshots lose external CSS, all images and anything built by JavaScript (open question 3).
+    - HTML snapshots lose external CSS, all images and anything built by JavaScript (owner's decision 5).
     - SVG has no pixel guarantee.
     - There is one more IPC command, and its frame format and limits are a contract.
 
@@ -808,11 +813,7 @@ Depends on Story 2.
 
 ## Open Questions (owner)
 
-1. **Setting default.** The card is on by default, with a checkbox to turn it off. *Recommendation: on.* It is what was asked for, and the 350 ms delay keeps it out of the way.
-2. **Markdown in the card.** Show raw first lines, or render them? *Recommendation: raw first lines.* Rendering would fetch the document's images and draw diagrams on every hover, and a click already gives the rendered view.
-3. **HTML fidelity.** With no scripts, no network and no images, the snapshot shows only the page's text and inline styles. Pages styled by an external stylesheet look plain. Pages built by JavaScript show their first source lines instead. *Recommendation: accept this.* A fuller snapshot needs scripts, file access or image decoding in the frame, which would undo the sandboxing in this plan's design brief: at least as strict as `HtmlView`.
-4. **Hover delay.** *Recommendation: 350 ms, fixed, no setting for it.* It can be tuned after use. The 150 ms leave grace, the 1000 ms redraw wait and the 200 ms loading threshold are implementation constants, not owner choices.
-5. **Story 1 is not a vertical slice.** It ships `peek_file`, its contract and the TypeScript client with no UI, which departs from the "small vertical slices" rule. It was split out because the combined first story had 28 acceptance criteria. *Recommendation: accept it.* It is fully verified by its own tests (Rust and TypeScript, including the shared frame vector). It changes no user-visible behaviour, so shipping it alone is safe, and Story 2 is the vertical slice that makes it visible. The alternative is one large first story.
+None. The five open questions were decided by the owner on 2026-10-29, each as recommended (decisions 3 to 7).
 
 ## Review Triage Log
 
@@ -871,3 +872,4 @@ Depends on Story 2.
   - SVG allows fragment-only `url(#id)`, so gradients, clip paths, masks, markers and filters pass; every other `url(` still rejects (Story 3 AC3, limits table, allowlist).
   - The XML-declaration exemption requires `<?xml` plus whitespace, so `<?xml-stylesheet` at offset 0 rejects (Story 3 AC3).
   - A manual check reruns the still-pointer redraw case with the DOM renderer (Story 2).
+- 2026-10-29, owner approval at 80fff14: the plan was approved. The five open questions were answered as recommended and recorded as owner's decisions 3 to 7, inside the frozen section. Status is now approved. ADR 0008 was written. The verification command is unchanged.
