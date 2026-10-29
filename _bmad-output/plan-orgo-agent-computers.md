@@ -11,7 +11,7 @@ risk: 'medium'
 review: 'adversarial'
 review_source: 'pinned'
 lenses_ran: ['adversarial']
-review_loop_iteration: 4
+review_loop_iteration: 5
 context: []
 ---
 
@@ -252,7 +252,7 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
 pub const MCP_ASK: &[&str] = &[
     // computer lifecycle in today's spec
     "mcp__*orgo*__*create*",            // create_computer (also create_workspace/screen/...: writes)
-    "mcp__*orgo*__*clone*",
+    "mcp__*orgo*__*clone_computer*",   // not *clone*: future iPhone-clone reads (GET /computers/{id}/clone…)
     "mcp__*orgo*__*fork*",
     "mcp__*orgo*__*resize*computer*",   // not *resize*: that catches GET get_resize_limits
     "mcp__*orgo*__*update*",            // update_computer sets or moves the end
@@ -274,7 +274,7 @@ pub const MCP_ASK: &[&str] = &[
     "mcp__*orgo*__*secret*",            // /secrets, /secrets/sync
     "mcp__*orgo*__*ssh*key*",
     "mcp__*orgo*__*freeze*",            // /freeze, a stop under another name
-    "mcp__*orgo*__*heal*",              // /heal, which can restart
+    "mcp__*orgo*__*heal_*",             // /heal, which can restart; not *heal*: that catches get_computer_health
 ];
 ```
 
@@ -284,7 +284,15 @@ pub const MCP_ASK: &[&str] = &[
 - **The REST write-verb corpus.** These are the names Orgo's naming rule would give the write paths in the [key permissions table](https://docs.orgo.ai/api-reference/api-keys/permissions): `wake_computer`, `restore_computer_backup`, `restore_snapshot`, `set_computer_billing`, `create/update/delete_public_url`, `set_residential_proxy`, `freeze_computer`, `heal_computer`, `set_computer_ssh_key`, `sync_computer_secrets`, `set_computer_end`, `extend_computer`, `launch_template`, `boot_computer`. All are matched.
 - **Over-matching, recorded:**
   - The other writes they match ask too, which is the safe direction: `create_workspace/screen/client/chat_completion`, `update_workspace/client(_billing)`, `start_file_upload`, `stop_template_run`, `stop_client_billing`, `delete_file/template/workspace`.
-  - A future read named like `get_computer_startup_log` would match `*start*`.
+  - **Ask-side misfires on reads, recorded and harmless (an extra prompt):**
+    - `*start*` would match a future `get_computer_startup_log`;
+    - `*proxy*` would match a `get_residential_proxy`;
+    - `*public*url*` would match a `list_public_urls`;
+    - `*secret*` would match a `list_secrets`;
+    - `*billing*` matches today's `get_client_billing`;
+    - `*stop*` would match a `get_auto_stop`;
+    - `*delete*` would match a `get_delete_preview`.
+  - **Narrowed in round 5 so reads aren't caught:** `*heal*` became `*heal_*`, so `get_computer_health` isn't matched. `*clone*` became `*clone_computer*`, so future iPhone-clone reads such as `get_computer_clone_status` aren't matched, while `clone_computer` still is, with or without the `orgo_` prefix.
   - A server named like `georgo` matches `*orgo*`.
   - Matching is case-sensitive, so `Orgo` does not match.
 - **The fixture.** `src-tauri/src/orgo_operations.json` holds (method, path, operationId) from the spec, plus the REST write-verb corpus as hypothetical names marked as such, so the test runs offline.
@@ -292,7 +300,17 @@ pub const MCP_ASK: &[&str] = &[
 **Where the rules go.** Install, for `name == "orgo"`:
 1. Resolve the two roots.
    - `<root>` is the git root from `project_root`: the worktree root inside a worktree.
-   - `<main>` is the main checkout's root, from `main_checkout_root(<root>)`. When `<root>/.git` is a file (`gitdir: …/.git/worktrees/<name>`), it follows `gitdir` and that directory's `commondir` to the common `.git`, whose parent is `<main>`. Otherwise `<main>` is `<root>`.
+   - `<main>` is the main checkout's root, from `main_checkout_root(<root>)`, with guards (round 5). It follows the walk only when every step holds:
+     1. `<root>/.git` is a file whose first line is `gitdir: <path>`. A relative `<path>` (git ≥ 2.48, `worktree.useRelativePaths`) is resolved against `<root>`, the folder holding the `.git` file.
+     2. `<gitdir>/commondir` exists. Its content, if relative, is resolved against `<gitdir>`, and the result is canonicalised.
+     3. That common dir is a directory named `.git`.
+     4. Its parent holds that same `.git` as a directory.
+
+     Then `<main>` is that parent. In every other case `<main>` is `<root>`:
+     - a normal checkout, where `.git` is a directory;
+     - a submodule or `--separate-git-dir`, where there is no `commondir`;
+     - a bare repository's worktree, where the common dir is `repo.git` and there is no main checkout;
+     - any unreadable file.
 2. Read and validate `<root>/.mcp.json`, `<root>/.claude/settings.json` and `<main>/.claude/settings.local.json`. If any is invalid or the wrong shape, refuse and write nothing.
 3. Merge `MCP_ASK` into `permissions.ask` of `<main>/.claude/settings.local.json`. Claude Code reads that file from any subdirectory, and from inside any worktree of the repository.
 4. Merge them into `<root>/.claude/settings.json`, for teammates and root sessions.
@@ -301,12 +319,12 @@ pub const MCP_ASK: &[&str] = &[
 `mcp_install` returns the rules added to either file.
 
 **Every ADE launch (S1-1, S1-4).**
-- **The rules.** `orgo_launch_rules()` (Rust, no arguments) returns `{ ask: MCP_ASK, continuousDeny: … }`. `src/lib/orgoRules.ts` exports `loadLaunchRules(): Promise<LaunchRules>`, which invokes it once and caches the result.
+- **The rules.** `orgo_launch_rules()` (Rust, no arguments) returns `{ ask: MCP_ASK, continuousDeny: … }`. `src/lib/orgoRules.ts` exports `loadLaunchRules(): Promise<LaunchRules>`, which invokes it and caches the result **only on success** (round 5). A rejected load clears the cache, so the next launch tries again rather than being blocked for the rest of the app's life.
   - If the invoke fails, it rejects, and every caller refuses to launch with "ADE couldn't load its permission rules, so the agent was not started". It fails closed.
 - **The type makes it required.** `LaunchOptions` gains `rules: LaunchRules` as a **required** field, and `buildLaunchCommand(provider, rolePath, opts: LaunchOptions)` makes `opts` required. tsc then fails on every caller that doesn't pass rules.
   - `prepareAgentLaunch` covers the picker and `dispatchAgent`. `OrchestratorTab.tsx:292` is updated to `await loadLaunchRules()` and pass them.
   - The two capability probes use a module-private `PROBE_RULES`, which is not exported, so no other caller can borrow it.
-  - Codex and Ollama ignore `rules`; the claude and deepseek paths emit them.
+  - Codex and Ollama ignore `rules`; the claude and deepseek paths emit them. Because `prepareAgentLaunch` loads the rules before building any command, **Codex and Ollama launches also wait on the load, and fail closed with it**. That is harmless, since the rules are constant and load in one local IPC call.
 - **The flag.** `claudeCommand` adds `--settings '{"permissions":{"ask":[…]}}'`, quoted with `shellQuote` (`agentCommand.ts:26`), to every claude and deepseek launch: Manual, Continuous and `-p`.
 - **Silent and folder-independent.** Glob names are exempt from the "matches no tool" warning, so this is silent in projects without Orgo, and it does not depend on the cwd, the project, or how Orgo was installed. The flag's lists merge with the files' lists (U13, settled).
 - **The Orchestrator.** It runs `claude … -p` without bypass, so an ask cannot be shown there and the call is refused. That was already true, because `-p` cannot prompt for an unapproved MCP tool. The live impact is low, but the rules now ride along.
@@ -359,7 +377,13 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 2. Install sends `mcp_install` with `name: "orgo"` and a server of exactly `{type: "http", url: "https://www.orgo.ai/mcp"}`. With rules returned, the notice says ADE's agents always ask, names both settings files, says the first install may reorder `.claude/settings.json`, and says to run `/mcp`. Covered by `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says where the rules went".
 3. Every `oauth: true` entry has no `secrets`, empty `envRefs`, and an `https:` URL. Covered by `src/data/__tests__/mcpCatalog.test.ts` › "sign-in servers carry no secret and use https".
 4. `"cloud computer"` finds `["orgo"]`, and `"browser click"` still finds `["playwright"]`. Covered by `mcpCatalog.test.ts` › "searches name, category and description" (extended).
-5. Installing `orgo` in a temp git repo with no settings files creates `.claude/settings.json` and `.claude/settings.local.json` at the repo root, each with only `permissions.ask` = `MCP_ASK`. It writes the server and returns the rules. In a simulated worktree, where `<wt>/.git` is a `gitdir:` file pointing at `<main>/.git/worktrees/wt`, which has a `commondir` of `../..`, install writes `settings.local.json` under `<main>/.claude/` and `settings.json` and `.mcp.json` under `<wt>`. Covered by `src-tauri/src/mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings`, `orgo_install_from_a_worktree_writes_local_rules_to_the_main_checkout`.
+5. Installing `orgo` in a temp git repo with no settings files creates `.claude/settings.json` and `.claude/settings.local.json` at the repo root, each with only `permissions.ask` = `MCP_ASK`. It writes the server and returns the rules. Worktree cases, on temp folders:
+   - **Absolute gitdir.** `<wt>/.git` is `gitdir: <main>/.git/worktrees/wt`, which has a `commondir` of `../..`. Install writes `settings.local.json` under `<main>/.claude/`, and `settings.json` and `.mcp.json` under `<wt>`.
+   - **Relative gitdir.** `gitdir: ../main/.git/worktrees/wt` gives the same `<main>`.
+   - **Submodule or `--separate-git-dir`.** `gitdir: ../.git/modules/sub`, or a gitdir elsewhere, with no `commondir`. `<main>` stays `<root>`, the submodule.
+   - **Bare repository's worktree.** The common dir is `repo.git`, not `.git`, with no checkout. `<main>` falls back to `<root>`.
+
+   Covered by `src-tauri/src/mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings` and `orgo_install_from_a_worktree_writes_local_rules_to_the_main_checkout`, and by the shared module's `main_checkout_root_follows_only_real_worktrees`.
 6. **(Reworded for S1-3.)** Existing settings files hold `model`, `hooks` and `env` keys, user allow and deny rules, a user ask rule, and one rule equal to an Orgo glob. After install:
    - each file parsed as JSON equals the original with only `permissions.ask` changed;
    - that array is the original elements in order, followed by the missing Orgo rules in `MCP_ASK` order, each once;
@@ -374,7 +398,9 @@ Each names its test. The developer writes it failing first. AC10 is a regression
    - every name in the REST write-verb corpus is matched;
    - the matches hold for `mcp__orgo__orgo_<op>`, `mcp__orgo-prod__orgo_<op>` and `mcp__orgo__<op>` (no prefix);
    - `mcp__github__create_issue`, `mcp__orgo__orgo_get_computer`, `mcp__orgo__orgo_list_workspaces` and `mcp__orgo__orgo_get_screenshot` are not matched;
-   - the recorded over- and under-matches hold as documented: `mcp__georgo__…_create_computer` and `…_get_computer_startup_log` are matched, and `mcp__Orgo__…` is not.
+   - the recorded misfires hold as documented:
+     - matched: `mcp__georgo__…_create_computer`, and the hypothetical reads `get_computer_startup_log`, `get_residential_proxy`, `list_public_urls`, `list_secrets`, `get_auto_stop` and `get_delete_preview`;
+     - not matched: `mcp__Orgo__…`, and the hypothetical reads `get_computer_health` and `get_computer_clone_status`.
 
    Covered by `orgo_rules.rs` › `ask_globs_catch_every_lifecycle_write_and_no_read`.
 10. The deny callers behave as before. Covered by `usage.rs` › existing `deny_rules_merge_into_settings` and `deny_refuses_other_rules_and_bad_json` (green).
@@ -384,7 +410,7 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 14. The Orgo guide section contains every `MCP_ASK` glob (read from `orgo_rules.rs`), and mentions "subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly" and "reorder". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
 15. **(S1-4.)** An Orchestrator dispatch types a `claude … -p '<task>'` command that contains the `--settings` with `MCP_ASK`, through `loadLaunchRules`. Covered by `src/components/__tests__/OrchestratorTab.test.tsx` (extended) › "orchestrator dispatches carry Orgo's ask rules".
 16. **(S1-4.)** The board's `dispatchAgent` types a command that contains the same `--settings`. Covered by `src/lib/__tests__/agentLaunch.test.ts` › "board dispatch carries Orgo's ask rules".
-17. **(S1-4.)** When the `orgo_launch_rules` invoke rejects, `prepareAgentLaunch` returns `{ ok: false }` with the "couldn't load its permission rules" message, and the Orchestrator aborts its dispatch with it. No command is typed. Covered by `agentLaunch.test.ts` › "no rules, no launch" and `OrchestratorTab.test.tsx` › "no rules, no dispatch".
+17. **(S1-4.)** When the `orgo_launch_rules` invoke rejects, `prepareAgentLaunch` returns `{ ok: false }` with the "couldn't load its permission rules" message, and the Orchestrator aborts its dispatch with it. No command is typed. **(S1-6.)** If the first invoke rejects and the second resolves, the first launch is refused and the second goes through with the rules. Covered by `agentLaunch.test.ts` › "no rules, no launch" and "a failed load is retried, not cached", and `OrchestratorTab.test.tsx` › "no rules, no dispatch".
 
 ## Verification (1)
 
@@ -426,17 +452,18 @@ Depends on Story 1 (`orgo_rules.rs`, `orgo_launch_rules`, the `--settings` plumb
 
   ```rust
   pub const CONTINUOUS_DENY_MCP: &[&str] = &[
-      "mcp__*orgo*__*create*", "mcp__*orgo*__*clone*", "mcp__*orgo*__*fork*",
+      "mcp__*orgo*__*create*", "mcp__*orgo*__*clone_computer*", "mcp__*orgo*__*fork*",
       "mcp__*orgo*__*start*",  "mcp__*orgo*__*resume*", "mcp__*orgo*__*resize*computer*",
       // round 4 (S1-5): REST verbs that start or bring back a computer
       "mcp__*orgo*__*wake*",   "mcp__*orgo*__*restore*", "mcp__*orgo*__*launch*",
-      "mcp__*orgo*__*boot*",   "mcp__*orgo*__*heal*",
+      "mcp__*orgo*__*boot*",   "mcp__*orgo*__*heal_*",
   ];
   ```
 
   - A glob deny "is removed from Claude's context", and it is silent where no tool matches.
   - Always passing it covers Orgo added by `claude mcp add` (`~/.claude.json`), an ancestor `.mcp.json`, and another server name containing "orgo".
   - In Continuous sessions it also hides other "create" writes such as `create_screen` and `create_workspace`, which is acceptable for an unattended session.
+  - **Deny-side misfire, recorded:** `*start*` would hide a future `get_computer_startup_log` read in Continuous sessions. It is narrowed like the ask list (`*clone_computer*`, `*heal_*`), so `get_computer_health` and iPhone-clone reads stay visible.
   - Like the ask list, it is checked against the fixture.
     - No GET is matched.
     - Every create, clone, fork, start, restart, resume and resize-computer is matched.
@@ -481,7 +508,7 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
 ## Acceptance Criteria (1b)
 
 1. `buildLaunchCommand("claude", path, { rules, continuous: true, task: "go" })`, with `rules.continuousDeny` non-empty, orders the command as `--dangerously-skip-permissions`, `--settings …`, `--disallowedTools` with each rule shell-quoted, `--append-system-prompt-file …`, then the task. Without `continuous`, or with an empty list, there is no `--disallowedTools`. Covered by `src/lib/__tests__/agentCommand.test.ts` › "continuous launches deny Orgo creation before the role flag".
-2. **(1b-1.)** `orgo_launch_rules()` returns `CONTINUOUS_DENY_MCP` and `CONTINUOUS_DENY_CLI` unconditionally; it takes no project. Against `orgo_operations.json`, no MCP deny glob matches a GET operation, and each of create, clone, fork, start, restart, resume and resize-computer is matched. Covered by `orgo_rules.rs` › `continuous_mcp_denies_are_unconditional_and_spare_reads`.
+2. **(1b-1.)** `orgo_launch_rules()` returns `CONTINUOUS_DENY_MCP` and `CONTINUOUS_DENY_CLI` unconditionally; it takes no project. Against `orgo_operations.json`, no MCP deny glob matches a GET operation, and each of create, clone, fork, start, restart, resume and resize-computer is matched. `get_computer_health` and `get_computer_clone_status` are not matched, and `get_computer_startup_log` is, as recorded. Covered by `orgo_rules.rs` › `continuous_mcp_denies_are_unconditional_and_spare_reads`.
 3. Under the documented semantics, re-implemented in the test:
    - **Denied:** `orgo c create --name a`, `orgo computers start a`, `orgo --json c create`, `orgo c --json resize a --ram 8`, `orgo t run hermes-agent`, `ORGO_PROFILE=x orgo c clone a`, `orgo c create --profile default`, `env orgo c create`, `/home/u/.orgo/bin/orgo c create`, `npx orgo c create`, `sh -c 'orgo c create'`.
    - **Denied, the recorded over-match:** `grep "orgo c create" notes.md` and `grep "orgo --json" x`.
@@ -730,3 +757,12 @@ Decided: Q3 for Story 1 (decision 7), Q5 (6), Q7 (4), Q8 (8, widened in round 3)
 | **1c record** | n/a | `orgo logout` advice for users already signed in. Possible convergence with the CLI plan's PreToolUse hook noted, not designed. |
 | **Q12** (owner, "Accept, fix later") | decided | Decision 11. Q12 closed. The notice and guide say the first install may reorder `.claude/settings.json`. Key-order preservation is its own deferred story. |
 | **Q11** home of the shared merge | open | Still recommend `src-tauri/src/claude_settings.rs`, which now also holds `main_checkout_root`. Convergence with the CLI plan's `usage.rs`/`rule_match.rs` noted. |
+
+**Round 5, 2026-10-29: re-review of e8e7cc4. Story 1 PASS WITH MINORS; Story 1b PASS WITH MINORS.** Confirmed by the reviewer: the three `buildLaunchCommand` callers are forced, AC11's `@ts-expect-error` is checked by tsc, there is no race, Codex is untouched, and no Continuous deny matches a read in today's spec.
+
+| Finding | Action |
+|---|---|
+| **S1-6:** a rejected first `loadLaunchRules()` would block every later launch | Caches only on success; a reject clears it. AC17 adds a reject-then-resolve case. |
+| **S1-7:** Ollama (and Codex) launches also wait on the rules load | Stated: they fail closed with it, which is harmless (constant rules, one local IPC call). |
+| **Worktree guards** | `main_checkout_root` follows the walk only when the `.git` file has a gitdir (relative resolved against the folder), `commondir` exists (resolved against the gitdir, canonicalised), the common dir is a directory named `.git`, and its parent holds it. Otherwise `<main> = <root>`. AC5 adds relative-gitdir, submodule / `--separate-git-dir` and bare-repo-worktree cases. |
+| **S1-8:** `*heal*` and `*clone*` would hide future reads; ask-side misfires unrecorded | `*heal_*` and `*clone_computer*` in both the ask and deny lists, checked against the spec and the hypothetical reads. AC9 records the harmless ask-side misfires (`*proxy*`, `*public*url*`, `*secret*`, `*billing*`, `*stop*`, `*delete*`, `*start*`). 1b records `*start*` hiding a future `get_computer_startup_log`. |
