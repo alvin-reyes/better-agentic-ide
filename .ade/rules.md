@@ -14,10 +14,11 @@ command decides.
    (designer), the ops and release plan (devops). Each artifact is pressure-tested by the
    adversarial-reviewer before it moves on.
 2. **Approve.** The owner signs off the plan. Approval **fixes the verification command**,
-   recorded in `docs/architecture.md` under "Verification command". Changing it later
-   needs the owner's approval again.
+   recorded in `docs/superpowers/specs/2026-10-14-relay-pairing-design.md` under
+   "Verification". Changing it later needs the owner's approval again.
 3. **Shard.** The scrum-master slices the approved plan into small, vertically sliced,
-   independently testable stories under `docs/stories/`, one file per story.
+   independently testable stories: `Story N` sections in a standalone plan
+   (`_bmad-output/plan-*.md`), or entries in an initiative's `tickets.toml`.
 4. **Build.** Developer agents implement stories, strictly test-first. When several run
    in parallel, give each its own git worktree so they don't overwrite each other.
 5. **Verify.** QA (or the owner) runs the verification command against the story's work
@@ -64,6 +65,10 @@ A story is Done only when ALL hold:
 4. Any shared contract it introduced is recorded in `.ade/context/`.
 
 If any is false, the story is not Done: no exceptions, no overrides by assertion.
+
+Manual checks that need the running app don't gate Done: QA records each as "not run,
+pending the owner" and never as passed, and the owner runs them in the app. A plan can
+still make a named manual check a gate, in its own words (ADR 0009).
 
 <!-- ade:archive -->
 ## 4. The archive

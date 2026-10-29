@@ -33,12 +33,18 @@ verification command passes**. No agent certifies its own work.
   only the story's Verification section and the journal — never the code or tests it judges.
 
 ## Project layout
-- `docs/prd.md`: product requirements (the product-manager owns this).
-- `docs/architecture.md`: system design and, under "Verification command", the single
-  command that decides Done (the architect owns this).
-- `docs/ux-spec.md`, `docs/mockup.html`: design artifacts (the designer).
-- `docs/ops.md`: CI/CD, environments, rollout, rollback, monitoring (devops).
-- `docs/stories/`: one file per story, the unit of work (the scrum-master).
+This repo keeps its planning work in `_bmad-output/` and its specs in
+`docs/superpowers/specs/`. The rest of `docs/` is mostly the website and user guide.
+- `_bmad-output/plan-*.md`: a standalone plan, with its stories as `Story N` sections,
+  each with its acceptance criteria and its own Verification section.
+- `_bmad-output/initiative-*/`: an initiative, its epics, its plans and `tickets.toml`,
+  the stories in build order.
+- `docs/superpowers/specs/`: design specs. The **verification command**, the single
+  command that decides Done, is in `docs/superpowers/specs/2026-10-14-relay-pairing-design.md`
+  under "Verification" (approved by the owner on 2026-10-14; the architect owns it):
+  `npx tsc --noEmit` · `npm test` · `cd src-tauri && cargo test` · `cd relay && cargo test` ·
+  `cd mobile && npx tsc --noEmit && npx jest`.
+- `_bmad-output/deferred-work.md`: work split off a plan and not yet built.
 - `.ade/rules.md`: **the rules**: the methodology and the non-negotiables.
 - `.ade/context/`: the **Context Store**: shared interfaces, types and decisions that
   parallel and later stories must agree on. Read it before inventing a contract.
