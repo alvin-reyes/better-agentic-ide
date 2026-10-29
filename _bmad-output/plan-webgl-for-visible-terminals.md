@@ -17,7 +17,7 @@ context: []
 
 One story, built test-first by a developer agent in its own worktree.
 
-**Status:** draft. The owner approved the approach on 2026-10-29 (the frozen section). Adversarial review pass 1 blocked this plan at e812c34, and it was revised in place (see the Review Triage Log). It becomes `approved` and gets its journal line once the re-review passes and the owner accepts D7, the DOM-renderer spacing fix, which goes beyond the approved approach. This matches the earlier journal entries, which record approval after review.
+**Status:** draft. The owner approved the approach on 2026-10-29 (the frozen section). Adversarial review pass 1 blocked this plan at e812c34, and it was revised in place (see the Review Triage Log). On 2026-10-29 the owner also had D7, the DOM-renderer spacing fix, included (decision 7). The plan becomes `approved` and gets its journal line once the re-review passes. This matches the earlier journal entries, which record approval after review.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -35,6 +35,7 @@ One story, built test-first by a developer agent in its own worktree.
 4. `onContextLoss` still falls back to the DOM renderer and frees the slot.
 5. The `gpuRendering` setting keeps applying only to terminals opened after the change, unless that is inconsistent with re-acquiring on attach; then the architect decides and says why (settled in Design Notes D5).
 6. The verification command is unchanged.
+7. Added 2026-10-29, after adversarial review pass 1, in the owner's words "Include it": the DOM-renderer letter-spacing fix (Design Note D7) is part of this story.
 
 ## Known uncertainty
 
@@ -54,11 +55,11 @@ The distortion itself is not confirmed. It shows in WebKit (WKWebView on macOS, 
 
 </frozen-after-approval>
 
-## Proposed addition: the DOM renderer's letter-spacing (needs the owner's OK)
+## The DOM renderer's letter-spacing (owner decision 7)
 
 Found during review and confirmed by the coordinator with plain xterm 6.0.0 in Chromium. The DOM renderer sets a default `letter-spacing` of `cell.width - widthCache.get('W')` (`DomRenderer.ts:291-295`). It computes this only when it is built and when the char size, the device pixel ratio or an option changes, never on a resize or a re-seat. ADE opens every terminal in a detached wrapper. There xterm's char size is still right, because it is measured with canvas `measureText`, but the `WidthCache`'s DOM span measures 0. So the row container's `letter-spacing` is a whole cell: about 8.4px against about 0 for a terminal opened attached.
 
-Chromium's per-span spacing hides this; WebKit may not. That would explain the distortion on every DOM-rendered terminal: those past the cap, those with GPU rendering off, and, with this plan, those evicted while hidden and later shown without a slot. Design Note D7 adds the fix to this story. The fix is small and sits on the same seat path, but it goes beyond the approved approach, so the owner decides. Without it, this plan's fallbacks may stay distorted in WebKit.
+Chromium's per-span spacing hides this; WebKit may not. That would explain the distortion on every DOM-rendered terminal: those past the cap, those with GPU rendering off, and, with this plan, those evicted while hidden and later shown without a slot. Design Note D7 adds the fix to this story, on the same seat path; the owner included it (decision 7). Without it, this plan's fallbacks may stay distorted in WebKit.
 
 ## Code Map
 
@@ -139,7 +140,7 @@ If `new WebglAddon()` or `loadAddon` throws (review m1):
   - D6's earlier reason was wrong (review M1): the hook can be rendered in jsdom once xterm is mocked. `sidePanelLayout.test.tsx`'s comment is about the real xterm.
 - Test seams follow the existing `__reset…ForTests` exports (`src/lib/persistence.ts:180`, `src/hooks/useFleetData.ts:83`). `__resetGpuForTests()` releases and clears every slot, clears the mount counts and the `gpuUnavailable` flag, and is called in `beforeEach`. `__setInstanceForTests(paneId, inst)` puts a fake instance in `instances` for AC9. `terminalSeating.test.tsx` also destroys every instance it created in `afterEach`.
 
-**D7. DOM-renderer spacing (the proposed addition).** `respaceDomRenderer(term)` sets `term.options.scrollSensitivity` to its value plus 1 and back. It runs from `seatTerminal` whenever the seated terminal ends up without a slot, so only while its wrapper is attached.
+**D7. DOM-renderer spacing (owner decision 7).** `respaceDomRenderer(term)` sets `term.options.scrollSensitivity` to its value plus 1 and back. It runs from `seatTerminal` whenever the seated terminal ends up without a slot, so only while its wrapper is attached.
 - **Why it works:** any option change runs `DomRenderer._handleOptionsChanged`, which calls `_setDefaultSpacing` (`DomRenderer.ts:412-424`). That re-measures `W` now that the element is attached, because `WidthCache` never caches a width of 0 (`WidthCache.ts:140-143`).
 - **Why `scrollSensitivity`:** it is public, validated only as above 0, and read only by `Viewport` (which re-reads its scroll options) and by the mouse service at wheel time. It changes nothing on screen, and the two writes leave it as it was.
 - **Rejected:** calling `handleCharSizeChanged()` on the private `_core._renderService._renderer.value` (private API). Re-setting a font option to the same value also doesn't work, because `OptionsService` fires only on a change.
@@ -202,7 +203,8 @@ Each names its test; the developer writes it failing first.
   - D4: load-failure cleanup, the stop-trying flag, the async destroy recorded.
   - D5: settings copy.
   - D6: rewritten, with a second test file for the real hook.
-  - D7 and the spacing section added, pending the owner.
+  - D7 and the spacing section added.
+- 2026-10-29, owner decision 7 ("Include it"): D7 is in the story. Recorded in the frozen section; status stays draft until the re-review passes.
   - AC4, AC10 and AC11 changed; AC11's source check dropped; AC12 to AC16 added.
   - Manual checks 3 to 9 added.
   - Status set back to draft and the early journal line removed.
@@ -222,4 +224,4 @@ Pass 1, adversarial, at e812c34: BLOCK. 1 blocker, 2 major, 6 minor, plus one ca
 | m4 | Missing manual checks | minor | patched: checks 3 to 8 |
 | m5 | Approval and journal line written before review | minor | patched: status draft, journal line removed; both written after the re-review passes |
 | m6 | Stale doc comment at `useTerminal.ts:165-171` | minor | patched: in the Code Map |
-| new | DOM renderer's spacing is computed while detached, a cell wide | likely cause | added as D7 pending the owner; AC11; manual checks 1 and 5 |
+| new | DOM renderer's spacing is computed while detached, a cell wide | likely cause | added as D7, included by the owner (decision 7); AC11; manual checks 1 and 5 |
