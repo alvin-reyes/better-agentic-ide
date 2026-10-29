@@ -3,7 +3,7 @@ title: 'WebGL follows the terminals on screen'
 type: 'bugfix'
 ticket: ''
 created: '2026-10-29'
-status: 'draft'
+status: 'approved'
 baseline_revision: '5d73348eeb80677a8adb2d2e4a59bfd6105320f4'
 route: 'oneshot'
 route_source: 'pinned'
@@ -17,7 +17,7 @@ context: []
 
 One story, built test-first by a developer agent in its own worktree.
 
-**Status:** draft. The owner approved the approach on 2026-10-29 (the frozen section). Adversarial review pass 1 blocked this plan at e812c34, and it was revised in place (see the Review Triage Log). On 2026-10-29 the owner also had D7, the DOM-renderer spacing fix, included (decision 7). Re-review pass 2 at d92a20d passed with minors, now applied. The plan becomes `approved`, and gets its journal line, when the owner approves it. This matches the earlier journal entries, which record approval after review.
+**Status:** approved by the owner on 2026-10-29 at 74187f6 ("Approve and build"; owner decision 8). Adversarial review blocked e812c34 and passed with minors at d92a20d; the minors were applied at 74187f6.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -36,6 +36,7 @@ One story, built test-first by a developer agent in its own worktree.
 5. The `gpuRendering` setting keeps applying only to terminals opened after the change, unless that is inconsistent with re-acquiring on attach; then the architect decides and says why (settled in Design Notes D5).
 6. The verification command is unchanged.
 7. Added 2026-10-29, after adversarial review pass 1, in the owner's words "Include it": the DOM-renderer letter-spacing fix (Design Note D7) is part of this story.
+8. Approved 2026-10-29 at 74187f6, in the owner's words "Approve and build", after adversarial review passed with minors at d92a20d and the minors were applied.
 
 ## Known uncertainty
 
@@ -216,7 +217,7 @@ Each names its test; the developer writes it failing first.
   - AC4, AC10 and AC11 changed; AC11's source check dropped; AC12 to AC16 added.
   - Manual checks 3 to 9 added.
   - Status set back to draft and the early journal line removed.
-- 2026-10-29, owner decision 7 ("Include it"): D7 is in the story. Recorded in the frozen section; status stays draft until the re-review passes.
+- 2026-10-29, owner decision 7 ("Include it"): D7 is in the story. Recorded in the frozen section.
 - 2026-10-29, after re-review pass 2 (PASS WITH MINORS at d92a20d). The changes:
   - n1: the latch is narrowed (D2 step 3, D4), AC10 rewritten, AC17 added.
   - n2: D4's async destroy note reworded.
@@ -225,6 +226,7 @@ Each names its test; the developer writes it failing first.
   - n6: the harness rule for AC12 and AC13.
   - n4: `.ade/session.md` confirmed byte-identical to main, which never had the early line; the stale knowledge line corrected.
   - Status stays draft for the owner's approval.
+- 2026-10-29, owner approval at 74187f6 (decision 8): status set to approved.
 
 ## Review Triage Log
 
