@@ -12,10 +12,12 @@ review: 'quick'
 review_source: 'pinned'
 lenses_ran: []
 review_loop_iteration: 0
-context: ['.ade/context/decisions/0010-orchestrator-anthropic-key-is-an-app-only-vault-secret.md']
+context: ['.ade/context/decisions/0013-orchestrator-anthropic-key-is-an-app-only-vault-secret.md']
 ---
 
 One story. It moves an existing secret out of plain-text files, so it needs both a migration and a security fix. Nothing here is visual beyond one settings field.
+
+ADR numbers are provisional. They are checked again at merge time, whichever branch lands first, because 0008–0012 are already taken or proposed on unmerged branches.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -95,7 +97,7 @@ One story. It moves an existing secret out of plain-text files, so it needs both
 - [ ] `src/components/AnthropicKeyField.tsx` (new), used by `SettingsPanel.tsx` in place of the input. It shows "Saved in the system keychain, not exported to terminals" or "No key set", from `vault_list`. A password input with a Save button (labelled Replace when a key is set) calls `vault_set` with the name and the note, then clears the input. Remove calls `vault_delete` after a confirm. Errors and `lastMoveError()` appear under the field. It never calls `vault_get` and never shows a value. Test T13.
 - [ ] `src/components/IntegrationsPanel.tsx` -- for a name in `APP_ONLY_SECRETS`, the row says "Not in terminals" and the save notice does not say terminals get it. Test T14.
 - [ ] `src/lib/__tests__/appOnlySecrets.test.ts` -- pins `APP_ONLY_SECRETS` to the `APP_ONLY` list in `vault.rs`, read from source the way `tauriCommandContract.test.ts` reads Rust. Test T15.
-- [ ] `.ade/context/vault-app-only-secrets.md` -- the name, the app-only rule, and who reads the key. ADR 0010 becomes Accepted at approval.
+- [ ] `.ade/context/vault-app-only-secrets.md` -- the name, the app-only rule, and who reads the key. ADR 0013 becomes Accepted at approval.
 - [ ] `docs/guide/settings.md`, `docs/guide/agents.md:105` -- the Anthropic key is stored in the system keychain and is not exported to terminals.
 
 **Acceptance Criteria** (each maps to a test, all run by the verification command):
@@ -130,7 +132,7 @@ Source: https://code.claude.com/docs/en/authentication, sections "Authentication
 
 Storing the key as `ANTHROPIC_API_KEY` would therefore put every Claude Code started in an ADE terminal on API billing. That applies at once to `-p` runs and to Agent SDK scripts, and after one prompt to interactive sessions. On managed machines it would stop Claude Code from starting at all. The Anthropic SDKs and many other tools also read that variable. Today the setting never reaches a terminal, so moving it there would widen its exposure for no gain. The new name is read by nothing outside ADE, and the app-only list also keeps it out of terminal environments. Either measure alone would avoid the billing change. Together they keep the key away from every process an agent runs. A user who wants API billing in terminals can still add `ANTHROPIC_API_KEY` themselves under Secrets, as today.
 
-The vault has no per-secret export option today: `SecretMeta` is `name`, `note`, `updated_at`. The Orgo plan lists "A vault option to keep a secret out of terminals" as deferred (`plan/orgo-agent-computers`, `_bmad-output/plan-orgo-agent-computers.md:565`). This story adds only a fixed, code-owned list, so the index format and the Secrets UI keep their shape. When the general option is built, this name becomes its first user (ADR 0010).
+The vault has no per-secret export option today: `SecretMeta` is `name`, `note`, `updated_at`. The Orgo plan lists "A vault option to keep a secret out of terminals" as deferred (`plan/orgo-agent-computers`, `_bmad-output/plan-orgo-agent-computers.md:565`). This story adds only a fixed, code-owned list, so the index format and the Secrets UI keep their shape. When the general option is built, this name becomes its first user (ADR 0013).
 
 ### The move, step by step (`moveAnthropicKeyToVault`)
 

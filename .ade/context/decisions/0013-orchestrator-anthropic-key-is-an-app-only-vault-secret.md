@@ -1,4 +1,4 @@
-# 0010: The Orchestrator's Anthropic key is an app-only vault secret
+# 0013: The Orchestrator's Anthropic key is an app-only vault secret
 
 - Status: Proposed, with the plan `_bmad-output/plan-anthropic-key-in-vault.md` (owner approved the fix on 2026-10-29; the name and the app-only rule are open questions in that plan).
 - Context: The Orchestrator's Anthropic API key was the setting `anthropicApiKey`, saved in plain text to localStorage, `state/kv/` and every `state/snapshots/` copy. The vault (`src-tauri/src/vault.rs`) keeps values in the OS keychain, but it exports every secret into every new ADE terminal. Claude Code ranks `ANTHROPIC_API_KEY` above a subscription `/login` (https://code.claude.com/docs/en/authentication, "Authentication precedence"): it is used straight away in `-p` runs, used after one prompt in interactive sessions, and blocked at startup under `forceLoginMethod`/`forceLoginOrgUUID`. The vault has no per-secret export option, and adding one was deferred in the Orgo plan.
