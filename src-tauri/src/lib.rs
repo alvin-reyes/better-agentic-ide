@@ -10,6 +10,7 @@ pub mod bmadswitch;
 pub mod bmadv6;
 mod contracts;
 mod crashlog;
+mod filepeek;
 mod git;
 mod mcp;
 mod platform;
@@ -451,6 +452,7 @@ pub fn run() {
             path_exists,
             path_is_symlink,
             read_file_base64,
+            filepeek::peek_file,
             resolve_file_paths,
             project_root,
             contracts::contracts_detect,
