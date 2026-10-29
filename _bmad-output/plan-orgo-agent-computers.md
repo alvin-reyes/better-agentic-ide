@@ -3,7 +3,7 @@ title: 'Agent computers from Orgo: MCP and CLI now, a native panel later'
 type: 'feature'
 ticket: ''
 created: '2026-10-29'
-status: 'draft'
+status: 'approved'
 baseline_revision: '5d73348eeb80677a8adb2d2e4a59bfd6105320f4'
 route: 'full'
 route_source: 'auto'
@@ -12,8 +12,10 @@ review: 'adversarial'
 review_source: 'pinned'
 lenses_ran: ['adversarial']
 review_loop_iteration: 5
-context: []
+context: ['.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on-click.md']
 ---
+
+> **Status (2026-10-29): approved by the owner at f32ca1e ("Approve and build"), for Stories 1 and 1b only.** Story 1c stays on hold. Stories 2 to 6 stay an outline, deferred on P4 in the product doc (`_bmad-output/product-ide-and-harness.md`, branch `plan/product-ide-and-harness`). ADR 0010 is accepted.
 
 **Step 1** is built in order:
 - **Story 1:** Orgo's hosted MCP server in the MCP library, signed in through Claude Code. Claude Code asks before any computer is created, changed, stopped or deleted. Rules go in three places: every Claude Code launch ADE makes (picker, board and Orchestrator), the project's shared settings, and the main checkout's root local settings, which Claude Code reads from any subfolder and any worktree.
@@ -61,6 +63,7 @@ context: []
 9. **(Q9) A dedicated ADE workspace in Orgo.** The sign-in uses it, and so do any CLI key and step 2's key.
 10. **The Orgo CLI: "install + guide, agent asks" (Story 1c).** **On hold** after review round 3: the parallel product doc recommends shipping it only as the CLI library's `orgo` entry, after Story 1 has been used with a real account. Awaiting the owner.
 11. **(Q12) "Accept, fix later."** The first Orgo install may reorder a committed `.claude/settings.json`, keeping every value. Story 1's notice and guide say so. Key-order preservation becomes its own small story.
+12. **Approval (2026-10-29, at f32ca1e): "Approve and build"** for Stories 1 and 1b. Story 1c remains on hold. Stories 2 to 6 remain an outline, deferred on P4. ADR 0010 is accepted with this approval.
 
 ## Boundaries & Constraints (all stories)
 
@@ -195,9 +198,9 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
 - **One rule source.** `src-tauri/src/orgo_rules.rs` holds `MCP_ASK`, `CONTINUOUS_DENY_MCP` and `CONTINUOUS_DENY_CLI`, and later `CLI_ASK` and `CLI_ALLOW`. It exposes `orgo_launch_rules()` for the launch path. The shared settings merge lives beside it (Q11).
 - **The parallel CLI library (`plan/cli-library-and-mcps`)** reuses these lists for its `orgo` entry and must not redefine them. `.ade/context/orgo-permission-rules.md` is the shared contract.
 
-## Proposed ADR 0010 (written on approval)
+## ADR 0010 (Accepted 2026-10-29)
 
-`.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on-click.md`. The next free number is 0010, because 0008 and 0009 are each used twice in history.
+Written as `.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on-click.md`. The number is provisional and is re-checked at merge time: 0008 (hover), 0009 (manual checks), 0011 (CLI), 0012 (principles) and 0013 (the Orchestrator key) are on other unmerged branches. The summary as drafted:
 - **Decision:**
   - Orgo is the only provider. Agents reach it through its hosted MCP server, and later its CLI.
   - The lifecycle rules are verb globs from one Rust module. They are passed on every ADE launch, and merged into the project's shared settings and the main checkout's root local settings.
