@@ -5,12 +5,12 @@ created: '2026-10-29'
 status: 'draft'
 owner_decision: 'pending'
 baseline_revision: '5d73348eeb80677a8adb2d2e4a59bfd6105320f4'
-review_loop_iteration: 1
+review_loop_iteration: 3
 ---
 
 # ADE is an IDE for coding agents and a harness for Claude Code
 
-The owner said, "Seems this is becoming an IDE with a harness." This doc makes that explicit, sets principles for new scope, checks everything in flight against them, and proposes a build order. It is a decision tool, not a PRD. Nothing here is approved until the owner answers section 9. Revision 2 answers the reviews of 5ce104e and 4b0b755 and records the owner's decisions of 2026-10-29. Plans are read at: Orgo `53b1d59` (round 3), CLI library `8a4938e`, hover previews `dc7ebb1`, WebGL `31ce6f8`.
+The owner said, "Seems this is becoming an IDE with a harness." This doc makes that explicit, sets principles for new scope, checks everything in flight against them, and proposes a build order. It is a decision tool, not a PRD. Nothing here is approved until the owner answers section 9. Revision 3 answers the three reviews (of 5ce104e, 4b0b755 and 5f0e90d) and records the owner's decisions of 2026-10-29. Plans are read at: Orgo `f32ca1e` (round 5), CLI library `8a4938e`, hover previews `dc7ebb1`, WebGL `31ce6f8`.
 
 ## 1. What ADE is
 
@@ -104,12 +104,19 @@ The jobs are listed because principle P1 requires a proposal to serve one of the
 - the user's own vendor login;
 - every command classified as ask, allow or knowingly unprompted, by two layers:
   - static ask rules from its table;
-  - from v1, a PreToolUse hook that parses each shell command, seeing through aliases, flag order and runner forms (owner decision, 2026-10-29);
+  - from v1, a PreToolUse hook that parses each shell command's text, handling flag order and runner forms (owner decision, 2026-10-29). Its limits:
+    - it sees only the command text, not the user's shell aliases or functions (whether the Bash tool loads them is unverified, CLI plan U1);
+    - it can't tell what a script the agent writes will do when run;
 - allow only for read-only commands;
 - one install form;
 - a write-once skill.
 
-The hook goes on the launch line, through the same `--settings` flag that Orgo round 3 uses, so it holds for every ADE launch. A settings file alone would not do, because a Continuous agent can delete one. A copy in the project's settings covers sessions ADE didn't launch. Two checks come before the hook counts toward P2. First, that hooks passed through `--settings` load alongside the project's hooks. Second, the C16 check under P2.
+The hook goes on the launch line, through the same `--settings` flag Orgo uses, so it holds for every ADE launch. A committed settings file alone would not do, because a Continuous agent can delete it. Three consequences follow:
+- **Orgo's contract changes.** Orgo AC11 pins that flag's value to exactly `{"permissions":{"ask":…}}`, so the CLI plan must amend AC11 and Orgo's context file.
+- **The binary lives outside the project**, for example beside the `ade-hook` workspace crate (`src-tauri/Cargo.toml:18`), so a Continuous agent can't edit it.
+- **The project copy, for sessions ADE didn't launch, goes in `.claude/settings.local.json`.** It names a machine-local binary path, which is why ADE's agent-status hooks already go there.
+
+Two checks come before the hook counts toward P2: that hooks passed through `--settings` load alongside the project's hooks, and the C16 check under P2.
 
 A plan may not claim a boundary stronger than the credential the CLI actually uses. If it relies on a narrower credential, a corpus test shows that no allowed command reaches a broader one.
 
@@ -128,7 +135,7 @@ How the CLIs measure up:
 |---|---|---|---|
 | WebGL for visible terminals (approved, in build) | **Fits** | P1 Parallel: the visible terminal keeps WebGL past the 8th. P5: the owner's report. Whether the DOM fallback *is* the distortion is unconfirmed; that is its first manual check. | — |
 | Hover previews (Stories 1–2 Done, 3 in build, 4–5 next) | **Fits** | P1 Check: look before opening. P5: the owner asked for it. P6: bounded reads, inert previews, no new dependency. P3 note: hovering a path such as `.env` shows its first lines without a click, which matters when screen-sharing (Q9). | — |
-| Orgo Story 1: hosted MCP, ask rules in files and in `--settings` on every ADE launch (in revision) | **Fits** | P1 Parallel/Done: agents test UI on a clean desktop and fan out. P2 ask rules. P3 no key in ADE. P4 vendor-hosted. P5: the owner's own use; the owner asked for Orgo directly, for all four purposes (decision 1). Its launch-flag rules serve every later rule set. The owner accepted (decision 11, 2026-10-29) that the first install may reorder a committed `.claude/settings.json`, with key order fixed in a later story. | — |
+| Orgo Story 1: hosted MCP, ask rules in files and in `--settings` on every ADE launch (in revision) | **Fits** | P1 Parallel/Done: agents test UI on a clean desktop and fan out. P2 ask rules. P3 no key in ADE. P4 vendor-hosted. P6(b): `src-tauri/src/orgo_operations.json`, the offline operations fixture that AC9 tests every rule against. P5: the owner's own use; the owner asked for Orgo directly, for all four purposes (decision 1). Its launch-flag rules serve every later rule set. The owner accepted (decision 11, 2026-10-29) that the first install may reorder a committed `.claude/settings.json`, with key order fixed in a later story. | — |
 | Orgo 1b: Continuous denies on the launch line | **Fits** | P2: the guard a Continuous agent cannot delete. Build it for Orgo now; other tables reuse the launch flag later (Q6). | — |
 | Orgo 1c: Orgo CLI (on hold) | **Fits, once `--profile` asks** | The CLI rule above. P5: the owner's own use (decisions 1 and 10). When the owner lifts the hold, it ships as the CLI library's `orgo` entry, with the library's install form. | Decision 10's install form, only if the owner picks typed installs (Q4). |
 | Orgo step 2: native panel, Stories 2–6 | **Defer** | P4: ADE's own copy of Orgo's desktop and lifecycle. P5 is met (the owner's own use, decisions 1–2), so the deferral rests on P4 alone. Approving the panel means recording a P4 override. Even a read-only list of computers in the fleet view needs a REST client, the vault key read in Rust behind a `vault_get` allowlist, and a new HTTP crate (`src-tauri` has none today). Any return is a new plan. | Decision 2, "then a native panel". Also decision 1's purposes 2–4 as stated there: Claude Code running remotely from an ADE tab, a fleet shown in the fleet view with cost, and a throwaway sandbox. Purpose 1, computer use, stays through Story 1. |
@@ -178,7 +185,7 @@ One order across everything in flight or proposed. Sizes are rough estimates (S:
 
 1. **Approve the tagline and the README paragraph?** Recommend yes, as one docs story covering the README and the website kicker.
 2. **Adopt the principles, the override clause and the exceptions list?** Recommend yes, as ADR 0012 written by the architect. Every plan would then carry a P1–P6 check for the adversarial reviewer.
-3. **The CLI hook's installation.** Decided on 2026-10-29: v1 is gh, stripe, vercel and wrangler, with a classifying PreToolUse hook. Recommend putting the hook on the `--settings` launch flag, with a project copy, and counting it toward P2 in Continuous mode only after the C16 check passes.
+3. **The CLI hook's installation.** Decided on 2026-10-29: v1 is gh, stripe, vercel and wrangler, with a classifying PreToolUse hook. Recommend putting the hook on the `--settings` launch flag (amending Orgo AC11), with its binary outside the project and a copy in `.claude/settings.local.json`, and counting it toward P2 in Continuous mode only after the C16 check passes.
 4. **One install form for every CLI?** Recommend typed installs (the CLI plan's form). Both typed and run-after-confirm meet P2, so this is about consistency. Orgo 1c follows the choice once `--profile` asks.
 5. **Defer Orgo step 2?** Recommend yes, on P4. This sets aside decision 2's panel and purposes 2–4 of decision 1. If you want the panel, record a P4 override, and it returns as a new plan.
 6. **Reuse the launch flag for other rules?** Recommend yes, after Orgo 1b. The audit's ask rules and the CLI plan's "money moves" denies would go on every ADE Claude Code launch.
