@@ -11,12 +11,12 @@ risk: 'medium'
 review: 'adversarial'
 review_source: 'pinned'
 lenses_ran: ['adversarial']
-review_loop_iteration: 3
+review_loop_iteration: 4
 context: []
 ---
 
 **Step 1** is built in order:
-- **Story 1:** Orgo's hosted MCP server in the MCP library, signed in through Claude Code. Claude Code asks before any computer is created, changed, stopped or deleted. Rules go in three places: every Claude Code launch ADE makes, the project's shared settings, and the repo-root local settings, which Claude Code reads from any subfolder.
+- **Story 1:** Orgo's hosted MCP server in the MCP library, signed in through Claude Code. Claude Code asks before any computer is created, changed, stopped or deleted. Rules go in three places: every Claude Code launch ADE makes (picker, board and Orchestrator), the project's shared settings, and the main checkout's root local settings, which Claude Code reads from any subfolder and any worktree.
 - **Story 1b:** a hard stop for ADE's Continuous mode, as `--disallowedTools` on the launch line.
 - **Story 1c, the Orgo CLI: ON HOLD** pending the owner. The review's findings are recorded under it, unaddressed.
 
@@ -45,16 +45,22 @@ context: []
 
    Orgo's sign-in list leaves these out "so a sign-in is never sent a computer's password" (https://docs.orgo.ai/guides/mcp).
 5. **Orgo tools that create, copy, resize, extend, start, stop or delete a computer always ask**, in every mode, ADE's Continuous mode (`claude --dangerously-skip-permissions`, `src/lib/agentCommand.ts:50`) included. Story 1 delivers it as follows:
-   - **Every Claude Code session ADE launches** carries the rules on its command line (`--settings`). That holds in any folder and any mode, and the agent cannot edit it.
-   - **Sessions the user starts themselves** on this machine, anywhere in the repository, read the rules from the repo-root `.claude/settings.local.json`.
+   - **Every Claude Code session ADE launches** carries the rules on its command line (`--settings`): the agent picker, the board's dispatch and the Orchestrator. `buildLaunchCommand` cannot be called without them, so a new launch path cannot leave them out. That holds in any folder and any mode, and the agent cannot edit it.
+     - The Orchestrator runs `claude -p` without bypass, where a prompt cannot be shown. Its Orgo lifecycle calls are refused rather than asked, which they already were before this story.
+   - **Sessions the user starts themselves** on this machine, anywhere in the repository, read the rules from `.claude/settings.local.json` at the root of the main checkout. That is also the file Claude Code reads inside a git worktree.
    - **Teammates** get them from the committed `.claude/settings.json` when they start at the root.
 
-   A user-started session can lose the rules if a Continuous-mode agent in it deletes them from the files. Sessions outside this repository, and providers that are not Claude Code (Codex), are not covered.
+   Not covered:
+   - a user-started session whose Continuous-mode agent deletes the rules from the files;
+   - sessions outside this repository;
+   - providers that are not Claude Code (Codex);
+   - an organisation that sets `allowManagedPermissionRulesOnly`, under which Claude Code ignores both the launch flag's and the files' rules.
 6. **(Q5) Claude Code on a remote computer signs in with a dedicated, spend-limited Anthropic Console key** that the user makes for remote machines. ADE sends it only on an explicit, confirmed action and never copies the user's own Claude login (step 2, Story 4).
 7. **(Q3) Not needed for Story 1.** The panel's key stays an open question for step 2.
 8. **(Q8) Yes, Story 1b.** Continuous launches pass `--disallowedTools` for the create, clone, fork, start, restart and resize tools, and the CLI's creating commands where Claude Code's pattern syntax allows. After review round 3: **always**, as server-glob patterns, not only when the project's `.mcp.json` names `orgo`. Orgo's own `claude mcp add` writes to `~/.claude.json`, and an ancestor `.mcp.json` or another server name would be missed.
 9. **(Q9) A dedicated ADE workspace in Orgo.** The sign-in uses it, and so do any CLI key and step 2's key.
 10. **The Orgo CLI: "install + guide, agent asks" (Story 1c).** **On hold** after review round 3: the parallel product doc recommends shipping it only as the CLI library's `orgo` entry, after Story 1 has been used with a real account. Awaiting the owner.
+11. **(Q12) "Accept, fix later."** The first Orgo install may reorder a committed `.claude/settings.json`, keeping every value. Story 1's notice and guide say so. Key-order preservation becomes its own small story.
 
 ## Boundaries & Constraints (all stories)
 
@@ -81,9 +87,10 @@ context: []
   - It is never sent a computer's password.
   - On a paid account, it cannot launch hourly computers (`403 HOURLY_NEEDS_BILLING`).
   - To revoke: Orgo Settings → Security → Connected AI apps, or `/mcp` → Clear authentication, or `claude mcp logout orgo`.
-- **Always ask (decision 5).** The ten `MCP_ASK` rules are verb globs on the tool name, with a glob in the server position, for example `mcp__*orgo*__*create*`. They go to three places:
-  1. **Launch flag.** ADE passes `--settings '{"permissions":{"ask":[…]}}'` on every Claude Code launch it makes, so they hold in any working directory and in any mode. A launch flag cannot be edited from inside the session.
-  2. **Repo-root `.claude/settings.local.json`.** "If you start Claude Code in a subdirectory of a git repository, it reads and writes that file at the repository root" ([settings](https://code.claude.com/docs/en/settings), Claude Code ≥ 2.1.211).
+- **Always ask (decision 5).** The 23 `MCP_ASK` rules are verb globs on the tool name, with a glob in the server position, for example `mcp__*orgo*__*create*`. They go to three places:
+  1. **Launch flag.** ADE passes `--settings '{"permissions":{"ask":[…]}}'` on every Claude Code launch it makes: the picker, the board and the Orchestrator. They hold in any working directory and in any mode, and a launch flag cannot be edited from inside the session.
+     - The flag's lists merge with the files' lists: Claude Code collects permission rules per source and concatenates them (review round 4, Claude Code 2.1.42 and 2.1.312).
+  2. **The main checkout's root `.claude/settings.local.json`.** "If you start Claude Code in a subdirectory of a git repository, it reads and writes that file at the repository root", and "in a worktree, it uses the file at the main checkout's root" ([settings](https://code.claude.com/docs/en/settings), Claude Code ≥ 2.1.211).
   3. **The project's `.claude/settings.json`**, committed for teammates who start at the root.
 
   The `.mcp.json` that loads Orgo is found from the working directory and every parent directory (review round 3, Claude Code's loader). `.claude/settings.json` is read only from the primary working directory. That is why the shared file alone was not enough.
@@ -94,7 +101,9 @@ context: []
   - Ask and deny rules take globs in the tool-name position. The pattern must match the whole name, and names with `*` raise no "matches no tool" warning, so the globs are silent where Orgo isn't installed.
 - **What these rules cannot stop, stated plainly:**
   - **User-started sessions in Continuous or bypass mode.** The agent can edit both settings files, and Claude Code reloads them. ADE-launched sessions keep the launch-flag rules.
-  - **Other clients and repositories.** Claude Code sessions outside this repository, Codex and other non-Claude Code agents, and Orgo signed in under a server name without "orgo" in it, or as a claude.ai connector whose name differs in case.
+  - **Other clients and repositories.** Claude Code sessions outside this repository, Codex and other non-Claude Code agents, and Orgo signed in under a server name without lowercase "orgo" in it. Matching is case-sensitive, so a claude.ai connector named `Orgo` is missed.
+  - **Managed-only rules.** Under an organisation policy of `allowManagedPermissionRulesOnly`, Claude Code ignores every rule outside managed settings, the launch flag's and the files' included. The guide says so.
+  - **New tool names that use none of the verbs.** The globs fail open for a future tool whose name avoids all 23 verbs.
   - **The CLI and the REST API**, until Story 1c, and then only as far as Bash patterns go.
   - **Actions on a computer.** Screenshot, mouse, keyboard, bash and Python on the remote computer still prompt in Manual mode and run unprompted in Continuous mode, by design. Their effects stay on the remote computer.
 - **Prompt injection.** A web page shown on a computer is untrusted input that comes back as a screenshot.
@@ -146,15 +155,22 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
 - **Tool-name globs.** Ask and deny rules accept globs in the tool-name position, and "the pattern must match the full tool name". Allow rules need a literal `mcp__<server>__` prefix. "Tool names containing `_` or `*` are exempt from the [matches no tool] check" ([permissions](https://code.claude.com/docs/en/permissions)).
 - **Bash patterns.** `*` can go anywhere. A trailing ` *` that is the only wildcard matches the bare command. Ask and deny rules apply to any subcommand of a compound command and match past any leading assignment. Only the listed wrappers are stripped: `env`, `npx` and absolute paths are not ([permissions](https://code.claude.com/docs/en/permissions)).
 - **`--settings <file-or-json>`** takes "a settings JSON file or an inline JSON string". It applies "above your user, project, and local files and below managed settings", for that session only. "When you set the same list key, such as `permissions.allow`, in more than one file, Claude Code combines the lists" ([CLI reference](https://code.claude.com/docs/en/cli-reference), [settings](https://code.claude.com/docs/en/settings)).
-  - The CLI reference also says values "override the same keys", so whether a `--settings` `permissions.ask` list merges with the files' lists, rather than replacing them, is U13.
-  - The fallback if it replaces: ADE puts the union of the two project files' `ask` lists and `MCP_ASK` in the flag.
-- **Settings-file locations.** `.claude/settings.json` is read from the primary working directory. `.claude/settings.local.json` is read at the repository root from a subdirectory, except outside git, at a home-directory root, on Windows, or when the root isn't owned by the user, where it stays with the start directory. Settings edits reach a running session ([settings](https://code.claude.com/docs/en/settings)).
+  - **U13, settled in review round 4.** The flag takes one value. Permission lists are collected per source and concatenated (Claude Code 2.1.42 `Jq6`/`jM5`, 2.1.312 `To()`/`rse`), so the flag's `ask` rules add to the files' rules. No union fallback is needed.
+- **Settings-file locations.**
+  - `.claude/settings.json` is read from the primary working directory.
+  - `.claude/settings.local.json` is read at the repository root from a subdirectory, and at the main checkout's root inside a worktree. The exceptions are outside git, at a home-directory root, on Windows, or when the root isn't owned by the user, where it stays with the start directory.
+  - Settings edits reach a running session ([settings](https://code.claude.com/docs/en/settings)).
+  - `allowManagedPermissionRulesOnly` makes managed settings the only source of permission rules ([permissions](https://code.claude.com/docs/en/permissions)).
 - **`--disallowedTools`** takes deny rules as separate arguments. A bare or glob tool name removes the tool from context. It takes a list, so another flag must follow it ([CLI reference](https://code.claude.com/docs/en/cli-reference)).
 - **Modes.** Explicit ask rules prompt even in `bypassPermissions`, deny rules block in every mode, and bypass may write `.claude/` ([permission modes](https://code.claude.com/docs/en/permission-modes)).
 - **ADE.**
   - It supports remote sign-in servers (`src/data/mcpCatalog.ts:44-49`, `IntegrationsPanel.tsx:83,183`).
-  - Only `AgentPicker` launches agents, in the pane's cwd (`AgentPicker.tsx:151,190`), through `prepareAgentLaunch` (`src/lib/agentLaunch.ts:21`) and `buildLaunchCommand`. The claude and deepseek providers share `claudeCommand` (`agentCommand.ts:49-53`).
+  - **(Corrected in round 4.)** Three paths launch agents:
+    - `AgentPicker` (`AgentPicker.tsx:151,190`), in the pane's cwd, and the board's `dispatchAgent` (`agentLaunch.ts:63-77`, called from `BoardPanel.tsx:162`). Both go through `prepareAgentLaunch` (`agentLaunch.ts:21`).
+    - The Orchestrator, which calls `buildLaunchCommand(spec.provider, rolePath)` directly and runs `claude … -p '<task>'` (`OrchestratorTab.tsx:292`).
+    - Two capability probes, `supportsRoleDelivery` and the task probe, also call `buildLaunchCommand` with `/dev/null` (`agentCommand.ts:156,165`). The claude and deepseek providers share `claudeCommand` (`agentCommand.ts:49-53`).
   - Projects can sit below the repo root (`IntegrationsPanel.tsx:29-31`).
+  - `project_root` returns the nearest ancestor with a `.git` entry (`src-tauri/src/lib.rs:184-194`). In a git worktree, `.git` is a file, so it returns the worktree root, not the main checkout.
 
 **Unverified, to check before the story that needs it:**
 - **U1.** How `GET /computers/{id}` tells plan from hourly (Story 5).
@@ -169,7 +185,7 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
 - **U10.** The key check's error codes (Story 2).
 - **U11.** GPU prices (Story 5).
 - **U12.** Whether CLI listings print `vnc_password` (Story 1c, on hold).
-- **U13.** Whether a `--settings` `permissions.ask` list merges with the files' `ask` lists. Check with `/permissions` in a session launched with the flag. Story 1 manual check; the fallback is above.
+- **U13.** Settled in round 4: the lists merge (see above). The manual check only confirms it.
 
 **Rejected: Orgo's local server, `orgo-mcp-server`.** It needs a vault key, returns `vnc_password` into context (F12), and registers the password, SSH, secrets, move and workspace tools. Its dependencies float, and it loads the spec and base URL at runtime. **Third-party servers** (`nickvasilescu/orgo-mcp`, `spencerkinney/computer-use-mcp`, Composio): not chosen.
 
@@ -184,7 +200,7 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
 `.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on-click.md`. The next free number is 0010, because 0008 and 0009 are each used twice in history.
 - **Decision:**
   - Orgo is the only provider. Agents reach it through its hosted MCP server, and later its CLI.
-  - The lifecycle rules are verb globs from one Rust module. They are passed on every ADE launch, and merged into the project's shared settings and the repo-root local settings.
+  - The lifecycle rules are verb globs from one Rust module. They are passed on every ADE launch, and merged into the project's shared settings and the main checkout's root local settings.
   - Creation is denied on the command line in Continuous launches.
   - In the native panel, only a click creates, starts or resizes a computer, with an end and under ADE's cap.
   - ADE never chooses hourly billing, never runs billing commands, never edits user-level Claude Code settings, and ships no credential except a dedicated key on a confirmed click.
@@ -204,8 +220,10 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
 - `src/components/IntegrationsPanel.tsx`: the card (:178-209), "Sign in" (:183), `install` (:73-90) and its notice (:83). The root is resolved with `project_root` (:44), which gives the git root.
 - `src-tauri/src/mcp.rs`: `mcp_install` (:44), `mcp_remove` (:63).
 - `src-tauri/src/usage.rs`: `settings_path` (:544), `merge_deny` (:651), `load_settings` (:718) and `save_settings` (:725), the existing settings writer. `local_settings_path` (:713) points at `.claude/settings.local.json`. The writer uses serde_json without `preserve_order`, so every write re-sorts object keys (see S1-3).
-- `src/lib/agentCommand.ts:49-53` `claudeCommand`, and `src/lib/agentLaunch.ts:21` `prepareAgentLaunch`.
-- **New:** `src-tauri/src/orgo_rules.rs`, and `src-tauri/src/orgo_operations.json`, the fixture.
+- `src/lib/agentCommand.ts`: `LaunchOptions` (:5), `claudeCommand` (:49-53), `buildLaunchCommand` (:68), and the probes (:156,165).
+- `src/lib/agentLaunch.ts`: `prepareAgentLaunch` (:21) and `dispatchAgent` (:63-77). `src/components/OrchestratorTab.tsx:292` is the direct caller.
+- `src-tauri/src/lib.rs:184-194`: `project_root_of`.
+- **New:** `src-tauri/src/orgo_rules.rs`; `src-tauri/src/orgo_operations.json`, the fixture; `src/lib/orgoRules.ts`, which loads the rules once.
 
 ## Design Notes (1)
 
@@ -228,10 +246,11 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
 - **`caution`** is a new optional field, rendered as `<p className="mcp-caution" role="note">`, and not searched.
 - **Search.** The description has no "click", so `"browser click"` still finds only Playwright, and `"cloud computer"` finds Orgo.
 
-**`MCP_ASK`, verb globs** (S1-2). They are robust to the unverified hosted names (U9), to a server renamed `orgo-prod`, and to a tool without the `orgo_` prefix:
+**`MCP_ASK`, verb globs** (S1-2, widened by S1-5). They are robust to the unverified hosted names (U9), to a server renamed `orgo-prod`, to a tool without the `orgo_` prefix, and to the REST write verbs Orgo already has that the MCP spec doesn't expose yet:
 
 ```rust
 pub const MCP_ASK: &[&str] = &[
+    // computer lifecycle in today's spec
     "mcp__*orgo*__*create*",            // create_computer (also create_workspace/screen/...: writes)
     "mcp__*orgo*__*clone*",
     "mcp__*orgo*__*fork*",
@@ -242,45 +261,82 @@ pub const MCP_ASK: &[&str] = &[
     "mcp__*orgo*__*stop*",
     "mcp__*orgo*__*delete*",
     "mcp__*orgo*__*enable*ssh*",        // not *ssh*: that catches GET get_computer_ssh
+    // REST write verbs not yet in the MCP spec (S1-5)
+    "mcp__*orgo*__*wake*",              // /computers/{id}/wake
+    "mcp__*orgo*__*restore*",           // /backup/restore, /snapshots/{id}/restore
+    "mcp__*orgo*__*launch*",
+    "mcp__*orgo*__*boot*",
+    "mcp__*orgo*__*extend*",
+    "mcp__*orgo*__*set*end*",
+    "mcp__*orgo*__*billing*",           // /computers/{id}/billing; also asks GET get_client_billing
+    "mcp__*orgo*__*public*url*",        // /public-urls
+    "mcp__*orgo*__*proxy*",             // /residential-proxy
+    "mcp__*orgo*__*secret*",            // /secrets, /secrets/sync
+    "mcp__*orgo*__*ssh*key*",
+    "mcp__*orgo*__*freeze*",            // /freeze, a stop under another name
+    "mcp__*orgo*__*heal*",              // /heal, which can restart
 ];
 ```
 
-- **Checked against all 86 operations of the live spec** (2026-10-29), snake-cased as `mcp__orgo__orgo_<op>`. **No GET operation matches.** Every computer lifecycle write matches: create, clone, fork, resize, update, start, restart, resume, stop, delete and enable-SSH.
-- **The other writes they also match ask too, which is the safe direction:** `create_workspace`, `create_screen`, `create_client`, `create_chat_completion`, `update_workspace`, `update_client(_billing)`, `start_file_upload`, `stop_template_run`, `stop_client_billing`, and `delete_file`, `delete_template`, `delete_workspace`.
-- **The fixture.** The list of operations is kept in `src-tauri/src/orgo_operations.json` (method, path, operationId), a copy of the spec's operation list, so the test runs offline.
-- **What the globs miss:** a server whose name lacks lowercase "orgo", such as a claude.ai connector named `Orgo`. The guide says to name the server `orgo`, which is what Install does.
+- **Checked against all 86 operations of the live spec** (2026-10-29), snake-cased as `mcp__orgo__orgo_<op>`.
+  - **Exactly one GET matches: `orgo_get_client_billing`** (via `*billing*`). It is a billing read, outside the sign-in list, and asking for it is intended.
+  - Every computer lifecycle write matches: create, clone, fork, resize, update, start, restart, resume, stop, delete and enable-SSH.
+- **The REST write-verb corpus.** These are the names Orgo's naming rule would give the write paths in the [key permissions table](https://docs.orgo.ai/api-reference/api-keys/permissions): `wake_computer`, `restore_computer_backup`, `restore_snapshot`, `set_computer_billing`, `create/update/delete_public_url`, `set_residential_proxy`, `freeze_computer`, `heal_computer`, `set_computer_ssh_key`, `sync_computer_secrets`, `set_computer_end`, `extend_computer`, `launch_template`, `boot_computer`. All are matched.
+- **Over-matching, recorded:**
+  - The other writes they match ask too, which is the safe direction: `create_workspace/screen/client/chat_completion`, `update_workspace/client(_billing)`, `start_file_upload`, `stop_template_run`, `stop_client_billing`, `delete_file/template/workspace`.
+  - A future read named like `get_computer_startup_log` would match `*start*`.
+  - A server named like `georgo` matches `*orgo*`.
+  - Matching is case-sensitive, so `Orgo` does not match.
+- **The fixture.** `src-tauri/src/orgo_operations.json` holds (method, path, operationId) from the spec, plus the REST write-verb corpus as hypothetical names marked as such, so the test runs offline.
 
 **Where the rules go.** Install, for `name == "orgo"`:
-1. Read and validate `<root>/.mcp.json`, `<root>/.claude/settings.json` and `<root>/.claude/settings.local.json`, where `<root>` is the git root from `project_root`. If any is invalid or the wrong shape, refuse and write nothing.
-2. Merge `MCP_ASK` into `permissions.ask` of `<root>/.claude/settings.local.json`. Claude Code reads that file at the repo root from any subdirectory, so it covers subfolder sessions on this machine.
-3. Merge them into `<root>/.claude/settings.json`, for teammates and root sessions.
-4. Write `.mcp.json`.
+1. Resolve the two roots.
+   - `<root>` is the git root from `project_root`: the worktree root inside a worktree.
+   - `<main>` is the main checkout's root, from `main_checkout_root(<root>)`. When `<root>/.git` is a file (`gitdir: …/.git/worktrees/<name>`), it follows `gitdir` and that directory's `commondir` to the common `.git`, whose parent is `<main>`. Otherwise `<main>` is `<root>`.
+2. Read and validate `<root>/.mcp.json`, `<root>/.claude/settings.json` and `<main>/.claude/settings.local.json`. If any is invalid or the wrong shape, refuse and write nothing.
+3. Merge `MCP_ASK` into `permissions.ask` of `<main>/.claude/settings.local.json`. Claude Code reads that file from any subdirectory, and from inside any worktree of the repository.
+4. Merge them into `<root>/.claude/settings.json`, for teammates and root sessions.
+5. Write `<root>/.mcp.json`.
 
 `mcp_install` returns the rules added to either file.
 
-**Every ADE launch (S1-1).**
-- `prepareAgentLaunch` invokes `orgo_launch_rules()`, which takes no arguments and returns `{ ask: MCP_ASK, … }`.
-- `claudeCommand` adds `--settings '{"permissions":{"ask":[…]}}'`, quoted with `shellQuote` (`agentCommand.ts:26`), to every claude and deepseek launch, Manual and Continuous alike.
-- Glob names are exempt from the "matches no tool" warning, so this is silent in projects without Orgo, and it does not depend on the cwd, the project, or how Orgo was installed.
-- A launch flag cannot be edited by the agent. If U13 shows `--settings` replaces rather than merges the `ask` list, the flag carries the union of the two project files' `ask` lists plus `MCP_ASK` instead.
+**Every ADE launch (S1-1, S1-4).**
+- **The rules.** `orgo_launch_rules()` (Rust, no arguments) returns `{ ask: MCP_ASK, continuousDeny: … }`. `src/lib/orgoRules.ts` exports `loadLaunchRules(): Promise<LaunchRules>`, which invokes it once and caches the result.
+  - If the invoke fails, it rejects, and every caller refuses to launch with "ADE couldn't load its permission rules, so the agent was not started". It fails closed.
+- **The type makes it required.** `LaunchOptions` gains `rules: LaunchRules` as a **required** field, and `buildLaunchCommand(provider, rolePath, opts: LaunchOptions)` makes `opts` required. tsc then fails on every caller that doesn't pass rules.
+  - `prepareAgentLaunch` covers the picker and `dispatchAgent`. `OrchestratorTab.tsx:292` is updated to `await loadLaunchRules()` and pass them.
+  - The two capability probes use a module-private `PROBE_RULES`, which is not exported, so no other caller can borrow it.
+  - Codex and Ollama ignore `rules`; the claude and deepseek paths emit them.
+- **The flag.** `claudeCommand` adds `--settings '{"permissions":{"ask":[…]}}'`, quoted with `shellQuote` (`agentCommand.ts:26`), to every claude and deepseek launch: Manual, Continuous and `-p`.
+- **Silent and folder-independent.** Glob names are exempt from the "matches no tool" warning, so this is silent in projects without Orgo, and it does not depend on the cwd, the project, or how Orgo was installed. The flag's lists merge with the files' lists (U13, settled).
+- **The Orchestrator.** It runs `claude … -p` without bypass, so an ask cannot be shown there and the call is refused. That was already true, because `-p` cannot prompt for an unapproved MCP tool. The live impact is low, but the rules now ride along.
 
-**The merge and key order (S1-3).** Recommend keeping the existing writer and **rewording AC6 to semantic equality**, rather than enabling serde_json's `preserve_order`.
+**The merge and key order (S1-3; owner decision 11, "Accept, fix later").** Story 1 keeps the existing writer, and AC6 asserts semantic equality. serde_json's `preserve_order` is not enabled here. Key-order preservation is its own small story (Deferred Work).
 - The writer re-sorts object keys and re-pretty-prints on its first write to a file. That is already true of ADE's settings writers today, recorded in `_bmad-output/initiative-phone-remote/deferred-work.md` (`save_settings` re-sorts `.claude/settings.local.json`).
 - `preserve_order` is crate-wide. It would change every JSON map in the app. It would break at least `mcp.rs`'s test that expects `["github", "mine"]` (`mcp.rs:100`), and it would change the output of every other JSON writer. That belongs to its own story with its own review.
 - What Story 1 guarantees: every key and value of the user's file survives (semantic equality), rule arrays keep their order with ADE's rules appended once, and a second install changes nothing byte for byte.
-- The notice and the guide say the first write reformats `.claude/settings.json`. The deferred entry is extended with the Orgo case.
+- The notice and the guide say the first install may reorder a committed `.claude/settings.json` (keys sorted, re-indented, every value kept). The deferred entry is extended with the Orgo case.
 
 **Remove** takes Orgo out of `.mcp.json` and leaves every rule. ADE never deletes a rule.
 
-**Notice:** "Orgo added to .mcp.json. Agents ADE starts will always ask before Orgo creates, changes, stops or deletes a computer, and rules were added to .claude/settings.json and .claude/settings.local.json for sessions you start yourself. The first write may reformat .claude/settings.json. Run /mcp in Claude Code to sign in."
+**Notice:** "Orgo added to .mcp.json. Agents ADE starts will always ask before Orgo creates, changes, stops or deletes a computer, and rules were added to .claude/settings.json and .claude/settings.local.json for sessions you start yourself. The first install may reorder .claude/settings.json; every setting is kept. Run /mcp in Claude Code to sign in."
 
 **Guide** (`docs/guide/integrations.md`): add Orgo to the "Web & browser" row and a `## Orgo cloud computers` section:
 - what it does;
 - signing in to the dedicated ADE workspace with `/mcp`;
 - what the sign-in allows, and how to revoke it;
-- always asks: the ten globs, the three places, and what they don't cover (user-started bypass sessions, other repositories, Codex, other server names);
+- always asks: the globs, the three places, and what they don't cover:
+  - user-started bypass sessions;
+  - other repositories;
+  - Codex;
+  - server names without lowercase "orgo";
+  - `allowManagedPermissionRulesOnly` policies;
+  - future tool names with none of the verbs.
+
+  In a git worktree, the local rules live in the main checkout's `.claude/settings.local.json`;
 - cost: billed until deleted, stopped hourly computers still pay for disk, the plan or credit is the limit, set an end, delete when done, auto top-up off;
-- prompt injection.
+- prompt injection;
+- that the first install may reorder a committed `.claude/settings.json`, keeping every value.
 
 **README:** "16 curated MCP servers".
 
@@ -291,16 +347,19 @@ pub const MCP_ASK: &[&str] = &[
 - **A session started in a subfolder:** the rules come from the launch flag (ADE) or the root local file (user-started).
 - **Settings outside git, at a home-directory root, or on Windows:** `settings.local.json` stays with the start directory, so a user-started subfolder session has no file rules. ADE launches keep the flag. The guide says so.
 - **A bypass-mode agent the user started deletes the file rules:** not prevented, and stated.
+- **Installed from a worktree:** the local rules go to the main checkout (`<main>`), which is where Claude Code reads them. The shared file and `.mcp.json` go to the worktree, which is where they are committed from.
+- **The rule invoke fails at launch:** no agent starts, and the reason is shown.
+- **`allowManagedPermissionRulesOnly` is set:** none of these rules apply. Nothing in ADE can change that, and the guide says so.
 
 ## Acceptance Criteria (1)
 
 Each names its test. The developer writes it failing first. AC10 is a regression check.
 
 1. With `vault_list` empty, the Orgo card shows "Sign in" and its caution as a `role="note"`, with no secret row, no "Add to vault" and no `npx` tag. Covered by `src/components/__tests__/IntegrationsPanel.test.tsx` (new) › "the Orgo card is a sign-in server with its caution".
-2. Install sends `mcp_install` with `name: "orgo"` and a server of exactly `{type: "http", url: "https://www.orgo.ai/mcp"}`. With rules returned, the notice says ADE's agents always ask, names both settings files, says the first write may reformat, and says to run `/mcp`. Covered by `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says where the rules went".
+2. Install sends `mcp_install` with `name: "orgo"` and a server of exactly `{type: "http", url: "https://www.orgo.ai/mcp"}`. With rules returned, the notice says ADE's agents always ask, names both settings files, says the first install may reorder `.claude/settings.json`, and says to run `/mcp`. Covered by `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says where the rules went".
 3. Every `oauth: true` entry has no `secrets`, empty `envRefs`, and an `https:` URL. Covered by `src/data/__tests__/mcpCatalog.test.ts` › "sign-in servers carry no secret and use https".
 4. `"cloud computer"` finds `["orgo"]`, and `"browser click"` still finds `["playwright"]`. Covered by `mcpCatalog.test.ts` › "searches name, category and description" (extended).
-5. Installing `orgo` in a temp git repo with no settings files creates `.claude/settings.json` and `.claude/settings.local.json` at the repo root, each with only `permissions.ask` = `MCP_ASK`. It writes the server and returns the rules. Covered by `src-tauri/src/mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings`.
+5. Installing `orgo` in a temp git repo with no settings files creates `.claude/settings.json` and `.claude/settings.local.json` at the repo root, each with only `permissions.ask` = `MCP_ASK`. It writes the server and returns the rules. In a simulated worktree, where `<wt>/.git` is a `gitdir:` file pointing at `<main>/.git/worktrees/wt`, which has a `commondir` of `../..`, install writes `settings.local.json` under `<main>/.claude/` and `settings.json` and `.mcp.json` under `<wt>`. Covered by `src-tauri/src/mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings`, `orgo_install_from_a_worktree_writes_local_rules_to_the_main_checkout`.
 6. **(Reworded for S1-3.)** Existing settings files hold `model`, `hooks` and `env` keys, user allow and deny rules, a user ask rule, and one rule equal to an Orgo glob. After install:
    - each file parsed as JSON equals the original with only `permissions.ask` changed;
    - that array is the original elements in order, followed by the missing Orgo rules in `MCP_ASK` order, each once;
@@ -309,18 +368,23 @@ Each names its test. The developer writes it failing first. AC10 is a regression
    Covered by `src-tauri/src/orgo_rules.rs` › `merge_keeps_every_user_value_and_is_idempotent`.
 7. If any one of `.mcp.json`, `.claude/settings.json` or `.claude/settings.local.json` is `{ not json`, or has a string `permissions.ask`, install errors and all three files are byte-identical to before. A missing file stays missing. Covered by `mcp.rs` › `orgo_install_refuses_and_touches_nothing_on_bad_files`.
 8. Installing `github` writes no settings file. Removing `orgo` keeps every rule in both files. Covered by `mcp.rs` › `only_orgo_adds_rules_and_remove_keeps_them`.
-9. **(S1-2.)** Against `orgo_operations.json`, using a full-match glob matcher:
-   - no `MCP_ASK` glob matches the tool name of any GET operation;
+9. **(S1-2, S1-5.)** Against `orgo_operations.json`, using a full-match glob matcher:
+   - the only GET operation an `MCP_ASK` glob matches is `getClientBilling`;
    - each of `createComputer`, `cloneComputer`, `forkComputer`, `resizeComputer`, `updateComputer`, `startComputer`, `restartComputer`, `resumeComputer`, `stopComputer`, `deleteComputer` and `enableComputerSsh` is matched;
+   - every name in the REST write-verb corpus is matched;
    - the matches hold for `mcp__orgo__orgo_<op>`, `mcp__orgo-prod__orgo_<op>` and `mcp__orgo__<op>` (no prefix);
-   - `mcp__github__create_issue` and `mcp__orgo__orgo_get_computer` are not matched.
+   - `mcp__github__create_issue`, `mcp__orgo__orgo_get_computer`, `mcp__orgo__orgo_list_workspaces` and `mcp__orgo__orgo_get_screenshot` are not matched;
+   - the recorded over- and under-matches hold as documented: `mcp__georgo__…_create_computer` and `…_get_computer_startup_log` are matched, and `mcp__Orgo__…` is not.
 
    Covered by `orgo_rules.rs` › `ask_globs_catch_every_lifecycle_write_and_no_read`.
 10. The deny callers behave as before. Covered by `usage.rs` › existing `deny_rules_merge_into_settings` and `deny_refuses_other_rules_and_bad_json` (green).
-11. **(S1-1.)** Every claude and deepseek launch from `buildLaunchCommand` carries exactly one `--settings` argument. Its shell-unquoted value parses to `{"permissions": {"ask": MCP_ASK}}`. This holds in Manual and in Continuous mode, and Codex launches are unchanged. Covered by `src/lib/__tests__/agentCommand.test.ts` › "every Claude Code launch carries Orgo's ask rules".
+11. **(S1-1, S1-4.)** `buildLaunchCommand(provider, rolePath, { rules })` for claude and deepseek carries exactly one `--settings` argument, whose shell-unquoted value parses to `{"permissions": {"ask": rules.ask}}`. This holds in Manual mode, in Continuous mode, and with a `-p` task. Codex launches are unchanged. `rules` is a required property of the required `opts`, so a call without it is a type error, which `npx tsc --noEmit` enforces. Covered by `src/lib/__tests__/agentCommand.test.ts` › "every Claude Code launch carries Orgo's ask rules", plus a `// @ts-expect-error` case for a call without `rules`.
 12. **(S1-1.)** Launching from `AgentPicker` with a pane cwd of `<repo>/app` invokes `orgo_launch_rules` with no path, and types a command containing the same `--settings` as with cwd `<repo>`. Covered by `src/components/__tests__/agentLaunch.test.ts` › "Orgo rules do not depend on the folder an agent starts in".
 13. The guide's MCP table lists exactly the catalog's servers, by set equality after removing parenthesised text and splitting on commas. Covered by `scripts/mcpCatalogDocs.test.ts` (new) › "the guide's table lists exactly the catalog".
-14. The Orgo guide section contains every `MCP_ASK` glob (read from `orgo_rules.rs`) and mentions "subfolder", "Continuous", "/mcp", "until you delete" and "auto top-up". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
+14. The Orgo guide section contains every `MCP_ASK` glob (read from `orgo_rules.rs`), and mentions "subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly" and "reorder". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
+15. **(S1-4.)** An Orchestrator dispatch types a `claude … -p '<task>'` command that contains the `--settings` with `MCP_ASK`, through `loadLaunchRules`. Covered by `src/components/__tests__/OrchestratorTab.test.tsx` (extended) › "orchestrator dispatches carry Orgo's ask rules".
+16. **(S1-4.)** The board's `dispatchAgent` types a command that contains the same `--settings`. Covered by `src/lib/__tests__/agentLaunch.test.ts` › "board dispatch carries Orgo's ask rules".
+17. **(S1-4.)** When the `orgo_launch_rules` invoke rejects, `prepareAgentLaunch` returns `{ ok: false }` with the "couldn't load its permission rules" message, and the Orchestrator aborts its dispatch with it. No command is typed. Covered by `agentLaunch.test.ts` › "no rules, no launch" and `OrchestratorTab.test.tsx` › "no rules, no dispatch".
 
 ## Verification (1)
 
@@ -330,7 +394,9 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 - **Sign-in (U9).** Sign in through `/mcp` to the ADE workspace. No `orgo_get_vnc_password` appears. Every lifecycle tool listed is matched by a glob.
 - **Subfolder, ADE launch.** In a repo with Orgo installed, open a pane in `<repo>/app`, launch an agent from the picker, and ask it to create a computer: it prompts. Repeat with Continuous on: it prompts (1b later denies instead).
 - **Subfolder, user-started.** In `<repo>/app`, type `claude` yourself and ask for a create: it prompts, from the root `settings.local.json`. `/permissions` shows the rule's source.
-- **U13.** In an ADE-launched session, `/permissions` lists the rules from both the command line and the project files.
+- **U13 (confirm).** In an ADE-launched session, `/permissions` lists the rules from both the command line and the project files.
+- **Worktree.** Install from a pane inside a git worktree. `<main>/.claude/settings.local.json` gains the rules. A `claude` typed in the worktree prompts on a create.
+- **Orchestrator.** Dispatch a task that asks for a computer. The `-p` run reports the Orgo call as refused, not run.
 - **Manual mode.** "Yes, and don't ask again" on a create, then another create: it still prompts.
 - **Clean-up.** Delete every computer, check the dashboard is empty, and revoke the sign-in.
 
@@ -338,8 +404,8 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 
 - `src/data/mcpCatalog.ts` and its test.
 - `src/components/IntegrationsPanel.tsx` and its new test; `src/index.css`.
-- `src/lib/agentCommand.ts`, `src/lib/agentLaunch.ts` and their tests.
-- `src-tauri/src/orgo_rules.rs` (new), `src-tauri/src/orgo_operations.json` (new), and `lib.rs` registration.
+- `src/lib/agentCommand.ts`, `src/lib/agentLaunch.ts`, `src/lib/orgoRules.ts` (new), `src/components/OrchestratorTab.tsx`, and their tests.
+- `src-tauri/src/orgo_rules.rs` (new), the shared `merge_rules` and `main_checkout_root` (in `src-tauri/src/claude_settings.rs` per Q11, unless the CLI library plan created it first), `src-tauri/src/orgo_operations.json` (new), and `lib.rs` registration.
 - `src-tauri/src/mcp.rs`; `src-tauri/src/usage.rs` (calls the shared merge, no behaviour change).
 - `scripts/mcpCatalogDocs.test.ts`, `docs/guide/integrations.md`, `README.md`.
 - `.ade/context/orgo-permission-rules.md`, and the deferred-work entry.
@@ -362,20 +428,45 @@ Depends on Story 1 (`orgo_rules.rs`, `orgo_launch_rules`, the `--settings` plumb
   pub const CONTINUOUS_DENY_MCP: &[&str] = &[
       "mcp__*orgo*__*create*", "mcp__*orgo*__*clone*", "mcp__*orgo*__*fork*",
       "mcp__*orgo*__*start*",  "mcp__*orgo*__*resume*", "mcp__*orgo*__*resize*computer*",
+      // round 4 (S1-5): REST verbs that start or bring back a computer
+      "mcp__*orgo*__*wake*",   "mcp__*orgo*__*restore*", "mcp__*orgo*__*launch*",
+      "mcp__*orgo*__*boot*",   "mcp__*orgo*__*heal*",
   ];
   ```
 
   - A glob deny "is removed from Claude's context", and it is silent where no tool matches.
   - Always passing it covers Orgo added by `claude mcp add` (`~/.claude.json`), an ancestor `.mcp.json`, and another server name containing "orgo".
   - In Continuous sessions it also hides other "create" writes such as `create_screen` and `create_workspace`, which is acceptable for an unattended session.
-  - Like the ask list, it is checked against the fixture: no GET matched, and every create, clone, fork, start, restart, resume and resize-computer matched.
+  - Like the ask list, it is checked against the fixture.
+    - No GET is matched.
+    - Every create, clone, fork, start, restart, resume and resize-computer is matched.
+    - The corpus names `wake_computer`, `restore_computer_backup`, `launch_template`, `boot_computer` and `heal_computer` are matched.
 - **`CONTINUOUS_DENY_CLI`, always**, with leading wildcards so the usual ways of invoking the program are caught:
   - For `G` in `computers`, `c` and `S` in `create`, `start`, `restart`, `resize`, `clone`: `Bash(*orgo G S*)`.
   - `Bash(*orgo templates run*)`, `Bash(*orgo t run*)`.
   - `Bash(*orgo -*)`: a global flag before the subcommand.
   - `Bash(*orgo computers -*)`, `Bash(*orgo c -*)`, `Bash(*orgo templates -*)`, `Bash(*orgo t -*)`: a flag before the subcommand.
 
-  A leading `*` matches `env orgo …`, `/home/u/.orgo/bin/orgo …`, `npx orgo …` and `sh -c 'orgo …'`. These are deny rules, so a leading wildcard is allowed and raises no warning; only allow rules warn about it. It still misses a quoted subcommand (`orgo c 'create'`), shell aliases and functions, variables (`$O c create`), and commands built at runtime or run from a script file.
+  These are deny rules, so a leading wildcard is allowed and raises no warning; only allow rules warn about it.
+
+  **What a leading `*` catches:** `env orgo …`, `/home/u/.orgo/bin/orgo …`, unversioned `npx orgo …`, and `sh -c 'orgo …'`.
+
+  **What it misses** (round 4, corrected; the guide lists all of these):
+  - **Versioned runners:** `npx orgo@2.3.0 c create`, `pnpm dlx orgo@latest …`. The `@version` breaks the contiguous `orgo c create`.
+  - **Other invocations:** `node …/dist/cli.js c create`.
+  - **Spacing:** doubled spaces, tabs and line continuations between words.
+  - **Quoting:** `orgo "c" create`, `orgo c 'create'`.
+  - **Indirection:** variables (`$O c create`), shell aliases and functions, scripts written to a file and run, `xargs -n1 orgo …`, and commands built at runtime.
+  - **Out of 1b's scope:** the credit-spending `orgo agent`, `orgo run` and `orgo handoff start`. They create no computer; they wait for Story 1c.
+
+  **What it over-matches**, also recorded: any command whose text contains the phrase is denied in Continuous mode, for example:
+  - `grep "orgo c create" notes.md`, `git commit -m "… orgo c create …"`, and `echo` or heredocs that mention it;
+  - `Bash(*orgo -*)` against `grep "orgo --json"`.
+
+  **Judged tolerable, not narrowed.** Narrowing to a word boundary (`* orgo …`) would lose `sh -c 'orgo …'`, where a quote precedes the name.
+  - A false deny costs one refused command in an unattended session, and the agent can rephrase it (`grep -F 'orgo c' | grep create`).
+  - A false allow would let an unattended agent create a computer.
+  - Agents building these stories will hit it when they grep the plan, so the context file and the guide say so.
 
 **The launch.** With `continuous`, `claudeCommand` writes:
 
@@ -389,19 +480,20 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
 
 ## Acceptance Criteria (1b)
 
-1. `buildLaunchCommand("claude", path, { continuous: true, disallowedTools: […], task: "go" })` orders the command as `--dangerously-skip-permissions`, `--settings …`, `--disallowedTools` with each rule shell-quoted, `--append-system-prompt-file …`, then the task. Without `continuous`, or with an empty list, there is no `--disallowedTools`. Covered by `src/lib/__tests__/agentCommand.test.ts` › "continuous launches deny Orgo creation before the role flag".
+1. `buildLaunchCommand("claude", path, { rules, continuous: true, task: "go" })`, with `rules.continuousDeny` non-empty, orders the command as `--dangerously-skip-permissions`, `--settings …`, `--disallowedTools` with each rule shell-quoted, `--append-system-prompt-file …`, then the task. Without `continuous`, or with an empty list, there is no `--disallowedTools`. Covered by `src/lib/__tests__/agentCommand.test.ts` › "continuous launches deny Orgo creation before the role flag".
 2. **(1b-1.)** `orgo_launch_rules()` returns `CONTINUOUS_DENY_MCP` and `CONTINUOUS_DENY_CLI` unconditionally; it takes no project. Against `orgo_operations.json`, no MCP deny glob matches a GET operation, and each of create, clone, fork, start, restart, resume and resize-computer is matched. Covered by `orgo_rules.rs` › `continuous_mcp_denies_are_unconditional_and_spare_reads`.
 3. Under the documented semantics, re-implemented in the test:
    - **Denied:** `orgo c create --name a`, `orgo computers start a`, `orgo --json c create`, `orgo c --json resize a --ram 8`, `orgo t run hermes-agent`, `ORGO_PROFILE=x orgo c clone a`, `orgo c create --profile default`, `env orgo c create`, `/home/u/.orgo/bin/orgo c create`, `npx orgo c create`, `sh -c 'orgo c create'`.
+   - **Denied, the recorded over-match:** `grep "orgo c create" notes.md` and `grep "orgo --json" x`.
    - **Not denied:** `orgo c delete a`, `orgo c list --json` and `orgo whoami`.
-   - **Unmatched, the documented limit:** `orgo c 'create'`.
+   - **Unmatched, the documented limits:** `orgo c 'create'`, `orgo "c" create`, `orgo  c create` (two spaces), `npx orgo@2.3.0 c create`, `pnpm dlx orgo@latest c create`, `node /x/dist/cli.js c create`, `$O c create`, `xargs -n1 orgo c create`. The test asserts these are not matched, so the guide's list stays true.
 
    Covered by `orgo_rules.rs` › `continuous_cli_denies_cover_creation`.
 4. **(1b-2.)** Launching from `AgentPicker` with Continuous on, from a pane cwd of `<repo>/app` and of `<repo>`, invokes `orgo_launch_rules` with no path argument. Both typed commands carry identical `--disallowedTools` lists. With Continuous off, neither command has `--disallowedTools`. Covered by `src/components/__tests__/agentLaunch.test.ts` › "continuous denies are the same in every folder".
 
 **Manual checks:**
 - In an ADE Continuous session started in `<repo>/app`, with Orgo installed through ADE, `orgo_create_computer` is absent from the tools. Repeat with Orgo added through `claude mcp add` instead.
-- `orgo c create` is refused.
+- `orgo c create` is refused, and so are `env orgo c create` and `sh -c 'orgo c create'`, run through real Claude Code, not only the test matcher.
 - `orgo_delete_computer` still prompts.
 
 **Slice (1b):** `src/lib/agentCommand.ts`, `src/lib/agentLaunch.ts`, their tests, `src-tauri/src/orgo_rules.rs`, the context file, and a paragraph in the guide.
@@ -421,6 +513,7 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
     - add ask rules `Bash(orgo *--profile*)` and `Bash(orgo *ORGO_PROFILE*)`;
     - add `env`, `exec`, absolute paths, `watch`/`setsid` and flags-after-subcommand to the unmatched list.
   - The Security claim that "`ORGO_API_KEY` overrides any `orgo login` in ADE terminals" is wrong whenever a profile is named.
+  - **(Round 4.)** Users already signed in with `orgo login` should run `orgo logout`, which removes the account-wide credential from `~/.orgo/credentials.json`, before relying on the workspace key. Whenever 1c is revived, the guide and the setup flow must say so.
 - **1c-2, version and fixture.** Pin `orgo@2.3.0`, and add an offline AC that classifies a recorded `orgo manifest` fixture.
 - **1c-3, classification.**
   - `computers exec --file` and `computers bash` from stdin must ask.
@@ -429,6 +522,11 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
 - **Test strategy.** Add a one-time manual matrix of the risky corpus through real Claude Code, in Manual and in Continuous mode.
 
 Story 1b's CLI denies stand on their own and do not wait for this story.
+
+**Possible convergence (round 4, FYI from the owner).** The CLI library plan (`plan/cli-library-and-mcps`) now narrows its v1 to gh, stripe, vercel and wrangler. It adds a PreToolUse hook that parses each shell command before Claude Code runs it, handling aliases, flag order and runner forms such as `npx`, `pnpm`, `env` and `sh -c`, with ask rules on top.
+- If that hook lands, a revived 1c could express Orgo's CLI rules through it. That would close most of the Bash-pattern limits listed in 1b and above, such as versioned runners, quoting, spacing and flags after the subcommand.
+- Story 1b's leading-wildcard denies could later move onto it as well.
+- Not redesigned now: 1b stays as written, and 1c stays on hold.
 
 <details><summary>Round-2 design (superseded where the findings above conflict)</summary>
 
@@ -561,7 +659,10 @@ The verification command is the repo's, unchanged: `npx tsc --noEmit` · `npm te
 
 ## Deferred Work
 
-- serde_json `preserve_order`: ADE's settings writers re-sort keys on first write. This is an existing entry in `_bmad-output/initiative-phone-remote/deferred-work.md`, now also hit by Orgo's install on `.claude/settings.json`. It needs its own story, because it is crate-wide.
+- **Key-order preservation in Claude Code settings files, its own small story** (owner decision 11, "fix later").
+  - ADE's settings writers re-sort keys and re-indent on first write. This is an existing entry in `_bmad-output/initiative-phone-remote/deferred-work.md`, now also hit by Orgo's install on a committed `.claude/settings.json`.
+  - The options are serde_json's crate-wide `preserve_order`, which needs a check of every JSON writer and of `mcp.rs:100`'s order assertion, or a settings-only writer that edits `permissions.*` arrays without reparsing the rest.
+  - The story picks one and owns the review.
 - A vault option to keep a secret out of terminals.
 - Website mention once step 2 ships.
 - Windows, macOS and iPhone Orgo computers.
@@ -569,15 +670,18 @@ The verification command is the repo's, unchanged: `npx tsc --noEmit` · `npm te
 
 ## Open Questions (owner)
 
-Decided: Q3 for Story 1 (decision 7), Q5 (6), Q7 (4), Q8 (8, widened in round 3), Q9 (9), the CLI (10, now on hold). Q6 is moot. Stories 1 and 1b need no answer to be built.
+Decided: Q3 for Story 1 (decision 7), Q5 (6), Q7 (4), Q8 (8, widened in round 3), Q9 (9), the CLI (10, now on hold), Q12 (11). Q6 is moot. Stories 1 and 1b need no answer to be built.
 
 - **Q1. Spend limits and the auto-stop default (step 2).** Recommend: a cap of 3 (configurable 1 to 10), a 2 h end by default, auto-stop at 30 min, Small or Medium, no GPU, no hourly.
 - **Q2. Does ADE ever create a computer without a click?** Recommend: never.
 - **Q3. The panel's key (step 2).** Recommend: vault `ORGO_API_KEY`, Custom, on the ADE workspace, read only in Rust, with `vault_get` allowlisted first.
 - **Q4. The live view.** Recommend: noVNC 1.7.0, `connect-src` plus exactly `wss://www.orgo.ai`, and both CSP tests. Confirm MPL-2.0 is acceptable.
 - **Q10. The CLI rule set beyond decision 10's list.** On hold with Story 1c.
-- **Q11. Where the shared settings merge lives.** Recommend a neutral `src-tauri/src/claude_settings.rs`, created by whichever plan builds first.
-- **Q12 (new, S1-3).** Accept that the first Orgo install reformats a committed `.claude/settings.json` (keys sorted, re-indented, every value kept), with `preserve_order` deferred to its own story? Recommend yes.
+- **Q11. Where the shared settings merge lives.**
+  - Recommend a neutral `src-tauri/src/claude_settings.rs` for the merge (`merge_rules`, `load_settings`, `save_settings`) and for `main_checkout_root`. Whichever plan builds first creates it.
+  - The CLI library plan currently places this code in `usage.rs` and a `rule_match.rs`. The coordinator is giving its architect the same recommendation, so both plans should converge on `claude_settings.rs`.
+  - `orgo_rules.rs` keeps only Orgo's lists.
+- **Q12. Closed** by decision 11 ("Accept, fix later").
 
 ## Review Triage Log
 
@@ -609,3 +713,20 @@ Decided: Q3 for Story 1 (decision 7), Q5 (6), Q7 (4), Q8 (8, widened in round 3)
 | **1b-2:** pin how the project is resolved | minor | No project is needed any more. AC4 asserts the same denies from `<repo>` and `<repo>/app`, and that no path is passed. |
 | **1c-1, 1c-2, 1c-3**, test strategy | blocking/major | **Recorded, not reworked.** Story 1c is on hold pending the owner (product doc). The Security section no longer claims `ORGO_API_KEY` overrides a login. |
 | Confirmed by the reviewer: hosted OAuth, the Sentry precedent, ask and deny in bypass, `--disallowedTools` placement, merge safety | n/a | Kept. |
+
+**Round 4, 2026-10-29: re-review of 53b1d59. Story 1 BLOCK on S1-4 only; Story 1b PASS WITH MINORS. U13 settled. Owner answered Q12.**
+
+| Finding | Verdict | Action |
+|---|---|---|
+| **U13:** `--settings` takes one value, and permission lists are concatenated per source (2.1.42 `Jq6`/`jM5`, 2.1.312 `To()`/`rse`) | settled | Union fallback removed. The manual check only confirms it. |
+| **S1-4:** the Orchestrator (`OrchestratorTab.tsx:292`) calls `buildLaunchCommand` directly, so "Only AgentPicker launches agents" was false. AC11 was unmeetable (sync builder, async rules). | major | `rules: LaunchRules` is a required field of now-required `LaunchOptions`, so tsc forces every caller. `loadLaunchRules()` caches the Rust invoke and fails closed. The probes use a module-private `PROBE_RULES`. The Orchestrator and `dispatchAgent` pass the rules. The facts line was corrected to list all three paths. Decision 5 now names them, and notes that `-p` refuses rather than asks (low live impact). AC11 rewritten with a `@ts-expect-error` case. AC15 (Orchestrator), AC16 (board dispatch) and AC17 (fail closed) added. |
+| **S1-5:** future tool names fail open | minor | Added 13 verbs: wake, restore, launch, boot, extend, set\*end, billing, public\*url, proxy, secret, ssh\*key, plus freeze and heal from the same permissions table. Checked against the live spec: the only GET matched is `get_client_billing`, asked on purpose. AC9 now also checks a REST write-verb corpus from the key permissions page, and pins the recorded over- and under-matches: `georgo` and `get_computer_startup_log` match; `Orgo` does not, because matching is case-sensitive. 1b's deny list gained wake, restore, launch, boot and heal. |
+| **Worktree:** Claude Code reads the main checkout's `settings.local.json` inside a worktree, while `project_root` (`lib.rs:184-194`) returns the worktree root | minor | Install writes the local rules to the main checkout through `main_checkout_root`, which follows the `.git` file's `gitdir` to its `commondir`. AC5 has a worktree case, and there is a manual check. |
+| **Managed-only rules:** `allowManagedPermissionRulesOnly` voids both the flag's and the files' rules | minor | Stated in decision 5, Security, failure modes and the guide (AC14 checks the guide). |
+| **1b over-match** (grep, commit messages, echo, heredocs, `*orgo -*`) | minor | Documented and judged tolerable: a false deny costs one refused command, a false allow an unattended create. Not narrowed, because word-boundary forms lose `sh -c '…'`. AC3 pins two over-matches. |
+| **1b "npx is caught" claim** | minor | Corrected: unversioned `npx orgo` is caught; `npx orgo@2.3.0` and `pnpm dlx orgo@latest` are not. |
+| **1b limits list** | minor | Added: `node …/dist/cli.js`, doubled whitespace, tabs and line continuations, `orgo "c" create`, `$O c create`, scripts, `xargs -n1`, and the credit-spending `agent`, `run` and `handoff start` (until 1c). AC3 asserts they stay unmatched. |
+| **1b manual checks** | minor | `env orgo c create` and `sh -c '…'` are run through real Claude Code. |
+| **1c record** | n/a | `orgo logout` advice for users already signed in. Possible convergence with the CLI plan's PreToolUse hook noted, not designed. |
+| **Q12** (owner, "Accept, fix later") | decided | Decision 11. Q12 closed. The notice and guide say the first install may reorder `.claude/settings.json`. Key-order preservation is its own deferred story. |
+| **Q11** home of the shared merge | open | Still recommend `src-tauri/src/claude_settings.rs`, which now also holds `main_checkout_root`. Convergence with the CLI plan's `usage.rs`/`rule_match.rs` noted. |
