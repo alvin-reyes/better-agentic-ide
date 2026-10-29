@@ -319,21 +319,21 @@ While either wait runs, nothing new is shown.
 - window `blur` and `resize`;
 - `resized(term)` from `term.onResize` (a pane resize, after which xterm calls `leave` with the pointer unmoved), only when `term` owns the card or `hovered`;
 - `visibilitychange` to hidden;
-- `contentMoved(term)`, only when `term` owns the card or `hovered`;
+- `contentMoved(term)`, only when `term` owns the card or `hovered`, or is the terminal where the pointer last moved. That last case covers a pointer resting on a URL link (WebLinksAddon, which this controller never sees) while output follows and a file link scrolls under it;
 - the redraw cases above.
 
 So typing in Claude Code's live region, which redraws the rows under the pointer, never brings the card back. Only moving the pointer does.
 
 **`pointerLeft(term)`** comes from a `mouseleave` on the terminal element itself. The listener acts only when `e.target === term.element`: non-bubbling `mouseleave` events for child boundaries still reach an ancestor's capture listener, and with xterm's DOM renderer (used when GPU rendering is off, past 8 GPU terminals, or after a context loss) every span or row crossing would otherwise count as leaving. It sets `movedSinceEnter` and clears `hovered` if `term` owns it. The browser fires the inner screen element's `mouseleave` (and so xterm's `leave`) before the terminal element's own, so `pointerLeft` normally follows xterm's `leave` rather than preceding it. The controller handles both orders: `leave` first takes the real-leave path when the pointer had moved, and `pointerLeft` then only clears what remains.
 
-**`pointerMoved(term, point)`** comes from a capture-phase `mousemove` on the terminal element. It sets `movedSinceEnter`. If `hovered` belongs to another terminal, it clears `hovered`, because the pointer has left that terminal. If `suppressed` is set, it clears it. Then, only if `enabled()` is true and `hovered` belongs to `term`, it starts the delay for that link at the new point. This matters because xterm never re-fires `hover` for a move inside the same link (`Linkifier.ts:99-105`), so after a key press, nudging the pointer on the link brings the card back.
+**`pointerMoved(term, point)`** comes from a capture-phase `mousemove` on the terminal element. It sets `movedSinceEnter` and records `term` as the terminal where the pointer last moved. If `hovered` belongs to another terminal, it clears `hovered`, because the pointer has left that terminal. A running redraw wait becomes the 150 ms grace, because the pointer is no longer still. If `suppressed` is set, it clears it. Then, only if `enabled()` is true and `hovered` belongs to `term`, it starts the delay for that link at the new point. A link accepted this way, after a dismissal, keeps `movedSinceEnter` true. This matters because xterm never re-fires `hover` for a move inside the same link (`Linkifier.ts:99-105`), so after a key press, nudging the pointer on the link brings the card back.
 
 **Known limits:**
 - A path drawn in place (not scrolled) under a parked pointer opens a card after the delay. An example is Claude Code's live region before the output first scrolls. The pointer's move to where it rests still counts as a move since the last accepted hover.
-- Because `movedSinceEnter` is cleared only by an accepted hover, a redraw leave after the pointer moved inside the link is treated as a real leave. If xterm's re-hover then takes longer than 150 ms, the card hides and returns after the delay.
+- Because `movedSinceEnter` is cleared only by an accepted hover, a redraw leave after the pointer moved inside the link is treated as a real leave. If xterm's re-hover then takes longer than 150 ms, the card hides and returns after the delay. Likewise, after a nudge reopens the card, `movedSinceEnter` stays true. Until the next accepted hover, new content drawn under the now-still pointer can open a card.
 - The 150 ms and 1000 ms waits are constants to tune in the manual check.
 
-**`forget(term)`** clears everything `term` owns: `hovered` if it is `term`'s; and, if the card is `term`'s, it hides the card, cancels its delay, grace and redraw timers, and increments the token so a late answer is dropped. It does not set `suppressed`. Taking a terminal out of view fires no xterm `leave` (a keyboard tab switch, Cmd+W, detaching to another window), so `useTerminal` calls `forget(paneId)` wherever a terminal's wrapper leaves the DOM (`detachInstance`) and from the `attachHoverDismissal` disposer.
+**`forget(term)`** clears everything `term` owns: `hovered` if it is `term`'s; and, if the card is `term`'s, it hides the card, cancels its delay, grace and redraw timers, and drops the in-flight answer, so a late answer shows nothing. It does not set `suppressed`. Taking a terminal out of view fires no xterm `leave` (a keyboard tab switch, Cmd+W, detaching to another window), so `useTerminal` calls `forget(paneId)` wherever a terminal's wrapper leaves the DOM (`detachInstance`) and from the `attachHoverDismissal` disposer.
 
 **Not cancellable:** a Rust read already in flight is not aborted. It is bounded instead, and a stale answer is dropped. Moving the pointer across many links issues no reads, because a read starts only after the full delay.
 
@@ -932,3 +932,8 @@ None. The five open questions were decided by the owner on 2026-10-29, each as r
   - The `enabled()` check in `pointerMoved` gains a test (Story 2 AC22).
   - The `mouseleave` order is clarified: xterm's `leave` comes first.
   - The body width is recorded as 294 px (320 − 24 − 2, border-box). The image box, PDF fit, HTML clip and scale follow from it, and Story 4's thumbnail becomes at most 588×480.
+- 2026-10-29, Story 2 re-review of de3af00: PASS WITH MINORS. The lifecycle text is synced with the code:
+  - A pointer move turns a running redraw wait into the 150 ms grace.
+  - A re-accept after a dismissal keeps `movedSinceEnter` true. Known limit 2 now says the same.
+  - The terminal where the pointer last moved also owns `contentMoved`, which covers a pointer resting on a URL link.
+  - `forget` drops the in-flight answer. The effect is unchanged.
