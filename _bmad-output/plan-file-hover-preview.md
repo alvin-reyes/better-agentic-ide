@@ -94,7 +94,7 @@ The card follows the existing viewers' safety rules. Text is rendered as text. A
 
 ```mermaid
 flowchart LR
-  subgraph Webview["Webview (one per window: main and each detached window)"]
+  subgraph Webview["Webview (one per window: main and each detached window; one controller per window, shared by its terminals, state scoped per terminal)"]
     XT["xterm link<br/>(terminalFileLinks.ts)"] -- "hover / leave / activate" --> HC["hover controller<br/>(hoverPreview.ts)"]
     TD["terminal events<br/>(mousemove, mousedown, wheel: capture;<br/>onScroll with viewportY change)"] --> HC
     WD["window events<br/>(keydown, blur, resize, hidden)"] --> HC
@@ -243,7 +243,7 @@ UTF-8 cut at the read boundary: an incomplete trailing sequence is dropped, not 
   - text, of kind text;
   - HTML: the source text plus its snapshot, computed once per stamp (Story 5);
   - an image `Blob`;
-  - a PDF thumbnail (a `Blob` of a PNG of at most 592×480 pixels) with its `numPages`.
+  - a PDF thumbnail (a `Blob` of a PNG of at most 588×480 pixels, which is 294×240 at `devicePixelRatio` 2) with its `numPages`.
 - An entry's weight is its text length (2 bytes per UTF-16 code unit) or its Blob's size. The budget is 32 entries and 32 MB. At most three images at the 10 MB cap fit. Each entry is under the 10 MB cap, so no entry is ever over budget on its own.
 - **PDF bytes are never cached.** A PDF entry is created only after the card has rendered the thumbnail, so a stale PDF answer is dropped, not stored. Stale answers of the other kinds are stored, since the work is already done.
 - **Race:** a request keeps a JavaScript reference to the entry whose stamp it sent as `known`. If a later answer evicts that entry while the request is in flight, an `unchanged` answer is still served from the kept reference. Without a kept entry, `known` is not sent.
@@ -273,15 +273,22 @@ The controller is built for that.
 
 It returns false when `viewportY` is unchanged in a buffer that is not full, or drops by exactly 1 in a full buffer. `attachHoverDismissal` calls it on every `onScroll`.
 
+**One controller per window, with state scoped per terminal.** Every terminal in a window feeds the same controller, including background tabs, whose xterm instances stay alive and keep receiving PTY output. xterm fires `onScroll` for every line whether or not the terminal is on screen. So every terminal-side call carries the terminal it came from, as `term: TerminalId` (the pane id). The rules:
+- **Only the owning terminal can close or suppress the card.** That is the terminal that produced the card's or `hovered`'s link. `contentMoved(term)` and `resized(term)` from any other terminal are ignored, so output or a resize in another pane or tab never touches this pane's card.
+- **Window-level dismissals stay global:** key press, window `blur` and `resize`, hidden, and `wheel` and `mousedown` on any terminal. There is one pointer and one keyboard.
+- **A pointer event from terminal X never reopens a link from terminal Y.**
+- **Removing or disposing a terminal clears what it owns.** See `forget` below.
+
 **State.** The controller keeps three separate things:
-- `hovered`: the link xterm last reported under the pointer, with the pointer. It is set by `enter` and cleared by a `leave` with the same key.
-- `card`: the pending, loading or shown preview, with its key.
+- `hovered`: the link xterm last reported under the pointer, with the pointer and its `term`. It is set by `enter` and cleared by a `leave` from the same terminal with the same key.
+- `card`: the pending, loading or shown preview, with its key and its `term`.
 - `suppressed`: a flag.
 
 It also keeps `movedSinceEnter`, which `pointerMoved()` sets and an accepted `enter` clears.
 
-`createHoverController({ peek, cache, show, hide, enabled, delayMs = 350, loadingAfterMs = 200, graceMs = 150, redrawWaitMs = 1000 })` returns `enter(link, pointer)`, `leave(key)`, `dismiss()`, `pointerMoved(point)`, `pointerLeft()` and `contentMoved()`.
+`createHoverController({ peek, cache, show, hide, enabled, delayMs = 350, loadingAfterMs = 200, graceMs = 150, redrawWaitMs = 1000 })` returns `enter(term, link, pointer)`, `leave(term, key)`, `dismiss()`, `pointerMoved(term, point)`, `pointerLeft(term)`, `contentMoved(term)`, `resized(term)` and `forget(term)`.
 - `link` is `{ abs, key }`, and `pointer` is `{ x, y, buttons }` from the xterm event.
+- A key is only compared together with its `term`, because two terminals can show the same path at the same viewport row.
 
 **`enter`.** It always records `hovered`. It then does nothing more when any of these holds:
 - `enabled()` is false;
@@ -291,7 +298,7 @@ It also keeps `movedSinceEnter`, which `pointerMoved()` sets and an accepted `en
 
 When the key equals the card's key, `enter` is a no-op: the card keeps its place, and a running leave wait is cancelled. This absorbs redraw churn, double hovers and row crossings inside one link. Otherwise `enter` accepts the link: it increments the token, hides the current card and starts the 350 ms delay.
 
-**`leave(key)`.** It clears `hovered` whenever `key` equals `hovered.key`, whatever the card's state, including while suppressed with no card on screen. Otherwise a suppressed hover could go stale and later open a card for a path that has gone. The rest is ignored unless `key` is the card's key. Then:
+**`leave(term, key)`.** It clears `hovered` whenever `term` and `key` equal `hovered`'s, whatever the card's state, including while suppressed with no card on screen. Otherwise a suppressed hover could go stale and later open a card for a path that has gone. The rest is ignored unless `term` and `key` are the card's. Then:
 - **Real leave** (`movedSinceEnter` true; the pointer moved): a 150 ms grace runs before the card is hidden, covering a row crossing inside one link. The hide does not suppress, because the pointer moved.
 - **Redraw leave** (`movedSinceEnter` false; the pointer is still): the card stays for up to 1000 ms, waiting for xterm's re-hover of the same key. The long wait covers the provider's `get_pty_cwd`, which can spawn `lsof` (`pty.rs:288-296`, `378-386`).
   - A same-key `enter` keeps the card.
@@ -310,34 +317,36 @@ While either wait runs, nothing new is shown.
 - `mousedown` and `wheel` on the terminal element, in the **capture** phase (xterm's scrollable element stops wheel propagation);
 - the link's `activate` (a click, which still opens the file);
 - window `blur` and `resize`;
-- `term.onResize` (a pane resize, after which xterm calls `leave` with the pointer unmoved);
+- `resized(term)` from `term.onResize` (a pane resize, after which xterm calls `leave` with the pointer unmoved), only when `term` owns the card or `hovered`;
 - `visibilitychange` to hidden;
-- `contentMoved()`;
+- `contentMoved(term)`, only when `term` owns the card or `hovered`;
 - the redraw cases above.
 
 So typing in Claude Code's live region, which redraws the rows under the pointer, never brings the card back. Only moving the pointer does.
 
-**`pointerLeft()`** comes from a `mouseleave` on the terminal element itself. The listener acts only when `e.target === term.element`: non-bubbling `mouseleave` events for child boundaries still reach an ancestor's capture listener, and with xterm's DOM renderer (used when GPU rendering is off, past 8 GPU terminals, or after a context loss) every span or row crossing would otherwise count as leaving. It sets `movedSinceEnter`, so xterm's following `leave` counts as a real leave (150 ms grace, not the 1000 ms redraw wait), and it clears `hovered`.
+**`pointerLeft(term)`** comes from a `mouseleave` on the terminal element itself. The listener acts only when `e.target === term.element`: non-bubbling `mouseleave` events for child boundaries still reach an ancestor's capture listener, and with xterm's DOM renderer (used when GPU rendering is off, past 8 GPU terminals, or after a context loss) every span or row crossing would otherwise count as leaving. It sets `movedSinceEnter` and clears `hovered` if `term` owns it. The browser fires the inner screen element's `mouseleave` (and so xterm's `leave`) before the terminal element's own, so `pointerLeft` normally follows xterm's `leave` rather than preceding it. The controller handles both orders: `leave` first takes the real-leave path when the pointer had moved, and `pointerLeft` then only clears what remains.
 
-**`pointerMoved(point)`** comes from a capture-phase `mousemove` on the terminal element. It sets `movedSinceEnter`. If `suppressed` is set, it clears it, and if `hovered` is still set, it starts the delay for that link at the new point. This matters because xterm never re-fires `hover` for a move inside the same link (`Linkifier.ts:99-105`), so after a key press, nudging the pointer on the link brings the card back.
+**`pointerMoved(term, point)`** comes from a capture-phase `mousemove` on the terminal element. It sets `movedSinceEnter`. If `hovered` belongs to another terminal, it clears `hovered`, because the pointer has left that terminal. If `suppressed` is set, it clears it. Then, only if `enabled()` is true and `hovered` belongs to `term`, it starts the delay for that link at the new point. This matters because xterm never re-fires `hover` for a move inside the same link (`Linkifier.ts:99-105`), so after a key press, nudging the pointer on the link brings the card back.
 
 **Known limits:**
 - A path drawn in place (not scrolled) under a parked pointer opens a card after the delay. An example is Claude Code's live region before the output first scrolls. The pointer's move to where it rests still counts as a move since the last accepted hover.
 - Because `movedSinceEnter` is cleared only by an accepted hover, a redraw leave after the pointer moved inside the link is treated as a real leave. If xterm's re-hover then takes longer than 150 ms, the card hides and returns after the delay.
 - The 150 ms and 1000 ms waits are constants to tune in the manual check.
 
+**`forget(term)`** clears everything `term` owns: `hovered` if it is `term`'s; and, if the card is `term`'s, it hides the card, cancels its delay, grace and redraw timers, and increments the token so a late answer is dropped. It does not set `suppressed`. Taking a terminal out of view fires no xterm `leave` (a keyboard tab switch, Cmd+W, detaching to another window), so `useTerminal` calls `forget(paneId)` wherever a terminal's wrapper leaves the DOM (`detachInstance`) and from the `attachHoverDismissal` disposer.
+
 **Not cancellable:** a Rust read already in flight is not aborted. It is bounded instead, and a stale answer is dropped. Moving the pointer across many links issues no reads, because a read starts only after the full delay.
 
-**Wiring.** `attachHoverDismissal(term, controller)` adds the terminal-side listeners:
+**Wiring.** `attachHoverDismissal(term, paneId, controller)` adds the terminal-side listeners, each passing `paneId`:
 - capture `mousemove`, which calls `pointerMoved`;
 - `mouseleave` on the terminal element, which calls `pointerLeft` only when `e.target === term.element`;
 - capture `mousedown` and `wheel`;
-- `term.onResize`, which calls `dismiss`;
-- `onScroll`, which calls the controller's `contentMoved()` when `textMoved` says the text moved.
+- `term.onResize`, which calls `resized(paneId)`;
+- `onScroll`, which calls the controller's `contentMoved(paneId)` when `textMoved` says the text moved.
 
-It returns a disposer, which `useTerminal` calls when it disposes the terminal.
+Window-level listeners (`keydown`, `blur`, `resize`, `visibilitychange`) call the global `dismiss()`. The disposer unhooks the listeners and calls `forget(paneId)`. `useTerminal` calls it when it disposes the terminal.
 
-**Panes and windows:** hover works on any visible pane, focused or not, and in detached windows. Each window mounts its own `FileHoverCard` and has its own controller and cache.
+**Panes and windows:** hover works on any visible pane, focused or not, and in detached windows. Each window mounts its own `FileHoverCard` and has one controller and one cache, shared by all of its terminals. The controller's state is scoped per terminal, so output, resizes and removals in one pane or tab never affect another's card.
 
 ## Card placement and look (`FileHoverCard.tsx`, with `placeCard` in `filePeek.ts`)
 
@@ -355,7 +364,7 @@ It returns a disposer, which `useTerminal` calls when it disposes the terminal.
 **Layout.** The card is 320 px wide with 12 px padding.
 - **Header:** the file name in `var(--text-primary)`, 12 px semibold, clipped with an ellipsis.
 - **Detail line:** `"12.3 KB · modified 3 min ago"` in `var(--text-secondary)`, 11 px. Story 3 adds `· 1920 × 1080` and Story 4 adds `· 12 pages`.
-- **Body:** 296 px wide.
+- **Body:** 294 px wide: 320 minus 24 px of padding minus 2 px of border, with `box-sizing: border-box`. Every body size below uses 294.
 - **Surface:** `var(--bg-elevated)`, a 1 px `var(--border-strong)` border, `var(--radius-lg)` corners and `var(--shadow-lg)`.
 - **Text bodies:** the terminal font at 11 px on `var(--bg-primary)`, with `tab-size: 4`.
 
@@ -549,13 +558,13 @@ Depends on Story 1.
 - `src/lib/hoverPreview.ts` (new): `createHoverController`, `textMoved` and `attachHoverDismissal`, as described in the shared design.
 - `src/stores/fileHoverStore.ts` (new): a zustand store holding `{ card: { abs, point, state: "loading" | "ready" | "error", content?, error? } | null }`, with `show` and `hide`.
 - `src/components/FileHoverCard.tsx` (new): the portal; the header and detail line; the text body; and the binary, empty, details-only and error states. Mount it once in `src/App.tsx`, next to `<Toast>` (`:550`), and once in `src/DetachedApp.tsx`.
-- `src/lib/terminalFileLinks.ts:151`: `registerFileLinks(term, getCwd, open, preview?)`, where `preview` is `{ enter(link, pointer), leave(key), dismiss() }`. At `:199` each link gains:
+- `src/lib/terminalFileLinks.ts:151`: `registerFileLinks(term, getCwd, open, preview?)`, where `preview` is `{ enter(link, pointer), leave(key), dismiss() }`. `useTerminal` builds it with the pane id bound, for example `enter: (link, p) => controller.enter(paneId, link, p)`, so the link layer stays unaware of terminal identity. At `:199` each link gains:
   - `hover: (e) => preview.enter({ abs, key }, { x: e.clientX, y: e.clientY, buttons: e.buttons })`;
   - `leave: () => preview.leave(key)`;
   - an `activate` that calls `preview.dismiss()` before `open(f.abs)`.
 
   Here `key` is the viewport-relative key from the shared design. `provideLinks` reads `term.buffer.active.viewportY` synchronously at its start, together with the rows, before awaiting `getCwd` and the resolve, so a trim during those awaits cannot shift the key. xterm's own link ranges have the same race. That is why the full-scrollback manual check (`yes | head -20000`), not a unit test, is the real gate for "scrolled back, the card stays open". There is no `dispose` hook. Without `preview`, links are exactly as today.
-- `src/hooks/useTerminal.ts:238`: `openTerminal` passes the window's controller and calls `attachHoverDismissal(term, controller)`. Call its disposer next to `inst.term.dispose()` (`:159`).
+- `src/hooks/useTerminal.ts:238`: `openTerminal` passes the window's single controller with the pane id, and calls `attachHoverDismissal(term, paneId, controller)`. Call its disposer next to `inst.term.dispose()`. `detachInstance`, where the wrapper is removed, calls `controller.forget(paneId)`.
 - `src/stores/settingsStore.ts:366,439,512` and `src/components/SettingsPanel.tsx:~612`: the setting.
 - `docs/guide/terminal.md:45-57` ("Clickable files"): one bullet, describing only what this story ships:
   - hovering a path shows its size, modified time and first lines;
@@ -636,7 +645,12 @@ Depends on Story 1.
 
     -- › "never takes focus and sits where placeCard says"
 17. `fileHoverPreview` defaults to true, `setFileHoverPreview(false)` persists, and a reloaded store reads false. -- `src/stores/__tests__/settingsStore.test.ts` › "file hover preview setting" (new file)
-18. The existing suites still pass, including `terminalFileLinks.test.ts` and `previewSecurity.test.ts`. -- existing
+18. **Two terminals, one controller.** With A's card shown, output in B (B's `onScroll` with `textMoved` true) neither hides A's card nor suppresses it: a later `leave(A, k)` and `enter(A, k)` behave as if B had done nothing. A's own `contentMoved` still dismisses it. -- `hoverPreview.test.ts` › "output in another terminal leaves the card alone"
+19. B's `term.onResize` (`resized(B)`) does not hide A's card. A's own `resized(A)` does. -- › "only the owning terminal's resize closes the card"
+20. After a tab switch away from A, simulated by A's wrapper being removed and `forget(A)` called by the code under test, `keydown`, then `pointerMoved(B, …)` with no `enter` in B, opens no card and makes no `peek` for A's link. A `pointerMoved(B, …)` while `hovered` is A's, without any `forget`, also clears it. -- › "a pointer in one terminal never reopens another's link"
+21. Disposing a terminal (its `attachHoverDismissal` disposer) while its card shows hides the card. It clears `hovered`, so a later `pointerMoved` opens nothing, and a late `peek` answer shows nothing. -- › "disposing a terminal clears its card and hover"
+22. With `enabled()` false: after a card was shown and a `keydown` dismissed it, a `pointerMoved` on the same link opens no card and makes no `peek`. This covers the `enabled()` check in `pointerMoved`. -- › "a nudge opens nothing when the setting is off"
+23. The existing suites still pass, including `terminalFileLinks.test.ts` and `previewSecurity.test.ts`. -- existing
 
 ## Verification (2)
 
@@ -670,7 +684,7 @@ Depends on Story 2.
 - `src/lib/filePeek.ts`: `PeekCache` stores the image as a `Blob` with the type from `imageMime` (`src/lib/viewerKind.ts`).
 - `src/components/FileHoverCard.tsx`, the image body:
   - a `useObjectUrl(blob)` hook, which creates the URL in an effect, keyed on the Blob, and revokes it in the effect's cleanup, so a re-render never creates another URL;
-  - `<img src={url} decoding="async" alt="">` in a 296×200 box with `object-fit: contain`;
+  - `<img src={url} decoding="async" alt="">` in a 294×200 box with `object-fit: contain`;
   - a CSS checkerboard behind it, so dark or transparent images stay visible;
   - the detail line gains `· W × H`;
   - `skipped` and `tooLarge` show their messages and no `img`.
@@ -740,7 +754,7 @@ Depends on Story 2.
 - `src-tauri/src/filepeek.rs`: kind `pdf` gives `bytes` up to 20 MB, and `tooLarge` above.
 - `src/components/hover/HoverPdf.tsx` (new). It is loaded with `React.lazy`, so pdf.js loads only on the first PDF hover. The render:
   1. Call `loadPdf(payload, { maxImageSize: 40_000_000 })`, then `getPage(1)`.
-  2. Take a viewport scaled to fit 296×240 CSS pixels, times `devicePixelRatio` (at most 2).
+  2. Take a viewport scaled to fit 294×240 CSS pixels, times `devicePixelRatio` (at most 2), so the thumbnail is at most 588×480 pixels (it was 592 before the body width was corrected).
   3. Render into a canvas, then `await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"))`. `toBlob` takes a callback, not a promise, and a `null` Blob is an error.
   4. Store `{ thumbnail, numPages }` in the cache. This is the only PDF content ever cached.
   5. Show the thumbnail as an `img` on white. The detail line gains `· N pages`.
@@ -787,7 +801,7 @@ Depends on Story 2.
   - `snapshotDoc(html: string): string | null`, the five steps in the shared design's Security section. It returns `null` when there is no fixed point, when verification fails, or when the input is longer than 262,144 UTF-16 code units. That cap bounds the sanitizer's work even if a future caller passes more than the 256 KiB read.
   - It is computed **once per stamp, outside render, and only for a card that will show**: when an `html` answer's token is current and no leave wait is running, the controller computes `snapshotDoc` and `isBlank` before showing the card, and stores both in the cache entry with the source text. A stale answer caches the source text only. Its snapshot is computed the first time a card for that stamp shows. An `unchanged` answer reuses a stored snapshot, and the card's render only reads it.
   - `isBlank(doc: string): boolean` is true when the sanitized `<body>` holds no text after trimming. `noscript` is already removed, so an SPA shell's "enable JavaScript" message does not count, and images are removed too.
-- `src/components/FileHoverCard.tsx`, the HTML body: a 296×222 clip box holding:
+- `src/components/FileHoverCard.tsx`, the HTML body: a 294×221 clip box (1024×768 at scale 0.287) holding:
 
   ```tsx
   <iframe
@@ -798,7 +812,7 @@ Depends on Story 2.
     style={{
       width: 1024,
       height: 768,
-      transform: "scale(0.289)",
+      transform: "scale(0.287)",
       transformOrigin: "0 0",
       pointerEvents: "none",
       border: "none",
@@ -912,3 +926,9 @@ None. The five open questions were decided by the owner on 2026-10-29, each as r
   - The XML-declaration exemption requires `<?xml` plus whitespace, so `<?xml-stylesheet` at offset 0 rejects (Story 3 AC3).
   - A manual check reruns the still-pointer redraw case with the DOM renderer (Story 2).
 - 2026-10-29, owner approval at 80fff14: the plan was approved. The five open questions were answered as recommended and recorded as owner's decisions 3 to 7, inside the frozen section. Status is now approved. ADR 0008 was written. The verification command is unchanged.
+- 2026-10-29, Story 2 code review of 3ae5f6a: BLOCK, traced to the plan's lifecycle wording. This is a design correction within the frozen intent ("hover works on any visible pane") and does not change any owner decision.
+  - **B1.** One controller per window is fed by every terminal, background tabs included. Its state is now scoped per terminal: only the owning terminal's `contentMoved` and `resized` close or suppress the card, and window-level dismissals stay global (Story 2 AC18, AC19).
+  - **M1.** `hovered` and the card carry their terminal. A pointer event from one terminal never reopens another's link. A new `forget(term)`, called by the disposer and by `detachInstance`, clears what a removed terminal owns (Story 2 AC20, AC21).
+  - The `enabled()` check in `pointerMoved` gains a test (Story 2 AC22).
+  - The `mouseleave` order is clarified: xterm's `leave` comes first.
+  - The body width is recorded as 294 px (320 − 24 − 2, border-box). The image box, PDF fit, HTML clip and scale follow from it, and Story 4's thumbnail becomes at most 588×480.
