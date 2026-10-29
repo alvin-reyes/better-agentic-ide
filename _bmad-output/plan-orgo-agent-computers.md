@@ -1,5 +1,5 @@
 ---
-title: 'Agent computers from Orgo: an MCP library entry now, a native panel later'
+title: 'Agent computers from Orgo: MCP and CLI now, a native panel later'
 type: 'feature'
 ticket: ''
 created: '2026-10-29'
@@ -11,11 +11,18 @@ risk: 'medium'
 review: 'adversarial'
 review_source: 'pinned'
 lenses_ran: ['adversarial']
-review_loop_iteration: 1
+review_loop_iteration: 2
 context: []
 ---
 
-There are two steps. **Story 1** adds Orgo's hosted MCP server to the MCP library, signed in through Claude Code. It also writes Claude Code rules that ask before any computer is created, changed, stopped or deleted, in every permission mode. It is small and can be built once this plan is approved. **Stories 2 to 6** are step 2, the native panel. They are outlined only, because they need the owner's answers to the open questions at the end and a check of the unverified facts (U-list) with a real account. Shard them only after both. Shared intent, decisions, security and cost come first.
+**Step 1** is three small stories, built in order, each buildable once this plan is approved:
+- **Story 1:** Orgo's hosted MCP server in the MCP library, signed in through Claude Code, with `ask` rules that prompt before any computer is created, changed, stopped or deleted, in every permission mode.
+- **Story 1b:** a hard stop for ADE's Continuous mode, as `--disallowedTools` on the launch line, which an agent cannot edit from inside its session.
+- **Story 1c:** the Orgo CLI. ADE installs it, signs it in, tells agents how to use it, and keeps its risky commands behind `ask` rules.
+
+**Stories 2 to 6** are step 2, the native panel. They are outlined only, because they need the owner's answers to the open questions at the end and a check of the unverified facts (U-list) with a real account.
+
+All of Orgo's permission rules, for MCP, CLI and Continuous mode, are defined once, in `src-tauri/src/orgo_rules.rs`. Shared intent, decisions, security and cost come first.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -23,151 +30,209 @@ There are two steps. **Story 1** adds Orgo's hosted MCP server to the MCP librar
 
 **Problem:** An agent working in ADE has only the user's own machine. It cannot test the UI it just built in a clean desktop and browser. It cannot run Claude Code somewhere other than the user's laptop, fan work out across several machines, or run untrusted code away from the user's files and keys. Orgo rents cloud computers made for agents to drive. ADE has no way to reach them.
 
-**Approach:** Two steps, Orgo only.
-1. Add Orgo's **hosted** MCP server (`https://www.orgo.ai/mcp`) to ADE's MCP library. The user signs in with their Orgo account through Claude Code's `/mcp`, so ADE holds no Orgo key. Installing it also adds Claude Code `ask` rules, which keep every create, copy, resize, end change, start, stop and delete behind a prompt, even in Continuous mode.
-2. Later, a native panel. A click creates a computer and opens its live desktop in a tab. The panel adds lifecycle with a spend guard, a terminal that can run Claude Code remotely, and fleet lanes with cost.
+**Approach:** Orgo only.
+1. **MCP:** Orgo's hosted MCP server (`https://www.orgo.ai/mcp`) in ADE's MCP library, signed in with the user's Orgo account through Claude Code's `/mcp`. Installing it adds Claude Code `ask` rules for every create, copy, resize, end change, start, stop and delete.
+2. **Continuous hard stop:** when ADE launches Continuous mode, the tools and commands that create or start computers are denied on the command line, where the agent cannot edit the rules.
+3. **CLI:** ADE offers to install the `orgo` CLI and sign it in, tells agents to read `orgo manifest` and use `--json`, and adds `ask` rules for its commands that create, start, delete, resize or clone computers, touch billing, API keys or secrets, print passwords, or open a shell. Read-only commands run freely.
+4. **Native panel, later:** a click creates a computer and opens its live desktop in a tab. It adds lifecycle with a spend guard, a terminal that can run Claude Code remotely, and fleet lanes with cost.
 
 ## Owner's decisions (2026-10-29)
 
-1. Purposes, all four: computer use (an agent drives a real desktop and browser, for example to test the UI it built); Claude Code running remotely from an ADE tab; a parallel fleet across several machines, shown in the fleet view with cost; a throwaway sandbox for untrusted code.
-2. Depth: MCP first (Story 1), then a native panel with the live desktop, lifecycle and cost (step 2).
-3. Provider: Orgo only. No provider-neutral abstraction: no `ComputerProvider` interface, no settings for a second vendor.
-4. **(Q7) Story 1 uses Orgo's hosted MCP server**, `https://www.orgo.ai/mcp`, with the user signing in through Claude Code's MCP OAuth flow. There is no API key in ADE's vault for Story 1, no npx package and no local server. The reason comes from the review, which ran `orgo-mcp-server@1.1.1` and read the live spec:
+1. **Purposes, all four:** computer use (an agent drives a real desktop and browser, for example to test the UI it built); Claude Code running remotely from an ADE tab; a parallel fleet across several machines, shown in the fleet view with cost; a throwaway sandbox for untrusted code.
+2. **Depth:** MCP first, then a native panel with the live desktop, lifecycle and cost.
+3. **Provider:** Orgo only. No provider-neutral abstraction.
+4. **(Q7) Story 1 uses Orgo's hosted MCP server**, with the user signing in through Claude Code's MCP OAuth flow. No API key in ADE's vault for Story 1, no npx package, no local server. The review found three reasons:
    - The local server puts each computer's root VNC password into model context and transcripts.
    - It exposes `orgo_get_vnc_password`, `orgo_enable_computer_ssh`, `orgo_apply_computer_secrets`, `orgo_move_computer` and workspace edits.
-   - Orgo's sign-in tool list leaves these out "so a sign-in is never sent a computer's password" (https://docs.orgo.ai/guides/mcp).
-5. **Orgo tools that create, copy, resize, extend, start, stop or delete a computer always ask**, in every mode, ADE's Continuous mode (`claude --dangerously-skip-permissions`, `src/lib/agentCommand.ts:50`) included. Story 1 delivers this.
-6. **(Q5) Claude Code on a remote computer signs in with a dedicated, spend-limited Anthropic Console key** that the user makes for remote machines. ADE sends it only on an explicit, confirmed action, and never copies the user's own Claude login. This is for step 2 (Story 4).
-7. **(Q3) Not needed for Story 1**, since the hosted server needs no key in ADE. For step 2's native panel it stays an open question.
+   - Orgo's sign-in list leaves these out "so a sign-in is never sent a computer's password" (https://docs.orgo.ai/guides/mcp).
+5. **Orgo tools that create, copy, resize, extend, start, stop or delete a computer always ask**, in every mode, ADE's Continuous mode (`claude --dangerously-skip-permissions`, `src/lib/agentCommand.ts:50`) included.
+6. **(Q5) Claude Code on a remote computer signs in with a dedicated, spend-limited Anthropic Console key** that the user makes for remote machines. ADE sends it only on an explicit, confirmed action and never copies the user's own Claude login (step 2, Story 4).
+7. **(Q3) Not needed for Story 1.** The panel's key stays an open question for step 2.
+8. **(Q8) Yes, Story 1b.** When ADE launches Continuous mode in a project whose `.mcp.json` has `orgo`, it passes `--disallowedTools` for the create, clone, fork, start, restart and resize tools. The same applies to the CLI, wherever Claude Code's tool-pattern syntax allows.
+9. **(Q9) A dedicated ADE workspace in Orgo.** The sign-in uses it, and so do the CLI's key and step 2's key.
+10. **The Orgo CLI: "install + guide, agent asks" (Story 1c).**
+    - ADE offers to install it and run `orgo login`, and documents it for agents: `orgo manifest` and `--json`.
+    - It adds project rules so agents must ask before any `orgo` command that creates, starts, deletes, resizes, clones or forks computers, touches billing, API keys or secrets, prints passwords (`vnc-password`), or opens a shell.
+    - Read-only commands (list, whoami, manifest, show) run freely.
+    - Story 1b's hard stop also blocks the creating commands under Continuous mode.
+    - The CLI's own login is account-wide. Recommend a key scoped to the dedicated workspace, and say so in the guide.
+    - Shape it so it can become the `orgo` entry of the parallel "CLI tools" library (`plan/cli-library-and-mcps`), which reuses this plan's rules rather than redefining them.
 
 ## Boundaries & Constraints (all stories)
 
 **Always:**
-- Orgo's own hosted MCP server, and Orgo's documented REST and WebSocket endpoints for step 2. No third-party wrapper.
+- Orgo's own hosted MCP server, Orgo's own `orgo` CLI, and Orgo's documented REST and WebSocket endpoints for step 2. No third-party wrapper.
+- Every Orgo permission rule ADE writes or passes comes from `src-tauri/src/orgo_rules.rs`. The webview cannot add one: it names an action, and Rust picks the rules.
 - Every Orgo or Claude Code fact a story relies on is cited below. A fact marked unverified (U-list) is checked before the story that needs it is sharded.
 - ADE edits `.claude/settings.json` only by merging. The user's keys and rules are kept, a file that is not valid JSON is left alone and the action is refused, and ADE never deletes a rule.
 - The verification command is unchanged (see Verification).
 
 **Never:**
-- ADE never creates, starts or resizes an Orgo computer without the user's click. This holds for the native panel in every story. In the MCP path, Claude Code creates computers, and Story 1's rules make it ask first.
-- ADE never sends `billing_mode: "hourly"`, never calls an Account, Clients, Billing or capacity-buying endpoint, and never adds credit.
-- ADE never copies the user's Claude Code credentials, `~/.claude`, the keychain's Claude entry, SSH keys or any other vault secret to an Orgo computer. The one exception is decision 6: a dedicated key the user names, sent on a confirmed click.
+- ADE never creates, starts or resizes an Orgo computer without the user's click. This holds for the native panel in every story. In the MCP and CLI paths, Claude Code runs the call, and these stories' rules make it ask first.
+- ADE never sends `billing_mode: "hourly"`, never calls an Account, Clients, Billing or capacity-buying endpoint, never runs `orgo billing`, and never adds credit.
+- ADE never copies the user's Claude Code credentials, `~/.claude`, `~/.orgo/credentials.json`, the keychain's Claude entry, SSH keys or any other vault secret to an Orgo computer. The one exception is decision 6.
+- ADE never pipes a remote install script into a shell on the user's behalf.
 - No change to `relay/` or `mobile/`. No provider abstraction.
 
 ## Security
 
-- **No Orgo key in ADE for Story 1.** `.mcp.json` holds only `{"type": "http", "url": "https://www.orgo.ai/mcp"}`. Claude Code runs the OAuth sign-in in the browser and keeps the tokens itself. Orgo issues 1-hour access tokens with rotating refresh tokens. Nothing secret is in any file ADE writes.
-- **What signing in grants** ([Orgo MCP guide](https://docs.orgo.ai/guides/mcp)):
-  - The grant covers one workspace, which the user picks at sign-in. In it, Claude Code can create and manage computers, screens and files, and read the workspace.
-  - It sees only Orgo's reviewed tool list. Templates, Clients, Account, Chat and Support are left out. So are creating, changing or deleting workspaces, suspend and resume, file upload, `orgo_get_vnc_password`, `orgo_apply_computer_secrets` and `orgo_move_computer`. A sign-in is never sent a computer's password and cannot put Orgo vault secrets on a computer.
-  - On a paid account, a sign-in cannot launch hourly computers (`403 HOURLY_NEEDS_BILLING`, [computer ends](https://docs.orgo.ai/guides/computer-ends)).
-  - To revoke: Orgo Settings → Security → Connected AI apps → Disconnect. In Claude Code, `/mcp` → Clear authentication, or `claude mcp logout orgo`.
-- **Always ask (decision 5).** Install merges ten `ask` rules into the project's `.claude/settings.json` (Story 1). Each rule names the full tool `mcp__orgo__<tool>`, from Orgo's naming rule: `orgo_` plus the operationId in snake_case. The covered actions are create, clone, fork, resize, update (end), start, restart, stop, delete and enable SSH. Claude Code's documentation says:
-  - "Claude Code doesn't auto-approve the following in any mode, including `bypassPermissions` … Tools matched by an explicit ask rule" ([permission modes](https://code.claude.com/docs/en/permission-modes), "Actions no mode auto-approves").
+- **No Orgo key in ADE for Story 1.** `.mcp.json` holds only `{"type": "http", "url": "https://www.orgo.ai/mcp"}`. Claude Code runs the OAuth sign-in in the browser and keeps the tokens. Orgo issues 1-hour access tokens with rotating refresh tokens.
+- **What the MCP sign-in grants** ([Orgo MCP guide](https://docs.orgo.ai/guides/mcp)):
+  - The grant covers one workspace, the dedicated ADE workspace (decision 9). In it, Claude Code can create and manage computers, screens and files, and read the workspace.
+  - It sees only Orgo's reviewed tool list. Templates, Clients, Account, Chat, Support, workspace create/change/delete, suspend/resume, file upload, `orgo_get_vnc_password`, `orgo_apply_computer_secrets` and `orgo_move_computer` are left out.
+  - It is never sent a computer's password.
+  - On a paid account, it cannot launch hourly computers (`403 HOURLY_NEEDS_BILLING`).
+  - To revoke: Orgo Settings → Security → Connected AI apps, or in Claude Code `/mcp` → Clear authentication, or `claude mcp logout orgo`.
+- **What the CLI's login grants.** `orgo login` saves an **account-wide** credential to `~/.orgo/credentials.json`, and every CLI command can use it: billing top-up, key minting, secrets and every workspace. `ORGO_API_KEY` in the environment "skips `~/.orgo/credentials.json`" ([CLI](https://docs.orgo.ai/guides/cli)).
+  - Recommended instead: a Custom key scoped to the dedicated workspace, saved in ADE's vault as `ORGO_API_KEY`. Its permissions are Computers write, Control write, Workspaces read, everything else none.
+  - New ADE terminals then use that narrow key in place of any `orgo login`, and the server refuses billing, keys and secrets whatever command runs.
+  - The vault puts the key in every new ADE terminal, as it does every secret. The narrow scope is what bounds that.
+- **Always ask (decision 5), MCP.** Story 1 merges ten `ask` rules into the project's `.claude/settings.json`. They name `mcp__orgo__orgo_create_computer`, `…clone…`, `…fork…`, `…resize…`, `…update…` (the end), `…start…`, `…restart…`, `…stop…`, `…delete…` and `…enable_computer_ssh`. Claude Code's documentation backs this:
+  - "Claude Code doesn't auto-approve the following in any mode, including `bypassPermissions` … Tools matched by an explicit ask rule" ([permission modes](https://code.claude.com/docs/en/permission-modes)).
   - Rules are evaluated deny, then ask, then allow ([permissions](https://code.claude.com/docs/en/permissions)).
-  - An allow rule a user saves with "Yes, and don't ask again" lands in `.claude/settings.local.json`. It "doesn't outrank an `ask` rule from a project or managed file", and `deny` and `ask` rules apply without waiting for workspace trust ([settings](https://code.claude.com/docs/en/settings)).
-- **What the ask rules do not stop, stated plainly:**
-  - **An agent in Continuous mode can remove them.** Bypass mode allows writes to `.claude/` ("Protected paths … `bypassPermissions`: Allowed"), and Claude Code reloads permission edits into the running session. The rules stop runaway loops and mistakes. They do not stop an agent that sets out to rewrite its own settings. Q8 proposes a hard stop that the agent cannot edit.
-  - **They apply only where Claude Code reads them.** It reads `.claude/settings.json` from the session's primary working directory. A session started in a subfolder may not see them; whether it still loads `.mcp.json` there is U8. The guide says to start Claude Code at the project root.
-  - **Actions on the computer are not covered.** Screenshot, mouse, keyboard, bash and Python on the remote computer still prompt in Manual mode and run unprompted in Continuous mode. That is what Continuous mode is for, and their effects stay on the remote computer.
-- **Prompt injection.** Over a sign-in, screenshots always come back to the model as images. A web page shown on the computer is untrusted input that can carry instructions.
-  - It can steer what the agent does on the computer. The effect is contained there, so use throwaway computers.
-  - It can push the agent to create or delete computers. The ask rules catch that.
-  - It can push the agent to type local data into the computer, or to act on the user's machine with local tools. Orgo's rules do not cover that. In Continuous mode those local tools run unprompted, as they already do today.
+  - A "Yes, and don't ask again" allow in `.claude/settings.local.json` "doesn't outrank an `ask` rule from a project or managed file", and `deny` and `ask` apply without workspace trust ([settings](https://code.claude.com/docs/en/settings)).
+- **Always ask, CLI (Story 1c).** Bash `ask` rules cover the commands in decision 10, under both the full group names and their aliases (`c`, `ws`, `t`, `keys`, `rm`). They also cover any `orgo` command with a flag before its subcommand. Read-only commands get `allow` rules. Per Claude Code's docs, ask and deny rules match inside compound commands and subshells, and past any leading variable assignment.
+- **The Continuous hard stop (Story 1b).** Continuous mode allows writes to `.claude/`, and Claude Code reloads settings mid-session, so a Continuous agent could delete the ask rules. Story 1b therefore passes the creating tools and commands as `--disallowedTools` deny rules on the launch line. That is outside any file, so the session cannot edit them, and "Deny rules block in every mode, including `bypassPermissions`". Stop, delete and the rest still ask through the settings rules, which a Continuous agent could still remove.
+- **What these rules cannot stop, stated plainly:**
+  - **Other invocations.** A Bash rule "isn't a security boundary around the program" ([permissions](https://code.claude.com/docs/en/permissions)). It does not match `npx orgo …`, `~/.orgo/bin/orgo …`, `node …/cli.js`, `sh -c 'orgo …'`, a quoted subcommand (`orgo c 'create'`), a shell alias or function, or `curl` to the REST API with a key the agent finds. The server-side limits of the narrow key are the boundary.
+  - **Where Claude Code reads them.** It reads `.claude/settings.json` from the session's primary working directory (U8). The guide says to start Claude Code at the project root.
+  - **Other agents.** Codex and other providers ADE launches do not read Claude Code's settings or flags. These rules bind Claude Code, and providers launched through `claude`, only.
+  - **Actions on a computer.** Screenshot, mouse, keyboard, bash and Python on the remote computer prompt in Manual mode and run unprompted in Continuous mode, by design. Their effects stay on the remote computer.
+  - **JSON listings (U12).** Whether `orgo computers list --json` prints `vnc_password` is unverified. The docs say workspace listings remove credential fields, while the review found the password there. Until U12 is settled, listing with `--json` asks. `ORGO_JSON=1 orgo c list` cannot be told apart from the text form, and runs unprompted in Continuous mode.
+- **Prompt injection.** A web page shown on a computer is untrusted input that comes back as a screenshot.
+  - It can steer the agent's actions on the computer, which are contained there, and lifecycle tools are asked or denied.
+  - It can push the agent to type local data into the computer, or to act locally with local tools. Orgo's rules do not cover that, and in Continuous mode local tools run unprompted, as today.
   - The guide says: use a disposable computer, don't sign in to personal accounts on it, and don't run Continuous mode while the agent browses sites you don't trust.
-- **Step 2's key (Q3).** The native panel calls the REST API with an Orgo API key from the vault, read in Rust. The webview can read any vault value today through `vault_get(name)` (`src-tauri/src/vault.rs:137-140`, registered at `src-tauri/src/lib.rs:483`), so "the key never reaches the webview" is not true yet. Recommend: Story 2 first limits `vault_get` to an allowlist. Today the only caller is `DEEPSEEK_API_KEY` (`src/lib/anthropic.ts:176`).
-- **The computer password (step 2) is root on that machine.** It opens the screen, `/ws/terminal` and the proxy's bash. The panel fetches it in Rust per session, passes it to the tab that uses it, and never writes it to disk, syncs it, logs it or shows it.
+- **Step 2's key (Q3).** The webview can read any vault value today through `vault_get(name)` (`src-tauri/src/vault.rs:137-140`, registered at `src-tauri/src/lib.rs:483`). Story 2 first limits `vault_get` to an allowlist, which today is just `DEEPSEEK_API_KEY` (`src/lib/anthropic.ts:176`).
+- **The computer password is root on that machine.** No ADE path shows, logs or stores it. The CLI's `vnc-password` asks. The panel (step 2) fetches it in Rust per session, for the tab that uses it.
 
 ## Cost
 
 - **What a computer costs** ([billing](https://docs.orgo.ai/guides/billing), [prices](https://docs.orgo.ai/guides/pricing)):
-  - On a paid plan, a computer that fits the plan's remaining vCPU and RAM is included, with no marginal charge. Past that, it runs by the hour from credit, but only for a caller with Billing write. That is never an MCP sign-in.
+  - On a paid plan, a computer that fits the plan's remaining vCPU and RAM is included. Past that, it runs by the hour from credit, but only for a caller with Billing write, which is never an MCP sign-in or the narrow key.
   - On a free account, computers run by the hour from credit: $5 signup credit, Medium only.
   - Linux hourly runs $0.023/h (Small) to $0.202/h (XL), billed per second. A paid plan runs at most 50 computers.
-  - GPU computers have no published price (U11). ADE never creates one.
-- **A computer costs money until it is deleted, not until it is stopped.** A stopped hourly computer still pays for its disk, from $0.0017/h (Small) up. A computer whose end passes is stopped and then deleted 7 days later unless started. The guide says "delete it when you're done".
-- **The real spend limit is the Orgo plan or credit, not ADE.** With a sign-in, a runaway agent on a paid plan can fill the capacity the user already pays for, up to 50 computers, and nothing beyond it. On a free account it can spend the credit balance, unless auto top-up is on, which charges the card up to 5 times in 24 hours. The guide says to leave auto top-up off.
-  - Whether a sign-in on a free account can launch at all is U2.
-  - Story 1's ask rules put a prompt in front of every create. They are not a cap.
-- **The native panel adds ADE's own guard** (Story 2): a cap on running ADE-made computers, an end on every computer it creates (`ends_in_hours`), auto-stop when idle, and no hourly launches.
-- **Nothing runs forever by default from ADE.** An Orgo computer without an end runs until stopped. ADE's panel always sends an end. The MCP path cannot force one, so the guide asks the user to tell the agent to set one.
+  - GPU prices are unpublished (U11). ADE never creates GPU computers.
+- **A computer costs money until it is deleted.** A stopped hourly computer still pays for its disk, from $0.0017/h. A computer whose end passes is stopped, then deleted 7 days later unless started. The CLI's `computers create` has no end option, so a CLI-made computer runs until stopped. The guide says to delete it when done.
+- **The real spend limit is the Orgo plan or credit, not ADE.**
+  - With the sign-in or the narrow key, a runaway agent on a paid plan can fill the capacity the user already pays for, up to 50 computers.
+  - On a free account it can spend the credit, unless auto top-up is on, which charges the card up to 5 times in 24 hours. The guide says to leave it off.
+  - `orgo billing topup` buys credit directly. It asks, it is denied in Continuous mode, and the narrow key refuses it server-side.
+  - The ask rules put a prompt in front of every create. The hard stop removes creates from Continuous sessions. Neither is a cap.
+- **The native panel adds ADE's own guard** (Story 2): a cap on running ADE-made computers, an end on every computer it creates, auto-stop when idle, and no hourly launches.
 
 </frozen-after-approval>
 
 ## What Orgo offers (verified 2026-10-29 against the live docs)
 
-The search results disagreed on paths. The live docs settle it: the base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID as `/computers/{id}/…`. A create takes `workspace_id`, and the older name `project_id` is still accepted. `/api/projects/{project}/computers/{name}/…` is not in the current spec.
+The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID as `/computers/{id}/…`. A create takes `workspace_id`, and the older name `project_id` is still accepted. `/api/projects/{project}/computers/{name}/…` is not in the current spec.
 
 | # | Fact | Source |
 |---|---|---|
 | F1 | REST auth is `Authorization: Bearer $ORGO_API_KEY`, with keys beginning `sk_live_`. Spec 2.0.0 has 86 operations. | https://docs.orgo.ai/llms.txt, https://docs.orgo.ai/api-reference/introduction |
-| F2 | Hosted MCP: `https://www.orgo.ai/mcp`, streamable HTTP. Without a token it answers `401` with `WWW-Authenticate: Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp", scope="mcp:tools"`. Its OAuth metadata publishes dynamic client registration, PKCE S256 and public clients (`token_endpoint_auth_methods_supported: ["none"]`), plus a revocation endpoint. Tools are one per operation, named `orgo_` + the operationId in snake_case (`createComputer` → `orgo_create_computer`). A sign-in sees a reviewed subset (see Security). | https://docs.orgo.ai/guides/mcp; probed 2026-10-29: `POST https://www.orgo.ai/mcp`, `GET https://www.orgo.ai/.well-known/oauth-protected-resource/mcp`, `GET https://www.orgo.ai/.well-known/oauth-authorization-server` |
-| F3 | Live spec groups: Workspaces 5, Computers 14, Computer Lifecycle 7, Computer Actions 10, Templates 15, Files 7, Screens 5, Account 3, Clients 15, Chat 1, Agent accounts 3, Support 1. | https://docs.orgo.ai/api-reference/openapi.json (fetched 2026-10-29) |
-| F4 | Create: `POST /computers` with `workspace_id` and `name` (both required). `os` defaults to `linux`; `ram` is 4, 8, 16, 32 or 64. `billing_mode` is `plan` by default, or `hourly`. `ends_in_hours` is 1 to 720. `template_ref` is optional, for example `system/coding`, which runs `claude` and `codex`. `gpu` is `2q` or `4q`. The `201` is already `running`. | https://docs.orgo.ai/api-reference/computers/create, https://docs.orgo.ai/guides/templates/examples |
-| F5 | Lifecycle: start, stop, restart, suspend, resume and delete. Stop archives the disk, releases compute and reads `frozen`. Delete is permanent. A computer with an end stops at it and is deleted 7 days later unless started. "Sleep when idle" (`auto_stop_minutes`) is off by default. | https://docs.orgo.ai/api-reference/computers/stop, …/computers/delete, https://docs.orgo.ai/guides/computer-ends, https://docs.orgo.ai/guides/instance-types |
+| F2 | Hosted MCP: `https://www.orgo.ai/mcp`. Without a token it answers `401` with `WWW-Authenticate: Bearer resource_metadata=…/.well-known/oauth-protected-resource/mcp`. Its OAuth metadata publishes dynamic client registration, PKCE S256, public clients and revocation. Tools are `orgo_` + the operationId in snake_case, and a sign-in sees a reviewed subset. | https://docs.orgo.ai/guides/mcp; probed 2026-10-29 |
+| F3 | Live spec groups: Workspaces 5, Computers 14, Computer Lifecycle 7, Computer Actions 10, Templates 15, Files 7, Screens 5, Account 3, Clients 15, Chat 1, Agent accounts 3, Support 1. | https://docs.orgo.ai/api-reference/openapi.json |
+| F4 | Create: `POST /computers` with `workspace_id` and `name`. `os` defaults to `linux`; `ram` is 4 to 64; `billing_mode` is `plan` or `hourly`; `ends_in_hours` is 1 to 720; `template_ref` (for example `system/coding`, which runs `claude` and `codex`); `gpu` is `2q` or `4q`. | https://docs.orgo.ai/api-reference/computers/create |
+| F5 | Lifecycle: stop archives the disk and reads `frozen`. Delete is permanent. An end stops the computer, which is deleted 7 days later unless started. Auto-stop (`auto_stop_minutes`) is off by default. | https://docs.orgo.ai/api-reference/computers/stop, https://docs.orgo.ai/guides/computer-ends, https://docs.orgo.ai/guides/instance-types |
 | F6 | Billing: see Cost. | https://docs.orgo.ai/guides/billing, https://docs.orgo.ai/guides/pricing |
-| F7 | Live desktop: `wss://www.orgo.ai/desktops/{id}/ws/websockify?token={vnc_password}`, any websockify client (noVNC ≥ 1.7.0). There is no origin allowlist, and an `sk_` key from a browser gets `4001`. Close codes: `4003` stopped or asleep, `4006` credential for another workspace, `4007` MFA required, `4008` idle 30 min without human input. | https://docs.orgo.ai/guides/embed-vms |
-| F8 | Terminal: `wss://www.orgo.ai/desktops/{id}/ws/terminal?token=…&cols=&rows=&session=`, a full PTY with JSON `input` and `resize` frames. A named `session` survives a disconnect. Linux machines also take direct SSH with the user's public key. | https://docs.orgo.ai/api-reference/computers/terminal, https://docs.orgo.ai/guides/ssh |
-| F9 | Commands: `POST /computers/{id}/bash` and `/exec` (Python). Files: upload (10 MB), export, download. | https://docs.orgo.ai/llms.txt |
-| F10 | Keys: full access, or restricted (Custom, eleven groups). Scope is the account, one workspace or one computer. A workspace key sees only its workspace and cannot call billing, account or template endpoints. A restricted key calling Control on a computer that holds its own Orgo key gets `403 computer_key_held`. A template's secrets are injected only for a key with Secrets write. | https://docs.orgo.ai/api-reference/api-keys/permissions, …/api-keys/computer-keys, https://docs.orgo.ai/api-reference/authentication, https://docs.orgo.ai/guides/templates/secrets |
-| F11 | Rate limits: "some endpoints" answer `429`; back off from 1 s, doubling to 60 s. No general numbers are published. | https://docs.orgo.ai/api-reference/introduction |
-| F12 | The `Computer` schema, which carries `vnc_password`, is the response of `createComputer`, `getComputer` and `resizeComputer`. The review also found it in the workspace listings. | openapi.json (fetched 2026-10-29) |
+| F7 | Live desktop: `wss://www.orgo.ai/desktops/{id}/ws/websockify?token={vnc_password}`, noVNC ≥ 1.7.0, no origin allowlist. Close codes: `4001` bad credential, `4003` stopped or asleep, `4006` other workspace, `4007` MFA, `4008` idle 30 min. | https://docs.orgo.ai/guides/embed-vms |
+| F8 | Terminal over `wss://…/ws/terminal?token=…&session=`, a full PTY. Direct SSH on Linux. | https://docs.orgo.ai/api-reference/computers/terminal, https://docs.orgo.ai/guides/ssh |
+| F9 | Commands: `bash` and `exec`; files: upload (10 MB), export, download. | https://docs.orgo.ai/llms.txt |
+| F10 | Keys: full or Custom, scoped to the account, one workspace or one computer. A workspace key cannot call billing, account or template endpoints. `403 computer_key_held`; template secrets need Secrets write. | https://docs.orgo.ai/api-reference/api-keys/permissions, …/computer-keys, https://docs.orgo.ai/guides/templates/secrets |
+| F11 | Rate limits: "some endpoints" `429`; back off 1 s to 60 s. | https://docs.orgo.ai/api-reference/introduction |
+| F12 | The `Computer` schema (with `vnc_password`) is the response of `createComputer`, `getComputer` and `resizeComputer`. The review found it in workspace listings too. | openapi.json |
+| F13 | CLI install, sign-in and output: `npm install -g orgo` (Node ≥ 20) or `curl -fsSL https://orgo.ai/install.sh \| bash`. `orgo login` uses a device code and saves `~/.orgo/credentials.json` (0600); `ORGO_PROFILE` selects a profile. `ORGO_API_KEY` skips the credentials file. Every command takes `--json` and `--help`; `ORGO_JSON=1` forces JSON, and output is plain text with no prompts when stdout isn't a terminal. `orgo manifest` prints every command and option as JSON. | https://docs.orgo.ai/guides/cli |
+| F14 | CLI 2.3.0 (npm `orgo`, repo `spencerkinney/orgo-cli`, commander 12), read from `dist/cli.js` without running it. | `npm pack orgo@2.3.0` |
+
+**F14, the CLI's commands in detail:**
+- **Global options:** `--json`, `--quiet`, `--profile <name>`. Commander accepts these before the subcommand.
+- **Aliases:** `computers`=`c`, `workspaces`=`ws`, `templates`=`t`, `api-keys`=`keys`; `secrets delete` and `files delete` = `rm`.
+- **`computers`:** `list create delete start stop restart resize bash exec clone rename wait vnc-password screenshot view ssh`. `create` has no end or billing option.
+- **`workspaces`:** `list create use current rename delete`.
+- **`templates`:** `list show run delete validate publish build schema`.
+- **`billing`:** `balance topup history portal`, where `topup` buys $10 to $100.
+- **`api-keys`:** `list create delete`.
+- **Commands not in the docs:** `clone` (scan, data, inject, install and watch, which send a plugged-in iPhone's apps and data to an Orgo iPhone), `handoff` (start, status, cancel: give a computer an agent job), and `egress` (status, residential, custom, off, devices, pair: route a computer's traffic through a proxy or a paired machine).
 
 **Claude Code facts this plan relies on (verified 2026-10-29):**
-- A remote server in `.mcp.json` is `{"type": "http", "url": "…"}` ([MCP](https://code.claude.com/docs/en/mcp)). OAuth fields (`oauth.clientId`, `callbackPort`) are needed only for servers without automatic setup. Orgo publishes dynamic registration (F2), so none are needed. Sign-in is `/mcp` in a session, and "Clear authentication" revokes it locally.
-- MCP tool permission names are `mcp__<server>__<tool>`, and ask and deny rules take globs in the tool-name position ([permissions](https://code.claude.com/docs/en/permissions)).
-- Explicit ask rules prompt even in `bypassPermissions`. Deny rules block in every mode. A local allow does not outrank a project ask. Settings edits reach a running session. `.claude/settings.json` is read from the primary working directory ([permission modes](https://code.claude.com/docs/en/permission-modes), [settings](https://code.claude.com/docs/en/settings)).
-- ADE's MCP library already supports remote sign-in servers: Sentry, Supabase, Notion, Linear and Stripe are `{type: "http", url}` with `oauth: true` (`src/data/mcpCatalog.ts:44-49`). The card shows a "Sign in" tag (`IntegrationsPanel.tsx:183`), and the install notice says to run `/mcp` (:83). Story 1 needs no new remote-server support.
+- **Remote MCP servers.** A remote server is `{"type": "http", "url": "…"}`. OAuth fields are needed only for servers without automatic setup, sign-in is `/mcp`, and "Clear authentication" revokes it locally ([MCP](https://code.claude.com/docs/en/mcp)).
+- **Rule names and wildcards** ([permissions](https://code.claude.com/docs/en/permissions)):
+  - MCP rule names are `mcp__<server>__<tool>`. Ask and deny rules take globs in the tool-name position.
+  - A deny or ask name that matches no tool warns at startup, but "Tool names containing `_` or `*` are exempt from the check", which covers every `mcp__orgo__…` rule.
+- **Bash patterns** ([permissions](https://code.claude.com/docs/en/permissions), "Wildcard patterns", "Wrappers", "What a Bash rule doesn't match"):
+  - "A `*` can go anywhere in the rule". A trailing ` *` that is the rule's only wildcard "also matches the bare command".
+  - `:*` is equivalent to a trailing ` *` and recognised only at the end.
+  - Deny and ask rules apply to any subcommand of a compound command, subshell or substitution.
+  - Claude Code strips the wrappers `timeout`, `time`, `nice`, `nohup` and `stdbuf`, the builtins `command` and `builtin`, and bare `xargs`. `npx` is not stripped.
+  - "A deny or ask rule matches past any leading assignment". An allow rule matches only past known-safe ones.
+  - Allow rules with a `*` before the subcommand warn at startup.
+- **Modes.** Explicit ask rules prompt even in `bypassPermissions`, and deny rules block in every mode. Bypass allows writes to `.claude/`, and settings edits reach a running session ([permission modes](https://code.claude.com/docs/en/permission-modes), [settings](https://code.claude.com/docs/en/settings)).
+- **`--disallowedTools` / `--disallowed-tools`** takes deny rules as separate arguments, for example `"Bash(git log *)" "Edit"`. A bare tool name removes the tool from Claude's context, and a scoped `Bash(…)` rule denies matching calls ([CLI reference](https://code.claude.com/docs/en/cli-reference)). It takes a list, so ADE must put another flag after it, or the positional task would be read as a rule.
+- **ADE already supports remote sign-in servers** (`src/data/mcpCatalog.ts:44-49`, `IntegrationsPanel.tsx:83,183`). Only `AgentPicker` launches Continuous mode, through `prepareAgentLaunch` (`src/lib/agentLaunch.ts:21`) and `buildLaunchCommand`. `runInNewTab(name, cwd, command)` (`src/lib/terminalCommands.ts:21`) opens a terminal and runs a command.
 
 **Unverified, to check before the story that needs it:**
-- **U1.** How `GET /computers/{id}` tells plan from hourly. No `billing_mode` is in the documented response (Story 5).
-- **U2.** Whether an MCP sign-in, or a Custom key without Billing write, can create on a free account, where hourly is the default (Story 1 guide wording, Story 2).
+- **U1.** How `GET /computers/{id}` tells plan from hourly (Story 5).
+- **U2.** Whether an MCP sign-in or a Custom key without Billing write can create on a free account (guide wording, Story 2).
 - **U3.** What a sleeping (`suspended`) computer is billed (Story 3).
-- **U4.** How auto-stop is set. It is not a create parameter, it is reachable through `PATCH /computers/{id}/resize` (`auto_stop_minutes`) and `PATCH /computers/{id}/auto-stop`, and the docs disagree on whether it suspends or stops (Story 3).
-- **U5.** Real rate limits on create, get and screenshot (Story 2).
-- **U6.** Whether WKWebView and WebKitGTK open `wss://www.orgo.ai` from the app's origin once the CSP allows it. Needs a spike (Story 2).
-- **U7.** Whether `GET /workspaces/{id}` (`desktops`) lists every computer a key can see (Story 3).
-- **U8.** Whether Claude Code started in a subfolder loads the root `.mcp.json` while not reading the root `.claude/settings.json`. If so, Orgo's tools would load without their ask rules (Story 1 manual check).
-- **U9.** The hosted server's exact tool names. They come from Orgo's documented naming rule and the operationIds, not from a signed-in listing, which needs an account. Whether `orgo_enable_computer_ssh`, `orgo_clone_computer` and `orgo_fork_computer` are in the reviewed list is also open. Whether an ask rule that names a tool the session doesn't have shows Claude Code's "matches no tool" startup row is not settled by the docs either (Story 1 manual check).
-- **U10.** Story 2's key check reads `GET /account/capacity`. A restricted account-wide key without Account access answers `403 key_permission`, while a workspace key answers `403 workspace_scope_mismatch`. The check must branch on `code`, and the codes need confirming with real keys.
-- **U11.** GPU prices (`gpu: 2q | 4q`) are not published. Reserved GPU computers go through a billing endpoint (Story 5 shows "price unknown").
+- **U4.** How auto-stop is set, and whether it suspends or stops (Story 3).
+- **U5.** Real rate limits (Story 2).
+- **U6.** Whether WKWebView and WebKitGTK open `wss://www.orgo.ai` once the CSP allows it (Story 2 spike).
+- **U7.** Whether `GET /workspaces/{id}` lists every computer (Story 3).
+- **U8.** Whether Claude Code started in a subfolder loads the root `.mcp.json` but not the root `.claude/settings.json` (Story 1 and 1c manual checks).
+- **U9.** The hosted server's exact tool names, which come from the documented naming rule, and whether clone, fork and enable-SSH are in the sign-in list (Story 1 manual check). The "matches no tool" warning is settled: names with `_` are exempt.
+- **U10.** The key check's error codes, `key_permission` vs `workspace_scope_mismatch` (Story 2).
+- **U11.** GPU prices (Story 5).
+- **U12.** Whether `orgo computers list` / `orgo workspaces list`, as text or `--json`, print `vnc_password`. The CLI passes the API's computer records through unchanged (`{...d}`), and the docs and the review disagree on whether the API strips the field (Story 1c manual check; the rules ask on `--json` listings until settled).
 
-**Rejected: Orgo's local server, `orgo-mcp-server` (npm, from `OrgoAI/orgo-mcp`).**
-- It needs an API key in the vault, and that key reaches every new ADE terminal.
-- With Control write it returns each computer's root `vnc_password` into model context and transcripts (F12).
-- It registers `orgo_get_vnc_password`, `orgo_enable_computer_ssh`, `orgo_apply_computer_secrets`, `orgo_move_computer` and workspace edits.
-- Pinning it would not fix the surface. Its dependencies float, and it loads the spec and the base URL at runtime.
-- The hosted sign-in avoids all of this (decision 4).
+**Rejected: Orgo's local server, `orgo-mcp-server`.**
+- It needs an API key in the vault.
+- It returns `vnc_password` into model context (F12).
+- It registers the password, SSH, secrets, move and workspace tools.
+- Pinning would not fix the surface: its dependencies float, and it loads the spec and base URL at runtime.
 
-**Third-party servers, not chosen:** `nickvasilescu/orgo-mcp`, `spencerkinney/computer-use-mcp` and the Composio toolkit. Orgo's own hosted server is first-party.
+**Third-party servers** (`nickvasilescu/orgo-mcp`, `spencerkinney/computer-use-mcp`, Composio): not chosen. Orgo's hosted server is first-party.
 
-## How Story 1 and step 2 coexist
+## How the pieces coexist
 
-They use two credentials for two callers. Story 1's sign-in belongs to Claude Code: agents use it, and Claude Code stores it. Step 2's native panel uses an Orgo API key that ADE's Rust code reads from the vault (Q3). Both should reach the same Orgo workspace: the user picks it at sign-in and scopes the key to it (Q9). Then computers an agent made through MCP show in the panel as "made elsewhere" (Story 3), with Stop and Delete, and not counted against ADE's cap. Revoking one credential leaves the other working. Neither is ever handed to the other caller.
+- **Three credentials.**
+  - Claude Code's MCP sign-in, for agents' MCP tools.
+  - The CLI's credential: ideally `ORGO_API_KEY`, the narrow workspace key from ADE's vault, which overrides any `orgo login`.
+  - Step 2's panel key, the same `ORGO_API_KEY`, read in Rust (Q3).
+
+  All three reach the one dedicated ADE workspace (decision 9). Computers made by any of them show in the panel, with the ones ADE did not make marked "made elsewhere" (Story 3). Revoking one leaves the others working.
+- **One rule source.** `src-tauri/src/orgo_rules.rs` holds `MCP_ASK`, `CLI_ASK`, `CLI_ALLOW`, `CONTINUOUS_DENY_MCP` and `CONTINUOUS_DENY_CLI`, together with the merge into `.claude/settings.json`. The MCP library (Story 1), the Continuous launch (1b), the CLI setup (1c) and the parallel "CLI tools" library's `orgo` entry all read from it.
+- **The parallel CLI library (`plan/cli-library-and-mcps`)**, whichever lands first:
+  - **If Story 1c lands first:** the library adopts its `orgo` entry (detect, install, sign in, agent doc) and calls `orgo_rules` for the rules.
+  - **If the library lands first:** Story 1c becomes that library's `orgo` entry, in the library's data shape, keeping `orgo_rules.rs` and its tests.
+
+  Either way, the rules are defined here once. The library plan should name this dependency and must not copy the rule lists. `.ade/context/orgo-permission-rules.md` is the shared contract.
 
 ## Proposed ADR 0010 (written on approval)
 
 `.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on-click.md`. The next free number is 0010, because 0008 and 0009 are each used twice in history.
 - **Decision:**
-  - Orgo is the only provider, with no abstraction.
-  - Agents reach Orgo through its hosted MCP server with the user's sign-in. ADE keeps their lifecycle tools behind Claude Code `ask` rules in every mode.
-  - In the native panel, only a user's click creates, starts or resizes a computer. Every ADE create carries an end and stays under ADE's cap.
-  - ADE never chooses hourly billing. It ships no credential except a dedicated key on a confirmed click.
-  - ADE never sends the panel's Orgo key to the webview, and Story 2 limits `vault_get` to an allowlist so the webview cannot ask for it.
-- **Consequences:** a second provider later is new work, not configuration. The MCP path's spend limit is the user's Orgo plan or credit, behind a prompt. Orgo API changes are absorbed in one Rust module (step 2).
+  - Orgo is the only provider. Agents reach it through its hosted MCP server and its CLI, both behind Claude Code rules from one Rust module.
+  - Creation is asked in every mode, and denied on the command line in Continuous mode.
+  - In the native panel, only a click creates, starts or resizes a computer, with an end and under ADE's cap.
+  - ADE never chooses hourly billing, never runs billing commands, and ships no credential except a dedicated key on a confirmed click.
+  - ADE never sends the panel's key to the webview, and Story 2 limits `vault_get` to an allowlist.
+- **Consequences:**
+  - A second provider is new work.
+  - The agent paths' spend limit is the user's Orgo plan or credit, behind a prompt, plus the narrow key's server-side refusals.
+  - Bash rules are not a boundary around the program. The key's scope is.
 
 ---
 
-# Story 1: Orgo in the MCP library, always asking
+# Story 1: Orgo's MCP server in the library, always asking
 
 ## Code Map (1)
 
 - `src/data/mcpCatalog.ts`: `McpEntry` (:18-31), `MCP_CATALOG` (:33). The "Web & browser" entries are playwright and fetch (:108-125). Sentry (:44-49) is the precedent for an http sign-in server.
-- `src/components/IntegrationsPanel.tsx`: the card (:178-209), the "Sign in" tag (:183), `install` (:73-90) with the sign-in notice (:83).
-- `src-tauri/src/mcp.rs`: `mcp_install` (:44) and `mcp_remove` (:63) merge one server into `.mcp.json`; tests from :74.
-- `src-tauri/src/usage.rs`: `settings_path` (:544), `merge_deny` (:651), `load_settings` (:718) and `save_settings` (:725). These form the existing merge-safe writer for `.claude/settings.json`, tested by `deny_rules_merge_into_settings` (:1377) and `deny_refuses_other_rules_and_bad_json` (:1463).
-- `src/lib/agentCommand.ts:50`: Continuous mode is `claude --dangerously-skip-permissions`. Unchanged in Story 1 (see Q8).
-- `docs/guide/integrations.md`: the MCP library table (:13-19) and the sign-in bullet (:25). `README.md:46`: "15 curated MCP servers".
+- `src/components/IntegrationsPanel.tsx`: the card (:178-209), the "Sign in" tag (:183), `install` (:73-90) and the sign-in notice (:83).
+- `src-tauri/src/mcp.rs`: `mcp_install` (:44) and `mcp_remove` (:63); tests from :74.
+- `src-tauri/src/usage.rs`: `settings_path` (:544), `merge_deny` (:651), `load_settings` (:718) and `save_settings` (:725), the existing merge-safe settings writer. Tested by `deny_rules_merge_into_settings` (:1377) and `deny_refuses_other_rules_and_bad_json` (:1463).
+- **New:** `src-tauri/src/orgo_rules.rs`.
+- `docs/guide/integrations.md`: the table (:13-19) and the sign-in bullet (:25). `README.md:46`.
 
 ## Design Notes (1)
 
@@ -186,22 +251,16 @@ They use two credentials for two callers. Story 1's sign-in belongs to Claude Co
 }
 ```
 
-What Install writes into `.mcp.json` under `mcpServers.orgo`:
+- **What it writes.** Install writes `{"type": "http", "url": "https://www.orgo.ai/mcp"}` under `mcpServers.orgo`, with no headers, env or OAuth fields, so the tools are `mcp__orgo__<tool>`.
+- **`caution`** is a new optional `McpEntry` field, rendered under the description as `<p className="mcp-caution" role="note">` in the amber of `.mcp-tag[data-warn]`. It is not searched.
+- **Search.** The description has no "click", so `"browser click"` still finds only Playwright, and "Cloud computers" makes `"cloud computer"` find Orgo.
 
-```json
-{ "type": "http", "url": "https://www.orgo.ai/mcp" }
-```
-
-There are no headers, env or OAuth fields. The server key is `orgo`, so its tools are `mcp__orgo__<tool>`.
-
-**`caution`** is a new optional field on `McpEntry`. The card renders it under the description as `<p className="mcp-caution" role="note">`, styled like `.mcp-tag[data-warn]`. Only Orgo sets it. It is not part of `matchCatalog`'s haystack. The description contains no "click", which keeps `"browser click"` → `["playwright"]`. "Cloud computers" makes `"cloud computer"` find Orgo.
-
-**The ask rules** are a Rust constant in `src-tauri/src/mcp.rs`. The webview cannot add to the list: it only names the server it installs.
+**`src-tauri/src/orgo_rules.rs`** (Story 1 creates it):
 
 ```rust
-/// Orgo tools that create, copy, resize, re-time, start, stop or delete a
-/// computer: Claude Code asks before each call, in every permission mode.
-const ORGO_ASK_RULES: &[&str] = &[
+/// Orgo MCP tools that create, copy, resize, re-time, start, stop or delete a
+/// computer, or open SSH: Claude Code asks before each call, in every mode.
+pub const MCP_ASK: &[&str] = &[
     "mcp__orgo__orgo_create_computer",
     "mcp__orgo__orgo_clone_computer",
     "mcp__orgo__orgo_fork_computer",
@@ -213,101 +272,229 @@ const ORGO_ASK_RULES: &[&str] = &[
     "mcp__orgo__orgo_delete_computer",
     "mcp__orgo__orgo_enable_computer_ssh",
 ];
+
+/// Merge `rules` into `permissions.<list>` of `<root>/.claude/settings.json`,
+/// keeping every other key and rule in order. Refuses, writing nothing, when the
+/// file isn't valid JSON or has the wrong shape. Returns the rules it added.
+pub fn merge_rules(root: &Path, list: &str /* "ask" | "allow" | "deny" */, rules: &[&str]) -> Result<Vec<String>, String>;
 ```
 
-- **The names** are derived from the live spec's operationIds by Orgo's documented rule (F2). A signed-in listing needs an account, so it is U9, checked by hand.
-- **Suspend and resume** are left out: the sign-in list excludes them. A name the hosted list lacks is harmless, apart from a possible "matches no tool" row (U9).
-- **Why exact names and not a glob:** `mcp__orgo__*` would also ask for every screenshot and click, which would make computer use unusable. A verb glob such as `mcp__orgo__*_computer` would also catch the read-only `orgo_get_computer`, which agents poll.
+- **One writer.** `usage.rs`'s `merge_deny` becomes a call to `orgo_rules::merge_rules(root, "deny", …)`, so ADE has one settings writer. Its behaviour and tests are unchanged. The function could move to a neutral `claude_settings.rs` instead; the developer picks the module and records it in the contract.
+- **Names.** They are derived from the live spec's operationIds by Orgo's documented rule. A signed-in listing is the manual check (U9).
+- **Why exact names.** `mcp__orgo__*` would ask on every screenshot and click. A verb glob would also catch `orgo_get_computer`, which agents poll.
 
 **Install, in order** (`mcp_install`, for `name == "orgo"`):
-1. Read `.mcp.json` and `.claude/settings.json`. If either exists and is not valid JSON, or `permissions`/`permissions.ask` has the wrong type, refuse with the existing message and write nothing.
-2. Merge the ask rules into `permissions.ask`. Keep every other key and rule in order, and add each missing rule once at the end.
+1. Read `.mcp.json` and `.claude/settings.json`. If either is invalid or the wrong shape, refuse and write nothing.
+2. Run `merge_rules(root, "ask", MCP_ASK)`.
 3. Write `.mcp.json`.
 
-So the server is never installed without its rules. If step 3 fails after step 2, the rules stay, which is the safe direction. Implement it by generalising `merge_deny` to `merge_rules(root, "deny" | "ask", rules)`. The existing deny callers keep their behaviour and their tests.
+The server is never installed without its rules. If step 3 fails, the rules stay, which is the safe direction. `mcp_install` returns the rules it added (`Vec<String>`, empty for other servers), and the notice uses them.
 
-`mcp_install` returns the ask rules it added (`Vec<String>`, empty for other servers). The notice uses that list.
-
-**Remove** takes Orgo out of `.mcp.json` and **leaves the ask rules**. ADE never deletes a rule, because it cannot tell one it added from the same rule the user wrote. The notice says the rules were kept.
+**Remove** takes Orgo out of `.mcp.json` and leaves the rules. ADE never deletes a rule, because it can't tell its own from the user's identical one.
 
 **Notice after install:** "Orgo added to .mcp.json. Claude Code will ask before Orgo creates, changes, stops or deletes a computer (rules added to .claude/settings.json). Start Claude Code at the project root and run /mcp to sign in."
 
-**Guide** (`docs/guide/integrations.md`): add Orgo to the "Web & browser" row and a `## Orgo cloud computers` section covering:
-1. **What it does.** Claude Code can create a cloud computer, see its screen, drive its browser and run commands on it.
-2. **Sign in.** Install, open a new terminal at the project root, start `claude`, approve the server, then run `/mcp` → orgo → Authenticate. Pick a workspace kept for ADE (Q9).
-3. **What signing in allows.** The grant covers one workspace and Orgo's reviewed tool list. It never receives a computer's password and cannot launch hourly computers on a paid plan.
-4. **Revoke.** Orgo Settings → Security → Connected AI apps, or `/mcp` → Clear authentication.
-5. **Always asks.** Name the ten tools, and say it holds in Continuous mode. State that a Continuous-mode agent can edit `.claude/settings.json` and so could remove the rules.
-6. **Cost.**
-   - Computers are billed until deleted, and a stopped hourly computer still pays for its disk.
-   - Your plan or credit is the limit.
-   - Ask the agent to give each computer an end, and delete it when done.
-   - Leave auto top-up off.
-7. **Prompt injection.** Pages on the computer can try to steer the agent. Use throwaway computers, don't sign in to personal accounts there, and avoid Continuous mode while it browses untrusted sites.
+**Guide** (`docs/guide/integrations.md`): add Orgo to the "Web & browser" row and a `## Orgo cloud computers` section. Story 1 writes its first part:
+- what it does;
+- signing in to the dedicated ADE workspace, at the project root, with `/mcp`;
+- what the sign-in allows, and how to revoke it;
+- always asks, naming the ten tools, and that it holds in Continuous mode;
+- cost: billed until deleted, stopped hourly computers still pay for disk, the plan or credit is the limit, set an end, delete when done, leave auto top-up off;
+- prompt injection.
 
-Update **README** to "16 curated MCP servers".
+**README:** "16 curated MCP servers".
 
-**Contract:** `.ade/context/mcp-ask-rules.md` records what ADE writes into a project's `.claude/settings.json` for MCP servers: which server, which rules, when, and that removal keeps them. Later stories and the panel must agree with it.
+**Contract:** Story 1 creates `.ade/context/orgo-permission-rules.md`: the module, the lists, where each is written or passed, that ADE never deletes a rule, and that the CLI library reuses them. Stories 1b and 1c extend it.
 
 **Failure modes:**
-
-| Failure | Handling |
-|---|---|
-| `.claude/settings.json` is invalid JSON or has the wrong shape | Install is refused with the file named. Neither file changes. |
-| Not signed in | Claude Code shows the server as needing authentication in `/mcp`, and the notice says to run it. |
-| Session started in a subfolder | The rules may not apply (U8). The guide and the notice say to start at the project root. |
-| The hosted list lacks a named tool | That rule matches nothing, possibly with a startup row (U9). No tool goes unprompted because of it. |
-| A Continuous-mode agent deletes the rules | Not prevented in Story 1; stated in the guide. Q8 is the hard stop. |
+- **Bad settings file:** install is refused, with the file named, and nothing changes.
+- **Not signed in:** `/mcp` shows it, and the notice says to sign in.
+- **Session in a subfolder:** the rules may not apply (U8). The guide and the notice say to start at the project root.
+- **A Continuous agent deletes the rules:** creates stay denied by Story 1b. Stop, delete and the rest lose their prompt, which the guide states.
 
 ## Acceptance Criteria (1)
 
-Each names the test that covers it. The developer writes it failing first. AC10 is a regression check of existing behaviour.
+Each names its test. The developer writes it failing first. AC10 is a regression check.
 
-1. Rendering `IntegrationsPanel` with `vault_list` empty: the Orgo card shows the "Sign in" tag and its caution as a `role="note"`, and has no secret row, no "Add to vault" button and no `npx` tag. Covered by `src/components/__tests__/IntegrationsPanel.test.tsx` (new) › "the Orgo card is a sign-in server with its caution".
-2. Clicking Install on the Orgo card invokes `mcp_install` with `name: "orgo"` and a `server` whose keys are exactly `type` ("http") and `url` ("https://www.orgo.ai/mcp"). When the mocked command returns the ask rules, the status notice says Claude Code will ask, and says to start at the project root and run `/mcp`. Covered by `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says how to sign in".
-3. Every catalog entry with `oauth: true` has no `secrets` and `envRefs(server)` empty, and its `url` is `https:`. Covered by `src/data/__tests__/mcpCatalog.test.ts` › "sign-in servers carry no secret and use https".
-4. `matchCatalog(MCP_CATALOG, "cloud computer")` returns `["orgo"]`, and `"browser click"` still returns `["playwright"]`. Covered by `mcpCatalog.test.ts` › "searches name, category and description" (extended).
-5. `mcp_install` of `orgo` into a project without `.claude/settings.json` creates it with `permissions.ask` equal to `ORGO_ASK_RULES` and no other key, writes the server to `.mcp.json`, and returns the ten rules. Covered by `src-tauri/src/mcp.rs` › `orgo_install_adds_ask_rules`.
-6. The existing `.claude/settings.json` holds `model`, `hooks` and `env` keys, user `allow` and `deny` rules, and an `ask` list with one user rule and one rule equal to an Orgo rule. After install:
-   - every other key and rule is unchanged and in its original order;
-   - each Orgo rule appears exactly once;
-   - the return value lists only the nine that were added;
-   - a second install leaves the file byte-identical and returns an empty list.
+1. Rendering `IntegrationsPanel` with `vault_list` empty: the Orgo card shows "Sign in" and its caution as a `role="note"`, with no secret row, no "Add to vault" and no `npx` tag. Covered by `src/components/__tests__/IntegrationsPanel.test.tsx` (new) › "the Orgo card is a sign-in server with its caution".
+2. Install sends `mcp_install` with `name: "orgo"` and a server whose keys are exactly `type` "http" and `url` "https://www.orgo.ai/mcp". With the rules returned, the notice says Claude Code will ask, to start at the project root, and to run `/mcp`. Covered by `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says how to sign in".
+3. Every `oauth: true` entry has no `secrets`, empty `envRefs`, and an `https:` URL. Covered by `src/data/__tests__/mcpCatalog.test.ts` › "sign-in servers carry no secret and use https".
+4. `"cloud computer"` finds `["orgo"]`, and `"browser click"` still finds `["playwright"]`. Covered by `mcpCatalog.test.ts` › "searches name, category and description" (extended).
+5. Installing `orgo` with no settings file creates `.claude/settings.json` with only `permissions.ask` = `MCP_ASK`, writes the server, and returns the ten rules. Covered by `src-tauri/src/mcp.rs` › `orgo_install_adds_ask_rules`.
+6. An existing settings file holds `model`, `hooks`, `env`, user allow and deny rules, a user ask rule, and one rule equal to an Orgo rule. After install:
+   - all other keys and rules are unchanged and in order;
+   - each Orgo rule appears once;
+   - nine are returned;
+   - a second install leaves the file byte-identical and returns nothing.
 
-   Covered by `mcp.rs` › `orgo_ask_rules_merge_and_keep_the_users_rules`.
-7. With `.claude/settings.json` holding `{ not json`, or `permissions.ask` set to a string, install returns an error, and both `.claude/settings.json` and `.mcp.json` are byte-identical to before. With `.mcp.json` invalid instead, install errors and `.claude/settings.json` is not created. Covered by `mcp.rs` › `orgo_install_refuses_and_touches_nothing_on_bad_files`.
-8. Installing `github` creates no `.claude/settings.json` and returns an empty list. `mcp_remove` of `orgo` takes it out of `.mcp.json` and leaves every ask rule in `.claude/settings.json`. Covered by `mcp.rs` › `only_orgo_adds_rules_and_remove_keeps_them`.
-9. `ORGO_ASK_RULES` equals `mcp__orgo__` + `orgo_` + snake_case(operationId) for exactly `createComputer`, `cloneComputer`, `forkComputer`, `resizeComputer`, `updateComputer`, `startComputer`, `restartComputer`, `stopComputer`, `deleteComputer` and `enableComputerSsh`. The test holds the operationIds and the conversion, so a misspelt rule fails. Covered by `mcp.rs` › `orgo_ask_rules_follow_orgos_tool_names`.
-10. The deny callers behave as before after `merge_deny` becomes `merge_rules`. Covered by `src-tauri/src/usage.rs` › existing `deny_rules_merge_into_settings`, `deny_refuses_other_rules_and_bad_json` (unchanged, green).
-11. The guide's MCP library table names exactly the catalog's servers. Each cell is split on commas after removing parenthesised text, and each catalog `name` has its trailing parenthesised part removed, then the two sets must be equal. So "Git" and "GitHub" are distinct, and "Databases (DBHub)" matches the "Databases (…)" cell. Covered by `scripts/mcpCatalogDocs.test.ts` (new) › "the guide's table lists exactly the catalog".
-12. The guide's `## Orgo cloud computers` section names every tool in `ORGO_ASK_RULES` (the test reads them from `src-tauri/src/mcp.rs`), and mentions "Continuous", "/mcp", "until you delete" and "auto top-up". `README.md` says "<N> curated MCP servers" with N equal to `MCP_CATALOG.length`. Covered by `scripts/mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
+   Covered by `src-tauri/src/orgo_rules.rs` › `merge_keeps_the_users_rules_and_is_idempotent`.
+7. A settings file holding `{ not json`, or a string `permissions.ask`, refuses the install, and both files stay byte-identical. An invalid `.mcp.json` refuses it, and no settings file is created. Covered by `mcp.rs` › `orgo_install_refuses_and_touches_nothing_on_bad_files`.
+8. Installing `github` writes no settings file. Removing `orgo` keeps every ask rule. Covered by `mcp.rs` › `only_orgo_adds_rules_and_remove_keeps_them`.
+9. `MCP_ASK` equals `mcp__orgo__orgo_` + snake_case(operationId) for exactly `createComputer`, `cloneComputer`, `forkComputer`, `resizeComputer`, `updateComputer`, `startComputer`, `restartComputer`, `stopComputer`, `deleteComputer` and `enableComputerSsh`. Covered by `orgo_rules.rs` › `mcp_rules_follow_orgos_tool_names`.
+10. The deny callers behave as before. Covered by `usage.rs` › existing `deny_rules_merge_into_settings` and `deny_refuses_other_rules_and_bad_json` (green, unchanged).
+11. The guide's MCP table lists exactly the catalog's servers, by set equality after removing parenthesised text and splitting on commas, so "Git" ≠ "GitHub". Covered by `scripts/mcpCatalogDocs.test.ts` (new) › "the guide's table lists exactly the catalog".
+12. The Orgo guide section names every `MCP_ASK` tool (read from `orgo_rules.rs`), and mentions "Continuous", "/mcp", "until you delete" and "auto top-up". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
 
 ## Verification (1)
 
-**Commands (the repo's verification command, unchanged):**
-- `npx tsc --noEmit`: expected exit 0.
-- `npm test`: expected all pass, including `IntegrationsPanel.test.tsx`, `mcpCatalogDocs.test.ts` and the extended `mcpCatalog.test.ts`.
-- `cd src-tauri && cargo test`: expected all pass, including the four new `mcp.rs` tests and the existing `usage.rs` deny tests.
-- `cd relay && cargo test`: expected all pass (no change).
-- `cd mobile && npx tsc --noEmit && npx jest`: expected all pass (no change).
+**Commands:** the repo's verification command, unchanged (see Verification, all stories). The new tests are in `IntegrationsPanel.test.tsx`, `mcpCatalogDocs.test.ts`, `mcpCatalog.test.ts`, `mcp.rs` and `orgo_rules.rs`, and the `usage.rs` deny tests stay green.
 
 **Manual checks (owner, with a real Orgo account):**
-- **Sign-in and tool names (U9).** Install Orgo in a scratch git project, open a new terminal at its root, start `claude`, approve the server, then `/mcp` → orgo → Authenticate, picking a workspace for ADE. The tool list shows no `orgo_get_vnc_password`. Compare the tool names with `ORGO_ASK_RULES`, and note any rule shown as "matches no tool".
-- **Manual mode.** Ask "create a small Orgo computer that ends in 1 hour and show me a screenshot". The create prompts. Answer "Yes, and don't ask again", ask for another, and it prompts again.
-- **Continuous mode.** Start an agent from the picker with Continuous on, in the same project, and ask it to create a computer. Claude Code still prompts for `orgo_create_computer`, and for `orgo_delete_computer` when it cleans up.
-- **Subfolder (U8).** Start `claude` in a subfolder. Note whether Orgo's tools load and whether the create still prompts.
-- **Clean-up.** Delete every computer made, check the Orgo dashboard shows none, then revoke in Orgo Settings → Security → Connected AI apps.
+- **U9.** Sign in through `/mcp` to the ADE workspace. No `orgo_get_vnc_password` appears. Compare the tool names with `MCP_ASK`.
+- **Manual mode.** A create prompts. "Yes, and don't ask again" still prompts next time.
+- **Continuous mode, before Story 1b.** A create still prompts (the ask rule), and so does a delete.
+- **U8.** In a subfolder, note whether the tools load and whether a create prompts.
+- **Clean-up.** Delete every computer, check the dashboard is empty, and revoke the sign-in.
 
 ## Slice (1)
 
-These files only:
-- `src/data/mcpCatalog.ts`, `src/data/__tests__/mcpCatalog.test.ts`
-- `src/components/IntegrationsPanel.tsx`, `src/components/__tests__/IntegrationsPanel.test.tsx`, `src/index.css`
-- `src-tauri/src/mcp.rs`, `src-tauri/src/usage.rs` (the merge generalised, no behaviour change)
-- `scripts/mcpCatalogDocs.test.ts`, `docs/guide/integrations.md`, `README.md`
-- `.ade/context/mcp-ask-rules.md`
+`src/data/mcpCatalog.ts` and its test; `src/components/IntegrationsPanel.tsx` and its new test; `src/index.css`; `src-tauri/src/orgo_rules.rs` (new) and its registration in `lib.rs`; `src-tauri/src/mcp.rs`; `src-tauri/src/usage.rs` (calls the shared merge, no behaviour change); `scripts/mcpCatalogDocs.test.ts`; `docs/guide/integrations.md`; `README.md`; `.ade/context/orgo-permission-rules.md`. No new dependency.
 
-No new dependency, and no change to `agentCommand.ts` or the CSP.
+---
+
+# Story 1b: the Continuous-mode hard stop
+
+Depends on Story 1 (`orgo_rules.rs`).
+
+## Code Map (1b)
+
+- `src/lib/agentCommand.ts`: `LaunchOptions` (:5), `claudeCommand` (:49-53). Today it builds `claude --dangerously-skip-permissions --append-system-prompt-file <path> [task]`. The deepseek provider uses the same function.
+- `src/lib/agentLaunch.ts:21`: `prepareAgentLaunch(spec, cwd, opts)`, async, called by `AgentPicker.tsx:151`.
+- `src-tauri/src/orgo_rules.rs`: gains the deny lists and a command.
+
+## Design Notes (1b)
+
+**The lists** in `orgo_rules.rs`:
+- `CONTINUOUS_DENY_MCP`: `mcp__orgo__orgo_create_computer`, `…clone…`, `…fork…`, `…start…`, `…restart…`, `…resize…`. These are bare tool names, so Claude Code removes the tools from the session entirely.
+- `CONTINUOUS_DENY_CLI`, Bash patterns in Claude Code's documented syntax:
+  - `Bash(orgo -*)`: any `orgo` command with a global flag before the subcommand. Agents are told to put flags after it.
+  - `Bash(orgo computers -*)`, `Bash(orgo c -*)`, `Bash(orgo templates -*)`, `Bash(orgo t -*)`, `Bash(orgo billing -*)`: flags between group and subcommand.
+  - For `G` in `computers`, `c` and `S` in `create`, `start`, `restart`, `resize`, `clone`: `Bash(orgo G S *)`.
+  - `Bash(orgo templates run *)`, `Bash(orgo t run *)`: launch from a template.
+  - `Bash(orgo billing topup *)`: buy credit. This is a recommended addition to the owner's list (see Q10).
+
+**The command.** `orgo_continuous_denies(project) -> Vec<String>` returns:
+- `CONTINUOUS_DENY_MCP` when `<project>/.mcp.json` has an `orgo` server, as decision 8 says;
+- **always** `CONTINUOUS_DENY_CLI`. The CLI can be installed in the middle of a session, which a launch-time check cannot see. A Bash rule that matches nothing is silent, so this costs nothing in projects that never use Orgo.
+
+**The launch.** `prepareAgentLaunch` calls it when `continuous` is set, and passes the result as `LaunchOptions.disallowedTools`. `claudeCommand` then writes:
+
+```
+claude --dangerously-skip-permissions --disallowedTools '<rule>' '<rule>' … --append-system-prompt-file <path> [task]
+```
+
+- Each rule is quoted with `shellQuote` (`src/lib/agentCommand.ts:26`), the same quoter the task uses.
+- `--disallowedTools` takes a list, so it sits **before** `--append-system-prompt-file`. That flag ends the list, and the task stays positional.
+- Without `continuous`, nothing is added.
+- Providers that are not launched through `claude` (Codex, Ollama) are unchanged, and the guide says these rules do not bind them.
+
+**What it leaves to the ask rules:** stop, delete, `update` (end), enable SSH, and the CLI's other risky commands still ask under Continuous mode through Story 1's and 1c's settings rules. An agent that rewrites `.claude/settings.json` can remove those, but not these.
+
+## Acceptance Criteria (1b)
+
+1. `buildLaunchCommand("claude", path, { continuous: true, disallowedTools: ["mcp__orgo__orgo_create_computer", "Bash(orgo c create *)"], task: "go" })` puts `--disallowedTools` and the two shell-quoted rules after `--dangerously-skip-permissions`, then `--append-system-prompt-file`, then the task. Without `continuous`, or with an empty list, there is no `--disallowedTools`. Covered by `src/lib/__tests__/agentCommand.test.ts` › "continuous launches deny Orgo creation before the role flag".
+2. `orgo_continuous_denies` on a project whose `.mcp.json` has `orgo` returns MCP and CLI denies. Without it, it returns only the CLI denies. With an invalid `.mcp.json`, it returns the CLI denies and no error. Covered by `orgo_rules.rs` › `continuous_denies_follow_the_project`.
+3. Every command in the creating corpus is matched by a `CONTINUOUS_DENY_CLI` rule under Claude Code's documented semantics, and `orgo c delete a` and `orgo c list --json` are not. The corpus is `orgo c create --name a`, `orgo computers start a`, `orgo --json c create`, `orgo c --json resize a --ram 8`, `orgo t run hermes-agent`, `ORGO_PROFILE=x orgo c clone a` and `orgo billing topup --amount 10`. Covered by `orgo_rules.rs` › `continuous_cli_denies_cover_creation` (uses the test matcher described in 1c).
+4. Launching from `AgentPicker` with Continuous on invokes `orgo_continuous_denies` with the project root and types a command containing `--disallowedTools`. With Continuous off, there is no such call. Covered by `src/components/__tests__/agentLaunch.test.ts` (extended) › "continuous launch carries Orgo denies".
+
+**Manual checks:** in a Continuous session in a project with Orgo installed, `orgo_create_computer` is absent from the tools, `orgo c create` is refused, and `orgo_delete_computer` still prompts.
+
+**Slice (1b):** `src/lib/agentCommand.ts`, `src/lib/agentLaunch.ts`, their tests, `src-tauri/src/orgo_rules.rs`, `lib.rs` registration, the context file, and a paragraph in the guide's Orgo section.
+
+---
+
+# Story 1c: the Orgo CLI, installed, guided, and asking
+
+Depends on Story 1 (`orgo_rules.rs`, `merge_rules`). Story 1b supplies its Continuous denies. Coordinate with `plan/cli-library-and-mcps` (see "How the pieces coexist").
+
+## Design Notes (1c)
+
+**Where in the UI.** An "Orgo CLI" row under the Orgo card in the MCP library. It moves to the CLI library's `orgo` entry when that exists. The row shows:
+- whether `orgo` is on PATH, via the existing `check_command_exists`;
+- whether `ORGO_API_KEY` is in the vault;
+- three actions:
+  - **Set up CLI.** A confirm lists what happens, then `orgo_cli_setup(project)`:
+    1. merges `CLI_ASK` into `permissions.ask` and `CLI_ALLOW` into `permissions.allow`, through `merge_rules`, with the same refusal rules as Story 1;
+    2. writes `.claude/skills/orgo-cli/SKILL.md` only if it is missing.
+
+    Then, if `npm` is on PATH, `runInNewTab("Orgo CLI", root, "npm install -g orgo")`. Otherwise the row shows the install-script line for the user to copy. ADE does not pipe it into a shell.
+  - **Sign in** runs `runInNewTab("Orgo login", root, "orgo login")`. The device code appears there.
+  - **Use a workspace key (recommended)** opens the vault with `ORGO_API_KEY` pre-filled and the key steps from the guide.
+
+**The rule lists**, generated in `orgo_rules.rs` from one small table:
+
+```rust
+const ALIASES: &[(&str, &[&str])] = &[
+    ("computers", &["computers", "c"]), ("workspaces", &["workspaces", "ws"]),
+    ("templates", &["templates", "t"]), ("files", &["files"]),
+];
+const ASK_SUBS: &[(&str, &[&str])] = &[
+    ("computers", &["create", "start", "restart", "resize", "clone", "stop", "delete", "vnc-password", "ssh"]),
+    ("workspaces", &["create", "delete"]),          // delete removes its computers
+    ("templates", &["run", "delete"]),              // run creates a computer
+    ("files", &["upload"]),                         // sends a local file to Orgo (Q10)
+];
+const ASK_WHOLE: &[&str] = &["billing", "api-keys", "keys", "secrets", "ssh",
+    // Q10, recommended: they spend credit, route traffic or send local data
+    "run", "agent", "resume", "handoff", "egress", "clone", "login", "logout"];
+```
+
+- **`CLI_ASK`**:
+  - `Bash(orgo A S *)` for every alias `A` of a group and every `S` in its `ASK_SUBS`. With a trailing ` *` as the only wildcard, this also matches the bare command.
+  - `Bash(orgo W *)` for every `W` in `ASK_WHOLE`.
+  - `Bash(orgo -*)`: a global flag before the subcommand (`--json`, `--quiet`, `--profile`).
+  - `Bash(orgo A -*)` for every alias of computers, workspaces, templates and files: a flag before the subcommand.
+  - Until U12 is settled: `Bash(orgo computers list *--json*)`, `Bash(orgo c list *--json*)`, `Bash(orgo workspaces list *--json*)`, `Bash(orgo ws list *--json*)`.
+
+  This comes to 52 rules.
+- **`CLI_ALLOW`**, the read-only commands, subcommand first, about 18 rules:
+  - `Bash(orgo)`, `Bash(orgo whoami *)`, `Bash(orgo manifest *)`, `Bash(orgo help *)`, `Bash(orgo sessions *)`;
+  - `Bash(orgo A list *)` for computers, workspaces, templates and files;
+  - `Bash(orgo A current *)` for workspaces;
+  - `Bash(orgo A show *)` and `Bash(orgo A schema *)` for templates.
+  - Allow rules in a committed file wait for workspace trust ([settings](https://code.claude.com/docs/en/settings)). Until then, these commands prompt in Manual mode, which is the safe direction.
+- **Precedence.** Ask beats allow, so `orgo c list --json` asks (U12) while `orgo c list` runs freely.
+- **What can't be matched reliably** (the guide lists it):
+  - `npx orgo …`, `~/.orgo/bin/orgo …`, `node …/dist/cli.js …`, `sh -c '…'`, `bash -c '…'`, `eval`, shell aliases and functions, and quoted subcommands (`orgo c 'create'`);
+  - `xargs` with flags;
+  - `ORGO_JSON=1 orgo c list`: allow rules don't match past that assignment, so it prompts in Manual mode and runs in Continuous mode;
+  - commands added in a later CLI version, until the table is updated;
+  - an agent reading `~/.orgo/credentials.json` and calling the REST API with `curl`.
+
+  For all of these, the server-side limits of the narrow workspace key are the real boundary.
+- **Over-matching** is in the safe direction: a computer named `create` makes `orgo c bash create …` ask. Commander does not expand abbreviated subcommands, so there are no other spellings to cover.
+
+**The agent skill**, `.claude/skills/orgo-cli/SKILL.md`, written only if missing. Its `description` triggers on Orgo, cloud computer and `orgo` CLI. Its body says:
+- run `orgo manifest` first, and work from it;
+- put `--json` **after** the subcommand (`orgo computers list --json`), because a flag before the subcommand always asks;
+- work in the ADE workspace (`--workspace <name>`);
+- never run `orgo computers vnc-password`, `orgo billing`, `orgo api-keys` or `orgo secrets` unless the user asks;
+- `computers create` has no end, so delete computers when done (`orgo computers delete <name> --yes`), or set an end through the MCP server's `orgo_update_computer`;
+- a prompt will appear for creating, starting, deleting, resizing and cloning, by design.
+
+In the CLI library, this skill becomes the entry's "tell agents" text.
+
+**Guide:** the Orgo section gains "Orgo CLI". It covers install, sign-in, why to prefer a workspace key over `orgo login` (the login is account-wide, and `ORGO_API_KEY` overrides it in ADE terminals), what asks, what runs freely, the Continuous hard stop, and the list of what can't be matched.
+
+## Acceptance Criteria (1c)
+
+The tests use a matcher, `fn rule_matches(rule, cmd)` in `orgo_rules.rs` tests. It implements the documented semantics: literal text with `*` matching any text; a trailing ` *` that is the only wildcard also matches the bare command; `:*` at the end equals ` *`; and ask and deny rules match after leading `NAME=value` assignments and the stripped wrappers are removed.
+
+1. Every command in the risky corpus is matched by some `CLI_ASK` rule. The corpus covers each `ASK_SUBS` and `ASK_WHOLE` entry under each alias, with a global flag first (`orgo --json c create`), a flag between (`orgo c --json resize a`), an env prefix (`ORGO_PROFILE=dev orgo c delete a`), `timeout 30 orgo ssh a`, and `orgo c list --json`. Covered by `orgo_rules.rs` › `cli_ask_covers_every_risky_command`.
+2. Every command in the read-only corpus is matched by a `CLI_ALLOW` rule and by no `CLI_ASK` rule: `orgo`, `orgo whoami`, `orgo manifest`, `orgo computers list`, `orgo c list --workspace ade`, `orgo ws current`, `orgo templates show hermes-agent`, `orgo t list --json`, `orgo files list` and `orgo sessions`. Covered by `cli_read_only_runs_freely`.
+3. The documented-limit corpus is matched by no rule, so the guide's "can't be matched" list stays true: `npx orgo c create`, `~/.orgo/bin/orgo c create`, `sh -c 'orgo c create'` and `orgo c 'create'`. Covered by `cli_limits_are_what_the_guide_says`.
+4. `orgo_cli_setup` merges `CLI_ASK` and `CLI_ALLOW` into an existing settings file, keeping the user's keys and rules in order, and is idempotent. A bad file refuses it, and nothing is written. Covered by `orgo_cli_setup_merges_and_refuses_bad_files`.
+5. `orgo_cli_setup` writes the skill when it is missing and leaves an existing one byte-identical. The written skill contains `orgo manifest`, `--json` after a subcommand, and `delete`. Covered by `orgo_cli_setup_writes_the_skill_once`.
+6. In the panel, the Orgo CLI row shows "not installed" when `check_command_exists("orgo")` fails. **Set up CLI** invokes `orgo_cli_setup` and then opens a tab running exactly `npm install -g orgo`. **Sign in** opens a tab running `orgo login`. Without `npm`, no tab opens and the install-script line is shown. Covered by `IntegrationsPanel.test.tsx` › "the Orgo CLI row installs, signs in and never pipes a script".
+7. The guide's "Orgo CLI" section names every `ASK_WHOLE` entry and every `ASK_SUBS` subcommand (read from `orgo_rules.rs`), names each limit from AC3, and recommends a key scoped to one workspace. Covered by `mcpCatalogDocs.test.ts` › "the CLI section matches the rules".
+
+**Manual checks (owner):**
+- Install, then sign in with a workspace key in the vault. `orgo whoami` names the ADE workspace.
+- `orgo computers list` runs freely; `orgo c create --name t` prompts; `orgo computers vnc-password t` prompts; `orgo billing balance` prompts.
+- **U12:** run `orgo computers list --json` and `orgo workspaces list --json` once by hand, and check for `vnc_password`.
+- In Continuous mode, `orgo c create` is refused (1b) and `orgo c delete t --yes` prompts.
+
+**Slice (1c):** `src-tauri/src/orgo_rules.rs` (CLI lists, `orgo_cli_setup`, the skill text), `lib.rs`, `src/components/IntegrationsPanel.tsx` and its test, `scripts/mcpCatalogDocs.test.ts`, `docs/guide/integrations.md`, and the context file. No new dependency.
 
 ---
 
@@ -324,7 +511,8 @@ flowchart LR
   end
   subgraph Rust [src-tauri]
     OR[orgo.rs: REST client, spend guard] --> LG[(orgo-computers.json ledger)]
-    OR --> KC[vault: Orgo key from keychain, Rust only]
+    OR --> KC[vault: ORGO_API_KEY, Rust only]
+    RU[orgo_rules.rs: MCP / CLI / Continuous rules]
   end
   CP -- invoke orgo_create --> OR
   CT -- invoke orgo_session: id + password --> OR
@@ -332,11 +520,11 @@ flowchart LR
   CT -- wss websockify?token --> DESK[www.orgo.ai/desktops/id]
   TT -- wss terminal?token --> DESK
   FL -- invoke orgo_list --> OR
-  CC[Claude Code, signed in via /mcp] -- MCP sign-in --> MCP[www.orgo.ai/mcp]
+  CC[Claude Code: MCP sign-in, orgo CLI] -- MCP / CLI --> API
 ```
 
-- **`src-tauri/src/orgo.rs`** is the only ADE code that calls the Orgo REST API. It reads the panel's key (Q3) through a new internal `vault` function. Story 2 first limits `vault_get` to an allowlist (`DEEPSEEK_API_KEY` today), so the webview cannot ask for the Orgo key. It needs an HTTP client crate (`reqwest` with rustls, or `ureq`), the first new Rust dependency.
-- **The ledger**, `orgo-computers.json` in app data, holds only the computers ADE created. It sits beside `vault-index.json`, is not synced, and stores no passwords.
+- **`src-tauri/src/orgo.rs`** is the only ADE code that calls the REST API. It reads `ORGO_API_KEY` (Q3) through an internal `vault` function, after Story 2 limits `vault_get` to an allowlist. It needs an HTTP client crate (`reqwest` with rustls, or `ureq`).
+- **The ledger**, `orgo-computers.json` in app data, holds only ADE-made computers. It is not synced and stores no passwords.
 
 ```mermaid
 erDiagram
@@ -354,9 +542,8 @@ erDiagram
   }
 ```
 
-- **The spend guard** lives in `orgo_create`, the only create path. It refuses at the cap and always sends `ends_in_hours`. It never sends `billing_mode` or `gpu`. Then it sets auto-stop (U4).
-- **The live view** is noVNC (`@novnc/novnc` 1.7.0, MPL-2.0) in a new tab type, `"computer"`. The CSP's `connect-src` gains exactly `wss://www.orgo.ai`; today it has `http: https:` and no `ws`/`wss`. **Both** `scripts/csp.test.ts` and `scripts/browserTabCsp.test.ts` are updated: that one host, no `wss:` or `ws:` wildcard, and the existing frame and connect assertions still hold.
-- **The Context Store** gains `.ade/context/orgo-computers.md`: commands, ledger fields and close-code handling.
+- **The spend guard** lives in `orgo_create`, the only create path. It refuses at the cap, always sends `ends_in_hours`, and never sends `billing_mode` or `gpu`. Then it sets auto-stop (U4).
+- **The live view:** noVNC (`@novnc/novnc` 1.7.0, MPL-2.0) in a `"computer"` tab. `connect-src` gains exactly `wss://www.orgo.ai`, and both `scripts/csp.test.ts` and `scripts/browserTabCsp.test.ts` are updated: that host, no `wss:` or `ws:` wildcard, and the existing assertions still hold.
 
 ```mermaid
 sequenceDiagram
@@ -368,7 +555,7 @@ sequenceDiagram
   U->>W: New agent computer (size, ends in)
   W->>R: orgo_create(size, endsInHours, purpose)
   R->>R: running ADE computers < cap? else refuse
-  R->>K: read the Orgo key (Rust only)
+  R->>K: read ORGO_API_KEY (Rust only)
   R->>O: POST /computers {workspace_id, name, ram, ends_in_hours}
   O-->>R: 201 {id, status: running, ends_at, vnc_password}
   R->>R: append ledger entry (no password)
@@ -378,97 +565,104 @@ sequenceDiagram
   O-->>R: {password}
   R-->>W: {id, password} (memory only)
   W->>O: wss /desktops/{id}/ws/websockify?token=password
-  O-->>W: live desktop
 ```
 
 ## Stories (outline)
 
 **Story 2: New agent computer, with its live desktop in a tab.** Purpose 1.
-- First, `vault_get` gets an allowlist, with a test that `vault_get("ORGO_API_KEY")` is refused.
-- "New agent computer" in the command palette and the fleet view opens a sheet: size (Small, Medium or Large; no GPU), ends in (Q1 default), and the workspace. On confirm, `orgo_create` runs, a computer tab opens, and noVNC connects.
+- First, a `vault_get` allowlist, with a test that `vault_get("ORGO_API_KEY")` is refused.
+- The sheet offers size (Small, Medium or Large; no GPU), ends in (Q1) and the ADE workspace.
 - Close codes:
-  - `4003`: "Stopped or asleep", with a Start button (a click).
-  - `4008`: reconnect on the next input.
+  - `4003`: Start, as a click.
+  - `4008`: reconnect on input.
   - `4001`: refetch the password once.
-  - `4006`: "This key is for another workspace" (Q9).
-  - `4007`: "Orgo wants MFA: finish it in the browser".
-- The key check calls `GET /account/capacity` and branches on `code` (U10). Success means an account-wide key; `key_permission` means restricted account-wide; `workspace_scope_mismatch` means a workspace key. ADE warns on the first two, linking the guide's key steps, and does not refuse.
-- It depends on F4, F5, F7, F10, U4, U5, U6 and U10, and needs Q1 to Q4 and Q9. It adds `orgo.rs`, the ledger, the CSP change with both CSP tests, the `"computer"` tab type, `@novnc/novnc`, ADR 0010 and the context file.
+  - `4006`: "key is for another workspace".
+  - `4007`: "finish MFA in the browser".
+- The key check calls `GET /account/capacity` and branches on `code` (U10). It warns on an account-wide key and does not refuse.
+- It depends on F4, F5, F7, F10, U4, U5, U6 and U10, and needs Q1 to Q4. It adds `orgo.rs`, the ledger, the CSP change with both tests, the tab type, `@novnc/novnc`, ADR 0010 and `.ade/context/orgo-computers.md`.
 
-**Story 3: Lifecycle, with stop, start, delete and auto-stop when idle.**
-- Per computer: Stop, Start (a click) and Delete (a confirm naming the computer and saying the disk is lost). The tab says "Ends in 3h 12m" and offers "Extend 1 h" as a click.
-- Auto-stop when idle uses the Q1 default, applied right after create.
-- On launch, reconcile the ledger with the workspace. Computers the ledger has but Orgo does not are dropped. Computers ADE did not make, for example ones an agent made through MCP, show as "made elsewhere" with Stop and Delete, not counted against the cap.
+**Story 3: Lifecycle, with stop, start, delete and auto-stop.**
+- Stop, Start (a click) and Delete (a confirm saying the disk is lost). The tab shows "Ends in …" with "Extend 1 h".
+- Auto-stop uses the Q1 default.
+- On launch, reconcile with the workspace. Computers ADE did not make, through MCP or the CLI, show as "made elsewhere", not counted against the cap.
 - It depends on F5, U3, U4 and U7.
 
-**Story 4: A terminal into the computer, running Claude Code remotely.** Purpose 2.
-- A terminal pane in the computer tab: xterm.js (already a dependency) over `/ws/terminal` with `session=ade`. Optionally create from `template_ref: "system/coding"`, which has `claude` installed.
-- **Claude Code's credentials (decision 6).** "Run Claude Code here" asks for a vault secret the user picks, by default `ANTHROPIC_REMOTE_API_KEY`, which should be a dedicated, spend-limited Anthropic Console key.
-  - A confirm names the secret and the computer. On confirm, Rust writes it to the computer's environment, so the panel's code never reads the value.
-  - The choice is not remembered, and it is never the user's own Claude login.
-  - The guide says that anyone with the computer's password, and Orgo itself, can read it there, and that deleting the computer removes it.
-  - ADE does not use Orgo's template-secret injection. That needs Secrets write (F10) and would take the value from Orgo's vault, not ADE's.
-- **Getting code there is explicit.** The user picks a branch that is already pushed and clones it with a fine-grained, single-repo, short-lived token, or confirms a named upload. No background folder sync.
-- Handle `403 computer_key_held` (F10): a computer that holds its own Orgo key cannot be driven by a restricted key. Say so, and point to the guide.
+**Story 4: A terminal, and Claude Code remotely.** Purpose 2.
+- xterm.js over `/ws/terminal`, `session=ade`. Optionally `template_ref: "system/coding"`.
+- **Credentials (decision 6).** "Run Claude Code here" asks for a vault secret, by default `ANTHROPIC_REMOTE_API_KEY`, a dedicated, spend-limited Console key.
+  - A confirm names the secret and the computer, and Rust writes it to the computer's environment.
+  - The choice is never remembered, and it is never the user's login.
+  - The guide says Orgo and anyone with the computer password can read it there, and that deleting the computer removes it.
+  - No Orgo template-secret injection, which needs Secrets write (F10).
+- Code goes there only by an explicit clone of a pushed branch, with a fine-grained, single-repo, short-lived token, or by a confirmed upload.
+- Handle `403 computer_key_held`.
 - It depends on F4, F8, F10 and F12.
 
 **Story 5: Fleet lanes and cost.** Purpose 3.
-- Each running ledger computer, and each "made elsewhere" computer, is a fleet lane, with status from `GET /computers/{id}` and an end marker.
-- Cost per lane: an hourly computer is running time × the published rate, or `prepaid_cents`. A plan computer is "on plan". A GPU computer is "price unknown" (U11). A stopped computer shows its disk rate until deleted.
-- "New fleet" creates N computers in one confirmed click, with N no more than the cap's remaining room.
+- Lanes for ledger and made-elsewhere computers.
+- Cost: hourly is time × rate, or `prepaid_cents`; plan computers are "on plan"; GPU is "price unknown" (U11); a stopped computer shows its disk rate until deleted.
+- "New fleet" is N computers in one confirmed click, within the cap.
 - It depends on F6, U1 and U11.
 
 **Story 6: A throwaway sandbox.** Purpose 4.
-- "Run in a sandbox" creates a Small computer with a 1 h end and `deleteOnClose`, and opens its terminal. Closing the tab deletes it, after one confirm that can be turned off per sandbox.
-- No vault secret, credential or project file is sent. The sheet says so.
-- It depends on F5 and needs Q1. It reuses Stories 2 to 4.
+- A Small computer with a 1 h end and `deleteOnClose`, which closing the tab deletes after a confirm.
+- Nothing is sent to it.
+- It reuses Stories 2 to 4.
 
 ---
 
 ## Verification (all stories)
 
-The verification command is the repo's, unchanged: `npx tsc --noEmit` · `npm test` · `cd src-tauri && cargo test` · `cd relay && cargo test` · `cd mobile && npx tsc --noEmit && npx jest`. Step 2's REST client is tested against recorded responses behind a fake HTTP layer in `orgo.rs`, never the live API. The command stays offline and free.
+The verification command is the repo's, unchanged: `npx tsc --noEmit` · `npm test` · `cd src-tauri && cargo test` · `cd relay && cargo test` · `cd mobile && npx tsc --noEmit && npx jest`. Step 2's REST client is tested against recorded responses behind a fake HTTP layer, never the live API. The command stays offline and free.
+
+The rule tests check ADE's rules against Claude Code's documented matching, re-implemented in the test. They cannot run Claude Code itself, which is what the manual checks are for.
+
+## Story order and dependencies
+
+1. **Story 1**: MCP entry, `orgo_rules.rs` and the shared settings merge. Depends on nothing.
+2. **Story 1b**: Continuous hard stop. Depends on 1.
+3. **Story 1c**: Orgo CLI. Depends on 1. It is independent of 1b, but its Continuous denies come from 1b, so build 1b first or together. It is coordinated with `plan/cli-library-and-mcps`, whichever lands first.
+4. **Stories 2 → 3 → 4 → 5 → 6**: the native panel. They depend on 1 for the shared workspace and contract. Story 2 needs Q1 to Q4 and U4 to U6 and U10.
 
 ## Deferred Work
 
-- Q8's hard stop for Continuous mode, if the owner wants it as its own story.
-- A vault option to give a secret only to named consumers, not to every terminal.
+- A vault option to keep a secret out of terminals, or give it only to named consumers.
 - Website (`docs/index.html`): mention agent computers once step 2 ships.
-- Windows, macOS and iPhone Orgo computers. The panel targets Linux, the default and the only OS with SSH and every end/stop feature.
+- Windows, macOS and iPhone Orgo computers.
+- Re-checking the CLI rule table against `orgo manifest` when the CLI's major version changes. It could later become a test against a recorded manifest.
 
 ## Open Questions (owner)
 
-Decided on 2026-10-29: Q5 (decision 6) and Q7 (decision 4). Q6 (file tools) is moot: the hosted sign-in list decides it, with no upload and with list, export, download and delete. Story 1 needs no answer here to be built. Q8 and Q9 bear on its guide wording and on a follow-up story.
+Decided on 2026-10-29: Q3 for Story 1 (decision 7), Q5 (6), Q7 (4), Q8 (8), Q9 (9) and the CLI (10). Q6 is moot. Stories 1, 1b and 1c need only Q10 to be built, and they ship with its recommended answer unless the owner says otherwise.
 
 - **Q1. Spend limits and the auto-stop default (step 2).**
-  - Recommend: at most **3** running ADE-made computers, configurable 1 to 10.
-  - Every ADE create carries an end: **2 h** by default, with 1 h, 2 h, 4 h, 8 h or 24 h offered and nothing longer.
-  - Auto-stop after **30 min** idle.
-  - **Small** for a sandbox, **Medium** for a desktop. No GPU and no hourly.
+  - Recommend: 3 running ADE-made computers, configurable 1 to 10.
+  - A 2 h end by default (1, 2, 4, 8 or 24 h).
+  - Auto-stop after 30 min idle.
+  - Small for a sandbox, Medium for a desktop. No GPU, no hourly.
 - **Q2. Does ADE ever create a computer without a click?**
-  - Recommend: **never**, including starting a stopped one.
-  - Agents get computers through MCP, behind Story 1's ask rules.
-- **Q3. Where does the native panel's key live?**
-  - Recommend: a vault entry, `ORGO_API_KEY`, read only in Rust, with `vault_get` allowlisted first (Story 2).
-  - The key should be Custom, scoped to the same workspace the sign-in uses: Computers write, Control write, Workspaces read, everything else none.
-  - The panel never uses Claude Code's MCP sign-in, and Claude Code never gets the key.
-  - The vault still exports every secret into every new ADE terminal, so scripts there could use this key. The narrow scope bounds that. A per-secret "not in terminals" option is deferred.
-- **Q4. What does the live view use?**
+  - Recommend: never, including starting a stopped one.
+- **Q3. The panel's key (step 2).**
+  - Recommend: the same vault `ORGO_API_KEY` the CLI uses, a Custom key on the ADE workspace (Computers write, Control write, Workspaces read).
+  - Rust reads it, and `vault_get` is allowlisted first.
+- **Q4. The live view.**
   - Recommend: noVNC 1.7.0 in the main webview, with `connect-src` widened by exactly `wss://www.orgo.ai` and both CSP tests updated.
-  - Rejected alternatives:
-    - Framing the Orgo dashboard needs Orgo's web login inside ADE and third-party cookies that WKWebView blocks.
-    - `orgo-vnc` is a 0.x wrapper.
-    - A Rust WebSocket relay adds a moving part.
-  - noVNC is MPL-2.0, used unmodified alongside ADE's MIT code. Confirm that is acceptable.
-  - U6 needs a spike first.
-- **Q8. A hard stop for Continuous mode (new).**
-  - In Continuous mode an agent can edit `.claude/settings.json`, and the edit reaches the running session, so the ask rules can be removed.
-  - A CLI deny cannot be edited from inside the session. Option: when ADE launches Continuous mode in a project whose `.mcp.json` has `orgo`, it adds `--disallowedTools` for `orgo_create_computer`, `orgo_clone_computer`, `orgo_fork_computer`, `orgo_start_computer`, `orgo_restart_computer` and `orgo_resize_computer`.
-  - The cost: a Continuous agent cannot make or start computers at all. The user makes them, or uses a Manual session.
-  - Recommend: **yes, as Story 1b**, a separate small slice on `agentCommand.ts` and the launch path, after Story 1.
-- **Q9. Which Orgo workspace (new)?**
-  - Recommend: a workspace kept for ADE, chosen at sign-in and used for step 2's key, with nothing else in it.
-  - The sign-in's reach and a runaway agent's reach then stop at computers made for this work.
+  - Confirm that MPL-2.0 alongside ADE's MIT code is acceptable.
+  - U6 needs a spike.
+- **Q10. The CLI rule set beyond decision 10's list (new).**
+  - Recommend asking also for:
+    - `run`, `agent`, `resume` and `handoff`, which spend AI credit;
+    - `egress`, which routes the computer's traffic through proxies or a paired machine;
+    - top-level `clone`, which sends a plugged-in iPhone's apps and data to Orgo;
+    - `files upload`, which sends a local file;
+    - `templates delete` and `workspaces create`;
+    - `login` and `logout`;
+    - any `--json` listing until U12 is settled.
+  - Recommend Continuous mode also deny `billing topup`.
+  - Each is one row in the table to drop if unwanted.
+- **Q11. Who owns the shared settings merge (new, with the parallel plan).**
+  - Recommend: `merge_rules` lives in one neutral module (`src-tauri/src/claude_settings.rs`), used by `usage.rs`, `orgo_rules.rs` and the CLI library.
+  - Whichever plan builds first creates it, and the other reuses it.
 
 ## Review Triage Log
 
@@ -476,14 +670,26 @@ Decided on 2026-10-29: Q5 (decision 6) and Q7 (decision 4). Q6 (file tools) is m
 
 | Finding | Verdict | Action |
 |---|---|---|
-| The local `orgo-mcp-server` puts each computer's root `vnc_password` into model context and transcripts (create, get, resize and workspace listings), and registers `get_vnc_password`, `enable_computer_ssh`, `apply_computer_secrets`, `move_computer` and workspace edits | blocking | Story 1 rewritten around the hosted sign-in server (decision 4). Local server kept as a rejected alternative with these reasons. `vnc_password` in the `Computer` schema of create, get and resize confirmed in the live spec (F12). |
-| Continuous mode (`--dangerously-skip-permissions`) would let an agent create computers unprompted | blocking (owner, decision 5) | Story 1 writes ask rules merge-safely. Verified in Claude Code's docs that explicit ask rules prompt in `bypassPermissions` and deny rules hold in every mode. The residual (bypass can edit `.claude/settings.json`) stated, with Q8 as the hard stop. |
-| npx pinning rationale was wrong: dependencies float, and the spec and base URL load at runtime | major | Dropped with the local server. |
-| `ORGO_TAGS`, the vault key and the credentials-file fallback | n/a | Dropped from Story 1. |
-| m1: cost described as "until stopped"; stopped hourly computers still pay for disk | minor | Cost now says billed until deleted, in the frozen section, the caution and the guide (AC12 pins "until you delete"). |
-| m2: ACs restated spelling rather than proving behaviour | minor | ACs rewritten around behaviour. The panel renders and installs; merge, preserve, refuse and idempotence are tested on real files; the docs match the rules ADE writes. One derivation test (AC9) catches misspelt tool names. |
-| AC10 substring match: "Git" passes because of "GitHub" | minor | Now exact set equality of table cells against catalog names (AC11). |
-| The ADR claimed the key never reaches the webview, but `vault_get` takes any name | major | ADR reworded to "ADE never sends it". Story 2 starts with a `vault_get` allowlist, and Q3 recommends it. |
-| Story 2 named only `scripts/csp.test.ts` | minor | Both CSP tests named. |
-| Gaps: capacity check with restricted keys, close codes 4006 and 4007, `computer_key_held`, template secrets needing Secrets write, GPU prices | minor | Added as U10 and U11, Story 2 close codes, a Story 4 note, and a Story 5 "price unknown". |
-| How the hosted sign-in and step 2's REST key coexist | minor | New section "How Story 1 and step 2 coexist", plus Q9. |
+| The local `orgo-mcp-server` puts root `vnc_password` into model context, and registers the password, SSH, secrets, move and workspace tools | blocking | Story 1 rewritten around the hosted sign-in server (decision 4). Local server kept as a rejected alternative. F12 confirmed in the live spec. |
+| Continuous mode would let an agent create computers unprompted | blocking (owner, decision 5) | Ask rules, merged safely. Ask and deny under bypass verified in Claude Code's docs. The residual stated. |
+| npx pinning rationale wrong | major | Dropped with the local server. |
+| `ORGO_TAGS`, vault key, credentials-file fallback | n/a | Dropped from Story 1. |
+| m1: "until stopped" understated cost | minor | "Billed until deleted" everywhere, pinned by AC12. |
+| m2: ACs restated spelling | minor | ACs test behaviour. |
+| AC10 substring "Git" in "GitHub" | minor | Exact set equality (AC11). |
+| ADR claimed the key never reaches the webview | major | Reworded. Story 2 starts with a `vault_get` allowlist. |
+| Story 2 named one CSP test | minor | Both named. |
+| Gaps: capacity check codes, 4006 and 4007, `computer_key_held`, template secrets, GPU prices | minor | U10, U11, Story 2 close codes, Story 4 note, Story 5 "price unknown". |
+| Hosted sign-in vs step 2's key | minor | "How the pieces coexist". |
+
+**Round 2, 2026-10-29: owner decisions Q8 and Q9, and new scope (the Orgo CLI).**
+
+| Item | Action |
+|---|---|
+| Q8: hard stop in Continuous mode | Story 1b. The `--disallowedTools` syntax, bare-name removal and deny-in-every-mode verified in the CLI reference and permission docs. Placed before `--append-system-prompt-file` because the flag takes a list. CLI denies always passed, because a mid-session install is invisible at launch and a Bash rule that matches nothing is silent. |
+| Q9: dedicated ADE workspace | Decision 9. Used by the sign-in, the CLI key, step 2's key and the skill. |
+| The Orgo CLI | Story 1c. Commands, aliases and global options read from `orgo@2.3.0`'s bundle. Undocumented `clone`, `handoff` and `egress` found and put in Q10. `computers create` has no end, which is now in Cost and the skill. |
+| Bash pattern syntax | Verified: `*` anywhere, trailing ` *` matches the bare command, `:*` only at the end, ask and deny match past any assignment and inside compounds, and the listed wrappers are stripped, not `npx`. What can't be matched is listed and pinned by a test (1c AC3). |
+| A `--json` listing may print `vnc_password` | U12. The CLI passes API records through, and the docs and the review disagree. Listings with `--json` ask until checked. |
+| U9's "matches no tool" worry | Settled: names containing `_` are exempt from the check. |
+| Coordination with `plan/cli-library-and-mcps` | One rule module (`orgo_rules.rs`), a shared contract, Q11 for the merge's home, and the dependency stated both ways. |
