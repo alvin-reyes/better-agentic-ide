@@ -17,7 +17,7 @@ context: []
 
 One story, built test-first by a developer agent in its own worktree.
 
-**Status:** draft. The owner approved the approach on 2026-10-29 (the frozen section). Adversarial review pass 1 blocked this plan at e812c34, and it was revised in place (see the Review Triage Log). On 2026-10-29 the owner also had D7, the DOM-renderer spacing fix, included (decision 7). The plan becomes `approved` and gets its journal line once the re-review passes. This matches the earlier journal entries, which record approval after review.
+**Status:** draft. The owner approved the approach on 2026-10-29 (the frozen section). Adversarial review pass 1 blocked this plan at e812c34, and it was revised in place (see the Review Triage Log). On 2026-10-29 the owner also had D7, the DOM-renderer spacing fix, included (decision 7). Re-review pass 2 at d92a20d passed with minors, now applied. The plan becomes `approved`, and gets its journal line, when the owner approves it. This matches the earlier journal entries, which record approval after review.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
@@ -73,7 +73,7 @@ Chromium's per-span spacing hides this; WebKit may not. That would explain the d
   - the effect counts the pane mounted in its synchronous body and unmounted in its cleanup;
   - the doc comment at `useTerminal.ts:165-171` rewritten to describe slots that follow the screen;
   - exports: `seatTerminal`, `notePaneMounted`, `notePaneUnmounted`, `MAX_GPU`, `__resetGpuForTests`, `__setInstanceForTests`.
-- `src/hooks/__tests__/gpuSlots.test.ts` -- new: the slot policy with fakes, AC1 to AC11.
+- `src/hooks/__tests__/gpuSlots.test.ts` -- new: the slot policy with fakes, AC1 to AC11 and AC17.
 - `src/hooks/__tests__/terminalSeating.test.tsx` -- new: the real hook rendered in jsdom with xterm mocked, AC12 to AC16.
 - `src/components/SettingsPanel.tsx:643` -- the setting's last sentence (D5). Copy only, no test.
 - No `.ade/context/` entry and no ADR: the slots are private to `useTerminal.ts` and no other module reads them.
@@ -82,7 +82,7 @@ Chromium's per-span spacing hides this; WebKit may not. That would explain the d
 
 **D1. Data structures.**
 - `gpuSlots = new Map<Terminal, { paneId: string; addon: WebglAddon; gl: WebGL2RenderingContext | null }>()`. Map insertion order is the LRU order, least recently seated first: seating a terminal that already holds a slot deletes and re-sets its entry. Keyed by `Terminal` so `releaseGpu(term)` and its callers keep their signature.
-- `mountedPanes = new Map<string, number>()`, a count per pane id. The effect in `useTerminal` calls `notePaneMounted(paneId)` in its synchronous body, before the first `await`, and `notePaneUnmounted(paneId)` in its cleanup, deleting the key at 0. A count rather than a set because React's StrictMode, which `main.tsx` uses, runs mount, cleanup, mount in development.
+- `mountedPanes = new Map<string, number>()`, a count per pane id. The effect in `useTerminal` calls `notePaneMounted(paneId)` in its synchronous body, after its `if (!container) return;` (`useTerminal.ts:446`) and before the first `await`. Placed earlier, an effect that returns without a container would count the pane with no cleanup to uncount it, and that pane could never be evicted. The effect calls and `notePaneUnmounted(paneId)` in its cleanup, deleting the key at 0. A count rather than a set because React's StrictMode, which `main.tsx` uses, runs mount, cleanup, mount in development.
 - "Mounted" means `mountedPanes` has the slot's `paneId` with a count above 0. The victim is the first slot, in LRU order, whose pane is not mounted.
 
 Why not `wrapper.isConnected` (review B1): all panes of a tab mount in one commit, React runs all their effects in one passive flush, and each `attach()` then resumes after its `await` in tree order. When the first pane seats, the others' wrappers are still detached. They would be taken as hidden and evicted one after another: 8 new contexts on a switch where 1 would do, and the same on un-zoom, which remounts every pane (`App.tsx:480-482`). Counting mounts in the effect body marks every pane of the commit before any of them seats.
@@ -90,10 +90,11 @@ Why not `wrapper.isConnected` (review B1): all panes of a tab mount in one commi
 Why not derive "on screen" from the active tab: zoom is local state in `App.tsx:79`, outside any store, and the rule would duplicate `App.tsx`'s render logic. A mounted `useTerminal` effect is exactly owner decision 2's "currently mounted". A detached window is its own webview with its own module state.
 
 **D2. `seatTerminal(paneId, container, inst)`.** `attachSolely(container, inst.wrapper)`, then:
-1. Setting off, or WebGL found unavailable (D4): `releaseGpu(inst.term)` (a no-op without a slot), then D7, then stop.
+1. Setting off: `releaseGpu(inst.term)` (a no-op without a slot), then D7, then stop.
 2. Already holds a slot: move it to the end of the LRU order and stop. No new addon.
-3. All slots taken: release the first slot whose pane is not mounted. If every holder is mounted, apply D7 and stop: the DOM renderer, per owner decision 3.
-4. Load a new addon (D3). If that fails, apply D7.
+3. WebGL latched off (D4): apply D7 and stop. No load, no eviction, and no holder is released because of the latch.
+4. All slots taken: release the first slot whose pane is not mounted. If every holder is mounted, apply D7 and stop: the DOM renderer, per owner decision 3.
+5. Load a new addon (D3). If that fails, apply D7.
 
 The addon is loaded after `attachSolely`, so `WebglRenderer` is built inside a connected element (it reads `screenElement.isConnected` when constructed).
 
@@ -119,12 +120,18 @@ The `onContextLoss` handler returns early unless `gpuSlots.get(term)?.addon === 
 If `new WebglAddon()` or `loadAddon` throws (review m1):
 - Dispose that addon; xterm adds it to the terminal's list before activating it.
 - Remove every canvas the call added under `term.element`, losing any WebGL context on one first. `WebglRenderer` appends its canvas (`WebglRenderer.ts:138`) before `_initializeWebGLState` can throw.
-- Set a module flag, `gpuUnavailable`, so no further load is tried until the app restarts. A failure here means no WebGL2 or a failing driver, and retrying on every seat would repeat the cost.
-- A victim already released in step 3 of D2 stays on the DOM renderer.
+- Count it as a failure. The module flag `gpuUnavailable` latches, so no further load is tried until the app restarts, only in these cases:
+  - **at once, when WebGL2 is unsupported:** `new WebglAddon()` throws (it does so only in its Safari-below-16 check), or `loadAddon` throws an error whose message starts with "WebGL2 not supported" (`getContext` returned null, `WebglRenderer.ts:88-90`);
+  - **after 3 consecutive failed loads of any other kind,** for example `_initializeWebGLState` on a context lost as it was created (`WebglRenderer.ts:140`) while WebKit's GPU process restarts.
+- Any successful load resets the count.
+- **Why 3:** a load is tried only when a terminal is seated without a slot, about once per tab switch, so 3 failures in a row span several user actions, longer than a GPU process restart. Each failed load is cleaned up as above, so 3 attempts cost little, and a driver that always fails is still caught within 3 switches.
+- **On latching,** log once through `invoke("log_error", { message })` (the crash log, `src-tauri/src/crashlog.rs`), naming the reason and the last error, so the fallback is not silent.
+- The latch never releases an existing holder. Terminals with working contexts keep them until they are evicted, detached, destroyed or lose their context.
+- A victim already released in step 4 of D2 stays on the DOM renderer.
 
 `detachInstance` (and so `destroyInstance`) keeps calling `releaseGpu(inst.term)` before `inst.term.dispose()`.
 
-`closeTab` and `detachTab` call these from inside `import("../hooks/useTerminal").then(...)` (`tabStore.ts:309-311`, `417-419`), so the slots are freed a few microtasks after the store changes (review m2). The module is already loaded by then, so this happens before React commits and runs the next tab's effects. In practice the slots are free before any seat. If not, the cost is one extra eviction of a hidden terminal, which gets WebGL back when it is shown. This is recorded, not changed.
+`closeTab` and `detachTab` call these from inside `import("../hooks/useTerminal").then(...)` (`tabStore.ts:309-311`, `417-419`), so the slots are freed some hops after the store changes (review m2): `import()` with Vite's `__vitePreload` can take several. A store update from a native keydown can render in a microtask, so the slots may be freed after the next tab's first seat. The worst case is one extra eviction of a hidden terminal, which gets WebGL back when it is shown. This is recorded, not changed.
 
 **D5. The setting.** Read at each seat: off means no new addon, and a holder being seated releases its slot. Keeping "terminals opened after the change" would mean remembering the setting per terminal at open time. A terminal opened with it on would then keep re-acquiring WebGL on every tab switch after the user turned it off, which defeats the setting's purpose as the escape hatch for blank terminals. The settings sentence becomes: "Applies to each terminal the next time you switch to it. Windows already detached keep the setting they opened with." `settingsStore` reads `localStorage` once at start and does not sync across windows (review m3).
 
@@ -135,10 +142,11 @@ If `new WebglAddon()` or `loadAddon` throws (review m1):
   - The fake terminal is `{ element, rows, options, loadAddon: (a) => a.activate(term), refresh, dispose }`. Its `options` records every assignment, for AC11.
   - Panes are marked on screen with `notePaneMounted` and `notePaneUnmounted`. Settings are set with `useSettingsStore.setState({ gpuRendering })`.
 - `terminalSeating.test.tsx` (the wiring) renders the real `useTerminal` through a small harness. The harness renders one `<div ref>` per pane of the "active tab", or only the zoomed pane, the way `App.tsx` and `PaneContainer` do. It does not render `TerminalPane`, whose other effects (cwd polling, project root) have nothing to do with slots and would need more mocks.
+  - **For AC12 and AC13 the harness must mount panes as `App.tsx` and `PaneContainer` do:** every pane of a tab switch, or of a zoom change, in one React commit, from one `render`, never one pane per `act` or per commit. Mounting panes one at a time would hide B1, so a later change to the harness must keep this, and the test file says so in a comment.
   - Mocked: `@xterm/xterm` (a fake `Terminal` with `open`, `loadAddon`, `options`, `cols`, `rows`, `element`, `write`, `writeln`, `focus`, `dispose`, `onData`, `onResize`, `attachCustomKeyEventHandler`, `buffer`); every addon (`FitAddon.proposeDimensions` returns 120x40 and `fit` sets them); `registerFileLinks`; `@tauri-apps/api/core` (`create_pty` resolves an id and records its size); `@tauri-apps/api/app`; `@tauri-apps/plugin-opener`.
   - Stubbed: `ResizeObserver`, `offsetWidth` and `offsetHeight` (non-zero), and `requestAnimationFrame` as a manual queue the test flushes.
   - D6's earlier reason was wrong (review M1): the hook can be rendered in jsdom once xterm is mocked. `sidePanelLayout.test.tsx`'s comment is about the real xterm.
-- Test seams follow the existing `__reset…ForTests` exports (`src/lib/persistence.ts:180`, `src/hooks/useFleetData.ts:83`). `__resetGpuForTests()` releases and clears every slot, clears the mount counts and the `gpuUnavailable` flag, and is called in `beforeEach`. `__setInstanceForTests(paneId, inst)` puts a fake instance in `instances` for AC9. `terminalSeating.test.tsx` also destroys every instance it created in `afterEach`.
+- Test seams follow the existing `__reset…ForTests` exports (`src/lib/persistence.ts:180`, `src/hooks/useFleetData.ts:83`). `__resetGpuForTests()` releases and clears every slot, clears the mount counts, the `gpuUnavailable` flag and the failure count, and is called in `beforeEach`. `__setInstanceForTests(paneId, inst)` puts a fake instance in `instances` for AC9. `terminalSeating.test.tsx` also destroys every instance it created in `afterEach`.
 
 **D7. DOM-renderer spacing (owner decision 7).** `respaceDomRenderer(term)` sets `term.options.scrollSensitivity` to its value plus 1 and back. It runs from `seatTerminal` whenever the seated terminal ends up without a slot, so only while its wrapper is attached.
 - **Why it works:** any option change runs `DomRenderer._handleOptionsChanged`, which calls `_setDefaultSpacing` (`DomRenderer.ts:412-424`). That re-measures `W` now that the element is attached, because `WidthCache` never caches a width of 0 (`WidthCache.ts:140-143`).
@@ -151,7 +159,7 @@ If `new WebglAddon()` or `loadAddon` throws (review m1):
 
 Each names its test; the developer writes it failing first.
 
-`src/hooks/__tests__/gpuSlots.test.ts`:
+`src/hooks/__tests__/gpuSlots.test.ts` (AC17 was added in pass 2 and keeps its number so the hook tests' numbers don't change):
 1. Seating a terminal with GPU on and a free slot loads one new `WebglAddon` into it, and its wrapper is connected when `loadAddon` runs; seating the same terminal again loads nothing. -- "a seated terminal gets WebGL once"
 2. With 8 terminals seated and then unmounted, seating a 9th gives it WebGL and disposes exactly one of the others' addons. -- "the 9th terminal gets WebGL while 8 hidden ones hold slots"
 3. Eviction takes the least recently seated unmounted terminal, where re-seating counts as recent: seat A to H, unmount all, re-seat and unmount A, seat I, and B's addon is disposed, not A's. -- "evicts the least recently seated hidden terminal"
@@ -161,8 +169,9 @@ Each names its test; the developer writes it failing first.
 7. Context loss frees the slot (the next seat takes it without evicting anyone) and calls `term.refresh(0, rows - 1)`; the terminal gets a new addon on its next seat. -- "context loss frees the slot"
 8. With `gpuRendering` off, seating loads no addon, and a holder seated with it off has its addon disposed and its slot freed. -- "the setting off means no WebGL"
 9. `detachInstance` and `destroyInstance` on a holder dispose its addon before `term.dispose`, and free its slot for the next seat. -- "detach and destroy free the slot"
-10. If `loadAddon` throws after adding a canvas, `seatTerminal` does not throw, the terminal holds no slot, the addon is disposed, the canvas is removed and its context lost, and a later seat of another terminal constructs no `WebglAddon`. -- "a failed load cleans up and stops trying"
+10. If `loadAddon` throws a transient error after adding a canvas, `seatTerminal` does not throw, the terminal holds no slot, the addon is disposed, and the canvas is removed with its context lost. That single failure does not latch: the next seat constructs a `WebglAddon` again, and every other holder keeps its addon through its next seat. -- "a failed load cleans up and does not latch"
 11. A terminal that ends a seat without a slot (setting off, all holders mounted, or a failed load) has `options.scrollSensitivity` set to another value and then back to its original value. A terminal that ends a seat holding a slot has no option set. -- "a DOM-rendered terminal re-measures its spacing when seated"
+17. A "WebGL2 not supported" error, or a throwing constructor, latches at once. Three consecutive transient failures latch, but two failures with a success between them do not. Latching calls `log_error` once. Once latched, no `WebglAddon` is constructed, nothing is evicted, and existing holders seated again keep their addons. -- "WebGL latches off only when unsupported or failing repeatedly"
 
 `src/hooks/__tests__/terminalSeating.test.tsx` (the real hook, xterm mocked):
 12. Tab B has 8 panes holding all 8 slots. Switching to a 1-pane tab A evicts exactly one terminal, b1. Switching back to B then constructs exactly one `WebglAddon` and evicts exactly one terminal, a1; b2 to b8 keep their addons. -- "switching to a multi-pane tab evicts once"
@@ -181,11 +190,11 @@ Each names its test; the developer writes it failing first.
 - `cd mobile && npx tsc --noEmit && npx jest` -- expected: all pass (no mobile change)
 
 **Manual checks (macOS app, then WebKitGTK on Linux):**
-1. **The uncertainty, on the build before this fix:** turn GPU rendering off and open a new tab. Is the text distorted the same way as on the 9th or later tab, and is `.xterm-rows`'s `letter-spacing` about a cell wide? If yes, the DOM renderer's spacing is the cause. With this fix (D7 included), the same steps show undistorted text with `letter-spacing` within ±0.5px of 0. If the text is fine on the old build, the cause is elsewhere: report it before this story is closed.
+1. **The uncertainty, on the build before this fix:** turn GPU rendering off and open a new tab. Is the text distorted the same way as on the 9th or later tab, and is the computed `letter-spacing` of the `.xterm-rows` element about a cell wide? If yes, the DOM renderer's spacing is the cause. With this fix (D7 included), the same steps show undistorted text with `letter-spacing` within ±0.5px of 0. If the text is fine on the old build, the cause is elsewhere: report it before this story is closed.
 2. Open 12 tabs and switch through all of them twice. In the web inspector, each visible terminal has a WebGL canvas in `.xterm-screen` and no `.xterm-rows`. The text is not distorted, and switching to a tab that had to take a slot shows no visible delay.
 3. Switch to and from a 4-pane tab and an 8-pane tab: every pane on WebGL once the tab shows, none blank.
 4. Zoom and un-zoom a pane of the 8-pane tab: no pane blank or distorted.
-5. Split one tab 4x4: 8 panes on WebGL, 8 on the DOM renderer with `letter-spacing` near 0, none blank.
+5. Split one tab 4x4: 8 panes on WebGL, 8 on the DOM renderer, none blank. For each DOM-rendered pane, the computed `letter-spacing` of its `.xterm-rows` element is within ±0.5px of 0. AC11 proves only that the option is written and restored; checks 1 and 5 are the only proof that the spacing itself is right.
 6. Detach a tab into its own window and reattach it: both windows draw, none blank.
 7. Show a sixel image (for example with `img2sixel`) in a tab, open enough tabs that it is evicted, then switch back: the image is still drawn.
 8. With hidden terminals holding slots, turn GPU rendering off and switch tabs: each terminal shown has no WebGL canvas and normal spacing. Turn it back on and switch again: WebGL returns.
@@ -204,10 +213,18 @@ Each names its test; the developer writes it failing first.
   - D5: settings copy.
   - D6: rewritten, with a second test file for the real hook.
   - D7 and the spacing section added.
-- 2026-10-29, owner decision 7 ("Include it"): D7 is in the story. Recorded in the frozen section; status stays draft until the re-review passes.
   - AC4, AC10 and AC11 changed; AC11's source check dropped; AC12 to AC16 added.
   - Manual checks 3 to 9 added.
   - Status set back to draft and the early journal line removed.
+- 2026-10-29, owner decision 7 ("Include it"): D7 is in the story. Recorded in the frozen section; status stays draft until the re-review passes.
+- 2026-10-29, after re-review pass 2 (PASS WITH MINORS at d92a20d). The changes:
+  - n1: the latch is narrowed (D2 step 3, D4), AC10 rewritten, AC17 added.
+  - n2: D4's async destroy note reworded.
+  - n3: where `notePaneMounted` goes.
+  - n5: manual checks 1 and 5 name the property and say what AC11 proves.
+  - n6: the harness rule for AC12 and AC13.
+  - n4: `.ade/session.md` confirmed byte-identical to main, which never had the early line; the stale knowledge line corrected.
+  - Status stays draft for the owner's approval.
 
 ## Review Triage Log
 
@@ -225,3 +242,14 @@ Pass 1, adversarial, at e812c34: BLOCK. 1 blocker, 2 major, 6 minor, plus one ca
 | m5 | Approval and journal line written before review | minor | patched: status draft, journal line removed; both written after the re-review passes |
 | m6 | Stale doc comment at `useTerminal.ts:165-171` | minor | patched: in the Code Map |
 | new | DOM renderer's spacing is computed while detached, a cell wide | likely cause | added as D7, included by the owner (decision 7); AC11; manual checks 1 and 5 |
+
+Pass 2, adversarial, at d92a20d: PASS WITH MINORS. B1, M1, M2, D7, m1, m3, m4 and m6 confirmed.
+
+| # | Finding | Verdict | Action |
+|---|---|---|---|
+| n1 | `gpuUnavailable` latches on one failure, silently, and D2 released every holder under it | minor | patched: latch only when unsupported or after 3 consecutive failures, logged, never releases holders (D2, D4); AC10, AC17 |
+| n2 | D4 overstated when async destroy frees slots | minor | patched: reworded to "possibly after the next seat" |
+| n3 | `notePaneMounted` placement could leak a count | minor | patched: after `if (!container) return;` (D1) |
+| n4 | Journal is append-only; stale knowledge line | minor | `.ade/session.md` byte-identical to main at 5d73348, which never had the line; knowledge line corrected |
+| n5 | Manual check 5 didn't name the property; AC11's reach | minor | patched |
+| n6 | The harness could quietly weaken AC12 and AC13 | minor | patched: one-commit rule in D6 |
