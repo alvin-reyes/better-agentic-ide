@@ -4,6 +4,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "../lib/terminalFileLinks";
+import { attachHoverDismissal, createHoverController } from "../lib/hoverPreview";
+import { PeekCache, peekFile } from "../lib/filePeek";
 import { isAppShortcut } from "../lib/shortcuts";
 import { openFileFromTerminal } from "../lib/openFile";
 import { writePty } from "../lib/terminalCommands";
@@ -16,6 +18,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTabStore, findAllPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useFileHoverStore } from "../stores/fileHoverStore";
 import { isAnsweringKey, reportAnsweringKey } from "../stores/agentStatusStore";
 
 interface PtyEvent {
@@ -32,6 +35,7 @@ interface TerminalInstance {
   serializeAddon: SerializeAddon;
   ptyId: number | null;
   wrapper: HTMLDivElement; // the DOM element xterm renders into
+  stopHoverPreview: () => void;
 }
 
 const instances = new Map<string, TerminalInstance>();
@@ -156,6 +160,7 @@ function detachInstance(paneId: string) {
   const inst = instances.get(paneId);
   if (!inst) return;
   releaseGpu(inst.term);
+  inst.stopHoverPreview();
   inst.term.dispose();
   inst.wrapper.remove();
   instances.delete(paneId);
@@ -217,6 +222,16 @@ export function attachSolely(container: HTMLElement, wrapper: HTMLElement): void
   if (wrapper.parentElement !== container) container.appendChild(wrapper);
 }
 
+// File previews on hover: one controller and cache per window (each window
+// is its own webview), shared by its terminals. The card is FileHoverCard.
+const hoverPreview = createHoverController({
+  peek: peekFile,
+  cache: new PeekCache(),
+  show: (card) => useFileHoverStore.getState().show(card),
+  hide: () => useFileHoverStore.getState().hide(),
+  enabled: () => useSettingsStore.getState().fileHoverPreview,
+});
+
 /** An xterm with its addons, rendered into a detached wrapper div that lives outside React. */
 function openTerminal(paneId: string) {
   const wrapper = document.createElement("div");
@@ -235,7 +250,8 @@ function openTerminal(paneId: string) {
   }));
 
   term.open(wrapper);
-  registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal);
+  registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal, hoverPreview);
+  const stopHoverPreview = attachHoverDismissal(term, hoverPreview);
 
   enableGpuRenderer(term);
   try {
@@ -244,7 +260,7 @@ function openTerminal(paneId: string) {
     // Image rendering not available
   }
 
-  return { term, fitAddon, searchAddon, serializeAddon, wrapper };
+  return { term, fitAddon, searchAddon, serializeAddon, wrapper, stopHoverPreview };
 }
 
 /** Channel that streams a PTY's output into `term`. */
@@ -389,11 +405,11 @@ interface NewInstanceOptions {
 
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, opts: NewInstanceOptions): Promise<TerminalInstance> {
   const { initialCwd, serializedBuffer, isNewTab = false, container } = opts;
-  const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
+  const { term, fitAddon, searchAddon, serializeAddon, wrapper, stopHoverPreview } = openTerminal(paneId);
 
   if (serializedBuffer) term.write(serializedBuffer);
 
-  const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };
+  const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper, stopHoverPreview };
   instances.set(paneId, inst);
 
   // Seat and fit the terminal before anything is decided from its size.

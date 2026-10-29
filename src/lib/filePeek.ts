@@ -67,3 +67,130 @@ export async function peekFile(path: string, kind: PeekKind, known?: string): Pr
   if (Array.isArray(raw)) bytesAsJson = true;
   return unframe(raw);
 }
+
+const SIZE_UNITS = ["KB", "MB", "GB", "TB"];
+
+/** "999 B", then 1000-based units with one decimal: "12.3 KB", "10.0 MB". */
+export function formatSize(bytes: number): string {
+  if (bytes < 1000) return `${bytes} B`;
+  let value = bytes / 1000;
+  let unit = 0;
+  // 999,999 B is "1.0 MB", not "1000.0 KB".
+  while (unit < SIZE_UNITS.length - 1 && Number(value.toFixed(1)) >= 1000) {
+    value /= 1000;
+    unit++;
+  }
+  return `${value.toFixed(1)} ${SIZE_UNITS[unit]}`;
+}
+
+/**
+ * How long ago a file was modified: "just now" (also for a future mtime),
+ * "N min ago", "N h ago", then the local date. Null when there is no mtime.
+ */
+export function formatModified(ms: number | null, now: number): string | null {
+  if (ms === null) return null;
+  const ago = now - ms;
+  if (ago < 60_000) return "just now";
+  if (ago < 3_600_000) return `${Math.floor(ago / 60_000)} min ago`;
+  if (ago < 86_400_000) return `${Math.floor(ago / 3_600_000)} h ago`;
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** The hover card's largest size, its gap from the pointer and its margin from the window's edges. */
+export const CARD_WIDTH = 320;
+export const CARD_HEIGHT = 340;
+const CARD_GAP = 12;
+const CARD_MARGIN = 8;
+
+export interface CardPlacement {
+  left?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
+}
+
+/**
+ * Where the card goes for a pointer: right of and below it, flipped to the
+ * pointer's left or above it at the window's edges, pinned to the margin when
+ * neither side fits. Anchoring by `right`/`bottom` keeps a smaller card
+ * against the pointer too.
+ */
+export function placeCard(pointer: { x: number; y: number }, viewport: { width: number; height: number }): CardPlacement {
+  const place: CardPlacement = {};
+  if (pointer.x + CARD_GAP + CARD_WIDTH <= viewport.width - CARD_MARGIN) place.left = pointer.x + CARD_GAP;
+  else if (pointer.x - CARD_GAP - CARD_WIDTH >= CARD_MARGIN) place.right = viewport.width - (pointer.x - CARD_GAP);
+  else place.left = CARD_MARGIN;
+  if (pointer.y + CARD_GAP + CARD_HEIGHT <= viewport.height - CARD_MARGIN) place.top = pointer.y + CARD_GAP;
+  else if (pointer.y - CARD_GAP - CARD_HEIGHT >= CARD_MARGIN) place.bottom = viewport.height - (pointer.y - CARD_GAP);
+  else place.top = CARD_MARGIN;
+  return place;
+}
+
+/** What the cache keeps of a preview. Stories 3 to 5 add images, PDF thumbnails and HTML snapshots. */
+export type PeekContent = { type: "text"; text: string; truncated: boolean };
+
+export interface PeekEntry {
+  stamp: string;
+  size: number;
+  modifiedMs: number | null;
+  content: PeekContent;
+}
+
+const CACHE_ENTRIES = 32;
+const CACHE_BYTES = 32_000_000;
+
+/** Text weighs 2 bytes per UTF-16 code unit. */
+function weight(entry: PeekEntry): number {
+  return entry.content.text.length * 2;
+}
+
+/**
+ * Previews already fetched, by absolute path, so a repeat hover sends the
+ * stamp as `known` and an unchanged file is not read again. Bounded to 32
+ * entries and 32 MB of content; the least recently used goes first.
+ */
+export class PeekCache {
+  // A Map iterates in insertion order: the first key is the least recent.
+  private entries = new Map<string, PeekEntry>();
+  private bytes = 0;
+
+  get size(): number {
+    return this.entries.size;
+  }
+
+  /** The entry for `abs`, which becomes the most recent. */
+  get(abs: string): PeekEntry | undefined {
+    const entry = this.entries.get(abs);
+    if (entry) {
+      this.entries.delete(abs);
+      this.entries.set(abs, entry);
+    }
+    return entry;
+  }
+
+  set(abs: string, entry: PeekEntry): void {
+    this.delete(abs);
+    this.entries.set(abs, entry);
+    this.bytes += weight(entry);
+    while (this.entries.size > 1 && (this.entries.size > CACHE_ENTRIES || this.bytes > CACHE_BYTES)) {
+      this.delete(this.entries.keys().next().value as string);
+    }
+  }
+
+  delete(abs: string): void {
+    const entry = this.entries.get(abs);
+    if (!entry) return;
+    this.entries.delete(abs);
+    this.bytes -= weight(entry);
+  }
+}
+
+// CSI (colors, cursor moves) and OSC (titles, hyperlinks; ended by BEL or ST).
+const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+
+/** Terminal escape sequences removed, so a log shows as plain text. */
+export function stripAnsi(text: string): string {
+  return text.replace(ANSI, "");
+}

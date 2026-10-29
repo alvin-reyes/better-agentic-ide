@@ -57,6 +57,7 @@ Saved the report to ./out/report.pdf
 - **Markdown, HTML, PDFs and images** open in the [preview panel]({{ '/guide/files/' | relative_url }}#preview-panel) beside the terminal. **Everything else** opens in a tab.
 - A path that wraps onto the next line is still one link.
 - Words that only look like files (`v1.2.3`, a path that doesn't exist) are not links.
+- **Rest the pointer on a path** to preview the file without opening it. A card shows the file's size, when it was modified and, for a text or code file, its first lines. A binary file shows only its details. Typing, clicking, scrolling, or new output at the bottom of the terminal closes the card; move the pointer to bring it back. To turn previews off, clear **Preview a file when hovering its path in the terminal** in Settings.
 
 Web addresses are links too; they open in your browser.
 

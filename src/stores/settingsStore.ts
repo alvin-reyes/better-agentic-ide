@@ -364,6 +364,8 @@ interface Settings {
   askOnNewTab: boolean;
   /** Print the ADE logo and version at the top of a new terminal. */
   showBanner: boolean;
+  /** Preview a file when the pointer rests on its path in a terminal. */
+  fileHoverPreview: boolean;
   /** Set up every project (BMAD, methodology, agents) when it's opened. */
   autoProjectSetup: boolean;
 }
@@ -400,6 +402,7 @@ interface SettingsStore extends Settings {
   setShowShortcutBar: (show: boolean) => void;
   setAskOnNewTab: (ask: boolean) => void;
   setShowBanner: (show: boolean) => void;
+  setFileHoverPreview: (on: boolean) => void;
   setAutoProjectSetup: (on: boolean) => void;
   setGpuRendering: (on: boolean) => void;
   getActiveTheme: () => ThemeColors;
@@ -437,6 +440,7 @@ const defaults: Settings = {
   gpuRendering: true,
   askOnNewTab: true,
   showBanner: true,
+  fileHoverPreview: true,
   autoProjectSetup: true,
 };
 
@@ -510,6 +514,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setShowShortcutBar: (showShortcutBar) => save({ showShortcutBar }),
     setAskOnNewTab: (askOnNewTab) => save({ askOnNewTab }),
     setShowBanner: (showBanner) => save({ showBanner }),
+    setFileHoverPreview: (fileHoverPreview) => save({ fileHoverPreview }),
     setAutoProjectSetup: (autoProjectSetup) => save({ autoProjectSetup }),
     setGpuRendering: (gpuRendering) => save({ gpuRendering }),
 

@@ -10,6 +10,7 @@ import type { SetupFailure, SetupResult } from "./lib/projectSetup";
 import { SWITCH_DONE_EVENT, type SwitchDone } from "./lib/bmadSwitch";
 import { writePty } from "./lib/terminalCommands";
 import Toast from "./components/Toast";
+import FileHoverCard from "./components/FileHoverCard";
 import MethodologyPromptHost from "./components/MethodologyPrompt";
 import { togglePalette, useMethodologyPrompt } from "./lib/methodologyPrompt";
 import { hideSplash } from "./lib/splash";
@@ -548,6 +549,7 @@ export default function App() {
       {/* After the panels in the DOM, so it sits over one that raised it. */}
       <MethodologyPromptHost />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      <FileHoverCard />
     </div>
   );
 }

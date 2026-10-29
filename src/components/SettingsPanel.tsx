@@ -623,6 +623,18 @@ export default function SettingsPanel() {
               <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
                 <input
                   type="checkbox"
+                  checked={store.fileHoverPreview}
+                  onChange={(e) => store.setFileHoverPreview(e.target.checked)}
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Preview a file when hovering its path in the terminal
+                </span>
+              </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
                   checked={store.autoProjectSetup}
                   onChange={(e) => store.setAutoProjectSetup(e.target.checked)}
                   style={{ accentColor: "var(--accent)" }}

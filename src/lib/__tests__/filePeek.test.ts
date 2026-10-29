@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-import { peekFile, peekKind, unframe } from "../filePeek";
+import { formatModified, formatSize, peekFile, peekKind, PeekCache, placeCard, stripAnsi, unframe, type PeekEntry } from "../filePeek";
 
 const REPO = resolve(__dirname, "../../..");
 
@@ -124,5 +124,113 @@ describe("peekFile", () => {
     expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/a.png", kind: "image", known: undefined });
     await again.peekFile("/p/r.pdf", "pdf");
     expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/r.pdf", kind: "pdf", known: undefined });
+  });
+});
+
+describe("card formats", () => {
+  it("formats size and modified time", () => {
+    expect(formatSize(0)).toBe("0 B");
+    expect(formatSize(999)).toBe("999 B");
+    expect(formatSize(1000)).toBe("1.0 KB");
+    expect(formatSize(12_345)).toBe("12.3 KB");
+    expect(formatSize(999_999)).toBe("1.0 MB");
+    expect(formatSize(4_100_000)).toBe("4.1 MB");
+    expect(formatSize(10_000_000)).toBe("10.0 MB");
+    expect(formatSize(1_234_567_890)).toBe("1.2 GB");
+
+    const now = new Date(2026, 9, 29, 12, 0, 0).getTime();
+    expect(formatModified(now, now)).toBe("just now");
+    expect(formatModified(now - 59_999, now)).toBe("just now");
+    expect(formatModified(now - 60_000, now)).toBe("1 min ago");
+    expect(formatModified(now - 3 * 60_000 - 5_000, now)).toBe("3 min ago");
+    expect(formatModified(now - 3_599_999, now)).toBe("59 min ago");
+    expect(formatModified(now - 3_600_000, now)).toBe("1 h ago");
+    expect(formatModified(now - 86_399_999, now)).toBe("23 h ago");
+    // From 24 hours on: the local date.
+    expect(formatModified(now - 86_400_000, now)).toBe("2026-10-28");
+    expect(formatModified(new Date(2024, 0, 5, 23, 59).getTime(), now)).toBe("2024-01-05");
+    // A file from the future (clock skew) was modified "just now".
+    expect(formatModified(now + 3_600_000, now)).toBe("just now");
+    // Before 1970: negative, still a date.
+    const old = new Date(1969, 11, 25, 12, 0, 0).getTime();
+    expect(old).toBeLessThan(0);
+    expect(formatModified(old, now)).toBe("1969-12-25");
+    // No mtime on this platform: no date at all.
+    expect(formatModified(null, now)).toBeNull();
+  });
+});
+
+describe("placeCard", () => {
+  // The card's largest size is 320 x 340, with a 12 px gap and an 8 px margin.
+  const viewport = { width: 1200, height: 800 };
+
+  it("places the card inside the window", () => {
+    // Open space: right of and below the pointer.
+    expect(placeCard({ x: 100, y: 100 }, viewport)).toEqual({ left: 112, top: 112 });
+    // Exactly fits on the right (100 + 12 + 320 = 432 <= 440 - 8).
+    expect(placeCard({ x: 100, y: 100 }, { width: 440, height: 800 })).toEqual({ left: 112, top: 112 });
+    // Four pixels short of the margin: it doesn't fit there, nor to the left.
+    expect(placeCard({ x: 100, y: 100 }, { width: 436, height: 800 })).toEqual({ left: 8, top: 112 });
+    expect(placeCard({ x: 100, y: 100 }, { width: 1200, height: 456 })).toEqual({ left: 112, top: 8 });
+    // Near the right edge: anchored by `right`, to the pointer's left.
+    expect(placeCard({ x: 1000, y: 100 }, viewport)).toEqual({ right: 1200 - 988, top: 112 });
+    // Near the bottom edge: anchored by `bottom`, above the pointer.
+    expect(placeCard({ x: 100, y: 600 }, viewport)).toEqual({ left: 112, bottom: 800 - 588 });
+    // Bottom-right corner: both.
+    expect(placeCard({ x: 1150, y: 780 }, viewport)).toEqual({ right: 1200 - 1138, bottom: 800 - 768 });
+    // A window smaller than the card: pinned to the margin.
+    expect(placeCard({ x: 150, y: 150 }, { width: 300, height: 300 })).toEqual({ left: 8, top: 8 });
+    // Neither side fits horizontally, the bottom does.
+    expect(placeCard({ x: 250, y: 600 }, { width: 500, height: 800 })).toEqual({ left: 8, bottom: 800 - 588 });
+  });
+});
+
+describe("PeekCache", () => {
+  const text = (t: string, stamp = "s"): PeekEntry => ({ stamp, size: t.length, modifiedMs: 0, content: { type: "text", text: t, truncated: false } });
+
+  it("cache is bounded and LRU", () => {
+    const cache = new PeekCache();
+    for (let i = 0; i < 32; i++) cache.set(`/f${i}`, text(`file ${i}`));
+    expect(cache.size).toBe(32);
+    // Reading /f0 makes it the most recent, so /f1 is the oldest now.
+    expect(cache.get("/f0")?.content).toEqual({ type: "text", text: "file 0", truncated: false });
+    cache.set("/f32", text("file 32"));
+    expect(cache.size).toBe(32);
+    expect(cache.get("/f1")).toBeUndefined();
+    expect(cache.get("/f0")).toBeDefined();
+    expect(cache.get("/f32")).toBeDefined();
+    // Setting an existing path replaces it, it does not add one.
+    cache.set("/f0", text("again", "s2"));
+    expect(cache.size).toBe(32);
+    expect(cache.get("/f0")?.stamp).toBe("s2");
+
+    // Weight: text counts 2 bytes per UTF-16 code unit, against 32 MB.
+    const weighed = new PeekCache();
+    const eightMillion = "x".repeat(8_000_000); // 16 MB
+    weighed.set("/a", text(eightMillion));
+    weighed.set("/b", text(eightMillion));
+    expect(weighed.size).toBe(2); // exactly 32 MB fits
+    expect(weighed.get("/a")).toBeDefined(); // /b is now the oldest
+    weighed.set("/c", text("y"));
+    expect(weighed.get("/b")).toBeUndefined();
+    expect(weighed.get("/a")).toBeDefined();
+    expect(weighed.get("/c")).toBeDefined();
+    weighed.delete("/c");
+    expect(weighed.get("/c")).toBeUndefined();
+    expect(weighed.size).toBe(1);
+  });
+});
+
+describe("stripAnsi", () => {
+  it("ANSI escapes are stripped", () => {
+    // CSI: colors, cursor moves, erase, private modes.
+    expect(stripAnsi("\x1b[1;31merror\x1b[0m: bad")).toBe("error: bad");
+    expect(stripAnsi("a\x1b[2Kb\x1b[10;20Hc\x1b[?25ld")).toBe("abcd");
+    // OSC: a title ended by BEL, a hyperlink ended by ST.
+    expect(stripAnsi("\x1b]0;my title\x07after")).toBe("after");
+    expect(stripAnsi("\x1b]8;;https://x.dev\x1b\\link\x1b]8;;\x1b\\ done")).toBe("link done");
+    // Tabs and newlines stay.
+    expect(stripAnsi("\tcol\x1b[32m1\x1b[0m\n\tcol2\n")).toBe("\tcol1\n\tcol2\n");
+    expect(stripAnsi("plain text")).toBe("plain text");
   });
 });

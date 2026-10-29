@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ILink, ILinkProvider, Terminal } from "@xterm/xterm";
+import type { HoverLink, HoverPointer } from "./hoverPreview";
 
 /**
  * Clickable file paths in terminal output: whatever Claude (or any command)
@@ -144,17 +145,29 @@ function overlaps(a: CellRange, b: CellRange): boolean {
   return !before(a.end, b.start) && !before(b.end, a.start);
 }
 
+/** The hover card's side of a link (the window's hover controller). */
+export interface LinkPreview {
+  enter(link: HoverLink, pointer: HoverPointer): void;
+  leave(key: string): void;
+  dismiss(): void;
+}
+
 /**
  * Register the provider on a terminal. `getCwd` gives the folder relative
  * paths resolve against; `open` receives the absolute path of a clicked file.
+ * With `preview`, hovering a link previews the file.
  */
 export function registerFileLinks(
   term: Terminal,
   getCwd: () => Promise<string | null>,
   open: (path: string) => void,
+  preview?: LinkPreview,
 ): void {
   const provider: ILinkProvider = {
     provideLinks(lineNumber, callback) {
+      // Read before any await: a link's key names its rows on screen, so a
+      // scrollback trim that leaves the text where it is keeps the key.
+      const viewportY = term.buffer.active.viewportY;
       type Found = { path: string; start: { x: number; y: number }; end: { x: number; y: number } };
       // Each found path, as 1-based cells, kept only when it covers this row.
       const covering = (path: string, start: Found["start"], end: Found["end"]): Found[] =>
@@ -192,12 +205,24 @@ export function registerFileLinks(
         const found = candidates.flatMap((c, i) => (resolved[i] ? [{ ...c, abs: resolved[i] as string, isJoined: i < joined.length }] : []));
         // A joined path that names a file wins over the fragments it is made of.
         const winners = found.filter((f) => f.isJoined || !found.some((j) => j.isJoined && overlaps(j, f)));
-        const links: ILink[] = winners.map((f) => ({
-          range: { start: f.start, end: f.end },
-          text: f.path,
-          decorations: { underline: true, pointerCursor: true },
-          activate: () => open(f.abs),
-        }));
+        const links: ILink[] = winners.map((f) => {
+          const link: ILink = {
+            range: { start: f.start, end: f.end },
+            text: f.path,
+            decorations: { underline: true, pointerCursor: true },
+            activate: () => {
+              preview?.dismiss();
+              open(f.abs);
+            },
+          };
+          if (preview) {
+            const row = (y: number) => y - 1 - viewportY;
+            const key = `${f.abs}\0${f.start.x},${row(f.start.y)}-${f.end.x},${row(f.end.y)}`;
+            link.hover = (e) => preview.enter({ abs: f.abs, key }, { x: e.clientX, y: e.clientY, buttons: e.buttons });
+            link.leave = () => preview.leave(key);
+          }
+          return link;
+        });
         callback(links.length > 0 ? links : undefined);
       })();
     },

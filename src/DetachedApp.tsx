@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import PaneContainer from "./components/PaneContainer";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
+import FileHoverCard from "./components/FileHoverCard";
 import { useTabStore } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import type { Tab } from "./stores/tabStore";
@@ -97,6 +98,7 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
         <PaneContainer node={activeTab.root} tabId={activeTab.id} />
       </div>
       <Scratchpad ref={scratchpadRef} />
+      <FileHoverCard />
     </div>
   );
 }
