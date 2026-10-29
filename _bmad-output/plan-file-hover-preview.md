@@ -11,7 +11,7 @@ risk: 'medium'
 review: 'quick'
 review_source: 'pinned'
 lenses_ran: ['adversarial']
-review_loop_iteration: 1
+review_loop_iteration: 2
 context: ['.ade/context/file-peek.md', '.ade/context/decisions/0008-file-previews-are-bounded-and-inert.md']
 ---
 
@@ -54,7 +54,7 @@ The card follows the existing viewers' safety rules. Text is rendered as text. A
 
 **Always:**
 - The card previews only a link's `abs`: the path `resolve_file_paths` already resolved for that link. It never resolves or guesses a path of its own.
-- `peek_file` enforces every read limit, size cap and pixel cap listed in the limits table below. The frontend cannot ask for more.
+- `peek_file` enforces every read limit, every size cap and the raster pixel cap listed in the limits table below. The frontend cannot ask for more. The one cap applied in the frontend is the pixel limit for images embedded in a PDF, which the card passes to pdf.js (Story 4).
 - Nothing in the card can take focus or sit in the tab order:
   - The card has `pointer-events: none`.
   - Its code never calls `focus()`.
@@ -109,11 +109,11 @@ sequenceDiagram
   participant K as PeekCache
   participant R as peek_file (Rust)
   participant V as FileHoverCard
-  X->>C: hover(abs, range, event)
+  X->>C: hover(abs, key, event)
   alt same link already pending or open
-    Note over C: no-op (cancels a running leave grace)
-  else button held, or content scrolled under a still pointer
-    Note over C: ignored
+    Note over C: no-op (cancels a running leave wait)
+  else button held, suppressed, or a new link with no pointer move
+    Note over C: remembered as under the pointer, not shown
   else new link
     Note over C: token = n+1, hide old card, wait 350 ms
     C->>K: entry(abs), kept by this request
@@ -130,8 +130,13 @@ sequenceDiagram
       Note over C: not shown; cached only if text/html/image
     end
   end
-  X->>C: leave(abs, range)
-  Note over C: 150 ms grace; a same-link hover cancels it, otherwise dismiss
+  X->>C: leave(key)
+  alt pointer moved since the hover (real leave)
+    Note over C: 150 ms grace; a same-link hover cancels it, otherwise hide
+  else pointer still (xterm redraw)
+    Note over C: keep the card up to 1000 ms for the same-link re-hover
+  end
+  Note over C: any dismissal (key, click, wheel, blur, content moved) suppresses until the pointer moves
 ```
 
 There is no persistent data. The cache is in memory, one per window. The only stored value is the new setting.
@@ -140,13 +145,13 @@ There is no persistent data. The cache is in memory, one per window. The only st
 
 **Signature.** `#[tauri::command(async)] peek_file(path: String, kind: PeekKind, known: Option<String>) -> Result<tauri::ipc::Response, String>`, in a new `src-tauri/src/filepeek.rs`. Field names are camelCase.
 
-**The frame.** The response body is one frame, and the frontend receives it as an `ArrayBuffer`. No base64 is involved and no `atob` runs on the UI thread. The frame is laid out as:
+**The frame.** The response body is one frame. On Tauri's custom-protocol IPC path, which is the normal path on every platform, the frontend receives it as an `ArrayBuffer`, with no base64 and no `atob` on the UI thread. If the webview has fallen back to postMessage IPC, the same bytes arrive as a JSON array of numbers (tauri 2.10.2 `ipc-protocol.js:57-67`, `protocol.rs:390-402`). That fallback is sticky for the session once it trips. It is still correct, but slower; it is a known limit. The frame is laid out as:
 
 1. A 4-byte big-endian header length.
 2. The header: a UTF-8 JSON `FilePeek`.
 3. The payload: the raw file bytes for a `bytes` body, and empty otherwise.
 
-`frame(&FilePeek, &[u8]) -> Vec<u8>` in Rust and `unframe(ArrayBuffer) -> { peek, payload: Uint8Array }` in TypeScript are pure functions. Both are tested against the same hand-written byte vector, which is recorded in the contract file.
+`frame(&FilePeek, &[u8]) -> Vec<u8>` in Rust and `unframe(ArrayBuffer | Uint8Array | number[]) -> { peek, payload: Uint8Array }` in TypeScript are pure functions. `unframe` throws if the buffer is shorter than 4 bytes plus the header length, or if the header is not JSON. Both are tested against the same hand-written byte vector, which is recorded in the contract file.
 
 **Inputs.**
 - `PeekKind` is one of `"text" | "image" | "pdf" | "html" | "meta"`. The frontend chooses it with `peekKind(path)`, which reuses `viewerKind` (`src/lib/viewerKind.ts`):
@@ -201,13 +206,22 @@ Each size cap and pixel cap is a Rust `const` in `filepeek.rs`. The display and 
 | HTML read | first 256 KiB as text | A truncated page still renders. |
 | Raster image | 10 MB (10,000,000 bytes) | Bounds the IPC payload and the cache entry. |
 | Raster pixels | 40 megapixels, checked in Rust; no readable size means not sent | A small file can hold a huge bitmap: a 20000×20000 PNG decodes to 1.6 GB. |
-| SVG | 1 MB; not previewed (`svgFeatures`) if it contains `<use`, `<image`, `feImage` or `<!ENTITY` | Screens out the known blow-ups: nested `<use>`, embedded rasters of any size, and entity expansion. **No pixel guarantee is claimed for SVG**: a heavy filter or a huge path count inside 1 MB can still be slow to rasterize. This is a known limit, accepted because the `<img>` is rasterized at card size. |
+| SVG | 1 MB, and previewed only if it passes the allowlist below; otherwise `skipped/svgFeatures` | The allowlist removes every route to an embedded raster, nested `<use>` and entity expansion found so far. A 200 KB 1-bit 40000² PNG in a `data:` URL would decode to about 6.4 GB. **No pixel guarantee is claimed for SVG**: a heavy filter or a huge path count inside 1 MB can still be slow to rasterize. This is a known limit, accepted because the `<img>` is rasterized at card size. |
 | PDF | 20 MB; page 1 only; `maxImageSize` 40,000,000 passed to pdf.js | pdf.js parses in its worker and skips any embedded image over the pixel cap. |
 | Cache (frontend) | 32 entries and 32 MB of content, least recently used evicted | See Cache below. |
 
+**SVG allowlist** (`svg_is_plain(bytes) -> bool`, in Rust). An SVG is previewed only if all of these hold. Every check is on the raw bytes, and the text checks ignore ASCII case:
+- **Encoding:** the bytes are valid UTF-8, with no BOM other than UTF-8's and no NUL byte. If there is an XML declaration, its `encoding`, when present, is `utf-8`. This rules out UTF-16 and any encoding that could hide text from these checks.
+- **No embedded data or CSS references:** the text contains no `data:` and no `url(`.
+- **No escapes:** the text contains no `&#` character reference, no named entity other than `&amp;`, `&lt;`, `&gt;`, `&quot;` and `&apos;`, and no `\`. This blocks hiding `data:` or `url(` behind XML character references or CSS escapes such as `u\72l(`.
+- **No risky elements:** no `<!ENTITY`, no `foreignObject`, and no `use`, `image` or `feImage` element.
+- **No namespace prefixes:** no element name has a namespace prefix (no `<x:` or `</x:` for any prefix), so `<svg:use>` and `<svg:image>` are rejected.
+
+Anything else shows "SVG not previewed". It is a deliberately narrow allowlist: plain charts and icons pass, while sprites, embedded images and exotic encodings get details only.
+
 UTF-8 cut at the read boundary: an incomplete trailing sequence is dropped, not turned into U+FFFD. `\r\n` becomes `\n`. An empty file shows "Empty file".
 
-**Image dimensions** (`image_size(bytes) -> Option<(u32, u32)>`, returning the largest area the browser could decode):
+**Image dimensions** (`image_size(bytes) -> Option<(u32, u32)>`, returning the largest area the browser could decode). A zero width or height in any header gives `None` (for example, a JPEG of height 0 that defers it to a DNL marker), so such a file is never decoded. The area is compared with the cap as `u64` (`w as u64 * h as u64`), so a 65536×65536 PNG cannot wrap around to 0.
 - **PNG:** IHDR. APNG frames must fit inside it, per the spec.
 - **GIF:** the logical screen and every image descriptor (`0x2C`), found by walking the extension and LZW sub-blocks. The maximum width and height over all of them is used. A walk that runs off the end returns `None`.
 - **JPEG:** walk the segments from SOI by their lengths and take the first top-level SOFn (C0–C3, C5–C7, C9–CB, CD–CF). An SOF inside an APP1 EXIF thumbnail is skipped with its segment.
@@ -218,7 +232,8 @@ UTF-8 cut at the read boundary: an incomplete trailing sequence is dropped, not 
 ## Cache (`PeekCache` in `src/lib/filePeek.ts`)
 
 - Entries are keyed by `abs` and hold `{ stamp, size, modifiedMs, content }`. `content` is one of:
-  - text, of kind text or html;
+  - text, of kind text;
+  - HTML: the source text plus its snapshot, computed once per stamp (Story 5);
   - an image `Blob`;
   - a PDF thumbnail (a `Blob` of a PNG of at most 592×480 pixels) with its `numPages`.
 - An entry's weight is its text length (2 bytes per UTF-16 code unit) or its Blob's size. The budget is 32 entries and 32 MB. At most three images at the 10 MB cap fit. Each entry is under the 10 MB cap, so no entry is ever over budget on its own.
@@ -229,42 +244,85 @@ UTF-8 cut at the read boundary: an incomplete trailing sequence is dropped, not 
 ## Hover lifecycle (`src/lib/hoverPreview.ts`, framework-free)
 
 What xterm 6.0.0 actually does, from its source:
-- **Row change.** The linkifier calls `leave` and asks again for links whenever the pointer changes row (`Linkifier.ts:93-97`), including inside one wrapped or stitched link.
-- **Redraw.** On any redraw of the rows under the current link it calls `leave`, then asks again with the last mouse event and calls `hover` again with the pointer unmoved (`Linkifier.ts:301-320`; a redraw starting at row 0 clears every link).
-- **Duplicate hover.** A late provider reply can call `hover` twice without a `leave` in between.
-- **Scrolling.** `term.onScroll` fires for every line pushed into the scrollback, even while the user is scrolled back (`BufferService.ts:121`).
+- **Row change.** When the pointer changes row, the linkifier calls `leave` and asks again for links (`Linkifier.ts:93-97`). This happens even inside one wrapped or stitched link.
+- **Moving within a row.** Moving within the same row on the same link calls nothing (`Linkifier.ts:99-105`).
+- **Redraws.** On any redraw of the rows under the current link, it calls `leave` and asks again with the last mouse event. It then calls `hover` again with the pointer unmoved (`Linkifier.ts:301-320`). A redraw starting at row 0 clears every link.
+- **Late replies.** A late provider reply can call `hover` twice without a `leave` in between.
+- **Scrolling.** `term.onScroll` fires for every line pushed into the scrollback, whatever the view does (`BufferService.ts:121`). How the view moves depends on whether the scrollback is full (`BufferService.ts:78-104`), and a full scrollback is normal in long agent runs (10,000 lines by default, `settingsStore.ts:427`):
+  - **Scrollback not full, following output:** `viewportY` and `baseY` both increase by 1, and the text moves up.
+  - **Scrollback not full, scrolled back:** `viewportY` stays put, and the text stays put.
+  - **Scrollback full, following output:** `viewportY` and `baseY` stay put, but the oldest line is recycled, so every row's text moves up.
+  - **Scrollback full, scrolled back:** `viewportY` drops by 1, and the visible text stays put, so its buffer `y` shifts by 1. At `viewportY` 0 it cannot drop, so the text moves.
 
 The controller is built for that.
 
-`createHoverController({ peek, cache, show, hide, enabled, delayMs = 350, loadingAfterMs = 200, graceMs = 150 })` returns:
-- `enter(link, pointer)`, where `link` is `{ abs, key }` and `key` is `abs` plus the link's buffer range;
-- `leave(key)`;
-- `dismiss()`;
-- `pointerMoved()`;
-- `contentScrolled()`.
+**Link keys are viewport-relative.** Story 2 creates each link with `key = abs + "\0" + start.x,(start.y - 1 - viewportY) + "-" + end.x,(end.y - 1 - viewportY)`, using the `viewportY` at the moment the link is provided. When a full buffer trims while the user is scrolled back, the text and its viewport row stay put, so the re-provided link keeps its key. When the text really moves, the key changes.
 
-The `pointer` argument is `{ x, y, buttons }`, taken from the xterm event.
+**Content moved.** `textMoved(prev, now)` is a pure function. `now` is `{ viewportY, baseY, length, rows, scrollback }`, and the buffer is full when `length >= rows + scrollback`. It returns true when any of these holds:
+- `viewportY === baseY` (following output);
+- the buffer is full and `viewportY` and the previous `viewportY` are both 0 (trimming at the top of a full buffer);
+- `viewportY` changed in any way other than the full-buffer trim, where it drops by exactly 1 (a real scroll).
 
-- **`enter`**:
-  - Ignored when `enabled()` is false, when `pointer.buttons !== 0` (a button is held, as in a drag-select), or while `scrolledUnder` is set (below).
-  - When `key` equals the current link's key, pending or shown, it is a no-op: the card keeps its place, and a running grace timer is cancelled. This absorbs redraw churn, double hovers and row crossings inside one link.
-  - Otherwise it increments the token, hides the current card and starts the delay.
-- **`leave(key)`**: ignored unless `key` is the current link's. Otherwise it starts a 150 ms grace timer. When the timer ends, the card is dismissed. While the grace runs, nothing new is shown; a same-key `enter` ends the grace and shows whatever has loaded.
-- **When the delay ends**, it calls `peek(abs, peekKind(abs), kept?.stamp)`. If the answer takes longer than 200 ms, a loading card shows first, so a fast answer never flashes one. Only an answer whose token is still current is shown. An error shows "Can't preview: <message>" without a body.
-- **`contentScrolled()`** runs from `term.onScroll` only when `term.buffer.active.viewportY` differs from the value last seen. It dismisses the card and sets `scrolledUnder`, which `pointerMoved()` clears.
-  - **At the bottom of the buffer:** each output line moves the view. The card closes, and a path that scrolls under a resting pointer opens no card until the pointer moves.
-  - **Scrolled back:** the view does not move, so output leaves the card open. One exception: once the scrollback is full, xterm trims the oldest line and lowers `viewportY` to keep the view still. That counts as a change and closes the card (known limit).
-- **Not cancellable:** a Rust read already in flight is not aborted. It is bounded instead, and a stale answer is dropped. Moving the pointer across many links issues no reads, because a read starts only after the full delay.
+It returns false when `viewportY` is unchanged in a buffer that is not full, or drops by exactly 1 in a full buffer. `attachHoverDismissal` calls it on every `onScroll`.
 
-**What else closes the card** (each calls `dismiss`):
-- The link's `activate`. A click still opens the file.
-- `mousedown` on the terminal element.
-- `wheel` on the terminal element, in the **capture** phase, because xterm's scrollable element stops wheel propagation.
-- A window `keydown`, in the capture phase and passive.
-- Window `blur` and `resize`.
-- `visibilitychange` to hidden.
+**State.** The controller keeps three separate things:
+- `hovered`: the link xterm last reported under the pointer, with the pointer. It is set by `enter` and cleared by a `leave` with the same key.
+- `card`: the pending, loading or shown preview, with its key.
+- `suppressed`: a flag.
 
-`attachHoverDismissal(term, controller)` adds the terminal-side listeners: capture `mousemove`, which calls `pointerMoved`; capture `mousedown` and `wheel`; and `onScroll` with the `viewportY` check. It returns a disposer, which `useTerminal` calls when it disposes the terminal.
+It also keeps `movedSinceEnter`, which `pointerMoved()` sets and an accepted `enter` clears.
+
+`createHoverController({ peek, cache, show, hide, enabled, delayMs = 350, loadingAfterMs = 200, graceMs = 150, redrawWaitMs = 1000 })` returns `enter(link, pointer)`, `leave(key)`, `dismiss()`, `pointerMoved(point)` and `contentMoved()`.
+- `link` is `{ abs, key }`, and `pointer` is `{ x, y, buttons }` from the xterm event.
+
+**`enter`.** It always records `hovered`. It then does nothing more when any of these holds:
+- `enabled()` is false;
+- `pointer.buttons !== 0` (a button is held, as in a drag-select);
+- `suppressed` is set;
+- the key is new and `movedSinceEnter` is false. That means new content was drawn under a still pointer. It counts as a dismissal (see below).
+
+When the key equals the card's key, `enter` is a no-op: the card keeps its place, and a running leave wait is cancelled. This absorbs redraw churn, double hovers and row crossings inside one link. Otherwise `enter` accepts the link: it increments the token, hides the current card and starts the 350 ms delay.
+
+**`leave(key)`.** It is ignored unless `key` is the card's key. It clears `hovered` if that matches. Then:
+- **Real leave** (`movedSinceEnter` true; the pointer moved): a 150 ms grace runs before the card is hidden, covering a row crossing inside one link. The hide does not suppress, because the pointer moved.
+- **Redraw leave** (`movedSinceEnter` false; the pointer is still): the card stays for up to 1000 ms, waiting for xterm's re-hover of the same key. The long wait covers the provider's `get_pty_cwd`, which can spawn `lsof` (`pty.rs:288-296`, `378-386`).
+  - A same-key `enter` keeps the card.
+  - A different-key `enter` is new content under a still pointer, and it dismisses.
+  - Nothing arriving within 1000 ms means the path vanished, and it dismisses.
+
+While either wait runs, nothing new is shown.
+
+**When the delay ends**, the controller calls `peek(abs, peekKind(abs), kept?.stamp)`.
+- If the answer takes longer than 200 ms, a loading card shows first, so a fast answer never flashes one.
+- Only an answer whose token is still current is shown.
+- An error shows "Can't preview: <message>" without a body.
+
+**Dismissal.** `dismiss()` hides any card, cancels the pending delay and sets `suppressed`. These all call it:
+- a window `keydown` (capture phase, passive, never prevented);
+- `mousedown` and `wheel` on the terminal element, in the **capture** phase (xterm's scrollable element stops wheel propagation);
+- the link's `activate` (a click, which still opens the file);
+- window `blur` and `resize`;
+- `visibilitychange` to hidden;
+- `contentMoved()`;
+- the redraw cases above.
+
+So typing in Claude Code's live region, which redraws the rows under the pointer, never brings the card back. Only moving the pointer does.
+
+**`pointerMoved(point)`** comes from a capture-phase `mousemove` on the terminal element. It sets `movedSinceEnter`. If `suppressed` is set, it clears it, and if `hovered` is still set, it starts the delay for that link at the new point. This matters because xterm never re-fires `hover` for a move inside the same link (`Linkifier.ts:99-105`), so after a key press, nudging the pointer on the link brings the card back.
+
+**Known limits:**
+- A path drawn in place, not scrolled, under a pointer that rests off any link and has not moved since its last accepted hover can open a card after the delay.
+- Because `movedSinceEnter` is cleared only by an accepted hover, a redraw leave after the pointer moved inside the link is treated as a real leave. If xterm's re-hover then takes longer than 150 ms, the card hides and returns after the delay.
+- The 150 ms and 1000 ms waits are constants to tune in the manual check.
+
+**Not cancellable:** a Rust read already in flight is not aborted. It is bounded instead, and a stale answer is dropped. Moving the pointer across many links issues no reads, because a read starts only after the full delay.
+
+**Wiring.** `attachHoverDismissal(term, controller)` adds the terminal-side listeners:
+- capture `mousemove`, which calls `pointerMoved`;
+- capture `mousedown` and `wheel`;
+- `onScroll`, which calls the controller's `contentMoved()` when `textMoved` says the text moved.
+
+It returns a disposer, which `useTerminal` calls when it disposes the terminal.
 
 **Panes and windows:** hover works on any visible pane, focused or not, and in detached windows. Each window mounts its own `FileHoverCard` and has its own controller and cache.
 
@@ -393,14 +451,14 @@ Each criterion names the test that covers it. The developer writes each test fir
 5. `open_regular` on a FIFO returns `Err` rather than blocking. This is the same thread and timeout pattern, calling the open step directly, which is what a FIFO swapped in after the stat would hit. -- › `open_does_not_block` (unix only)
 6. Stamps:
    - `known` equal to the stamp gives `unchanged`.
-   - Rewriting the same number of bytes and then restoring mtime with `File::set_modified` still changes the stamp, through ctime. This is unix only.
+   - Rewriting the same number of bytes and then restoring mtime with `File::set_modified` still changes the stamp, through ctime. The test sleeps 50 ms after creating the file, so the rewrite falls in a later timestamp tick on every filesystem the suite runs on. This is unix only.
    - Pointing a symlink at a different file of the same size and mtime changes it, through dev and ino.
    - A pre-1970 mtime gives a negative `modifiedMs` and still matches on a second call.
 
    -- › `stamp_catches_rewrites_and_retargets`
 7. Kind `meta` gives `none` with size and stamp. Until Stories 3 and 4, kinds `image` and `pdf` also give `none`. -- › `meta_and_pending_kinds`
 8. `frame` of a fixed `FilePeek` and payload equals the byte vector in the contract file. -- › `frame_matches_the_contract_vector`
-9. `unframe` of that same byte vector gives the same header and payload. -- `src/lib/__tests__/filePeek.test.ts` › "unframe reads the contract vector"
+9. `unframe` of that same byte vector gives the same header and payload, whether it arrives as an `ArrayBuffer`, a `Uint8Array` or a `number[]`. It throws on a buffer shorter than 4 bytes, on a header length past the end, and on a header that is not JSON. -- `src/lib/__tests__/filePeek.test.ts` › "unframe reads the contract vector in every IPC shape"
 10. `peekKind` maps paths as follows:
     - `.md`, `.ts` and `Dockerfile` → `text`;
     - `.png`, `.svg` and `.ico` → `image`;
@@ -422,6 +480,8 @@ Each criterion names the test that covers it. The developer writes each test fir
 
 **Manual check (macOS):** call `peek_file` from the dev console on an iCloud "Optimize Mac Storage" file that is not downloaded. It should return `skipped/notDownloaded`, and the file should stay cloud-only.
 
+**Known limit (stamp):** two same-size writes within one timestamp tick, with the mtime restored afterwards, share a ctime. The card then shows the older content until the file changes again. On ext4 a tick is a few milliseconds; on APFS it is nanoseconds.
+
 ---
 
 # Story 2: the card, with text, code and file details
@@ -431,7 +491,7 @@ Depends on Story 1.
 ## Code Map (2)
 
 - `src/lib/filePeek.ts`: add `formatSize`, `formatModified`, `placeCard`, `PeekCache` and `stripAnsi`.
-- `src/lib/hoverPreview.ts` (new): `createHoverController` and `attachHoverDismissal`, as described in the shared design.
+- `src/lib/hoverPreview.ts` (new): `createHoverController`, `textMoved` and `attachHoverDismissal`, as described in the shared design.
 - `src/stores/fileHoverStore.ts` (new): a zustand store holding `{ card: { abs, point, state: "loading" | "ready" | "error", content?, error? } | null }`, with `show` and `hide`.
 - `src/components/FileHoverCard.tsx` (new): the portal; the header and detail line; the text body; and the binary, empty, details-only and error states. Mount it once in `src/App.tsx`, next to `<Toast>` (`:550`), and once in `src/DetachedApp.tsx`.
 - `src/lib/terminalFileLinks.ts:151`: `registerFileLinks(term, getCwd, open, preview?)`, where `preview` is `{ enter(link, pointer), leave(key), dismiss() }`. At `:199` each link gains:
@@ -439,7 +499,7 @@ Depends on Story 1.
   - `leave: () => preview.leave(key)`;
   - an `activate` that calls `preview.dismiss()` before `open(f.abs)`.
 
-  Here `key` is `${f.abs}\0${start.x},${start.y}-${end.x},${end.y}`. There is no `dispose` hook. Without `preview`, links are exactly as today.
+  Here `key` is the viewport-relative key from the shared design, computed when the link is created from `term.buffer.active.viewportY`. There is no `dispose` hook. Without `preview`, links are exactly as today.
 - `src/hooks/useTerminal.ts:238`: `openTerminal` passes the window's controller and calls `attachHoverDismissal(term, controller)`. Call its disposer next to `inst.term.dispose()` (`:159`).
 - `src/stores/settingsStore.ts:366,439,512` and `src/components/SettingsPanel.tsx:~612`: the setting.
 - `docs/guide/terminal.md:45-57` ("Clickable files"): one bullet, describing only what this story ships:
@@ -465,34 +525,44 @@ Depends on Story 1.
 4. `stripAnsi` removes CSI sequences (colors, cursor moves) and OSC sequences (titles, hyperlinks ended by BEL or ST), and keeps tabs and newlines. -- › "ANSI escapes are stripped"
 5. Using fake timers, the controller's basic timing:
    - no `peek` happens before 350 ms;
-   - a `leave` at 349 ms followed by an expired grace means no `peek` and no card;
+   - a real `leave` at 349 ms followed by an expired grace means no `peek` and no card;
    - an answer that arrives after the dismissal is cached, but no card shows;
    - an answer within 200 ms shows no loading card, and a slower one shows the loading card first;
    - with `enabled()` false, `enter` calls nothing;
    - a rejected `peek` shows an error card.
 
    -- `src/lib/__tests__/hoverPreview.test.ts` › "delays, cancels and drops stale previews"
-6. **Redraw churn:** with the card shown, `leave(k)` then `enter(k)` within 150 ms leaves the card shown, never calls `hide`, and starts no second `peek`. With the card pending, the same sequence keeps the original timer. -- › "a redraw does not flicker the card"
-7. **Double hover:** `enter(k)` twice without a `leave` shows one card and makes one `peek`. -- › "a repeated hover is a no-op"
-8. **Row crossing:** `leave(k)` then `enter(k)` for a link spanning two rows, with a new pointer on the second row, keeps the card at its first position. -- › "crossing rows inside one link keeps the card"
-9. **A different link:** `leave(k1)` then `enter(k2)` hides the first card and shows the second card only after its own 350 ms. A `leave(k1)` arriving after `enter(k2)` is ignored. -- › "a different link replaces the card"
+6. **Redraw churn:** with the card shown and no `pointerMoved` since the hover, `leave(k)` and then `enter(k)` 900 ms later leave the card shown. `hide` is never called and no second `peek` starts. With no re-hover, the card is dismissed at 1000 ms, and a later `enter(k2)` with no `pointerMoved` shows nothing. -- › "a redraw leave keeps the card; a vanished path closes it"
+7. **New content under a still pointer:** with the card shown, a redraw `leave(k1)` followed by `enter(k2)` with no `pointerMoved` dismisses the card and shows nothing. With no card, `enter(k2)` after an accepted `enter(k1)` with no `pointerMoved` in between also shows nothing. -- › "content drawn under a still pointer opens no card"
+8. **Real leave and row crossing:** after `pointerMoved`, a `leave(k)` followed by `enter(k)` within 150 ms keeps the card at its first position (crossing rows inside one link). A `leave(k)` with no re-hover hides it at 150 ms and does not suppress: a later `pointerMoved` followed by `enter(k2)` shows `k2` after its own 350 ms. A `leave(k1)` arriving after `enter(k2)` is ignored. `enter(k)` twice without a `leave` shows one card and makes one `peek`. -- › "real leaves, row crossings and double hovers"
+9. **Every dismissal suppresses:** after a `keydown` dismissal, `leave(k)` and then `enter(k)` with no `pointerMoved` show nothing, even after 2 s. A `pointerMoved` while `k` is still hovered then starts the delay, and the card shows 350 ms later with no new `enter`. The same holds after `mousedown`, `wheel`, `activate`, `blur` and `contentMoved`. -- › "a dismissal holds until the pointer moves, then reopens the link under it"
 10. **Held button:** `enter` with `buttons: 1` does nothing. -- › "dragging a selection shows no card"
-11. **Output while scrolled back:** with a fake terminal, `onScroll` firing with `viewportY` unchanged leaves the card shown. With `viewportY` changed it dismisses. After that, `enter` of a new key is ignored until `pointerMoved()`. -- › "scrolling closes the card only when the view moves"
-12. `attachHoverDismissal` calls `dismiss` for each of these:
-    - `wheel` and `mousedown` dispatched to a child of the terminal element whose bubble handler calls `stopPropagation`, which shows the listeners use capture;
-    - a window `keydown`, whose `defaultPrevented` stays false;
-    - window `blur` and `resize`;
-    - `visibilitychange` while hidden.
+11. **`textMoved`, with a fake buffer that models both scrollback states** (`viewportY`, `baseY`, `length`, `rows`, `scrollback`):
+    - Not full, following output (`viewportY` and `baseY` both increase): true.
+    - Not full, scrolled back (`viewportY` unchanged): false.
+    - Full, following output (`viewportY === baseY`, both unchanged): true.
+    - Full, scrolled back (`viewportY` drops by 1): false.
+    - Full, at `viewportY` 0 twice: true.
+    - A jump of `viewportY` by 5: true.
 
-    `mousemove` calls `pointerMoved`. After the disposer runs, none of these do anything. -- › "every dismissal path closes the card"
-13. The link wiring, tested with a fake terminal (`buffer.active.getLine`, with `registerLinkProvider` captured) and `invoke` mocked to resolve one path:
-    - the provided link's `hover` calls `preview.enter` with `{ abs, key }` and `{ x, y, buttons }` from the event;
+    Wired through `attachHoverDismissal`, a full scrolled-back trim leaves the card shown, and a full following-output scroll dismisses it. -- › "content moves exactly when xterm moves the text"
+12. **Viewport-relative keys:** a link provided at buffer `y` 120 with `viewportY` 100, and the same text re-provided at `y` 119 after a trim with `viewportY` 99, have the same key. The same text at `y` 120 with `viewportY` 101 has a different key. -- `src/lib/__tests__/terminalFileLinks.test.ts` › "link keys survive a scrollback trim"
+13. `attachHoverDismissal`:
+    - It calls `dismiss` for `wheel` and `mousedown` dispatched to a child of the terminal element whose bubble handler calls `stopPropagation`, which shows the listeners use capture.
+    - It calls `dismiss` for a window `keydown`, whose `defaultPrevented` stays false.
+    - It calls `dismiss` for window `blur` and `resize`, and for `visibilitychange` while hidden.
+    - `mousemove` calls `pointerMoved`.
+    - After the disposer runs, none of these do anything.
+
+    -- `hoverPreview.test.ts` › "every dismissal path is wired"
+14. The link wiring, tested with a fake terminal (`buffer.active.getLine`, with `registerLinkProvider` captured) and `invoke` mocked to resolve one path:
+    - the provided link's `hover` calls `preview.enter` with `{ abs, key }`, where `key` is viewport-relative, and `{ x, y, buttons }` from the event;
     - `leave` calls `preview.leave(key)`;
     - `activate` calls `preview.dismiss` and then `open(abs)`;
     - without `preview`, the link has no `hover` or `leave`.
 
     -- `src/lib/__tests__/terminalFileLinks.test.ts` › "links drive the hover preview and still open on click"
-14. `FileHoverCard` bodies:
+15. `FileHoverCard` bodies:
     - A text body shows the name, the detail line and at most 16 lines, with a final "…" row when `truncated` or more lines exist.
     - ANSI escapes are not shown.
     - `binary` shows "Binary file".
@@ -501,7 +571,7 @@ Depends on Story 1.
     - A file containing `<img src=x onerror=alert(1)>` adds no `img` element.
 
     -- `src/components/__tests__/FileHoverCard.test.tsx` › "renders text and details as text"
-15. Focus and placement:
+16. Focus and placement:
     - The card has `role="tooltip"` and `pointer-events: none`.
     - No element in it has a `tabindex` other than `-1`.
     - `document.activeElement` is the same before and after the card shows.
@@ -509,8 +579,8 @@ Depends on Story 1.
     - Its colors are `var(...)` values only.
 
     -- › "never takes focus and sits where placeCard says"
-16. `fileHoverPreview` defaults to true, `setFileHoverPreview(false)` persists, and a reloaded store reads false. -- `src/stores/__tests__/settingsStore.test.ts` › "file hover preview setting" (new file)
-17. The existing suites still pass, including `terminalFileLinks.test.ts` and `previewSecurity.test.ts`. -- existing
+17. `fileHoverPreview` defaults to true, `setFileHoverPreview(false)` persists, and a reloaded store reads false. -- `src/stores/__tests__/settingsStore.test.ts` › "file hover preview setting" (new file)
+18. The existing suites still pass, including `terminalFileLinks.test.ts` and `previewSecurity.test.ts`. -- existing
 
 ## Verification (2)
 
@@ -520,7 +590,9 @@ Depends on Story 1.
 - Hover `src/App.tsx:42:7` in Claude Code output. The card appears after about a third of a second, next to the pointer, inside the window, and over a neighbouring split pane.
 - Hold the pointer still on a path while Claude Code redraws its prompt: the card does not flicker.
 - Move along a path that wraps over two rows: the card stays open.
-- Scroll back and hover while output streams: the card stays open. At the bottom, output closes it.
+- Scroll back and hover while output streams, both before and after the scrollback fills (`yes | head -20000` fills it): the card stays open. At the bottom, output closes it, and a path scrolling under the still pointer opens no card until the pointer moves.
+- Type while hovering a path in Claude Code's prompt area: the card closes and stays closed. Nudge the pointer on the path: it returns.
+- Tune the 150 ms and 1000 ms waits if a card flickers on row crossing or after a slow `cwd` lookup.
 - Typing closes the card, and the keys reach the shell.
 - A mouse-wheel scroll closes it. A drag-select over a path shows no card.
 - Clicking still opens the file.
@@ -537,13 +609,13 @@ Depends on Story 2.
 
 - `src-tauri/src/filepeek.rs`, kind `image`:
   - `tooLarge` above the cap: 10 MB for rasters, 1 MB for `.svg`.
-  - Rasters: `image_size` as in the Limits section, giving `skipped/noSize` or `skipped/pixels`, otherwise `bytes` with `width`/`height`.
-  - SVG: `skipped/svgFeatures` on the screen in the Limits table, otherwise `bytes`.
+  - Rasters: `image_size` as in the Limits section, with the area in `u64`, giving `skipped/noSize` or `skipped/pixels`, otherwise `bytes` with `width`/`height`.
+  - SVG: `svg_is_plain` as in the Limits section, giving `skipped/svgFeatures` unless it passes, otherwise `bytes`.
 - `src/lib/filePeek.ts`: `PeekCache` stores the image as a `Blob` with the type from `imageMime` (`src/lib/viewerKind.ts`).
 - `src/components/FileHoverCard.tsx`, the image body:
-  - `<img src={URL.createObjectURL(blob)} decoding="async" alt="">` in a 296×200 box with `object-fit: contain`;
+  - a `useObjectUrl(blob)` hook, which creates the URL in an effect, keyed on the Blob, and revokes it in the effect's cleanup, so a re-render never creates another URL;
+  - `<img src={url} decoding="async" alt="">` in a 296×200 box with `object-fit: contain`;
   - a CSS checkerboard behind it, so dark or transparent images stay visible;
-  - the URL is revoked on unmount;
   - the detail line gains `· W × H`;
   - `skipped` and `tooLarge` show their messages and no `img`.
 - `.ade/context/file-peek.md`: the `image` arm.
@@ -557,15 +629,21 @@ Depends on Story 2.
    - a JPEG with an APP1 segment containing an SOF0 for 1×1 before the real SOF0 of 30000×30000, giving 30000×30000;
    - an ICO with a 16×16 BMP entry and a PNG entry whose IHDR says 30000×30000, giving 30000×30000.
 
-   A cut-short header in each format, and random bytes, give `None`. -- `filepeek.rs` tests › `image_header_sizes`
-2. Rasters under the caps give `bytes` whose payload equals the file, with `width` and `height`. The 30000×30000 GIF, JPEG and ICO above give `skipped/pixels` with an empty payload. A PNG with an unreadable header gives `skipped/noSize`. A sparse 10,000,001-byte `.png` gives `tooLarge` with limit 10,000,000. -- › `images_are_capped_and_sized`
-3. SVG:
-   - An SVG containing `<use`, `<image`, `feImage` or `<!ENTITY` gives `skipped/svgFeatures`.
-   - A plain SVG under 1 MB gives `bytes`.
-   - A 1,000,001-byte SVG gives `tooLarge`.
+   A cut-short header in each format, random bytes, a PNG with width 0, and a JPEG whose SOF0 height is 0 (the DNL form) give `None`. -- `filepeek.rs` tests › `image_header_sizes`
+2. Rasters under the caps give `bytes` whose payload equals the file, with `width` and `height`. The 30000×30000 GIF, JPEG and ICO above give `skipped/pixels` with an empty payload. So does a PNG of 65536×65536, whose area wraps to 0 in `u32`. A PNG with an unreadable header gives `skipped/noSize`. A sparse 10,000,001-byte `.png` gives `tooLarge` with limit 10,000,000. -- › `images_are_capped_and_sized`
+3. A plain UTF-8 SVG chart (paths, text, gradients, an inline `<style>` without `url(`) under 1 MB gives `bytes`. A 1,000,001-byte SVG gives `tooLarge`. Each of these gives `skipped/svgFeatures`:
+   - `<use>`, `<image>` and `<feImage>`;
+   - `<svg:use>` and `<svg:image>`, through a namespace prefix;
+   - a UTF-16 LE SVG with a BOM, and a UTF-8 SVG declaring `encoding="UTF-16"` or `encoding="ISO-2022-JP"`;
+   - `<foreignObject>` with a CSS background;
+   - `url(data:image/png;base64,…)` in a `style` attribute (`mask-image`) and in a `<style>` element;
+   - `data:` hidden behind character references (`&#100;ata:`);
+   - `url(` hidden behind a CSS escape (`u\72l(`);
+   - an internal `<!ENTITY>`;
+   - a named entity other than the five XML ones.
 
-   -- › `svg_is_screened`
-4. A PNG body renders exactly one `img` with a `blob:` `src` and `decoding="async"`. The detail line shows `"W × H"`. Unmounting the card calls `URL.revokeObjectURL` with that URL. jsdom has no object URLs, so the test stubs both functions. -- `FileHoverCard.test.tsx` › "image thumbnail"
+   -- › `svg_allowlist_rejects_every_bypass`
+4. A PNG body renders exactly one `img` with a `blob:` `src` and `decoding="async"`. The detail line shows `"W × H"`. Re-rendering the card with the same Blob creates no second URL. Unmounting the card calls `URL.revokeObjectURL` with that URL. jsdom has no object URLs, so the test stubs both functions. -- `FileHoverCard.test.tsx` › "image thumbnail"
 5. An SVG body whose bytes contain `<script>` renders as an `img` with a `blob:` `src`. The card contains no `svg` element, and the document gains no `script` element. -- › "svg is only ever an img"
 6. Messages, each with no `img`:
    - `skipped/pixels` shows "Too large to preview (30000 × 30000)";
@@ -597,11 +675,12 @@ Depends on Story 2.
 - `src/components/hover/HoverPdf.tsx` (new). It is loaded with `React.lazy`, so pdf.js loads only on the first PDF hover. The render:
   1. Call `loadPdf(payload, { maxImageSize: 40_000_000 })`, then `getPage(1)`.
   2. Take a viewport scaled to fit 296×240 CSS pixels, times `devicePixelRatio` (at most 2).
-  3. Render into a canvas, then `canvas.toBlob("image/png")`.
+  3. Render into a canvas, then `await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"))`. `toBlob` takes a callback, not a promise, and a `null` Blob is an error.
   4. Store `{ thumbnail, numPages }` in the cache. This is the only PDF content ever cached.
   5. Show the thumbnail as an `img` on white. The detail line gains `· N pages`.
 
   On unmount it calls `renderTask.cancel()` and the loading task's `destroy()`.
+- **Known limit:** pdf.js's `maxImageSize` bounds only an image's declared width and height (the image dictionary's `/W` and `/H`, `pdf.worker.mjs:40549-40561`). A JPX or DCT stream that decodes larger than declared is not bounded by it. That decode happens in the pdf.js worker, off the UI thread, but it can still use a lot of memory.
 - `src/lib/hoverPreview.ts`: a PDF answer whose token is stale is dropped, never cached. An `unchanged` answer for a PDF shows the kept thumbnail without loading pdf.js.
 - `.ade/context/file-peek.md`: the `pdf` arm. `docs/guide/terminal.md`: the bullet gains PDFs.
 
@@ -615,7 +694,7 @@ Depends on Story 2.
    - it shows one `img` with a `blob:` thumbnail;
    - the detail line shows `· 12 pages`.
 
-   jsdom has no canvas, so the test stubs `HTMLCanvasElement.prototype.getContext` and `toBlob`. -- `src/components/__tests__/HoverPdf.test.tsx` › "renders page one only, with the pixel cap"
+   jsdom has no canvas, so the test stubs `HTMLCanvasElement.prototype.getContext`, and stubs `toBlob` to call its callback asynchronously. A stub `toBlob` that calls back with `null` shows "Can't preview this PDF". -- `src/components/__tests__/HoverPdf.test.tsx` › "renders page one only, with the pixel cap"
 4. A dismissal before the render resolves calls the render task's `cancel` and the loading task's `destroy`. No `img` appears, and the cache holds no entry for the file. -- › "a dismissed card stops pdf.js and caches nothing"
 5. A second hover on the same unchanged PDF shows the cached thumbnail and does not call `loadPdf`. -- › "an unchanged PDF is not parsed again"
 6. When `loadPdf` rejects (an encrypted or corrupt file), the card shows "Can't preview this PDF", and the file's details are still present. -- › "a PDF that won't open still shows its details"
@@ -639,7 +718,8 @@ Depends on Story 2.
 ## Code Map (5)
 
 - `src/lib/htmlSnapshot.ts` (new):
-  - `snapshotDoc(html: string): string | null`, the five steps in the shared design's Security section. It returns `null` when there is no fixed point or verification fails.
+  - `snapshotDoc(html: string): string | null`, the five steps in the shared design's Security section. It returns `null` when there is no fixed point, when verification fails, or when the input is longer than 262,144 UTF-16 code units. That cap bounds the sanitizer's work even if a future caller passes more than the 256 KiB read.
+  - It is computed **once per stamp, outside render**: when an `html` answer arrives, the controller computes `snapshotDoc` and `isBlank` before showing the card, and stores both in the cache entry with the source text. An `unchanged` answer reuses them, and the card's render only reads them.
   - `isBlank(doc: string): boolean` is true when the sanitized `<body>` holds no text after trimming. `noscript` is already removed, so an SPA shell's "enable JavaScript" message does not count, and images are removed too.
 - `src/components/FileHoverCard.tsx`, the HTML body: a 296×222 clip box holding:
 
@@ -661,7 +741,7 @@ Depends on Story 2.
   />
   ```
 
-  When `snapshotDoc` returns `null` or `isBlank` is true, it shows the source's first 16 lines (Story 2's text body) labelled "HTML source". A `binary` body shows "Binary file".
+  The iframe's `doc` is the cached snapshot. When it is `null` or blank, the card shows the source's first 16 lines (Story 2's text body) labelled "HTML source". A `binary` body shows "Binary file".
 - No Rust: Story 1 already reads kind `html`, up to 256 KiB.
 - `docs/guide/terminal.md`: the bullet gains HTML snapshots and says what they leave out (external styles, images, scripts).
 
@@ -678,6 +758,7 @@ Depends on Story 2.
 4. `isBlank` is true for a script-only SPA shell, including one with a `<noscript>You need to enable JavaScript</noscript>`, and false for a page with text. -- › "detects a page with nothing to show"
 5. The card's HTML body renders an `iframe` whose `sandbox` attribute is the empty string, with `tabindex="-1"` and `pointer-events: none`. Its `srcdoc` begins with `<!doctype html>` and contains the CSP meta. A blank page, or a `null` snapshot, shows "HTML source" and the first lines as text. -- `FileHoverCard.test.tsx` › "html snapshot is sandboxed and inert"
 6. A source check: every `<iframe` in `FileHoverCard.tsx` and `src/components/hover/` has `sandbox=""`, and none contains `allow-`. -- `src/components/__tests__/previewSecurity.test.ts` › "hover card iframes allow nothing" (new case)
+7. With `snapshotDoc` spied on, an `html` answer computes it exactly once. Re-rendering the card and a second hover answered `unchanged` do not call it again. Input over the cap returns `null` without calling DOMPurify. -- `hoverPreview.test.ts` › "the snapshot is computed once per stamp"; `htmlSnapshot.test.ts` › "oversized input is refused"
 
 ## Verification (5)
 
@@ -699,7 +780,7 @@ Depends on Story 2.
 - The same hover card in the file browser and for Markdown links.
 - Previews for `.docx` (first paragraphs via mammoth), video and audio.
 - UTF-16 text without a BOM, and ANSI colors in the text body (today they are stripped).
-- An SVG preview with a real pixel bound (rasterizing off-thread with limits), and SVGs that use `<use>`.
+- An SVG preview with a real pixel bound (rasterizing off-thread with limits), so sprites, SVGs that use `<use>` and SVGs with embedded images can be previewed.
 - A true HTML screenshot with external CSS and images, which needs an offscreen renderer and its own security review.
 
 ## Open Questions (owner)
@@ -707,7 +788,8 @@ Depends on Story 2.
 1. **Setting default.** The card is on by default, with a checkbox to turn it off. *Recommendation: on.* It is what was asked for, and the 350 ms delay keeps it out of the way.
 2. **Markdown in the card.** Show raw first lines, or render them? *Recommendation: raw first lines.* Rendering would fetch the document's images and draw diagrams on every hover, and a click already gives the rendered view.
 3. **HTML fidelity.** With no scripts, no network and no images, the snapshot shows only the page's text and inline styles. Pages styled by an external stylesheet look plain. Pages built by JavaScript show their first source lines instead. *Recommendation: accept this.* A fuller snapshot needs scripts, file access or image decoding in the frame, which would undo the sandboxing in this plan's design brief: at least as strict as `HtmlView`.
-4. **Hover delay.** *Recommendation: 350 ms, fixed, no setting for it.* It can be tuned after use. The 150 ms leave grace and the 200 ms loading threshold are implementation constants, not owner choices.
+4. **Hover delay.** *Recommendation: 350 ms, fixed, no setting for it.* It can be tuned after use. The 150 ms leave grace, the 1000 ms redraw wait and the 200 ms loading threshold are implementation constants, not owner choices.
+5. **Story 1 is not a vertical slice.** It ships `peek_file`, its contract and the TypeScript client with no UI, which departs from the "small vertical slices" rule. It was split out because the combined first story had 28 acceptance criteria. *Recommendation: accept it.* It is fully verified by its own tests (Rust and TypeScript, including the shared frame vector). It changes no user-visible behaviour, so shipping it alone is safe, and Story 2 is the vertical slice that makes it visible. The alternative is one large first story.
 
 ## Review Triage Log
 
@@ -738,3 +820,16 @@ Depends on Story 2.
   - **Minor 12.** UTF-16 with a BOM is decoded. ANSI escapes are stripped. User-visible caps are decimal, so messages match `formatSize`.
   - **Minor 13.** Each story's guide change covers only what it ships.
   - **Minor 14.** The old Story 1 is split into Story 1 (`peek_file` and contract) and Story 2 (controller and card).
+- 2026-10-29, re-review of 4609a26: BLOCKED on three majors. Confirmed fixed by the reviewer: M2, M3, M4, M5 (normal path), the GIF, JPEG and ICO sizing, the FIFO open, pdf.js `maxImageSize`, and most of B1. Fixed in this revision:
+  - **R1, scroll rule.** `textMoved(prev, now)` is a pure function covering all four scrollback states. Following output is always movement; a full-buffer trim while scrolled back is not; the top of a full buffer is. Link keys are viewport-relative, so a trim keeps the key. Story 2 AC11 and AC12 model both full and non-full buffers.
+  - **R2, suppression.** Every dismissal sets one "suppressed until the pointer moves" flag. `pointerMoved()` restarts the delay for the link still under the pointer, because xterm does not re-fire `hover` inside the same link. A new key with no pointer move counts as a dismissal. Story 2 AC7 and AC9 cover these.
+  - **R3, SVG.** The denylist is replaced by the `svg_is_plain` allowlist: UTF-8 only, with a checked encoding declaration; no `data:`, `url(`, `&#`, `\`, unknown entities, `<!ENTITY`, `foreignObject`, `use`, `image` or `feImage`; no prefixed elements. Story 3 AC3 covers each bypass. The limits table wording is corrected.
+  - **Minor 1.** `unframe` accepts an `ArrayBuffer`, a `Uint8Array` or a `number[]`, and checks the header length (Story 1 AC9). ArrayBuffer is stated as guaranteed only on the custom-protocol path.
+  - **Minor 2.** The area is computed in `u64`, and a zero dimension gives `None` (Story 3 AC1 and AC2).
+  - **Minor 3.** The object URL is made in a `useObjectUrl` effect (Story 3 AC4). `toBlob` is wrapped in a Promise (Story 4 AC3).
+  - **Minor 4.** A redraw leave, with the pointer still, keeps the card and waits 1000 ms for the re-hover, enough to cover the `get_pty_cwd` lookup. A real leave keeps the 150 ms grace. Both are tested (Story 2 AC6 and AC8). The constants are tuned in the manual check.
+  - **Minor 5.** Story 1 AC6 sleeps 50 ms to cross a timestamp tick. Staleness from same-tick rewrites is recorded as a known limit.
+  - **Minor 6.** The bound on JPX and DCT streams in PDFs is recorded as a known limit (Story 4).
+  - **Minor 7.** The HTML snapshot is computed once per stamp, outside render, cached, and its input is capped (Story 5 AC7).
+  - **Minor 8.** The frozen boundary now names the PDF image cap as the one frontend-side cap.
+  - **Minor 9.** Added as owner question 5.
