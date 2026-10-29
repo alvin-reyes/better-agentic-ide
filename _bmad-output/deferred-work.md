@@ -34,3 +34,24 @@
 - source_plan: `_bmad-output/plan-agent-colors.md`
   summary: Bump the ADE Claude Code plugin's version so existing installs pick up the colored agent files.
   evidence: Owner decision 8c (2026-10-16). Story A regenerates `claude-plugin/plugins/ade/agents/*.md` but leaves `plugin.json` at 1.1.0.
+- source_plan: `_bmad-output/plan-file-hover-preview.md`
+  summary: Keyboard access to the file hover card, for example a shortcut that previews the link under the cursor.
+  evidence: The plan's Behaviour section makes the card mouse-only: terminal links have no keyboard access today, so keyboard access is out of scope.
+- source_plan: `_bmad-output/plan-file-hover-preview.md`
+  summary: Cross-window settings sync: an open detached window keeps its old settings until it is reopened. This already applies to every setting.
+  evidence: `settingsStore` has no cross-window sync for any setting today, so the new `fileHoverPreview` setting follows the same rule (plan, Setting section).
+- source_plan: `_bmad-output/plan-file-hover-preview.md`
+  summary: The same hover card for file paths in the file browser, and for Markdown links.
+  evidence: Owner decision 1 limits the card to the file paths ADE already links in terminal output; the plan's Never list excludes URL and directory links.
+- source_plan: `_bmad-output/plan-file-hover-preview.md`
+  summary: Previews for `.docx` (first paragraphs, via mammoth), video and audio.
+  evidence: Owner decision 2 lists four file types; Story 1's `peekKind` maps `.docx` to `meta`, which shows details only.
+- source_plan: `_bmad-output/plan-file-hover-preview.md`
+  summary: UTF-16 text without a BOM, and ANSI colors in the text body (today they are stripped).
+  evidence: The plan's Limits table says UTF-16 without a BOM shows as binary (a known limit), and the text body strips escape sequences rather than rendering colors.
+- source_plan: `_bmad-output/plan-file-hover-preview.md`
+  summary: An SVG preview with a real pixel bound (rasterized off the UI thread with limits), so sprites, SVGs that use `<use>`, CSS-styled SVGs (matplotlib, Mermaid) and SVGs with embedded images can be previewed.
+  evidence: ADR 0008 Consequences: most real-world SVGs get details only, and an SVG that passes the allowlist has no pixel guarantee; accepted for now.
+- source_plan: `_bmad-output/plan-file-hover-preview.md`
+  summary: A true HTML screenshot with external CSS and images, which needs an offscreen renderer and its own security review.
+  evidence: ADR 0008 Consequences: HTML snapshots are low-fidelity (no external CSS, no images, pages built by JavaScript fall back to source lines), accepted by the owner on 2026-10-29 (decision 5).
