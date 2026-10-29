@@ -187,8 +187,11 @@ export class PeekCache {
   }
 }
 
-// CSI (colors, cursor moves) and OSC (titles, hyperlinks; ended by BEL or ST).
-const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+// In order: CSI, 7- and 8-bit (colors, cursor moves); OSC (titles,
+// hyperlinks), ended by BEL or ST, or by the end of a cut-off read; DCS, SOS,
+// PM and APC strings, ended by ST; escapes with intermediates (`ESC ( B`
+// from `tput sgr0`); and two-byte escapes (`ESC 7`, `ESC =`).
+const ANSI = /(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)|\x1b[PX^_][^\x1b]*(?:\x1b\\|$)|\x1b[ -/]+[0-~]|\x1b[0-~]/g;
 
 /** Terminal escape sequences removed, so a log shows as plain text. */
 export function stripAnsi(text: string): string {

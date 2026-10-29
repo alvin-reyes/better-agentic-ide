@@ -232,5 +232,13 @@ describe("stripAnsi", () => {
     // Tabs and newlines stay.
     expect(stripAnsi("\tcol\x1b[32m1\x1b[0m\n\tcol2\n")).toBe("\tcol1\n\tcol2\n");
     expect(stripAnsi("plain text")).toBe("plain text");
+    // Two- and three-byte escapes: charset (`tput sgr0` ends with ESC ( B),
+    // save/restore cursor, keypad modes.
+    expect(stripAnsi("a\x1b(Bb\x1b7c\x1b8d\x1b=e\x1b>f")).toBe("abcdef");
+    // DCS ... ST, and the 8-bit CSI.
+    expect(stripAnsi("x\x1bP1$r0m\x1b\\y")).toBe("xy");
+    expect(stripAnsi("\x9b31mred\x9b0m")).toBe("red");
+    // An OSC cut off by the read: everything after it goes.
+    expect(stripAnsi("before\x1b]0;a title that never\nends")).toBe("before");
   });
 });

@@ -161,6 +161,7 @@ function detachInstance(paneId: string) {
   if (!inst) return;
   releaseGpu(inst.term);
   inst.stopHoverPreview();
+  hoverPreview.forget(paneId);
   inst.term.dispose();
   inst.wrapper.remove();
   instances.delete(paneId);
@@ -223,7 +224,8 @@ export function attachSolely(container: HTMLElement, wrapper: HTMLElement): void
 }
 
 // File previews on hover: one controller and cache per window (each window
-// is its own webview), shared by its terminals. The card is FileHoverCard.
+// is its own webview), shared by its terminals, each call carrying its pane
+// id. The card is FileHoverCard.
 const hoverPreview = createHoverController({
   peek: peekFile,
   cache: new PeekCache(),
@@ -250,8 +252,13 @@ function openTerminal(paneId: string) {
   }));
 
   term.open(wrapper);
-  registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal, hoverPreview);
-  const stopHoverPreview = attachHoverDismissal(term, hoverPreview);
+  // The link layer knows nothing of panes: this terminal's id is bound here.
+  registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal, {
+    enter: (link, pointer) => hoverPreview.enter(paneId, link, pointer),
+    leave: (key) => hoverPreview.leave(paneId, key),
+    dismiss: () => hoverPreview.dismiss(),
+  });
+  const stopHoverPreview = attachHoverDismissal(term, paneId, hoverPreview);
 
   enableGpuRenderer(term);
   try {
@@ -533,6 +540,8 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       const inst = instances.get(paneId);
       if (inst && inst.wrapper.parentElement === container) {
         container.removeChild(inst.wrapper);
+        // Out of view (a tab switch, a move to another window): xterm sends no leave.
+        hoverPreview.forget(paneId);
       }
       termRef.current = null;
     };

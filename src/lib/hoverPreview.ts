@@ -17,6 +17,11 @@ import { peekKind, type PeekBody, type PeekCache, type PeekFrame, type PeekKind 
  * So a same-link hover is a no-op, a leave waits before hiding (150 ms when
  * the pointer moved, 1000 ms for a redraw under a still pointer), and every
  * dismissal holds until the pointer moves again.
+ *
+ * One controller serves every terminal in the window, background tabs
+ * included, so each terminal-side call names its terminal. Output or a resize
+ * in a terminal that owns neither the card nor the hovered link is ignored;
+ * keys, clicks, wheel, blur and window resizes dismiss window-wide.
  */
 
 /** A file link: its resolved path, and a key that names it on screen (see `terminalFileLinks.ts`). */
@@ -48,18 +53,29 @@ export interface HoverCard {
   error?: string;
 }
 
+/** The pane id of the terminal a call comes from. */
+export type TerminalId = string;
+
+/**
+ * The window's controller, shared by all its terminals (background tabs
+ * included). Terminal-side calls carry the terminal they came from.
+ */
 export interface HoverController {
   /** xterm reports `link` under the pointer. */
-  enter(link: HoverLink, pointer: HoverPointer): void;
+  enter(term: TerminalId, link: HoverLink, pointer: HoverPointer): void;
   /** xterm reports the link with `key` is no longer under the pointer. */
-  leave(key: string): void;
-  /** Close any card and ignore hovers until the pointer moves. */
+  leave(term: TerminalId, key: string): void;
+  /** Window-wide: close any card and ignore hovers until the pointer moves. */
   dismiss(): void;
-  pointerMoved(pointer: HoverPointer): void;
+  pointerMoved(term: TerminalId, pointer: HoverPointer): void;
   /** The pointer left the terminal element. */
-  pointerLeft(): void;
-  /** The text on screen moved (output, a real scroll). */
-  contentMoved(): void;
+  pointerLeft(term: TerminalId): void;
+  /** The terminal's text moved (output, a real scroll); dismisses only if `term` owns the card or the hovered link. */
+  contentMoved(term: TerminalId): void;
+  /** The terminal was resized (`term.onResize`); dismisses only if `term` owns the card or the hovered link. */
+  resized(term: TerminalId): void;
+  /** The terminal was disposed or taken out of view: forget its link and card, without suppressing. */
+  forget(term: TerminalId): void;
 }
 
 export interface HoverControllerOptions {
@@ -78,6 +94,7 @@ export interface HoverControllerOptions {
 type Timer = ReturnType<typeof setTimeout>;
 
 interface Pending {
+  term: TerminalId;
   link: HoverLink;
   point: { x: number; y: number };
   token: number;
@@ -100,8 +117,8 @@ export function createHoverController({
   graceMs = 150,
   redrawWaitMs = 1000,
 }: HoverControllerOptions): HoverController {
-  // The link xterm last reported under the pointer.
-  let hovered: HoverLink | null = null;
+  // The link xterm last reported under the pointer, and its terminal.
+  let hovered: { term: TerminalId; link: HoverLink } | null = null;
   // The pending, loading or shown preview.
   let card: Pending | null = null;
   let suppressed = false;
@@ -167,10 +184,11 @@ export function createHoverController({
     );
   };
 
-  const accept = (link: HoverLink, pointer: HoverPointer) => {
+  // `moved`: accepted by a pointer move (after a dismissal), which counts as one.
+  const accept = (term: TerminalId, link: HoverLink, pointer: HoverPointer, moved = false) => {
     drop();
-    movedSinceEnter = false;
-    const c: Pending = { link, point: { x: pointer.x, y: pointer.y }, token: ++token, delayDone: false, fetching: false, view: null, shown: null };
+    movedSinceEnter = moved;
+    const c: Pending = { term, link, point: { x: pointer.x, y: pointer.y }, token: ++token, delayDone: false, fetching: false, view: null, shown: null };
     card = c;
     delayTimer = setTimeout(() => {
       c.delayDone = true;
@@ -202,12 +220,16 @@ export function createHoverController({
     render();
   };
 
+  // Only the terminal that produced the card's or the hovered link can close
+  // it by its own events: background tabs keep receiving output.
+  const owns = (term: TerminalId) => card?.term === term || hovered?.term === term;
+
   return {
-    enter(link, pointer) {
-      hovered = link;
+    enter(term, link, pointer) {
+      hovered = { term, link };
       if (!enabled() || pointer.buttons !== 0 || suppressed) return;
       // Redraw churn, double hovers and row crossings inside one link.
-      if (card?.link.key === link.key) {
+      if (card?.term === term && card.link.key === link.key) {
         endWait();
         return;
       }
@@ -216,37 +238,53 @@ export function createHoverController({
         dismiss();
         return;
       }
-      accept(link, pointer);
+      accept(term, link, pointer);
     },
 
-    leave(key) {
+    leave(term, key) {
       // Cleared in any state, so a hover that went stale while suppressed
       // can't open a card later for a path that has gone.
-      if (hovered?.key === key) hovered = null;
-      if (card?.link.key !== key || wait) return;
+      if (hovered?.term === term && hovered.link.key === key) hovered = null;
+      if (card?.term !== term || card.link.key !== key || wait) return;
       startWait(movedSinceEnter ? "grace" : "redraw");
     },
 
     dismiss,
 
-    pointerMoved(pointer) {
+    pointerMoved(term, pointer) {
       movedSinceEnter = true;
+      // The pointer is in this terminal: another's link is not under it.
+      if (hovered && hovered.term !== term) hovered = null;
+      // A redraw wait assumed a still pointer.
+      if (wait?.kind === "redraw") startWait("grace");
       // Dragging with a button held (a selection) keeps a dismissal.
       if (!suppressed || pointer.buttons !== 0) return;
       suppressed = false;
       // xterm never re-fires `hover` for a move inside the same link, so the
       // link still under the pointer is reopened from here.
-      if (hovered && enabled()) accept(hovered, pointer);
+      if (hovered && enabled()) accept(term, hovered.link, pointer, true);
     },
 
-    pointerLeft() {
+    pointerLeft(term) {
       movedSinceEnter = true;
-      hovered = null;
-      // xterm's leave can come first, while the pointer still looked still.
-      if (wait?.kind === "redraw") startWait("grace");
+      if (hovered?.term === term) hovered = null;
+      // xterm's leave comes first, while the pointer still looked still.
+      if (card?.term === term && wait?.kind === "redraw") startWait("grace");
     },
 
-    contentMoved: dismiss,
+    contentMoved(term) {
+      if (owns(term)) dismiss();
+    },
+
+    resized(term) {
+      if (owns(term)) dismiss();
+    },
+
+    // Taken out of view or disposed: xterm sends no leave. Not a dismissal.
+    forget(term) {
+      if (hovered?.term === term) hovered = null;
+      if (card?.term === term) drop();
+    },
   };
 }
 
@@ -285,9 +323,10 @@ export function textMoved(prev: BufferState, now: BufferState): boolean {
  * The terminal-side events that move or close the card. Pointer and wheel
  * listeners capture, because xterm's scrollable element stops wheel events
  * and its handlers run below `term.element`; the key listener is passive and
- * never prevents anything, so keys still reach the terminal. Returns a disposer.
+ * never prevents anything, so keys still reach the terminal. Returns a
+ * disposer, which also forgets the terminal's link and card.
  */
-export function attachHoverDismissal(term: Terminal, controller: HoverController): () => void {
+export function attachHoverDismissal(term: Terminal, paneId: TerminalId, controller: HoverController): () => void {
   const el = term.element;
   if (!el) return () => {};
   const snapshot = (): BufferState => {
@@ -296,11 +335,11 @@ export function attachHoverDismissal(term: Terminal, controller: HoverController
   };
   let prev = snapshot();
 
-  const onMove = (e: MouseEvent) => controller.pointerMoved({ x: e.clientX, y: e.clientY, buttons: e.buttons });
+  const onMove = (e: MouseEvent) => controller.pointerMoved(paneId, { x: e.clientX, y: e.clientY, buttons: e.buttons });
   // `mouseleave` doesn't bubble, but a child's still reaches a capture
   // listener: with the DOM renderer every span or row crossing would count.
   const onLeave = (e: MouseEvent) => {
-    if (e.target === el) controller.pointerLeft();
+    if (e.target === el) controller.pointerLeft(paneId);
   };
   const dismiss = () => controller.dismiss();
   const onVisibility = () => {
@@ -316,10 +355,10 @@ export function attachHoverDismissal(term: Terminal, controller: HoverController
   window.addEventListener("resize", dismiss);
   document.addEventListener("visibilitychange", onVisibility);
   // After a pane resize xterm calls `leave` with the pointer unmoved.
-  const resized = term.onResize(dismiss);
+  const resized = term.onResize(() => controller.resized(paneId));
   const scrolled = term.onScroll(() => {
     const now = snapshot();
-    if (textMoved(prev, now)) controller.contentMoved();
+    if (textMoved(prev, now)) controller.contentMoved(paneId);
     prev = now;
   });
 
@@ -334,5 +373,6 @@ export function attachHoverDismissal(term: Terminal, controller: HoverController
     document.removeEventListener("visibilitychange", onVisibility);
     resized.dispose();
     scrolled.dispose();
+    controller.forget(paneId);
   };
 }
