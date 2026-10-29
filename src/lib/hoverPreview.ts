@@ -121,6 +121,8 @@ export function createHoverController({
   let hovered: { term: TerminalId; link: HoverLink } | null = null;
   // The pending, loading or shown preview.
   let card: Pending | null = null;
+  // The terminal the pointer last moved in, until it leaves.
+  let pointerTerm: TerminalId | null = null;
   let suppressed = false;
   let movedSinceEnter = false;
   let token = 0;
@@ -253,6 +255,7 @@ export function createHoverController({
 
     pointerMoved(term, pointer) {
       movedSinceEnter = true;
+      pointerTerm = term;
       // The pointer is in this terminal: another's link is not under it.
       if (hovered && hovered.term !== term) hovered = null;
       // A redraw wait assumed a still pointer.
@@ -267,13 +270,17 @@ export function createHoverController({
 
     pointerLeft(term) {
       movedSinceEnter = true;
+      if (pointerTerm === term) pointerTerm = null;
       if (hovered?.term === term) hovered = null;
       // xterm's leave comes first, while the pointer still looked still.
       if (card?.term === term && wait?.kind === "redraw") startWait("grace");
     },
 
+    // Also when the pointer rests in `term` on no file link (a URL, say):
+    // xterm's redraw re-asks every provider, and a file link scrolled under
+    // the still pointer must not open.
     contentMoved(term) {
-      if (owns(term)) dismiss();
+      if (owns(term) || pointerTerm === term) dismiss();
     },
 
     resized(term) {

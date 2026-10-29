@@ -677,6 +677,54 @@ describe("one controller, many terminals", () => {
     expect(t.peek).toHaveBeenCalledTimes(1);
   });
 
+  it("output under a resting pointer opens no card", async () => {
+    // The pointer rests on a URL link in A (no card, no hovered file link).
+    // Output moves the text, and xterm's redraw re-asks every provider: a file
+    // link now under the still pointer opens nothing until the pointer moves.
+    let { t, a, b, offA, offB, output } = twoTerminals();
+    a.child.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 100, clientY: 100 }));
+    output(a);
+    t.c.enter(A, K1, at(100));
+    await tick(2000);
+    expect(t.peek).not.toHaveBeenCalled();
+    a.child.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 101, clientY: 100 }));
+    await tick(350);
+    expect(t.peek).toHaveBeenCalledTimes(1);
+    offA();
+    offB();
+
+    // Output in B, where the pointer isn't, leaves A alone.
+    ({ t, a, b, offA, offB, output } = twoTerminals());
+    a.child.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 100, clientY: 100 }));
+    output(b);
+    t.c.enter(A, K1, at(100));
+    await tick(350);
+    expect(t.peek).toHaveBeenCalledTimes(1);
+    offA();
+    offB();
+
+    // Crossing from A into B while A's card is up: B's move forgets A's link,
+    // but the card is still A's, and A's output closes it.
+    ({ t, a, b, offA, offB, output } = twoTerminals());
+    await shown(t);
+    b.child.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 700, clientY: 100 }));
+    output(a);
+    expect(t.hide).toHaveBeenCalledTimes(1);
+    offA();
+    offB();
+
+    // Once the pointer has left A, A's output is not under it.
+    ({ t, a, b, offA, offB, output } = twoTerminals());
+    a.child.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 100, clientY: 100 }));
+    a.element.dispatchEvent(new MouseEvent("mouseleave"));
+    output(a);
+    t.c.enter(B, K1, at(100));
+    await tick(350);
+    expect(t.peek).toHaveBeenCalledTimes(1);
+    offA();
+    offB();
+  });
+
   it("only the owning terminal's resize closes the card", async () => {
     const { t, a, b, offA, offB } = twoTerminals();
     await shown(t);
@@ -743,8 +791,8 @@ describe("one controller, many terminals", () => {
     const source = readFileSync(resolve(__dirname, "../../hooks/useTerminal.ts"), "utf8");
     const detachBody = source.slice(source.indexOf("function detachInstance("), source.indexOf("\n}\n", source.indexOf("function detachInstance(")));
     expect(detachBody).toContain("hoverPreview.forget(paneId)");
-    const cleanup = source.slice(source.indexOf("// On unmount: detach the wrapper"));
-    expect(cleanup.slice(0, cleanup.indexOf("termRef.current = null"))).toContain("hoverPreview.forget(paneId)");
+    const removal = source.slice(source.indexOf("if (inst && inst.wrapper.parentElement === container) {"));
+    expect(removal.slice(0, removal.indexOf("}"))).toContain("hoverPreview.forget(paneId)");
     // Its links reach the controller with the pane id bound.
     expect(source).toContain("enter: (link, pointer) => hoverPreview.enter(paneId, link, pointer)");
     expect(source).toContain("leave: (key) => hoverPreview.leave(paneId, key)");
