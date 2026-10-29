@@ -498,6 +498,45 @@ Each criterion names the test that covers it. The developer writes each test fir
 
 **Known limit (stamp):** two same-size writes within one timestamp tick, with the mtime restored afterwards, share a ctime. The card then shows the older content until the file changes again. On ext4 a tick is a few milliseconds; on APFS it is nanoseconds.
 
+**Results (1), QA, 2026-10-29, at a925686 (HEAD; build 8283b38, test fixes a925686), run one after another, working tree clean:**
+- `npx tsc --noEmit` -- pass: exit 0.
+- `npm test` -- pass on the first run: 148 files, 1649 tests passed, 0 failed (baseline 147 / 1645: +`filePeek.test.ts` with 4 tests; `tauriCommandContract.test.ts` 4 tests pass). No flaky rerun needed.
+- `cd src-tauri && cargo test` -- pass: lib 465 passed, 0 failed, 1 ignored (baseline 456: +9 `filepeek::tests::*`), plus 12 and 2 in the other binaries. One warning, `which_command` never used in `platform.rs:98`, in a file this story does not touch.
+- `cd relay && cargo test` -- pass: 266 passed, 0 failed across all targets (same as baseline).
+- `cd mobile && npx tsc --noEmit && npx jest` -- pass: tsc exit 0; 1 suite, 6 tests passed (same as baseline).
+
+**Manual checks -- NOT RUN.** Linux WebKitGTK console check: not run, needs the running app on Linux with a GUI; pending the owner. macOS iCloud dataless check (`skipped/notDownloaded`, file stays cloud-only): not run, needs the running app on macOS; pending the owner. Neither is claimed to pass. The `SF_DATALESS` branch of `peek_path` is therefore verified only by reading, and by the JSON-shape test of `Skipped`.
+
+**Code review rounds:** adversarial code review of 8283b38 -- BLOCK on test strength (the AC12 fallback test passed with an inverted trigger, plus five minors). Fix round a925686 (tests only). Re-review at a925686 -- PASS: 27 Rust mutants killed, both blocking TypeScript mutants killed.
+
+**AC coverage (read from the tests at a925686, not from the developer's table):**
+1. `text_is_read_up_to_the_cap`: small file whole, `truncated: false`, `size` 12, `modifiedMs` equal to the file's mtime, stamp non-empty; 100 KB gives exactly 16 KiB, `truncated`, `size` 100 KB; `html` gives exactly 256 KiB on a 300 KB file, and `text` on the same file stops at 16 KiB.
+2. `binary_and_text_encodings`: NUL at byte 8191 is `binary`, NUL at 8192 is text; a cut 3-byte and a cut 4-byte sequence are dropped, a whole one stays, an uncut broken tail is lossy; invalid UTF-8 inside is lossy; `\r\n` to `\n`; UTF-16 LE and BE with BOM decode; a UTF-16 NUL is `binary`, one past 8 KiB is not; UTF-16 cuts are dropped; also through the file read.
+3. `reads_are_bounded_by_bytes`: counting wrapper over `io::repeat`: exactly `cap` bytes, `truncated`, `given <= cap + 1`; a file of exactly the cap is whole.
+4. `only_regular_files_are_read`: missing path `Err`; a directory `Err("not a regular file")`; FIFO `Err("not a regular file")` on a thread with `recv_timeout(5 s)`; a symlink returns the target's content and size.
+5. `open_does_not_block` (unix): `open_regular` on a FIFO gives `Err("not a regular file")` within 5 s; a plain file opens, a directory does not.
+6. `stamp_catches_rewrites_and_retargets`: `known` equal gives `unchanged` with an empty payload; stale `known` reads; 50 ms sleep, same-size rewrite with mtime restored changes the stamp (unix); retargeted symlink of same size and mtime changes it (unix), and the layout is asserted against `dev` and `ino`; pre-1970 mtime gives `-86_400_000` and matches on a second call; `-1500 us` gives `-2` (floors).
+7. `meta_and_pending_kinds`: `meta`, `image`, `pdf` each give `none` with size 19, a stamp and an empty payload.
+8. `frame_matches_the_contract_vector`: reads the hex block of `.ade/context/file-peek.md` (`include_str!`), length 131, equal to `frame(...)`; with a payload appended it follows the header. `bodies_and_kinds_match_the_typescript_union` pins the JSON of every body and the `kind` names.
+9. `filePeek.test.ts` "unframe reads the contract vector in every IPC shape": `ArrayBuffer`, `Uint8Array`, `number[]` and a padded offset view (`byteOffset` 3, shorter than its buffer), each with and without a payload; throws on 3 bytes, on a header length past the end, on a truncated vector and on a non-JSON header.
+10. `filePeek.test.ts` "peekKind follows viewerKind": `.md`, `.ts`, `Dockerfile` text; `.png`, `.svg`, `.ico` image; `.pdf`; `.html`, `.htm`; `.docx` meta.
+11. `filePeek.test.ts` "one literal call site": one `invoke` call with `"peek_file"` and `{ path, kind, known }`; a regex count of exactly 1 and the literal `invoke<ArrayBuffer>("peek_file", { path, kind, known })` in the source. `tauriCommandContract.test.ts` (existing, 4 tests) passes with `peek_file` registered as `filepeek::peek_file` and its `path`, `kind` and `known` parsed from the Rust signature.
+12. `filePeek.test.ts` "stops asking for bytes after the IPC fallback": `ArrayBuffer` answers never switch; the call that meets the `number[]` still sends `image`; later `image` and `pdf` send `meta`; `text` and `html` unchanged; a fresh module (`vi.resetModules`) is back on the normal path.
+All 12 ACs are covered by a test that asserts the criterion; none is uncovered.
+
+**Definition of Done (.ade/rules.md section 3):**
+1. Each acceptance criterion covered by an automated test -- met (map above).
+2. The verification command passes, real output recorded -- met (above).
+3. Change limited to the slice -- met. `git diff cb78a0d..a925686` is 6 files, 825 insertions, no deletions: `src-tauri/src/filepeek.rs` (new), `src-tauri/src/lib.rs` (`mod filepeek;` and one `generate_handler!` entry), `src/lib/filePeek.ts` and its test (new), `.ade/context/file-peek.md` (new), `.ade/knowledge/developer.md` (3 lines). No `Cargo.toml`, `Cargo.lock`, `tauri.conf.json`, `package.json` or lockfile change (`libc` and `serde_json` were already dependencies); no Story 2 to 5 code (no card, hover lifecycle, cache, setting, image or PDF arm; `image` and `pdf` return `none`). No AI attribution in the commit messages.
+4. Shared contract recorded in `.ade/context/file-peek.md` -- met: command, frame, test vector, `FilePeek`, bodies, stamp, order of work and limits, with the image and PDF arms marked for Stories 3 and 4.
+
+**Open risks:**
+- The macOS code (`SF_DATALESS` check using `MetadataExt::st_flags`) and the Windows path (`stamp` as `size:mtime_ns`, no `O_NONBLOCK`) were not compiled here: only `x86_64-unknown-linux-gnu` is installed, and CI has not run on this branch. CI builds and tests `src-tauri` on macOS and Windows, so a compile or test failure there would show only after the push.
+- The two manual checks above are unrun.
+- The same-size, same-tick rewrite limit (known limit above) is accepted by the plan.
+
+**Verdict (1): Done at a925686 on the four Definition of Done items alone.** The rules' Definition of Done names only the automated verification command, and the owner has not yet ruled on how manual checks gate Done; the verdict does not rest on the manual checks, which are pending the owner. The macOS/Windows compile risk stays open until CI runs.
+
 ---
 
 # Story 2: the card, with text, code and file details
