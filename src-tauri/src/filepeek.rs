@@ -213,11 +213,27 @@ mod tests {
     use std::path::PathBuf;
     use std::time::Duration;
 
-    fn scratch(name: &str) -> PathBuf {
+    /// A fresh temp dir, removed when the test ends, pass or fail.
+    struct Scratch(PathBuf);
+
+    impl std::ops::Deref for Scratch {
+        type Target = Path;
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn scratch(name: &str) -> Scratch {
         let dir = std::env::temp_dir().join(format!("ade-filepeek-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        dir
+        Scratch(dir)
     }
 
     fn peek(path: &Path, kind: PeekKind) -> FilePeek {
@@ -296,6 +312,8 @@ mod tests {
         assert_eq!(text_of(&decode_text(&cut4, true)).0, "a");
         let whole = "ab€".as_bytes();
         assert_eq!(text_of(&decode_text(whole, true)).0, "ab€", "a complete character at the boundary stays");
+        // A file that really ends in a broken sequence was not cut: it is lossy, not dropped.
+        assert_eq!(decode_text(&cut, false), Body::Text { text: "ab\u{FFFD}".into(), truncated: false });
 
         assert_eq!(text_of(&decode_text(b"a\xFFb", false)).0, "a\u{FFFD}b", "invalid UTF-8 inside is lossy");
         assert_eq!(text_of(&decode_text(b"one\r\ntwo\r\n", false)).0, "one\ntwo\n");
@@ -306,6 +324,11 @@ mod tests {
         assert_eq!(text_of(&decode_text(&be, false)).0, "hé\n", "UTF-16 BE with a BOM");
         let le_nul: Vec<u8> = [0xFF, 0xFE].into_iter().chain("a\0b".encode_utf16().flat_map(|u| u.to_le_bytes())).collect();
         assert_eq!(decode_text(&le_nul, false), Body::Binary, "a NUL character in UTF-16");
+        // Only the first 8 KiB are sniffed in UTF-16 too: a NUL at byte 2 + 2 * 5000 is text.
+        let mut late16: Vec<u16> = vec![u16::from(b'a'); 6000];
+        late16[5000] = 0;
+        let le_late: Vec<u8> = [0xFF, 0xFE].into_iter().chain(late16.iter().flat_map(|u| u.to_le_bytes())).collect();
+        assert!(matches!(decode_text(&le_late, false), Body::Text { .. }), "a UTF-16 NUL past 8 KiB is not sniffed");
         // Cut by the read: half a code unit, then half a surrogate pair.
         let mut le_cut: Vec<u8> = [0xFF, 0xFE].into_iter().chain("a😀".encode_utf16().flat_map(|u| u.to_le_bytes())).collect();
         le_cut.truncate(le_cut.len() - 1);
@@ -318,6 +341,9 @@ mod tests {
         let f = dir.join("utf16.txt");
         std::fs::write(&f, &le).unwrap();
         assert_eq!(text_of(&peek(&f, PeekKind::Text).body).0, "hé\n");
+        let broken = dir.join("broken.txt");
+        std::fs::write(&broken, cut).unwrap();
+        assert_eq!(text_of(&peek(&broken, PeekKind::Text).body), ("ab\u{FFFD}", false));
         let empty = dir.join("empty.txt");
         std::fs::write(&empty, "").unwrap();
         assert_eq!(peek(&empty, PeekKind::Text).body, Body::Text { text: String::new(), truncated: false });
@@ -422,6 +448,21 @@ mod tests {
             let to_b = peek(&link, PeekKind::Meta);
             assert_eq!((to_a.size, to_a.modified_ms), (to_b.size, to_b.modified_ms));
             assert_ne!(to_a.stamp, to_b.stamp, "retargeted link");
+
+            // The documented layout, so dev and ino are proven present whatever
+            // the filesystem's ctime resolution.
+            use std::os::unix::fs::MetadataExt;
+            let m = std::fs::metadata(&b).unwrap();
+            let ns = |s: i64, n: i64| s as i128 * 1_000_000_000 + n as i128;
+            let expected = format!(
+                "{}:{}:{}:{}:{}",
+                m.size(),
+                ns(m.mtime(), m.mtime_nsec()),
+                ns(m.ctime(), m.ctime_nsec()),
+                m.dev(),
+                m.ino()
+            );
+            assert_eq!(to_b.stamp, expected);
         }
 
         let old = dir.join("old.txt");
@@ -430,6 +471,9 @@ mod tests {
         let p = peek(&old, PeekKind::Text);
         assert_eq!(p.modified_ms, Some(-86_400_000));
         assert_eq!(peek_path(&old, PeekKind::Text, Some(&p.stamp)).unwrap().0.body, Body::Unchanged);
+        // Milliseconds round down, not toward zero: 1.5 ms before 1970 is -2.
+        File::options().write(true).open(&old).unwrap().set_modified(UNIX_EPOCH - Duration::from_micros(1500)).unwrap();
+        assert_eq!(peek(&old, PeekKind::Text).modified_ms, Some(-2));
     }
 
     #[test]
@@ -466,5 +510,21 @@ mod tests {
         assert_eq!(frame(&peek, &[]), vector);
         let with_payload = [vector.as_slice(), &[0x00, 0xFF, 0x7F]].concat();
         assert_eq!(frame(&peek, &[0x00, 0xFF, 0x7F]), with_payload, "the payload follows the header");
+    }
+
+    #[test]
+    fn bodies_and_kinds_match_the_typescript_union() {
+        let json = |b: Body| serde_json::to_string(&b).unwrap();
+        assert_eq!(json(Body::Binary), r#"{"type":"binary"}"#);
+        assert_eq!(json(Body::Unchanged), r#"{"type":"unchanged"}"#);
+        assert_eq!(json(Body::None), r#"{"type":"none"}"#);
+        // Built on macOS only in production, so pinned here for every platform.
+        assert_eq!(
+            json(Body::Skipped { reason: SkipReason::NotDownloaded }),
+            r#"{"type":"skipped","reason":"notDownloaded"}"#
+        );
+        for (s, kind) in [("text", PeekKind::Text), ("image", PeekKind::Image), ("pdf", PeekKind::Pdf), ("html", PeekKind::Html), ("meta", PeekKind::Meta)] {
+            assert_eq!(serde_json::from_str::<PeekKind>(&format!("\"{s}\"")).unwrap(), kind);
+        }
     }
 }

@@ -65,7 +65,7 @@ The header is 127 (`0x7f`) bytes; `é` is `c3 a9`. A payload, when there is one,
 | `{ type: "tooLarge", limit }` | over the kind's size cap (Stories 3 and 4); the file is not read |
 | `{ type: "skipped", reason, width?, height? }` | `reason`: `"notDownloaded"` (a macOS dataless file, Story 1), `"pixels"`, `"noSize"`, `"svgFeatures"` (Story 3); nothing is read |
 | `{ type: "unchanged" }` | `known` equals the file's stamp; the file is not read |
-| `{ type: "none" }` | kind `meta`; until Stories 3 and 4, also kinds `image` and `pdf` |
+| `{ type: "none" }` | kind `meta`; until Stories 3 and 4, also kinds `image` and `pdf`; unless the file is dataless (macOS), which gives `skipped/notDownloaded` |
 
 Text decoding: a UTF-16 LE or BE BOM decodes as UTF-16 (UTF-16 without a BOM shows as binary); otherwise UTF-8, lossily, with an incomplete sequence at the read boundary dropped rather than turned into U+FFFD. `\r\n` becomes `\n`.
 

@@ -90,12 +90,23 @@ describe("peekFile", () => {
   it("stops asking for bytes after the IPC fallback", async () => {
     vi.resetModules();
     const fresh = await import("../filePeek");
+    // ArrayBuffer answers (the normal path) never switch byte kinds off,
+    // however many arrive.
     await fresh.peekFile("/p/a.png", "image");
     expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/a.png", kind: "image", known: undefined });
+    await fresh.peekFile("/p/r.pdf", "pdf");
+    expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/r.pdf", kind: "pdf", known: undefined });
+    await fresh.peekFile("/p/b.md", "text");
+    await fresh.peekFile("/p/a.png", "image");
+    expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/a.png", kind: "image", known: undefined });
+    await fresh.peekFile("/p/r.pdf", "pdf");
+    expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/r.pdf", kind: "pdf", known: undefined });
 
     // The postMessage fallback hands the bytes over as a JSON array.
+    // The call that meets it still asked for the bytes; only later ones switch.
     invoke.mockResolvedValueOnce(contractVector());
-    const { peek } = await fresh.peekFile("/p/b.md", "text");
+    const { peek } = await fresh.peekFile("/p/c.png", "image");
+    expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/c.png", kind: "image", known: undefined });
     expect(peek).toEqual(HEADER);
 
     await fresh.peekFile("/p/a.png", "image");
@@ -111,5 +122,7 @@ describe("peekFile", () => {
     const again = await import("../filePeek");
     await again.peekFile("/p/a.png", "image");
     expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/a.png", kind: "image", known: undefined });
+    await again.peekFile("/p/r.pdf", "pdf");
+    expect(invoke).toHaveBeenLastCalledWith("peek_file", { path: "/p/r.pdf", kind: "pdf", known: undefined });
   });
 });
