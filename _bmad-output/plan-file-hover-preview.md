@@ -11,7 +11,7 @@ risk: 'medium'
 review: 'quick'
 review_source: 'pinned'
 lenses_ran: ['adversarial']
-review_loop_iteration: 3
+review_loop_iteration: 4
 context: ['.ade/context/file-peek.md', '.ade/context/decisions/0008-file-previews-are-bounded-and-inert.md']
 ---
 
@@ -206,21 +206,21 @@ Each size cap and pixel cap is a Rust `const` in `filepeek.rs`. The display and 
 | HTML read | first 256 KiB as text | A truncated page still renders. |
 | Raster image | 10 MB (10,000,000 bytes) | Bounds the IPC payload and the cache entry. |
 | Raster pixels | 40 megapixels, checked in Rust; no readable size means not sent | A small file can hold a huge bitmap: a 20000×20000 PNG decodes to 1.6 GB. |
-| SVG | 1 MB, and previewed only if it passes the allowlist below (no CSS, no comments, CDATA or processing instructions, no `data:` or `url(`, no escapes or entities, no `use`, `image`, `feImage` or `foreignObject`, no prefixed elements); otherwise `skipped/svgFeatures` | The allowlist removes every route to an embedded raster, nested `<use>` and entity expansion found so far, including forbidden text split by comments or CDATA inside a stylesheet. A 200 KB 1-bit 40000² PNG in a `data:` URL would decode to about 6.4 GB. **No pixel guarantee is claimed for SVG**: a heavy filter or a huge path count inside 1 MB can still be slow to rasterize. This is a known limit, accepted because the `<img>` is rasterized at card size. |
+| SVG | 1 MB, and previewed only if it passes the allowlist below (no CSS, no comments, CDATA or processing instructions, no `data:`, no `url(` except a fragment-only `url(#id)`, no escapes or entities, no `use`, `image`, `feImage` or `foreignObject`, no prefixed elements); otherwise `skipped/svgFeatures` | The allowlist removes every route to an embedded raster, nested `<use>` and entity expansion found so far, including forbidden text split by comments or CDATA inside a stylesheet. A 200 KB 1-bit 40000² PNG in a `data:` URL would decode to about 6.4 GB. **No pixel guarantee is claimed for SVG**: a heavy filter or a huge path count inside 1 MB can still be slow to rasterize. This is a known limit, accepted because the `<img>` is rasterized at card size. |
 | PDF | 20 MB; page 1 only; `maxImageSize` 40,000,000 passed to pdf.js | pdf.js parses in its worker and skips any embedded image over the pixel cap. |
 | Cache (frontend) | 32 entries and 32 MB of content, least recently used evicted | See Cache below. |
 
 **SVG allowlist** (`svg_is_plain(bytes) -> bool`, in Rust). An SVG is previewed only if all of these hold. Every check is on the raw bytes, and the text checks ignore ASCII case:
 - **Encoding:** the bytes are valid UTF-8, with no BOM other than UTF-8's and no NUL byte. If there is an XML declaration, its `encoding`, when present, is `utf-8`. This rules out UTF-16 and any encoding that could hide text from these checks.
-- **No embedded data or CSS references:** the text contains no `data:` and no `url(`.
+- **No embedded data, and only in-document references:** the text contains no `data:`. A `url(` is permitted only as a fragment reference: optional whitespace, an optional quote (`"` or `'`), `#`, an id of one or more `[A-Za-z0-9_.:-]`, the matching quote if one opened, optional whitespace, then `)`. Any other `url(` rejects. This lets gradients, clip paths, masks, markers and filters (`fill="url(#g)"`) through. Because CSS, `data:`, entities, escapes and external references all stay banned, such a reference can only point inside the document.
 - **No escapes:** the text contains no `&#` character reference, no named entity other than `&amp;`, `&lt;`, `&gt;`, `&quot;` and `&apos;`, and no `\`. This blocks hiding `data:` or `url(` behind XML character references or CSS escapes such as `u\72l(`.
 - **No CSS:** no `<style` element and no `style` attribute (`style` after whitespace, then optional whitespace and `=`). A stylesheet is built from its text nodes, so comments, CDATA sections and processing instructions inside it can split `url(` or `data:` (`ur<!---->l(da<!---->ta:…)`, `ur<![CDATA[l(]]>`, `@import "da<!---->ta:…"`). Rejecting all CSS removes that route rather than trying to parse it.
-- **No comments, CDATA or processing instructions:** no `<!--`, no `<![CDATA[`, and no `<?` except an XML declaration at offset 0 (after an optional UTF-8 BOM).
+- **No comments, CDATA or processing instructions:** no `<!--`, no `<![CDATA[`, and no `<?` except an XML declaration at offset 0 (after an optional UTF-8 BOM). The declaration is `<?xml` followed by whitespace, so `<?xml-stylesheet` at offset 0 is not exempt.
 - **No risky elements:** no `<!ENTITY`, no `foreignObject`, and no `use`, `image` or `feImage` element.
 - **No namespace prefixes:** no element name has a namespace prefix (no `<x:` or `</x:` for any prefix), so `<svg:use>` and `<svg:image>` are rejected.
 - **How names match:** an element name matches when `<name` is followed by whitespace (including a newline), `/` or `>`, so `<use\nhref=…>` and `<use/>` are caught. `<user>` is not.
 
-Anything else shows "SVG not previewed". This is a deliberately narrow allowlist: plain charts and icons drawn with presentation attributes (`fill="…"`) pass. CSS-styled SVGs, which include most matplotlib and Mermaid output, get details only, as do sprites, embedded images and exotic encodings.
+Anything else shows "SVG not previewed". This is a deliberately narrow allowlist: plain charts and icons drawn with presentation attributes (`fill="…"`, including in-document references such as `fill="url(#g)"`) pass. CSS-styled SVGs, which include most matplotlib and Mermaid output, get details only, as do sprites, embedded images and exotic encodings.
 
 UTF-8 cut at the read boundary: an incomplete trailing sequence is dropped, not turned into U+FFFD. `\r\n` becomes `\n`. An empty file shows "Empty file".
 
@@ -312,7 +312,7 @@ While either wait runs, nothing new is shown.
 
 So typing in Claude Code's live region, which redraws the rows under the pointer, never brings the card back. Only moving the pointer does.
 
-**`pointerLeft()`** comes from a capture-phase `mouseleave` on the terminal element. It sets `movedSinceEnter`, so xterm's following `leave` counts as a real leave (150 ms grace, not the 1000 ms redraw wait), and it clears `hovered`.
+**`pointerLeft()`** comes from a `mouseleave` on the terminal element itself. The listener acts only when `e.target === term.element`: non-bubbling `mouseleave` events for child boundaries still reach an ancestor's capture listener, and with xterm's DOM renderer (used when GPU rendering is off, past 8 GPU terminals, or after a context loss) every span or row crossing would otherwise count as leaving. It sets `movedSinceEnter`, so xterm's following `leave` counts as a real leave (150 ms grace, not the 1000 ms redraw wait), and it clears `hovered`.
 
 **`pointerMoved(point)`** comes from a capture-phase `mousemove` on the terminal element. It sets `movedSinceEnter`. If `suppressed` is set, it clears it, and if `hovered` is still set, it starts the delay for that link at the new point. This matters because xterm never re-fires `hover` for a move inside the same link (`Linkifier.ts:99-105`), so after a key press, nudging the pointer on the link brings the card back.
 
@@ -325,7 +325,7 @@ So typing in Claude Code's live region, which redraws the rows under the pointer
 
 **Wiring.** `attachHoverDismissal(term, controller)` adds the terminal-side listeners:
 - capture `mousemove`, which calls `pointerMoved`;
-- capture `mouseleave`, which calls `pointerLeft`;
+- `mouseleave` on the terminal element, which calls `pointerLeft` only when `e.target === term.element`;
 - capture `mousedown` and `wheel`;
 - `term.onResize`, which calls `dismiss`;
 - `onScroll`, which calls the controller's `contentMoved()` when `textMoved` says the text moved.
@@ -562,7 +562,7 @@ Depends on Story 1.
     - It calls `dismiss` for `wheel` and `mousedown` dispatched to a child of the terminal element whose bubble handler calls `stopPropagation`, which shows the listeners use capture.
     - It calls `dismiss` for a window `keydown`, whose `defaultPrevented` stays false.
     - It calls `dismiss` for window `blur` and `resize`, for `term.onResize`, and for `visibilitychange` while hidden.
-    - `mousemove` calls `pointerMoved`, and `mouseleave` calls `pointerLeft`.
+    - `mousemove` calls `pointerMoved`, and a `mouseleave` targeted at the terminal element calls `pointerLeft`. A `mouseleave` dispatched on a child span does not call `pointerLeft`.
     - After `pointerLeft`, a `leave` of the card's key with no `mousemove` hides the card at 150 ms, not 1000 ms.
     - After the disposer runs, none of these do anything.
 
@@ -600,7 +600,7 @@ Depends on Story 1.
 
 **Manual checks (macOS app, plus Linux WebKitGTK if available):**
 - Hover `src/App.tsx:42:7` in Claude Code output. The card appears after about a third of a second, next to the pointer, inside the window, and over a neighbouring split pane.
-- Hold the pointer still on a path while Claude Code redraws its prompt: the card does not flicker.
+- Hold the pointer still on a path while Claude Code redraws its prompt: the card does not flicker. Repeat with GPU rendering off (the DOM renderer), to see whether WebKit sends a synthetic `mousemove` when row spans are replaced under a still pointer. If it does, a redraw would count as a pointer move; record what happens.
 - Move along a path that wraps over two rows: the card stays open.
 - Scroll back and hover while output streams, both before and after the scrollback fills (`yes | head -20000` fills it): the card stays open. At the bottom, output closes it, and a path scrolling under the still pointer opens no card until the pointer moves.
 - Type while hovering a path in Claude Code's prompt area: the card closes and stays closed. Nudge the pointer on the path: it returns.
@@ -643,7 +643,7 @@ Depends on Story 2.
 
    A cut-short header in each format, random bytes, a PNG with width 0, and a JPEG whose SOF0 height is 0 (the DNL form) give `None`. -- `filepeek.rs` tests › `image_header_sizes`
 2. Rasters under the caps give `bytes` whose payload equals the file, with `width` and `height`. The 30000×30000 GIF, JPEG and ICO above give `skipped/pixels` with an empty payload. So does a PNG of 65536×65536, whose area wraps to 0 in `u32`. A PNG with an unreadable header gives `skipped/noSize`. A sparse 10,000,001-byte `.png` gives `tooLarge` with limit 10,000,000. -- › `images_are_capped_and_sized`
-3. A plain UTF-8 SVG chart (paths, text, gradients and presentation attributes, with an XML declaration at offset 0) under 1 MB gives `bytes`. So does one containing a `<user>` element. A 1,000,001-byte SVG gives `tooLarge`. Each of these gives `skipped/svgFeatures`:
+3. A plain UTF-8 SVG chart (paths, text and presentation attributes, with an XML declaration at offset 0) under 1 MB gives `bytes`. So does one with a gradient referenced as `fill="url(#g)"`, one with `url( #g )` and `url('#g')`, and one containing a `<user>` element. A 1,000,001-byte SVG gives `tooLarge`. Each of these gives `skipped/svgFeatures`:
    - `<use>`, `<image>` and `<feImage>`;
    - `<svg:use>` and `<svg:image>`, through a namespace prefix;
    - a UTF-16 LE SVG with a BOM, and a UTF-8 SVG declaring `encoding="UTF-16"` or `encoding="ISO-2022-JP"`;
@@ -659,7 +659,10 @@ Depends on Story 2.
    - any `<style>` element, even one with no `url(`;
    - a `style="fill:red"` attribute;
    - `<use` followed by a newline before `href=`;
-   - a processing instruction other than the XML declaration at offset 0.
+   - a processing instruction other than the XML declaration at offset 0;
+   - `<?xml-stylesheet href="x.css"?>` at offset 0;
+   - `url(data:…)`, `url(http://…)` and `url(g.svg#x)`;
+   - `fill="url(#g)"` together with a `data:` elsewhere in the file.
 
    -- › `svg_allowlist_rejects_every_bypass`
 4. A PNG body renders exactly one `img` with a `blob:` `src` and `decoding="async"`. The detail line shows `"W × H"`. Re-rendering the card with the same Blob creates no second URL. Unmounting the card calls `URL.revokeObjectURL` with that URL. jsdom has no object URLs, so the test stubs both functions. -- `FileHoverCard.test.tsx` › "image thumbnail"
@@ -863,3 +866,8 @@ Depends on Story 2.
   - **Minor 5.** After the first array-shaped response, byte kinds are requested as `meta` (Story 1 AC12). A WebKitGTK manual check for "IPC custom protocol failed" is added.
   - **Minor 6.** `unframe` honours a `Uint8Array`'s `byteOffset` and `byteLength` (Story 1 AC9).
   - **Minor 7.** The snapshot is computed only for a card that will show (Story 5 AC7). A timing manual check on a dense 256 KiB page is added.
+- 2026-10-29, final review of 2d6e2ea: PASS WITH MINORS. All four applied, nothing else changed:
+  - `pointerLeft` acts only on a `mouseleave` targeted at the terminal element, so child-boundary events under the DOM renderer are ignored (Story 2 AC13).
+  - SVG allows fragment-only `url(#id)`, so gradients, clip paths, masks, markers and filters pass; every other `url(` still rejects (Story 3 AC3, limits table, allowlist).
+  - The XML-declaration exemption requires `<?xml` plus whitespace, so `<?xml-stylesheet` at offset 0 rejects (Story 3 AC3).
+  - A manual check reruns the still-pointer redraw case with the DOM renderer (Story 2).
