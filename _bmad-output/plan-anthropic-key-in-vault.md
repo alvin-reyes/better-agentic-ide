@@ -3,7 +3,7 @@ title: 'The Orchestrator''s Anthropic API key lives in the vault, not in saved s
 type: 'bugfix'
 ticket: ''
 created: '2026-10-29'
-status: 'draft'
+status: 'approved'
 baseline_revision: '5d73348eeb80677a8adb2d2e4a59bfd6105320f4'
 route: 'oneshot'
 route_source: 'auto'
@@ -31,19 +31,24 @@ ADR numbers are provisional. They are checked again at merge time, whichever bra
 
 **Approach:** Keep the key in the vault under its own name, which is never exported to terminals. On first launch after the update, move any saved key into the vault, check the vault holds it, then remove it from settings and from every snapshot. The Settings → AI API field becomes a vault-backed field. The Orchestrator reads the key with `vault_get`, the same way it reads the DeepSeek key.
 
-## Owner's decisions (2026-10-29)
+## Owner's decisions
 
 1. Fix it: "Yes, plan and build it" (owner, 2026-10-29, approving the intent above).
 2. The verification command is unchanged.
+3. Approved at cdcdb4f: "Approve both stories" (owner, 2026-10-30). Stories A and B are built in that order, with the rotate hint as static text.
+4. The vault name is `ADE_ORCHESTRATOR_ANTHROPIC_KEY`, kept out of terminals by the fixed app-only list in `vault.rs`. The general per-secret option stays deferred (owner, 2026-10-30, Q1).
+5. There is no fallback to an `ANTHROPIC_API_KEY` vault entry (owner, 2026-10-30, Q2).
+6. Without a keychain, there is no plain-text read, and **Remove the saved copy** is offered (owner, 2026-10-30, Q3).
+7. **P2 override (ADR 0012):** the one-time move at launch reads the user's key and writes it to the keychain without a click. The owner approves it on the stated reason: it only moves the user's own key between two ADE stores, to meet P3 (owner, 2026-10-30, Q4). Every other credential action stays on the user's click.
 
 </frozen-after-approval>
 
-## Coordinator's decisions (2026-10-30, open to the owner's veto)
+## Coordinator's decisions (2026-10-30; they stand, as the owner approved without a veto)
 
 - **Two stories.** The plan is split as above, following "small, vertically sliced". Story A carries what was AC 1, 2, 17 and 18; Story B carries the rest. The owner may merge them back.
 - **The rotate hint is static text** under the field, with no persisted flag and no Dismiss.
 
-## Open questions for the owner (settle before approval)
+## Owner questions (answered 2026-10-30; see Owner's decisions 4–7)
 
 1. **Story A: the vault name and terminal export.** Recommended: `ADE_ORCHESTRATOR_ANTHROPIC_KEY`, kept out of terminals by a fixed list of app-only names in `vault.rs`. The general per-secret "not in terminals" option stays deferred, as the Orgo plan left it. Using `ANTHROPIC_API_KEY` is **rejected** (Design Notes, *Why not `ANTHROPIC_API_KEY`*). Confirm the name, and confirm a fixed list rather than the general option.
 2. **Story B: no fallback to an `ANTHROPIC_API_KEY` vault entry.** DeepSeek reuses the terminal key, but this provider will not. Reusing it would reward storing `ANTHROPIC_API_KEY` in the vault, and that switches every ADE terminal's Claude Code to API billing. Recommended: no fallback.
@@ -86,11 +91,21 @@ ADR numbers are provisional. They are checked again at merge time, whichever bra
 | | Story A: app-only vault secrets | Story B: the move, the field, the read path |
 |---|---|---|
 | **P1** a job and a change | **Met.** Job: Reach ("give agents tools and keys without putting secrets in files"). Harness change: a secret on the app-only list is no longer handed to agent terminals, and the Secrets tab says which ones. On its own, Story A protects only an entry the user creates under that name; the change reaches the Orchestrator's key with Story B. | **Met.** Job: Reach. Change: the Orchestrator's key stops being a plain-text setting in the files ADE writes (localStorage, `kv/`, snapshots), and it isn't handed to agent terminals. The Orchestrator tab itself is frozen (product doc, Q8 open): this is the "key fix first" that freeze names. |
-| **P2** nothing risky without the user's action | **N/A.** No new action from P2's list: save and delete already exist in the Secrets tab, and only their copy changes. | **Not met for one action; override asked (owner Q4).** On the user's click: Save/Replace (`vault_set`), Remove (`vault_delete`, after a confirm), **Remove the saved copy** (after a confirm), and the Orchestrator's key read (on Send). The one-time move at launch reads and writes the credential with no click. |
+| **P2** nothing risky without the user's action | **N/A.** No new action from P2's list: save and delete already exist in the Secrets tab, and only their copy changes. | **Not met for one action: overridden by the owner on 2026-10-30 (Owner's decision 7).** On the user's click: Save/Replace (`vault_set`), Remove (`vault_delete`, after a confirm), **Remove the saved copy** (after a confirm), and the Orchestrator's key read (on Send). The one-time move at launch reads and writes the credential with no click. |
 | **P3** no secrets in plain text | **Met.** Values stay in the OS keychain. Who else can read them: every vault secret not on the list is still exported to every ADE terminal (the known exception for the vault's terminal export stays). App-only secrets are not handed to terminals, but any same-user process can still query the keychain (`secret-tool` on Linux, `CredRead` on Windows; ACLs apply on macOS). | **Met for the files ADE controls.** The key is held only in the OS keychain, under `ADE_ORCHESTRATOR_ANTHROPIC_KEY`. Who can read it: the Orchestrator and the move (`vault_get`), and any same-user process through the keychain, as for Story A. Residue ADE can't remove is listed in *What this fix does not remove*. The static hint tells users to rotate. Without a keychain the key stays in plain text until the user removes it (owner Q3). |
 | **P4** thin where a vendor does the job | **N/A**: no vendor product. | **N/A**: the Anthropic API is called as before. |
 | **P5** real work needs it | **Met.** The owner's own use, and ADE itself: it closes part of the known P3 exception ("The Orchestrator stores the Anthropic API key in plain-text settings… The owner approved the fix on 2026-10-29"). | **Met.** Same; this story removes that exception line when it ships. |
 | **P6** provable and keepable | **(a) Met.** A1–A4 are offline tests in the verification command. Vendor behaviour (Claude Code keeping the subscription login in an ADE terminal) is a named manual check. Under ADR 0009 (on the unmerged `docs/claude-md-paths` branch), manual checks don't gate Done unless the plan says so, and this plan doesn't. **(b), (c) N/A**: no table of vendor tool names or subcommands. | **(a) Met.** B1–B16 are offline tests. The webview-storage residue and the no-keychain path are named manual checks, not gating. **(b), (c) N/A**: same. |
+
+## Product doc exceptions list (ADR 0012)
+
+The product doc (`_bmad-output/product-ide-and-harness.md`, §4 "Known exceptions, shipped or decided") is on `plan/product-ide-and-harness`, not on this branch. When the branches meet, it gains this line:
+
+| What | Fails | Status |
+|---|---|---|
+| The Orchestrator's one-time launch move reads the user's Anthropic key and writes it to the keychain without a click (`plan-anthropic-key-in-vault.md`, Story B) | P2 (reads or changes credentials) | Owner override of 2026-10-30: it only moves the user's own key between two ADE stores, to meet P3. |
+
+When Story B ships, the existing line for the Orchestrator's plain-text key (P3) is removed, as Tasks (B) say.
 
 ## What this fix does not remove (stated honestly)
 
@@ -424,4 +439,5 @@ The plan does not wait for a second launch before stripping. That would keep the
 ## Plan Change Log
 
 - 2026-10-30, review round 1: everything outside the frozen block was revised. The frozen Intent and Owner's decisions are unchanged.
+- 2026-10-30, approval: the owner approved both stories at cdcdb4f. Status set to approved; the four answers and the P2 override recorded in the frozen Owner's decisions; the line for the product doc's exceptions list added; ADR 0013 Accepted.
 - 2026-10-30, re-review: split into Stories A and B, with the ACs renumbered per story (old → new: 1→A1, 2→A2, 18→A3 (Rust part), 17→A4, 3→B1, 4–8→B2–B6, 9→B7, 10→B8, 11→B9, 12→B10 (with the name parity from 18), 13→B11, 14→B12, 15→B13 (static), 16→B14, 19→B15, 20→B16). Added the Principles check and owner Q4. The frozen block is unchanged.

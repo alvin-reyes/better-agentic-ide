@@ -1,6 +1,6 @@
 # Vault: app-only secrets
 
-Status: proposed with `_bmad-output/plan-anthropic-key-in-vault.md` (ADR 0013). It becomes current when that story is Done.
+Status: approved with `_bmad-output/plan-anthropic-key-in-vault.md` (ADR 0013, accepted 2026-10-30). It becomes current as Stories A and B are Done.
 
 - **App-only names** are listed as literals in `APP_ONLY` in `src-tauri/src/vault.rs`. Today the list is `ADE_ORCHESTRATOR_ANTHROPIC_KEY`.
 - **They are never in a terminal's environment.** `terminal_env` filters the map it returns, on both the cached path and the fresh-read path. The cache itself keeps every name, so its complete-read check still holds.
