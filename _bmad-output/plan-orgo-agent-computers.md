@@ -16,6 +16,13 @@ context: ['.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on
 ---
 
 > **Status (2026-10-29): approved by the owner at f32ca1e ("Approve and build"), for Stories 1 and 1b only.** Story 1c stays on hold. Stories 2 to 6 stay an outline, deferred on P4 in the product doc (`_bmad-output/product-ide-and-harness.md`, branch `plan/product-ide-and-harness`). ADR 0010 is accepted.
+>
+> **Amendment 1 (2026-10-30), after the code review of a895c05 (Story 1: BLOCK).** It fixes how Story 1's code is to be corrected. It changes nothing in the frozen block, and the verification command is unchanged. Each item is marked **(CR-…)** where it lands. The triage is in the Review Triage Log.
+> - CR-1: the worktree walk.
+> - CR-2: wait for the shell's line editor before typing a launch line.
+> - CR-m1 to CR-m8: the minor findings.
+>
+> One item waits on the owner: **CR-3, more ask globs**, in the "Pending owner ruling" block under Story 1's ACs. Story 1's fix does not wait for it. Its completeness test (AC21) lands either way.
 
 **Step 1** is built in order:
 - **Story 1:** Orgo's hosted MCP server in the MCP library, signed in through Claude Code. Claude Code asks before any computer is created, changed, stopped or deleted. Rules go in three places: every Claude Code launch ADE makes (picker, board and Orchestrator), the project's shared settings, and the main checkout's root local settings, which Claude Code reads from any subfolder and any worktree.
@@ -163,6 +170,20 @@ The base URL is `https://www.orgo.ai/api`, and computers are addressed by UUID a
   - `.claude/settings.json` is read from the primary working directory.
   - `.claude/settings.local.json` is read at the repository root from a subdirectory, and at the main checkout's root inside a worktree. The exceptions are outside git, at a home-directory root, on Windows, or when the root isn't owned by the user, where it stays with the start directory.
   - Settings edits reach a running session ([settings](https://code.claude.com/docs/en/settings)).
+  - **(CR-1) Which folder's `settings.local.json` a worktree session reads.** Verified 2026-10-30 against Claude Code 2.1.314, the binary in the build container, in two ways.
+    - **Its source.** Its `findCanonicalGitRoot` follows `<root>/.git` (`gitdir: <g>`) to `<g>/commondir` (`<c>`). It moves only when all of these hold:
+      - `<g>`'s parent is `<c>/worktrees`;
+      - `<g>/gitdir` points back at `<root>/.git`;
+      - `<c>` is named `.git`.
+
+      Then it uses `<c>`'s parent, with no check of `core.bare`. Before moving the file there, it falls back to the start folder when that parent is the home folder, or when it, its `.git` or its `.claude` is not owned by the current user, or on a platform without uids.
+    - **Observed.** A `SessionStart` hook in each candidate file, run with `claude -p` (invalid key, unreachable base URL) in the reviewer's real-git layouts (`scratchpad/layouts`, `layouts2`). The table is in "Where the rules go".
+      - The canonical root's file is read.
+      - 2.1.314 also loads the start folder's own `.claude/settings.local.json`, the "legacy" file. Story 1 relies on neither the legacy file nor its absence.
+  - **(CR-2) A typed line and the terminal's canonical mode.** Until a shell's line editor (zle, readline) is running, the terminal is in canonical mode. The kernel holds typed input as one line of at most `MAX_CANON` bytes: 1024 on macOS, 4096 on Linux. The rest is dropped, and the truncated line still runs.
+    - Shown on Linux on 2026-10-30. `bash --rcfile <rc>` was used, where the rc sleeps 1 s. A 5,000-byte line was typed 250 ms after spawn. It ran cut at 4095 bytes.
+    - The same line typed once the terminal's `ICANON` flag was clear ran whole.
+    - `tcgetattr` on the PTY master returns the slave's flags. On Linux, `tty_mode_ioctl` uses `tty->link`. On macOS, pty ioctls go to the shared tty. portable-pty 0.9 exposes the master's fd (`MasterPty::as_raw_fd`).
   - `allowManagedPermissionRulesOnly` makes managed settings the only source of permission rules ([permissions](https://code.claude.com/docs/en/permissions)).
 - **`--disallowedTools`** takes deny rules as separate arguments. A bare or glob tool name removes the tool from context. It takes a list, so another flag must follow it ([CLI reference](https://code.claude.com/docs/en/cli-reference)).
 - **Modes.** Explicit ask rules prompt even in `bypassPermissions`, deny rules block in every mode, and bypass may write `.claude/` ([permission modes](https://code.claude.com/docs/en/permission-modes)).
@@ -227,6 +248,20 @@ Written as `.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-o
 - `src/lib/agentLaunch.ts`: `prepareAgentLaunch` (:21) and `dispatchAgent` (:63-77). `src/components/OrchestratorTab.tsx:292` is the direct caller.
 - `src-tauri/src/lib.rs:184-194`: `project_root_of`.
 - **New:** `src-tauri/src/orgo_rules.rs`; `src-tauri/src/orgo_operations.json`, the fixture; `src/lib/orgoRules.ts`, which loads the rules once.
+- **(CR) At a895c05:**
+  - `src-tauri/src/claude_settings.rs:50-73`: `main_checkout_root`, `linked_main_checkout`.
+  - `src-tauri/src/mcp.rs`:
+    - `read_config` (:14-23), which reads an unreadable file as empty;
+    - `mcp_install` (:44-66);
+    - `add_orgo_rules` (:76-97).
+  - `src/components/IntegrationsPanel.tsx:78-84`: the notice.
+  - `src/lib/orgoRules.ts:28`: the shape check.
+- **(CR-2) Where launch lines are typed:**
+  - `src/lib/terminalCommands.ts`: `runInNewTabPane` (:30-45) serves the picker's new tab and the board's `dispatchAgent`, and `writePty` (:5).
+  - `src/components/OrchestratorTab.tsx:327-328`, the Orchestrator's own `writePty`.
+  - `src-tauri/src/pty.rs`: `PtyInstance.master` (:13) and `write_pty` (:203).
+
+  ADE has no "shell ready" signal today. A pane's `ptyId` only says the PTY exists.
 
 ## Design Notes (1)
 
@@ -303,27 +338,69 @@ pub const MCP_ASK: &[&str] = &[
 **Where the rules go.** Install, for `name == "orgo"`:
 1. Resolve the two roots.
    - `<root>` is the git root from `project_root`: the worktree root inside a worktree.
-   - `<main>` is the main checkout's root, from `main_checkout_root(<root>)`, with guards (round 5). It follows the walk only when every step holds:
-     1. `<root>/.git` is a file whose first line is `gitdir: <path>`. A relative `<path>` (git ≥ 2.48, `worktree.useRelativePaths`) is resolved against `<root>`, the folder holding the `.git` file.
-     2. `<gitdir>/commondir` exists. Its content, if relative, is resolved against `<gitdir>`, and the result is canonicalised.
-     3. That common dir is a directory named `.git`.
-     4. Its parent holds that same `.git` as a directory.
+   - `<main>` comes from `main_checkout_root(<root>)`. **(CR-1, replaces round 5's walk.)** It is defined as **the folder whose `.claude/settings.local.json` Claude Code reads for a session started anywhere in `<root>`**. That is not always git's own main worktree.
+     - **How it is found.** It mirrors Claude Code's `findCanonicalGitRoot` (fact CR-1) with pure file reads and no git process. Asking git would give a different answer in the bare case: `git worktree list` marks `proj` as a bare main worktree, and `git rev-parse --show-toplevel` fails there. It could also disagree with Claude Code where Claude Code's own guards fall back.
+     - **The walk.** It is followed only when every step holds:
+       1. `<root>/.git` is a regular file (not a link) whose trimmed content is the single line `gitdir: <g>`. A relative `<g>` (git ≥ 2.48, `worktree.useRelativePaths`) is resolved against `<root>`.
+       2. `<g>/commondir` is a regular file, not a link. Its trimmed content `<c>`, if relative, is resolved against `<g>`.
+       3. The canonical parent of `<g>` equals canonical `<c>` joined with `worktrees`. So `<g>` is one of `<c>`'s worktree admin folders.
+       4. `<g>/gitdir` is a regular file whose trimmed content, resolved against `<g>` and canonicalised, equals canonical `<root>` joined with `.git`. The admin folder points back at this worktree.
+       5. Canonical `<c>`'s file name is `.git`. The candidate is its parent. There is **no `core.bare` check**: Claude Code reads `proj/` in the bare-clone layout, so ADE writes there.
+     - **The guards Claude Code applies before it moves the file.** The candidate is used only when all of these hold:
+       - **Not the home folder.** It is not the canonical home folder (`$HOME`). When `$HOME` is unset or can't be canonicalised, the candidate is not used.
+       - **Owned by the user (unix only).** The candidate, `<candidate>/.git` and `<candidate>/.claude` (when present) are each owned by the current effective uid, read with `symlink_metadata`, via `libc::geteuid()` (libc is already a unix dependency).
+       - **Not Windows.** On a platform other than unix, `<main>` is `<root>`, as it is for Claude Code.
+       - **No backslashes (unix).** None of `<root>`, `<g>`, `<c>` or the back-pointer contains a backslash.
+     - **Shape.** For tests, the walk takes the home folder and the uid as arguments: `main_checkout_root_for(root, home: Option<&Path>, uid: Option<u32>)`. `main_checkout_root(root)` passes the real ones.
+     - **Every other case.** `<main>` is `<root>`, including any unreadable file.
+     - **The cases, each a test (AC5).** Every row matches what Claude Code 2.1.314 was seen to read:
 
-     Then `<main>` is that parent. In every other case `<main>` is `<root>`:
-     - a normal checkout, where `.git` is a directory;
-     - a submodule or `--separate-git-dir`, where there is no `commondir`;
-     - a bare repository's worktree, where the common dir is `repo.git` and there is no main checkout;
-     - any unreadable file.
+       | Layout | `<root>` | `<main>` |
+       |---|---|---|
+       | Normal checkout | `main` | `main` |
+       | Linked worktree, absolute gitdir | `wt` | `main` |
+       | Linked worktree, relative gitdir | `wtrel` | `main` |
+       | Submodule (`gitdir: ../.git/modules/sub`, no `commondir`) | `sub` | `sub` |
+       | A worktree of a submodule (common dir `main/.git/modules/sub`, not named `.git`) | `subwt` | `subwt` |
+       | A submodule inside a linked worktree | `wtsub/sub` | `wtsub/sub` |
+       | `git init --separate-git-dir <store>/.git sep`: the checkout itself (no `commondir`) | `sep` | `sep` |
+       | A worktree of that repository (common dir `<store>/.git`) | `sepwt` | **`<store>`** |
+       | The same with a separate gitdir not named `.git` (`<store2>`) | `sep2wt` | `sep2wt` |
+       | `git clone --bare … proj/.git`, then `git worktree add proj/feature` | `proj/feature` | **`proj`** |
+       | `git init --bare repo.git` with a worktree `bw` | `bw` | `bw` |
+       | Back-pointer missing, or pointing at another folder | `wt` | `wt` |
+       | `<g>` not under `<c>/worktrees` | `wt` | `wt` |
+       | `commondir` is a symbolic link | `wt` | `wt` |
+       | The candidate is `$HOME` | `wt` | `wt` |
+       | The candidate, its `.git` or its `.claude` is owned by another uid | `wt` | `wt` |
+       | `.git` file without a `gitdir:` line; a gitdir that does not exist; no `.git` | itself | itself |
+
+     - **Consequence, recorded for the guide.** In a `--separate-git-dir` repository, the checkout (`sep`) and its worktrees (`<store>`) read different local files, as Claude Code does. A worktree of a bare repository named other than `.git` reads its own. Install from each place you start sessions, and ADE's launches carry the rules on the command line regardless.
 2. Read and validate `<root>/.mcp.json`, `<root>/.claude/settings.json` and `<main>/.claude/settings.local.json`. If any is invalid or the wrong shape, refuse and write nothing.
+   - **(CR-m2)** For `orgo`, a `.mcp.json` that exists but can't be read is refused the same way, with the file named: for example a directory, not UTF-8, or permission denied. `read_config` today reads every read error as an empty file. The Orgo install must not then replace the user's `.mcp.json` with one holding only Orgo.
+   - Only `NotFound`, and a file that is empty or only whitespace, read as empty.
+   - Other servers keep today's behaviour (Deferred Work).
 3. Merge `MCP_ASK` into `permissions.ask` of `<main>/.claude/settings.local.json`. Claude Code reads that file from any subdirectory, and from inside any worktree of the repository.
-4. Merge them into `<root>/.claude/settings.json`, for teammates and root sessions.
+4. Merge them into `<root>/.claude/settings.json`, for teammates and root sessions. Each file is saved only when rules were added to it (a no-op install rewrites nothing, CR-m8).
 5. Write `<root>/.mcp.json`.
 
-`mcp_install` returns the rules added to either file.
+**(CR-m1) Not all-or-nothing after validation, by design.**
+- Validation covers all three files before the first write, so an invalid or unreadable file writes nothing.
+- After that, the writes run in this order: the local file, the shared file, then `.mcp.json`. A write that fails part-way, such as a full disk or a folder that can't be written, can leave rules without the server. It never leaves the server without the rules, which is the safe direction.
+- There is no rollback: a rollback is another write that can fail. The guide and this plan say so, and installing again finishes the job.
+
+**(CR-m4) What `mcp_install` returns.** It returns `McpInstalled { rules: Vec<String>, files: Vec<String> }`, serialised camelCase, for every server:
+- `rules`: the rules added to either file, in `MCP_ASK` order. It is empty for every other server and on a repeat install.
+- `files`: the absolute paths of the settings files that gained at least one rule, shared first, then local.
 
 **Every ADE launch (S1-1, S1-4).**
 - **The rules.** `orgo_launch_rules()` (Rust, no arguments) returns `{ ask: MCP_ASK, continuousDeny: … }`. `src/lib/orgoRules.ts` exports `loadLaunchRules(): Promise<LaunchRules>`, which invokes it and caches the result **only on success** (round 5). A rejected load clears the cache, so the next launch tries again rather than being blocked for the rest of the app's life.
   - If the invoke fails, it rejects, and every caller refuses to launch with "ADE couldn't load its permission rules, so the agent was not started". It fails closed.
+  - **(CR-m5)** A result counts as malformed, and is rejected and not cached like a failed invoke, when:
+    - `ask` is not an array of strings; or
+    - `ask` is empty.
+
+    An empty list would launch agents with no rules.
 - **The type makes it required.** `LaunchOptions` gains `rules: LaunchRules` as a **required** field, and `buildLaunchCommand(provider, rolePath, opts: LaunchOptions)` makes `opts` required. tsc then fails on every caller that doesn't pass rules.
   - `prepareAgentLaunch` covers the picker and `dispatchAgent`. `OrchestratorTab.tsx:292` is updated to `await loadLaunchRules()` and pass them.
   - The two capability probes use a module-private `PROBE_RULES`, which is not exported, so no other caller can borrow it.
@@ -331,6 +408,46 @@ pub const MCP_ASK: &[&str] = &[
 - **The flag.** `claudeCommand` adds `--settings '{"permissions":{"ask":[…]}}'`, quoted with `shellQuote` (`agentCommand.ts:26`), to every claude and deepseek launch: Manual, Continuous and `-p`.
 - **Silent and folder-independent.** Glob names are exempt from the "matches no tool" warning, so this is silent in projects without Orgo, and it does not depend on the cwd, the project, or how Orgo was installed. The flag's lists merge with the files' lists (U13, settled).
 - **The Orchestrator.** It runs `claude … -p` without bypass, so an ask cannot be shown there and the call is refused. That was already true, because `-p` cannot prompt for an unapproved MCP tool. The live impact is low, but the rules now ride along.
+- **(CR-2) Typing the line once the shell can take it.**
+  - **The problem.** `--settings` adds 609 bytes. Measured launch lines with no task:
+    - claude: 697 bytes, or 728 in Continuous mode;
+    - deepseek: 1034, or 1065 in Continuous mode.
+
+    Story 1b adds `--disallowedTools`, and an Orchestrator task has no length cap. `runInNewTabPane` and the Orchestrator type into a PTY that is ~250 ms old. A shell still reading its rc files is in canonical mode, and on macOS a line over 1023 bytes is cut and may run cut (fact CR-2).
+  - **The fix.** Wait until the terminal leaves canonical mode, which is when the shell's line editor is up, and then type. In canonical mode no length is safe, and only waiting fixes every length.
+  - **Rejected alternatives.**
+    - Shortening the globs can't get a deepseek line with a 400-character task under 1024 bytes. It also changes the frozen list.
+    - Passing the rules as a file path would let the session edit its own rules, which needs the owner.
+    - Waiting for the shell's first output fails on rc files that print and on instant prompts, such as powerlevel10k, that draw a prompt before zle starts.
+  - **Rust**, `src-tauri/src/pty.rs`:
+
+    ```rust
+    /// Whether the shell in PTY `id` is reading with its own line editor: the
+    /// terminal is out of canonical mode, so a typed line of any length
+    /// arrives whole. None where that can't be known (not unix, an unknown id,
+    /// or tcgetattr fails).
+    #[tauri::command]
+    pub fn pty_line_editor_ready(state: tauri::State<'_, PtyManager>, id: u32) -> Option<bool>
+    ```
+
+    - It is built on a free function `fn line_editor_ready(master: &dyn MasterPty) -> Option<bool>`.
+    - On unix, it takes `master.as_raw_fd()?` and reads a zeroed `libc::termios` with `libc::tcgetattr`. A non-zero return gives `None`. Otherwise it returns `Some(c_lflag & libc::ICANON == 0)`.
+    - On other platforms it returns `None`.
+    - It is registered in `lib.rs` beside `write_pty`. There is no new dependency.
+  - **TypeScript**, `src/lib/terminalCommands.ts`:
+    - `export async function whenLineEditorReady(ptyId: number, timeoutMs = 10_000): Promise<void>` polls `invoke<boolean | null>("pty_line_editor_ready", { id: ptyId })` every 50 ms.
+      - It returns on `true`.
+      - It returns at once on `null`, and on a rejected invoke, as today.
+      - It returns when `timeoutMs` has passed.
+      - It keeps polling on `false`.
+    - `export async function typeWhenReady(ptyId: number, command: string): Promise<void>` awaits `whenLineEditorReady(ptyId)`, then `writePty(ptyId, command + "\r")`.
+    - `runInNewTabPane` uses `typeWhenReady` once it has the PTY id. If the tab was closed while it waited, it types nothing and returns `null`.
+    - `OrchestratorTab.tsx:327-328` replaces its `writePty(ptyId, cmd + "\r")` with `typeWhenReady(ptyId, cmd)`.
+    - The picker's "This terminal" path writes into a pane whose shell is already up, so it is unchanged.
+  - **Limits, recorded.**
+    - **A shell with no line editor** never leaves canonical mode: `sh`/dash, or `bash --noediting`. After 10 s ADE types anyway, as today, and a line over `MAX_CANON` can still be cut there.
+    - **A line editor that isn't the shell's.** A `read -q` prompt in an rc file, for example oh-my-zsh's update question, also clears `ICANON`, so the line goes to that prompt. That is unchanged from today.
+    - **Windows** (not published) gets `None` and types at once.
 
 **The merge and key order (S1-3; owner decision 11, "Accept, fix later").** Story 1 keeps the existing writer, and AC6 asserts semantic equality. serde_json's `preserve_order` is not enabled here. Key-order preservation is its own small story (Deferred Work).
 - The writer re-sorts object keys and re-pretty-prints on its first write to a file. That is already true of ADE's settings writers today, recorded in `_bmad-output/initiative-phone-remote/deferred-work.md` (`save_settings` re-sorts `.claude/settings.local.json`).
@@ -340,7 +457,19 @@ pub const MCP_ASK: &[&str] = &[
 
 **Remove** takes Orgo out of `.mcp.json` and leaves every rule. ADE never deletes a rule.
 
-**Notice:** "Orgo added to .mcp.json. Agents ADE starts will always ask before Orgo creates, changes, stops or deletes a computer, and rules were added to .claude/settings.json and .claude/settings.local.json for sessions you start yourself. The first install may reorder .claude/settings.json; every setting is kept. Run /mcp in Claude Code to sign in."
+**Notice (CR-m4, replaces the fixed text).** It is built from `McpInstalled`.
+- **Each file in `files`** is shown relative to the project root when it is inside it (`.claude/settings.json`, `.claude/settings.local.json`), and absolute otherwise. A file outside the root is the local file of a worktree's `<main>`. The names are joined with " and ".
+- **When `rules` is non-empty**, the notice is:
+
+  "Orgo added to .mcp.json. Agents ADE starts will always ask before Orgo creates, changes, stops or deletes a computer. For sessions you start yourself, ask rules were added to `<names>``<where>`.`<reorder>` Run /mcp in Claude Code to sign in."
+
+  - `<where>` is ", which Claude Code reads in this worktree" when the last file is outside the root, and empty otherwise.
+  - `<reorder>` is " The first install may reorder .claude/settings.json; every setting is kept." only when the shared file is in `files`.
+- **When `rules` is empty**, the existing sign-in and plain notices stand.
+
+Examples:
+- Both files at the root: "… ask rules were added to .claude/settings.json and .claude/settings.local.json. The first install may reorder .claude/settings.json; every setting is kept. Run /mcp …"
+- From a worktree whose shared file already had them: "… ask rules were added to /Users/a/app/.claude/settings.local.json, which Claude Code reads in this worktree. Run /mcp …"
 
 **Guide** (`docs/guide/integrations.md`): add Orgo to the "Web & browser" row and a `## Orgo cloud computers` section:
 - what it does;
@@ -355,16 +484,29 @@ pub const MCP_ASK: &[&str] = &[
   - future tool names with none of the verbs.
 
   In a git worktree, the local rules live in the main checkout's `.claude/settings.local.json`;
+  - **(CR-1)** the guide names the two exceptions from the table above, in a sentence.
+    - In a `--separate-git-dir` repository, worktrees read the file in the folder holding the separate `.git`, not the checkout's.
+    - A worktree of a bare repository not named `.git` reads its own.
 - cost: billed until deleted, stopped hourly computers still pay for disk, the plan or credit is the limit, set an end, delete when done, auto top-up off;
 - prompt injection;
-- that the first install may reorder a committed `.claude/settings.json`, keeping every value.
+- that the first install may reorder a committed `.claude/settings.json`, keeping every value;
+- **(CR-m1, CR-m2) failures, replacing "the install is refused and nothing is written".** The guide says:
+
+  "If `.mcp.json` or either settings file can't be read, isn't valid JSON, or has a `permissions.ask` that isn't a list, the install is refused, the file is named, and nothing is written. If a write fails part-way, for example on a full disk, the rules may already be in your settings without the Orgo server, never the other way round. Fix it and install again."
 
 **README:** "16 curated MCP servers".
 
 **Contract:** `.ade/context/orgo-permission-rules.md` records the lists, the three places, `orgo_launch_rules()`, that ADE never deletes a rule, and that the CLI library reuses the lists.
+- **(CR) The fix updates it in four places:**
+  1. Place 2's `<main>` is "the folder whose `settings.local.json` Claude Code reads", with the walk's five steps, its guards, and a pointer to this plan's table. The list "normal checkout, submodule, `--separate-git-dir`, bare repo's worktree" is dropped, since it was wrong for two layouts.
+  2. `mcp_install` returns `McpInstalled { rules, files }`.
+  3. `loadLaunchRules` rejects an empty `ask`.
+  4. A new section, "Typing a launch line", names `pty_line_editor_ready(id) -> boolean | null` and `typeWhenReady(ptyId, command)`. Every path that types a launch line into a new PTY uses them.
 
 **Failure modes:**
-- **Any of the three files invalid:** install is refused with the file named, and nothing is written.
+- **Any of the three files invalid or (for `.mcp.json`) unreadable:** install is refused with the file named, and nothing is written.
+- **A write fails after validation (CR-m1):** the rules may be written without the server, never the reverse. The error names the file, and installing again completes it.
+- **The shell's line editor never comes up (CR-2):** after 10 s the launch line is typed anyway, as before this story. A line longer than `MAX_CANON` can be cut there.
 - **A session started in a subfolder:** the rules come from the launch flag (ADE) or the root local file (user-started).
 - **Settings outside git, at a home-directory root, or on Windows:** `settings.local.json` stays with the start directory, so a user-started subfolder session has no file rules. ADE launches keep the flag. The guide says so.
 - **A bypass-mode agent the user started deletes the file rules:** not prevented, and stated.
@@ -377,23 +519,39 @@ pub const MCP_ASK: &[&str] = &[
 Each names its test. The developer writes it failing first. AC10 is a regression check.
 
 1. With `vault_list` empty, the Orgo card shows "Sign in" and its caution as a `role="note"`, with no secret row, no "Add to vault" and no `npx` tag. Covered by `src/components/__tests__/IntegrationsPanel.test.tsx` (new) › "the Orgo card is a sign-in server with its caution".
-2. Install sends `mcp_install` with `name: "orgo"` and a server of exactly `{type: "http", url: "https://www.orgo.ai/mcp"}`. With rules returned, the notice says ADE's agents always ask, names both settings files, says the first install may reorder `.claude/settings.json`, and says to run `/mcp`. Covered by `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says where the rules went".
+2. **(Changed, CR-m4.)** Install sends `mcp_install` with `name: "orgo"` and a server of exactly `{type: "http", url: "https://www.orgo.ai/mcp"}`. With the root `/r`, the notice built from the returned `McpInstalled` reads as follows. Every case says ADE's agents always ask and ends with "Run /mcp in Claude Code to sign in."
+   - **(a) Both files.** `files` = `[/r/.claude/settings.json, /r/.claude/settings.local.json]`. The notice names ".claude/settings.json and .claude/settings.local.json", with the reorder sentence.
+   - **(b) Local only.** `files` = `[/r/.claude/settings.local.json]`. It names only ".claude/settings.local.json", and has no reorder sentence and no ".claude/settings.json".
+   - **(c) Shared only.** `files` = `[/r/.claude/settings.json]`. It names only ".claude/settings.json", with the reorder sentence, and has no "settings.local.json".
+   - **(d) A worktree.** `files` = `[/r/.claude/settings.json, /m/.claude/settings.local.json]`. It names ".claude/settings.json and /m/.claude/settings.local.json, which Claude Code reads in this worktree".
+
+   Covered by `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says where the rules went" (extended to the four cases).
 3. Every `oauth: true` entry has no `secrets`, empty `envRefs`, and an `https:` URL. Covered by `src/data/__tests__/mcpCatalog.test.ts` › "sign-in servers carry no secret and use https".
 4. `"cloud computer"` finds `["orgo"]`, and `"browser click"` still finds `["playwright"]`. Covered by `mcpCatalog.test.ts` › "searches name, category and description" (extended).
-5. Installing `orgo` in a temp git repo with no settings files creates `.claude/settings.json` and `.claude/settings.local.json` at the repo root, each with only `permissions.ask` = `MCP_ASK`. It writes the server and returns the rules. Worktree cases, on temp folders:
-   - **Absolute gitdir.** `<wt>/.git` is `gitdir: <main>/.git/worktrees/wt`, which has a `commondir` of `../..`. Install writes `settings.local.json` under `<main>/.claude/`, and `settings.json` and `.mcp.json` under `<wt>`.
-   - **Relative gitdir.** `gitdir: ../main/.git/worktrees/wt` gives the same `<main>`.
-   - **Submodule or `--separate-git-dir`.** `gitdir: ../.git/modules/sub`, or a gitdir elsewhere, with no `commondir`. `<main>` stays `<root>`, the submodule.
-   - **Bare repository's worktree.** The common dir is `repo.git`, not `.git`, with no checkout. `<main>` falls back to `<root>`.
+5. **(Changed, CR-1, CR-m4.)** Installing `orgo` in a temp git repo with no settings files creates `.claude/settings.json` and `.claude/settings.local.json` at the repo root, each with only `permissions.ask` = `MCP_ASK`. It writes the server and returns `McpInstalled { rules: MCP_ASK, files: [<root>/.claude/settings.json, <root>/.claude/settings.local.json] }`.
+   - **From a hand-built linked worktree**, absolute and relative gitdir, its admin folder holding `commondir` (`../..`) and the `gitdir` back-pointer (`<wt>/.git`):
+     - install writes `settings.local.json` under `<main>/.claude/`, and `settings.json` and `.mcp.json` under `<wt>`;
+     - `files` is `[<wt>/.claude/settings.json, <main>/.claude/settings.local.json]`.
+   - **`main_checkout_root_for` gives `<main>` for every row of the table in "Where the rules go"**, on hand-built folders. The guard rows use the injected `home` and `uid`: the candidate passed as `home`; a uid one more than the folders' owner.
+   - **Real git.** With real `git`, the rows git can build are checked: normal checkout, linked worktree, submodule, `--separate-git-dir` checkout and its worktree, the bare clone into `proj/.git` with `proj/feature`, and `repo.git` with `bw`. Each gives the table's `<main>`, including **`<store>`** for the separate-gitdir worktree and **`proj`** for the bare clone. The test fails if `git` is missing, as `sync.rs`'s tests do.
 
-   Covered by `src-tauri/src/mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings` and `orgo_install_from_a_worktree_writes_local_rules_to_the_main_checkout`, and by the shared module's `main_checkout_root_follows_only_real_worktrees`.
+   Covered by:
+   - `src-tauri/src/mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings` and `orgo_install_from_a_worktree_writes_local_rules_to_the_main_checkout`, whose fixture gains the back-pointer;
+   - `src-tauri/src/claude_settings.rs` › `main_checkout_root_follows_only_real_worktrees`, extended. Its `main_with_worktree_admin` gains the back-pointer, and it adds the bare-clone, separate-gitdir, submodule-worktree and guard rows;
+   - `claude_settings.rs` › `main_checkout_root_matches_real_git_layouts` (new).
 6. **(Reworded for S1-3.)** Existing settings files hold `model`, `hooks` and `env` keys, user allow and deny rules, a user ask rule, and one rule equal to an Orgo glob. After install:
    - each file parsed as JSON equals the original with only `permissions.ask` changed;
    - that array is the original elements in order, followed by the missing Orgo rules in `MCP_ASK` order, each once;
    - a second install leaves both files byte-identical to after the first, and returns nothing.
 
    Covered by `src-tauri/src/orgo_rules.rs` › `merge_keeps_every_user_value_and_is_idempotent`.
-7. If any one of `.mcp.json`, `.claude/settings.json` or `.claude/settings.local.json` is `{ not json`, or has a string `permissions.ask`, install errors and all three files are byte-identical to before. A missing file stays missing. Covered by `mcp.rs` › `orgo_install_refuses_and_touches_nothing_on_bad_files`.
+
+   **(Added, CR-m8.)** Hand-formatted files that already hold every `MCP_ASK` rule are left byte-for-byte unchanged by install, which returns `rules: []` and `files: []`. "Hand-formatted" means 4-space indent, keys not sorted (`"permissions"` before `"model"`), and no trailing newline, so any re-save would change them. This covers `.claude/settings.json` and `.claude/settings.local.json`, the latter at the root and in a worktree's `<main>`. It catches an unconditional save of either file. Covered by `mcp.rs` › `orgo_install_with_every_rule_present_rewrites_nothing`.
+7. **(Changed, CR-m2.)** Install errors, and all three files are byte-identical to before, when any one of these holds:
+   - `.mcp.json`, `.claude/settings.json` or `.claude/settings.local.json` is `{ not json`, or has a string `permissions.ask`;
+   - `.mcp.json` exists but can't be read: it is a directory, or it is the bytes `[0xff, 0xfe]` (not UTF-8).
+
+   The error names the file. A missing file stays missing. Other servers' installs are not part of this AC (Deferred Work). Covered by `mcp.rs` › `orgo_install_refuses_and_touches_nothing_on_bad_files` (extended).
 8. Installing `github` writes no settings file. Removing `orgo` keeps every rule in both files. Covered by `mcp.rs` › `only_orgo_adds_rules_and_remove_keeps_them`.
 9. **(S1-2, S1-5.)** Against `orgo_operations.json`, using a full-match glob matcher:
    - the only GET operation an `MCP_ASK` glob matches is `getClientBilling`;
@@ -410,10 +568,91 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 11. **(S1-1, S1-4.)** `buildLaunchCommand(provider, rolePath, { rules })` for claude and deepseek carries exactly one `--settings` argument, whose shell-unquoted value parses to `{"permissions": {"ask": rules.ask}}`. This holds in Manual mode, in Continuous mode, and with a `-p` task. Codex launches are unchanged. `rules` is a required property of the required `opts`, so a call without it is a type error, which `npx tsc --noEmit` enforces. Covered by `src/lib/__tests__/agentCommand.test.ts` › "every Claude Code launch carries Orgo's ask rules", plus a `// @ts-expect-error` case for a call without `rules`.
 12. **(S1-1.)** Launching from `AgentPicker` with a pane cwd of `<repo>/app` invokes `orgo_launch_rules` with no path, and types a command containing the same `--settings` as with cwd `<repo>`. Covered by `src/components/__tests__/agentLaunch.test.ts` › "Orgo rules do not depend on the folder an agent starts in".
 13. The guide's MCP table lists exactly the catalog's servers, by set equality after removing parenthesised text and splitting on commas. Covered by `scripts/mcpCatalogDocs.test.ts` (new) › "the guide's table lists exactly the catalog".
-14. The Orgo guide section contains every `MCP_ASK` glob (read from `orgo_rules.rs`), and mentions "subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly" and "reorder". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
+14. The Orgo guide section contains every `MCP_ASK` glob (read from `orgo_rules.rs`), and mentions "subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly", "reorder", and **(CR-m1)** "part-way" and "never the other way round". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
 15. **(S1-4.)** An Orchestrator dispatch types a `claude … -p '<task>'` command that contains the `--settings` with `MCP_ASK`, through `loadLaunchRules`. Covered by `src/components/__tests__/OrchestratorTab.test.tsx` (extended) › "orchestrator dispatches carry Orgo's ask rules".
 16. **(S1-4.)** The board's `dispatchAgent` types a command that contains the same `--settings`. Covered by `src/lib/__tests__/agentLaunch.test.ts` › "board dispatch carries Orgo's ask rules".
-17. **(S1-4.)** When the `orgo_launch_rules` invoke rejects, `prepareAgentLaunch` returns `{ ok: false }` with the "couldn't load its permission rules" message, and the Orchestrator aborts its dispatch with it. No command is typed. **(S1-6.)** If the first invoke rejects and the second resolves, the first launch is refused and the second goes through with the rules. Covered by `agentLaunch.test.ts` › "no rules, no launch" and "a failed load is retried, not cached", and `OrchestratorTab.test.tsx` › "no rules, no dispatch".
+17. **(S1-4.)** When the `orgo_launch_rules` invoke rejects, `prepareAgentLaunch` returns `{ ok: false }` with the "couldn't load its permission rules" message, and the Orchestrator aborts its dispatch with it. No command is typed. **(S1-6.)** If the first invoke rejects and the second resolves, the first launch is refused and the second goes through with the rules.
+    - **(Added, CR-m5.)** An invoke that resolves `{ ask: [] }` is refused the same way and is not cached. The next invoke, resolving `MCP_ASK`, goes through.
+
+    Covered by `agentLaunch.test.ts` › "no rules, no launch", "a failed load is retried, not cached" and "an empty rule list is no rules", and `OrchestratorTab.test.tsx` › "no rules, no dispatch".
+18. **(New, CR-2.)** Each case uses fake timers and a mocked `invoke`:
+    - **Waits.** `pty_line_editor_ready` answers `false`, `false`, `true`. `runInNewTabPane` writes the command plus `"\r"` exactly once, only after the third answer, and returns the pane id.
+    - **Can't know.** It answers `null`, or the invoke rejects. The command is written after that one call.
+    - **No line editor.** It always answers `false`. The command is written exactly once, at 10 s and not before.
+    - **Tab closed.** The tab is closed while it answers `false`. Nothing is written, and the call returns `null`.
+    - **Whole.** The written bytes are the whole command, whatever its length (a 3,000-byte command in one case).
+
+    Covered by `src/lib/__tests__/terminalCommands.test.ts` (new) › "a launch line waits for the shell's line editor", "types at once when readiness can't be known", "types anyway after 10 s", "a tab closed while waiting gets nothing".
+19. **(New, CR-2.)** On unix, through `line_editor_ready` on a real PTY from `portable_pty::native_pty_system()`, as `pty.rs`'s tests already make them:
+    - **Fresh.** A PTY running `sh -c 'sleep 3'` reads `Some(false)`.
+    - **Raw.** One running `sh -c 'stty -icanon; sleep 3'` reads `Some(true)` within 2 s.
+    - **Long line.** `bash --noprofile --rcfile <tmp rc> -i` is spawned, where the rc runs `sleep 1` and sets `PS1='READY$ '`. The test waits for `Some(true)` and then types `printf %s <5000 × "x"> | wc -c` and `"\r"`. The output contains `5000` within 10 s. 5,000 bytes is over both Linux's 4096 and macOS's 1024, and CI's `backend-macos` job runs this on a Mac.
+
+    Covered by `src-tauri/src/pty.rs` › `line_editor_ready_follows_canonical_mode` and `a_long_line_typed_once_the_line_editor_is_up_arrives_whole`.
+20. **(New, CR-2.)** An Orchestrator dispatch whose task description is 400 characters, with `pty_line_editor_ready` answering `false` then `true`:
+    - `write_pty` is not called before the `true`;
+    - it is then called once with the whole `claude … -p '<task>'` line plus `"\r"`, over 1024 bytes.
+
+    Covered by `OrchestratorTab.test.tsx` › "dispatch types the task once the shell's line editor is up".
+21. **(New, CR-3; lands whatever the owner rules.)** Every operation in `orgo_operations.json` passes this check:
+    - **In scope:** a method other than `GET`, and a path that is `/computers` or starts with `/computers/`.
+    - **Either it asks:** some `MCP_ASK` glob matches `mcp__orgo__orgo_<snake op>`.
+    - **Or it is skipped on purpose:** it is in `COMPUTER_WRITES_NOT_ASKED`, a `const` in `orgo_rules.rs`'s test module, with a comment on every entry saying why.
+    - **The skip list stays honest:** every entry exists in the fixture and is matched by no `MCP_ASK` glob.
+
+    A new `/computers` write in a refreshed fixture then fails the test until someone classifies it. The list's content depends on the ruling (see "Pending owner ruling"). Covered by `orgo_rules.rs` › `every_computer_write_asks_or_is_skipped_on_purpose`.
+
+## Pending owner ruling: CR-3, writes no ask glob catches
+
+**Not decided.** The 23 globs are frozen by the owner's approval. Nothing here changes them until the owner rules. Story 1's fix lands AC21 either way.
+
+**The finding.** These non-GET operations in `orgo_operations.json` match no `MCP_ASK` glob: `suspendComputer`, `moveComputer`, `destroyScreen`, `disableComputerSsh`, `testRunTemplate`, `buildTemplate` and `addAccountCapacity`. `*delete*` would also miss a future `destroy_computer` or `terminate_computer`.
+- Most of these are outside the sign-in's reviewed tool list today: suspend, move, templates and account. They matter if that list widens, or if Orgo is reached some other way.
+
+**Proposed additions (8), appended to `MCP_ASK` in this order:**
+
+```rust
+    // Writes the round-5 list missed (code review of a895c05, owner ruling 2026-10-__)
+    "mcp__*orgo*__*suspend*",          // suspend_computer (a stop that keeps memory)
+    "mcp__*orgo*__*destroy*",          // destroy_screen; a future destroy_computer
+    "mcp__*orgo*__*terminate*",        // a future terminate_computer
+    "mcp__*orgo*__*move_computer*",    // move_computer (to another workspace); also a future remove_computer. Not *move*: that catches mouse_move
+    "mcp__*orgo*__*run_template*",     // test_run_template, which runs a computer from a template
+    "mcp__*orgo*__*build_template*",   // build_template, which spends build time
+    "mcp__*orgo*__*add*capacity*",     // add_account_capacity (buys capacity). Not *capacity*: that catches GET get_account_capacity
+    "mcp__*orgo*__*disable*ssh*",      // disable_computer_ssh, the pair of *enable*ssh*
+```
+
+**Checked against the 87 operations on 2026-10-30**, as `mcp__orgo__orgo_<op>`, `mcp__orgo-prod__orgo_<op>` and `mcp__orgo__<op>`:
+- **Reads.** The only GET matched by the 31 globs is still `getClientBilling`.
+- **New matches.** All seven operations above.
+- **Still unmatched `/computers` writes:**
+  - the computer actions `mouseClick`, `mouseMove`, `mouseDrag`, `typeText`, `pressKey`, `scroll`, `wait`, `executeBash` and `executePython`;
+  - `resizeScreen`.
+- **New recorded misfire:** a hypothetical `get_suspend_status` read would ask.
+- **Left alone, outside `/computers`:**
+  - `publishTemplate`, `validateTemplate` and `cancelBuild` (template edits, no computer, no spend);
+  - `reduceAccountCapacity` (lowers capacity);
+  - the Clients, Files, Agent-accounts and Support writes. These are outside the sign-in list, and Boundaries already say ADE itself never calls Account, Clients or Billing endpoints.
+
+**If the owner says yes:**
+- `MCP_ASK` becomes the 31 globs above, and the guide and the context file list them (AC14 reads them from the source).
+- **AC9 gains:**
+  - matched: `suspendComputer`, `moveComputer`, `destroyScreen`, `disableComputerSsh`, `testRunTemplate`, `buildTemplate` and `addAccountCapacity`;
+  - matched, in the corpus as hypothetical: `destroy_computer` and `terminate_computer`;
+  - not matched: `get_account_capacity`, `mouse_move` and `resize_screen`;
+  - matched as a recorded misfire: `get_suspend_status`.
+- **AC21's `COMPUTER_WRITES_NOT_ASKED`** holds:
+  - the nine computer actions, commented "actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)";
+  - `resizeScreen`, commented "a screen's display size; no lifecycle or cost effect".
+- **Story 1b's `CONTINUOUS_DENY_MCP` gains `mcp__*orgo*__*run_template*`.** A template run creates a computer. That matches 1b's CLI denies, which already block `orgo templates run`. Its AC2 then also asserts `testRunTemplate` is matched.
+
+**If the owner says no:**
+- The 23 stay.
+- `COMPUTER_WRITES_NOT_ASKED` also holds `suspendComputer`, `moveComputer`, `destroyScreen` and `disableComputerSsh`, each commented "owner ruling 2026-10-__: not asked".
+- The guide's "What the rules don't cover" names them.
+
+**The question, for the owner:** "Add these 8 ask globs to Orgo's 23: suspend, destroy, terminate, move_computer, run_template, build_template, add*capacity, disable*ssh. Also deny run_template in Continuous launches (Story 1b). Yes, or no?"
 
 ## Verification (1)
 
@@ -424,7 +663,16 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 - **Subfolder, ADE launch.** In a repo with Orgo installed, open a pane in `<repo>/app`, launch an agent from the picker, and ask it to create a computer: it prompts. Repeat with Continuous on: it prompts (1b later denies instead).
 - **Subfolder, user-started.** In `<repo>/app`, type `claude` yourself and ask for a create: it prompts, from the root `settings.local.json`. `/permissions` shows the rule's source.
 - **U13 (confirm).** In an ADE-launched session, `/permissions` lists the rules from both the command line and the project files.
-- **Worktree.** Install from a pane inside a git worktree. `<main>/.claude/settings.local.json` gains the rules. A `claude` typed in the worktree prompts on a create.
+- **Worktree.** Install from a pane inside a git worktree. `<main>/.claude/settings.local.json` gains the rules, and the notice names that path (CR-m4). A `claude` typed in a subfolder of the worktree prompts on a create.
+- **(CR-2) macOS long launch lines. This check gates Done for Story 1 (ADR 0009).**
+  - QA records it as "not run: needs the running app on macOS; pending the owner".
+  - Story 1 is not called Done until the owner has run it and recorded a pass. A failure is raised and fixed before Done, not filed as a later bug.
+  - On a Mac, in the owner's own zsh with their normal rc files, check:
+    1. **DeepSeek, new tab.** With DeepSeek as the provider, pick any agent with "New tab". The agent starts with its role. The tab shows no `quote>` or `dquote>` continuation prompt, no bell, and no partial command at the prompt.
+    2. **DeepSeek, Continuous.** The same with Continuous mode on.
+    3. **Orchestrator.** Dispatch an Orchestrator task whose description is at least 400 characters. The `-p` run starts, and its first output shows it received the whole task: ask it to repeat the task's last sentence.
+    4. **Board.** One board dispatch, through `dispatchAgent`, also starts normally.
+  - **Why it gates.** This story adds 609 bytes to every launch line. On macOS a cut line breaks the main launch paths, and no automated check runs the real app with a real user's zsh on a Mac. The CI macOS job runs AC19's Rust test, which is evidence for this check but not a substitute for it.
 - **Orchestrator.** Dispatch a task that asks for a computer. The `-p` run reports the Orgo call as refused, not run.
 - **Manual mode.** "Yes, and don't ask again" on a create, then another create: it still prompts.
 - **Clean-up.** Delete every computer, check the dashboard is empty, and revoke the sign-in.
@@ -438,8 +686,13 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 - `src-tauri/src/mcp.rs`; `src-tauri/src/usage.rs` (calls the shared merge, no behaviour change).
 - `scripts/mcpCatalogDocs.test.ts`, `docs/guide/integrations.md`, `README.md`.
 - `.ade/context/orgo-permission-rules.md`, and the deferred-work entry.
+- **(CR-2)**
+  - `src/lib/terminalCommands.ts` and its new test `src/lib/__tests__/terminalCommands.test.ts`;
+  - `src-tauri/src/pty.rs` (`pty_line_editor_ready`, `line_editor_ready` and their tests), plus its `lib.rs` registration;
+  - `OrchestratorTab.tsx:327-328`, already in the slice.
+- **(CR-m3, m6, m7)** These deferred-work entries are already in `_bmad-output/deferred-work.md`, written with this amendment. The developer does not add them again.
 
-No new dependency, and no change to `Cargo.toml` features.
+No new dependency, and no change to `Cargo.toml` features. `libc` is already a unix dependency.
 
 ---
 
@@ -505,6 +758,8 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
 ```
 
 `--disallowedTools` takes a list, so it sits before `--append-system-prompt-file`, and the task stays positional. Without `continuous` there is no `--disallowedTools`, and `--settings` remains (Story 1). Codex and Ollama are unchanged, and the guide says these rules do not bind them.
+
+**(CR-2) Line length.** The deny list adds several hundred bytes to every Continuous launch line. 1b relies on Story 1's `typeWhenReady` (AC18 to AC20) and adds no typing path of its own. If the owner rules yes on CR-3, `CONTINUOUS_DENY_MCP` also gains `mcp__*orgo*__*run_template*`.
 
 **What still only asks under Continuous mode:** stop, delete, update (the end) and enable SSH, through the launch-flag ask rules from Story 1, which the agent cannot remove.
 
@@ -697,6 +952,11 @@ The verification command is the repo's, unchanged: `npx tsc --noEmit` · `npm te
 - Website mention once step 2 ships.
 - Windows, macOS and iPhone Orgo computers.
 - Refreshing `orgo_operations.json` when Orgo's spec major version changes.
+- **(CR) Recorded in `_bmad-output/deferred-work.md` with this amendment:**
+  - **m2:** every server but Orgo still reads an unreadable `.mcp.json` as empty and replaces it.
+  - **m3:** a `.claude/settings.json` that is a symbolic link is replaced by a regular file on ADE's first write (`atomic_write` renames over the link), and the link's target is left as it was.
+  - **m6:** Windows PowerShell 5.1 strips the embedded double quotes from `--settings '{"permissions":…}'`, so the JSON arrives broken. It is advisory, since Windows isn't published.
+  - **m7:** the presets and Agent-status hook writers still write `<worktree>/.claude/settings.local.json`, not `<main>`'s.
 
 ## Open Questions (owner)
 
@@ -769,3 +1029,19 @@ Decided: Q3 for Story 1 (decision 7), Q5 (6), Q7 (4), Q8 (8, widened in round 3)
 | **S1-7:** Ollama (and Codex) launches also wait on the rules load | Stated: they fail closed with it, which is harmless (constant rules, one local IPC call). |
 | **Worktree guards** | `main_checkout_root` follows the walk only when the `.git` file has a gitdir (relative resolved against the folder), `commondir` exists (resolved against the gitdir, canonicalised), the common dir is a directory named `.git`, and its parent holds it. Otherwise `<main> = <root>`. AC5 adds relative-gitdir, submodule / `--separate-git-dir` and bare-repo-worktree cases. |
 | **S1-8:** `*heal*` and `*clone*` would hide future reads; ask-side misfires unrecorded | `*heal_*` and `*clone_computer*` in both the ask and deny lists, checked against the spec and the hypothetical reads. AC9 records the harmless ask-side misfires (`*proxy*`, `*public*url*`, `*secret*`, `*billing*`, `*stop*`, `*delete*`, `*start*`). 1b records `*start*` hiding a future `get_computer_startup_log`. |
+
+**Code review of a895c05 (Story 1 as built), 2026-10-30: BLOCK. Amendment 1.**
+
+| Finding | Verdict | Decision |
+|---|---|---|
+| **CR-1 (major):** `main_checkout_root` accepts any canonical common dir named `.git`. It returns `proj` for a bare clone into `proj/.git` with `proj/feature`, and `<store>` for a worktree of `git init --separate-git-dir <store>/.git sep`. The plan said a bare repo's worktree falls back to `<root>`. | **Upheld against the plan, not the code's two answers.** | `<main>` is redefined as the folder whose `settings.local.json` Claude Code reads. Claude Code 2.1.314 was read and run with hook markers in the reviewer's own layouts, and it reads **`proj`** and **`<store>`**. git itself also lists `<store>` as the main worktree. So the code's two answers were right. The proposed fix (reject `core.bare`, or require `<parent>/.git` to resolve back) was **not adopted**. It would move the rules to `proj/feature`, which Claude Code doesn't read from a subfolder, and `<parent>/.git` *is* the common dir in both layouts. The walk gains the checks Claude Code makes and the code lacked: `<g>` under `<c>/worktrees`, the `gitdir` back-pointer, the home folder, ownership, `commondir` not a link, and no Windows. Pure file reads, no git. The plan's case list and the contract were the errors and are rewritten as a table. AC5 adds every row on hand-built folders and the git-buildable rows on real git. |
+| **CR-2 (major):** launch lines of 697 to 1065 bytes, plus an Orchestrator task, are typed into a PTY before the line editor is up. macOS's 1024-byte canonical limit cuts them. | upheld | ADE had no ready signal. A new `pty_line_editor_ready` reads the slave's `ICANON` through `tcgetattr` on the master's fd. `typeWhenReady` waits for it (50 ms polls, 10 s cap, then types as before) in `runInNewTabPane` and the Orchestrator. Shortening the globs doesn't fix a long task, a rules file needs the owner, and first-output waits fail on chatty rc files and instant prompts. AC18 to AC20 cover it, with a real-PTY 5,000-byte line test that CI's macOS job also runs. A named macOS manual check **gates Done** under ADR 0009. |
+| **CR-3 (major):** `suspendComputer`, `destroyScreen`, `moveComputer`, `testRunTemplate`, `buildTemplate`, `addAccountCapacity` and `disableComputerSsh` match no glob, and `*delete*` misses a future `destroy_computer` | **pending the owner** (the list is frozen) | 8 globs are drafted and checked (still only `getClientBilling` among reads), with a 1b deny for `run_template`. The completeness test AC21 lands either way, with a commented skip list. See "Pending owner ruling". |
+| m1: install isn't all-or-nothing after a later write fails | minor | Reworded, no rollback. All three files are validated before the first write, and the write order is local, shared, then `.mcp.json`, so a partial state is rules without the server. The guide says so, and AC14 checks it. |
+| m2: an unreadable `.mcp.json` is read as empty | minor | The Orgo path refuses it, before any write (AC7). Other servers go to deferred work. |
+| m3: a symlinked `settings.json` is replaced by `atomic_write` | minor | Deferred work. |
+| m4: the notice names both files, even when one got the rules, and doesn't say a worktree's file is elsewhere | minor | `mcp_install` returns `McpInstalled { rules, files }`. The notice names only the files that changed, absolute when outside the root, with ", which Claude Code reads in this worktree" (AC2, four cases). |
+| m5: `orgoRules.ts:28` accepts `{ask: []}` | minor | Rejected and not cached (AC17). |
+| m6: PowerShell 5.1 strips the embedded quotes | advisory | Deferred work. Windows isn't published. |
+| m7: presets and Agent-status hooks still write the worktree's local file | out of slice | Deferred work. |
+| m8: no test catches an unconditional shared save | minor | AC6: hand-formatted files already holding every rule are byte-identical after install. |

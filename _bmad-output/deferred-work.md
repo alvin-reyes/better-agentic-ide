@@ -34,3 +34,15 @@
 - source_plan: `_bmad-output/plan-agent-colors.md`
   summary: Bump the ADE Claude Code plugin's version so existing installs pick up the colored agent files.
   evidence: Owner decision 8c (2026-10-16). Story A regenerates `claude-plugin/plugins/ade/agents/*.md` but leaves `plugin.json` at 1.1.0.
+- source_plan: `_bmad-output/plan-orgo-agent-computers.md`
+  summary: Installing any MCP server but Orgo reads an unreadable `.mcp.json` (a directory, not UTF-8, permission denied) as empty and then replaces it with a file holding only the new server.
+  evidence: Pre-existing in `read_config` (`src-tauri/src/mcp.rs`), which maps every read error to an empty map. Orgo's Story 1 refuses it on the Orgo path only (code review of a895c05, CR-m2). Telling `NotFound` apart from other errors for every server fixes it.
+- source_plan: `_bmad-output/plan-orgo-agent-computers.md`
+  summary: A `.claude/settings.json` that is a symbolic link (for example to a shared team file) becomes a regular file on ADE's first write, and the link's target keeps its old content.
+  evidence: Pre-existing in `state::atomic_write`, which writes a temporary file and renames it over the path. Now also reached by the Orgo install (code review of a895c05, CR-m3). Writing through the link, or refusing it with the file named, would fix it.
+- source_plan: `_bmad-output/plan-orgo-agent-computers.md`
+  summary: On Windows PowerShell 5.1, the double quotes inside `--settings '{"permissions":{"ask":[...]}}'` are stripped when the argument reaches `claude`, so the JSON arrives broken.
+  evidence: Advisory, from the code review of a895c05 (CR-m6). PowerShell 5.1 does not escape embedded double quotes for native commands; 7.3+ does. Windows isn't published. A Windows launch path would need its own quoting, or the rules in a file.
+- source_plan: `_bmad-output/plan-orgo-agent-computers.md`
+  summary: The presets and Agent-status hook writers still write `<worktree>/.claude/settings.local.json`; from a worktree, Claude Code reads the main checkout's (`claude_settings::main_checkout_root`).
+  evidence: Code review of a895c05 (CR-m7). Claude Code 2.1.314 also loads the start folder's own `settings.local.json`, so a session started at the worktree root still sees them, but one started in a subfolder does not. Point both writers at `main_checkout_root`.
