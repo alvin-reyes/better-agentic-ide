@@ -31,7 +31,7 @@ Start Claude Code in a new terminal in that project to load what you installed. 
 Keep API keys and tokens in the vault instead of in `.env` files, shell profiles or `.mcp.json`.
 
 - **Where they live:** values go into the system keychain (Keychain on macOS, Secret Service on Linux). ADE only keeps the names, and never writes a value to disk or syncs it to other machines.
-- **How they're used:** every secret is set as an environment variable in terminals opened after you save it. MCP servers from the library refer to them as `${NAME}`, which Claude Code fills in from that environment, so a value never lands in `.mcp.json`. Agents and scripts in those terminals can read them too.
+- **How they're used:** every secret, except the few ADE keeps for itself (marked *Not in terminals*), is set as an environment variable in terminals opened after you save it. MCP servers from the library refer to them as `${NAME}`, which Claude Code fills in from that environment, so a value never lands in `.mcp.json`. Agents and scripts in those terminals can read them too.
 - **Names** use capitals, digits and underscores, like `OPENAI_API_KEY`. *Replace* stores a new value under the same name. *Delete* removes it from the keychain.
 
 Terminals that were already open keep the environment they started with. Open a new tab to pick up a new or changed secret.

@@ -16,6 +16,8 @@ interface SecretMeta {
   name: string;
   note: string;
   updatedAt: number;
+  /** False for the few secrets ADE keeps for itself (computed by the vault). */
+  inTerminals: boolean;
 }
 
 type Servers = Record<string, Record<string, unknown>>;
@@ -49,12 +51,13 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
     if (!root) return;
     invoke<Servers>("mcp_list", { project: root }).then(setInstalled).catch((e) => setError(errText(e)));
   }, [root]);
-  const loadSecrets = useCallback(() => {
-    invoke<SecretMeta[]>("vault_list").then(setSecrets).catch((e) => setError(errText(e)));
-  }, []);
+  const loadSecrets = useCallback(
+    () => invoke<SecretMeta[]>("vault_list").then((list) => { setSecrets(list); return list; }).catch((e) => { setError(errText(e)); return []; }),
+    [],
+  );
 
   useEffect(loadInstalled, [loadInstalled]);
-  useEffect(loadSecrets, [loadSecrets]);
+  useEffect(() => { loadSecrets(); }, [loadSecrets]);
   useEffect(() => {
     for (const cmd of ["npx", "uvx"]) {
       invoke<string>("check_command_exists", { command: cmd })
@@ -109,10 +112,15 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
   const saveSecret = async () => {
     setError(null);
     try {
-      await invoke("vault_set", { name: draft.name.trim(), value: draft.value, note: draft.note.trim() || null });
-      setNotice(`${draft.name.trim()} saved to the system keychain. Terminals you open from now on have it.`);
+      const name = draft.name.trim();
+      await invoke("vault_set", { name, value: draft.value, note: draft.note.trim() || null });
       setDraft({ name: "", value: "", note: "" });
-      loadSecrets();
+      const appOnly = (await loadSecrets()).some((s) => s.name === name && !s.inTerminals);
+      setNotice(
+        appOnly
+          ? `${name} saved to the system keychain. ADE uses it; terminals don't get it.`
+          : `${name} saved to the system keychain. Terminals you open from now on have it.`,
+      );
     } catch (err) {
       setError(errText(err));
     }
@@ -273,6 +281,7 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
                       <small>
                         {s.note ? `${s.note} · ` : ""}
                         {users.length ? `used by ${users.join(", ")} · ` : ""}
+                        {s.inTerminals ? "" : "Not in terminals · "}
                         saved {new Date(s.updatedAt).toLocaleDateString()}
                       </small>
                       <button className="ig-link" onClick={() => setDraft({ name: s.name, value: "", note: s.note })}>Replace</button>
@@ -283,7 +292,7 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
                 {secrets.length === 0 && <li className="contracts-empty">No secrets yet. Save API keys and tokens here instead of in .env files or shell profiles.</li>}
               </ul>
               <p className="integrations-foot">
-                Values live in your system keychain and are never written to disk or synced. Each one is set as an environment variable in terminals opened after it's saved, which is how MCP servers and agents get them. Wallet private keys don't belong here: ADE never handles them.
+                Values live in your system keychain and are never written to disk or synced. Each one, except the few ADE keeps for itself (marked <em>Not in terminals</em>), is set as an environment variable in terminals opened after it's saved, which is how MCP servers and agents get them. Wallet private keys don't belong here: ADE never handles them.
               </p>
             </>
           )}
