@@ -26,6 +26,8 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "check_command_exists":
         throw new Error("not installed");
+      case "orgo_launch_rules":
+        return { ask: ["mcp__*orgo*__*create*"] };
       case "create_directory":
         // Mirrors the Rust command, which expands ~ and returns the real path.
         return String(args.path).replace("~", "/Users/testuser");
@@ -43,6 +45,9 @@ vi.mock("@tauri-apps/api/core", () => ({
     }
   }),
 }));
+
+/** Orgo's ask rules, which every Claude Code launch carries (see orgoRules.ts). */
+const SETTINGS = `--settings '{"permissions":{"ask":["mcp__*orgo*__*create*"]}}'`;
 
 // jsdom has no layout engine, so it doesn't implement scrollIntoView.
 // AgentPicker calls it (via a ref effect) to keep the selected row visible.
@@ -145,7 +150,7 @@ describe("AgentPicker", () => {
     // POSIX shell, and the agent would launch with no role definition at all.
     expect(tauri.ptyWrites.length).toBe(1);
     expect(tauri.ptyWrites[0].text).toBe(
-      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md'\r"
+      `claude ${SETTINGS} --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md'\r`
     );
     expect(tauri.ptyWrites[0].id).toBe(11);
   });
@@ -187,7 +192,7 @@ describe("AgentPicker", () => {
 
     expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/product-manager.v6.md");
     expect(tauri.ptyWrites[0].text).toBe(
-      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/product-manager.v6.md'\r"
+      `claude ${SETTINGS} --append-system-prompt-file '/Users/testuser/.ade/roles/product-manager.v6.md'\r`
     );
   });
 

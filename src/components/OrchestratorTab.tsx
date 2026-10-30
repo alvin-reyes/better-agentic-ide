@@ -10,6 +10,7 @@ import { composeRoleMarkdown } from "../lib/agentComposition";
 import { specFromCurated, rolePathFor, ensureRoleDir } from "../lib/agentSpec";
 import { buildLaunchCommand, shellQuote } from "../lib/agentCommand";
 import { methodologyOf } from "../lib/projectSetup";
+import { loadLaunchRules, RULES_UNAVAILABLE, type LaunchRules } from "../lib/orgoRules";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
@@ -289,7 +290,14 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const methodology = await methodologyOf(projectDir);
     const rolePath = rolePathFor(spec, roleDir, methodology);
 
-    const launch = buildLaunchCommand(spec.provider, rolePath);
+    // `-p` can't show a prompt, so an asked tool is refused here, not run.
+    let rules: LaunchRules;
+    try {
+      rules = await loadLaunchRules();
+    } catch (err) {
+      return abortDispatch(`${RULES_UNAVAILABLE}: ${err}`);
+    }
+    const launch = buildLaunchCommand(spec.provider, rolePath, { rules });
     if (launch.kind === "unsupported") {
       // Currently unreachable: dispatchTask always resolves spec.provider to
       // "claude" (see specFromCurated above). Kept because buildLaunchCommand

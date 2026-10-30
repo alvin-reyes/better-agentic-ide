@@ -5,6 +5,7 @@ import { composeRoleMarkdown, toModelfile } from "./agentComposition";
 import { buildLaunchCommand, UNTYPEABLE } from "./agentCommand";
 import { ensureRoleDir, rolePathFor, type AgentSpec } from "./agentSpec";
 import { methodologyOf } from "./projectSetup";
+import { loadLaunchRules, RULES_UNAVAILABLE, type LaunchRules } from "./orgoRules";
 import { runInNewTabPane } from "./terminalCommands";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
@@ -27,6 +28,14 @@ export async function prepareAgentLaunch(
   if (!role) return { ok: false, error: "" };
   const domain = spec.domainId ? getDomain(spec.domainId) : undefined;
 
+  // Before any command is built, for every provider: no rules, no launch.
+  let rules: LaunchRules;
+  try {
+    rules = await loadLaunchRules();
+  } catch (err) {
+    return { ok: false, error: `${RULES_UNAVAILABLE}: ${err}` };
+  }
+
   let roleDir: string;
   try {
     roleDir = await ensureRoleDir();
@@ -40,6 +49,7 @@ export async function prepareAgentLaunch(
 
   const settings = useSettingsStore.getState();
   const result = buildLaunchCommand(spec.provider, rolePath, {
+    rules,
     continuous: opts.continuous,
     ollamaModel: settings.ollamaModel,
     roleId: spec.roleId,

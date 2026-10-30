@@ -27,6 +27,8 @@ export interface McpEntry {
   oauth?: boolean;
   /** Needs this on PATH. */
   needs?: "npx" | "uvx";
+  /** What installing it lets an agent do that the user should weigh first. Not searched. */
+  caution?: string;
   docs: string;
 }
 
@@ -122,6 +124,16 @@ export const MCP_CATALOG: McpEntry[] = [
     server: { command: "uvx", args: ["mcp-server-fetch"] },
     needs: "uvx",
     docs: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+  },
+  {
+    id: "orgo",
+    name: "Orgo",
+    category: "Web & browser",
+    description: "Cloud computers with a desktop, browser and shell that the agent can start, see, drive and run commands on.",
+    server: { type: "http", url: "https://www.orgo.ai/mcp" },
+    oauth: true,
+    caution: "Signing in lets Claude Code create, drive and delete computers in the Orgo workspace you choose. They cost money until deleted, and what their screens show can try to steer the agent. Agents ADE starts always ask before a computer is created, changed, stopped or deleted, even in Continuous mode. So do Claude Code sessions you start in this project, unless the rules are removed from its settings.",
+    docs: "https://docs.orgo.ai/guides/mcp",
   },
   {
     id: "context7",

@@ -7,6 +7,7 @@
 - source_plan: `_bmad-output/initiative-phone-remote/plan-agent-status.md`
   summary: Writing `.claude/settings.local.json` (presets and Agent status hooks) re-sorts its keys and reformats it, because serde_json is built without `preserve_order`.
   evidence: Pre-existing in `save_settings`; found again in the agent-status review (pass 1, finding 1b). Fixing it means enabling `preserve_order` for the crate and checking every other JSON writer.
+  also: Since Orgo's Story 1 (`_bmad-output/plan-orgo-agent-computers.md`), installing Orgo from the MCP library also re-sorts a committed `.claude/settings.json` on its first write, keeping every value (owner decision 11, "accept, fix later"). The writer is now `src-tauri/src/claude_settings.rs`. Its own small story picks crate-wide `preserve_order` (check every JSON writer and `mcp.rs`'s `["github", "mine"]` order assertion) or a settings-only writer that edits `permissions.*` arrays without reparsing the rest.
 - source_plan: `_bmad-output/initiative-phone-remote/plan-agent-status-fixes.md`
   summary: An `ade-created` record left by an enable whose settings write then failed could later let disable remove an empty settings file the user created; and projects enabled before the record existed leave an empty file or `"hooks": {}` behind on disable.
   evidence: Reported by the implementer after review pass 1 on 2026-10-14; both need an unlikely sequence and are harmless or untidy, so they were not patched.

@@ -4,6 +4,17 @@ import OrchestratorTab from "../OrchestratorTab";
 import { useOrchestratorStore } from "../../stores/orchestratorStore";
 import { useTabStore } from "../../stores/tabStore";
 import { destroyInstance } from "../../hooks/useTerminal";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { __resetLaunchRulesForTests } from "../../lib/orgoRules";
+
+/** MCP_ASK as Rust defines it, so the test passes on exactly what the app would. */
+const MCP_ASK = (() => {
+  const src = readFileSync(resolve(__dirname, "../../../src-tauri/src/orgo_rules.rs"), "utf8");
+  const block = src.slice(src.indexOf("pub const MCP_ASK"), src.indexOf("];", src.indexOf("pub const MCP_ASK")));
+  return [...block.matchAll(/"(mcp__[^"]+)"/g)].map((m) => m[1]);
+})();
+const SETTINGS = `--settings '${JSON.stringify({ permissions: { ask: MCP_ASK } })}'`;
 
 // OrchestratorTab imports @tauri-apps/api/core at module scope, and dispatch
 // drives it for real. Mock it the same way AgentPicker.test.tsx does, and
@@ -12,11 +23,16 @@ const tauri = vi.hoisted(() => ({
   ptyWrites: [] as { id: number; text: string }[],
   fileWrites: [] as { path: string; content: string }[],
   failFileWrite: false,
+  failRules: false,
+  ask: [] as string[],
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args: Record<string, unknown> = {}) => {
     switch (command) {
+      case "orgo_launch_rules":
+        if (tauri.failRules) throw new Error("ipc down");
+        return { ask: tauri.ask };
       case "create_directory":
         // Mirrors the Rust command, which expands ~ and returns the real path.
         return String(args.path).replace("~", "/Users/testuser");
@@ -102,6 +118,9 @@ beforeEach(() => {
   tauri.ptyWrites.length = 0;
   tauri.fileWrites.length = 0;
   tauri.failFileWrite = false;
+  tauri.failRules = false;
+  tauri.ask = MCP_ASK;
+  __resetLaunchRulesForTests();
 });
 
 describe("OrchestratorTab dispatch error", () => {
@@ -205,10 +224,58 @@ describe("OrchestratorTab dispatch command", () => {
     // And no leading space before "Read SPEC.md".
     expect(tauri.ptyWrites.length).toBe(1);
     expect(tauri.ptyWrites[0].text).toBe(
-      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md' " +
+      `claude ${SETTINGS} --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md' ` +
         "-p 'Read SPEC.md for the full project specification and context. Your task: Wire up OAuth'\r"
     );
     expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/architect-security.v6.md");
+  });
+
+  it("orchestrator dispatches carry Orgo's ask rules", async () => {
+    expect(MCP_ASK.length).toBeGreaterThan(20);
+    const sessionId = seedSession("Rules session", [
+      { title: "Rules auth", description: "Make a computer", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Rules auth").id, 36);
+    await act(async () => {
+      await tick();
+    });
+    expect(tauri.ptyWrites).toHaveLength(1);
+    expect(tauri.ptyWrites[0].text).toMatch(/^claude --settings '.*' --append-system-prompt-file '.*' -p '.*Make a computer'\r$/);
+    expect(tauri.ptyWrites[0].text).toContain(` ${SETTINGS} `);
+  });
+
+  it("no rules, no dispatch", async () => {
+    tauri.failRules = true;
+    const sessionId = seedSession("No rules session", [
+      { title: "No rules auth", description: "Wire up OAuth", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    const agentTabId = agentTab("No rules auth").id;
+    await attachPty(agentTabId, 37);
+    await act(async () => {
+      await tick();
+    });
+    expect(tauri.ptyWrites).toEqual([]);
+    expect(tauri.fileWrites).toEqual([]);
+    expect(useTabStore.getState().tabs.some((t) => t.id === agentTabId)).toBe(false);
+    expect(screen.getByRole("alert").textContent).toMatch(/couldn't load its permission rules, so the agent was not started/);
   });
 
   it("dispatches into the tab it created, not whichever tab the user focused", async () => {

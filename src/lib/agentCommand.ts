@@ -1,8 +1,14 @@
 import { modelTagFor } from "./agentComposition";
+import type { LaunchRules } from "./orgoRules";
 
 export type Provider = "claude" | "codex" | "deepseek" | "ollama";
 
 export interface LaunchOptions {
+  /**
+   * Permission rules every claude and deepseek launch carries, from
+   * `loadLaunchRules()`. Required, so no launch path can leave them out.
+   */
+  rules: LaunchRules;
   continuous?: boolean;
   ollamaModel?: string;
   /** Identifies the derived Ollama model, so a role keeps the same one. */
@@ -45,11 +51,19 @@ export const DEEPSEEK_MODEL = "deepseek-v4-pro";
 export const UNTYPEABLE = /[^\x20-\x7e]/;
 const UNTYPEABLE_RUNS = /[^\x20-\x7e]+/g;
 
-/** The claude invocation both the claude and deepseek providers launch. */
+/**
+ * The claude invocation both the claude and deepseek providers launch.
+ *
+ * `--settings` adds the ask rules to the session's own permission lists, on
+ * top of the user's and the project's files, in any folder and any mode:
+ * Claude Code asks for a tool an ask rule matches even when permissions are
+ * skipped, and the session cannot edit its own command line.
+ */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
+  const settings = ` --settings ${shellQuote(JSON.stringify({ permissions: { ask: opts.rules.ask } }))}`;
   const task = opts.task ? ` ${shellQuote(opts.task.replace(UNTYPEABLE_RUNS, " "))}` : "";
-  return `claude${flags} --append-system-prompt-file ${quotedPath}${task}`;
+  return `claude${flags}${settings} --append-system-prompt-file ${quotedPath}${task}`;
 }
 
 /**
@@ -68,7 +82,7 @@ function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
 export function buildLaunchCommand(
   provider: Provider,
   rolePath: string,
-  opts: LaunchOptions = {}
+  opts: LaunchOptions
 ): LaunchResult {
   const path = shellQuote(rolePath);
 
@@ -146,6 +160,13 @@ export function buildLaunchCommand(
 }
 
 /**
+ * What the probes below build with. They only ask whether a command comes
+ * back and never launch it, so they need no real rules. Not exported, so no
+ * caller that launches can borrow it.
+ */
+const PROBE_RULES: LaunchRules = { ask: [] };
+
+/**
  * Whether a provider has a verified role-delivery mechanism.
  *
  * Derived from `buildLaunchCommand` rather than kept as a second list, so the
@@ -153,7 +174,7 @@ export function buildLaunchCommand(
  * does. The path argument is irrelevant to the outcome.
  */
 export function supportsRoleDelivery(provider: Provider): boolean {
-  return buildLaunchCommand(provider, "/dev/null").kind === "command";
+  return buildLaunchCommand(provider, "/dev/null", { rules: PROBE_RULES }).kind === "command";
 }
 
 /**
@@ -162,6 +183,6 @@ export function supportsRoleDelivery(provider: Provider): boolean {
  * board's disabled Dispatch cannot drift from what launching does.
  */
 export function taskUnsupportedReason(provider: Provider): string | null {
-  const r = buildLaunchCommand(provider, "/dev/null", { task: "x" });
+  const r = buildLaunchCommand(provider, "/dev/null", { rules: PROBE_RULES, task: "x" });
   return r.kind === "unsupported" ? r.reason : null;
 }

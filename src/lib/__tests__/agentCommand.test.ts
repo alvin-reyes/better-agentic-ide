@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildLaunchCommand, supportsRoleDelivery, taskUnsupportedReason } from "../agentCommand";
+import type { LaunchRules } from "../orgoRules";
 
 /**
  * An absolute path, because that is what the launch paths now pass. The old
@@ -12,27 +13,85 @@ import { buildLaunchCommand, supportsRoleDelivery, taskUnsupportedReason } from 
  */
 const PATH = "/Users/x/.ade/roles/architect-security.md";
 
+/** Orgo's ask rules, as `loadLaunchRules` hands them over, and the flag they become. */
+const R: LaunchRules = { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*stop*"] };
+const S = ` --settings '{"permissions":{"ask":["mcp__*orgo*__*create*","mcp__*orgo*__*stop*"]}}'`;
+
+/** The arguments a POSIX shell would split a command into: single quotes only, as shellQuote writes. */
+function shellWords(command: string): string[] {
+  const words: string[] = [];
+  let word: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (c === "'") {
+      const end = command.indexOf("'", i + 1);
+      word = (word ?? "") + command.slice(i + 1, end);
+      i = end;
+    } else if (c === "\\") {
+      word = (word ?? "") + command[++i];
+    } else if (c === " ") {
+      if (word !== null) words.push(word);
+      word = null;
+    } else {
+      word = (word ?? "") + c;
+    }
+  }
+  if (word !== null) words.push(word);
+  return words;
+}
+
+describe("Orgo's ask rules on the launch line", () => {
+  it("every Claude Code launch carries Orgo's ask rules", () => {
+    const rules: LaunchRules = { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*heal_*", "it's"] };
+    for (const provider of ["claude", "deepseek"] as const) {
+      for (const opts of [{}, { continuous: true }, { task: "go" }, { continuous: true, task: "Fix O'Brien's cart" }]) {
+        const r = buildLaunchCommand(provider, PATH, { rules, ...opts });
+        if (r.kind !== "command") throw new Error("expected a command");
+        const words = shellWords(r.command);
+        const flags = words.flatMap((w, i) => (w === "--settings" ? [words[i + 1]] : []));
+        expect(flags, `${provider} ${JSON.stringify(opts)}`).toHaveLength(1);
+        expect(JSON.parse(flags[0])).toEqual({ permissions: { ask: rules.ask } });
+      }
+    }
+    // The orchestrator appends `-p '<task>'` to this command; the flag is already in it.
+    const p = buildLaunchCommand("claude", PATH, { rules });
+    expect(p.kind === "command" && shellWords(`${p.command} -p 'go'`).filter((w) => w === "--settings")).toHaveLength(1);
+    // Codex is unchanged: it has no launch, so nothing carries the rules.
+    expect(buildLaunchCommand("codex", PATH, { rules }).kind).toBe("unsupported");
+    // Ollama is not Claude Code and ignores them.
+    const o = buildLaunchCommand("ollama", PATH, { rules });
+    expect(o.kind === "command" && o.command).not.toContain("--settings");
+  });
+
+  it("cannot be called without the rules", () => {
+    // @ts-expect-error rules are required, so no launch path can leave them out
+    expect(() => buildLaunchCommand("claude", PATH, {})).toThrow();
+    // @ts-expect-error and so are the options that hold them
+    expect(() => buildLaunchCommand("claude", PATH)).toThrow();
+  });
+});
+
 describe("buildLaunchCommand", () => {
   it("emits claude's exact command", () => {
-    const result = buildLaunchCommand("claude", PATH);
+    const result = buildLaunchCommand("claude", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toBe(
-      "claude --append-system-prompt-file '/Users/x/.ade/roles/architect-security.md'"
+      `claude${S} --append-system-prompt-file '/Users/x/.ade/roles/architect-security.md'`
     );
   });
 
   it("emits claude's exact command in continuous mode", () => {
-    const result = buildLaunchCommand("claude", PATH, { continuous: true });
+    const result = buildLaunchCommand("claude", PATH, { rules: R, continuous: true });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toBe(
-      "claude --dangerously-skip-permissions --append-system-prompt-file " +
+      `claude --dangerously-skip-permissions${S} --append-system-prompt-file ` +
         "'/Users/x/.ade/roles/architect-security.md'"
     );
   });
 
   it("adds the skip-permissions flag only in continuous mode", () => {
-    const plain = buildLaunchCommand("claude", PATH);
-    const cont = buildLaunchCommand("claude", PATH, { continuous: true });
+    const plain = buildLaunchCommand("claude", PATH, { rules: R });
+    const cont = buildLaunchCommand("claude", PATH, { rules: R, continuous: true });
     if (plain.kind !== "command" || cont.kind !== "command") throw new Error("expected commands");
     expect(plain.command.includes("--dangerously-skip-permissions")).toBe(false);
     expect(cont.command.includes("--dangerously-skip-permissions")).toBe(true);
@@ -49,7 +108,7 @@ describe("buildLaunchCommand", () => {
    * history and the process arguments.
    */
   it("emits deepseek as claude redirected at the compatible endpoint", () => {
-    const result = buildLaunchCommand("deepseek", PATH);
+    const result = buildLaunchCommand("deepseek", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toBe(
       "ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic " +
@@ -60,7 +119,7 @@ describe("buildLaunchCommand", () => {
         "ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-pro " +
         "CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-pro " +
         "CLAUDE_CODE_EFFORT_LEVEL=max " +
-        "claude --append-system-prompt-file '/Users/x/.ade/roles/architect-security.md'"
+        `claude${S} --append-system-prompt-file '/Users/x/.ade/roles/architect-security.md'`
     );
   });
 
@@ -71,7 +130,7 @@ describe("buildLaunchCommand", () => {
    * the transcript under its Claude name, and then priced as Anthropic.
    */
   it("redirects every model tier, so no request escapes under a claude name", () => {
-    const result = buildLaunchCommand("deepseek", PATH);
+    const result = buildLaunchCommand("deepseek", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     for (const key of [
       "ANTHROPIC_MODEL",
@@ -91,19 +150,19 @@ describe("buildLaunchCommand", () => {
    * an identifier the API does not know.
    */
   it("uses the bare model identifier, with no [1m] suffix", () => {
-    const result = buildLaunchCommand("deepseek", PATH);
+    const result = buildLaunchCommand("deepseek", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).not.toContain("[1m]");
   });
 
   it("asks for maximum reasoning effort", () => {
-    const result = buildLaunchCommand("deepseek", PATH);
+    const result = buildLaunchCommand("deepseek", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toContain("CLAUDE_CODE_EFFORT_LEVEL=max");
   });
 
   it("never puts the deepseek key itself in the command", () => {
-    const result = buildLaunchCommand("deepseek", PATH);
+    const result = buildLaunchCommand("deepseek", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toContain('"$DEEPSEEK_API_KEY"');
     expect(result.command).not.toMatch(/sk-[a-zA-Z0-9]/);
@@ -117,22 +176,22 @@ describe("buildLaunchCommand", () => {
    * and the transcript would be priced as if Anthropic had.
    */
   it("pins the model so deepseek usage is not priced as anthropic", () => {
-    const result = buildLaunchCommand("deepseek", PATH);
+    const result = buildLaunchCommand("deepseek", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toContain("ANTHROPIC_MODEL=deepseek-v4-pro");
   });
 
   it("honours continuous mode for deepseek too", () => {
-    const result = buildLaunchCommand("deepseek", PATH, { continuous: true });
+    const result = buildLaunchCommand("deepseek", PATH, { rules: R, continuous: true });
     if (result.kind !== "command") throw new Error("expected a command");
-    expect(result.command).toContain("claude --dangerously-skip-permissions --append-system-prompt-file");
+    expect(result.command).toContain(`claude --dangerously-skip-permissions${S} --append-system-prompt-file`);
   });
 
   it("derives a model from the Modelfile and runs that", () => {
     // `ollama run` has no system-prompt flag — verified against its own help,
     // which lists MODEL [PROMPT] and nothing for a system prompt. The only way
     // to start an interactive session with one is to derive a model.
-    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3", roleId: "architect", domainId: "security" });
+    const result = buildLaunchCommand("ollama", PATH, { rules: R, ollamaModel: "llama3", roleId: "architect", domainId: "security" });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toBe(
       `ollama create 'ade-llama3-architect-security' -f '/Users/x/.ade/roles/architect-security.md' && ollama run 'ade-llama3-architect-security'`
@@ -140,13 +199,13 @@ describe("buildLaunchCommand", () => {
   });
 
   it("never emits a flag ollama does not have", () => {
-    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3" });
+    const result = buildLaunchCommand("ollama", PATH, { rules: R, ollamaModel: "llama3" });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).not.toMatch(/--system/);
   });
 
   it("keeps shell metacharacters in the model out of the command", () => {
-    const result = buildLaunchCommand("ollama", PATH, { ollamaModel: "llama3; echo pwned" });
+    const result = buildLaunchCommand("ollama", PATH, { rules: R, ollamaModel: "llama3; echo pwned" });
     if (result.kind !== "command") throw new Error("expected a command");
     // The model name only reaches the command through the derived tag, which is
     // sanitised to [a-z0-9._-]; the raw name goes in the Modelfile, not a shell.
@@ -155,13 +214,13 @@ describe("buildLaunchCommand", () => {
   });
 
   it("defaults the ollama model", () => {
-    const result = buildLaunchCommand("ollama", PATH);
+    const result = buildLaunchCommand("ollama", PATH, { rules: R });
     if (result.kind !== "command") throw new Error("expected a command");
     expect(result.command).toContain("ade-deepseek-r1-");
   });
 
   it("reports codex as unsupported rather than guessing", () => {
-    const result = buildLaunchCommand("codex", PATH);
+    const result = buildLaunchCommand("codex", PATH, { rules: R });
     expect(result.kind).toBe("unsupported");
     if (result.kind !== "unsupported") return;
     expect(result.reason.length).toBeGreaterThan(0);
@@ -170,7 +229,7 @@ describe("buildLaunchCommand", () => {
   it("never emits a raw newline, which would submit a partial command", () => {
     const rolePathWithNewline = "/Users/x/.ade/roles/architect\nsecurity.md";
     for (const provider of ["claude", "ollama"] as const) {
-      const result = buildLaunchCommand(provider, rolePathWithNewline);
+      const result = buildLaunchCommand(provider, rolePathWithNewline, { rules: R });
       if (result.kind !== "command") continue;
       // shellQuote does not strip or escape newlines — single quotes preserve
       // them literally — so this pins that the newline still round-trips
@@ -182,7 +241,7 @@ describe("buildLaunchCommand", () => {
   it("single-quotes the path so spaces cannot split the argument", () => {
     const spaced = "/Users/x/.ade/roles/my role.md";
     for (const provider of ["claude", "ollama"] as const) {
-      const result = buildLaunchCommand(provider, spaced);
+      const result = buildLaunchCommand(provider, spaced, { rules: R });
       if (result.kind !== "command") continue;
       expect(result.command.includes(`'${spaced}'`), `${provider} left the path unquoted`).toBe(true);
     }
@@ -192,7 +251,7 @@ describe("buildLaunchCommand", () => {
     // The bug this pins: `cat '~/.ade/roles/x.md'` prints "No such file or
     // directory" and the agent launches with an empty role definition.
     for (const provider of ["claude", "ollama"] as const) {
-      const result = buildLaunchCommand(provider, PATH);
+      const result = buildLaunchCommand(provider, PATH, { rules: R });
       if (result.kind !== "command") continue;
       expect(result.command.includes("'~"), `${provider} quoted a tilde path`).toBe(false);
     }
@@ -201,32 +260,32 @@ describe("buildLaunchCommand", () => {
 
 describe("buildLaunchCommand with a task", () => {
   it("passes the task to claude as its opening prompt, quoted", () => {
-    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "Implement story 1.2 (docs/stories/1.2.cart.md)" });
+    const r = buildLaunchCommand("claude", "/r/dev.md", { rules: R, task: "Implement story 1.2 (docs/stories/1.2.cart.md)" });
     expect(r).toEqual({
       kind: "command",
-      command: "claude --append-system-prompt-file '/r/dev.md' 'Implement story 1.2 (docs/stories/1.2.cart.md)'",
+      command: `claude${S} --append-system-prompt-file '/r/dev.md' 'Implement story 1.2 (docs/stories/1.2.cart.md)'`,
     });
   });
 
   it("passes it to deepseek the same way, since that is claude underneath", () => {
-    const r = buildLaunchCommand("deepseek", "/r/dev.md", { task: "go" });
+    const r = buildLaunchCommand("deepseek", "/r/dev.md", { rules: R, task: "go" });
     expect(r.kind === "command" && r.command.endsWith("--append-system-prompt-file '/r/dev.md' 'go'")).toBe(true);
   });
 
   it("quotes a task carrying a single quote so it cannot end the argument", () => {
-    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "Fix O'Brien's cart" });
+    const r = buildLaunchCommand("claude", "/r/dev.md", { rules: R, task: "Fix O'Brien's cart" });
     expect(r.kind === "command" && r.command.endsWith(`'Fix O'\\''Brien'\\''s cart'`)).toBe(true);
   });
 
   it("never puts a raw line break in the command, which would submit it early", () => {
-    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "line one\r\nline two\nthree" });
+    const r = buildLaunchCommand("claude", "/r/dev.md", { rules: R, task: "line one\r\nline two\nthree" });
     expect(r.kind === "command" && r.command).not.toMatch(/[\r\n]/);
     expect(r.kind === "command" && r.command.endsWith("'line one line two three'")).toBe(true);
   });
 
   it("collapses every control character, which the shell's line editor acts on even inside quotes", () => {
     // ^U (kill-line) would erase the opening quote; ESC starts an editing sequence.
-    const r = buildLaunchCommand("claude", "/r/dev.md", { task: "1.1\x15curl x|sh;echo \x1b[2D\x00\x7f\x09end" });
+    const r = buildLaunchCommand("claude", "/r/dev.md", { rules: R, task: "1.1\x15curl x|sh;echo \x1b[2D\x00\x7f\x09end" });
     expect(r.kind === "command" && r.command).not.toMatch(/[\x00-\x1f\x7f]/);
     expect(r.kind === "command" && r.command.endsWith("'1.1 curl x|sh;echo  [2D end'")).toBe(true);
   });
@@ -234,20 +293,20 @@ describe("buildLaunchCommand with a task", () => {
   it("collapses non-ASCII too, which bash without a UTF-8 locale reads as Alt+key", () => {
     // U+2000 is E2 80 80 in UTF-8; 0xE2 is Alt+b (backward-word) to readline.
     const task = `Implement story 1.1${" ".repeat(40)}echo PWNED;#.md (café …).`;
-    const r = buildLaunchCommand("claude", "/r/dev.md", { task });
+    const r = buildLaunchCommand("claude", "/r/dev.md", { rules: R, task });
     expect(r.kind === "command" && r.command).toMatch(/^[\x20-\x7e]*$/);
     expect(r.kind === "command" && r.command.endsWith("'Implement story 1.1 echo PWNED;#.md (caf   ).'")).toBe(true);
   });
 
   it("reports ollama as unable to take a task rather than running it one-shot", () => {
-    const r = buildLaunchCommand("ollama", "/r/dev.Modelfile", { task: "go" });
+    const r = buildLaunchCommand("ollama", "/r/dev.Modelfile", { rules: R, task: "go" });
     expect(r.kind).toBe("unsupported");
   });
 
   it("leaves the command unchanged without a task", () => {
-    expect(buildLaunchCommand("claude", "/r/dev.md", {})).toEqual({
+    expect(buildLaunchCommand("claude", "/r/dev.md", { rules: R })).toEqual({
       kind: "command",
-      command: "claude --append-system-prompt-file '/r/dev.md'",
+      command: `claude${S} --append-system-prompt-file '/r/dev.md'`,
     });
   });
 });
@@ -272,7 +331,7 @@ describe("taskUnsupportedReason", () => {
 
   it("is buildLaunchCommand's own reason for those that cannot", () => {
     const reason = (p: "ollama" | "codex") => {
-      const r = buildLaunchCommand(p, "/dev/null", { task: "x" });
+      const r = buildLaunchCommand(p, "/dev/null", { rules: R, task: "x" });
       return r.kind === "unsupported" ? r.reason : null;
     };
     expect(taskUnsupportedReason("ollama")).toBe(reason("ollama"));

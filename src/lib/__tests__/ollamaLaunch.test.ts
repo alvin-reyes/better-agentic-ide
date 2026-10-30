@@ -46,7 +46,7 @@ describe("buildLaunchCommand for ollama", () => {
   const PATH = "/Users/x/.ade/roles/architect-security.md";
 
   it("derives a model from the Modelfile and runs it", () => {
-    const r = buildLaunchCommand("ollama", PATH, { ollamaModel: "deepseek-r1" });
+    const r = buildLaunchCommand("ollama", PATH, { rules: { ask: [] }, ollamaModel: "deepseek-r1" });
     expect(r.kind).toBe("command");
     if (r.kind !== "command") return;
     expect(r.command).toMatch(/ollama create .* -f '.*' && ollama run /);
@@ -54,7 +54,7 @@ describe("buildLaunchCommand for ollama", () => {
   });
 
   it("quotes the path and the model, both of which are user-controlled", () => {
-    const r = buildLaunchCommand("ollama", "/tmp/a b.md", { ollamaModel: "evil; rm -rf /" });
+    const r = buildLaunchCommand("ollama", "/tmp/a b.md", { rules: { ask: [] }, ollamaModel: "evil; rm -rf /" });
     if (r.kind !== "command") throw new Error("expected a command");
     expect(r.command).toContain("'/tmp/a b.md'");
     expect(r.command).not.toMatch(/; rm -rf \/(?!')/);
