@@ -3,7 +3,7 @@ title: 'A CLI library for agents, guarded by a command hook (v1: gh, stripe, ver
 type: 'feature'
 ticket: ''
 created: '2026-10-29'
-status: 'draft'
+status: 'approved'
 baseline_revision: '5d73348eeb80677a8adb2d2e4a59bfd6105320f4'
 route: 'full'
 route_source: 'auto'
@@ -25,9 +25,9 @@ The plan is now a security component. Its first two stories are the guard and it
 | 2 | The guard on every ADE launch: one `--settings` value carrying the rules, the guard and `disableAllHooks: false`; a headless option; a Claude Code version check | 1, and Q1 (the Orgo AC11 amendment) | no |
 | 3 | The CLI tools tab: detect, typed install, sign-in, credential notes | — | the tab could ship with gh alone |
 | 4 | Tell agents, for gh: the guard and rules in the main checkout's root `settings.local.json`, and a skill Rust writes | 1, 3 (not 2); Orgo Story 1 (`a895c05`) merged | — |
-| 5 | stripe through the guard | 4 | **recommended next cut** |
-| 6 | vercel through the guard (every command asks, as the product doc says) | 4 | cuttable |
-| 7 | wrangler through the guard | 4 | cuttable |
+| 5 | stripe through the guard | 4 | **deferred** (owner, Q4): waits for a named need |
+| 6 | vercel through the guard (every command asks, as the product doc says) | 4 | **deferred** (owner, Q4) |
+| 7 | wrangler through the guard | 4 | **deferred** (owner, Q4) |
 | 8 | Quarterly fixture re-capture: a named, recurring story (P6(c)) | 1 | no; it recurs |
 
 **Recommended cut** (scope note): build Stories 1 to 4 for gh, use them, and only then decide on 5 to 7. gh is the CLI with a named project, ADE's own repository (P5).
@@ -55,6 +55,17 @@ The plan is now a security component. Its first two stories are the guard and it
 5. (2026-10-29) **ADE never runs an installer, or `curl | sh`, on its own.**
 6. (2026-10-29, accepted for Orgo, applied here) **The first rules merge may reorder a settings file, keeping every value.** Key-order preservation is its own story.
 7. (2026-10-30) **ADR 0012 applies:** this plan carries a Principles check.
+8. (2026-10-30) **Approval, after review round 6 (PASS WITH MINORS) at 5c34845.** The owner took every recommendation in Q1–Q8:
+   - **Q1:** amend Orgo's AC11 as quoted under Coordination (the AC11 text is applied on `plan/orgo-agent-computers`, not here).
+   - **Q2:** in Continuous mode the guard asks. On any Claude Code version where V1 fails, it denies under `bypassPermissions` instead.
+   - **Q3:** fail toward asking.
+   - **Q4:** gh first. Stories 1–4 are built now. Stories 5–7 (stripe, vercel, wrangler) wait for a named need.
+   - **Q5:** the Vercel MCP and Chrome DevTools stay deferred.
+   - **Q6:** every vercel command asks.
+   - **Q7:** the shipped-MCP ask rules move to the MCP audit plan, with the findings handed over.
+   - **Q8:** typed installs for every CLI and for Orgo 1c.
+
+   ADR 0011 is accepted. Stories 1 and 4 still need Orgo Story 1 merged first. The deferred items are in `_bmad-output/deferred-work.md`.
 
 </frozen-after-approval>
 
@@ -1001,6 +1012,8 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 
 ## Deferred Work
 
+Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
+
 - **The other 15 CLIs**, on the guard, each named per P5 first. Round-1 research is in git at `20d5f79`. Orgo 1c is among them, once `--profile` asks.
 - **MCP additions, each waiting for a named project (P5):**
   - **Vercel:** ask on the 100 non-read tools across 48 verbs, plus secret gets by name: `get_project_env`, `get_shared_env_var`, `get_edge_config_token(s)`, `get_access_to_vercel_url`, `get_bypass_ip`, `get_project_deletion_link`, `get_cert_by_id`, **`list_feature_flag_sdk_keys`** and **`get_edge_config_items`**. Plus the guard on `mcp__vercel__.*`, the inverted test over 248 tools, and the fixture at `scratchpad/web/vercel-tools.txt`.
@@ -1014,6 +1027,8 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 - Windows; key-order preservation; a Continuous deny set for money moves (product doc Q6); vendor agent setups.
 
 ## Open Questions (owner)
+
+**All eight decided on 2026-10-30, each as recommended** (Owner's decisions, item 8). The text below is kept as the owner read it.
 
 - **Q1. Amend Orgo's approved AC11 (built at `a895c05`).**
   - The amendment is the quoted text under Coordination: `permissions.ask` = `rules.ask`, plus `disableAllHooks: false`, plus exactly one guard entry, plus `headless`.
