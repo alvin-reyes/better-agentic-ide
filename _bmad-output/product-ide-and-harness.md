@@ -2,15 +2,29 @@
 title: 'ADE is an IDE for coding agents and a harness for Claude Code'
 type: 'product-decision'
 created: '2026-10-29'
-status: 'draft'
-owner_decision: 'pending'
+status: 'approved'
+owner_decision: 'approved 2026-10-30'
 baseline_revision: '5d73348eeb80677a8adb2d2e4a59bfd6105320f4'
 review_loop_iteration: 3
+context: ['.ade/context/decisions/0012-ade-is-an-ide-plus-a-harness-principles-p1-p6.md']
 ---
 
 # ADE is an IDE for coding agents and a harness for Claude Code
 
-The owner said, "Seems this is becoming an IDE with a harness." This doc makes that explicit, sets principles for new scope, checks everything in flight against them, and proposes a build order. It is a decision tool, not a PRD. Nothing here is approved until the owner answers section 9. Revision 3 answers the three reviews (of 5ce104e, 4b0b755 and 5f0e90d) and records the owner's decisions of 2026-10-29. Plans are read at: Orgo `f32ca1e` (round 5), CLI library `8a4938e`, hover previews `dc7ebb1`, WebGL `31ce6f8`.
+The owner said, "Seems this is becoming an IDE with a harness." This doc makes that explicit, sets principles for new scope, checks everything in flight against them, and proposes a build order. It is a decision tool, not a PRD. The owner approved it on 2026-10-30 (below); the principles are ADR 0012. Revision 3 answers the three reviews (of 5ce104e, 4b0b755 and 5f0e90d) and records the owner's decisions of 2026-10-29. Plans are read at: Orgo `f32ca1e` (round 5), CLI library `8a4938e`, hover previews `dc7ebb1`, WebGL `31ce6f8`.
+
+## Owner's decisions (2026-10-30)
+
+Approved after the third adversarial review (PASS WITH MINORS on 5f0e90d, minors applied at 454528c).
+
+1. **Principles: adopt as ADR 0012.** P1–P6 (§4), with the override clause and the known-exceptions list, are recorded in `.ade/context/decisions/0012-ade-is-an-ide-plus-a-harness-principles-p1-p6.md`. The exceptions list stays here, in §4. Every plan from now on carries a "Principles check" section answering P1–P6, and the adversarial reviewer tests it. (Q2)
+2. **Tagline: approve, build the docs story.** "The IDE for coding agents, and the harness for Claude Code." and the README opening paragraph (§8) ship as one small docs story covering the README and the website's hero kicker. "Verified, not vibed." stays the website's h1. (Q1)
+3. **Follow-ups for the queue, each its own small plan** (§7):
+   - an audit of the shipped MCP entries, with ask rules for them;
+   - pinning the `npx`/`uvx` MCP package versions (Q10);
+   - hover cards on secret files (`.env*`, `*.pem`, `*.key`) show file details only, not content (Q9);
+   - freezing the Orchestrator's scope (Q8).
+4. **Orgo native panel: defer it.** Orgo Stories 2–6 are deferred on P4. This sets aside Orgo decision 2's panel and purposes 2–4 of Orgo decision 1; it returns only as a new plan. (Q5)
 
 ## 1. What ADE is
 
@@ -86,8 +100,8 @@ The jobs are listed because principle P1 requires a proposal to serve one of the
 |---|---|---|
 | The vault exports every secret into every new ADE terminal | P3 (readable by any agent there) | By design and stated in the guide. Orgo plan, Deferred: "keep a secret out of terminals". |
 | The Orchestrator stores the Anthropic API key in plain-text settings (`settingsStore.ts:504`, read at `anthropic.ts:190`; only sync strips it). The DeepSeek key beside it uses the vault. | P3 | Defect. The owner approved the fix on 2026-10-29; it is being planned. |
-| Nine MCP entries run `npx`/`uvx` packages with no pinned version, so what runs changes without a user action. Chrome DevTools would be the tenth. | P2 (install) | Shipped. See Q10. |
-| Shipped MCP entries that can move money, deploy or delete without a prompt | P2 | Shipped. See §6, audit. |
+| Nine MCP entries run `npx`/`uvx` packages with no pinned version, so what runs changes without a user action. Chrome DevTools would be the tenth. | P2 (install) | Shipped. The owner decided on 2026-10-30 to pin them (Q10, §7). |
+| Shipped MCP entries that can move money, deploy or delete without a prompt | P2 | Shipped. Audit and ask rules queued (owner, 2026-10-30; §6, §7). |
 | The phone remote builds its own relay and app, with accounts later, instead of using Claude Code's Remote Control | P4 | Owner decision of 2026-10-14: "an admin can disable" Remote Control. |
 
 ## 5. What we won't build
@@ -134,20 +148,20 @@ How the CLIs measure up:
 | Item | Verdict | Reason (principles) | Reverses |
 |---|---|---|---|
 | WebGL for visible terminals (approved, in build) | **Fits** | P1 Parallel: the visible terminal keeps WebGL past the 8th. P5: the owner's report. Whether the DOM fallback *is* the distortion is unconfirmed; that is its first manual check. | — |
-| Hover previews (Stories 1–2 Done, 3 in build, 4–5 next) | **Fits** | P1 Check: look before opening. P5: the owner asked for it. P6: bounded reads, inert previews, no new dependency. P3 note: hovering a path such as `.env` shows its first lines without a click, which matters when screen-sharing (Q9). | — |
+| Hover previews (Stories 1–2 Done, 3 in build, 4–5 next) | **Fits** | P1 Check: look before opening. P5: the owner asked for it. P6: bounded reads, inert previews, no new dependency. P3 note: hovering a path such as `.env` shows its first lines without a click, which matters when screen-sharing. Follow-up decided 2026-10-30 (Q9, §7 item 11). | — |
 | Orgo Story 1: hosted MCP, ask rules in files and in `--settings` on every ADE launch (in revision) | **Fits** | P1 Parallel/Done: agents test UI on a clean desktop and fan out. P2 ask rules. P3 no key in ADE. P4 vendor-hosted. P6(b): `src-tauri/src/orgo_operations.json`, the offline operations fixture that AC9 tests every rule against. P5: the owner's own use; the owner asked for Orgo directly, for all four purposes (decision 1). Its launch-flag rules serve every later rule set. The owner accepted (decision 11, 2026-10-29) that the first install may reorder a committed `.claude/settings.json`, with key order fixed in a later story. | — |
 | Orgo 1b: Continuous denies on the launch line | **Fits** | P2: the guard a Continuous agent cannot delete. Build it for Orgo now; other tables reuse the launch flag later (Q6). | — |
 | Orgo 1c: Orgo CLI (on hold) | **Fits, once `--profile` asks** | The CLI rule above. P5: the owner's own use (decisions 1 and 10). When the owner lifts the hold, it ships as the CLI library's `orgo` entry, with the library's install form. | Decision 10's install form, only if the owner picks typed installs (Q4). |
-| Orgo step 2: native panel, Stories 2–6 | **Defer** | P4: ADE's own copy of Orgo's desktop and lifecycle. P5 is met (the owner's own use, decisions 1–2), so the deferral rests on P4 alone. Approving the panel means recording a P4 override. Even a read-only list of computers in the fleet view needs a REST client, the vault key read in Rust behind a `vault_get` allowlist, and a new HTTP crate (`src-tauri` has none today). Any return is a new plan. | Decision 2, "then a native panel". Also decision 1's purposes 2–4 as stated there: Claude Code running remotely from an ADE tab, a fleet shown in the fleet view with cost, and a throwaway sandbox. Purpose 1, computer use, stays through Story 1. |
+| Orgo step 2: native panel, Stories 2–6 | **Defer** (owner, 2026-10-30) | P4: ADE's own copy of Orgo's desktop and lifecycle. P5 is met (the owner's own use, decisions 1–2), so the deferral rests on P4 alone. Approving the panel means recording a P4 override. Even a read-only list of computers in the fleet view needs a REST client, the vault key read in Rust behind a `vault_get` allowlist, and a new HTTP crate (`src-tauri` has none today). Any return is a new plan. | Decision 2, "then a native panel". Also decision 1's purposes 2–4 as stated there: Claude Code running remotely from an ADE tab, a fleet shown in the fleet view with cost, and a throwaway sandbox. Purpose 1, computer use, stays through Story 1. |
 | CLI library v1: tab, rules, skills and the classifying hook, for gh, stripe, vercel and wrangler (owner decision, 2026-10-29) | **Fits** | P5: gh is ADE's own repo, whose work lands as GitHub PRs (#67 at baseline); stripe, vercel and wrangler are the owner's choice (owner's own use). P2: `gh secret set`, `gh release delete`, `vercel --prod` and `wrangler deploy` run unprompted in Continuous mode today. In Continuous mode the hook counts only after the C16 check. P6: each CLI needs its help fixture and the unclassified-command test. | — (the owner narrowed "all four groups" for v1) |
 | fly, supabase, netlify, psql, sqlite3, duckdb | **Later** | fly keeps its P5 (ADE's relay, phone-watch story 11, "Deploy the relay to Fly.io"). The others: P5 owner to name. | — |
 | aws, gcloud, az, doctl, terraform; e2b, modal, docker | **Later, if named** | P5: owner to name. Their tables can meet P6 once fixtures exist. docker's rm, prune and push ask (P2). | — |
 | MCP additions: Vercel, Cloudflare, Figma, AWS Knowledge | **Fits if named** | P2 holds: Vercel and Figma add ask rules, Cloudflare asks on every `execute` call, and AWS Knowledge is read-only. P5: owner to name each. | — |
 | MCP addition: Chrome DevTools | **Fits if named and pinned** | Local and isolated, with no sign-ins (P3). It fails P2 (install) while it floats `@latest`, like nine shipped entries (Q10). P5: owner to name. | — |
 | MCP addition: Atlassian | **Unverified** | If its v2 server exposes fixed discovery and execute tools, an ask rule on the execute tool passes P2, as Cloudflare's does. If not, writes run unprompted in Continuous mode and it needs an owner override. P5: owner to name. | — |
-| Shipped-MCP audit (not in either plan) | **First after Orgo 1 and 1b** | It needs the shared settings merge and launch flag that Orgo Story 1 builds, and Story 1 is in its third review round. Moving the mechanism into the audit would re-plan reviewed work. P2, expected failures to be verified by the audit story: Stripe (money); Supabase (deletes, billable branches); GitHub (merges and file writes, bounded by the PAT's scope; workflow runs may not be in its default toolsets); DBHub (any SQL its user may run); Airtable (record deletes); Playwright (submits any form, a risk that depends on its browser profile's sign-ins). To check: Notion, Linear, Sentry. Filesystem writes fall outside Claude Code's `Edit` rules, so the archive deny doesn't cover them. Pass: Git, Memory, Fetch, Context7, Sequential thinking. Supersedes CLI plan Q6. | — |
+| Shipped-MCP audit (not in either plan; owner, 2026-10-30) | **First after Orgo 1 and 1b** | It needs the shared settings merge and launch flag that Orgo Story 1 builds, and Story 1 is in its third review round. Moving the mechanism into the audit would re-plan reviewed work. P2, expected failures to be verified by the audit story: Stripe (money); Supabase (deletes, billable branches); GitHub (merges and file writes, bounded by the PAT's scope; workflow runs may not be in its default toolsets); DBHub (any SQL its user may run); Airtable (record deletes); Playwright (submits any form, a risk that depends on its browser profile's sign-ins). To check: Notion, Linear, Sentry. Filesystem writes fall outside Claude Code's `Edit` rules, so the archive deny doesn't cover them. Pass: Git, Memory, Fetch, Context7, Sequential thinking. Supersedes CLI plan Q6. | — |
 | Phone remote (approved; 5a onward) | **Fits, with the P4 override** | P1 Attention. P2: control is off per tab and needs Face ID. P3: end-to-end, and the relay reads no content. P4 fails, overridden on 2026-10-14. P5: the owner's own use. P6: covered by the five-line command. | — |
-| Orchestrator tab | **Freeze** | P3 defect (key fix first). P1 overlaps the stage board's Dispatch. | — |
+| Orchestrator tab | **Freeze** (owner, 2026-10-30) | P3 defect (key fix first). P1 overlaps the stage board's Dispatch. Retire it or fold it into Dispatch: still open (Q8). | — |
 
 ## 7. Build queue
 
@@ -156,24 +170,33 @@ One order across everything in flight or proposed. Sizes are rough estimates (S:
 1. **WebGL fix.** In build. S.
 2. **Hover Story 3** (images). In build. S.
 3. **Orchestrator key into the vault.** P3 defect, approved 2026-10-29, being planned. S.
-4. **Docs story:** tagline and README paragraph, after Q1. S.
-5. **Orgo Story 1.** In revision. M.
-6. **Orgo 1b.** S.
-7. **Shipped-MCP audit**, ask rules through Story 1's merge and launch flag. L.
-8. **Hover Stories 4 (PDF) and 5 (HTML).** M each.
-9. **CLI library v1:** tab, rules, skills and the classifying hook on the launch flag, for gh, stripe, vercel and wrangler. L. Before the hook counts toward P2 in Continuous mode, the C16 check and the `--settings` hooks check must pass.
-10. **Settings key-order story** (Orgo decision 11). S.
-11. **Later and named additions:** fly and other CLIs, MCP servers, and Orgo 1c once its hold is lifted. S each.
+4. **Orchestrator scope freeze** (owner, 2026-10-30): its own small plan states what the freeze holds; whether to retire it or fold it into Dispatch stays open (Q8). S.
+5. **Docs story:** the tagline and README paragraph (§8) in the README and the website's hero kicker; the h1 stays (owner, 2026-10-30). S.
+6. **Principles check in this repo's plan format** (ADR 0012). This repo's plans need the section, but it must not go into ADE's product templates (`src/lib/projectMethodology.ts`), because other ADE projects aren't bound by ADE's own product principles, nor into the vendored `bmad-build` plan template, which a BMAD update overwrites. A repo-local mechanism (for example a committed `_bmad/custom/bmad-build.toml` override) is for that plan to choose. Until it lands, plan authors add the section by hand. S.
+7. **MCP version pinning** (owner, 2026-10-30): pin all nine `npx`/`uvx` entries, and Chrome DevTools if it is added. One catalog-wide story; it does not wait for Orgo. S.
+8. **Orgo Story 1.** In revision. M.
+9. **Orgo 1b.** S.
+10. **Shipped-MCP audit** and ask rules for the shipped entries, through Story 1's merge and launch flag (owner, 2026-10-30). L.
+11. **Hover on secret files** (owner, 2026-10-30): for `.env*`, `*.pem` and `*.key`, the card shows file details only, not content. Before Stories 4 and 5, which extend the same card. S.
+12. **Hover Stories 4 (PDF) and 5 (HTML).** M each.
+13. **CLI library v1:** tab, rules, skills and the classifying hook on the launch flag, for gh, stripe, vercel and wrangler. L. Before the hook counts toward P2 in Continuous mode, the C16 check and the `--settings` hooks check must pass.
+14. **Settings key-order story** (Orgo decision 11). S.
+15. **Later and named additions:** fly and other CLIs, MCP servers, and Orgo 1c once its hold is lifted. S each.
 
 **Separate track: phone remote 5a onward.** L: twelve watch stories, then the steer and public-service epics. It runs in parallel, because its slices sit mostly in `relay/` and `mobile/`.
 
-**ADR numbers:**
+**ADR numbers** (provisional until merge, re-checked then):
 - 0008 is the hover ADR (`plan/file-hover-preview`);
 - 0009, "manual checks don't gate Done", is on `docs/claude-md-paths` and unmerged;
-- the Orgo plan proposes 0010 and the CLI plan 0011;
-- the principles ADR would be 0012.
+- 0010 is the Orgo ADR, accepted on its branch, and 0011 the CLI plan's, proposed;
+- 0012 is the principles ADR, accepted with this doc;
+- 0013 is the Orchestrator key ADR, proposed (`fix/anthropic-key-in-vault`).
+
+`hermes-openclaw-plan` and `code-viewer-panel` also claim 0008 and 0009.
 
 ## 8. Positioning
+
+Approved by the owner on 2026-10-30; it ships as the docs story (§7, item 5).
 
 **Tagline:** *The IDE for coding agents, and the harness for Claude Code.* It replaces "The terminal for building products with AI" (README) and the website's hero kicker, "The IDE built for Claude Code developers and architects". The website's h1, "Verified, not vibed.", stays.
 
@@ -183,13 +206,15 @@ One order across everything in flight or proposed. Sizes are rough estimates (S:
 
 ## 9. Open questions for the owner
 
-1. **Approve the tagline and the README paragraph?** Recommend yes, as one docs story covering the README and the website kicker.
-2. **Adopt the principles, the override clause and the exceptions list?** Recommend yes, as ADR 0012 written by the architect. Every plan would then carry a P1–P6 check for the adversarial reviewer.
-3. **The CLI hook's installation.** Decided on 2026-10-29: v1 is gh, stripe, vercel and wrangler, with a classifying PreToolUse hook. Recommend putting the hook on the `--settings` launch flag (amending Orgo AC11), with its binary outside the project and a copy in `.claude/settings.local.json`, and counting it toward P2 in Continuous mode only after the C16 check passes.
-4. **One install form for every CLI?** Recommend typed installs (the CLI plan's form). Both typed and run-after-confirm meet P2, so this is about consistency. Orgo 1c follows the choice once `--profile` asks.
-5. **Defer Orgo step 2?** Recommend yes, on P4. This sets aside decision 2's panel and purposes 2–4 of decision 1. If you want the panel, record a P4 override, and it returns as a new plan.
-6. **Reuse the launch flag for other rules?** Recommend yes, after Orgo 1b. The audit's ask rules and the CLI plan's "money moves" denies would go on every ADE Claude Code launch.
-7. **Which projects need the later CLIs and each MCP addition?** Recommend building only what you name. Atlassian may also need a P2 override.
-8. **Orchestrator.** The key fix is approved. Recommend freezing its scope, and later deciding whether to retire it or fold it into the stage board's Dispatch.
-9. **Hover on secret files.** Recommend a small follow-up: for `.env*`, `*.pem` and `*.key`, the card shows file details only, not content.
-10. **Pin MCP package versions?** Recommend one catalog-wide story that pins all nine `npx`/`uvx` entries, plus Chrome DevTools if it is added. Otherwise, record floating versions as a permanent P2 exception.
+Q1, Q2, Q3, Q5, Q8 (the freeze), Q9 and Q10 are decided. Q4, Q6, Q7 and the second half of Q8 stay open.
+
+1. **Approve the tagline and the README paragraph?** *Decided 2026-10-30: yes, as one docs story covering the README and the website kicker.*
+2. **Adopt the principles, the override clause and the exceptions list?** *Decided 2026-10-30: yes, as ADR 0012.* Every plan carries a P1–P6 check for the adversarial reviewer.
+3. **The CLI hook's installation.** *Decided on 2026-10-29:* v1 is gh, stripe, vercel and wrangler, with a classifying PreToolUse hook. Recommend putting the hook on the `--settings` launch flag (amending Orgo AC11), with its binary outside the project and a copy in `.claude/settings.local.json`, and counting it toward P2 in Continuous mode only after the C16 check passes.
+4. **One install form for every CLI?** *Open.* Recommend typed installs (the CLI plan's form). Both typed and run-after-confirm meet P2, so this is about consistency. Orgo 1c follows the choice once `--profile` asks.
+5. **Defer Orgo step 2?** *Decided 2026-10-30: deferred, on P4.* This sets aside decision 2's panel and purposes 2–4 of decision 1. It returns only as a new plan.
+6. **Reuse the launch flag for other rules?** *Open.* Recommend yes, after Orgo 1b. The audit's ask rules and the CLI plan's "money moves" denies would go on every ADE Claude Code launch.
+7. **Which projects need the later CLIs and each MCP addition?** *Open.* Recommend building only what you name. Atlassian may also need a P2 override.
+8. **Orchestrator.** The key fix is approved. *Decided 2026-10-30: freeze its scope.* *Open:* whether to retire it later or fold it into the stage board's Dispatch.
+9. **Hover on secret files.** *Decided 2026-10-30: a small follow-up.* For `.env*`, `*.pem` and `*.key`, the card shows file details only, not content.
+10. **Pin MCP package versions?** *Decided 2026-10-30: pin.* One catalog-wide story pins all nine `npx`/`uvx` entries, plus Chrome DevTools if it is added (which is Q7).
