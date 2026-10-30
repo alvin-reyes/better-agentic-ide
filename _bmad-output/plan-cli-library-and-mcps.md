@@ -1023,7 +1023,7 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 - **Q2. In Continuous mode, the guard asks.** Recommend ask, per decision 4, counted only once V1 passes. If V1 fails on a version users run, recommend `deny` under `bypassPermissions` for that version.
 - **Q3. Fail toward asking: the real cost.** Recommend yes.
 
-  **False asks that remain after round 5.** All of them come from what the agent types on the command line. Text read from disk (scripts, sourced files, `package.json`) triggers these only when it names a guarded CLI.
+  **False asks that remain after round 6.** All of them come from what the agent types on the command line. Text read from disk (scripts, sourced files, `package.json`) triggers these only when it names a guarded CLI.
   - **The largest category: a path-form name whose directory is an unquoted variable that doesn't strictly resolve** (`$OUT/bin/tool`, `$WORK/run.sh`). Since round 6 resolves chained literal assignments on the same line, this is mostly a variable set in an earlier tool call.
   - A command name that is a variable the guard can't strictly resolve: `"$EDITOR" f`, `$PYTHON x.py` when `PYTHON` was set in an earlier tool call, `"$@"` as a command. (`PY=python3; $PY x.py` on one line resolves and passes.)
   - A script or sourced path built on a variable other than `$HOME` or `~`: `. "$NVM_DIR/nvm.sh"`. (`. "$HOME/.cargo/env"` passes.)
@@ -1038,7 +1038,8 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 
   **No longer asking:**
   - an `echo`, `printf`, `grep` or `rg`, or a commit message that quotes a risky command: **round 3** (the skip list);
-  - ordinary wrapper scripts (`gradlew`, `mvnw`, `nvm.sh`, cargo's env, `run() { "$@"; }`, `./configure`) and binaries built on the line: **round 5**.
+  - ordinary wrapper scripts (`gradlew`, `mvnw`, `nvm.sh`, cargo's env, `run() { "$@"; }`, `./configure`) and binaries built on the line: **round 5**;
+  - chained path variables on one line (`S=/x; P=$S/y; $P/run`), `$HOME`/`~` script paths, a built binary on a line that also runs a guarded command, and `vercel` as a file or package name: **round 6**.
 
   **The rate.** Two data points, neither of them a measurement of the guard itself:
   - **The reviewer's model:** about **0.86% on 1,856 local Bash calls** (round 6). It is approximate, because it is a regex model of the rules, not the guard. It is biased, because most of the sample is review sessions full of scratchpad path variables. And it was taken before round 6 resolved chained assignments and narrowed the missing-path rule, which remove most of its largest category.
