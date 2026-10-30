@@ -24,7 +24,7 @@ The plan is now a security component. Its first two stories are the guard and it
 | 1 | The guard engine, for gh (helper subcommand, parser, gh table, fixtures, corpora). Not wired to anything yet. | — | no |
 | 2 | The guard on every ADE launch: one `--settings` value carrying the rules, the guard and `disableAllHooks: false`; a headless option; a Claude Code version check | 1, and Q1 (the Orgo AC11 amendment) | no |
 | 3 | The CLI tools tab: detect, typed install, sign-in, credential notes | — | the tab could ship with gh alone |
-| 4 | Tell agents, for gh: the guard and rules in the main checkout's root `settings.local.json`, and a skill Rust writes | 2, 3 | — |
+| 4 | Tell agents, for gh: the guard and rules in the main checkout's root `settings.local.json`, and a skill Rust writes | 1, 3 (not 2) | — |
 | 5 | stripe through the guard | 4 | **recommended next cut** |
 | 6 | vercel through the guard (every command asks, as the product doc says) | 4 | cuttable |
 | 7 | wrangler through the guard | 4 | cuttable |
@@ -101,7 +101,7 @@ The plan is now a security component. Its first two stories are the guard and it
 **Always:**
 - **One settings module.** `src-tauri/src/claude_settings.rs` holds the merge, `main_checkout_root`, `launch_rules()` and the test matcher. It is shared with the Orgo plan, whose Story 1 is now built at `a895c05`. This plan extends what that commit created and doesn't recreate it.
 - **The webview passes a CLI id, never a rule, a hook command, a path or skill text.** Rust picks them.
-- **The guard runs from outside the project.** It is ADE's installed `ade-hook` helper, and every hook entry names it by **absolute path, in shell form**: `"<abs path>" guard`. Older Claude Code drops exec-form `args` (review round 2), and a variable in the path could be overridden by a settings `env` block.
+- **The guard runs from outside the project.** It is ADE's installed `ade-hook` helper, and every hook entry runs it by **absolute path, in shell form**, through `GUARD_CMD` (see The hook entries). Older Claude Code drops exec-form `args` (review round 2), and a variable in the path could be overridden by a settings `env` block.
 - **The guard never returns `allow`, and never rewrites a command.**
 - **It fails closed:**
   - unparseable input that touches a guarded name asks;
@@ -128,7 +128,7 @@ Orgo was approved at `2245693`, and its Story 1 is built at `a895c05`. Its AC11 
 > Every claude and deepseek launch from `buildLaunchCommand` carries exactly one `--settings`. Its value parses to an object with exactly these keys:
 > - `permissions.ask`, equal to `rules.ask`, which is Orgo's `MCP_ASK` followed by each guarded CLI's ask rules;
 > - `disableAllHooks: false`;
-> - when `rules.guard` is set: `hooks.PreToolUse`, equal to exactly one entry, `{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": "\"<abs ade-hook>\" guard", "timeout": 5, "onFailure": "block"}]}`, with `guard --headless` when `opts.headless` is true.
+> - when `rules.guard` is set: `hooks.PreToolUse`, equal to exactly one entry, `{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": GUARD_CMD, "timeout": 5, "onFailure": "block"}]}`, where `GUARD_CMD` is the shell-form string under "The hook entries", with `guard --headless` when `opts.headless` is true.
 >
 > `rules` stays required, through `loadLaunchRules()`, which caches only on success and fails closed.
 
@@ -181,15 +181,22 @@ Sources: the docs (`code.claude.com/docs/en/{hooks,permissions,permission-modes,
 - The logic lives in `src-tauri/src/cli_guard/`, which the main crate compiles, so `cargo test` covers it.
 - The core is pure: `classify(command, &Ctx) -> Verdict`. `Ctx` injects the cwd, env lookups and bounded file reads.
 - It doesn't use the network, writes nothing and keeps no state.
-- **A belt for older Claude Code** (review B3): when bare `ade-hook` (the status forwarder) receives a `PreToolUse` event, it runs the guard. ADE's own status hooks never register PreToolUse, so this changes nothing for them. And if a version drops `guard` from the command line, the guard still runs.
+- **The forwarder is unchanged.** Round 2 added a PreToolUse branch to the bare forwarder. It is dropped: under the shell form the `guard` word always reaches the helper, and ADE's status hooks never register PreToolUse (`usage.rs:983-994`), so the branch would be dead code (review round 3).
+- **This amends ADR 0003**, which says "ADE never returns hook decisions" (and `hook_forward.rs:4`). The forwarder still returns none. The `guard` subcommand does, and only on PreToolUse. ADR 0011 says so explicitly.
 
-**The hook entries.** Both use shell form with an absolute path:
-- **On every ADE launch** (Story 2), inside the one `--settings` value, as in the amendment.
-- **In the main checkout's root `.claude/settings.local.json`** (Story 4):
-  - `{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": "\"<abs ade-hook>\" guard", "timeout": 5, "onFailure": "block"}]}`;
-  - written only after checking that the path exists;
-  - recognised later by its `guard` argument and the helper's file name.
-  - If ADE moves (its path changes), the tab shows "Repair guard", which rewrites the path. Until then, on Claude Code ≥ 2.1.295, every Bash call there blocks (fail closed). On older versions the call goes through.
+**The hook entries.** Both use shell form with an absolute path, and the same command string, `GUARD_CMD`:
+
+```sh
+if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard; else printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"ADE command guard missing (ADE moved or removed). Reinstall ADE, or remove the guard: Integrations > CLI tools > Remove guard, or delete the entry with ade-hook in .claude/settings.local.json."}}'; fi
+```
+
+- **A missing helper is an `ask` that names the fix**, not a block on every call (review minor 3). The guide gives the removal path.
+- **Quoting** (review minor 2): the path goes in single quotes, and a `'` inside it is written as `'\''`, so `$`, backticks and `"` in it stay literal. The string is then JSON-encoded, and for the launch flag shell-quoted once more with `shellQuote`. Story 2 AC1 round-trips a path holding `$`, a backtick, `"`, `'` and a space.
+- **Where the entries go:**
+  - **on every ADE launch** (Story 2), inside the one `--settings` value, as in the amendment;
+  - **in the main checkout's root `.claude/settings.local.json`** (Story 4), as `{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": GUARD_CMD, "timeout": 5, "onFailure": "block"}]}`.
+- **The file entry** is written only after checking that the path exists, and recognised later by the helper's file name and `guard`.
+- **If ADE moves:** the tab shows **Repair guard**, which rewrites the path. **Remove guard** deletes only ADE's own entry, as agent-status does for its hooks (ADR 0003).
 - **Both entries can run for one call.** They make the same decision, and two `ask`s are one prompt (review minor 9).
 
 **What it decides:**
@@ -219,7 +226,24 @@ Sources: the docs (`code.claude.com/docs/en/{hooks,permissions,permission-modes,
    - **function definitions**: `f() { … }` and `function f { … }` bodies are classified as if run, and so are their call sites (review B5).
 2. **Command-name resolution**:
    - A literal name, after quote removal and escape decoding, is classified.
-   - A name holding unquoted `{…,…}`, `$`, `` ` ``, glob characters or `{}` (xargs `-I`) is **computed**. It is first resolved against brace expansion and literal assignments earlier on the same line (`x=g; ${x}h` → `gh`). If it still can't be resolved, it asks (Q3).
+   - `[` and `[[` are literal names, never computed (review round 3).
+   - A path-form name (`/x/gh`, `./bin/gh`, `"$VIRTUAL_ENV/bin/python"`) is classified by its **literal basename**, even when the directory part is computed.
+     - When the path exists, it is also canonicalised (`realpath` through `Ctx`), so a symlink named `deploy` that points at `vercel` is caught.
+     - A *copy* of a binary under another name is not caught; that is an escape (minor 1).
+   - A name holding unquoted `{…,…}`, `$`, `` ` ``, glob characters or `{}` (xargs `-I`) is **computed**.
+     - Brace expansion of literals is resolved: `{gh,} repo view` → `gh`.
+   - **A variable is resolved only under strict conditions** (review round 3 blocker). Its value is used only if the line holds **exactly one** assignment to that name, and that assignment is:
+     - literal (no expansion in the value);
+     - unconditional (not inside `&&`, `||`, `if`, `case`, a loop or a function body);
+     - at top level (not in a subshell, a `$( )` or a pipeline stage);
+     - before the use.
+   - **Any other assignment form to that name anywhere on the line makes it computed:**
+     - `+=`;
+     - `read`, `printf -v`, `declare`, `typeset`, `local`, `export X=$(…)`, `let`, `mapfile`/`readarray`;
+     - `for X in`;
+     - a second assignment.
+   - **So do the parameter operators:** `${x:-…}`, `${x:=…}`, `${x%…}`, `${x#…}`, `${x/…}`, `${x^…}`, `${!x}` and `${x[@]}`.
+   - A computed name that can't be resolved this way asks (Q3).
 3. **Unwrapping**, repeated, both documented and fallback:
    - **Assignments**, including `export STRIPE_API_KEY=…` earlier on the line, which is tracked.
    - **Wrappers:** `env` (`-i`, `-u`, `-C`, `-S` re-parsed), `sudo`, `su -c`, `command`, `builtin`, `exec`, `nohup`, `time`, `nice`, `timeout`, `stdbuf`, `xargs` (with `-I` the command is computed), `watch`, `parallel`, `flock`, `setsid`, `script -c`, `caffeinate`, `arch`, `tmux new-session|send-keys|run-shell`, `screen`, and `ssh host CMD` (remote, still classified).
@@ -241,7 +265,11 @@ Sources: the docs (`code.claude.com/docs/en/{hooks,permissions,permission-modes,
      - Script bodies are re-parsed at most 4 levels deep. A missing `package.json`, or one that can't be read, gives no decision unless the text names a guarded bin.
    - **Paths:** an absolute or relative path gives its basename. `node …/node_modules/<pkg>/…` gives that package's bin.
    - **Bin aliases:** `vc`, `wrangler2`, `cf-wrangler`, and `@stripe/cli` → `stripe`.
-   - **Fallback** (review B5): any word sequence, including re-lexed quoted strings, in which a guarded bin is followed by the words of one of its risky leaves asks. This catches wrappers the list doesn't know, at the cost of asking for an `echo` or commit message that quotes such a command (Q3).
+   - **Fallback** (review B5, narrowed in round 3) catches wrappers the list doesn't know. The rules:
+     - **Prefix-table CLIs (gh, stripe, wrangler):** in the arguments of a command the guard doesn't know, a guarded bin followed by the words of one of its risky leaves asks. This includes quoted strings, which are re-lexed, so `tmux send-keys 'gh repo delete o/r' Enter` asks.
+     - **All-ask CLIs (vercel):** the fallback matches only where the bin is a whole unquoted argv word of an unknown command, or is in command position. Never inside quoted text. So `grep -r vercel .`, `npm i vercel` and `git commit -m "fix vercel deploy"` don't ask.
+     - **Known non-executing commands are skipped:** `echo`, `printf`, `grep`, `rg`, `ag`, `ls`, `cat`, `git commit -m/-F`, `git log --grep`, `git tag -m`. The exception is when their output feeds a shell (`echo … | bash`), which step 3's shell rule handles.
+     - The reviewer's measurement over 1,599 real Bash calls found about 1% spurious asks before these reductions.
 4. **Classifying** by the CLI's table:
    - global flags and their arity, so the subcommand is found with flags before or after it;
    - subcommand aliases, gh's built-in alias `co`, and **user aliases read from gh's `config.yml`** (a `!` shell alias asks);
@@ -267,7 +295,7 @@ Sources: the docs (`code.claude.com/docs/en/{hooks,permissions,permission-modes,
 - Claude Code sessions started outside this repository.
 
 **Fixtures** (in `src-tauri/src/cli_guard/testdata/`, each with its version, capture date and capture command at the top):
-- **gh:** `GH_CONFIG_DIR=$(mktemp -d) gh help reference` (gh 2.89.0: 215 command headings, captured while planning), the built-in alias list (`co: pr checkout`), and the group aliases from the manual (`cs`; `ext`/`extensions`; `agent`/`agents`/`agent-tasks`).
+- **gh:** `GH_CONFIG_DIR=$(mktemp -d) XDG_DATA_HOME=$(mktemp -d) gh help reference` (gh 2.89.0: 214 command headings plus the title; an empty `XDG_DATA_HOME` keeps installed extensions out, review minor 6), the built-in alias list (`co: pr checkout`), and the group aliases from the manual (`cs`; `ext`/`extensions`; `agent`/`agents`/`agent-tasks`).
 - **stripe:** `stripe --map json` (`pkg/cmd/root.go:350`), plus the hidden `daemon` and `plugin` commands, from their sources.
 - **vercel:** a **tree**, not a flat list (review M10). It holds the `name`, `aliases` and `subcommands` structure parsed from the `vercel@65.7.0` bundle, cross-checked against `vercel <command> --help` for the top level. Bins are `vc` and `vercel`.
 - **wrangler:** the 479 command strings of `wrangler@4.155.0` (`wrangler-dist/cli.js`), as a tree. Bins are `wrangler`, `wrangler2` and `cf-wrangler`.
@@ -405,10 +433,10 @@ sequenceDiagram
 | Failure | Handling |
 |---|---|
 | Helper missing (dev build) | `launch_rules().guard = null`: ask rules only. The tab says "Command guard unavailable in this build". |
-| Claude Code < 2.1.295 | Shell form still runs the guard, but a crash or timeout fails open. `guard_status` reads `claude --version`, from the resolved `claude` outside the project, once per app session. The tab shows "Guard runs; fails open on a crash (Claude Code 2.1.x)". |
+| Claude Code < 2.1.295 | Shell form still runs the guard, but a crash or timeout fails open. `guard_status` reads `claude --version` from the `claude` that `find_command` resolves outside the project, once per app session. The tab shows the path it checked, and says a terminal with a different `PATH` (for example nvm) may run another version (minor 4). |
 | Claude Code without the `--settings` hooks merge (V5 fails) | The guide claims only the file hook for user-started sessions, and ask rules for ADE launches. |
 | `disableAllHooks: true` in a file the tab can see | Warned on the tab. ADE launches are unaffected (flag `false`). User-started sessions lose the file guard. |
-| ADE moved (path changed) | "Repair guard". Until then, Bash blocks on ≥ 2.1.295 and passes on older versions. |
+| ADE moved or uninstalled | The shell form's `else` branch asks on each Bash call, with a reason that names Repair guard, Remove guard and the file. It no longer blocks. |
 | Input too large or too deep | ask |
 | Settings file not a JSON object | Refused; nothing written. |
 | A repo hook returns `defer` | Precedence would put `defer` over our `ask`. `defer` needs `-p`, where the guard denies, and deny beats defer. Interactive behaviour is V7. |
@@ -418,6 +446,7 @@ sequenceDiagram
 
 `0011-cli-library-guarded-by-a-command-hook.md`.
 - **Context:** prefix rules can't hold, and settings files and skills load from different places.
+- **Amends ADR 0003.** That ADR says "ADE never returns hook decisions". The status forwarder still never does; the new `ade-hook guard` subcommand returns PreToolUse decisions, `ask` or `deny`, never `allow`.
 - **Decision:**
   - A PreToolUse guard ships in ADE's helper. It is run by absolute path in shell form, from outside the project.
   - It classifies each library CLI against a fixture-backed table. It never allows, asks on risk and on the unknown, denies when headless, and fails closed.
@@ -450,7 +479,8 @@ sequenceDiagram
 - The guard as specified above, with gh's table, fixture and credential paths.
 - `run(stdin, stdout, env, ctx)` is what the binary calls; tests call it too.
 - `ade-hook guard` takes `--headless`.
-- The forwarder's PreToolUse belt is part of this story.
+- **`cli_rules.rs`** (gh's ask, allow and Read rules) is in this story, so Story 4 can use the file guard and rules even if Q1 is rejected and Story 2 never ships (review round 3).
+- The forwarder is not changed.
 
 ## Acceptance Criteria (1)
 
@@ -468,6 +498,18 @@ sequenceDiagram
    - `cat <<EOF > f` (body not a command);
    - `for`, `until`, `select`, `if`/`elif`/`else`, `! gh`, `coproc gh`, `time gh`;
    - `f() { gh "$@"; }; f …` and `function f { … }`.
+   - `[ -x x ] && gh repo view` (`[` is literal); `"$VIRTUAL_ENV/bin/gh" repo delete o/r` (basename `gh` → asks); a symlink `deploy` → `gh` in a fake fs (canonicalised → asks).
+   - **Variable resolution: these are computed and ask**, because bash runs gh for each:
+     - `x=g; false && x=y; ${x}h repo delete o/r`
+     - `x=g; (x=y); ${x}h repo delete o/r`
+     - `x=g; f(){ x=y; }; ${x}h repo delete o/r`
+     - `x=g; if false; then x=y; fi; ${x}h repo delete o/r`
+     - `x=y; printf -v x gh; $x repo delete o/r`
+     - `x=y; read x <<<gh; $x repo delete o/r`
+     - `x=g; x+=h; $x repo delete o/r`
+     - `${x:-g}h repo delete o/r`
+     - `x=ghz; ${x%z} repo delete o/r`
+   - Only `x=g; ${x}h repo delete o/r` resolves, to `gh`, and asks through the table.
 2. **Unwrapping** reaches gh through each of these, and through three nested at once. Covered by `cli_guard/unwrap.rs` › `unwraps_every_documented_form`. The forms:
    - assignments, `export X=1;`;
    - `env` (`-i`, `-u`, `-S`), `sudo`, `su -c`, `command`, `exec`, `nohup`, `nice`, `timeout`, `stdbuf`, `xargs`, `watch`, `parallel`, `flock`, `setsid`, `script -c`, `caffeinate`, `arch`;
@@ -486,9 +528,10 @@ sequenceDiagram
    - `gh api -X DELETE repos/o/r`, `gh api repos/o/r/issues -f t=x`, `gh api graphql -f query='mutation{…}'`, `gh api graphql --input q.graphql`, **`gh api repos/o/r/secret-scanning/alerts`**;
    - `gh myext`, a user alias `rmr: repo delete` from a fake `config.yml`, a `!` alias;
    - `tmux send-keys 'gh repo delete o/r' Enter` (the fallback);
+   - `echo "gh repo delete o/r" | bash` (the shell rule, not the fallback);
    - `"$GH" repo view` (computed).
 
-   These give no decision: `gh api repos/o/r`, `gh api graphql -f query='query{viewer{login}}'`, `gh auth status`, `gh config get editor`, `gh co 12`, `gh --version`, `gh pr list --search "delete button"`.
+   These give no decision: `echo "run gh repo delete o/r to clean up"`, `git commit -m "gh repo delete docs"`, `grep -r "gh repo delete" docs/`, `gh api repos/o/r`, `gh api graphql -f query='query{viewer{login}}'`, `gh auth status`, `gh config get editor`, `gh co 12`, `gh --version`, `gh pr list --search "delete button"`.
 
    Covered by `cli_guard` › `gh_hand_corpus`.
 6. **Credentials.** These ask:
@@ -516,9 +559,11 @@ sequenceDiagram
    - for `tool_name: "Monitor"` with a `command` field, it classifies it like Bash;
    - it prints `ask` for malformed stdin;
    - it always exits 0;
-   - the bare forwarder entry point, given a PreToolUse event, produces the same output as `guard`.
+   - the bare forwarder's output is unchanged from today for every event (`hook_forward.rs`'s existing tests stay green).
 10. **Speed:** `classify` on the 200 longest corpus commands is under 50 ms each in a debug build. Covered by `cli_guard` › `classify_is_fast`.
-11. **Pinned escapes:** `deno run npm:x`, `mise exec -- gh repo delete o/r` (the fallback catches this one: it asks), `node deploy.js`, and a shell alias `g` used as `g repo delete` each behave as the guide states. Covered by `cli_guard` › `documented_escapes`.
+11. **Pinned escapes:** `deno run npm:x`, `mise exec -- gh repo delete o/r` (the fallback catches this one: it asks), `node deploy.js`, a shell alias `g` used as `g repo delete`, and a copy of `gh` named `hg2` each behave as the guide states. Covered by `cli_guard` › `documented_escapes`.
+12. **Rules:** every gh ask rule matches the canonical form of some gh risky leaf under `rule_matches`, and none matches a read leaf. `rule_matches` reproduces the docs' wildcard table. Covered by `cli_rules.rs` › `gh_rules_cover_canonical_risks`, `claude_settings.rs` › `matches_claude_codes_documented_examples` (moved here from Story 2).
+13. **The shell-form command:** `GUARD_CMD` for an existing helper runs it with `guard`. For a missing path it prints the `ask` JSON naming Repair guard and Remove guard, and exits 0. Run through `/bin/sh -c` in the test. Covered by `cli_guard` › `missing_helper_asks_with_the_fix`.
 
 ## Verification (1)
 
@@ -528,7 +573,7 @@ The five commands, unchanged.
 
 ## Slice (1)
 
-`src-tauri/ade-hook/src/main.rs`; `src-tauri/src/cli_guard/**`; `lib.rs` (the module only); `.ade/context/cli-guard.md`.
+`src-tauri/ade-hook/src/main.rs` (the `guard` subcommand only); `src-tauri/src/cli_guard/**`; `src-tauri/src/cli_rules.rs`; `src-tauri/src/claude_settings.rs` (`rule_matches`); `lib.rs` (the modules only); `.ade/context/cli-guard.md`.
 
 ---
 
@@ -544,7 +589,6 @@ Depends on Story 1, and on the owner's answer to Q1.
 - `src/lib/agentLaunch.ts:21,42`.
 - `src/components/OrchestratorTab.tsx:292`, with the `-p` added about 20 lines below.
 - `src-tauri/src/pty.rs:168`.
-- New: `src-tauri/src/cli_rules.rs`.
 
 ## Design Notes (2)
 
@@ -553,10 +597,6 @@ Depends on Story 1, and on the owner's answer to Q1.
   - `guard` is `{ command: "\"<abs>\" guard" }` when the helper exists beside `current_exe()`, else `null`.
 - **`claudeCommand`** writes the amended value, with `disableAllHooks: false`.
 - **`LaunchOptions.headless?: boolean`**: only `OrchestratorTab` sets it, and it produces `guard --headless`.
-- **`guard_status()`** returns:
-  - `{ helper: bool, claudeVersion, onFailureSupported: version ≥ 2.1.295, disableAllHooksFiles: [paths] }`;
-  - `claudeVersion` from `claude --version`, resolved outside the project, once per app session;
-  - `disableAllHooksFiles`: settings files in the project, the repository root and the user's home that set `disableAllHooks: true`.
 
 ## Acceptance Criteria (2)
 
@@ -566,18 +606,12 @@ Depends on Story 1, and on the owner's answer to Q1.
    - and, when `rules.guard` is set, `hooks.PreToolUse` equal to exactly the specified entry;
    - no other keys.
 
-   `headless: true` gives `guard --headless`. Codex is unchanged. A call without `rules` is a `@ts-expect-error`.
+   `headless: true` gives `guard --headless`. Codex is unchanged. A call without `rules` is a `@ts-expect-error`. A helper path holding `$`, a backtick, `"`, `'` and a space survives the JSON and the shell-quoting: the parsed `command` runs that exact path under `/bin/sh -c` (minor 2).
 2. The picker, `dispatchAgent` and the Orchestrator each type a command carrying the guard. Only the Orchestrator's has `--headless`. When `loadLaunchRules` rejects, nothing is typed. Covered by `agentLaunch.test.ts`, `OrchestratorTab.test.tsx`.
-3. `launch_rules()` includes every gh ask rule. Every gh ask rule matches the canonical form of some gh risky leaf under `rule_matches`, and none matches a read leaf. `rule_matches` reproduces the docs' wildcard table. Covered by `claude_settings.rs` › `launch_rules_compose`, `cli_rules.rs` › `gh_rules_cover_canonical_risks`.
+3. `launch_rules()` includes every gh ask rule from Story 1's `cli_rules.rs`, after Orgo's `MCP_ASK`. Covered by `claude_settings.rs` › `launch_rules_compose`.
 4. With no helper beside the executable, `guard` is `null`, and the launch value has `permissions` and `disableAllHooks` but no `hooks`. Covered by `claude_settings.rs` › `no_helper_no_hook`.
-5. **`guard_status`:**
-   - parses `2.1.312 (Claude Code)` and `2.1.42 (Claude Code)`, setting `onFailureSupported` true and false;
-   - refuses a `claude` resolved inside the project;
-   - lists a fake `.claude/settings.json` holding `disableAllHooks: true`.
-
-   Covered by `cli_tools.rs` › `guard_status_reports_version_and_disabling_files`.
-6. **The launch value fits on a shell line:** the composed value (Orgo plus gh) shell-quotes to a single line under 8 KB, with no newline. Covered by `agentCommand.test.ts` › "launch value stays a single bounded line".
-7. **The context file** `.ade/context/launch-settings.md` holds the amendment text, and Orgo's `orgo-permission-rules.md` links it. This is a DoD item.
+5. **The launch value fits on a shell line:** the composed value (Orgo plus gh) shell-quotes to a single line under 8 KB, with no newline. Covered by `agentCommand.test.ts` › "launch value stays a single bounded line".
+6. **The context file** `.ade/context/launch-settings.md` holds the amendment text, and Orgo's `orgo-permission-rules.md` links it. This is a DoD item.
 
 ## Verification (2)
 
@@ -596,7 +630,7 @@ V1 and V5 gate the guide's Continuous-mode claim (ADR 0012 P2).
 
 ## Slice (2)
 
-`claude_settings.rs` (`launch_rules`); `cli_rules.rs`; `agentCommand.ts`, `agentLaunch.ts`, `launchRules.ts`, `OrchestratorTab.tsx` and their tests; `cli_tools.rs` (`guard_status`); `lib.rs`; the context file; the guide's "Command guard" section, written without the Continuous claim until V1 and V5 pass.
+`claude_settings.rs` (`launch_rules`); `agentCommand.ts`, `agentLaunch.ts`, `launchRules.ts`, `OrchestratorTab.tsx` and their tests; `lib.rs`; the context file; the guide's "Command guard" section, written without the Continuous claim until V1 and V5 pass.
 
 ---
 
@@ -612,7 +646,11 @@ V1 and V5 gate the guide's Continuous-mode claim (ADR 0012 P2).
 - **wrangler** has no ADE-run check. Its **Check sign-in** types `npx wrangler whoami` into a new tab (M9).
 - **Install:** `typeInNewTab("Install <Name>", projectRoot, command)`, with no `\r`.
 - **Sign in:** `runInNewTab` on click.
-- **Card notes:** where the credential lives, and whether it's plaintext; env tokens present in the vault; the guard's status (`guard_status`); Windows.
+- **`guard_status()`** (moved here from Story 2, review round 3) returns `{ helper, helperPath, claudePath, claudeVersion, onFailureSupported, disableAllHooksFiles, launchGuard }`:
+  - `claudeVersion` comes from `claude --version`, run on the `claude` that `find_command` resolves outside the project, once per app session. `claudePath` says which binary that was (minor 4).
+  - `disableAllHooksFiles` lists the settings files in the project, the repository root and the user's home that set `disableAllHooks: true`.
+  - `launchGuard` is true only once Story 2 has shipped. Until then the card says "ADE launches: ask rules only".
+- **Card notes:** where the credential lives, and whether it's plaintext; env tokens present in the vault; the guard's status; Windows.
 
 ## Acceptance Criteria (3)
 
@@ -622,7 +660,14 @@ V1 and V5 gate the guide's Continuous-mode claim (ADR 0012 P2).
 4. Nothing runs on mount, and the click handlers send `{ id }` only. Covered by `CliToolsTab.test.tsx` › "nothing runs until you click".
 5. Installs and wrangler's check open a new tab at the project root and type without `\r`. The active pane receives nothing. Covered by `CliToolsTab.test.tsx` › "typed into a new tab, never run, never into the active pane".
 6. Every env token present in the vault is named on its card. Covered by `CliToolsTab.test.tsx` › "vault overrides are named".
-7. Credential notes, and guard notes (no helper; fails open on Claude Code below 2.1.295; files that set `disableAllHooks`), render from mocked `guard_status`. Covered by `CliToolsTab.test.tsx` › "cards say where the credential lives and how the guard stands".
+7. Credential notes, and guard notes, render from mocked `guard_status`: no helper; fails open on Claude Code below 2.1.295, naming `claudePath`; files that set `disableAllHooks`; `launchGuard` false. Covered by `CliToolsTab.test.tsx` › "cards say where the credential lives and how the guard stands".
+10. **`guard_status`:**
+    - parses `2.1.312 (Claude Code)` and `2.1.42 (Claude Code)` into `onFailureSupported` true and false;
+    - refuses a `claude` resolved inside the project;
+    - reports the `claudePath` it ran;
+    - lists a fake `.claude/settings.json` that holds `disableAllHooks: true`.
+
+    Covered by `cli_tools.rs` › `guard_status_reports_version_and_disabling_files`.
 8. Windows shows its note and no **Tell agents**. Covered by `CliToolsTab.test.tsx`.
 9. The guide's `## CLI tools` table names exactly the catalog's CLIs. Covered by `scripts/cliCatalogDocs.test.ts`.
 
@@ -636,7 +681,7 @@ The five commands, unchanged.
 
 # Story 4: Tell agents, for gh
 
-Depends on Stories 2 and 3.
+Depends on Stories 1 and 3. **Not on Story 2.** If Q1 is rejected, this story alone still covers user-started sessions in the repository.
 
 ## Design Notes (4)
 
@@ -646,7 +691,7 @@ Depends on Stories 2 and 3.
 3. Check that the helper path exists.
 4. Merge into that file:
    - the gh ask, allow and `Read` rules;
-   - the guard entry, once (absolute path, shell form, `Bash|Monitor`).
+   - the guard entry, once (`GUARD_CMD`, `Bash|Monitor`).
 5. Write `<project>/.claude/skills/gh-cli/SKILL.md` from Rust's `cli_skill("gh")`, only if it is missing.
 
 It never writes `.claude/settings.json`.
@@ -670,7 +715,7 @@ It never writes `.claude/settings.json`.
    - is not written when the path doesn't exist (an error);
    - keeps ADE's agent-status hooks and user hooks.
 
-   `cli_guard_repair` updates only ADE's entry. Covered by `cli_tools.rs` › `guard_entry_is_absolute_once_and_repairable`.
+   `cli_guard_repair` updates only ADE's entry. `cli_guard_remove` deletes only ADE's entry and leaves every rule and every other hook. Covered by `cli_tools.rs` › `guard_entry_is_absolute_once_repairable_and_removable`.
 3. A tracked or symlinked `settings.local.json` is refused, and nothing is written. Covered by `cli_tools.rs` › `refuses_a_repository_supplied_local_file`.
 4. **Merge:** values survive (semantic equality, decision 6), rule arrays append once, and a second call is byte-identical. A file that is not a JSON object is refused with nothing written. Covered by `claude_settings.rs` › `merge_keeps_values_and_refuses_bad_files`.
 5. **The skill:**
@@ -683,7 +728,7 @@ It never writes `.claude/settings.json`.
    Covered by `cli_tools.rs` › `skills_are_rendered_in_rust_and_inert`.
 6. The commands take `(project, id)` only. An unknown id or `../x` writes nothing, and no write lands outside `<root>/.claude/` and `<project>/.claude/skills/`. Covered by `cli_tools.rs` › `writes_are_confined`.
 7. An existing skill is kept. Disable removes only an unedited skill, and the settings stay byte-identical. Covered by `cli_tools.rs` › `skills_once_and_removed_only_unedited`.
-8. **Tell agents** sends `{ project, id }` only. **Repair guard** shows when `guard_status` reports a moved path. Covered by `CliToolsTab.test.tsx`.
+8. **Tell agents** sends `{ project, id }` only. **Repair guard** and **Remove guard** show when `guard_status` reports a moved or missing helper. Covered by `CliToolsTab.test.tsx`.
 9. The guide states:
    - where the files go and why;
    - the Windows and outside-git exceptions;
@@ -737,7 +782,7 @@ Depends on Story 4.
    - through runners: `npx vercel --prod`, `npx -y vercel@latest --prod`, `npx --package vercel vc deploy`, `npx -c 'vercel --prod'`, `pnpm dlx vercel`, `pnpm vercel`, `yarn dlx vercel`, `bunx vercel`, `bun x vercel`, `npm exec vercel -- --prod`;
    - through scripts: `npm run deploy` (`"deploy": "vercel --prod"`), `npm run build` with `"postbuild": "vercel"`, `pnpm --filter web run ship`, `yarn workspace web deploy`, `turbo run deploy`, `npm ci` with `"prepare": "vercel pull"`, and `node node_modules/vercel/dist/vc.js`.
 
-   `vercel --version` gives no decision. Covered by `cli_guard` › `vercel_hand_corpus`.
+   `vercel --version` gives no decision. These give no decision too (fallback narrowed for all-ask CLIs): `grep -r vercel .`, `npm i -D vercel`, `rg "vercel --prod" docs`, `git commit -m "vercel deploy fix"`, `cat vercel.json`, `echo vercel`. Covered by `cli_guard` › `vercel_hand_corpus`, `vercel_mentions_do_not_ask`.
 3. Generated corpora pass. Covered by `cli_guard` › `vercel_corpus`.
 4. Rules, credential paths, the skill and the docs extend to vercel. Covered by the existing tests.
 
@@ -778,12 +823,12 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 
 - `scripts/recaptureCliFixtures.md` lists, per CLI, the exact capture command, the package or binary version to install, and where the fixture goes. The developer runs it outside ADE's tests.
 - The coverage tests then fail by name on each new command, and each one is classified in the same change.
-- The journal gets a dated line per re-capture.
-- The first run is scheduled one quarter after Story 1 ships.
+- **The due date lives where the queue lives** (minor 5): the scrum-master shards Story 8 as a story file in `docs/stories/`, with the next due date in its header. Each re-capture's Done line in `.ade/session.md` names the next due date, and the story file is updated to match.
+- The first run is due one quarter after Story 1 ships.
 
 ## Acceptance Criteria (8)
 
-1. Every fixture file starts with a header giving the version, the capture date (ISO) and the capture command. A test fails if a header is missing, or if the date is more than 120 days before a `REVIEW_BY` constant that each re-capture updates. Covered by `cli_guard` › `fixtures_carry_versions_and_are_fresh`.
+1. Every fixture file starts with a header giving the version, the capture date (ISO), the capture command and `next_due` (at most 92 days after capture). A test fails if a header is missing or the dates are inconsistent. It does not read the wall clock, so it never turns red on its own. Covered by `cli_guard` › `fixtures_carry_versions_and_due_dates`.
 2. `scripts/recaptureCliFixtures.md` names a capture command for every fixture file. Covered by `scripts/cliCatalogDocs.test.ts` › "every fixture has a capture recipe".
 3. After a re-capture adds a leaf, the coverage test reports it by name. This is shown by a test with a fixture containing an invented leaf. Covered by `tables.rs` › `new_leaves_are_named`.
 
@@ -824,7 +869,7 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
   - The amendment is the quoted text under Coordination: `permissions.ask` = `rules.ask`, plus `disableAllHooks: false`, plus exactly one guard entry, plus `headless`.
   - Recommend **yes**. `--settings` takes one value, and without `disableAllHooks: false` any settings file or Continuous agent can switch the guard off.
   - **The cost:** ADE launches also run the user's and the project's other hooks when a file had turned them off. The tab says so.
-  - Without the amendment, Story 2 can't ship, and the guard covers only user-started sessions through the file (Story 4).
+  - Without the amendment, Story 2 can't ship. Stories 1, 3 and 4 still ship: the file guard and the rules cover sessions the user starts in the repository, and ADE launches keep Orgo's ask rules only.
 - **Q2. In Continuous mode, the guard asks.** Recommend ask, per decision 4, counted only once V1 passes. If V1 fails on a version users run, recommend `deny` under `bypassPermissions` for that version.
 - **Q3. Fail closed on computed command names and on the fallback scan.**
   - Recommend yes. `"$EDITOR" f` and `"$PY" x.py` will ask, and so will an `echo` or commit message that quotes `gh repo delete …`.
@@ -871,3 +916,20 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 | Minor 8 | `secret-scanning` paths and graphql (Story 1 AC5). |
 | Minor 9 | Stated: two guard runs give one decision. |
 | Scope note | gh-first cut recommended (Q4). MCP and the audit work left this plan. |
+
+**Round 3, 2026-10-30: re-review of af869f7. Narrow BLOCK.** Every round-2 blocker is confirmed closed. The caps are measured fine: the longest of 1,599 real calls was 33 KB and the deepest nesting about 5. Spurious asks ran at about 1%.
+
+| Finding | Action |
+|---|---|
+| Blocker: the `${x}h` resolver could be confidently wrong | Strict resolution: exactly one literal, unconditional, top-level assignment before the use. Every other assignment form and every `${…}` operator make the name computed. Nine reviewer cases added to Story 1 AC1. |
+| Blocker: vercel fallback noise | For all-ask CLIs the fallback matches only bare argv words of unknown commands, or command position, never quoted text. Story 6 AC2 pins six mentions as no decision. |
+| False-ask reductions | `[`/`[[` literal; a computed directory with a literal basename is classified by the basename; known non-executing commands are skipped unless piped into a shell (Story 1 AC1, AC5). |
+| `guard_status` dependency | Moved into Story 3, with `launchGuard` for before Story 2. |
+| `cli_rules.rs` dependency | Moved into Story 1. Story 4 depends on 1 and 3, not 2. |
+| ADR 0003 contradiction; dead forwarder branch | ADR 0011 states it amends 0003. The forwarder branch is dropped and its output pinned unchanged (AC9). |
+| Minor 1 | Path names canonicalised; copies listed as an escape (AC1, AC11). |
+| Minor 2 | Single-quote, JSON and shell quoting of the helper path, round-tripped in Story 2 AC1. |
+| Minor 3 | A missing helper asks with the fix (Story 1 AC13); Remove guard and the guide's removal path. |
+| Minor 4 | `guard_status` reports `claudePath`. |
+| Minor 5 | The due date goes in the story file and the journal; no wall-clock test. |
+| Minor 6 | gh fixture captured with an empty `XDG_DATA_HOME`; 214 headings plus the title. |
