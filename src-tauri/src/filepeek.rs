@@ -14,6 +14,12 @@ const TEXT_CAP: usize = 16 * 1024;
 const HTML_CAP: usize = 256 * 1024;
 /// A NUL in this many leading bytes means the file is binary (git's rule).
 const SNIFF: usize = 8 * 1024;
+/// A raster image is sent whole, so it is not read past this.
+const IMAGE_CAP: usize = 10_000_000;
+/// An SVG is sent whole, so it is not read past this.
+const SVG_CAP: usize = 1_000_000;
+/// The most pixels a raster may decode to: a small file can hold a huge bitmap.
+const MAX_PIXELS: u64 = 40_000_000;
 const NOT_REGULAR: &str = "not a regular file";
 /// `st_flags` bit of a macOS file whose content is in the cloud only.
 #[cfg(target_os = "macos")]
@@ -29,12 +35,14 @@ pub enum PeekKind {
     Meta,
 }
 
-// Only a macOS dataless file is skipped until images land (Story 3).
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SkipReason {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     NotDownloaded,
+    Pixels,
+    NoSize,
+    SvgFeatures,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -42,8 +50,21 @@ pub enum SkipReason {
 pub enum Body {
     Text { text: String, truncated: bool },
     Binary,
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    Skipped { reason: SkipReason },
+    Bytes {
+        length: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        width: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        height: Option<u32>,
+    },
+    TooLarge { limit: u64 },
+    Skipped {
+        reason: SkipReason,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        width: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        height: Option<u32>,
+    },
     Unchanged,
     None,
 }
@@ -159,6 +180,290 @@ fn incomplete_tail(bytes: &[u8]) -> usize {
     0
 }
 
+const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+
+fn be16(b: &[u8], at: usize) -> Option<u16> {
+    Some(u16::from_be_bytes(b.get(at..at.checked_add(2)?)?.try_into().ok()?))
+}
+
+fn be32(b: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_be_bytes(b.get(at..at.checked_add(4)?)?.try_into().ok()?))
+}
+
+fn le16(b: &[u8], at: usize) -> Option<u16> {
+    Some(u16::from_le_bytes(b.get(at..at.checked_add(2)?)?.try_into().ok()?))
+}
+
+fn le32(b: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(b.get(at..at.checked_add(4)?)?.try_into().ok()?))
+}
+
+fn le24(b: &[u8], at: usize) -> Option<u32> {
+    let s = b.get(at..at.checked_add(3)?)?;
+    Some(u32::from_le_bytes([s[0], s[1], s[2], 0]))
+}
+
+/// A size with no zero side: a zero (such as a JPEG height deferred to a DNL
+/// marker) means the real size is unknown.
+fn nonzero(w: u32, h: u32) -> Option<(u32, u32)> {
+    (w != 0 && h != 0).then_some((w, h))
+}
+
+/// Pixels in `w` by `h`, in `u64`: 65536 x 65536 is 0 in `u32`.
+fn area((w, h): (u32, u32)) -> u64 {
+    w as u64 * h as u64
+}
+
+/// Width and height of the largest image the browser could decode from these
+/// bytes, picked by their signature, not the file's extension. `None` when the
+/// format is not one of these, the header is cut short, or a side is zero.
+pub fn image_size(b: &[u8]) -> Option<(u32, u32)> {
+    if b.starts_with(PNG_SIGNATURE) {
+        png_size(b)
+    } else if b.starts_with(b"GIF87a") || b.starts_with(b"GIF89a") {
+        gif_size(b)
+    } else if b.starts_with(&[0xFF, 0xD8]) {
+        jpeg_size(b)
+    } else if b.starts_with(b"RIFF") && b.get(8..12) == Some(b"WEBP") {
+        webp_size(b)
+    } else if b.starts_with(b"BM") {
+        dib_size(b.get(14..)?, false)
+    } else if b.starts_with(&[0, 0, 1, 0]) || b.starts_with(&[0, 0, 2, 0]) {
+        ico_size(b)
+    } else {
+        None
+    }
+}
+
+/// IHDR; APNG frames must fit inside it.
+fn png_size(b: &[u8]) -> Option<(u32, u32)> {
+    if b.get(12..16)? != b"IHDR" {
+        return None;
+    }
+    nonzero(be32(b, 16)?, be32(b, 20)?)
+}
+
+/// A BMP's DIB header (core or info), height as its absolute value. In an
+/// ICO the height covers the AND mask too, so the image is half of it.
+fn dib_size(b: &[u8], ico: bool) -> Option<(u32, u32)> {
+    let (w, h) = match le32(b, 0)? {
+        12 => (le16(b, 4)? as u32, le16(b, 6)? as u32),
+        n if n >= 16 => ((le32(b, 4)? as i32).unsigned_abs(), (le32(b, 8)? as i32).unsigned_abs()),
+        _ => return None,
+    };
+    nonzero(w, if ico { h / 2 } else { h })
+}
+
+/// The logical screen and every frame, found by walking the blocks; the
+/// largest width and height of them all (a frame's offset included, since a
+/// decoder may grow the canvas to fit it). A walk that runs off the end is `None`.
+fn gif_size(b: &[u8]) -> Option<(u32, u32)> {
+    let color_table = |flags: u8| if flags & 0x80 != 0 { 3usize << ((flags & 7) + 1) } else { 0 };
+    // Data sub-blocks, each led by its length, until a zero length.
+    let sub_blocks = |mut i: usize| -> Option<usize> {
+        loop {
+            let n = *b.get(i)? as usize;
+            i += 1 + n;
+            if n == 0 {
+                return Some(i);
+            }
+        }
+    };
+    let (mut w, mut h) = nonzero(le16(b, 6)? as u32, le16(b, 8)? as u32)?;
+    let mut i = 13 + color_table(*b.get(10)?);
+    loop {
+        match *b.get(i)? {
+            0x3B => return Some((w, h)),
+            // Extension: introducer, label, sub-blocks.
+            0x21 => i = sub_blocks(i + 2)?,
+            // Image descriptor: left, top, width, height, flags; a local color
+            // table; the LZW minimum code size; sub-blocks.
+            0x2C => {
+                let (left, top) = (le16(b, i + 1)? as u32, le16(b, i + 3)? as u32);
+                let (fw, fh) = nonzero(le16(b, i + 5)? as u32, le16(b, i + 7)? as u32)?;
+                w = w.max(left + fw);
+                h = h.max(top + fh);
+                i = sub_blocks(i + 10 + color_table(*b.get(i + 9)?) + 1)?;
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// The first top-level SOFn, walking the segments from SOI by their lengths,
+/// so an SOF inside an APP1 EXIF thumbnail is skipped with its segment.
+fn jpeg_size(b: &[u8]) -> Option<(u32, u32)> {
+    let mut i = 2;
+    loop {
+        if *b.get(i)? != 0xFF {
+            return None;
+        }
+        // Any number of 0xFF fill bytes, then the marker.
+        while *b.get(i)? == 0xFF {
+            i += 1;
+        }
+        let marker = b[i];
+        i += 1;
+        match marker {
+            // RSTn and TEM stand alone.
+            0xD0..=0xD7 | 0x01 => continue,
+            // Image data or the end, with no frame header first.
+            0xD8 | 0xD9 | 0xDA => return None,
+            0xC0..=0xCF if !matches!(marker, 0xC4 | 0xC8 | 0xCC) => {
+                // Length, precision, height, width.
+                return nonzero(be16(b, i + 5)? as u32, be16(b, i + 3)? as u32);
+            }
+            _ => {
+                let len = be16(b, i)? as usize;
+                if len < 2 {
+                    return None;
+                }
+                i += len;
+            }
+        }
+    }
+}
+
+/// The first chunk: `VP8 ` (lossy), `VP8L` (lossless) or `VP8X` (the
+/// canvas, which animation frames must fit).
+fn webp_size(b: &[u8]) -> Option<(u32, u32)> {
+    let data = b.get(20..)?;
+    match b.get(12..16)? {
+        b"VP8 " => {
+            if data.get(3..6)? != [0x9d, 0x01, 0x2a] {
+                return None;
+            }
+            nonzero((le16(data, 6)? & 0x3FFF) as u32, (le16(data, 8)? & 0x3FFF) as u32)
+        }
+        b"VP8L" => {
+            if *data.first()? != 0x2F {
+                return None;
+            }
+            let bits = le32(data, 1)?;
+            Some(((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1))
+        }
+        b"VP8X" => Some((le24(data, 4)? + 1, le24(data, 7)? + 1)),
+        _ => None,
+    }
+}
+
+/// Every directory entry's own image (a PNG's IHDR, or else a DIB header);
+/// the largest wins, so a PNG inside an ICO cannot get past the pixel cap.
+fn ico_size(b: &[u8]) -> Option<(u32, u32)> {
+    let count = le16(b, 4)? as usize;
+    let mut largest: Option<(u32, u32)> = None;
+    for entry in 0..count {
+        let at = 6 + 16 * entry;
+        let (len, offset) = (le32(b, at + 8)? as usize, le32(b, at + 12)? as usize);
+        let data = b.get(offset..offset.checked_add(len)?)?;
+        let size = if data.starts_with(PNG_SIGNATURE) { png_size(data)? } else { dib_size(data, true)? };
+        if largest.is_none_or(|l| area(size) > area(l)) {
+            largest = Some(size);
+        }
+    }
+    largest
+}
+
+/// Whether `<name` at `at` (lowercase) is that element: followed by
+/// whitespace, `/`, `>` or the end, so `<user>` is not `<use>`.
+fn element_at(lower: &str, at: usize, name: &str) -> bool {
+    let rest = &lower[at + 1..];
+    rest.starts_with(name) && rest[name.len()..].bytes().next().is_none_or(|c| c.is_ascii_whitespace() || c == b'/' || c == b'>')
+}
+
+/// Whether the text at the start of `s` (just after `url(`) is a fragment
+/// reference: optional whitespace, an optional quote, `#`, an id of
+/// `[A-Za-z0-9_.:-]`, the same quote, optional whitespace, then `)`.
+fn fragment_url(s: &str) -> bool {
+    let s = s.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let (quote, s) = match s.chars().next() {
+        Some(q @ ('"' | '\'')) => (Some(q), &s[1..]),
+        _ => (None, s),
+    };
+    let Some(s) = s.strip_prefix('#') else { return false };
+    let id = s.find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-'))).unwrap_or(s.len());
+    if id == 0 {
+        return false;
+    }
+    let mut s = &s[id..];
+    if let Some(q) = quote {
+        let Some(rest) = s.strip_prefix(q) else { return false };
+        s = rest;
+    }
+    s.trim_start_matches(|c: char| c.is_ascii_whitespace()).starts_with(')')
+}
+
+/// Whether an SVG is plain enough to preview: the allowlist in the contract
+/// (`.ade/context/file-peek.md`). It rules out every route found to an
+/// embedded raster, an external load, nested `<use>` or entity expansion, by
+/// refusing what could hide one rather than parsing it.
+pub fn svg_is_plain(bytes: &[u8]) -> bool {
+    // UTF-8 only (a UTF-16 BOM is not UTF-8), and no NUL.
+    let Ok(text) = std::str::from_utf8(bytes) else { return false };
+    if text.contains('\0') {
+        return false;
+    }
+    let lower = text.strip_prefix('\u{FEFF}').unwrap_or(text).to_ascii_lowercase();
+
+    // The one processing instruction allowed: an XML declaration at offset 0,
+    // whose encoding, if named, is UTF-8.
+    let mut after_decl = lower.as_str();
+    if lower.starts_with("<?xml") && lower[5..].starts_with(|c: char| c.is_ascii_whitespace()) {
+        let Some(end) = lower.find("?>") else { return false };
+        let decl = &lower[..end];
+        if let Some(at) = decl.find("encoding") {
+            let Some(value) = decl[at + 8..].trim_start().strip_prefix('=').map(str::trim_start) else { return false };
+            let Some(q @ ('"' | '\'')) = value.chars().next() else { return false };
+            let mut parts = value[1..].splitn(2, q);
+            if parts.next() != Some("utf-8") || parts.next().is_none() {
+                return false;
+            }
+        }
+        after_decl = &lower[end + 2..];
+    }
+    if after_decl.contains("<?") {
+        return false;
+    }
+
+    // No comments, CDATA, entity declarations, embedded data, escapes or
+    // foreign content.
+    if ["<!--", "<![cdata[", "<!entity", "data:", "\\", "foreignobject"].iter().any(|bad| lower.contains(bad)) {
+        return false;
+    }
+    // Every `&` starts one of the five XML entities (so no `&#` either).
+    for (at, _) in lower.match_indices('&') {
+        if !["&amp;", "&lt;", "&gt;", "&quot;", "&apos;"].iter().any(|e| lower[at..].starts_with(e)) {
+            return false;
+        }
+    }
+    // `url(` only as an in-document fragment reference.
+    for (at, _) in lower.match_indices("url(") {
+        if !fragment_url(&lower[at + 4..]) {
+            return false;
+        }
+    }
+    // No `style` attribute: `style` after whitespace, then optional whitespace and `=`.
+    for (at, _) in lower.match_indices("style") {
+        let after_space = lower[..at].ends_with(|c: char| c.is_ascii_whitespace());
+        if after_space && lower[at + 5..].trim_start().starts_with('=') {
+            return false;
+        }
+    }
+    for (at, _) in lower.match_indices('<') {
+        // No CSS, and no element that pulls in another image or document.
+        if ["style", "use", "image", "feimage"].iter().any(|name| element_at(&lower, at, name)) {
+            return false;
+        }
+        // No namespace prefix on an element name, start or end tag.
+        let name = lower[at + 1..].strip_prefix('/').unwrap_or(&lower[at + 1..]);
+        let len = name.find(|c: char| c.is_ascii_whitespace() || matches!(c, '/' | '>')).unwrap_or(name.len());
+        if name[..len].contains(':') {
+            return false;
+        }
+    }
+    true
+}
+
 /// A 4-byte big-endian header length, the JSON header, then the payload.
 pub fn frame(peek: &FilePeek, payload: &[u8]) -> Vec<u8> {
     // Plain structs, strings and numbers: serializing cannot fail.
@@ -187,18 +492,48 @@ pub fn peek_path(path: &Path, kind: PeekKind, known: Option<&str>) -> Result<(Fi
     {
         use std::os::macos::fs::MetadataExt;
         if meta.st_flags() & SF_DATALESS != 0 {
-            return Ok((peek(Body::Skipped { reason: SkipReason::NotDownloaded }), Vec::new()));
+            return Ok((peek(Body::Skipped { reason: SkipReason::NotDownloaded, width: None, height: None }), Vec::new()));
         }
     }
+    let svg = kind == PeekKind::Image && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg"));
     let cap = match kind {
         PeekKind::Text => TEXT_CAP,
         PeekKind::Html => HTML_CAP,
-        // Images and PDFs arrive with Stories 3 and 4; until then, details only.
-        PeekKind::Image | PeekKind::Pdf | PeekKind::Meta => return Ok((peek(Body::None), Vec::new())),
+        PeekKind::Image if svg => SVG_CAP,
+        PeekKind::Image => IMAGE_CAP,
+        // PDFs arrive with Story 4; until then, details only.
+        PeekKind::Pdf | PeekKind::Meta => return Ok((peek(Body::None), Vec::new())),
     };
+    // An image is sent whole, so one over its cap is not read at all.
+    let too_large = || Body::TooLarge { limit: cap as u64 };
+    if kind == PeekKind::Image && meta.len() > cap as u64 {
+        return Ok((peek(too_large()), Vec::new()));
+    }
     let file = open_regular(path).map_err(|e| e.to_string())?;
     let (bytes, truncated) = read_bounded(file, cap).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-    Ok((peek(decode_text(&bytes, truncated)), Vec::new()))
+    if kind != PeekKind::Image {
+        return Ok((peek(decode_text(&bytes, truncated)), Vec::new()));
+    }
+    // It grew past the cap after the stat.
+    if truncated {
+        return Ok((peek(too_large()), Vec::new()));
+    }
+    let skipped = |reason, size: Option<(u32, u32)>| Body::Skipped { reason, width: size.map(|s| s.0), height: size.map(|s| s.1) };
+    let body = if svg {
+        if svg_is_plain(&bytes) {
+            Body::Bytes { length: bytes.len() as u64, width: None, height: None }
+        } else {
+            skipped(SkipReason::SvgFeatures, None)
+        }
+    } else {
+        match image_size(&bytes) {
+            None => skipped(SkipReason::NoSize, None),
+            Some(size) if area(size) > MAX_PIXELS => skipped(SkipReason::Pixels, Some(size)),
+            Some((w, h)) => Body::Bytes { length: bytes.len() as u64, width: Some(w), height: Some(h) },
+        }
+    };
+    let payload = if matches!(body, Body::Bytes { .. }) { bytes } else { Vec::new() };
+    Ok((peek(body), payload))
 }
 
 #[tauri::command(async)]
@@ -481,13 +816,390 @@ mod tests {
         let dir = scratch("meta");
         let f = dir.join("report.pdf");
         std::fs::write(&f, "%PDF-1.7 not really").unwrap();
-        for kind in [PeekKind::Meta, PeekKind::Image, PeekKind::Pdf] {
+        // Images are read from Story 3 on; PDFs wait for Story 4.
+        for kind in [PeekKind::Meta, PeekKind::Pdf] {
             let (p, payload) = peek_path(&f, kind, None).unwrap();
             assert_eq!(p.body, Body::None, "{kind:?}");
             assert_eq!(p.size, 19);
             assert!(!p.stamp.is_empty());
             assert!(payload.is_empty());
         }
+    }
+
+    // Minimal image headers, built by hand: only the fields `image_size` reads
+    // are meaningful, the rest is zero.
+
+    fn png(w: u32, h: u32) -> Vec<u8> {
+        let mut b = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+        b.extend(w.to_be_bytes());
+        b.extend(h.to_be_bytes());
+        b.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]); // depth, color type, methods, CRC
+        b
+    }
+
+    /// A BITMAPINFOHEADER (no `BM` file header), as a BMP has after its 14 bytes and an ICO entry holds.
+    fn dib(w: i32, h: i32) -> Vec<u8> {
+        let mut b = 40u32.to_le_bytes().to_vec();
+        b.extend(w.to_le_bytes());
+        b.extend(h.to_le_bytes());
+        b.extend([1, 0, 32, 0]);
+        b.extend([0; 24]);
+        b
+    }
+
+    fn bmp(w: i32, h: i32) -> Vec<u8> {
+        let mut b = b"BM".to_vec();
+        b.extend([0; 12]);
+        b.extend(dib(w, h));
+        b
+    }
+
+    fn webp(fourcc: &[u8; 4], data: &[u8]) -> Vec<u8> {
+        let mut b = b"RIFF".to_vec();
+        b.extend((4 + 8 + data.len() as u32).to_le_bytes());
+        b.extend(b"WEBP");
+        b.extend(fourcc);
+        b.extend((data.len() as u32).to_le_bytes());
+        b.extend(data);
+        b
+    }
+
+    fn vp8(w: u16, h: u16) -> Vec<u8> {
+        let mut d = vec![0x10, 0x02, 0x00, 0x9d, 0x01, 0x2a];
+        d.extend(w.to_le_bytes());
+        d.extend(h.to_le_bytes());
+        webp(b"VP8 ", &d)
+    }
+
+    fn vp8l(w: u32, h: u32) -> Vec<u8> {
+        let mut d = vec![0x2f];
+        d.extend(((w - 1) | (h - 1) << 14).to_le_bytes());
+        webp(b"VP8L", &d)
+    }
+
+    fn vp8x(w: u32, h: u32) -> Vec<u8> {
+        let mut d = vec![0x10, 0, 0, 0];
+        d.extend(&(w - 1).to_le_bytes()[..3]);
+        d.extend(&(h - 1).to_le_bytes()[..3]);
+        webp(b"VP8X", &d)
+    }
+
+    /// A GIF89a with a 2-color global table, a comment, then each frame as
+    /// (left, top, width, height), each behind a graphic control extension,
+    /// the second with a local color table.
+    fn gif(screen: (u16, u16), frames: &[(u16, u16, u16, u16)]) -> Vec<u8> {
+        let mut b = b"GIF89a".to_vec();
+        b.extend(screen.0.to_le_bytes());
+        b.extend(screen.1.to_le_bytes());
+        b.extend([0x80, 0, 0]); // global color table of 2 entries
+        b.extend([0, 0, 0, 255, 255, 255]);
+        b.extend([0x21, 0xFE, 3, b'h', b'i', b'!', 0]); // a comment in one sub-block
+        for (i, &(left, top, w, h)) in frames.iter().enumerate() {
+            b.extend([0x21, 0xF9, 4, 0, 10, 0, 0, 0]);
+            b.push(0x2C);
+            for v in [left, top, w, h] {
+                b.extend(v.to_le_bytes());
+            }
+            if i == 1 {
+                b.push(0x81); // local color table of 4 entries
+                b.extend([0x2C; 12]); // its bytes look like descriptors, to be skipped
+            } else {
+                b.push(0);
+            }
+            b.extend([2, 2, 0x4C, 0x01, 1, 0x2C, 0]); // LZW size, then 2- and 1-byte sub-blocks
+        }
+        b.push(0x3B);
+        b
+    }
+
+    fn jpeg_sof(marker: u8, w: u16, h: u16) -> Vec<u8> {
+        let mut b = vec![0xFF, marker, 0, 17, 8];
+        b.extend(h.to_be_bytes());
+        b.extend(w.to_be_bytes());
+        b.extend([3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
+        b
+    }
+
+    /// SOI, an APP1 EXIF segment whose thumbnail has an SOF0 of 1x1, a DQT,
+    /// the real SOF, then SOS and EOI.
+    fn jpeg(sof: u8, w: u16, h: u16) -> Vec<u8> {
+        let mut thumb = vec![0xFF, 0xD8];
+        thumb.extend(jpeg_sof(0xC0, 1, 1));
+        thumb.extend([0xFF, 0xD9]);
+        let mut app1 = b"Exif\0\0".to_vec();
+        app1.extend(&thumb);
+        let mut b = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        b.extend((app1.len() as u16 + 2).to_be_bytes());
+        b.extend(app1);
+        b.extend([0xFF, 0xDB, 0, 4, 0, 0]);
+        b.extend([0xFF, 0xFF]); // a fill byte before the next marker
+        b.extend(jpeg_sof(sof, w, h));
+        b.extend([0xFF, 0xDA, 0, 2, 0xAB, 0xFF, 0xD9]);
+        b
+    }
+
+    /// An ICO whose entries hold each of `images` in turn (a PNG or a DIB).
+    fn ico(images: &[Vec<u8>]) -> Vec<u8> {
+        let mut b = vec![0, 0, 1, 0];
+        b.extend((images.len() as u16).to_le_bytes());
+        let mut offset = 6 + 16 * images.len() as u32;
+        for img in images {
+            b.extend([16, 16, 0, 0, 1, 0, 32, 0]); // the directory's own sizes are not trusted
+            b.extend((img.len() as u32).to_le_bytes());
+            b.extend(offset.to_le_bytes());
+            offset += img.len() as u32;
+        }
+        for img in images {
+            b.extend(img);
+        }
+        b
+    }
+
+    #[test]
+    fn image_header_sizes() {
+        assert_eq!(image_size(&png(640, 480)), Some((640, 480)));
+        assert_eq!(image_size(&bmp(300, 200)), Some((300, 200)));
+        assert_eq!(image_size(&bmp(300, -200)), Some((300, 200)), "a top-down BMP");
+        assert_eq!(image_size(&vp8(320, 240)), Some((320, 240)));
+        assert_eq!(image_size(&vp8l(1000, 16384)), Some((1000, 16384)));
+        assert_eq!(image_size(&vp8x(16_777_216, 3)), Some((16_777_216, 3)));
+        // GIF: every frame counts, whatever the logical screen says.
+        assert_eq!(image_size(&gif((1, 1), &[(0, 0, 30000, 30000)])), Some((30000, 30000)));
+        assert_eq!(image_size(&gif((20, 10), &[(0, 0, 4, 4), (0, 0, 8, 30)])), Some((20, 30)), "after a local color table");
+        assert_eq!(image_size(&gif((20, 10), &[(0, 0, 4, 4), (0, 0, 4, 4), (0, 0, 50, 5)])), Some((50, 10)), "the last frame");
+        assert_eq!(image_size(&gif((10, 10), &[(100, 5, 10, 10)])), Some((110, 15)), "a frame's offset grows the canvas");
+        // JPEG: the EXIF thumbnail's SOF is skipped with its segment.
+        assert_eq!(image_size(&jpeg(0xC0, 30000, 30000)), Some((30000, 30000)));
+        assert_eq!(image_size(&jpeg(0xC2, 800, 600)), Some((800, 600)), "progressive");
+        assert_eq!(image_size(&jpeg(0xCF, 7, 9)), Some((7, 9)));
+        // ICO: the largest entry, in either order, PNG or DIB (half height: the mask).
+        assert_eq!(image_size(&ico(&[dib(16, 32), png(30000, 30000)])), Some((30000, 30000)));
+        assert_eq!(image_size(&ico(&[png(30000, 30000), dib(16, 32)])), Some((30000, 30000)));
+        assert_eq!(image_size(&ico(&[dib(16, 32), dib(48, 96), dib(32, 64)])), Some((48, 48)));
+
+        // Cut short, in each format: none can be sized.
+        let cut = |b: Vec<u8>, keep: usize| b[..keep].to_vec();
+        for (name, short) in [
+            ("png", cut(png(640, 480), 22)),
+            ("bmp", cut(bmp(300, 200), 24)),
+            ("vp8", cut(vp8(320, 240), 28)),
+            ("vp8l", cut(vp8l(320, 240), 22)),
+            ("vp8x", cut(vp8x(320, 240), 28)),
+            ("gif header", cut(gif((1, 1), &[]), 8)),
+            ("gif frame", { let g = gif((1, 1), &[(0, 0, 30000, 30000)]); let n = g.len(); cut(g, n - 1) }),
+            ("gif sub-block", { let g = gif((1, 1), &[(0, 0, 9, 9)]); let n = g.len(); cut(g, n - 4) }),
+            ("jpeg", { let j = jpeg(0xC0, 30000, 30000); let n = j.len(); cut(j, n - 20) }),
+            ("jpeg thumbnail only", cut(jpeg(0xC0, 30000, 30000), 30)),
+            ("ico entry", { let i = ico(&[dib(16, 32), png(30000, 30000)]); let n = i.len(); cut(i, n - 1) }),
+            ("ico directory", cut(ico(&[dib(16, 32)]), 12)),
+        ] {
+            assert_eq!(image_size(&short), None, "{name}");
+        }
+        // Not an image at all.
+        let mut seed = 0x2545_F491_u32;
+        let noise: Vec<u8> = (0..4096)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            })
+            .collect();
+        assert_eq!(image_size(&noise), None);
+        assert_eq!(image_size(b""), None);
+        assert_eq!(image_size(b"<svg/>"), None);
+        // A zero dimension anywhere: never decoded.
+        assert_eq!(image_size(&png(0, 480)), None);
+        assert_eq!(image_size(&png(640, 0)), None);
+        assert_eq!(image_size(&jpeg(0xC0, 640, 0)), None, "height deferred to DNL");
+        assert_eq!(image_size(&bmp(0, 10)), None);
+        assert_eq!(image_size(&vp8(0, 10)), None);
+        assert_eq!(image_size(&gif((0, 10), &[(0, 0, 4, 4)])), None);
+        assert_eq!(image_size(&gif((10, 10), &[(0, 0, 4, 0)])), None);
+        assert_eq!(image_size(&ico(&[dib(16, 1)])), None, "half of 1 is 0");
+    }
+
+    /// `body` inside an `<svg>` root, after an XML declaration.
+    fn svg(body: &str) -> String {
+        format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n{body}\n</svg>\n")
+    }
+
+    const GRADIENT: &str = "<defs><linearGradient id=\"g\"><stop offset=\"0\" stop-color=\"#fff\"/></linearGradient></defs>";
+
+    #[test]
+    fn images_are_capped_and_sized() {
+        let dir = scratch("images");
+        let write = |name: &str, bytes: &[u8]| {
+            let p = dir.join(name);
+            std::fs::write(&p, bytes).unwrap();
+            p
+        };
+        let sized = |w: u32, h: u32, len: usize| Body::Bytes { length: len as u64, width: Some(w), height: Some(h) };
+        let pixels = |w: u32, h: u32| Body::Skipped { reason: SkipReason::Pixels, width: Some(w), height: Some(h) };
+
+        for (name, bytes, w, h) in [
+            ("a.png", png(640, 480), 640, 480),
+            ("a.gif", gif((1, 1), &[(0, 0, 64, 32)]), 64, 32),
+            ("a.jpg", jpeg(0xC0, 1920, 1080), 1920, 1080),
+            ("a.webp", vp8x(512, 256), 512, 256),
+            ("a.bmp", bmp(40, -30), 40, 30),
+            ("a.ico", ico(&[dib(16, 32), png(256, 256)]), 256, 256),
+            // Exactly 40 megapixels is allowed.
+            ("cap.png", png(8000, 5000), 8000, 5000),
+        ] {
+            let (p, payload) = peek_path(&write(name, &bytes), PeekKind::Image, None).unwrap();
+            assert_eq!(p.body, sized(w, h, bytes.len()), "{name}");
+            assert_eq!(payload, bytes, "{name}: the payload is the file");
+            assert_eq!(p.size, bytes.len() as u64);
+        }
+        // The extension does not pick the parser: a JPEG named .png is sized as a JPEG.
+        let (p, _) = peek_path(&write("jpeg.png", &jpeg(0xC0, 30, 20)), PeekKind::Image, None).unwrap();
+        assert_eq!(p.body, sized(30, 20, jpeg(0xC0, 30, 20).len()));
+
+        for (name, bytes, w, h) in [
+            ("big.gif", gif((1, 1), &[(0, 0, 30000, 30000)]), 30000, 30000),
+            ("big.jpg", jpeg(0xC0, 30000, 30000), 30000, 30000),
+            ("big.ico", ico(&[dib(16, 32), png(30000, 30000)]), 30000, 30000),
+            // 65536 x 65536 is 2^32: 0 in u32.
+            ("wrap.png", png(65536, 65536), 65536, 65536),
+            ("over.png", png(8000, 5001), 8000, 5001),
+            // 40,000,001 pixels: one over.
+            ("one-over.png", png(53, 754_717), 53, 754_717),
+        ] {
+            let (p, payload) = peek_path(&write(name, &bytes), PeekKind::Image, None).unwrap();
+            assert_eq!(p.body, pixels(w, h), "{name}");
+            assert!(payload.is_empty(), "{name}: no bytes sent");
+        }
+
+        for (name, bytes) in [("bad.png", b"\x89PNG\r\n\x1a\nnot really".to_vec()), ("zero.png", png(0, 10)), ("svg.png", svg("").into_bytes())] {
+            let (p, payload) = peek_path(&write(name, &bytes), PeekKind::Image, None).unwrap();
+            assert_eq!(p.body, Body::Skipped { reason: SkipReason::NoSize, width: None, height: None }, "{name}");
+            assert!(payload.is_empty());
+        }
+
+        // Size caps, from the stat: a sparse file is never read.
+        let sparse = |name: &str, len: u64, head: &[u8]| {
+            let p = write(name, head);
+            File::options().write(true).open(&p).unwrap().set_len(len).unwrap();
+            p
+        };
+        let (p, payload) = peek_path(&sparse("huge.png", 10_000_001, &png(10, 10)), PeekKind::Image, None).unwrap();
+        assert_eq!(p.body, Body::TooLarge { limit: 10_000_000 });
+        assert_eq!(p.size, 10_000_001);
+        assert!(payload.is_empty());
+        let (p, payload) = peek_path(&sparse("edge.png", 10_000_000, &png(10, 10)), PeekKind::Image, None).unwrap();
+        assert_eq!(p.body, sized(10, 10, 10_000_000), "exactly the cap is read");
+        assert_eq!(payload.len(), 10_000_000);
+        // The SVG cap is not the raster cap.
+        let (p, _) = peek_path(&sparse("mid.png", 1_000_001, &png(10, 10)), PeekKind::Image, None).unwrap();
+        assert_eq!(p.body, sized(10, 10, 1_000_001));
+    }
+
+    #[test]
+    fn svg_allowlist_rejects_every_bypass() {
+        let dir = scratch("svg");
+        let plain = svg(&format!(
+            "{GRADIENT}<rect x=\"1\" y=\"1\" width=\"40\" height=\"30\" fill=\"#4a90d9\" stroke=\"black\"/>\n<path d=\"M10 80 L50 20 L90 80 Z\" fill=\"none\" stroke-width=\"2\"/>\n<text x=\"5\" y=\"95\" font-style=\"italic\" font-size=\"8\">Q3 &amp; Q4 &lt;draft&gt; &quot;a&quot; &apos;b&apos;</text>"
+        ));
+        let accepted = [
+            ("a plain chart", plain.clone()),
+            ("a gradient", svg(&format!("{GRADIENT}<rect width=\"9\" height=\"9\" fill=\"url(#g)\"/>"))),
+            ("spaces in url()", svg(&format!("{GRADIENT}<rect fill=\"url( #g )\" stroke=\"URL(#g)\"/>"))),
+            ("quoted url()", svg(&format!("{GRADIENT}<rect fill=\"url('#g')\" clip-path='url(\"#c.1_a:b-2\")'/>"))),
+            ("a <user> element", svg("<user/><images/><styles/>")),
+            ("no declaration", "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>".into()),
+            ("a UTF-8 BOM", format!("\u{FEFF}{plain}")),
+            ("encoding utf-8, single quotes", plain.replace("encoding=\"UTF-8\"", "encoding='utf-8'")),
+            ("a prefixed attribute", svg("<a xlink:href=\"#x\"><rect/></a>")),
+        ];
+        for (name, text) in &accepted {
+            assert!(svg_is_plain(text.as_bytes()), "{name} should pass");
+        }
+
+        let png_data = "data:image/png;base64,iVBORw0KGgo=";
+        let utf16: Vec<u8> = [0xFF, 0xFE].into_iter().chain(plain.encode_utf16().flat_map(|u| u.to_le_bytes())).collect();
+        let rejected: Vec<(&str, Vec<u8>)> = [
+            ("<use>", svg(&format!("{GRADIENT}<use href=\"#g\"/>"))),
+            ("<use/>", svg("<use/>")),
+            ("<use> then a newline", svg("<use\nhref=\"#g\"/>")),
+            ("<use> then a tab", svg("<use\thref=\"#g\"/>")),
+            ("<USE>", svg("<USE href=\"#g\"></USE>")),
+            ("<image>", svg("<image href=\"a.png\" width=\"9\" height=\"9\"/>")),
+            ("<feImage>", svg("<filter id=\"f\"><feImage href=\"a.png\"/></filter>")),
+            ("<svg:use>", svg("<svg:use href=\"#g\"/>")),
+            ("<svg:image>", svg("<svg:image href=\"a.png\"/>")),
+            ("a prefixed element", svg("<x:rect/>")),
+            ("a prefixed end tag", svg("<rect></x:rect>")),
+            ("encoding UTF-16", plain.replace("UTF-8", "UTF-16")),
+            ("encoding ISO-2022-JP", plain.replace("UTF-8", "ISO-2022-JP")),
+            ("an unterminated encoding", plain.replace("encoding=\"UTF-8\"", "encoding=\"UTF-8")),
+            ("<foreignObject> with CSS", svg("<foreignObject width=\"9\" height=\"9\"><div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"background:url(a.png)\"/></foreignObject>")),
+            ("<foreignObject>", svg("<foreignObject width=\"9\" height=\"9\"><div xmlns=\"http://www.w3.org/1999/xhtml\">hi</div></foreignObject>")),
+            ("data: in a style attribute", svg(&format!("<rect style=\"mask-image:url({png_data})\"/>"))),
+            ("data: in a <style>", svg(&format!("<style>rect{{mask-image:url({png_data})}}</style>"))),
+            ("data: behind a character reference", svg("<rect fill=\"url(#g)\" mask=\"&#100;ata:image/png;base64,AAAA\"/>")),
+            ("a hex character reference", svg("<text>&#x41;</text>")),
+            ("url( behind a CSS escape", svg("<rect style=\"mask-image:u\\72l(a.png)\"/>")),
+            ("a backslash", svg("<text>C:\\temp</text>")),
+            ("an internal <!ENTITY>", plain.replace("<svg ", "<!DOCTYPE svg [<!ENTITY big \"x\">]>\n<svg ")),
+            ("a named entity", svg("<text>a&nbsp;b</text>")),
+            ("a bare ampersand", svg("<text>a & b</text>")),
+            ("a comment split in a <style>", svg(&format!("<style>rect{{-webkit-mask-image:ur<!---->l(da<!---->ta:{})}}</style>", &png_data[5..]))),
+            ("a CDATA split", svg("<style>rect{mask-image:ur<![CDATA[l(]]>a.png)}</style>")),
+            ("an @import split", svg("<style>@import \"da<!---->ta:text/css,rect{}\";</style>")),
+            ("a <style> with no url(", svg("<style>rect{fill:red}</style>")),
+            ("a <STYLE/>", svg("<STYLE/>")),
+            ("a style attribute", svg("<rect style=\"fill:red\"/>")),
+            ("a style attribute, spaced", svg("<rect\nstyle = 'fill:red'/>")),
+            ("a comment", svg("<!-- drawn by hand -->")),
+            ("a CDATA section", svg("<text><![CDATA[x]]></text>")),
+            ("a processing instruction", svg("<?foo bar?>")),
+            ("<?xml-stylesheet?> at offset 0", format!("<?xml-stylesheet href=\"x.css\"?>\n{}", svg("").split_once('\n').unwrap().1)),
+            ("an XML declaration not at offset 0", format!("\n{plain}")),
+            ("a second XML declaration", svg("<?xml version=\"1.0\"?>")),
+            ("url(data:)", svg(&format!("<rect fill=\"url({png_data})\"/>"))),
+            ("url(http:)", svg("<rect fill=\"url(http://example.com/a.svg#g)\"/>")),
+            ("url(file#id)", svg("<rect fill=\"url(g.svg#x)\"/>")),
+            ("url(#) with no id", svg("<rect fill=\"url(#)\"/>")),
+            ("url(#id) unclosed", svg("<rect fill=\"url(#g\"/>")),
+            ("url(#id x)", svg("<rect fill=\"url(#g x)\"/>")),
+            ("url() with mismatched quotes", svg("<rect fill='url(\"#g)'/>")),
+            ("url(#id\") with no opening quote", svg("<rect fill='url(#g\")'/>")),
+            ("a fragment url() and data: elsewhere", svg(&format!("{GRADIENT}<rect fill=\"url(#g)\"/><text>{png_data}</text>"))),
+        ]
+        .into_iter()
+        .map(|(name, text)| (name, text.into_bytes()))
+        .chain([
+            ("UTF-16 LE with a BOM", utf16),
+            ("Latin-1", svg("<text>caf\u{1}</text>").into_bytes().into_iter().map(|b| if b == 1 { 0xE9 } else { b }).collect()),
+            ("a NUL", svg("<text>a\0b</text>").into_bytes()),
+        ])
+        .collect();
+        for (name, bytes) in &rejected {
+            assert!(!svg_is_plain(bytes), "{name} should be rejected");
+        }
+
+        // Through `peek_file`: bytes, skipped with nothing sent, or too large.
+        let (p, payload) = peek_path(&{ let f = dir.join("chart.svg"); std::fs::write(&f, &plain).unwrap(); f }, PeekKind::Image, None).unwrap();
+        assert_eq!(p.body, Body::Bytes { length: plain.len() as u64, width: None, height: None });
+        assert_eq!(payload, plain.as_bytes());
+        let f = dir.join("sprite.SVG");
+        std::fs::write(&f, svg("<use href=\"#g\"/>")).unwrap();
+        let (p, payload) = peek_path(&f, PeekKind::Image, None).unwrap();
+        assert_eq!(p.body, Body::Skipped { reason: SkipReason::SvgFeatures, width: None, height: None });
+        assert!(payload.is_empty());
+        let padded = |len: usize| {
+            let mut s = plain.clone();
+            s.push_str(&" ".repeat(len - plain.len()));
+            s
+        };
+        let f = dir.join("edge.svg");
+        std::fs::write(&f, padded(1_000_000)).unwrap();
+        assert_eq!(peek_path(&f, PeekKind::Image, None).unwrap().0.body, Body::Bytes { length: 1_000_000, width: None, height: None });
+        std::fs::write(&f, padded(1_000_001)).unwrap();
+        let (p, payload) = peek_path(&f, PeekKind::Image, None).unwrap();
+        assert_eq!(p.body, Body::TooLarge { limit: 1_000_000 });
+        assert!(payload.is_empty());
     }
 
     /// The `hex` block of the contract file, as bytes.
@@ -520,9 +1232,24 @@ mod tests {
         assert_eq!(json(Body::None), r#"{"type":"none"}"#);
         // Built on macOS only in production, so pinned here for every platform.
         assert_eq!(
-            json(Body::Skipped { reason: SkipReason::NotDownloaded }),
+            json(Body::Skipped { reason: SkipReason::NotDownloaded, width: None, height: None }),
             r#"{"type":"skipped","reason":"notDownloaded"}"#
         );
+        assert_eq!(
+            json(Body::Skipped { reason: SkipReason::Pixels, width: Some(30000), height: Some(20000) }),
+            r#"{"type":"skipped","reason":"pixels","width":30000,"height":20000}"#
+        );
+        assert_eq!(json(Body::Skipped { reason: SkipReason::NoSize, width: None, height: None }), r#"{"type":"skipped","reason":"noSize"}"#);
+        assert_eq!(
+            json(Body::Skipped { reason: SkipReason::SvgFeatures, width: None, height: None }),
+            r#"{"type":"skipped","reason":"svgFeatures"}"#
+        );
+        assert_eq!(json(Body::TooLarge { limit: 10_000_000 }), r#"{"type":"tooLarge","limit":10000000}"#);
+        assert_eq!(
+            json(Body::Bytes { length: 9, width: Some(3), height: Some(2) }),
+            r#"{"type":"bytes","length":9,"width":3,"height":2}"#
+        );
+        assert_eq!(json(Body::Bytes { length: 9, width: None, height: None }), r#"{"type":"bytes","length":9}"#);
         for (s, kind) in [("text", PeekKind::Text), ("image", PeekKind::Image), ("pdf", PeekKind::Pdf), ("html", PeekKind::Html), ("meta", PeekKind::Meta)] {
             assert_eq!(serde_json::from_str::<PeekKind>(&format!("\"{s}\"")).unwrap(), kind);
         }

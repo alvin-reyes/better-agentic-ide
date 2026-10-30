@@ -1,5 +1,5 @@
 import type { Terminal } from "@xterm/xterm";
-import { peekKind, type PeekBody, type PeekCache, type PeekFrame, type PeekKind } from "./filePeek";
+import { peekContent, peekKind, type PeekBody, type PeekCache, type PeekContent, type PeekFrame, type PeekKind } from "./filePeek";
 
 /**
  * The hover card's lifecycle for file links in terminal output, kept free of
@@ -40,7 +40,8 @@ export interface HoverPointer {
 export interface HoverContent {
   size: number;
   modifiedMs: number | null;
-  body: PeekBody;
+  /** The answer's body, or what was kept of it: an image arrives as its Blob. */
+  body: PeekBody | PeekContent;
 }
 
 /** What the card shows: `fileHoverStore` holds it, `FileHoverCard` renders it. */
@@ -166,12 +167,12 @@ export function createHoverController({
       render();
     }, loadingAfterMs);
     peek(abs, peekKind(abs), kept?.stamp).then(
-      ({ peek: p }) => {
-        let body = p.body;
-        if (body.type === "unchanged" && kept) body = kept.content;
+      ({ peek: p, payload }) => {
+        const content = p.body.type === "unchanged" ? kept?.content : peekContent(abs, p.body, payload);
         // Cached even when stale: the work is done.
-        if (body.type === "text") cache.set(abs, { stamp: p.stamp, size: p.size, modifiedMs: p.modifiedMs, content: body });
+        if (content) cache.set(abs, { stamp: p.stamp, size: p.size, modifiedMs: p.modifiedMs, content });
         else cache.delete(abs);
+        const body = content ?? p.body;
         if (card?.token !== c.token) return;
         clearTimeout(loadingTimer);
         c.view = { abs, point: c.point, state: "ready", content: { size: p.size, modifiedMs: p.modifiedMs, body } };

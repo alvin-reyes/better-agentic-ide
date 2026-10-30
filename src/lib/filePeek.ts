@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { viewerKind } from "./viewerKind";
+import { imageMime, viewerKind } from "./viewerKind";
 
 /**
  * The client of `peek_file`, the bounded read behind the terminal's hover
@@ -128,8 +128,20 @@ export function placeCard(pointer: { x: number; y: number }, viewport: { width: 
   return place;
 }
 
-/** What the cache keeps of a preview. Stories 3 to 5 add images, PDF thumbnails and HTML snapshots. */
-export type PeekContent = { type: "text"; text: string; truncated: boolean };
+/** An image's bytes, typed from its extension; the card shows it through a `blob:` URL. */
+export type ImageContent = { type: "image"; blob: Blob; width?: number; height?: number };
+
+/** What the cache keeps of a preview. Stories 4 and 5 add PDF thumbnails and HTML snapshots. */
+export type PeekContent = { type: "text"; text: string; truncated: boolean } | ImageContent;
+
+/** What an answer gives the cache and the card, or undefined when there is nothing to keep. */
+export function peekContent(abs: string, body: PeekBody, payload: Uint8Array): PeekContent | undefined {
+  if (body.type === "text") return body;
+  if (body.type === "bytes" && peekKind(abs) === "image") {
+    return { type: "image", blob: new Blob([payload as Uint8Array<ArrayBuffer>], { type: imageMime(abs) }), width: body.width, height: body.height };
+  }
+  return undefined;
+}
 
 export interface PeekEntry {
   stamp: string;
@@ -141,9 +153,9 @@ export interface PeekEntry {
 const CACHE_ENTRIES = 32;
 const CACHE_BYTES = 32_000_000;
 
-/** Text weighs 2 bytes per UTF-16 code unit. */
-function weight(entry: PeekEntry): number {
-  return entry.content.text.length * 2;
+/** Text weighs 2 bytes per UTF-16 code unit; an image, its Blob's size. */
+function weight({ content }: PeekEntry): number {
+  return content.type === "text" ? content.text.length * 2 : content.blob.size;
 }
 
 /**

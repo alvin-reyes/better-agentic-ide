@@ -62,12 +62,36 @@ The header is 127 (`0x7f`) bytes; `é` is `c3 a9`. A payload, when there is one,
 | `{ type: "text", text, truncated }` | kinds `text` and `html` |
 | `{ type: "binary" }` | kinds `text` and `html`: a NUL in the first 8 KiB, after UTF-16 decoding |
 | `{ type: "bytes", length, width?, height? }` | kinds `image` (Story 3) and `pdf` (Story 4); the payload holds the bytes |
-| `{ type: "tooLarge", limit }` | over the kind's size cap (Stories 3 and 4); the file is not read |
-| `{ type: "skipped", reason, width?, height? }` | `reason`: `"notDownloaded"` (a macOS dataless file, Story 1), `"pixels"`, `"noSize"`, `"svgFeatures"` (Story 3); nothing is read |
+| `{ type: "tooLarge", limit }` | over the kind's size cap (Stories 3 and 4), by the stat (the file is not read) or by a read that finds it grew past the cap |
+| `{ type: "skipped", reason, width?, height? }` | `reason`: `"notDownloaded"` (a macOS dataless file, Story 1; nothing is read), `"pixels"` (with `width` and `height`), `"noSize"`, `"svgFeatures"` (Story 3; read up to the cap, nothing sent). The payload is always empty |
 | `{ type: "unchanged" }` | `known` equals the file's stamp; the file is not read |
-| `{ type: "none" }` | kind `meta`; until Stories 3 and 4, also kinds `image` and `pdf`; unless the file is dataless (macOS), which gives `skipped/notDownloaded` |
+| `{ type: "none" }` | kind `meta`; until Story 4, also kind `pdf`; unless the file is dataless (macOS), which gives `skipped/notDownloaded` |
 
 Text decoding: a UTF-16 LE or BE BOM decodes as UTF-16 (UTF-16 without a BOM shows as binary); otherwise UTF-8, lossily, with an incomplete sequence at the read boundary dropped rather than turned into U+FFFD. `\r\n` becomes `\n`.
+
+`width`, `height` and the `skipped` fields are left out of the JSON when absent (an SVG's `bytes` has neither).
+
+## Images (Story 3)
+
+Kind `image`. A path whose extension is `svg` (any case) is an SVG; anything else is a raster. The frontend types the Blob from the same extension (`imageMime`), so `image/svg+xml` is only ever paired with bytes that passed `svg_is_plain`.
+
+- **Caps.** Rasters 10,000,000 bytes, SVG 1,000,000 bytes: over the cap by the stat is `tooLarge` with the file unread; a read of `cap + 1` that finds more (it grew) is `tooLarge` too.
+- **Rasters:** `image_size(bytes) -> Option<(u32, u32)>`, picked by the bytes' signature, never the extension (a JPEG named `.png` is sized as a JPEG; an unknown signature is `None`). `None` gives `skipped/noSize`; an area over 40,000,000, computed as `w as u64 * h as u64`, gives `skipped/pixels` with the size; otherwise `bytes` with `width` and `height`. A zero side anywhere gives `None`.
+  - PNG: IHDR.
+  - GIF: the logical screen and every image descriptor, walking extension and LZW sub-blocks; the largest width and height, where a frame counts as `left + width` by `top + height` (a decoder may grow the canvas to fit it). A walk that runs off the end, or meets an unknown block, is `None`.
+  - JPEG: segments from SOI by their lengths (fill bytes skipped; RSTn and TEM stand alone); the first SOFn (C0-C3, C5-C7, C9-CB, CD-CF). SOS, EOI or another SOI before it is `None`. An SOF inside an APP1 EXIF thumbnail is skipped with its segment.
+  - WebP: the first chunk, `VP8 `, `VP8L` or `VP8X` (canvas).
+  - BMP: the DIB header (core or info), height as its absolute value.
+  - ICO and CUR: every directory entry's data (a PNG signature means its IHDR, otherwise a DIB with half its height); the largest by area. An entry whose data is out of range is `None`.
+- **SVG:** `svg_is_plain(bytes) -> bool`, else `skipped/svgFeatures`. All text checks ignore ASCII case and cover the whole file. It passes only if:
+  - the bytes are UTF-8 (an optional UTF-8 BOM) with no NUL;
+  - the only `<?` is an XML declaration at offset 0 (after the BOM): `<?xml` then whitespace, ended by `?>`, whose `encoding`, if present, is quoted `utf-8`;
+  - there is no `<!--`, `<![CDATA[`, `<!ENTITY`, `data:`, `\` or `foreignObject`;
+  - every `&` begins `&amp;`, `&lt;`, `&gt;`, `&quot;` or `&apos;` (so no `&#` reference and no other entity);
+  - every `url(` is a fragment reference: optional whitespace, an optional `"` or `'`, `#`, one or more `[A-Za-z0-9_.:-]`, the same quote, optional whitespace, `)`;
+  - there is no `style` attribute (`style` after whitespace, then optional whitespace and `=`);
+  - no `style`, `use`, `image` or `feImage` element, where `<name` matches when followed by whitespace, `/`, `>` or the end (`<user>` is not `<use>`);
+  - no element name, start or end tag, has a namespace prefix (`<x:` or `</x:`).
 
 ## Order of work
 
@@ -76,7 +100,8 @@ Text decoding: a UTF-16 LE or BE BOM decodes as UTF-16 (UTF-16 without a BOM sho
 3. macOS: `st_flags & SF_DATALESS` (`0x40000000`): `skipped/notDownloaded`.
 4. The kind's size cap.
 5. Open with `O_NONBLOCK` on unix, then require `is_file()` on the handle.
-6. Read through `take(cap + 1)`; the extra byte marks `truncated`.
+6. Read through `take(cap + 1)`; the extra byte marks `truncated` (for an image, `tooLarge`).
+7. Images: `svg_is_plain` or `image_size`, as above. The payload is the whole file only for `bytes`.
 
 ## Limits
 

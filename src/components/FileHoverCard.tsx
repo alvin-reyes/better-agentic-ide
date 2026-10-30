@@ -1,18 +1,24 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFileHoverStore } from "../stores/fileHoverStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { CARD_HEIGHT, CARD_WIDTH, formatModified, formatSize, placeCard, stripAnsi } from "../lib/filePeek";
 import type { HoverContent } from "../lib/hoverPreview";
 
+/** The card's body width: 320 less 24 px of padding and 2 px of border. */
+const BODY_WIDTH = CARD_WIDTH - 26;
+
 /** Lines of a text file the card shows. */
 const MAX_LINES = 16;
 
 const fileName = (abs: string) => abs.split(/[\\/]/).pop() || abs;
 
-function details({ size, modifiedMs }: HoverContent): string {
+function details({ size, modifiedMs, body }: HoverContent): string {
   const modified = formatModified(modifiedMs, Date.now());
-  return modified ? `${formatSize(size)} · modified ${modified}` : formatSize(size);
+  const parts = [formatSize(size)];
+  if (modified) parts.push(`modified ${modified}`);
+  if (body.type === "image" && body.width !== undefined && body.height !== undefined) parts.push(`${body.width} × ${body.height}`);
+  return parts.join(" · ");
 }
 
 const secondary = { fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" } as const;
@@ -58,6 +64,52 @@ function TextBody({ text, truncated }: { text: string; truncated: boolean }) {
 }
 
 /**
+ * A `blob:` URL for `blob` while the caller is mounted. It is made in an
+ * effect keyed on the Blob, so a re-render never makes another, and revoked
+ * in that effect's cleanup.
+ */
+function useObjectUrl(blob: Blob): string | null {
+  const [made, setMade] = useState<{ blob: Blob; url: string } | null>(null);
+  useEffect(() => {
+    const url = URL.createObjectURL(blob);
+    setMade({ blob, url });
+    return () => URL.revokeObjectURL(url);
+  }, [blob]);
+  // Until the effect runs for a new Blob, the old URL is already revoked.
+  return made?.blob === blob ? made.url : null;
+}
+
+// Light and dark squares behind an image, so a dark or transparent one stays
+// visible on any theme: the one fixed color in an image body.
+const CHECKERBOARD = {
+  backgroundColor: "#ffffff",
+  backgroundImage:
+    "linear-gradient(45deg, #d0d0d0 25%, transparent 25%), linear-gradient(-45deg, #d0d0d0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #d0d0d0 75%), linear-gradient(-45deg, transparent 75%, #d0d0d0 75%)",
+  backgroundSize: "16px 16px",
+  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
+} as const;
+
+/** An image, SVG included, only ever as an `<img>` of a `blob:` URL: its markup never enters the DOM. */
+function ImageBody({ blob }: { blob: Blob }) {
+  const url = useObjectUrl(blob);
+  return (
+    <div style={{ marginTop: "8px", width: `${BODY_WIDTH}px`, height: "200px", borderRadius: "var(--radius)", overflow: "hidden", ...CHECKERBOARD }}>
+      {url && <img src={url} decoding="async" alt="" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }} />}
+    </div>
+  );
+}
+
+/** Why an image body was not sent, or null. */
+function notPreviewed(body: HoverContent["body"]): string | null {
+  if (body.type === "tooLarge") return `Too large to preview (over ${formatSize(body.limit)})`;
+  if (body.type !== "skipped") return null;
+  if (body.reason === "pixels") return `Too large to preview (${body.width} × ${body.height})`;
+  if (body.reason === "noSize") return "Can't read image size";
+  if (body.reason === "svgFeatures") return "SVG not previewed";
+  return null;
+}
+
+/**
  * The preview card for a file link under the pointer, in a portal so it can
  * overflow its pane. It never takes the pointer or focus: keys and clicks
  * always reach the terminal underneath.
@@ -67,6 +119,7 @@ export default function FileHoverCard() {
   if (!card) return null;
   const { content } = card;
   const body = content?.body;
+  const unsent = body ? notPreviewed(body) : null;
   return createPortal(
     <div
       role="tooltip"
@@ -103,6 +156,8 @@ export default function FileHoverCard() {
       {content && <div style={secondary}>{details(content)}</div>}
       {body?.type === "text" && <TextBody text={body.text} truncated={body.truncated} />}
       {body?.type === "binary" && <Note>Binary file</Note>}
+      {body?.type === "image" && <ImageBody blob={body.blob} />}
+      {unsent && <Note>{unsent}</Note>}
     </div>,
     document.body,
   );

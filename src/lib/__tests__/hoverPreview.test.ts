@@ -185,6 +185,71 @@ describe("createHoverController", () => {
     expect(t.cache.get(K2.abs)).toBeUndefined();
   });
 
+  it("an image answer is kept as a Blob of its type", async () => {
+    const t = setup();
+    const svg = { abs: "/p/logo.svg", key: "/p/logo.svg\u00000,2-11,2" };
+    const bytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+    t.c.pointerMoved(A, at(100));
+    t.c.enter(A, svg, at(100));
+    await tick(350);
+    expect(t.peek).toHaveBeenLastCalledWith(svg.abs, "image", undefined);
+    t.peeks[0].resolve({ peek: { size: bytes.length, modifiedMs: 0, stamp: "v1", body: { type: "bytes", length: bytes.length } }, payload: bytes });
+    await tick(0);
+    const body = t.lastShown()?.content?.body;
+    expect(body).toMatchObject({ type: "image" });
+    const blob = (body as { blob: Blob }).blob;
+    expect(blob.type).toBe("image/svg+xml");
+    // jsdom's Blob has no `arrayBuffer`; FileReader reads it, on real timers.
+    vi.useRealTimers();
+    const read = await new Promise<ArrayBuffer>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(blob);
+    });
+    expect([...new Uint8Array(read)]).toEqual([...bytes]);
+    expect(t.cache.get(svg.abs)).toMatchObject({ stamp: "v1", content: { type: "image", blob } });
+  });
+
+  it("an evicted entry is kept by its request", async () => {
+    const t = setup();
+    const img = (n: number) => ({ abs: `/p/shot${n}.png`, key: `/p/shot${n}.png\u00000,${n}-12,${n}` });
+    const imageFrame = (stamp: string): PeekFrame => ({
+      peek: { size: 10_000_000, modifiedMs: 0, stamp, body: { type: "bytes", length: 10_000_000, width: 640, height: 480 } },
+      payload: new Uint8Array(10_000_000),
+    });
+    const hover = async (n: number) => {
+      t.c.pointerMoved(A, at(100 + n));
+      t.c.enter(A, img(n), at(100 + n));
+      await tick(350);
+    };
+
+    // The first image is shown and cached.
+    await hover(0);
+    expect(t.peek).toHaveBeenLastCalledWith(img(0).abs, "image", undefined);
+    t.peeks[0].resolve(imageFrame("x1"));
+    await tick(0);
+    expect(t.lastShown()).toMatchObject({ abs: img(0).abs, state: "ready", content: { body: { type: "image", width: 640, height: 480 } } });
+    const blob = (t.lastShown()?.content?.body as { blob: Blob }).blob;
+    expect(blob.size).toBe(10_000_000);
+    expect(blob.type).toBe("image/png");
+
+    // Three more are asked for, then the first again, with its stamp.
+    for (const n of [1, 2, 3]) await hover(n);
+    await hover(0);
+    expect(t.peek).toHaveBeenLastCalledWith(img(0).abs, "image", "x1");
+    // Their answers land first: 40 MB, so the first image is evicted.
+    for (const n of [1, 2, 3]) t.peeks[n].resolve(imageFrame(`s${n}`));
+    await tick(0);
+    expect(t.cache.get(img(0).abs)).toBeUndefined();
+    expect(t.cache.size).toBe(3);
+
+    // `unchanged` is still served, from the entry the request kept.
+    t.peeks[4].resolve({ peek: { size: 10_000_000, modifiedMs: 0, stamp: "x1", body: { type: "unchanged" } }, payload: new Uint8Array() });
+    await tick(0);
+    expect(t.lastShown()).toMatchObject({ abs: img(0).abs, state: "ready", content: { body: { type: "image", blob, width: 640, height: 480 } } });
+    expect(t.cache.get(img(0).abs)?.content).toMatchObject({ type: "image", blob });
+  });
+
   it("a redraw leave keeps the card; a vanished path closes it", async () => {
     const t = setup();
     await shown(t);

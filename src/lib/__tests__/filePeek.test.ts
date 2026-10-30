@@ -221,6 +221,36 @@ describe("PeekCache", () => {
   });
 });
 
+describe("PeekCache with images", () => {
+  const image = (stamp: string): PeekEntry => ({
+    stamp,
+    size: 10_000_000,
+    modifiedMs: 0,
+    content: { type: "image", blob: new Blob([new Uint8Array(10_000_000)], { type: "image/png" }), width: 640, height: 480 },
+  });
+  const text = (t: string): PeekEntry => ({ stamp: "t", size: t.length, modifiedMs: 0, content: { type: "text", text: t, truncated: false } });
+
+  it("cache counts image bytes", () => {
+    // Three 10 MB images fit the 32 MB budget; a fourth evicts the oldest.
+    const cache = new PeekCache();
+    for (const n of [1, 2, 3, 4]) cache.set(`/i${n}.png`, image(`s${n}`));
+    expect(cache.size).toBe(3);
+    expect(cache.get("/i1.png")).toBeUndefined();
+    for (const n of [2, 3, 4]) expect(cache.get(`/i${n}.png`)?.stamp).toBe(`s${n}`);
+
+    // An image weighs its Blob's size: 30 MB of images and 2 MB of text is exactly the budget.
+    cache.set("/t", text("x".repeat(1_000_000)));
+    expect(cache.size).toBe(4);
+    cache.set("/t", text("x".repeat(1_000_001)));
+    expect(cache.get("/i2.png")).toBeUndefined();
+    expect(cache.size).toBe(3);
+    // Deleting an image gives its weight back.
+    cache.delete("/i3.png");
+    cache.set("/i5.png", image("s5"));
+    expect(cache.size).toBe(3);
+  });
+});
+
 describe("stripAnsi", () => {
   it("ANSI escapes are stripped", () => {
     // CSI: colors, cursor moves, erase, private modes.

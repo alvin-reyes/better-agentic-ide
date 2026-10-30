@@ -1,16 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import FileHoverCard from "../FileHoverCard";
 import { useFileHoverStore } from "../../stores/fileHoverStore";
-import { placeCard, type PeekBody } from "../../lib/filePeek";
-import type { HoverCard } from "../../lib/hoverPreview";
+import { placeCard } from "../../lib/filePeek";
+import type { HoverCard, HoverContent } from "../../lib/hoverPreview";
 
 const ABS = "/proj/src/components/App.tsx";
 
-function ready(body: PeekBody, extra: Partial<HoverCard> = {}): HoverCard {
+function ready(body: HoverContent["body"], extra: Partial<HoverCard> = {}): HoverCard {
   return {
     abs: ABS,
     point: { x: 100, y: 100 },
@@ -141,5 +141,94 @@ describe("FileHoverCard", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(document.activeElement).toBe(input);
     input.remove();
+  });
+});
+
+describe("FileHoverCard images", () => {
+  // jsdom has no object URLs: stub both, numbering the URLs made.
+  const createObjectURL = vi.fn((_blob: Blob) => `blob:test/${createObjectURL.mock.calls.length}`);
+  const revokeObjectURL = vi.fn((_url: string) => {});
+  beforeEach(() => {
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+  });
+  afterEach(() => {
+    // Unmount while the stubs are still there: the card revokes on the way out.
+    act(() => useFileHoverStore.getState().hide());
+    cleanup();
+    const url = URL as unknown as Record<string, unknown>;
+    delete url.createObjectURL;
+    delete url.revokeObjectURL;
+  });
+
+  const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
+
+  it("image thumbnail", () => {
+    const card = showCard(ready({ type: "image", blob: png, width: 1920, height: 1080 }));
+    const imgs = card.querySelectorAll("img");
+    expect(imgs).toHaveLength(1);
+    const img = imgs[0];
+    expect(img.getAttribute("src")).toBe("blob:test/1");
+    expect(img.getAttribute("decoding")).toBe("async");
+    expect(img.getAttribute("alt")).toBe("");
+    expect(img.style.objectFit).toBe("contain");
+    const box = img.parentElement as HTMLElement;
+    expect([box.style.width, box.style.height]).toEqual(["294px", "200px"]);
+    expect(within(card).getByText("12.3 KB · modified 3 min ago · 1920 × 1080")).toBeTruthy();
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(createObjectURL).toHaveBeenCalledWith(png);
+
+    // Re-rendered with the same Blob (a new card object): no second URL.
+    act(() => useFileHoverStore.getState().show(ready({ type: "image", blob: png, width: 1920, height: 1080 }, { point: { x: 300, y: 200 } })));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    expect(screen.getByRole("tooltip").querySelector("img")?.getAttribute("src")).toBe("blob:test/1");
+
+    // Another Blob: the old URL goes, a new one is made.
+    const other = new Blob([new Uint8Array([1])], { type: "image/png" });
+    act(() => useFileHoverStore.getState().show(ready({ type: "image", blob: other, width: 2, height: 2 })));
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test/1");
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("tooltip").querySelector("img")?.getAttribute("src")).toBe("blob:test/2");
+
+    // Unmounting the card revokes its URL.
+    act(() => useFileHoverStore.getState().hide());
+    expect(revokeObjectURL).toHaveBeenCalledTimes(2);
+    expect(revokeObjectURL).toHaveBeenLastCalledWith("blob:test/2");
+  });
+
+  it("svg is only ever an img", () => {
+    const scripts = document.querySelectorAll("script").length;
+    const markup = '<svg xmlns="http://www.w3.org/2000/svg"><script>window.pwned = 1</script><rect width="9" height="9"/></svg>';
+    const blob = new Blob([markup], { type: "image/svg+xml" });
+    const card = showCard({ ...ready({ type: "image", blob }), abs: "/proj/logo.svg" });
+    const imgs = card.querySelectorAll("img");
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0].getAttribute("src")).toMatch(/^blob:/);
+    expect(card.querySelector("svg")).toBeNull();
+    expect(document.querySelectorAll("script")).toHaveLength(scripts);
+    expect(card.textContent).not.toContain("pwned");
+    // No size is known for an SVG: the detail line has none.
+    expect(within(card).getByText("12.3 KB · modified 3 min ago")).toBeTruthy();
+  });
+
+  it("images that are not decoded say why", () => {
+    const cases: [HoverContent["body"], string][] = [
+      [{ type: "skipped", reason: "pixels", width: 30000, height: 30000 }, "Too large to preview (30000 × 30000)"],
+      [{ type: "skipped", reason: "noSize" }, "Can't read image size"],
+      [{ type: "skipped", reason: "svgFeatures" }, "SVG not previewed"],
+      [{ type: "tooLarge", limit: 10_000_000 }, "Too large to preview (over 10.0 MB)"],
+      [{ type: "tooLarge", limit: 1_000_000 }, "Too large to preview (over 1.0 MB)"],
+    ];
+    for (const [body, message] of cases) {
+      const card = showCard(ready(body));
+      expect(within(card).getByText(message)).toBeTruthy();
+      expect(within(card).getByText("12.3 KB · modified 3 min ago")).toBeTruthy();
+      expect(card.querySelector("img")).toBeNull();
+      cleanup();
+    }
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 });
