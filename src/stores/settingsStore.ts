@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Provider } from "../lib/agentCommand";
 import { readJson } from "../lib/storage";
+import { LEGACY_FIELD, carryLegacyField } from "../lib/anthropicKey";
 
 export interface ThemeColors {
   bgPrimary: string;
@@ -351,7 +352,6 @@ interface Settings {
   cursorBlink: boolean;
   scrollback: number;
   defaultProvider: Provider;
-  anthropicApiKey: string;
   orchestratorModel: string;
   ollamaEndpoint: string;
   ollamaModel: string;
@@ -391,7 +391,6 @@ interface SettingsStore extends Settings {
   setCursorBlink: (blink: boolean) => void;
   setScrollback: (lines: number) => void;
   setDefaultProvider: (provider: Provider) => void;
-  setAnthropicApiKey: (key: string) => void;
   setOrchestratorModel: (model: string) => void;
   setOllamaEndpoint: (endpoint: string) => void;
   setOllamaModel: (model: string) => void;
@@ -409,7 +408,9 @@ interface SettingsStore extends Settings {
 }
 
 function persistSettings(s: Settings) {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  // The old plain-text API key is never in the store's state; it is carried
+  // from localStorage into each save until the move to the vault strips it.
+  localStorage.setItem(SETTINGS_KEY, carryLegacyField(JSON.stringify(s)));
 }
 
 function persistWorkspaces(w: WorkspacePreset[]) {
@@ -426,7 +427,6 @@ const defaults: Settings = {
   cursorBlink: true,
   scrollback: 10000,
   defaultProvider: "claude",
-  anthropicApiKey: "",
   orchestratorModel: "claude-opus-5",
   ollamaEndpoint: "http://localhost:11434",
   ollamaModel: "deepseek-r1",
@@ -451,7 +451,9 @@ const defaults: Settings = {
  */
 const LEGACY_MONO = '"JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", monospace';
 
-function migrate(saved: Partial<Settings>): Partial<Settings> {
+function migrate(raw: Partial<Settings>): Partial<Settings> {
+  // The Anthropic key moved to the vault (ADR 0013): the store never holds the old field.
+  const { [LEGACY_FIELD]: _key, ...saved } = raw as Partial<Settings> & Record<string, unknown>;
   if (saved.fontFamily === LEGACY_MONO) {
     const { fontFamily: _drop, ...rest } = saved;
     return rest; // fall back to the current default
@@ -501,7 +503,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setCursorBlink: (cursorBlink) => save({ cursorBlink }),
     setScrollback: (scrollback) => save({ scrollback }),
     setDefaultProvider: (defaultProvider) => save({ defaultProvider }),
-    setAnthropicApiKey: (anthropicApiKey) => save({ anthropicApiKey }),
     setOrchestratorModel: (orchestratorModel) => save({ orchestratorModel }),
     setOllamaEndpoint: (ollamaEndpoint) => save({ ollamaEndpoint }),
     setOllamaModel: (ollamaModel) => save({ ollamaModel }),

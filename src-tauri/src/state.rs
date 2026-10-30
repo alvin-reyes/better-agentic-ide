@@ -219,6 +219,56 @@ pub fn restore_snapshot(state_dir: &Path, name: &str, now_ms: u64) -> std::io::R
     Ok(())
 }
 
+/// The settings key's file, the only one that held a secret field.
+const SETTINGS_FILE: &str = "better-terminal-settings.json";
+
+/// Strip `sync::SECRET_FIELDS` from the settings file in `dir` and delete
+/// that file's leftover temp files. Returns how many files it wrote or
+/// deleted; a file it cannot change is left for the next launch.
+fn scrub_dir(dir: &Path) -> usize {
+    let mut changed = 0;
+    let temp_prefix = format!(".{}.", SETTINGS_FILE);
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with(&temp_prefix) && name.ends_with(".tmp") && fs::remove_file(entry.path()).is_ok() {
+                changed += 1;
+            }
+        }
+    }
+    let path = dir.join(SETTINGS_FILE);
+    if let Ok(raw) = fs::read_to_string(&path) {
+        let stripped = crate::sync::strip_secrets(&raw);
+        if stripped != raw && atomic_write(&path, &stripped).is_ok() {
+            changed += 1;
+        }
+    }
+    changed
+}
+
+/// Remove the old plain-text API key field from every copy of the settings
+/// ADE keeps under `state_dir`: each snapshot and any leftover restore
+/// directory (stripped, not deleted: after a crash mid-restore, `.kv-old-*`
+/// may be the only copy of the state). `kv/` is touched only `at_boot`,
+/// before auto-save starts; later, a write may be in flight there.
+pub fn scrub_secrets(state_dir: &Path, at_boot: bool) -> usize {
+    let mut dirs = Vec::new();
+    if at_boot {
+        dirs.push(state_dir.join("kv"));
+    }
+    let snap_dir = state_dir.join("snapshots");
+    dirs.extend(list_snapshots(&snap_dir).into_iter().map(|n| snap_dir.join(n)));
+    if let Ok(entries) = fs::read_dir(state_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if (name.starts_with(".kv-old-") || name.starts_with(".kv-restore-")) && entry.path().is_dir() {
+                dirs.push(entry.path());
+            }
+        }
+    }
+    dirs.iter().map(|d| scrub_dir(d)).sum()
+}
+
 pub(crate) fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -258,6 +308,14 @@ pub fn state_list_snapshots(app: tauri::AppHandle) -> Result<Vec<String>, String
 #[tauri::command(async)]
 pub fn state_restore_snapshot(app: tauri::AppHandle, name: String) -> Result<(), String> {
     restore_snapshot(&state_dir(&app)?, &name, now_ms()).map_err(|e| e.to_string())
+}
+
+/// Strip the old API key field from the saved settings copies (see
+/// `scrub_secrets`). The webview passes `atBoot: true` only before auto-save
+/// has started. Returns how many files changed.
+#[tauri::command(async)]
+pub fn state_scrub_secrets(app: tauri::AppHandle, at_boot: bool) -> Result<usize, String> {
+    Ok(scrub_secrets(&state_dir(&app)?, at_boot))
 }
 
 #[tauri::command]
@@ -379,5 +437,98 @@ mod tests {
         let all = read_all(&kv);
         assert_eq!(all.get("k").map(String::as_str), Some("old"));
         assert_eq!(all.get("ade-rec-1").map(String::as_str), Some("frames"));
+    }
+
+    const KEYED: &str = "{\"anthropicApiKey\":\"sk-ant-K\",\"fontSize\":14,\"themeId\":\"nord\"}";
+    /// Spaced on purpose: a rewrite through serde would change its bytes.
+    const CLEAN: &str = "{ \"fontSize\": 12, \"themeId\": \"light\" }";
+    const SETTINGS: &str = "better-terminal-settings.json";
+    const SETTINGS_TMP: &str = ".better-terminal-settings.json.123-0.tmp";
+    /// Another key's temp file: the scrub must leave it alone.
+    const OTHER_TMP: &str = ".ade-session.json.123-1.tmp";
+
+    /// The old key in kv/, three snapshots, a .kv-old-* and a .kv-restore-*
+    /// directory, and in temp files in kv/ and one snapshot; one clean snapshot.
+    fn keyed_state(name: &str) -> PathBuf {
+        let dir = tmp(name);
+        let put = |rel: &str, body: &str| {
+            let p = dir.join(rel);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, body).unwrap();
+        };
+        put(&format!("kv/{SETTINGS}"), KEYED);
+        put(&format!("kv/{SETTINGS_TMP}"), KEYED);
+        put(&format!("kv/{OTHER_TMP}"), "{\"tabs\":[]}");
+        put("kv/ade-session.json", "{\"tabs\":[]}");
+        for snap in ["1000", "1001", "1002"] {
+            put(&format!("snapshots/{snap}/{SETTINGS}"), KEYED);
+            put(&format!("snapshots/{snap}/ade-session.json"), "{\"tabs\":[]}");
+        }
+        put(&format!("snapshots/1001/{SETTINGS_TMP}"), KEYED);
+        put(&format!("snapshots/1003/{SETTINGS}"), CLEAN);
+        put(&format!(".kv-old-900/{SETTINGS}"), KEYED);
+        put(&format!(".kv-restore-901/{SETTINGS}"), KEYED);
+        dir
+    }
+
+    fn files_under(dir: &Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for entry in fs::read_dir(dir).unwrap().flatten() {
+            let p = entry.path();
+            if p.is_dir() { out.extend(files_under(&p)); } else { out.push(p); }
+        }
+        out
+    }
+
+    fn json(path: &Path) -> serde_json::Value {
+        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn scrub_removes_the_old_key_everywhere_under_state() {
+        let dir = keyed_state("scrub-boot");
+        let clean_before = fs::metadata(dir.join("snapshots/1003").join(SETTINGS)).unwrap().modified().unwrap();
+
+        // 1 kv + 3 snapshots + 2 restore dirs stripped, 2 temp files deleted.
+        assert_eq!(scrub_secrets(&dir, true), 8);
+
+        for f in files_under(&dir) {
+            let body = fs::read_to_string(&f).unwrap();
+            assert!(!body.contains("anthropicApiKey") && !body.contains("sk-ant-K"), "{} still holds the key", f.display());
+        }
+        assert!(!dir.join("kv").join(SETTINGS_TMP).exists());
+        assert!(!dir.join("snapshots/1001").join(SETTINGS_TMP).exists());
+        assert!(dir.join("kv").join(OTHER_TMP).exists(), "another key's temp file was deleted");
+        // Restore directories are stripped, not deleted.
+        assert!(dir.join(".kv-old-900").join(SETTINGS).exists());
+        assert!(dir.join(".kv-restore-901").join(SETTINGS).exists());
+
+        let rest = serde_json::json!({ "fontSize": 14, "themeId": "nord" });
+        for rel in ["kv", "snapshots/1000", "snapshots/1001", "snapshots/1002", ".kv-old-900", ".kv-restore-901"] {
+            assert_eq!(json(&dir.join(rel).join(SETTINGS)), rest, "{rel}");
+        }
+        assert_eq!(fs::read_to_string(dir.join("kv/ade-session.json")).unwrap(), "{\"tabs\":[]}");
+        let clean = dir.join("snapshots/1003").join(SETTINGS);
+        assert_eq!(fs::read_to_string(&clean).unwrap(), CLEAN, "the clean snapshot was rewritten");
+        assert_eq!(fs::metadata(&clean).unwrap().modified().unwrap(), clean_before);
+
+        assert_eq!(scrub_secrets(&dir, true), 0);
+    }
+
+    #[test]
+    fn scrub_leaves_kv_alone_after_boot() {
+        let dir = keyed_state("scrub-live");
+
+        // 3 snapshots + 2 restore dirs stripped, 1 snapshot temp file deleted.
+        assert_eq!(scrub_secrets(&dir, false), 6);
+
+        assert_eq!(fs::read_to_string(dir.join("kv").join(SETTINGS)).unwrap(), KEYED);
+        assert_eq!(fs::read_to_string(dir.join("kv").join(SETTINGS_TMP)).unwrap(), KEYED);
+        for f in files_under(&dir).into_iter().filter(|f| !f.starts_with(dir.join("kv"))) {
+            let body = fs::read_to_string(&f).unwrap();
+            assert!(!body.contains("anthropicApiKey") && !body.contains("sk-ant-K"), "{} still holds the key", f.display());
+        }
+        assert!(!dir.join("snapshots/1001").join(SETTINGS_TMP).exists());
+        assert_eq!(scrub_secrets(&dir, false), 0);
     }
 }

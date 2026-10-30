@@ -4,6 +4,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import type { ChatImage } from "../stores/orchestratorStore";
 import { AGENT_CATALOG } from "../data/curatedAgents";
 import { DEEPSEEK_BASE_URL, DEEPSEEK_MODEL } from "./agentCommand";
+import { ANTHROPIC_VAULT_NAME } from "./anthropicKey";
 
 const PROFILE_IDS = AGENT_CATALOG.map((p) => p.id);
 
@@ -187,7 +188,21 @@ export async function sendOrchestratorMessage(
     });
   }
 
-  const apiKey = settings.anthropicApiKey;
+  // The key lives in the vault under an app-only name that terminals never
+  // get (ADR 0013). There is no fallback: not to an ANTHROPIC_API_KEY entry,
+  // which would put terminals' Claude Code on API billing, and not to the old
+  // plain-text setting.
+  let apiKey = "";
+  try {
+    apiKey = await invoke<string>("vault_get", { name: ANTHROPIC_VAULT_NAME });
+  } catch (err) {
+    const message = typeof err === "string" ? err : err instanceof Error ? err.message : String(err);
+    if (message !== "not found") {
+      // "The system keychain isn't available: …" and the like.
+      callbacks.onError(message);
+      return;
+    }
+  }
 
   if (!apiKey) {
     callbacks.onError("No Anthropic API key set. Go to Settings → AI API to add one.");

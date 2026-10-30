@@ -51,7 +51,7 @@ pub const DEVICE_KEYS: &[&str] = &["ade-session", "ade-scratchpad-draft"];
 pub const SECRET_FIELDS: &[&str] = &["anthropicApiKey"];
 
 /// Remove secret fields from a JSON object value; non-objects pass through.
-fn strip_secrets(value: &str) -> String {
+pub(crate) fn strip_secrets(value: &str) -> String {
     match serde_json::from_str::<serde_json::Value>(value) {
         Ok(serde_json::Value::Object(mut map)) => {
             let mut changed = false;

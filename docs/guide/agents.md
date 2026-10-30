@@ -102,7 +102,7 @@ A project's work outlives the terminal it started in, which is why Project is th
 Press {% include key.html mac="⌘⇧O" other="Ctrl+Alt+Shift+O" %} to open an Orchestrator tab and talk through a project (type in the scratchpad). It breaks the work into tasks, each with an agent profile, a priority and its dependencies.
 
 - **Dispatch** one task, or **Dispatch All** ready tasks. Each runs in its own terminal with `claude`, the task, and a generated `SPEC.md`.
-- The orchestrator uses the Anthropic API, DeepSeek, or a local Ollama model — pick one in *Settings → AI API*. DeepSeek reuses the `DEEPSEEK_API_KEY` in [Secrets]({{ '/guide/integrations/' | relative_url }}#secrets-vault), so it needs no second key.
+- The orchestrator uses the Anthropic API, DeepSeek, or a local Ollama model — pick one in *Settings → AI API*. DeepSeek reuses the `DEEPSEEK_API_KEY` in [Secrets]({{ '/guide/integrations/' | relative_url }}#secrets-vault), so it needs no second key. The Anthropic key is stored in the system keychain and is not exported to terminals; if you saved it in ADE before this version, rotate it.
 
 ## Stage board
 

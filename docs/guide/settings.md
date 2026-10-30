@@ -38,7 +38,7 @@ Rename any open tab, and save the current set of tabs as a named workspace. **Lo
 
 The [orchestrator]({{ '/guide/agents/' | relative_url }}#orchestrator) needs a model:
 
-- **Anthropic**: paste an API key (`sk-ant-…`) and pick a model. The key stays on this machine; sync never copies it.
+- **Anthropic**: paste an API key (`sk-ant-…`), **Save** it, and pick a model. The key is stored in the system keychain, not in ADE's settings, and it is not exported to terminals; sync never copies it. A key saved in ADE before this version was stored in plain text: ADE moves it to the keychain at the next launch, but rotate it at console.anthropic.com. Without a working keychain the Orchestrator can't use the key, and this section offers **Remove the saved copy** to delete the plain-text one.
 - **DeepSeek**: calls DeepSeek's Anthropic-compatible endpoint with the `DEEPSEEK_API_KEY` already in the [vault]({{ '/guide/integrations/' | relative_url }}#secrets-vault), so there is no second key to enter.
 - **Ollama (local)**: set the endpoint (default `http://localhost:11434`) and a model name such as `llama3.2` or `qwen2.5-coder`.
 

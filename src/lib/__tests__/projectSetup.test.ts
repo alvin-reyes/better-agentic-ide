@@ -424,14 +424,14 @@ describe("the kept list", () => {
   });
 
   it("re-asks v4 projects after the kept list is seeded, in the main window", () => {
-    const main = readFileSync(resolve(__dirname, "../../main.tsx"), "utf8");
+    const main = readFileSync(resolve(__dirname, "../boot.ts"), "utf8");
     const seeded = main.indexOf("migrateKept();");
     expect(seeded).toBeGreaterThan(-1);
     expect(main.indexOf("reaskV4Projects()", seeded)).toBeGreaterThan(seeded);
   });
 
   it("is migrated after the saved state is restored, in the main window", () => {
-    const main = readFileSync(resolve(__dirname, "../../main.tsx"), "utf8");
+    const main = readFileSync(resolve(__dirname, "../boot.ts"), "utf8");
     const hydrated = main.indexOf("await hydrateFromDisk();");
     const saving = main.indexOf("startAutoSave();", hydrated);
     const migrated = main.indexOf("migrateKept();");

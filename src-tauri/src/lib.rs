@@ -474,6 +474,7 @@ pub fn run() {
             state::state_snapshot,
             state::state_list_snapshots,
             state::state_restore_snapshot,
+            state::state_scrub_secrets,
             state::state_dir_path,
             sync::sync_get_config,
             sync::sync_set_config,

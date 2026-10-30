@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import { invoke } from "@tauri-apps/api/core";
 import SyncSettings from "./SyncSettings";
+import AnthropicKeyField from "./AnthropicKeyField";
 import { PROVIDERS } from "../data/providers";
 import { supportsRoleDelivery } from "../lib/agentCommand";
 
@@ -958,22 +959,7 @@ export default function SettingsPanel() {
               {/* Anthropic section */}
               {store.orchestratorProvider === "anthropic" && (
                 <>
-                  <div>
-                    <label style={SECTION_LABEL_STYLE}>
-                      Anthropic API Key
-                    </label>
-                    <input
-                      type="password"
-                      value={store.anthropicApiKey}
-                      onChange={(e) => store.setAnthropicApiKey(e.target.value)}
-                      placeholder="sk-ant-..."
-                      style={{ ...MONO_INPUT_STYLE, marginTop: "8px" }}
-                      {...inputFocus}
-                    />
-                    <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
-                      Required for Orchestrator Mode. Get your key at console.anthropic.com
-                    </p>
-                  </div>
+                  <AnthropicKeyField labelStyle={SECTION_LABEL_STYLE} inputStyle={MONO_INPUT_STYLE} inputFocus={inputFocus} />
 
                   <div>
                     <label style={SECTION_LABEL_STYLE}>
