@@ -290,9 +290,11 @@ fn gif_size(b: &[u8]) -> Option<(u32, u32)> {
     }
 }
 
-/// The first top-level SOFn, walking the segments from SOI by their lengths,
-/// so an SOF inside an APP1 EXIF thumbnail is skipped with its segment.
+/// The largest top-level SOFn before the first scan, walking the segments
+/// from SOI by their lengths, so an SOF inside an APP1 EXIF thumbnail is
+/// skipped with its segment. A zero side in any of them is `None`.
 fn jpeg_size(b: &[u8]) -> Option<(u32, u32)> {
+    let mut largest: Option<(u32, u32)> = None;
     let mut i = 2;
     loop {
         if *b.get(i)? != 0xFF {
@@ -307,16 +309,22 @@ fn jpeg_size(b: &[u8]) -> Option<(u32, u32)> {
         match marker {
             // RSTn and TEM stand alone.
             0xD0..=0xD7 | 0x01 => continue,
-            // Image data or the end, with no frame header first.
-            0xD8 | 0xD9 | 0xDA => return None,
-            0xC0..=0xCF if !matches!(marker, 0xC4 | 0xC8 | 0xCC) => {
-                // Length, precision, height, width.
-                return nonzero(be16(b, i + 5)? as u32, be16(b, i + 3)? as u32);
-            }
+            // The scan: what follows is image data, not segments.
+            0xDA => return largest,
+            // The end, or another image, before any scan.
+            0xD8 | 0xD9 => return None,
             _ => {
                 let len = be16(b, i)? as usize;
                 if len < 2 {
                     return None;
+                }
+                // SOFn; C4 (DHT), C8 (JPG) and CC (DAC) are not frame headers.
+                if (0xC0..=0xCF).contains(&marker) && !matches!(marker, 0xC4 | 0xC8 | 0xCC) {
+                    // Length, precision, height, width.
+                    let size = nonzero(be16(b, i + 5)? as u32, be16(b, i + 3)? as u32)?;
+                    if largest.is_none_or(|l| area(size) > area(l)) {
+                        largest = Some(size);
+                    }
                 }
                 i += len;
             }
@@ -425,9 +433,14 @@ pub fn svg_is_plain(bytes: &[u8]) -> bool {
         return false;
     }
 
-    // No comments, CDATA, entity declarations, embedded data, escapes or
-    // foreign content.
-    if ["<!--", "<![cdata[", "<!entity", "data:", "\\", "foreignobject"].iter().any(|bad| lower.contains(bad)) {
+    // No comments, CDATA, entity or attribute-list declarations, embedded
+    // data, image sets, escapes or foreign content.
+    if ["<!--", "<![cdata[", "<!entity", "<!attlist", "data:", "image-set(", "\\", "foreignobject"].iter().any(|bad| lower.contains(bad)) {
+        return false;
+    }
+    // No internal DTD subset: libxml2 applies its default attributes. It can
+    // only come before the root element, and nothing else there uses `[`.
+    if lower[..lower.find("<svg").unwrap_or(lower.len())].contains('[') {
         return false;
     }
     // Every `&` starts one of the five XML entities (so no `&#` either).
@@ -454,10 +467,12 @@ pub fn svg_is_plain(bytes: &[u8]) -> bool {
         if ["style", "use", "image", "feimage"].iter().any(|name| element_at(&lower, at, name)) {
             return false;
         }
-        // No namespace prefix on an element name, start or end tag.
+        // No namespace prefix on an element name, start or end tag. The name
+        // ends at its first non-name character (a `<` among them), so every
+        // byte is scanned once: the check stays linear on `<<<<…`.
         let name = lower[at + 1..].strip_prefix('/').unwrap_or(&lower[at + 1..]);
-        let len = name.find(|c: char| c.is_ascii_whitespace() || matches!(c, '/' | '>')).unwrap_or(name.len());
-        if name[..len].contains(':') {
+        let colon = name.bytes().take_while(|&c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.' | b':') || c >= 0x80).any(|c| c == b':');
+        if colon {
             return false;
         }
     }
@@ -495,28 +510,37 @@ pub fn peek_path(path: &Path, kind: PeekKind, known: Option<&str>) -> Result<(Fi
             return Ok((peek(Body::Skipped { reason: SkipReason::NotDownloaded, width: None, height: None }), Vec::new()));
         }
     }
-    let svg = kind == PeekKind::Image && path.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg"));
     let cap = match kind {
         PeekKind::Text => TEXT_CAP,
         PeekKind::Html => HTML_CAP,
-        PeekKind::Image if svg => SVG_CAP,
-        PeekKind::Image => IMAGE_CAP,
+        PeekKind::Image => {
+            let (body, payload) = image_body(path, meta.len(), || open_regular(path))?;
+            return Ok((peek(body), payload));
+        }
         // PDFs arrive with Story 4; until then, details only.
         PeekKind::Pdf | PeekKind::Meta => return Ok((peek(Body::None), Vec::new())),
     };
-    // An image is sent whole, so one over its cap is not read at all.
-    let too_large = || Body::TooLarge { limit: cap as u64 };
-    if kind == PeekKind::Image && meta.len() > cap as u64 {
-        return Ok((peek(too_large()), Vec::new()));
-    }
     let file = open_regular(path).map_err(|e| e.to_string())?;
     let (bytes, truncated) = read_bounded(file, cap).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-    if kind != PeekKind::Image {
-        return Ok((peek(decode_text(&bytes, truncated)), Vec::new()));
+    Ok((peek(decode_text(&bytes, truncated)), Vec::new()))
+}
+
+/// The body and payload of an image whose stat says `size` bytes; `open`
+/// opens it, and is not called at all when the stat is over the cap. An SVG
+/// (by extension) is checked by `svg_is_plain`, a raster by `image_size`.
+pub fn image_body<R: Read>(path: &Path, size: u64, open: impl FnOnce() -> io::Result<R>) -> Result<(Body, Vec<u8>), String> {
+    let svg = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg"));
+    let cap = if svg { SVG_CAP } else { IMAGE_CAP };
+    // An image is sent whole, so one over its cap is not read at all.
+    let too_large = || Ok((Body::TooLarge { limit: cap as u64 }, Vec::new()));
+    if size > cap as u64 {
+        return too_large();
     }
+    let file = open().map_err(|e| e.to_string())?;
+    let (bytes, truncated) = read_bounded(file, cap).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
     // It grew past the cap after the stat.
     if truncated {
-        return Ok((peek(too_large()), Vec::new()));
+        return too_large();
     }
     let skipped = |reason, size: Option<(u32, u32)>| Body::Skipped { reason, width: size.map(|s| s.0), height: size.map(|s| s.1) };
     let body = if svg {
@@ -533,13 +557,19 @@ pub fn peek_path(path: &Path, kind: PeekKind, known: Option<&str>) -> Result<(Fi
         }
     };
     let payload = if matches!(body, Body::Bytes { .. }) { bytes } else { Vec::new() };
-    Ok((peek(body), payload))
+    Ok((body, payload))
 }
 
-#[tauri::command(async)]
-pub fn peek_file(path: String, kind: PeekKind, known: Option<String>) -> Result<tauri::ipc::Response, String> {
-    let (peek, payload) = peek_path(Path::new(&path), kind, known.as_deref())?;
-    Ok(tauri::ipc::Response::new(frame(&peek, &payload)))
+/// On tauri's blocking pool, not on a shared async worker: the read is
+/// bounded, but a slow mount or a slow check must not stall other commands.
+#[tauri::command]
+pub async fn peek_file(path: String, kind: PeekKind, known: Option<String>) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (peek, payload) = peek_path(Path::new(&path), kind, known.as_deref())?;
+        Ok(tauri::ipc::Response::new(frame(&peek, &payload)))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -1200,6 +1230,200 @@ mod tests {
         let (p, payload) = peek_path(&f, PeekKind::Image, None).unwrap();
         assert_eq!(p.body, Body::TooLarge { limit: 1_000_000 });
         assert!(payload.is_empty());
+    }
+
+    /// `f` on its own thread; `None` if it takes longer than `limit` (the
+    /// thread is left to finish, so a slow regression fails instead of hanging).
+    fn within<T: Send + 'static>(limit: Duration, f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(f());
+        });
+        rx.recv_timeout(limit).ok()
+    }
+
+    #[test]
+    fn svg_allowlist_is_linear() {
+        // 1 MB (the SVG cap) of one piece, repeated: each is a shape where a
+        // check made per `<`, `&`, `url(`, `style` or `<!doctype` could rescan
+        // what follows it. The bound is generous for a debug build; a release
+        // build takes a few milliseconds.
+        let pieces = ["<", "<a", "</", "</a", "<a:", "<s", "<use", "<!doctype", "<!doctype [", "url(#a)", "url( ", " style", " style ", "&amp;", "&", "<?xml ", "a", " "];
+        for piece in pieces {
+            let bytes = piece.repeat(SVG_CAP / piece.len()).into_bytes();
+            let started = std::time::Instant::now();
+            let done = within(Duration::from_secs(2), move || svg_is_plain(&bytes));
+            assert!(done.is_some(), "{piece:?} x 1 MB took over 2 s");
+            eprintln!("svg_is_plain({piece:?} x 1 MB): {:?}", started.elapsed());
+        }
+    }
+
+    /// SOI, `segments`, then SOS and EOI.
+    fn jpeg_of(segments: &[Vec<u8>]) -> Vec<u8> {
+        let mut b = vec![0xFF, 0xD8];
+        for s in segments {
+            b.extend(s);
+        }
+        b.extend([0xFF, 0xDA, 0, 2, 0xAB, 0xFF, 0xD9]);
+        b
+    }
+
+    #[test]
+    fn image_header_edges() {
+        // JPEG: DHT, JPG and DAC sit in the SOF range but are not frame
+        // headers, though their bytes here read as 30000 x 30000.
+        for marker in [0xC4, 0xC8, 0xCC] {
+            let table = vec![0xFF, marker, 0, 8, 0x00, 0x75, 0x30, 0x75, 0x30, 0x00];
+            assert_eq!(image_size(&jpeg_of(&[table, jpeg_sof(0xC0, 10, 10)])), Some((10, 10)), "{marker:#X}");
+        }
+        // The largest frame header before the scan, in either order.
+        let (small, big) = (jpeg_sof(0xC0, 1, 1), jpeg_sof(0xC2, 30000, 30000));
+        assert_eq!(image_size(&jpeg_of(&[small.clone(), big.clone()])), Some((30000, 30000)));
+        assert_eq!(image_size(&jpeg_of(&[big, small])), Some((30000, 30000)));
+        assert_eq!(image_size(&jpeg_of(&[jpeg_sof(0xC0, 40, 5), jpeg_sof(0xC1, 6, 40)])), Some((6, 40)), "by area");
+        assert_eq!(image_size(&jpeg_of(&[jpeg_sof(0xC0, 40, 5), jpeg_sof(0xC1, 6, 0)])), None, "a zero side in any");
+        // Nothing after the scan is a segment: its bytes are image data.
+        let mut after_scan = vec![0xFF, 0xD8];
+        after_scan.extend(jpeg_sof(0xC0, 10, 10));
+        after_scan.extend([0xFF, 0xDA, 0, 2, 0xAB]);
+        after_scan.extend(jpeg_sof(0xC0, 30000, 30000));
+        assert_eq!(image_size(&after_scan), Some((10, 10)));
+        assert_eq!(image_size(&jpeg_of(&[])), None, "a scan with no frame header");
+
+        // ICO: no entries; a PNG entry whose first chunk is not IHDR; CUR, and no other type.
+        assert_eq!(image_size(&ico(&[])), None);
+        let mut no_ihdr = png(30000, 30000);
+        no_ihdr[12..16].copy_from_slice(b"IDAT");
+        assert_eq!(image_size(&ico(&[dib(16, 32), no_ihdr.clone()])), None);
+        let mut cur = ico(&[png(64, 64)]);
+        cur[2] = 2;
+        assert_eq!(image_size(&cur), Some((64, 64)));
+        cur[2] = 3;
+        assert_eq!(image_size(&cur), None);
+        // PNG: the first chunk must be IHDR.
+        assert_eq!(image_size(&no_ihdr), None);
+        // GIF: an unknown block ends the walk with no size.
+        let mut odd = gif((10, 10), &[(0, 0, 4, 4)]);
+        odd.pop();
+        odd.extend([0x99, 0x3B]);
+        assert_eq!(image_size(&odd), None);
+
+        // BMP: the 12-byte core header has 16-bit sizes; 16 bytes and longer, 32-bit; nothing shorter.
+        let bmp_with = |header: u32, sizes: &[u8]| {
+            let mut b = b"BM".to_vec();
+            b.extend([0; 12]);
+            b.extend(header.to_le_bytes());
+            b.extend(sizes);
+            b.extend([1, 0, 24, 0, 0, 0, 0, 0]);
+            b
+        };
+        let core: Vec<u8> = [300u16.to_le_bytes(), 200u16.to_le_bytes()].concat();
+        let info: Vec<u8> = [300i32.to_le_bytes(), (-200i32).to_le_bytes()].concat();
+        assert_eq!(image_size(&bmp_with(12, &core)), Some((300, 200)));
+        assert_eq!(image_size(&bmp_with(16, &info)), Some((300, 200)));
+        assert_eq!(image_size(&bmp_with(124, &info)), Some((300, 200)));
+        for header in [0, 11, 13, 15] {
+            assert_eq!(image_size(&bmp_with(header, &info)), None, "header size {header}");
+        }
+
+        // WebP: each chunk's signature, and the 14-bit size fields.
+        let mut v = vp8(320, 240);
+        v[23] = 0; // the start code
+        assert_eq!(image_size(&v), None);
+        assert_eq!(image_size(&vp8(0xC000 | 320, 0x4000 | 240)), Some((320, 240)), "scale bits are not size");
+        let mut v = vp8l(320, 240);
+        v[20] = 0x2E; // the signature
+        assert_eq!(image_size(&v), None);
+        let mut d = vec![0x2F];
+        d.extend((319 | 239 << 14 | 0xF000_0000u32).to_le_bytes()); // alpha and version bits set
+        assert_eq!(image_size(&webp(b"VP8L", &d)), Some((320, 240)));
+        assert_eq!(image_size(&webp(b"VP9 ", &[0; 10])), None);
+    }
+
+    #[test]
+    fn svg_allowlist_rejects_dtds_and_image_set() {
+        let doctype = "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n";
+        let accepted = [
+            ("an external DOCTYPE", svg("").replacen("<svg ", &format!("{doctype}<svg "), 1)),
+            ("brackets in the text", svg("<text>[draft] (v2)</text>")),
+        ];
+        for (name, text) in &accepted {
+            assert!(svg_is_plain(text.as_bytes()), "{name} should pass");
+        }
+        let rejected = [
+            // libxml2 applies an ATTLIST's default attributes, so CSS gets in.
+            ("an ATTLIST default style", svg("<rect/>").replacen("<svg ", "<!DOCTYPE svg [<!ATTLIST rect style CDATA \"fill:red\">]>\n<svg ", 1)),
+            ("an empty internal subset", svg("").replacen("<svg ", "<!DOCTYPE svg [ ]>\n<svg ", 1)),
+            ("an ATTLIST behind a quoted >", svg("").replacen("<svg ", "<!DOCTYPE svg SYSTEM \"a><svg\" [<!ATTLIST svg x CDATA \"y\">]>\n<svg ", 1)),
+            ("an ENTITY behind a quoted >", svg("").replacen("<svg ", "<!DOCTYPE svg SYSTEM \"a><svg\" [<!ENTITY big \"x\">]>\n<svg ", 1)),
+            ("image-set()", svg("<rect fill=\"image-set('a.png' 1x)\"/>")),
+            ("-webkit-image-set()", svg("<rect fill=\"-webkit-image-set('a.png' 1x)\"/>")),
+            ("an XML declaration with no ?>", svg("").replacen("?>", "", 1)),
+        ];
+        for (name, text) in &rejected {
+            assert!(!svg_is_plain(text.as_bytes()), "{name} should be rejected");
+        }
+    }
+
+    #[test]
+    fn image_caps_are_checked_before_reading() {
+        struct Counting<R> {
+            inner: R,
+            given: u64,
+        }
+        impl<R: Read> Read for Counting<R> {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                let n = self.inner.read(buf)?;
+                self.given += n as u64;
+                Ok(n)
+            }
+        }
+        let denied = || Err::<io::Empty, _>(io::Error::other("permission denied"));
+
+        // Over the cap by the stat: the file is not opened, let alone read,
+        // so one that can't be opened is still `tooLarge`, not an error.
+        for (name, size, limit) in [("huge.png", 10_000_001, 10_000_000), ("huge.svg", 1_000_001, 1_000_000)] {
+            let mut opened = false;
+            let open = || {
+                opened = true;
+                Ok(io::empty())
+            };
+            let (body, payload) = image_body(Path::new(name), size, open).unwrap();
+            assert_eq!(body, Body::TooLarge { limit }, "{name}");
+            assert!(!opened && payload.is_empty(), "{name}");
+            assert_eq!(image_body(Path::new(name), size, denied).unwrap().0, Body::TooLarge { limit });
+        }
+        // Within the cap by the stat, an open that fails is the error.
+        assert_eq!(image_body(Path::new("small.png"), 10, denied).unwrap_err(), "permission denied");
+
+        // It grew after the stat: the read stops at cap + 1 and says so.
+        for (name, limit) in [("growing.png", 10_000_000), ("growing.svg", 1_000_000)] {
+            let mut endless = Counting { inner: io::repeat(b'<'), given: 0 };
+            let (body, payload) = image_body(Path::new(name), 10, || Ok(&mut endless)).unwrap();
+            assert_eq!(body, Body::TooLarge { limit }, "{name}");
+            assert!(payload.is_empty());
+            assert!(endless.given <= limit + 1, "{name}: asked for {} bytes", endless.given);
+        }
+    }
+
+    #[test]
+    fn the_command_reads_on_the_blocking_pool() {
+        use tauri::ipc::{InvokeResponseBody, IpcResponse};
+        let dir = scratch("command");
+        let f = dir.join("a.txt");
+        std::fs::write(&f, "hello").unwrap();
+        let path = f.to_string_lossy().into_owned();
+        let response = tauri::async_runtime::block_on(peek_file(path, PeekKind::Text, None)).unwrap();
+        let Ok(InvokeResponseBody::Raw(bytes)) = response.body() else { panic!("a raw frame") };
+        assert_eq!(bytes, frame(&peek_path(&f, PeekKind::Text, None).unwrap().0, &[]));
+        let missing = dir.join("missing.txt").to_string_lossy().into_owned();
+        assert!(tauri::async_runtime::block_on(peek_file(missing, PeekKind::Text, None)).is_err());
+
+        // The read runs on tauri's blocking pool, so a slow file (a network
+        // mount, a pathological SVG) never holds a shared async worker.
+        let source = include_str!("filepeek.rs");
+        let command = source.split("pub async fn peek_file(").nth(1).expect("an async command").split("\n}\n").next().unwrap();
+        assert!(command.contains("tauri::async_runtime::spawn_blocking(move ||"), "{command}");
     }
 
     /// The `hex` block of the contract file, as bytes.

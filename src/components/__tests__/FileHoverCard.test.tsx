@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -175,6 +175,9 @@ describe("FileHoverCard images", () => {
     expect(img.style.objectFit).toBe("contain");
     const box = img.parentElement as HTMLElement;
     expect([box.style.width, box.style.height]).toEqual(["294px", "200px"]);
+    // The checkerboard behind it: the one fixed color in the card.
+    expect(box.getAttribute("style")).toContain("linear-gradient(45deg, #d0d0d0 25%, transparent 25%)");
+    expect(box.style.backgroundSize).toBe("16px 16px");
     expect(within(card).getByText("12.3 KB · modified 3 min ago · 1920 × 1080")).toBeTruthy();
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(createObjectURL).toHaveBeenCalledWith(png);
@@ -197,6 +200,45 @@ describe("FileHoverCard images", () => {
     act(() => useFileHoverStore.getState().hide());
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
     expect(revokeObjectURL).toHaveBeenLastCalledWith("blob:test/2");
+  });
+
+  it("a revoked URL is never on screen", () => {
+    // At each revoke, the card must not be showing the URL being revoked.
+    const onScreen: (string | null | undefined)[] = [];
+    revokeObjectURL.mockImplementation((url: string) => {
+      const src = document.querySelector("[role=tooltip] img")?.getAttribute("src");
+      if (src === url) onScreen.push(src);
+    });
+    showCard(ready({ type: "image", blob: png, width: 4, height: 4 }));
+    for (let i = 0; i < 3; i++) {
+      const next = new Blob([new Uint8Array([i])], { type: "image/png" });
+      act(() => useFileHoverStore.getState().show(ready({ type: "image", blob: next, width: 4, height: 4 })));
+      expect(screen.getByRole("tooltip").querySelector("img")?.getAttribute("src")).toBe(`blob:test/${i + 2}`);
+    }
+    act(() => useFileHoverStore.getState().hide());
+    expect(revokeObjectURL).toHaveBeenCalledTimes(4);
+    expect(onScreen).toEqual([]);
+    revokeObjectURL.mockImplementation(() => {});
+  });
+
+  it("the size shows only when both sides are known", () => {
+    const card = showCard(ready({ type: "image", blob: png, width: 5 }));
+    expect(within(card).getByText("12.3 KB · modified 3 min ago")).toBeTruthy();
+    expect(card.textContent).not.toContain("×");
+  });
+
+  it("an image that fails to decode says so", () => {
+    let card = showCard(ready({ type: "image", blob: png, width: 4, height: 4 }));
+    fireEvent.error(card.querySelector("img") as HTMLImageElement);
+    card = screen.getByRole("tooltip");
+    expect(within(card).getByText("Can't preview this image")).toBeTruthy();
+    expect(card.querySelector("img")).toBeNull();
+    // Another image is tried afresh.
+    const next = new Blob([new Uint8Array([7])], { type: "image/png" });
+    act(() => useFileHoverStore.getState().show(ready({ type: "image", blob: next, width: 4, height: 4 })));
+    card = screen.getByRole("tooltip");
+    expect(card.querySelector("img")).not.toBeNull();
+    expect(within(card).queryByText("Can't preview this image")).toBeNull();
   });
 
   it("svg is only ever an img", () => {

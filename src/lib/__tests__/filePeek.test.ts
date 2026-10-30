@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-import { formatModified, formatSize, peekFile, peekKind, PeekCache, placeCard, stripAnsi, unframe, type PeekEntry } from "../filePeek";
+import { formatModified, formatSize, peekContent, peekFile, peekKind, PeekCache, placeCard, stripAnsi, unframe, type PeekEntry } from "../filePeek";
 
 const REPO = resolve(__dirname, "../../..");
 
@@ -248,6 +248,23 @@ describe("PeekCache with images", () => {
     cache.delete("/i3.png");
     cache.set("/i5.png", image("s5"));
     expect(cache.size).toBe(3);
+  });
+});
+
+describe("peekContent", () => {
+  it("only an image kind's bytes become an image", () => {
+    const payload = new Uint8Array([1, 2, 3]);
+    const bytes = { type: "bytes", length: 3, width: 2, height: 1 } as const;
+    expect(peekContent("/a/shot.png", bytes, payload)).toMatchObject({ type: "image", width: 2, height: 1 });
+    expect((peekContent("/a/logo.SVG", { type: "bytes", length: 3 }, payload) as { blob: Blob }).blob.type).toBe("image/svg+xml");
+    // Story 4 sends PDF bytes: they are not an image.
+    expect(peekContent("/a/report.pdf", bytes, payload)).toBeUndefined();
+    expect(peekContent("/a/notes.txt", bytes, payload)).toBeUndefined();
+    const text = { type: "text", text: "hi", truncated: false } as const;
+    expect(peekContent("/a/notes.txt", text, payload)).toBe(text);
+    for (const body of [{ type: "binary" }, { type: "none" }, { type: "unchanged" }, { type: "tooLarge", limit: 1 }] as const) {
+      expect(peekContent("/a/shot.png", body, payload)).toBeUndefined();
+    }
   });
 });
 

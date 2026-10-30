@@ -92,9 +92,20 @@ const CHECKERBOARD = {
 /** An image, SVG included, only ever as an `<img>` of a `blob:` URL: its markup never enters the DOM. */
 function ImageBody({ blob }: { blob: Blob }) {
   const url = useObjectUrl(blob);
+  // The Blob the browser could not decode, so another one is tried afresh.
+  const [failed, setFailed] = useState<Blob | null>(null);
+  if (failed === blob) return <Note>Can't preview this image</Note>;
   return (
     <div style={{ marginTop: "8px", width: `${BODY_WIDTH}px`, height: "200px", borderRadius: "var(--radius)", overflow: "hidden", ...CHECKERBOARD }}>
-      {url && <img src={url} decoding="async" alt="" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }} />}
+      {url && (
+        <img
+          src={url}
+          decoding="async"
+          alt=""
+          onError={() => setFailed(blob)}
+          style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }}
+        />
+      )}
     </div>
   );
 }
