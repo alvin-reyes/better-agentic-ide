@@ -348,6 +348,24 @@ mod tests {
         let from_cache = terminal_env(&mut filled, names(), |_| panic!("cached: no read"));
         assert_eq!(keys(&from_cache), ["GITHUB_TOKEN"]);
         assert_eq!(filled.as_ref().map(HashMap::len), Some(2), "the cache itself is never filtered");
+
+        // An incomplete read (one name unreadable, keychain locked for it) is
+        // returned but not cached, so the next terminal reads again.
+        let partial_reads = std::cell::Cell::new(0);
+        let partial = |name: &str| {
+            partial_reads.set(partial_reads.get() + 1);
+            (name != "GITHUB_TOKEN").then(|| format!("value-of-{name}"))
+        };
+        let names3 = || vec![meta(ORCHESTRATOR_ANTHROPIC_KEY), meta("GITHUB_TOKEN"), meta("DEEPSEEK_API_KEY")];
+        let mut cache = None;
+        let env = terminal_env(&mut cache, names3(), partial);
+        assert_eq!(keys(&env), ["DEEPSEEK_API_KEY"]);
+        assert!(cache.is_none(), "only a complete read is cached");
+        assert_eq!(partial_reads.get(), 3);
+        let env = terminal_env(&mut cache, names3(), partial);
+        assert_eq!(keys(&env), ["DEEPSEEK_API_KEY"]);
+        assert_eq!(partial_reads.get(), 6, "an incomplete read is read again next time");
+        assert!(cache.is_none());
     }
 
     #[test]
@@ -391,6 +409,9 @@ mod tests {
         assert_eq!(get_error(other), text);
 
         // Through the command itself, on the mock keychain (no entry yet).
+        // The builder is process-wide on purpose: once this runs, every vault
+        // test in this binary talks to the mock, so no other test may rely on
+        // the real keychain (none does; the others go through pure helpers).
         keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
         assert_eq!(vault_get("ADE_TEST_MISSING".into()), Err("not found".to_string()));
     }

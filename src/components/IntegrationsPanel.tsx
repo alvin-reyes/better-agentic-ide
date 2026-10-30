@@ -51,13 +51,16 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
     if (!root) return;
     invoke<Servers>("mcp_list", { project: root }).then(setInstalled).catch((e) => setError(errText(e)));
   }, [root]);
-  const loadSecrets = useCallback(
-    () => invoke<SecretMeta[]>("vault_list").then((list) => { setSecrets(list); return list; }).catch((e) => { setError(errText(e)); return []; }),
+  const readSecrets = useCallback(
+    () => invoke<SecretMeta[]>("vault_list").then((list) => { setSecrets(list); return list; }),
     [],
   );
+  const loadSecrets = useCallback(() => {
+    readSecrets().catch((e) => setError(errText(e)));
+  }, [readSecrets]);
 
   useEffect(loadInstalled, [loadInstalled]);
-  useEffect(() => { loadSecrets(); }, [loadSecrets]);
+  useEffect(loadSecrets, [loadSecrets]);
   useEffect(() => {
     for (const cmd of ["npx", "uvx"]) {
       invoke<string>("check_command_exists", { command: cmd })
@@ -115,12 +118,12 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
       const name = draft.name.trim();
       await invoke("vault_set", { name, value: draft.value, note: draft.note.trim() || null });
       setDraft({ name: "", value: "", note: "" });
-      const appOnly = (await loadSecrets()).some((s) => s.name === name && !s.inTerminals);
-      setNotice(
-        appOnly
-          ? `${name} saved to the system keychain. ADE uses it; terminals don't get it.`
-          : `${name} saved to the system keychain. Terminals you open from now on have it.`,
-      );
+      // The save worked; a list that can't be read back must not hide that.
+      const list = await readSecrets().catch(() => null);
+      const saved = `${name} saved to the system keychain.`;
+      if (!list) setNotice(saved);
+      else if (list.some((s) => s.name === name && !s.inTerminals)) setNotice(`${saved} ADE uses it; terminals don't get it.`);
+      else setNotice(`${saved} Terminals you open from now on have it.`);
     } catch (err) {
       setError(errText(err));
     }
