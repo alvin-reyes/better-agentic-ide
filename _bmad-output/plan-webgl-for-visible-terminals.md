@@ -205,6 +205,68 @@ Each names its test; the developer writes it failing first.
    - No visible terminal may go blank or fall back.
    - **If contexts are not released:** this story is not Done as planned. The owner chooses between shipping D7 alone, which fixes DOM-rendered text without changing how slots are given out, and keeping the eviction with a lower `MAX_GPU`, re-checked with this same stress check.
 
+### QA record, 2026-10-30, at 2a2c76c (build 8217cc1; code review PASS WITH MINORS at 8217cc1, minors r1-r4 applied in 2a2c76c, tests and the knowledge file only, `useTerminal.ts` unchanged)
+
+**Verdict: PASS.** The five verification lines were run in sequence in a clean worktree at 2a2c76c; all pass. All 17 ACs are each covered by a named test. The slice is limited. Manual checks 1-9 are **not run: needs the running app on macOS and WebKitGTK; pending the owner** (the owner's ruling of 2026-10-29, ADR 0009 on the unmerged branch `docs/claude-md-paths`: manual checks needing the running app do not gate Done unless the plan names one as a gate). This plan names none as a gate; see the two caveats under "Manual checks".
+
+**Real output (tails):**
+
+| Line | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0, no output |
+| `npm test` | `Test Files  149 passed (149)`, `Tests  1682 passed (1682)`, exit 0. Includes `gpuSlots.test.ts (17 tests)`, `terminalSeating.test.tsx (19 tests)`, `attachSolely.test.ts (6 tests)` and `answeringKeys.test.ts (3 tests)`, the last two unchanged. Baseline on main: 147 files / 1645 tests; +2 files, +37 tests (17 + 19 + 1 new guard test) |
+| `cd src-tauri && cargo test` | exit 0: lib `456 passed; 0 failed; 1 ignored`, main 0, bmadswitch_e2e `12 passed`, bmadv6_e2e `2 passed` |
+| `cd relay && cargo test` | exit 0: 266 passed, 0 failed, 0 ignored, summed over every test binary |
+| `cd mobile && npx tsc --noEmit && npx jest` | exit 0: `Test Suites: 1 passed, 1 total`, `Tests: 6 passed, 6 total` |
+
+**Acceptance criteria to tests** (read in the test files, not taken from names):
+
+| AC | Test | What it asserts |
+|---|---|---|
+| 1 | gpuSlots: "a seated terminal gets WebGL once" | one addon, `connectedAtLoad` true, two more seats load nothing, `loadAddon` called once |
+| 2 | gpuSlots: "the 9th terminal gets WebGL while 8 hidden ones hold slots" | 9th has one live addon, exactly one other disposed |
+| 3 | gpuSlots: "evicts the least recently seated hidden terminal" | A to H, re-seat A, I seated: only B disposed |
+| 4 | gpuSlots: "never evicts a mounted terminal" | 8 mounted (one wrapper unattached): 9th gets none, none disposed; 7 mounted + 1 hidden with a mounted one oldest: the hidden one goes; StrictMode double count |
+| 5 | gpuSlots: "a re-shown terminal regains WebGL with a new addon" | new instance, another hidden one evicted, `reused` is 0 |
+| 6 | gpuSlots: "releases in order and ignores a stale context loss" | log is exactly `dispose`, `loseContext`; a context loss fired inside dispose, and later, changes no slot |
+| 7 | gpuSlots: "context loss frees the slot" | `refresh(0, 23)`, next seat evicts nobody, new addon on next seat |
+| 8 | gpuSlots: "the setting off means no WebGL" | no addon constructed with it off, holder seated with it off is disposed with `loseContext`, WebGL returns when on |
+| 9 | gpuSlots: "detach and destroy free the slot" | `dispose` before `term.dispose` for each, each frees a slot for the next seat |
+| 10 | gpuSlots: "a failed load cleans up and does not latch" | no throw, no slot, addon disposed, canvas removed, `loseContext` called, other holders keep theirs, next seat retries, no `log_error` |
+| 11 | gpuSlots: "a DOM-rendered terminal re-measures its spacing when seated" | holders: no option write; no-slot via all-mounted, setting off, failed load and latched: `scrollSensitivity` written to another value then back to the original (including a non-default 3) |
+| 12 | terminalSeating: "switching to a multi-pane tab evicts once" | 8 then 9 addons, b1 evicted; back to B: one new addon, a1 evicted, b2-b8 untouched |
+| 13 | terminalSeating: "zoom and un-zoom evict at most once" | zoom in and out: no new addon, no eviction; zoomed, to A and back, un-zoom: one new addon, a1 evicted |
+| 14 | terminalSeating: "a new pane gets WebGL and its real size before the shell starts" | `webgl` event before `create_pty`, one fit on WebGL, `create_pty` gets rows 40, cols 120. Runs without StrictMode only (see risks) |
+| 15 | terminalSeating: "a re-shown pane is seated before the next frame" | after microtasks only, with frames still queued, the addon is loaded and was connected |
+| 16 | terminalSeating: "a pane closed before seating gets no WebGL" | zero addons constructed, wrapper in no container |
+| 17 | gpuSlots: "WebGL latches off only when unsupported or failing repeatedly" (5 tests) | unsupported and throwing constructor latch at once with one `log_error`; 3 transient failures latch; 2 + success + 2 do not; latched: nothing constructed, nothing evicted, holders kept |
+
+AC12, AC13, AC15 and AC16 run in three modes (StrictMode; StrictMode with panes keyed by index; plain), plus extra tests for a pane with no container (D1) and for a reattach. All panes of a switch mount in one `render`/`rerender`, as D6 requires.
+
+**Definition of Done (.ade/rules.md §3):**
+1. Every AC has an automated test: yes, above.
+2. The verification command passes, output recorded: yes, above.
+3. Slice: `git diff 31ce6f8..2a2c76c --stat` touches exactly six files: `src/hooks/useTerminal.ts`, `src/hooks/__tests__/gpuSlots.test.ts` (new), `src/hooks/__tests__/terminalSeating.test.tsx` (new), `src/components/SettingsPanel.tsx` (the one copy line), `scripts/terminalAttachGuard.test.ts` (retargeted) and `.ade/knowledge/developer.md`. No `App.tsx`, `src-tauri/`, `relay/` or `mobile/` change, no `package.json` or lockfile change, no `node_modules` change. The 8217cc1..2a2c76c step touches only the two new test files and the knowledge file, so the code reviewed is the code verified.
+4. Shared contract: the slots, mount counts and latch are module-private to `useTerminal.ts`. The new exports (`seatTerminal`, `notePaneMounted`, `notePaneUnmounted`, `MAX_GPU`, `__resetGpuForTests`, `__setInstanceForTests`) are read only by the two new tests; a grep of `src/`, `scripts/` and `.ade/context/` finds no other reader but `scripts/terminalAttachGuard.test.ts`, which scans the source text. No `.ade/context/` entry is needed, as the Code Map says.
+
+**Deviations from the plan, checked:**
+- `scripts/terminalAttachGuard.test.ts` retargeted: the old scan looked for the literal `attachSolely(container, inst.wrapper)`, which D2 removed from the effect. The new one slices the effect's `attach` body and requires the guard before `seatTerminal(`, and a second test requires `attachSolely(` to be called only inside `seatTerminal`. The guard's intent is preserved.
+- Extra tests (D1 no-container, reattach, a `MAX_GPU` check, extra assertions in AC11 and AC14): additions only, none weakens an AC.
+- AC14 runs without StrictMode only. In development, StrictMode's first, cancelled `attach` creates the instance with no container, so a new pane's shell starts at 80x24 before the second attach seats it. The developer confirmed this on main at 5d73348. It is dev-only and predates this story. The consequence is that AC14 is not proven under StrictMode; production builds do not use StrictMode double-effects.
+
+**QA's own mutation spot-check** (in a scratch copy of the tree; the worktree was not touched): 7 mutants of `useTerminal.ts`, each run against the two new test files. All 7 killed: evict without the mounted check (8 failures); drop `loseContext` from release (2); drop the spacing nudge on a failed load (1); count the mount before the container check (3); do not move a re-seated terminal to the end of the LRU order (4); latch after 1 failure (3); replace the early seat in `createInstance` with `attachSolely` (1, AC14). The developer's own run reported 42 of 42 killed with one equivalent latch-order mutant; QA did not repeat that.
+
+**Manual checks (all 9): not run: needs the running app on macOS (WKWebView) and Linux (WebKitGTK); pending the owner.** Not recorded as passed.
+- **Check 1 is the one that confirms the root cause** (GPU off, open a new tab on the build before this fix: is the text distorted, and is the computed `letter-spacing` of `.xterm-rows` about a cell wide? On this build it should be within ±0.5px of 0). Until it is run, "the DOM renderer's spacing causes the distortion" is a hypothesis. What the tests prove is the mechanism (the nudge is written, and WebGL follows the screen), not that the distortion is gone. Check 5 is the only proof of the spacing itself, as the plan says.
+- Check 9 is the proof that `loseContext` frees a context against WebKit's cap, and the proof that the evict-and-reacquire loop does not blank a visible terminal.
+- The plan does not name any manual check as a gate. Two checks carry closure language: check 1 ("report it before this story is closed" if the old build's text is fine) and check 9 ("not Done as planned" if contexts are not released). They read as what to do on a bad result, not as a requirement to run them first, so under ADR 0009 they do not hold Done. If the owner reads either as a gate, Done is withdrawn until it is run.
+
+**Open risks:**
+1. Dev-only StrictMode 80x24 gap (a new pane's shell starts at 80x24 under `npm run dev`). Older than this story, confirmed on main, not fixed here, and the reason AC14 has no StrictMode run.
+2. The root cause of the distortion is unconfirmed (check 1).
+3. WebKit context release is unverified (check 9). If `loseContext` does not free a context there, every eviction adds a live context and past the cap the oldest is lost, which the plan says would stop this story as planned (shipping D7 alone, or a lower `MAX_GPU`).
+4. The `closeTab` and `detachTab` slot frees run in `import().then(...)`, so one extra eviction of a hidden terminal is possible. Recorded in D4, self-correcting, untested by design.
+
 ## Plan Change Log
 
 - 2026-10-29, after adversarial review pass 1 (BLOCK at e812c34). The frozen section is unchanged. The changes:
