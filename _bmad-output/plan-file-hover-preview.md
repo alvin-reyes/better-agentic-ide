@@ -148,7 +148,7 @@ There is no persistent data. The cache is in memory, one per window. The only st
 
 ## The `peek_file` contract (recorded in `.ade/context/file-peek.md` by Story 1)
 
-**Signature.** `#[tauri::command(async)] peek_file(path: String, kind: PeekKind, known: Option<String>) -> Result<tauri::ipc::Response, String>`, in a new `src-tauri/src/filepeek.rs`. Field names are camelCase.
+**Signature.** `#[tauri::command] pub async fn peek_file(path: String, kind: PeekKind, known: Option<String>) -> Result<tauri::ipc::Response, String>`, in a new `src-tauri/src/filepeek.rs`. Field names are camelCase. The body awaits `tauri::async_runtime::spawn_blocking`, the same idiom as `sync_now`, so the read and the checks run on tauri's blocking pool and never hold one of the shared async workers that other commands run on.
 
 **The frame.** The response body is one frame. On Tauri's custom-protocol IPC path, which is the normal path on every platform, the frontend receives it as an `ArrayBuffer`, with no base64 and no `atob` on the UI thread. If the webview has fallen back to postMessage IPC, the same bytes arrive as a JSON array of numbers (tauri 2.10.2 `ipc-protocol.js:57-67`, `protocol.rs:390-402`). That fallback is sticky for the session once it trips. A 20 MB payload as a `number[]` would freeze the UI for seconds, so after the first array-shaped response the window's client stops asking for byte kinds: `peekFile` sends kind `meta` for `image` and `pdf`, and those cards show the file's details only for the rest of the session. The frame is laid out as:
 
@@ -222,8 +222,10 @@ Each size cap and pixel cap is a Rust `const` in `filepeek.rs`. The display and 
 - **No CSS:** no `<style` element and no `style` attribute (`style` after whitespace, then optional whitespace and `=`). A stylesheet is built from its text nodes, so comments, CDATA sections and processing instructions inside it can split `url(` or `data:` (`ur<!---->l(da<!---->ta:…)`, `ur<![CDATA[l(]]>`, `@import "da<!---->ta:…"`). Rejecting all CSS removes that route rather than trying to parse it.
 - **No comments, CDATA or processing instructions:** no `<!--`, no `<![CDATA[`, and no `<?` except an XML declaration at offset 0 (after an optional UTF-8 BOM). The declaration is `<?xml` followed by whitespace, so `<?xml-stylesheet` at offset 0 is not exempt.
 - **No risky elements:** no `<!ENTITY`, no `foreignObject`, and no `use`, `image` or `feImage` element.
+- **No DTD defaults:** no `<!ATTLIST`, and no `[` anywhere before the first `<svg`, so there is no internal DTD subset. libxml2 applies an ATTLIST's default attributes, so a default `style` would let CSS in. A DOCTYPE with only external ids still passes.
+- **No image sets:** no `image-set(`, which also covers `-webkit-image-set(`.
 - **No namespace prefixes:** no element name has a namespace prefix (no `<x:` or `</x:` for any prefix), so `<svg:use>` and `<svg:image>` are rejected.
-- **How names match:** an element name matches when `<name` is followed by whitespace (including a newline), `/` or `>`, so `<use\nhref=…>` and `<use/>` are caught. `<user>` is not.
+- **How names match:** an element name matches when `<name` is followed by whitespace (including a newline), `/` or `>`, so `<use\nhref=…>` and `<use/>` are caught. `<user>` is not. A name is read only up to its first non-name character, so the scan is linear in the file: 1 MB of `<` is checked in under 0.4 s in a debug build, and `svg_allowlist_is_linear` bounds 18 such shapes.
 
 Anything else shows "SVG not previewed". This is a deliberately narrow allowlist: plain charts and icons drawn with presentation attributes (`fill="…"`, including in-document references such as `fill="url(#g)"`) pass. CSS-styled SVGs, which include most matplotlib and Mermaid output, get details only, as do sprites, embedded images and exotic encodings.
 
@@ -232,7 +234,7 @@ UTF-8 cut at the read boundary: an incomplete trailing sequence is dropped, not 
 **Image dimensions** (`image_size(bytes) -> Option<(u32, u32)>`, returning the largest area the browser could decode). A zero width or height in any header gives `None` (for example, a JPEG of height 0 that defers it to a DNL marker), so such a file is never decoded. The area is compared with the cap as `u64` (`w as u64 * h as u64`), so a 65536×65536 PNG cannot wrap around to 0.
 - **PNG:** IHDR. APNG frames must fit inside it, per the spec.
 - **GIF:** the logical screen and every image descriptor (`0x2C`), found by walking the extension and LZW sub-blocks. The maximum width and height over all of them is used. A walk that runs off the end returns `None`.
-- **JPEG:** walk the segments from SOI by their lengths and take the first top-level SOFn (C0–C3, C5–C7, C9–CB, CD–CF). An SOF inside an APP1 EXIF thumbnail is skipped with its segment.
+- **JPEG:** walk the segments from SOI by their lengths (fill bytes skipped; RSTn and TEM stand alone) up to the first SOS, and take the largest SOFn by area among them (C0–C3, C5–C7, C9–CB, CD–CF; C4 DHT, C8 JPG and CC DAC are not SOFs). Nothing after the SOS is parsed. A zero side in any SOF, no SOF before the SOS, an EOI or another SOI before the SOS, or a walk that runs off the end gives `None`. An SOF inside an APP1 EXIF thumbnail is skipped with its segment.
 - **WebP:** `VP8 `, `VP8L` and `VP8X` (canvas size; animation frames must fit the canvas).
 - **BMP:** the DIB header, with the absolute value of the height.
 - **ICO:** the directory's entries. For each entry's data, a PNG signature means its IHDR is used; otherwise the BMP DIB header with half its height (the mask). The largest entry is used, so a PNG inside an ICO cannot get past the cap.
@@ -389,7 +391,7 @@ Window-level listeners (`keydown`, `blur`, `resize`, `visibilitychange`) call th
   - It refuses anything that is not a regular file, checking both before opening and on the open handle.
   - It opens with `O_NONBLOCK`, so a FIFO swapped in after the stat cannot hang a worker.
   - It never triggers a download of a macOS dataless file.
-  - **Known limit:** a 16 KiB read on a slow network mount still blocks one async worker until it returns. The UI shows the loading card meanwhile; nothing on the UI thread waits.
+  - **Known limit:** a 16 KiB read on a slow network mount still holds one thread of tauri's blocking pool until it returns. The shared async workers stay free, so other commands are not stalled. The UI shows the loading card meanwhile; nothing on the UI thread waits.
 - **Symlinks** are followed exactly as a click follows them, so the card has no access a click doesn't have. The stamp includes the target's dev and ino, so a retargeted link is re-read.
 - **Text** is rendered as text nodes, so `<img onerror>` in a file shows up as text.
 - **SVG** goes through an `<img>` with a `blob:` URL, which runs no script and loads nothing external (the browser's secure static mode). Its markup is never parsed into the app's DOM. The Limits table lists the SVG features that skip the preview, and why there is no pixel guarantee.
@@ -989,3 +991,7 @@ None. The five open questions were decided by the owner on 2026-10-29, each as r
   - A re-accept after a dismissal keeps `movedSinceEnter` true. Known limit 2 now says the same.
   - The terminal where the pointer last moved also owns `contentMoved`, which covers a pointer resting on a URL link.
   - `forget` drops the in-flight answer. The effect is unchanged.
+- 2026-10-30, Story 3 re-review of 4e56074: PASS WITH MINORS. The plan text is synced with the code and `.ade/context/file-peek.md`; Story 3's approved meaning and the frontend contract are unchanged, so no owner re-approval is needed (as with the Story 2 sync in 2bf5d80):
+  - `peek_file` is `#[tauri::command] pub async fn`, awaiting `spawn_blocking` like `sync_now`. The slow-mount known limit now holds a blocking-pool thread, not a shared async worker.
+  - JPEG takes the largest SOF by area before the first SOS, not the first SOF; the `None` cases and the non-SOF markers (C4, C8, CC) are stated.
+  - The SVG allowlist adds `<!ATTLIST`, any `[` before the first `<svg` (no internal subset) and `image-set(`, and notes that the name scan is linear.
