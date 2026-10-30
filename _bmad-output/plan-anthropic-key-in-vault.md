@@ -196,6 +196,32 @@ Ships first. It does not touch settings, the Orchestrator or boot.
 - Add `ADE_ORCHESTRATOR_ANTHROPIC_KEY` in Secrets. Then `env | grep ADE_ORCHESTRATOR` in a new ADE terminal prints nothing, and the row says "Not in terminals".
 - `claude` started in that terminal still shows the subscription login in `/status`.
 
+**Result (QA, 2026-10-30, HEAD 9cea987, run plainly and in sequence, no `CARGO_PROFILE_DEV_DEBUG` or `CARGO_INCREMENTAL` overrides): PASS. Story A is Done.**
+
+| Command | Real output |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| `npm test` | Test Files 148 passed (148); Tests 1652 passed (1652); exit 0 |
+| `cd src-tauri && cargo test` | lib: 460 passed, 0 failed, 1 ignored (461 run); other binaries 12 passed and 2 passed; exit 0 |
+| `cd relay && cargo test` | 11 + 2 + 86 + 14 + 32 + 11 + 68 + 33 + 9 = 266 passed, 0 failed; exit 0 |
+| `cd mobile && npx tsc --noEmit && npx jest` | tsc exit 0; Tests 6 passed (6); exit 0 |
+
+**Criteria to tests** (each test ran and passed in the runs above):
+- **A1** -- `vault::tests::app_only_secrets_never_reach_terminals_fresh_or_cached` (fresh read returns `GITHUB_TOKEN` only; the cache holds both names; a second run reads nothing; a cache holding both names still leaves the app-only name out and is not itself filtered; an incomplete read is not cached) and `vault::tests::orchestrator_key_name_is_valid_and_not_read_by_claude_code` (`valid_name`, no `ANTHROPIC_` or `CLAUDE_` prefix, `in_terminals` false).
+- **A2** -- `vault::tests::missing_entry_reads_as_not_found` (`NoEntry` gives exactly "not found"; locked and other errors keep their text; also through `vault_get` on the mock keychain).
+- **A3** -- `vault::tests::list_marks_app_only_names` (app-only false, others true, and the `inTerminals` JSON key).
+- **A4** -- `src/components/__tests__/IntegrationsSecrets.test.tsx`, 7 tests: row marked "Not in terminals" and only that row; app-only notice on a new save; the other-name notice; the other-name notice with an app-only secret already saved; notice taken from the vault's answer, not the name; neutral notice and no alert when the read-back fails; the footer text.
+
+**Slice:** `git diff 55b8e80..9cea987` touches 7 files: `src-tauri/src/vault.rs`, `src/components/IntegrationsPanel.tsx`, its test, `docs/guide/integrations.md:34`, `.ade/context/vault-app-only-secrets.md`, and one-line appends to `.ade/knowledge/developer.md` and `.ade/knowledge/adversarial-reviewer.md`. No settings, Orchestrator, boot, `sync.rs`, `anthropic*.ts` or dependency changes: nothing from Story B.
+
+**Shared contract:** recorded in `.ade/context/vault-app-only-secrets.md` (`APP_ONLY`, `in_terminals`, `terminal_env`, `vault_list` shape, `vault_get` "not found"), and it matches the code.
+
+**Manual checks:**
+- Add `ADE_ORCHESTRATOR_ANTHROPIC_KEY` in Secrets; `env | grep ADE_ORCHESTRATOR` in a new ADE terminal prints nothing; the row says "Not in terminals" -- not run: needs the running app on Linux, macOS and Windows desktops with a real keychain; pending the owner.
+- `claude` started in that terminal still shows the subscription login in `/status` -- not run: needs the running app and a signed-in `claude` on a desktop; pending the owner.
+
+**Not covered by an automated test (noted, not gating):** the real `env_for_terminals` wrapper and the real keychain path (no tauri test feature; the pure seam `terminal_env` carries the proof, as the plan states). Two minors left to the owner by the review: overlapping saves can briefly leave a stale list; "used by" can sit next to "Not in terminals".
+
 ---
 
 # Story B: the Orchestrator's key moves to the vault
