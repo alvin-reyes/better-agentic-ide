@@ -194,6 +194,7 @@ Sources: the docs (`code.claude.com/docs/en/{hooks,permissions,permission-modes,
   - **The CLI's own credential scope.** ADE adds no narrower one, and the product doc's CLI rule says so.
   - **The Bash sandbox** (`/sandbox`), if the user turns it on. ADE doesn't configure it.
   - **ADE never claims more:** the guide states this model in these words.
+- **Scripts are judged as they are on disk when the hook runs.** An existing script that an earlier command on the same line edits (`sed -i …`, `echo … >> x.sh`) is parsed as it is now, and the guard can't see the edit. A *missing* script after a tree-changing command asks (round 6, item 7); the `>>` case is parsed with the appended literal text (round 5, m-c). Any other same-line edit of an existing script is within this model's limits.
 - **The property that holds anyway: the guard fails toward asking.**
   - Unknown leaves, computed names, computed code handed to an evaluator, unparsable or oversized input, scripts the guard can't read, and its own panics all ask.
   - It never returns `allow` or rewrites a command, so a wrong answer can only add a prompt or miss one. It can never remove a prompt that a rule or the mode would have shown.
@@ -258,10 +259,12 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
 2. **Command-name resolution**:
    - A literal name, after quote removal and escape decoding, is classified.
    - `[` and `[[` are literal names, never computed (review round 3).
-   - A path-form name (`/x/gh`, `./bin/gh`, `"$VIRTUAL_ENV/bin/python"`) is classified by its **literal basename**. When the directory part is computed, that holds **only if every expansion in the directory part is inside double quotes**, or is unquoted but **strictly resolved** (below) to a value with no whitespace, glob characters or shell metacharacters (m-b: `S=/tmp/x; $S/walk/walk` → basename `walk`). Any other unquoted `$…` or `$(…)` can word-split into a whole command, so the name stays computed (review B2: `a="gh repo delete o/r #"; $a/b` runs gh).
-   - **A path-form name whose file doesn't exist yet** (review round 5, B) gives **no decision**, because it is usually a binary built earlier on the line (`cargo build && ./target/debug/app`). The exceptions:
+   - A path-form name (`/x/gh`, `./bin/gh`, `"$VIRTUAL_ENV/bin/python"`) is classified by its **literal basename**. When the directory part is computed, that holds **only if every expansion in the directory part is inside double quotes**, or is unquoted but **strictly resolved** (below, chained values included) to a value with no whitespace, glob characters or shell metacharacters (m-b: `S=/tmp/x; $S/walk/walk` → basename `walk`; round 6: `S=/x; P=$S/y; $P/run` → basename `run`). Any other unquoted `$…` or `$(…)` can word-split into a whole command, so the name stays computed (review B2: `a="gh repo delete o/r #"; $a/b` runs gh).
+   - **`$HOME` and `~` expand in script and `source` paths** (round 6, item 2), to the home directory from `Ctx`, as they already do in credential paths. No other variable expands there: a path built on any other unresolved variable stays computed. `. "$HOME/.cargo/env"` is read and parsed (no decision for the stock file); `. "$NVM_DIR/nvm.sh"` asks.
+   - **A path-form name whose file doesn't exist yet** (review round 5, B) gives **no decision**, because it is usually a binary built earlier on the line (`cargo build && ./target/debug/app`). The exceptions are:
      - the line writes it with a redirect, `tee`, `cp`/`mv` or `cat >`, in which case the write-then-run rule applies;
-     - the line names a guarded bin or alias anywhere, in which case it asks.
+     - the name's own basename is a guarded bin or alias, in which case it asks (`make && ./bin/gh repo delete o/r`). **A guarded bin elsewhere on the line doesn't count** (round 6, item 5): `cargo build && ./target/debug/app && gh pr view 1` gives no decision for `./target/debug/app`, and `gh pr view 1` is classified on its own;
+     - **a tree-changing command earlier on the same line** (round 6, item 7), in which case it asks. Those commands are `git checkout|switch|pull|merge|rebase|reset|restore`, `git stash pop|apply`, `git am|apply`, `unzip`, `tar x…`, `curl -o|-O|--output`, `wget` (any form that writes a file), `rsync` and `scp` into the tree.
      - `bash x.sh`, `sh x.sh` and `source x.sh` of a missing file still ask.
    - **A path-form name whose file exists is also parsed as a script** (review M2), the same way `bash x.sh` is, when it either:
      - has an `sh`, `bash`, `zsh` or `dash` shebang (including `#!/usr/bin/env bash`); or
@@ -272,7 +275,8 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
      - **Literal guarded commands in the file always classify as usual**, and ask when risky.
      - **The fail-closed triggers count only if the file's text names a guarded bin, alias or credential path as a word.** The triggers are: computed command names, computed evaluator code, parse failures and oversize.
      - So a stock `gradlew` (`eval "set -- $( … )"`, `exec "$JAVACMD" "$@"`), `./mvnw`, `~/.nvm/nvm.sh`, `"$HOME/.cargo/env"` and a `run() { "$@"; }` helper give no decision.
-     - **Caps.** Files up to 256 KB are parsed. Files from 256 KB to 4 MB (`./configure`) are scanned only for guarded names: none found gives no decision, and one found asks. Over 4 MB asks only when the line itself names a guarded bin.
+     - **Caps.** Files up to 256 KB are parsed. Files from 256 KB to 4 MB (`./configure`, `ltmain.sh` at 325 KB) are scanned only for guarded names: none found gives no decision, and one found asks. Over 4 MB asks only when the line itself names a guarded bin.
+     - **A total budget across nesting** (round 6, item 6): one hook call reads at most **4 MB of disk text in total**, across every script and sourced file it follows (nesting depth is already capped at 64). A file that would pass the budget gets the oversize rule: name-scanned within what's left of the budget, else asking only if the line names a guarded bin.
      - The command line itself keeps the strict rules.
      - When the path exists, it is also canonicalised (`realpath` through `Ctx`), so a symlink named `deploy` that points at `vercel` is caught.
      - A *copy* of a binary under another name is not caught; that is an escape (minor 1).
@@ -283,6 +287,7 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
      - unconditional (not inside `&&`, `||`, `if`, `case`, a loop or a function body);
      - at top level (not in a subshell, a `$( )`, a pipeline stage, a background `&` stage or a `coproc`);
      - before the use.
+   - **Chained literal assignments** (round 6, item 3): a value whose own expansions all strictly resolve is itself resolved, to a **depth of 4**. `S=/x; P=$S/y; $P/run` resolves `P` to `/x/y`. Beyond depth 4, or with any expansion in the chain that doesn't strictly resolve, the name stays computed.
    - **Lines on which no variable resolves at all** (review B1). If the line contains any of these, every variable-built name on it is computed and asks:
      - `eval`, `source` or `.`;
      - `declare`, `typeset` or `local` with `-n` (a nameref);
@@ -319,6 +324,7 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
 
      A literal code argument is parsed instead.
    - **Double-quoted code is parsed as a template** (m-d). Its literal structure is parsed, and each expansion becomes a computed word. A computed word matters only in command-name position, or in a guarded CLI's leaf, flag or argument positions.
+     - **Command-name position includes the command that a wrapper or runner will run** (round 6, item 1): the word after `sudo`, `env`, `nohup` and the other wrappers; the package after `npx`/`npm exec`/`pnpm dlx`/`bunx`; and the script name after `npm run`/`pnpm run`/`yarn run`/`bun run`. So `bash -c "sudo $x"`, `bash -c "npx $pkg --prod"`, `npx "$PKG" --prod` and `npm run "$s"` all ask.
      - So `bash -c "until grep -q x $f; do sleep 1; done"` gives no decision.
      - `bash -c "$CMD"`, `eval "$c$z"` and `eval "$(fnm env)"` still ask, because the expansion sits in command-name position.
    - **Write-then-run** (review M1). This covers a script fed to a shell, run by path, or sourced, when a redirect, `tee`, `cp`/`mv` or `cat >` earlier on the same line writes it. What gets parsed:
@@ -344,7 +350,7 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
    - **Bin aliases:** `vc`, `wrangler2`, `cf-wrangler`, and `@stripe/cli` → `stripe`.
    - **Fallback** (review B5, narrowed in round 3) catches wrappers the list doesn't know. The rules:
      - **Prefix-table CLIs (gh, stripe, wrangler):** in the arguments of a command the guard doesn't know, a guarded bin followed by the words of one of its risky leaves asks. This includes quoted strings, which are re-lexed, so `tmux send-keys 'gh repo delete o/r' Enter` asks.
-     - **All-ask CLIs (vercel):** the fallback matches where the bin is a whole unquoted argv word of an unknown command, or in command position. It also matches **a quoted argument of a command not on the skip list whose first word is `vercel` or `vc`** (m4: `concurrently "vercel --prod"`). It never matches other quoted text. So `grep -r vercel .`, `npm i vercel` and `git commit -m "fix vercel deploy"` don't ask.
+     - **All-ask CLIs (vercel):** the fallback matches where the bin is a whole unquoted argv word of an unknown command, or in command position. A bare `vercel` argv word is **ignored** under `cd`, `mkdir`, `rm`, `mv`, `cp`, `touch`, `ln` and `npm view|info|ls` (round 6, item 4), where it is a file or package name. It also matches **a quoted argument of a command not on the skip list whose first word is `vercel` or `vc`** (m4: `concurrently "vercel --prod"`). It never matches other quoted text. So `grep -r vercel .`, `npm i vercel` and `git commit -m "fix vercel deploy"` don't ask.
      - **Known non-executing commands are skipped:** `echo`, `printf`, `grep`, `rg` (except with `--pre`/`--pre-glob`, which run a command: m5), `ag`, `ls`, `cat`, `git commit -m/-F`, `git log --grep`, `git tag -m`. The exception is when their output feeds a shell (`echo … | bash`), which step 3's shell rule handles.
      - The reviewer's measurement over 1,599 real Bash calls found about 1% spurious asks before these reductions.
 4. **Classifying** by the CLI's table:
@@ -623,7 +629,11 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
 
      The same `gradlew` with one added line `gh release delete v1` asks. A 1 MB `./configure` containing the word `gh` asks.
    - **binaries built on the line (round 5, B):** `cargo build && ./target/debug/app`, `go build -o app . && ./app`, `gcc t.c -o t && ./t` and `make && ./bin/test` give no decision. `make && ./bin/gh repo delete o/r` asks (basename `gh`). `bash missing.sh` asks;
-   - **directory variables (m-b):** `S=/tmp/x; $S/walk/walk` gives no decision. `S="/tmp/x y"; $S/walk` asks;
+   - **directory variables (m-b, round 6):** `S=/tmp/x; $S/walk/walk` and `S=/x; P=$S/y; $P/run` (chained) give no decision. `S="/tmp/x y"; $S/walk` asks, and so does a five-deep chain;
+   - **`$HOME` and `~` (round 6):** `. "$HOME/.cargo/env"` and `source ~/.cargo/env` (stock content) give no decision. `. "$NVM_DIR/nvm.sh"` asks;
+   - **wrapped and run-by-runner names (round 6):** `bash -c "sudo $x"`, `bash -c "npx $pkg --prod"`, `npx "$PKG" --prod` and `npm run "$s"` ask;
+   - **the missing-path rule (round 6):** `cargo build && ./target/debug/app && gh pr view 1` gives no decision. `git checkout feature && ./deploy.sh`, `unzip x.zip && ./run.sh`, `tar xf x.tgz && ./x/go` and `curl -o t.sh https://e.x && ./t.sh` ask, each with the script missing in the fake fs;
+   - **the read budget (round 6):** a chain of sourced files totalling 6 MB that names no guarded bin gives no decision; the same chain with `gh repo delete o/r` in its last file, past the budget, asks only if the line names a guarded bin;
    - **write-then-run (M1, m-c):** these ask:
      - `echo 'gh repo delete o/r' > x.sh && bash x.sh`;
      - `cat > x.sh <<EOF\ngh repo delete o/r\nEOF\nbash x.sh`;
@@ -678,7 +688,10 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
    - it prints `ask` for malformed stdin;
    - it always exits 0;
    - the bare forwarder's output is unchanged from today for every event (`hook_forward.rs`'s existing tests stay green).
-10. **Speed:** `classify` on the 200 longest corpus commands is under 50 ms each in a debug build. Covered by `cli_guard` › `classify_is_fast`.
+10. **Speed** (round 6, item 6). Covered by `cli_guard` › `classify_is_fast`.
+    - `classify` on the 200 longest corpus commands is under 50 ms each in a debug build.
+    - Parsing a 256 KB script (a generated shell file of that size, and `ltmain.sh`'s shape) is under **500 ms in a debug build**, a tenth of the 5 s hook timeout.
+    - A full 4 MB read budget, mostly name-scanned, is under **1 s**.
 11. **Pinned escapes:** `deno run npm:x`, `mise exec -- gh repo delete o/r` (the fallback catches this one: it asks), `node deploy.js`, a shell alias `g` used as `g repo delete`, and a copy of `gh` named `hg2` each behave as the guide states. Covered by `cli_guard` › `documented_escapes`.
 12. **Rules:** every gh ask rule matches the canonical form of some gh risky leaf under `rule_matches`, and none matches a read leaf. `rule_matches` reproduces the docs' wildcard table. Covered by `cli_rules.rs` › `gh_rules_cover_canonical_risks`, `claude_settings.rs` › `matches_claude_codes_documented_examples` (moved here from Story 2).
 13. **The shell-form command, run through `/bin/sh -c`.** Covered by `cli_guard` › `missing_helper_asks_with_the_fix`.
@@ -917,6 +930,7 @@ Depends on Story 4.
 
    - **Quoted command lines (m4):** `concurrently "vercel --prod" "npm run dev"` and `npm-run-all -p "vc deploy"` ask.
    - **A script by path** (moved here from Story 1, m-f): `./scripts/deploy.sh` holding `vercel --prod` asks.
+   - **File and package names (round 6):** `cd vercel`, `mkdir -p apps/vercel`, `rm -rf vercel`, `mv vercel old`, `cp -r vercel x`, `touch vercel`, `ln -s a vercel`, `npm view vercel version`, `npm info vercel` and `npm ls vercel` give no decision.
 
    `vercel --version`, `command -v vercel`, `which vercel` and `type vc` give no decision. These give no decision too (fallback narrowed for all-ask CLIs): `grep -r vercel .`, `npm i -D vercel`, `rg "vercel --prod" docs`, `git commit -m "vercel deploy fix"`, `cat vercel.json`, `echo vercel`. Covered by `cli_guard` › `vercel_hand_corpus`, `vercel_mentions_do_not_ask`.
 3. Generated corpora pass. Covered by `cli_guard` › `vercel_corpus`.
@@ -1010,19 +1024,27 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 - **Q3. Fail toward asking: the real cost.** Recommend yes.
 
   **False asks that remain after round 5.** All of them come from what the agent types on the command line. Text read from disk (scripts, sourced files, `package.json`) triggers these only when it names a guarded CLI.
+  - **The largest category: a path-form name whose directory is an unquoted variable that doesn't strictly resolve** (`$OUT/bin/tool`, `$WORK/run.sh`). Since round 6 resolves chained literal assignments on the same line, this is mostly a variable set in an earlier tool call.
   - A command name that is a variable the guard can't strictly resolve: `"$EDITOR" f`, `$PYTHON x.py` when `PYTHON` was set in an earlier tool call, `"$@"` as a command. (`PY=python3; $PY x.py` on one line resolves and passes.)
+  - A script or sourced path built on a variable other than `$HOME` or `~`: `. "$NVM_DIR/nvm.sh"`. (`. "$HOME/.cargo/env"` passes.)
+  - A wrapper or runner running a computed name: `npx "$PKG" …`, `npm run "$s"`, `sudo $x`.
   - Computed code in command-name position of an evaluator: `eval "$(fnm env)"`, `eval "$(ssh-agent -s)"`, `bash -c "$CMD"`, `source "$f"`. (Double-quoted templates such as `bash -c "until grep -q x $f; do …"` no longer ask.)
   - A variable-built command name on a line that also uses `eval`, `source`/`.`, a nameref, `getopts` or `select`.
-  - `bash x.sh` or `source x.sh` of a file that doesn't exist. A path-form binary built earlier on the line (`cargo build && ./target/debug/app`) no longer asks.
+  - `bash x.sh` or `source x.sh` of a file that doesn't exist, and a missing path-form script after a tree-changing command (`git checkout x && ./deploy.sh`). A path-form binary built earlier on the line (`cargo build && ./target/debug/app`) no longer asks, even when a guarded command is elsewhere on the line.
   - A script written on the same line from non-literal content and then run (`curl -o x.sh … && bash x.sh`). That is close to a real risk anyway.
   - A guarded command fed run-time arguments by `xargs` or `parallel` that isn't a complete read leaf (every `xargs stripe …`, `xargs gh auth status`).
   - A quoted command line that starts with a risky guarded command, passed to a command the guard doesn't know (`concurrently "gh release create v1"`).
+  - With Story 6: a bare `vercel` word in the arguments of a command not on the skip list and not a file or package command (`docker run vercel …`).
 
   **No longer asking:**
   - an `echo`, `printf`, `grep` or `rg`, or a commit message that quotes a risky command: **round 3** (the skip list);
   - ordinary wrapper scripts (`gradlew`, `mvnw`, `nvm.sh`, cargo's env, `run() { "$@"; }`, `./configure`) and binaries built on the line: **round 5**.
 
-  **The rate.** **An estimate, not a measurement: 0.3 to 0.7% of Bash calls**, mostly `eval "$(…)"` environment setup and variable command names. It is extrapolated from the reviewer's ~1% on 1,599 local calls, measured before the round-3 reductions. **That sample is biased**: most of it comes from reviews of this plan, which are dense with guarded commands. **V8 is the measurement**, on that corpus and on a sample of your ordinary sessions. If the ordinary sample comes out above 1%, you decide before Story 2 ships.
+  **The rate.** Two data points, neither of them a measurement of the guard itself:
+  - **The reviewer's model:** about **0.86% on 1,856 local Bash calls** (round 6). It is approximate, because it is a regex model of the rules, not the guard. It is biased, because most of the sample is review sessions full of scratchpad path variables. And it was taken before round 6 resolved chained assignments and narrowed the missing-path rule, which remove most of its largest category.
+  - **The plan's estimate, not a measurement: 0.3 to 0.7%** after round 6, mostly unresolved path variables set in earlier tool calls, `eval "$(…)"` environment setup and variable command names.
+
+  **V8 is the measurement**, run on the guard itself, on the local corpus and on a sample of your ordinary sessions. If the ordinary sample comes out above 1%, you decide before Story 2 ships.
 
   The alternative asks only when the text names a guarded CLI. It is quieter, but it lets `${x}h` through when `x` was set in an earlier tool call.
 - **Q4. The cut.** Recommend Stories 1 to 4 for gh first, then decide on stripe, vercel and wrangler against a named need (P5).
@@ -1122,3 +1144,19 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 | m-h | V8's corpus stated as biased; an ordinary-sessions sample added; above 1%, the owner decides before Story 2. |
 | m1 (optional) | Also asserts no adjacent single-quoted runs (zsh `RC_QUOTES`). |
 | Q3 | The remaining false asks listed; round 3 credited for the echo/commit reduction; 0.3–0.7% marked as an estimate from a biased sample, with V8 as the measurement. |
+
+**Round 6, 2026-10-30: review of 900862e. PASS WITH MINORS, overall and for every story.**
+- The reviewer checked the disk-text rule on real files: gradlew, nvm.sh, cargo env, venv activate and ltmain.sh give no decision. Of 415 `.sh` files on the machine, only ADE's own `scripts/use-custom-domain.sh` names gh, and it rightly asks.
+- `GUARD_CMD` under `/bin/sh` matches AC13.
+- The caps open no realistic escape.
+
+| Minor | Action |
+|---|---|
+| 1: wrapped and runner-run names | Command-name position includes what a wrapper or runner will run; four AC2 cases. |
+| 2: `$HOME`/`~` | Both expand in script and `source` paths, nothing else does; `. "$HOME/.cargo/env"` passes and `. "$NVM_DIR/nvm.sh"` asks (AC2, Q3). |
+| 3: chained assignments | Resolved to depth 4 (AC2). |
+| 4: vercel as a file or package name | Ignored under `cd`, `mkdir`, `rm`, `mv`, `cp`, `touch`, `ln`, `npm view/info/ls` (Story 6 AC2). |
+| 5: missing-path exception | Only the name's own basename counts, not a guarded bin elsewhere on the line (AC2). |
+| 6: total budget | 4 MB of disk text per hook call; speed bounds of 500 ms for a 256 KB parse and 1 s for the full budget (AC10). |
+| 7: tree changing before a run | A missing path-form name after a tree-changing command asks; same-line edits of existing scripts stated in the threat model (AC2). |
+| Q3 | The reviewer's 0.86%/1,856-call model added as a second, approximate and biased data point; largest category named; the Story 6 category added; V8 stays the measurement. |
