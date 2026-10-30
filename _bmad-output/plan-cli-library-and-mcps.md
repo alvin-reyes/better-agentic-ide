@@ -62,7 +62,7 @@ The plan is now a security component. Its first two stories are the guard and it
 
 **P1, a job and a change: met.**
 - Job: **Check**, through the harness.
-- The change: in every Claude Code session ADE launches, an agent command that deletes, deploys, moves money, changes or prints credentials through gh now prompts, or is denied under `-p`. Stories 5 to 7 extend this to stripe, vercel and wrangler, however the command is written.
+- The change: in every Claude Code session ADE launches, an agent command that deletes, deploys, moves money, changes or prints credentials through gh now prompts, or is denied under `-p`. Stories 5 to 7 extend this to stripe, vercel and wrangler, for the forms agents write (the threat model under "The command guard").
 - Story 4 extends it to sessions the user starts in this repository on this machine.
 - For the IDE half: Story 3 removes steps a person takes today to find out whether a CLI is installed and signed in, and where its credential lives.
 
@@ -208,9 +208,12 @@ Sources: the docs (`code.claude.com/docs/en/{hooks,permissions,permission-modes,
 **The hook entries.** Both use shell form with an absolute path, and the same command string, `GUARD_CMD`:
 
 ```sh
-if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard<H>; else case "$CLAUDE_CODE_ENTRYPOINT<HV>" in sdk-*) printf %s '<JSON with "deny">';; *) printf %s '<JSON with "ask">';; esac; fi
+# Interactive variant (the launch flag without headless, and the file entry):
+if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard; else case "${CLAUDE_CODE_ENTRYPOINT}" in sdk-*) printf %s '<JSON with "deny">';; *) printf %s '<JSON with "ask">';; esac; fi
+# Headless variant (Orchestrator launches): a deny-only branch, no case at all (review round 5, m-a):
+if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else printf %s '<JSON with "deny">'; fi
 # <JSON …> = {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"|"deny","permissionDecisionReason":"ADE command guard missing (ADE moved or removed). Reinstall ADE, or remove the guard: Integrations > CLI tools > Remove guard, or delete the ade-hook entry in .claude/settings.local.json."}}
-# <H> is " --headless" for headless launches, else empty. <HV> is "sdk-headless" for headless launches, so the case always picks deny there (review m2).
+# Round 4's "$CLAUDE_CODE_ENTRYPOINT<HV>" expanded the variable CLAUDE_CODE_ENTRYPOINTsdk, so it always asked; it is gone.
 ```
 
 - **A missing helper is an `ask` that names the fix**, not a block on every call (review minor 3). The guide gives the removal path.
@@ -218,7 +221,7 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard<H>; else case "$CLA
   - **A helper path containing `'` or `\` is refused.** `launch_rules().guard` is then `null`, and the tab says "ADE's install path contains a quote or backslash; the command guard is off". There is no cross-branch dependency on the fish-safe quoter ADR.
   - Any other path goes in single quotes, so `$`, backticks, `"` and spaces stay literal. `printf %s` prints no newline escape.
   - The string is JSON-encoded, then shell-quoted for the launch flag with `shellQuote`.
-  - **What the typed line can and can't contain.** It can't be free of backslashes: JSON writes `"` as `\"`, and `shellQuote` writes `'` as `'\''`. Fish reads `\"` literally inside single quotes, and reads `\'` correctly outside them, so neither is a problem. **The invariant Story 2 AC1 asserts:** no single-quoted run of the typed line contains `\\` or `\'`. Those are the only two escapes fish reads inside single quotes, so the line then means the same in sh, bash, zsh and fish.
+  - **What the typed line can and can't contain.** It can't be free of backslashes: JSON writes `"` as `\"`, and `shellQuote` writes `'` as `'\''`. Fish reads `\"` literally inside single quotes, and reads `\'` correctly outside them, so neither is a problem. **The invariant Story 2 AC1 asserts:** no single-quoted run of the typed line contains `\\` or `\'`. Those are the only two escapes fish reads inside single quotes. **It also asserts that no two single-quoted runs are adjacent**: no `''` occurs except as the tail of a `'\''`, where the first quote is escaped outside quotes. That covers zsh's `RC_QUOTES` (m1). The line then means the same in sh, bash, zsh (with or without `RC_QUOTES`) and fish.
 - **Where the entries go:**
   - **on every ADE launch** (Story 2), inside the one `--settings` value, as in the amendment;
   - **in the main checkout's root `.claude/settings.local.json`** (Story 4), as `{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": GUARD_CMD, "timeout": 5, "onFailure": "block"}]}`.
@@ -255,12 +258,22 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard<H>; else case "$CLA
 2. **Command-name resolution**:
    - A literal name, after quote removal and escape decoding, is classified.
    - `[` and `[[` are literal names, never computed (review round 3).
-   - A path-form name (`/x/gh`, `./bin/gh`, `"$VIRTUAL_ENV/bin/python"`) is classified by its **literal basename**. When the directory part is computed, that holds **only if every expansion in the directory part is inside double quotes**. An unquoted `$…` or `$(…)` can word-split into a whole command, so the name stays computed (review B2: `a="gh repo delete o/r #"; $a/b` runs gh).
-   - **A path-form name whose file exists is also parsed as a script** (review M2), the same way `bash x.sh` is, when it is under the size cap and either:
+   - A path-form name (`/x/gh`, `./bin/gh`, `"$VIRTUAL_ENV/bin/python"`) is classified by its **literal basename**. When the directory part is computed, that holds **only if every expansion in the directory part is inside double quotes**, or is unquoted but **strictly resolved** (below) to a value with no whitespace, glob characters or shell metacharacters (m-b: `S=/tmp/x; $S/walk/walk` → basename `walk`). Any other unquoted `$…` or `$(…)` can word-split into a whole command, so the name stays computed (review B2: `a="gh repo delete o/r #"; $a/b` runs gh).
+   - **A path-form name whose file doesn't exist yet** (review round 5, B) gives **no decision**, because it is usually a binary built earlier on the line (`cargo build && ./target/debug/app`). The exceptions:
+     - the line writes it with a redirect, `tee`, `cp`/`mv` or `cat >`, in which case the write-then-run rule applies;
+     - the line names a guarded bin or alias anywhere, in which case it asks.
+     - `bash x.sh`, `sh x.sh` and `source x.sh` of a missing file still ask.
+   - **A path-form name whose file exists is also parsed as a script** (review M2), the same way `bash x.sh` is, when it either:
      - has an `sh`, `bash`, `zsh` or `dash` shebang (including `#!/usr/bin/env bash`); or
      - is a text file with no shebang, which bash runs as a shell script.
 
      A script with another shebang (`python`, `node`) is a program and an escape. `./d.sh` and `./scripts/deploy.sh` are both parsed.
+   - **Text read from disk follows a gentler rule than the command line** (review round 5, A). This covers scripts run by path or through a shell, sourced files, and `package.json` scripts.
+     - **Literal guarded commands in the file always classify as usual**, and ask when risky.
+     - **The fail-closed triggers count only if the file's text names a guarded bin, alias or credential path as a word.** The triggers are: computed command names, computed evaluator code, parse failures and oversize.
+     - So a stock `gradlew` (`eval "set -- $( … )"`, `exec "$JAVACMD" "$@"`), `./mvnw`, `~/.nvm/nvm.sh`, `"$HOME/.cargo/env"` and a `run() { "$@"; }` helper give no decision.
+     - **Caps.** Files up to 256 KB are parsed. Files from 256 KB to 4 MB (`./configure`) are scanned only for guarded names: none found gives no decision, and one found asks. Over 4 MB asks only when the line itself names a guarded bin.
+     - The command line itself keeps the strict rules.
      - When the path exists, it is also canonicalised (`realpath` through `Ctx`), so a symlink named `deploy` that points at `vercel` is caught.
      - A *copy* of a binary under another name is not caught; that is an escape (minor 1).
    - A name holding unquoted `{…,…}`, `$`, `` ` ``, glob characters or `{}` (xargs `-I`) is **computed**.
@@ -287,7 +300,13 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard<H>; else case "$CLA
    - **Wrappers:** `env` (`-i`, `-u`, `-C`, `-S` re-parsed), `sudo`, `su -c`, `command`, `builtin`, `exec`, `nohup`, `time`, `nice`, `timeout`, `stdbuf`, `xargs` (with `-I` the command is computed), `watch`, `parallel`, `flock`, `setsid`, `script -c`, `caffeinate`, `arch`, `tmux new-session|send-keys|run-shell`, `screen`, and `ssh host CMD` (remote, still classified).
      - `command -v`, `which` and `type` only look a name up, and give no decision (m4).
    - **Arguments supplied at run time** (review M4):
-     - A guarded command under `xargs` or `parallel`, or under `find -exec` with `{}`, gets its leaf or flags from input. It asks unless the literal part already names a complete **read** leaf with no risky flags or arguments. `xargs gh pr view` passes; `echo repo delete o/r | xargs gh` asks; `xargs gh pr close` asks.
+     - A guarded command under `xargs` or `parallel`, or under `find -exec` with `{}`, gets its leaf or flags from input. It asks unless the literal part already names a **complete read leaf**.
+     - **A complete read leaf** (m-e) is a leaf that is classed read, has no subcommands, defines no risky flags or arguments, and belongs to a CLI with no risky global flags.
+       - `xargs gh pr view` passes.
+       - `echo repo delete o/r | xargs gh` asks; `xargs gh pr close` asks.
+       - `xargs gh auth status` asks (`-t` is a risky flag); `xargs gh api` asks (its arguments are risky).
+       - Every `xargs stripe …` asks, because `--api-key`, `--live` and `-p` are risky global flags.
+     - **`parallel CMD ::: a b c` arguments are literal**, not run-time: they are substituted as written and classified like any other words.
      - A computed word (after strict resolution) anywhere in a leaf that has risky flags or arguments asks: `f=-d; gh pr close 3 $f`.
    - **`find … -exec|-execdir|-ok|-okdir CMD … ;|+`.**
    - **`git -c alias.X='!…'` and `git config alias.X '!…'`:** the shell text is re-parsed. So are `git rebase --exec|-x CMD` and `git bisect run CMD …` (review m5).
@@ -299,9 +318,16 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard<H>; else case "$CLA
      - `tmux send-keys`, `git -c alias.x='!…'`, `git rebase --exec`/`-x`, `git bisect run`, `npx -c`, `npm exec -c`, `rg --pre`.
 
      A literal code argument is parsed instead.
-   - **Write-then-run** (review M1). A script fed to a shell, run by path or sourced asks when it doesn't exist yet, or when a redirect, `tee` or `cp`/`mv` earlier on the same line writes it.
-     - The exception: when the earlier write's content is literal on the line (`echo '…' > x.sh`, `cat > x.sh <<EOF … EOF`), that content is parsed as the script instead. A harmless script written and run in one line then gives no decision, and a risky one asks.
-     - Content from anything else asks.
+   - **Double-quoted code is parsed as a template** (m-d). Its literal structure is parsed, and each expansion becomes a computed word. A computed word matters only in command-name position, or in a guarded CLI's leaf, flag or argument positions.
+     - So `bash -c "until grep -q x $f; do sleep 1; done"` gives no decision.
+     - `bash -c "$CMD"`, `eval "$c$z"` and `eval "$(fnm env)"` still ask, because the expansion sits in command-name position.
+   - **Write-then-run** (review M1). This covers a script fed to a shell, run by path, or sourced, when a redirect, `tee`, `cp`/`mv` or `cat >` earlier on the same line writes it. What gets parsed:
+     - **Literal content** on the line (`echo '…' > x.sh`, `cat > x.sh <<EOF … EOF`) is parsed as the script.
+     - **`>>` appends** (m-c): the existing file's content plus the literal appended text.
+     - **`cp a.sh x.sh` / `mv a.sh x.sh`** with a literal source that exists (m-c): `a.sh` is parsed, under the disk-text rule.
+     - **Content from anything else asks**: a command's output, a computed source, a download.
+
+     A harmless script written and run in one line gives no decision, and a risky one asks.
    - **Runners:**
      - `npx` (`-y`/`--yes`/`--no`/`-p`/`--package`, and `PKG@version`), plus `npx -c '…'`;
      - `npm exec|x` (plus `-c '…'`);
@@ -588,10 +614,27 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
    - `git -c alias.x='!gh …' x`;
    - `sh -c`, `bash -lc`, `echo "gh …" | bash`, `printf … | sh`, `bash <<< "gh …"`;
    - `bash x.sh` and `source x.sh`, with `x.sh` in a fake fs;
-   - **scripts by path (M2):** `./d.sh` (`#!/bin/sh` + `gh repo delete o/r`), a no-shebang text `./x`, and `./scripts/deploy.sh` holding `vercel --prod` (asks once Story 6's table exists; in Story 1 it asks as an unknown-shebang-free script naming a guarded bin);
-   - **write-then-run (M1):** `echo 'gh repo delete o/r' > x.sh && bash x.sh` and `cat > x.sh <<EOF\ngh repo delete o/r\nEOF\nbash x.sh` (literal content parsed → ask); `cp a.sh x.sh && bash x.sh` (non-literal content → ask); `echo 'ls' > x.sh && bash x.sh` (literal, harmless → no decision);
+   - **scripts by path (M2):** `./d.sh` (`#!/bin/sh` + `gh repo delete o/r`), a no-shebang text `./x` holding `gh repo delete o/r`, and `./scripts/deploy.sh` holding `gh release create v1` all ask (m-f; the vercel case is in Story 6);
+   - **text from disk (round 5, A):** these give no decision:
+     - `./gradlew build`, with a fake `gradlew` of the stock shape (`eval "set -- $( … )"`, `exec "$JAVACMD" "$@"`, modelled on `mobile/node_modules/@react-native/gradle-plugin/gradlew`);
+     - `source ./nvm.sh`, an nvm.sh-style file of functions and computed calls naming no guarded bin;
+     - `./run.sh build`, where `run.sh` holds `run() { "$@"; }`;
+     - a 1 MB `./configure` naming no guarded bin.
+
+     The same `gradlew` with one added line `gh release delete v1` asks. A 1 MB `./configure` containing the word `gh` asks.
+   - **binaries built on the line (round 5, B):** `cargo build && ./target/debug/app`, `go build -o app . && ./app`, `gcc t.c -o t && ./t` and `make && ./bin/test` give no decision. `make && ./bin/gh repo delete o/r` asks (basename `gh`). `bash missing.sh` asks;
+   - **directory variables (m-b):** `S=/tmp/x; $S/walk/walk` gives no decision. `S="/tmp/x y"; $S/walk` asks;
+   - **write-then-run (M1, m-c):** these ask:
+     - `echo 'gh repo delete o/r' > x.sh && bash x.sh`;
+     - `cat > x.sh <<EOF\ngh repo delete o/r\nEOF\nbash x.sh`;
+     - `echo 'gh repo delete o/r' >> x.sh && bash x.sh`, with an existing harmless `x.sh`;
+     - `cp a.sh x.sh && ./x.sh`, with `a.sh` holding `gh repo delete o/r`;
+     - `curl -o x.sh https://e.x && bash x.sh` (non-literal content).
+
+     `echo 'ls' > x.sh && bash x.sh` and `cp a.sh x.sh && ./x.sh` with a harmless `a.sh` give no decision;
+   - **templates (m-d):** `bash -c "until grep -q x $f; do sleep 1; done"` gives no decision. `bash -c "$CMD"` asks;
    - **computed evaluator code (M3):** `c='gh repo delete o/r'; eval "$c$z"`, `bash -c "$CMD"`, `source "$f"`, `ssh h "$c"`, `git rebase -x "$c" main` all ask; `git rebase --exec 'gh repo delete o/r' main` and `git bisect run gh repo delete o/r` ask by parsing;
-   - **run-time arguments (M4):** `echo repo delete o/r | xargs gh` and `xargs gh pr close` ask; `xargs gh pr view` and `find . -name '*.md' -exec gh gist view {} \;` pass; `f=-d; gh pr close 3 $f` asks;
+   - **run-time arguments (M4, m-e):** these ask: `echo repo delete o/r | xargs gh`, `xargs gh pr close`, `xargs gh auth status`, `xargs gh api`, `f=-d; gh pr close 3 $f`. These pass: `xargs gh pr view`, `find . -name '*.md' -exec gh gist view {} \;`, `parallel gh pr view ::: 1 2 3`. `parallel gh repo delete ::: o/a` asks because its literal arguments are classified;
    - **lookups (m4):** `command -v gh`, `which gh` and `type gh` give no decision;
    - `eval`;
    - absolute and relative paths.
@@ -638,14 +681,22 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
 10. **Speed:** `classify` on the 200 longest corpus commands is under 50 ms each in a debug build. Covered by `cli_guard` › `classify_is_fast`.
 11. **Pinned escapes:** `deno run npm:x`, `mise exec -- gh repo delete o/r` (the fallback catches this one: it asks), `node deploy.js`, a shell alias `g` used as `g repo delete`, and a copy of `gh` named `hg2` each behave as the guide states. Covered by `cli_guard` › `documented_escapes`.
 12. **Rules:** every gh ask rule matches the canonical form of some gh risky leaf under `rule_matches`, and none matches a read leaf. `rule_matches` reproduces the docs' wildcard table. Covered by `cli_rules.rs` › `gh_rules_cover_canonical_risks`, `claude_settings.rs` › `matches_claude_codes_documented_examples` (moved here from Story 2).
-13. **The shell-form command:** `GUARD_CMD` for an existing helper runs it with `guard`. For a missing path it prints the `ask` JSON naming Repair guard and Remove guard, and exits 0. Run through `/bin/sh -c` in the test. Covered by `cli_guard` › `missing_helper_asks_with_the_fix`.
+13. **The shell-form command, run through `/bin/sh -c`.** Covered by `cli_guard` › `missing_helper_asks_with_the_fix`.
+    - For an existing helper, both variants run it, the headless one with `--headless`.
+    - For a missing path, with `CLAUDE_CODE_ENTRYPOINT` set to `cli`, to `sdk-cli`, and empty or unset:
+      - the interactive variant prints `ask`, `deny` and `ask`;
+      - the headless variant prints `deny` every time.
+    - Every output names Repair guard and Remove guard, and exits 0 (m-a).
 
 ## Verification (1)
 
 The five commands, unchanged.
 
 **Manual:** run the release helper by hand on the reviewer's probe scripts (`scratchpad/scripts/ghforms.sh`, `scratchpad/probe4/`): every line asks.
-- **V8:** replay the reviewer's 1,599-call corpus through `classify`, and record the spurious-ask rate in the story's Verification section. The expected rate is under 1% (Q3).
+- **V8:** measure the spurious-ask rate, and record both numbers in the story's Verification section.
+  - **The local corpus** (1,761 calls by round 5) is **biased**: most of it comes from reviews of this plan, which are full of guarded commands and probes.
+  - So V8 also replays a sample of the owner's **ordinary sessions** (at least 500 calls from at least 5 projects).
+  - **If the measured rate on the ordinary sample is above 1%, the owner decides before Story 2 ships** whether to accept it, narrow the triggers, or ship Story 1 only behind the file entry (m-h).
 
 ## Slice (1)
 
@@ -865,6 +916,7 @@ Depends on Story 4.
    - through scripts: `npm run deploy` (`"deploy": "vercel --prod"`), `npm run build` with `"postbuild": "vercel"`, `pnpm --filter web run ship`, `yarn workspace web deploy`, `turbo run deploy`, `npm ci` with `"prepare": "vercel pull"`, and `node node_modules/vercel/dist/vc.js`.
 
    - **Quoted command lines (m4):** `concurrently "vercel --prod" "npm run dev"` and `npm-run-all -p "vc deploy"` ask.
+   - **A script by path** (moved here from Story 1, m-f): `./scripts/deploy.sh` holding `vercel --prod` asks.
 
    `vercel --version`, `command -v vercel`, `which vercel` and `type vc` give no decision. These give no decision too (fallback narrowed for all-ask CLIs): `grep -r vercel .`, `npm i -D vercel`, `rg "vercel --prod" docs`, `git commit -m "vercel deploy fix"`, `cat vercel.json`, `echo vercel`. Covered by `cli_guard` › `vercel_hand_corpus`, `vercel_mentions_do_not_ask`.
 3. Generated corpora pass. Covered by `cli_guard` › `vercel_corpus`.
@@ -955,17 +1007,22 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
   - **The cost:** ADE launches also run the user's and the project's other hooks when a file had turned them off. The tab says so.
   - Without the amendment, Story 2 can't ship. Stories 1, 3 and 4 still ship, **provided Orgo Story 1 (`a895c05`) lands first**: they need its settings merge and `main_checkout_root`, and that code is back in review. Then the file guard and the rules cover sessions the user starts in the repository, and ADE launches keep Orgo's ask rules only.
 - **Q2. In Continuous mode, the guard asks.** Recommend ask, per decision 4, counted only once V1 passes. If V1 fails on a version users run, recommend `deny` under `bypassPermissions` for that version.
-- **Q3. Fail toward asking: the real cost.** Recommend yes. After round 4, the commands that ask without being risky are:
-  - a whole-word computed command name: `"$EDITOR" f`, `$PYTHON x.py`, `"$@"` as a command;
-  - computed code handed to an evaluator: `eval "$(fnm env)"`, `eval "$(ssh-agent)"`, `source "$f"`, `bash -c "$CMD"`;
-  - any variable-built command name on a line that also uses `eval`, `source` or `.`, a nameref, `getopts` or `select`;
-  - a script written on the same line from non-literal content and then run;
-  - a guarded command fed run-time arguments by `xargs` or `parallel`, unless it is a complete read;
-  - a quoted risky command line passed to a command the guard doesn't know and that isn't on the skip list.
+- **Q3. Fail toward asking: the real cost.** Recommend yes.
 
-  An `echo`, `printf`, `grep` or `rg`, or a commit message that quotes a risky command, **no longer asks** (the skip list).
+  **False asks that remain after round 5.** All of them come from what the agent types on the command line. Text read from disk (scripts, sourced files, `package.json`) triggers these only when it names a guarded CLI.
+  - A command name that is a variable the guard can't strictly resolve: `"$EDITOR" f`, `$PYTHON x.py` when `PYTHON` was set in an earlier tool call, `"$@"` as a command. (`PY=python3; $PY x.py` on one line resolves and passes.)
+  - Computed code in command-name position of an evaluator: `eval "$(fnm env)"`, `eval "$(ssh-agent -s)"`, `bash -c "$CMD"`, `source "$f"`. (Double-quoted templates such as `bash -c "until grep -q x $f; do …"` no longer ask.)
+  - A variable-built command name on a line that also uses `eval`, `source`/`.`, a nameref, `getopts` or `select`.
+  - `bash x.sh` or `source x.sh` of a file that doesn't exist. A path-form binary built earlier on the line (`cargo build && ./target/debug/app`) no longer asks.
+  - A script written on the same line from non-literal content and then run (`curl -o x.sh … && bash x.sh`). That is close to a real risk anyway.
+  - A guarded command fed run-time arguments by `xargs` or `parallel` that isn't a complete read leaf (every `xargs stripe …`, `xargs gh auth status`).
+  - A quoted command line that starts with a risky guarded command, passed to a command the guard doesn't know (`concurrently "gh release create v1"`).
 
-  **Honest estimate:** under 1% of Bash calls, probably 0.3 to 0.7%, mostly `eval "$(…)"` environment setup and `"$VAR"` command names. The reviewer measured about 1% on 1,599 real calls before the round-3 reductions. Round 4 adds evaluator and write-then-run asks, and removes the commit and `echo` ones. V8 replays that corpus and records the real number.
+  **No longer asking:**
+  - an `echo`, `printf`, `grep` or `rg`, or a commit message that quotes a risky command: **round 3** (the skip list);
+  - ordinary wrapper scripts (`gradlew`, `mvnw`, `nvm.sh`, cargo's env, `run() { "$@"; }`, `./configure`) and binaries built on the line: **round 5**.
+
+  **The rate.** **An estimate, not a measurement: 0.3 to 0.7% of Bash calls**, mostly `eval "$(…)"` environment setup and variable command names. It is extrapolated from the reviewer's ~1% on 1,599 local calls, measured before the round-3 reductions. **That sample is biased**: most of it comes from reviews of this plan, which are dense with guarded commands. **V8 is the measurement**, on that corpus and on a sample of your ordinary sessions. If the ordinary sample comes out above 1%, you decide before Story 2 ships.
 
   The alternative asks only when the text names a guarded CLI. It is quieter, but it lets `${x}h` through when `x` was set in an earlier tool call.
 - **Q4. The cut.** Recommend Stories 1 to 4 for gh first, then decide on stripe, vercel and wrangler against a named need (P5).
@@ -1048,3 +1105,20 @@ Depends on Story 1. Runs every quarter, or sooner when a vendor's release notes 
 | m6 | Story 2's Design Notes use `GUARD_CMD`; Story 3's ACs renumbered; `launchGuard` defined. |
 | m7 | ADR 0003 gains "Amended by 0011" on approval; ADRs 0009 and 0012 cited by slug. |
 | Owner questions | Q3 restated with the real cost and an estimate; Q1's fallback depends on Orgo Story 1 landing first; V8 added to measure. |
+
+**Round 5, 2026-10-30: review of 6cfc414. BLOCK on Story 1 only.** Converging: against the threat model, nothing realistic gets through. Two common honest patterns asked on every run.
+
+| Finding | Action |
+|---|---|
+| A: scripts read from disk applied the command-line rules (gradlew, mvnw, nvm.sh, cargo env, `run() { "$@"; }`, `./configure`) | Disk text triggers fail-closed only when it names a guarded bin, alias or credential path. Literal guarded commands still classify. A 256 KB parse cap, then a name-scan to 4 MB. AC2 cases, including a stock-shaped gradlew. |
+| B: binaries built and run on one line | A missing path-form name gives no decision, unless the line writes it or names a guarded bin. `bash`/`source` of a missing file still asks. Four AC2 cases. |
+| m-a: headless case expanded the wrong variable | A deny-only headless variant. AC13 runs both variants under `/bin/sh` with the entrypoint set to `cli`, `sdk-cli` and empty. |
+| m-b | An unquoted directory variable that strictly resolves to a plain value keeps the basename. |
+| m-c | `>>` parses the existing file plus the appended text; `cp a.sh x.sh` parses `a.sh`. |
+| m-d | Double-quoted code parsed as a template. |
+| m-e | "Complete read leaf" defined; `xargs gh auth status` and `xargs gh api` ask; every `xargs stripe` asks; `parallel ::: literal` is literal. |
+| m-f | Story 1's script example uses gh; the vercel case moved to Story 6. |
+| m-g | P1 says "for the forms agents write (threat model)". |
+| m-h | V8's corpus stated as biased; an ordinary-sessions sample added; above 1%, the owner decides before Story 2. |
+| m1 (optional) | Also asserts no adjacent single-quoted runs (zsh `RC_QUOTES`). |
+| Q3 | The remaining false asks listed; round 3 credited for the echo/commit reduction; 0.3–0.7% marked as an estimate from a biased sample, with V8 as the measurement. |
