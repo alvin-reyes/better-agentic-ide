@@ -114,12 +114,12 @@ type Addon = InstanceType<typeof FakeWebglAddon>;
 type Inst = Parameters<typeof seatTerminal>[2];
 
 /** A pane with a fake terminal in a detached wrapper, and its container on the page. */
-function pane(id: string) {
+function pane(id: string, scrollSensitivity = 1) {
   const element = document.createElement("div");
   const wrapper = document.createElement("div");
   wrapper.appendChild(element);
   const writes: Array<[string, unknown]> = [];
-  const options = new Proxy<Record<string, unknown>>({ scrollSensitivity: 1 }, {
+  const options = new Proxy<Record<string, unknown>>({ scrollSensitivity }, {
     set(target, key, value) {
       writes.push([String(key), value]);
       target[String(key)] = value;
@@ -174,13 +174,13 @@ const logErrors = () => h.invoke.mock.calls.filter(([cmd]) => cmd === "log_error
 const transient = () => new Error("could not initialize WebGL state");
 const unsupported = () => new Error("WebGL2 not supported null");
 
-/** The D7 nudge: scrollSensitivity written to another value, then back. */
-function expectRespaced(p: Pane) {
+/** The D7 nudge: scrollSensitivity written to another value, then back to `original`. */
+function expectRespaced(p: Pane, original = 1) {
   expect(p.writes).toHaveLength(2);
   expect(p.writes[0][0]).toBe("scrollSensitivity");
-  expect(p.writes[0][1]).not.toBe(1);
-  expect(p.writes[1]).toEqual(["scrollSensitivity", 1]);
-  expect(p.term.options.scrollSensitivity).toBe(1);
+  expect(p.writes[0][1]).not.toBe(original);
+  expect(p.writes[1]).toEqual(["scrollSensitivity", original]);
+  expect(p.term.options.scrollSensitivity).toBe(original);
 }
 
 const registered: string[] = [];
@@ -436,6 +436,10 @@ describe("WebGL slots follow the terminals on screen", () => {
     const off = pane("off");
     off.show();
     expectRespaced(off);
+    // Put back to the terminal's own value, not to a default.
+    const custom = pane("custom", 3);
+    custom.show();
+    expectRespaced(custom, 3);
     useSettingsStore.setState({ gpuRendering: true });
 
     // A failed load.

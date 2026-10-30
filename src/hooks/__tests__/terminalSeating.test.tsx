@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
-import { useRef } from "react";
+import { StrictMode, useRef } from "react";
 
 /**
  * The real useTerminal hook, rendered in jsdom with xterm, its addons and the
@@ -101,6 +101,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: async () => {} }));
 
 import { useTerminal, getSearchAddon, destroyInstance, stopIdlePolling, __resetGpuForTests } from "../useTerminal";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useTabStore, type Tab } from "../../stores/tabStore";
 
 const { FakeWebglAddon, events, ptys } = h;
 type FakeTerminal = InstanceType<typeof h.FakeTerminal>;
@@ -120,15 +121,30 @@ function NoContainer({ id }: { id: string }) {
 
 /**
  * The active tab's panes, or only the zoomed one, the way App.tsx and
- * PaneContainer render them. Every pane of a tab switch or a zoom change
- * mounts in ONE React commit from one render: never mount them one per act
- * or per commit, or the switch no longer looks like the app's and the
- * eviction cascade it guards against (all panes' effects run before any of
- * them is seated) goes unseen.
+ * PaneContainer render them. Every pane of a tab switch or
+ * a zoom change mounts in ONE React commit from one render: never mount them
+ * one per act or per commit, or the switch no longer looks like the app's and
+ * the eviction cascade it guards against (all panes' effects run before any
+ * of them is seated) goes unseen.
+ *
+ * With `indexKeys`, panes are keyed by position as PaneContainer keys a
+ * split's children, so a tab switch reuses a component with a new paneId.
  */
-function Screen({ panes, zoomed }: { panes: string[]; zoomed?: string }) {
-  return zoomed ? <Pane key={zoomed} id={zoomed} /> : <div>{panes.map((id) => <Pane key={id} id={id} />)}</div>;
+function Screen({ panes, zoomed, indexKeys = false }: { panes: string[]; zoomed?: string; indexKeys?: boolean }) {
+  return zoomed
+    ? <Pane key={zoomed} id={zoomed} />
+    : <div>{panes.map((id, i) => <Pane key={indexKeys ? i : id} id={id} />)}</div>;
 }
+
+/** How the harness renders: set per describe by the mode under test. */
+const mode = { strictMode: true, indexKeys: false };
+
+/**
+ * At the root inside StrictMode, as main.tsx renders the app, so every effect
+ * runs mount, cleanup, mount. (A StrictMode returned from inside a component
+ * doesn't double-run its effects here.)
+ */
+const root = (el: React.ReactElement) => (mode.strictMode ? <StrictMode>{el}</StrictMode> : el);
 
 let frames: FrameRequestCallback[] = [];
 const runFrames = () => { for (const cb of frames.splice(0)) cb(0); };
@@ -150,10 +166,10 @@ async function microtasks() {
 function show(r: ReturnType<typeof render> | null, panes: string[], zoomed?: string) {
   panes.forEach((id) => used.add(id));
   if (r) {
-    r.rerender(<Screen panes={panes} zoomed={zoomed} />);
+    r.rerender(root(<Screen panes={panes} zoomed={zoomed} indexKeys={mode.indexKeys} />));
     return r;
   }
-  return render(<Screen panes={panes} zoomed={zoomed} />);
+  return render(root(<Screen panes={panes} zoomed={zoomed} indexKeys={mode.indexKeys} />));
 }
 
 const termOf = (id: string) => (getSearchAddon(id) as unknown as { term: FakeTerminal }).term;
@@ -180,6 +196,8 @@ afterAll(() => {
   stopIdlePolling();
 });
 
+const initialTabs = useTabStore.getState();
+
 beforeEach(() => {
   useSettingsStore.setState({ gpuRendering: true, showBanner: false });
 });
@@ -195,9 +213,21 @@ afterEach(async () => {
   ptys.length = 0;
   frames = [];
   h.invoke.mockClear();
+  useTabStore.setState({ tabs: initialTabs.tabs, activeTabId: initialTabs.activeTabId });
 });
 
-describe("seating terminals as panes mount", () => {
+const modes = [
+  { name: "StrictMode", strictMode: true, indexKeys: false },
+  { name: "StrictMode, panes keyed by index as PaneContainer does", strictMode: true, indexKeys: true },
+  { name: "without StrictMode", strictMode: false, indexKeys: false },
+];
+
+describe.each(modes)("seating terminals as panes mount ($name)", (m) => {
+  beforeEach(() => {
+    mode.strictMode = m.strictMode;
+    mode.indexKeys = m.indexKeys;
+  });
+
   // AC12
   it("switching to a multi-pane tab evicts once", async () => {
     const r = show(null, B);
@@ -253,21 +283,6 @@ describe("seating terminals as panes mount", () => {
     for (const id of B) expect(webglOf(id).filter((a) => !a.disposed)).toHaveLength(1);
   });
 
-  // AC14
-  it("a new pane gets WebGL and its real size before the shell starts", async () => {
-    show(null, ["n1"]);
-    await settle();
-    const [addon] = webglOf("n1");
-    expect(addon).toBeDefined();
-    expect(addon.connectedAtLoad).toBe(true);
-    const pty = events.indexOf("create_pty");
-    expect(pty).toBeGreaterThan(0);
-    expect(events.indexOf("webgl")).toBeLessThan(pty);
-    // The fit the shell's size comes from ran on the WebGL renderer.
-    expect(events.slice(0, pty).filter((e) => e.startsWith("fit:"))).toEqual(["fit:true"]);
-    expect(ptys).toEqual([{ rows: 40, cols: 120 }]);
-  });
-
   // AC15
   it("a re-shown pane is seated before the next frame", async () => {
     useSettingsStore.setState({ gpuRendering: false });
@@ -302,7 +317,7 @@ describe("seating terminals as panes mount", () => {
     show(r, []);
     await settle();
 
-    const ghost = render(<NoContainer id="b1" />);
+    const ghost = render(root(<NoContainer id="b1" />));
     ghost.unmount();
 
     show(r, ["x1"]);
@@ -310,4 +325,48 @@ describe("seating terminals as panes mount", () => {
     expect(webglOf("x1")).toHaveLength(1);
     expect(evicted()).toEqual(["b1"]);
   });
+  // A tab moved back from a detached window: its pane already has a shell.
+  it("a pane that already has a shell reattaches to it and takes one slot", async () => {
+    const tab: Tab = { id: "t", name: "t", activePaneId: "r1", root: { type: "pane", pane: { id: "r1", ptyId: 42 } } };
+    useTabStore.setState({ tabs: [tab], activeTabId: "t" });
+    show(null, ["r1"]);
+    await settle();
+    const calls = h.invoke.mock.calls.map(([cmd]) => cmd);
+    expect(calls.filter((c) => c === "reattach_pty")).toHaveLength(1);
+    expect(h.invoke.mock.calls.find(([cmd]) => cmd === "reattach_pty")![1]).toMatchObject({ id: 42 });
+    expect(calls).not.toContain("create_pty");
+    expect(FakeWebglAddon.all).toHaveLength(1);
+    expect(webglOf("r1")).toHaveLength(1);
+    expect(webglOf("r1")[0].disposed).toBe(false);
+    expect(webglOf("r1")[0].connectedAtLoad).toBe(true);
+  });
+});
+
+/**
+ * Without StrictMode only. In development, StrictMode's first, cancelled
+ * attach() creates the instance with no container, so the shell starts at
+ * 80x24 before the second attach seats it. That predates the WebGL slots
+ * (main at 5d73348 does the same) and never happens in a production build.
+ */
+describe("seating a new pane (without StrictMode)", () => {
+  beforeEach(() => {
+    mode.strictMode = false;
+    mode.indexKeys = false;
+  });
+
+  // AC14
+  it("a new pane gets WebGL and its real size before the shell starts", async () => {
+    show(null, ["n1"]);
+    await settle();
+    const [addon] = webglOf("n1");
+    expect(addon).toBeDefined();
+    expect(addon.connectedAtLoad).toBe(true);
+    const pty = events.indexOf("create_pty");
+    expect(pty).toBeGreaterThan(0);
+    expect(events.indexOf("webgl")).toBeLessThan(pty);
+    // The fit the shell's size comes from ran on the WebGL renderer.
+    expect(events.slice(0, pty).filter((e) => e.startsWith("fit:"))).toEqual(["fit:true"]);
+    expect(ptys).toEqual([{ rows: 40, cols: 120 }]);
+  });
+
 });
