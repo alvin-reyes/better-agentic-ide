@@ -447,9 +447,9 @@ pub const MCP_ASK: &[&str] = &[
   - **Rust.** `claude_settings::launch_rules()` takes no arguments and is registered as the Tauri command `launch_rules`. It replaces `orgo_launch_rules` and returns `LaunchRules { ask, continuous_deny, guard }`, serialised camelCase.
     - `ask` is `orgo_rules::MCP_ASK`. The CLI library's Story 2 appends its CLIs' ask rules after it.
     - `continuousDeny` is `[]` in Story 1. Story 1b fills it.
-    - `guard` is `null` in Story 1. The CLI library's Story 2 sets it to `{ command }`.
+    - `guard` is `null` in Story 1. The CLI library's Story 2 sets it to `{ interactive, headless }`, both command strings that Rust builds (CLI plan f8309e4).
   - **TypeScript.** `src/lib/launchRules.ts` replaces `orgoRules.ts` with the same exports apart from the type:
-    - `LaunchRules { ask: string[]; continuousDeny: string[]; guard: { command: string } | null }`;
+    - `LaunchRules { ask: string[]; continuousDeny: string[]; guard: { interactive: string; headless: string } | null }`;
     - `loadLaunchRules(): Promise<LaunchRules>`, `RULES_UNAVAILABLE` and `__resetLaunchRulesForTests`.
 
     `loadLaunchRules` invokes `launch_rules` and caches the result **only on success** (round 5). A rejected load clears the cache, so the next launch tries again rather than being blocked for the rest of the app's life.
@@ -457,10 +457,10 @@ pub const MCP_ASK: &[&str] = &[
   - **(CR-m5)** A result counts as malformed, and is rejected and not cached like a failed invoke, when any of these holds:
     - `ask` is not an array of strings, or is empty;
     - `continuousDeny` is not an array of strings;
-    - `guard` is neither `null` nor an object with a string `command`.
+    - `guard` is neither `null` nor an object with both a string `interactive` and a string `headless`.
 
     An empty `ask` would launch agents with no rules.
-  - **Not decided here.** The guard's non-null shape, and how `headless` picks its variant, belong to the CLI library's Story 2. Its Design Notes give `guard: { command }`, while AC11's text picks the variant by `opts.headless`. Story 1 only types the field and emits `hooks` when it is non-null.
+  - **The guard's shape (settled by the CLI plan at f8309e4).** Rust's `launch_rules()` builds both variants. `buildLaunchCommand` picks `rules.guard.headless` when `opts.headless` is set, and `rules.guard.interactive` otherwise. TypeScript never builds a command string. Story 1's `launch_rules()` returns `guard: null`.
 - **The type makes it required.** `LaunchOptions` gains `rules: LaunchRules` as a **required** field, and `buildLaunchCommand(provider, rolePath, opts: LaunchOptions)` makes `opts` required. tsc then fails on every caller that doesn't pass rules.
   - `prepareAgentLaunch` covers the picker and `dispatchAgent`. `OrchestratorTab.tsx:292` is updated to `await loadLaunchRules()` and pass them.
   - **(R2, decision 14)** `LaunchOptions` gains an optional `headless?: boolean`. Only the Orchestrator sets it, to `true`. It changes nothing while `rules.guard` is `null`.
@@ -470,7 +470,7 @@ pub const MCP_ASK: &[&str] = &[
   - `permissions: { ask: rules.ask }`, always;
   - only when `rules.guard` is non-null, both of these:
     - `disableAllHooks: false`;
-    - `hooks: { PreToolUse: [{ matcher: "Bash|Monitor", hooks: [{ type: "command", command: rules.guard.command, timeout: 5, onFailure: "block" }] }] }`.
+    - `hooks: { PreToolUse: [{ matcher: "Bash|Monitor", hooks: [{ type: "command", command: opts.headless ? rules.guard.headless : rules.guard.interactive, timeout: 5, onFailure: "block" }] }] }`.
 
   Until the CLI library's Story 2, the value is exactly `{"permissions":{"ask":[…31 globs]}}`.
   - **Why `disableAllHooks: false` goes with the guard.** A `disableAllHooks: true` in a user, project or local file turns off every non-managed hook, the launch flag's included, and `--settings` outranks those files. It is needed only to keep the guard's hook on, so without a guard it is left out, and the user's hook settings stand.
@@ -708,7 +708,7 @@ Each names its test. The developer writes it failing first. AC10 is a regression
     - `permissions`, equal to `{"ask": rules.ask}`, where `rules.ask` is `MCP_ASK` followed by each guarded CLI's ask rules;
     - only when `rules.guard` is non-null, both:
       - `disableAllHooks`, equal to `false`;
-      - `hooks`, equal to `{"PreToolUse": [{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": rules.guard.command, "timeout": 5, "onFailure": "block"}]}]}`. Here `rules.guard.command` is the CLI plan's `GUARD_CMD`: its headless variant when `opts.headless` is true, otherwise the interactive one.
+      - `hooks`, equal to `{"PreToolUse": [{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": C, "timeout": 5, "onFailure": "block"}]}]}`. Here `rules.guard` has the type `{ interactive: string, headless: string } | null`, both variants built by Rust's `launch_rules()`. `C` is `rules.guard.headless` when `opts.headless` is true, and `rules.guard.interactive` otherwise.
 
     When `rules.guard` is `null`, the value has neither `disableAllHooks` nor `hooks`.
 
@@ -721,11 +721,12 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 
     **How Story 1 meets it.**
     - `launch_rules()` returns `guard: null`. The first test asserts the exact value `{"permissions":{"ask":MCP_ASK}}`, with no `disableAllHooks` key, in all three modes.
-    - The second test passes a made-up `guard: { command: "X" }` and asserts exactly three keys:
+    - The second test passes a made-up `guard: { interactive: "X", headless: "Y" }`. Without `headless`, it asserts exactly three keys:
       - `permissions`;
       - `disableAllHooks: false`;
       - the `hooks` entry with `command: "X"`.
-    - Choosing the headless variant is tested by the CLI library's Story 2 (its AC1). Story 1 only adds `headless` to `LaunchOptions`.
+
+      With `headless: true`, it asserts the same three keys with `command: "Y"`.
     - `claude_settings.rs` › `launch_rules_are_the_ask_list_with_no_guard_yet` asserts `{ ask: MCP_ASK, continuousDeny: [], guard: null }`. It replaces `orgo_rules.rs` › `launch_rules_are_the_ask_list`.
 12. **(S1-1.)** Launching from `AgentPicker` with a pane cwd of `<repo>/app` invokes `launch_rules` with no arguments, and types a command containing the same `--settings` as with cwd `<repo>`. Covered by `src/components/__tests__/agentLaunch.test.ts` › "Orgo rules do not depend on the folder an agent starts in".
 13. The guide's MCP table lists exactly the catalog's servers, by set equality after removing parenthesised text and splitting on commas. Covered by `scripts/mcpCatalogDocs.test.ts` (new) › "the guide's table lists exactly the catalog".
@@ -733,7 +734,7 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 15. **(S1-4.)** An Orchestrator dispatch types a `claude … -p '<task>'` command that contains the `--settings` with `MCP_ASK`, through `loadLaunchRules`. **(R2)** It builds the command with `headless: true`. The picker and `dispatchAgent` don't set `headless` (AC12, AC16). Covered by `src/components/__tests__/OrchestratorTab.test.tsx` (extended) › "orchestrator dispatches carry Orgo's ask rules".
 16. **(S1-4.)** The board's `dispatchAgent` types a command that contains the same `--settings`. Covered by `src/lib/__tests__/agentLaunch.test.ts` › "board dispatch carries Orgo's ask rules".
 17. **(S1-4.)** When the `launch_rules` invoke rejects, `prepareAgentLaunch` returns `{ ok: false }` with the "couldn't load its permission rules" message, and the Orchestrator aborts its dispatch with it. No command is typed. **(S1-6.)** If the first invoke rejects and the second resolves, the first launch is refused and the second goes through with the rules.
-    - **(Added, CR-m5.)** An invoke that resolves `{ ask: [], continuousDeny: [], guard: null }` is refused the same way and is not cached. The next invoke, resolving the real rules, goes through. **(R2)** So are `continuousDeny: "x"` and `guard: { command: 1 }`.
+    - **(Added, CR-m5.)** An invoke that resolves `{ ask: [], continuousDeny: [], guard: null }` is refused the same way and is not cached. The next invoke, resolving the real rules, goes through. **(R2)** So are `continuousDeny: "x"`, and a `guard` missing either string: `{ interactive: "X" }`, `{ headless: "Y" }` and `{ interactive: "X", headless: 1 }`.
 
     Covered by `agentLaunch.test.ts` › "no rules, no launch", "a failed load is retried, not cached" and "an empty rule list is no rules", and `OrchestratorTab.test.tsx` › "no rules, no dispatch".
 18. **(New, CR-2; amended R2-4, R2-6.)** Each case uses fake timers and a mocked `invoke`:
@@ -1249,3 +1250,13 @@ What changes in this plan:
 - **The contract** describes the conditional shape.
 - **The gating check's `ps` line** expects no `disableAllHooks`.
 - **ADR 0010's revision note** is updated.
+
+**Guard shape, aligned with the CLI plan at f8309e4 (2026-11-01).** That plan settled `rules.guard` as `{ interactive: string, headless: string } | null`. Rust builds both variants, and `buildLaunchCommand` picks one by `opts.headless`. TypeScript never builds a command string.
+
+What changes in this plan:
+- **AC11's hooks bullet** uses `C`, the headless variant or the interactive one.
+- **AC11's made-up guard** is `{ interactive: "X", headless: "Y" }`. The test expects `command: "X"`, or `"Y"` with `headless: true`, alongside `disableAllHooks: false`.
+- **AC17 and the `launchRules.ts` validation** reject a guard missing either string.
+- **The launch-rules design note and the flag design note** state the type and the choice, and drop the "not decided here" caveat.
+
+There is no other change.
