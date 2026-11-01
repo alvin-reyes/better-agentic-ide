@@ -48,7 +48,6 @@ pub fn merge_rules(settings: &mut Map<String, Value>, list: &str, rules: &[Strin
 /// `$HOME` is unset, as Node's `os.homedir()` gives Claude Code. None when
 /// it is unknown or empty.
 pub fn home_dir() -> Option<PathBuf> {
-    #[allow(deprecated)]
     std::env::home_dir().filter(|h| !h.as_os_str().is_empty())
 }
 
@@ -81,20 +80,46 @@ pub fn main_checkout_root(root: &Path) -> PathBuf {
 /// every other case, including anything unreadable, the home folder, a
 /// folder another user owns, and every platform without uids.
 pub fn main_checkout_root_for(root: &Path, home: Option<&Path>, uid: Option<u32>) -> PathBuf {
-    canonical_root(root, home, uid).unwrap_or_else(|| root.to_path_buf())
+    #[cfg(unix)]
+    {
+        main_checkout_root_with(root, home, uid, real_owner)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (home, uid);
+        root.to_path_buf()
+    }
 }
 
-#[cfg(not(unix))]
-fn canonical_root(_root: &Path, _home: Option<&Path>, _uid: Option<u32>) -> Option<PathBuf> {
-    None
+/// `main_checkout_root_for` with the owner lookup passed in, so tests can
+/// make one path at a time read as another user's without being root.
+#[cfg(unix)]
+fn main_checkout_root_with(
+    root: &Path,
+    home: Option<&Path>,
+    uid: Option<u32>,
+    owner_of: impl Fn(&Path) -> std::io::Result<u32>,
+) -> PathBuf {
+    canonical_root(root, home, uid, owner_of).unwrap_or_else(|| root.to_path_buf())
+}
+
+/// The uid that owns `path` itself (a link is not followed).
+#[cfg(unix)]
+fn real_owner(path: &Path) -> std::io::Result<u32> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::symlink_metadata(path).map(|m| m.uid())
 }
 
 /// The walk's candidate, kept only when Claude Code would move the file
 /// there: not the home folder (an unknown one counts as home), and the
 /// candidate, its `.git` and its `.claude` (when present) owned by `uid`.
 #[cfg(unix)]
-fn canonical_root(root: &Path, home: Option<&Path>, uid: Option<u32>) -> Option<PathBuf> {
-    use std::os::unix::fs::MetadataExt;
+fn canonical_root(
+    root: &Path,
+    home: Option<&Path>,
+    uid: Option<u32>,
+    owner_of: impl Fn(&Path) -> std::io::Result<u32>,
+) -> Option<PathBuf> {
     let candidate = linked_main_checkout(root)?;
     let uid = uid?;
     let home = home?.canonicalize().ok()?;
@@ -102,8 +127,8 @@ fn canonical_root(root: &Path, home: Option<&Path>, uid: Option<u32>) -> Option<
         return None;
     }
     for (path, required) in [(candidate.clone(), true), (candidate.join(".git"), true), (candidate.join(".claude"), false)] {
-        match std::fs::symlink_metadata(&path) {
-            Ok(m) if m.uid() == uid => {}
+        match owner_of(&path) {
+            Ok(owner) if owner == uid => {}
             Err(e) if !required && e.kind() == std::io::ErrorKind::NotFound => {}
             _ => return None,
         }
@@ -466,6 +491,38 @@ mod tests {
         // main_checkout_root passes the real home folder and uid.
         assert_eq!(main_checkout_root(&wt), main);
 
+        std::fs::remove_dir_all(d).ok();
+        std::fs::remove_dir_all(home).ok();
+    }
+
+    /// Each ownership guard alone, as any user: the owner lookup is replaced
+    /// so one path at a time reads as another user's. (The root-only
+    /// `lchown` cases above check the real lookup the same way.)
+    #[cfg(unix)]
+    #[test]
+    fn main_checkout_root_checks_each_owner_alone() {
+        let d = tmp("owners");
+        let home = tmp("owners-home");
+        let main = main_checkout(&d);
+        let wt = d.join("wt");
+        worktree(&main.join(".git"), "wt", &wt);
+        std::fs::create_dir_all(main.join(".claude")).unwrap();
+        let uid = owner(&main);
+        let real = |p: &Path| real_owner(p);
+        assert_eq!(main_checkout_root_with(&wt, Some(&home), Some(uid), real), main, "every owner is us");
+        for (what, other) in [("the candidate", main.clone()), (".git", main.join(".git")), (".claude", main.join(".claude"))] {
+            let lookup = |p: &Path| if p == other { Ok(uid + 1) } else { real_owner(p) };
+            assert_eq!(main_checkout_root_with(&wt, Some(&home), Some(uid), lookup), wt, "{what} owned by another uid");
+            let unreadable = |p: &Path| if p == other { Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)) } else { real_owner(p) };
+            assert_eq!(main_checkout_root_with(&wt, Some(&home), Some(uid), unreadable), wt, "{what} can't be read");
+        }
+        // A missing .claude is fine; a missing .git or candidate is not.
+        let missing = |p: &Path| if p == main.join(".claude") { Err(std::io::Error::from(std::io::ErrorKind::NotFound)) } else { real_owner(p) };
+        assert_eq!(main_checkout_root_with(&wt, Some(&home), Some(uid), missing), main, "no .claude");
+        for gone in [main.clone(), main.join(".git")] {
+            let lookup = |p: &Path| if p == gone { Err(std::io::Error::from(std::io::ErrorKind::NotFound)) } else { real_owner(p) };
+            assert_eq!(main_checkout_root_with(&wt, Some(&home), Some(uid), lookup), wt, "{} missing", gone.display());
+        }
         std::fs::remove_dir_all(d).ok();
         std::fs::remove_dir_all(home).ok();
     }

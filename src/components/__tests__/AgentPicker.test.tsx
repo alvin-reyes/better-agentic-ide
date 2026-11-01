@@ -69,8 +69,8 @@ Element.prototype.scrollIntoView = vi.fn();
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 /** Render AgentPicker and let its provider-detection effect settle inside act(). */
-async function renderPicker() {
-  const utils = render(<AgentPicker onClose={() => {}} />);
+async function renderPicker(onClose: () => void = () => {}) {
+  const utils = render(<AgentPicker onClose={onClose} />);
   await act(async () => {
     await flush();
   });
@@ -190,15 +190,17 @@ describe("AgentPicker", () => {
     expect(start).toHaveBeenCalledTimes(1);
     cleanup();
 
-    // The pane is closed while the picker waits: nothing is typed, and no session starts.
+    // The pane is closed while the picker waits: nothing is typed, no session
+    // starts, and the picker stays open saying why, so the user can retry.
     start.mockClear();
+    const onClose = vi.fn();
     tauri.ptyWrites.length = 0;
     tauri.events.length = 0;
     tauri.neverReady = true;
     let tabId = "";
     act(() => { tabId = useTabStore.getState().addTab("Closing"); });
     attachPty(8);
-    await renderPicker();
+    await renderPicker(onClose);
     await clickRow("Auth Architect");
     for (let i = 0; i < 100 && !tauri.events.includes("ready:8:false"); i++) {
       await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
@@ -211,6 +213,11 @@ describe("AgentPicker", () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
     expect(tauri.ptyWrites).toEqual([]);
     expect(start).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe("The terminal changed before the agent was typed; nothing was started."),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Auth Architect").length).toBeGreaterThan(0);
   }, 20_000);
 
   it("writes the role file to the same absolute path the command reads", async () => {

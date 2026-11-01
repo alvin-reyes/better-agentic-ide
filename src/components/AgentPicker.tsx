@@ -201,10 +201,14 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       if (!paneId) return;
     } else {
       // Once its shell's line editor is up: a tab still reading its rc files
-      // can be picked, and a line typed then can be cut. Nothing is typed,
-      // and no session starts, if the pane is gone by then.
+      // can be picked, and a line typed then can be cut. If the terminal
+      // changed by then, nothing is typed and no session starts; the picker
+      // stays open and says so, for another try.
       const typed = await typeWhenReady(ptyId, cmd, () => getActivePtyId() === ptyId).catch(() => true);
-      if (!typed) return;
+      if (!typed) {
+        setLaunchError("The terminal changed before the agent was typed; nothing was started.");
+        return;
+      }
       paneId = getActivePane()?.id ?? null;
     }
 
