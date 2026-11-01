@@ -26,7 +26,7 @@ context: ['.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on
 >
 > **Amendment 2 (2026-11-01), after the review of 7a8dcdc (BLOCK on R2-1).** The reviewer confirmed CR-1 with their own Claude Code 2.1.314 probe, and confirmed that CR-2's `ICANON` signal works on Linux. It records two owner rulings and fixes the review's findings. Each item is marked **(R2-…)**:
 > - **CR-3: yes.** 31 ask globs, plus `*run_template*` in Story 1b's Continuous deny list.
-> - **AC11 replaced.** The launch value carries `disableAllHooks: false` and, later, the CLI library's guard. This follows the CLI library plan's Q1 (owner, 2026-10-30, `plan/cli-library-and-mcps` at 5f8e35c).
+> - **AC11 replaced.** The launch value will carry the CLI library's guard. It carries `disableAllHooks: false` only alongside that guard (owner, 2026-11-01). This follows the CLI library plan's Q1 (owner, 2026-10-30, `plan/cli-library-and-mcps` at 5f8e35c).
 > - **R2-1:** refuse an install whose root is the home folder.
 > - **R2-2:** what Windows CI asserts.
 > - **R2-3:** the picker's "This terminal".
@@ -86,9 +86,12 @@ context: ['.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on
 12. **Approval (2026-10-29, at f32ca1e): "Approve and build"** for Stories 1 and 1b. Story 1c remains on hold. Stories 2 to 6 remain an outline, deferred on P4. ADR 0010 is accepted with this approval.
 13. **(2026-10-30) CR-3: yes.** Eight more ask globs, for 31 in all: `*suspend*`, `*destroy*`, `*terminate*`, `*move_computer*`, `*run_template*`, `*build_template*`, `*add*capacity*` and `*disable*ssh*`, each under `mcp__*orgo*__`. Story 1b's Continuous deny list gains `*run_template*`.
 14. **(2026-10-30) AC11 replaced through the CLI library plan's Q1** (`_bmad-output/plan-cli-library-and-mcps.md`, approved at 5f8e35c on `plan/cli-library-and-mcps`).
-    - The one `--settings` value on every ADE launch carries `permissions.ask`, `disableAllHooks: false`, and, once the CLI library's Story 2 lands, its command guard as a PreToolUse hook.
+    - The one `--settings` value on every ADE launch carries `permissions.ask`. Once the CLI library's Story 2 lands, it also carries that story's command guard as a PreToolUse hook.
+    - **(2026-11-01 ruling) `disableAllHooks: false` goes on a launch only when a guard is on it**, meaning `rules.guard` is non-null.
+      - Before the CLI library's Story 2, every ADE launch carries exactly `{"permissions":{"ask":MCP_ASK}}`.
+      - Once the guard exists, `disableAllHooks: false` and the `hooks` entry come together.
     - `orgo_launch_rules()` becomes `launch_rules()`, and `orgoRules.ts` becomes `launchRules.ts`.
-    - The cost of `disableAllHooks: false`: a session ADE starts runs the user's and the project's other hooks even where a settings file turned hooks off.
+    - **The cost of `disableAllHooks: false`** applies only once the guard ships. From then on, a session ADE starts runs the user's and the project's other hooks even where a settings file turned hooks off. Until then, ADE launches leave hooks exactly as the user's files set them.
 
 ## Boundaries & Constraints (all stories)
 
@@ -116,7 +119,7 @@ context: ['.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on
   - On a paid account, it cannot launch hourly computers (`403 HOURLY_NEEDS_BILLING`).
   - To revoke: Orgo Settings → Security → Connected AI apps, or `/mcp` → Clear authentication, or `claude mcp logout orgo`.
 - **Always ask (decision 5).** The 31 `MCP_ASK` rules (23 at approval, plus 8 by decision 13) are verb globs on the tool name, with a glob in the server position, for example `mcp__*orgo*__*create*`. They go to three places:
-  1. **Launch flag.** ADE passes `--settings '{"permissions":{"ask":[…]}}'` on every Claude Code launch it makes (decision 14: the value now also carries `"disableAllHooks": false`, and later the CLI guard; see AC11): the picker, the board and the Orchestrator. They hold in any working directory and in any mode, and a launch flag cannot be edited from inside the session.
+  1. **Launch flag.** ADE passes `--settings '{"permissions":{"ask":[…]}}'` on every Claude Code launch it makes (decision 14: once the CLI guard ships, the value also carries the guard and `"disableAllHooks": false`, together; see AC11): the picker, the board and the Orchestrator. They hold in any working directory and in any mode, and a launch flag cannot be edited from inside the session.
      - The flag's lists merge with the files' lists: Claude Code collects permission rules per source and concatenates them (review round 4, Claude Code 2.1.42 and 2.1.312).
   2. **The main checkout's root `.claude/settings.local.json`.** "If you start Claude Code in a subdirectory of a git repository, it reads and writes that file at the repository root", and "in a worktree, it uses the file at the main checkout's root" ([settings](https://code.claude.com/docs/en/settings), Claude Code ≥ 2.1.211).
   3. **The project's `.claude/settings.json`**, committed for teammates who start at the root.
@@ -463,14 +466,15 @@ pub const MCP_ASK: &[&str] = &[
   - **(R2, decision 14)** `LaunchOptions` gains an optional `headless?: boolean`. Only the Orchestrator sets it, to `true`. It changes nothing while `rules.guard` is `null`.
   - The two capability probes use a module-private `PROBE_RULES`, which is not exported, so no other caller can borrow it.
   - Codex and Ollama ignore `rules`; the claude and deepseek paths emit them. Because `prepareAgentLaunch` loads the rules before building any command, **Codex and Ollama launches also wait on the load, and fail closed with it**. That is harmless, since the rules are constant and load in one local IPC call.
-- **The flag (replaced by decision 14).** `claudeCommand` adds one `--settings`, quoted with `shellQuote` (`agentCommand.ts:26`), to every claude and deepseek launch: Manual, Continuous and `-p`. It is built as `JSON.stringify` of an object with these keys in this order:
-  - `permissions: { ask: rules.ask }`;
-  - `disableAllHooks: false`;
-  - when `rules.guard` is non-null only, `hooks: { PreToolUse: [{ matcher: "Bash|Monitor", hooks: [{ type: "command", command: rules.guard.command, timeout: 5, onFailure: "block" }] }] }`.
+- **The flag (replaced by decision 14, with the 2026-11-01 ruling).** `claudeCommand` adds one `--settings`, quoted with `shellQuote` (`agentCommand.ts:26`), to every claude and deepseek launch: Manual, Continuous and `-p`. It is built as `JSON.stringify` of an object with these keys in this order:
+  - `permissions: { ask: rules.ask }`, always;
+  - only when `rules.guard` is non-null, both of these:
+    - `disableAllHooks: false`;
+    - `hooks: { PreToolUse: [{ matcher: "Bash|Monitor", hooks: [{ type: "command", command: rules.guard.command, timeout: 5, onFailure: "block" }] }] }`.
 
-  Until the CLI library's Story 2, the value is exactly `{"permissions":{"ask":[…31 globs]},"disableAllHooks":false}`.
-  - **Why `disableAllHooks: false`.** A `disableAllHooks: true` in a user, project or local file turns off every non-managed hook, the launch flag's included. `--settings` outranks those files.
-  - **The cost**, stated in the guide: sessions ADE starts run the user's and the project's other hooks even where a file turned hooks off.
+  Until the CLI library's Story 2, the value is exactly `{"permissions":{"ask":[…31 globs]}}`.
+  - **Why `disableAllHooks: false` goes with the guard.** A `disableAllHooks: true` in a user, project or local file turns off every non-managed hook, the launch flag's included, and `--settings` outranks those files. It is needed only to keep the guard's hook on, so without a guard it is left out, and the user's hook settings stand.
+  - **The cost,** once the guard ships: sessions ADE starts run the user's and the project's other hooks even where a file turned hooks off. The CLI library's guide states it. Story 1's guide says that ADE launches don't change hooks.
 - **Silent and folder-independent.** Glob names are exempt from the "matches no tool" warning, so this is silent in projects without Orgo, and it does not depend on the cwd, the project, or how Orgo was installed. The flag's lists merge with the files' lists (U13, settled).
 - **The Orchestrator.** It runs `claude … -p` without bypass, so an ask cannot be shown there and the call is refused. That was already true, because `-p` cannot prompt for an unapproved MCP tool. The live impact is low, but the rules now ride along.
 - **(CR-2) Typing the line once the shell can take it.**
@@ -599,7 +603,7 @@ Examples:
     - In a `--separate-git-dir` repository, worktrees read the file in the folder holding the separate `.git`, not the checkout's.
     - **Not covered for sessions you start in a subfolder:** a worktree of a bare repository or of a separate gitdir not named `.git`, and a worktree of a submodule. There, the rules reach sessions started at the worktree's root only.
 - **(R2-1)** that Orgo can't be installed from the home folder, and why: open a project folder;
-- **(decision 14)** "Agents ADE starts carry `disableAllHooks: false`, so a `disableAllHooks: true` in your settings files doesn't turn hooks off in them: your own and your project's hooks run there too.";
+- **(decision 14, 2026-11-01 ruling)** "Agents ADE starts carry these ask rules on their command line and nothing else, so your hooks run in them as your settings say." The CLI library's guard changes this when it ships, and its own guide section states the cost;
 - **(R2-9)** "ADE waits up to 10 seconds for a new terminal's prompt before it types an agent's command. A shell with no line editor, such as `sh`, waits the full 10 seconds."
 - cost: billed until deleted, stopped hourly computers still pay for disk, the plan or credit is the limit, set an end, delete when done, auto top-up off;
 - prompt injection;
@@ -611,7 +615,7 @@ Examples:
 **README:** "16 curated MCP servers".
 
 **Contract:** `.ade/context/orgo-permission-rules.md` records the lists (31 ask globs, decision 13), the three places, `launch_rules()` (formerly `orgo_launch_rules()`), that ADE never deletes a rule, and that the CLI library reuses the lists.
-- **(R2, decision 14)** It links to `.ade/context/launch-settings.md` for the shape of the launch value: `permissions`, `disableAllHooks: false` and the guard's `hooks`. The CLI library's Story 2 creates that file. Until then, the link is marked "(created by the CLI library's Story 2)", and this plan's AC11 is the reference.
+- **(R2, decision 14)** It links to `.ade/context/launch-settings.md` for the shape of the launch value: `permissions` always, and `disableAllHooks: false` with the guard's `hooks` only when a guard is set. The CLI library's Story 2 creates that file. Until then, the link is marked "(created by the CLI library's Story 2)", and this plan's AC11 is the reference.
 - **(CR) The fix updates it in four places:**
   1. Place 2's `<main>` is "the folder whose `settings.local.json` Claude Code reads", with the walk's five steps, its guards, and a pointer to this plan's table. The list "normal checkout, submodule, `--separate-git-dir`, bare repo's worktree" is dropped, since it was wrong for two layouts.
   2. `mcp_install` returns `McpInstalled { rules, files }`.
@@ -700,21 +704,32 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 
    Covered by `orgo_rules.rs` › `ask_globs_catch_every_lifecycle_write_and_no_read`.
 10. The deny callers behave as before. Covered by `usage.rs` › existing `deny_rules_merge_into_settings` and `deny_refuses_other_rules_and_bad_json` (green).
-11. **(S1-1, S1-4; amended 2026-10-30 by `_bmad-output/plan-cli-library-and-mcps.md` Q1, approved by the owner.)** `buildLaunchCommand(provider, rolePath, { rules })` for claude and deepseek carries exactly one `--settings` argument. Its shell-unquoted value parses to an object with exactly these keys:
+11. **(S1-1, S1-4; amended 2026-10-30 by `_bmad-output/plan-cli-library-and-mcps.md` Q1, approved by the owner; amended again 2026-11-01 by the owner: `disableAllHooks` only with a guard.)** `buildLaunchCommand(provider, rolePath, { rules })` for claude and deepseek carries exactly one `--settings` argument. Its shell-unquoted value parses to an object with exactly these keys:
     - `permissions`, equal to `{"ask": rules.ask}`, where `rules.ask` is `MCP_ASK` followed by each guarded CLI's ask rules;
-    - `disableAllHooks`, equal to `false`;
-    - only when `rules.guard` is non-null: `hooks`, equal to `{"PreToolUse": [{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": rules.guard.command, "timeout": 5, "onFailure": "block"}]}]}`. Here `rules.guard.command` is the CLI plan's `GUARD_CMD`: its headless variant when `opts.headless` is true, otherwise the interactive one.
+    - only when `rules.guard` is non-null, both:
+      - `disableAllHooks`, equal to `false`;
+      - `hooks`, equal to `{"PreToolUse": [{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": rules.guard.command, "timeout": 5, "onFailure": "block"}]}]}`. Here `rules.guard.command` is the CLI plan's `GUARD_CMD`: its headless variant when `opts.headless` is true, otherwise the interactive one.
 
-    This holds in Manual mode, in Continuous mode, and with a `-p` task. Codex launches are unchanged. `rules` is a required property of the required `opts`, so a call without it is a type error, which `npx tsc --noEmit` enforces. Until the CLI library's Story 2 lands, `rules.guard` is `null`, so the value is exactly `{"permissions": {"ask": MCP_ASK}, "disableAllHooks": false}`. Covered by `src/lib/__tests__/agentCommand.test.ts` › "every Claude Code launch carries the rules, the guard and disableAllHooks:false", plus a `// @ts-expect-error` case for a call without `rules`.
+    When `rules.guard` is `null`, the value has neither `disableAllHooks` nor `hooks`.
 
-    **(R2, how Story 1 meets it.)**
-    - `launch_rules()` returns `guard: null`, so Story 1's test asserts the exact two-key value.
-    - It also passes a made-up `guard: { command: "X" }` and asserts the `hooks` entry with `command: "X"`.
+    This holds in Manual mode, in Continuous mode, and with a `-p` task. Codex launches are unchanged. `rules` is a required property of the required `opts`, so a call without it is a type error, which `npx tsc --noEmit` enforces. Until the CLI library's Story 2 lands, `rules.guard` is `null`, so the value is exactly `{"permissions": {"ask": MCP_ASK}}`.
+
+    Covered by `src/lib/__tests__/agentCommand.test.ts`:
+    - "a launch with no guard carries only the ask rules";
+    - "a launch with a guard carries the rules, the guard and disableAllHooks:false";
+    - a `// @ts-expect-error` case for a call without `rules`.
+
+    **How Story 1 meets it.**
+    - `launch_rules()` returns `guard: null`. The first test asserts the exact value `{"permissions":{"ask":MCP_ASK}}`, with no `disableAllHooks` key, in all three modes.
+    - The second test passes a made-up `guard: { command: "X" }` and asserts exactly three keys:
+      - `permissions`;
+      - `disableAllHooks: false`;
+      - the `hooks` entry with `command: "X"`.
     - Choosing the headless variant is tested by the CLI library's Story 2 (its AC1). Story 1 only adds `headless` to `LaunchOptions`.
     - `claude_settings.rs` › `launch_rules_are_the_ask_list_with_no_guard_yet` asserts `{ ask: MCP_ASK, continuousDeny: [], guard: null }`. It replaces `orgo_rules.rs` › `launch_rules_are_the_ask_list`.
 12. **(S1-1.)** Launching from `AgentPicker` with a pane cwd of `<repo>/app` invokes `launch_rules` with no arguments, and types a command containing the same `--settings` as with cwd `<repo>`. Covered by `src/components/__tests__/agentLaunch.test.ts` › "Orgo rules do not depend on the folder an agent starts in".
 13. The guide's MCP table lists exactly the catalog's servers, by set equality after removing parenthesised text and splitting on commas. Covered by `scripts/mcpCatalogDocs.test.ts` (new) › "the guide's table lists exactly the catalog".
-14. The Orgo guide section contains every `MCP_ASK` glob (read from `orgo_rules.rs`), and mentions "subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly", "reorder", **(CR-m1)** "part-way" and "never the other way round", and **(R2)** "home folder", "disableAllHooks" and "10 seconds". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
+14. The Orgo guide section contains every `MCP_ASK` glob (read from `orgo_rules.rs`), and mentions "subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly", "reorder", **(CR-m1)** "part-way" and "never the other way round", and **(R2)** "home folder", "your hooks run" and "10 seconds". The README count equals `MCP_CATALOG.length`. Covered by `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes", "the README count matches the catalog".
 15. **(S1-4.)** An Orchestrator dispatch types a `claude … -p '<task>'` command that contains the `--settings` with `MCP_ASK`, through `loadLaunchRules`. **(R2)** It builds the command with `headless: true`. The picker and `dispatchAgent` don't set `headless` (AC12, AC16). Covered by `src/components/__tests__/OrchestratorTab.test.tsx` (extended) › "orchestrator dispatches carry Orgo's ask rules".
 16. **(S1-4.)** The board's `dispatchAgent` types a command that contains the same `--settings`. Covered by `src/lib/__tests__/agentLaunch.test.ts` › "board dispatch carries Orgo's ask rules".
 17. **(S1-4.)** When the `launch_rules` invoke rejects, `prepareAgentLaunch` returns `{ ok: false }` with the "couldn't load its permission rules" message, and the Orchestrator aborts its dispatch with it. No command is typed. **(S1-6.)** If the first invoke rejects and the second resolves, the first launch is refused and the second goes through with the rules.
@@ -815,7 +830,7 @@ Each names its test. The developer writes it failing first. AC10 is a regression
     5. **(R2-3) This terminal.** Open a new tab and, within the 2 s while its rc sleeps, pick an agent with "This terminal".
   - **Pass condition, for each of the five; no DeepSeek key needed.** Both of these hold:
     - the tab shows no `quote>`, `dquote>` or `>` continuation prompt, no bell, and no partial command left at the prompt;
-    - the `ps` line for it shows the whole command: `--settings {…"disableAllHooks":false}`, then `--append-system-prompt-file <path>` with the role file's full path, and for the Orchestrator, `-p` followed by the task ending in `ZEBRA-END`.
+    - the `ps` line for it shows the whole command: `--settings {"permissions":{"ask":[…]}}`, then `--append-system-prompt-file <path>` with the role file's full path, and for the Orchestrator, `-p` followed by the task ending in `ZEBRA-END`.
 
     Where no `ps` line is caught because the agent exited, the agent's own error passes instead. An auth error is fine, for example DeepSeek with no key. A shell error such as `command not found`, `parse error` or `unmatched '` fails the check.
   - **Fail.** Any continuation prompt, a cut `ps` line, or a shell error.
@@ -1220,3 +1235,17 @@ Decided: Q3 for Story 1 (decision 7), Q5 (6), Q7 (4), Q8 (8, widened in round 3)
 | **R2-7:** the subfolder claims were wrong for `bw`, `sep2wt` and `subwt`; `$HOME` unset | upheld | The table gains a "subfolder sessions" column, and the guide lists the three as not covered in subfolders. `home_dir()` is `std::env::home_dir()`, which falls back to the passwd entry like Node's `os.homedir()`. |
 | **R2-8:** the gating check could pass without testing the fix | upheld | A slow rc (`sleep 2`) is required. The pass condition needs no key: no continuation prompt, and a whole `ps` line, or an auth error rather than a shell error. "This terminal" is added as a fifth case. |
 | **R2-9 (advisory):** a silent 10 s wait for shells without a line editor | declined | No notice, since that needs a new UI surface outside the slice. One guide sentence instead (AC14 checks "10 seconds"). |
+
+**Owner ruling, 2026-11-01: `disableAllHooks: false` only with a guard.** It goes on a launch only when `rules.guard` is non-null. Before the CLI library's Story 2, Orgo launches carry only `{"permissions":{"ask":MCP_ASK}}`. Once the guard exists, `disableAllHooks:false` and the `hooks` entry come together.
+
+What changes in this plan:
+- **Decision 14** gains the ruling.
+- **AC11:**
+  - the no-guard value is exactly the ask rules;
+  - a made-up guard brings both keys;
+  - there are two named tests.
+- **The flag design note** emits both keys only with a guard.
+- **The guide.** Its sentence becomes "Agents ADE starts carry these ask rules on their command line and nothing else, so your hooks run in them as your settings say". The cost moves to the CLI library's guide. AC14 checks "your hooks run" instead of "disableAllHooks".
+- **The contract** describes the conditional shape.
+- **The gating check's `ps` line** expects no `disableAllHooks`.
+- **ADR 0010's revision note** is updated.
