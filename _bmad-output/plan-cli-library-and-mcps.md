@@ -57,6 +57,7 @@ The plan is now a security component. Its first two stories are the guard and it
 7. (2026-10-30) **ADR 0012 applies:** this plan carries a Principles check.
 8. (2026-10-30) **Approval, after review round 6 (PASS WITH MINORS) at 5c34845.** The owner took every recommendation in Q1–Q8:
    - **Q1:** amend Orgo's AC11 as quoted under Coordination (the AC11 text is applied on `plan/orgo-agent-computers`, not here).
+     - **Refined 2026-11-01 (owner ruling):** `disableAllHooks: false` goes on a launch only when a guard is on it (`rules.guard` non-null). It has no benefit before the guard exists, so the cost (re-enabling hooks a user turned off) is paid only once the guard is there. The original answer stands otherwise.
    - **Q2:** in Continuous mode the guard asks. On any Claude Code version where V1 fails, it denies under `bypassPermissions` instead.
    - **Q3:** fail toward asking.
    - **Q4:** gh first. Stories 1–4 are built now. Stories 5–7 (stripe, vercel, wrangler) wait for a named need.
@@ -112,7 +113,13 @@ The plan is now a security component. Its first two stories are the guard and it
 **Always:**
 - **One settings module.** `src-tauri/src/claude_settings.rs` is shared with the Orgo plan.
   - Orgo's Story 1 (built at `a895c05`) creates the merge and `main_checkout_root`. This plan **adds** `launch_rules()` (Story 2) and the test matcher `rule_matches` (**new in Story 1**).
-  - Orgo Story 1's code review came back BLOCK and is being fixed. `main_checkout_root` will change: it will reject a bare common dir, and a separate gitdir whose parent's `.git` doesn't resolve back to it. This plan depends on the function's contract ("the root whose `.claude/settings.local.json` Claude Code reads, or an error"), not on its current body. Stories 1 and 4 need Orgo Story 1 merged.
+  - **This plan depends on `main_checkout_root`'s contract as the Orgo plan now defines it** (`plan/orgo-agent-computers` at `ee59f5d`, CR-1 and the R2-7 walk table), not on any body of it. The earlier note here, that it would reject a bare common dir and a mismatched separate gitdir, is withdrawn, because the Orgo plan withdrew that fix after probing Claude Code 2.1.314. The contract:
+    - `<main>` is **the folder whose `.claude/settings.local.json` Claude Code reads for a session started anywhere in `<root>`**. It is found by a pure-file walk that mirrors Claude Code's `findCanonicalGitRoot`. It is not git's own main worktree: in the bare-clone layout it is `proj/`, with no `core.bare` check.
+    - Claude Code's own guards apply. The candidate is never the canonical home folder (`claude_settings::home_dir()`), must be owned by the effective uid (unix), and holds no backslashes. Off unix, and in every other case, `<main>` is `<root>`.
+    - For tests, the function is `main_checkout_root_for(root, home: Option<&Path>, uid: Option<u32>)`. `main_checkout_root(root)` passes the real home folder and uid.
+    - In the R2-7 table's three layouts, the rules reach only sessions started at the worktree's root, not in its subfolders. Story 4's guide sentence names them, as the Orgo guide does.
+    - **The home-folder refusal (Orgo R2-1, AC22) applies to this plan's writes too.** `cli_agents_enable` is refused when canonical `<root>` or `<main>` is the home folder, or when the home folder is unknown. Its shape mirrors Orgo's `install(…, home, uid)` (Story 4).
+  - Stories 1 and 4 need Orgo Story 1 merged.
 - **The webview passes a CLI id, never a rule, a hook command, a path or skill text.** Rust picks them.
 - **The guard runs from outside the project.** It is ADE's installed `ade-hook` helper, and every hook entry runs it by **absolute path, in shell form**, through `GUARD_CMD` (see The hook entries). Older Claude Code drops exec-form `args` (review round 2), and a variable in the path could be overridden by a settings `env` block.
 - **The guard never returns `allow`, and never rewrites a command.**
@@ -145,14 +152,24 @@ Orgo was approved at `2245693`, and its Story 1 is built at `a895c05`. Its AC11 
 >
 > `rules` stays required, through `loadLaunchRules()`, which caches only on success and fails closed.
 
+**As refined after approval (2026-11-01, owner ruling and guard shape; the text above is what the owner approved on 2026-10-30):**
+> Every claude and deepseek launch from `buildLaunchCommand` carries exactly one `--settings`. Its value parses to an object with exactly these keys:
+> - `permissions`, equal to `{"ask": rules.ask}`, where `rules.ask` is `MCP_ASK` followed by each guarded CLI's ask rules;
+> - **only when `rules.guard` is non-null**, two more:
+>   - `disableAllHooks`, equal to `false`;
+>   - `hooks`, equal to `{"PreToolUse": [{"matcher": "Bash|Monitor", "hooks": [{"type": "command", "command": C, "timeout": 5, "onFailure": "block"}]}]}`, where `C` is `rules.guard.headless` when `opts.headless` is true and `rules.guard.interactive` otherwise.
+>
+> With `rules.guard` null, the value is exactly `{"permissions": {"ask": rules.ask}}`. `rules.guard` is `{ interactive: string, headless: string } | null`: both `GUARD_CMD` variants, built in Rust by `launch_rules()`. `buildLaunchCommand` picks one; it never builds a command string itself.
+
 What else changes on Orgo's side:
 - `orgo_launch_rules()` becomes `launch_rules()` in `claude_settings.rs`, and `src/lib/orgoRules.ts` becomes `launchRules.ts`.
 - `LaunchOptions` gains an optional `headless`, which only the Orchestrator sets (review M5).
 
-**Why `disableAllHooks: false`** (review B2):
+**Why `disableAllHooks: false`** (review B2), and why only with a guard (owner, 2026-11-01):
 - `"disableAllHooks": true` in any user, project or local settings file turns off every non-managed hook, the launch flag's included.
 - `--settings` "takes precedence over project and local settings" (hooks.md › Disable or remove hooks), so the flag's own `false` keeps hooks on.
 - **The cost:** it also re-enables the user's and the project's other hooks for ADE-launched sessions, where the user had turned them off. The tab and the guide say so (Q1).
+- **So it is set only when a guard is on the launch** (owner ruling, 2026-11-01). Before the guard exists, or on a build without the helper, it would buy nothing and still cost the above.
 
 **Other shared points:**
 - **Orgo 1c**, if its hold is lifted, becomes this library's `orgo` entry, on the guard. Its install form follows the product doc's open Q4: recommend typed. It passes the product doc's CLI rule once `--profile` and `ORGO_PROFILE` ask, which the guard's table can do.
@@ -743,27 +760,30 @@ Depends on Story 1, and on the owner's answer to Q1.
 
 ## Design Notes (2)
 
-- **`launch_rules()`** returns `{ ask, continuousDeny, guard }`:
-  - `ask` is Orgo's `MCP_ASK` followed by the gh ask rules;
-  - `guard` is `{ command: GUARD_CMD }` when the helper exists beside `current_exe()` and its path holds no `'` or `\`, else `null`. `GUARD_CMD` is built with the headless variant when `headless` is set (m6).
-- **`claudeCommand`** writes the amended value, with `disableAllHooks: false`.
-- **`LaunchOptions.headless?: boolean`**: only `OrchestratorTab` sets it, and it produces `guard --headless`.
+- **`launch_rules()`** (Rust, no arguments) returns `{ ask, continuousDeny, guard }`:
+  - `ask` is Orgo's `MCP_ASK` followed by the gh ask rules.
+  - `guard` is `{ interactive: GUARD_CMD_INTERACTIVE, headless: GUARD_CMD_HEADLESS }` when the helper exists beside `current_exe()` and its path holds no `'` or `\`. Otherwise it is `null`.
+  - **Both variants are built in Rust** (post-approval sync, 2026-11-01). `launch_rules()` stays argument-free and cacheable by `loadLaunchRules()`, matching Orgo's AC11, where the variant comes from `opts.headless`.
+- **`claudeCommand`** writes the refined value:
+  - with `rules.guard` null: exactly `{"permissions":{"ask": rules.ask}}`;
+  - with a guard: also `disableAllHooks: false` and the hook entry, whose `command` is `rules.guard.headless` if `opts.headless`, else `rules.guard.interactive`.
+
+  The TypeScript side never assembles or edits a command string.
+- **`LaunchOptions.headless?: boolean`**: only `OrchestratorTab` sets it.
 
 ## Acceptance Criteria (2)
 
-1. **The amended AC11.** Covered by `src/lib/__tests__/agentCommand.test.ts` › "every Claude Code launch carries the rules, the guard and disableAllHooks:false". `buildLaunchCommand(provider, rolePath, { rules })` for claude and deepseek carries exactly one `--settings`, whose value parses to an object with:
-   - `permissions.ask` equal to `rules.ask`;
-   - `disableAllHooks: false`;
-   - and, when `rules.guard` is set, `hooks.PreToolUse` equal to exactly the specified entry;
-   - no other keys.
+1. **The amended AC11, as refined on 2026-11-01.** Covered by `src/lib/__tests__/agentCommand.test.ts` › "every Claude Code launch carries the rules, and the guard with disableAllHooks:false only when there is one". `buildLaunchCommand(provider, rolePath, { rules })` for claude and deepseek carries exactly one `--settings`, whose value parses to:
+   - with `rules.guard` null: exactly `{"permissions": {"ask": rules.ask}}`, **with no `disableAllHooks` key**;
+   - with `rules.guard` set: an object with exactly `permissions` (`{"ask": rules.ask}`), `disableAllHooks: false`, and `hooks.PreToolUse` equal to exactly the specified entry. Its `command` is `rules.guard.interactive` without `opts.headless`, and `rules.guard.headless` with it. The test uses distinct made-up strings for the two, so swapping them fails.
 
-   `headless: true` gives `guard --headless`, and its missing-helper branch prints `deny` (m2). Codex is unchanged. A call without `rules` is a `@ts-expect-error`.
+   The headless variant's missing-helper branch prints `deny` (m2, tested in Story 1 AC13). Codex is unchanged. A call without `rules` is a `@ts-expect-error`.
    - A helper path holding `$`, a backtick, `"` and a space survives the JSON and the shell-quoting: the parsed `command` runs that exact path under `/bin/sh -c`.
    - A path holding `'` or `\` gives `guard: null`.
    - **The typed line has no `\\` or `\'` inside any single-quoted run** (the fish invariant, m1).
 2. The picker, `dispatchAgent` and the Orchestrator each type a command carrying the guard. Only the Orchestrator's has `--headless`. When `loadLaunchRules` rejects, nothing is typed. Covered by `agentLaunch.test.ts`, `OrchestratorTab.test.tsx`.
 3. `launch_rules()` includes every gh ask rule from Story 1's `cli_rules.rs`, after Orgo's `MCP_ASK`. Covered by `claude_settings.rs` › `launch_rules_compose`.
-4. With no helper beside the executable, `guard` is `null`, and the launch value has `permissions` and `disableAllHooks` but no `hooks`. Covered by `claude_settings.rs` › `no_helper_no_hook`.
+4. With no helper beside the executable, or a helper path holding `'` or `\`, `guard` is `null`, and the launch value is exactly `{"permissions": {…}}`, with no `disableAllHooks` and no `hooks`. With a helper, `guard.interactive` and `guard.headless` are the two `GUARD_CMD` variants for that path: the headless one contains `guard --headless` and no `case`. Covered by `claude_settings.rs` › `no_helper_no_hook`, `launch_rules_build_both_guard_variants`.
 5. **The launch value fits on a shell line:** the composed value (Orgo plus gh) shell-quotes to a single line under 8 KB, with no newline. Covered by `agentCommand.test.ts` › "launch value stays a single bounded line".
 6. **The context file** `.ade/context/launch-settings.md` holds the amendment text, and Orgo's `orgo-permission-rules.md` links it. This is a DoD item.
 
@@ -842,8 +862,9 @@ Depends on Stories 1 and 3, and on Orgo Story 1 (`a895c05`) merged, for the merg
 
 ## Design Notes (4)
 
-**`cli_agents_enable(project, id)`**, in order:
-1. `root = main_checkout_root(project)`.
+**`cli_agents_enable(project, id)`**, the Tauri command, calls `enable(project, id, home: Option<&Path>, uid: Option<u32>)` with `claude_settings::home_dir()` and the effective uid (`None` off unix), mirroring Orgo's `install(…, home, uid)`. In order:
+1. `<root>` is the git root of `project`. `<main> = main_checkout_root_for(<root>, home, uid)`, by its contract (Boundaries).
+   - **Never the home folder** (post-approval sync with Orgo R2-1). Refuse, before anything is read or written, when canonical `<root>` or `<main>` equals the canonical home folder, or when the home folder is unknown: "gh wasn't set up for agents: `<root>` is your home folder. Open a project folder and choose Tell agents there." 
 2. Validate `<root>/.claude/settings.local.json`. If it is tracked in git or a symlink, refuse: Claude Code would treat it as repository-supplied (H10).
 3. Check that the helper path exists.
 4. Merge into that file:
@@ -883,7 +904,8 @@ It never writes `.claude/settings.json`.
    - it is at most 1,500 characters.
 
    Covered by `cli_tools.rs` › `skills_are_rendered_in_rust_and_inert`.
-6. The commands take `(project, id)` only. An unknown id or `../x` writes nothing, and no write lands outside `<root>/.claude/` and `<project>/.claude/skills/`. Covered by `cli_tools.rs` › `writes_are_confined`.
+6. The commands take `(project, id)` only. An unknown id or `../x` writes nothing, and no write lands outside `<main>/.claude/` and `<project>/.claude/skills/`. Covered by `cli_tools.rs` › `writes_are_confined`.
+   - **(Post-approval sync, Orgo R2-1/AC22.)** `enable(project, "gh", home, uid)` is refused with an error containing "Open a project folder", and nothing is created, when `home` is the project folder: a temp folder with no `.git`, and again a temp git repository. It is also refused with no home folder known. Covered by `cli_tools.rs` › `tell_agents_refuses_the_home_folder`.
 7. An existing skill is kept. Disable removes only an unedited skill, and the settings stay byte-identical. Covered by `cli_tools.rs` › `skills_once_and_removed_only_unedited`.
 8. **Tell agents** sends `{ project, id }` only. **Repair guard** shows when `fileGuard.exists` is false. **Remove guard** shows whenever `fileGuard.present` is true, working or not (m3). Covered by `CliToolsTab.test.tsx`.
 9. The guide states:
@@ -1034,6 +1056,7 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
   - The amendment is the quoted text under Coordination: `permissions.ask` = `rules.ask`, plus `disableAllHooks: false`, plus exactly one guard entry, plus `headless`.
   - Recommend **yes**. `--settings` takes one value, and without `disableAllHooks: false` any settings file or Continuous agent can switch the guard off.
   - **The cost:** ADE launches also run the user's and the project's other hooks when a file had turned them off. The tab says so.
+    - *Refinement, 2026-11-01 (owner):* only on launches that carry the guard. Before Story 2, or without the helper, launches carry no `disableAllHooks` and the cost isn't paid.
   - Without the amendment, Story 2 can't ship. Stories 1, 3 and 4 still ship, **provided Orgo Story 1 (`a895c05`) lands first**: they need its settings merge and `main_checkout_root`, and that code is back in review. Then the file guard and the rules cover sessions the user starts in the repository, and ADE launches keep Orgo's ask rules only.
 - **Q2. In Continuous mode, the guard asks.** Recommend ask, per decision 4, counted only once V1 passes. If V1 fails on a version users run, recommend `deny` under `bypassPermissions` for that version.
 - **Q3. Fail toward asking: the real cost.** Recommend yes.
@@ -1176,3 +1199,11 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
 | 6: total budget | 4 MB of disk text per hook call; speed bounds of 500 ms for a 256 KB parse and 1 s for the full budget (AC10). |
 | 7: tree changing before a run | A missing path-form name after a tree-changing command asks; same-line edits of existing scripts stated in the threat model (AC2). |
 | Q3 | The reviewer's 0.86%/1,856-call model added as a second, approximate and biased data point; largest category named; the Story 6 category added; V8 stays the measurement. |
+
+**Post-approval sync, 2026-11-01** (the plan was approved at 5f8e35c; these refine it without reopening review):
+
+| Item | Change |
+|---|---|
+| Owner ruling: `disableAllHooks: false` only with a guard | It is set only when `rules.guard` is non-null. Updated: Coordination (the approved text kept, the refined text added), "Why `disableAllHooks: false`", Story 2 Design Notes, AC1 and AC4, ADR 0011, and Q1's record in Owner's decisions (item 8) and in Open Questions, as a dated refinement. **Orgo's AC11 needs the matching change.** |
+| The guard's shape | `launch_rules()` returns `guard: { interactive, headless } \| null`, both built in Rust; `buildLaunchCommand` picks one from `opts.headless`. It stays argument-free and cacheable, as in Orgo's AC11. Story 2 Design Notes, AC1 and AC4. **Orgo's AC11 says `rules.guard.command`, and needs the matching change.** |
+| Stale `main_checkout_root` note | Withdrawn. The plan depends on the contract as the Orgo plan defines it at `ee59f5d`: CR-1, the R2-7 walk table, `main_checkout_root_for(root, home, uid)`, Claude Code's guards. Story 4 adopts the home-folder refusal (R2-1, AC22) with `enable(…, home, uid)`, plus a new case in Story 4 AC6. |

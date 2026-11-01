@@ -1,6 +1,6 @@
 # 0011: The CLI library is guarded by a command hook ADE ships
 
-- Status: Accepted (owner, 2026-10-30), with the plan `_bmad-output/plan-cli-library-and-mcps.md` (approved after six adversarial review rounds; round 6 passed with minors at 5c34845). **Amends ADR 0003** (`0003-agent-status-hooks-helper-endpoint`).
+- Status: Accepted (owner, 2026-10-30; refined 2026-11-01: `disableAllHooks: false` only with a guard), with the plan `_bmad-output/plan-cli-library-and-mcps.md` (approved after six adversarial review rounds; round 6 passed with minors at 5c34845). **Amends ADR 0003** (`0003-agent-status-hooks-helper-endpoint`).
 - Context:
   - Agents use command-line tools as much as MCP servers. In ADE's Continuous mode, an agent can run `gh secret set`, `gh release delete`, `vercel --prod` or `stripe pay` without a prompt.
   - Claude Code's Bash permission rules are prefix patterns. The docs say a rule "isn't a security boundary around the program": rules miss runners, aliases, global flags, `sh -c`, absolute paths and npm scripts.
@@ -13,7 +13,9 @@
     - It never returns `allow` and never rewrites a command. It asks on risky and unknown leaves, computed names and computed evaluator code. It denies when headless (`--headless`, or `CLAUDE_CODE_ENTRYPOINT` `sdk-*`). It fails closed on parse failures, oversize input, panics, and (on Claude Code ≥ 2.1.295) crashes and timeouts.
     - Text read from disk triggers fail-closed rules only when it names a guarded CLI.
   - **Where the guard and rules go:**
-    - On every ADE launch, in the one shared `--settings` value, which also carries `disableAllHooks: false` and Orgo's ask rules. This is the amendment to Orgo's AC11.
+    - On every ADE launch, in the one shared `--settings` value, with Orgo's ask rules. This is the amendment to Orgo's AC11.
+      - **`disableAllHooks: false` is set only on launches that carry the guard** (owner ruling, 2026-11-01). Before the guard exists, or without the helper, the value is just `{"permissions": {"ask": …}}`.
+      - `launch_rules()` returns both guard variants, `{ interactive, headless }`, and `buildLaunchCommand` picks one from `opts.headless`.
     - In the main checkout's root `.claude/settings.local.json`, for sessions the user starts in the repository.
     - Ask and Read rules sit on top. ADE never writes a tracked file.
   - **Threat model.** The guard defends against an agent's honest or careless commands and the indirections agents really write: scripts by path, `bash -c`, eval of built strings, `xargs`, write-then-run, runners and npm scripts.
@@ -28,6 +30,6 @@
 - Consequences:
   - Each new CLI is a fixture, a guard table, rules, corpora and a line in the quarterly re-capture. v1 builds gh; stripe, vercel and wrangler wait for a named need.
   - The guard is a parser that must keep up with shell forms and CLI releases. Unknown leaves and computed names ask, so falling behind adds prompts rather than removing them. The estimated false-ask rate is 0.3–0.7% of Bash calls, to be measured (V8).
-  - `disableAllHooks: false` on the launch line also re-enables the user's and project's other hooks for ADE-launched sessions where a settings file had turned them off. The tab says so.
+  - `disableAllHooks: false` on a guarded launch also re-enables the user's and project's other hooks for that session where a settings file had turned them off. The tab says so. Unguarded launches don't pay this cost.
   - Not covered: Windows, Claude Code sessions outside the repository, other agents, and `allowManagedHooksOnly`, `--safe-mode` or managed `disableAllHooks`.
 - Numbering: provisional until merge (ADR 0012's list). 0010 is Orgo's.
