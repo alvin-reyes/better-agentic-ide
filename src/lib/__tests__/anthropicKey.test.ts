@@ -333,12 +333,31 @@ describe("moveAnthropicKeyToVault", () => {
     expect(stored()).not.toContain(K);
   });
 
-  it("B6: an empty field is removed with no vault call", async () => {
-    saved({ [LEGACY_FIELD]: "", fontSize: 14 });
+  it.each([
+    ["empty", ""],
+    ["a number", 42],
+    ["null", null],
+  ])("B6: a field that is %s is removed with no value read; with no key in the vault, only temp files are scrubbed", async (_, value) => {
+    saved({ [LEGACY_FIELD]: value, fontSize: 14 });
+    tauri.vault.set("GITHUB_TOKEN", "x");
     await expect(moveAnthropicKeyToVault()).resolves.toBe("stripped");
-    expect(cmds()).toEqual(["state_write", "state_scrub_secrets"]);
+    // Names only (`vault_list`): no value is read or written.
+    expect(cmds()).toEqual(["state_write", "vault_list", "state_scrub_secrets"]);
+    expect(tauri.calls[2].args).toEqual({ atBoot: true, strip: false });
     expect(written()).toEqual({ fontSize: 14 });
     expect(JSON.parse(stored()!)).toEqual({ fontSize: 14 });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["a number", 42],
+    ["null", null],
+  ])("B6: a field that is %s, with the vault listing the key, is stripped from every copy", async (_, value) => {
+    saved({ [LEGACY_FIELD]: value, fontSize: 14 });
+    tauri.vault.set(NAME, K);
+    await expect(moveAnthropicKeyToVault()).resolves.toBe("stripped");
+    expect(cmds()).toEqual(["state_write", "vault_list", "state_scrub_secrets"]);
+    expect(tauri.calls[2].args).toEqual({ atBoot: true, strip: true });
   });
 
   it.each([

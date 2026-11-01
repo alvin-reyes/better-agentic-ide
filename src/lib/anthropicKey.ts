@@ -230,8 +230,10 @@ export async function moveAnthropicKeyToVault(): Promise<MoveResult> {
     await invoke("state_write", { entries: { [SETTINGS_KEY]: json } });
     // 6. Auto-save hasn't started, so this queues no second write.
     localStorage.setItem(SETTINGS_KEY, json);
-    // 7.
-    await scrubAtBoot(true);
+    // 7. Strip the settings copies only when the vault holds the key: this
+    // move put it there or found it, or (for an empty field) `vault_list`
+    // lists it. Otherwise the snapshots may hold the last copy of a key.
+    await scrubAtBoot(keyInVault || (await vaultListsKey()));
     return wrote ? "moved" : "stripped";
   } catch (err) {
     moveFailure = { reason: errText(err), keyInVault };
