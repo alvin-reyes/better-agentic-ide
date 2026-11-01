@@ -546,10 +546,27 @@ pub const MCP_ASK: &[&str] = &[
         - a send to a thread that has ended gives `Err("the terminal is closed")`.
       - **Order.** Sync commands run one at a time on the main thread, in the order their IPC messages arrive, and one channel per PTY keeps that order to the terminal. Nothing waits on a terminal, so the main thread never blocks on one.
       - **`kill_pty`** removes the instance, which drops the sender. A writer thread that isn't blocked drains what is queued, sees the channel close, and ends.
-    - **Limit, recorded: a writer thread blocked on a PTY that never reads is leaked.**
-      - **Observed on Linux, 2026-11-01.** A 1 MiB write against `stty -icanon -echo; sleep 30` stayed blocked after the whole process group was killed. It also stayed blocked after closing the master fds and after `tcflush(TCIOFLUSH)`. macOS is not checked.
-      - **The bound.** It is one parked thread per terminal closed in that state, with a 64 KiB stack, holding whatever was queued for that terminal. Nothing else waits on it: other terminals, the main thread and the async runtime are unaffected. Keystrokes don't pile up threads, only bytes in that one queue.
-      - **It ends when ADE exits.** No safe way to wake it was found. Making the master fd non-blocking would also make the reader thread's reads non-blocking, because a dup shares the file status flags.
+    - **Limit, recorded (restated by R4-1): a writer thread blocked on a PTY that never reads is leaked until ADE exits, and so is that terminal's pty pair.**
+      - **When it happens.** A terminal is closed while it isn't reading its input, with a write still pending that the kernel's input buffer can't take. That needs a large paste or a long launch line into a raw-mode program that has stopped reading. It is rare.
+      - **Observed on Linux, 2026-11-01.** A 1 MiB write against `stty -icanon -echo; sleep 30` stayed blocked after all of these:
+        - killing the whole process group;
+        - closing the slave;
+        - EIO on the master;
+        - closing the master fds;
+        - `tcflush(TCIOFLUSH)`.
+
+        macOS is not checked.
+      - **What it holds until exit:**
+        - the parked thread (64 KiB stack) and the bytes queued for that terminal;
+        - the writer's dup of the master fd, so that terminal's pty pair stays allocated. Each leak uses up one of the system's ptys until ADE exits.
+        - Because the writer is never dropped, `UnixMasterWriter::drop` never sends its closing newline and EOF. Nothing reads that terminal any more, so nothing is lost by that.
+      - **What it doesn't hold.** Other terminals, the main thread and the async runtime don't wait on it. Keystrokes don't add threads, only bytes to that one queue.
+      - **A safe wake-up exists, deferred.** The reviewer reproduced it on Linux (`scratchpad/wake/sig.c`, `w.py`):
+        - install a no-op `sigaction` handler, without `SA_RESTART`, on a signal ADE doesn't use (a `SIGRTMIN+n`);
+        - write with an own loop instead of `write_all`, checking a closed flag after each return, whether partial or `EINTR`;
+        - `kill_pty` sets the flag and `pthread_kill`s the writer (`JoinHandleExt::as_pthread_t`).
+
+        It is **deferred work, not Story 1**, as the coordinator preferred. The trigger is rare, and the cost is a process-wide signal handler, which every other thread and library in ADE would share. That deserves its own story and review. The deferred entry records the recipe and its cost.
   - **TypeScript**, `src/lib/terminalCommands.ts`:
     - **`whenLineEditorReady`.** `export async function whenLineEditorReady(ptyId: number, timeoutMs = 10_000): Promise<void>` polls `invoke<boolean | null>("pty_line_editor_ready", { id: ptyId })` every 50 ms.
       - It returns after **two `true` answers in a row** (R2-4). One sample can land in the gap between two rc commands, after a child cleared `ICANON` and exited.
@@ -777,6 +794,7 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 19. **(New, CR-2; amended R2-2, R2-4.)** All `#[cfg(unix)]`, through `line_editor_ready(master, pid)` on a real PTY from `portable_pty::native_pty_system()`, as `pty.rs`'s tests already make them:
     - **Fresh.** A PTY running `sh -c 'sleep 3'` reads `Some(false)`.
     - **Raw, shell in front.** `sh -c 'stty -icanon; sleep 3'` reads `Some(true)` within 2 s. With no job control the shell's process group stays in the foreground.
+      - **(R4-3) This case must run in CI's `backend-macos` job.** Don't gate it to Linux, and don't mark it `#[ignore]`. It is what catches `tcgetpgrp` or `tcgetattr` failing on the macOS master. Otherwise that failure would make every launch on a Mac wait the full 10 s, silently.
     - **(R2-4) Raw, shell not in front.** `sh -c 'set -m; stty -icanon; sleep 3; :'` reads `Some(false)` for 2 s. With job control, `sleep` is its own foreground group, as zsh runs rc commands. Checked on Linux with dash, 2026-11-01.
     - **(R3-2) Unreadable means not ready.** `line_editor_ready(master, None)` is `Some(false)`. `None` is reserved for platforms that can't know, as the Windows twin asserts. AC18's "No line editor" case covers the 10 s cap that then applies.
     - **Long line.** `bash --noprofile --rcfile <tmp rc> -i` is spawned, where the rc runs `sleep 1` and sets `PS1='READY$ '`. The test waits for two `Some(true)` in a row, 50 ms apart, and then types `printf %s <5000 × "x"> | wc -c` and `"\r"`. The output contains `5000` within 10 s. 5,000 bytes is over both Linux's 4096 and macOS's 1024, and CI's `backend-macos` job runs this on a Mac.
@@ -807,9 +825,12 @@ Each names its test. The developer writes it failing first. AC10 is a regression
     Covered by `mcp.rs` › `orgo_install_refuses_the_home_folder` (runs everywhere).
 23. **(New, R2-3.)** The picker's "This terminal": with an active pane holding PTY 7 and `pty_line_editor_ready` answering `false`, `true`, `true`, `write_pty` for PTY 7 is called once, after the second `true`, with the command plus `"\r"`. If the pane is closed during the wait, nothing is written and no agent session is started. Covered by `src/components/__tests__/AgentPicker.test.tsx` › "This terminal waits for the shell before typing".
 24. **(New, R2-5; replaced by R3-1.)** These tests are `#[cfg(unix)]`, on real PTYs built through the constructor, calling `write_to(&instances, id, data)`:
+    - **(R4-2) Start-up, for (a) and (b) on each PTY.** Before the first `write_to`:
+      - start a thread that reads and discards the master's output. Unread echo can otherwise make `stty`, which uses `TCSADRAIN`, wait;
+      - poll `master.get_termios()` until `ICANON` is clear, within 5 s.
     - **(a) Order.** PTY A runs `sh -c 'stty raw -echo; cat > <tmp file>'`. 1,000 back-to-back `write_to(A, format!("{i:04}\n"))` calls, for `i` in `0..1000`, return, and within 5 s the file reads exactly `0000\n0001\n…0999\n`.
-    - **(b) Others go on.** PTY A runs `sh -c 'stty -icanon -echo; sleep 30; :'`, and a 1 MiB `write_to(A, …)` has blocked A's writer thread (wait 500 ms). Then `write_to(B, b"ok")` to a PTY B running `sh -c 'stty raw -echo; cat > <tmp file>'` lands in B's file within 1 s, and a resize of B returns within 1 s.
-    - **(c) No wait.** In (b)'s state, `write_to(A, b"x")` returns `Ok` within 50 ms.
+    - **(b) Others go on.** PTY A runs `sh -c 'stty -icanon -echo; sleep 30; :'`, and a 1 MiB `write_to(A, …)` was sent. The test asserts that 500 ms have elapsed since then, not that the writer blocked. Then `write_to(B, b"ok")` to a PTY B running `sh -c 'stty raw -echo; cat > <tmp file>'` lands in B's file within 1 s, and a resize of B returns within 1 s.
+    - **(c) No wait.** In (b)'s state, `write_to(A, b"x")` returns `Ok` within 500 ms (R4-2). A truly blocking write never returns, so the looser bound still catches it.
 
     Each test kills its PTYs at the end. A's leaked writer thread is expected, as recorded.
 
@@ -840,6 +861,37 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 - **Story 1:** AC9, AC21, the guide (AC14 reads the globs from the source), and the contract file ("31 ask globs").
 - **Story 1b:** its deny list and AC2.
 - **ADR 0010:** a dated line, added with this amendment.
+
+## Build checklist for the a895c05 fix-up
+
+Every Story 1 AC that Amendments 1 to 3 added or changed, for the developer and QA to work from. AC1, AC3, AC4, AC8, AC10, AC13 and AC16 are unchanged from a895c05. Each AC above is the full text; this list only indexes it.
+
+| AC | What it pins | Tests (file › name) | Amendment |
+|---|---|---|---|
+| 2 | The notice names only the files that gained rules, a worktree's local file as an absolute path; four cases | `IntegrationsPanel.test.tsx` › "installing Orgo writes the hosted server and says where the rules went" | 1 (CR-m4) |
+| 5 | `McpInstalled { rules, files }`; `<main>` per the walk table, guard rows included; real git; `cfg(unix)` with Windows twins | `mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings`, `orgo_install_from_a_worktree_writes_local_rules_to_the_main_checkout` (unix), `orgo_install_from_a_worktree_keeps_local_rules_in_the_worktree` (not unix); `claude_settings.rs` › `main_checkout_root_follows_only_real_worktrees` (unix), `main_checkout_root_matches_real_git_layouts` (unix), `main_checkout_root_is_the_root_off_unix` (not unix) | 1 (CR-1, CR-m4), 2 (R2-2) |
+| 6 | Hand-formatted files already holding every rule are left byte-identical | `mcp.rs` › `orgo_install_with_every_rule_present_rewrites_nothing`, `…_in_a_worktree` (unix) | 1 (CR-m8), 2 (R2-2) |
+| 7 | An unreadable `.mcp.json` (a directory, or not UTF-8) refuses an Orgo install, with nothing written | `mcp.rs` › `orgo_install_refuses_and_touches_nothing_on_bad_files` | 1 (CR-m2) |
+| 9 | 31 globs. The seven new matches, `destroy_computer` and `terminate_computer`, `get_suspend_status` as a misfire, and three non-matches; the only read still `getClientBilling` | `orgo_rules.rs` › `ask_globs_catch_every_lifecycle_write_and_no_read` | 2 (decision 13) |
+| 11 | Only `{"permissions":{"ask":MCP_ASK}}` with no guard. With a guard, `disableAllHooks:false` plus `hooks`, using `interactive` or `headless` by `opts.headless`. `launch_rules()` replaces `orgo_launch_rules` | `agentCommand.test.ts` › "a launch with no guard carries only the ask rules", "a launch with a guard carries the rules, the guard and disableAllHooks:false", plus the `@ts-expect-error` case; `claude_settings.rs` › `launch_rules_are_the_ask_list_with_no_guard_yet` | 2 (decision 14), the 2026-11-01 ruling, the guard shape |
+| 12 | The picker invokes `launch_rules` with no arguments | `agentLaunch.test.ts` › "Orgo rules do not depend on the folder an agent starts in" | 2 |
+| 14 | The guide also mentions "part-way", "never the other way round", "home folder", "your hooks run" and "10 seconds" | `mcpCatalogDocs.test.ts` › "the Orgo section matches the rules ADE writes" | 1 (CR-m1), 2, the 2026-11-01 ruling |
+| 15 | The Orchestrator builds with `headless: true`; the picker and board don't | `OrchestratorTab.test.tsx` › "orchestrator dispatches carry Orgo's ask rules" | 2 |
+| 17 | An empty `ask`, a non-list `continuousDeny`, or a guard missing `interactive` or `headless` is refused and not cached | `agentLaunch.test.ts` › "no rules, no launch", "a failed load is retried, not cached", "an empty rule list is no rules"; `OrchestratorTab.test.tsx` › "no rules, no dispatch" | 1 (CR-m5), 2, the guard shape |
+| 18 | Types after two ready answers in a row; at once on `null` or a rejection; at 10 s otherwise; nothing to a closed tab; the whole line | `terminalCommands.test.ts` (new) › the four named cases | 1 (CR-2), 2 (R2-4, R2-6) |
+| 19 | Real PTYs: fresh is false; raw with the shell in front is true (**in `backend-macos` too**); raw with a job in front is false; no pid is `Some(false)`; a 5,000-byte line arrives whole; Windows gives `None` | `pty.rs` › `line_editor_ready_follows_canonical_mode_and_the_foreground`, `a_long_line_typed_once_the_line_editor_is_up_arrives_whole`, `line_editor_ready_is_unknown_off_unix` | 1, 2 (R2-2, R2-4), 3 (R3-2), R4-3 |
+| 20 | The Orchestrator types its 400-character task after the shell is ready; a closed tab fails the task with a reason | `OrchestratorTab.test.tsx` › "dispatch types the task once the shell's line editor is up", "a tab closed before typing fails the task" | 1, 2 (R2-6) |
+| 21 | Every `/computers` write asks or is on the commented skip list (nine actions plus `resizeScreen`) | `orgo_rules.rs` › `every_computer_write_asks_or_is_skipped_on_purpose` | 1, 2 (decision 13) |
+| 22 | Orgo install from the home folder, or with no home folder known, is refused, with nothing written | `mcp.rs` › `orgo_install_refuses_the_home_folder` | 2 (R2-1) |
+| 23 | The picker's "This terminal" waits for the shell; nothing is typed into a pane closed meanwhile | `AgentPicker.test.tsx` › "This terminal waits for the shell before typing" | 2 (R2-3) |
+| 24 | Per-PTY writer thread: order over 1,000 writes, other PTYs go on, writes return without waiting; `write_pty` stays sync | `pty.rs` › `writes_arrive_in_order`, `a_blocked_terminal_holds_up_no_other`, `a_write_to_a_blocked_terminal_returns_at_once`, `write_pty_stays_a_sync_command` | 2 (R2-5), 3 (R3-1), R4-2 |
+
+**Also in the fix-up:**
+- **Story 1b's AC2** gains `testRunTemplate`, through `*run_template*` in its deny list (decision 13). It is built with 1b, not in this fix-up.
+- **The manual checks.** The Worktree check now names the notice's path. The **macOS long launch lines** check **gates Done**: a slow rc, five cases, and the `ps` pass condition.
+- **The contract file** `.ade/context/orgo-permission-rules.md` gets the updates listed under "Contract", including the link to `launch-settings.md`.
+- **The rename.** `orgoRules.ts` becomes `launchRules.ts`, and `orgo_launch_rules` becomes `launch_rules`, in `claude_settings.rs`, with its `lib.rs` registration.
+- **No deferred-work entries are needed from the developer.** They were written with Amendments 1 to 4.
 
 ## Verification (1)
 
@@ -1314,3 +1366,16 @@ The reviewer confirmed:
 | **R2-4:** on unix, no foreground group meant `None`, so the line was typed at once | upheld | **R3-2.** On unix, an unreadable pid, termios or foreground group gives `Some(false)`, and the 10 s cap applies. `None` stays for platforms that can't know, and for unknown ids. AC19 is updated. |
 | A zsh rc that leaves the terminal raw and then runs builtins also passes the wait | upheld | **R3-3.** Added to Limits. |
 | **R2-8:** the binary name in the alternative set-up was assumed | upheld | **R3-4.** The set-up leads with `sleep 2` in `~/.zshrc`. The `ZDOTDIR` route starts with an `ls` of the bundle's `MacOS` folder. |
+
+**Re-review of 829d64f (Amendment 3), 2026-11-01: PASS WITH MINORS. Amendment 4 (R4), applying the minors.**
+
+The reviewer confirmed:
+- sync commands run inline, one at a time, in arrival order (tauri 2.10.2 `ipc/protocol.rs` → `webview/mod.rs:1724`);
+- sending while holding the lock is fine.
+
+| Finding | Decision |
+|---|---|
+| The leak statement was wrong ("no safe way to wake it") and incomplete | **R4-1.** Restated. The parked thread also keeps the master dup, and so the pty pair, open until exit, and `UnixMasterWriter::drop` never sends its newline and EOF. The reviewer's signal wake-up (a no-`SA_RESTART` handler on a spare `SIGRTMIN+n`, an own write loop with a closed flag, `pthread_kill` from `kill_pty`) is recorded and **deferred**, not in Story 1. The trigger is rare, and a process-wide signal handler is a cross-cutting change that deserves its own review. A deferred-work entry is added. |
+| AC24 is flaky in CI | **R4-2.** (a) and (b) drain the master and wait for `ICANON` to clear before writing. (b) asserts 500 ms elapsed, not that the writer blocked. (c)'s bound goes from 50 ms to 500 ms. |
+| AC19's "raw + shell in front" must run on macOS | **R4-3.** Stated: it runs in `backend-macos`, with no gating and no ignore, because it catches a master-side `tcgetpgrp` failure that would otherwise make every launch wait 10 s. |
+| A single list for the developer and QA | A "Build checklist for the a895c05 fix-up" section, before Verification (1). |
