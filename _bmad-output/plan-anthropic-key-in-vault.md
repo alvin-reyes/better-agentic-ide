@@ -41,6 +41,12 @@ ADR numbers are provisional. They are checked again at merge time, whichever bra
 6. Without a keychain, there is no plain-text read, and **Remove the saved copy** is offered (owner, 2026-10-30, Q3).
 7. **P2 override (ADR 0012):** the one-time move at launch reads the user's key and writes it to the keychain without a click. The owner approves it on the stated reason: it only moves the user's own key between two ADE stores, to meet P3 (owner, 2026-10-30, Q4). Every other credential action stays on the user's click.
 
+Rulings of 2026-11-01, made by the owner after the re-review of Story B found the code ahead of this plan's text:
+
+8. **Extension of the P2 override (decision 7): the move may delete what it just wrote.** On a read-back mismatch, the launch move may `vault_delete` the value it just wrote. That applies only when step 3 found no entry or an entry holding `""`, and only within the move's 5 s bound. A late answer never deletes. The settings still hold the key at that moment, so it stays in at least one place.
+9. **The boot scrub needs the vault to list the key.** The boot scrub of the settings files and snapshots runs only when `vault_list` holds `ADE_ORCHESTRATOR_ANTHROPIC_KEY`. Leftover `.better-terminal-settings.json.*.tmp` temp files are deleted at every boot without that condition, since they are never the only copy. `vault_list` reads only `vault-index.json` and returns names, so it counts as "no vault call" in the sense of reading or writing a value.
+10. **A stray plain copy after Remove is accepted.** If, after the user removes the vault key, a stray plain-text copy comes back through an accepted race (a detached window's stale flush, or a late sync import), the next launch moves it into the keychain again. This is a known limit (see *Known limits (accepted)*).
+
 </frozen-after-approval>
 
 ## Coordinator's decisions (2026-10-30; they stand, as the owner approved without a veto)
@@ -66,8 +72,9 @@ ADR numbers are provisional. They are checked again at merge time, whichever bra
 ## Boundaries & Constraints (both stories)
 
 **Always:**
-- The key is in at least one of the two places at every moment. The move writes to the vault, reads it back and compares, writes the stripped settings to disk, updates localStorage, then scrubs. If a step fails or the app crashes, a later step never runs, so the next launch repeats the move from the start.
+- The key is in at least one of the two places at every moment. The move writes to the vault, reads it back and compares, writes the stripped settings to disk, updates localStorage, then scrubs. If a step fails or the app crashes, a later step never runs, so the next launch repeats the move from the start. On a read-back mismatch the move may delete the value it just wrote (Owner's decision 8); the settings still hold the key then.
 - The move is idempotent. A second run with nothing to move does no vault write.
+- **"No vault call"** in this plan means no `vault_get`, `vault_set` or `vault_delete`: no value is read or written. `vault_list` reads only `vault-index.json` and returns names, so it is not a vault call in this sense (Owner's decision 9).
 - The webview receives the key's value in only three places: the Orchestrator's request path, the move's step 3 (checking for an existing entry), and the move's step 4 (the read-back after writing). The settings UI uses `vault_list` (names only).
 - An app-only name is never exported into a terminal environment, on a fresh read or a cached one.
 - `ADE_ORCHESTRATOR_ANTHROPIC_KEY` must be on any future `vault_get` allowlist. The Orgo plan proposes one ("Story 2 first limits it to an allowlist, which today is `DEEPSEEK_API_KEY`", `plan/orgo-agent-computers`, plan :116, :210, :652), though its Stories 2–6 are deferred. The constraint is recorded in the context file and ADR 0013 and checked by convention in B15.
@@ -91,7 +98,7 @@ ADR numbers are provisional. They are checked again at merge time, whichever bra
 | | Story A: app-only vault secrets | Story B: the move, the field, the read path |
 |---|---|---|
 | **P1** a job and a change | **Met.** Job: Reach ("give agents tools and keys without putting secrets in files"). Harness change: a secret on the app-only list is no longer handed to agent terminals, and the Secrets tab says which ones. On its own, Story A protects only an entry the user creates under that name; the change reaches the Orchestrator's key with Story B. | **Met.** Job: Reach. Change: the Orchestrator's key stops being a plain-text setting in the files ADE writes (localStorage, `kv/`, snapshots), and it isn't handed to agent terminals. The Orchestrator tab itself is frozen (product doc, Q8 open): this is the "key fix first" that freeze names. |
-| **P2** nothing risky without the user's action | **N/A.** No new action from P2's list: save and delete already exist in the Secrets tab, and only their copy changes. | **Not met for one action: overridden by the owner on 2026-10-30 (Owner's decision 7).** On the user's click: Save/Replace (`vault_set`), Remove (`vault_delete`, after a confirm), **Remove the saved copy** (after a confirm), and the Orchestrator's key read (on Send). The one-time move at launch reads and writes the credential with no click. |
+| **P2** nothing risky without the user's action | **N/A.** No new action from P2's list: save and delete already exist in the Secrets tab, and only their copy changes. | **Not met for one action: overridden by the owner on 2026-10-30 (Owner's decision 7).** On the user's click: Save/Replace (`vault_set`), Remove (`vault_delete`, after a confirm), **Remove the saved copy** (after a confirm), and the Orchestrator's key read (on Send). The one-time move at launch reads and writes the credential with no click, and on a read-back mismatch within its 5 s bound may delete the value it just wrote (extension of the override, Owner's decision 8, 2026-11-01). |
 | **P3** no secrets in plain text | **Met.** Values stay in the OS keychain. Who else can read them: every vault secret not on the list is still exported to every ADE terminal (the known exception for the vault's terminal export stays). App-only secrets are not handed to terminals, but any same-user process can still query the keychain (`secret-tool` on Linux, `CredRead` on Windows; ACLs apply on macOS). | **Met for the files ADE controls.** The key is held only in the OS keychain, under `ADE_ORCHESTRATOR_ANTHROPIC_KEY`. Who can read it: the Orchestrator and the move (`vault_get`), and any same-user process through the keychain, as for Story A. Residue ADE can't remove is listed in *What this fix does not remove*. The static hint tells users to rotate. Without a keychain the key stays in plain text until the user removes it (owner Q3). |
 | **P4** thin where a vendor does the job | **N/A**: no vendor product. | **N/A**: the Anthropic API is called as before. |
 | **P5** real work needs it | **Met.** The owner's own use, and ADE itself: it closes part of the known P3 exception ("The Orchestrator stores the Anthropic API key in plain-text settings… The owner approved the fix on 2026-10-29"). | **Met.** Same; this story removes that exception line when it ships. |
@@ -103,7 +110,7 @@ The product doc (`_bmad-output/product-ide-and-harness.md`, §4 "Known exception
 
 | What | Fails | Status |
 |---|---|---|
-| The Orchestrator's one-time launch move reads the user's Anthropic key and writes it to the keychain without a click (`plan-anthropic-key-in-vault.md`, Story B) | P2 (reads or changes credentials) | Owner override of 2026-10-30: it only moves the user's own key between two ADE stores, to meet P3. |
+| The Orchestrator's one-time launch move reads the user's Anthropic key and writes it to the keychain without a click, and on a read-back mismatch may delete the value it just wrote (`plan-anthropic-key-in-vault.md`, Story B) | P2 (reads or changes credentials) | Owner override of 2026-10-30: it only moves the user's own key between two ADE stores, to meet P3. Extended 2026-11-01 to the delete, only when the vault held no entry or `""` before the move and only within the 5 s bound. |
 
 When Story B ships, the existing line for the Orchestrator's plain-text key (P3) is removed, as Tasks (B) say.
 
@@ -118,6 +125,17 @@ Story B removes the key from the files ADE controls: localStorage's current valu
 So the field always shows the static rotate text while a key is set or a saved copy exists (B13). Story B's manual check greps the webview data directory as well as `state/`.
 
 "Not exported to terminals" means a secret is not handed to terminal processes, not that they cannot get it: see P3 above.
+
+## Known limits (accepted)
+
+These are accepted and not coded against. Each one self-heals at a later launch.
+
+- **A stray plain copy after Remove is moved back into the keychain** (Owner's decision 10). The user removes the key from the vault with **Remove**. A plain-text copy then comes back through one of the races below, or the matrix row "Old ADE running alongside…" (a detached window's stale flush). The next launch finds the field and moves it into the keychain again (or strips it, if the user has saved a new key since), so the key the user removed can be set again without a click. Remove's confirm says the Orchestrator can't use Anthropic until a key is added again, and in this case that stops being true at the next launch.
+- **A late pre-launch sync import can put the key back on disk** until the next launch. `sync.rs` `import_state` reads the local settings file, then writes the imported value with `restore_secrets`, which copies the field from that earlier read. If the move strips `kv/` between the read and the write, the key is back in `kv/`. The bounded startup wait and its deadline make this a narrow window. The next launch moves or strips it again.
+- **A main-window reload while a detached window is mid-write.** The main window's ErrorBoundary reload reruns `bootMain`, whose boot scrub deletes leftover `.better-terminal-settings.json.*.tmp` in `kv/` at every boot. If a detached window's settings write is in flight then, its temp file can be deleted before its rename. That `atomic_write` fails, and the detached window's auto-save retry (5 s) writes the value again.
+- **Persistence is not proven** (see that section under *The move, step by step*).
+
+The two races are also recorded in `.ade/context/vault-app-only-secrets.md`.
 
 ## Design Notes (both stories)
 
@@ -233,17 +251,20 @@ Needs Story A (`APP_ONLY`, `"not found"`, `inTerminals`).
 | Scenario | State at launch | Result | On failure |
 |---|---|---|---|
 | Key saved | settings `anthropicApiKey: "sk-ant-K"`, vault has no entry | vault holds K (note "Orchestrator: Anthropic API key. Not exported to terminals."); field removed from kv, localStorage and everything under `state/` | settings untouched; reason shown in Settings → AI API with **Remove the saved copy** |
-| Already moved | no field in settings | no vault call; boot scrub runs (a no-op unless something under `state/` still holds the field) | scrub failure logged, retried next launch |
-| Empty field | `anthropicApiKey: ""` | field removed from settings and `state/`; no vault call | as above |
-| Unparseable settings | localStorage settings not JSON, or not an object | nothing to move; no vault call, no disk write; boot scrub runs | none |
+| Already moved | no field in settings | no vault call; `vault_list` (names only). If it lists the name, the boot scrub runs (a no-op unless something under `state/` still holds the field). If it doesn't, or it rejects, no settings file or snapshot is stripped, and leftover temp files are still deleted (Owner's decision 9) | scrub failure, or files it skipped, logged; retried next launch |
+| Empty field | `anthropicApiKey: ""` (or a value that isn't a string) | field removed from settings and `state/`; no vault call; step 7 follows step 5 | as above |
+| Unparseable settings | localStorage settings missing, not JSON, or not an object | nothing to move; no vault call, no settings write; `vault_list` decides the boot scrub, as in "Already moved" | none |
 | Crash after vault write | settings K, vault K | next launch: the entry already exists, so only the strip and scrub run | none |
 | Vault already holds another value | settings K1, vault K2 | vault keeps K2; K1 is removed from settings (after the move, a settings copy can only come from an older backup) | settings untouched |
-| Vault write or read fails, or read-back differs | keychain locked, missing or denied | settings untouched, no disk write, no scrub | reason shown under the field; retried next launch; the user may remove the copy |
-| Keychain hangs | `vault_get` or `vault_set` unanswered | after 5 s on steps 3–4, treated as a failure; boot goes on | a late write can only add K to the vault, which leaves K in both places for the next launch |
-| Disk write of stripped settings fails | `state_write` rejects (step 5 has no timeout) | localStorage keeps K, no scrub; K is in the vault and on disk | retried next launch |
+| Vault holds an empty value | settings K, vault entry `""` | not "the vault wins": the move overwrites it with K, as for no entry | as for no entry |
+| Vault write or read fails | keychain locked, missing or denied | settings untouched, no disk write, no scrub; nothing is deleted from the vault | reason shown under the field; retried next launch; the user may remove the copy |
+| Read-back differs | settings K, vault had no entry or `""`; the read-back after `vault_set` returns another value | within the 5 s bound: `vault_delete` of the name (best effort; its rejection is ignored), then a failure with the mismatch reason. Settings untouched, no disk write, no scrub (Owner's decision 8) | as above. A read-back that answers after the bound deletes nothing |
+| Keychain hangs | `vault_get` or `vault_set` unanswered | after 5 s on steps 3–4, treated as a failure; boot goes on. Once the bound has passed the move sends no further vault call | a late answer can only add K to the vault, never delete, which leaves K in both places for the next launch |
+| Disk write of stripped settings fails | `state_write` rejects (step 5 has no timeout) | localStorage keeps K, no scrub; K is in the vault and on disk; `lastMoveFailure().keyInVault` is true | the notice says the key is in the keychain but its old copy couldn't be removed; retried next launch |
 | Settings saved while the move has failed | user changes a setting | the field is carried into the saved JSON only while it is still in localStorage; the store's state never holds it | none |
 | Remove the saved copy, disk write fails | `state_write` rejects | localStorage untouched; error shown under the field | user can retry |
-| Old ADE running alongside, a detached window reloaded by its ErrorBoundary, or a detached window's queued flush landing just after a removal | that process still holds the old settings | it can re-save the field once; the next launch moves or strips it again | self-heals at the next launch |
+| Remove the saved copy, snapshot clean-up fails | `state_scrub_secrets` rejects, or reports skipped files | settings (disk and localStorage) are already clear; `SavedCopyError` with `settingsCleared: true` | its message is shown with **Try again**, which repeats the removal |
+| Old ADE running alongside, a detached window reloaded by its ErrorBoundary, or a detached window's queued flush landing just after a removal | that process still holds the old settings | it can re-save the field once; the next launch moves or strips it again. After a **Remove** of the vault key, that move sets the key again (*Known limits*) | self-heals at the next launch |
 | Snapshot restored later | a snapshot from before the scrub (none remain after a successful scrub), or a copy from outside ADE | next launch moves it again | as row 1 |
 | Not under Tauri (tests, browser) | `invoke` throws | treated as a failure: no throw, settings untouched, boot continues | none |
 | Keychain readable but not persistent | gnome-keyring's in-memory "session" collection, or an unsaved KeePassXC database | the read-back passes; the key is lost at the next reboot or lock | not detected: see *Persistence is not proven* |
@@ -272,15 +293,18 @@ Needs Story A (`APP_ONLY`, `"not found"`, `inTerminals`).
 
 ## Tasks (B)
 
-- [ ] `src-tauri/src/state.rs`: `scrub_secrets(state_dir, at_boot: bool) -> usize`, exposed as `state_scrub_secrets({ atBoot })` and registered in `lib.rs`.
+- [ ] `src-tauri/src/state.rs`: `scrub_secrets(state_dir, at_boot: bool) -> ScrubReport`, exposed as `state_scrub_secrets({ atBoot })` and registered in `lib.rs`. `ScrubReport { changed, skipped }` is returned as JSON `{ "changed": n, "skipped": n }`: `changed` counts files written or deleted, and `skipped` counts files that may still hold the key because they couldn't be read, rewritten or deleted. Skipped files are retried on the next run.
   - **Always:** applies `sync::strip_secrets` to `better-terminal-settings.json` in every `snapshots/*/` and in any leftover `.kv-old-*` or `.kv-restore-*` directory. Those directories are stripped, not deleted: after a crash mid-restore, `.kv-old-*` may be the only copy of the state.
   - **Always:** deletes the key's leftover temp files (`.better-terminal-settings.json.*.tmp`) in those directories. Nothing writes there while the app runs.
   - **Only with `at_boot`:** the same strip and temp deletion in `kv/`. At boot, auto-save has not started, so no write is in flight. Later, auto-save may be mid-way between creating and renaming a temp file (`state.rs:71-82`), or may have just flushed a newer value that a strip would overwrite.
-  - Writes only files that changed, with `atomic_write`, and returns the count.
-- [ ] `src/lib/anthropicKey.ts` (new; imports only `@tauri-apps/api/core`):
-  - `ANTHROPIC_VAULT_NAME`, `LEGACY_FIELD = "anthropicApiKey"`.
-  - `moveAnthropicKeyToVault(): Promise<MoveResult>`, following the matrix and *The move, step by step*.
-  - `lastMoveError(): string | null`, `hasSavedCopy(): boolean` (reads localStorage), `carryLegacyField(json)` for `persistSettings`, and `removeSavedCopy(): Promise<void>` (see *Removing the saved copy*).
+  - Writes only files that changed, with `atomic_write`, and returns the report.
+  - A way to delete only the leftover temp files, with no strip, for the boot when `vault_list` doesn't hold the name (Owner's decision 9). After 870aaa2 this is being built as a `strip` flag (`state_scrub_secrets({ atBoot, strip })`, `strip: false` deleting temp files only); the context file records the final shape. The boot strips after a move or strip, and on the nothing-to-move path only when `vault_list` holds the name; `removeSavedCopy` always strips.
+- [ ] `src/lib/anthropicKey.ts` (new; its only static import is `@tauri-apps/api/core`; `removeSavedCopy` loads `./persistence` dynamically for `flushNow`):
+  - `ANTHROPIC_VAULT_NAME`, `LEGACY_FIELD = "anthropicApiKey"`, `ANTHROPIC_KEY_NOTE` ("Orchestrator: Anthropic API key. Not exported to terminals.").
+  - `moveAnthropicKeyToVault(): Promise<MoveResult>` (`"moved" | "stripped" | "nothing" | "failed"`, never throws), following the matrix and *The move, step by step*.
+  - `lastMoveError(): string | null`, and `lastMoveFailure(): { reason, keyInVault } | null`. `keyInVault` is true when the failure came after steps 3–4 had confirmed the vault holds a key (step 5 or 6).
+  - `hasSavedCopy(): boolean` (localStorage holds the field as a non-empty string), `carryLegacyField(json)` for `persistSettings`, and `removeSavedCopy(): Promise<void>` (see *Removing the saved copy*).
+  - `SavedCopyError` (with `settingsCleared: boolean`) and the `ScrubReport` type.
 - [ ] `src/lib/boot.ts` (new; imports per the import rules): `bootMain(deps)` and `bootDetached(deps)`, the two branches of `boot()`.
   - `bootMain` awaits `moveAnthropicKeyToVault()` after `hydrateFromDisk()` and before `startAutoSave()`. `bootDetached` never calls it.
   - `main.tsx` picks one branch, then keeps `import("./stores/settingsStore")` → `applyThemeToDOM` → render, unchanged.
@@ -290,13 +314,18 @@ Needs Story A (`APP_ONLY`, `"not found"`, `inTerminals`).
 - [ ] `src/lib/anthropic.ts`: the Anthropic provider reads `vault_get({ name: ANTHROPIC_VAULT_NAME })`.
   - `"not found"` or `""` gives the existing copy, "No Anthropic API key set. Go to Settings → AI API to add one."
   - Any other rejection shows the vault's own message. For an unavailable, locked or denied keychain that already reads "The system keychain isn't available: …" (`keychain_error`).
-- [ ] `src/components/AnthropicKeyField.tsx` (new), used by `SettingsPanel.tsx` in place of the input:
+- [ ] `src/components/AnthropicKeyField.tsx` (new). Its default export `AnthropicKeyField` replaces the input in `SettingsPanel.tsx`'s Anthropic section:
   - **Status line**, from `vault_list`: "Saved in the system keychain. Not exported to terminals." or "No key set."
+  - **When `vault_list` rejects:** "Couldn't read the vault: <error>", and no status line. Whether a key is set is unknown, so it never says "No key set" and offers no Remove.
   - **Key input:** a password input. Its button reads Save, or Replace when a key is set, and calls `vault_set` with the name and the note, then clears the input.
   - **Remove** (when a key is set): confirm, then `vault_delete`.
-  - **When `lastMoveError()` is set and `hasSavedCopy()` is true:** the reason, plus **Remove the saved copy** (confirm, then `removeSavedCopy()`; its error is shown if it fails).
   - **Static rotate text**, shown while a key is set or a saved copy exists: "If a key was ever saved in ADE's settings before this version, it was stored in plain text: rotate it at console.anthropic.com."
   - It never calls `vault_get` and never shows a value.
+- [ ] `SavedCopyNotice`, exported from the same file. `SettingsPanel.tsx` renders it on Settings → AI API **for every Orchestrator provider**, outside the Anthropic section, because a stranded plain-text key matters whichever provider is picked.
+  - **When `lastMoveFailure()` is set and `hasSavedCopy()` is true:** the reason, worded by the step that failed, plus **Remove the saved copy** (confirm, then `removeSavedCopy()`).
+    - `keyInVault: true`: "The key is in the system keychain, but ADE couldn't remove its old copy from settings: <reason>. That copy is still stored in plain text."
+    - `keyInVault: false`: "The key saved in ADE's settings couldn't be moved to the system keychain: <reason>. The Orchestrator doesn't use that copy, and it is still stored in plain text."
+  - A failed removal shows "Couldn't remove the saved copy: <error>". A `SavedCopyError` with `settingsCleared: true` shows its own message and **Try again**, which runs `removeSavedCopy()` again.
 - [ ] `src/lib/__tests__/vaultGetCallers.test.ts` (T19).
 - [ ] `.ade/context/vault-app-only-secrets.md`: keep it true to what Story B builds.
 - [ ] Docs: `docs/guide/settings.md` and `docs/guide/agents.md:105` say the Anthropic key is stored in the system keychain, is not exported to terminals, and should be rotated if it was saved before this version.
@@ -304,15 +333,21 @@ Needs Story A (`APP_ONLY`, `"not found"`, `inTerminals`).
 
 ### The move, step by step (`moveAnthropicKeyToVault`, at boot only)
 
-1. Parse `localStorage["better-terminal-settings"]`. If it is unreadable, not an object, or has no field, go to step 7.
-2. If the field is `""`, go to step 5.
-3. `vault_get(NAME)`. A non-empty value means the vault wins: go to step 5. A rejection with `"not found"` means continue. Any other rejection is a failure.
-4. `vault_set(NAME, K, note)`, then `vault_get(NAME)`, which must equal K. Otherwise this is a failure.
+1. Parse `localStorage["better-terminal-settings"]`. If it is missing, unreadable, not an object, or has no field, there is nothing to move. Call `vault_list` (names only; not a vault call, Owner's decision 9):
+   - if it lists NAME, go to step 7;
+   - if it doesn't, or it rejects (logged), strip nothing: only the leftover temp files are deleted. A restore that silently missed the vault key must not let the scrub strip the only copies left on disk.
+
+   Return `"nothing"`.
+2. If the field is `""`, or not a string, go to step 5.
+3. `vault_get(NAME)`. A non-empty value means the vault wins: go to step 5. A rejection with `"not found"`, or the value `""`, means continue: an empty entry is overwritten. Any other rejection is a failure.
+4. `vault_set(NAME, K, note)`, then `vault_get(NAME)`, which must equal K.
+   - If the read-back rejects, this is a failure and nothing is deleted.
+   - If it answers with another value **within the 5 s bound**, the move sends `vault_delete(NAME)` (best effort; a rejection is ignored), then fails with "The system keychain returned a different value after saving the key." Step 3 found no entry or `""`, so the value removed is the one this move just wrote, and a wrong value left behind would read as "the vault wins" at the next launch (Owner's decision 8).
 5. `state_write({ "better-terminal-settings": json without the field })`. A rejection is a failure. **No timeout:** a write that landed late could overwrite a newer auto-save flush.
 6. `localStorage.setItem` the same JSON. `startAutoSave` has not started, so nothing else wrote to localStorage since step 1, and this does not queue a second write.
-7. `state_scrub_secrets({ atBoot: true })`. Its errors are logged, not fatal, and it runs at every launch.
+7. `state_scrub_secrets({ atBoot: true })`. Its errors, and a report with `skipped > 0`, are logged, not fatal. It runs after every successful step 5 and, when there is nothing to move, only as step 1 says. Return `"moved"` if step 4 wrote the vault, else `"stripped"` (or `"nothing"` from step 1).
 
-Steps 3–4 share one 5 s bound. A failure records `lastMoveError` and returns, so nothing after it runs. A timed-out call that answers late can only add K to the vault.
+Steps 3–4 share one 5 s bound. Once it has passed, the move fails and sends no further vault call: no `vault_set` after a late first `vault_get`, no read-back after a late `vault_set`, and no `vault_delete` after a late read-back. A call already in flight that answers late can only add K to the vault; it never deletes. A failure records `lastMoveFailure()` (`{ reason, keyInVault }`) and returns `"failed"`, so nothing after it runs.
 
 ### Removing the saved copy (`removeSavedCopy`, while the app runs)
 
@@ -321,7 +356,7 @@ Auto-save is live and a detached window may be saving too, so:
 1. `await flushNow()`, so queued writes land first.
 2. Read localStorage again and delete only `LEGACY_FIELD`, then `await invoke("state_write", …)` with the result. A rejection leaves localStorage untouched and returns the error for the field to show.
 3. Read localStorage **again** (other windows may have saved during the await), delete only `LEGACY_FIELD`, and `setItem` the result. Auto-save mirrors that write.
-4. `state_scrub_secrets({ atBoot: false })`: snapshots and restore directories only. `kv/` was written in step 2.
+4. `state_scrub_secrets({ atBoot: false })`: snapshots and restore directories only. `kv/` was written in step 2. If it rejects, or reports `skipped > 0`, `removeSavedCopy` rejects with a `SavedCopyError` whose `settingsCleared` is true, and whose message says the settings are clear but the saved copies under ADE's state folder were not all cleaned.
 
 A detached window whose own queued flush lands after step 2 can put the field back on disk once. That is the matrix row "Old ADE running alongside…", and it self-heals at the next launch.
 
@@ -343,10 +378,11 @@ The plan does not wait for a second launch before stripping. That would keep the
 
 - **B1.** Given a state directory where the field is in `kv/`, three snapshots, a `.kv-old-*` and a `.kv-restore-*` directory, and in `.better-terminal-settings.json.123-0.tmp` temp files in `kv/` and in one snapshot, and is absent from one snapshot:
   - `scrub_secrets(at_boot: true)` leaves no file under the state directory holding the field or its value, and removes the temp files;
-  - every other field is unchanged, the clean snapshot is not rewritten, and a second run returns 0;
-  - `scrub_secrets(at_boot: false)` on the same fixture leaves `kv/` and its temp file byte-identical and cleans everything else.
+  - every other field is unchanged, the clean snapshot is not rewritten, and a second run returns `{ changed: 0, skipped: 0 }`;
+  - `scrub_secrets(at_boot: false)` on the same fixture leaves `kv/` and its temp file byte-identical and cleans everything else;
+  - a file it can't rewrite or delete is counted in `skipped`, not lost silently.
 
-  -- **T3** `state.rs` `scrub_removes_the_old_key_everywhere_under_state`, `scrub_leaves_kv_alone_after_boot`.
+  -- **T3** `state.rs` `scrub_removes_the_old_key_everywhere_under_state`, `scrub_leaves_kv_alone_after_boot`, `scrub_counts_what_it_could_not_clean`.
 - **B2.** Given saved settings with `anthropicApiKey: "sk-ant-K"` and an empty vault, the move's calls are, in order:
   1. `vault_get` (rejects `"not found"`);
   2. `vault_set` (name, K, note);
@@ -355,17 +391,22 @@ The plan does not wait for a second launch before stripping. That would keep the
   5. `state_scrub_secrets({ atBoot: true })`.
 
   Afterwards localStorage holds neither the field nor K. -- **T4** `anthropicKey.test.ts`.
-- **B3.** A second run makes no `vault_set` and no `state_write`, and still calls `state_scrub_secrets`. Given a vault that already equals the settings value (a crash after the write), the move strips without writing. -- **T5**.
-- **B4.** In each of these cases, localStorage and disk still hold the key, `state_write` and `state_scrub_secrets` are not called, and `lastMoveError()` gives the reason:
+- **B3.** With nothing to move (a second run), the move makes no `vault_get`, `vault_set`, `vault_delete` or `state_write`, and calls `vault_list` (Owner's decision 9):
+  - if `vault_list` holds `ADE_ORCHESTRATOR_ANTHROPIC_KEY`, it then calls `state_scrub_secrets({ atBoot: true })`;
+  - if it doesn't, or it rejects, no settings file or snapshot is stripped, and leftover `.better-terminal-settings.json.*.tmp` files are still deleted.
+
+  Given a vault that already equals the settings value (a crash after the write), the move strips without writing: `vault_get` → `state_write` → `state_scrub_secrets`. -- **T5**.
+- **B4.** In each of these cases, localStorage and disk still hold the key, `state_write` and `state_scrub_secrets` are not called, `lastMoveError()` gives the reason, and `lastMoveFailure().keyInVault` is false:
   - the first `vault_get` rejects with anything but `"not found"`;
   - `vault_set` rejects;
-  - the read-back rejects or differs;
-  - steps 3–4 take longer than 5 s;
+  - the read-back rejects: no `vault_delete`;
+  - the read-back differs within the bound, after step 3 found no entry or `""`: one `vault_delete` of the name, and the reason is the mismatch even if that delete rejects (Owner's decision 8);
+  - steps 3–4 take longer than 5 s, including when they share the bound: a first `vault_get` answering after it is followed by no `vault_set`, a `vault_set` answering after it by no read-back, and a read-back that differs after it by no `vault_delete`;
   - `invoke` throws (not under Tauri).
 
   -- **T6** (one case each; fake timers for the timeout).
-- **B5.** If `state_write` rejects after a verified vault write, localStorage keeps the field and no scrub runs. A slow `state_write` is never timed out. -- **T7**.
-- **B6.** An empty field is removed with no vault call. Settings that are not JSON, or not an object, cause no write and no vault call. A different value already in the vault is kept, and the field is removed. -- **T8**, **T9**.
+- **B5.** If `state_write` rejects after a verified vault write, localStorage keeps the field, no scrub runs, and `lastMoveFailure().keyInVault` is true. A slow `state_write` is never timed out. -- **T7**.
+- **B6.** An empty field is removed with no vault call. Settings that are missing, not JSON, or not an object, cause no settings write and no vault call (`vault_list` may run: it reads names only, and decides the boot scrub as in B3). A vault entry holding `""` is not the vault's key: it is overwritten with K. A different non-empty value already in the vault is kept, and the field is removed. A boot scrub that rejects or skips files is logged, not fatal. -- **T8**, **T9**.
 - **B7.** Given localStorage settings holding the field and an unknown field `futureThing`:
   - the loaded store's state has no `anthropicApiKey`;
   - a save keeps both fields in the saved JSON;
@@ -387,33 +428,38 @@ The plan does not wait for a second launch before stripping. That would keep the
   - re-reads localStorage after that await and removes only the field, so a key another window added during the await (`fontSize`) survives;
   - calls `state_scrub_secrets({ atBoot: false })` and makes no vault call.
 
-  `hasSavedCopy()` is then false. If `state_write` rejects, localStorage is untouched, the error is returned, and no scrub runs. -- **T18a**, **T18b** in `anthropicKey.test.ts`.
+  `hasSavedCopy()` is then false. If `state_write` rejects, localStorage is untouched, the error is returned, and no scrub runs. If the scrub rejects or reports skipped files, the settings are already clear and `removeSavedCopy()` rejects with a `SavedCopyError` whose `settingsCleared` is true and whose message names the skipped count. -- **T18a**, **T18b** in `anthropicKey.test.ts`.
 - **B12.** `AnthropicKeyField`:
   - with no key it shows "No key set" and Save;
   - saving calls `vault_set` with the name, the value and the note, then empties the input;
   - with a key set, the button reads Replace;
   - Remove calls `vault_delete` only after the confirm is accepted;
+  - when `vault_list` rejects, it shows "Couldn't read the vault: <error>", not "No key set", and offers no Remove;
   - no render calls `vault_get` or shows the value.
 
   -- **T13a** `AnthropicKeyField.test.tsx`.
 - **B13.** The static rotate text shows while a key is set or a saved copy exists, and not otherwise. -- **T13b**.
-- **B14.** With `lastMoveError()` set and a saved copy, the field shows the reason and **Remove the saved copy**.
+- **B14.** `SavedCopyNotice`, with `lastMoveFailure()` set and a saved copy, shows the reason and **Remove the saved copy**.
+  - The reason is worded by the step that failed: with `keyInVault` true it says the key is in the system keychain and only its old copy remains; with `keyInVault` false it says the move to the keychain failed.
   - Accepting the confirm calls `removeSavedCopy()`, after which the action is gone.
-  - A failed removal shows its error.
-  - Without a saved copy, the action is not shown.
+  - A failed removal shows its error. A `SavedCopyError` with `settingsCleared` shows its message and **Try again**.
+  - Without a saved copy, or without a move failure, the action is not shown.
+  - Settings → AI API renders it whatever the Orchestrator provider.
 
-  -- **T13c**.
+  -- **T13c** `AnthropicKeyField.test.tsx`; the provider case in `src/components/__tests__/SettingsSavedCopy.test.tsx`.
 - **B15.** A convention check, not a runtime guard: every `vault_get` invoke site in `src/` is in `anthropic.ts` or `anthropicKey.ts` and names `DEEPSEEK_API_KEY` or `ANTHROPIC_VAULT_NAME`, and no other file under `src/` contains the string `vault_get`. It is found with `tauriCommandContract.test.ts`'s invoke-site parser. -- **T19** `vaultGetCallers.test.ts`.
 - **B16.** With `invoke` mocked and settings holding K:
   - `bootMain` makes, in order, `state_read_all` → `vault_get` → `vault_set` → `vault_get` → `state_write` → `state_scrub_secrets` → `state_snapshot`;
   - `bootDetached` makes no `vault_*` or `state_scrub_secrets` call;
-  - a failed move still lets `bootMain` reach `state_snapshot`.
+  - a failed move still lets `bootMain` reach `state_snapshot`;
+  - with no deps passed, `bootMain` runs the real sync and project-setup steps around the move, in order;
+  - `main.tsx` runs only `bootMain` (main window) or only `bootDetached` (detached window), and finishes it before loading the settings store.
 
-  Sync and the later launch steps are injected as no-ops. -- **T20** `boot.test.ts`.
+  Sync and the later launch steps are injected as no-ops, or mocked where the defaults are pinned. -- **T20** `boot.test.ts`, `src/__tests__/main.test.tsx`.
 
 ## Verification (B)
 
-**Commands** (the agreed verification command, unchanged): `npx tsc --noEmit` (exit 0) · `npm test` (all pass, including T4–T13c, T16, T18a/b, T19, T20) · `cd src-tauri && cargo test` (all pass, including T3 and the existing `api_keys_never_reach_the_repo_and_each_machine_keeps_its_own`) · `cd relay && cargo test` · `cd mobile && npx tsc --noEmit && npx jest` (untouched, all pass).
+**Commands** (the agreed verification command, unchanged): `npx tsc --noEmit` (exit 0) · `npm test` (all pass, including T4–T13c, T16, T18a/b, T19, T20, `SettingsSavedCopy.test.tsx` and `main.test.tsx`) · `cd src-tauri && cargo test` (all pass, including T3 and the existing `api_keys_never_reach_the_repo_and_each_machine_keeps_its_own`) · `cd relay && cargo test` · `cd mobile && npx tsc --noEmit && npx jest` (untouched, all pass).
 
 **Manual checks** (not gating, per ADR 0009):
 - With a key saved by the previous build, launch the new build. Then check each of these:
@@ -467,3 +513,11 @@ The plan does not wait for a second launch before stripping. That would keep the
 - 2026-10-30, review round 1: everything outside the frozen block was revised. The frozen Intent and Owner's decisions are unchanged.
 - 2026-10-30, approval: the owner approved both stories at cdcdb4f. Status set to approved; the four answers and the P2 override recorded in the frozen Owner's decisions; the line for the product doc's exceptions list added; ADR 0013 Accepted.
 - 2026-10-30, re-review: split into Stories A and B, with the ACs renumbered per story (old → new: 1→A1, 2→A2, 18→A3 (Rust part), 17→A4, 3→B1, 4–8→B2–B6, 9→B7, 10→B8, 11→B9, 12→B10 (with the name parity from 18), 13→B11, 14→B12, 15→B13 (static), 16→B14, 19→B15, 20→B16). Added the Principles check and owner Q4. The frozen block is unchanged.
+- 2026-11-01, Story B re-review at 870aaa2: the code had moved past the plan's text, so the plan was brought to the code and to three owner rulings, for QA to check against.
+  - Owner's decisions 8–10 added to the frozen block, as new rulings; decisions 1–7 and the Intent are unchanged. Decision 8 extends the P2 override of decision 7 (the Principles check and the exceptions line say so).
+  - Decision 8 (delete on mismatch): step 4, the shared-bound paragraph, the matrix row "Read-back differs" (split from "Vault write or read fails"), "Keychain hangs", the Boundaries invariant, B4.
+  - Decision 9 (scrub needs `vault_list`; temp files every boot; "no vault call" defined): step 1, step 7, the matrix rows "Already moved" and "Unparseable settings", Boundaries, B3 (was: "still calls `state_scrub_secrets`"), B6 (was: "no vault call" left undefined), Tasks (B) for the temp-files-only clean.
+  - Decision 10 and the two races in `.ade/context/vault-app-only-secrets.md`: the new *Known limits (accepted)* section; the matrix row "Old ADE running alongside…".
+  - ADR 0013 amended: the Status line notes the 2026-11-01 rulings; Consequences gain the delete (decision 8) and the accepted limit (decision 10).
+  - Not yet at 870aaa2, and in progress in the worktree: decision 8's "a late answer never deletes", and decision 9's temp-file deletion when `vault_list` lacks the name (being built as a `strip` flag on `state_scrub_secrets`). QA checks them in the commit that completes the review fixes.
+  - Review fixes at 870aaa2 now described: `scrub_secrets` returns `ScrubReport { changed, skipped }` (B1, step 7, *Removing the saved copy*, matrix); `lastMoveFailure()` gives `{ reason, keyInVault }` and the notice is worded by the step that failed (Tasks, B4, B5, B14); `SavedCopyNotice` shows for every provider (Tasks, B14); an unreadable `vault_list` says "Couldn't read the vault" (Tasks, B12); a vault entry holding `""` is overwritten (step 3, matrix, B6); a non-string field is stripped like `""` (step 2); no further vault call once the bound has passed (B4); `main.tsx` order pinned by `main.test.tsx` (B16).
