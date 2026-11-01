@@ -36,6 +36,18 @@ context: ['.ade/context/decisions/0010-agent-computers-are-orgo-only-and-made-on
 > - **R2-7:** subfolder coverage in the walk table, and `$HOME` fallback.
 > - **R2-8:** a slow rc and a key-free pass condition for the gating check.
 > - **R2-9:** no notice; recorded.
+>
+> **Amendment 3 (2026-11-01), after the re-review of 4f68b49 (BLOCK on R2-5).** The reviewer confirmed:
+> - the zsh process-group claim and the bash gap;
+> - `get_termios` and `process_group_leader` on the master;
+> - `home_dir()` on rustc 1.97;
+> - the guard shape.
+>
+> Changes, marked **(R3-…)**:
+> - **R3-1:** `write_pty` stays sync and stops blocking. Each PTY gets its own writer thread fed by a channel, so keystrokes keep their order and no runtime worker waits on a terminal. AC24 becomes three tests, and the command path is covered.
+> - **R3-2:** on unix, a missing foreground group means "not ready", not "can't know".
+> - **R3-3:** one more limit, a zsh rc that leaves the terminal raw.
+> - **R3-4:** the gating check's set-up leads with `~/.zshrc`.
 
 **Step 1** is built in order:
 - **Story 1:** Orgo's hosted MCP server in the MCP library, signed in through Claude Code. Claude Code asks before any computer is created, changed, stopped or deleted. Rules go in three places: every Claude Code launch ADE makes (picker, board and Orchestrator), the project's shared settings, and the main checkout's root local settings, which Claude Code reads from any subfolder and any worktree.
@@ -494,8 +506,9 @@ pub const MCP_ASK: &[&str] = &[
     /// Whether the shell in PTY `id` is reading with its own line editor: the
     /// terminal is out of canonical mode AND the shell itself is the
     /// foreground process group, so a typed line of any length reaches it
-    /// whole. None where that can't be known (not unix, an unknown id, no
-    /// child pid, or the termios or foreground group can't be read).
+    /// whole. None only where that can't be known at all: not unix, or an
+    /// unknown id. On unix, a pid, termios or foreground group that can't be
+    /// read means Some(false): not ready, and the 10 s cap applies (R3-2).
     #[tauri::command]
     pub fn pty_line_editor_ready(state: tauri::State<'_, PtyManager>, id: u32) -> Option<bool>
     ```
@@ -504,24 +517,39 @@ pub const MCP_ASK: &[&str] = &[
     - **On unix:**
 
       ```rust
-      let t: libc::termios = master.get_termios()?.into();
-      let fg = master.process_group_leader()?;
-      Some(t.c_lflag & libc::ICANON == 0 && fg as u32 == shell?)
+      let (Some(t), Some(fg), Some(shell)) =
+          (master.get_termios(), master.process_group_leader(), shell)
+      else {
+          return Some(false); // R3-2: unreadable on unix is "not ready", not "can't know"
+      };
+      let t: libc::termios = t.into();
+      Some(t.c_lflag & libc::ICANON == 0 && fg as u32 == shell)
       ```
 
       - The conversion uses nix's `From<Termios> for libc::termios`, so the code never names nix. There is no new dependency.
       - portable-pty's spawn makes the shell a session leader, so its pid is its process group.
     - **On other platforms** it returns `None`.
     - It is registered in `lib.rs` beside `write_pty`.
-  - **(R2-5) `write_pty` releases the global lock before it writes.**
-    - **The problem.** Today it holds the `instances` mutex across a blocking `write_all`. A raw-mode reader that isn't reading can block that write once about 1 KB is unread on macOS, and then every terminal's write, resize, attach and kill waits on the mutex.
-    - **The fix.**
-      - `PtyInstance.writer` becomes `Arc<Mutex<Box<dyn Write + Send>>>`.
-      - `write_pty` calls a free function `write_to(instances: &Mutex<HashMap<u32, PtyInstance>>, id, data)`. It clones the writer's `Arc` under the `instances` lock, drops that lock, then locks only that writer and calls `write_all` and `flush`.
-      - An unknown id stays `Ok(())`.
-      - **`write_pty` becomes `#[tauri::command(async)]`.** A sync Tauri command runs on the main thread, so a blocked write would freeze the whole window, not only the terminals.
-      - `kill_pty` and `resize_pty` need no writer lock, so they go on while a write blocks.
-      - **Limit, recorded.** A write blocked on a PTY whose reader never reads stays blocked, and so does its worker thread. On Linux it stayed blocked after the child was killed: 2026-11-01, a 1 MiB write against `stty -icanon -echo; sleep 5`. Only that terminal is affected.
+  - **(R2-5, replaced by R3-1) `write_pty` stays sync and never waits on a terminal.**
+    - **The problem.** Today `write_pty` holds the `instances` mutex across a blocking `write_all`. A raw-mode reader that isn't reading can block that write once about 1 KB is unread on macOS. Every terminal's write, resize, attach and kill then waits on the mutex, and because the command is sync, so does the main thread.
+    - **Why not `(async)` (Amendment 2's fix, withdrawn).**
+      - Async commands are spawned as separate tokio tasks (tauri-macros 2.5.4 `wrapper.rs:344`, tauri 2.10.2 `ipc/mod.rs:375`). `useTerminal.ts:281` sends each keystroke without awaiting the last, so writes can land out of order. The reviewer saw 64 ordered tasks on a 4-worker runtime finish out of order in 174 of 200 batches.
+      - A blocked write also holds a runtime worker, and each further keystroke to that terminal holds another. After about one keystroke per core, every async command in ADE stalls.
+    - **The fix: one writer thread per PTY, fed by a channel.**
+      - **The instance.** `PtyInstance.writer` is replaced by `input: std::sync::mpsc::Sender<Vec<u8>>`.
+      - **The thread.** `PtyInstance` is built through one constructor, which `create_pty` and the tests use. It takes the writer from `master.take_writer()` and spawns a thread named `pty-writer-<id>`, with `std::thread::Builder::stack_size(64 * 1024)`.
+        - The thread loops on `rx.recv()`, calling `write_all` and then `flush` for each chunk.
+        - It ends when every sender is gone and the queue is empty, or on the first write error.
+      - **`write_pty` stays `#[tauri::command]` (sync)** and calls `write_to(instances: &Mutex<HashMap<u32, PtyInstance>>, id, data)`:
+        - it calls `input.send(data)` under the `instances` lock; an unbounded `mpsc` send never blocks;
+        - an unknown id stays `Ok(())`;
+        - a send to a thread that has ended gives `Err("the terminal is closed")`.
+      - **Order.** Sync commands run one at a time on the main thread, in the order their IPC messages arrive, and one channel per PTY keeps that order to the terminal. Nothing waits on a terminal, so the main thread never blocks on one.
+      - **`kill_pty`** removes the instance, which drops the sender. A writer thread that isn't blocked drains what is queued, sees the channel close, and ends.
+    - **Limit, recorded: a writer thread blocked on a PTY that never reads is leaked.**
+      - **Observed on Linux, 2026-11-01.** A 1 MiB write against `stty -icanon -echo; sleep 30` stayed blocked after the whole process group was killed. It also stayed blocked after closing the master fds and after `tcflush(TCIOFLUSH)`. macOS is not checked.
+      - **The bound.** It is one parked thread per terminal closed in that state, with a 64 KiB stack, holding whatever was queued for that terminal. Nothing else waits on it: other terminals, the main thread and the async runtime are unaffected. Keystrokes don't pile up threads, only bytes in that one queue.
+      - **It ends when ADE exits.** No safe way to wake it was found. Making the master fd non-blocking would also make the reader thread's reads non-blocking, because a dup shares the file status flags.
   - **TypeScript**, `src/lib/terminalCommands.ts`:
     - **`whenLineEditorReady`.** `export async function whenLineEditorReady(ptyId: number, timeoutMs = 10_000): Promise<void>` polls `invoke<boolean | null>("pty_line_editor_ready", { id: ptyId })` every 50 ms.
       - It returns after **two `true` answers in a row** (R2-4). One sample can land in the gap between two rc commands, after a child cleared `ICANON` and exited.
@@ -556,6 +584,7 @@ pub const MCP_ASK: &[&str] = &[
     - **(R2-4) Not proof, but much harder to fool.** Verified on Linux, 2026-11-01:
       - **zsh 5.9** runs each rc command in its own process group, so the reviewer's race rc (`stty -icanon; sleep 0.6; stty icanon`) shows "raw" with the shell not in the foreground, and the wait holds. zsh is macOS's default shell.
       - **bash** starts job control only after its startup files. Its rc commands share the shell's process group, so the same rc still releases the wait while `sleep 0.6` runs raw. Recorded, not fixed.
+      - **(R3-3) zsh, too.** A zsh rc that leaves the terminal raw (`stty -icanon` with no restore) and then runs builtin work, such as loops, `typeset` or sourcing more files, keeps zsh itself in the foreground with `ICANON` clear. That passes the wait.
       - **Still undetected in any shell:**
         - a builtin that reads raw, such as a colour query through `read`;
         - an rc ending in `exec tmux`, which keeps the shell's pid;
@@ -749,7 +778,7 @@ Each names its test. The developer writes it failing first. AC10 is a regression
     - **Fresh.** A PTY running `sh -c 'sleep 3'` reads `Some(false)`.
     - **Raw, shell in front.** `sh -c 'stty -icanon; sleep 3'` reads `Some(true)` within 2 s. With no job control the shell's process group stays in the foreground.
     - **(R2-4) Raw, shell not in front.** `sh -c 'set -m; stty -icanon; sleep 3; :'` reads `Some(false)` for 2 s. With job control, `sleep` is its own foreground group, as zsh runs rc commands. Checked on Linux with dash, 2026-11-01.
-    - **No pid.** `line_editor_ready(master, None)` is `None`.
+    - **(R3-2) Unreadable means not ready.** `line_editor_ready(master, None)` is `Some(false)`. `None` is reserved for platforms that can't know, as the Windows twin asserts. AC18's "No line editor" case covers the 10 s cap that then applies.
     - **Long line.** `bash --noprofile --rcfile <tmp rc> -i` is spawned, where the rc runs `sleep 1` and sets `PS1='READY$ '`. The test waits for two `Some(true)` in a row, 50 ms apart, and then types `printf %s <5000 × "x"> | wc -c` and `"\r"`. The output contains `5000` within 10 s. 5,000 bytes is over both Linux's 4096 and macOS's 1024, and CI's `backend-macos` job runs this on a Mac.
 
     On Windows, `#[cfg(not(unix))]` `line_editor_ready_is_unknown_off_unix` spawns `cmd.exe /c ping -n 3 127.0.0.1` in a ConPTY and asserts `None`.
@@ -777,13 +806,19 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 
     Covered by `mcp.rs` › `orgo_install_refuses_the_home_folder` (runs everywhere).
 23. **(New, R2-3.)** The picker's "This terminal": with an active pane holding PTY 7 and `pty_line_editor_ready` answering `false`, `true`, `true`, `write_pty` for PTY 7 is called once, after the second `true`, with the command plus `"\r"`. If the pane is closed during the wait, nothing is written and no agent session is started. Covered by `src/components/__tests__/AgentPicker.test.tsx` › "This terminal waits for the shell before typing".
-24. **(New, R2-5.)** `#[cfg(unix)]` and run on a real PTY:
-    - **A blocked write.** PTY A runs `sh -c 'stty -icanon -echo; sleep 5'`, which never reads. A thread calls `write_to(&instances, A, 1 MiB)`, which blocks.
-    - **Others go on.** While it blocks, `write_to(&instances, B, b"echo ok\r")` for PTY B returns within 1 s, and so does a resize of B.
-    - **Kill goes on.** `kill` of A returns within 1 s. The test then drops its thread, which stays blocked as recorded.
-    - `write_pty` is declared `#[tauri::command(async)]`. This is checked by review, since it can't be tested without a Tauri runtime.
+24. **(New, R2-5; replaced by R3-1.)** These tests are `#[cfg(unix)]`, on real PTYs built through the constructor, calling `write_to(&instances, id, data)`:
+    - **(a) Order.** PTY A runs `sh -c 'stty raw -echo; cat > <tmp file>'`. 1,000 back-to-back `write_to(A, format!("{i:04}\n"))` calls, for `i` in `0..1000`, return, and within 5 s the file reads exactly `0000\n0001\n…0999\n`.
+    - **(b) Others go on.** PTY A runs `sh -c 'stty -icanon -echo; sleep 30; :'`, and a 1 MiB `write_to(A, …)` has blocked A's writer thread (wait 500 ms). Then `write_to(B, b"ok")` to a PTY B running `sh -c 'stty raw -echo; cat > <tmp file>'` lands in B's file within 1 s, and a resize of B returns within 1 s.
+    - **(c) No wait.** In (b)'s state, `write_to(A, b"x")` returns `Ok` within 50 ms.
 
-    Covered by `pty.rs` › `a_blocked_write_holds_up_only_its_own_terminal`.
+    Each test kills its PTYs at the end. A's leaked writer thread is expected, as recorded.
+
+    **The command path.**
+    - `write_pty` is the one line `write_to(&state.instances, id, data)`, so the three tests cover what it does.
+    - **(d) Stays sync.** `pty.rs` › `write_pty_stays_a_sync_command` reads `include_str!("pty.rs")` and asserts that the attribute line directly above `pub fn write_pty(` is exactly `#[tauri::command]`, not `(async)`. That keeps R3-1's ordering from regressing.
+    - **TypeScript.** The webview side is unchanged: `writePty` still invokes `write_pty`, and AC18, AC20 and AC23 cover its callers.
+
+    Covered by `pty.rs` › `writes_arrive_in_order`, `a_blocked_terminal_holds_up_no_other`, `a_write_to_a_blocked_terminal_returns_at_once` and `write_pty_stays_a_sync_command`. The existing tests that build a `PtyInstance` by hand, or write through `.writer` (`pty.rs:554-574`, `:666-669`), switch to the constructor and `write_to`.
 
 ## Owner ruling: CR-3, writes no ask glob caught (ruled yes, 2026-10-30, decision 13)
 
@@ -819,9 +854,13 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 - **(CR-2) macOS long launch lines. This check gates Done for Story 1 (ADR 0009).**
   - QA records it as "not run: needs the running app on macOS; pending the owner".
   - Story 1 is not called Done until the owner has run it and recorded a pass. A failure is raised and fixed before Done, not filed as a later bug.
-  - **(R2-8) Set-up.** On a Mac, in the owner's own zsh, with a slow rc so the run can tell the fix from luck. Either:
-    - put `sleep 2` as the first line of `~/.zshrc`, and remove it afterwards; or
-    - quit ADE and start its executable from a terminal: `ZDOTDIR=/tmp/slowz "/Applications/Better Terminal.app/Contents/MacOS/better-terminal"`. Here `/tmp/slowz/.zshrc` holds `sleep 2` then `source ~/.zshrc`. `open -a` would not pass `ZDOTDIR` on.
+  - **(R2-8, R3-4) Set-up.** On a Mac, in the owner's own zsh, with a slow rc so the run can tell the fix from luck.
+    - **Preferred:** put `sleep 2` as the first line of `~/.zshrc`, restart ADE, and remove the line afterwards.
+    - **Alternative, leaving `~/.zshrc` alone:**
+      1. Run `ls "/Applications/Better Terminal.app/Contents/MacOS/"` to find the executable's name. `better-terminal` is expected, but use what `ls` shows.
+      2. Quit ADE and start that executable from a terminal: `ZDOTDIR=/tmp/slowz "/Applications/Better Terminal.app/Contents/MacOS/<name>"`, where `/tmp/slowz/.zshrc` holds `sleep 2` then `source ~/.zshrc`.
+
+      `open -a` would not pass `ZDOTDIR` on.
   - **Find the agent's process.** In a terminal outside ADE, run `ps -o pid=,args= -ax | grep -- --append-system-prompt-file`. `ps` shows arguments without the shell's quotes.
   - **Check:**
     1. **DeepSeek, new tab.** With DeepSeek as the provider, pick any agent with "New tab".
@@ -847,7 +886,7 @@ Each names its test. The developer writes it failing first. AC10 is a regression
 - `src/lib/agentCommand.ts`, `src/lib/agentLaunch.ts`, `src/lib/orgoRules.ts` (new; **renamed `src/lib/launchRules.ts` by R2**), `src/components/OrchestratorTab.tsx`, and their tests.
 - **(R2)**
   - `src/components/AgentPicker.tsx` and its test (R2-3);
-  - `src-tauri/src/pty.rs`'s `write_pty`, `write_to` and `PtyInstance.writer` (R2-5);
+  - `src-tauri/src/pty.rs`'s `write_pty`, `write_to`, and the `PtyInstance` constructor with its writer thread and `input` channel (R2-5, R3-1);
   - `launch_rules` in `claude_settings.rs` with its `lib.rs` registration, which replaces `orgo_launch_rules`;
   - `home_dir()` and the `install` split in `mcp.rs` (R2-1);
   - ADR 0010's dated line, written with this amendment;
@@ -1260,3 +1299,18 @@ What changes in this plan:
 - **The launch-rules design note and the flag design note** state the type and the choice, and drop the "not decided here" caveat.
 
 There is no other change.
+
+**Re-review of 4f68b49 (Amendment 2 and its follow-ups), 2026-11-01: BLOCK on R2-5. Amendment 3.**
+
+The reviewer confirmed:
+- the zsh process-group claim and the bash gap;
+- `get_termios` and `process_group_leader` on the master, from portable-pty 0.9.0's source;
+- `home_dir()` on rustc 1.97;
+- the guard shape matching the CLI plan.
+
+| Finding | Verdict | Decision |
+|---|---|---|
+| **R2-5 (blocking):** an `(async)` `write_pty` runs as separate tokio tasks, so un-awaited keystrokes reorder (174 of 200 batches out of order in the reviewer's demo). A blocked write holds a worker per keystroke and stalls every async command. | upheld | **R3-1.** `write_pty` stays sync and only sends on a per-PTY `mpsc` channel. A per-PTY writer thread with a 64 KiB stack does the blocking write. This keeps order and never blocks the main thread or the runtime, and `kill_pty` drops the sender. **A writer blocked on a never-read PTY is leaked**, since kill, closing the fds and `tcflush` didn't wake it on Linux. The leak is bounded to one parked thread per such terminal, and it ends with ADE. AC24 becomes (a) order over 1,000 writes, (b) other PTYs go on, (c) the write returns within 50 ms. A source check, (d), keeps `write_pty` sync. |
+| **R2-4:** on unix, no foreground group meant `None`, so the line was typed at once | upheld | **R3-2.** On unix, an unreadable pid, termios or foreground group gives `Some(false)`, and the 10 s cap applies. `None` stays for platforms that can't know, and for unknown ids. AC19 is updated. |
+| A zsh rc that leaves the terminal raw and then runs builtins also passes the wait | upheld | **R3-3.** Added to Limits. |
+| **R2-8:** the binary name in the alternative set-up was assumed | upheld | **R3-4.** The set-up leads with `sleep 2` in `~/.zshrc`. The `ZDOTDIR` route starts with an `ls` of the bundle's `MacOS` folder. |
