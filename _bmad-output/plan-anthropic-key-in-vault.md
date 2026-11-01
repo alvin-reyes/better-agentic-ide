@@ -252,7 +252,7 @@ Needs Story A (`APP_ONLY`, `"not found"`, `inTerminals`).
 |---|---|---|---|
 | Key saved | settings `anthropicApiKey: "sk-ant-K"`, vault has no entry | vault holds K (note "Orchestrator: Anthropic API key. Not exported to terminals."); field removed from kv, localStorage and everything under `state/` | settings untouched; reason shown in Settings → AI API with **Remove the saved copy** |
 | Already moved | no field in settings | no vault call; `vault_list` (names only). If it lists the name, the boot scrub runs (a no-op unless something under `state/` still holds the field). If it doesn't, or it rejects, no settings file or snapshot is stripped, and leftover temp files are still deleted (Owner's decision 9) | scrub failure, or files it skipped, logged; retried next launch |
-| Empty field | `anthropicApiKey: ""` (or a value that isn't a string) | field removed from settings and `state/`; no vault call; step 7 follows step 5 | as above |
+| Empty field | `anthropicApiKey: ""` (or a value that isn't a string) | field removed from settings (step 5); no vault call. Then `vault_list` (names only) decides the boot scrub: `strip: true` if it lists the name, else `strip: false` (snapshots and restore directories keep their copies; leftover temp files are still deleted) (Owner's decision 9) | as above |
 | Unparseable settings | localStorage settings missing, not JSON, or not an object | nothing to move; no vault call, no settings write; `vault_list` decides the boot scrub, as in "Already moved" | none |
 | Crash after vault write | settings K, vault K | next launch: the entry already exists, so only the strip and scrub run | none |
 | Vault already holds another value | settings K1, vault K2 | vault keeps K2; K1 is removed from settings (after the move, a settings copy can only come from an older backup) | settings untouched |
@@ -293,12 +293,12 @@ Needs Story A (`APP_ONLY`, `"not found"`, `inTerminals`).
 
 ## Tasks (B)
 
-- [ ] `src-tauri/src/state.rs`: `scrub_secrets(state_dir, at_boot: bool) -> ScrubReport`, exposed as `state_scrub_secrets({ atBoot })` and registered in `lib.rs`. `ScrubReport { changed, skipped }` is returned as JSON `{ "changed": n, "skipped": n }`: `changed` counts files written or deleted, and `skipped` counts files that may still hold the key because they couldn't be read, rewritten or deleted. Skipped files are retried on the next run.
-  - **Always:** applies `sync::strip_secrets` to `better-terminal-settings.json` in every `snapshots/*/` and in any leftover `.kv-old-*` or `.kv-restore-*` directory. Those directories are stripped, not deleted: after a crash mid-restore, `.kv-old-*` may be the only copy of the state.
-  - **Always:** deletes the key's leftover temp files (`.better-terminal-settings.json.*.tmp`) in those directories. Nothing writes there while the app runs.
-  - **Only with `at_boot`:** the same strip and temp deletion in `kv/`. At boot, auto-save has not started, so no write is in flight. Later, auto-save may be mid-way between creating and renaming a temp file (`state.rs:71-82`), or may have just flushed a newer value that a strip would overwrite.
+- [ ] `src-tauri/src/state.rs`: `scrub_secrets(state_dir, at_boot: bool, strip: bool) -> ScrubReport`, exposed as `state_scrub_secrets({ atBoot, strip })` and registered in `lib.rs`. `ScrubReport { changed, skipped }` is returned as JSON `{ "changed": n, "skipped": n }`: `changed` counts files written or deleted, and `skipped` counts files that may still hold the key because they couldn't be read, rewritten or deleted. Skipped files are retried on the next run.
+  - **Where:** every `snapshots/*/` and any leftover `.kv-old-*` or `.kv-restore-*` directory, and `kv/` **only with `at_boot`**. At boot, auto-save has not started, so no write is in flight. Later, auto-save may be mid-way between creating and renaming a temp file (`state.rs:71-82`), or may have just flushed a newer value that a strip would overwrite.
+  - **Always:** deletes the key's leftover temp files (`.better-terminal-settings.json.*.tmp`) there. They are never the only copy (Owner's decision 9). Outside `kv/`, nothing writes there while the app runs.
+  - **Only with `strip`:** applies `sync::strip_secrets` to `better-terminal-settings.json` there. Restore directories are stripped, not deleted: after a crash mid-restore, `.kv-old-*` may be the only copy of the state. With `strip: false`, settings files are left untouched.
   - Writes only files that changed, with `atomic_write`, and returns the report.
-  - A way to delete only the leftover temp files, with no strip, for the boot when `vault_list` doesn't hold the name (Owner's decision 9). After 870aaa2 this is being built as a `strip` flag (`state_scrub_secrets({ atBoot, strip })`, `strip: false` deleting temp files only); the context file records the final shape. The boot strips after a move or strip, and on the nothing-to-move path only when `vault_list` holds the name; `removeSavedCopy` always strips.
+  - **Callers:** the boot passes `{ atBoot: true, strip: true }` after a move or when the vault wins, and `{ atBoot: true, strip: <whether vault_list lists the name> }` on the nothing-to-move path and the empty-field path (Owner's decision 9). `removeSavedCopy` passes `{ atBoot: false, strip: true }`.
 - [ ] `src/lib/anthropicKey.ts` (new; its only static import is `@tauri-apps/api/core`; `removeSavedCopy` loads `./persistence` dynamically for `flushNow`):
   - `ANTHROPIC_VAULT_NAME`, `LEGACY_FIELD = "anthropicApiKey"`, `ANTHROPIC_KEY_NOTE` ("Orchestrator: Anthropic API key. Not exported to terminals.").
   - `moveAnthropicKeyToVault(): Promise<MoveResult>` (`"moved" | "stripped" | "nothing" | "failed"`, never throws), following the matrix and *The move, step by step*.
@@ -333,19 +333,19 @@ Needs Story A (`APP_ONLY`, `"not found"`, `inTerminals`).
 
 ### The move, step by step (`moveAnthropicKeyToVault`, at boot only)
 
-1. Parse `localStorage["better-terminal-settings"]`. If it is missing, unreadable, not an object, or has no field, there is nothing to move. Call `vault_list` (names only; not a vault call, Owner's decision 9):
-   - if it lists NAME, go to step 7;
-   - if it doesn't, or it rejects (logged), strip nothing: only the leftover temp files are deleted. A restore that silently missed the vault key must not let the scrub strip the only copies left on disk.
-
-   Return `"nothing"`.
-2. If the field is `""`, or not a string, go to step 5.
+1. Parse `localStorage["better-terminal-settings"]`. If it is missing, unreadable, not an object, or has no field, there is nothing to move. Call `vault_list` (names only; not a vault call, Owner's decision 9) and go to step 7 with `strip` = whether it lists NAME. A rejection (logged) counts as not listed. With `strip: false` only the leftover temp files are deleted: a restore that silently missed the vault key must not let the scrub strip the only copies left on disk. Return `"nothing"`.
+2. If the field is `""`, or not a string, there is no key to move: go to step 5, and step 7 takes `strip` from `vault_list` as in step 1.
 3. `vault_get(NAME)`. A non-empty value means the vault wins: go to step 5. A rejection with `"not found"`, or the value `""`, means continue: an empty entry is overwritten. Any other rejection is a failure.
 4. `vault_set(NAME, K, note)`, then `vault_get(NAME)`, which must equal K.
    - If the read-back rejects, this is a failure and nothing is deleted.
    - If it answers with another value **within the 5 s bound**, the move sends `vault_delete(NAME)` (best effort; a rejection is ignored), then fails with "The system keychain returned a different value after saving the key." Step 3 found no entry or `""`, so the value removed is the one this move just wrote, and a wrong value left behind would read as "the vault wins" at the next launch (Owner's decision 8).
 5. `state_write({ "better-terminal-settings": json without the field })`. A rejection is a failure. **No timeout:** a write that landed late could overwrite a newer auto-save flush.
 6. `localStorage.setItem` the same JSON. `startAutoSave` has not started, so nothing else wrote to localStorage since step 1, and this does not queue a second write.
-7. `state_scrub_secrets({ atBoot: true })`. Its errors, and a report with `skipped > 0`, are logged, not fatal. It runs after every successful step 5 and, when there is nothing to move, only as step 1 says. Return `"moved"` if step 4 wrote the vault, else `"stripped"` (or `"nothing"` from step 1).
+7. `state_scrub_secrets({ atBoot: true, strip })`, at every launch whose move didn't fail:
+   - after a move (step 4 wrote the vault) or when the vault wins (step 3): `strip: true`, since `vault_get` has shown the vault holds a key;
+   - on the nothing-to-move path (step 1) and the empty or non-string field path (step 2): `strip` = whether `vault_list` lists NAME. Leftover temp files are deleted either way.
+
+   Its errors, and a report with `skipped > 0`, are logged, not fatal. Return `"moved"` if step 4 wrote the vault, else `"stripped"` (or `"nothing"` from step 1).
 
 Steps 3–4 share one 5 s bound. Once it has passed, the move fails and sends no further vault call: no `vault_set` after a late first `vault_get`, no read-back after a late `vault_set`, and no `vault_delete` after a late read-back. A call already in flight that answers late can only add K to the vault; it never deletes. A failure records `lastMoveFailure()` (`{ reason, keyInVault }`) and returns `"failed"`, so nothing after it runs.
 
@@ -356,7 +356,7 @@ Auto-save is live and a detached window may be saving too, so:
 1. `await flushNow()`, so queued writes land first.
 2. Read localStorage again and delete only `LEGACY_FIELD`, then `await invoke("state_write", …)` with the result. A rejection leaves localStorage untouched and returns the error for the field to show.
 3. Read localStorage **again** (other windows may have saved during the await), delete only `LEGACY_FIELD`, and `setItem` the result. Auto-save mirrors that write.
-4. `state_scrub_secrets({ atBoot: false })`: snapshots and restore directories only. `kv/` was written in step 2. If it rejects, or reports `skipped > 0`, `removeSavedCopy` rejects with a `SavedCopyError` whose `settingsCleared` is true, and whose message says the settings are clear but the saved copies under ADE's state folder were not all cleaned.
+4. `state_scrub_secrets({ atBoot: false, strip: true })`: snapshots and restore directories only. `kv/` was written in step 2. If it rejects, or reports `skipped > 0`, `removeSavedCopy` rejects with a `SavedCopyError` whose `settingsCleared` is true, and whose message says the settings are clear but the saved copies under ADE's state folder were not all cleaned.
 
 A detached window whose own queued flush lands after step 2 can put the field back on disk once. That is the matrix row "Old ADE running alongside…", and it self-heals at the next launch.
 
@@ -377,25 +377,27 @@ The plan does not wait for a second launch before stripping. That would keep the
 ## Acceptance Criteria (B)
 
 - **B1.** Given a state directory where the field is in `kv/`, three snapshots, a `.kv-old-*` and a `.kv-restore-*` directory, and in `.better-terminal-settings.json.123-0.tmp` temp files in `kv/` and in one snapshot, and is absent from one snapshot:
-  - `scrub_secrets(at_boot: true)` leaves no file under the state directory holding the field or its value, and removes the temp files;
+  - `scrub_secrets(at_boot: true, strip: true)` leaves no file under the state directory holding the field or its value, and removes the temp files;
   - every other field is unchanged, the clean snapshot is not rewritten, and a second run returns `{ changed: 0, skipped: 0 }`;
-  - `scrub_secrets(at_boot: false)` on the same fixture leaves `kv/` and its temp file byte-identical and cleans everything else;
+  - `scrub_secrets(at_boot: false, strip: true)` on the same fixture leaves `kv/` and its temp file byte-identical and cleans everything else;
+  - `scrub_secrets(at_boot: true, strip: false)` deletes the settings temp files (another key's temp file stays) and leaves every settings file byte-identical, the field included; a later `strip: true` run then strips them;
+  - `scrub_secrets(at_boot: false, strip: false)` leaves `kv/` and its temp file alone and deletes only the temp files elsewhere;
   - a file it can't rewrite or delete is counted in `skipped`, not lost silently.
 
-  -- **T3** `state.rs` `scrub_removes_the_old_key_everywhere_under_state`, `scrub_leaves_kv_alone_after_boot`, `scrub_counts_what_it_could_not_clean`.
+  -- **T3** `state.rs` `scrub_removes_the_old_key_everywhere_under_state`, `scrub_leaves_kv_alone_after_boot`, `scrub_without_strip_deletes_only_the_temp_files`, `scrub_without_strip_after_boot_leaves_kv_alone`, `scrub_counts_what_it_could_not_clean`.
 - **B2.** Given saved settings with `anthropicApiKey: "sk-ant-K"` and an empty vault, the move's calls are, in order:
   1. `vault_get` (rejects `"not found"`);
   2. `vault_set` (name, K, note);
   3. `vault_get` (returns K);
   4. `state_write` (settings without the field);
-  5. `state_scrub_secrets({ atBoot: true })`.
+  5. `state_scrub_secrets({ atBoot: true, strip: true })`.
 
   Afterwards localStorage holds neither the field nor K. -- **T4** `anthropicKey.test.ts`.
-- **B3.** With nothing to move (a second run), the move makes no `vault_get`, `vault_set`, `vault_delete` or `state_write`, and calls `vault_list` (Owner's decision 9):
-  - if `vault_list` holds `ADE_ORCHESTRATOR_ANTHROPIC_KEY`, it then calls `state_scrub_secrets({ atBoot: true })`;
-  - if it doesn't, or it rejects, no settings file or snapshot is stripped, and leftover `.better-terminal-settings.json.*.tmp` files are still deleted.
+- **B3.** With nothing to move (a second run), the move makes no `vault_get`, `vault_set`, `vault_delete` or `state_write`, calls `vault_list` (Owner's decision 9), then calls `state_scrub_secrets`:
+  - with `{ atBoot: true, strip: true }` if `vault_list` holds `ADE_ORCHESTRATOR_ANTHROPIC_KEY`;
+  - with `{ atBoot: true, strip: false }` if it doesn't, or it rejects: no settings file or snapshot is stripped, and leftover `.better-terminal-settings.json.*.tmp` files are still deleted.
 
-  Given a vault that already equals the settings value (a crash after the write), the move strips without writing: `vault_get` → `state_write` → `state_scrub_secrets`. -- **T5**.
+  Given a vault that already equals the settings value (a crash after the write), the move strips without writing: `vault_get` → `state_write` → `state_scrub_secrets({ atBoot: true, strip: true })`. -- **T5** in `anthropicKey.test.ts` (the calls and their `strip`); that `strip: false` still deletes the temp files and strips nothing is proven in Rust by `scrub_without_strip_deletes_only_the_temp_files` and `scrub_without_strip_after_boot_leaves_kv_alone` (B1).
 - **B4.** In each of these cases, localStorage and disk still hold the key, `state_write` and `state_scrub_secrets` are not called, `lastMoveError()` gives the reason, and `lastMoveFailure().keyInVault` is false:
   - the first `vault_get` rejects with anything but `"not found"`;
   - `vault_set` rejects;
@@ -406,7 +408,12 @@ The plan does not wait for a second launch before stripping. That would keep the
 
   -- **T6** (one case each; fake timers for the timeout).
 - **B5.** If `state_write` rejects after a verified vault write, localStorage keeps the field, no scrub runs, and `lastMoveFailure().keyInVault` is true. A slow `state_write` is never timed out. -- **T7**.
-- **B6.** An empty field is removed with no vault call. Settings that are missing, not JSON, or not an object, cause no settings write and no vault call (`vault_list` may run: it reads names only, and decides the boot scrub as in B3). A vault entry holding `""` is not the vault's key: it is overwritten with K. A different non-empty value already in the vault is kept, and the field is removed. A boot scrub that rejects or skips files is logged, not fatal. -- **T8**, **T9**.
+- **B6.** An empty field is removed with no vault call, and the boot scrub's `strip` comes from `vault_list` (Owner's decision 9). Tests in `anthropicKey.test.ts` (titles land with the commit after 85dcbcd):
+  - an empty field with no vault key: `state_scrub_secrets({ atBoot: true, strip: false })`;
+  - an empty field with the key listed: `state_scrub_secrets({ atBoot: true, strip: true })`;
+  - a non-string field behaves the same.
+
+  Settings that are missing, not JSON, or not an object, cause no settings write and no vault call (`vault_list` may run: it reads names only, and decides the boot scrub as in B3). A vault entry holding `""` is not the vault's key: it is overwritten with K. A different non-empty value already in the vault is kept, and the field is removed. A boot scrub that rejects or skips files is logged, not fatal. -- **T8**, **T9**.
 - **B7.** Given localStorage settings holding the field and an unknown field `futureThing`:
   - the loaded store's state has no `anthropicApiKey`;
   - a save keeps both fields in the saved JSON;
@@ -426,7 +433,7 @@ The plan does not wait for a second launch before stripping. That would keep the
   - calls `flushNow` first;
   - writes the settings without the field through `state_write`;
   - re-reads localStorage after that await and removes only the field, so a key another window added during the await (`fontSize`) survives;
-  - calls `state_scrub_secrets({ atBoot: false })` and makes no vault call.
+  - calls `state_scrub_secrets({ atBoot: false, strip: true })` and makes no vault call.
 
   `hasSavedCopy()` is then false. If `state_write` rejects, localStorage is untouched, the error is returned, and no scrub runs. If the scrub rejects or reports skipped files, the settings are already clear and `removeSavedCopy()` rejects with a `SavedCopyError` whose `settingsCleared` is true and whose message names the skipped count. -- **T18a**, **T18b** in `anthropicKey.test.ts`.
 - **B12.** `AnthropicKeyField`:
@@ -519,5 +526,6 @@ The plan does not wait for a second launch before stripping. That would keep the
   - Decision 9 (scrub needs `vault_list`; temp files every boot; "no vault call" defined): step 1, step 7, the matrix rows "Already moved" and "Unparseable settings", Boundaries, B3 (was: "still calls `state_scrub_secrets`"), B6 (was: "no vault call" left undefined), Tasks (B) for the temp-files-only clean.
   - Decision 10 and the two races in `.ade/context/vault-app-only-secrets.md`: the new *Known limits (accepted)* section; the matrix row "Old ADE running alongside…".
   - ADR 0013 amended: the Status line notes the 2026-11-01 rulings; Consequences gain the delete (decision 8) and the accepted limit (decision 10).
-  - Not yet at 870aaa2, and in progress in the worktree: decision 8's "a late answer never deletes", and decision 9's temp-file deletion when `vault_list` lacks the name (being built as a `strip` flag on `state_scrub_secrets`). QA checks them in the commit that completes the review fixes.
+  - Decision 8's late-answer guard and the `strip` flag on `state_scrub_secrets` are built at 85dcbcd. The empty-field gate (decision 9 on the empty or non-string field path) is built in the next commit.
   - Review fixes at 870aaa2 now described: `scrub_secrets` returns `ScrubReport { changed, skipped }` (B1, step 7, *Removing the saved copy*, matrix); `lastMoveFailure()` gives `{ reason, keyInVault }` and the notice is worded by the step that failed (Tasks, B4, B5, B14); `SavedCopyNotice` shows for every provider (Tasks, B14); an unreadable `vault_list` says "Couldn't read the vault" (Tasks, B12); a vault entry holding `""` is overwritten (step 3, matrix, B6); a non-string field is stripped like `""` (step 2); no further vault call once the bound has passed (B4); `main.tsx` order pinned by `main.test.tsx` (B16).
+- 2026-11-01, Story B third review (PASS WITH MINORS) at 85dcbcd: text only, no ruling changed. Tasks (B) give `scrub_secrets(state_dir, at_boot, strip) -> ScrubReport` and `state_scrub_secrets({ atBoot, strip })`, with temp files always deleted and settings files stripped only with `strip`. Step 7, B2, B3 and B11 write each call with its `strip`. B1 states the `strip: false` behaviour and adds `scrub_without_strip_deletes_only_the_temp_files` and `scrub_without_strip_after_boot_leaves_kv_alone`, which B3 also cites. Decision 9 is now applied literally to the empty or non-string field path too (step 2, step 7, matrix row "Empty field", B6): after step 5, `strip` comes from `vault_list`.
