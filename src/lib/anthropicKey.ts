@@ -142,6 +142,9 @@ async function toVault(key: string, isAbandoned: () => boolean): Promise<boolean
   if (isAbandoned()) throw new TimedOut();
   const back = await invoke<string>("vault_get", { name: ANTHROPIC_VAULT_NAME });
   if (back !== key) {
+    // Past the bound, a different value may be one the user has just saved:
+    // the move deletes only within its 5 s bound (owner, 2026-11-01).
+    if (isAbandoned()) throw new TimedOut();
     // Best effort: a wrong value left behind would read as "the vault wins" at
     // the next launch, which would then strip the only good copy.
     await invoke("vault_delete", { name: ANTHROPIC_VAULT_NAME }).catch(() => {});
@@ -170,9 +173,13 @@ function withinBound<T>(run: (isAbandoned: () => boolean) => Promise<T>): Promis
   });
 }
 
-async function scrubAtBoot(): Promise<void> {
+/**
+ * Step 7. Leftover temp files are always deleted. The settings copies are
+ * stripped only with `strip`, when the vault is known to hold the key.
+ */
+async function scrubAtBoot(strip: boolean): Promise<void> {
   try {
-    const report = await invoke<ScrubReport>("state_scrub_secrets", { atBoot: true });
+    const report = await invoke<ScrubReport>("state_scrub_secrets", { atBoot: true, strip });
     if (report && report.skipped > 0) {
       console.warn(`scrubbing the old Anthropic key from saved state skipped ${report.skipped} file(s); retried next launch`);
     }
@@ -187,7 +194,7 @@ async function vaultListsKey(): Promise<boolean> {
     const list = await invoke<{ name: string }[]>("vault_list");
     return list.some((s) => s.name === ANTHROPIC_VAULT_NAME);
   } catch (err) {
-    console.warn("couldn't read the vault's names; the boot scrub waits for the next launch", err);
+    console.warn("couldn't read the vault's names; the boot scrub leaves the settings copies for the next launch", err);
     return false;
   }
 }
@@ -203,12 +210,12 @@ export async function moveAnthropicKeyToVault(): Promise<MoveResult> {
   moveFailure = null;
   let keyInVault = false;
   try {
-    // 1. Nothing to move. The scrub runs only if the vault lists the key:
-    // otherwise a restore that silently missed the settings key would let it
-    // strip the only copies left on disk.
+    // 1. Nothing to move. The settings copies are stripped only if the vault
+    // lists the key: otherwise a restore that silently missed the settings key
+    // would let the scrub strip the only copies left on disk.
     const settings = readSettings();
     if (settings === null || !Object.prototype.hasOwnProperty.call(settings, LEGACY_FIELD)) {
-      if (await vaultListsKey()) await scrubAtBoot();
+      await scrubAtBoot(await vaultListsKey());
       return "nothing";
     }
     // 2-4. An empty field (or one that isn't a string) needs no vault call.
@@ -224,7 +231,7 @@ export async function moveAnthropicKeyToVault(): Promise<MoveResult> {
     // 6. Auto-save hasn't started, so this queues no second write.
     localStorage.setItem(SETTINGS_KEY, json);
     // 7.
-    await scrubAtBoot();
+    await scrubAtBoot(true);
     return wrote ? "moved" : "stripped";
   } catch (err) {
     moveFailure = { reason: errText(err), keyInVault };
@@ -257,7 +264,7 @@ export async function removeSavedCopy(): Promise<void> {
   // 4. Snapshots and restore directories; kv/ was written in step 2.
   let report: ScrubReport;
   try {
-    report = await invoke<ScrubReport>("state_scrub_secrets", { atBoot: false });
+    report = await invoke<ScrubReport>("state_scrub_secrets", { atBoot: false, strip: true });
   } catch (err) {
     throw new SavedCopyError(`The key was removed from ADE's settings, but cleaning its saved snapshots failed: ${errText(err)}`, true);
   }

@@ -231,9 +231,9 @@ pub struct ScrubReport {
     pub skipped: usize,
 }
 
-/// Strip `sync::SECRET_FIELDS` from the settings file in `dir` and delete
-/// that file's leftover temp files, writing through `write`.
-fn scrub_dir(dir: &Path, write: &dyn Fn(&Path, &str) -> std::io::Result<()>, report: &mut ScrubReport) {
+/// Delete the settings file's leftover temp files in `dir` and, if `strip`,
+/// strip `sync::SECRET_FIELDS` from the settings file, writing through `write`.
+fn scrub_dir(dir: &Path, strip: bool, write: &dyn Fn(&Path, &str) -> std::io::Result<()>, report: &mut ScrubReport) {
     let temp_prefix = format!(".{}.", SETTINGS_FILE);
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -245,6 +245,9 @@ fn scrub_dir(dir: &Path, write: &dyn Fn(&Path, &str) -> std::io::Result<()>, rep
                 }
             }
         }
+    }
+    if !strip {
+        return;
     }
     let path = dir.join(SETTINGS_FILE);
     match fs::read_to_string(&path) {
@@ -267,12 +270,21 @@ fn scrub_dir(dir: &Path, write: &dyn Fn(&Path, &str) -> std::io::Result<()>, rep
 /// directory (stripped, not deleted: after a crash mid-restore, `.kv-old-*`
 /// may be the only copy of the state). `kv/` is touched only `at_boot`,
 /// before auto-save starts; later, a write may be in flight there.
-pub fn scrub_secrets(state_dir: &Path, at_boot: bool) -> ScrubReport {
-    scrub_secrets_with(state_dir, at_boot, &|p: &Path, body: &str| atomic_write(p, body))
+///
+/// Leftover temp files of the settings file are always deleted: they are
+/// never the only copy. The settings files themselves are stripped only with
+/// `strip`, which the boot passes only when the vault is known to hold the key.
+pub fn scrub_secrets(state_dir: &Path, at_boot: bool, strip: bool) -> ScrubReport {
+    scrub_secrets_with(state_dir, at_boot, strip, &|p: &Path, body: &str| atomic_write(p, body))
 }
 
 /// `scrub_secrets` with the file writer passed in (tests make it fail).
-fn scrub_secrets_with(state_dir: &Path, at_boot: bool, write: &dyn Fn(&Path, &str) -> std::io::Result<()>) -> ScrubReport {
+fn scrub_secrets_with(
+    state_dir: &Path,
+    at_boot: bool,
+    strip: bool,
+    write: &dyn Fn(&Path, &str) -> std::io::Result<()>,
+) -> ScrubReport {
     let mut dirs = Vec::new();
     if at_boot {
         dirs.push(state_dir.join("kv"));
@@ -289,7 +301,7 @@ fn scrub_secrets_with(state_dir: &Path, at_boot: bool, write: &dyn Fn(&Path, &st
     }
     let mut report = ScrubReport::default();
     for d in &dirs {
-        scrub_dir(d, write, &mut report);
+        scrub_dir(d, strip, write, &mut report);
     }
     report
 }
@@ -337,10 +349,11 @@ pub fn state_restore_snapshot(app: tauri::AppHandle, name: String) -> Result<(),
 
 /// Strip the old API key field from the saved settings copies (see
 /// `scrub_secrets`). The webview passes `atBoot: true` only before auto-save
-/// has started. Returns `{ changed, skipped }`.
+/// has started, and `strip: false` to delete only leftover temp files.
+/// Returns `{ changed, skipped }`.
 #[tauri::command(async)]
-pub fn state_scrub_secrets(app: tauri::AppHandle, at_boot: bool) -> Result<ScrubReport, String> {
-    Ok(scrub_secrets(&state_dir(&app)?, at_boot))
+pub fn state_scrub_secrets(app: tauri::AppHandle, at_boot: bool, strip: bool) -> Result<ScrubReport, String> {
+    Ok(scrub_secrets(&state_dir(&app)?, at_boot, strip))
 }
 
 #[tauri::command]
@@ -515,7 +528,7 @@ mod tests {
         let clean_before = fs::metadata(dir.join("snapshots/1003").join(SETTINGS)).unwrap().modified().unwrap();
 
         // 1 kv + 3 snapshots + 2 restore dirs stripped, 2 temp files deleted.
-        assert_eq!(scrub_secrets(&dir, true), ScrubReport { changed: 8, skipped: 0 });
+        assert_eq!(scrub_secrets(&dir, true, true), ScrubReport { changed: 8, skipped: 0 });
 
         for f in files_under(&dir) {
             let body = fs::read_to_string(&f).unwrap();
@@ -537,7 +550,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&clean).unwrap(), CLEAN, "the clean snapshot was rewritten");
         assert_eq!(fs::metadata(&clean).unwrap().modified().unwrap(), clean_before);
 
-        assert_eq!(scrub_secrets(&dir, true), ScrubReport::default());
+        assert_eq!(scrub_secrets(&dir, true, true), ScrubReport::default());
     }
 
     #[test]
@@ -545,7 +558,7 @@ mod tests {
         let dir = keyed_state("scrub-live");
 
         // 3 snapshots + 2 restore dirs stripped, 1 snapshot temp file deleted.
-        assert_eq!(scrub_secrets(&dir, false), ScrubReport { changed: 6, skipped: 0 });
+        assert_eq!(scrub_secrets(&dir, false, true), ScrubReport { changed: 6, skipped: 0 });
 
         assert_eq!(fs::read_to_string(dir.join("kv").join(SETTINGS)).unwrap(), KEYED);
         assert_eq!(fs::read_to_string(dir.join("kv").join(SETTINGS_TMP)).unwrap(), KEYED);
@@ -554,7 +567,33 @@ mod tests {
             assert!(!body.contains("anthropicApiKey") && !body.contains("sk-ant-K"), "{} still holds the key", f.display());
         }
         assert!(!dir.join("snapshots/1001").join(SETTINGS_TMP).exists());
-        assert_eq!(scrub_secrets(&dir, false), ScrubReport::default());
+        assert_eq!(scrub_secrets(&dir, false, true), ScrubReport::default());
+    }
+
+    #[test]
+    fn scrub_without_strip_deletes_only_the_temp_files() {
+        let dir = keyed_state("scrub-temps-only");
+
+        // No key in the vault: leftover temp files go (kv/ and snapshot 1001),
+        // every settings file stays as it is.
+        assert_eq!(scrub_secrets(&dir, true, false), ScrubReport { changed: 2, skipped: 0 });
+        assert!(!dir.join("kv").join(SETTINGS_TMP).exists());
+        assert!(!dir.join("snapshots/1001").join(SETTINGS_TMP).exists());
+        assert!(dir.join("kv").join(OTHER_TMP).exists());
+        for rel in ["kv", "snapshots/1000", "snapshots/1001", "snapshots/1002", ".kv-old-900", ".kv-restore-901"] {
+            assert_eq!(fs::read_to_string(dir.join(rel).join(SETTINGS)).unwrap(), KEYED, "{rel} was stripped");
+        }
+
+        // With the key in the vault, the settings copies are stripped too.
+        assert_eq!(scrub_secrets(&dir, true, true), ScrubReport { changed: 6, skipped: 0 });
+    }
+
+    #[test]
+    fn scrub_without_strip_after_boot_leaves_kv_alone() {
+        let dir = keyed_state("scrub-temps-live");
+        assert_eq!(scrub_secrets(&dir, false, false), ScrubReport { changed: 1, skipped: 0 });
+        assert!(dir.join("kv").join(SETTINGS_TMP).exists());
+        assert!(!dir.join("snapshots/1001").join(SETTINGS_TMP).exists());
     }
 
     #[test]
@@ -573,13 +612,13 @@ mod tests {
             if p.starts_with(&refuse) { Err(std::io::Error::other("read-only")) } else { atomic_write(p, body) }
         };
 
-        let report = scrub_secrets_with(&dir, true, &write);
+        let report = scrub_secrets_with(&dir, true, true, &write);
         assert_eq!(report.skipped, 3, "{report:?}");
         assert_eq!(report.changed, 7, "{report:?}");
         assert_eq!(fs::read_to_string(refuse.join(SETTINGS)).unwrap(), KEYED, "a failed rewrite must leave the file as it was");
 
         // The next run retries only what is left.
-        assert_eq!(scrub_secrets(&dir, true), ScrubReport { changed: 1, skipped: 2 });
+        assert_eq!(scrub_secrets(&dir, true, true), ScrubReport { changed: 1, skipped: 2 });
     }
 
     #[test]
