@@ -46,3 +46,9 @@
 - source_plan: `_bmad-output/plan-orgo-agent-computers.md`
   summary: The presets and Agent-status hook writers still write `<worktree>/.claude/settings.local.json`; from a worktree, Claude Code reads the main checkout's (`claude_settings::main_checkout_root`).
   evidence: Code review of a895c05 (CR-m7). Claude Code 2.1.314 also loads the start folder's own `settings.local.json`, so a session started at the worktree root still sees them, but one started in a subfolder does not. Point both writers at `main_checkout_root`.
+- source_plan: `_bmad-output/plan-orgo-agent-computers.md`
+  summary: From a terminal in the home folder, installing any MCP server but Orgo writes `~/.mcp.json`, and the token-saver deny rules merge into `~/.claude/settings.json`, Claude Code's user settings.
+  evidence: Pre-existing. `project_root_of` (`src-tauri/src/lib.rs:186-191`) returns the folder itself when no ancestor has `.git`, and new terminals usually start in `$HOME`. Orgo's install refuses the home folder since Amendment 2 (R2-1); `mcp_install` for other servers and `usage::merge_deny` don't. The same `home_dir()` check would close both.
+- source_plan: `_bmad-output/plan-orgo-agent-computers.md`
+  summary: A bash rc file command that clears `ICANON` and keeps running (for example `stty -icanon; sleep 1`) releases ADE's wait for the line editor, so a long launch line can still be cut.
+  evidence: Seen on Linux 2026-11-01 with the reviewer's race rc. bash enables job control only after its startup files, so rc commands share the shell's process group and the foreground check can't tell them apart. zsh runs them in their own groups and is not affected. Also requiring that the shell has no child process (Linux `/proc/<pid>/task/<pid>/children`, macOS `proc_listchildpids`) would close it.
