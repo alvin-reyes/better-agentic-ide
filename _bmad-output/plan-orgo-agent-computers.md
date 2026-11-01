@@ -931,6 +931,71 @@ Every Story 1 AC that Amendments 1 to 3 added or changed, for the developer and 
 - **Manual mode.** "Yes, and don't ask again" on a create, then another create: it still prompts.
 - **Clean-up.** Delete every computer, check the dashboard is empty, and revoke the sign-in.
 
+**QA record (2026-11-01, HEAD `a1ced96` on `plan/orgo-agent-computers`, on top of `d76ef8c`).**
+
+**Verdict: automated verification green; Story 1 is NOT Done. Done is pending the owner's gating macOS check (ADR 0009).** No Done line was written to the journal.
+
+*Verification command, run by QA in sequence on Linux (root), real output:*
+
+| Command | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0, no output |
+| `npm test` | exit 0. `Test Files 150 passed (150)`, `Tests 1675 passed (1675)`. `BoardPanel.test.tsx` (46 tests) passed on the first run, so no rerun was needed |
+| `cd src-tauri && cargo test` | exit 0. lib: `480 passed; 0 failed; 1 ignored` (the ignore is `usage.rs:1833`, not in this slice). Other targets: 12, 2 passed. One warning, `platform.rs:98 which_command` never used; `platform.rs` is not in the diff |
+| `cd relay && cargo test` | exit 0. 11 + 2 + 86 + 14 + 32 + 11 + 68 + 33 + 9 = 266 passed, 0 failed |
+| `cd mobile && npx tsc --noEmit && npx jest` | exit 0. `Tests: 6 passed, 6 total` |
+
+Counts equal the developer's last run (1675 / 480 + 1 ignored / 266 / 6).
+
+*Extra, as the review asked:* the built `src-tauri` lib test binary was run as `nobody` (uid 65534), on its own, for `claude_settings::`, `mcp::` and `orgo_rules::`: `19 passed; 0 failed`. That includes `main_checkout_root_checks_each_owner_alone`, the injected-owner test, which does not need root. The three ownership-guard mutants were not re-run by QA (that would mean editing code); QA relies on the code review's record of them.
+
+*Every AC maps to a test that ran* (each name found in the test output, not just in the source):
+
+| AC | Test (ran, passed) |
+|---|---|
+| 1 | `IntegrationsPanel.test.tsx` › the Orgo card is a sign-in server with its caution |
+| 2 (a–d) | `IntegrationsPanel.test.tsx` › installing Orgo writes the hosted server and says where the rules went (the four notices, incl. "which Claude Code reads in this worktree"); also › a repeat Orgo install that added no rules gets the plain sign-in notice |
+| 3, 4 | `mcpCatalog.test.ts` › sign-in servers carry no secret and use https; searches name, category and description |
+| 5 | `mcp.rs` › `orgo_install_writes_rules_to_shared_and_root_local_settings`, `orgo_install_from_a_worktree_writes_local_rules_to_the_main_checkout`; `claude_settings.rs` › `main_checkout_root_follows_only_real_worktrees`, `main_checkout_root_matches_real_git_layouts` (real git; fails if git is missing), `main_checkout_root_checks_each_owner_alone` |
+| 6 | `orgo_rules.rs` › `merge_keeps_every_user_value_and_is_idempotent`; `mcp.rs` › `orgo_install_with_every_rule_present_rewrites_nothing` and `…_in_a_worktree` |
+| 7 | `mcp.rs` › `orgo_install_refuses_and_touches_nothing_on_bad_files` |
+| 8 | `mcp.rs` › `only_orgo_adds_rules_and_remove_keeps_them` |
+| 9, 21 | `orgo_rules.rs` › `ask_globs_catch_every_lifecycle_write_and_no_read` (31 entries asserted), `every_computer_write_asks_or_is_skipped_on_purpose`, and `glob_matcher_follows_claude_codes_full_match` |
+| 10 | `usage.rs` › `deny_rules_merge_into_settings`, `deny_refuses_other_rules_and_bad_json` |
+| 11 | `agentCommand.test.ts` › a launch with no guard carries only the ask rules; a launch with a guard carries the rules, the guard and disableAllHooks:false; cannot be called without the rules (`@ts-expect-error`, enforced by `npx tsc --noEmit`); `claude_settings.rs` › `launch_rules_are_the_ask_list_with_no_guard_yet` |
+| 12 | `components/__tests__/agentLaunch.test.ts` › Orgo rules do not depend on the folder an agent starts in |
+| 13, 14 | `scripts/mcpCatalogDocs.test.ts` › the guide's table lists exactly the catalog; the Orgo section matches the rules ADE writes; the README count matches the catalog |
+| 15, 17, 20 | `OrchestratorTab.test.tsx` › orchestrator dispatches carry Orgo's ask rules; no rules, no dispatch; dispatch types the task once the shell's line editor is up; a tab closed before typing fails the task |
+| 16, 17 | `lib/__tests__/agentLaunch.test.ts` › board dispatch carries Orgo's ask rules; no rules, no launch; an empty rule list is no rules; a failed load is retried, not cached |
+| 18 | `terminalCommands.test.ts` › a launch line waits for two ready answers in a row; types at once when readiness can't be known; types anyway after 10 s; a tab closed while waiting gets nothing (the 3,000-byte whole-line case is in the first of them) |
+| 19 | `pty.rs` › `line_editor_ready_follows_canonical_mode_and_the_foreground`, `a_long_line_typed_once_the_line_editor_is_up_arrives_whole` (neither is `#[ignore]` or Linux-gated). The Windows twin `line_editor_ready_is_unknown_off_unix` is `cfg(not(unix))` |
+| 22 | `mcp.rs` › `orgo_install_refuses_the_home_folder` (plus two worktree-of-home tests) |
+| 23 | `AgentPicker.test.tsx` › This terminal waits for the shell before typing. The review minor (a cancelled launch says "The terminal changed before the agent was typed; nothing was started.") is asserted in the same file |
+| 24 | `pty.rs` › `writes_arrive_in_order`, `a_blocked_terminal_holds_up_no_other`, `a_write_to_a_blocked_terminal_returns_at_once`, `write_pty_stays_a_sync_command` |
+
+*Not exercised on this machine (cannot be, so the claim stops here):*
+- the `cfg(not(unix))` Windows twins (`main_checkout_root_is_the_root_off_unix`, `orgo_install_from_a_worktree_keeps_local_rules_in_the_worktree`, `line_editor_ready_is_unknown_off_unix`): CI's `backend-windows` runs them;
+- AC19's two PTY tests on a macOS master: CI's `backend-macos` job runs them. That is evidence for the gating check, not a substitute (see above).
+
+*Slice (`git diff 2245693..HEAD` less the plan-only commits):* every non-plan file is in "Slice (1)" or is a knowledge/context/deferred-work file. No unrelated edits. **No Story 1b code:** no `--disallowedTools`, `continuousDeny` is only the empty array in the launch shape (`launch_rules()` returns `continuous_deny: Vec::new()`), and `CONTINUOUS_DENY_MCP` does not exist. `*run_template*` appears only as an ask glob. `Guard` is `None` (the CLI library's Story 2 is not built here). Nothing in `mobile/` or `relay/` changed.
+
+*Contract (`.ade/context/orgo-permission-rules.md`) against the code:* matches. `MCP_ASK` has 31 entries; `launch_rules()` takes no arguments and returns camelCase `{ ask, continuousDeny: [], guard: null }`, registered in `lib.rs`; `launchRules.ts` refuses an empty `ask`, a non-list `continuousDeny`, and a guard missing a string `interactive` or `headless`, and caches only a success; `main_checkout_root_for` follows the five-step walk and the home, ownership, unix-only and backslash guards; `pty_line_editor_ready` is registered, `write_pty` stays a sync `#[tauri::command]` that queues on the per-PTY channel. The contract names `.ade/context/launch-settings.md`, which does not exist yet; the contract itself says the CLI library's Story 2 creates it and AC11 is the reference until then. Not a defect.
+
+*Manual checks, all:* **not run: needs the running app on <platform>; pending the owner.**
+- **macOS long launch lines (GATING, ADR 0009):** not run: needs the running app on macOS; pending the owner.
+- Sign-in (U9): not run: needs the running app and a real Orgo account; pending the owner.
+- Subfolder, ADE launch: not run: needs the running app on macOS or Linux; pending the owner.
+- Subfolder, user-started: not run: needs the running app on macOS or Linux; pending the owner.
+- U13 (confirm): not run: needs the running app on macOS or Linux; pending the owner.
+- Worktree: not run: needs the running app on macOS or Linux; pending the owner.
+- Orchestrator (`-p` reports the Orgo call as refused): not run: needs the running app and a real Orgo account; pending the owner.
+- Manual mode ("Yes, and don't ask again" still prompts): not run: needs the running app and a real Orgo account; pending the owner.
+- Clean-up: not run: needs the running app and a real Orgo account; pending the owner.
+
+*Known and not gating (code review's note):* "This terminal" on a pane running a non-Claude program waits 10 s, then types into it. Unchanged from before.
+
+**What stands between this and Done:** only the owner running the macOS long-launch-line check above (set-up, `ps` pass condition, all five cases) and recording a pass here. A failure is raised and fixed before Done.
+
 ## Slice (1)
 
 - `src/data/mcpCatalog.ts` and its test.
