@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor, cleanup } from "@testing-library/react";
 import AgentPicker from "../AgentPicker";
-import { useTabStore } from "../../stores/tabStore";
+import { useTabStore, findAllPanes } from "../../stores/tabStore";
+import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { AGENT_CATEGORIES } from "../../data/curatedAgents";
 import { ROLES_FILTER } from "../../data/pickerItems";
@@ -19,6 +20,12 @@ import { AGENT_COLOR_HEX } from "../../data/agentColors";
 const tauri = vi.hoisted(() => ({
   ptyWrites: [] as { id: number; text: string }[],
   fileWrites: [] as { path: string; content: string }[],
+  /** What pty_line_editor_ready answers next; null (can't know) once empty. */
+  ready: [] as (boolean | null)[],
+  neverReady: false,
+  /** Whether a pane still holds this PTY; Rust answers null for a PTY that is gone. */
+  ptyOpen: (_id: number): boolean => true,
+  events: [] as string[],
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -26,8 +33,13 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "check_command_exists":
         throw new Error("not installed");
-      case "orgo_launch_rules":
-        return { ask: ["mcp__*orgo*__*create*"] };
+      case "launch_rules":
+        return { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: null };
+      case "pty_line_editor_ready": {
+        const answer = !tauri.ptyOpen(Number(args.id)) ? null : tauri.neverReady ? false : tauri.ready.length ? tauri.ready.shift()! : null;
+        tauri.events.push(`ready:${args.id}:${answer}`);
+        return answer;
+      }
       case "create_directory":
         // Mirrors the Rust command, which expands ~ and returns the real path.
         return String(args.path).replace("~", "/Users/testuser");
@@ -35,6 +47,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         tauri.fileWrites.push({ path: String(args.path), content: String(args.content) });
         return null;
       case "write_pty":
+        tauri.events.push(`write:${args.id}`);
         tauri.ptyWrites.push({
           id: Number(args.id),
           text: new TextDecoder().decode(new Uint8Array(args.data as number[])),
@@ -46,7 +59,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
-/** Orgo's ask rules, which every Claude Code launch carries (see orgoRules.ts). */
+/** Orgo's ask rules, which every Claude Code launch carries (see launchRules.ts). */
 const SETTINGS = `--settings '{"permissions":{"ask":["mcp__*orgo*__*create*"]}}'`;
 
 // jsdom has no layout engine, so it doesn't implement scrollIntoView.
@@ -106,6 +119,10 @@ async function clickRow(name: string) {
 beforeEach(() => {
   tauri.ptyWrites.length = 0;
   tauri.fileWrites.length = 0;
+  tauri.ready = [];
+  tauri.neverReady = false;
+  tauri.events.length = 0;
+  tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => t.root && findAllPanes(t.root).some((p) => p.ptyId === id));
   useSettingsStore.getState().setDefaultProvider("claude");
 });
 
@@ -154,6 +171,47 @@ describe("AgentPicker", () => {
     );
     expect(tauri.ptyWrites[0].id).toBe(11);
   });
+
+  it("This terminal waits for the shell before typing", async () => {
+    const start = vi.spyOn(useAgentTrackerStore.getState(), "startSession");
+    start.mockClear();
+    // Its own tab, so closing it below leaves another.
+    act(() => { useTabStore.getState().addTab("Fresh"); });
+    attachPty(7);
+    tauri.ready = [false, true, true];
+    await renderPicker();
+    await clickRow("Auth Architect");
+    for (let i = 0; i < 100 && tauri.ptyWrites.length === 0; i++) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    }
+    expect(tauri.events).toEqual(["ready:7:false", "ready:7:true", "ready:7:true", "write:7"]);
+    expect(tauri.ptyWrites).toHaveLength(1);
+    expect(tauri.ptyWrites[0]).toEqual({ id: 7, text: `claude ${SETTINGS} --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md'\r` });
+    expect(start).toHaveBeenCalledTimes(1);
+    cleanup();
+
+    // The pane is closed while the picker waits: nothing is typed, and no session starts.
+    start.mockClear();
+    tauri.ptyWrites.length = 0;
+    tauri.events.length = 0;
+    tauri.neverReady = true;
+    let tabId = "";
+    act(() => { tabId = useTabStore.getState().addTab("Closing"); });
+    attachPty(8);
+    await renderPicker();
+    await clickRow("Auth Architect");
+    for (let i = 0; i < 100 && !tauri.events.includes("ready:8:false"); i++) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    }
+    expect(tauri.events).toContain("ready:8:false");
+    act(() => { useTabStore.getState().closeTab(tabId); });
+    for (let i = 0; i < 100 && !tauri.events.includes("ready:8:null"); i++) {
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    }
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+    expect(tauri.ptyWrites).toEqual([]);
+    expect(start).not.toHaveBeenCalled();
+  }, 20_000);
 
   it("writes the role file to the same absolute path the command reads", async () => {
     await renderPicker();

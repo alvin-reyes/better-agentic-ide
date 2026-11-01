@@ -1,5 +1,5 @@
 import { modelTagFor } from "./agentComposition";
-import type { LaunchRules } from "./orgoRules";
+import type { LaunchRules } from "./launchRules";
 
 export type Provider = "claude" | "codex" | "deepseek" | "ollama";
 
@@ -10,6 +10,11 @@ export interface LaunchOptions {
    */
   rules: LaunchRules;
   continuous?: boolean;
+  /**
+   * A `-p` session, which can't show a prompt: only the Orchestrator sets it.
+   * It picks the guard's headless command; with no guard it changes nothing.
+   */
+  headless?: boolean;
   ollamaModel?: string;
   /** Identifies the derived Ollama model, so a role keeps the same one. */
   roleId?: string;
@@ -52,6 +57,23 @@ export const UNTYPEABLE = /[^\x20-\x7e]/;
 const UNTYPEABLE_RUNS = /[^\x20-\x7e]+/g;
 
 /**
+ * The one `--settings` value of a launch. `permissions` always. Only with a
+ * guard, `disableAllHooks: false` and the guard's hook together: a settings
+ * file's `disableAllHooks: true` would otherwise turn the guard off, and
+ * without a guard the user's hook settings stand untouched.
+ */
+function launchSettings(opts: LaunchOptions): Record<string, unknown> {
+  const { ask, guard } = opts.rules;
+  if (!guard) return { permissions: { ask } };
+  const command = opts.headless ? guard.headless : guard.interactive;
+  return {
+    permissions: { ask },
+    disableAllHooks: false,
+    hooks: { PreToolUse: [{ matcher: "Bash|Monitor", hooks: [{ type: "command", command, timeout: 5, onFailure: "block" }] }] },
+  };
+}
+
+/**
  * The claude invocation both the claude and deepseek providers launch.
  *
  * `--settings` adds the ask rules to the session's own permission lists, on
@@ -61,7 +83,7 @@ const UNTYPEABLE_RUNS = /[^\x20-\x7e]+/g;
  */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
-  const settings = ` --settings ${shellQuote(JSON.stringify({ permissions: { ask: opts.rules.ask } }))}`;
+  const settings = ` --settings ${shellQuote(JSON.stringify(launchSettings(opts)))}`;
   const task = opts.task ? ` ${shellQuote(opts.task.replace(UNTYPEABLE_RUNS, " "))}` : "";
   return `claude${flags}${settings} --append-system-prompt-file ${quotedPath}${task}`;
 }
@@ -164,7 +186,7 @@ export function buildLaunchCommand(
  * back and never launch it, so they need no real rules. Not exported, so no
  * caller that launches can borrow it.
  */
-const PROBE_RULES: LaunchRules = { ask: [] };
+const PROBE_RULES: LaunchRules = { ask: [], continuousDeny: [], guard: null };
 
 /**
  * Whether a provider has a verified role-delivery mechanism.

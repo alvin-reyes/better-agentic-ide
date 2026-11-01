@@ -434,6 +434,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pty::create_pty,
             pty::write_pty,
+            pty::pty_line_editor_ready,
             pty::resize_pty,
             pty::reattach_pty,
             pty::kill_pty,
@@ -488,7 +489,7 @@ pub fn run() {
             mcp::mcp_list,
             mcp::mcp_install,
             mcp::mcp_remove,
-            orgo_rules::orgo_launch_rules,
+            claude_settings::launch_rules,
             antislop::slop_diff,
             antislop::ade_plugin_marketplace,
             projectsetup::project_setup_status,

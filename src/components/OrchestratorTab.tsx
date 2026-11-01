@@ -10,13 +10,13 @@ import { composeRoleMarkdown } from "../lib/agentComposition";
 import { specFromCurated, rolePathFor, ensureRoleDir } from "../lib/agentSpec";
 import { buildLaunchCommand, shellQuote } from "../lib/agentCommand";
 import { methodologyOf } from "../lib/projectSetup";
-import { loadLaunchRules, RULES_UNAVAILABLE, type LaunchRules } from "../lib/orgoRules";
+import { loadLaunchRules, RULES_UNAVAILABLE, type LaunchRules } from "../lib/launchRules";
 import { sendOrchestratorMessage, type ChatTurn } from "../lib/anthropic";
 import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import { sanitizeHtml } from "../lib/sanitizeHtml";
 import mermaid from "mermaid";
-import { writePty } from "../lib/terminalCommands";
+import { typeWhenReady } from "../lib/terminalCommands";
 
 function buildSpec(session: OrchestratorSession, tasks: OrchestratorTask[]): string {
   const lines: string[] = [];
@@ -297,7 +297,7 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     } catch (err) {
       return abortDispatch(`${RULES_UNAVAILABLE}: ${err}`);
     }
-    const launch = buildLaunchCommand(spec.provider, rolePath, { rules });
+    const launch = buildLaunchCommand(spec.provider, rolePath, { rules, headless: true });
     if (launch.kind === "unsupported") {
       // Currently unreachable: dispatchTask always resolves spec.provider to
       // "claude" (see specFromCurated above). Kept because buildLaunchCommand
@@ -325,7 +325,15 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const specRef = projectDir ? "Read SPEC.md for the full project specification and context. " : "";
     const taskPrompt = `${specRef}Your task: ${task.description}`;
     const cmd = `${launch.command} -p ${shellQuote(taskPrompt)}`;
-    await writePty(ptyId, cmd + "\r").catch(() => {});
+    // Once the shell's line editor is up: a line typed before then is cut at
+    // 1024 bytes on macOS, and the cut line still runs. A failed write stays
+    // silent, as it always was.
+    const tabExists = (id: string) => useTabStore.getState().tabs.some((t) => t.id === id);
+    const typed = await typeWhenReady(ptyId, cmd, () => tabExists(agentTabId)).catch(() => true);
+    if (!typed) {
+      updateTaskStatus(sessionId, task.id, "failed");
+      return abortDispatch(`The tab for "${task.title}" was closed before its task was typed. Nothing was dispatched.`);
+    }
 
     if (agentPane) {
       useAgentTrackerStore.getState().startSession(

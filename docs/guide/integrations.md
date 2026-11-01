@@ -30,30 +30,33 @@ Start Claude Code in a new terminal in that project to load what you installed. 
 
 [Orgo](https://docs.orgo.ai/guides/mcp) rents cloud computers made for agents: each has a desktop, a browser and a shell that the agent can start, see, drive and run commands on. Use one to test the UI an agent just built in a clean desktop, or to run code away from your own files and keys.
 
-**Signing in.** Install Orgo from the library, start Claude Code in the project and run `/mcp` to sign in with your Orgo account. Choose a workspace you keep for ADE, so what agents make stays apart from your other computers. ADE stores no Orgo key: Claude Code holds the sign-in.
+**Signing in.** Install Orgo from the library, start Claude Code in the project and run `/mcp` to sign in with your Orgo account. Install it from a project folder: ADE refuses to install Orgo when the project root is your home folder, because the home folder's `.claude/settings.json` is Claude Code's own user settings, which ADE never edits. Open a project folder and install it there. Choose a workspace you keep for ADE, so what agents make stays apart from your other computers. ADE stores no Orgo key: Claude Code holds the sign-in.
 
 **What the sign-in allows.** Claude Code can create, manage and delete computers, screens and files in that one workspace, from Orgo's reviewed tool list. It is never sent a computer's password, and it can't buy capacity or launch hourly computers on a paid plan. To revoke it, use Orgo's *Settings → Security → Connected AI apps*, `/mcp` → *Clear authentication*, or `claude mcp logout orgo`.
 
 ### It always asks
 
-Claude Code asks before any Orgo tool that creates, copies, resizes, re-times, starts, resumes, stops or deletes a computer, or turns on SSH. That holds in Manual and in Continuous mode: Claude Code never skips an ask rule. The rules match by verb, in any server named like Orgo, so they also cover tools Orgo hasn't published yet:
+Claude Code asks before any Orgo tool that creates, copies, resizes, re-times, starts, resumes, suspends, stops, moves or deletes a computer, runs or builds a template, buys capacity, or turns SSH on or off. That holds in Manual and in Continuous mode: Claude Code never skips an ask rule. The rules match by verb, in any server named like Orgo, so they also cover tools Orgo hasn't published yet:
 
-`mcp__*orgo*__*create*`, `mcp__*orgo*__*clone_computer*`, `mcp__*orgo*__*fork*`, `mcp__*orgo*__*resize*computer*`, `mcp__*orgo*__*update*`, `mcp__*orgo*__*start*`, `mcp__*orgo*__*resume*`, `mcp__*orgo*__*stop*`, `mcp__*orgo*__*delete*`, `mcp__*orgo*__*enable*ssh*`, `mcp__*orgo*__*wake*`, `mcp__*orgo*__*restore*`, `mcp__*orgo*__*launch*`, `mcp__*orgo*__*boot*`, `mcp__*orgo*__*extend*`, `mcp__*orgo*__*set*end*`, `mcp__*orgo*__*billing*`, `mcp__*orgo*__*public*url*`, `mcp__*orgo*__*proxy*`, `mcp__*orgo*__*secret*`, `mcp__*orgo*__*ssh*key*`, `mcp__*orgo*__*freeze*`, `mcp__*orgo*__*heal_*`.
+`mcp__*orgo*__*create*`, `mcp__*orgo*__*clone_computer*`, `mcp__*orgo*__*fork*`, `mcp__*orgo*__*resize*computer*`, `mcp__*orgo*__*update*`, `mcp__*orgo*__*start*`, `mcp__*orgo*__*resume*`, `mcp__*orgo*__*stop*`, `mcp__*orgo*__*delete*`, `mcp__*orgo*__*enable*ssh*`, `mcp__*orgo*__*wake*`, `mcp__*orgo*__*restore*`, `mcp__*orgo*__*launch*`, `mcp__*orgo*__*boot*`, `mcp__*orgo*__*extend*`, `mcp__*orgo*__*set*end*`, `mcp__*orgo*__*billing*`, `mcp__*orgo*__*public*url*`, `mcp__*orgo*__*proxy*`, `mcp__*orgo*__*secret*`, `mcp__*orgo*__*ssh*key*`, `mcp__*orgo*__*freeze*`, `mcp__*orgo*__*heal_*`, `mcp__*orgo*__*suspend*`, `mcp__*orgo*__*destroy*`, `mcp__*orgo*__*terminate*`, `mcp__*orgo*__*move_computer*`, `mcp__*orgo*__*run_template*`, `mcp__*orgo*__*build_template*`, `mcp__*orgo*__*add*capacity*`, `mcp__*orgo*__*disable*ssh*`.
 
 A few reads ask too, such as billing details, which costs one extra prompt. Projects without Orgo see no warning about them.
 
 The rules go to three places:
 
-- **Every agent ADE starts**, from the agent picker, the board and the Orchestrator, carries them on its command line, in any folder of the project. The session can't edit its own command line. The Orchestrator's agents can't show a prompt, so an Orgo call that would ask is refused there instead.
-- **`.claude/settings.local.json` at the repository root**, for Claude Code sessions you start yourself, in the root or any subfolder. In a git worktree, they go to the main checkout's `.claude/settings.local.json`, which is the file Claude Code reads there.
+- **Every agent ADE starts**, from the agent picker, the board and the Orchestrator, carries them on its command line, in any folder of the project. The session can't edit its own command line. The Orchestrator's agents can't show a prompt, so an Orgo call that would ask is refused there instead. Agents ADE starts carry these ask rules on their command line and nothing else, so your hooks run in them as your settings say.
+- **`.claude/settings.local.json` at the repository root**, for Claude Code sessions you start yourself, in the root or any subfolder. In a git worktree, they go to the main checkout's `.claude/settings.local.json`, which is the file Claude Code reads there, and the install's notice names that file. In a `--separate-git-dir` repository, worktrees read the file in the folder holding the separate `.git`, not the checkout's.
 - **`.claude/settings.json`**, which you can commit, for teammates who start at the root.
 
-*Remove* takes Orgo out of `.mcp.json` and leaves the rules. ADE never deletes a rule. If one of the three files isn't valid JSON, or its `permissions.ask` isn't a list, the install is refused and nothing is written; fix the file and install again. The first install may reorder a committed `.claude/settings.json`: its keys are sorted and re-indented, and every setting is kept.
+*Remove* takes Orgo out of `.mcp.json` and leaves the rules. ADE never deletes a rule. If `.mcp.json` or either settings file can't be read, isn't valid JSON, or has a `permissions.ask` that isn't a list, the install is refused, the file is named, and nothing is written. If a write fails part-way, for example on a full disk, the rules may already be in your settings without the Orgo server, never the other way round. Fix it and install again. The first install may reorder a committed `.claude/settings.json`: its keys are sorted and re-indented, and every setting is kept.
+
+ADE waits up to 10 seconds for a new terminal's prompt before it types an agent's command. A shell with no line editor, such as `sh`, waits the full 10 seconds.
 
 What the rules don't cover:
 
 - **Sessions you start yourself in Continuous or bypass mode.** The agent can edit both settings files and remove the rules. Agents ADE starts keep the command-line rules.
 - **Other repositories**, and sessions outside git, at a home-directory root or on Windows, where Claude Code keeps `settings.local.json` in the folder you started in, so a session you start in a subfolder has no file rules.
+- **Sessions you start in a subfolder of some worktrees:** a worktree of a bare repository or of a separate gitdir not named `.git`, and a worktree of a submodule. There, the rules reach sessions started at the worktree's root only.
 - **Codex and other agents that aren't Claude Code.**
 - **Orgo under a server name without a lowercase "orgo"** in it. Matching is case-sensitive, so a connector named `Orgo` is missed.
 - **Organisations that set `allowManagedPermissionRulesOnly`.** Claude Code then ignores every rule outside managed settings, these included.

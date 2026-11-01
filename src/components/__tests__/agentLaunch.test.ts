@@ -6,20 +6,24 @@ import AgentPicker from "../AgentPicker";
 import { useTabStore } from "../../stores/tabStore";
 import { usePaneCwd } from "../../stores/paneMetaStore";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { __resetLaunchRulesForTests } from "../../lib/orgoRules";
+import { __resetLaunchRulesForTests } from "../../lib/launchRules";
 
 const tauri = vi.hoisted(() => ({
   ptyWrites: [] as string[],
-  /** The arguments of every orgo_launch_rules call. */
+  /** The arguments of every launch_rules call. */
   ruleCalls: [] as unknown[],
+  guard: null as unknown,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args?: Record<string, unknown>) => {
     switch (command) {
-      case "orgo_launch_rules":
+      case "launch_rules":
         tauri.ruleCalls.push(args);
-        return { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*stop*"] };
+        return { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*stop*"], continuousDeny: [], guard: tauri.guard };
+      case "pty_line_editor_ready":
+        // Can't know: typed at once.
+        return null;
       case "create_directory":
         return String(args?.path).replace("~", "/Users/testuser");
       case "write_text_file":
@@ -125,5 +129,17 @@ describe("launching from the agent picker", () => {
     expect(tauri.ruleCalls).toEqual([undefined, undefined]);
     expect(settingsOf(inSub)).toEqual([` --settings '{"permissions":{"ask":["mcp__*orgo*__*create*","mcp__*orgo*__*stop*"]}}' `]);
     expect(settingsOf(atRoot)).toEqual(settingsOf(inSub));
+  });
+
+  it("the picker's launches are not headless", async () => {
+    useSettingsStore.getState().setDefaultProvider("claude");
+    tauri.guard = { interactive: "GUARD-INTERACTIVE", headless: "GUARD-HEADLESS" };
+    try {
+      const typed = await launchIn("/repo", 43);
+      expect(typed).toContain('"command":"GUARD-INTERACTIVE"');
+      expect(typed).not.toContain("GUARD-HEADLESS");
+    } finally {
+      tauri.guard = null;
+    }
   });
 });

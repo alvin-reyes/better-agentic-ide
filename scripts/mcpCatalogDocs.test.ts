@@ -40,9 +40,10 @@ describe("the MCP guide", () => {
     const next = guide.indexOf("\n## ", start + 1);
     const section = guide.slice(start, next === -1 ? undefined : next);
     const ask = mcpAsk();
-    expect(ask).toHaveLength(23);
+    expect(ask).toHaveLength(31);
     for (const glob of ask) expect(section, glob).toContain(`\`${glob}\``);
-    for (const word of ["subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly", "reorder"]) {
+    for (const word of ["subfolder", "worktree", "Continuous", "/mcp", "until you delete", "auto top-up", "allowManagedPermissionRulesOnly", "reorder",
+      "part-way", "never the other way round", "home folder", "your hooks run", "10 seconds"]) {
       expect(section, word).toContain(word);
     }
   });

@@ -8,12 +8,46 @@ use tauri::ipc::Channel;
 use crate::ptysink::{lock, pump, Out, Sink};
 
 pub struct PtyInstance {
-    writer: Box<dyn Write + Send>,
+    /// What is typed into the terminal, in order, for its writer thread.
+    input: std::sync::mpsc::Sender<Vec<u8>>,
     _child: Box<dyn portable_pty::Child + Send + Sync>,
     master: Box<dyn MasterPty + Send>,
     pid: Option<u32>,
     /// Where this PTY's output goes. The reader thread holds the other handle.
     sink: Arc<Mutex<Sink>>,
+}
+
+impl PtyInstance {
+    /// The one way to build an instance. It takes the master's writer and
+    /// starts the thread that does this terminal's blocking writes, fed by a
+    /// channel: nothing that sends to it waits on the terminal, and one
+    /// channel per terminal keeps its keystrokes in order. The thread ends
+    /// once every sender is gone and the queue is empty, or on the first
+    /// write error. A thread blocked on a terminal that never reads stays
+    /// blocked until ADE exits, holding that terminal's queue and pty pair
+    /// (recorded in the Orgo plan; a wake-up is deferred work).
+    fn new(
+        id: u32,
+        child: Box<dyn portable_pty::Child + Send + Sync>,
+        master: Box<dyn MasterPty + Send>,
+        pid: Option<u32>,
+        sink: Arc<Mutex<Sink>>,
+    ) -> Result<Self, String> {
+        let mut writer = master.take_writer().map_err(|e| format!("take_writer failed: {}", e))?;
+        let (input, queue) = std::sync::mpsc::channel::<Vec<u8>>();
+        std::thread::Builder::new()
+            .name(format!("pty-writer-{id}"))
+            .stack_size(64 * 1024)
+            .spawn(move || {
+                while let Ok(chunk) = queue.recv() {
+                    if writer.write_all(&chunk).and_then(|()| writer.flush()).is_err() {
+                        break;
+                    }
+                }
+            })
+            .map_err(|e| format!("can't start the terminal's writer: {e}"))?;
+        Ok(Self { input, _child: child, master, pid, sink })
+    }
 }
 
 pub struct PtyManager {
@@ -175,20 +209,11 @@ pub fn create_pty(
     let child_pid = child.process_id();
     drop(pair.slave);
 
-    let writer = pair.master.take_writer().map_err(|e| format!("take_writer failed: {}", e))?;
     let reader = clone_reader(pair.master.as_ref())?;
     let sink = Arc::new(Mutex::new(Sink::new(channel_out(on_event))));
+    let instance = PtyInstance::new(id, child, pair.master, child_pid, sink.clone())?;
 
-    state.instances.lock().unwrap().insert(
-        id,
-        PtyInstance {
-            writer,
-            _child: child,
-            master: pair.master,
-            pid: child_pid,
-            sink: sink.clone(),
-        },
-    );
+    state.instances.lock().unwrap().insert(id, instance);
 
     // Started after the insert, so a shell that exits at once still finds
     // its entry to remove.
@@ -199,21 +224,56 @@ pub fn create_pty(
     Ok(id)
 }
 
+/// Sync, on purpose: sync commands run one at a time in the order they
+/// arrive, which keeps keystrokes in order. It only queues the bytes for the
+/// terminal's writer thread, so it never waits on the terminal.
 #[tauri::command]
 pub fn write_pty(
     state: tauri::State<'_, PtyManager>,
     id: u32,
     data: Vec<u8>,
 ) -> Result<(), String> {
-    let mut instances = state.instances.lock().unwrap();
-    if let Some(instance) = instances.get_mut(&id) {
-        instance
-            .writer
-            .write_all(&data)
-            .map_err(|e| e.to_string())?;
-        instance.writer.flush().map_err(|e| e.to_string())?;
+    write_to(&state.instances, id, data)
+}
+
+/// What `write_pty` does. An unbounded send never blocks; an unknown id is
+/// not an error, and a terminal whose writer has ended is.
+fn write_to(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32, data: Vec<u8>) -> Result<(), String> {
+    if let Some(instance) = instances.lock().unwrap().get(&id) {
+        instance.input.send(data).map_err(|_| "the terminal is closed".to_string())?;
     }
     Ok(())
+}
+
+/// Whether the shell in PTY `id` is reading with its own line editor: the
+/// terminal is out of canonical mode AND the shell itself is the foreground
+/// process group, so a typed line of any length reaches it whole. None only
+/// where that can't be known at all: not unix, or an unknown id. On unix, a
+/// pid, termios or foreground group that can't be read means Some(false):
+/// not ready, and the webview's 10 s cap applies.
+#[tauri::command]
+pub fn pty_line_editor_ready(state: tauri::State<'_, PtyManager>, id: u32) -> Option<bool> {
+    let instances = state.instances.lock().unwrap();
+    let instance = instances.get(&id)?;
+    line_editor_ready(instance.master.as_ref(), instance.pid)
+}
+
+/// `pty_line_editor_ready` for one master and its shell's pid. portable-pty
+/// makes the shell a session leader, so its pid is its process group.
+fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool> {
+    #[cfg(unix)]
+    {
+        let (Some(t), Some(fg), Some(shell)) = (master.get_termios(), master.process_group_leader(), shell) else {
+            return Some(false);
+        };
+        let t: libc::termios = t.into();
+        Some(t.c_lflag & libc::ICANON == 0 && fg as u32 == shell)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (master, shell);
+        None
+    }
 }
 
 #[tauri::command]
@@ -551,7 +611,6 @@ mod tests {
         let child = pair.slave.spawn_command(cmd).unwrap();
         drop(pair.slave);
         let pid = child.process_id();
-        let writer = pair.master.take_writer().unwrap();
         let reader = clone_reader(pair.master.as_ref()).unwrap();
 
         let first = Window::new();
@@ -559,20 +618,12 @@ mod tests {
         let id = 7;
         let instances: Arc<Mutex<HashMap<u32, PtyInstance>>> = Arc::new(Mutex::new(HashMap::new()));
         let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
-        instances.lock().unwrap().insert(
-            id,
-            PtyInstance { writer, _child: child, master: pair.master, pid, sink: sink.clone() },
-        );
+        instances.lock().unwrap().insert(id, PtyInstance::new(id, child, pair.master, pid, sink.clone()).unwrap());
         let table = instances.clone();
         start_reader(reader, sink.clone(), move || {
             table.lock().unwrap().remove(&id);
         });
-        let enter = || {
-            let mut table = instances.lock().unwrap();
-            let writer = &mut table.get_mut(&id).unwrap().writer;
-            writer.write_all(b"\n").unwrap();
-            writer.flush().unwrap();
-        };
+        let enter = || write_to(&instances, id, b"\n".to_vec()).unwrap();
         let has = |text: &[u8], word: &str| String::from_utf8_lossy(text).contains(word);
 
         wait_for("A1 in the first window", || first.text().contains("A1"));
@@ -663,10 +714,9 @@ mod hook_env_tests {
         let child = pair.slave.spawn_command(cmd).unwrap();
         drop(pair.slave);
         let pid = child.process_id();
-        let writer = pair.master.take_writer().unwrap();
         let sink = Arc::new(Mutex::new(Sink::unattached()));
         assert!(!lock(&sink).finish(), "no window was told");
-        instances.lock().unwrap().insert(id, PtyInstance { writer, _child: child, master: pair.master, pid, sink });
+        instances.lock().unwrap().insert(id, PtyInstance::new(id, child, pair.master, pid, sink).unwrap());
     }
 
     fn agent_with_a_session(id: u32) -> crate::agent_status::AgentStatus {
@@ -722,6 +772,25 @@ mod wiring_tests {
         assert_eq!(source.matches(concat!("thread::", "spawn(")).count(), 1);
     }
 
+    /// A sync command runs on the main thread, one at a time, in the order its
+    /// IPC messages arrive; an `(async)` one is a separate task, and
+    /// keystrokes sent without awaiting the last would land out of order.
+    #[test]
+    fn write_pty_stays_a_sync_command() {
+        let source = include_str!("pty.rs");
+        let needle = concat!("pub fn ", "write_pty(");
+        let at = source.find(needle).expect("write_pty is defined here");
+        assert!(source[..at].ends_with('\n'), "write_pty starts its own line");
+        let attribute = source[..at].trim_end().lines().last().map(str::trim);
+        assert_eq!(attribute, Some("#[tauri::command]"), "the line above write_pty is exactly #[tauri::command]");
+    }
+
+    #[test]
+    fn writing_to_an_unknown_pty_does_nothing() {
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        assert_eq!(write_to(&instances, 99, b"x".to_vec()), Ok(()));
+    }
+
     #[test]
     fn attaching_to_an_unknown_pty_is_an_error() {
         let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
@@ -729,5 +798,242 @@ mod wiring_tests {
         let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
         assert_eq!(attach(&instances, &agent, 99, window.out()), Err("PTY not found".to_string()));
         assert!(window.events().is_empty(), "the window that asked receives nothing");
+    }
+}
+
+/// The terminal side of a real PTY, for the line-editor and writer tests.
+#[cfg(all(test, unix))]
+mod real_pty {
+    use super::*;
+    use crate::ptysink::testing::Window;
+    use std::time::{Duration, Instant};
+
+    /// `argv` in a fresh PTY, built through the constructor, with its output
+    /// read (and so drained) into a window.
+    pub(super) fn spawn(id: u32, argv: &[&str]) -> (PtyInstance, Window) {
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new(argv[0]);
+        cmd.args(&argv[1..]);
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id();
+        let reader = clone_reader(pair.master.as_ref()).unwrap();
+        let window = Window::new();
+        let sink = Arc::new(Mutex::new(Sink::new(window.out())));
+        let instance = PtyInstance::new(id, child, pair.master, pid, sink.clone()).unwrap();
+        start_reader(reader, sink, || {});
+        (instance, window)
+    }
+
+    /// Whether the terminal is out of canonical mode, read directly.
+    pub(super) fn raw(master: &dyn MasterPty) -> bool {
+        master.get_termios().is_some_and(|t| {
+            let t: libc::termios = t.into();
+            t.c_lflag & libc::ICANON == 0
+        })
+    }
+
+    /// Wait until `done`, or fail after `within`.
+    pub(super) fn within(what: &str, within: Duration, done: impl Fn() -> bool) {
+        let deadline = Instant::now() + within;
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out after {within:?} waiting for {what}");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    pub(super) fn stop(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32) {
+        if let Some(mut instance) = instances.lock().unwrap().remove(&id) {
+            instance._child.kill().ok();
+        }
+    }
+
+    pub(super) fn temp_file(name: &str) -> std::path::PathBuf {
+        static N: AtomicU32 = AtomicU32::new(0);
+        std::env::temp_dir().join(format!("ade-pty-{name}-{}-{}", std::process::id(), N.fetch_add(1, Ordering::Relaxed)))
+    }
+}
+
+#[cfg(all(test, unix))]
+mod line_editor_tests {
+    use super::real_pty::{raw, spawn, stop, temp_file, within};
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    fn ready(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32) -> Option<bool> {
+        let table = instances.lock().unwrap();
+        let instance = table.get(&id).unwrap();
+        line_editor_ready(instance.master.as_ref(), instance.pid)
+    }
+
+    #[test]
+    fn line_editor_ready_follows_canonical_mode_and_the_foreground() {
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+
+        // Fresh: canonical mode, so not ready.
+        let (fresh, _w1) = spawn(1, &["/bin/sh", "-c", "sleep 3"]);
+        instances.lock().unwrap().insert(1, fresh);
+        assert_eq!(ready(&instances, 1), Some(false), "fresh");
+
+        // Raw with the shell in front: no job control keeps sh's group in the
+        // foreground. This must hold on macOS too (CI's backend-macos job):
+        // it is what catches tcgetpgrp or tcgetattr failing on the master.
+        let (front, _w2) = spawn(2, &["/bin/sh", "-c", "stty -icanon; sleep 3"]);
+        instances.lock().unwrap().insert(2, front);
+        within("raw with the shell in front reads Some(true)", Duration::from_secs(2), || ready(&instances, 2) == Some(true));
+
+        // Raw with a job in front: with job control, sleep is its own
+        // foreground group, as zsh runs rc commands.
+        let (behind, _w3) = spawn(3, &["/bin/sh", "-c", "set -m; stty -icanon; sleep 3; :"]);
+        instances.lock().unwrap().insert(3, behind);
+        within("the job's terminal to go raw", Duration::from_secs(2), || raw(instances.lock().unwrap()[&3].master.as_ref()));
+        std::thread::sleep(Duration::from_millis(200));
+        let until = Instant::now() + Duration::from_secs(2);
+        let mut samples = 0;
+        while Instant::now() < until {
+            assert_eq!(ready(&instances, 3), Some(false), "raw with a job in front");
+            assert!(raw(instances.lock().unwrap()[&3].master.as_ref()), "still raw, so the foreground is what says no");
+            samples += 1;
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(samples > 10);
+
+        // Unreadable means not ready: None is only for platforms that can't know.
+        assert_eq!(line_editor_ready(instances.lock().unwrap()[&2].master.as_ref(), None), Some(false), "no pid");
+
+        for id in [1, 2, 3] {
+            stop(&instances, id);
+        }
+    }
+
+    #[test]
+    fn a_long_line_typed_once_the_line_editor_is_up_arrives_whole() {
+        let rc = temp_file("rc");
+        std::fs::write(&rc, "sleep 1\nPS1='READY$ '\n").unwrap();
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        let (bash, window) = spawn(4, &["bash", "--noprofile", "--rcfile", rc.to_str().unwrap(), "-i"]);
+        instances.lock().unwrap().insert(4, bash);
+
+        // Two ready answers in a row, 50 ms apart, as typeWhenReady waits.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut in_a_row = 0;
+        while in_a_row < 2 {
+            assert!(Instant::now() < deadline, "bash's line editor never came up");
+            in_a_row = if ready(&instances, 4) == Some(true) { in_a_row + 1 } else { 0 };
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(window.text().contains("READY$ "), "the rc ran first: {:?}", window.text());
+
+        // 5,000 bytes: over Linux's 4096 and macOS's 1024.
+        let line = format!("printf %s {} | wc -c\r", "x".repeat(5000));
+        write_to(&instances, 4, line.into_bytes()).unwrap();
+        // What follows the echoed command: wc's count. The echo itself has no digits.
+        within("the whole line counted", Duration::from_secs(10), || {
+            window.text().split("wc -c").nth(1).is_some_and(|after| after.contains("5000"))
+        });
+
+        stop(&instances, 4);
+        std::fs::remove_file(rc).ok();
+    }
+}
+
+#[cfg(all(test, not(unix)))]
+mod off_unix_tests {
+    use super::*;
+
+    #[test]
+    fn line_editor_ready_is_unknown_off_unix() {
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("cmd.exe");
+        cmd.args(["/c", "ping -n 3 127.0.0.1"]);
+        let mut child = pair.slave.spawn_command(cmd).unwrap();
+        assert_eq!(line_editor_ready(pair.master.as_ref(), child.process_id()), None);
+        child.kill().ok();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod writer_tests {
+    use super::real_pty::{raw, spawn, stop, temp_file, within};
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// A PTY whose program has started and made the terminal raw. Its output
+    /// is drained (unread echo can make stty, which drains, wait).
+    fn started(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32, script: &str) {
+        let (instance, _window) = spawn(id, &["/bin/sh", "-c", script]);
+        instances.lock().unwrap().insert(id, instance);
+        within("the terminal to leave canonical mode", Duration::from_secs(5), || raw(instances.lock().unwrap()[&id].master.as_ref()));
+    }
+
+    /// A terminal that reads into `file` and one that never reads, with a
+    /// 1 MiB write sent to the second, 500 ms ago.
+    fn one_blocked(instances: &Mutex<HashMap<u32, PtyInstance>>, file: &std::path::Path) {
+        started(instances, 1, "stty -icanon -echo; sleep 30; :");
+        started(instances, 2, &format!("stty raw -echo; cat > '{}'", file.display()));
+        write_to(instances, 1, vec![b'y'; 1 << 20]).unwrap();
+        let sent = Instant::now();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(sent.elapsed() >= Duration::from_millis(500));
+    }
+
+    #[test]
+    fn writes_arrive_in_order() {
+        let file = temp_file("order");
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        started(&instances, 1, &format!("stty raw -echo; cat > '{}'", file.display()));
+        for i in 0..1000 {
+            write_to(&instances, 1, format!("{i:04}\n").into_bytes()).unwrap();
+        }
+        let expected: String = (0..1000).map(|i| format!("{i:04}\n")).collect();
+        within("all 1,000 writes in the file", Duration::from_secs(5), || {
+            std::fs::read_to_string(&file).is_ok_and(|t| t.len() >= expected.len())
+        });
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), expected);
+        stop(&instances, 1);
+        std::fs::remove_file(file).ok();
+    }
+
+    #[test]
+    fn a_blocked_terminal_holds_up_no_other() {
+        let file = temp_file("other");
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        one_blocked(&instances, &file);
+
+        let start = Instant::now();
+        write_to(&instances, 2, b"ok".to_vec()).unwrap();
+        within("the other terminal's write", Duration::from_secs(1), || std::fs::read_to_string(&file).is_ok_and(|t| t == "ok"));
+
+        // A resize, as resize_pty does it: through the instances lock.
+        let start_resize = Instant::now();
+        instances.lock().unwrap()[&2]
+            .master
+            .resize(PtySize { rows: 30, cols: 100, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        assert!(start_resize.elapsed() < Duration::from_secs(1), "resize took {:?}", start_resize.elapsed());
+        assert!(start.elapsed() < Duration::from_secs(2));
+
+        stop(&instances, 1);
+        stop(&instances, 2);
+        std::fs::remove_file(file).ok();
+    }
+
+    #[test]
+    fn a_write_to_a_blocked_terminal_returns_at_once() {
+        let file = temp_file("noblock");
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        one_blocked(&instances, &file);
+
+        let start = Instant::now();
+        assert_eq!(write_to(&instances, 1, b"x".to_vec()), Ok(()));
+        assert!(start.elapsed() < Duration::from_millis(500), "write_to took {:?}", start.elapsed());
+
+        stop(&instances, 1);
+        stop(&instances, 2);
+        std::fs::remove_file(file).ok();
     }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildLaunchCommand, supportsRoleDelivery, taskUnsupportedReason } from "../agentCommand";
-import type { LaunchRules } from "../orgoRules";
+import type { LaunchRules } from "../launchRules";
 
 /**
  * An absolute path, because that is what the launch paths now pass. The old
@@ -14,7 +14,7 @@ import type { LaunchRules } from "../orgoRules";
 const PATH = "/Users/x/.ade/roles/architect-security.md";
 
 /** Orgo's ask rules, as `loadLaunchRules` hands them over, and the flag they become. */
-const R: LaunchRules = { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*stop*"] };
+const R: LaunchRules = { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*stop*"], continuousDeny: [], guard: null };
 const S = ` --settings '{"permissions":{"ask":["mcp__*orgo*__*create*","mcp__*orgo*__*stop*"]}}'`;
 
 /** The arguments a POSIX shell would split a command into: single quotes only, as shellQuote writes. */
@@ -41,26 +41,57 @@ function shellWords(command: string): string[] {
 }
 
 describe("Orgo's ask rules on the launch line", () => {
-  it("every Claude Code launch carries Orgo's ask rules", () => {
-    const rules: LaunchRules = { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*heal_*", "it's"] };
+  /** The one `--settings` value of a launch, parsed. */
+  function settingsOf(r: ReturnType<typeof buildLaunchCommand>, label: string): Record<string, unknown> {
+    if (r.kind !== "command") throw new Error(`expected a command: ${label}`);
+    const words = shellWords(r.command);
+    const flags = words.flatMap((w, i) => (w === "--settings" ? [words[i + 1]] : []));
+    expect(flags, label).toHaveLength(1);
+    return JSON.parse(flags[0]);
+  }
+
+  const MODES = [{}, { continuous: true }, { task: "go" }, { continuous: true, task: "Fix O'Brien's cart" }];
+
+  it("a launch with no guard carries only the ask rules", () => {
+    const rules: LaunchRules = { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*heal_*", "it's"], continuousDeny: [], guard: null };
     for (const provider of ["claude", "deepseek"] as const) {
-      for (const opts of [{}, { continuous: true }, { task: "go" }, { continuous: true, task: "Fix O'Brien's cart" }]) {
-        const r = buildLaunchCommand(provider, PATH, { rules, ...opts });
-        if (r.kind !== "command") throw new Error("expected a command");
-        const words = shellWords(r.command);
-        const flags = words.flatMap((w, i) => (w === "--settings" ? [words[i + 1]] : []));
-        expect(flags, `${provider} ${JSON.stringify(opts)}`).toHaveLength(1);
-        expect(JSON.parse(flags[0])).toEqual({ permissions: { ask: rules.ask } });
+      for (const opts of [...MODES, { headless: true }, { headless: true, task: "go" }]) {
+        const label = `${provider} ${JSON.stringify(opts)}`;
+        const value = settingsOf(buildLaunchCommand(provider, PATH, { rules, ...opts }), label);
+        // Exactly the ask rules: no disableAllHooks and no hooks without a guard.
+        expect(value, label).toEqual({ permissions: { ask: rules.ask } });
+        expect(Object.keys(value), label).toEqual(["permissions"]);
       }
     }
+    // The exact bytes, so the value is the one the plan and the gating check name.
+    const r = buildLaunchCommand("claude", PATH, { rules: R });
+    expect(r.kind === "command" && r.command).toContain(S);
     // The orchestrator appends `-p '<task>'` to this command; the flag is already in it.
-    const p = buildLaunchCommand("claude", PATH, { rules });
+    const p = buildLaunchCommand("claude", PATH, { rules, headless: true });
     expect(p.kind === "command" && shellWords(`${p.command} -p 'go'`).filter((w) => w === "--settings")).toHaveLength(1);
     // Codex is unchanged: it has no launch, so nothing carries the rules.
     expect(buildLaunchCommand("codex", PATH, { rules }).kind).toBe("unsupported");
     // Ollama is not Claude Code and ignores them.
     const o = buildLaunchCommand("ollama", PATH, { rules });
     expect(o.kind === "command" && o.command).not.toContain("--settings");
+  });
+
+  it("a launch with a guard carries the rules, the guard and disableAllHooks:false", () => {
+    const rules: LaunchRules = { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: { interactive: "X", headless: "Y" } };
+    const hooks = (command: string) => ({
+      PreToolUse: [{ matcher: "Bash|Monitor", hooks: [{ type: "command", command, timeout: 5, onFailure: "block" }] }],
+    });
+    for (const provider of ["claude", "deepseek"] as const) {
+      for (const opts of MODES) {
+        const label = `${provider} ${JSON.stringify(opts)}`;
+        const value = settingsOf(buildLaunchCommand(provider, PATH, { rules, ...opts }), label);
+        expect(Object.keys(value), label).toEqual(["permissions", "disableAllHooks", "hooks"]);
+        expect(value, label).toEqual({ permissions: { ask: rules.ask }, disableAllHooks: false, hooks: hooks("X") });
+        const headless = settingsOf(buildLaunchCommand(provider, PATH, { rules, ...opts, headless: true }), `${label} headless`);
+        expect(Object.keys(headless), label).toEqual(["permissions", "disableAllHooks", "hooks"]);
+        expect(headless, label).toEqual({ permissions: { ask: rules.ask }, disableAllHooks: false, hooks: hooks("Y") });
+      }
+    }
   });
 
   it("cannot be called without the rules", () => {

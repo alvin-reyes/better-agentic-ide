@@ -5,7 +5,7 @@ import { composeRoleMarkdown, toModelfile } from "./agentComposition";
 import { buildLaunchCommand, UNTYPEABLE } from "./agentCommand";
 import { ensureRoleDir, rolePathFor, type AgentSpec } from "./agentSpec";
 import { methodologyOf } from "./projectSetup";
-import { loadLaunchRules, RULES_UNAVAILABLE, type LaunchRules } from "./orgoRules";
+import { loadLaunchRules, RULES_UNAVAILABLE, type LaunchRules } from "./launchRules";
 import { runInNewTabPane } from "./terminalCommands";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";

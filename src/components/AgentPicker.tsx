@@ -5,7 +5,7 @@ import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
-import { runInNewTabPane, writePty } from "../lib/terminalCommands";
+import { runInNewTabPane, typeWhenReady } from "../lib/terminalCommands";
 import { hasActiveProcess } from "../hooks/useTerminal";
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { getRole } from "../data/roles";
@@ -200,7 +200,11 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       paneId = await runInNewTabPane(item.name, cwd, cmd);
       if (!paneId) return;
     } else {
-      await writePty(ptyId, cmd + "\r").catch(() => {});
+      // Once its shell's line editor is up: a tab still reading its rc files
+      // can be picked, and a line typed then can be cut. Nothing is typed,
+      // and no session starts, if the pane is gone by then.
+      const typed = await typeWhenReady(ptyId, cmd, () => getActivePtyId() === ptyId).catch(() => true);
+      if (!typed) return;
       paneId = getActivePane()?.id ?? null;
     }
 

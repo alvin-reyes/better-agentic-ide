@@ -3,10 +3,9 @@
 //! from here, and the webview cannot add one. See
 //! `.ade/context/orgo-permission-rules.md`.
 
-use serde::Serialize;
-
 /// Ask before any Orgo tool that creates, copies, resizes, re-times, starts,
-/// resumes, stops or deletes a computer, or enables SSH. Verb globs on the
+/// resumes, suspends, stops, moves or deletes a computer, runs or builds a
+/// template, buys capacity, or turns SSH on or off. Verb globs on the
 /// tool name with a glob for the server, so they hold for any server named
 /// like Orgo and for tool names Orgo has not published yet. Checked against
 /// every operation of Orgo's spec in `orgo_operations.json`.
@@ -36,19 +35,16 @@ pub const MCP_ASK: &[&str] = &[
     "mcp__*orgo*__*ssh*key*",
     "mcp__*orgo*__*freeze*",          // /freeze, a stop under another name
     "mcp__*orgo*__*heal_*",           // /heal, which can restart; not *heal*: that catches get_computer_health
+    // Writes the round-5 list missed (code review of a895c05; owner decision 13, 2026-10-30)
+    "mcp__*orgo*__*suspend*",         // suspend_computer (a stop that keeps memory)
+    "mcp__*orgo*__*destroy*",         // destroy_screen; a future destroy_computer
+    "mcp__*orgo*__*terminate*",       // a future terminate_computer
+    "mcp__*orgo*__*move_computer*",   // move_computer; also a future remove_computer. Not *move*: that catches mouse_move
+    "mcp__*orgo*__*run_template*",    // test_run_template, which runs a computer from a template
+    "mcp__*orgo*__*build_template*",  // build_template, which spends build time
+    "mcp__*orgo*__*add*capacity*",    // add_account_capacity. Not *capacity*: that catches GET get_account_capacity
+    "mcp__*orgo*__*disable*ssh*",     // disable_computer_ssh, the pair of *enable*ssh*
 ];
-
-/// The rules every Claude Code launch ADE makes carries, as `--settings`.
-#[derive(Serialize)]
-pub struct LaunchRules {
-    pub ask: Vec<String>,
-}
-
-/// The same for every launch: no project or folder decides them.
-#[tauri::command]
-pub fn orgo_launch_rules() -> LaunchRules {
-    LaunchRules { ask: MCP_ASK.iter().map(|r| r.to_string()).collect() }
-}
 
 #[cfg(test)]
 mod tests {
@@ -177,6 +173,82 @@ mod tests {
         for read in ["get_computer_health", "get_computer_clone_status"] {
             assert!(!asks(&format!("mcp__orgo__orgo_{read}")), "{read} doesn't ask");
         }
+
+        // Owner decision 13: the writes the round-5 list missed.
+        for op in ["suspendComputer", "moveComputer", "destroyScreen", "disableComputerSsh", "testRunTemplate", "buildTemplate", "addAccountCapacity"] {
+            assert!(ops.iter().any(|o| o["operationId"] == op && o["method"] != "GET"), "{op} is a write in the spec");
+            for name in tool_names(&snake(op)) {
+                assert!(asks(&name), "{name} asks");
+            }
+        }
+        for tool in ["destroy_computer", "terminate_computer"] {
+            assert!(corpus.iter().any(|t| t == tool), "{tool} is in the corpus");
+        }
+        assert!(asks("mcp__orgo__orgo_get_suspend_status"), "get_suspend_status asks, a recorded misfire");
+        // ...and the reads and actions next to them that they must not catch.
+        for op in ["getAccountCapacity", "mouseMove", "resizeScreen"] {
+            assert!(ops.iter().any(|o| o["operationId"] == op), "{op} is in the spec");
+            for name in tool_names(&snake(op)) {
+                assert!(!asks(&name), "{name} doesn't ask");
+            }
+        }
+
+        assert_eq!(MCP_ASK.len(), 31, "23 at approval plus 8 by owner decision 13");
+    }
+
+    /// The `/computers` writes no `MCP_ASK` glob catches, each on purpose.
+    const COMPUTER_WRITES_NOT_ASKED: &[&str] = &[
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "mouseClick",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "mouseMove",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "mouseDrag",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "typeText",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "pressKey",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "scroll",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "wait",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "executeBash",
+        // actions on the computer; they prompt in Manual mode and are contained on the remote machine (Security)
+        "executePython",
+        // a screen's display size; no lifecycle or cost effect
+        "resizeScreen",
+    ];
+
+    #[test]
+    fn every_computer_write_asks_or_is_skipped_on_purpose() {
+        let fixture = fixture();
+        let ops = fixture["operations"].as_array().unwrap();
+        let in_scope = |o: &&Value| {
+            let path = o["path"].as_str().unwrap();
+            o["method"] != "GET" && (path == "/computers" || path.starts_with("/computers/"))
+        };
+        let mut checked = 0;
+        for o in ops.iter().filter(in_scope) {
+            let op = o["operationId"].as_str().unwrap();
+            let asked = asks(&format!("mcp__orgo__orgo_{}", snake(op)));
+            assert!(
+                asked || COMPUTER_WRITES_NOT_ASKED.contains(&op),
+                "{op} ({} {}) writes to a computer and neither asks nor is skipped on purpose: classify it",
+                o["method"],
+                o["path"]
+            );
+            checked += 1;
+        }
+        assert!(checked >= 20, "the fixture holds the computer writes ({checked})");
+        assert!(ops.iter().filter(in_scope).any(|o| o["path"] == "/computers"), "POST /computers itself is in scope");
+        // The skip list stays honest: each entry is a real computer write that no glob catches.
+        for op in COMPUTER_WRITES_NOT_ASKED {
+            assert!(ops.iter().filter(in_scope).any(|o| o["operationId"] == *op), "{op} is a /computers write in the fixture");
+            for name in tool_names(&snake(op)) {
+                assert!(!asks(&name), "{name} is skipped, so no glob may match it");
+            }
+        }
     }
 
     #[test]
@@ -210,7 +282,8 @@ mod tests {
 
         let added = crate::mcp::mcp_install(dir.to_string_lossy().into(), "orgo".into(), serde_json::json!({ "type": "http", "url": "https://www.orgo.ai/mcp" })).unwrap();
         let missing: Vec<String> = MCP_ASK.iter().filter(|r| **r != already).map(|r| r.to_string()).collect();
-        assert_eq!(added, missing);
+        assert_eq!(added.rules, missing);
+        assert_eq!(added.files.len(), 2);
 
         let mut expected = user.clone();
         let mut ask = vec![Value::from("Bash(git push *)"), Value::from(already)];
@@ -224,14 +297,8 @@ mod tests {
         // A second install changes nothing, to the byte.
         let bytes: Vec<Vec<u8>> = files.iter().map(|f| std::fs::read(f).unwrap()).collect();
         let again = crate::mcp::mcp_install(dir.to_string_lossy().into(), "orgo".into(), serde_json::json!({ "type": "http", "url": "https://www.orgo.ai/mcp" })).unwrap();
-        assert!(again.is_empty());
+        assert!(again.rules.is_empty() && again.files.is_empty(), "a second install returns nothing");
         assert_eq!(files.iter().map(|f| std::fs::read(f).unwrap()).collect::<Vec<_>>(), bytes);
         std::fs::remove_dir_all(dir).ok();
-    }
-
-    #[test]
-    fn launch_rules_are_the_ask_list() {
-        assert_eq!(orgo_launch_rules().ask, MCP_ASK);
-        assert_eq!(serde_json::to_value(orgo_launch_rules()).unwrap(), serde_json::json!({ "ask": MCP_ASK }));
     }
 }

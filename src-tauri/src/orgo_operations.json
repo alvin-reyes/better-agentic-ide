@@ -94,6 +94,6 @@
   ],
   "hypotheticalWriteVerbs": {
     "note": "HYPOTHETICAL: not operations in the spec. The names Orgo's naming rule would give the REST write paths in the key permissions table (https://docs.orgo.ai/api-reference/api-keys/permissions), so the rules already ask for them.",
-    "names": ["wake_computer", "restore_computer_backup", "restore_snapshot", "set_computer_billing", "create_public_url", "update_public_url", "delete_public_url", "set_residential_proxy", "freeze_computer", "heal_computer", "set_computer_ssh_key", "sync_computer_secrets", "set_computer_end", "extend_computer", "launch_template", "boot_computer"]
+    "names": ["wake_computer", "restore_computer_backup", "restore_snapshot", "set_computer_billing", "create_public_url", "update_public_url", "delete_public_url", "set_residential_proxy", "freeze_computer", "heal_computer", "set_computer_ssh_key", "sync_computer_secrets", "set_computer_end", "extend_computer", "launch_template", "boot_computer", "destroy_computer", "terminate_computer"]
   }
 }
