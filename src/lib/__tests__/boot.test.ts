@@ -30,6 +30,16 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
+// The real defaults' collaborators, recorded in the same log as the invokes.
+vi.mock("../sync", () => ({
+  syncBeforeLaunch: vi.fn(async () => void h.calls.push("syncBeforeLaunch")),
+  startPeriodicSync: vi.fn(() => void h.calls.push("startPeriodicSync")),
+}));
+vi.mock("../projectSetup", () => ({
+  migrateKept: vi.fn(() => void h.calls.push("migrateKept")),
+  reaskV4Projects: vi.fn(async () => void h.calls.push("reaskV4Projects")),
+}));
+
 import { bootDetached, bootMain } from "../boot";
 import { __resetForTests } from "../persistence";
 
@@ -67,6 +77,23 @@ describe("B16: boot order", () => {
     expect(deps.afterAutoSave).toHaveBeenCalledOnce();
     expect(deps.startPeriodicSync).toHaveBeenCalledOnce();
     expect(localStorage.getItem(KEY)).not.toContain("sk-ant-K");
+  });
+
+  it("with no deps, runs the real sync and project-setup steps around the move, in order", async () => {
+    await bootMain();
+    expect(h.calls).toEqual([
+      "syncBeforeLaunch",
+      "state_read_all",
+      "vault_get",
+      "vault_set",
+      "vault_get",
+      "state_write",
+      "state_scrub_secrets",
+      "state_snapshot",
+      "migrateKept",
+      "reaskV4Projects",
+      "startPeriodicSync",
+    ]);
   });
 
   it("runs sync before the restore, and the later steps after auto-save", async () => {

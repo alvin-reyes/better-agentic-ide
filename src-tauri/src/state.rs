@@ -222,28 +222,44 @@ pub fn restore_snapshot(state_dir: &Path, name: &str, now_ms: u64) -> std::io::R
 /// The settings key's file, the only one that held a secret field.
 const SETTINGS_FILE: &str = "better-terminal-settings.json";
 
+/// What a scrub did: files it wrote or deleted, and files that may still
+/// hold the key because it could not read, rewrite or delete them (left for
+/// the next run).
+#[derive(serde::Serialize, Debug, Default, PartialEq, Eq)]
+pub struct ScrubReport {
+    pub changed: usize,
+    pub skipped: usize,
+}
+
 /// Strip `sync::SECRET_FIELDS` from the settings file in `dir` and delete
-/// that file's leftover temp files. Returns how many files it wrote or
-/// deleted; a file it cannot change is left for the next launch.
-fn scrub_dir(dir: &Path) -> usize {
-    let mut changed = 0;
+/// that file's leftover temp files, writing through `write`.
+fn scrub_dir(dir: &Path, write: &dyn Fn(&Path, &str) -> std::io::Result<()>, report: &mut ScrubReport) {
     let temp_prefix = format!(".{}.", SETTINGS_FILE);
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&temp_prefix) && name.ends_with(".tmp") && fs::remove_file(entry.path()).is_ok() {
-                changed += 1;
+            if name.starts_with(&temp_prefix) && name.ends_with(".tmp") {
+                match fs::remove_file(entry.path()) {
+                    Ok(()) => report.changed += 1,
+                    Err(_) => report.skipped += 1,
+                }
             }
         }
     }
     let path = dir.join(SETTINGS_FILE);
-    if let Ok(raw) = fs::read_to_string(&path) {
-        let stripped = crate::sync::strip_secrets(&raw);
-        if stripped != raw && atomic_write(&path, &stripped).is_ok() {
-            changed += 1;
+    match fs::read_to_string(&path) {
+        Ok(raw) => {
+            let stripped = crate::sync::strip_secrets(&raw);
+            if stripped != raw {
+                match write(&path, &stripped) {
+                    Ok(()) => report.changed += 1,
+                    Err(_) => report.skipped += 1,
+                }
+            }
         }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => report.skipped += 1,
     }
-    changed
 }
 
 /// Remove the old plain-text API key field from every copy of the settings
@@ -251,7 +267,12 @@ fn scrub_dir(dir: &Path) -> usize {
 /// directory (stripped, not deleted: after a crash mid-restore, `.kv-old-*`
 /// may be the only copy of the state). `kv/` is touched only `at_boot`,
 /// before auto-save starts; later, a write may be in flight there.
-pub fn scrub_secrets(state_dir: &Path, at_boot: bool) -> usize {
+pub fn scrub_secrets(state_dir: &Path, at_boot: bool) -> ScrubReport {
+    scrub_secrets_with(state_dir, at_boot, &|p: &Path, body: &str| atomic_write(p, body))
+}
+
+/// `scrub_secrets` with the file writer passed in (tests make it fail).
+fn scrub_secrets_with(state_dir: &Path, at_boot: bool, write: &dyn Fn(&Path, &str) -> std::io::Result<()>) -> ScrubReport {
     let mut dirs = Vec::new();
     if at_boot {
         dirs.push(state_dir.join("kv"));
@@ -266,7 +287,11 @@ pub fn scrub_secrets(state_dir: &Path, at_boot: bool) -> usize {
             }
         }
     }
-    dirs.iter().map(|d| scrub_dir(d)).sum()
+    let mut report = ScrubReport::default();
+    for d in &dirs {
+        scrub_dir(d, write, &mut report);
+    }
+    report
 }
 
 pub(crate) fn now_ms() -> u64 {
@@ -312,9 +337,9 @@ pub fn state_restore_snapshot(app: tauri::AppHandle, name: String) -> Result<(),
 
 /// Strip the old API key field from the saved settings copies (see
 /// `scrub_secrets`). The webview passes `atBoot: true` only before auto-save
-/// has started. Returns how many files changed.
+/// has started. Returns `{ changed, skipped }`.
 #[tauri::command(async)]
-pub fn state_scrub_secrets(app: tauri::AppHandle, at_boot: bool) -> Result<usize, String> {
+pub fn state_scrub_secrets(app: tauri::AppHandle, at_boot: bool) -> Result<ScrubReport, String> {
     Ok(scrub_secrets(&state_dir(&app)?, at_boot))
 }
 
@@ -490,7 +515,7 @@ mod tests {
         let clean_before = fs::metadata(dir.join("snapshots/1003").join(SETTINGS)).unwrap().modified().unwrap();
 
         // 1 kv + 3 snapshots + 2 restore dirs stripped, 2 temp files deleted.
-        assert_eq!(scrub_secrets(&dir, true), 8);
+        assert_eq!(scrub_secrets(&dir, true), ScrubReport { changed: 8, skipped: 0 });
 
         for f in files_under(&dir) {
             let body = fs::read_to_string(&f).unwrap();
@@ -512,7 +537,7 @@ mod tests {
         assert_eq!(fs::read_to_string(&clean).unwrap(), CLEAN, "the clean snapshot was rewritten");
         assert_eq!(fs::metadata(&clean).unwrap().modified().unwrap(), clean_before);
 
-        assert_eq!(scrub_secrets(&dir, true), 0);
+        assert_eq!(scrub_secrets(&dir, true), ScrubReport::default());
     }
 
     #[test]
@@ -520,7 +545,7 @@ mod tests {
         let dir = keyed_state("scrub-live");
 
         // 3 snapshots + 2 restore dirs stripped, 1 snapshot temp file deleted.
-        assert_eq!(scrub_secrets(&dir, false), 6);
+        assert_eq!(scrub_secrets(&dir, false), ScrubReport { changed: 6, skipped: 0 });
 
         assert_eq!(fs::read_to_string(dir.join("kv").join(SETTINGS)).unwrap(), KEYED);
         assert_eq!(fs::read_to_string(dir.join("kv").join(SETTINGS_TMP)).unwrap(), KEYED);
@@ -529,6 +554,37 @@ mod tests {
             assert!(!body.contains("anthropicApiKey") && !body.contains("sk-ant-K"), "{} still holds the key", f.display());
         }
         assert!(!dir.join("snapshots/1001").join(SETTINGS_TMP).exists());
-        assert_eq!(scrub_secrets(&dir, false), 0);
+        assert_eq!(scrub_secrets(&dir, false), ScrubReport::default());
+    }
+
+    #[test]
+    fn scrub_counts_what_it_could_not_clean() {
+        let dir = keyed_state("scrub-skips");
+        // A temp-file name that can't be removed as a file.
+        fs::create_dir_all(dir.join("snapshots/1002").join(".better-terminal-settings.json.9-9.tmp/x")).unwrap();
+        // A settings path that can't be read as a file.
+        fs::create_dir_all(dir.join("snapshots/1004").join(SETTINGS)).unwrap();
+        // A snapshot with no settings file at all: nothing to clean, nothing skipped.
+        fs::create_dir_all(dir.join("snapshots/1005")).unwrap();
+        fs::write(dir.join("snapshots/1005/ade-session.json"), "{}").unwrap();
+        // A copy whose rewrite fails.
+        let refuse = dir.join(".kv-old-900");
+        let write = |p: &Path, body: &str| {
+            if p.starts_with(&refuse) { Err(std::io::Error::other("read-only")) } else { atomic_write(p, body) }
+        };
+
+        let report = scrub_secrets_with(&dir, true, &write);
+        assert_eq!(report.skipped, 3, "{report:?}");
+        assert_eq!(report.changed, 7, "{report:?}");
+        assert_eq!(fs::read_to_string(refuse.join(SETTINGS)).unwrap(), KEYED, "a failed rewrite must leave the file as it was");
+
+        // The next run retries only what is left.
+        assert_eq!(scrub_secrets(&dir, true), ScrubReport { changed: 1, skipped: 2 });
+    }
+
+    #[test]
+    fn scrub_report_serializes_for_the_webview() {
+        let json = serde_json::to_value(ScrubReport { changed: 2, skipped: 1 }).unwrap();
+        assert_eq!(json, serde_json::json!({ "changed": 2, "skipped": 1 }));
     }
 }

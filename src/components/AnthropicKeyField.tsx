@@ -3,8 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   ANTHROPIC_KEY_NOTE,
   ANTHROPIC_VAULT_NAME,
+  SavedCopyError,
   hasSavedCopy,
-  lastMoveError,
+  lastMoveFailure,
   removeSavedCopy,
 } from "../lib/anthropicKey";
 
@@ -12,7 +13,8 @@ import {
  * Settings → AI API: the Orchestrator's Anthropic key, kept in the vault (the
  * OS keychain) under an app-only name that terminals never get (ADR 0013).
  * Names only: it asks `vault_list` whether a key is set and never reads or
- * shows a value.
+ * shows a value. The plain-text copy a failed move leaves behind is offered
+ * for removal by `SavedCopyNotice`, which Settings shows for every provider.
  */
 
 interface Props {
@@ -47,16 +49,22 @@ function errText(err: unknown): string {
 export default function AnthropicKeyField({ labelStyle, inputStyle, inputFocus }: Props) {
   /** Whether the vault holds the key; null until `vault_list` answers. */
   const [isSet, setIsSet] = useState<boolean | null>(null);
+  /** Why `vault_list` couldn't be read: then whether a key is set is unknown. */
+  const [listError, setListError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [savedCopy, setSavedCopy] = useState(() => hasSavedCopy());
-  const [removeError, setRemoveError] = useState<string | null>(null);
-  const moveError = lastMoveError();
+  const savedCopy = hasSavedCopy();
 
   const refresh = () =>
     invoke<{ name: string }[]>("vault_list")
-      .then((list) => setIsSet(list.some((s) => s.name === ANTHROPIC_VAULT_NAME)))
-      .catch(() => setIsSet(false));
+      .then((list) => {
+        setListError(null);
+        setIsSet(list.some((s) => s.name === ANTHROPIC_VAULT_NAME));
+      })
+      .catch((err) => {
+        setIsSet(null);
+        setListError(errText(err));
+      });
 
   useEffect(() => {
     void refresh();
@@ -85,22 +93,6 @@ export default function AnthropicKeyField({ labelStyle, inputStyle, inputFocus }
     }
   };
 
-  const removeCopy = async () => {
-    if (
-      !window.confirm(
-        "Delete the Anthropic API key saved in ADE's settings? It is removed from this machine's settings and their snapshots. A key from the Console can't be viewed again, so you may need a new one.",
-      )
-    )
-      return;
-    setRemoveError(null);
-    try {
-      await removeSavedCopy();
-    } catch (err) {
-      setRemoveError(`Couldn't remove the saved copy: ${errText(err)}`);
-    }
-    setSavedCopy(hasSavedCopy());
-  };
-
   return (
     <div>
       <label htmlFor="anthropic-api-key" style={labelStyle}>
@@ -111,6 +103,7 @@ export default function AnthropicKeyField({ labelStyle, inputStyle, inputFocus }
           {isSet ? "Saved in the system keychain. Not exported to terminals." : "No key set."}
         </p>
       )}
+      {listError && <p style={{ ...ERROR_STYLE, marginTop: "8px" }}>Couldn't read the vault: {listError}</p>}
       <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
         <input
           id="anthropic-api-key"
@@ -137,19 +130,68 @@ export default function AnthropicKeyField({ labelStyle, inputStyle, inputFocus }
       </div>
       {error && <p style={ERROR_STYLE}>{error}</p>}
       <p style={HINT_STYLE}>Required for Orchestrator Mode. Get your key at console.anthropic.com</p>
-      {moveError && savedCopy && (
-        <div style={{ marginTop: "8px" }}>
+      {(isSet || savedCopy) && <p style={HINT_STYLE}>{ROTATE_TEXT}</p>}
+    </div>
+  );
+}
+
+/**
+ * The plain-text key a failed move left in ADE's settings (no working
+ * keychain, or a failed disk write): why it is still there, and **Remove the
+ * saved copy**. Shown on Settings → AI API whatever the provider.
+ */
+export function SavedCopyNotice() {
+  const [savedCopy, setSavedCopy] = useState(() => hasSavedCopy());
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  /** Settings are clean but some snapshot copies are not: say so and keep a retry. */
+  const [snapshotsLeft, setSnapshotsLeft] = useState<string | null>(null);
+  const failure = lastMoveFailure();
+
+  const run = async () => {
+    setRemoveError(null);
+    try {
+      await removeSavedCopy();
+      setSnapshotsLeft(null);
+    } catch (err) {
+      if (err instanceof SavedCopyError && err.settingsCleared) setSnapshotsLeft(err.message);
+      else setRemoveError(`Couldn't remove the saved copy: ${errText(err)}`);
+    }
+    setSavedCopy(hasSavedCopy());
+  };
+
+  const removeCopy = () => {
+    if (
+      !window.confirm(
+        "Delete the Anthropic API key saved in ADE's settings? It is removed from this machine's settings and their snapshots. A key from the Console can't be viewed again, so you may need a new one.",
+      )
+    )
+      return;
+    void run();
+  };
+
+  return (
+    <>
+      {failure && savedCopy && (
+        <div>
           <p style={ERROR_STYLE}>
-            The key saved in ADE's settings couldn't be moved to the system keychain: {moveError}. The Orchestrator
-            doesn't use that copy, and it is still stored in plain text.
+            {failure.keyInVault
+              ? `The key is in the system keychain, but ADE couldn't remove its old copy from settings: ${failure.reason}. That copy is still stored in plain text.`
+              : `The key saved in ADE's settings couldn't be moved to the system keychain: ${failure.reason}. The Orchestrator doesn't use that copy, and it is still stored in plain text.`}
           </p>
-          <button type="button" onClick={() => void removeCopy()} style={{ ...BUTTON_STYLE, marginTop: "6px" }}>
+          <button type="button" onClick={removeCopy} style={{ ...BUTTON_STYLE, marginTop: "6px" }}>
             Remove the saved copy
           </button>
         </div>
       )}
       {removeError && <p style={ERROR_STYLE}>{removeError}</p>}
-      {(isSet || savedCopy) && <p style={HINT_STYLE}>{ROTATE_TEXT}</p>}
-    </div>
+      {snapshotsLeft && (
+        <div>
+          <p style={ERROR_STYLE}>{snapshotsLeft}</p>
+          <button type="button" onClick={() => void run()} style={{ ...BUTTON_STYLE, marginTop: "6px" }}>
+            Try again
+          </button>
+        </div>
+      )}
+    </>
   );
 }

@@ -30,11 +30,44 @@ const VAULT_TIMEOUT_MS = 5000;
  */
 export type MoveResult = "moved" | "stripped" | "nothing" | "failed";
 
-let moveError: string | null = null;
+/** Why the last move failed, and whether the key was already safe in the vault by then. */
+export interface MoveFailure {
+  reason: string;
+  /** True when the failure came after the vault was known to hold a key (step 5). */
+  keyInVault: boolean;
+}
+
+let moveFailure: MoveFailure | null = null;
 
 /** Why the last move failed, or null if it didn't. */
 export function lastMoveError(): string | null {
-  return moveError;
+  return moveFailure?.reason ?? null;
+}
+
+/** The last move's failure with the step it reached, or null if it didn't fail. */
+export function lastMoveFailure(): MoveFailure | null {
+  return moveFailure;
+}
+
+/** What `state_scrub_secrets` did: files written or deleted, and files it couldn't change. */
+export interface ScrubReport {
+  changed: number;
+  skipped: number;
+}
+
+/**
+ * `removeSavedCopy` failed. `settingsCleared` is true when the settings (disk
+ * and localStorage) no longer hold the key and only the snapshot clean-up
+ * failed, so trying again only needs to repeat that.
+ */
+export class SavedCopyError extends Error {
+  constructor(
+    message: string,
+    readonly settingsCleared: boolean,
+  ) {
+    super(message);
+    this.name = "SavedCopyError";
+  }
 }
 
 function errText(err: unknown): string {
@@ -103,11 +136,17 @@ async function toVault(key: string, isAbandoned: () => boolean): Promise<boolean
   } catch (err) {
     if (errText(err) !== "not found") throw err;
   }
+  // From here the vault held no usable key, so whatever it holds next was written by this move.
   if (isAbandoned()) throw new TimedOut();
   await invoke("vault_set", { name: ANTHROPIC_VAULT_NAME, value: key, note: ANTHROPIC_KEY_NOTE });
   if (isAbandoned()) throw new TimedOut();
   const back = await invoke<string>("vault_get", { name: ANTHROPIC_VAULT_NAME });
-  if (back !== key) throw new Error("The system keychain returned a different value after saving the key.");
+  if (back !== key) {
+    // Best effort: a wrong value left behind would read as "the vault wins" at
+    // the next launch, which would then strip the only good copy.
+    await invoke("vault_delete", { name: ANTHROPIC_VAULT_NAME }).catch(() => {});
+    throw new Error("The system keychain returned a different value after saving the key.");
+  }
   return true;
 }
 
@@ -133,9 +172,23 @@ function withinBound<T>(run: (isAbandoned: () => boolean) => Promise<T>): Promis
 
 async function scrubAtBoot(): Promise<void> {
   try {
-    await invoke("state_scrub_secrets", { atBoot: true });
+    const report = await invoke<ScrubReport>("state_scrub_secrets", { atBoot: true });
+    if (report && report.skipped > 0) {
+      console.warn(`scrubbing the old Anthropic key from saved state skipped ${report.skipped} file(s); retried next launch`);
+    }
   } catch (err) {
     console.warn("scrubbing the old Anthropic key from saved state failed", err);
+  }
+}
+
+/** Names only (`vault_list`): whether the vault holds the key. False if the list can't be read. */
+async function vaultListsKey(): Promise<boolean> {
+  try {
+    const list = await invoke<{ name: string }[]>("vault_list");
+    return list.some((s) => s.name === ANTHROPIC_VAULT_NAME);
+  } catch (err) {
+    console.warn("couldn't read the vault's names; the boot scrub waits for the next launch", err);
+    return false;
   }
 }
 
@@ -147,12 +200,15 @@ async function scrubAtBoot(): Promise<void> {
  * throws.
  */
 export async function moveAnthropicKeyToVault(): Promise<MoveResult> {
-  moveError = null;
+  moveFailure = null;
+  let keyInVault = false;
   try {
-    // 1. Nothing to move: only the scrub runs.
+    // 1. Nothing to move. The scrub runs only if the vault lists the key:
+    // otherwise a restore that silently missed the settings key would let it
+    // strip the only copies left on disk.
     const settings = readSettings();
     if (settings === null || !Object.prototype.hasOwnProperty.call(settings, LEGACY_FIELD)) {
-      await scrubAtBoot();
+      if (await vaultListsKey()) await scrubAtBoot();
       return "nothing";
     }
     // 2-4. An empty field (or one that isn't a string) needs no vault call.
@@ -160,6 +216,7 @@ export async function moveAnthropicKeyToVault(): Promise<MoveResult> {
     let wrote = false;
     if (typeof key === "string" && key !== "") {
       wrote = await withinBound((isAbandoned) => toVault(key, isAbandoned));
+      keyInVault = true;
     }
     // 5. Disk first, with no timeout: a late write could overwrite a newer flush.
     const json = without(settings);
@@ -170,7 +227,7 @@ export async function moveAnthropicKeyToVault(): Promise<MoveResult> {
     await scrubAtBoot();
     return wrote ? "moved" : "stripped";
   } catch (err) {
-    moveError = errText(err);
+    moveFailure = { reason: errText(err), keyInVault };
     return "failed";
   }
 }
@@ -178,7 +235,9 @@ export async function moveAnthropicKeyToVault(): Promise<MoveResult> {
 /**
  * Delete the plain-text copy while the app runs (when the move can't): from
  * disk, localStorage, and the snapshots. Rejects with the error if the disk
- * write fails, leaving localStorage as it was. Never touches the vault.
+ * write fails, leaving localStorage as it was; rejects with a
+ * `SavedCopyError` (`settingsCleared: true`) if only the snapshot clean-up
+ * failed or skipped files. Never touches the vault.
  */
 export async function removeSavedCopy(): Promise<void> {
   // Dynamic, so this module's only static import stays `@tauri-apps/api/core`.
@@ -196,5 +255,17 @@ export async function removeSavedCopy(): Promise<void> {
     }
   }
   // 4. Snapshots and restore directories; kv/ was written in step 2.
-  await invoke("state_scrub_secrets", { atBoot: false });
+  let report: ScrubReport;
+  try {
+    report = await invoke<ScrubReport>("state_scrub_secrets", { atBoot: false });
+  } catch (err) {
+    throw new SavedCopyError(`The key was removed from ADE's settings, but cleaning its saved snapshots failed: ${errText(err)}`, true);
+  }
+  if (report && report.skipped > 0) {
+    const n = report.skipped;
+    throw new SavedCopyError(
+      `The key was removed from ADE's settings, but ${n} saved ${n === 1 ? "copy" : "copies"} under ADE's state folder couldn't be cleaned.`,
+      true,
+    );
+  }
 }

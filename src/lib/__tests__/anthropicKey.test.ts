@@ -32,10 +32,15 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "vault_set":
         tauri.vault.set(args.name as string, args.value as string);
         return Promise.resolve(null);
+      case "vault_delete":
+        tauri.vault.delete(args.name as string);
+        return Promise.resolve(null);
+      case "vault_list":
+        return Promise.resolve([...tauri.vault.keys()].map((name) => ({ name, note: "", updatedAt: 1, inTerminals: true })));
       case "state_write":
         return Promise.resolve(null);
       case "state_scrub_secrets":
-        return Promise.resolve(0);
+        return Promise.resolve({ changed: 0, skipped: 0 });
       default:
         return Promise.reject(new Error(`unexpected command: ${cmd}`));
     }
@@ -52,8 +57,10 @@ import {
   ANTHROPIC_KEY_NOTE,
   ANTHROPIC_VAULT_NAME,
   LEGACY_FIELD,
+  SavedCopyError,
   hasSavedCopy,
   lastMoveError,
+  lastMoveFailure,
   moveAnthropicKeyToVault,
   removeSavedCopy,
 } from "../anthropicKey";
@@ -109,8 +116,33 @@ describe("moveAnthropicKeyToVault", () => {
     tauri.calls.length = 0;
 
     await expect(moveAnthropicKeyToVault()).resolves.toBe("nothing");
-    expect(cmds()).toEqual(["state_scrub_secrets"]);
-    expect(tauri.calls[0].args).toEqual({ atBoot: true });
+    // Names only: the scrub runs because the vault lists the key.
+    expect(cmds()).toEqual(["vault_list", "state_scrub_secrets"]);
+    expect(tauri.calls[1].args).toEqual({ atBoot: true });
+  });
+
+  it("item 5: with nothing to move and no key in the vault, the boot scrub is skipped", async () => {
+    saved({ fontSize: 14 });
+    tauri.vault.set("GITHUB_TOKEN", "x");
+    await expect(moveAnthropicKeyToVault()).resolves.toBe("nothing");
+    expect(cmds()).toEqual(["vault_list"]);
+  });
+
+  it("item 5: with nothing to move and an unreadable vault list, the boot scrub is skipped", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    tauri.vault.set(NAME, K);
+    tauri.on.vault_list = () => Promise.reject("index unreadable");
+    await expect(moveAnthropicKeyToVault()).resolves.toBe("nothing");
+    expect(cmds()).toEqual(["vault_list"]);
+    warn.mockRestore();
+  });
+
+  it("item 3: a vault entry holding an empty value is overwritten, not taken as the vault's key", async () => {
+    saved({ [LEGACY_FIELD]: K, fontSize: 14 });
+    tauri.vault.set(NAME, "");
+    await expect(moveAnthropicKeyToVault()).resolves.toBe("moved");
+    expect(tauri.calls.find((c) => c.cmd === "vault_set")!.args).toEqual({ name: NAME, value: K, note: ANTHROPIC_KEY_NOTE });
+    expect(tauri.vault.get(NAME)).toBe(K);
   });
 
   it("B3: after a crash past the vault write, it strips without writing the vault", async () => {
@@ -167,6 +199,59 @@ describe("moveAnthropicKeyToVault", () => {
       await expect(moveAnthropicKeyToVault()).resolves.toBe("failed");
       expectUntouched(before);
       expect(lastMoveError()).toMatch(/different/i);
+      // Item 4: the wrong value is removed, so the next launch doesn't take it as "the vault wins".
+      expect(tauri.calls.filter((c) => c.cmd === "vault_delete").map((c) => c.args)).toEqual([{ name: NAME }]);
+    });
+
+    it("the read-back differs after an empty entry: that entry is removed too", async () => {
+      saved({ [LEGACY_FIELD]: K });
+      let gets = 0;
+      tauri.on.vault_get = () => (++gets === 1 ? "" : "sk-ant-OTHER");
+      await expect(moveAnthropicKeyToVault()).resolves.toBe("failed");
+      expect(cmds()).toContain("vault_delete");
+    });
+
+    it("the read-back differs and the clean-up delete fails: still a failure with the mismatch reason", async () => {
+      saved({ [LEGACY_FIELD]: K });
+      const before = stored();
+      let gets = 0;
+      tauri.on.vault_get = () => (++gets === 1 ? Promise.reject("not found") : "sk-ant-OTHER");
+      tauri.on.vault_delete = () => Promise.reject("denied");
+      await expect(moveAnthropicKeyToVault()).resolves.toBe("failed");
+      expectUntouched(before);
+      expect(lastMoveError()).toMatch(/different/i);
+    });
+
+    it("the read-back rejects: nothing is deleted", async () => {
+      saved({ [LEGACY_FIELD]: K });
+      let gets = 0;
+      tauri.on.vault_get = () => (++gets === 1 ? Promise.reject("not found") : Promise.reject("read failed"));
+      await expect(moveAnthropicKeyToVault()).resolves.toBe("failed");
+      expect(cmds()).not.toContain("vault_delete");
+    });
+
+    it("item 2: a first vault_get that answers after the bound is followed by no vault_set", async () => {
+      vi.useFakeTimers();
+      saved({ [LEGACY_FIELD]: K });
+      const before = stored();
+      tauri.on.vault_get = () => new Promise((_, reject) => setTimeout(() => reject("not found"), 6000));
+      const result = moveAnthropicKeyToVault();
+      await vi.advanceTimersByTimeAsync(5000);
+      await expect(result).resolves.toBe("failed");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(cmds()).toEqual(["vault_get"]);
+      expectUntouched(before);
+    });
+
+    it("item 2: a vault_set that answers after the bound is followed by no read-back", async () => {
+      vi.useFakeTimers();
+      saved({ [LEGACY_FIELD]: K });
+      tauri.on.vault_set = () => new Promise((resolve) => setTimeout(() => resolve(null), 6000));
+      const result = moveAnthropicKeyToVault();
+      await vi.advanceTimersByTimeAsync(5000);
+      await expect(result).resolves.toBe("failed");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(cmds()).toEqual(["vault_get", "vault_set"]);
     });
 
     it("steps 3-4 take longer than 5 s", async () => {
@@ -243,14 +328,16 @@ describe("moveAnthropicKeyToVault", () => {
     ["null", "null"],
   ])("B6: settings that are %s cause no write and no vault call", async (_, raw) => {
     localStorage.setItem(KEY, raw);
+    tauri.vault.set(NAME, K);
     await expect(moveAnthropicKeyToVault()).resolves.toBe("nothing");
-    expect(cmds()).toEqual(["state_scrub_secrets"]);
+    // Names only (`vault_list`): no value is read or written.
+    expect(cmds()).toEqual(["vault_list", "state_scrub_secrets"]);
     expect(stored()).toBe(raw);
   });
 
   it("B6: no saved settings at all is nothing to move", async () => {
     await expect(moveAnthropicKeyToVault()).resolves.toBe("nothing");
-    expect(cmds()).toEqual(["state_scrub_secrets"]);
+    expect(cmds()).toEqual(["vault_list"]);
   });
 
   it("B6: a different value already in the vault is kept, and the field is removed", async () => {
@@ -261,6 +348,34 @@ describe("moveAnthropicKeyToVault", () => {
     expect(tauri.vault.get(NAME)).toBe("sk-ant-K2");
     expect(written()).toEqual({ fontSize: 14 });
     expect(stored()).not.toContain("sk-ant-K1");
+  });
+
+  it("item 6: a boot scrub that skipped files is logged, not fatal", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    saved({ [LEGACY_FIELD]: K });
+    tauri.on.state_scrub_secrets = () => ({ changed: 3, skipped: 2 });
+    await expect(moveAnthropicKeyToVault()).resolves.toBe("moved");
+    expect(warn.mock.calls.flat().join(" ")).toMatch(/2/);
+    warn.mockRestore();
+  });
+
+  it("item 7: a failure says whether the key is already in the vault", async () => {
+    saved({ [LEGACY_FIELD]: K });
+    tauri.on.vault_set = () => Promise.reject("denied");
+    await moveAnthropicKeyToVault();
+    expect(lastMoveFailure()).toEqual({ reason: "denied", keyInVault: false });
+
+    tauri.on = { state_write: () => Promise.reject("disk full") };
+    await moveAnthropicKeyToVault();
+    expect(lastMoveFailure()).toEqual({ reason: "disk full", keyInVault: true });
+
+    tauri.vault.set(NAME, "sk-ant-OTHER");
+    await moveAnthropicKeyToVault();
+    expect(lastMoveFailure()).toEqual({ reason: "disk full", keyInVault: true });
+
+    tauri.on = {};
+    await moveAnthropicKeyToVault();
+    expect(lastMoveFailure()).toBeNull();
   });
 
   it("a scrub failure is logged, not fatal", async () => {
@@ -312,6 +427,41 @@ describe("removeSavedCopy", () => {
     expect(stored()).toBe(before);
     expect(cmds()).not.toContain("state_scrub_secrets");
     expect(hasSavedCopy()).toBe(true);
+  });
+});
+
+describe("item 6: removeSavedCopy reports what the scrub could not clean", () => {
+  const failMove = async () => {
+    saved({ [LEGACY_FIELD]: K, fontSize: 14 });
+    tauri.on.vault_get = () => Promise.reject("The system keychain isn't available: locked");
+    await moveAnthropicKeyToVault();
+    tauri.on = {};
+    tauri.calls.length = 0;
+  };
+
+  it("skipped files reject with an error that names them, after settings were cleared", async () => {
+    await failMove();
+    tauri.on.state_scrub_secrets = () => ({ changed: 1, skipped: 2 });
+    const err = await removeSavedCopy().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(SavedCopyError);
+    expect((err as SavedCopyError).settingsCleared).toBe(true);
+    expect((err as SavedCopyError).message).toMatch(/2 saved copies/);
+    expect(hasSavedCopy()).toBe(false);
+  });
+
+  it("a scrub that rejects also says settings were cleared", async () => {
+    await failMove();
+    tauri.on.state_scrub_secrets = () => Promise.reject("busy");
+    const err = await removeSavedCopy().then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(SavedCopyError);
+    expect((err as SavedCopyError).settingsCleared).toBe(true);
+    expect((err as SavedCopyError).message).toContain("busy");
   });
 });
 

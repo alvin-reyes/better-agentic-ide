@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import { invoke } from "@tauri-apps/api/core";
 import SyncSettings from "./SyncSettings";
-import AnthropicKeyField from "./AnthropicKeyField";
+import AnthropicKeyField, { SavedCopyNotice } from "./AnthropicKeyField";
 import { PROVIDERS } from "../data/providers";
 import { supportsRoleDelivery } from "../lib/agentCommand";
 
@@ -955,6 +955,9 @@ export default function SettingsPanel() {
                   Choose which AI provider powers the Orchestrator planner.
                 </p>
               </div>
+
+              {/* A plain-text Anthropic key a failed move left behind, whatever the provider */}
+              <SavedCopyNotice />
 
               {/* Anthropic section */}
               {store.orchestratorProvider === "anthropic" && (
