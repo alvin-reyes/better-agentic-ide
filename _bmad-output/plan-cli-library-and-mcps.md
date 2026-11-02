@@ -390,8 +390,8 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
    **A leaf the table doesn't know asks.**
 5. **Credentials** (review M3). Each of these asks:
    - A word, redirect target or glob that, after `~`/`$HOME` expansion and tracking of an earlier `cd`, names a guarded CLI's credential file, or matches one as a glob (`~/.config/gh/h*`).
-   - A credential file's folder or a parent of it, used by a copying, archiving or recursive reader: `cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `grep -r`, `find`.
-   - `find <cred dir> -exec …`.
+   - A credential file's folder or a parent of it, used by a copying, archiving or recursive reader: `cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `grep -r`.
+   - `find <cred dir or a parent> -exec|-execdir|-ok|-okdir …`. **Plain `find` without those actions is not a credential reader** (owner ruling, 2026-11-02): it lists names and never reads file contents, so `find / -name …` and `find ~ -type f` give no decision.
    - **Keychain CLIs:** `security find-generic-password`, `find-internet-password`, `dump-keychain` and `export`, and `secret-tool lookup|search`. gh keeps its token in the keyring by default (service `gh:github.com`).
 
 **What the guard still can't see, stated in the guide and pinned in the corpora as escapes:**
@@ -692,10 +692,10 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
    Covered by `cli_guard` › `gh_hand_corpus`.
 6. **Credentials.** These ask:
    - `cat ~/.config/gh/hosts.yml`, `cat $HOME/.config/gh/h*`, `cd ~/.config/gh && cat hosts.yml`;
-   - `cp -r ~/.config/gh /tmp/x`, `tar czf x.tgz ~/.config`, `zip -r x ~/.config/gh`, `find ~/.config/gh -exec cat {} \;`, `base64 < ~/.config/gh/hosts.yml`;
+   - `cp -r ~/.config/gh /tmp/x`, `tar czf x.tgz ~/.config`, `zip -r x ~/.config/gh`, `find ~/.config/gh -exec cat {} \;`, `find ~ -name hosts.yml -execdir cat {} +`, `find / -ok cat {} \;`, `base64 < ~/.config/gh/hosts.yml`;
    - `security find-generic-password -s gh:github.com -w`, `secret-tool lookup service gh:github.com`.
 
-   `cat ~/.config/gh/config.yml` and `ls ~/.config` give no decision. Covered by `cli_guard/creds.rs` › `credential_reads_ask`.
+   These give no decision: `cat ~/.config/gh/config.yml`, `ls ~/.config`, and plain `find` with no `-exec`, `-execdir`, `-ok` or `-okdir`: `find / -name '*.pem'`, `find ~ -type f -newer x`, `find ~/.config/gh -name hosts.yml` (owner ruling, 2026-11-02). Covered by `cli_guard/creds.rs` › `credential_reads_ask`.
 7. **Fail closed and bounded:**
    - a 1 MB command and a 10,000-deep `$(…)` both ask, without a stack overflow (run in a thread with a 256 KB stack);
    - `gh repo delete "unterminated` asks;
@@ -1207,3 +1207,9 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
 | Owner ruling: `disableAllHooks: false` only with a guard | It is set only when `rules.guard` is non-null. Updated: Coordination (the approved text kept, the refined text added), "Why `disableAllHooks: false`", Story 2 Design Notes, AC1 and AC4, ADR 0011, and Q1's record in Owner's decisions (item 8) and in Open Questions, as a dated refinement. **Orgo's AC11 needs the matching change.** |
 | The guard's shape | `launch_rules()` returns `guard: { interactive, headless } \| null`, both built in Rust; `buildLaunchCommand` picks one from `opts.headless`. It stays argument-free and cacheable, as in Orgo's AC11. Story 2 Design Notes, AC1 and AC4. **Orgo's AC11 says `rules.guard.command`, and needs the matching change.** |
 | Stale `main_checkout_root` note | Withdrawn. The plan depends on the contract as the Orgo plan defines it at `ee59f5d`: CR-1, the R2-7 walk table, `main_checkout_root_for(root, home, uid)`, Claude Code's guards. Story 4 adopts the home-folder refusal (R2-1, AC22) with `enable(…, home, uid)`, plus a new case in Story 4 AC6. |
+
+**Post-approval ruling, 2026-11-02 (owner): plain `find` is not a credential reader.**
+- **Why:** Story 1's developer replayed 2,646 local Bash calls through the real helper (c7d5fa2) and got 19 asks. 9 of them were plain `find /`.
+- **The ruling:** `find` without `-exec`, `-execdir`, `-ok` or `-okdir` lists names only and never reads contents. Over a folder that holds the gh credential folder, it gives no decision. With any of those actions, it still asks.
+- **Updated:** the credential-readers list (`find` removed from the recursive readers, the action form kept and widened to all four actions) and Story 1 AC6 (two more asking cases, and three plain-`find` no-decision cases).
+- Q3's list of remaining false asks never named `find`, so it is unchanged.
