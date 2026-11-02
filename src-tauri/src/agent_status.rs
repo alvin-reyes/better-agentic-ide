@@ -347,7 +347,9 @@ type Watcher = Box<dyn Fn(AgentStatusUpdate) -> bool + Send>;
 struct Inner {
     core: Mutex<Core>,
     watchers: Mutex<Vec<Watcher>>,
-    token: String,
+    /// The key each terminal's token is made from. Held in memory only:
+    /// never logged, never on a command line, never in an environment.
+    master: [u8; 32],
     /// The endpoint's port, or why it isn't listening.
     port: Result<u16, String>,
     /// The helper's absolute path, or why it can't be used.
@@ -358,11 +360,25 @@ struct Inner {
 #[derive(Clone)]
 pub struct AgentStatus(Arc<Inner>);
 
-/// A new random token, as hex.
-fn new_token() -> Result<String, String> {
+/// A new random master key, from which each terminal's token is made.
+fn new_master() -> Result<[u8; 32], String> {
     let mut bytes = [0u8; 32];
     getrandom::getrandom(&mut bytes).map_err(|e| format!("no random token: {e}"))?;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+    Ok(bytes)
+}
+
+/// Lowercase hex.
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The token of terminal `pty`: the lowercase hex of
+/// HMAC-SHA-256(master, "pty:<id>"). A token speaks for its own PTY only.
+pub fn pty_token(master: &[u8], pty: u32) -> String {
+    use hmac::{Hmac, Mac};
+    let mut mac = <Hmac<sha2::Sha256> as Mac>::new_from_slice(master).expect("HMAC takes a key of any length");
+    mac.update(format!("pty:{pty}").as_bytes());
+    hex(&mac.finalize().into_bytes())
 }
 
 /// Where the helper is: beside this executable, in a release bundle and in a
@@ -385,9 +401,14 @@ fn equal_in_constant_time(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// Why a request is refused, before its body is read: the status to answer
-/// with. On success, the PTY id it is from.
-pub fn screen(method: &str, headers: &[(String, String)], port: u16, token: &str, length: Option<usize>) -> Result<u32, u16> {
+/// with. On success, the PTY id it is from. The PTY id is read first (missing
+/// or malformed is 401), then the token is checked against that id's.
+pub fn screen(method: &str, headers: &[(String, String)], port: u16, master: &[u8], length: Option<usize>) -> Result<u32, u16> {
     let get = |name: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str());
+    let pty = get(HEADER_PTY).and_then(|p| p.trim().parse::<u32>().ok()).ok_or(401u16)?;
+    if !get(HEADER_TOKEN).is_some_and(|t| equal_in_constant_time(t.as_bytes(), pty_token(master, pty).as_bytes())) {
+        return Err(401);
+    }
     if method != "POST" {
         return Err(405);
     }
@@ -397,13 +418,10 @@ pub fn screen(method: &str, headers: &[(String, String)], port: u16, token: &str
     if get("Host") != Some(format!("127.0.0.1:{port}").as_str()) {
         return Err(403);
     }
-    if !get(HEADER_TOKEN).is_some_and(|t| equal_in_constant_time(t.as_bytes(), token.as_bytes())) {
-        return Err(401);
-    }
     if length.is_some_and(|n| n > MAX_BODY) {
         return Err(413);
     }
-    get(HEADER_PTY).and_then(|p| p.trim().parse::<u32>().ok()).ok_or(400)
+    Ok(pty)
 }
 
 impl AgentStatus {
@@ -411,8 +429,12 @@ impl AgentStatus {
     /// When it can't listen, or the helper is missing, terminals get none of
     /// the four variables and `unavailable` says why.
     pub fn start(helper: Result<PathBuf, String>) -> AgentStatus {
-        let token = new_token();
-        let server = match &token {
+        Self::start_with(helper, new_master())
+    }
+
+    /// `start`, with the master key given: tests pass a fixed one.
+    fn start_with(helper: Result<PathBuf, String>, master: Result<[u8; 32], String>) -> AgentStatus {
+        let server = match &master {
             Ok(_) => tiny_http::Server::http("127.0.0.1:0").map_err(|e| format!("Agent status couldn't listen on 127.0.0.1: {e}")),
             Err(e) => Err(e.clone()),
         };
@@ -426,7 +448,7 @@ impl AgentStatus {
         let status = AgentStatus(Arc::new(Inner {
             core: Mutex::new(Core::default()),
             watchers: Mutex::new(Vec::new()),
-            token: token.unwrap_or_default(),
+            master: master.unwrap_or_default(),
             port,
             helper,
         }));
@@ -458,7 +480,7 @@ impl AgentStatus {
         Some(vec![
             (ENV_BIN, helper.to_string_lossy().into_owned()),
             (ENV_PORT, port.to_string()),
-            (ENV_TOKEN, self.0.token.clone()),
+            (ENV_TOKEN, pty_token(&self.0.master, pty)),
             (ENV_PTY, pty.to_string()),
         ])
     }
@@ -535,9 +557,10 @@ impl AgentStatus {
         *self.0.port.as_ref().unwrap()
     }
 
+    /// The token terminal `pty` is given.
     #[cfg(test)]
-    fn token(&self) -> &str {
-        &self.0.token
+    fn token_for(&self, pty: u32) -> String {
+        pty_token(&self.0.master, pty)
     }
 }
 
@@ -550,7 +573,7 @@ fn serve(server: tiny_http::Server, status: Weak<Inner>) {
         let headers: Vec<(String, String)> =
             request.headers().iter().map(|h| (h.field.as_str().as_str().to_string(), h.value.as_str().to_string())).collect();
         let method = request.method().as_str().to_string();
-        let code = match screen(&method, &headers, port, &status.0.token, request.body_length()) {
+        let code = match screen(&method, &headers, port, &status.0.master, request.body_length()) {
             Err(code) => code,
             Ok(pty) => {
                 // The length header can be absent (chunked): read one byte
@@ -1058,10 +1081,21 @@ mod tests {
     }
 
     #[test]
+    fn a_terminal_token_is_the_hmac_of_its_pty_id() {
+        // printf 'pty:12' | openssl dgst -sha256 -mac HMAC -macopt hexkey:07070707...07 (32 bytes of 7)
+        const VECTOR: &str = "3f8ccefd10bfe2ceaa21ee7f77e088c03c41ea801bd1e3154b93eab19760094f";
+        assert_eq!(pty_token(&[7u8; 32], 12), VECTOR);
+        let st = AgentStatus::start_with(Ok(PathBuf::from("/Applications/Better Terminal.app/Contents/MacOS/ade-hook")), Ok([7u8; 32]));
+        let token_of = |pty: u32| st.terminal_env(pty).unwrap().into_iter().find(|(k, _)| *k == ENV_TOKEN).unwrap().1;
+        assert_eq!(token_of(12), VECTOR);
+        assert_ne!(token_of(13), VECTOR, "two terminals never share a token");
+    }
+
+    #[test]
     fn the_endpoint_takes_a_right_token_and_answers_empty() {
         let st = started();
         let port = st.port();
-        let ok = send(port, &request(port, "POST", &format!("X-ADE-Token: {}\r\nX-ADE-PTY: 9\r\n", st.token()), &start_body("e1")));
+        let ok = send(port, &request(port, "POST", &format!("X-ADE-Token: {}\r\nX-ADE-PTY: 9\r\n", st.token_for(9)), &start_body("e1")));
         assert!(status_line(&ok).contains(" 200"), "{ok}");
         assert_eq!(body_of(&ok), "{}");
         assert!(!ok.to_ascii_lowercase().contains("access-control"), "no CORS headers");
@@ -1072,29 +1106,73 @@ mod tests {
     fn the_endpoint_refuses_and_changes_nothing() {
         let st = started();
         let port = st.port();
-        let token = format!("X-ADE-Token: {}\r\nX-ADE-PTY: 9\r\n", st.token());
+        let token = format!("X-ADE-Token: {}\r\nX-ADE-PTY: 9\r\n", st.token_for(9));
         let big = format!(r#"{{"hook_event_name":"SessionStart","session_id":"x","cwd":"{}"}}"#, "a".repeat(MAX_BODY));
         let cases = [
-            ("wrong token", request(port, "POST", "X-ADE-Token: nope\r\nX-ADE-PTY: 9\r\n", &start_body("x"))),
-            ("missing token", request(port, "POST", "X-ADE-PTY: 9\r\n", &start_body("x"))),
-            ("Origin", request(port, "POST", &format!("{token}Origin: http://evil.example\r\n"), &start_body("x"))),
-            ("foreign Host", request(port, "POST", &token, &start_body("x")).replace(&format!("Host: 127.0.0.1:{port}"), &format!("Host: localhost:{port}"))),
-            ("GET", request(port, "GET", &token, "")),
-            ("oversize", request(port, "POST", &token, &big)),
+            ("wrong token", 401, request(port, "POST", "X-ADE-Token: nope\r\nX-ADE-PTY: 9\r\n", &start_body("x"))),
+            ("missing token", 401, request(port, "POST", "X-ADE-PTY: 9\r\n", &start_body("x"))),
+            ("Origin", 403, request(port, "POST", &format!("{token}Origin: http://evil.example\r\n"), &start_body("x"))),
+            ("foreign Host", 403, request(port, "POST", &token, &start_body("x")).replace(&format!("Host: 127.0.0.1:{port}"), &format!("Host: localhost:{port}"))),
+            ("GET", 405, request(port, "GET", &token, "")),
+            ("oversize", 413, request(port, "POST", &token, &big)),
             (
                 "oversize, chunked",
+                413,
                 format!(
                     "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{token}Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n{big}\r\n0\r\n\r\n",
                     big.len()
                 ),
             ),
-            ("no PTY", request(port, "POST", &format!("X-ADE-Token: {}\r\n", st.token()), &start_body("x"))),
+            ("no PTY", 401, request(port, "POST", &format!("X-ADE-Token: {}\r\n", st.token_for(9)), &start_body("x"))),
         ];
-        for (name, raw) in cases {
+        for (name, code, raw) in cases {
             let answer = send(port, &raw);
-            assert!(!status_line(&answer).contains(" 200"), "{name}: {answer}");
+            assert!(status_line(&answer).contains(&format!(" {code}")), "{name}: {answer}");
             assert_eq!(body_of(&answer), "{}", "{name}");
         }
+        assert_eq!(st.current(), BTreeMap::new());
+    }
+
+    #[test]
+    fn a_pty_token_is_refused_for_another_pty() {
+        let st = started();
+        let port = st.port();
+        for (token_of, header) in [(9, 7), (7, 9)] {
+            let raw = request(port, "POST", &format!("X-ADE-Token: {}\r\nX-ADE-PTY: {header}\r\n", st.token_for(token_of)), &start_body("x"));
+            let answer = send(port, &raw);
+            assert!(status_line(&answer).contains(" 401"), "PTY {token_of}'s token as PTY {header}: {answer}");
+            assert_eq!(body_of(&answer), "{}");
+        }
+        assert_eq!(st.current(), BTreeMap::new());
+    }
+
+    #[test]
+    fn a_malformed_pty_header_is_401() {
+        let st = started();
+        let port = st.port();
+        for bad in ["", "abc", "-1", "4294967296"] {
+            // The token is the right one for a valid id, and for the id the
+            // header would be if it were read leniently.
+            for token in [st.token_for(9), st.token_for(0)] {
+                let raw = request(port, "POST", &format!("X-ADE-Token: {token}\r\nX-ADE-PTY: {bad}\r\n"), &start_body("x"));
+                let answer = send(port, &raw);
+                assert!(status_line(&answer).contains(" 401"), "X-ADE-PTY {bad:?}: {answer}");
+                assert_eq!(body_of(&answer), "{}");
+            }
+        }
+        assert_eq!(st.current(), BTreeMap::new());
+    }
+
+    #[test]
+    fn the_master_key_is_not_a_token() {
+        let st = started();
+        let port = st.port();
+        let master = hex(&st.0.master);
+        assert_eq!(master.len(), 64);
+        let raw = request(port, "POST", &format!("X-ADE-Token: {master}\r\nX-ADE-PTY: 9\r\n"), &start_body("x"));
+        let answer = send(port, &raw);
+        assert!(status_line(&answer).contains(" 401"), "{answer}");
+        assert_eq!(body_of(&answer), "{}");
         assert_eq!(st.current(), BTreeMap::new());
     }
 
@@ -1102,8 +1180,11 @@ mod tests {
     fn the_endpoint_listens_on_loopback_only() {
         let st = started();
         assert!(TcpStream::connect(("127.0.0.1", st.port())).is_ok());
-        let screened = screen("POST", &[("Host".into(), format!("127.0.0.1:{}", st.port()))], st.port(), st.token(), None);
+        let host = ("Host".to_string(), format!("127.0.0.1:{}", st.port()));
+        let screened = screen("POST", &[host.clone()], st.port(), &st.0.master, None);
         assert_eq!(screened, Err(401));
+        let right = [host, (HEADER_PTY.into(), "9".into()), (HEADER_TOKEN.into(), st.token_for(9))];
+        assert_eq!(screen("POST", &right, st.port(), &st.0.master, None), Ok(9));
     }
 
     #[test]
@@ -1115,7 +1196,7 @@ mod tests {
         assert_eq!(env[3].1, "12");
         assert_eq!(env[1].1, st.port().to_string());
         assert_eq!(env[2].1.len(), 64);
-        assert_ne!(env[2].1, started().token(), "a new token each launch");
+        assert_ne!(env[2].1, started().token_for(12), "a new token each launch");
         assert_eq!(st.unavailable(), None);
 
         let missing = AgentStatus::start(Err("The Agent status helper is missing".into()));
