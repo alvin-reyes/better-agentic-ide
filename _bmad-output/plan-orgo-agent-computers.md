@@ -1099,7 +1099,7 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
    - **Denied:** `orgo c create --name a`, `orgo computers start a`, `orgo --json c create`, `orgo c --json resize a --ram 8`, `orgo t run hermes-agent`, `ORGO_PROFILE=x orgo c clone a`, `orgo c create --profile default`, `env orgo c create`, `/home/u/.orgo/bin/orgo c create`, `npx orgo c create`, `sh -c 'orgo c create'`.
    - **Denied, the recorded over-match:** `grep "orgo c create" notes.md` and `grep "orgo --json" x`.
    - **Not denied:** `orgo c delete a`, `orgo c list --json` and `orgo whoami`.
-   - **Unmatched, the documented limits:** `orgo c 'create'`, `orgo "c" create`, `orgo  c create` (two spaces), `npx orgo@2.3.0 c create`, `pnpm dlx orgo@latest c create`, `node /x/dist/cli.js c create`, `$O c create`, `xargs -n1 orgo c create`. The test asserts these are not matched, so the guide's list stays true.
+   - **Unmatched, the documented limits:** `orgo c 'create'`, `orgo "c" create`, `orgo  c create` (two spaces), `npx orgo@2.3.0 c create`, `pnpm dlx orgo@latest c create`, `node /x/dist/cli.js c create`, `$O c create`, `echo create | xargs -n1 orgo c` (xargs supplies the subcommand from its input). The test asserts these are not matched, so the guide's list stays true.
 
    Covered by `orgo_rules.rs` › `continuous_cli_denies_cover_creation`.
 4. **(1b-2.)** Launching from `AgentPicker` with Continuous on, from a pane cwd of `<repo>/app` and of `<repo>`, invokes `launch_rules` with no path argument. Both typed commands carry identical `--disallowedTools` lists. With Continuous off, neither command has `--disallowedTools`. Covered by `src/components/__tests__/agentLaunch.test.ts` › "continuous denies are the same in every folder".
@@ -1444,3 +1444,8 @@ The reviewer confirmed:
 | AC24 is flaky in CI | **R4-2.** (a) and (b) drain the master and wait for `ICANON` to clear before writing. (b) asserts 500 ms elapsed, not that the writer blocked. (c)'s bound goes from 50 ms to 500 ms. |
 | AC19's "raw + shell in front" must run on macOS | **R4-3.** Stated: it runs in `backend-macos`, with no gating and no ignore, because it catches a master-side `tcgetpgrp` failure that would otherwise make every launch wait 10 s. |
 | A single list for the developer and QA | A "Build checklist for the a895c05 fix-up" section, before Verification (1). |
+
+**Story 1b AC3 example corrected, 2026-11-02 (found by the 1b developer).**
+- **The error.** AC3 listed `xargs -n1 orgo c create` as an unmatched limit. That string contains `orgo c create`, so `Bash(*orgo c create*)` denies it. That is correct, and fine: it is the safe direction.
+- **The real limit** is the one the design note already describes: `xargs` supplying the subcommand from its input. The example is now `echo create | xargs -n1 orgo c`. Its two parts, `echo create` and `xargs -n1 orgo c`, match no deny pattern: there is no `orgo c create`, no `orgo c -` and no `orgo -`.
+- **What changes.** Only the example. The design note's wording, every ruling and every other example are unchanged.
