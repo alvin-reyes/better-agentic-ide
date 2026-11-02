@@ -3,7 +3,7 @@ import { bmadRootOf } from "../lib/projectSetup";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, shownView } from "../stores/tabStore";
 import { useSettingsStore, themePresets, applyThemeToDOM } from "../stores/settingsStore";
 import { useFleetStore } from "../stores/fleetStore";
 
@@ -62,7 +62,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     const tab = useTabStore.getState().tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
     terminalModule()
-      .then(({ getPtyCwd }) => getPtyCwd(tab.activePaneId))
+      .then(({ getPtyCwd }) => getPtyCwd(shownView(tab).activePaneId))
       .then((dir) => (dir ? bmadRootOf(dir) : null))
       .then((found) => { if (live) setBmadProject(found); })
       .catch(() => {});
@@ -74,8 +74,9 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     const split = (direction: "horizontal" | "vertical") => {
       if (activeTab) {
         terminalModule().then(({ getPtyCwd }) => {
-          getPtyCwd(activeTab.activePaneId).then((cwd) => {
-            useTabStore.getState().splitPane(activeTabId, activeTab.activePaneId, direction, cwd);
+          const paneId = shownView(activeTab).activePaneId;
+          getPtyCwd(paneId).then((cwd) => {
+            useTabStore.getState().splitPane(activeTabId, paneId, direction, cwd);
           });
         });
       }
@@ -90,7 +91,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "split-h", label: "Split Horizontally", shortcut: L("splitHorizontal"), category: "Panes", action: () => split("horizontal") },
       { id: "split-v", label: "Split Vertically", shortcut: L("splitVertical"), category: "Panes", action: () => split("vertical") },
       { id: "close-pane", label: "Close Pane", shortcut: L("closePane"), category: "Panes", action: () => {
-        if (activeTab) useTabStore.getState().closePane(activeTabId, activeTab.activePaneId);
+        if (activeTab) useTabStore.getState().closePane(activeTabId, shownView(activeTab).activePaneId);
         onClose();
       }},
       { id: "zoom-pane", label: "Zoom / Unzoom Pane", shortcut: L("zoomPane"), category: "Panes", action: () => {
@@ -122,7 +123,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
           window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why, archiveFile } }));
         if (!cwd) return failed("No active tab to set up.");
         terminalModule().then(({ getPtyCwd }) =>
-          getPtyCwd(cwd.activePaneId).then(async (dir) => {
+          getPtyCwd(shownView(cwd).activePaneId).then(async (dir) => {
             // getPtyCwd is null for any pane with no live shell — an
             // orchestrator, editor, fleet or browser tab.
             if (!dir) return failed("This tab has no folder. Open a terminal in the project first.");
@@ -197,7 +198,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "rec-start", label: "Start Recording", category: "Recording", action: () => {
         if (activeTab) {
           import("../hooks/useTerminalRecording").then(({ useRecordingStore }) => {
-            useRecordingStore.getState().startRecording(activeTab.activePaneId);
+            useRecordingStore.getState().startRecording(shownView(activeTab).activePaneId);
           });
         }
         onClose();
@@ -205,7 +206,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
       { id: "rec-stop", label: "Stop Recording", category: "Recording", action: () => {
         if (activeTab) {
           import("../hooks/useTerminalRecording").then(({ useRecordingStore }) => {
-            useRecordingStore.getState().stopRecording(activeTab.activePaneId);
+            useRecordingStore.getState().stopRecording(shownView(activeTab).activePaneId);
           });
         }
         onClose();

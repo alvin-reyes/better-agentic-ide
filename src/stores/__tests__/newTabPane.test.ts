@@ -6,10 +6,10 @@ vi.mock("../../hooks/useTerminal", () => ({
   destroyInstance: () => {},
 }));
 
-import { useTabStore, saveSession, loadSession, findAllPanes } from "../tabStore";
+import { useTabStore, saveSession, loadSession, findAllPanes, allTabPanes, ownView } from "../tabStore";
 
 const KEY = "ade-session";
-const tab = (id: string) => useTabStore.getState().tabs.find((t) => t.id === id)!;
+const tab = (id: string) => ownView(useTabStore.getState().tabs.find((t) => t.id === id)!);
 
 beforeEach(() => localStorage.clear());
 
@@ -35,7 +35,7 @@ describe("Pane.isNewTab", () => {
       activeTabId: "t1",
     }));
     expect(loadSession()).toBe(true);
-    const panes = useTabStore.getState().tabs.flatMap((t) => findAllPanes(t.root));
+    const panes = useTabStore.getState().tabs.flatMap((t) => allTabPanes(t));
     expect(panes.length).toBeGreaterThan(0);
     expect(panes.every((p) => !p.isNewTab)).toBe(true);
   });

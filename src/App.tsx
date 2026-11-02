@@ -39,7 +39,8 @@ const ShortcutsOverlay = lazy(() => import("./components/ShortcutsOverlay"));
 const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
-import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
+import { useTabStore, findAllPanes, saveSession, loadSession, shownView, allTabPanes } from "./stores/tabStore";
+import { tabFolderPaneId } from "./lib/tabDisplay";
 import { flushNow } from "./lib/persistence";
 import { listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
@@ -93,7 +94,8 @@ export default function App() {
   const activePtyId = useTabStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
     if (!tab) return null;
-    return findAllPanes(tab.root).find((p) => p.id === tab.activePaneId)?.ptyId ?? null;
+    const view = shownView(tab);
+    return findAllPanes(view.root).find((p) => p.id === view.activePaneId)?.ptyId ?? null;
   });
 
   // The first render is on screen: fade out the launch splash.
@@ -286,8 +288,10 @@ export default function App() {
   // folder without any React state changing, and the BMAD banner and the
   // "This terminal" fleet view would otherwise keep using the old folder.
   // (The file browser polls on its own for the same reason.)
+  // The tab's folder is its own view's, whatever view is in sight.
+  const folderPaneId = activeTab ? tabFolderPaneId(activeTab) : undefined;
   useEffect(() => {
-    const paneId = activeTab?.activePaneId;
+    const paneId = folderPaneId;
     if (!paneId) return;
     if (activeTab?.type && activeTab.type !== "terminal") return;
     let cancelled = false;
@@ -298,7 +302,7 @@ export default function App() {
     resolve();
     const id = window.setInterval(resolve, CWD_POLL_MS);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
+  }, [activeTab?.type, folderPaneId, activePtyId]);
 
   // Not over the BMAD version question or the switch's confirm step.
   const toggleCommandPalette = useCallback(() => setPaletteOpen(togglePalette), []);
@@ -352,7 +356,7 @@ export default function App() {
       return;
     }
 
-    const activeProcesses = findAllPanes(tab.root)
+    const activeProcesses = allTabPanes(tab)
       .map((p) => hasActiveProcess(p.id))
       .filter((name): name is string => name !== null);
 
@@ -397,7 +401,7 @@ export default function App() {
     const closeMany = (e: Event) => {
       const ids: string[] = (e as CustomEvent).detail?.tabIds ?? [];
       const targets = tabs.filter((t) => ids.includes(t.id));
-      const live = targets.filter((t) => findAllPanes(t.root).some((p) => hasActiveProcess(p.id) !== null));
+      const live = targets.filter((t) => allTabPanes(t).some((p) => hasActiveProcess(p.id) !== null));
       const close = () => { for (const t of targets) closeTab(t.id); setConfirmDialog(null); };
       // hasActiveProcess reads an xterm buffer, so it is null for every editor
       // tab. Without asking them too, "Close others" discarded unsaved files
@@ -478,8 +482,8 @@ export default function App() {
                         <ContractsWorkbench key={activeTab.contractsRoot} root={activeTab.contractsRoot} />
                       </Suspense>
                     : zoomedPane
-                    ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
-                    : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
+                    ? <TerminalPane paneId={shownView(activeTab).activePaneId} tabId={activeTab.id} />
+                    : <PaneContainer node={shownView(activeTab).root} tabId={activeTab.id} />
           )}
         </div>
         {previewOpen && (

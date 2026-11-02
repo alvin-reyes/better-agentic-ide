@@ -1,11 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { tabLabel, tabCwd, tabProject, groupRuns, matchTabs, projectColor, TAB_COLORS } from "../tabDisplay";
-import type { Tab } from "../../stores/tabStore";
+import { tabLabel, tabCwd, tabProject, tabFolderPaneId, groupRuns, matchTabs, projectColor, TAB_COLORS } from "../tabDisplay";
+import { ownViewOnly, useTabStore, type Tab } from "../../stores/tabStore";
 
 const tab = (o: Partial<Tab> & { paneId?: string; savedCwd?: string } = {}): Tab => ({
   id: o.id ?? "t", name: o.name ?? "Terminal", type: o.type,
-  root: { type: "pane", pane: { id: o.paneId ?? "p", ptyId: null, savedCwd: o.savedCwd } },
-  activePaneId: o.paneId ?? "p",
+  ...ownViewOnly({ type: "pane", pane: { id: o.paneId ?? "p", ptyId: null, savedCwd: o.savedCwd } }, o.paneId ?? "p"),
 });
 
 describe("tab labels", () => {
@@ -49,5 +48,45 @@ describe("tab switcher", () => {
     expect(matchTabs(items, "web").map((i) => i.label)).toEqual(["claude"]);
     expect(matchTabs(items, "acme cla").map((i) => i.label)).toEqual(["claude"]);
     expect(matchTabs(items, "").length).toBe(3);
+  });
+});
+
+describe("a tab with a hidden view", () => {
+  // A hidden view "v1" in another folder (and project); story 2b makes these,
+  // here the test builds it.
+  const withHidden = (t: Tab, shown = "own"): Tab => ({
+    ...t,
+    views: {
+      ...t.views,
+      v1: { id: "v1", name: "vim", spawnedBy: "own", root: { type: "pane", pane: { id: "h", ptyId: null, savedCwd: "/elsewhere/other" } }, activePaneId: "h" },
+    },
+    viewOrder: ["own", "v1"],
+    shownView: shown,
+  });
+  const cwds = { p: "/r/src", q: "/s/lib", h: "/elsewhere/other" };
+  const projects = { "/r/src": "/r", "/s/lib": "/s", "/elsewhere/other": "/elsewhere" };
+
+  it("label, project and sort ignore a hidden view", () => {
+    for (const shown of ["own", "v1"]) {
+      const plain = tab({ id: "a" });
+      const hidden = withHidden(plain, shown);
+      expect(tabCwd(hidden, cwds)).toBe(tabCwd(plain, cwds));
+      expect(tabLabel(hidden, tabCwd(hidden, cwds))).toBe(tabLabel(plain, tabCwd(plain, cwds)));
+      expect(tabProject(hidden, cwds, projects)).toBe(tabProject(plain, cwds, projects));
+
+      const key = (t: Tab) => tabProject(t, cwds, projects) ?? `~${t.id}`;
+      const order = (first: Tab) => {
+        useTabStore.setState({ tabs: [first, tab({ id: "b", paneId: "q" }), tab({ id: "c" })] });
+        useTabStore.getState().sortTabsBy(key);
+        return useTabStore.getState().tabs.map((t) => t.id);
+      };
+      expect(order(hidden)).toEqual(order(plain));
+    }
+  });
+
+  it("the tab's folder (activeCwd) is the own view's, even with a hidden view shown", () => {
+    const plain = tab({ id: "a" });
+    expect(tabFolderPaneId(withHidden(plain, "v1"))).toBe(tabFolderPaneId(plain));
+    expect(tabFolderPaneId(withHidden(plain, "v1"))).toBe("p");
   });
 });

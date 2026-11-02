@@ -189,6 +189,16 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
     activity, Fleet, ⌘K, toasts and the close confirms;
   - `viewOfPane(tab, paneId)`: used by `setPtyId`, `setActivePaneInTab`,
     `closePane` and `splitPane`.
+- **Helpers (story 2a).** `OWN_VIEW` (`"own"`) and `ownViewOnly(root, activePaneId)`,
+  which gives the `views`/`viewOrder`/`shownView` fields of a one-view tab
+  (new tabs, loaded sessions, detached windows, test fixtures).
+  `tabFolderPaneId(tab)` in `src/lib/tabDisplay.ts` is the pane whose folder
+  is the tab's folder (App's `activeCwd`, so project setup, the board, Fleet's
+  "This terminal", the context guard): always the own view's active pane.
+  The file browser follows the own view too.
+- **Killing.** `destroyInstance(paneId, storePtyId?)` kills by the store's
+  `ptyId` when the pane has no instance; `closeTab` passes it for every pane
+  of every view.
 - **Attention** is keyed by `tabId/viewId`.
 - **Names.**
   - `--name`, if given.
