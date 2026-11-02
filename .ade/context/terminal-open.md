@@ -8,11 +8,11 @@ its pane.
 - ADR: `decisions/0014-terminals-open-terminals-through-the-hook-endpoint.md`
   (number provisional). Builds on `agent-events.md` (ADR 0003), which it amends.
 - Uses, from other branches (not yet on main): the busy check of
-  `pane-busy.md` (`hermes-b-busy-panes`), the PTY writer thread and
+  `pane-busy.md` (`origin/hermes-b-busy-panes`), the PTY writer thread and
   `pty_line_editor_ready` of `feat/cli-guard` (ADR 0011), and `shellQuote`
-  (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`, `hermes-a-quoting`).
+  (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`, `origin/hermes-a-quoting`).
 
-Status: approved by the owner 2026-11-02 (revised the same day after the final review, rulings R1 to R4); not yet built. macOS and Linux only.
+Status: approved by the owner 2026-11-02 (revised the same day after the final review and its re-review, rulings R1 to R7); not yet built. macOS and Linux only.
 
 ## The CLI
 
@@ -32,6 +32,11 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   - The folder must be the user's, mode 0700, not a symlink, and hold only
     `ade`, a symlink whose `readlink` target is exactly this launch's helper
     path. This is checked at launch and in every `create_pty`.
+  - An inherited `PATH` entry is an ADE bin folder (from any build or app
+    data dir) when it ends in `bin/release` or `bin/debug-<16 hex>` and holds
+    an `ade` symlink whose target's file name is `ade-hook` (or
+    `ade-hook.exe`), checked by `lstat` and `readlink` only. Such entries are
+    always stripped; others are kept.
   - `create_pty` always strips inherited entries for these folders. It
     prepends its own only when it sets the `ADE_*` variables.
   - Agents and scripts use `"$ADE_HOOK_BIN" open`.
@@ -112,7 +117,9 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
 - **Threads.** `serve` stays one loop. For `/open` it runs `screen()`, reads
   the body and calls the injected handler's `admit` (the limits) on its own
   thread, then hands the admitted request to a new thread that calls
-  `handle` and answers. Hook events are served meanwhile. The handler is
+  `handle` and answers. `admit` returns an `Admission` whose `Drop` releases
+  the in-flight slot, so a panic in `handle` or a failed thread spawn (503)
+  can't leak it. Hook events are served meanwhile. The handler is
   set by `AgentStatus::set_open_handler(Arc<dyn OpenHandler>)` in `.setup()`,
   since `AgentStatus::start` has no `AppHandle` or `PtyManager`.
 
@@ -146,9 +153,12 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
   `paneBusy(paneId)` is non-null for any of its panes; a tab when any view
   is. Panes with neither an instance nor a `ptyId` (a restored sub-terminal
   not yet shown) are skipped. `useGuardedClose` applies it to the tab-close
-  confirm (U4), `requestCloseView` (×, ⌘W, Delete) and Close Others; Insert
-  command is enabled when `paneBusy` is null, checked again on click, and
-  written without Enter. No other busy check exists, and nothing else calls
+  confirm (U4), `requestCloseView` (×, ⌘W, Delete) and Close Others.
+- **Insert command** is enabled only when `paneBusy` is null **and**
+  `pty_line_editor_ready` is true for the pane's PTY; both are checked again
+  on click, and it writes the line without Enter. A shell without a line
+  editor (`dash`, `ksh` without emacs or vi mode) or a `read -s` prompt keeps
+  it disabled, with a title saying why. No other busy check exists, and nothing else calls
   `hasActiveProcess`.
 - No exit code in v1: `PtyEvent::Exit` is unchanged.
 
@@ -180,7 +190,9 @@ type OpenMessage =
 - **The new pane's terminal is created at once:** `createInstance` with no
   container, at the caller's size (24×80 if the caller has no instance),
   then `create_pty` with the `requestId`. A later mount finds the instance:
-  exactly one `create_pty` per pane.
+  exactly one `create_pty` per pane. When `create_pty` returns, if the
+  instance's size differs from the one the PTY was made with (a `--focus`
+  mount fitted it meanwhile), the window sends `resize_pty`.
   - **Hidden-terminal budget** (story 4b), for any instance created without a
     container: scrollback `min(setting, 1000)`, kept by
     `refreshAllTerminals`, and no `ImageAddon`, until the first

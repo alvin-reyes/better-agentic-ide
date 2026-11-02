@@ -344,12 +344,15 @@ A 28 px bar above the terminal, inside the view, never a modal:
   - *Insert command* puts the full quoted line at the prompt **without
     Enter**, so the user reviews it and runs it. That is the same as the user
     typing it in their own terminal.
-  - **Disabled while the shell is busy** (a passphrase prompt, an rc
-    program), by the plan's busy check, title "Available once the
-    shell is back at its prompt". It enables when the check passes, and the
-    check runs **again on click**: if the shell became busy in between,
-    nothing is inserted and the button goes back to disabled. The line is held
-    in memory only, never saved.
+  - **Disabled while the shell is busy or has no line editor up** (a
+    passphrase prompt such as `read -s`, an rc program), by the plan's busy
+    check and its line-editor check. Title "Available once the shell is back
+    at its prompt"; in a shell that has no line editor at all (`dash`, `ksh`
+    without emacs or vi mode), title "This shell has no line editor; type the
+    command yourself", and it stays disabled. It enables when both checks
+    pass, and both run **again on click**: if either fails in between,
+    nothing is inserted and the button goes back to disabled. The line is
+    held in memory only, never saved.
 - **Shell exited:** "This shell has exited." **[Close sub-terminal]** (closes
   at once: an exited shell isn't running). The tab's own view keeps today's
   look (no bar).
@@ -424,7 +427,8 @@ what the UX above depends on.
    1000-line scrollback, no GPU renderer or image addon until first shown.
 5. The window learns `typed` and `why` (spinner, notice, announcement).
 6. The busy check per view (every pane of it), used by every close confirm
-   and by Insert command (when enabling it and again on click).
+   and by Insert command, which also needs the line-editor check (both when
+   enabling it and again on click).
 7. Detached windows: carry sub-terminals, accept an open, handle the keys.
 8. Session format gains sub-terminals; restored ones start when first shown;
    old sessions load unchanged.

@@ -12,12 +12,13 @@ work out into terminals the user can see.
 - Contract: `.ade/context/terminal-open.md`.
 - **ADRs are cited by slug.** Two branches each hold an 0008 and an 0009:
   - `0008-one-shell-quoter-safe-in-posix-shells-and-fish` (branch
-    `hermes-a-quoting`, local only) is the one this plan uses, not
+    `hermes-a-quoting`, on `origin`) is the one this plan uses, not
     `0008-file-previews-are-bounded-and-inert`;
   - `0009-manual-checks-do-not-gate-done` (branch `docs/claude-md-paths`) is
     the one this plan uses, not `0009-one-side-panel-shows-clicked-files-read-only`.
 - Revised 2026-11-02 after the final adversarial review, under the owner's
-  rulings R1 to R4 (see "Owner decisions").
+  rulings R1 to R4, then after its re-review (approved with fixes), under
+  R5 to R7 (see "Owner decisions").
 
 ## Settled
 
@@ -128,6 +129,16 @@ sequenceDiagram
     It checks this at launch and in every `create_pty`.
   - `create_pty` always strips inherited ADE bin folders from `PATH`. It
     prepends its own only when it sets the `ADE_*` variables.
+  - **Recognising an inherited bin folder** from any ADE build (another app
+    data dir: a dev build, a different bundle id, an older install): a
+    `PATH` entry is stripped when its last two components are `bin/release`
+    or `bin/debug-<16 hex>`, and it holds an `ade` that is a symlink whose
+    target's file name is `ade-hook` (or `ade-hook.exe`). Checked with
+    `lstat` and `readlink` only, never by running anything; the target need
+    not exist (a removed build is still stripped). Any other entry is left
+    alone. A test covers a folder from another app data dir, one whose
+    target is gone, and a look-alike (`bin/release` without that symlink),
+    which is kept.
   - `--cwd` is joined to `$PWD`, normalised lexically, and checked with
     `stat`. The logical path is what gets sent.
   - Windows is out of scope; `/open` answers 422 there.
@@ -153,6 +164,13 @@ sequenceDiagram
     events keep being served meanwhile; a test pins that.
   - The cap of 32 counts admitted requests in flight, so it also bounds
     these threads.
+  - **The in-flight count is released by an RAII guard.** `admit` returns an
+    `Admission` that owns the slot; its `Drop` releases it (and a claimed PTY
+    then counts instead, until it exits). So a panic in `handle`, a failed
+    `std::thread::Builder::spawn` (answered 503 on the `serve` thread, the
+    `Admission` dropped with it) or an early return can't leak a slot. Tests:
+    a handler that panics, and an injected spawn failure, each leave the
+    count where it started.
 - **Per-PTY tokens (amends ADR 0003).** Each terminal's `ADE_HOOK_TOKEN` is
   the lowercase hex of `HMAC-SHA-256(master, "pty:<id>")`.
   - The master key is 32 random bytes from `getrandom`, new each launch,
@@ -204,13 +222,15 @@ sequenceDiagram
     `dash` or `ksh`.
   - Words must be printable ASCII (D6).
   - A typed line may be at most 4096 bytes. This is no longer about the
-    canonical buffer (the line editor takes any length); it keeps a line
-    short enough to review in the not-typed notice and well inside the 16 KB
-    body.
+    canonical buffer (the line editor takes any length). It is a sanity
+    bound: well inside the 16 KB body, and short enough that Insert command,
+    which writes the whole line at a prompt, leaves an editable line. (The
+    notice masks the line, so the cap is not about reviewing it there.)
 - **Known typing failures** (manual check V2, which does not gate):
   - A shell with no line editor never becomes ready: `dash` (and `sh` where
     it is dash, as on Debian), and `ksh` without `set -o emacs` or `vi`. The
-    result is `typed:false`; Insert command still works.
+    result is `typed:false`, and Insert command stays disabled there too (see
+    "Busy check"); the user types the command.
   - `exec tmux` (or an rc file that `exec`s any raw-mode program) takes the
     line: the process keeps the shell's pid and leaves canonical mode.
 - **Deadline.** Each request carries `expiresAt`, 5 s after it is sent.
@@ -249,10 +269,13 @@ contract says, nothing else calls `hasActiveProcess`; this plan doesn't.
   its panes. A tab is running when any of its views is, its own view
   included.
 - **The one addition.** Panes of a restored sub-terminal not yet shown since
-  the restart are skipped: they have no instance and no shell, and the agent
-  tracker's sessions are saved in `localStorage`, so a stale "running" session
-  for one of their pane ids could otherwise count. `useGuardedClose` skips a
-  pane that has neither an instance nor a `ptyId`. A test pins it.
+  the restart are skipped. `paneBusy` already returns null for them (they
+  have no instance, and restored panes get new ids, so no saved tracker
+  session matches), so this is a cheap explicit guard that states the rule
+  rather than relying on that: `useGuardedClose` skips a pane that has
+  neither an instance nor a `ptyId`. A test pins it with the realistic case:
+  a session restored with a sub-terminal that is never shown, then the tab
+  closed, asks nothing.
 - **Where it applies.**
   - **Closing a tab (U4):** `requestCloseTab` asks over `allTabPanes(tab)`,
     with the UX's wording ("2 are running a program (dev server, claude:
@@ -264,8 +287,18 @@ contract says, nothing else calls `hasActiveProcess`; this plan doesn't.
     which then closes the view.
   - **Close Others / to the Right:** the existing one confirmation, over
     `allTabPanes` of each tab.
-  - **Insert command:** enabled when `paneBusy` is null for the pane, and
-    checked again on click. It writes the line without Enter.
+  - **Insert command:** enabled only when `paneBusy` is null for the pane
+    **and** `pty_line_editor_ready` (`feat/cli-guard`) is true for its PTY.
+    Both are checked again on click; if either fails, nothing is written and
+    the button goes back to disabled. It writes the line without Enter.
+    A prompt that reads in canonical mode is not a line editor: a shell
+    without one (`dash`, `ksh` without emacs or vi mode) or a builtin
+    `read -s` passphrase prompt keeps it disabled, so a line can't be cut at
+    the canonical buffer or land in a password prompt. The disabled button's
+    title says which: "Available once the shell is back at its prompt"
+    (busy, or not yet ready) or "This shell has no line editor; type the
+    command yourself" (`dash`/`ksh` without editing, known from the shell's
+    name).
   - An idle prompt, an exited shell and a not-yet-shown restored sub-terminal
     are not running.
 - **Windows** (story 2b ships there). `pty_foreground_job` is an error off
@@ -273,16 +306,30 @@ contract says, nothing else calls `hasActiveProcess`; this plan doesn't.
   that only recognises Claude. On Windows a sub-terminal or tab running
   something else closes without a confirm, as a tab does today. Documented in
   the guide; `/open` itself answers 422 there.
-- **Merge order.** `hermes-b-busy-panes` merges to main before story 2b.
-  Preferred order: 2a (being built) merges first; `hermes-b-busy-panes` then
-  rebases onto main (over #73's `useTerminal.ts` too) and its
-  `findAllPanes(tab.root)` reads in `useGuardedClose.ts`, which `tsc` lists
-  once `Tab.root` is gone, become `allTabPanes(tab)`; then 2b. If
-  `hermes-b-busy-panes` is ready first it may merge first and 2a rebases onto
-  it, with the same `tsc` errors to fix. Either way the change to it is
-  mechanical and belongs to whoever rebases.
-- `hermes-b-busy-panes` and `hermes-a-quoting` exist only in the main
-  checkout; neither is on `origin`. The owner should push both.
+- **Merge order** (all pairs that touch the same code).
+  - **`feat/cli-guard` vs 2a:** `feat/cli-guard` changes
+    `terminalCommands.ts` (`runInNewTabPane`, which reads the new tab's
+    `activePaneId` and `tab.root`) and adds tests that build tabs with
+    `root` and `activePaneId` (about 23 such reads in its `__tests__` and
+    `terminalCommands.ts`). Whichever merges second moves them to the
+    accessors (`ownView` for a new tab, `allTabPanes` for the lookup) and
+    the tests' tab fixtures to `views`; `tsc` lists every one.
+  - **`feat/cli-guard` vs story 4:** `feat/cli-guard` replaces
+    `PtyInstance` construction with `PtyInstance::new(id, child, master,
+    pid, sink)` (it starts the writer thread). Story 4 adds the owner window
+    label and the `requestId` to `PtyInstance`. If `feat/cli-guard` is on
+    main first, story 4 adds them as fields set after `new` (or as `new`'s
+    arguments); otherwise `feat/cli-guard` rebases and carries them through
+    `new`. Story 9 needs `feat/cli-guard` anyway.
+  - **`hermes-b-busy-panes` vs 2a and 2b:** `hermes-b-busy-panes` merges to
+    main before story 2b. Preferred order: 2a (being built) merges first;
+    `hermes-b-busy-panes` then rebases onto main (over #73's `useTerminal.ts`
+    too) and its `findAllPanes(tab.root)` reads in `useGuardedClose.ts`,
+    which `tsc` lists once `Tab.root` is gone, become `allTabPanes(tab)`;
+    then 2b. If `hermes-b-busy-panes` is ready first it may merge first and
+    2a rebases onto it, with the same `tsc` errors to fix. Either way the
+    change is mechanical and belongs to whoever rebases.
+- `hermes-b-busy-panes` and `hermes-a-quoting` are on `origin` (R7).
 
 ## The store: views stored explicitly
 
@@ -395,6 +442,13 @@ the new pane's terminal as soon as it adds the pane (story 4).
   in the map before its first `await`, so the mount finds it and doesn't
   create a second. A test opens with `--focus` and counts exactly one
   `create_pty`; another does the same for a background add shown at once.
+- **Size after a `--focus` mount.** The PTY is created at the caller's size,
+  but a `--focus` mount fits the terminal to its pane, possibly before the
+  `ptyId` lands, when there is no PTY to resize. So once `create_pty`
+  returns, if the instance's `cols`/`rows` differ from the size the PTY was
+  made with, the window sends `resize_pty` with the current size. A test
+  mounts with a different size before `create_pty` resolves and checks one
+  `resize_pty` with the pane's size follows.
 - This replaces a Rust spawn. Rust never spawns or kills, nothing exists
   until the window agrees, and activity, attention and exit status work
   before the pane is first shown.
@@ -449,7 +503,13 @@ seat) is unchanged.
     load runs.
   - **Passes** when p95 is under 50 ms. The machine, macOS version and the
     three numbers go in the story's Verification section.
-- Story 4 no longer waits for V3, or for this story (R3).
+- Story 4 no longer waits for V3, or for this story (R3, R5).
+- **Between 4 and 4b, accepted** (N6): a sub-terminal opened with `ade open`
+  runs as a full terminal from the start, with the user's scrollback and the
+  image addon (only WebGL waits for a seat, as on main). Up to 32 of them
+  can cost that much memory until 4b ships. The UX's entry tooltip "Opened
+  in the background: only the last 1000 lines are kept until you view it"
+  ships with 4b, not before.
 
 ## Closing and detaching
 
@@ -509,16 +569,19 @@ as an amendment to ADR 0011 when story 9 lands:
 - **P1: met.** The job is Parallel. Agents' work runs in terminals listed
   beside the agent, a click away, instead of in hidden processes. A person no
   longer opens a tab, `cd`s and types to start a server beside their shell.
-- **P2: met, under D1, D2 and the hidden-by-default ruling.**
-  - `ade open -- <cmd>` runs a command with no ADE prompt, which is no more
-    than the Bash call that ran it.
+- **P2: met, under D1, D2, R6 and the hidden-by-default ruling.**
+  - `ade open -- <cmd>` runs a command with no ADE prompt. That is the Bash
+    call that ran it, with one difference: the line is typed into an
+    interactive shell, so it runs after the user's rc files and through
+    their aliases and functions, which a Bash call doesn't see. The guard
+    can't see through those (R6); the guide says so, in story 9.
   - The CLI-library guard classifies `ade open` and `"$ADE_HOOK_BIN" open` as
     a runner and judges the command after `--` (D1, see "The guard and
     `ade open`"). Story 9 waits for that guard.
   - A new sub-terminal is hidden by default, but announced: its strip entry
     flashes and is named after the command, the badge counts it, and an
     `aria-live="polite"` region says "Opened sub-terminal: <name>".
-  - "Insert command" uses the busy check (S7).
+  - "Insert command" uses the busy check and the line-editor check (S7).
   - The sandbox reaching loopback (manual check V1) is a documented known
     exception (D2).
 - **P3: met, with known exception D3.**
@@ -589,7 +652,21 @@ as an amendment to ADR 0011 when story 9 lands:
   - **M9:** story 2b hides Move to New Window for tabs with sub-terminals
     until story 5, with a test.
 
-D2 and D3 join the product doc's exceptions list on approval.
+- **After the re-review** (approved with fixes):
+  - **R5:** story 4 creates the terminal at once with today's
+    `createInstance` (no container). Only the hidden-terminal budget, the dev
+    helpers and V3 are in 4b.
+  - **R6:** the alias/function gap under `ade open --` is documented, not
+    asked; D1 stands.
+  - **R7:** `hermes-a-quoting` and `hermes-b-busy-panes` are pushed to
+    `origin`.
+  - **N1:** Insert command also needs the line editor to be up.
+  - **N6:** the interim cost between stories 4 and 4b is accepted.
+
+D2 and D3 join the product doc's exceptions list on approval: §4, "Known
+exceptions, shipped or decided", of `_bmad-output/product-ide-and-harness.md`
+on branch `plan/product-ide-and-harness` (where ADR 0012 keeps the one list).
+That file is the product-manager's; they add the two lines.
 
 ## Testing
 
@@ -615,7 +692,9 @@ D2 and D3 join the product doc's exceptions list on approval.
     events still served while an `/open` waits on its thread; `reserve_id`
     never repeats.
   - The bin folder and `PATH`, including a symlink whose target is not this
-    launch's helper.
+    launch's helper, and stripping an inherited folder from another app data
+    dir.
+  - The in-flight count after a panicking handler and a failed spawn.
   - The guard (story 9): `"$ADE_HOOK_BIN" open -- gh repo delete o/r` asks as
     the bare `gh` line does; `"$ADE_HOOK_BIN" open --name x` doesn't ask; a
     line that assigns `ADE_HOOK_BIN` asks.
@@ -629,9 +708,13 @@ D2 and D3 join the product doc's exceptions list on approval.
   - Toast and ⌘K switch to the view.
   - `useGuardedClose`: closing a tab whose only sub-terminal is at an idle
     prompt asks nothing; with one where `paneBusy` names a program, it asks;
-    a restored sub-terminal not yet shown is skipped even with a stale
-    "running" tracker session; × and ⌘W on a sub-terminal use
-    `requestCloseView`.
+    a session restored with a sub-terminal that is never shown, then the tab
+    closed, asks nothing; × and ⌘W on a sub-terminal use
+    `requestCloseView`, and both it and ⌘⇧W kill a pane with no instance
+    through the store's `ptyId`.
+  - Insert command: disabled while `paneBusy` names a program, while the
+    line editor isn't ready (a `read -s` prompt), and for `dash`; re-checked
+    on click.
   - Move to New Window is absent from the menu of a tab with sub-terminals
     (2b) and present again in story 5.
   - Default names: `npm run dev` gives "npm"; `env TOKEN=x npm run dev` gives
@@ -648,7 +731,8 @@ D2 and D3 join the product doc's exceptions list on approval.
     - `expiresAt` and `expired`;
     - the refusals;
     - creation at once: instance and `create_pty` before any mount, at the
-      caller's size; exactly one `create_pty` with `--focus`.
+      caller's size; exactly one `create_pty` with `--focus`, and one
+      `resize_pty` when the mounted size differs.
   - The hidden-terminal budget (story 4b), as listed in its section.
   - Shortcuts don't `preventDefault` without sub-terminals.
 
@@ -687,12 +771,19 @@ also needs manual check V3, recorded by the owner.
      - Done when the verification command is green, plus the per-function
        tests with a hidden view built by the test.
      - Parallel with 1.
+     - Note (N3): 2a's ticket (`epic-sub-terminals/tickets.toml`, line 60)
+       still lists `activeCwd (and so useProjectSetup)` under "view in
+       sight". It is stale: `activeCwd` and everything it feeds read the own
+       view (M4), as the 2a developer was told and has built.
    - 2b: Sub-terminals by hand.
      - The strip, switching, the badge, ⌘[ / ⌘].
      - "New Sub-terminal" (U5).
      - Closing a sub-terminal and a tab, with the busy check through
        `useGuardedClose` (`requestCloseView`), and the restored-not-shown
-       skip.
+       skip. `requestCloseView` and ⌘⇧W on a sub-terminal's last pane kill
+       every pane through the instance or, with none, the store's `ptyId`
+       (`kill_pty`); 2a's `closePane` fix for the same is being made now
+       (N4).
      - Move to New Window hidden for tabs with sub-terminals, with a test.
      - The aria-live announcement.
      - Saving and restoring `subViews` and `shownView`, with the 5 MB
@@ -711,10 +802,14 @@ also needs manual check V3, recorded by the owner.
    - The CLI's `mode()`, flags and exit codes; `cargo check -p ade-hook`
      joins the verification command here.
    - After 1 and 2b. No manual check gates it.
-   - 4b. **The hidden-terminal budget** (new, split from 4 by R3).
+   - Creation at once stays here (R5). The `--focus` resize after the
+     `ptyId` lands. The in-flight RAII guard. Merge pair with
+     `feat/cli-guard` (`PtyInstance::new`).
+   - 4b. **The hidden-terminal budget** (new, split from 4 by R3, R5).
      - Capped scrollback kept through `refreshAllTerminals`; `ImageAddon`
        deferred to the first seat, loaded before `loadGpu`.
      - The dev helpers `__adeEchoProbe` and `__adeTypeInHidden`.
+     - The UX's "only the last 1000 lines" tooltip.
      - Manual check V3 gates its Done.
      - After 4.
 5. **Moving.**
@@ -731,9 +826,12 @@ also needs manual check V3, recorded by the owner.
 8. **`--split`**, in any view. After 4.
 9. **`-- COMMAND`.**
    - Typing through the line-editor check and the writer thread, `typed` to
-     the window, the notice and Insert command (with the busy check),
-     exit 5.
+     the window, the notice and Insert command (with the busy and
+     line-editor checks), exit 5.
    - The guard change, as an amendment to ADR 0011 (M6).
+   - The guide entry: typed commands run after rc files and through aliases
+     and functions, which the guard can't see (R6); and how to expand
+     secrets inside the new terminal (D3).
    - After 4, D9 (`hermes-a-quoting`), and `feat/cli-guard` on main.
 
 The limits land in story 4, before the command in story 9.
