@@ -40,7 +40,7 @@ const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
 import { useTabStore, saveSession, loadSession, shownView, allTabPanes } from "./stores/tabStore";
-import { tabFolderPaneId } from "./lib/tabDisplay";
+import { tabFolderPaneId, tabFolderPtyId } from "./lib/tabDisplay";
 import { flushNow } from "./lib/persistence";
 import { listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
@@ -94,9 +94,7 @@ export default function App() {
   // asynchronously once create_pty resolves; cwd resolution must wait for that.
   const folderPtyId = useTabStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
-    if (!tab) return null;
-    const paneId = tabFolderPaneId(tab);
-    return allTabPanes(tab).find((p) => p.id === paneId)?.ptyId ?? null;
+    return tab ? tabFolderPtyId(tab) : null;
   });
 
   // The first render is on screen: fade out the launch splash.

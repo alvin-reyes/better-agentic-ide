@@ -43,6 +43,26 @@ describe("detachTabToWindow", () => {
     expect(payload).toBe(JSON.stringify({ id: "go", name: "go", root: tree, activePaneId: "b" }));
   });
 
+  it("sends the own view's root and active pane when another view is shown and first", async () => {
+    const hidden = { type: "pane" as const, pane: { id: "h", ptyId: 9 } };
+    const own = ownViewOnly(tree, "b");
+    useTabStore.setState({
+      tabs: [
+        { id: "keep", name: "keep", ...ownViewOnly({ type: "pane", pane: { id: "k", ptyId: 1 } }, "k") },
+        {
+          id: "go", name: "go",
+          views: { ...own.views, v1: { id: "v1", name: "vim", spawnedBy: "own", root: hidden, activePaneId: "h" } },
+          viewOrder: ["v1", "own"],
+          shownView: "v1",
+        },
+      ],
+      activeTabId: "go",
+    });
+    await detachTabToWindow("go");
+    const payload = decodeURIComponent(windows[0].opts.url.replace("index.html?detached=", ""));
+    expect(JSON.parse(payload)).toEqual({ id: "go", name: "go", root: tree, activePaneId: "b" });
+  });
+
   it("the detached window holds the payload as a tab with one own view", () => {
     const t = tabFromDetached({ id: "go", name: "go", root: tree, activePaneId: "b" });
     expect(t.viewOrder).toEqual(["own"]);

@@ -3,7 +3,8 @@ import { bmadRootOf } from "../lib/projectSetup";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
-import { useTabStore, shownView, ownView } from "../stores/tabStore";
+import { useTabStore, shownView } from "../stores/tabStore";
+import { tabFolderPaneId } from "../lib/tabDisplay";
 import { useSettingsStore, themePresets, applyThemeToDOM } from "../stores/settingsStore";
 import { useFleetStore } from "../stores/fleetStore";
 
@@ -62,7 +63,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     const tab = useTabStore.getState().tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
     terminalModule()
-      .then(({ getPtyCwd }) => getPtyCwd(ownView(tab).activePaneId))
+      .then(({ getPtyCwd }) => getPtyCwd(tabFolderPaneId(tab)))
       .then((dir) => (dir ? bmadRootOf(dir) : null))
       .then((found) => { if (live) setBmadProject(found); })
       .catch(() => {});
@@ -123,7 +124,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
           window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why, archiveFile } }));
         if (!cwd) return failed("No active tab to set up.");
         terminalModule().then(({ getPtyCwd }) =>
-          getPtyCwd(ownView(cwd).activePaneId).then(async (dir) => {
+          getPtyCwd(tabFolderPaneId(cwd)).then(async (dir) => {
             // getPtyCwd is null for any pane with no live shell — an
             // orchestrator, editor, fleet or browser tab.
             if (!dir) return failed("This tab has no folder. Open a terminal in the project first.");
