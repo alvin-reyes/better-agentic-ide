@@ -262,7 +262,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
   };
 
   function sub(o) {
-    return Object.assign({ id: "s" + ++uid, state: "running", agent: null, attention: false, activity: false, from: null, why: null, line: null, flash: false, busy: false, fg: false, restored: false, prog: null }, o);
+    return Object.assign({ id: "s" + ++uid, state: "running", agent: null, attention: false, activity: false, from: null, why: null, line: null, flash: false, busy: false, fg: false, noLE: false, restored: false, prog: null }, o);
   }
   function initial() {
     uid = 0;
@@ -367,7 +367,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
     let notice = "";
     if (v !== t.own && v.state === "notTyped") {
       notice = `<div class="notice warn" role="status"><span class="nottyped">!</span><span>The command (<code>${esc(v.line.split(" ")[0])} …</code>) wasn't typed: ${esc(v.why)}.</span><span class="sp"></span>
-        <button class="btn" data-insert="${v.id}" ${v.fg ? "disabled" : ""} title="${v.fg ? "Available once the shell is back at its prompt" : "Puts the command at the prompt without pressing Enter"}">Insert command</button><button class="btn link" data-dismiss="${v.id}">Dismiss</button></div>`;
+        <button class="btn" data-insert="${v.id}" ${v.fg || v.noLE ? "disabled" : ""} title="${v.noLE ? "This shell has no line editor; type the command yourself" : v.fg ? "Available once the shell is back at its prompt" : "Puts the command at the prompt without pressing Enter"}">Insert command</button><button class="btn link" data-dismiss="${v.id}">Dismiss</button></div>`;
     } else if (v !== t.own && v.state === "exited") {
       notice = `<div class="notice dead" role="status"><span>This shell has exited.</span><span class="sp"></span><button class="btn" data-closesub="${v.id}">Close sub-terminal</button></div>`;
     }
@@ -563,7 +563,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
     if (d.closesub) { e.stopPropagation(); return closeSub(cur(), d.closesub); }
     if (d.closetab) { e.stopPropagation(); return closeTab(d.closetab); }
     if (d.insert) { if (el.disabled) return; const s = cur().subs.find((x) => x.id === d.insert);
-      if (s.fg) { render(); return log("Checked again on click (pty_shell_idle): the shell is busy, nothing inserted."); }
+      if (s.fg || s.noLE) { render(); return log("Checked again on click (busy check paneBusy/useGuardedClose, and the line-editor check): the shell is busy or has no line editor up, nothing inserted."); }
       s.state = "running"; s.term = T.shell("~/src/api").replace('<span class="cursor"></span>', esc(s.line) + '<span class="cursor"></span>'); render(); return log("Inserted at the prompt without Enter: review it, then press Enter."); }
     if (d.dismiss) { const s = cur().subs.find((x) => x.id === d.dismiss); s.state = "running"; render(); return log("Notice dismissed."); }
     if (d.tab !== undefined) { S.activeTab = d.tab; const t = cur(); viewOf(t).attention = false; render(); return log(`"${t.name}" shows the view it was left on.`); }
@@ -631,8 +631,8 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
     ["Finished while away", sub({ name: "tests", attention: true }), false, "<b>Attention.</b> Accent dot; clears when shown."],
     ["Agent needs you", sub({ name: "claude: auth", agent: "needsYou" }), false, "<b>Needs you.</b> The existing red dot with halo, per view; rolls up to the main tab."],
     ["Agent waiting", sub({ name: "claude: billing", agent: "waiting" }), false, "<b>Waiting.</b> The existing blue dot."],
-    ["Starting", sub({ name: "storybook", state: "starting" }), false, "<b>Starting.</b> Only when a command was given; clears on the typed result (≤ ~5 s). No command: no spinner."],
-    ["Command not typed", sub({ name: "npm", state: "notTyped", why: "the new shell was busy" }), false, "<b>Not typed.</b> Yellow ! mark; the view's notice masks the command and enables Insert command once the shell is at its prompt."],
+    ["Starting", sub({ name: "storybook", state: "starting" }), false, "<b>Starting.</b> Only when a command was given; clears on the typed result (at most about 10 s). No command: no spinner."],
+    ["Command not typed", sub({ name: "npm", state: "notTyped", why: "the new shell was busy" }), false, "<b>Not typed.</b> Yellow ! mark; the view's notice masks the command and enables Insert command once the shell is at its prompt with a line editor up (a shell with no line editor keeps it disabled: \"This shell has no line editor; type the command yourself\")."],
     ["Shell exited", sub({ name: "npm", state: "exited" }), false, "<b>Exited.</b> Name at 60%, “exited” in #8B929E. The shell ended (also a shell that died at start); not a pass/fail of the command, and no exit code."],
     ["Restored", sub({ name: "npm", restored: true }), false, "<b>Restored.</b> After a restart: a new shell, started when first shown. Saved name (here from the naming rule); the label stays so it doesn't read as running."],
     ["Named by the rule", sub({ name: "npx" }), false, "<b>Default name.</b> <code>NODE_ENV=test npx vitest --token …</code> → “npx”: first word, skipping VAR=value. With no command: the folder's basename, else “Terminal”. The command line is never shown."],
