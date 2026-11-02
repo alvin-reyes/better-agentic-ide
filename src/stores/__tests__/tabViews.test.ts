@@ -129,7 +129,7 @@ describe("tabStore readers with a hidden view", () => {
     expect(tab().views.v1.activePaneId).toBe("h2");
     expect(ids(tab().views.own.root)).toEqual(["o1", "o2"]);
     expect(tab().views.own.activePaneId).toBe("o1");
-    await vi.waitFor(() => expect(destroyInstance).toHaveBeenCalledWith("h1"));
+    await vi.waitFor(() => expect(destroyInstance).toHaveBeenCalledWith("h1", 11));
     // The last pane of a view stays, as the last pane of a tab did.
     useTabStore.getState().closePane("t", "h2");
     expect(ids(tab().views.v1.root)).toEqual(["h2"]);
@@ -205,5 +205,52 @@ describe("tabStore readers with a hidden view", () => {
     const panes = findAllPanes(reopened.views.own.root);
     expect(panes).toHaveLength(1);
     expect(panes[0].initialCwd).toBe("/proj/own");
+  });
+});
+
+/** The same readers with the hidden view v1 in sight. */
+describe("tabStore readers with a hidden view in sight", () => {
+  const showHidden = () => useTabStore.setState((s) => ({ tabs: s.tabs.map((t) => (t.id === "t" ? { ...t, shownView: "v1" } : t)) }));
+  beforeEach(showHidden);
+
+  it("getActivePane with a pane in a hidden view, shown", () => {
+    expect(useTabStore.getState().getActivePane()?.id).toBe("h1");
+  });
+
+  it("getActivePtyId with a pane in a hidden view, shown", () => {
+    expect(useTabStore.getState().getActivePtyId()).toBe(11);
+  });
+
+  it("getTabActivePane with a pane in a hidden view, shown", () => {
+    useTabStore.setState({ activeTabId: "other" });
+    expect(useTabStore.getState().getTabActivePane("t")?.id).toBe("h1");
+  });
+
+  it("focusNextPane with a pane in a hidden view, shown", () => {
+    useTabStore.getState().focusNextPane("t");
+    expect(tab().views.v1.activePaneId).toBe("h2");
+    expect(tab().views.own.activePaneId).toBe("o1");
+  });
+
+  it("focusPrevPane with a pane in a hidden view, shown", () => {
+    useTabStore.getState().focusPrevPane("t");
+    expect(tab().views.v1.activePaneId).toBe("h2");
+    expect(tab().views.own.activePaneId).toBe("o1");
+  });
+
+  it("closeTab and reopenClosedTab with a pane in a hidden view, shown", () => {
+    useTabStore.getState().closeTab("t");
+    expect(useTabStore.getState().closedTabs.slice(-1)[0]).toEqual({ name: "Terminal", cwd: "/proj/own", color: undefined });
+    useTabStore.getState().reopenClosedTab();
+    const reopened = useTabStore.getState().tabs.slice(-1)[0];
+    expect(findAllPanes(reopened.views.own.root).map((p) => p.initialCwd)).toEqual(["/proj/own"]);
+  });
+
+  it("saveSession with a pane in a hidden view, shown", async () => {
+    await saveSession();
+    const saved = JSON.parse(localStorage.getItem(KEY)!);
+    const t = saved.tabs.find((x: { id: string }) => x.id === "t");
+    expect(t.activePaneId).toBe("o1");
+    expect(t.root.children.map((c: { pane: { id: string; savedCwd?: string } }) => [c.pane.id, c.pane.savedCwd])).toEqual([["o1", "/proj/own"], ["o2", undefined]]);
   });
 });

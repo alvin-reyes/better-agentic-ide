@@ -453,7 +453,8 @@ export const useTabStore = create<TabStore>((set, get) => {
       const view = viewOfPane(tab, paneId);
       if (!view) return;
       if (findAllPanes(view.root).length <= 1) return; // don't close the last pane
-      import("../hooks/useTerminal").then(({ destroyInstance }) => destroyInstance(paneId));
+      const ptyId = findPane(view.root, paneId)?.ptyId ?? null;
+      import("../hooks/useTerminal").then(({ destroyInstance }) => destroyInstance(paneId, ptyId));
       const newRoot = removePaneFromNode(view.root, paneId);
       if (!newRoot) return;
       const newActive = view.activePaneId === paneId ? findAllPanes(newRoot)[0].id : view.activePaneId;

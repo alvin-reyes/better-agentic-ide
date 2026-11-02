@@ -3,7 +3,7 @@ import { bmadRootOf } from "../lib/projectSetup";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import { modLabel, shortcutLabel as L } from "../lib/shortcuts";
-import { useTabStore, shownView } from "../stores/tabStore";
+import { useTabStore, shownView, ownView } from "../stores/tabStore";
 import { useSettingsStore, themePresets, applyThemeToDOM } from "../stores/settingsStore";
 import { useFleetStore } from "../stores/fleetStore";
 
@@ -52,7 +52,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
   const listRef = useRef<HTMLDivElement>(null);
   const { tabs, activeTabId, addTab, setActiveTab } = useTabStore();
 
-  // The BMAD project the active pane is in, and the version it is on: the
+  // The BMAD project the tab's folder (its own view) is in, and its version: the
   // palette offers the switch to the other one. Null until that is known, and
   // for a pane with no folder or a project with no BMAD.
   const [bmadProject, setBmadProject] = useState<{ root: string; methodology: "v4" | "v6" } | null>(null);
@@ -62,7 +62,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     const tab = useTabStore.getState().tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
     terminalModule()
-      .then(({ getPtyCwd }) => getPtyCwd(shownView(tab).activePaneId))
+      .then(({ getPtyCwd }) => getPtyCwd(ownView(tab).activePaneId))
       .then((dir) => (dir ? bmadRootOf(dir) : null))
       .then((found) => { if (live) setBmadProject(found); })
       .catch(() => {});
@@ -123,7 +123,7 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
           window.dispatchEvent(new CustomEvent("project-setup-failed", { detail: { why, archiveFile } }));
         if (!cwd) return failed("No active tab to set up.");
         terminalModule().then(({ getPtyCwd }) =>
-          getPtyCwd(shownView(cwd).activePaneId).then(async (dir) => {
+          getPtyCwd(ownView(cwd).activePaneId).then(async (dir) => {
             // getPtyCwd is null for any pane with no live shell — an
             // orchestrator, editor, fleet or browser tab.
             if (!dir) return failed("This tab has no folder. Open a terminal in the project first.");

@@ -147,8 +147,7 @@ function isPaneActive(paneId: string): boolean {
 
 /**
  * Dispose a pane's terminal and kill its shell. `storePtyId` is the store's
- * id for the pane: a pane that has never been shown has no instance, but may
- * still have a shell (one moved back from a detached window), killed by it.
+ * id for the pane: it kills a pane that has a shell but no instance yet.
  */
 function destroyInstance(paneId: string, storePtyId?: number | null) {
   const inst = instances.get(paneId);

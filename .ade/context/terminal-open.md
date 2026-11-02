@@ -195,10 +195,11 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   `tabFolderPaneId(tab)` in `src/lib/tabDisplay.ts` is the pane whose folder
   is the tab's folder (App's `activeCwd`, so project setup, the board, Fleet's
   "This terminal", the context guard): always the own view's active pane.
-  The file browser follows the own view too.
+  The file browser and the palette's BMAD switch and "Set up project" follow
+  the own view too; the palette's pane actions act on the view in sight.
 - **Killing.** `destroyInstance(paneId, storePtyId?)` kills by the store's
   `ptyId` when the pane has no instance; `closeTab` passes it for every pane
-  of every view.
+  of every view, and `closePane` for the pane it closes.
 - **Attention** is keyed by `tabId/viewId`.
 - **Names.**
   - `--name`, if given.
