@@ -36,7 +36,7 @@ Local to the Mac (macOS and Linux). Not Windows, not an escape-sequence route, n
 
 ## Story 2a verification (QA, 2026-11-02, on 120672e)
 
-Verdict: not Done. Code review blocked 120672e; awaiting the fix commit, then re-verify.
+Verdict on 120672e: not Done (code review blocked). Superseded by the re-verify at 68c8864 below.
 
 The five approved lines (relay-pairing-design.md, Verification), run in sequence, all exit 0:
 - `npx tsc --noEmit`: exit 0.
@@ -46,3 +46,22 @@ The five approved lines (relay-pairing-design.md, Verification), run in sequence
 - `cd mobile && npx tsc --noEmit && npx jest`: tsc exit 0; 1 suite, 6 tests passed.
 
 Found so far: golden session file regenerated from the base commit a470b06 and matches byte for byte (AC5, AC6 sound). No expect( line was removed or changed in existing tests (minus-only check prints nothing). Slice is the story's. terminal-open.md updated. Mutants that survived the suite: getActivePane and focusPaneBy using the own view instead of the shown view; detachTabToWindow sending the first view instead of the own view (needs a second view); tabLabel reading all panes. Cause: the hidden-view tests keep shownView "own" (the review's Major), so shown-versus-own swaps are not caught.
+
+## Story 2a verification, re-verify (QA, 2026-11-02, on 68c8864)
+
+Verdict: Done. Judged against the corrected ticket (07e37b4 on `sub-terminals`, with AC 9 and AC 10). The code re-review at 68c8864 passed with minors.
+
+The five approved lines, run in sequence, all exit 0:
+- `npx tsc --noEmit`: exit 0.
+- `npm test`: 152 files, 1716 tests passed.
+- `cd src-tauri && cargo test`: lib 456 passed, 0 failed, 1 ignored.
+- `cd relay && cargo test`: 15 result lines ok.
+- `cd mobile && npx tsc --noEmit && npx jest`: tsc exit 0; jest 6 passed.
+
+Evidence:
+- No existing assertion changed: a minus-only check of the test diff a470b06..68c8864 finds 0 removed `expect(` lines. The golden session file, regenerated from a470b06, matches byte for byte (AC5, AC6).
+- AC1 to AC10 each have a named test in tabViews.test.ts, tabDisplay.test.ts, session.test.ts and detachWindow.test.ts; AC10 is the "with a hidden view in sight" group.
+- Mutants (22, in a scratch copy of 68c8864): 19 killed, including shown/own swaps in getActivePane, getTabActivePane, focusPaneBy, the closed-tab record, the terminal path of saveSession, the detach payload root and activePaneId, tabFolderPaneId and tabFolderPtyId, and closePane's store-ptyId kill. Survivors: setActivePaneInTab's fallback for an unknown pane id (own versus shown); saveSession's non-terminal-tab path reading shownView (those tabs never have views); detach payload via `Object.values(views)[0]` (equivalent while own is first). All three are unreachable in production until 2b.
+- Coverage note (reviewer N3): the tests for CommandPalette and App cover the helpers `tabFolderPaneId` and `tabFolderPtyId`, not the components. Call sites that read `shownView` directly (CommandPalette :66/:127, App :291, FileBrowser :161) are not guarded; this moves to 2b as component-level acceptance criteria.
+- BoardPanel flake: the "does not refresh on the done event while its own switch is still registered" test failed 1 of 5 full runs on the base a470b06 and 0 of 5 on 68c8864 (plus the passing runs above). It exists without 2a and is not introduced by it.
+- Not zero behaviour change, by design: `destroyInstance` kills a pane that has no instance by the store's ptyId (AC3 requires it for closeTab, and closePane).
