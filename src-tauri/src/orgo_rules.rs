@@ -404,6 +404,7 @@ mod tests {
             "/home/u/.orgo/bin/orgo c create",
             "npx orgo c create",
             "sh -c 'orgo c create'",
+            "xargs -n1 orgo c create", // the whole phrase is in its text
         ] {
             assert!(cli_denied(command), "{command} is denied");
         }
@@ -423,9 +424,7 @@ mod tests {
             "pnpm dlx orgo@latest c create",
             "node /x/dist/cli.js c create",
             "$O c create",
-            // AC3 also lists `xargs -n1 orgo c create` here, but its text holds
-            // `orgo c create`, so `Bash(*orgo c create*)` denies it. That AC item
-            // can't be met as written; it is left out pending the owner, not re-decided.
+            "echo create | xargs -n1 orgo c", // xargs supplies the subcommand from its input
         ] {
             assert!(!cli_denied(command), "{command} is not matched, a documented limit");
         }
