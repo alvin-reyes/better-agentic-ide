@@ -72,9 +72,12 @@ pub const CONTINUOUS_DENY_MCP: &[&str] = &[
 /// start a computer, and a flag before a subcommand. The leading `*` catches
 /// `env orgo`, an absolute path, unversioned `npx orgo` and `sh -c 'orgo …'`;
 /// deny rules may lead with a wildcard. Not a boundary: versioned runners,
-/// quoting, extra spaces and indirection get past it, and any command whose
-/// text holds the phrase (a grep, a commit message) is denied. Both are
-/// listed in the guide and `.ade/context/orgo-permission-rules.md`.
+/// `node …/dist/cli.js`, quoting, a variable set in an earlier command,
+/// aliases, scripts and `xargs` supplying the subcommand from its input get
+/// past it, and any command whose text holds the phrase (a grep, a commit
+/// message) is denied. Spacing is no gap: Claude Code normalises whitespace
+/// and line continuations before matching. All of this is listed in the
+/// guide and `.ade/context/orgo-permission-rules.md`.
 pub const CONTINUOUS_DENY_CLI: &[&str] = &[
     "Bash(*orgo computers create*)",
     "Bash(*orgo computers start*)",
