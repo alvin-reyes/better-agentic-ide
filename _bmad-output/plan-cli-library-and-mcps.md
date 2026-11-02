@@ -415,7 +415,8 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
      - **`sed`'s script words are exempt** when they hold only `s` commands (sync 2026-11-02, review 3). The script words are each `-e` value, otherwise the first operand.
        - Addresses may be numbers, `$`, `,`, `~`, `!` or `/re/`, separated by `;` or newlines. Flags may only be `g`, `p`, `i`, `I`, `m`, `M` or digits.
        - So `sed -i 's#gh/hosts.yml#gh/config.yml#' docs/x.md` passes.
-       - These still ask: the `r`, `R`, `w`, `W` and `e` commands; the `w` and `e` flags (the developer is adding the `e`-flag case); and `-f` scripts.
+       - These still ask: the `r`, `R`, `w`, `W` and `e` commands; the `w` and `e` flags; and `-f` scripts.
+     - **sed scripts that run commands are computed code and ask** (review 3, built at 80a0a4d), whatever the text names. That means a script with an `e` command, including inside `{…}`, or an `s` command with the `e` flag. The scripts checked are each `-e` value, each `--expression=` value, and otherwise the first operand. `-f` scripts aren't read. In disk text, this asks only when the text names a guarded bin.
    - A credential file's folder or a parent of it, used by a copying, archiving or recursive reader: `cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `ditto`, `grep -r`. **A recursive reader run with the current folder inside a credential folder asks even with no path argument** (`cd ~/.config/gh && grep -r token`) (sync 2026-11-02).
    - **`rg` and `ag`** are not generic recursive readers, and both stay text-only for the substring rule. They skip hidden entries **only below a search root** (sync 2026-11-02, review 3; this replaces the earlier "`rg` only with `--hidden`" rule).
      - **The search roots** are each path operand after the pattern. With `-e`, `-f` or rg's `--files`, every operand is a root. With no path operand, the root is the current folder.
@@ -423,7 +424,12 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
        - lies inside a credential folder; or
        - lies above one with no hidden step in between (`~/.config` → `gh`); or
        - lies above one with a hidden step (`~` → `.config`) and the hidden flags are set: rg `--hidden`, `-.` or `-uu`; ag `--hidden` or `-u`.
-     - **Glob roots** (`~/.config/*`) count through the same literal-prefix rule. The developer is adding this now.
+     - **Glob roots** (review 3, built at 80a0a4d) count in two ways, and the hidden-step rule then applies:
+       - through their literal head, when that head lies inside a credential folder;
+       - through each credential folder, or ancestor of one, that they match.
+
+       So `rg token ~/.config/*`, `rg token ~/.c*` and `ag token ~/.config/*` ask, while `rg token ~/*`, `rg --hidden token ~/*` and `rg token ~/?config` give no decision.
+   - **Globs follow the shell's dot rule everywhere** (`glob_match`, which credential-file globs also use). A leading `.` in a path segment matches only a literal `.`, so `~/*` never reaches `~/.config` (review 3).
      - So `rg x ~` gives no decision, and `rg --hidden x ~` asks.
    - `find <cred dir or a parent> -exec|-execdir|-ok|-okdir …`. **Plain `find` without those actions is not a credential reader** (owner ruling, 2026-11-02): it lists names and never reads file contents, so `find / -name …` and `find ~ -type f` give no decision.
      - **Extended, within the ruling** (sync 2026-11-02): a plain `find`'s names **feed a read** when its start path, or the current folder, covers a credential folder and its output goes to `xargs`, to `parallel` (from stdin), to a `while`/`until` loop, or into a `$( )`. That asks. `find ~/.config/gh -type f | wc -l` still gives no decision.
@@ -760,6 +766,14 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
      - here-docs: `query { viewer { login } }` in a quoted here-doc, and in an unquoted one;
      - help: `gh repo delete o/r --help=true`, `gh repo delete o/r --help`;
      - sed: `sed -i 's#gh/hosts.yml#gh/config.yml#' docs/x.md`, `sed -i -e 's|~/.config/gh/hosts.yml|$GH_CONFIG_DIR/hosts.yml|g' docs/x.md`.
+
+   **Review 3 minors (built at 80a0a4d).** Covered by `cli_guard` › `code_review_3`.
+   - **These ask:**
+     - glob roots: `rg token ~/.config/*`, `rg token ~/.config/g*`, `rg token ~/.config/gh/*`, `rg token ~/.c*`, `rg token ~/.c*/g?`, `ag token ~/.config/*`;
+     - sed scripts that run commands: `sed 's/x/gh repo delete o\/r/e' f`, `sed 's/x/cat \/root\/.config\/gh\/hosts.yml/e' f`, `sed -e 's/a/b/' -e 's/x/date/ge' f`, `sed --expression='s/x/date/e' f`, `sed '1e gh repo delete o/r' f`, and an `e` inside `{…}`: `sed -n '/start/,/end/{e date\n}' f`.
+   - **These give no decision:**
+     - glob roots: `rg token ~/*`, `rg --hidden token ~/*`, `rg token src/*`, `rg token ~/.config/z*`, `rg token ~/?config`, `rg token ~/[.]config`;
+     - sed: `sed 's/e/E/g' f`, `sed -e 's/x/y/' -e '/z/d' f`, `sed -n '/^e/p' f`, `sed 'y/abc/xyz/' f`, `sed 'y/abc/xez/' f`, `sed -i.bak 's#e#f#2' f`, `sed 's/x/y/w notes.md' f`, `sed '1i header line' f`, `sed ':retry;N;b retry' f`, `sed -n '/x/b done;p;:done' f`.
 6. **Credentials.** These ask:
    - `cat ~/.config/gh/hosts.yml`, `cat $HOME/.config/gh/h*`, `cd ~/.config/gh && cat hosts.yml`;
    - `cp -r ~/.config/gh /tmp/x`, `tar czf x.tgz ~/.config`, `zip -r x ~/.config/gh`, `find ~/.config/gh -exec cat {} \;`, `find ~ -name hosts.yml -execdir cat {} +`, `find / -ok cat {} \;`, `base64 < ~/.config/gh/hosts.yml`;
@@ -1333,11 +1347,17 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
 
 | Item | Plan change | Checked in the code |
 |---|---|---|
-| 1. rg and ag | Search-root rule replaces "`rg` only with `--hidden`": roots, inside or above a credential folder, the hidden step and hidden flags, glob roots through the literal-prefix rule; text-only for the substring rule; not generic recursive readers. AC6 cases. | `creds.rs:246-292`, `credential_reads_ask`, `credential_paths_from_the_environment`. Glob roots are in progress (developer). |
+| 1. rg and ag | Search-root rule replaces "`rg` only with `--hidden`": roots, inside or above a credential folder, the hidden step and hidden flags, glob roots through the literal-prefix rule; text-only for the substring rule; not generic recursive readers. AC6 cases. | `creds.rs:246-292`, `credential_reads_ask`, `credential_paths_from_the_environment`. Glob roots built at 80a0a4d (`code_review_3`). |
 | 2. Computed graphql `query=` | Asks in every spelling. AC5 cases. | `code_review_2` |
 | 3. Literal here-doc | Read as literal text wherever a word is expanded, commit messages included. AC5 cases. | `code_review_2`; context file |
 | 4. Help values | Counts only with no value or `true`/`t`/`1`/`T`; `-x=value` parsed for short flags; false or computed asks. AC5 cases. | `code_review_2` |
 | 5. pnpm path selectors | Packages under the folder, plus the root when the folder holds it. AC2 cases. | `scripts.rs:724`, `monorepo_roots_dont_recurse` |
 | 6. turbo.json root tasks | Not followed; added under the limits. | context file, Limits |
-| 7. sed script words | Exempt from the substring rule when they hold only `s` commands with the listed addresses and flags; `r`/`R`/`w`/`W`/`e` commands, `w`/`e` flags and `-f` scripts ask. AC5 cases. | `code_review_2`. The `e`-flag case is in progress (developer). |
+| 7. sed script words | Exempt from the substring rule when they hold only `s` commands with the listed addresses and flags; `r`/`R`/`w`/`W`/`e` commands, `w`/`e` flags and `-f` scripts ask. AC5 cases. | `code_review_2`. The `e` command and flag built at 80a0a4d (`code_review_3`). |
 | 8. Q3 | Latest measurement added, labelled biased: 14 of 2,743 (0.51%): 8 documented computed names, 3 true asks, 3 review probes quoting `hosts.yml`. Added the substring rule's false ask on `python3 -c "print('… gh/hosts.yml')"`. | the developer's replay |
+
+**Post-approval sync, 2026-11-02 (review 3 minors, built at 80a0a4d).** Closes the two items marked in progress above.
+- **Glob search roots for rg/ag:** a glob root counts through its literal head, and through each credential folder or ancestor of one that it matches. The hidden-step rule then applies.
+- **The shell's dot rule** applies to every glob (`glob_match`).
+- **sed scripts that run commands** (an `e` command, or the `e` flag on `s`) are computed code and ask. The scripts checked are each `-e` value, each `--expression=` value, and otherwise the first operand. `-f` scripts aren't read. In disk text, it asks only when the text names a guarded bin.
+- AC5 gains the `code_review_3` cases.
