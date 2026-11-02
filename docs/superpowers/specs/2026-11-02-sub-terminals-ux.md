@@ -150,7 +150,7 @@ it is a full terminal like any other.
 
 | State | Status | Entry |
 |---|---|---|
-| Starting | 10 px spinner, `--text-secondary`, title "Starting: typing the command" | **only when a command was given.** Clears when the window learns the typed result (typed or not typed), at most about 5 s after the open. Opened with no command (or New Sub-terminal): no spinner, running at once. |
+| Starting | 10 px spinner, `--text-secondary`, title "Starting: typing the command" | **only when a command was given.** Clears when the window learns the typed result (typed or not typed), at most about 10 s after the open. Opened with no command (or New Sub-terminal): no spinner, running at once. |
 | Running | none | normal |
 | Command not typed | yellow `!` mark, title "Command not typed" | normal; a notice in the view (below) |
 | Exited | "exited" in `#8B929E` | name at 60% opacity |
@@ -233,11 +233,10 @@ Order is append-only (newest at the right). No reordering in v1.
 ## Closing
 
 **Running** means, for this spec and for every confirm below: the plan's
-Rust idle check, `pty_shell_idle`, says the view's shell is not idle (a
-program, Claude included, is in the foreground). This replaces today's
-"only for Claude" detection for sub-terminals and for tabs that have them. An
-idle shell, an exited shell and a restored sub-terminal that hasn't been shown
-since the restart are **not** running.
+busy check (the approved busy-pane check, `paneBusy`) names a program in the
+foreground of any of the view's panes (Claude included). An idle shell, an
+exited shell and a restored sub-terminal that hasn't been shown since the
+restart are **not** running.
 
 | Action | What happens |
 |---|---|
@@ -245,7 +244,7 @@ since the restart are **not** running.
 | ⌘⇧W on a sub-terminal's last pane | closes the sub-terminal, same confirm. On the tab's own last pane it stays a no-op, as today. |
 | The tab's own entry | no ×. It closes with the tab. |
 | The tab's own shell exits | the view shows today's `[Process exited]`; sub-terminals keep running. The tab stays until closed. |
-| Main tab ×, ⌘W in the tab's own view, Close Others / to the Right | closes the tab and every sub-terminal. **Confirms if any view is running**, i.e. `pty_shell_idle` is false for the tab's own shell or for any sub-terminal's shell: the same rule as ×. Idle, exited and not-yet-shown restored sub-terminals are not counted. |
+| Main tab ×, ⌘W in the tab's own view, Close Others / to the Right | closes the tab and every sub-terminal. **Confirms if any view is running**, i.e. the busy check names a program in any pane of the tab's own view or of any sub-terminal: the same rule as ×. Idle, exited and not-yet-shown restored sub-terminals are not counted. |
 
 The tab-close confirmation, in the existing dialog (`App.tsx`
 `setConfirmDialog`):
@@ -346,7 +345,7 @@ A 28 px bar above the terminal, inside the view, never a modal:
     Enter**, so the user reviews it and runs it. That is the same as the user
     typing it in their own terminal.
   - **Disabled while the shell is busy** (a passphrase prompt, an rc
-    program), by the plan's `pty_shell_idle` check, title "Available once the
+    program), by the plan's busy check, title "Available once the
     shell is back at its prompt". It enables when the check passes, and the
     check runs **again on click**: if the shell became busy in between,
     nothing is inserted and the button goes back to disabled. The line is held
@@ -424,8 +423,8 @@ what the UX above depends on.
 4. Attention and activity per view, from creation. Hidden sub-terminals:
    1000-line scrollback, no GPU renderer or image addon until first shown.
 5. The window learns `typed` and `why` (spinner, notice, announcement).
-6. `pty_shell_idle` per view, used by every close confirm and by Insert
-   command (when enabling it and again on click).
+6. The busy check per view (every pane of it), used by every close confirm
+   and by Insert command (when enabling it and again on click).
 7. Detached windows: carry sub-terminals, accept an open, handle the keys.
 8. Session format gains sub-terminals; restored ones start when first shown;
    old sessions load unchanged.

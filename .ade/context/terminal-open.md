@@ -7,8 +7,12 @@ its pane.
 - UX: `docs/superpowers/specs/2026-11-02-sub-terminals-ux.md`.
 - ADR: `decisions/0014-terminals-open-terminals-through-the-hook-endpoint.md`
   (number provisional). Builds on `agent-events.md` (ADR 0003), which it amends.
+- Uses, from other branches (not yet on main): the busy check of
+  `pane-busy.md` (`hermes-b-busy-panes`), the PTY writer thread and
+  `pty_line_editor_ready` of `feat/cli-guard` (ADR 0011), and `shellQuote`
+  (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`, `hermes-a-quoting`).
 
-Status: proposed, not yet approved or built. macOS and Linux only.
+Status: approved by the owner 2026-11-02 (revised the same day after the final review, rulings R1 to R4); not yet built. macOS and Linux only.
 
 ## The CLI
 
@@ -26,7 +30,8 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
 - **On `PATH`:** `<app data dir>/bin/release/ade`, or
   `bin/debug-<sha256(helper path), 16 hex>/ade`, a symlink to the helper.
   - The folder must be the user's, mode 0700, not a symlink, and hold only
-    `ade`. This is checked at launch and in every `create_pty`.
+    `ade`, a symlink whose `readlink` target is exactly this launch's helper
+    path. This is checked at launch and in every `create_pty`.
   - `create_pty` always strips inherited entries for these folders. It
     prepends its own only when it sets the `ADE_*` variables.
   - Agents and scripts use `"$ADE_HOOK_BIN" open`.
@@ -34,15 +39,16 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   normalised lexically, checked with `stat`. The logical path is sent; the
   default is `$PWD`. `--name` is refused with `--split`.
 - **Output:** nothing on success. Errors go to stderr as `ade: <message>`.
-- **Exit codes:**
+- **Exit codes** (the same table as the spec):
   - `0`: opened; the command, if any, was typed.
-  - `1`: refused or failed, with the message from the body. A 400 with `{}`
-    means "this ADE is too old for ade open; restart ADE". Also when there
-    is no answer in 15 s.
+  - `1`: any answer other than 200, 401 or 410 (400, 404, 409, 422, 429,
+    504), with the message from the body; or no answer within 15 s. A 400
+    with `{}` means "this ADE is too old for ade open; restart ADE".
   - `2`: usage.
   - `3`: `ADE_HOOK_PORT`, `ADE_HOOK_TOKEN` or `ADE_PTY_ID` is unset or
     malformed.
-  - `4`: connection refused, or 401. Mention tmux and screen in the message.
+  - `4`: connection refused, 401, or 410 (this terminal has closed). Mention
+    tmux and screen in the message.
   - `5`: opened, but the command was not typed (`typed:false`).
 - Never put the token on a command line: `ps` shows it.
 
@@ -55,6 +61,8 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   mismatch is 401.
 - The same check applies to `/` and `/open`.
 - PTY ids are never reused: `reserve_id` is monotonic.
+- Not a boundary between same-user processes: one can read another
+  terminal's environment, token included.
 
 ## The request
 
@@ -72,7 +80,7 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
 | Field | Type | Rule (checked in Rust; 422 when broken) |
 |---|---|---|
 | `cwd` | string, required | absolute, an existing folder |
-| `command` | string[] or null | 1–64 words, each non-empty, bytes `0x20`–`0x7e`; typed line at most 1000 bytes; shell basename one of `sh`, `bash`, `zsh`, `fish`, `dash`, `ksh` |
+| `command` | string[] or null | 1–64 words, each non-empty, bytes `0x20`–`0x7e`; typed line at most 4096 bytes; shell basename one of `sh`, `bash`, `zsh`, `fish`, `dash`, `ksh` |
 | `split` | `"right"`, `"down"` or null | null = a new sub-terminal of the caller's tab |
 | `name` | string or null | 1–64 characters, no control characters; null when `split` is set |
 | `focus` | bool, default false | true = show the new sub-terminal (or pane), focus it, activate its tab |
@@ -86,19 +94,27 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
 | Code | Body | When |
 |---|---|---|
 | 200 | `{"ok":true,"typed":true}` | added; command typed, or none given |
-| 200 | `{"ok":true,"typed":false,"why":"..."}` | added; command not typed (shell busy, printed nothing in 5 s, exited first, or the acknowledged PTY failed the claim check) |
+| 200 | `{"ok":true,"typed":false,"why":"..."}` | added; command not typed (the shell's line editor wasn't ready within 5 s of the window's answer, the shell exited first, or the acknowledged PTY failed the claim check) |
 | 400 | `{"error":"..."}` | not JSON, unknown field, wrong type |
-| 409 | `{"error":"..."}` | no listener for the caller's window; the window refused (caller pane not found, split from a non-terminal tab, split limit) |
+| 409 | `{"error":"..."}` | no open handler yet ("ADE is still starting"); no listener for the caller's window; the window refused (caller pane not found, split from a non-terminal tab, split limit) |
 | 410 | `{"error":"the terminal you ran this from is gone"}` | caller PTY not live |
 | 422 | `{"error":"..."}` | a field rule |
 | 429 | `{"error":"..."}` | caller pane's bucket empty (8, refills 1/s) or 32 running `/open` shells, counting requests in flight |
 | 504 | `{"error":"ADE didn't answer; no terminal was opened"}` | no `terminal_open_done` before `expiresAt` |
 | from `screen()`, 404 | `{}` | as for hook events |
 
-ADE answers within 12 s. Rust never spawns or kills a terminal for `/open`.
-The window makes and removes them.
+ADE answers within 11 s (5 s for the window, then at most 5 s for the line
+editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
+`/open`. The window makes and removes them.
 
 ## ADE inside
+
+- **Threads.** `serve` stays one loop. For `/open` it runs `screen()`, reads
+  the body and calls the injected handler's `admit` (the limits) on its own
+  thread, then hands the admitted request to a new thread that calls
+  `handle` and answers. Hook events are served meanwhile. The handler is
+  set by `AgentStatus::set_open_handler(Arc<dyn OpenHandler>)` in `.setup()`,
+  since `AgentStatus::start` has no `AppHandle` or `PtyManager`.
 
 - `PtyInstance` records its owner window label. `create_pty` sets it and
   `reattach_pty` replaces it.
@@ -118,19 +134,22 @@ The window makes and removes them.
     - it is owned by that window.
     Otherwise the result is `typed:false`.
   - An accepted PTY is marked as made by `/open`, for the cap.
-  - It re-checks `line`: printable ASCII, at most 1000 bytes.
-- **Typing:**
-  - Wait for the first output, then 300 ms of quiet, at most 5 s. At 5 s,
-    with some output, go on; with none, `typed:false`.
-  - Type only if `master.process_group_leader()` (`tcgetpgrp`) equals the
-    shell's pid. Never use `pgrep -P`.
-  - Write `line + "\r"`.
-- `pty_shell_idle({ id }) -> bool` is true when `tcgetpgrp` equals the
-  shell's pid.
-- **"Running"** means `pty_shell_idle` is false for any pane of a
-  sub-terminal. That one definition is used by the tab-close confirm (U4),
-  the × confirm and "Insert command" (disabled while not idle, checked again
-  on click, written without Enter).
+  - It re-checks `line`: printable ASCII, at most 4096 bytes.
+- **Typing** (`feat/cli-guard`'s PTY layer):
+  - Poll `line_editor_ready(master, shell pid)` (the check behind
+    `pty_line_editor_ready`: out of canonical mode, and `tcgetpgrp` is the
+    shell) every 50 ms; type after two ready answers in a row. Not ready
+    within 5 s of the window's answer: `typed:false`. Never use `pgrep -P`.
+  - Write `line + "\r"` through the PTY's `input` channel (its writer
+    thread), never a blocking write.
+- **"Running"** is `pane-busy.md`'s check: a view is running when
+  `paneBusy(paneId)` is non-null for any of its panes; a tab when any view
+  is. Panes with neither an instance nor a `ptyId` (a restored sub-terminal
+  not yet shown) are skipped. `useGuardedClose` applies it to the tab-close
+  confirm (U4), `requestCloseView` (×, ⌘W, Delete) and Close Others; Insert
+  command is enabled when `paneBusy` is null, checked again on click, and
+  written without Enter. No other busy check exists, and nothing else calls
+  `hasActiveProcess`.
 - No exit code in v1: `PtyEvent::Exit` is unchanged.
 
 ```ts
@@ -158,16 +177,19 @@ type OpenMessage =
   sub-terminal and activates the tab.
 - **Split:** `splitPane` within the caller's view (hidden or not), which
   returns the new pane id or null (the limit).
-- **The new pane's terminal is created at once, headless:**
-  `openTerminal(paneId, { cols, rows })` at the caller's size (24×80 if the
-  caller has no instance), then `create_pty`.
-  - Until first show it has scrollback `min(setting, 1000)`, no GPU renderer
-    and no image addon. Hidden panes reattached headless in a detached window
-    get the same.
-  - On first show it gets all three.
+- **The new pane's terminal is created at once:** `createInstance` with no
+  container, at the caller's size (24×80 if the caller has no instance),
+  then `create_pty` with the `requestId`. A later mount finds the instance:
+  exactly one `create_pty` per pane.
+  - **Hidden-terminal budget** (story 4b), for any instance created without a
+    container: scrollback `min(setting, 1000)`, kept by
+    `refreshAllTerminals`, and no `ImageAddon`, until the first
+    `seatTerminal`. That seat lifts the scrollback and loads the
+    `ImageAddon` before `loadGpu`. WebGL needs nothing: only a seat takes a
+    slot.
 - **The answer:** `terminal_open_done` once it has the `ptyId`, with
   `line = words.map(w => /^[\w./-]+$/.test(w) ? w : shellQuote(w)).join(" ")`.
-  `shellQuote` is from `src/lib/shellQuote.ts` (ADR 0008).
+  `shellQuote` is from `src/lib/shellQuote.ts` (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`).
 - `expired` closes what it added for that request.
 - `typed` sets the entry's status.
 - The line is held in memory only.
@@ -198,12 +220,13 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
     synced.
 - **The session.** `SavedTab.root` stays the own view, so old sessions load
   as one view. New fields: `subViews` (name, tree, folders, scrollback) and
-  `shownView`.
+  `shownView`. The 5 MB truncation walks `root` and every `subViews` tree.
   - Restored sub-terminals start when first shown.
   - Commands, status and `spawnedBy` are never saved. The line for Insert
     command lives in memory only.
   - `sync.rs` strips `serializedBuffer` before pushing to the sync repo.
-- **Detaching** sends `views`, `viewOrder` and `shownView`.
+- **Detaching** (story 5) sends `views`, `viewOrder` and `shownView`. Until
+  story 5, Move to New Window is hidden for a tab with sub-terminals.
   - The detached window reattaches hidden panes at once, headless.
   - Its destroy handler kills `allTabPanes`.
 
