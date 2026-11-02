@@ -14,7 +14,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes, shownView } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isAnsweringKey, reportAnsweringKey } from "../stores/agentStatusStore";
 
@@ -71,7 +71,7 @@ function checkIdleTransition(paneId: string) {
   if (prevActive && !active) {
     // Output finished in a tab you aren't looking at: flag it in the tab bar.
     const { tabs, activeTabId } = useTabStore.getState();
-    const owner = tabs.find((t) => findAllPanes(t.root).some((p) => p.id === paneId));
+    const owner = tabs.find((t) => allTabPanes(t).some((p) => p.id === paneId));
     if (owner && owner.id !== activeTabId) {
       void import("../stores/paneMetaStore").then(({ usePaneCwd }) => usePaneCwd.getState().markAttention(owner.id));
     }
@@ -145,9 +145,14 @@ function isPaneActive(paneId: string): boolean {
   return Date.now() - last < ACTIVITY_TIMEOUT;
 }
 
-function destroyInstance(paneId: string) {
+/**
+ * Dispose a pane's terminal and kill its shell. `storePtyId` is the store's
+ * id for the pane: it kills a pane that has a shell but no instance yet.
+ */
+function destroyInstance(paneId: string, storePtyId?: number | null) {
   const inst = instances.get(paneId);
-  if (inst?.ptyId != null) invoke("kill_pty", { id: inst.ptyId });
+  const ptyId = inst ? inst.ptyId : storePtyId;
+  if (ptyId != null) invoke("kill_pty", { id: ptyId });
   detachInstance(paneId);
 }
 
@@ -607,7 +612,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       if (!inst) {
         // A pane with a ptyId already has a shell (a detached window's tab):
         // reattach to it instead of starting a new one.
-        const pane = useTabStore.getState().tabs.flatMap((t) => findAllPanes(t.root)).find((p) => p.id === paneId);
+        const pane = useTabStore.getState().tabs.flatMap((t) => allTabPanes(t)).find((p) => p.id === paneId);
         if (pane?.ptyId) {
           inst = await createReattachedInstance(paneId, pane.ptyId, setPtyId);
         } else {
@@ -740,7 +745,7 @@ function getTerminalDimensions(paneId: string): { cols: number; rows: number } |
 function focusActiveTerminal(): boolean {
   const { tabs, activeTabId } = useTabStore.getState();
   const tab = tabs.find((t) => t.id === activeTabId);
-  const inst = tab ? instances.get(tab.activePaneId) : undefined;
+  const inst = tab ? instances.get(shownView(tab).activePaneId) : undefined;
   if (!inst) return false;
   inst.term.focus();
   return true;

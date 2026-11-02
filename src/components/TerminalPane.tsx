@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { SHORTCUTS, matches } from "../lib/shortcuts";
 import { useTerminal, getPtyCwd, getSearchAddon } from "../hooks/useTerminal";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, findAllPanes, shownView } from "../stores/tabStore";
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { invoke } from "@tauri-apps/api/core";
 import TerminalSearch from "./TerminalSearch";
@@ -37,11 +37,12 @@ export default function TerminalPane({ paneId, tabId }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const setActivePaneInTab = useTabStore((s) => s.setActivePaneInTab);
   const activeTab = useTabStore((s) => s.tabs.find((t) => t.id === tabId));
-  const isActive = activeTab?.activePaneId === paneId;
+  const view = activeTab ? shownView(activeTab) : undefined;
+  const isActive = view?.activePaneId === paneId;
   const [showSearch, setShowSearch] = useState(false);
   const [cwd, setCwd] = useState<string | null>(null);
 
-  const allPanes = activeTab ? findAllPanes(activeTab.root) : [];
+  const allPanes = view ? findAllPanes(view.root) : [];
   const paneIndex = allPanes.findIndex((p) => p.id === paneId);
   const paneColor = PANE_COLORS[paneIndex % PANE_COLORS.length];
   const hasMultiplePanes = allPanes.length > 1;

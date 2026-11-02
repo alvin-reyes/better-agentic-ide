@@ -39,7 +39,8 @@ const ShortcutsOverlay = lazy(() => import("./components/ShortcutsOverlay"));
 const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
-import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
+import { useTabStore, saveSession, loadSession, shownView, allTabPanes } from "./stores/tabStore";
+import { tabFolderPaneId, tabFolderPtyId } from "./lib/tabDisplay";
 import { flushNow } from "./lib/persistence";
 import { listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
@@ -87,13 +88,13 @@ export default function App() {
   } | null>(null);
   const { tabs, activeTabId, getActivePtyId, closeTab, closePane } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  // The active pane's PTY id, as a primitive so the subscription only fires when
-  // it actually changes. Panes start with ptyId: null and are filled in
+  // The PTY id of the pane whose folder is the active tab's folder (the own
+  // view's active pane), as a primitive so the subscription only fires when it
+  // actually changes. Panes start with ptyId: null and are filled in
   // asynchronously once create_pty resolves; cwd resolution must wait for that.
-  const activePtyId = useTabStore((s) => {
+  const folderPtyId = useTabStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
-    if (!tab) return null;
-    return findAllPanes(tab.root).find((p) => p.id === tab.activePaneId)?.ptyId ?? null;
+    return tab ? tabFolderPtyId(tab) : null;
   });
 
   // The first render is on screen: fade out the launch splash.
@@ -272,11 +273,12 @@ export default function App() {
     };
   }, []);
 
-  // Resolve the active terminal's cwd eagerly. Non-terminal tabs (fleet, editor,
+  // Resolve the active tab's folder eagerly: its own view's active pane,
+  // whatever view is in sight. Non-terminal tabs (fleet, editor,
   // browser, orchestrator) have no PTY, so keep the last resolved value rather
   // than clearing it — the fleet views read this while a fleet tab is focused.
   //
-  // activePtyId is in the dependency list on purpose: getPtyCwd resolves null
+  // folderPtyId is in the dependency list on purpose: getPtyCwd resolves null
   // (it does not reject) while the pane's PTY has not been created yet, which is
   // the state of every pane on the first render. Depending on the PTY id makes
   // this re-run the moment create_pty lands, which is the only recovery path in
@@ -286,8 +288,9 @@ export default function App() {
   // folder without any React state changing, and the BMAD banner and the
   // "This terminal" fleet view would otherwise keep using the old folder.
   // (The file browser polls on its own for the same reason.)
+  const folderPaneId = activeTab ? tabFolderPaneId(activeTab) : undefined;
   useEffect(() => {
-    const paneId = activeTab?.activePaneId;
+    const paneId = folderPaneId;
     if (!paneId) return;
     if (activeTab?.type && activeTab.type !== "terminal") return;
     let cancelled = false;
@@ -298,7 +301,7 @@ export default function App() {
     resolve();
     const id = window.setInterval(resolve, CWD_POLL_MS);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
+  }, [activeTab?.type, folderPaneId, folderPtyId]);
 
   // Not over the BMAD version question or the switch's confirm step.
   const toggleCommandPalette = useCallback(() => setPaletteOpen(togglePalette), []);
@@ -352,7 +355,7 @@ export default function App() {
       return;
     }
 
-    const activeProcesses = findAllPanes(tab.root)
+    const activeProcesses = allTabPanes(tab)
       .map((p) => hasActiveProcess(p.id))
       .filter((name): name is string => name !== null);
 
@@ -397,7 +400,7 @@ export default function App() {
     const closeMany = (e: Event) => {
       const ids: string[] = (e as CustomEvent).detail?.tabIds ?? [];
       const targets = tabs.filter((t) => ids.includes(t.id));
-      const live = targets.filter((t) => findAllPanes(t.root).some((p) => hasActiveProcess(p.id) !== null));
+      const live = targets.filter((t) => allTabPanes(t).some((p) => hasActiveProcess(p.id) !== null));
       const close = () => { for (const t of targets) closeTab(t.id); setConfirmDialog(null); };
       // hasActiveProcess reads an xterm buffer, so it is null for every editor
       // tab. Without asking them too, "Close others" discarded unsaved files
@@ -478,8 +481,8 @@ export default function App() {
                         <ContractsWorkbench key={activeTab.contractsRoot} root={activeTab.contractsRoot} />
                       </Suspense>
                     : zoomedPane
-                    ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
-                    : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
+                    ? <TerminalPane paneId={shownView(activeTab).activePaneId} tabId={activeTab.id} />
+                    : <PaneContainer node={shownView(activeTab).root} tabId={activeTab.id} />
           )}
         </div>
         {previewOpen && (

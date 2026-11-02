@@ -13,7 +13,7 @@ import {
 // The pending check lives with setup, which it blocks; it is the switch's all the same.
 export { pendingSwitches, type PendingSwitch } from "./projectSetup";
 import { useFleetStore } from "../stores/fleetStore";
-import { findAllPanes, useTabStore } from "../stores/tabStore";
+import { allTabPanes, useTabStore } from "../stores/tabStore";
 
 /**
  * A `files` equal to this means "unknown, or at least this many": the count
@@ -163,7 +163,7 @@ export interface OpenInProject {
 export async function openInProject(root: string): Promise<OpenInProject> {
   const { getPtyCwd } = await import("../hooks/useTerminal");
   const asked = useTabStore.getState().tabs.flatMap((tab) =>
-    findAllPanes(tab.root).map(async (pane) => ({ tab: tab.name, cwd: await getPtyCwd(pane.id).catch(() => null) })),
+    allTabPanes(tab).map(async (pane) => ({ tab: tab.name, cwd: await getPtyCwd(pane.id).catch(() => null) })),
   );
   const panes: OpenInProject["panes"] = [];
   for (const { tab, cwd } of await Promise.all(asked)) {

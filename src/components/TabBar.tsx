@@ -1,7 +1,7 @@
 import { requestNewTab } from "../lib/newTab";
 import { useState, useRef, useEffect } from "react";
 import { shortcutLabel } from "../lib/shortcuts";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isPaneActive } from "../hooks/useTerminal";
 import { usePaneCwd, baseName } from "../stores/paneMetaStore";
@@ -57,7 +57,7 @@ export default function TabBar() {
     const check = () => {
       const active = new Set<string>();
       for (const tab of tabs) {
-        const panes = findAllPanes(tab.root);
+        const panes = allTabPanes(tab);
         if (panes.some((p) => isPaneActive(p.id))) {
           active.add(tab.id);
         }

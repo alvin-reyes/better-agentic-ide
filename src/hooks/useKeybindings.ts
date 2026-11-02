@@ -1,6 +1,6 @@
 import { requestNewTab } from "../lib/newTab";
 import { useEffect } from "react";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, shownView } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
 import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
@@ -100,7 +100,7 @@ export function useKeybindings(actions: KeybindingActions) {
       if (is("sendEnter")) return run(actions.sendEnterToTerminal);
       if (is("closePane")) {
         return run(() => {
-          if (activeTab) actions.requestClosePane(activeTabId, activeTab.activePaneId);
+          if (activeTab) actions.requestClosePane(activeTabId, shownView(activeTab).activePaneId);
         });
       }
       if (is("closeTab")) return run(() => actions.requestCloseTab(activeTabId));
@@ -123,8 +123,9 @@ export function useKeybindings(actions: KeybindingActions) {
         const direction = is("splitHorizontal") ? "horizontal" : "vertical";
         return run(() => {
           if (!activeTab) return;
-          getPtyCwd(activeTab.activePaneId).then((cwd) => {
-            splitPane(activeTabId, activeTab.activePaneId, direction, cwd);
+          const paneId = shownView(activeTab).activePaneId;
+          getPtyCwd(paneId).then((cwd) => {
+            splitPane(activeTabId, paneId, direction, cwd);
           });
         });
       }

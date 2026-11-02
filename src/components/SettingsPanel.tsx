@@ -1,6 +1,6 @@
 import { useSettingsStore, themePresets, applyThemeToDOM, type ThemeColors } from "../stores/settingsStore";
 import { shortcutLabel } from "../lib/shortcuts";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, ownView } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import { invoke } from "@tauri-apps/api/core";
@@ -196,10 +196,10 @@ export default function SettingsPanel() {
     if (!workspaceName.trim()) return;
     store.saveWorkspace(
       workspaceName.trim(),
-      tabStore.tabs.map((t) => ({
-        name: t.name,
-        splits: t.root.type === "split" ? t.root.direction : "none",
-      }))
+      tabStore.tabs.map((t) => {
+        const root = ownView(t).root;
+        return { name: t.name, splits: root.type === "split" ? root.direction : "none" };
+      })
     );
     setWorkspaceName("");
   };

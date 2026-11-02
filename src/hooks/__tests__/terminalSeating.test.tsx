@@ -101,7 +101,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: async () => {} }));
 
 import { useTerminal, getSearchAddon, destroyInstance, stopIdlePolling, __resetGpuForTests } from "../useTerminal";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { useTabStore, type Tab } from "../../stores/tabStore";
+import { useTabStore, ownViewOnly, type Tab } from "../../stores/tabStore";
 
 const { FakeWebglAddon, events, ptys } = h;
 type FakeTerminal = InstanceType<typeof h.FakeTerminal>;
@@ -327,7 +327,7 @@ describe.each(modes)("seating terminals as panes mount ($name)", (m) => {
   });
   // A tab moved back from a detached window: its pane already has a shell.
   it("a pane that already has a shell reattaches to it and takes one slot", async () => {
-    const tab: Tab = { id: "t", name: "t", activePaneId: "r1", root: { type: "pane", pane: { id: "r1", ptyId: 42 } } };
+    const tab: Tab = { id: "t", name: "t", ...ownViewOnly({ type: "pane", pane: { id: "r1", ptyId: 42 } }, "r1") };
     useTabStore.setState({ tabs: [tab], activeTabId: "t" });
     show(null, ["r1"]);
     await settle();

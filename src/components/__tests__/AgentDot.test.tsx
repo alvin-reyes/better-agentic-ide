@@ -6,12 +6,12 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null), Channe
 import AgentDot from "../AgentDot";
 import FleetGroups from "../fleet/FleetGroups";
 import { useAgentStatusStore } from "../../stores/agentStatusStore";
-import { useTabStore, type Tab } from "../../stores/tabStore";
+import { useTabStore, ownViewOnly, type Tab } from "../../stores/tabStore";
 import type { LaneGroup } from "../../stores/fleetStore";
 
 const tab = (id: string, ...ptys: number[]): Tab => ({
-  id, name: id, activePaneId: `${id}-0`,
-  root: { type: "split", direction: "horizontal", children: ptys.map((p, i) => ({ type: "pane", pane: { id: `${id}-${i}`, ptyId: p } })) },
+  id, name: id,
+  ...ownViewOnly({ type: "split", direction: "horizontal", children: ptys.map((p, i) => ({ type: "pane", pane: { id: `${id}-${i}`, ptyId: p } })) }, `${id}-0`),
 });
 
 const dot = () => document.querySelector(".agent-dot");

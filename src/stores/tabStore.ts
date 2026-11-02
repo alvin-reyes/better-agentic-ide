@@ -30,6 +30,22 @@ export interface SplitContainer {
 
 export type PaneNode = SplitNode | SplitContainer;
 
+/** The id of a tab's own view: always present, always first in `viewOrder`. */
+export const OWN_VIEW = "own";
+
+/**
+ * One pane tree of a tab. A tab without sub-terminals has only its own view;
+ * every reader says which view it means (shownView, ownView, allTabPanes,
+ * viewOfPane) instead of reading a single tree.
+ */
+export interface View {
+  id: string;
+  name: string | null;
+  spawnedBy: string | null;
+  root: PaneNode;
+  activePaneId: string;
+}
+
 export interface Tab {
   id: string;
   name: string;
@@ -50,8 +66,49 @@ export interface Tab {
   previewPath?: string | null;
   /** Accent chosen from the tab's context menu. */
   color?: string;
-  root: PaneNode;
-  activePaneId: string;
+  views: Record<string, View>;
+  viewOrder: string[];
+  shownView: string;
+}
+
+/** The view fields of a tab whose only view is its own, holding `root`. */
+export function ownViewOnly(root: PaneNode, activePaneId: string): Pick<Tab, "views" | "viewOrder" | "shownView"> {
+  return {
+    views: { [OWN_VIEW]: { id: OWN_VIEW, name: null, spawnedBy: null, root, activePaneId } },
+    viewOrder: [OWN_VIEW],
+    shownView: OWN_VIEW,
+  };
+}
+
+/** The view in sight. */
+export function shownView(tab: Tab): View {
+  return tab.views[tab.shownView] ?? tab.views[OWN_VIEW];
+}
+
+/** The tab's own view: its label, folder and project come from here. */
+export function ownView(tab: Tab): View {
+  return tab.views[OWN_VIEW];
+}
+
+/** Every pane of every view, in `viewOrder`. */
+export function allTabPanes(tab: Tab): Pane[] {
+  return tab.viewOrder.flatMap((id) => (tab.views[id] ? findAllPanes(tab.views[id].root) : []));
+}
+
+/** The view holding `paneId`, or undefined. */
+export function viewOfPane(tab: Tab, paneId: string): View | undefined {
+  for (const id of tab.viewOrder) {
+    const view = tab.views[id];
+    if (view && findPane(view.root, paneId)) return view;
+  }
+  return undefined;
+}
+
+/** `tab` with view `viewId` replaced by `update(view)`. */
+function withView(tab: Tab, viewId: string, update: (v: View) => View): Tab {
+  const view = tab.views[viewId];
+  if (!view) return tab;
+  return { ...tab, views: { ...tab.views, [viewId]: update(view) } };
 }
 
 /** What reopening a closed terminal tab brings back. */
@@ -237,8 +294,8 @@ export const useTabStore = create<TabStore>((set, get) => {
   const initialTabId = newTabId();
 
   /** Append a tab and activate it. Non-terminal tabs carry a placeholder pane. */
-  const openTab = (fields: Omit<Tab, "id" | "root" | "activePaneId">, pane = createDefaultPane()): string => {
-    const tab: Tab = { ...fields, id: newTabId(), root: { type: "pane", pane }, activePaneId: pane.id };
+  const openTab = (fields: Omit<Tab, "id" | "views" | "viewOrder" | "shownView">, pane = createDefaultPane()): string => {
+    const tab: Tab = { ...fields, id: newTabId(), ...ownViewOnly({ type: "pane", pane }, pane.id) };
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
     return tab.id;
   };
@@ -252,12 +309,13 @@ export const useTabStore = create<TabStore>((set, get) => {
   const focusPaneBy = (tabId: string, step: 1 | -1) => {
     const tab = get().tabs.find((t) => t.id === tabId);
     if (!tab) return;
-    const allPanes = findAllPanes(tab.root);
+    const view = shownView(tab);
+    const allPanes = findAllPanes(view.root);
     if (allPanes.length <= 1) return;
-    const idx = allPanes.findIndex((p) => p.id === tab.activePaneId);
+    const idx = allPanes.findIndex((p) => p.id === view.activePaneId);
     const next = allPanes[(idx + step + allPanes.length) % allPanes.length];
     set((s) => ({
-      tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, activePaneId: next.id } : t)),
+      tabs: s.tabs.map((t) => (t.id === tabId ? withView(t, view.id, (v) => ({ ...v, activePaneId: next.id })) : t)),
     }));
   };
 
@@ -266,8 +324,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       {
         id: initialTabId,
         name: "Terminal",
-        root: { type: "pane", pane: initialPane },
-        activePaneId: initialPane.id,
+        ...ownViewOnly({ type: "pane", pane: initialPane }, initialPane.id),
       },
     ],
     activeTabId: initialTabId,
@@ -299,7 +356,8 @@ export const useTabStore = create<TabStore>((set, get) => {
       if (state.tabs.length <= 1) return;
       const tab = state.tabs.find((t) => t.id === id);
       if (tab && (!tab.type || tab.type === "terminal")) {
-        const pane = findAllPanes(tab.root).find((p) => p.id === tab.activePaneId) ?? findAllPanes(tab.root)[0];
+        const own = ownView(tab);
+        const pane = findAllPanes(own.root).find((p) => p.id === own.activePaneId) ?? findAllPanes(own.root)[0];
         const cwd = (pane && usePaneCwd.getState().cwds[pane.id]) || pane?.savedCwd || pane?.initialCwd || null;
         const closed = [...state.closedTabs, { name: tab.name, cwd, color: tab.color }].slice(-MAX_CLOSED);
         set({ closedTabs: closed });
@@ -307,7 +365,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       if (tab) {
         // Imported lazily: useTerminal imports this store.
         import("../hooks/useTerminal").then(({ destroyInstance }) => {
-          for (const pane of findAllPanes(tab.root)) destroyInstance(pane.id);
+          for (const pane of allTabPanes(tab)) destroyInstance(pane.id, pane.ptyId);
         });
       }
       const idx = state.tabs.findIndex((t) => t.id === id);
@@ -356,28 +414,33 @@ export const useTabStore = create<TabStore>((set, get) => {
     setActivePaneInTab: (tabId, paneId) =>
       set((s) => ({
         tabs: s.tabs.map((t) =>
-          t.id === tabId ? { ...t, activePaneId: paneId } : t,
+          t.id === tabId
+            ? withView(t, (viewOfPane(t, paneId) ?? shownView(t)).id, (v) => ({ ...v, activePaneId: paneId }))
+            : t,
         ),
       })),
 
     setPtyId: (paneId, ptyId) =>
       set((s) => ({
-        tabs: s.tabs.map((t) => ({
-          ...t,
-          root: updatePaneInNode(t.root, paneId, (p) => ({ ...p, ptyId })),
-        })),
+        tabs: s.tabs.map((t) => {
+          const view = viewOfPane(t, paneId);
+          if (!view) return t;
+          return withView(t, view.id, (v) => ({ ...v, root: updatePaneInNode(v.root, paneId, (p) => ({ ...p, ptyId })) }));
+        }),
       })),
 
     splitPane: (tabId, paneId, direction, initialCwd) => {
       const state = get();
       const tab = state.tabs.find((t) => t.id === tabId);
       if (!tab) return;
-      const result = splitPaneInNode(tab.root, paneId, direction, initialCwd);
+      const view = viewOfPane(tab, paneId);
+      if (!view) return;
+      const result = splitPaneInNode(view.root, paneId, direction, initialCwd);
       if (!result.newPaneId) return;
       set((s) => ({
         tabs: s.tabs.map((t) =>
           t.id === tabId
-            ? { ...t, root: result.node, activePaneId: result.newPaneId! }
+            ? withView(t, view.id, (v) => ({ ...v, root: result.node, activePaneId: result.newPaneId! }))
             : t,
         ),
       }));
@@ -387,14 +450,17 @@ export const useTabStore = create<TabStore>((set, get) => {
       const state = get();
       const tab = state.tabs.find((t) => t.id === tabId);
       if (!tab) return;
-      if (findAllPanes(tab.root).length <= 1) return; // don't close the last pane
-      import("../hooks/useTerminal").then(({ destroyInstance }) => destroyInstance(paneId));
-      const newRoot = removePaneFromNode(tab.root, paneId);
+      const view = viewOfPane(tab, paneId);
+      if (!view) return;
+      if (findAllPanes(view.root).length <= 1) return; // don't close the last pane
+      const ptyId = findPane(view.root, paneId)?.ptyId ?? null;
+      import("../hooks/useTerminal").then(({ destroyInstance }) => destroyInstance(paneId, ptyId));
+      const newRoot = removePaneFromNode(view.root, paneId);
       if (!newRoot) return;
-      const newActive = tab.activePaneId === paneId ? findAllPanes(newRoot)[0].id : tab.activePaneId;
+      const newActive = view.activePaneId === paneId ? findAllPanes(newRoot)[0].id : view.activePaneId;
       set((s) => ({
         tabs: s.tabs.map((t) =>
-          t.id === tabId ? { ...t, root: newRoot, activePaneId: newActive } : t,
+          t.id === tabId ? withView(t, view.id, (v) => ({ ...v, root: newRoot, activePaneId: newActive })) : t,
         ),
       }));
     },
@@ -415,7 +481,7 @@ export const useTabStore = create<TabStore>((set, get) => {
 
       // Dispose the xterm instances but keep the PTYs running for the new window.
       import("../hooks/useTerminal").then(({ detachInstance }) => {
-        for (const pane of findAllPanes(tab.root)) detachInstance(pane.id);
+        for (const pane of allTabPanes(tab)) detachInstance(pane.id);
       });
 
       const idx = state.tabs.findIndex((t) => t.id === id);
@@ -435,7 +501,8 @@ export const useTabStore = create<TabStore>((set, get) => {
       const state = get();
       const tab = state.tabs.find((t) => t.id === state.activeTabId);
       if (!tab) return null;
-      return findPane(tab.root, tab.activePaneId);
+      const view = shownView(tab);
+      return findPane(view.root, view.activePaneId);
     },
 
     getActivePtyId: () => get().getActivePane()?.ptyId ?? null,
@@ -443,7 +510,8 @@ export const useTabStore = create<TabStore>((set, get) => {
     getTabActivePane: (tabId) => {
       const tab = get().tabs.find((t) => t.id === tabId);
       if (!tab) return null;
-      return findPane(tab.root, tab.activePaneId);
+      const view = shownView(tab);
+      return findPane(view.root, view.activePaneId);
     },
   };
 });
@@ -527,8 +595,8 @@ async function saveSession(): Promise<void> {
         id: tab.id,
         name: tab.name,
         type: tab.type,
-        root: { type: "pane", pane: { id: tab.activePaneId } },
-        activePaneId: tab.activePaneId,
+        root: { type: "pane", pane: { id: ownView(tab).activePaneId } },
+        activePaneId: ownView(tab).activePaneId,
         editorFilePath: tab.editorFilePath,
         browserUrl: tab.browserUrl,
         orchestratorSessionId: tab.orchestratorSessionId,
@@ -537,7 +605,9 @@ async function saveSession(): Promise<void> {
       });
       continue;
     }
-    const panes = findAllPanes(tab.root);
+    // Only the own view is saved until sub-terminals are (SavedTab.root is its tree).
+    const own = ownView(tab);
+    const panes = findAllPanes(own.root);
     const paneData = new Map<string, SavedPane>();
 
     for (const pane of panes) {
@@ -556,8 +626,8 @@ async function saveSession(): Promise<void> {
       id: tab.id,
       name: tab.name,
       type: tab.type,
-      root: serializePaneNode(tab.root, paneData),
-      activePaneId: tab.activePaneId,
+      root: serializePaneNode(own.root, paneData),
+      activePaneId: own.activePaneId,
       color: tab.color,
     });
   }
@@ -626,8 +696,7 @@ function loadSession(): boolean {
         id: newTabId(),
         name: saved.name,
         type: (saved.type as Tab["type"]) || undefined,
-        root,
-        activePaneId: findAllPanes(root)[0]?.id || "",
+        ...ownViewOnly(root, findAllPanes(root)[0]?.id || ""),
         editorFilePath: saved.editorFilePath,
         browserUrl: saved.browserUrl,
         previewPath: saved.previewPath,
