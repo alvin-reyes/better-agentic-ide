@@ -1124,6 +1124,54 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
 
 **Slice (1b):** `src/lib/agentCommand.ts`, `src/lib/agentLaunch.ts`, their tests, `src-tauri/src/orgo_rules.rs`, the context file, and a paragraph in the guide.
 
+## Verification (1b)
+
+**Commands:** the repo's verification command, unchanged.
+
+**Does 1b have a gating manual check of its own? No.** Only Story 1's macOS long-launch-line check is marked as gating (ADR 0009). 1b's three manual checks are not marked gating, and 1b adds no typing path of its own (it relies on Story 1's `typeWhenReady`, CR-2).
+
+**QA record (2026-11-02, HEAD `8d2a225` on `plan/orgo-agent-computers`, 1b's commits `be4c32a` to `8d2a225` on top of Story 1's QA record `f8b593a`).**
+
+**Verdict: automated verification green; every AC is covered by a test that ran. Story 1b is NOT recorded Done yet, because of one stale line in the contract (finding C1). It cannot be Done before Story 1 either: it ships with Story 1 and waits on the same owner check.** Once C1 is fixed and re-checked, 1b is recorded as "Done with Story 1". No Done line was written to the journal.
+
+*Verification command, run by QA in sequence on Linux (root), real output:*
+
+| Command | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0, no output |
+| `npm test` | exit 0. `Test Files  150 passed (150)`, `Tests  1678 passed (1678)`. `BoardPanel.test.tsx` passed on the first run, so no rerun was needed (its `act(...)` warnings on stderr are old and not failures) |
+| `cd src-tauri && cargo test` | exit 0. lib: `482 passed; 0 failed; 1 ignored` (the ignore is `usage.rs:1833`, not in this slice). Other targets: 0, 12, 2, 0 passed. One warning, `platform.rs:98 which_command` never used; `platform.rs` is not in the diff |
+| `cd relay && cargo test` | exit 0. 266 passed, 0 failed |
+| `cd mobile && npx tsc --noEmit && npx jest` | exit 0. `Tests: 6 passed, 6 total` |
+
+Counts equal the developer's last run (150 files / 1678; 482 + 1 ignored; 266; 6/6).
+
+*Every AC maps to a test that ran* (names taken from the verbose/`--list` output, not only the source):
+
+| AC | Test (ran, passed) |
+|---|---|
+| 1 | `src/lib/__tests__/agentCommand.test.ts` › Continuous mode's hard stop on the launch line › continuous launches deny Orgo creation before the role flag. Asserts the exact word order for claude and deepseek (flag, `--settings`, `--disallowedTools`, each rule its own argument, `--append-system-prompt-file`, task last), the exact quoted bytes (including a rule with `'`), and no flag without `continuous`, with an empty list, headless, or on ollama |
+| 2 | `orgo_rules.rs` › `continuous_mcp_denies_are_unconditional_and_spare_reads`. Asserts the 12-glob list exactly, `launch_rules()` returns MCP then CLI, no GET in the fixture is denied, createComputer, cloneComputer, forkComputer, startComputer, restartComputer, resumeComputer, resizeComputer and `testRunTemplate` are denied, the five corpus names are denied, health and clone-status reads are spared, `get_computer_startup_log` is denied as recorded, and stop, delete, update and enable-SSH ask and are not denied. Also `claude_settings.rs` › `launch_rules_are_the_ask_list_with_no_guard_yet` (the declared decision-14 change: the serialized shape now carries the deny list) |
+| 3 | `orgo_rules.rs` › `continuous_cli_denies_cover_creation`. Asserts the 17 rules exactly, the 11 denied commands, the two recorded over-matches, the 3 not-denied commands, and the 7 documented limits (`echo create | xargs -n1 orgo c` is the corrected example). The two-space and other whitespace forms are deliberately not asserted either way, as AC3 says |
+| 4 | `src/components/__tests__/agentLaunch.test.ts` › launching from the agent picker › continuous denies are the same in every folder. Drives the real picker with Continuous switched on through its warning, from `/repo/app` and `/repo`; asserts `launch_rules` was called with no argument both times, identical `--disallowedTools` text, and no flag with Continuous off |
+| 5 | `src/lib/__tests__/agentLaunch.test.ts` › prepareAgentLaunch › an empty continuous deny list is no rules (refused with Continuous on and off, nothing written, not cached, the next launch loads the real list), and the `{ continuousDeny: [] }` row of › an empty rule list is no rules |
+
+The other 1b-adjacent mocks (`AgentPicker.test.tsx`, `OrchestratorTab.test.tsx`, `lib/__tests__/agentLaunch.test.ts`) now answer a non-empty `continuousDeny`, as AC5 requires, and their suites pass. The board test also asserts a board dispatch carries neither `--dangerously-skip-permissions` nor `--disallowedTools`.
+
+*Slice (`git diff f8b593a..HEAD`):* 14 files. Code: `agentCommand.ts`, `launchRules.ts` (AC5), `orgo_rules.rs`, and `claude_settings.rs`, which holds only the declared change (decision 14): the `launch_rules()` body and doc line, and the `launch_rules` test, which now expects the deny list. Tests: the five test files above. Docs: `docs/guide/integrations.md` (two paragraphs under one heading, the slice's "paragraph in the guide") and the context file. Other: the plan text and two `.ade/knowledge` notes. No `relay/`, `mobile/`, `package.json`, `Cargo.toml` or dependency change, and no file outside the slice. `agentLaunch.ts`, named in the plan's slice, is unchanged; AC5's behaviour lives in `launchRules.ts`, which the plan's AC5 names. The built tree is clean except the untracked `node_modules` folders.
+
+*Contract (`.ade/context/orgo-permission-rules.md`) against the code:* matches on everything except one clause.
+- Matches: `CONTINUOUS_DENY_MCP` (12 globs, same order and text as the code), `CONTINUOUS_DENY_CLI` (17 rules), `launch_rules()` returns MCP then CLI with no argument, `--disallowedTools` only with `continuous` and a non-empty list, each rule `shellQuote`d, between `--settings` and `--append-system-prompt-file`, claude and deepseek only, the picker alone sets `continuous`, and the "not gaps" and over-match notes.
+- **C1 (defect, blocks Done): line 18 is stale.** It says `launchRules.ts` "rejects, and does not cache, an empty `ask`, a non-list `continuousDeny`, and a `guard`…". Since 1b (AC5) `checked()` also rejects an **empty** `continuousDeny`, so every launch is refused. The contract is what a test author reads to decide what a `launch_rules` mock may return; as written it would let one return `continuousDeny: []`, which now fails closed. It needs "an empty `continuousDeny`" added (Definition of Done §3, item 4). QA cannot edit the context file.
+- **C2 (minor, not blocking, same fix pass):** the doc comment on `CONTINUOUS_DENY_CLI` in `orgo_rules.rs` (line 74 to 77) still lists "extra spaces" among the things that get past the denies. The 1b review verified Claude Code 2.1.314 denies them; the plan, the guide and the context file were corrected, this comment was not.
+
+*Manual checks, all:* **not run: needs the running app on macOS or Linux; pending the owner.** None gates Done for 1b.
+- In an ADE Continuous session started in `<repo>/app`, with Orgo installed through ADE, `orgo_create_computer` is absent from the tools; repeat with Orgo added through `claude mcp add`: not run: needs the running app on macOS or Linux; pending the owner.
+- `orgo c create`, `env orgo c create` and `sh -c 'orgo c create'` are refused through real Claude Code: not run: needs the running app on macOS or Linux; pending the owner. (The code review probed the real Claude Code 2.1.314 outside the app with a fake API and a fake MCP server and found the flag parses as built; that is the reviewer's evidence, not a QA run.)
+- `orgo_delete_computer` still prompts: not run: needs the running app and a real Orgo account; pending the owner.
+
+**What stands between this and Done:** (1) the developer fixes C1 (and C2) and QA re-checks the two lines; (2) Story 1 becomes Done through the owner's gating macOS check. 1b is then recorded Done, with Story 1.
+
 ---
 
 # Story 1c: the Orgo CLI — ON HOLD
