@@ -102,6 +102,47 @@ describe("Orgo's ask rules on the launch line", () => {
   });
 });
 
+describe("Continuous mode's hard stop on the launch line", () => {
+  /** Deny rules as `loadLaunchRules` hands them over: globs, spaces, parentheses and a quote to survive. */
+  const DENY = ["mcp__*orgo*__*create*", "Bash(*orgo c create*)", "Bash(*orgo -*)", "it's"];
+  const rules: LaunchRules = { ask: R.ask, continuousDeny: DENY, guard: null };
+
+  it("continuous launches deny Orgo creation before the role flag", () => {
+    const settings = JSON.stringify({ permissions: { ask: R.ask } });
+    for (const provider of ["claude", "deepseek"] as const) {
+      const r = buildLaunchCommand(provider, PATH, { rules, continuous: true, task: "go" });
+      if (r.kind !== "command") throw new Error(`expected a command: ${provider}`);
+      const words = shellWords(r.command);
+      // Each rule its own argument, in order, after --settings and before the role flag; the task stays last.
+      expect(words.slice(words.indexOf("claude")), provider).toEqual([
+        "claude", "--dangerously-skip-permissions", "--settings", settings,
+        "--disallowedTools", ...DENY,
+        "--append-system-prompt-file", PATH, "go",
+      ]);
+    }
+    // The exact bytes: every rule single-quoted, so no glob or space reaches the shell bare.
+    const r = buildLaunchCommand("claude", PATH, { rules, continuous: true, task: "go" });
+    expect(r.kind === "command" && r.command).toBe(
+      `claude --dangerously-skip-permissions${S} --disallowedTools 'mcp__*orgo*__*create*' 'Bash(*orgo c create*)' ` +
+        `'Bash(*orgo -*)' 'it'\\''s' --append-system-prompt-file '${PATH}' 'go'`
+    );
+
+    // Without continuous (Manual, the board, the Orchestrator's headless -p), or with an empty list: no flag.
+    const without = [{}, { continuous: false }, { task: "go" }, { headless: true }, { headless: true, task: "go" }];
+    for (const provider of ["claude", "deepseek"] as const) {
+      for (const opts of without) {
+        const c = buildLaunchCommand(provider, PATH, { rules, ...opts });
+        expect(c.kind === "command" && c.command, `${provider} ${JSON.stringify(opts)}`).not.toContain("--disallowedTools");
+      }
+      const empty = buildLaunchCommand(provider, PATH, { rules: { ...rules, continuousDeny: [] }, continuous: true, task: "go" });
+      expect(empty.kind === "command" && empty.command, `${provider} empty`).not.toContain("--disallowedTools");
+    }
+    // Ollama isn't Claude Code: the rules don't bind it, and it gets no flag it doesn't have.
+    const o = buildLaunchCommand("ollama", PATH, { rules, continuous: true });
+    expect(o.kind === "command" && o.command).not.toContain("--disallowedTools");
+  });
+});
+
 describe("buildLaunchCommand", () => {
   it("emits claude's exact command", () => {
     const result = buildLaunchCommand("claude", PATH, { rules: R });

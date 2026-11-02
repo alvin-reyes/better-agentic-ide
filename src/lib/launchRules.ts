@@ -10,7 +10,10 @@ import { invoke } from "@tauri-apps/api/core";
 export interface LaunchRules {
   /** Ask rules: Orgo's computer lifecycle tools always ask, in every mode. Never empty. */
   ask: string[];
-  /** Deny rules for Continuous launches. Empty until Story 1b. */
+  /**
+   * Deny rules for Continuous launches, passed as `--disallowedTools`: the
+   * Orgo tools and `orgo` commands that create or start a computer.
+   */
   continuousDeny: string[];
   /**
    * The CLI library's command guard, as a PreToolUse hook command for an

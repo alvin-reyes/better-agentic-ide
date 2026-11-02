@@ -192,7 +192,7 @@ fn linked_main_checkout(root: &Path) -> Option<PathBuf> {
 pub struct LaunchRules {
     /// Ask rules: `orgo_rules::MCP_ASK`; the CLI library's Story 2 appends its CLIs' rules.
     pub ask: Vec<String>,
-    /// Deny rules for Continuous launches. Empty until Story 1b fills it.
+    /// Deny rules for Continuous launches: `orgo_rules::CONTINUOUS_DENY_MCP`, then `CONTINUOUS_DENY_CLI`.
     pub continuous_deny: Vec<String>,
     /// The CLI library's command guard. None until its Story 2 builds it.
     pub guard: Option<Guard>,
@@ -212,7 +212,11 @@ pub struct Guard {
 pub fn launch_rules() -> LaunchRules {
     LaunchRules {
         ask: crate::orgo_rules::MCP_ASK.iter().map(|r| r.to_string()).collect(),
-        continuous_deny: Vec::new(),
+        continuous_deny: crate::orgo_rules::CONTINUOUS_DENY_MCP
+            .iter()
+            .chain(crate::orgo_rules::CONTINUOUS_DENY_CLI)
+            .map(|r| r.to_string())
+            .collect(),
         guard: None,
     }
 }
@@ -622,9 +626,11 @@ mod tests {
     fn launch_rules_are_the_ask_list_with_no_guard_yet() {
         let rules = launch_rules();
         assert_eq!(rules.ask, crate::orgo_rules::MCP_ASK);
+        // Story 1b: the Continuous denies, MCP globs then CLI patterns.
+        let deny: Vec<&str> = crate::orgo_rules::CONTINUOUS_DENY_MCP.iter().chain(crate::orgo_rules::CONTINUOUS_DENY_CLI).copied().collect();
         assert_eq!(
             serde_json::to_value(launch_rules()).unwrap(),
-            serde_json::json!({ "ask": crate::orgo_rules::MCP_ASK, "continuousDeny": [], "guard": null })
+            serde_json::json!({ "ask": crate::orgo_rules::MCP_ASK, "continuousDeny": deny, "guard": null })
         );
     }
 }

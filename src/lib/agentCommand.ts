@@ -80,12 +80,20 @@ function launchSettings(opts: LaunchOptions): Record<string, unknown> {
  * top of the user's and the project's files, in any folder and any mode:
  * Claude Code asks for a tool an ask rule matches even when permissions are
  * skipped, and the session cannot edit its own command line.
+ *
+ * In Continuous mode, `--disallowedTools` also denies the Orgo tools and
+ * `orgo` commands that create or start a computer, each rule its own quoted
+ * argument. The flag takes a list, so it goes before
+ * `--append-system-prompt-file`, which keeps the task positional.
  */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
   const settings = ` --settings ${shellQuote(JSON.stringify(launchSettings(opts)))}`;
+  const deny = opts.continuous && opts.rules.continuousDeny.length > 0
+    ? ` --disallowedTools ${opts.rules.continuousDeny.map(shellQuote).join(" ")}`
+    : "";
   const task = opts.task ? ` ${shellQuote(opts.task.replace(UNTYPEABLE_RUNS, " "))}` : "";
-  return `claude${flags}${settings} --append-system-prompt-file ${quotedPath}${task}`;
+  return `claude${flags}${settings}${deny} --append-system-prompt-file ${quotedPath}${task}`;
 }
 
 /**

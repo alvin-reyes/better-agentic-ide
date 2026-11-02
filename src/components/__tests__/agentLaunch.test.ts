@@ -20,7 +20,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "launch_rules":
         tauri.ruleCalls.push(args);
-        return { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*stop*"], continuousDeny: [], guard: tauri.guard };
+        return { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*stop*"], continuousDeny: DENY, guard: tauri.guard };
       case "pty_line_editor_ready":
         // Can't know: typed at once.
         return null;
@@ -37,6 +37,9 @@ vi.mock("@tauri-apps/api/core", () => ({
     }
   }),
 }));
+
+/** What `launch_rules` answers for Continuous launches: a glob, and a Bash rule with spaces. */
+const DENY = vi.hoisted(() => ["mcp__*orgo*__*create*", "Bash(*orgo c create*)"]);
 
 Element.prototype.scrollIntoView = vi.fn();
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -96,7 +99,7 @@ describe("rolePathFor", () => {
 
 describe("launching from the agent picker", () => {
   /** Launch Auth Architect in the active pane, whose folder is `cwd`, and return the typed command. */
-  async function launchIn(cwd: string, ptyId: number): Promise<string> {
+  async function launchIn(cwd: string, ptyId: number, continuous = false): Promise<string> {
     __resetLaunchRulesForTests();
     tauri.ptyWrites.length = 0;
     const pane = useTabStore.getState().getActivePane();
@@ -105,6 +108,12 @@ describe("launching from the agent picker", () => {
     usePaneCwd.getState().setCwd(pane.id, cwd);
     render(createElement(AgentPicker, { onClose: () => {} }));
     await act(async () => { await flush(); });
+    if (continuous) {
+      // On through its warning, as a user turns it on.
+      fireEvent.click(screen.getByRole("switch", { name: "Continuous mode" }));
+      fireEvent.click(screen.getByText("I understand, enable"));
+      expect(screen.getByRole("switch", { name: "Continuous mode" }).getAttribute("aria-checked")).toBe("true");
+    }
     await act(async () => {
       fireEvent.click(screen.getAllByText("Auth Architect")[0]);
       await flush();
@@ -129,6 +138,27 @@ describe("launching from the agent picker", () => {
     expect(tauri.ruleCalls).toEqual([undefined, undefined]);
     expect(settingsOf(inSub)).toEqual([` --settings '{"permissions":{"ask":["mcp__*orgo*__*create*","mcp__*orgo*__*stop*"]}}' `]);
     expect(settingsOf(atRoot)).toEqual(settingsOf(inSub));
+  });
+
+  /** Everything from `--disallowedTools` up to the role flag, or null when there is no such flag. */
+  const denyOf = (command: string) => command.match(/ --disallowedTools (.*) --append-system-prompt-file /)?.[1] ?? null;
+
+  it("continuous denies are the same in every folder", async () => {
+    useSettingsStore.getState().setDefaultProvider("claude");
+    tauri.ruleCalls.length = 0;
+    const inSub = await launchIn("/repo/app", 44, true);
+    const atRoot = await launchIn("/repo", 45, true);
+    // Never told a folder.
+    expect(tauri.ruleCalls).toEqual([undefined, undefined]);
+    expect(inSub).toContain(" --dangerously-skip-permissions ");
+    expect(denyOf(inSub)).toBe("'mcp__*orgo*__*create*' 'Bash(*orgo c create*)'");
+    expect(denyOf(atRoot)).toBe(denyOf(inSub));
+    // Continuous off: neither folder gets the flag.
+    for (const cwd of ["/repo/app", "/repo"]) {
+      const manual = await launchIn(cwd, 46);
+      expect(manual, cwd).not.toContain("--dangerously-skip-permissions");
+      expect(manual, cwd).not.toContain("--disallowedTools");
+    }
   });
 
   it("the picker's launches are not headless", async () => {

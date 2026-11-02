@@ -18,7 +18,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       io.ruleLoads++;
       if (io.failRules > 0) { io.failRules--; throw new Error("ipc down"); }
       if (io.malformed !== undefined) { const m = io.malformed; io.malformed = undefined; return m; }
-      return { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*delete*"], continuousDeny: [], guard: io.guard };
+      return { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*delete*"], continuousDeny: ["Bash(*orgo c create*)"], guard: io.guard };
     }
     if (cmd === "create_directory") return "/home/u/.ade/roles";
     if (cmd === "write_text_file") { io.writes.push(args as { path: string; content: string }); return; }
@@ -133,6 +133,9 @@ describe("dispatchAgent", () => {
     expect(err).toBeNull();
     expect(io.ran).toHaveLength(1);
     expect(io.ran[0]).toContain(` ${SETTINGS} `);
+    // The board never launches in Continuous mode, so it carries no Continuous denies.
+    expect(io.ran[0]).not.toContain("--dangerously-skip-permissions");
+    expect(io.ran[0]).not.toContain("--disallowedTools");
   });
 
   it("board dispatch is not headless", async () => {

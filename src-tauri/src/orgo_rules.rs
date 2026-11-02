@@ -46,6 +46,55 @@ pub const MCP_ASK: &[&str] = &[
     "mcp__*orgo*__*disable*ssh*",     // disable_computer_ssh, the pair of *enable*ssh*
 ];
 
+/// Denied in Continuous launches (`--disallowedTools`), always, whether or
+/// not the project names Orgo: the Orgo tools that create or start a
+/// computer. A glob deny takes the tool out of the session, and is silent
+/// where no tool matches. Stop, delete, update and enable-SSH stay asks.
+/// Checked against `orgo_operations.json` like `MCP_ASK`: no read is denied.
+pub const CONTINUOUS_DENY_MCP: &[&str] = &[
+    "mcp__*orgo*__*create*",
+    "mcp__*orgo*__*clone_computer*", // not *clone*: future iPhone-clone reads
+    "mcp__*orgo*__*fork*",
+    "mcp__*orgo*__*start*",          // start_computer, restart_computer; also hides a future get_computer_startup_log
+    "mcp__*orgo*__*resume*",
+    "mcp__*orgo*__*resize*computer*", // not *resize*: that catches GET get_resize_limits
+    // REST verbs that start or bring back a computer
+    "mcp__*orgo*__*wake*",
+    "mcp__*orgo*__*restore*",
+    "mcp__*orgo*__*launch*",
+    "mcp__*orgo*__*boot*",
+    "mcp__*orgo*__*heal_*",          // not *heal*: that catches get_computer_health
+    // owner decision 13: a template run creates a computer
+    "mcp__*orgo*__*run_template*",
+];
+
+/// Denied in Continuous launches: the `orgo` CLI commands that create or
+/// start a computer, and a flag before a subcommand. The leading `*` catches
+/// `env orgo`, an absolute path, unversioned `npx orgo` and `sh -c 'orgo …'`;
+/// deny rules may lead with a wildcard. Not a boundary: versioned runners,
+/// quoting, extra spaces and indirection get past it, and any command whose
+/// text holds the phrase (a grep, a commit message) is denied. Both are
+/// listed in the guide and `.ade/context/orgo-permission-rules.md`.
+pub const CONTINUOUS_DENY_CLI: &[&str] = &[
+    "Bash(*orgo computers create*)",
+    "Bash(*orgo computers start*)",
+    "Bash(*orgo computers restart*)",
+    "Bash(*orgo computers resize*)",
+    "Bash(*orgo computers clone*)",
+    "Bash(*orgo c create*)",
+    "Bash(*orgo c start*)",
+    "Bash(*orgo c restart*)",
+    "Bash(*orgo c resize*)",
+    "Bash(*orgo c clone*)",
+    "Bash(*orgo templates run*)",
+    "Bash(*orgo t run*)",
+    "Bash(*orgo -*)", // a global flag before the subcommand
+    "Bash(*orgo computers -*)",
+    "Bash(*orgo c -*)",
+    "Bash(*orgo templates -*)",
+    "Bash(*orgo t -*)",
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,6 +297,137 @@ mod tests {
             for name in tool_names(&snake(op)) {
                 assert!(!asks(&name), "{name} is skipped, so no glob may match it");
             }
+        }
+    }
+
+    fn denied(name: &str) -> bool {
+        CONTINUOUS_DENY_MCP.iter().any(|g| glob_matches(g, name))
+    }
+
+    #[test]
+    fn continuous_mcp_denies_are_unconditional_and_spare_reads() {
+        // Story 1b (1b-1): launch_rules() takes no project and always carries both lists, MCP first.
+        let rules = crate::claude_settings::launch_rules();
+        let both: Vec<String> = CONTINUOUS_DENY_MCP.iter().chain(CONTINUOUS_DENY_CLI).map(|r| r.to_string()).collect();
+        assert!(!CONTINUOUS_DENY_MCP.is_empty() && !CONTINUOUS_DENY_CLI.is_empty());
+        assert_eq!(rules.continuous_deny, both);
+        assert_eq!(serde_json::to_value(&rules).unwrap()["continuousDeny"], serde_json::json!(both));
+
+        // Every glob has the server glob, so Orgo added by `claude mcp add` or under another name is caught too.
+        assert_eq!(
+            CONTINUOUS_DENY_MCP,
+            [
+                "mcp__*orgo*__*create*", "mcp__*orgo*__*clone_computer*", "mcp__*orgo*__*fork*",
+                "mcp__*orgo*__*start*", "mcp__*orgo*__*resume*", "mcp__*orgo*__*resize*computer*",
+                "mcp__*orgo*__*wake*", "mcp__*orgo*__*restore*", "mcp__*orgo*__*launch*",
+                "mcp__*orgo*__*boot*", "mcp__*orgo*__*heal_*",
+                "mcp__*orgo*__*run_template*",
+            ]
+        );
+
+        let fixture = fixture();
+        let ops = fixture["operations"].as_array().unwrap();
+        // No read is denied, under any name a tool can have.
+        let reads_denied: Vec<&str> = ops
+            .iter()
+            .filter(|o| o["method"] == "GET")
+            .map(|o| o["operationId"].as_str().unwrap())
+            .filter(|op| tool_names(&snake(op)).iter().any(|n| denied(n)))
+            .collect();
+        assert!(reads_denied.is_empty(), "reads denied: {reads_denied:?}");
+
+        // Every create, clone, fork, start, restart, resume and resize-computer, and (decision 13) a template run.
+        for op in ["createComputer", "cloneComputer", "forkComputer", "startComputer", "restartComputer", "resumeComputer", "resizeComputer", "testRunTemplate"] {
+            assert!(ops.iter().any(|o| o["operationId"] == op && o["method"] != "GET"), "{op} is a write in the spec");
+            for name in tool_names(&snake(op)) {
+                assert!(denied(&name), "{name} is denied");
+            }
+        }
+        // The REST verbs that start or bring back a computer, not yet in the MCP spec.
+        let corpus = fixture["hypotheticalWriteVerbs"]["names"].as_array().unwrap();
+        for tool in ["wake_computer", "restore_computer_backup", "launch_template", "boot_computer", "heal_computer"] {
+            assert!(corpus.iter().any(|t| t == tool), "{tool} is in the corpus");
+            for name in tool_names(tool) {
+                assert!(denied(&name), "{name} is denied");
+            }
+        }
+
+        // Narrowed like the ask list: health and clone-status reads stay visible...
+        for read in ["get_computer_health", "get_computer_clone_status"] {
+            assert!(!denied(&format!("mcp__orgo__orgo_{read}")), "{read} is not denied");
+        }
+        // ...and the recorded misfire: *start* hides a future startup-log read.
+        assert!(denied("mcp__orgo__orgo_get_computer_startup_log"), "get_computer_startup_log is denied, as recorded");
+
+        // Stop, delete, update (the end) and enable SSH still only ask in Continuous mode.
+        for op in ["stopComputer", "deleteComputer", "updateComputer", "enableComputerSsh"] {
+            for name in tool_names(&snake(op)) {
+                assert!(!denied(&name) && asks(&name), "{name} asks and is not denied");
+            }
+        }
+        assert!(!denied("mcp__github__create_issue"), "no rule reaches a server not named like Orgo");
+    }
+
+    /// Claude Code's Bash rule, `Bash(<pattern>)`: `*` is any run of
+    /// characters, spaces included, and the pattern must match the whole
+    /// command. No pattern here has a space before a `*`, so the word-boundary
+    /// form doesn't arise.
+    fn cli_denied(command: &str) -> bool {
+        CONTINUOUS_DENY_CLI
+            .iter()
+            .any(|r| glob_matches(r.strip_prefix("Bash(").and_then(|p| p.strip_suffix(')')).expect("a Bash(...) rule"), command))
+    }
+
+    #[test]
+    fn continuous_cli_denies_cover_creation() {
+        // Every listed rule, in order: each creating subcommand under both group names, template runs, and a flag before the subcommand.
+        let mut listed: Vec<String> = Vec::new();
+        for group in ["computers", "c"] {
+            for sub in ["create", "start", "restart", "resize", "clone"] {
+                listed.push(format!("Bash(*orgo {group} {sub}*)"));
+            }
+        }
+        for rule in ["Bash(*orgo templates run*)", "Bash(*orgo t run*)", "Bash(*orgo -*)", "Bash(*orgo computers -*)", "Bash(*orgo c -*)", "Bash(*orgo templates -*)", "Bash(*orgo t -*)"] {
+            listed.push(rule.to_string());
+        }
+        assert_eq!(CONTINUOUS_DENY_CLI, listed);
+
+        for command in [
+            "orgo c create --name a",
+            "orgo computers start a",
+            "orgo --json c create",
+            "orgo c --json resize a --ram 8",
+            "orgo t run hermes-agent",
+            "ORGO_PROFILE=x orgo c clone a",
+            "orgo c create --profile default",
+            "env orgo c create",
+            "/home/u/.orgo/bin/orgo c create",
+            "npx orgo c create",
+            "sh -c 'orgo c create'",
+        ] {
+            assert!(cli_denied(command), "{command} is denied");
+        }
+        // The recorded over-match: any command whose text holds the phrase.
+        for command in ["grep \"orgo c create\" notes.md", "grep \"orgo --json\" x"] {
+            assert!(cli_denied(command), "{command} is denied, a recorded over-match");
+        }
+        for command in ["orgo c delete a", "orgo c list --json", "orgo whoami"] {
+            assert!(!cli_denied(command), "{command} is not denied");
+        }
+        // The documented limits, which the guide lists: these stay unmatched.
+        for command in [
+            "orgo c 'create'",
+            "orgo \"c\" create",
+            "orgo  c create",
+            "npx orgo@2.3.0 c create",
+            "pnpm dlx orgo@latest c create",
+            "node /x/dist/cli.js c create",
+            "$O c create",
+            // AC3 also lists `xargs -n1 orgo c create` here, but its text holds
+            // `orgo c create`, so `Bash(*orgo c create*)` denies it. That AC item
+            // can't be met as written; it is left out pending the owner, not re-decided.
+        ] {
+            assert!(!cli_denied(command), "{command} is not matched, a documented limit");
         }
     }
 
