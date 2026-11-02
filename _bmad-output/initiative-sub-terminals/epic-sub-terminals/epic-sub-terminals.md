@@ -33,3 +33,16 @@ Local to the Mac (macOS and Linux). Not Windows, not an escape-sequence route, n
 - Waiting on outside work: story 9 needs `shellQuote` from ADR 0008 (branch `hermes-a-quoting`, not on main) and the CLI-library guard's runner entry from ADR 0011 (branch `feat/cli-guard`, not on main). Entry 9 holds in `unknown` until both are on main or the owner rules otherwise.
 - Gate: story 4's Done needs manual check V3, per ADR 0009 (on the unmerged branch `docs/claude-md-paths`).
 - Decision: stories 2b, 3, 4, 5, 6, 7, 8 and 9 carry `refine = true`. Each is sharded at summary level now and gets its full acceptance criteria when it is pulled, after the story before it is Done.
+
+## Story 2a verification (QA, 2026-11-02, on 120672e)
+
+Verdict: not Done. Code review blocked 120672e; awaiting the fix commit, then re-verify.
+
+The five approved lines (relay-pairing-design.md, Verification), run in sequence, all exit 0:
+- `npx tsc --noEmit`: exit 0.
+- `npm test`: 152 files, 1706 tests passed.
+- `cd src-tauri && cargo test`: lib 456 passed, 1 ignored; others ok.
+- `cd relay && cargo test`: all 15 result lines ok (12 passed in the end-to-end crate).
+- `cd mobile && npx tsc --noEmit && npx jest`: tsc exit 0; 1 suite, 6 tests passed.
+
+Found so far: golden session file regenerated from the base commit a470b06 and matches byte for byte (AC5, AC6 sound). No expect( line was removed or changed in existing tests (minus-only check prints nothing). Slice is the story's. terminal-open.md updated. Mutants that survived the suite: getActivePane and focusPaneBy using the own view instead of the shown view; detachTabToWindow sending the first view instead of the own view (needs a second view); tabLabel reading all panes. Cause: the hidden-view tests keep shownView "own" (the review's Major), so shown-versus-own swaps are not caught.
