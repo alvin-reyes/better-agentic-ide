@@ -378,6 +378,8 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
        - turbo's `//#task` is the root's task; `pkg#task` is that one package's task.
        - **A script already on the call stack** (same package, same script) is a cycle. The walk stops there **without asking**, so a root `build` that runs `turbo run build` doesn't ask.
        - The 4-level cap still applies to chains that aren't cycles.
+       - **pnpm path selectors** (`--filter .`, `-F ./dir`, `{./dir}`, `-w ./dir`) select the workspace packages under that folder, plus the root when the folder holds it (sync 2026-11-02, review 3).
+       - **Root tasks declared in `turbo.json` aren't followed.** `turbo run X` classifies `X` in the workspace packages only; only `//#task` on the command line reaches the root. This is listed under the limits.
      - `npm install|ci|i`, `pnpm install|i`, `yarn` and `yarn install` classify the root package's `preinstall`, `install`, `postinstall` and `prepare` scripts.
      - Script bodies are re-parsed at most 4 levels deep. A missing `package.json`, or one that can't be read, gives no decision unless the text names a guarded bin.
    - **Paths:** an absolute or relative path gives its basename. `node …/node_modules/<pkg>/…` gives that package's bin.
@@ -395,6 +397,7 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
 
    **A leaf the table doesn't know asks.** In addition (post-approval sync, 2026-11-02):
    - **Help is a read:** `--help`, or `-h` on a leaf that doesn't define `-h` itself, gives no decision on any leaf. So `gh repo delete --help` passes, while `gh config get -h github.com oauth_token` (`-h` is `--host` there) still asks.
+     - **It counts only with no value or a true one** (`true`, `t`, `1`, `T`) (sync 2026-11-02, review 3). pflag's `-x=value` form is parsed for short flags too. A false or computed value means gh runs the command, so it asks: `gh repo delete o/r --yes --help=false` and `gh repo delete o/r -h=false` ask, while `--help=true` passes.
    - **Computed words in special leaves:** a computed positional asks, since it could be a flag. A computed flag value matters only for `gh api -X`.
    - **`gh api` with a computed endpoint** is judged by its literal parts. A computed part stands for exactly one path segment. The call asks only if any of these holds:
      - `secret-scanning` is literal in it;
@@ -402,12 +405,26 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
      - the segment where `secret-scanning` would sit is computed: `repos/{o}/{r}/<here>`, `orgs/{o}/<here>`, `enterprises/{e}/<here>`.
 
      So `gh api "repos/$OWNER/$REPO"` and `gh api "repos/o/r/issues/$N"` pass, and `gh api "repos/o/r/$X"` and `gh api "$EP"` ask.
+   - **`gh api graphql` with a computed `query=` value asks**, in every spelling: `-f`, `-F`, `--raw-field` and `--field=` (sync 2026-11-02, review 3).
+   - **A literal here-doc is literal text.** `$(cat <<EOF … EOF)` (quoted or unquoted marker), whose here-doc holds no expansions, is read as its literal text wherever a word is expanded, commit messages included. So a here-doc `query { viewer { login } }` passes, a here-doc mutation asks, and a here-doc holding `$X` is computed (sync 2026-11-02, review 3).
 5. **Credentials** (review M3). Each of these asks:
    - **The credential folders** are `$GH_CONFIG_DIR`, `$XDG_CONFIG_HOME/gh` and `~/.config/gh`. `$GH_CONFIG_DIR` and `$XDG_CONFIG_HOME` resolve strictly from the line when it assigns them, and otherwise from the hook's own environment, which is the session's (post-approval sync, 2026-11-02).
    - A word, redirect target or glob that, after `~`/`$HOME` expansion and tracking of an earlier `cd`, names a guarded CLI's credential file, or matches one as a glob (`~/.config/gh/h*`).
    - **A word whose literal prefix lies inside a credential folder, followed by a glob or computed tail** (`~/.config/gh/*`, `~/.config/gh/$F`), including `for` lists and `xargs -I` templates (sync 2026-11-02).
    - **`gh/hosts.yml`, or a credential file's path, anywhere in an argument**, code strings included (`python3 -c "…open('…/gh/hosts.yml')…"`, `node -e …`). The exception is a text-only command: `echo`, `printf`, `grep`/`egrep`/`fgrep`, `rg`, `ag`, `ls`, `which`, `type`, `whereis` and `git commit|log|tag` (sync 2026-11-02).
-   - A credential file's folder or a parent of it, used by a copying, archiving or recursive reader: `cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `ditto`, `grep -r`. **`rg` counts as a reader only with `--hidden`, `-.`, `-uu` or `--unrestricted`**, because it skips hidden folders otherwise. **A recursive reader run with the current folder inside a credential folder asks even with no path argument** (`cd ~/.config/gh && grep -r token`) (sync 2026-11-02).
+     - **`sed`'s script words are exempt** when they hold only `s` commands (sync 2026-11-02, review 3). The script words are each `-e` value, otherwise the first operand.
+       - Addresses may be numbers, `$`, `,`, `~`, `!` or `/re/`, separated by `;` or newlines. Flags may only be `g`, `p`, `i`, `I`, `m`, `M` or digits.
+       - So `sed -i 's#gh/hosts.yml#gh/config.yml#' docs/x.md` passes.
+       - These still ask: the `r`, `R`, `w`, `W` and `e` commands; the `w` and `e` flags (the developer is adding the `e`-flag case); and `-f` scripts.
+   - A credential file's folder or a parent of it, used by a copying, archiving or recursive reader: `cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `ditto`, `grep -r`. **A recursive reader run with the current folder inside a credential folder asks even with no path argument** (`cd ~/.config/gh && grep -r token`) (sync 2026-11-02).
+   - **`rg` and `ag`** are not generic recursive readers, and both stay text-only for the substring rule. They skip hidden entries **only below a search root** (sync 2026-11-02, review 3; this replaces the earlier "`rg` only with `--hidden`" rule).
+     - **The search roots** are each path operand after the pattern. With `-e`, `-f` or rg's `--files`, every operand is a root. With no path operand, the root is the current folder.
+     - **They ask when a root:**
+       - lies inside a credential folder; or
+       - lies above one with no hidden step in between (`~/.config` → `gh`); or
+       - lies above one with a hidden step (`~` → `.config`) and the hidden flags are set: rg `--hidden`, `-.` or `-uu`; ag `--hidden` or `-u`.
+     - **Glob roots** (`~/.config/*`) count through the same literal-prefix rule. The developer is adding this now.
+     - So `rg x ~` gives no decision, and `rg --hidden x ~` asks.
    - `find <cred dir or a parent> -exec|-execdir|-ok|-okdir …`. **Plain `find` without those actions is not a credential reader** (owner ruling, 2026-11-02): it lists names and never reads file contents, so `find / -name …` and `find ~ -type f` give no decision.
      - **Extended, within the ruling** (sync 2026-11-02): a plain `find`'s names **feed a read** when its start path, or the current folder, covers a credential folder and its output goes to `xargs`, to `parallel` (from stdin), to a `while`/`until` loop, or into a `$( )`. That asks. `find ~/.config/gh -type f | wc -l` still gives no decision.
    - **Keychain CLIs:** `security find-generic-password`, `find-internet-password`, `dump-keychain` and `export`, and `secret-tool lookup|search`. gh keeps its token in the keyring by default (service `gh:github.com`).
@@ -419,6 +436,7 @@ if [ -x '<abs ade-hook>' ]; then exec '<abs ade-hook>' guard --headless; else pr
 - what a program the agent runs does (`node deploy.js` calling an API; a Makefile target; a script with a non-shell shebang; a dependency's install script);
 - a computed name the guard resolves to something it doesn't guard;
 - runners outside the list (`deno run npm:vercel`, `mise exec`, `devbox run`);
+- root tasks that a `turbo.json` declares, rather than `//#task` on the command line (sync 2026-11-02);
 - a `claude` nested inside a session (it inherits `cli`, so the guard asks rather than denies);
 - sessions under `allowManagedHooksOnly`, `--safe-mode` or a managed `disableAllHooks`;
 - sessions where another settings file sets `disableAllHooks: true`, outside ADE launches. The tab checks the files it can see and warns;
@@ -698,6 +716,7 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
    - **monorepo roots (sync 2026-11-02),** with a root `build` that runs `turbo run build`, `test` that runs `pnpm -r test`, a looping `loop`/`loop2`, and a root `y` and `release` that run gh writes:
      - These give no decision: `npm run build`, `pnpm test`, `turbo run build`, `pnpm -r test`, `npm run check` (`npm run lint --workspaces`), `npm run loop`, `turbo run y`, `pnpm -r run y`, `npm run y --workspaces` and `turbo run a#z`.
      - These ask: `npm run y`, `turbo run b#z`, `npm run release`, `turbo run //#release`, `pnpm -r --include-workspace-root release`, `npm run release --workspaces --include-workspace-root` and `turbo run deploy` (a package's `gh release upload`).
+     - **pnpm path selectors (review 3):** `pnpm --filter . release` and `pnpm -F ./ run release` ask, because the folder holds the root. `pnpm --filter ./packages/b run z` asks. `pnpm --filter ./packages/a run z` gives no decision.
      - Covered by `cli_guard/scripts.rs` › `monorepo_roots_dont_recurse`;
    - **run-time arguments (M4, m-e):** these ask: `echo repo delete o/r | xargs gh`, `xargs gh pr close`, `xargs gh auth status`, `xargs gh api`, `f=-d; gh pr close 3 $f`. These pass: `xargs gh pr view`, `find . -name '*.md' -exec gh gist view {} \;`, `parallel gh pr view ::: 1 2 3`. `parallel gh repo delete ::: o/a` asks because its literal arguments are classified;
    - **lookups (m4):** `command -v gh`, `which gh` and `type gh` give no decision;
@@ -730,6 +749,17 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
      - `gh auth status --hostname "$H"`;
      - `gh repo delete --help`, `gh repo delete -h`, `gh secret set --help`;
      - `gh label clone o/src`, `gh pr update-branch 3`.
+
+   **Review 3 (sync 2026-11-02).** Covered by `cli_guard` › `code_review_2`.
+   - **These ask:**
+     - computed graphql queries: `gh api graphql -f query="$(cat m.graphql)"`, `gh api graphql -f query="$Q"`, `gh api graphql --raw-field query="$(< m.graphql)"`, `gh api graphql -F query="$(cat m.graphql)"`, `gh api graphql --field=query="$Q"`;
+     - here-docs: a here-doc mutation, and a here-doc query holding `$X`;
+     - help with a false value: `gh repo delete o/r --yes --help=false`, `gh repo delete o/r -h=false`;
+     - sed: `sed -n '1r /home/u/.config/gh/hosts.yml' docs/x.md`, `sed -n 's#x#y#w /tmp/gh/hosts.yml' docs/x.md`, `sed -n 's/x/y/e' ~/.config/gh/hosts.yml`, `sed '1e cat ~/.config/gh/hosts.yml ' docs/x.md`.
+   - **These give no decision:**
+     - here-docs: `query { viewer { login } }` in a quoted here-doc, and in an unquoted one;
+     - help: `gh repo delete o/r --help=true`, `gh repo delete o/r --help`;
+     - sed: `sed -i 's#gh/hosts.yml#gh/config.yml#' docs/x.md`, `sed -i -e 's|~/.config/gh/hosts.yml|$GH_CONFIG_DIR/hosts.yml|g' docs/x.md`.
 6. **Credentials.** These ask:
    - `cat ~/.config/gh/hosts.yml`, `cat $HOME/.config/gh/h*`, `cd ~/.config/gh && cat hosts.yml`;
    - `cp -r ~/.config/gh /tmp/x`, `tar czf x.tgz ~/.config`, `zip -r x ~/.config/gh`, `find ~/.config/gh -exec cat {} \;`, `find ~ -name hosts.yml -execdir cat {} +`, `find / -ok cat {} \;`, `base64 < ~/.config/gh/hosts.yml`;
@@ -740,16 +770,17 @@ Needs Orgo Story 1 (`a895c05`) merged: the shared `claude_settings.rs`. This sto
    **Post-approval sync, 2026-11-02**, in the same test.
    - **These ask:**
      - plain `find` feeding a read: `find ~/.config/gh -type f | xargs cat`, `find ~ -name hosts.yml | xargs -I{} cat {}`, `find ~/.config/gh -type f | parallel cat`, `find ~/.config/gh -type f | while read f; do cat "$f"; done`, `cat $(find ~/.config/gh -type f)`;
-     - `rg`: `rg --hidden token ~`, `rg -uu token ~/.config`;
+     - `rg` and `ag` (review 3 search-root rule): `rg --hidden token ~`, `rg -uu token ~/.config`, `rg -. token ~`, `rg oauth_token ~/.config/gh`, `rg token ~/.config`, `rg -l . ~/.config/gh`, `rg -e token -g '*.yml' ~/.config/gh`, `rg token src ~/.config/gh`, `cd ~/.config/gh && rg token`, `cd ~/.config && rg token`, `cd ~/.config/gh/sub && rg token`, `ag oauth ~/.config/gh`, `ag token ~/.config`, `ag --hidden token ~`, `ag -u token ~`;
      - code strings: `python3 -c "print(open('/root/.config/gh/hosts.yml').read())"`, the `node -e` read via `homedir()+'/.config/gh/hosts.yml'`;
      - glob and computed tails: `for f in ~/.config/gh/*; do cat "$f"; done`, `ls ~/.config/gh | xargs -I{} cat ~/.config/gh/{}`, `cat ~/.config/gh/$F`;
      - variables set on the line: `GH_CONFIG_DIR=/x/cfg; cat $GH_CONFIG_DIR/hosts.yml`, `export XDG_CONFIG_HOME=/x; cat $XDG_CONFIG_HOME/gh/hosts.yml`;
      - Git's credential helpers: `git credential fill`, `git credential-osxkeychain get`, `git credential-store get`, `git-credential-manager get`;
      - a recursive reader inside the folder: `cd ~/.config/gh && grep -r token`, `cd ~/.config/gh && rg --hidden token`.
-   - **These give no decision:** `find src -type f | xargs cat`, `find ~/.config/gh -type f | wc -l`, `rg token ~`, `cd ~/.config/gh && ls`, `git credential approve`, `git commit -m "read gh/hosts.yml in tests"`, `grep -n hosts.yml docs/gh/hosts.yml.md`.
+   - **These give no decision:** `find src -type f | xargs cat`, `find ~/.config/gh -type f | wc -l`, `rg token ~`, `rg -u token ~` (one `-u` doesn't search hidden entries in rg), `rg token src`, `cd ~ && rg token`, `ag token ~`, `cd ~/.config/gh && ls`, `git credential approve`, `git commit -m "read gh/hosts.yml in tests"`, `grep -n hosts.yml docs/gh/hosts.yml.md`.
    - **From the hook's environment** (`GH_CONFIG_DIR=/x/cfg`, `XDG_CONFIG_HOME=/y`):
      - These ask: `cat $GH_CONFIG_DIR/hosts.yml`, `cat "$XDG_CONFIG_HOME/gh/hosts.yml"`, `cp -r $GH_CONFIG_DIR /tmp/x`, `cat /x/cfg/hosts.yml`, `GH_CONFIG_DIR=/z; cat $GH_CONFIG_DIR/hosts.yml`.
      - These give no decision: `cat $GH_CONFIG_DIR/config.yml`, `GH_CONFIG_DIR=/z; cat /x/cfg/config.yml`.
+     - Search roots: `rg token /x/cfg` and `rg token /x` ask. With `GH_CONFIG_DIR=/srv/ghcfg`, `rg token /srv/ghcfg` and `rg token /srv` ask, and `rg token /srv/other` doesn't.
      - Covered by `cli_guard/creds.rs` › `credential_paths_from_the_environment`.
 7. **Fail closed and bounded:**
    - a 1 MB command and a 10,000-deep `$(…)` both ask, without a stack overflow (run in a thread with a 256 KB stack);
@@ -1128,6 +1159,7 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
   - A script written on the same line from non-literal content and then run (`curl -o x.sh … && bash x.sh`). That is close to a real risk anyway.
   - A guarded command fed run-time arguments by `xargs` or `parallel` that isn't a complete read leaf (every `xargs stripe …`, `xargs gh auth status`).
   - A quoted command line that starts with a risky guarded command, passed to a command the guard doesn't know (`concurrently "gh release create v1"`).
+  - **The substring rule on code strings that only mention the path:** `python3 -c "print('… gh/hosts.yml')"` asks, though it reads nothing. The rule can't tell a string that opens the file from one that prints its name (sync 2026-11-02).
   - With Story 6: a bare `vercel` word in the arguments of a command not on the skip list and not a file or package command (`docker run vercel …`).
 
   **No longer asking:**
@@ -1136,7 +1168,11 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
   - chained path variables on one line (`S=/x; P=$S/y; $P/run`), `$HOME`/`~` script paths, a built binary on a line that also runs a guarded command, and `vercel` as a file or package name: **round 6**.
 
   **The rate.**
-  - **Measured on the guard itself (post-approval sync, 2026-11-02): 16 asks in 2,795 local Bash calls, 0.57%.** It is biased: the local corpus is mostly review and build sessions for this plan. Of the 16:
+  - **Latest measurement on the guard itself (sync 2026-11-02, after review 3): 14 asks in 2,743 local Bash calls, 0.51%.** It is biased: the corpus is mostly review and build sessions for this plan. Of the 14:
+    - 8 are documented computed names;
+    - 3 are true asks;
+    - 3 are review probes that quote `hosts.yml`.
+  - **Measured earlier (sync 2026-11-02): 16 asks in 2,795 local Bash calls, 0.57%.** It is biased: the local corpus is mostly review and build sessions for this plan. Of the 16:
     - 8 are true gh asks;
     - 7 are documented computed names (the categories above);
     - 1 is write-then-run.
@@ -1147,7 +1183,7 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
   - **The reviewer's model:** about **0.86% on 1,856 local Bash calls** (round 6). It is approximate, because it is a regex model of the rules, not the guard. It is biased, because most of the sample is review sessions full of scratchpad path variables. And it was taken before round 6 resolved chained assignments and narrowed the missing-path rule, which remove most of its largest category.
   - **The plan's estimate, not a measurement: 0.3 to 0.7%** after round 6, mostly unresolved path variables set in earlier tool calls, `eval "$(…)"` environment setup and variable command names.
 
-  **V8 is the measurement**, run on the guard itself, on the local corpus (done: 0.57% including true asks, above) and on a sample of your ordinary sessions (still to do). If the ordinary sample comes out above 1%, you decide before Story 2 ships.
+  **V8 is the measurement**, run on the guard itself, on the local corpus (done: 0.51% including true asks, latest above) and on a sample of your ordinary sessions (still to do). If the ordinary sample comes out above 1%, you decide before Story 2 ships.
 
   The alternative asks only when the text names a guarded CLI. It is quieter, but it lets `${x}h` through when `x` was set in an earlier tool call.
 - **Q4. The cut.** Recommend Stories 1 to 4 for gh first, then decide on stripe, vercel and wrangler against a named need (P5).
@@ -1292,3 +1328,16 @@ Recorded in `_bmad-output/deferred-work.md` on approval (2026-10-30).
 | 8. Wrapper recursion | Counts toward the 64 levels (AC7). | `.ade/context/cli-guard.md` caps table |
 | 9. Stdin | Read to EOF; past about 1.6 MB (`MAX_INPUT * 6 + 64 KB`) dropped, and the call asks as oversize (AC7). | `mod.rs:204` |
 | Q3 rate | 16 of 2,795 local calls (0.57%), labelled biased: 8 true gh asks, 7 documented computed names, 1 write-then-run. | the developer's replay |
+
+**Post-approval sync, 2026-11-02 (Story 1's third code review, PASS WITH MINORS, at 886ac0a).** Each item was checked against `src-tauri/src/cli_guard/` and `.ade/context/cli-guard.md` at 886ac0a.
+
+| Item | Plan change | Checked in the code |
+|---|---|---|
+| 1. rg and ag | Search-root rule replaces "`rg` only with `--hidden`": roots, inside or above a credential folder, the hidden step and hidden flags, glob roots through the literal-prefix rule; text-only for the substring rule; not generic recursive readers. AC6 cases. | `creds.rs:246-292`, `credential_reads_ask`, `credential_paths_from_the_environment`. Glob roots are in progress (developer). |
+| 2. Computed graphql `query=` | Asks in every spelling. AC5 cases. | `code_review_2` |
+| 3. Literal here-doc | Read as literal text wherever a word is expanded, commit messages included. AC5 cases. | `code_review_2`; context file |
+| 4. Help values | Counts only with no value or `true`/`t`/`1`/`T`; `-x=value` parsed for short flags; false or computed asks. AC5 cases. | `code_review_2` |
+| 5. pnpm path selectors | Packages under the folder, plus the root when the folder holds it. AC2 cases. | `scripts.rs:724`, `monorepo_roots_dont_recurse` |
+| 6. turbo.json root tasks | Not followed; added under the limits. | context file, Limits |
+| 7. sed script words | Exempt from the substring rule when they hold only `s` commands with the listed addresses and flags; `r`/`R`/`w`/`W`/`e` commands, `w`/`e` flags and `-f` scripts ask. AC5 cases. | `code_review_2`. The `e`-flag case is in progress (developer). |
+| 8. Q3 | Latest measurement added, labelled biased: 14 of 2,743 (0.51%): 8 documented computed names, 3 true asks, 3 review probes quoting `hosts.yml`. Added the substring rule's false ask on `python3 -c "print('… gh/hosts.yml')"`. | the developer's replay |
