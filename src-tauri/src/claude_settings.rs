@@ -185,6 +185,55 @@ fn linked_main_checkout(root: &Path) -> Option<PathBuf> {
     c.parent().map(Path::to_path_buf)
 }
 
+/// Whether the Claude Code permission rule `rule` matches the Bash command
+/// `command` as Claude Code's wildcard table documents it (permissions ›
+/// Wildcard patterns). For tests of the rules ADE writes: it matches one
+/// command string, and doesn't split compound commands or strip wrappers.
+#[allow(dead_code)] // used by the rule tables' tests
+pub fn rule_matches(rule: &str, command: &str) -> bool {
+    let pattern = match rule {
+        "Bash" | "Bash(*)" => return true,
+        r => match r.strip_prefix("Bash(").and_then(|r| r.strip_suffix(')')) {
+            Some(p) => p,
+            None => return false,
+        },
+    };
+    // `:*` is a trailing wildcard only at the very end.
+    let pattern = match pattern.strip_suffix(":*") {
+        Some(head) => format!("{head} *"),
+        None => pattern.to_string(),
+    };
+    // A trailing ` *` that is the rule's only wildcard also matches the bare command.
+    if let Some(head) = pattern.strip_suffix(" *") {
+        if !head.contains('*') && command == head {
+            return true;
+        }
+    }
+    wildcard_match(pattern.as_bytes(), command.as_bytes())
+}
+
+/// `*` matches any text, spaces included; everything else matches itself.
+fn wildcard_match(p: &[u8], s: &[u8]) -> bool {
+    let (mut pi, mut si) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while si < s.len() {
+        if pi < p.len() && p[pi] == b'*' {
+            star = Some((pi, si));
+            pi += 1;
+        } else if pi < p.len() && p[pi] == s[si] {
+            pi += 1;
+            si += 1;
+        } else if let Some((sp, ss)) = star {
+            pi = sp + 1;
+            si = ss + 1;
+            star = Some((sp, ss + 1));
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|&c| c == b'*')
+}
+
 /// The settings every Claude Code launch ADE makes carries as its one
 /// `--settings` value. See `.ade/context/orgo-permission-rules.md`.
 #[derive(Serialize)]
@@ -626,5 +675,35 @@ mod tests {
             serde_json::to_value(launch_rules()).unwrap(),
             serde_json::json!({ "ask": crate::orgo_rules::MCP_ASK, "continuousDeny": [], "guard": null })
         );
+    }
+    #[test]
+    fn matches_claude_codes_documented_examples() {
+        // permissions.md › Wildcard patterns: (rule, matches, doesn't match).
+        let table: &[(&str, &[&str], &[&str])] = &[
+            ("Bash(npm run build)", &["npm run build"], &["npm run build --watch"]),
+            ("Bash(npm run *)", &["npm run build", "npm run test --watch", "npm run"], &["npm install"]),
+            ("Bash(git log * main)", &["git log --oneline main", "git log -5 main", "git log --output=<file> main"], &["git log main", "git push origin main"]),
+            ("Bash(git * main)", &["git merge main", "git push origin main", "git -c core.fsmonitor=<script> diff main"], &["git log"]),
+            ("Bash(* --version)", &["node --version", "bash -c 'echo hi' --version"], &["node -v"]),
+            ("Bash(ls *)", &["ls -la", "ls"], &["lsof"]),
+            ("Bash(ls*)", &["ls -la", "lsof"], &[]),
+            ("Bash(* --help *)", &["npm --help x"], &["npm --help"]),
+            // `:*` is a trailing wildcard, and only at the end.
+            ("Bash(ls:*)", &["ls -la", "ls"], &["lsof"]),
+            ("Bash(git:* push)", &[], &["git push", "git -C x push"]),
+            // A bare tool name and `Bash(*)` match every command.
+            ("Bash", &["rm -rf /", "ls"], &[]),
+            ("Bash(*)", &["rm -rf /", "ls"], &[]),
+            // Other tools' rules are not Bash rules.
+            ("Read(./x)", &[], &["./x", "cat ./x"]),
+        ];
+        for (rule, yes, no) in table {
+            for c in *yes {
+                assert!(rule_matches(rule, c), "{rule} should match {c:?}");
+            }
+            for c in *no {
+                assert!(!rule_matches(rule, c), "{rule} should not match {c:?}");
+            }
+        }
     }
 }

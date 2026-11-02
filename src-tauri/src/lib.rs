@@ -3,6 +3,8 @@ mod antislop;
 mod bmad;
 mod bmadconfig;
 mod claude_settings;
+mod cli_guard;
+mod cli_rules;
 // Public so `tests/bmadswitch_e2e.rs` can plan and apply a switch the way the
 // commands do, without the `AppHandle` they take.
 pub mod bmadswitch;
