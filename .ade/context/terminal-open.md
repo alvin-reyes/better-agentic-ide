@@ -229,6 +229,9 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   `tabFolderPaneId(tab)` in `src/lib/tabDisplay.ts` is the pane whose folder
   is the tab's folder (App's `activeCwd`, so project setup, the board, Fleet's
   "This terminal", the context guard): always the own view's active pane.
+  `tabFolderPtyId(tab)` is that pane's PTY id; App's `folderPtyId` uses it to
+  re-run the folder poll when the PTY lands. Only `getActivePtyId` reads the
+  view in sight.
   The file browser and the palette's BMAD switch and "Set up project" follow
   the own view too; the palette's pane actions act on the view in sight.
 - **Killing.** `destroyInstance(paneId, storePtyId?)` kills by the store's

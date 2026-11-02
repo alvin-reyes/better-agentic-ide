@@ -360,15 +360,16 @@ small.
 - `allTabPanes(tab)`
 - `viewOfPane(tab, paneId)`
 
-**Every reader, by what it needs.** Line numbers are on `origin/main` at
-9447767.
+**Every reader, by what it needs.** Line numbers are on branch
+`sub-terminals` at ff96db3 (stories 1 and 2a merged), where every reader
+already goes through an accessor.
 
 | Needs | Readers |
 |---|---|
-| **View in sight** | `getActivePane`, `getActivePtyId`, `getTabActivePane` (and so `AgentPicker`, `Scratchpad.tsx:672`, `OrchestratorTab.tsx:268,275`), `focusNextPane`/`focusPrevPane` (`focusPaneBy`), `App.tsx:96` (active PTY), `App.tsx:481` and `DetachedApp.tsx:97` (rendering), `TerminalPane.tsx:40,44`, `useKeybindings.ts:103` (close pane) and `:126-127` (splits), `CommandPalette.tsx:77-78` (split), `:93` (close pane), `:200,208` (recording), `focusActiveTerminal` (`useTerminal.ts:743`), `terminalCommands.ts:32` (`runInNewTabPane`'s new tab) |
-| **Own view** | `tabCwd`, `tabLabel`, `tabProject` (`tabDisplay.ts:19-20`), and so tab titles, project grouping, `sortTabsBy` and the strip's own entry (U2); **`activeCwd`** (`App.tsx:290`, the active tab's own view's active pane) and everything it feeds: `useProjectSetup`, `useContextGuard`, `BoardPanel`, `ContractsPanel`, `TokensPanel`, `IntegrationsPanel`, Fleet's "This terminal" (`FleetTab`, `FleetPanel`, `useFleetData`'s `activeCwd`) and the contract actions (`App.tsx:250,257`); `CommandPalette.tsx:65` (the BMAD project) and `:125` (Set Up Project), which are the same project actions as `useProjectSetup`; `FileBrowser.tsx:160,179`; the closed-tab record (`closeTab`) and `reopenClosedTab`; `SettingsPanel.tsx:201` (workspace layout); the phone remote's `remote_tabs_set` `project` (approved in `2026-10-14-relay-pairing-design.md`, not yet built) |
+| **View in sight** | `getActivePane`, `getActivePtyId` (and so `App.tsx:333`, the Ask-agent PTY), `getTabActivePane` (and so `AgentPicker`, `Scratchpad.tsx:672`, `OrchestratorTab.tsx:268,275`), `focusNextPane`/`focusPrevPane` (`focusPaneBy`), `App.tsx:484-485` and `DetachedApp.tsx:97` (rendering), `TerminalPane.tsx:40-41`, `useKeybindings.ts:103` (close pane) and `:126` (splits), `CommandPalette.tsx:78` (split), `:95` (close pane), `:202,210` (recording), `focusActiveTerminal` (`useTerminal.ts:748`), `terminalCommands.ts:33` (`runInNewTabPane`'s new tab) |
+| **Own view** | `tabCwd`, `tabLabel`, `tabProject` (`tabDisplay.ts`), and so tab titles, project grouping, `sortTabsBy` and the strip's own entry (U2); the tab's folder pane, `tabFolderPaneId(tab)`, and its PTY, `tabFolderPtyId(tab)` (`tabDisplay.ts:22,27`); **`activeCwd`** (`App.tsx:291-304`, polled from `tabFolderPaneId`, re-run when `folderPtyId` at `App.tsx:95-97` lands) and everything it feeds: `useProjectSetup`, `useContextGuard`, `BoardPanel`, `ContractsPanel`, `TokensPanel`, `IntegrationsPanel`, Fleet's "This terminal" (`FleetTab`, `FleetPanel`, `useFleetData`'s `activeCwd`) and the contract actions (`App.tsx:251,258`); `CommandPalette.tsx:66` (the BMAD project) and `:127` (Set Up Project), which are the same project actions as `useProjectSetup`; `FileBrowser.tsx:152,161,180`; the closed-tab record (`closeTab`) and `reopenClosedTab`; `SettingsPanel.tsx:200` (workspace layout); `detachWindow.ts:37-38` (serialises the own view until story 5); the phone remote's `remote_tabs_set` `project` (approved in `2026-10-14-relay-pairing-design.md`, not yet built) |
 | **The view holding a given pane** | `setPtyId`, `setActivePaneInTab`, `closePane`, `splitPane` (by pane id, in whatever view holds it, so `--split` works in a hidden view) |
-| **All views** | `closeTab` kill loop, `detachTab`, `saveSession` (including its 5 MB truncation) / `loadSession`, `tabAgentState` (`agentStatusStore.ts:38`), `useAgentStatusToasts.ts:8`, `TabBar.tsx:60`, `TabSwitcher.tsx:31`, `useFleetData.ts:136,201`, `useTerminal.ts:74,610`, `bmadSwitch.ts:166`, `terminalCommands.ts:38`, the close confirms (`App.tsx:355,400` on main; `useGuardedClose.ts` once `hermes-b-busy-panes` merges), `detachWindow.ts:6,27,43`, `remote_tabs_set` `pty_ids` (phone remote, not yet built) |
+| **All views** | `closeTab` kill loop, `detachTab`, `saveSession` (including its 5 MB truncation) / `loadSession`, `tabAgentState` (`agentStatusStore.ts:38`), `useAgentStatusToasts.ts:8`, `TabBar.tsx:60`, `TabSwitcher.tsx:31`, `useFleetData.ts:136,201`, `useTerminal.ts:74,615`, `bmadSwitch.ts:166`, `terminalCommands.ts:39`, the close confirms (`App.tsx:358,403` today; `useGuardedClose.ts` once `hermes-b-busy-panes` merges), `detachWindow.ts:54`, `remote_tabs_set` `pty_ids` (phone remote, not yet built) |
 
 - **`activeCwd` follows the tab, not the view in sight** (M4, ruled
   2026-11-02, per the UX): showing "dev server" in another folder doesn't
@@ -387,10 +388,13 @@ small.
   - 2a's `saveSession`/`loadSession` write and read only the own view, as
     `root`. `subViews` and `shownView` are story 2b's; until then a tab has
     no other view to lose.
-  - `SettingsPanel.tsx:201` reads the own view (the table's row).
-  - `useTerminal.ts:74` and `:610` read all views (the table's row).
-  - `App.tsx:96` (`activePtyId`) reads the view in sight; `activeCwd`
-    (`App.tsx:290`) reads the own view through `tabFolderPaneId`.
+  - `SettingsPanel.tsx:200` reads the own view (the table's row).
+  - `useTerminal.ts:74` and `:615` read all views (the table's row).
+  - `App.tsx:95-97` holds `folderPtyId`, from the own view through
+    `tabFolderPtyId(tab)` (2a's m3 fix): it re-runs the folder poll when the
+    own view's PTY lands. `activeCwd` (`App.tsx:291-304`) reads the own view
+    through `tabFolderPaneId`. Only `getActivePtyId` (`App.tsx:333`) reads
+    the view in sight.
 - **What enforces it.** The field removal, plus one vitest per `tabStore`
   function in the table, each run with a pane in a hidden view, plus a test
   that `activeCwd` is the own view's while a sub-terminal in another folder
