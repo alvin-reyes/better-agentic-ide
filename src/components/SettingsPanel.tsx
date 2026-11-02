@@ -640,7 +640,7 @@ export default function SettingsPanel() {
                   style={{ accentColor: "var(--accent)" }}
                 />
                 <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                  GPU rendering (WebGL). Turn it off if a terminal goes blank or loses its cursor. Applies to terminals opened after the change.
+                  GPU rendering (WebGL). Turn it off if a terminal goes blank or loses its cursor. Applies to each terminal the next time you switch to it. Windows already detached keep the setting they opened with.
                 </span>
               </label>
             </div>
