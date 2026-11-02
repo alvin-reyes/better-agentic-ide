@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADE Sub-terminals</title>
+<style>
+:root {
+  --bg-primary:#0A0B0D; --bg-secondary:#0F1013; --bg-tertiary:#15171B; --bg-elevated:#1B1E23; --bg-surface:#262A31;
+  --text-primary:#E8EAED; --text-secondary:#9BA1AC; --text-muted:#5A616D; --text-exited:#8B929E;
+  --accent:#7C8FFF; --accent-subtle:rgba(124,143,255,.15); --accent-solid:#4A5FE0;
+  --green:#4CC38A; --red:#F4756B; --red-subtle:rgba(244,117,107,.15); --yellow:#D9A441; --yellow-subtle:rgba(217,164,65,.13);
+  --border:rgba(255,255,255,.055); --border-strong:rgba(255,255,255,.10);
+  --radius-sm:4px; --radius:6px; --radius-lg:8px;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;
+  color-scheme: dark;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:#050607; color:var(--text-primary); font-family:var(--font-ui); font-size:13px; letter-spacing:-0.011em; }
+header.page { max-width:1180px; margin:0 auto; padding:24px 16px 8px; }
+header.page h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+header.page p { margin:0; color:var(--text-secondary); font-size:12px; line-height:1.5; max-width:820px; }
+.layout { max-width:1180px; margin:0 auto; padding:12px 16px 40px; display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:20px; align-items:start; }
+@media (max-width:900px){ .layout{ grid-template-columns:minmax(0,1fr);} }
+
+/* ---------- window ---------- */
+.win { background:var(--bg-primary); border:1px solid var(--border-strong); border-radius:10px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.45); width:100%; margin:0 auto; transition:max-width .2s; position:relative; }
+.win.narrow { max-width:520px; }
+.tabbar { display:flex; align-items:center; gap:4px; height:44px; padding:4px 12px 0 84px; background:var(--bg-secondary); border-bottom:1px solid var(--border); position:relative; user-select:none; }
+.lights { position:absolute; left:14px; top:16px; display:flex; gap:8px; }
+.lights i { width:12px; height:12px; border-radius:50%; background:#3a3d44; display:block; }
+.tabbar-strip { display:flex; align-items:center; gap:4px; min-width:0; flex:0 1 auto; overflow-x:auto; scrollbar-width:none; height:100%; }
+.tabbar-strip::-webkit-scrollbar { display:none; }
+.tab { display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:var(--radius) var(--radius) 0 0; color:var(--text-secondary); cursor:pointer; flex-shrink:0; align-self:flex-end; height:36px; position:relative; }
+.tab:hover { background:var(--bg-tertiary); }
+.tab.active { background:var(--bg-primary); color:var(--text-primary); font-weight:500; }
+.tab .num { font-family:var(--font-mono); font-size:11px; opacity:.35; }
+.tab .label { max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chev { flex-shrink:0; opacity:.4; }
+.tab.active .chev, .sub.sel .chev { opacity:.9; color:var(--accent); }
+.x { width:18px; height:18px; display:flex; align-items:center; justify-content:center; border-radius:3px; font-size:14px; line-height:1; opacity:0; border:0; background:transparent; color:inherit; cursor:pointer; padding:0; flex-shrink:0; }
+.tab:hover .x, .sub:hover .x, .sub.sel .x { opacity:.6; }
+.x:hover { opacity:1 !important; background:var(--accent-subtle); }
+.x:focus-visible { opacity:1; outline:2px solid var(--accent); }
+.icon-btn { width:28px; height:28px; border:0; background:transparent; color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.icon-btn:hover { background:var(--bg-tertiary); color:var(--text-primary); }
+
+/* existing marks, unchanged */
+.agent-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; display:inline-block; }
+.agent-dot[data-state=needsYou] { background:#f85149; box-shadow:0 0 0 2px rgba(248,81,73,.3); }
+.agent-dot[data-state=waiting] { background:#58a6ff; }
+.tab-attention { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px rgba(124,143,255,.25); flex-shrink:0; }
+.pulse { width:6px; height:6px; border-radius:50%; background:#3fb950; flex-shrink:0; animation:pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* new: count badge on the main tab */
+.count { display:inline-flex; align-items:center; gap:3px; height:16px; padding:0 5px; border-radius:8px; background:var(--bg-surface); color:var(--text-secondary); font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; flex-shrink:0; }
+
+/* new: sub-terminal strip */
+.substrip { display:flex; align-items:center; height:30px; padding:0 12px; background:var(--bg-primary); border-bottom:1px solid var(--border); gap:2px; user-select:none; }
+.substrip .scroller { display:flex; align-items:center; gap:2px; overflow-x:auto; scrollbar-width:none; min-width:0; flex:1 1 auto; height:100%; position:relative; }
+.substrip .scroller::-webkit-scrollbar { display:none; }
+.substrip .scroller.fade-r { -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent); mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent); }
+.substrip .scroller.fade-l { -webkit-mask-image:linear-gradient(to left,#000 calc(100% - 24px),transparent); mask-image:linear-gradient(to left,#000 calc(100% - 24px),transparent); }
+.substrip .scroller.fade-l.fade-r { -webkit-mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent); mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent); }
+.divider { width:1px; height:16px; background:var(--border-strong); margin:0 6px 0 4px; flex-shrink:0; }
+.sub { display:flex; align-items:center; gap:6px; height:24px; padding:0 8px 0 10px; border-radius:var(--radius-sm); color:var(--text-secondary); font-size:12px; cursor:pointer; flex-shrink:0; position:relative; white-space:nowrap; }
+.sub:hover { background:var(--bg-tertiary); }
+.sub.sel { background:var(--bg-elevated); color:var(--text-primary); font-weight:500; }
+.sub.sel::after { content:""; position:absolute; left:8px; right:8px; bottom:-3px; height:2px; border-radius:1px; background:var(--accent); }
+.sub.own { padding-right:10px; }
+.sub .name { max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+.win.narrow .sub .name { max-width:96px; }
+.sub.dead .name { opacity:.6; }
+.status { font-size:11px; font-weight:500; }
+.status.exited { color:var(--text-exited); }
+.sub:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+.btn:disabled { opacity:.45; cursor:default; }
+.nottyped { width:14px; height:14px; border-radius:50%; background:var(--yellow-subtle); color:var(--yellow); font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+.spin { width:10px; height:10px; border-radius:50%; border:1.5px solid var(--text-muted); border-top-color:var(--text-secondary); animation:spin .8s linear infinite; flex-shrink:0; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.sub.flash { animation:flash 1.2s ease-out; }
+@keyframes flash { 0%{ background:rgba(124,143,255,.35);} 100%{ background:transparent; } }
+@media (prefers-reduced-motion: reduce){ .sub.flash, .pulse, .spin { animation:none; } }
+
+/* content */
+.content { height:340px; display:flex; flex-direction:column; background:var(--bg-primary); }
+.notice { display:flex; align-items:center; gap:10px; min-height:28px; padding:4px 12px; font-size:12px; border-bottom:1px solid var(--border); }
+.notice.warn { background:var(--yellow-subtle); color:var(--text-primary); }
+.notice.dead { background:var(--bg-tertiary); color:var(--text-secondary); }
+.notice code { font-family:var(--font-mono); font-size:11.5px; background:rgba(255,255,255,.06); padding:1px 4px; border-radius:3px; }
+.notice .sp { flex:1; }
+.btn { height:22px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border-strong); background:var(--bg-elevated); color:var(--text-primary); font-size:12px; cursor:pointer; font-family:inherit; }
+.btn:hover { background:var(--bg-surface); }
+.btn.primary { background:var(--accent-solid); border-color:transparent; color:#fff; }
+.btn.danger { background:#b8433a; border-color:transparent; color:#fff; }
+.btn.link { border:0; background:transparent; color:var(--text-secondary); }
+.btn.link:hover { color:var(--text-primary); }
+.term { flex:1; padding:10px 14px; font-family:var(--font-mono); font-size:12.5px; line-height:1.55; color:#cfd3da; overflow:auto; white-space:pre-wrap; }
+.term .dim { color:var(--text-muted); } .term .g { color:var(--green); } .term .r { color:var(--red); } .term .a { color:var(--accent); } .term .y { color:var(--yellow); }
+.term .ask { display:block; border:1px solid var(--border-strong); border-radius:6px; padding:8px 10px; margin:6px 0; }
+.cursor { display:inline-block; width:7px; height:14px; background:#cfd3da; vertical-align:-2px; animation:pulse 1s steps(1) infinite; }
+
+/* menus, dialog, switcher */
+.menu { position:fixed; z-index:50; background:var(--bg-secondary); border:1px solid var(--border-strong); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.4); padding:4px 0; min-width:190px; }
+.menu button { display:flex; justify-content:space-between; width:100%; text-align:left; padding:6px 14px; font-size:12px; font-weight:500; color:var(--text-secondary); background:transparent; border:0; cursor:pointer; font-family:inherit; }
+.menu button:hover:not(:disabled) { background:var(--bg-elevated); color:var(--text-primary); }
+.menu button:disabled { opacity:.4; cursor:default; }
+.menu button.sep { border-top:1px solid var(--border); margin-top:4px; padding-top:9px; }
+.menu button.danger { color:#ff7b72; }
+.menu .tag { font-size:10px; color:var(--text-muted); font-weight:600; letter-spacing:.06em; }
+.scrim { position:absolute; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:40; }
+.dialog { width:min(400px,calc(100% - 32px)); background:var(--bg-elevated); border:1px solid var(--border-strong); border-radius:10px; padding:18px; box-shadow:0 8px 24px rgba(0,0,0,.45); }
+.dialog h3 { margin:0 0 6px; font-size:14px; font-weight:600; }
+.dialog p { margin:0 0 16px; color:var(--text-secondary); font-size:12.5px; line-height:1.5; }
+.dialog .row { display:flex; justify-content:flex-end; gap:8px; }
+.switcher { position:absolute; top:60px; left:50%; transform:translateX(-50%); width:min(480px,calc(100% - 32px)); background:var(--bg-secondary); border:1px solid var(--border-strong); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.45); z-index:45; overflow:hidden; }
+.switcher input { width:100%; border:0; border-bottom:1px solid var(--border); background:transparent; color:var(--text-primary); padding:12px 14px; font-size:13px; outline:none; font-family:inherit; }
+.switcher ul { list-style:none; margin:0; padding:4px; max-height:260px; overflow:auto; }
+.switcher li { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; font-size:12.5px; cursor:pointer; color:var(--text-secondary); }
+.switcher li.cur { background:var(--bg-elevated); color:var(--text-primary); }
+.switcher li .n { font-family:var(--font-mono); font-size:11px; opacity:.4; width:12px; }
+.switcher li .p { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-left:auto; }
+.switcher li.subrow { padding-left:30px; }
+.switcher li .st { font-size:10.5px; font-weight:600; padding:1px 6px; border-radius:8px; background:var(--bg-surface); }
+
+/* side panel */
+aside { background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:14px; position:sticky; top:12px; }
+aside h2 { font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-secondary); margin:0 0 8px; font-weight:600; }
+aside h2:not(:first-child) { margin-top:16px; }
+aside button.sc { display:block; width:100%; text-align:left; margin-bottom:6px; padding:7px 10px; border-radius:6px; border:1px solid var(--border-strong); background:var(--bg-tertiary); color:var(--text-primary); font-size:12px; cursor:pointer; font-family:inherit; line-height:1.35; }
+aside button.sc:hover { background:var(--bg-elevated); }
+aside button.sc code { font-family:var(--font-mono); font-size:10.5px; color:var(--text-secondary); display:block; margin-top:2px; }
+aside .keys { font-size:12px; color:var(--text-secondary); line-height:1.7; }
+kbd { font-family:var(--font-mono); font-size:11px; background:var(--bg-elevated); border:1px solid var(--border-strong); border-radius:4px; padding:0 5px; color:var(--text-primary); }
+.log { font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); background:var(--bg-primary); border-radius:6px; padding:8px; min-height:48px; line-height:1.5; }
+
+/* gallery */
+.gallery { max-width:1180px; margin:0 auto; padding:0 16px 48px; }
+.gallery h2 { font-size:14px; font-weight:600; margin:8px 0 10px; }
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+.card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:12px; }
+.card .demo { display:flex; align-items:center; gap:4px; background:var(--bg-primary); border-radius:6px; padding:6px 8px; min-height:38px; }
+.card .cap { font-size:11.5px; color:var(--text-secondary); margin-top:8px; line-height:1.45; }
+.card .cap b { color:var(--text-primary); font-weight:600; }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Sub-terminals</h1>
+  <p>Mockup for <code>2026-11-02-sub-terminals-ux.md</code>. Terminals opened with <code>ade open</code> join the caller's tab as sub-terminals in a strip under the tab bar. Click entries to switch, hover for ×, right-click an entry or a main tab for its menu, focus the strip and use ← → Home End Enter Delete, and use the scenarios on the right. Keys in this page: <kbd>[</kbd> <kbd>]</kbd> stand in for ⌘[ ⌘], <kbd>k</kbd> for ⌘K (the browser owns the real ones).</p>
+</header>
+
+<div class="layout">
+  <div>
+    <div class="win" id="win">
+      <div class="tabbar" id="tabbar"></div>
+      <div id="substrip"></div>
+      <div class="content" id="content"></div>
+      <div id="overlay"></div>
+      <div id="live" class="sr-only" aria-live="polite"></div>
+    </div>
+  </div>
+  <aside>
+    <h2>Scenarios</h2>
+    <button class="sc" data-sc="bg">Agent fans out (background)<code>ade open --name tests -- npm test</code></button>
+    <button class="sc" data-sc="focus">Person opens and switches<code>ade open --focus --name storybook -- npm run storybook</code></button>
+    <button class="sc" data-sc="grand">A sub-terminal opens one<code>(from "dev server") ade open -- npm run worker  →  "npm"</code></button>
+    <button class="sc" data-sc="nottyped">Command not typed<code>ade open -- npm run seed  →  exit 5</code></button>
+    <button class="sc" data-sc="answer">Answer the passphrase prompt<code>(enables Insert command)</code></button>
+    <button class="sc" data-sc="restart">Restart ADE<code>sub-terminals come back as "restored"</code></button>
+    <button class="sc" data-sc="first">First sub-terminal in a tab<code>(in "web") ade open -- npm run dev</code></button>
+    <button class="sc" data-sc="many">Many sub-terminals (overflow)</button>
+    <button class="sc" data-sc="narrow">Toggle narrow window</button>
+    <button class="sc" data-sc="switcher">Tab switcher (⌘K)</button>
+    <button class="sc" data-sc="closetab">Close tab "api"</button>
+    <button class="sc" data-sc="reset">Reset</button>
+    <h2>Keys</h2>
+    <div class="keys">
+      <kbd>⌘]</kbd> / <kbd>⌘[</kbd> next / previous terminal in the tab<br>
+      <kbd>⌘W</kbd> close what's in sight (sub-terminal, or the tab on its own view)<br>
+      <kbd>⌘1–9</kbd> <kbd>⌘⇧[</kbd> <kbd>⌘⇧]</kbd> top-level tabs, unchanged
+    </div>
+    <h2>Last event</h2>
+    <div class="log" id="log">Ready.</div>
+  </aside>
+</div>
+
+<section class="gallery">
+  <h2>Entry states</h2>
+  <div class="cards" id="cards"></div>
+</section>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const CHEV = '<svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.5 4L9.5 8L5.5 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const STACK = '<svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="1" y="3.5" width="7.5" height="7" rx="1.2" stroke="currentColor" stroke-width="1.2"/><path d="M3.5 1.5h6a1 1 0 0 1 1 1v6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+  const RANK = { needsYou: 0, waiting: 1 };
+  let uid = 0;
+
+  const T = {
+    claude: `<span class="dim">~/src/api</span> <span class="a">❯</span> claude
+<span class="a">⏺</span> I'll start the dev server and hand auth to a second agent.
+<span class="a">⏺</span> Bash("$ADE_HOOK_BIN" open --name "dev server" -- npm run dev)
+  <span class="dim">⎿ (opened)</span>
+<span class="a">⏺</span> Bash("$ADE_HOOK_BIN" open --name "claude: auth" -- claude "fix the token refresh")
+  <span class="dim">⎿ (opened)</span>
+<span class="a">⏺</span> Bash("$ADE_HOOK_BIN" open -- npm run lint)
+  <span class="dim">⎿ (opened)</span>
+<span class="a">⏺</span> Waiting on the dev server, then I'll run the API checks.
+
+<span class="a">&gt;</span> <span class="cursor"></span>`,
+    dev: `<span class="dim">~/src/api</span> <span class="a">❯</span> npm run dev
+
+&gt; api@0.4.0 dev
+&gt; tsx watch src/server.ts
+
+<span class="g">ready</span> on http://localhost:3000
+GET /health 200 3ms
+GET /v1/session 200 11ms
+POST /v1/token/refresh <span class="r">401</span> 6ms
+<span class="cursor"></span>`,
+    auth: `<span class="dim">~/src/api</span> <span class="a">❯</span> claude "fix the token refresh"
+<span class="a">⏺</span> The refresh handler compares expiry in seconds against Date.now().
+<span class="a">⏺</span> Update(src/auth/refresh.ts)
+<span class="ask">Do you want to make this edit to <b>refresh.ts</b>?
+<span class="a">❯ 1. Yes</span>
+  2. Yes, and don't ask again this session
+  3. No, and tell Claude what to do differently</span>`,
+    lint: `<span class="dim">~/src/api</span> <span class="a">❯</span> npm run lint
+
+&gt; eslint src
+
+<span class="g">✔</span> No problems
+<span class="dim">~/src/api</span> <span class="a">❯</span> exit
+
+<span class="dim">[Process exited]</span>`,
+    migrate: `<span class="dim">~/src/api</span> <span class="a">❯</span> exec npm run migrate
+
+&gt; prisma migrate deploy
+<span class="r">Error: P1001: Can't reach database server at localhost:5432</span>
+
+<span class="dim">[Process exited]</span>`,
+    notTyped: `<span class="y">Enter passphrase for key '/Users/me/.ssh/id_ed25519':</span> <span class="cursor"></span>`,
+    shell: (cwd) => `<span class="dim">${cwd}</span> <span class="a">❯</span> <span class="cursor"></span>`,
+    tests: `<span class="dim">~/src/api</span> <span class="a">❯</span> npm test
+
+ <span class="g">✓</span> auth/refresh.test.ts (6)
+ <span class="g">✓</span> routes/session.test.ts (11)
+ <span class="r">✗</span> routes/token.test.ts (3) <span class="r">1 failed</span>
+
+ Tests  <span class="r">1 failed</span> | 19 passed
+<span class="dim">~/src/api</span> <span class="a">❯</span> <span class="cursor"></span>`,
+    storybook: `<span class="dim">~/src/web</span> <span class="a">❯</span> npm run storybook
+
+<span class="g">Storybook 8.4</span> started on http://localhost:6006
+<span class="cursor"></span>`,
+  };
+
+  function sub(o) {
+    return Object.assign({ id: "s" + ++uid, state: "running", agent: null, attention: false, activity: false, from: null, why: null, line: null, flash: false, busy: false, fg: false, restored: false, prog: null }, o);
+  }
+  function initial() {
+    uid = 0;
+    return {
+      narrow: false,
+      activeTab: "api",
+      tabs: [
+        { id: "api", name: "api", cwd: "~/src/api", own: { term: T.claude, agent: null, attention: false, activity: false }, view: null, subs: [
+          sub({ name: "dev server", term: T.dev, activity: true, busy: true, prog: "node" }),
+          sub({ name: "claude: auth", term: T.auth, agent: "needsYou", busy: true, prog: "claude" }),
+          sub({ name: "npm", term: T.lint, state: "exited" }),
+          sub({ name: "migrate", term: T.migrate, state: "exited" }),
+        ] },
+        { id: "web", name: "web", cwd: "~/src/web", own: { term: T.shell("~/src/web"), agent: null, attention: false, activity: false }, view: null, subs: [] },
+        { id: "docs", name: "docs", cwd: "~/src/docs", own: { term: T.shell("~/src/docs"), agent: "waiting", attention: false, activity: false }, view: null, subs: [] },
+      ],
+      menu: null, dialog: null, switcher: null,
+    };
+  }
+  let S = initial();
+  const tab = (id) => S.tabs.find((t) => t.id === id);
+  const cur = () => tab(S.activeTab);
+  const views = (t) => [t.own, ...t.subs];
+  const viewOf = (t) => (t.view && t.subs.find((s) => s.id === t.view)) || t.own;
+  const log = (m) => ($("#log").textContent = m);
+  const stateWord = (s) => s.restored ? `restored: a new shell, ${s.name} was not run again` : s.state === "exited" ? "exited" : s.state === "starting" ? "starting" : s.state === "notTyped" ? "command not typed" : s.busy ? "running a program" : "at its prompt";
+  const announce = (() => { let n = 0, tName = "", last = "", timer; return (name, t) => { n = tName === t ? n + 1 : 1; tName = t; last = name; clearTimeout(timer); timer = setTimeout(() => { $("#live").textContent = n > 1 ? `${n} sub-terminals opened in ${t}` : `Sub-terminal ${last} opened in ${t}`; n = 0; tName = ""; }, 1000); }; })();
+
+  // ---------- main tab bar ----------
+  function rollup(t) {
+    const vs = views(t);
+    const agent = vs.map((v) => v.agent).filter(Boolean).sort((a, b) => RANK[a] - RANK[b])[0] || null;
+    return { agent, activity: vs.some((v) => v.activity), attention: vs.some((v) => v.attention) };
+  }
+  function renderTabbar() {
+    const html = S.tabs.map((t, i) => {
+      const active = t.id === S.activeTab;
+      const r = rollup(t);
+      const running = t.subs.filter((s) => s.state !== "exited" && !s.restored).length;
+      const exited = t.subs.length - running;
+      const countTitle = `${t.subs.length} sub-terminal${t.subs.length === 1 ? "" : "s"}: ${running} running${exited ? `, ${exited} exited` : ""}${r.agent === "needsYou" ? " · one needs you" : ""}`;
+      return `<div class="tab ${active ? "active" : ""}" data-tab="${t.id}" title="${esc(t.name)} — ${esc(t.cwd)}">
+        ${r.agent ? `<span class="agent-dot" data-state="${r.agent}" title="${r.agent === "needsYou" ? "An agent here needs you" : "An agent here is waiting for you"}"></span>` : ""}
+        ${!active && r.attention && !r.activity ? `<span class="tab-attention" title="New output finished while you were away"></span>` : ""}
+        ${!active && r.activity ? `<span class="pulse" title="Producing output"></span>` : ""}
+        ${CHEV}<span class="num">${i + 1}</span><span class="label">${esc(t.name)}</span>
+        ${t.subs.length ? `<span class="count" title="${countTitle}" aria-label="${countTitle}">${STACK}${t.subs.length}</span>` : ""}
+        <button class="x" data-closetab="${t.id}" aria-label="Close ${esc(t.name)}">×</button>
+      </div>`;
+    }).join("");
+    $("#tabbar").innerHTML = `<div class="lights"><i></i><i></i><i></i></div>
+      <div class="tabbar-strip">${html}</div>
+      <button class="icon-btn" title="New tab (⌘T)" aria-label="New tab">+</button>
+      <button class="icon-btn" data-sc="switcher" title="Go to tab (⌘K)" aria-label="Go to tab" style="font-size:12px">▾</button>`;
+  }
+
+  // ---------- sub strip ----------
+  function marks(v, inSight) {
+    let h = "";
+    if (v.agent) h += `<span class="agent-dot" data-state="${v.agent}" title="${v.agent === "needsYou" ? "An agent here needs you" : "An agent here is waiting for you"}"></span>`;
+    if (!inSight && v.activity) h += `<span class="pulse" title="Producing output"></span>`;
+    else if (!inSight && v.attention) h += `<span class="tab-attention" title="Finished while you were away"></span>`;
+    return h;
+  }
+  function status(s) {
+    if (s.state === "starting") return `<span class="spin" title="Starting: typing the command" aria-label="starting"></span>`;
+    if (s.state === "notTyped") return `<span class="nottyped" title="Command not typed" aria-label="command not typed">!</span>`;
+    if (s.state === "exited") return `<span class="status exited">exited</span>`;
+    if (s.restored) return `<span class="status exited">restored</span>`;
+    return "";
+  }
+  function renderStrip() {
+    const t = cur();
+    const el = $("#substrip");
+    if (!t.subs.length) { el.innerHTML = ""; return; }
+    const v = viewOf(t);
+    const prevScroll = el.querySelector(".scroller")?.scrollLeft ?? 0;
+    el.innerHTML = `<div class="substrip" role="tablist" aria-label="Terminals in ${esc(t.name)}">
+      <div class="sub own ${v === t.own ? "sel" : ""}" role="tab" aria-selected="${v === t.own}" aria-controls="content" tabindex="${v === t.own ? 0 : -1}" data-view="" title="${esc(t.name)} — ${esc(t.cwd)} (this tab's own terminal)">${marks(t.own, v === t.own)}${CHEV}<span class="name">${esc(t.name)}</span></div>
+      <div class="divider" aria-hidden="true"></div>
+      <div class="scroller">${t.subs.map((s) => {
+        const sel = v === s;
+        return `<div class="sub ${sel ? "sel" : ""} ${s.state === "exited" ? "dead" : ""} ${s.flash ? "flash" : ""}" role="tab" aria-selected="${sel}" aria-controls="content" tabindex="${sel ? 0 : -1}" data-view="${s.id}" data-sub="${s.id}"
+          title="${esc(s.name)} — ${esc(t.cwd)}${s.from ? `\nOpened from ${esc(s.from)}` : ""}${s.hidden ? "\nOpened in the background: only the last 1000 lines are kept until you view it." : ""}\n${stateWord(s)}">
+          ${marks(s, sel)}<span class="name">${esc(s.name)}</span>${status(s)}
+          <button class="x" data-closesub="${s.id}" tabindex="-1" aria-label="Close ${esc(s.name)}">×</button></div>`;
+      }).join("")}</div></div>`;
+    t.subs.forEach((s) => (s.flash = false));
+    const sc = el.querySelector(".scroller");
+    sc.scrollLeft = prevScroll;
+    sc.querySelector(".sel")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const fades = () => {
+      sc.classList.toggle("fade-l", sc.scrollLeft > 2);
+      sc.classList.toggle("fade-r", sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 2);
+    };
+    sc.addEventListener("scroll", fades); fades();
+  }
+
+  // ---------- content ----------
+  function renderContent() {
+    const t = cur(), v = viewOf(t);
+    let notice = "";
+    if (v !== t.own && v.state === "notTyped") {
+      notice = `<div class="notice warn" role="status"><span class="nottyped">!</span><span>The command (<code>${esc(v.line.split(" ")[0])} …</code>) wasn't typed: ${esc(v.why)}.</span><span class="sp"></span>
+        <button class="btn" data-insert="${v.id}" ${v.fg ? "disabled" : ""} title="${v.fg ? "Available once the shell is back at its prompt" : "Puts the command at the prompt without pressing Enter"}">Insert command</button><button class="btn link" data-dismiss="${v.id}">Dismiss</button></div>`;
+    } else if (v !== t.own && v.state === "exited") {
+      notice = `<div class="notice dead" role="status"><span>This shell has exited.</span><span class="sp"></span><button class="btn" data-closesub="${v.id}">Close sub-terminal</button></div>`;
+    }
+    $("#content").innerHTML = notice + `<div class="term" tabindex="0" aria-label="Terminal: ${esc(v === t.own ? t.name : v.name)}">${v.term}</div>`;
+  }
+
+  // ---------- overlays ----------
+  function renderOverlay() {
+    const o = $("#overlay");
+    let h = "";
+    if (S.dialog) {
+      h += `<div class="scrim" data-scrim><div class="dialog" role="alertdialog" aria-labelledby="dlg-t"><h3 id="dlg-t">${S.dialog.title}</h3><p>${S.dialog.body}</p>
+        <div class="row"><button class="btn" data-dlg="cancel">Cancel</button><button class="btn danger" data-dlg="ok">${S.dialog.ok}</button></div></div></div>`;
+    }
+    if (S.switcher) {
+      const q = S.switcher.q.toLowerCase();
+      const rows = [];
+      S.tabs.forEach((t, i) => {
+        const subs = t.subs.filter((s) => !q || s.name.toLowerCase().includes(q) || t.cwd.includes(q));
+        const tabHit = !q || t.name.includes(q) || t.cwd.includes(q);
+        if (tabHit || subs.length) rows.push({ t, i, s: null });
+        subs.forEach((s) => rows.push({ t, i, s }));
+      });
+      S.switcher.rows = rows;
+      S.switcher.cur = Math.min(S.switcher.cur, Math.max(rows.length - 1, 0));
+      h += `<div class="scrim" data-scrim style="align-items:flex-start;background:rgba(0,0,0,.35)"></div><div class="switcher" role="dialog" aria-label="Go to tab">
+        <input id="swq" placeholder="Go to tab: name, folder or project" value="${esc(S.switcher.q)}" aria-label="Search tabs">
+        <ul role="listbox">${rows.map((r, k) => {
+          const st = r.s ? (r.s.state === "exited" || r.s.restored ? `<span class="st" style="color:var(--text-exited)">${r.s.restored ? "restored" : "exited"}</span>` : r.s.activity ? `<span class="st" style="color:var(--green)">working</span>` : "") : "";
+          return `<li role="option" class="${r.s ? "subrow" : ""} ${k === S.switcher.cur ? "cur" : ""}" data-k="${k}">${r.s ? `<span class="dim" style="color:var(--text-muted)">↳</span>` : `<span class="n">${r.i + 1}</span>`}
+            ${r.s?.agent ? `<span class="agent-dot" data-state="${r.s.agent}"></span>` : ""}<span>${esc(r.s ? r.s.name : r.t.name)}</span>${st}<span class="p">${esc(r.t.cwd)}</span></li>`;
+        }).join("") || `<li>No tab matches “${esc(S.switcher.q)}”.</li>`}</ul></div>`;
+    }
+    o.innerHTML = h;
+    if (S.switcher) { const i = $("#swq"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+    // menu is fixed to the page
+    document.querySelectorAll(".menu").forEach((m) => m.remove());
+    if (S.menu) {
+      const m = document.createElement("div");
+      m.className = "menu"; m.style.left = S.menu.x + "px"; m.style.top = S.menu.y + "px";
+      m.innerHTML = S.menu.items.map((it, k) => `<button data-mi="${k}" class="${it.sep ? "sep" : ""} ${it.danger ? "danger" : ""}" ${it.disabled ? "disabled" : ""}>${it.label}${it.tag ? `<span class="tag">${it.tag}</span>` : ""}</button>`).join("");
+      document.body.appendChild(m);
+    }
+  }
+
+  function render() {
+    $("#win").classList.toggle("narrow", S.narrow);
+    renderTabbar(); renderStrip(); renderContent(); renderOverlay();
+  }
+
+  // ---------- actions ----------
+  function show(t, viewId) {
+    t.view = viewId || null;
+    const v = viewOf(t);
+    v.attention = false; v.activity = false; v.hidden = false;
+    if (v.restored && !v.started) { v.started = true; v.term = (v.saved || "") + `\n<span class="dim">Restored ${new Date().toDateString()}: new shell</span>\n` + T.shell("~/src/api"); }
+    render();
+  }
+  function step(d) {
+    const t = cur();
+    if (!t.subs.length) return log("No sub-terminals in this tab: ⌘] does nothing.");
+    const ids = [null, ...t.subs.map((s) => s.id)];
+    const i = ids.indexOf(t.view || null) + d;
+    if (i < 0 || i >= ids.length) return log("At the end of the strip: no wrap, as with tabs.");
+    show(t, ids[i]);
+    log(`Showing "${viewOf(t) === t.own ? t.name : viewOf(t).name}"; focus moves to its terminal.`);
+  }
+  function addSub(t, o, focus) {
+    const s = sub(Object.assign({ flash: !focus, hidden: !focus }, o));
+    t.subs.push(s);
+    if (focus) { S.activeTab = t.id; t.view = s.id; }
+    render();
+    return s;
+  }
+  function closeSub(t, id, confirmed) {
+    const s = t.subs.find((x) => x.id === id);
+    if (!s) return;
+    if (!confirmed && s.busy && s.state !== "exited" && !(s.restored && !s.started)) {
+      S.dialog = { title: `Close “${esc(s.name)}”?`, body: `It is running a program (${esc(s.prog || "a program")}). Closing ends it.`, ok: "Close", run: () => closeSub(t, id, true) };
+      return render();
+    }
+    const idx = t.subs.indexOf(s);
+    const wasInSight = viewOf(t) === s;
+    t.subs.splice(idx, 1);
+    if (wasInSight) t.view = idx > 0 ? t.subs[idx - 1].id : null;
+    log(t.subs.length ? `Closed "${s.name}"${s.busy ? "" : " at once: nothing was running"}.${wasInSight ? " The entry on its left is shown." : ""}` : `Closed "${s.name}", the last one: the strip goes and the tab's own terminal is shown.`);
+    render();
+  }
+  function closeTab(id, confirmed) {
+    const t = tab(id);
+    const running = t.subs.filter((s) => s.busy && s.state !== "exited" && !(s.restored && !s.started));
+    if (!confirmed && (running.length || t.own.agent)) {
+      const names = running.slice(0, 3).map((s) => s.name).join(", ") + (running.length > 3 ? ", …" : "");
+      S.dialog = t.subs.length
+        ? { title: `Close “${esc(t.name)}” and its ${t.subs.length} sub-terminal${t.subs.length === 1 ? "" : "s"}?`, body: running.length ? `${running.length} ${running.length === 1 ? "is" : "are"} running a program (${esc(names)}). Closing ends ${running.length === 1 ? "it" : "them"}.` : `The tab's own terminal has a live Claude session. Closing ends it.`, ok: "Close all", run: () => closeTab(id, true) }
+        : { title: "Active process running", body: "This tab has a live Claude session. Closing it will terminate the process. Are you sure?", ok: "Close", run: () => closeTab(id, true) };
+      return render();
+    }
+    if (S.tabs.length < 2) return log("The last tab can't close (as today).");
+    const i = S.tabs.indexOf(t);
+    S.tabs.splice(i, 1);
+    if (S.activeTab === id) S.activeTab = S.tabs[Math.max(0, i - 1)].id;
+    log(`Closed "${t.name}" and ${t.subs.length} sub-terminal(s). Reopen Closed Tab brings back only its own terminal.`);
+    render();
+  }
+  function moveOut(t, id) {
+    const s = t.subs.find((x) => x.id === id);
+    const idx = t.subs.indexOf(s);
+    if (viewOf(t) === s) t.view = idx > 0 ? t.subs[idx - 1].id : null;
+    t.subs.splice(idx, 1);
+    const nt = { id: "t" + ++uid, name: s.name, cwd: t.cwd, own: { term: s.term, agent: s.agent, attention: false, activity: false }, view: null, subs: [] };
+    S.tabs.splice(S.tabs.indexOf(t) + 1, 0, nt);
+    S.activeTab = nt.id;
+    log(`"${s.name}" is now a top-level tab, same shell, no restart. Its own ade open calls now add sub-terminals to it.`);
+    render();
+  }
+  function startThenSettle(t, s, after, ms = 2200) {
+    setTimeout(() => { if (t.subs.includes(s)) { after(s); render(); } }, ms);
+  }
+
+  const scenarios = {
+    bg() {
+      const t = tab("api");
+      const s = addSub(t, { name: "tests", state: "starting", term: T.tests, busy: true, prog: "npm" }); announce("tests", t.name);
+      log(`Agent in "api" ran ade open. Added at the end, flashed, badge now ${t.subs.length}. Nothing you see changed focus.`);
+      startThenSettle(t, s, (x) => { x.state = "running"; x.activity = viewOf(t) !== x; });
+      startThenSettle(t, s, (x) => { x.activity = false; x.busy = false; x.attention = viewOf(t) !== x; }, 6500);
+    },
+    focus() {
+      const t = tab("api");
+      const s = addSub(t, { name: "storybook", state: "starting", term: T.storybook, busy: true, prog: "node" }, true);
+      log(`--focus: "storybook" is shown and takes the keyboard.`);
+      startThenSettle(t, s, (x) => (x.state = "running"));
+    },
+    grand() {
+      const t = tab("api");
+      const s = addSub(t, { name: "npm", state: "starting", from: "dev server", term: T.shell("~/src/api"), busy: true, prog: "node" }); announce("npm", t.name);
+      log(`Flattened: the new one is a sibling at the end of "api"'s strip. Hover it: "Opened from dev server". Named "npm" by the rule: first word of the command, never the full line.`);
+      startThenSettle(t, s, (x) => { x.state = "running"; });
+    },
+    nottyped() {
+      const t = tab("api");
+      const s = addSub(t, { name: "npm", state: "starting", term: T.notTyped, busy: true, fg: true, prog: "ssh-add" }); announce("npm", t.name);
+      log("Opened; Rust found another program in the foreground and typed nothing (CLI exit 5). Click the entry.");
+      startThenSettle(t, s, (x) => { x.state = "notTyped"; x.line = "npm run seed -- --api-key sk_live_51Hx…"; $("#live").textContent = "npm: command not typed"; x.why = "the new shell was busy (a program started by its rc files is in the foreground)"; });
+    },
+    first() {
+      S.activeTab = "web";
+      const t = tab("web");
+      render();
+      setTimeout(() => {
+        announce("npm", t.name);
+        const s = addSub(t, { name: "npm", state: "starting", busy: true, prog: "node", term: T.storybook.replace("storybook", "dev").replace("Storybook 8.4", "vite").replace("6006", "5173") });
+        log(`"web" had none: the strip appears with "web" pinned and the new entry. The terminal loses one row; focus stays in "web".`);
+        startThenSettle(t, s, (x) => (x.state = "running"));
+      }, 500);
+    },
+    many() {
+      const t = tab("api");
+      ["typecheck", "e2e: chromium", "e2e: webkit", "docs build", "queue worker", "redis", "stripe", "ngrok", "claude: billing", "tail"].forEach((n, k) =>
+        t.subs.push(sub({ name: n, term: T.shell("~/src/api"), activity: k % 3 === 0, agent: n.startsWith("claude") ? "waiting" : null })));
+      render();
+      log("Many: the strip scrolls like the main tab bar (scrollbar hidden, edge fade). ⌘K finds one by name.");
+    },
+    answer() {
+      const s = tab("api").subs.find((x) => x.state === "notTyped");
+      if (!s) return log('Run "Command not typed" first.');
+      s.fg = false; s.busy = false; s.term = T.shell("~/src/api"); render();
+      log("The shell is back at its prompt: Insert command is enabled.");
+    },
+    restart() {
+      S.tabs.forEach((t) => t.subs.forEach((s) => { s.saved = s.term; s.restored = true; s.started = false; s.state = "running"; s.agent = null; s.activity = false; s.attention = false; s.busy = false; s.term = ""; }));
+      render();
+      log('Restarted: entries say "restored" and start a fresh shell when first shown. Commands are not re-run; closing the tab asks nothing for them.');
+    },
+    narrow() { S.narrow = !S.narrow; render(); log(S.narrow ? "Narrow: names cut at 96 px; marks, status and the selected ×  stay." : "Wide again."); },
+    switcher() { S.switcher = { q: "", cur: 0, rows: [] }; render(); log("Sub-terminals are indented rows under their tab; type to search them."); },
+    closetab() { S.activeTab = "api"; closeTab("api"); },
+    reset() { S = initial(); render(); log("Reset."); },
+  };
+
+  // ---------- events ----------
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-sc],[data-tab],[data-view],[data-closesub],[data-closetab],[data-dlg],[data-mi],[data-insert],[data-dismiss],[data-k],[data-scrim]");
+    if (S.menu && !e.target.closest(".menu")) { S.menu = null; renderOverlay(); return; }
+    if (!el) return;
+    const d = el.dataset;
+    if (d.mi !== undefined) { const it = S.menu.items[+d.mi]; S.menu = null; renderOverlay(); it.run?.(); return; }
+    if (d.dlg) { const run = S.dialog.run; S.dialog = null; if (d.dlg === "ok") run(); else { render(); log("Cancelled: nothing closed."); } return; }
+    if (d.k !== undefined) { pick(S.switcher.rows[+d.k]); return; }
+    if (d.scrim !== undefined) { if (e.target === el) { S.dialog = null; S.switcher = null; render(); } return; }
+    if (d.sc) return scenarios[d.sc]();
+    if (d.closesub) { e.stopPropagation(); return closeSub(cur(), d.closesub); }
+    if (d.closetab) { e.stopPropagation(); return closeTab(d.closetab); }
+    if (d.insert) { if (el.disabled) return; const s = cur().subs.find((x) => x.id === d.insert);
+      if (s.fg) { render(); return log("Checked again on click (pty_shell_idle): the shell is busy, nothing inserted."); }
+      s.state = "running"; s.term = T.shell("~/src/api").replace('<span class="cursor"></span>', esc(s.line) + '<span class="cursor"></span>'); render(); return log("Inserted at the prompt without Enter: review it, then press Enter."); }
+    if (d.dismiss) { const s = cur().subs.find((x) => x.id === d.dismiss); s.state = "running"; render(); return log("Notice dismissed."); }
+    if (d.tab !== undefined) { S.activeTab = d.tab; const t = cur(); viewOf(t).attention = false; render(); return log(`"${t.name}" shows the view it was left on.`); }
+    if (d.view !== undefined) { show(cur(), d.view); log(`Showing "${viewOf(cur()) === cur().own ? cur().name : viewOf(cur()).name}".`); }
+  });
+  document.addEventListener("contextmenu", (e) => {
+    const sEl = e.target.closest("[data-sub]");
+    const tEl = e.target.closest("[data-tab]");
+    // Only the items this feature adds or changes. New Sub-terminal is on terminal tabs only; every tab here is one.
+    if (!sEl && !tEl) return;
+    e.preventDefault();
+    if (sEl) {
+      const t = cur(), id = sEl.dataset.sub;
+      S.menu = { x: e.clientX, y: e.clientY, items: [
+        { label: "Move to New Tab", run: () => moveOut(t, id) },
+        { label: "Close", danger: true, sep: true, run: () => closeSub(t, id) },
+      ] };
+    } else {
+      const t = tab(tEl.dataset.tab);
+      S.menu = { x: e.clientX, y: e.clientY, items: [
+        { label: "New Sub-terminal", sep: true, run: () => { addSub(t, { name: "Terminal", term: T.shell(t.cwd) }, true); log(`New Sub-terminal in "${t.name}": you asked, so it's shown.`); } },
+        { label: "Close", danger: true, sep: true, run: () => closeTab(t.id) },
+      ] };
+    }
+    renderOverlay();
+  });
+  function pick(r) {
+    if (!r) return;
+    S.switcher = null; S.activeTab = r.t.id;
+    show(r.t, r.s ? r.s.id : null);
+    log(`Switcher: showing ${r.s ? `"${r.s.name}" in "${r.t.name}"` : `"${r.t.name}"`}.`); log(`Switcher: showing ${r.s ? `"${r.s.name}" in "${r.t.name}"` : `"${r.t.name}"`}.`);
+  }
+  document.addEventListener("input", (e) => { if (e.target.id === "swq") { S.switcher.q = e.target.value; S.switcher.cur = 0; renderOverlay(); } });
+  document.addEventListener("keydown", (e) => {
+    if (S.switcher) {
+      if (e.key === "Escape") { S.switcher = null; render(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); S.switcher.cur = Math.min(S.switcher.cur + 1, S.switcher.rows.length - 1); renderOverlay(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); S.switcher.cur = Math.max(S.switcher.cur - 1, 0); renderOverlay(); }
+      else if (e.key === "Enter") { e.preventDefault(); pick(S.switcher.rows[S.switcher.cur]); }
+      return;
+    }
+    if (S.dialog) { if (e.key === "Escape") { S.dialog = null; render(); } return; }
+    if (S.menu && e.key === "Escape") { S.menu = null; renderOverlay(); return; }
+    if (e.target.matches?.("input,textarea")) return;
+    if (e.target.matches?.('[role="tab"]')) {
+      const list = [...document.querySelectorAll('#substrip [role="tab"]')];
+      const i = list.indexOf(e.target);
+      const go = (j) => { e.preventDefault(); list.forEach((x) => (x.tabIndex = -1)); list[j].tabIndex = 0; list[j].focus(); list[j].scrollIntoView({ block: "nearest", inline: "nearest" }); };
+      if (e.key === "ArrowRight" && i < list.length - 1) return go(i + 1);
+      if (e.key === "ArrowLeft" && i > 0) return go(i - 1);
+      if (e.key === "Home") return go(0);
+      if (e.key === "End") return go(list.length - 1);
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(cur(), e.target.dataset.view); document.querySelector("#content .term")?.focus(); return; }
+      if (e.key === "Delete" && e.target.dataset.sub) { e.preventDefault(); return closeSub(cur(), e.target.dataset.sub); }
+    }
+    if (e.key === "]" || e.code === "BracketRight") { e.preventDefault(); step(1); }
+    else if (e.key === "[" || e.code === "BracketLeft") { e.preventDefault(); step(-1); }
+    else if (e.key === "k") { scenarios.switcher(); }
+  });
+
+  // ---------- gallery ----------
+  const G = [
+    ["Selected", sub({ name: "dev server" }), true, "<b>In sight.</b> Elevated background, weight 500, accent bar. × always shown."],
+    ["Running, producing output", sub({ name: "dev server", activity: true }), false, "<b>Activity.</b> Green pulse, only when not in sight (as main tabs)."],
+    ["Finished while away", sub({ name: "tests", attention: true }), false, "<b>Attention.</b> Accent dot; clears when shown."],
+    ["Agent needs you", sub({ name: "claude: auth", agent: "needsYou" }), false, "<b>Needs you.</b> The existing red dot with halo, per view; rolls up to the main tab."],
+    ["Agent waiting", sub({ name: "claude: billing", agent: "waiting" }), false, "<b>Waiting.</b> The existing blue dot."],
+    ["Starting", sub({ name: "storybook", state: "starting" }), false, "<b>Starting.</b> Only when a command was given; clears on the typed result (≤ ~5 s). No command: no spinner."],
+    ["Command not typed", sub({ name: "npm", state: "notTyped", why: "the new shell was busy" }), false, "<b>Not typed.</b> Yellow ! mark; the view's notice masks the command and enables Insert command once the shell is at its prompt."],
+    ["Shell exited", sub({ name: "npm", state: "exited" }), false, "<b>Exited.</b> Name at 60%, “exited” in #8B929E. The shell ended (also a shell that died at start); not a pass/fail of the command, and no exit code."],
+    ["Restored", sub({ name: "npm", restored: true }), false, "<b>Restored.</b> After a restart: a new shell, started when first shown. Saved name (here from the naming rule); the label stays so it doesn't read as running."],
+    ["Named by the rule", sub({ name: "npx" }), false, "<b>Default name.</b> <code>NODE_ENV=test npx vitest --token …</code> → “npx”: first word, skipping VAR=value. With no command: the folder's basename, else “Terminal”. The command line is never shown."],
+  ];
+  $("#cards").innerHTML = G.map(([, s, sel, cap]) => `<div class="card"><div class="demo">
+    <div class="sub ${sel ? "sel" : ""} ${s.state === "exited" ? "dead" : ""}">${marks(s, sel)}<span class="name">${esc(s.name)}</span>${status(s)}<button class="x" aria-label="Close ${esc(s.name)}" tabindex="-1">×</button></div></div>
+    <div class="cap">${cap}</div></div>`).join("") +
+    `<div class="card"><div class="demo" style="background:var(--bg-secondary)"><div class="tab active" style="height:30px;align-self:center">${CHEV}<span class="num">1</span><span class="label">api</span><span class="count">${STACK}4</span></div>
+     <div class="tab" style="height:30px;align-self:center"><span class="agent-dot" data-state="needsYou"></span>${CHEV}<span class="num">2</span><span class="label">web</span><span class="count">${STACK}2</span></div></div>
+     <div class="cap"><b>Count badge.</b> Neutral, never coloured. Attention rolls into the tab's existing marks: “web” has a sub-terminal that needs you.</div></div>`;
+
+  render();
+})();
+</script>
+</body>
+</html>

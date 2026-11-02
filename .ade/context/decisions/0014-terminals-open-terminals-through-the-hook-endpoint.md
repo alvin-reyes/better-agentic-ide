@@ -1,0 +1,53 @@
+# 0014: Terminals open sub-terminals through the hook endpoint, with per-PTY tokens and explicit views
+
+- **Status:** Proposed (2026-11-02).
+  - Records the decisions of `docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md`.
+  - The UX is `docs/superpowers/specs/2026-11-02-sub-terminals-ux.md`; the contract is `.ade/context/terminal-open.md`.
+  - **Amends ADR 0003** (`0003-agent-status-hooks-helper-endpoint`): the endpoint no longer "always answers `{}`", a missing PTY id is 401 rather than 400, and the token is no longer one per launch, "acceptable for a status dot".
+  - `ade-hook guard` stays with ADR 0011 (the CLI library).
+  - The number is provisional, per ADR 0012.
+- **Context:**
+  - People and agents want to open a terminal from inside a terminal.
+  - **The owner fixed the transport:** the loopback endpoint of ADR 0003, never an escape sequence.
+  - **The owner fixed the target:** a sub-terminal of the caller's tab, listed in a strip and not switched to by default; or a split of the caller's pane.
+  - **Today's code:**
+    - Only the view in sight of the active tab is mounted.
+    - A pane makes its PTY on mount, and unmounting never kills.
+    - About 30 call sites read `tab.root`, half of them in `tabStore.ts`.
+    - Detaching serialises only `root`.
+    - Closing kills only through a frontend instance.
+    - The endpoint has one token for all terminals and treats every path as a hook event.
+- **Decision:**
+  - **`POST /open` on the same endpoint.** `serve` routes by path.
+  - **Per-PTY tokens.** Each token is `HMAC-SHA-256(master, "pty:<id>")`, checked against `X-ADE-PTY`, which is parsed first.
+  - **The CLI is the helper under a second name.** `mode(argv0, args)` is a pure function tested in the main crate. `ade` goes on `PATH` from a checked folder owned by ADE, and agents use `"$ADE_HOOK_BIN" open`.
+  - **Views are stored explicitly.**
+    - `Tab.root` and `Tab.activePaneId` are removed. Every tab has `views` (with `own` always present), `viewOrder` and `shownView`.
+    - The accessors are `shownView`, `ownView`, `allTabPanes` and `viewOfPane`, and every reader is assigned to one of them.
+    - Swapping the shown view into `tab.root` was rejected. Every reader that should see all views, or the tab's own view, would silently see only the view in sight; the review found `setPtyId` dropping hidden panes' ids. Removing the field turns that class of bug into `tsc` errors.
+  - **The window creates the new terminal at once, headless.**
+    - It does this at the caller's size, with scrollback capped at 1000, and with no GPU renderer and no image addon until first show. A detached window's headless reattach gets the same budget.
+  - **Names never carry a command line.** A sub-terminal's default name is the command's first word after any `VAR=value` words, else the folder name, else "Terminal". Names are saved in the session, which is synced; the line for Insert command is held in memory only.
+    - Rust never spawns or kills.
+  - **Rust accepts the window's new PTY id only if it is safe.** The window passes the `requestId` into `create_pty`. The id must have been created with that request, be at least the next PTY id at request time, be unclaimed, be live, and be owned by that window. A terminal the user opens meanwhile can't be claimed.
+  - **Rust types the command only after a timely answer.**
+    - Only once the shell is quiet and is the foreground process group (`tcgetpgrp`).
+    - Only in sh, bash, zsh, fish, dash or ksh, with printable ASCII, at most 1000 bytes, quoted by ADR 0008.
+    - A command not typed leaves the shell alone and reports `typed:false`.
+    - After the timeout Rust sends `expired`, and the window removes what it added.
+  - **"Running" has one definition:** the Rust command `pty_shell_idle` (`tcgetpgrp` equals the shell's pid) is false for a pane. The tab-close confirm (U4), the × confirm and "Insert command" all use it. An idle prompt is not running.
+  - **Closing kills every pane in every view,** through the instance or through the store's `ptyId`.
+  - **Move to New Window carries every view.** It reattaches hidden panes headless and kills every view when the window is destroyed.
+  - **Limits:** 8 per caller pane, refilling 1 per second, and at most 32 running `/open` shells.
+- **Consequences:**
+  - **The token is now a command-execution credential.** Inside ADE that adds nothing. Outside, a leaked token works while its pane lives.
+  - **ADR 0012 principles:**
+    - **P2:** met under D1 (the guard's runner entry is the command story's acceptance criterion) and D2 (the sandbox reaching loopback is a known exception). Hidden-by-default is accepted, with an aria-live announcement, the strip flash and the badge.
+    - **P3:** secrets the caller's shell expanded land in the new shell's history and local scrollback. That is a known exception, documented (D3). Synced state never holds them: scrollback is stripped there and names are one word. A sync test pins this.
+  - **The views refactor touches about 25 files** in one no-behaviour-change story. `tsc` and the existing suite gate it.
+  - **Cost:**
+    - Up to 32 hidden xterms, each at a scrollback of 1000 until shown.
+    - Manual check V3 (hidden output must not slow typing; p95 echo under 50 ms by a dev-build echo probe) gates the first `/open` story, per ADR 0009 (unmerged, `docs/claude-md-paths`). The owner runs it on a Mac; until then QA records "not run, pending the owner".
+  - **Linux:** Ctrl+Shift+[ and ] never reach the shell.
+  - **Out of v1:** exit codes, renaming sub-terminals, single-sub-terminal Move to New Window, Windows.
+  - **The verification command is unchanged:** `npm test`, `npx tsc --noEmit`, `cargo test`.

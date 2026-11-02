@@ -39,7 +39,7 @@ listening and the helper exists (else none of the four is set):
 |---|---|
 | `ADE_HOOK_BIN` | absolute path of `ade-hook`, beside ADE's executable |
 | `ADE_HOOK_PORT` | the endpoint's port on 127.0.0.1, new each launch |
-| `ADE_HOOK_TOKEN` | 64 hex chars from `getrandom`, new each launch |
+| `ADE_HOOK_TOKEN` | 64 hex chars from `getrandom`, new each launch. **Proposed (ADR 0014, not built):** per terminal, `HMAC-SHA-256(master, "pty:<id>")`, checked against `X-ADE-PTY` |
 | `ADE_PTY_ID` | the pane's PTY id, reserved before the shell is spawned |
 
 ## The helper (`ade-hook`, logic in `src-tauri/src/hook_forward.rs`)
@@ -65,7 +65,7 @@ listening and the helper exists (else none of the four is set):
 (state unchanged): a wrong or missing token (constant-time compare, 401), any
 `Origin` (403), a `Host` other than `127.0.0.1:<port>` (403), any method but
 `POST` (405), a body over 16 KB (413), no PTY id (400). No CORS headers, bodies
-never logged. Every answer's body is `{}`.
+never logged. Every answer's body is `{}`. **Proposed (ADR 0014, not built):** this holds for `/` only; `serve` routes by path, `/open` answers per `terminal-open.md`, other paths 404. A missing or malformed PTY id becomes 401 (the PTY id is parsed before the token).
 
 ## States
 
@@ -125,6 +125,9 @@ Turning Agent status off drops the sessions whose `cwd` is in the project.
 
 - **Forgeable status.** The token is in the environment of everything started
   in an ADE terminal, so any of it can post events. Fine for a status dot.
+  **Proposed (ADR 0014, not built):** the token also opens terminals and
+  types commands (`terminal-open.md`); with per-PTY tokens a process speaks
+  only for its own pane.
   Piece 2 must not let a phone approve a `PermissionRequest` on this alone.
 - **Stale environment.** A long-lived process started in an ADE terminal (a
   tmux server) keeps that ADE's variables after it quits; its sessions report
