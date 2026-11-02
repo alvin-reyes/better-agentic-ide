@@ -1062,12 +1062,19 @@ Depends on Story 1 (`orgo_rules.rs`, `launch_rules`, the `--settings` plumbing).
 
   **What a leading `*` catches:** `env orgo …`, `/home/u/.orgo/bin/orgo …`, unversioned `npx orgo …`, and `sh -c 'orgo …'`.
 
-  **What it misses** (round 4, corrected; the guide lists all of these):
+  **What it misses** (round 4, corrected; corrected again 2026-11-02 against Claude Code 2.1.314; the guide lists all of these):
   - **Versioned runners:** `npx orgo@2.3.0 c create`, `pnpm dlx orgo@latest …`. The `@version` breaks the contiguous `orgo c create`.
   - **Other invocations:** `node …/dist/cli.js c create`.
-  - **Spacing:** doubled spaces, tabs and line continuations between words.
   - **Quoting:** `orgo "c" create`, `orgo c 'create'`.
-  - **Indirection:** variables (`$O c create`), shell aliases and functions, scripts written to a file and run, `xargs -n1 orgo …`, and commands built at runtime.
+  - **Indirection:** a variable set in an earlier command or tool call (`O=orgo` first, then `$O c create` later), shell aliases and functions, scripts written to a file and run, `xargs -n1 orgo …` supplying the subcommand from its input, and commands built at runtime.
+  - **Not gaps (2026-11-02).** The 1b code review found that Claude Code 2.1.314 normalises whitespace and line continuations before matching Bash rules. It probed the real binary with a fake API and a fake MCP server, and Claude Code **denies** all of these:
+    - `orgo  c create` (two spaces);
+    - `orgo computers   create` (three spaces);
+    - `orgo<TAB>c create`;
+    - `orgo c \⏎create` (a line continuation);
+    - `O=orgo; $O c create` written as one command.
+
+    Round 4's "spacing" gap is removed, and "variables" is narrowed to the cross-command case above.
   - **Out of 1b's scope:** the credit-spending `orgo agent`, `orgo run` and `orgo handoff start`. They create no computer; they wait for Story 1c.
 
   **What it over-matches**, also recorded: any command whose text contains the phrase is denied in Continuous mode, for example:
@@ -1098,11 +1105,17 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
 3. Under the documented semantics, re-implemented in the test:
    - **Denied:** `orgo c create --name a`, `orgo computers start a`, `orgo --json c create`, `orgo c --json resize a --ram 8`, `orgo t run hermes-agent`, `ORGO_PROFILE=x orgo c clone a`, `orgo c create --profile default`, `env orgo c create`, `/home/u/.orgo/bin/orgo c create`, `npx orgo c create`, `sh -c 'orgo c create'`.
    - **Denied, the recorded over-match:** `grep "orgo c create" notes.md` and `grep "orgo --json" x`.
+   - **Denied by Claude Code, not asserted by the test (2026-11-02):** `orgo  c create` (two spaces). This was verified against Claude Code 2.1.314, which normalises whitespace. The test's own matcher doesn't model that normalisation, so the test asserts only the cases both agree on. It neither asserts nor refutes this one, nor the other whitespace and line-continuation forms in the design note.
    - **Not denied:** `orgo c delete a`, `orgo c list --json` and `orgo whoami`.
-   - **Unmatched, the documented limits:** `orgo c 'create'`, `orgo "c" create`, `orgo  c create` (two spaces), `npx orgo@2.3.0 c create`, `pnpm dlx orgo@latest c create`, `node /x/dist/cli.js c create`, `$O c create`, `echo create | xargs -n1 orgo c` (xargs supplies the subcommand from its input). The test asserts these are not matched, so the guide's list stays true.
+   - **Unmatched, the documented limits:** `orgo c 'create'`, `orgo "c" create`, `npx orgo@2.3.0 c create`, `pnpm dlx orgo@latest c create`, `node /x/dist/cli.js c create`, `$O c create`, `echo create | xargs -n1 orgo c` (xargs supplies the subcommand from its input). The test asserts these are not matched, so the guide's list stays true.
 
    Covered by `orgo_rules.rs` › `continuous_cli_denies_cover_creation`.
 4. **(1b-2.)** Launching from `AgentPicker` with Continuous on, from a pane cwd of `<repo>/app` and of `<repo>`, invokes `launch_rules` with no path argument. Both typed commands carry identical `--disallowedTools` lists. With Continuous off, neither command has `--disallowedTools`. Covered by `src/components/__tests__/agentLaunch.test.ts` › "continuous denies are the same in every folder".
+5. **(2026-11-02, the 1b code review.)** `checked()` in `src/lib/launchRules.ts` refuses a result whose `continuousDeny` is empty, exactly as it refuses an empty `ask`. `loadLaunchRules` then rejects and caches nothing, and every launch, Continuous or not, is refused with the "couldn't load its permission rules" message. So the hard stop fails closed: a Continuous session can never start without its deny list.
+   - This supersedes Story 1's "`continuousDeny` is `[]` in Story 1". Since 1b, `launch_rules()` never returns it empty (AC2).
+   - Test mocks that answer `launch_rules` must carry a non-empty `continuousDeny`.
+
+   Covered by `agentLaunch.test.ts` › "an empty continuous deny list is no rules".
 
 **Manual checks:**
 - In an ADE Continuous session started in `<repo>/app`, with Orgo installed through ADE, `orgo_create_computer` is absent from the tools. Repeat with Orgo added through `claude mcp add` instead.
@@ -1449,3 +1462,14 @@ The reviewer confirmed:
 - **The error.** AC3 listed `xargs -n1 orgo c create` as an unmatched limit. That string contains `orgo c create`, so `Bash(*orgo c create*)` denies it. That is correct, and fine: it is the safe direction.
 - **The real limit** is the one the design note already describes: `xargs` supplying the subcommand from its input. The example is now `echo create | xargs -n1 orgo c`. Its two parts, `echo create` and `xargs -n1 orgo c`, match no deny pattern: there is no `orgo c create`, no `orgo c -` and no `orgo -`.
 - **What changes.** Only the example. The design note's wording, every ruling and every other example are unchanged.
+
+**Story 1b code review, 2026-11-02: PASS WITH MINORS (plan-text fixes).** The reviewer probed the real Claude Code 2.1.314 with a fake API and a fake MCP server. It confirmed:
+- the deny flag parses as built;
+- create, start, restart, resize and `test_run_template` are removed only in Continuous mode;
+- the role file and the task are intact;
+- nothing leaks into Manual mode.
+
+| Finding | Decision |
+|---|---|
+| Claude Code 2.1.314 normalises whitespace and line continuations before matching Bash rules. It denies `orgo  c create`, `orgo computers   create`, `orgo<TAB>c create` and `orgo c \⏎create`, and also `O=orgo; $O c create` as one command. | The design note's "spacing" gap is removed and the denied forms are listed. "Variables" is narrowed to a variable set in an earlier command or tool call. In AC3, `orgo  c create` moves from the unmatched list to a "denied by Claude Code, not asserted by the test" line: the test's matcher doesn't normalise whitespace, so it asserts only the cases both agree on. **The guide still lists those as gaps.** `docs/guide/integrations.md:70` ("doubled spaces, tabs and line continuations", "variables (`$O c create`)") needs the same correction in the 1b fix-up. |
+| An empty `continuousDeny` would start Continuous sessions with no hard stop | New 1b AC5: `checked()` refuses an empty `continuousDeny`, so the load rejects and no launch starts. This supersedes Story 1's empty-in-Story-1 note. |
