@@ -39,7 +39,7 @@ listening and the helper exists (else none of the four is set):
 |---|---|
 | `ADE_HOOK_BIN` | absolute path of `ade-hook`, beside ADE's executable |
 | `ADE_HOOK_PORT` | the endpoint's port on 127.0.0.1, new each launch |
-| `ADE_HOOK_TOKEN` | 64 hex chars from `getrandom`, new each launch. **Proposed (ADR 0014, not built):** per terminal, `HMAC-SHA-256(master, "pty:<id>")`, checked against `X-ADE-PTY` |
+| `ADE_HOOK_TOKEN` | per terminal (ADR 0014): the lowercase hex (64 chars) of `HMAC-SHA-256(master, "pty:<id>")`, `pty_token(master, pty)` in `agent_status.rs`. The master is 32 bytes from `getrandom`, new each launch, held in ADE's memory only (never logged, on a command line or in an environment). Checked against `X-ADE-PTY`; a token is refused for any other PTY, and the master itself is not a token |
 | `ADE_PTY_ID` | the pane's PTY id, reserved before the shell is spawned |
 
 ## The helper (`ade-hook`, logic in `src-tauri/src/hook_forward.rs`)
@@ -62,10 +62,15 @@ listening and the helper exists (else none of the four is set):
 ## The endpoint (`src-tauri/src/agent_status.rs`)
 
 `tiny_http` on `127.0.0.1:0`, started in `.setup()` before any PTY. Refuses
-(state unchanged): a wrong or missing token (constant-time compare, 401), any
-`Origin` (403), a `Host` other than `127.0.0.1:<port>` (403), any method but
-`POST` (405), a body over 16 KB (413), no PTY id (400). No CORS headers, bodies
-never logged. Every answer's body is `{}`. **Proposed (ADR 0014, not built):** this holds for `/` only; `serve` routes by path, `/open` answers per `terminal-open.md` on a thread of its own (so hook events are not held up), other paths 404. A missing or malformed PTY id becomes 401 (the PTY id is parsed before the token).
+(state unchanged), in this order: a missing or malformed `X-ADE-PTY` (401; it
+was 400 before ADR 0014), a token that is wrong, missing or not that PTY's
+(constant-time compare, 401), any method but `POST` (405), any `Origin` (403),
+a `Host` other than `127.0.0.1:<port>` (403), a body over 16 KB (413).
+`X-ADE-PTY` is well formed when it is a decimal `u32` (`trim().parse::<u32>()`):
+surrounding whitespace, a leading `+` and leading zeros are accepted and mean
+the same id (` 9`, `+9` and `009` are all PTY 9). Anything else (empty, a sign
+`-`, non-digits, a value above 4294967295) is malformed, so 401. No CORS
+headers, bodies never logged. Every answer's body is `{}`. **Proposed (ADR 0014, not built):** this holds for `/` only; `serve` routes by path, `/open` answers per `terminal-open.md` on a thread of its own (so hook events are not held up), other paths 404.
 
 ## States
 
@@ -125,12 +130,13 @@ Turning Agent status off drops the sessions whose `cwd` is in the project.
 
 - **Forgeable status.** The token is in the environment of everything started
   in an ADE terminal, so any of it can post events. Fine for a status dot.
-  **Proposed (ADR 0014, not built):** the token also opens terminals and
-  types commands (`terminal-open.md`). With per-PTY tokens, a process that
-  holds only its own terminal's environment can post only as its own pane;
-  any process of the same user can still read another terminal's
-  environment, and its token with it, so this is not a boundary between
-  them.
+  Tokens are per PTY (ADR 0014, built). A process that holds only its own
+  terminal's environment can post only as its own pane, and PTY ids are never
+  reused (`reserve_id`), so a token never becomes valid for a second terminal.
+  Any process of the same user can still read another terminal's environment,
+  and its token with it, so this is not a boundary between them.
+  **Proposed (ADR 0014, not built):** the token also opens terminals and types
+  commands (`terminal-open.md`).
   Piece 2 must not let a phone approve a `PermissionRequest` on this alone.
 - **Stale environment.** A long-lived process started in an ADE terminal (a
   tmux server) keeps that ADE's variables after it quits; its sessions report
