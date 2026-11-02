@@ -403,6 +403,10 @@ impl<'c, 'a> Guard<'c, 'a> {
             return Out::Unknown;
         }
         self.note_tree(sc, base, args);
+        if base == "sed" && super::creds::sed_scripts(args).iter().any(|(_, s)| super::creds::sed_runs_commands(s)) {
+            self.trigger(sc, "ADE: sed's script runs shell commands (an e command or the s///e flag), which the guard can't see into".into());
+            return Out::Unknown;
+        }
         let wrapped = |k: usize| -> &[W] { args.get(k..).unwrap_or(&[]) };
         match base {
             "env" => return self.env(sc, args, stdin, run),

@@ -884,6 +884,48 @@ mod tests {
                 ("sed -n 's#x#y#w /tmp/gh/hosts.yml' docs/x.md", true),
                 ("sed -n 's/x/y/e' ~/.config/gh/hosts.yml", true),
                 ("sed '1e cat ~/.config/gh/hosts.yml ' docs/x.md", true),
+                ("sed -n 'w /home/u/.config/gh/hosts.yml  ' docs/x.md", true),
+            ],
+        );
+    }
+
+    /// Code review 3 (PASS WITH MINORS, 2026-11-02): glob search roots, sed's `e`.
+    #[test]
+    fn code_review_3() {
+        let fs = gh_fs().file("/home/u/.config/gh/hosts.yml", "github.com:\n    oauth_token: gho_x\n");
+        check(
+            &fs,
+            &[
+                // Minor 1: a glob in an rg/ag search root.
+                ("rg token ~/.config/*", true),
+                ("rg token ~/.config/g*", true),
+                ("rg token ~/.config/gh/*", true),
+                ("rg token ~/.c*", true),
+                ("rg token ~/.c*/g?", true),
+                ("ag token ~/.config/*", true),
+                ("rg token ~/*", false),
+                ("rg --hidden token ~/*", false),
+                ("rg token src/*", false),
+                ("rg token ~/.config/z*", false),
+                ("rg token ~/?config", false),
+                ("rg token ~/[.]config", false),
+                // Minor 2: sed's `e` runs its text as a shell command.
+                ("sed 's/x/gh repo delete o\\/r/e' f", true),
+                ("sed 's/x/cat \\/root\\/.config\\/gh\\/hosts.yml/e' f", true),
+                ("sed -e 's/a/b/' -e 's/x/date/ge' f", true),
+                ("sed --expression='s/x/date/e' f", true),
+                ("sed '1e gh repo delete o/r' f", true),
+                ("sed -n '/start/,/end/{e date\n}' f", true),
+                ("sed 's/e/E/g' f", false),
+                ("sed -e 's/x/y/' -e '/z/d' f", false),
+                ("sed -n '/^e/p' f", false),
+                ("sed 'y/abc/xyz/' f", false),
+                ("sed -i.bak 's#e#f#2' f", false),
+                ("sed 's/x/y/w notes.md' f", false),
+                ("sed '1i header line' f", false),
+                ("sed 'y/abc/xez/' f", false),
+                ("sed ':retry;N;b retry' f", false),
+                ("sed -n '/x/b done;p;:done' f", false),
             ],
         );
     }

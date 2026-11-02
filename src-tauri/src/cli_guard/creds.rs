@@ -35,13 +35,17 @@ pub fn cred_dirs(ctx: &Ctx) -> Vec<PathBuf> {
 pub fn glob_match(pat: &str, s: &str) -> bool {
     let p: Vec<char> = pat.chars().collect();
     let t: Vec<char> = s.chars().collect();
-    fn go(p: &[char], t: &[char]) -> bool {
+    // `start`: at the start of a path segment, where a leading `.` matches only a literal `.`.
+    fn go(p: &[char], t: &[char], start: bool) -> bool {
+        let dot = start && t.first() == Some(&'.');
         match p.first() {
             None => t.is_empty(),
-            Some('*') => (0..=t.len()).take_while(|&k| k == 0 || t[k - 1] != '/').any(|k| go(&p[1..], &t[k..])),
-            Some('?') => !t.is_empty() && t[0] != '/' && go(&p[1..], &t[1..]),
+            Some('*') if dot => go(&p[1..], t, start),
+            Some('*') => (0..=t.len()).take_while(|&k| k == 0 || t[k - 1] != '/').any(|k| go(&p[1..], &t[k..], k == 0 && start)),
+            Some('?' | '[') if dot => false,
+            Some('?') => !t.is_empty() && t[0] != '/' && go(&p[1..], &t[1..], false),
             Some('[') => {
-                let Some(end) = p.iter().skip(1).position(|&c| c == ']').map(|e| e + 1) else { return t.first() == Some(&'[') && go(&p[1..], &t[1..]) };
+                let Some(end) = p.iter().skip(1).position(|&c| c == ']').map(|e| e + 1) else { return t.first() == Some(&'[') && go(&p[1..], &t[1..], false) };
                 let Some(&c) = t.first() else { return false };
                 let class = &p[1..end];
                 let (neg, class) = match class.first() {
@@ -59,12 +63,12 @@ pub fn glob_match(pat: &str, s: &str) -> bool {
                         k += 1;
                     }
                 }
-                hit != neg && go(&p[end + 1..], &t[1..])
+                hit != neg && go(&p[end + 1..], &t[1..], false)
             }
-            Some(&c) => t.first() == Some(&c) && go(&p[1..], &t[1..]),
+            Some(&c) => t.first() == Some(&c) && go(&p[1..], &t[1..], c == '/'),
         }
     }
-    go(&p, &t)
+    go(&p, &t, true)
 }
 
 /// The path a word names: after `--opt=`, `~` expanded, made absolute.
@@ -89,10 +93,9 @@ fn word_path(ctx: &Ctx, cwd: &Path, w: &W) -> Option<(PathBuf, bool)> {
 /// path inside them is not read.
 const TEXT_ONLY: &[&str] = &["echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "ls", "which", "type", "whereis"];
 
-/// The indices of `sed`'s script words (each `-e` value, else the first
-/// operand) that are only `s` commands with no flag that reads, writes or
-/// runs anything.
-fn sed_safe_scripts(args: &[W]) -> Vec<usize> {
+/// `sed`'s scripts: each `-e`/`--expression` value, else the first operand,
+/// with the index of the word when the whole word is the script.
+pub fn sed_scripts(args: &[W]) -> Vec<(Option<usize>, String)> {
     let mut scripts = Vec::new();
     let mut operand = None;
     let mut explicit = false;
@@ -102,10 +105,16 @@ fn sed_safe_scripts(args: &[W]) -> Vec<usize> {
         if args[k].computed() {
             operand = operand.or(Some(k));
         } else if t == "-e" || t == "--expression" {
-            scripts.push(k + 1);
+            if let Some(w) = args.get(k + 1) {
+                scripts.push((Some(k + 1), w.text.clone()));
+            }
             explicit = true;
             k += 1;
-        } else if t.starts_with("--expression=") || (t.starts_with("-e") && t.len() > 2) {
+        } else if let Some(v) = t.strip_prefix("--expression=") {
+            scripts.push((None, v.to_string()));
+            explicit = true;
+        } else if t.starts_with("-e") && t.len() > 2 {
+            scripts.push((None, t[2..].to_string()));
             explicit = true;
         } else if t == "-f" || t == "--file" || t.starts_with("-f") || t.starts_with("--file=") {
             explicit = true;
@@ -118,9 +127,99 @@ fn sed_safe_scripts(args: &[W]) -> Vec<usize> {
         k += 1;
     }
     if !explicit {
-        scripts.extend(operand);
+        if let Some(i) = operand {
+            scripts.push((Some(i), args[i].text.clone()));
+        }
     }
-    scripts.into_iter().filter(|&i| args.get(i).is_some_and(|a| !a.computed() && sed_only_substitutes(&a.text))).collect()
+    scripts
+}
+
+/// The indices of `sed`'s script words that are only `s` commands with no
+/// flag that reads, writes or runs anything.
+fn sed_safe_scripts(args: &[W]) -> Vec<usize> {
+    sed_scripts(args).into_iter().filter_map(|(i, text)| i.filter(|&i| !args[i].computed() && sed_only_substitutes(&text))).collect()
+}
+
+/// Whether a sed script runs a shell command: an `e` command, or an `s`
+/// command with the `e` flag. File names, `a`/`i`/`c` text, labels and
+/// `y` are skipped.
+pub fn sed_runs_commands(script: &str) -> bool {
+    let c: Vec<char> = script.chars().collect();
+    let mut i = 0;
+    let field = |i: &mut usize, d: char| -> bool {
+        while *i < c.len() {
+            if c[*i] == '\\' {
+                *i += 2;
+                continue;
+            }
+            if c[*i] == d {
+                *i += 1;
+                return true;
+            }
+            *i += 1;
+        }
+        false
+    };
+    let to_eol = |i: &mut usize| {
+        while *i < c.len() && c[*i] != '\n' {
+            *i += 1;
+        }
+    };
+    loop {
+        while i < c.len() && (c[i].is_whitespace() || matches!(c[i], ';' | '{' | '}')) {
+            i += 1;
+        }
+        if i >= c.len() {
+            return false;
+        }
+        loop {
+            match c.get(i) {
+                Some(ch) if ch.is_ascii_digit() || matches!(ch, '$' | ',' | '~' | '!' | '+' | ' ') => i += 1,
+                Some('/') => {
+                    i += 1;
+                    if !field(&mut i, '/') {
+                        return false;
+                    }
+                }
+                Some('\\') => {
+                    let Some(&d) = c.get(i + 1) else { return false };
+                    i += 2;
+                    if !field(&mut i, d) {
+                        return false;
+                    }
+                }
+                _ => break,
+            }
+        }
+        let Some(&cmd) = c.get(i) else { return false };
+        i += 1;
+        match cmd {
+            'e' => return true,
+            's' | 'y' => {
+                let Some(&d) = c.get(i) else { return false };
+                i += 1;
+                if !field(&mut i, d) || !field(&mut i, d) {
+                    return false;
+                }
+                if cmd == 's' {
+                    while i < c.len() && !matches!(c[i], ';' | '\n' | '}') {
+                        match c[i] {
+                            'e' => return true,
+                            'w' => to_eol(&mut i),
+                            _ => i += 1,
+                        }
+                    }
+                }
+            }
+            'a' | 'i' | 'c' | 'r' | 'R' | 'w' | 'W' => to_eol(&mut i),
+            ':' | 'b' | 't' | 'T' => {
+                while i < c.len() && !matches!(c[i], ';' | '\n') {
+                    i += 1;
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// A sed script of `s` commands only (line or `/re/` addresses allowed),
@@ -291,7 +390,28 @@ impl<'c, 'a> Guard<'c, 'a> {
         let roots: Vec<PathBuf> = if paths.is_empty() {
             vec![sc.cwd.clone()]
         } else {
-            paths.iter().filter_map(|a| word_path(self.ctx, &sc.cwd, a).map(|(p, _)| p)).collect()
+            let mut roots = Vec::new();
+            for a in paths {
+                let Some((p, glob)) = word_path(self.ctx, &sc.cwd, a) else { continue };
+                if !glob {
+                    roots.push(p);
+                    continue;
+                }
+                // A glob root: the folder before its first glob character (a
+                // root inside a credential folder when it lies there), and
+                // each credential folder or ancestor of one it matches.
+                let ps = p.to_string_lossy().into_owned();
+                if let Some(cut) = ps.find(['*', '?', '[']) {
+                    let head = &ps[..ps[..cut].rfind('/').unwrap_or(0).max(1)];
+                    if dirs.iter().any(|d| Path::new(head).starts_with(d)) {
+                        roots.push(PathBuf::from(head));
+                    }
+                }
+                for d in dirs {
+                    roots.extend(d.ancestors().filter(|anc| glob_match(&ps, &anc.to_string_lossy())).map(Path::to_path_buf));
+                }
+            }
+            roots
         };
         for r in &roots {
             for d in dirs {
