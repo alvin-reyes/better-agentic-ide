@@ -575,7 +575,11 @@ impl<'c, 'a> Guard<'c, 'a> {
                 Part::Sub { list, quoted } => {
                     self.sub_list(sc, list);
                     quoted_any |= quoted;
-                    atoms.push((if *quoted { Q_PH } else { U_PH }, false));
+                    // `$(cat <<'EOF' … EOF)` is the here-doc's literal text.
+                    match literal_heredoc(sc, list) {
+                        Some(text) => push_value(&mut atoms, &text, *quoted),
+                        None => atoms.push((if *quoted { Q_PH } else { U_PH }, false)),
+                    }
                 }
                 Part::ProcSub { list } => {
                     self.sub_list(sc, list);
@@ -650,6 +654,29 @@ impl<'c, 'a> Guard<'c, 'a> {
         }
         text
     }
+}
+
+/// The text a `$(cat <<EOF … EOF)` prints when its here-doc has no
+/// expansions: the body without its trailing newlines.
+fn literal_heredoc(sc: &Scope, list: &List) -> Option<String> {
+    let [item] = list.as_slice() else { return None };
+    if item.background || !item.andor.rest.is_empty() {
+        return None;
+    }
+    let [Cmd::Simple(s)] = item.andor.first.cmds.as_slice() else { return None };
+    if !s.assigns.is_empty() || s.words.len() != 1 || s.words[0].plain() != Some("cat") {
+        return None;
+    }
+    let [r] = s.redirs.as_slice() else { return None };
+    let body = &sc.heredocs.get(r.heredoc?)?.body;
+    let mut text = String::new();
+    for p in body {
+        match p {
+            Part::Lit { text: t, .. } => text.push_str(t),
+            _ => return None,
+        }
+    }
+    Some(text.trim_end_matches('\n').to_string())
 }
 
 fn home_text(ctx: &Ctx) -> Option<String> {

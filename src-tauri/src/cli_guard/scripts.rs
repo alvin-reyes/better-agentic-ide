@@ -529,7 +529,27 @@ impl<'c, 'a> Guard<'c, 'a> {
         if sel.names.is_empty() {
             return vec![root];
         }
-        self.select(&root, &sel.names, false)
+        // A path selector (`--filter .`, `-F ./apps`, `{./apps}`) selects the
+        // packages under that folder, and the root when the folder holds it.
+        let mut v = Vec::new();
+        let mut names = Vec::new();
+        for n in &sel.names {
+            let p = n.trim_start_matches('{').trim_end_matches('}');
+            if p == "." || p.starts_with("./") || p.starts_with("../") {
+                let dir = abs(&root, p);
+                if root.starts_with(&dir) {
+                    v.push(root.clone());
+                }
+                v.extend(self.select(&root, &[], true).into_iter().filter(|d| d.starts_with(&dir)));
+            } else {
+                names.push(n.clone());
+            }
+        }
+        if !names.is_empty() {
+            v.extend(self.select(&root, &names, false));
+        }
+        v.dedup();
+        v
     }
 
     /// The workspace packages under `root` matching `names` (by name or
@@ -793,6 +813,11 @@ mod tests {
                 ("npm run release --workspaces --include-workspace-root", true),
                 ("turbo run deploy", true),
                 ("pnpm -r run deploy", true),
+                // `--filter .` / `-F ./dir` select the packages under the folder, the root included.
+                ("pnpm --filter . release", true),
+                ("pnpm -F ./ run release", true),
+                ("pnpm --filter ./packages/a run z", false),
+                ("pnpm --filter ./packages/b run z", true),
                 ("npm run deploy --workspaces", true),
             ],
         );

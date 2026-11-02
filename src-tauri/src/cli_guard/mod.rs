@@ -854,6 +854,40 @@ mod tests {
         );
     }
 
+    /// Code review 2 (BLOCK, 2026-11-02): B2 and the minors.
+    #[test]
+    fn code_review_2() {
+        let fs = gh_fs().file("/w/m.graphql", "mutation{deleteIssue(input:{issueId:\"x\"}){clientMutationId}}\n");
+        check(
+            &fs,
+            &[
+                // B2: a computed graphql query asks.
+                ("gh api graphql -f query=\"$(cat m.graphql)\"", true),
+                ("gh api graphql -f query=\"$Q\"", true),
+                ("gh api graphql --raw-field query=\"$(< m.graphql)\"", true),
+                ("gh api graphql -F query=\"$(cat m.graphql)\"", true),
+                ("gh api graphql --field=query=\"$Q\"", true),
+                // A quoted here-doc in $(cat <<'EOF' …) is literal text.
+                ("gh api graphql -f query=\"$(cat <<'EOF'\nmutation { deleteIssue(input: {issueId: \\\"x\\\"}) { clientMutationId } }\nEOF\n)\"", true),
+                ("gh api graphql -f query=\"$(cat <<'EOF'\nquery { viewer { login } }\nEOF\n)\"", false),
+                ("gh api graphql -f query=\"$(cat <<EOF\nquery { viewer { login } }\nEOF\n)\"", false),
+                ("gh api graphql -f query=\"$(cat <<EOF\nquery { $X }\nEOF\n)\"", true),
+                // Minor 1: help counts only without a value, or with true.
+                ("gh repo delete o/r --yes --help=false", true),
+                ("gh repo delete o/r -h=false", true),
+                ("gh repo delete o/r --help=true", false),
+                ("gh repo delete o/r --help", false),
+                // Minor 4: sed's own script quoting the path isn't a read.
+                ("sed -i 's#gh/hosts.yml#gh/config.yml#' docs/x.md", false),
+                ("sed -i -e 's|~/.config/gh/hosts.yml|$GH_CONFIG_DIR/hosts.yml|g' docs/x.md", false),
+                ("sed -n '1r /home/u/.config/gh/hosts.yml' docs/x.md", true),
+                ("sed -n 's#x#y#w /tmp/gh/hosts.yml' docs/x.md", true),
+                ("sed -n 's/x/y/e' ~/.config/gh/hosts.yml", true),
+                ("sed '1e cat ~/.config/gh/hosts.yml ' docs/x.md", true),
+            ],
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn missing_helper_asks_with_the_fix() {

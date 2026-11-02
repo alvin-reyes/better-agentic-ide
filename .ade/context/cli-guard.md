@@ -50,12 +50,14 @@ Measured in a debug build on this machine (Story 1, AC10): a 256 KB script parse
 - `GH_LEXICON_EXCEPTIONS`: each leaf whose words hit the lexicon but isn't risk, with why.
 - A leaf the table doesn't know, an extension, a computed subcommand, or a computed word in a `Special` leaf asks. Under `xargs`/`parallel`/`find -exec {}`, anything but a complete read leaf asks.
 - User aliases come from gh's `config.yml` (`$GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`); a `!` alias asks.
-- `--help`, or `-h` on a leaf that doesn't define `-h`, gives no decision on any leaf.
+- `--help`, or `-h` on a leaf that doesn't define `-h`, gives no decision on any leaf, unless it has a value other than true (`--help=false`, `-h=false`: gh runs the command).
+- `gh api graphql` with a computed `query=` value asks. `$(cat <<EOF … EOF)` whose here-doc has no expansions is read as its literal text, everywhere a word is expanded.
 - A computed positional asks in a `Special` leaf (it could be a flag); a computed flag value asks only for `gh api -X`. `gh api`'s endpoint is judged by its literal parts: a computed part stands for one path segment, and the endpoint asks only if it names `secret-scanning`, its first segment is computed, or the segment where `secret-scanning` sits is computed (`repos/{o}/{r}/<here>`, `orgs/{o}/<here>`, `enterprises/{e}/<here>`).
 - Credentials (the folders: `$GH_CONFIG_DIR`, `$XDG_CONFIG_HOME/gh`, `~/.config/gh`, plus either variable when the line assigns it, strictly resolved):
   - a word or redirect naming `hosts.yml` there, exactly or as a glob; a word whose literal part before a glob or computed part lies inside a credential folder (`~/.config/gh/*`, `~/.config/gh/$F`, an `xargs -I` template), `for` lists included; a computed word ending in `gh/hosts.yml`;
-  - `gh/hosts.yml` (or a credential file's path) anywhere in an argument of a command that isn't text-only (`echo`, `printf`, `grep`/`egrep`/`fgrep`, `rg`, `ag`, `ls`, `which`, `type`, `whereis`, `git commit|log|tag`), code strings included;
-  - recursive readers over a credential folder or a parent (`cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `ditto`, `grep -r`, `rg` only with `--hidden`/`-.`/`-uu`, `find` only with `-exec`/`-execdir`/`-ok`/`-okdir`), or run with the current folder inside one;
+  - `gh/hosts.yml` (or a credential file's path) anywhere in an argument of a command that isn't text-only (`echo`, `printf`, `grep`/`egrep`/`fgrep`, `rg`, `ag`, `ls`, `which`, `type`, `whereis`, `git commit|log|tag`), code strings included; `sed`'s script words (each `-e` value, else the first operand) are exempt when they hold only `s` commands whose flags are `g`, `p`, `i`, `I`, `m`, `M` or digits;
+  - recursive readers over a credential folder or a parent (`cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `ditto`, `grep -r`, `find` only with `-exec`/`-execdir`/`-ok`/`-okdir`), or run with the current folder inside one;
+  - `rg` and `ag`, which skip hidden entries only *below* a search root: a search root (each path operand after the pattern, else the current folder) inside a credential folder, or above one with no hidden step down to it (`~/.config` → `gh`), asks; a hidden step (`~` → `.config`) counts only with `--hidden`, `-.`, `-uu` for rg or `-u` for ag;
   - names listed by a plain `find` whose start path (or the current folder) covers a credential folder, when they feed `xargs`, `parallel` (from stdin), a `while`/`until` loop, or a `$( )`;
   - the keychain CLIs `security find-generic-password|find-internet-password|dump-keychain|export` and `secret-tool lookup|search`; `git credential fill`, `git credential-<helper> get` and `git-credential-<helper> get`.
 
@@ -64,6 +66,7 @@ Measured in a debug build on this machine (Story 1, AC10): a 256 KB script parse
 - `npm run`/`test`/`start`, `pnpm X`, `yarn X`, `bun run`, install lifecycles; `turbo`, `nx`, `lerna` tasks. Each also runs `pre`/`post` scripts; bodies are re-parsed at most 4 levels deep.
 - `--workspaces`, `pnpm -r`, `yarn workspaces foreach` and a task runner select the workspace packages, **not the root**, unless `--include-workspace-root` is given; a repo with no workspaces is its own root. turbo's `//#task` is the root's task, `pkg#task` one package's.
 - A script already on the call stack (same package, same script) is a cycle: the walk stops there without asking.
+- A path selector (`--filter .`, `-F ./dir`, `{./dir}`, `-w ./dir`) selects the packages under that folder, and the root when the folder holds it.
 - Sourcing a missing file inside a virtualenv folder that `python -m venv DIR`, `python -m virtualenv DIR`, `virtualenv DIR` or `uv venv [DIR]` (`.venv`) creates earlier on the line gives no decision.
 
 ## Rules (`src-tauri/src/cli_rules.rs`)
@@ -74,5 +77,7 @@ Measured in a debug build on this machine (Story 1, AC10): a 256 KB script parse
 - `claude_settings::rule_matches(rule, command) -> bool` reproduces Claude Code's documented wildcard table, for tests.
 
 ## Limits (what the guard can't see; the guide states them)
+
+Root tasks a `turbo.json` declares (rather than `//#task` on the command line) are not followed: `turbo run X` classifies X in the workspace packages only.
 
 Deliberate obfuscation; shell aliases and functions defined outside the command; what a program does (`node deploy.js`, a non-shell shebang, a Makefile target, a dependency's install script); a copy of a binary under another name; runners outside the list (`deno run npm:x`); a computed name that resolves to something unguarded; a `claude` nested in a session (inherits `cli`, so it asks rather than denies); sessions under `allowManagedHooksOnly`, `--safe-mode` or a `disableAllHooks`; other agents; sessions outside the repository. A credential path built on `$GH_CONFIG_DIR` that the line doesn't assign is judged by the session's own `GH_CONFIG_DIR` (the hook's environment), not by what a later command might set.

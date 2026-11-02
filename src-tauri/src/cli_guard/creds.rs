@@ -89,6 +89,100 @@ fn word_path(ctx: &Ctx, cwd: &Path, w: &W) -> Option<(PathBuf, bool)> {
 /// path inside them is not read.
 const TEXT_ONLY: &[&str] = &["echo", "printf", "grep", "egrep", "fgrep", "rg", "ag", "ls", "which", "type", "whereis"];
 
+/// The indices of `sed`'s script words (each `-e` value, else the first
+/// operand) that are only `s` commands with no flag that reads, writes or
+/// runs anything.
+fn sed_safe_scripts(args: &[W]) -> Vec<usize> {
+    let mut scripts = Vec::new();
+    let mut operand = None;
+    let mut explicit = false;
+    let mut k = 0;
+    while k < args.len() {
+        let t = args[k].text.as_str();
+        if args[k].computed() {
+            operand = operand.or(Some(k));
+        } else if t == "-e" || t == "--expression" {
+            scripts.push(k + 1);
+            explicit = true;
+            k += 1;
+        } else if t.starts_with("--expression=") || (t.starts_with("-e") && t.len() > 2) {
+            explicit = true;
+        } else if t == "-f" || t == "--file" || t.starts_with("-f") || t.starts_with("--file=") {
+            explicit = true;
+            if t == "-f" || t == "--file" {
+                k += 1;
+            }
+        } else if !t.starts_with('-') || t == "-" {
+            operand = operand.or(Some(k));
+        }
+        k += 1;
+    }
+    if !explicit {
+        scripts.extend(operand);
+    }
+    scripts.into_iter().filter(|&i| args.get(i).is_some_and(|a| !a.computed() && sed_only_substitutes(&a.text))).collect()
+}
+
+/// A sed script of `s` commands only (line or `/re/` addresses allowed),
+/// with flags from `gpiImM` and digits.
+fn sed_only_substitutes(script: &str) -> bool {
+    let c: Vec<char> = script.chars().collect();
+    let mut i = 0;
+    // Read up to an unescaped `d`; false at the end.
+    let field = |i: &mut usize, d: char| -> bool {
+        while *i < c.len() {
+            if c[*i] == '\\' {
+                *i += 2;
+                continue;
+            }
+            if c[*i] == d {
+                *i += 1;
+                return true;
+            }
+            *i += 1;
+        }
+        false
+    };
+    loop {
+        while i < c.len() && (c[i].is_whitespace() || c[i] == ';') {
+            i += 1;
+        }
+        if i == c.len() {
+            return true;
+        }
+        // Addresses: numbers, `$`, `,`, `~`, `!`, and `/re/`.
+        loop {
+            match c.get(i) {
+                Some(ch) if ch.is_ascii_digit() || matches!(ch, '$' | ',' | '~' | '!' | ' ') => i += 1,
+                Some('/') => {
+                    i += 1;
+                    if !field(&mut i, '/') {
+                        return false;
+                    }
+                }
+                _ => break,
+            }
+        }
+        if c.get(i) != Some(&'s') {
+            return false;
+        }
+        let Some(&d) = c.get(i + 1) else { return false };
+        if d == '\\' || d == '\n' {
+            return false;
+        }
+        i += 2;
+        if !field(&mut i, d) || !field(&mut i, d) {
+            return false;
+        }
+        while i < c.len() && !matches!(c[i], ';' | '\n') {
+            if !(c[i].is_ascii_digit() || "gpiImM ".contains(c[i])) {
+                return false;
+            }
+            i += 1;
+        }
+    }
+}
+
 impl<'c, 'a> Guard<'c, 'a> {
     /// gh's credential folders, plus `$GH_CONFIG_DIR` and
     /// `$XDG_CONFIG_HOME/gh` when this line assigns them (strictly resolved).
@@ -140,6 +234,76 @@ impl<'c, 'a> Guard<'c, 'a> {
         }
     }
 
+    /// rg and ag skip hidden entries only *below* a search root: a root at or
+    /// above a credential folder reads it when no step from the root down to
+    /// it is hidden (`~/.config` to `gh`), or with `--hidden`/`-uu`/`-.`.
+    /// The roots are the path operands after the pattern, else the folder.
+    fn search_roots(&mut self, sc: &Scope, base: &str, args: &[W], dirs: &[PathBuf]) {
+        let vals = if base == "rg" { "ABCEMTdefgjmrt" } else { "ABCGgmp" };
+        let mut hidden = false;
+        // rg needs `-u` twice to search hidden entries; ag's `-u` is enough.
+        let mut unrestricted = 0;
+        let mut pattern_given = false;
+        let mut ops: Vec<&W> = Vec::new();
+        let mut k = 0;
+        let mut after_dashes = false;
+        while k < args.len() {
+            let a = &args[k];
+            let t = a.text.as_str();
+            if after_dashes || a.computed() || !t.starts_with('-') || t == "-" {
+                ops.push(a);
+                k += 1;
+                continue;
+            }
+            if t == "--" {
+                after_dashes = true;
+            } else if let Some(l) = t.strip_prefix("--") {
+                let name = l.split('=').next().unwrap_or(l);
+                hidden |= name == "hidden";
+                unrestricted += usize::from(name == "unrestricted");
+                if matches!(name, "regexp" | "file") {
+                    pattern_given = true;
+                }
+                if !l.contains('=') && matches!(name, "regexp" | "file" | "glob" | "iglob" | "type" | "type-not" | "max-count" | "context" | "before-context" | "after-context" | "max-depth" | "threads" | "replace" | "encoding" | "max-columns" | "type-add" | "ignore-file" | "path-separator" | "sort" | "sortr" | "pre" | "pre-glob" | "file-search-regex" | "depth") {
+                    k += 1;
+                }
+            } else {
+                let cs: Vec<char> = t[1..].chars().collect();
+                hidden |= cs.contains(&'.');
+                unrestricted += cs.iter().take_while(|c| !vals.contains(**c)).filter(|&&c| c == 'u').count();
+                for (i, c) in cs.iter().enumerate() {
+                    if vals.contains(*c) {
+                        if *c == 'e' || *c == 'f' {
+                            pattern_given = true;
+                        }
+                        if i + 1 == cs.len() {
+                            k += 1;
+                        }
+                        break;
+                    }
+                }
+            }
+            k += 1;
+        }
+        hidden |= unrestricted >= if base == "rg" { 2 } else { 1 };
+        // With `-e`/`-f` (or rg's `--files`) every operand is a path.
+        let paths: Vec<&W> = if pattern_given || args.iter().any(|a| a.is("--files")) { ops } else { ops.into_iter().skip(1).collect() };
+        let roots: Vec<PathBuf> = if paths.is_empty() {
+            vec![sc.cwd.clone()]
+        } else {
+            paths.iter().filter_map(|a| word_path(self.ctx, &sc.cwd, a).map(|(p, _)| p)).collect()
+        };
+        for r in &roots {
+            for d in dirs {
+                let reads = r.starts_with(d)
+                    || (d.starts_with(r) && (hidden || !d.strip_prefix(r).unwrap().components().any(|c| c.as_os_str().to_string_lossy().starts_with('.'))));
+                if reads {
+                    return self.ask(format!("ADE: {base} searches gh's credential folder ({})", d.display()));
+                }
+            }
+        }
+    }
+
     /// Commands that copy, archive or recursively read a folder holding a
     /// credential file; the keychain CLIs and git's credential helpers; and
     /// a credential path inside any argument of a command that isn't
@@ -161,7 +325,10 @@ impl<'c, 'a> Guard<'c, 'a> {
         let dirs = self.line_cred_dirs(sc);
         if !TEXT_ONLY.contains(&base) && !(base == "git" && matches!(first, "commit" | "log" | "tag")) {
             let names: Vec<String> = dirs.iter().map(|d| d.join("hosts.yml").to_string_lossy().into_owned()).collect();
-            if let Some(a) = args.iter().find(|a| a.text.contains("gh/hosts.yml") || names.iter().any(|n| a.text.contains(n.as_str()))) {
+            // sed's own script quoting the path edits text, unless it reads or writes files.
+            let exempt = if base == "sed" { sed_safe_scripts(args) } else { Vec::new() };
+            let named = |(i, a): &(usize, &W)| !exempt.contains(i) && (a.text.contains("gh/hosts.yml") || names.iter().any(|n| a.text.contains(n.as_str())));
+            if let Some((_, a)) = args.iter().enumerate().find(named) {
                 return self.ask(format!("ADE: {base} is given gh's credential file ({})", a.show()));
             }
         }
@@ -169,8 +336,7 @@ impl<'c, 'a> Guard<'c, 'a> {
         let reader = match base {
             "cp" => args.iter().any(|a| short_has(a, "rRa") || a.is("--recursive") || a.is("--archive")),
             "grep" | "egrep" | "fgrep" => args.iter().any(|a| short_has(a, "rR") || a.is("--recursive") || a.text.starts_with("--directories=recurse")),
-            // rg skips hidden folders, `.config` included, unless told not to.
-            "rg" => args.iter().any(|a| a.is("--hidden") || a.is("-.") || a.is("--unrestricted") || (short_has(a, "u") && a.text.matches('u').count() >= 2)),
+            "rg" | "ag" => return self.search_roots(sc, base, args, &dirs),
             // Plain find only lists names (owner ruling, 2026-11-02).
             "find" => args.iter().any(|a| ["-exec", "-execdir", "-ok", "-okdir"].iter().any(|x| a.is(x))),
             "rsync" | "scp" | "tar" | "zip" | "7z" | "7za" | "ditto" => true,
@@ -218,7 +384,15 @@ mod tests {
             ("cat $GH_CONFIG_DIR/config.yml", false),
             ("GH_CONFIG_DIR=/z; cat $GH_CONFIG_DIR/hosts.yml", true),
             ("GH_CONFIG_DIR=/z; cat /x/cfg/config.yml", false),
+            ("rg token /x/cfg", true),
+            ("rg token /x", true),
         ] {
+            let v = classify(cmd, &ctx(&fs, &env));
+            assert_eq!(matches!(v, Verdict::Ask(_)), want, "{cmd}: {v:?}");
+        }
+        // The review's case: a config folder at /srv/ghcfg.
+        let env = |k: &str| (k == "GH_CONFIG_DIR").then(|| "/srv/ghcfg".to_string());
+        for (cmd, want) in [("rg token /srv/ghcfg", true), ("rg token /srv", true), ("rg token /srv/other", false)] {
             let v = classify(cmd, &ctx(&fs, &env));
             assert_eq!(matches!(v, Verdict::Ask(_)), want, "{cmd}: {v:?}");
         }
@@ -262,6 +436,26 @@ mod tests {
                 ("rg token ~", false),
                 ("rg --hidden token ~", true),
                 ("rg -uu token ~/.config", true),
+                // Code review 2, B1: rg and ag skip hidden entries only below a
+                // search root; a root at or above the folder with no hidden
+                // step down to it is searched in full.
+                ("rg oauth_token ~/.config/gh", true),
+                ("rg token ~/.config", true),
+                ("rg -l . ~/.config/gh", true),
+                ("cd ~/.config/gh && rg token", true),
+                ("cd ~/.config && rg token", true),
+                ("cd ~ && rg token", false),
+                ("rg -e token -g '*.yml' ~/.config/gh", true),
+                ("rg token src ~/.config/gh", true),
+                ("rg token src", false),
+                ("ag oauth ~/.config/gh", true),
+                ("ag token ~/.config", true),
+                ("ag token ~", false),
+                ("ag --hidden token ~", true),
+                ("cd ~/.config/gh/sub && rg token", true),
+                ("rg -u token ~", false),
+                ("rg -. token ~", true),
+                ("ag -u token ~", true),
                 // More spellings of the same reads.
                 ("cat \"$HOME/.config/gh/hosts.yml\"", true),
                 ("cat /home/u/.config/gh/hosts.yml", true),

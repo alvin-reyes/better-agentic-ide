@@ -544,7 +544,9 @@ impl Table {
             }
         }
         // `--help` (or `-h` where the leaf doesn't define it) only prints help.
-        if flags.iter().any(|(f, _)| f == "help" || f == "h") {
+        // gh runs the command for `--help=false`: only a bare or true help flag is help.
+        let truthy = |v: &Option<W>| v.as_ref().map_or(true, |v| matches!(v.text.as_str(), "true" | "TRUE" | "True" | "t" | "T" | "1"));
+        if flags.iter().any(|(f, v)| (f == "help" || f == "h") && truthy(v)) {
             return (GhOut::None, Some(p));
         }
         // A computed positional could be a flag; a computed value matters only
@@ -660,6 +662,11 @@ fn take_flag(node: &Node, args: &[W], i: usize, out: &mut Vec<(String, Option<W>
             out.push((long, args.get(i + 1).cloned()));
             return if i + 1 < args.len() { 2 } else { 1 };
         }
+        // pflag's `-x=value` for a flag without a value (`-h=false`).
+        if chars.get(k + 1) == Some(&'=') {
+            out.push((long, Some(W { text: chars[k + 2..].iter().collect(), ..args[i].clone() })));
+            return 1;
+        }
         out.push((long, None));
     }
     1
@@ -711,6 +718,7 @@ fn api(p: &str, flags: &[(String, Option<W>)], pos: &[&W]) -> GhOut {
         let query = fields.iter().find_map(|f| f.strip_prefix("query="));
         return match query {
             None => risk("sends a graphql request whose query the guard can't see"),
+            Some(q) if q.contains([super::resolve::Q_PH, super::resolve::U_PH]) => risk("sends a graphql query that is computed here, so the guard can't see whether it is a mutation"),
             Some(q) if q.starts_with('@') => risk("sends a graphql query from a file"),
             Some(q) if q.contains("mutation") => risk("sends a graphql mutation"),
             Some(q) if q.contains("secretScanning") => risk("reads secret-scanning alerts"),
