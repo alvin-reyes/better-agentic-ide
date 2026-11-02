@@ -65,7 +65,11 @@ listening and the helper exists (else none of the four is set):
 (state unchanged), in this order: a missing or malformed `X-ADE-PTY` (401; it
 was 400 before ADR 0014), a token that is wrong, missing or not that PTY's
 (constant-time compare, 401), any method but `POST` (405), any `Origin` (403),
-a `Host` other than `127.0.0.1:<port>` (403), a body over 16 KB (413). No CORS
+a `Host` other than `127.0.0.1:<port>` (403), a body over 16 KB (413).
+`X-ADE-PTY` is well formed when it is a decimal `u32` (`trim().parse::<u32>()`):
+surrounding whitespace, a leading `+` and leading zeros are accepted and mean
+the same id (` 9`, `+9` and `009` are all PTY 9). Anything else (empty, a sign
+`-`, non-digits, a value above 4294967295) is malformed, so 401. No CORS
 headers, bodies never logged. Every answer's body is `{}`. **Proposed (ADR 0014, not built):** this holds for `/` only; `serve` routes by path, `/open` answers per `terminal-open.md`, other paths 404.
 
 ## States

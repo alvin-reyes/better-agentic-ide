@@ -1124,6 +1124,14 @@ mod tests {
                 ),
             ),
             ("no PTY", 401, request(port, "POST", &format!("X-ADE-Token: {}\r\n", st.token_for(9)), &start_body("x"))),
+            // The token is checked before the method, Origin and Host.
+            ("Origin, wrong token", 401, request(port, "POST", "X-ADE-Token: nope\r\nX-ADE-PTY: 9\r\nOrigin: http://evil.example\r\n", &start_body("x"))),
+            ("GET, wrong token", 401, request(port, "GET", "X-ADE-Token: nope\r\nX-ADE-PTY: 9\r\n", "")),
+            (
+                "foreign Host, wrong token",
+                401,
+                request(port, "POST", "X-ADE-Token: nope\r\nX-ADE-PTY: 9\r\n", &start_body("x")).replace(&format!("Host: 127.0.0.1:{port}"), &format!("Host: localhost:{port}")),
+            ),
         ];
         for (name, code, raw) in cases {
             let answer = send(port, &raw);
@@ -1153,7 +1161,7 @@ mod tests {
         for bad in ["", "abc", "-1", "4294967296"] {
             // The token is the right one for a valid id, and for the id the
             // header would be if it were read leniently.
-            for token in [st.token_for(9), st.token_for(0)] {
+            for token in [st.token_for(9), st.token_for(0), st.token_for(1)] {
                 let raw = request(port, "POST", &format!("X-ADE-Token: {token}\r\nX-ADE-PTY: {bad}\r\n"), &start_body("x"));
                 let answer = send(port, &raw);
                 assert!(status_line(&answer).contains(" 401"), "X-ADE-PTY {bad:?}: {answer}");
