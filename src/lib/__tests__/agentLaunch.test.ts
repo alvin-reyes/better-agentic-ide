@@ -34,6 +34,8 @@ import { dispatchAgent, prepareAgentLaunch } from "../agentLaunch";
 import { __resetLaunchRulesForTests } from "../launchRules";
 import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
 
+/** A well-formed Continuous deny list, for the malformed shapes that are wrong elsewhere. */
+const D = ["Bash(*orgo c create*)"];
 const SETTINGS = `--settings '{"permissions":{"ask":["mcp__*orgo*__*create*","mcp__*orgo*__*delete*"]}}'`;
 
 beforeEach(() => {
@@ -76,23 +78,26 @@ describe("prepareAgentLaunch", () => {
   });
 
   it("an answer that isn't a rule list is no rules", async () => {
-    io.malformed = { ask: "mcp__*orgo*__*create*", continuousDeny: [], guard: null };
+    io.malformed = { ask: "mcp__*orgo*__*create*", continuousDeny: D, guard: null };
     const r = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", {});
     expect(!r.ok && r.error).toMatch(/couldn't load its permission rules/);
     expect(io.writes).toEqual([]);
   });
 
   it("an empty rule list is no rules", async () => {
+    // Each wrong in exactly one way, so each check is tested on its own.
     const bad: unknown[] = [
-      { ask: [], continuousDeny: [], guard: null },
+      { ask: [], continuousDeny: D, guard: null },
       { ask: ["mcp__*orgo*__*create*"], continuousDeny: "x", guard: null },
       { ask: ["mcp__*orgo*__*create*"], continuousDeny: [1], guard: null },
+      // An empty deny list would drop Continuous mode's hard stop without a word.
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: null },
       { ask: ["mcp__*orgo*__*create*"], guard: null },
-      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: { interactive: "X" } },
-      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: { headless: "Y" } },
-      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: { interactive: "X", headless: 1 } },
-      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: "X" },
-      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [] },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: D, guard: { interactive: "X" } },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: D, guard: { headless: "Y" } },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: D, guard: { interactive: "X", headless: 1 } },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: D, guard: "X" },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: D },
       null,
     ];
     for (const answer of bad) {
@@ -107,6 +112,27 @@ describe("prepareAgentLaunch", () => {
       expect(next.ok && next.command, label).toContain(SETTINGS);
       expect(io.ruleLoads, label).toBe(2);
       __resetLaunchRulesForTests();
+    }
+  });
+
+  it("an empty continuous deny list is no rules", async () => {
+    // The hard stop fails closed: no launch at all, Continuous or not, without the deny list.
+    for (const continuous of [true, false]) {
+      __resetLaunchRulesForTests();
+      io.ruleLoads = 0;
+      io.writes.length = 0;
+      io.malformed = { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*delete*"], continuousDeny: [], guard: null };
+      const refused = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", { continuous });
+      expect(refused, `continuous ${continuous}`).toEqual({
+        ok: false,
+        error: expect.stringMatching(/couldn't load its permission rules, so the agent was not started/),
+      });
+      expect(io.writes, `continuous ${continuous}`).toEqual([]);
+      // Not cached: the next launch asks again and gets the real list.
+      const next = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", { continuous });
+      expect(next.ok, `continuous ${continuous}`).toBe(true);
+      expect(io.ruleLoads, `continuous ${continuous}`).toBe(2);
+      if (continuous) expect(next.ok && next.command).toContain(" --disallowedTools 'Bash(*orgo c create*)' ");
     }
   });
 

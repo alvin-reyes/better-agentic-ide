@@ -40,7 +40,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     switch (command) {
       case "launch_rules":
         if (tauri.failRules) throw new Error("ipc down");
-        return { ask: tauri.ask, continuousDeny: [], guard: tauri.guard };
+        return { ask: tauri.ask, continuousDeny: ["Bash(*orgo c create*)"], guard: tauri.guard };
       case "pty_line_editor_ready": {
         const answer = !tauri.ptyOpen(Number(args.id)) ? null : tauri.neverReady ? false : tauri.ready.length ? tauri.ready.shift()! : null;
         tauri.events.push(`ready:${answer}`);

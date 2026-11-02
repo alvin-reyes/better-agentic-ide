@@ -419,7 +419,9 @@ mod tests {
         for command in [
             "orgo c 'create'",
             "orgo \"c\" create",
-            "orgo  c create",
+            // Not `orgo  c create` (two spaces): Claude Code 2.1.314 normalises
+            // whitespace and line continuations before matching, and was verified
+            // to deny it. This matcher doesn't model that, so it asserts neither way.
             "npx orgo@2.3.0 c create",
             "pnpm dlx orgo@latest c create",
             "node /x/dist/cli.js c create",

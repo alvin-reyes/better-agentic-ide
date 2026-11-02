@@ -34,7 +34,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       case "check_command_exists":
         throw new Error("not installed");
       case "launch_rules":
-        return { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: null };
+        return { ask: ["mcp__*orgo*__*create*"], continuousDeny: ["Bash(*orgo c create*)"], guard: null };
       case "pty_line_editor_ready": {
         const answer = !tauri.ptyOpen(Number(args.id)) ? null : tauri.neverReady ? false : tauri.ready.length ? tauri.ready.shift()! : null;
         tauri.events.push(`ready:${args.id}:${answer}`);

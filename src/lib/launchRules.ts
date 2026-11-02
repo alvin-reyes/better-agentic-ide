@@ -28,11 +28,16 @@ export const RULES_UNAVAILABLE = "ADE couldn't load its permission rules, so the
 
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
 
-/** The rules, or null when the answer isn't their shape. An empty `ask` would launch agents with no rules. */
+/**
+ * The rules, or null when the answer isn't their shape. An empty `ask` would
+ * launch agents with no rules, and an empty `continuousDeny` would launch
+ * Continuous agents without their hard stop, so both are refused.
+ */
 function checked(r: unknown): LaunchRules | null {
   if (typeof r !== "object" || r === null) return null;
   const { ask, continuousDeny, guard } = r as Record<string, unknown>;
-  if (!isStrings(ask) || ask.length === 0 || !isStrings(continuousDeny)) return null;
+  if (!isStrings(ask) || ask.length === 0) return null;
+  if (!isStrings(continuousDeny) || continuousDeny.length === 0) return null;
   if (guard === null) return { ask: [...ask], continuousDeny: [...continuousDeny], guard: null };
   if (typeof guard !== "object") return null;
   const { interactive, headless } = guard as Record<string, unknown>;
