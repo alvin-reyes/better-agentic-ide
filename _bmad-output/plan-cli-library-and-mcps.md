@@ -840,6 +840,58 @@ The five commands, unchanged.
   - So V8 also replays a sample of the owner's **ordinary sessions** (at least 500 calls from at least 5 projects).
   - **If the measured rate on the ordinary sample is above 1%, the owner decides before Story 2 ships** whether to accept it, narrow the triggers, or ship Story 1 only behind the file entry (m-h).
 
+**QA record (2026-11-02, HEAD `861878f` on `feat/cli-guard`; code `c7d5fa2` + `e13d5e9`, `886ac0a`, `80a0a4d`; plan synced by `3b21b71`, `e197c91`, `7171c09`, `861878f`).**
+
+**Verdict: Story 1 is Done.** The five commands pass run in sequence, every AC maps to a test that ran, the slice is clean, and the contract matches the code. Per ADR 0009 (read on `docs/claude-md-paths`) the manual checks below are recorded, not assumed; this plan names none of them as gating Story 1 (V1, V2 and V5 gate the guide's Continuous-mode claim, not Done; V8's ordinary-sessions sample decides Story 2, not Story 1).
+
+*Verification command, run by QA in sequence on Linux (root), real output:*
+
+| Command | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0, no output |
+| `npm test` | exit 0. `Test Files 150 passed (150)`, `Tests 1675 passed (1675)`. `BoardPanel.test.tsx` passed on the first run; no rerun was needed |
+| `cd src-tauri && cargo test` | exit 0. lib: `503 passed; 0 failed; 1 ignored` (the ignore is `usage.rs` `enable_agent_hooks_for_the_check_script`, not in this slice). Other targets: 0 (bin), 12 (`bmadswitch_e2e`), 2 (`bmadv6_e2e`) passed. One warning, `platform.rs:98 which_command` never used (old, not in the diff) |
+| `cd relay && cargo test` | exit 0. 11 + 2 + 86 + 14 + 32 + 11 + 68 + 33 + 9 = 266 passed, 0 failed |
+| `cd mobile && npx tsc --noEmit && npx jest` | exit 0. `Tests: 6 passed, 6 total` |
+
+Counts equal the developer's last run (1675 / 503 + 1 ignored / 266 / 6). The 12 `hook_forward::tests` (the forwarder's existing tests) ran and passed, which is AC9's last bullet.
+
+*Every AC maps to a test that ran* (each name found in the `cargo test` output, not only in the source; the cases each AC lists were also matched against the test sources, 416 of 445 quoted spans found verbatim and the other 29 checked by hand: test-file names, `…` placeholders, and the AC2 write-then-run cases, which the tests spell with `w.sh` instead of `x.sh`):
+
+| AC | Test (ran, passed) |
+|---|---|
+| 1 | `lexer.rs` › `lexes_the_shapes_agents_write` (shapes, the 20 computed cases, the parse failures, the symlink `deploy`); `resolve.rs` › `split_words_keeps_quoting`; `mod.rs` › `pins_found_by_the_mutation_pass` (the other assignment forms) |
+| 2 | `unwrap.rs` › `unwraps_every_documented_form` (AC2, AC2_HARMLESS and AC2_EMPTY tables: wrappers, scripts by path, text from disk, built binaries, directory variables, `$HOME`, the missing-path rule, the read budget, write-then-run, templates, evaluator code, run-time arguments, lookups, `eval`, paths); `mod.rs` › `code_review_1` (virtualenvs); `scripts.rs` › `monorepo_roots_dont_recurse` (monorepo roots and the pnpm selectors) |
+| 3 | `tables.rs` › `gh_table_covers_the_reference` (214 headings, no unclassed leaf, the plan's lists word for word), `gh_lexicon` (every lexicon leaf is risk or has a written exception, and no exception is stale) |
+| 4 | `mod.rs` › `gh_corpus` (over 3,000 generated commands, 19 or 20 variants per leaf form) |
+| 5 | `mod.rs` › `gh_hand_corpus`; `code_review_1` (post-approval sync), `code_review_2` (review 3: computed graphql, here-docs, help with a value, sed), `code_review_3` (glob roots, sed `e`) |
+| 6 | `creds.rs` › `credential_reads_ask`, `credential_paths_from_the_environment` |
+| 7 | `bounds.rs` › `bounded_and_fail_closed`, `nesting_depth_is_counted_without_recursion`; `mod.rs` › `helper_contract` (stdin read to its end, 3 MB asks) |
+| 8 | `mod.rs` › `headless_denies` |
+| 9 | `mod.rs` › `helper_contract`; the `hook_forward::tests` |
+| 10 | `mod.rs` › `classify_is_fast`. QA ran it four more times with `--nocapture`: 256 KB script 175 to 377 ms (the 377 was the cold first run), ltmain-shaped 136 to 211 ms, full 4 MB budget 173 to 220 ms; the limits are 500 ms and 1 s |
+| 11 | `mod.rs` › `documented_escapes` |
+| 12 | `cli_rules.rs` › `gh_rules_cover_canonical_risks`; `claude_settings.rs` › `matches_claude_codes_documented_examples` |
+| 13 | `mod.rs` › `missing_helper_asks_with_the_fix` (runs the real shell-form command through `/bin/sh -c`, both variants, all four entry-point values) |
+
+*Extra checks by QA:*
+- The debug `ade-hook` built from this tree was run by hand with PreToolUse JSON on stdin: `gh repo delete o/r` asks (exit 0); `npm test` and `gh pr view 1` print nothing; `bash -c "gh release create v1"` and `cat ~/.config/gh/hosts.yml` ask; `x=g; ${x}h pr view 1` prints nothing; `Monitor` asks like Bash; a `Read` call prints nothing; `--headless` and `CLAUDE_CODE_ENTRYPOINT=sdk-cli` deny with the "ask the user to run it themselves" suffix; non-JSON stdin asks; with no arguments the forwarder still prints `{}`. No real `gh` was run.
+- Mutation spot-check, on a throwaway copy of `cli_guard/` (the story's files were not touched): 13 one-line mutants, 9 killed (flip `repo delete` and `auth token` out of risk; drop `sdk-py`; drop `Monitor`; drop `nohup`; drop `-okdir` from the unwrap `find` rule; `MAX_DEPTH` 80; `BUDGET` 8 MB; drop the `secretScanning` graphql check). 4 survived: `MAX_INPUT` doubled (nothing tests a command between 256 and 512 KB), `-okdir` dropped from the credential rule, `secret-tool search` dropped, and `MAX_CALLS` 2,000 raised to 200,000. On the real build `find ~/.config/gh -okdir cat {} \;` and `secret-tool search service gh:github.com` still ask through other rules, so these are test-strength gaps on contract details, not wrong behaviour. None is an AC case. The developer's equivalent-mutant claims (D10, G61, N13 accepted; D15, D16, T09, T16, T20, T23, R02 argued) were not re-run by QA; QA relies on code review 3's PASS WITH MINORS at `886ac0a` and the fixes in `80a0a4d`.
+
+*Slice (`git diff bda1f9a..HEAD`):* the guard `main.rs` subcommand, `cli_guard/**` with its two testdata files, `cli_rules.rs`, `claude_settings.rs` (`rule_matches` and its test), the two `mod` lines in `lib.rs`, `.ade/context/cli-guard.md`, and the plan syncs. Also `.ade/knowledge/developer.md` and `adversarial-reviewer.md` (appended notes, each role's own file). No Story 2 (launch wiring), Story 3 (UI) or Story 4 code; no TypeScript, relay or mobile file; no change to `Cargo.toml`, `Cargo.lock`, `ade-hook/Cargo.toml`, `package.json` or the lockfile, so no new dependency.
+
+*Contract (`.ade/context/cli-guard.md`) against the code:* the `run` and `classify` signatures, `Ctx` and the read-only `Fs` trait, the 8 MB `main` thread, the 1.6 MB stdin cap (`MAX_INPUT * 6 + 64 KB`), every row of the caps table (`bounds.rs`), the `GUARD_CMD` strings (`guard_command`), `MISSING_HELPER` (names Repair guard, Remove guard and the `settings.local.json` entry, holds no `'`), the headless suffix, and the fixture header (gh 2.89.0, 214 headings) all match. One wording nit, not a defect: `MISSING_HELPER` starts "ADE command guard missing", not "ADE: " like the other reasons.
+
+*Minor findings, none blocking:*
+- Design Notes (1) still says `run(stdin, stdout, env, ctx)`; the code, the tests and the contract have `run(stdin, stdout, headless, env, fs)`. The contract is right; the plan line is stale.
+- The four surviving mutants above are untested contract details (the 256 KB cap's exact value, the 2,000-call cap, `-okdir` in the credential rule, `secret-tool search`). Worth a pin the next time the file is open.
+
+*Manual checks, recorded, not assumed (ADR 0009):*
+- **Release helper on the reviewer's probe scripts** (`scratchpad/scripts/ghforms.sh`, `scratchpad/probe4/`): not run; the scripts are not in this worktree or any scratchpad QA can reach; pending the owner. (QA's own hand run of the debug helper, above, is a smaller substitute, not this check.)
+- **V8, the local corpus:** the developer's figure in this plan is 0.51% including true asks; QA did not re-measure it; pending the owner.
+- **V8, the ordinary-sessions sample** (at least 500 calls from at least 5 projects): not run; needs the owner's own sessions; pending the owner. If it is above 1% the owner decides before Story 2 ships. It does not gate Story 1.
+- **V1, V2, V5 and the other V-checks** (how a real Claude Code treats the hook): not run: need the running app and a real Claude Code; pending the owner. They gate the guide's Continuous-mode claim, not Done.
+
 ## Slice (1)
 
 `src-tauri/ade-hook/src/main.rs` (the `guard` subcommand only); `src-tauri/src/cli_guard/**`; `src-tauri/src/cli_rules.rs`; `src-tauri/src/claude_settings.rs` (`rule_matches`); `lib.rs` (the modules only); `.ade/context/cli-guard.md`.
