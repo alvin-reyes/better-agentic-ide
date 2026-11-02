@@ -154,7 +154,10 @@ sequenceDiagram
   - The cap of 32 counts admitted requests in flight, so it also bounds
     these threads.
 - **Per-PTY tokens (amends ADR 0003).** Each terminal's `ADE_HOOK_TOKEN` is
-  `HMAC-SHA-256(master, "pty:<id>")`.
+  the lowercase hex of `HMAC-SHA-256(master, "pty:<id>")`.
+  - The master key is 32 random bytes from `getrandom`, new each launch,
+    held as raw bytes in ADE's memory only: never hex-encoded, logged, put in
+    an environment or on a command line. Only the per-PTY tokens are hex.
   - `screen()` parses `X-ADE-PTY` first. A missing or malformed id is 401 (it
     was 400), then the token is checked.
   - This relies on PTY ids never being reused; a test pins `reserve_id`.
@@ -323,7 +326,24 @@ small.
 - **`activeCwd` follows the tab, not the view in sight** (M4, ruled
   2026-11-02, per the UX): showing "dev server" in another folder doesn't
   re-point the project banner, the board, Fleet's "This terminal" or the
-  contract actions. The 2a developer has this ruling.
+  contract actions. The 2a developer has this ruling; 2a reads it through
+  `tabFolderPaneId(tab)` (`tabDisplay.ts`), the own view's active pane.
+- **Placements story 2a made itself, confirmed** (checked against its
+  branch, 2026-11-02):
+  - `setActivePaneInTab` with a pane id no view holds falls back to the view
+    in sight. That keeps main's behaviour (it set the id whatever it was) for
+    a no-behaviour-change story.
+  - `closePane` can't close a view's last pane, as on main for a tab. Story
+    2b adds the one exception the UX asks for: on a sub-terminal's last pane,
+    ⌘⇧W closes the sub-terminal (through `useGuardedClose`). The own view's
+    last pane stays a no-op.
+  - 2a's `saveSession`/`loadSession` write and read only the own view, as
+    `root`. `subViews` and `shownView` are story 2b's; until then a tab has
+    no other view to lose.
+  - `SettingsPanel.tsx:201` reads the own view (the table's row).
+  - `useTerminal.ts:74` and `:610` read all views (the table's row).
+  - `App.tsx:96` (`activePtyId`) reads the view in sight; `activeCwd`
+    (`App.tsx:290`) reads the own view through `tabFolderPaneId`.
 - **What enforces it.** The field removal, plus one vitest per `tabStore`
   function in the table, each run with a pane in a hidden view, plus a test
   that `activeCwd` is the own view's while a sub-terminal in another folder
