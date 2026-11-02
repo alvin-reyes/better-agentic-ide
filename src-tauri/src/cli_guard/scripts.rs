@@ -100,6 +100,10 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
         }
         let Some(fd) = fs.read(path, self.budget.min(SCAN_CAP)) else {
+            // A virtualenv made earlier on the line (`python -m venv .venv && . .venv/bin/activate`).
+            if self.generated.iter().any(|g| path.starts_with(g)) {
+                return Out::Unknown;
+            }
             self.trigger(sc, format!("ADE: this runs {}, which is missing or unreadable, so the guard can't see what it runs", path.display()));
             return Out::Unknown;
         };
@@ -401,9 +405,13 @@ impl<'c, 'a> Guard<'c, 'a> {
             ("lerna", "run") => pos(&args[1..]).into_iter().take(1).collect(),
             _ => return Out::Unknown,
         };
-        let sel = Sel { all: true, ..Sel::default() };
         for t in tasks {
-            let name = t.text.rsplit('#').next().unwrap_or(&t.text).to_string();
+            // `//#task` is the root's task; `pkg#task` one package's; `task` every package's.
+            let (sel, name) = match t.text.split_once('#') {
+                Some(("//", n)) => (Sel::default(), n.to_string()),
+                Some((pkg, n)) => (Sel { names: vec![pkg.to_string()], ..Sel::default() }, n.to_string()),
+                None => (Sel { all: true, ..Sel::default() }, t.text.clone()),
+            };
             self.scripts(sc, &sel, &W { text: name, ..t.clone() }, &[]);
         }
         Out::Unknown
@@ -439,8 +447,15 @@ impl<'c, 'a> Guard<'c, 'a> {
             let n = name.text.as_str();
             for s in [format!("pre{n}"), n.to_string(), format!("post{n}")] {
                 if let Some(body) = json["scripts"][s.as_str()].as_str() {
+                    // A script already running is a cycle: npm would loop, so it adds nothing to judge.
+                    let key = (d.clone(), s.clone());
+                    if self.script_stack.contains(&key) {
+                        continue;
+                    }
                     let text = if s == n && !extra.is_empty() { format!("{body} {}", quote_args(extra)) } else { body.to_string() };
+                    self.script_stack.push(key);
                     self.script_body(&text, strict, d.clone());
+                    self.script_stack.pop();
                 }
             }
         }
@@ -501,8 +516,14 @@ impl<'c, 'a> Guard<'c, 'a> {
     fn dirs(&mut self, sc: &Scope, sel: &Sel) -> Vec<PathBuf> {
         let root = sel.dir(sc);
         if sel.all {
-            let mut v = vec![root.clone()];
-            v.extend(self.select(&root, &[], true));
+            // pnpm -r, npm --workspaces and turbo run the packages, not the
+            // root, unless asked to; a repo with no workspaces is its root.
+            let pkgs = self.select(&root, &[], true);
+            if pkgs.is_empty() {
+                return vec![root];
+            }
+            let mut v = if sel.root { vec![root] } else { Vec::new() };
+            v.extend(pkgs);
             return v;
         }
         if sel.names.is_empty() {
@@ -602,7 +623,10 @@ fn describe(e: &ParseError) -> String {
 pub struct Sel {
     pub dir: Option<PathBuf>,
     pub names: Vec<String>,
+    /// Every workspace package (`--workspaces`, `-r`, a task runner).
     pub all: bool,
+    /// The workspace root too (`--include-workspace-root`, turbo's `//#task`).
+    pub root: bool,
 }
 
 impl Sel {
@@ -626,6 +650,10 @@ impl Sel {
                 }
                 "--workspaces" | "-ws" => {
                     self.all = true;
+                    k += 1;
+                }
+                "--include-workspace-root" | "-iwr" => {
+                    self.root = true;
                     k += 1;
                 }
                 "--prefix" | "-C" => {
@@ -663,6 +691,10 @@ impl Sel {
                 }
                 "-r" | "--recursive" => {
                     self.all = true;
+                    k += 1;
+                }
+                "--include-workspace-root" => {
+                    self.root = true;
                     k += 1;
                 }
                 "-C" | "--dir" => {
@@ -710,5 +742,59 @@ impl Sel {
             k += 1;
         }
         (name, extra)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::testfs::*;
+
+    /// Code review 1, major 1: a root script that runs the workspace (`turbo
+    /// run build`, `pnpm -r test`) doesn't call itself, and a script already
+    /// on the call stack ends the walk without asking.
+    #[test]
+    fn monorepo_roots_dont_recurse() {
+        let root = r#"{"name":"root","private":true,"workspaces":["packages/*"],"scripts":{"build":"turbo run build","test":"pnpm -r test","lint":"turbo lint","check":"npm run lint --workspaces","release":"gh release create v1","loop":"npm run loop2","loop2":"npm run loop","y":"gh release delete v1"}}"#;
+        let fs = FakeFs::new()
+            .file("/w/package.json", root)
+            .file("/w/pnpm-workspace.yaml", "packages:\n  - \"packages/*\"\n")
+            .file("/w/turbo.json", "{}\n")
+            .file("/w/packages/a/package.json", r#"{"name":"a","scripts":{"build":"tsc","test":"vitest run","lint":"eslint .","y":"echo y","z":"echo z"}}"#)
+            .file("/w/packages/b/package.json", r#"{"name":"b","scripts":{"build":"tsc","test":"vitest run","deploy":"gh release upload v1 dist/*","z":"gh release delete v2"}}"#);
+        check(
+            &fs,
+            &[
+                ("npm run build", false),
+                ("pnpm test", false),
+                ("npm test", false),
+                ("pnpm build", false),
+                ("turbo run build", false),
+                ("turbo build", false),
+                ("pnpm -r test", false),
+                ("pnpm -r run build", false),
+                ("npm run lint", false),
+                ("turbo lint", false),
+                ("npm run check", false),
+                ("npm run build --workspaces", false),
+                ("npm run loop", false),
+                // The root's own `y` is not a package's: only the packages run.
+                ("turbo run y", false),
+                ("pnpm -r run y", false),
+                ("npm run y --workspaces", false),
+                ("npm run y", true),
+                // `pkg#task` is that package's task only.
+                ("turbo run a#z", false),
+                ("turbo run b#z", true),
+                // The root's own release still asks, and so does a package's deploy.
+                ("npm run release", true),
+                ("pnpm release", true),
+                ("turbo run //#release", true),
+                ("pnpm -r --include-workspace-root release", true),
+                ("npm run release --workspaces --include-workspace-root", true),
+                ("turbo run deploy", true),
+                ("pnpm -r run deploy", true),
+                ("npm run deploy --workspaces", true),
+            ],
+        );
     }
 }

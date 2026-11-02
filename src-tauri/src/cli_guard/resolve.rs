@@ -460,6 +460,11 @@ impl<'c, 'a> Guard<'c, 'a> {
         if name == "HOME" && !sc.vars.contains_key("HOME") {
             return home_text(self.ctx);
         }
+        // gh's config folders come from the session's environment when the
+        // line doesn't assign them, as `$HOME` does.
+        if matches!(name, "GH_CONFIG_DIR" | "XDG_CONFIG_HOME") && !sc.vars.contains_key(name) {
+            return (self.ctx.env)(name).filter(|v| v.starts_with('/'));
+        }
         if sc.disq || depth > 4 {
             return None;
         }
@@ -522,9 +527,12 @@ impl<'c, 'a> Guard<'c, 'a> {
     pub fn sub_list(&mut self, sc: &mut Scope, list: &List) {
         let cwd = sc.cwd.clone();
         self.depth += 1;
-        self.list_any(sc, list);
+        let out = self.list_any(sc, list);
         self.depth -= 1;
         sc.cwd = cwd;
+        if matches!(out, super::unwrap::Out::CredNames) {
+            self.ask("ADE: an argument is the list of files a find over gh's credential folder prints".into());
+        }
     }
 
     /// Expand one word into the words it becomes.

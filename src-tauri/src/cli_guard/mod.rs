@@ -113,6 +113,11 @@ pub struct Guard<'c, 'a> {
     pub writes: std::collections::HashMap<PathBuf, scripts::Written>,
     /// An earlier command on the line changes the tree (checkout, unpack, download).
     pub tree_changed: bool,
+    /// Virtualenv folders a generator earlier on the line creates.
+    pub generated: Vec<PathBuf>,
+    /// Package scripts being run, as `(package folder, script)`: a script
+    /// already here is a cycle.
+    pub script_stack: Vec<(PathBuf, String)>,
     pub calls: usize,
     pub memo: std::collections::HashSet<(String, Vec<String>)>,
     pub calling: Vec<String>,
@@ -131,6 +136,8 @@ impl<'c, 'a> Guard<'c, 'a> {
             seen: Vec::new(),
             writes: Default::default(),
             tree_changed: false,
+            generated: Vec::new(),
+            script_stack: Vec::new(),
             calls: 0,
             memo: Default::default(),
             calling: Vec::new(),
@@ -189,11 +196,16 @@ fn decide(input: &[u8], env: &dyn Fn(&str) -> Option<String>, fs: &dyn Fs) -> Ve
 /// The whole hook call: read Claude Code's PreToolUse JSON from `stdin`,
 /// print at most one decision to `stdout`, return the exit code (always 0).
 pub fn run(stdin: impl Read, stdout: &mut impl Write, headless: bool, env: &dyn Fn(&str) -> Option<String>, fs: &dyn Fs) -> i32 {
+    let mut stdin = stdin;
     let mut input = Vec::new();
-    // A command JSON-escapes to at most 6 bytes per byte; past that it is oversize anyway.
-    let _ = stdin.take((bounds::MAX_INPUT * 6 + 64 * 1024) as u64).read_to_end(&mut input);
+    // A command JSON-escapes to at most 6 bytes per byte; past that it is
+    // oversize anyway. The rest is read and dropped, so Claude Code's write
+    // never fails (as `hook_forward::read_payload` does).
+    let _ = (&mut stdin).take((bounds::MAX_INPUT * 6 + 64 * 1024) as u64).read_to_end(&mut input);
+    let over = std::io::copy(&mut stdin, &mut std::io::sink()).map_or(false, |n| n > 0);
     let headless = headless || matches!(env("CLAUDE_CODE_ENTRYPOINT").as_deref(), Some("sdk-cli" | "sdk-ts" | "sdk-py"));
-    if let Verdict::Ask(reason) = decide(&input, env, fs) {
+    let verdict = if over { Verdict::Ask("ADE: the command is over 256 KB, too large for the guard to check".into()) } else { decide(&input, env, fs) };
+    if let Verdict::Ask(reason) = verdict {
         let (decision, reason) = if headless { ("deny", format!("{reason}. This session can't show a prompt: ask the user to run it themselves")) } else { ("ask", reason) };
         let out = serde_json::json!({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision, "permissionDecisionReason": reason}});
         let _ = writeln!(stdout, "{out}");
@@ -561,6 +573,23 @@ mod tests {
             assert_eq!(code, 0, "{bad:?}");
             assert_eq!(decision(&out).0, "ask", "{bad:?}");
         }
+        // Stdin is read to its end even past the cap, so Claude Code's write
+        // never fails with EPIPE (code review 1, minor 5).
+        struct Counting<'a>(&'a [u8], usize);
+        impl Read for Counting<'_> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let n = buf.len().min(self.0.len() - self.1);
+                buf[..n].copy_from_slice(&self.0[self.1..self.1 + n]);
+                self.1 += n;
+                Ok(n)
+            }
+        }
+        let big = hook_input("Bash", &format!("echo {}", "a".repeat(3 * 1024 * 1024)));
+        let mut src = Counting(big.as_bytes(), 0);
+        let mut out = Vec::new();
+        assert_eq!(run(&mut src, &mut out, false, &no_env, &fs), 0);
+        assert_eq!(src.1, big.len(), "stdin not read to its end");
+        assert_eq!(decision(std::str::from_utf8(&out).unwrap()).0, "ask");
         // The cwd comes from stdin: a script next to it is read from there.
         let fs = FakeFs::new().file("/home/user/my-project/d.sh", "#!/bin/sh\ngh repo delete o/r\n");
         let (_, out) = run_hook(&hook_input("Bash", "./d.sh"), false, &no_env, &fs);
@@ -765,6 +794,64 @@ mod tests {
         for t in ["github", "ngh", "gh-pages", "ghz", "bgh", "_gh"] {
             assert!(!tables::names_guarded(t.as_bytes()), "{t}");
         }
+    }
+
+    /// Code review 1 (BLOCK, 2026-11-02): the minors, each pinned.
+    #[test]
+    fn code_review_1() {
+        let fs = gh_fs();
+        check(
+            &fs,
+            &[
+                // Minor 4: the two mutants argued equivalent.
+                ("f(){ x=y; }; ${x}h repo delete o/r", true),
+                ("npx $PKG repo delete o/r", true),
+                // Minor 6: gh api with a computed endpoint, judged by its literal parts.
+                ("gh api \"repos/{owner}/{repo}/pulls/$PR/comments\"", false),
+                ("gh api \"repos/$OWNER/$REPO\"", false),
+                ("gh api \"repos/o/r/issues/$N\" --jq .title", false),
+                ("gh api \"user/$X\"", false),
+                ("gh auth status --hostname \"$H\"", false),
+                ("gh api -H \"Accept: $T\" repos/o/r", false),
+                ("gh api \"repos/o/$R\"", false),
+                ("gh api \"repos/o/r/$X\"", true),
+                ("gh api \"orgs/$O/secret-scanning/alerts\"", true),
+                ("gh api \"orgs/o/$X\"", true),
+                ("gh api \"orgs/$O/repos\"", false),
+                ("gh api \"$EP\"", true),
+                ("gh api \"repos/o/r/pulls/$N\" -X \"$M\"", true),
+                ("gh api \"repos/o/r/pulls/$N\" -f body=x", true),
+                ("gh api repos/o/r/pulls $FLAGS", true),
+                ("gh auth status $FLAGS", true),
+                // Minor 7: help on a risky leaf is a read.
+                ("gh repo delete --help", false),
+                ("gh repo delete -h", false),
+                ("gh secret set --help", false),
+                ("gh config get -h github.com oauth_token", true),
+                // Minor 8: the class table.
+                ("gh repo fork o/r", true),
+                ("gh repo fork o/r --clone", true),
+                ("gh label clone o/src --force", true),
+                ("gh label clone o/src -f", true),
+                ("gh label clone o/src", false),
+                ("gh pr update-branch 3 --rebase", true),
+                ("gh pr update-branch 3", false),
+            ],
+        );
+        // Minor 9: a virtualenv made on the line, then sourced.
+        check(
+            &FakeFs::new(),
+            &[
+                ("python -m venv .venv && . .venv/bin/activate", false),
+                ("python3 -m venv /tmp/v && source /tmp/v/bin/activate && pip install x", false),
+                ("uv venv && source .venv/bin/activate", false),
+                ("uv venv env2 && . env2/bin/activate", false),
+                ("virtualenv x && . x/bin/activate", false),
+                ("python3 -m virtualenv y && . y/bin/activate.fish", false),
+                ("python -m venv .venv && . other/bin/activate", true),
+                (". .venv/bin/activate", true),
+            ],
+        );
     }
 
     #[cfg(unix)]

@@ -83,6 +83,10 @@ pub enum Special {
     ConfigList,
     /// Asks unless it is a provable read.
     Api,
+    /// `-f`/`--force` overwrites the destination's labels.
+    LabelClone,
+    /// `--rebase` rewrites the PR branch.
+    UpdateBranch,
 }
 
 use Class::{Known, Read, Risk, Special as Sp};
@@ -168,7 +172,7 @@ pub const GH_CLASSES: &[(&str, Class)] = &[
     ("issue unlock", Known),
     ("issue unpin", Known),
     ("issue view", Read),
-    ("label clone", Known),
+    ("label clone", Sp(Special::LabelClone)),
     ("label create", Known),
     ("label delete", Risk("deletes a label")),
     ("label edit", Known),
@@ -191,7 +195,7 @@ pub const GH_CLASSES: &[(&str, Class)] = &[
     ("pr review", Known),
     ("pr status", Read),
     ("pr unlock", Known),
-    ("pr update-branch", Known),
+    ("pr update-branch", Sp(Special::UpdateBranch)),
     ("pr view", Read),
     ("preview prompter", Known),
     ("project close", Risk("closes a project")),
@@ -235,7 +239,7 @@ pub const GH_CLASSES: &[(&str, Class)] = &[
     ("repo deploy-key delete", Risk("deletes a deploy key")),
     ("repo deploy-key list", Risk("lists deploy keys")),
     ("repo edit", Risk("changes a repository's settings")),
-    ("repo fork", Known),
+    ("repo fork", Risk("creates a repository (a fork)")),
     ("repo gitignore list", Read),
     ("repo gitignore view", Read),
     ("repo license list", Read),
@@ -523,12 +527,10 @@ impl Table {
         };
         // The leaf's own arguments.
         let mut pos: Vec<&W> = Vec::new();
-        let mut computed = false;
         while i < args.len() {
             let w = &args[i];
             let t = w.text.as_str();
             if w.computed() {
-                computed = true;
                 pos.push(w);
                 i += 1;
             } else if t == "--" {
@@ -541,7 +543,15 @@ impl Table {
                 i += 1;
             }
         }
-        computed |= flags.iter().any(|(_, v)| v.as_ref().is_some_and(W::computed));
+        // `--help` (or `-h` where the leaf doesn't define it) only prints help.
+        if flags.iter().any(|(f, _)| f == "help" || f == "h") {
+            return (GhOut::None, Some(p));
+        }
+        // A computed positional could be a flag; a computed value matters only
+        // for a flag that decides the risk (`gh api -X`). `gh api`'s endpoint
+        // is judged by its literal parts.
+        let skip_endpoint = usize::from(class == Sp(Special::Api));
+        let computed = pos.iter().skip(skip_endpoint).any(|w| w.computed()) || flags.iter().any(|(f, v)| f == "method" && v.as_ref().is_some_and(W::computed));
         let out = match class {
             Risk(r) => GhOut::Risk(format!("ADE: gh {p} {r}")),
             Read | Known => GhOut::None,
@@ -661,6 +671,8 @@ fn special_risk(s: Special) -> &'static str {
         Special::AuthStatus => "prints the auth token",
         Special::ConfigGet | Special::ConfigList => "prints a token",
         Special::Api => "writes, deletes or reads secret-scanning alerts",
+        Special::LabelClone => "overwrites labels",
+        Special::UpdateBranch => "rewrites the branch",
     }
 }
 
@@ -677,6 +689,8 @@ fn special(s: Special, p: &str, flags: &[(String, Option<W>)], pos: &[&W]) -> Gh
         },
         Special::ConfigList => risk("prints gh's configuration, which can hold a token"),
         Special::Api => api(p, flags, pos),
+        Special::LabelClone if has("force") => risk("with --force overwrites the destination's labels"),
+        Special::UpdateBranch if has("rebase") => risk("with --rebase rewrites the pull request's branch"),
         _ => GhOut::None,
     }
 }
@@ -710,10 +724,29 @@ fn api(p: &str, flags: &[(String, Option<W>)], pos: &[&W]) -> GhOut {
     if !fields.is_empty() {
         return risk("sends fields, which makes it a write");
     }
-    if endpoint.contains("secret-scanning") {
-        return risk("reads secret-scanning alerts");
+    if maybe_secret_scanning(endpoint) {
+        return risk("reads secret-scanning alerts, or its endpoint is computed where they would be");
     }
     GhOut::None
+}
+
+/// Whether a REST endpoint is, or with its computed parts could be, a
+/// secret-scanning one. A computed part stands for one path segment (agents
+/// write `repos/$OWNER/$REPO`); `secret-scanning` follows `repos/{o}/{r}/`,
+/// `orgs/{o}/` or `enterprises/{e}/`.
+fn maybe_secret_scanning(endpoint: &str) -> bool {
+    use super::resolve::{Q_PH, U_PH};
+    if endpoint.contains("secret-scanning") {
+        return true;
+    }
+    let segs: Vec<&str> = endpoint.trim_start_matches('/').split(['/', '?']).collect();
+    let computed = |s: &str| s.contains([Q_PH, U_PH]);
+    match segs[0] {
+        s if computed(s) => true,
+        "repos" => segs.get(3).is_some_and(|s| computed(s)),
+        "orgs" | "enterprises" => segs.get(2).is_some_and(|s| computed(s)),
+        _ => false,
+    }
 }
 
 /// The user's gh aliases from `config.yml`: `aliases:` then `    name: expansion`.
@@ -765,6 +798,8 @@ pub fn gh_canonical_forms() -> Vec<Canon> {
             Sp(Special::AuthStatus) => out.extend([c("auth status", false, false), c("auth status -t", true, false), c("auth status --show-token", true, false)]),
             Sp(Special::ConfigGet) => out.extend([c("config get editor", false, false), c("config get oauth_token", true, false)]),
             Sp(Special::ConfigList) => out.push(c("config list", true, false)),
+            Sp(Special::LabelClone) => out.extend([c("label clone o/src", false, false), c("label clone o/src --force", true, false)]),
+            Sp(Special::UpdateBranch) => out.extend([c("pr update-branch 3", false, false), c("pr update-branch 3 --rebase", true, false)]),
             Sp(Special::Api) => out.extend([
                 c("api repos/o/r", false, false),
                 c("api -X DELETE repos/o/r", true, false),
@@ -837,6 +872,10 @@ mod tests {
             let read = *l == "codespace list" || *l == "codespace view";
             assert_eq!(t.class(l) == Some(Class::Read), read, "{l}");
         }
+        // Code review 1, minor 8.
+        assert!(matches!(t.class("repo fork"), Some(Class::Risk(_))));
+        assert_eq!(t.class("label clone"), Some(Class::Special(Special::LabelClone)));
+        assert_eq!(t.class("pr update-branch"), Some(Class::Special(Special::UpdateBranch)));
         // Aliases from the fixture resolve.
         assert_eq!(t.class("co"), Some(Class::Known));
     }

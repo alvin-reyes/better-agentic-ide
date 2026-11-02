@@ -153,6 +153,16 @@ pub(crate) mod tests {
         let ok_cmd = deep(MAX_DEPTH - 1, "gh pr view 1");
         let v = std::thread::Builder::new().stack_size(1024 * 1024).spawn(move || verdict(&fs2, &ok_cmd)).unwrap().join().unwrap();
         assert_eq!(v, Verdict::NoDecision);
+        // 5,000 wrappers ending in gh ask, without a stack overflow (code review 1, minor 3).
+        let fs2 = fs.clone();
+        let wrapped = format!("{}gh pr view 1", "nohup ".repeat(5000));
+        let v = std::thread::Builder::new().stack_size(1024 * 1024).spawn(move || verdict(&fs2, &wrapped)).unwrap().join().unwrap();
+        assert!(matches!(&v, Verdict::Ask(r) if r.contains("64")), "{v:?}");
+        let fs2 = fs.clone();
+        let wrapped = format!("{}gh pr view 1", "sudo env nice ".repeat(30));
+        let v = std::thread::Builder::new().stack_size(1024 * 1024).spawn(move || verdict(&fs2, &wrapped)).unwrap().join().unwrap();
+        assert!(matches!(&v, Verdict::Ask(r) if r.contains("64")), "{v:?}");
+        assert_eq!(verdict(&fs, &format!("{}gh pr view 1", "nohup ".repeat(20))), Verdict::NoDecision);
         // Deep nesting through scripts: a chain of 70 sourced files asks
         // when they name gh, and gives no decision when they don't.
         let mut chain = FakeFs::new();

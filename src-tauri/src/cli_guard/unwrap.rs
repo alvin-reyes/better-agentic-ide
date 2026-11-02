@@ -18,6 +18,8 @@ pub enum In {
     File(PathBuf),
     /// A pipe or file the guard can't see.
     Opaque,
+    /// File names listed by a `find` over a credential folder or a parent.
+    CredNames,
 }
 
 /// What a command prints, when the guard can tell.
@@ -26,6 +28,8 @@ pub enum Out {
     Unknown,
     Text(String),
     File(PathBuf),
+    /// File names listed by a `find` over a credential folder or a parent.
+    CredNames,
 }
 
 /// How a command is run.
@@ -150,23 +154,26 @@ fn is_assignment(w: &W) -> bool {
 }
 
 impl<'c, 'a> Guard<'c, 'a> {
-    pub fn list(&mut self, sc: &mut Scope, list: &List) {
+    /// Classify a list; returns what its last command prints, when known.
+    pub fn list(&mut self, sc: &mut Scope, list: &List) -> Out {
+        let mut last = Out::Unknown;
         for item in list {
             if self.done() {
-                return;
+                return Out::Unknown;
             }
-            self.pipeline(sc, &item.andor.first);
+            last = self.pipeline(sc, &item.andor.first);
             for p in &item.andor.rest {
-                self.pipeline(sc, p);
+                last = self.pipeline(sc, p);
             }
         }
+        last
     }
 
-    pub fn list_any(&mut self, sc: &mut Scope, list: &List) {
+    pub fn list_any(&mut self, sc: &mut Scope, list: &List) -> Out {
         self.list(sc, list)
     }
 
-    fn pipeline(&mut self, sc: &mut Scope, p: &Pipeline) {
+    fn pipeline(&mut self, sc: &mut Scope, p: &Pipeline) -> Out {
         let mut prev = Out::Unknown;
         for (k, c) in p.cmds.iter().enumerate() {
             let stdin = if k == 0 {
@@ -176,16 +183,28 @@ impl<'c, 'a> Guard<'c, 'a> {
                     Out::Text(t) => In::Text(t),
                     Out::File(f) => In::File(f),
                     Out::Unknown => In::Opaque,
+                    Out::CredNames => In::CredNames,
                 }
             };
             prev = self.cmd(sc, c, stdin);
         }
+        prev
     }
 
     fn nested(&mut self, sc: &mut Scope, list: &List) {
         self.depth += 1;
         self.list(sc, list);
         self.depth -= 1;
+    }
+
+    /// File names from a `find` over a credential folder, read by `xargs`,
+    /// `parallel` or a `while read` loop, read the credential.
+    fn names_read(&mut self, stdin: &In, by: &str) -> bool {
+        if matches!(stdin, In::CredNames) {
+            self.ask(format!("ADE: {by} reads the files a find over gh's credential folder lists"));
+            return true;
+        }
+        false
     }
 
     pub fn cmd(&mut self, sc: &mut Scope, c: &Cmd, stdin: In) -> Out {
@@ -215,14 +234,19 @@ impl<'c, 'a> Guard<'c, 'a> {
                 self.redirs(sc, r);
             }
             Cmd::Loop { cond, body, redirs } => {
+                if self.names_read(&stdin, "the loop") {
+                    return Out::Unknown;
+                }
                 self.nested(sc, cond);
                 self.nested(sc, body);
                 self.redirs(sc, redirs);
             }
             Cmd::For { words, body, redirs, .. } => {
+                let mut ws = Vec::new();
                 for w in words.iter().flatten() {
-                    self.expand(sc, w);
+                    ws.extend(self.expand(sc, w));
                 }
+                self.cred_words(sc, &ws, &[]);
                 self.nested(sc, body);
                 self.redirs(sc, redirs);
             }
@@ -332,6 +356,18 @@ impl<'c, 'a> Guard<'c, 'a> {
         if self.done() || ws.is_empty() {
             return Out::Unknown;
         }
+        // Wrappers recurse here (`nohup nohup … gh`): it counts toward the nesting cap.
+        if self.depth > super::bounds::MAX_DEPTH {
+            self.trigger(sc, format!("ADE: the command nests deeper than {} levels, which the guard doesn't follow", super::bounds::MAX_DEPTH));
+            return Out::Unknown;
+        }
+        self.depth += 1;
+        let out = self.command_at(sc, ws, stdin, run);
+        self.depth -= 1;
+        out
+    }
+
+    fn command_at(&mut self, sc: &mut Scope, ws: &[W], stdin: In, run: Run) -> Out {
         let name = &ws[0];
         let args = &ws[1..];
         if name.is("[") || name.is("[[") {
@@ -403,8 +439,18 @@ impl<'c, 'a> Guard<'c, 'a> {
                 }
                 return self.command(sc, wrapped(k), stdin, run);
             }
-            "xargs" => return self.xargs(sc, args),
-            "parallel" => return self.parallel(sc, args),
+            "xargs" => {
+                if self.names_read(&stdin, "xargs") {
+                    return Out::Unknown;
+                }
+                return self.xargs(sc, args);
+            }
+            "parallel" => {
+                if !args.iter().any(|a| a.text.starts_with(":::")) && self.names_read(&stdin, "parallel") {
+                    return Out::Unknown;
+                }
+                return self.parallel(sc, args);
+            }
             "find" => return self.find(sc, args),
             "flock" => return self.flock(sc, args, stdin, run),
             "watch" => {
@@ -682,6 +728,18 @@ impl<'c, 'a> Guard<'c, 'a> {
     }
 
     fn find(&mut self, sc: &mut Scope, args: &[W]) -> Out {
+        // Plain `find` only lists names (owner ruling, 2026-11-02); the names
+        // of a credential folder are marked, so a reader they feed asks.
+        let dirs = super::creds::cred_dirs(self.ctx);
+        let starts: Vec<&W> = args.iter().take_while(|a| a.computed() || !(a.text.starts_with('-') || a.text == "(" || a.text == "!")).collect();
+        let covers = if starts.is_empty() {
+            dirs.iter().any(|d| d.starts_with(&sc.cwd))
+        } else {
+            starts.iter().filter(|a| !a.computed()).any(|a| {
+                let p = abs(&sc.cwd, &a.text);
+                dirs.iter().any(|d| d.starts_with(&p))
+            })
+        };
         let mut k = 0;
         while k < args.len() {
             if ["-exec", "-execdir", "-ok", "-okdir"].iter().any(|x| args[k].is(x)) {
@@ -703,7 +761,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                 k += 1;
             }
         }
-        Out::Unknown
+        if covers { Out::CredNames } else { Out::Unknown }
     }
 
     fn flock(&mut self, sc: &mut Scope, args: &[W], stdin: In, run: Run) -> Out {
@@ -833,7 +891,7 @@ impl<'c, 'a> Guard<'c, 'a> {
         match stdin {
             In::Text(t) => self.code_text(sc, &t, None),
             In::File(p) => self.read_script(sc, &p, Vec::new(), Exec::Shell),
-            In::Opaque => {
+            In::Opaque | In::CredNames => {
                 self.trigger(sc, format!("ADE: {base} reads commands from a pipe the guard can't see into"));
                 Out::Unknown
             }
@@ -911,6 +969,12 @@ impl<'c, 'a> Guard<'c, 'a> {
         let Some(sub) = args.get(k) else { return Out::Unknown };
         let rest = &args[k + 1..];
         match sub.text.as_str() {
+            "credential" if rest.first().is_some_and(|w| w.is("fill")) => {
+                self.ask("ADE: git credential fill prints a stored credential, gh's token after gh auth setup-git".into());
+            }
+            h if h.starts_with("credential-") && rest.iter().any(|w| w.is("get")) => {
+                self.ask(format!("ADE: git {h} get prints a stored credential, gh's token after gh auth setup-git"));
+            }
             "config" => {
                 for (i, w) in rest.iter().enumerate() {
                     if !w.computed() && w.text.to_ascii_lowercase().starts_with("alias.") {
@@ -1015,6 +1079,9 @@ impl<'c, 'a> Guard<'c, 'a> {
     /// Commands that change the tree or download files: a missing script run
     /// later on the line then asks.
     fn note_tree(&mut self, sc: &mut Scope, base: &str, args: &[W]) {
+        if let Some(dir) = venv_dir(base, args) {
+            self.generated.push(abs(&sc.cwd, &dir));
+        }
         match base {
             "unzip" | "rsync" | "scp" | "wget" => self.tree_changed = true,
             "tar" => {
@@ -1122,6 +1189,40 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
         }
     }
+}
+
+/// The folder a virtualenv generator creates: `python -m venv DIR`,
+/// `python -m virtualenv DIR`, `virtualenv DIR`, `uv venv [DIR]` (`.venv`).
+fn venv_dir(base: &str, args: &[W]) -> Option<String> {
+    let python = base.strip_prefix("python").is_some_and(|v| v.chars().all(|c| c.is_ascii_digit() || c == '.'));
+    let rest: &[W] = if python {
+        let m = args.iter().position(|a| a.is("-m"))?;
+        if !args.get(m + 1).is_some_and(|a| a.is("venv") || a.is("virtualenv")) {
+            return None;
+        }
+        &args[m + 2..]
+    } else if base == "virtualenv" {
+        args
+    } else if base == "uv" && args.first().is_some_and(|a| a.is("venv")) {
+        &args[1..]
+    } else {
+        return None;
+    };
+    let mut k = 0;
+    while k < rest.len() {
+        let t = rest[k].text.as_str();
+        if rest[k].computed() {
+            return None;
+        }
+        if matches!(t, "-p" | "--python" | "--prompt" | "--seed-packages") {
+            k += 2;
+        } else if t.starts_with('-') {
+            k += 1;
+        } else {
+            return Some(t.to_string());
+        }
+    }
+    (base == "uv").then(|| ".venv".to_string())
 }
 
 /// `printf FORMAT ARGS…`, roughly: `%s`/`%b` take the arguments, `\n` and `\t` decode.

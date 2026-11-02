@@ -75,6 +75,7 @@ pub const GH_ASK: &[&str] = &[
     "Bash(gh repo deploy-key delete *)",
     "Bash(gh repo deploy-key list *)",
     "Bash(gh repo edit *)",
+    "Bash(gh repo fork *)",
     "Bash(gh repo rename *)",
     "Bash(gh repo sync *)",
     "Bash(gh run cancel *)",
@@ -101,6 +102,8 @@ pub const GH_ASK: &[&str] = &[
     "Bash(gh api *--method*)",
     "Bash(gh api *--input*)",
     "Bash(gh api *secret-scanning*)",
+    "Bash(gh label clone * --force*)",
+    "Bash(gh pr update-branch * --rebase*)",
 ];
 /// Reads, for the main checkout's root `settings.local.json` only: a literal
 /// subcommand and one trailing wildcard, never `gh auth status` (`-t` prints

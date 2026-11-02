@@ -13,7 +13,7 @@ Decided in ADR 0011 (`decisions/0011-cli-library-guarded-by-a-command-hook.md`, 
 
 ## Input and output
 
-- Stdin: Claude Code's PreToolUse JSON. Only `tool_name` `Bash` or `Monitor` is classified, from `tool_input.command`; `cwd` is the session folder (falls back to `$PWD`, then `/`); `$HOME` is the home folder. Any other tool: no output.
+- Stdin: Claude Code's PreToolUse JSON, read to its end (past 1.6 MB it is dropped and the call asks as oversize), so the writer never gets EPIPE. Only `tool_name` `Bash` or `Monitor` is classified, from `tool_input.command`; `cwd` is the session folder (falls back to `$PWD`, then `/`); `$HOME` is the home folder. Any other tool: no output.
 - Malformed input (not JSON, no `tool_name`, a Bash/Monitor call with no string `command`): `ask`.
 - A decision is one line, exactly `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"|"deny","permissionDecisionReason":"…"}}`. No decision prints nothing. It never prints `allow` or `updatedInput`.
 - Reasons start `ADE: `, e.g. `ADE: gh repo delete deletes a repository`.
@@ -38,6 +38,7 @@ Decided in ADR 0011 (`decisions/0011-cli-library-guarded-by-a-command-hook.md`, 
 | Disk text name-scanned | 4 MB per file | asks only when the command line names a guarded bin |
 | Disk text per hook call | 4 MB in total | the file is name-scanned within what's left; unread text asks only when the line names a guarded bin |
 | Shell function calls followed | 2,000 (each distinct call once) | asks (strict text only) |
+| Wrapper recursion (`nohup nohup … gh`) | counts toward the 64 levels | asks (strict text only) |
 
 Measured in a debug build on this machine (Story 1, AC10): a 256 KB script parses in 160 to 200 ms, an ltmain.sh-shaped one in 140 to 170 ms, and a full 4 MB budget (250 KB parsed, the rest name-scanned) in 170 to 180 ms.
 
@@ -49,7 +50,21 @@ Measured in a debug build on this machine (Story 1, AC10): a 256 KB script parse
 - `GH_LEXICON_EXCEPTIONS`: each leaf whose words hit the lexicon but isn't risk, with why.
 - A leaf the table doesn't know, an extension, a computed subcommand, or a computed word in a `Special` leaf asks. Under `xargs`/`parallel`/`find -exec {}`, anything but a complete read leaf asks.
 - User aliases come from gh's `config.yml` (`$GH_CONFIG_DIR`, else `$XDG_CONFIG_HOME/gh`, else `~/.config/gh`); a `!` alias asks.
-- Credentials: `hosts.yml` in those three folders; the keychain CLIs `security find-generic-password|find-internet-password|dump-keychain|export` and `secret-tool lookup|search`.
+- `--help`, or `-h` on a leaf that doesn't define `-h`, gives no decision on any leaf.
+- A computed positional asks in a `Special` leaf (it could be a flag); a computed flag value asks only for `gh api -X`. `gh api`'s endpoint is judged by its literal parts: a computed part stands for one path segment, and the endpoint asks only if it names `secret-scanning`, its first segment is computed, or the segment where `secret-scanning` sits is computed (`repos/{o}/{r}/<here>`, `orgs/{o}/<here>`, `enterprises/{e}/<here>`).
+- Credentials (the folders: `$GH_CONFIG_DIR`, `$XDG_CONFIG_HOME/gh`, `~/.config/gh`, plus either variable when the line assigns it, strictly resolved):
+  - a word or redirect naming `hosts.yml` there, exactly or as a glob; a word whose literal part before a glob or computed part lies inside a credential folder (`~/.config/gh/*`, `~/.config/gh/$F`, an `xargs -I` template), `for` lists included; a computed word ending in `gh/hosts.yml`;
+  - `gh/hosts.yml` (or a credential file's path) anywhere in an argument of a command that isn't text-only (`echo`, `printf`, `grep`/`egrep`/`fgrep`, `rg`, `ag`, `ls`, `which`, `type`, `whereis`, `git commit|log|tag`), code strings included;
+  - recursive readers over a credential folder or a parent (`cp -r`, `rsync`, `scp`, `tar`, `zip`, `7z`, `ditto`, `grep -r`, `rg` only with `--hidden`/`-.`/`-uu`, `find` only with `-exec`/`-execdir`/`-ok`/`-okdir`), or run with the current folder inside one;
+  - names listed by a plain `find` whose start path (or the current folder) covers a credential folder, when they feed `xargs`, `parallel` (from stdin), a `while`/`until` loop, or a `$( )`;
+  - the keychain CLIs `security find-generic-password|find-internet-password|dump-keychain|export` and `secret-tool lookup|search`; `git credential fill`, `git credential-<helper> get` and `git-credential-<helper> get`.
+
+## Package scripts and runners
+
+- `npm run`/`test`/`start`, `pnpm X`, `yarn X`, `bun run`, install lifecycles; `turbo`, `nx`, `lerna` tasks. Each also runs `pre`/`post` scripts; bodies are re-parsed at most 4 levels deep.
+- `--workspaces`, `pnpm -r`, `yarn workspaces foreach` and a task runner select the workspace packages, **not the root**, unless `--include-workspace-root` is given; a repo with no workspaces is its own root. turbo's `//#task` is the root's task, `pkg#task` one package's.
+- A script already on the call stack (same package, same script) is a cycle: the walk stops there without asking.
+- Sourcing a missing file inside a virtualenv folder that `python -m venv DIR`, `python -m virtualenv DIR`, `virtualenv DIR` or `uv venv [DIR]` (`.venv`) creates earlier on the line gives no decision.
 
 ## Rules (`src-tauri/src/cli_rules.rs`)
 
@@ -60,4 +75,4 @@ Measured in a debug build on this machine (Story 1, AC10): a 256 KB script parse
 
 ## Limits (what the guard can't see; the guide states them)
 
-Deliberate obfuscation; shell aliases and functions defined outside the command; what a program does (`node deploy.js`, a non-shell shebang, a Makefile target, a dependency's install script); a copy of a binary under another name; runners outside the list (`deno run npm:x`); a computed name that resolves to something unguarded; a `claude` nested in a session (inherits `cli`, so it asks rather than denies); sessions under `allowManagedHooksOnly`, `--safe-mode` or a `disableAllHooks`; other agents; sessions outside the repository. A credential path built on `$GH_CONFIG_DIR` in the command text is not recognised (only a literal path, or one ending in `gh/hosts.yml`).
+Deliberate obfuscation; shell aliases and functions defined outside the command; what a program does (`node deploy.js`, a non-shell shebang, a Makefile target, a dependency's install script); a copy of a binary under another name; runners outside the list (`deno run npm:x`); a computed name that resolves to something unguarded; a `claude` nested in a session (inherits `cli`, so it asks rather than denies); sessions under `allowManagedHooksOnly`, `--safe-mode` or a `disableAllHooks`; other agents; sessions outside the repository. A credential path built on `$GH_CONFIG_DIR` that the line doesn't assign is judged by the session's own `GH_CONFIG_DIR` (the hook's environment), not by what a later command might set.
