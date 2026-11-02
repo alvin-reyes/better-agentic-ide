@@ -1132,7 +1132,7 @@ claude --dangerously-skip-permissions --settings '<ask json>' --disallowedTools 
 
 **QA record (2026-11-02, HEAD `8d2a225` on `plan/orgo-agent-computers`, 1b's commits `be4c32a` to `8d2a225` on top of Story 1's QA record `f8b593a`).**
 
-**Verdict: automated verification green; every AC is covered by a test that ran. Story 1b is NOT recorded Done yet, because of one stale line in the contract (finding C1). It cannot be Done before Story 1 either: it ships with Story 1 and waits on the same owner check.** Once C1 is fixed and re-checked, 1b is recorded as "Done with Story 1". No Done line was written to the journal.
+**Verdict: automated green, Done with Story 1.** Every AC is covered by a test that ran, and the contract is now current (C1 and C2 fixed and re-checked below). Story 1b ships with Story 1: it is Done once Story 1 passes the owner's gating macOS check, and not before. No Done line was written to the journal yet.
 
 *Verification command, run by QA in sequence on Linux (root), real output:*
 
@@ -1162,15 +1162,17 @@ The other 1b-adjacent mocks (`AgentPicker.test.tsx`, `OrchestratorTab.test.tsx`,
 
 *Contract (`.ade/context/orgo-permission-rules.md`) against the code:* matches on everything except one clause.
 - Matches: `CONTINUOUS_DENY_MCP` (12 globs, same order and text as the code), `CONTINUOUS_DENY_CLI` (17 rules), `launch_rules()` returns MCP then CLI with no argument, `--disallowedTools` only with `continuous` and a non-empty list, each rule `shellQuote`d, between `--settings` and `--append-system-prompt-file`, claude and deepseek only, the picker alone sets `continuous`, and the "not gaps" and over-match notes.
-- **C1 (defect, blocks Done): line 18 is stale.** It says `launchRules.ts` "rejects, and does not cache, an empty `ask`, a non-list `continuousDeny`, and a `guard`…". Since 1b (AC5) `checked()` also rejects an **empty** `continuousDeny`, so every launch is refused. The contract is what a test author reads to decide what a `launch_rules` mock may return; as written it would let one return `continuousDeny: []`, which now fails closed. It needs "an empty `continuousDeny`" added (Definition of Done §3, item 4). QA cannot edit the context file.
-- **C2 (minor, not blocking, same fix pass):** the doc comment on `CONTINUOUS_DENY_CLI` in `orgo_rules.rs` (line 74 to 77) still lists "extra spaces" among the things that get past the denies. The 1b review verified Claude Code 2.1.314 denies them; the plan, the guide and the context file were corrected, this comment was not.
+- **C1 (defect; FIXED and re-checked 2026-11-02 at `da84bf8`): line 18 was stale.** It says `launchRules.ts` "rejects, and does not cache, an empty `ask`, a non-list `continuousDeny`, and a `guard`…". Since 1b (AC5) `checked()` also rejects an **empty** `continuousDeny`, so every launch is refused. The contract is what a test author reads to decide what a `launch_rules` mock may return; as written it would let one return `continuousDeny: []`, which now fails closed. It needs "an empty `continuousDeny`" added (Definition of Done §3, item 4). QA cannot edit the context file.
+- **C2 (minor; FIXED and re-checked at `da84bf8`):** the doc comment on `CONTINUOUS_DENY_CLI` in `orgo_rules.rs` (line 74 to 77) still lists "extra spaces" among the things that get past the denies. The 1b review verified Claude Code 2.1.314 denies them; the plan, the guide and the context file were corrected, this comment was not.
 
 *Manual checks, all:* **not run: needs the running app on macOS or Linux; pending the owner.** None gates Done for 1b.
 - In an ADE Continuous session started in `<repo>/app`, with Orgo installed through ADE, `orgo_create_computer` is absent from the tools; repeat with Orgo added through `claude mcp add`: not run: needs the running app on macOS or Linux; pending the owner.
 - `orgo c create`, `env orgo c create` and `sh -c 'orgo c create'` are refused through real Claude Code: not run: needs the running app on macOS or Linux; pending the owner. (The code review probed the real Claude Code 2.1.314 outside the app with a fake API and a fake MCP server and found the flag parses as built; that is the reviewer's evidence, not a QA run.)
 - `orgo_delete_computer` still prompts: not run: needs the running app and a real Orgo account; pending the owner.
 
-**What stands between this and Done:** (1) the developer fixes C1 (and C2) and QA re-checks the two lines; (2) Story 1 becomes Done through the owner's gating macOS check. 1b is then recorded Done, with Story 1.
+*Re-check at `da84bf8` (comments and docs only, diff against `8d2a225` is `.ade/context/orgo-permission-rules.md` line 18 and the doc comment on `CONTINUOUS_DENY_CLI`):* line 18 now lists an empty `continuousDeny` (Story 1b AC5) among what `launchRules.ts` rejects, which matches `checked()`; the comment no longer lists spacing as a gap and names the real limits, which match the plan, the guide and the context file. No code line changed; `cargo test --lib orgo_rules` passes 6 of 6. The contract now matches the code.
+
+**What stands between this and Done:** only Story 1 becoming Done through the owner's gating macOS check. 1b is then recorded Done, with Story 1, and a journal line is appended.
 
 ---
 
