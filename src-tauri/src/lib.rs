@@ -436,6 +436,7 @@ pub fn run() {
             pty::reattach_pty,
             pty::kill_pty,
             pty::get_pty_cwd,
+            pty::pty_foreground_job,
             agent_status::agent_status_get,
             agent_status::agent_status_toggle,
             agent_status::agent_status_watch,

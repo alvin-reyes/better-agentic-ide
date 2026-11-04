@@ -84,13 +84,19 @@ export default function CommandPalette({ onClose, onToggleScratchpad, onOpenAgen
     const actions: PaletteItem[] = [
       // Tab actions
       { id: "new-tab", label: "New Tab", shortcut: L("newTab"), category: "Tabs", action: () => { onClose(); requestNewTab(); } },
-      { id: "close-tab", label: "Close Tab", shortcut: L("closeTab"), category: "Tabs", action: () => { useTabStore.getState().closeTab(activeTabId); onClose(); } },
+      { id: "close-tab", label: "Close Tab", shortcut: L("closeTab"), category: "Tabs", action: () => {
+        // Through App's guarded close, which asks first over a busy pane.
+        window.dispatchEvent(new CustomEvent("request-close-tab", { detail: { tabId: activeTabId } }));
+        onClose();
+      } },
       { id: "rename-tab", label: "Rename Tab", shortcut: L("renameTab"), category: "Tabs", action: () => { window.dispatchEvent(new CustomEvent("rename-active-tab")); onClose(); } },
       // Split actions
       { id: "split-h", label: "Split Horizontally", shortcut: L("splitHorizontal"), category: "Panes", action: () => split("horizontal") },
       { id: "split-v", label: "Split Vertically", shortcut: L("splitVertical"), category: "Panes", action: () => split("vertical") },
       { id: "close-pane", label: "Close Pane", shortcut: L("closePane"), category: "Panes", action: () => {
-        if (activeTab) useTabStore.getState().closePane(activeTabId, activeTab.activePaneId);
+        if (activeTab) {
+          window.dispatchEvent(new CustomEvent("request-close-pane", { detail: { tabId: activeTabId, paneId: activeTab.activePaneId } }));
+        }
         onClose();
       }},
       { id: "zoom-pane", label: "Zoom / Unzoom Pane", shortcut: L("zoomPane"), category: "Panes", action: () => {
