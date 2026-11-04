@@ -16,6 +16,12 @@ pub enum LogEvent {
     LeaveStoreError { code: &'static str },
     /// A device's queue was full, so it was dropped.
     QueueFull,
+    /// A control handler call failed (story 7b); the sender was refreshed and closed
+    /// with 1011.
+    ControlStoreError { code: &'static str },
+    /// A peer-set refresh read failed (story 7b); the devices it was reading were closed
+    /// with 1011.
+    RefreshStoreError { code: &'static str },
     /// A cleanup ran.
     Cleanup {
         touched: u64,
@@ -47,6 +53,12 @@ impl LogEvent {
                 ("leave_store_error", vec![("code", code.into())])
             }
             LogEvent::QueueFull => ("queue_full", vec![]),
+            LogEvent::ControlStoreError { code } => {
+                ("control_store_error", vec![("code", code.into())])
+            }
+            LogEvent::RefreshStoreError { code } => {
+                ("refresh_store_error", vec![("code", code.into())])
+            }
             LogEvent::Cleanup {
                 touched,
                 devices,
@@ -139,6 +151,8 @@ mod tests {
             LogEvent::DeviceLeft { online: 0 },
             LogEvent::LeaveStoreError { code: "injected" },
             LogEvent::QueueFull,
+            LogEvent::ControlStoreError { code: "store_task" },
+            LogEvent::RefreshStoreError { code: "injected" },
             LogEvent::Cleanup {
                 touched: 1,
                 devices: 2,

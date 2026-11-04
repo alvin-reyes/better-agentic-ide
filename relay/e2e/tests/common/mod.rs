@@ -3,6 +3,8 @@
 //! - `CountingStore` wraps a `Store`: it counts calls per method, can fail one method at
 //!   a time (`fail("register")` while `device` still succeeds), and has a gate that holds
 //!   every call (`hold`), or one method's calls (`hold_only`), until it is released.
+//!   Story 7b adds `fail_nth` (fail only the nth call to a method) and `hold_nth` (run the
+//!   nth call, then hold its result until `Held::release`).
 //! - `CaptureLog` keeps every log line the relay writes.
 
 #![allow(dead_code)]
@@ -51,11 +53,58 @@ impl Gate {
     }
 }
 
+/// One call held by `hold_nth`: it has run, and its result waits for `release`.
+#[derive(Default)]
+struct HeldState {
+    /// (started, released)
+    state: Mutex<(bool, bool)>,
+    changed: Condvar,
+}
+
+/// The handle `hold_nth` gives back. Dropping it releases the call, so a test that
+/// panics before `release` fails rather than hangs.
+pub struct Held(Arc<HeldState>);
+
+impl Held {
+    /// Whether the held call has run and is now waiting.
+    pub fn is_started(&self) -> bool {
+        self.0.state.lock().unwrap().0
+    }
+
+    /// Waits (polling) until the held call has run and is waiting, for at most 5 s.
+    pub async fn started(&self) {
+        let began = std::time::Instant::now();
+        while !self.is_started() {
+            assert!(
+                began.elapsed() < Duration::from_secs(5),
+                "timed out waiting for the held call"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    /// Lets the held call return its result.
+    pub fn release(&self) {
+        self.0.state.lock().unwrap().1 = true;
+        self.0.changed.notify_all();
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
 /// A `Store` that counts, fails and holds calls on request.
 pub struct CountingStore {
     inner: Arc<dyn Store>,
     calls: Mutex<HashMap<&'static str, usize>>,
     failing: Mutex<HashSet<&'static str>>,
+    /// Single calls to fail, by method and call number (1-based, over all calls).
+    fail_once: Mutex<HashSet<(&'static str, usize)>>,
+    /// Single calls to hold after they have run, by method and call number.
+    hold_once: Mutex<HashMap<(&'static str, usize), Arc<HeldState>>>,
     gate: Mutex<Gate>,
     opened: Condvar,
 }
@@ -66,6 +115,8 @@ impl CountingStore {
             inner,
             calls: Mutex::new(HashMap::new()),
             failing: Mutex::new(HashSet::new()),
+            fail_once: Mutex::new(HashSet::new()),
+            hold_once: Mutex::new(HashMap::new()),
             gate: Mutex::new(Gate::default()),
             opened: Condvar::new(),
         })
@@ -92,6 +143,31 @@ impl CountingStore {
     /// `method` reaches the store again.
     pub fn heal(&self, method: &str) {
         self.failing.lock().unwrap().remove(Self::known(method));
+    }
+
+    /// The nth call to `method` (counting every call since the store was made, from 1)
+    /// returns `INJECTED` without reaching the store; the calls before and after it work.
+    pub fn fail_nth(&self, method: &str, n: usize) {
+        self.fail_once
+            .lock()
+            .unwrap()
+            .insert((Self::known(method), n));
+    }
+
+    /// The nth call to `method` runs on the store, then keeps its result and waits until
+    /// the returned `Held` is released (or dropped). Every other call goes through.
+    pub fn hold_nth(&self, method: &str, n: usize) -> Held {
+        let state = Arc::new(HeldState::default());
+        self.hold_once
+            .lock()
+            .unwrap()
+            .insert((Self::known(method), n), state.clone());
+        Held(state)
+    }
+
+    /// Every call so far, all methods together.
+    pub fn total(&self) -> usize {
+        self.calls.lock().unwrap().values().sum()
     }
 
     /// Closes the gate: every call from now on waits until `release`.
@@ -131,9 +207,15 @@ impl CountingStore {
         }
     }
 
-    /// Counts the call, waits at the gate, then fails it if asked to.
-    fn enter(&self, method: &'static str) -> Result<(), StoreError> {
-        *self.calls.lock().unwrap().entry(method).or_default() += 1;
+    /// Counts the call, waits at the gate, then fails it if asked to. Returns the call's
+    /// number for `finish`.
+    fn enter(&self, method: &'static str) -> Result<usize, StoreError> {
+        let n = {
+            let mut calls = self.calls.lock().unwrap();
+            let count = calls.entry(method).or_default();
+            *count += 1;
+            *count
+        };
         let mut gate = self.gate.lock().unwrap();
         if gate.holds(method) {
             gate.waiting += 1;
@@ -143,55 +225,71 @@ impl CountingStore {
             gate.waiting -= 1;
         }
         drop(gate);
-        if self.failing.lock().unwrap().contains(method) {
+        if self.failing.lock().unwrap().contains(method)
+            || self.fail_once.lock().unwrap().remove(&(method, n))
+        {
             Err(INJECTED)
         } else {
-            Ok(())
+            Ok(n)
         }
+    }
+
+    /// Hands back a call's result, first holding it if `hold_nth` asked for this call.
+    fn finish<T>(&self, method: &'static str, n: usize, result: T) -> T {
+        let held = self.hold_once.lock().unwrap().remove(&(method, n));
+        if let Some(held) = held {
+            let mut state = held.state.lock().unwrap();
+            state.0 = true;
+            held.changed.notify_all();
+            while !state.1 {
+                state = held.changed.wait(state).unwrap();
+            }
+        }
+        result
     }
 }
 
 impl PairDirectory for CountingStore {
     fn peers_of(&self, id: &DeviceKey) -> Result<Vec<PairInfo>, StoreError> {
-        self.enter("peers_of")?;
-        self.inner.peers_of(id)
+        let n = self.enter("peers_of")?;
+        self.finish("peers_of", n, self.inner.peers_of(id))
     }
 }
 
 impl Store for CountingStore {
     fn device(&self, id: &DeviceKey) -> Result<Option<DeviceRecord>, StoreError> {
-        self.enter("device")?;
-        self.inner.device(id)
+        let n = self.enter("device")?;
+        self.finish("device", n, self.inner.device(id))
     }
 
     fn register(&self, id: &DeviceKey, role: Role, now: u64) -> Result<Registered, StoreError> {
-        self.enter("register")?;
-        self.inner.register(id, role, now)
+        let n = self.enter("register")?;
+        self.finish("register", n, self.inner.register(id, role, now))
     }
 
     fn touch(&self, id: &DeviceKey, now: u64) -> Result<bool, StoreError> {
-        self.enter("touch")?;
-        self.inner.touch(id, now)
+        let n = self.enter("touch")?;
+        self.finish("touch", n, self.inner.touch(id, now))
     }
 
     fn insert_pair(&self, pair: &PairRecord) -> Result<(), StoreError> {
-        self.enter("insert_pair")?;
-        self.inner.insert_pair(pair)
+        let n = self.enter("insert_pair")?;
+        self.finish("insert_pair", n, self.inner.insert_pair(pair))
     }
 
     fn pair(&self, pair_id: &PairId) -> Result<Option<PairRecord>, StoreError> {
-        self.enter("pair")?;
-        self.inner.pair(pair_id)
+        let n = self.enter("pair")?;
+        self.finish("pair", n, self.inner.pair(pair_id))
     }
 
     fn set_acked(&self, pair_id: &PairId) -> Result<bool, StoreError> {
-        self.enter("set_acked")?;
-        self.inner.set_acked(pair_id)
+        let n = self.enter("set_acked")?;
+        self.finish("set_acked", n, self.inner.set_acked(pair_id))
     }
 
     fn delete_pair(&self, pair_id: &PairId) -> Result<bool, StoreError> {
-        self.enter("delete_pair")?;
-        self.inner.delete_pair(pair_id)
+        let n = self.enter("delete_pair")?;
+        self.finish("delete_pair", n, self.inner.delete_pair(pair_id))
     }
 
     fn put_push_token(
@@ -201,8 +299,12 @@ impl Store for CountingStore {
         env: &str,
         now: u64,
     ) -> Result<(), StoreError> {
-        self.enter("put_push_token")?;
-        self.inner.put_push_token(phone, token, env, now)
+        let n = self.enter("put_push_token")?;
+        self.finish(
+            "put_push_token",
+            n,
+            self.inner.put_push_token(phone, token, env, now),
+        )
     }
 
     fn cleanup(
@@ -211,13 +313,13 @@ impl Store for CountingStore {
         cutoff: u64,
         online: &[DeviceKey],
     ) -> Result<CleanupCounts, StoreError> {
-        self.enter("cleanup")?;
-        self.inner.cleanup(now, cutoff, online)
+        let n = self.enter("cleanup")?;
+        self.finish("cleanup", n, self.inner.cleanup(now, cutoff, online))
     }
 
     fn counts(&self) -> Result<StoreCounts, StoreError> {
-        self.enter("counts")?;
-        self.inner.counts()
+        let n = self.enter("counts")?;
+        self.finish("counts", n, self.inner.counts())
     }
 }
 

@@ -58,13 +58,22 @@ Bytes<32>`, `slot: Bytes<16>`, `paired_at: u64`, `sig_m: Bytes<64>`, `acked: boo
 
 `CleanupCounts`: `touched`, `devices`, `pairs`, `push_tokens` (u64), `deleted:
 Vec<DeviceKey>`, and `deleted_pairs: Vec<PairId>`. Each batch reads the pair ids it is
-about to cascade away, in the same transaction as its delete. Story 7b strips its
-in-memory peer sets by these pair ids.
+about to cascade away, in the same transaction as its delete. Story 7b does not use
+`deleted_pairs`: cleanup strips nothing from the in-memory peer sets, because routing
+needs both ends' sets to name each other (ADR 0006).
 
 Pure functions: `admit(stored_role: Option<Role>, &Identity) -> Result<Admit::{Known,
 New}, LoginError>` and `cleanup_cutoff(now) -> Option<u64>`.
 
 Story 5a extends the trait with what pairing needs.
+
+**For story 5a: the writers' rule** (ADR 0006, story 7b). Every pair write a
+`ControlHandler` makes (it gets the relay's store as `&dyn Store`, inside
+`StoreHandle::call`) must return both of the pair's keys in `ControlOutcome.refresh`, and
+write only pairs that include the sender's key. A failed call (an `Err` or a panic) is
+recovered by the relay re-reading the sender and closing it 1011. `on_login` writes no
+pairs; `on_leave` returns its own `refresh`. See `remote-protocol.md`, "Limits and
+routing".
 
 ## Calling the store from the server
 
@@ -99,6 +108,10 @@ relay that has shut down holds no reference to the store. `SqliteStore` is one
 `CountingStore::new(Arc<dyn Store>)` wraps a store. `count(method)`; `fail(method)` /
 `heal(method)` make one method return `Failed("injected")` while the others still work;
 `hold()` gates every call and `hold_only(method)` one method's calls, until `release()`;
-`waiting()` says how many are parked;
+`waiting()` says how many are parked; `total()` counts every call. Story 7b added
+`fail_nth(method, n)` (only the nth call to that method, counted from the store's start,
+fails; the rest work) and `hold_nth(method, n) -> Held` (the nth call runs on the store,
+keeps its result, signals `Held::started()`, and returns it only on `Held::release()`;
+dropping `Held` releases it);
 `until(what, cond)` polls up to 5 s. Method names are the `Store` method names (`METHODS`).
 `CaptureLog` is a `LogSink` that keeps every rendered line.

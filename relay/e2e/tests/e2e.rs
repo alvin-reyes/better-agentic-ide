@@ -424,11 +424,14 @@ async fn a_first_frame_over_64_kib_gets_no_welcome() {
     let json = signed_login(&r.phone, &c, "localhost", Role::Phone).to_json();
     let padded = format!("{{{}{}", " ".repeat(65 * 1024), &json[1..]);
     let _ = ws.send(Message::text(padded)).await;
-    if let Some(close) = no_welcome(&mut ws).await {
-        assert_ne!(close.0, 1000, "{close:?}");
-    }
+    // Story 7b: closed with 1009, not left to the socket layer.
+    assert_eq!(
+        no_welcome(&mut ws).await,
+        Some((1009, "message_too_big".to_string()))
+    );
 }
 
+/// AC 4 (ticket AC 5), the replacement half: story 7b's 4409.
 #[tokio::test]
 async fn a_new_login_replaces_the_old_connection() {
     let r = relay().await;
@@ -460,17 +463,15 @@ async fn a_new_login_replaces_the_old_connection() {
         }
     );
 
-    // The first connection's stream ends.
-    let ended = timeout(WAIT, async {
-        loop {
-            match first.next_event().await {
-                Err(_) | Ok(Event::Closed { .. }) => break,
-                Ok(_) => continue,
-            }
+    // The first connection is closed with 4409 `replaced` (story 7b), and that is the
+    // next thing it hears.
+    assert_eq!(
+        next(&mut first).await,
+        Event::Closed {
+            code: 4409,
+            reason: "replaced".into()
         }
-    })
-    .await;
-    assert!(ended.is_ok(), "the replaced connection stayed open");
+    );
 
     // Closing it gives the Mac no extra offline; the second phone stays online.
     first.close().await;

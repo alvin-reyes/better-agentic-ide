@@ -108,10 +108,74 @@ pub enum Control {
     },
     /// Relay → device: a paired peer came online or left.
     Presence { peer: DeviceKey, online: bool },
+    /// Relay → device (story 7b): a frame over the frame limit was dropped. `peer` is
+    /// the frame's recipient.
+    RateLimited { peer: DeviceKey, retry_ms: u64 },
+    /// Relay → device (story 7b): a control message over the control limit was dropped
+    /// unprocessed. `msg` is its type; `slot`, `pair_id` and `peer` are given when it
+    /// carried them (a malformed one counts as absent), and left out of the JSON when
+    /// not. A device re-sends it after `retry_ms`, except `push` and `rehandshake`.
+    ControlLimited {
+        msg: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        slot: Option<Bytes<16>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pair_id: Option<PairId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        peer: Option<DeviceKey>,
+        retry_ms: u64,
+    },
+    /// Mac → relay → phone (story 7b, ADR 0005): ask for a new handshake. `peer` is the
+    /// recipient when sent, and the sender when the relay delivers it.
+    Rehandshake { peer: DeviceKey },
 }
 
 /// Every `t` in `Control`, so an unknown one can be told apart from a malformed one.
-const KNOWN_TYPES: [&str; 4] = ["challenge", "login", "welcome", "presence"];
+const KNOWN_TYPES: [&str; 7] = [
+    "challenge",
+    "login",
+    "welcome",
+    "presence",
+    "rate_limited",
+    "control_limited",
+    "rehandshake",
+];
+
+/// What the relay reads of a control message before it acts on it (story 7b): `t`, and
+/// at best effort the `slot`, `pair_id` and `peer` it carries. A field that is missing
+/// or malformed is `None`; only a message that isn't a JSON object with `v: 1` and a
+/// string `t` can't be read at all.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ControlHead {
+    pub t: String,
+    pub slot: Option<Bytes<16>>,
+    pub pair_id: Option<PairId>,
+    pub peer: Option<DeviceKey>,
+}
+
+impl ControlHead {
+    /// Reads the head of a text frame, or `None` if it is unreadable.
+    pub fn read(text: &str) -> Option<ControlHead> {
+        let value: serde_json::Value = serde_json::from_str(text).ok()?;
+        let obj = value.as_object()?;
+        if obj.get("v")?.as_u64()? != u64::from(VERSION) {
+            return None;
+        }
+        let t = obj.get("t")?.as_str()?.to_string();
+        fn field<const N: usize>(
+            obj: &serde_json::Map<String, serde_json::Value>,
+            name: &str,
+        ) -> Option<Bytes<N>> {
+            serde_json::from_value(obj.get(name)?.clone()).ok()
+        }
+        Some(ControlHead {
+            t,
+            slot: field(obj, "slot"),
+            pair_id: field(obj, "pair_id"),
+            peer: field(obj, "peer"),
+        })
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 struct Envelope<T> {
@@ -329,9 +393,158 @@ mod tests {
                 peer: Bytes([0; 32]),
                 online: true,
             },
+            Control::RateLimited {
+                peer: Bytes([0; 32]),
+                retry_ms: 0,
+            },
+            Control::ControlLimited {
+                msg: String::new(),
+                slot: None,
+                pair_id: None,
+                peer: None,
+                retry_ms: 0,
+            },
+            Control::Rehandshake {
+                peer: Bytes([0; 32]),
+            },
         ];
+        assert_eq!(all.len(), KNOWN_TYPES.len());
         for (msg, t) in all.iter().zip(KNOWN_TYPES) {
             assert!(msg.to_json().contains(&format!("\"t\":\"{t}\"")), "{t}");
+        }
+    }
+
+    #[test]
+    fn rate_limited_round_trips() {
+        let msg = Control::RateLimited {
+            peer: Bytes([6; 32]),
+            retry_ms: 50,
+        };
+        assert!(msg.to_json().contains("\"t\":\"rate_limited\""));
+        assert!(msg.to_json().contains("\"retry_ms\":50"));
+        round_trip(msg);
+    }
+
+    #[test]
+    fn control_limited_leaves_out_absent_options() {
+        let bare = Control::ControlLimited {
+            msg: "pair_status".into(),
+            slot: None,
+            pair_id: None,
+            peer: None,
+            retry_ms: 100,
+        };
+        assert_eq!(
+            bare.to_json(),
+            "{\"v\":1,\"t\":\"control_limited\",\"msg\":\"pair_status\",\"retry_ms\":100}"
+        );
+        round_trip(bare);
+        let full = Control::ControlLimited {
+            msg: "rehandshake".into(),
+            slot: Some(Bytes([1; 16])),
+            pair_id: Some(Bytes([2; 16])),
+            peer: Some(Bytes([3; 32])),
+            retry_ms: 7,
+        };
+        let text = full.to_json();
+        for field in ["\"slot\"", "\"pair_id\"", "\"peer\""] {
+            assert!(text.contains(field), "{text}");
+        }
+        round_trip(full);
+    }
+
+    #[test]
+    fn rehandshake_round_trips_with_its_peer() {
+        let msg = Control::Rehandshake {
+            peer: Bytes([8; 32]),
+        };
+        assert_eq!(
+            msg.to_json(),
+            format!(
+                "{{\"v\":1,\"t\":\"rehandshake\",\"peer\":\"{}\"}}",
+                URL_SAFE_NO_PAD.encode([8u8; 32])
+            )
+        );
+        round_trip(msg);
+    }
+
+    fn b64(bytes: &[u8]) -> String {
+        URL_SAFE_NO_PAD.encode(bytes)
+    }
+
+    #[test]
+    fn a_control_head_reads_t_and_the_fields_it_carries() {
+        let text = format!(
+            "{{\"v\":1,\"t\":\"pair_status\",\"slot\":\"{}\",\"pair_id\":\"{}\",\"peer\":\"{}\",\"x\":[1]}}",
+            b64(&[1; 16]),
+            b64(&[2; 16]),
+            b64(&[3; 32])
+        );
+        assert_eq!(
+            ControlHead::read(&text),
+            Some(ControlHead {
+                t: "pair_status".into(),
+                slot: Some(Bytes([1; 16])),
+                pair_id: Some(Bytes([2; 16])),
+                peer: Some(Bytes([3; 32])),
+            })
+        );
+        // An unknown type reads too: the head doesn't judge `t`.
+        let head = ControlHead::read("{\"v\":1,\"t\":\"from_the_future\"}").unwrap();
+        assert_eq!(head.t, "from_the_future");
+        assert_eq!((head.slot, head.pair_id, head.peer), (None, None, None));
+    }
+
+    #[test]
+    fn a_malformed_slot_or_pair_id_counts_as_absent() {
+        for bad in [
+            "\"AAAA\"".to_string(),
+            "1".into(),
+            "null".into(),
+            format!("\"{}=\"", b64(&[1; 16])),
+            format!("\"{}\"", b64(&[1; 17])),
+            "{}".into(),
+        ] {
+            let text = format!("{{\"v\":1,\"t\":\"unpair\",\"slot\":{bad},\"pair_id\":{bad}}}");
+            let head = ControlHead::read(&text).unwrap_or_else(|| panic!("{text}"));
+            assert_eq!(head.t, "unpair");
+            assert_eq!((head.slot, head.pair_id), (None, None), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_rehandshake_with_a_malformed_peer_reads_with_no_peer() {
+        for bad in [
+            "\"AAAA\"".to_string(),
+            "7".into(),
+            format!("\"{}\"", b64(&[3; 16])),
+        ] {
+            let text = format!("{{\"v\":1,\"t\":\"rehandshake\",\"peer\":{bad}}}");
+            let head = ControlHead::read(&text).unwrap();
+            assert_eq!(
+                (head.t.as_str(), head.peer),
+                ("rehandshake", None),
+                "{text}"
+            );
+        }
+        let missing = ControlHead::read("{\"v\":1,\"t\":\"rehandshake\"}").unwrap();
+        assert_eq!(missing.peer, None);
+    }
+
+    #[test]
+    fn an_unreadable_head_is_none() {
+        for text in [
+            "",
+            "not json",
+            "[1,2]",
+            "\"rehandshake\"",
+            "{\"t\":\"pair_status\"}",
+            "{\"v\":2,\"t\":\"pair_status\"}",
+            "{\"v\":\"1\",\"t\":\"pair_status\"}",
+            "{\"v\":1}",
+            "{\"v\":1,\"t\":7}",
+        ] {
+            assert_eq!(ControlHead::read(text), None, "{text:?}");
         }
     }
 

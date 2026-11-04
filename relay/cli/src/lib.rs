@@ -9,7 +9,7 @@ use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
 use futures_util::{SinkExt, StreamExt};
 use relay_core::{login_message, signed_host};
-use relay_protocol::{Bytes, Control, DecodeError, DeviceKey, PairInfo, Role};
+use relay_protocol::{Bytes, Control, DecodeError, DeviceKey, PairId, PairInfo, Role};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::http::Uri;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -26,6 +26,18 @@ pub enum Event {
     },
     /// A paired peer came online or left.
     Presence { peer: DeviceKey, online: bool },
+    /// A frame to `peer` was over the frame limit (story 7b).
+    RateLimited { peer: DeviceKey, retry_ms: u64 },
+    /// A control message was over the control limit and was dropped (story 7b).
+    ControlLimited {
+        msg: String,
+        slot: Option<Bytes<16>>,
+        pair_id: Option<PairId>,
+        peer: Option<DeviceKey>,
+        retry_ms: u64,
+    },
+    /// The Mac `peer` asks for a new handshake (story 7b).
+    Rehandshake { peer: DeviceKey },
     /// The relay closed the connection, with its close code and reason (0 and empty
     /// when it gave none). A refused login is 4401 `login_refused`.
     Closed { code: u16, reason: String },
@@ -156,6 +168,23 @@ impl Client {
                         Ok(Control::Presence { peer, online }) => {
                             Ok(Event::Presence { peer, online })
                         }
+                        Ok(Control::RateLimited { peer, retry_ms }) => {
+                            Ok(Event::RateLimited { peer, retry_ms })
+                        }
+                        Ok(Control::ControlLimited {
+                            msg,
+                            slot,
+                            pair_id,
+                            peer,
+                            retry_ms,
+                        }) => Ok(Event::ControlLimited {
+                            msg,
+                            slot,
+                            pair_id,
+                            peer,
+                            retry_ms,
+                        }),
+                        Ok(Control::Rehandshake { peer }) => Ok(Event::Rehandshake { peer }),
                         _ => Err(ClientError::Protocol),
                     };
                 }
@@ -166,6 +195,17 @@ impl Client {
                 _ => continue,
             }
         }
+    }
+
+    /// Asks the paired `peer` for a new handshake: `rehandshake {peer}`, routed by the
+    /// relay. One answered `control_limited` is not re-sent (ADR 0005).
+    pub async fn send_rehandshake(&mut self, peer: DeviceKey) -> Result<(), ClientError> {
+        if self.closed {
+            return Err(ClientError::Disconnected);
+        }
+        let msg = Control::Rehandshake { peer };
+        self.ws.send(Message::text(msg.to_json())).await?;
+        Ok(())
     }
 
     /// Closes the connection cleanly, waiting at most `CLOSE_WAIT` for the relay.
@@ -360,6 +400,87 @@ mod tests {
             Event::Presence {
                 peer: Bytes([2; 32]),
                 online: true
+            }
+        );
+    }
+
+    /// Story 7b: the limit answers and `rehandshake` are events.
+    #[tokio::test]
+    async fn rate_limited_control_limited_and_rehandshake_are_events() {
+        let sent = vec![
+            Control::RateLimited {
+                peer: Bytes([2; 32]),
+                retry_ms: 50,
+            },
+            Control::ControlLimited {
+                msg: "unpair".into(),
+                slot: None,
+                pair_id: Some(Bytes([3; 16])),
+                peer: None,
+                retry_ms: 100,
+            },
+            Control::Rehandshake {
+                peer: Bytes([4; 32]),
+            },
+        ];
+        let script = sent.clone();
+        let url = scripted(|mut ws| async move {
+            challenge_and_login(&mut ws).await;
+            for msg in script {
+                ws.send(Message::text(msg.to_json())).await.unwrap();
+            }
+            let _ = ws.next().await;
+        })
+        .await;
+        let mut client = Client::connect(&url, Role::Phone, &key()).await.unwrap();
+        assert_eq!(
+            client.next_event().await.unwrap(),
+            Event::RateLimited {
+                peer: Bytes([2; 32]),
+                retry_ms: 50
+            }
+        );
+        assert_eq!(
+            client.next_event().await.unwrap(),
+            Event::ControlLimited {
+                msg: "unpair".into(),
+                slot: None,
+                pair_id: Some(Bytes([3; 16])),
+                peer: None,
+                retry_ms: 100
+            }
+        );
+        assert_eq!(
+            client.next_event().await.unwrap(),
+            Event::Rehandshake {
+                peer: Bytes([4; 32])
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn send_rehandshake_sends_the_peer() {
+        let (got_tx, got_rx) = tokio::sync::oneshot::channel();
+        let url = scripted(|mut ws| async move {
+            challenge_and_login(&mut ws).await;
+            loop {
+                if let Some(Ok(Message::Text(text))) = ws.next().await {
+                    let _ = got_tx.send(text.to_string());
+                    return;
+                }
+            }
+        })
+        .await;
+        let mut client = Client::connect(&url, Role::Mac, &key()).await.unwrap();
+        client.send_rehandshake(Bytes([6; 32])).await.unwrap();
+        let text = tokio::time::timeout(Duration::from_secs(5), got_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            Control::from_json(&text).unwrap(),
+            Control::Rehandshake {
+                peer: Bytes([6; 32])
             }
         );
     }
