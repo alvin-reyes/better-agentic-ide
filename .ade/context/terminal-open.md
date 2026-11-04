@@ -209,12 +209,20 @@ type OpenMessage =
 ## Store shape (`src/stores/tabStore.ts`)
 
 ```ts
-interface View { id: string; name: string | null; spawnedBy: string | null; root: PaneNode; activePaneId: string }
+interface View { id: string; name: string | null; spawnedBy: string | null; root: PaneNode; activePaneId: string; restored: boolean }
 interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOrder: string[]; shownView: string }
 ```
 
 - **The fields.** `Tab.root` and `Tab.activePaneId` no longer exist.
   `views.own` is always present and is always `viewOrder[0]`.
+- **`restored`** (owner ruling Q3, 2026-11-04; story 2b-ii, ADR 0014):
+  - `loadSession` sets it to true on each sub-terminal it restores. Every
+    other view, the own view included, has false.
+  - It is never saved, and stays true for the view's life. Story 3 shows the
+    "restored" label on the strip entry from it.
+  - It does not drive the close guard. `useGuardedClose` still skips a pane
+    with neither an instance nor a `ptyId`, by that rule alone (see
+    "Running"); a restored view's panes match it until first shown.
 - **The accessors:**
   - `shownView(tab)`;
   - `ownView(tab)`: used by the label, cwd, project, sorting, the closed-tab
@@ -245,10 +253,10 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   - A name is never the full command line, because names are saved and
     synced.
 - **The session.** `SavedTab.root` stays the own view, so old sessions load
-  as one view. New fields: `subViews` (name, tree, folders, scrollback) and
-  `shownView`. The 5 MB truncation walks `root` and every `subViews` tree.
+  as one view. New fields: `subViews` (name, tree, `activePaneId` (Q4),
+  folders, scrollback) and `shownView`. The 5 MB truncation walks `root` and every `subViews` tree.
   - Restored sub-terminals start when first shown.
-  - Commands, status and `spawnedBy` are never saved. The line for Insert
+  - Commands, status, `spawnedBy` and `restored` are never saved. The line for Insert
     command lives in memory only.
   - `sync.rs` strips `serializedBuffer` before pushing to the sync repo.
 - **Detaching** (story 5) sends `views`, `viewOrder` and `shownView`. Until
