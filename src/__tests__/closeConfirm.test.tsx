@@ -32,6 +32,8 @@ vi.mock("../hooks/useTerminal", () => ({
   }),
   destroyInstance: vi.fn(),
   getPtyCwd: vi.fn(async () => null),
+  // Each pane stands for one on screen, with a terminal: the close guard samples it.
+  getTerminalDimensions: () => ({ cols: 80, rows: 24 }),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({

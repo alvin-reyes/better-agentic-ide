@@ -308,6 +308,46 @@ describe("accessibility", () => {
   });
 });
 
+describe("closing from the strip", () => {
+  /** The request-close-view events sent while `fn` runs. */
+  const closeRequests = (fn: () => void) => {
+    const seen: unknown[] = [];
+    const on = (e: Event) => seen.push((e as CustomEvent).detail);
+    window.addEventListener("request-close-view", on);
+    try { fn(); } finally { window.removeEventListener("request-close-view", on); }
+    return seen;
+  };
+
+  it("a sub-terminal's × is labelled Close <name> and is out of the tab order", () => {
+    const tests = addView("a", "tests");
+    const dev = addView("a", "dev server");
+    render(<SubTerminalStrip tabId="a" />);
+
+    const close = screen.getByRole("button", { name: "Close tests" });
+    expect(screen.getByRole("button", { name: "Close dev server" })).toBeTruthy();
+    expect(close.getAttribute("tabindex")).toBe("-1");
+    expect(within(entries()[1]).getByRole("button")).toBe(close);
+    // The own entry has none.
+    expect(within(entries()[0]).queryByRole("button")).toBeNull();
+
+    // A click asks to close that sub-terminal and does not show it.
+    expect(closeRequests(() => fireEvent.click(close))).toEqual([{ tabId: "a", viewId: tests }]);
+    expect(tab("a").shownView).toBe("own");
+    expect(closeRequests(() => fireEvent.click(screen.getByRole("button", { name: "Close dev server" }))))
+      .toEqual([{ tabId: "a", viewId: dev }]);
+  });
+
+  it("Delete on an entry calls requestCloseView", () => {
+    const tests = addView("a", "tests");
+    render(<SubTerminalStrip tabId="a" />);
+
+    act(() => entries()[1].focus());
+    expect(closeRequests(() => fireEvent.keyDown(entries()[1], { key: "Delete" }))).toEqual([{ tabId: "a", viewId: tests }]);
+    // The own entry closes with its tab, not from the strip.
+    expect(closeRequests(() => fireEvent.keyDown(entries()[0], { key: "Delete" }))).toEqual([]);
+  });
+});
+
 describe("the live announcement", () => {
   it("a background add is announced", () => {
     vi.useFakeTimers();

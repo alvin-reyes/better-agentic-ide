@@ -310,7 +310,7 @@ export default function App() {
 
   // Guarded close: confirm before discarding unsaved edits or killing a live
   // process, on every close path (see useGuardedClose).
-  const { confirmDialog, setConfirmDialog, requestCloseTab, requestClosePane } = useGuardedClose();
+  const { confirmDialog, setConfirmDialog, requestCloseTab, requestClosePane, requestCloseView } = useGuardedClose();
 
   useKeybindings({
     toggleScratchpad,
@@ -333,6 +333,7 @@ export default function App() {
     toggleTabSwitcher,
     requestCloseTab,
     requestClosePane,
+    requestCloseView,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
   });
 
@@ -441,6 +442,7 @@ export default function App() {
         <ConfirmDialog
           title={confirmDialog.title}
           message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
           onConfirm={confirmDialog.onConfirm}
           onCancel={() => setConfirmDialog(null)}
         />

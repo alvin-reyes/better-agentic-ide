@@ -1,6 +1,6 @@
 import { requestNewTab } from "../lib/newTab";
 import { useEffect } from "react";
-import { useTabStore, shownView } from "../stores/tabStore";
+import { useTabStore, shownView, OWN_VIEW } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { refreshAllTerminals, getPtyCwd, focusActiveTerminal } from "./useTerminal";
 import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
@@ -32,6 +32,7 @@ interface KeybindingActions {
   toggleTabSwitcher: () => void;
   requestCloseTab: (tabId: string) => void;
   requestClosePane: (tabId: string, paneId: string) => void;
+  requestCloseView: (tabId: string, viewId: string) => void;
   isScratchpadOpen: boolean;
 }
 
@@ -103,7 +104,16 @@ export function useKeybindings(actions: KeybindingActions) {
           if (activeTab) actions.requestClosePane(activeTabId, shownView(activeTab).activePaneId);
         });
       }
-      if (is("closeTab")) return run(() => actions.requestCloseTab(activeTabId));
+      // ⌘W closes what is in sight: a sub-terminal, else the tab.
+      if (is("closeTab")) {
+        return run(() => {
+          if (activeTab && activeTab.shownView !== OWN_VIEW && activeTab.views[activeTab.shownView]) {
+            actions.requestCloseView(activeTabId, activeTab.shownView);
+          } else {
+            actions.requestCloseTab(activeTabId);
+          }
+        });
+      }
 
       const n = tabNumber(e);
       if (n !== null) {

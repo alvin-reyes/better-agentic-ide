@@ -58,7 +58,7 @@ describe("a tab with a hidden view", () => {
     ...t,
     views: {
       ...t.views,
-      v1: { id: "v1", name: "vim", spawnedBy: "own", root: { type: "pane", pane: { id: "h", ptyId: null, savedCwd: "/elsewhere/other" } }, activePaneId: "h" },
+      v1: { id: "v1", name: "vim", spawnedBy: "own", root: { type: "pane", pane: { id: "h", ptyId: null, savedCwd: "/elsewhere/other" } }, activePaneId: "h", restored: false },
     },
     viewOrder: ["own", "v1"],
     shownView: shown,
@@ -107,7 +107,7 @@ describe("a tab with a hidden view", () => {
     const own: Tab = { id: "a", name: "Terminal", ...ownViewOnly({ type: "pane", pane: { id: "p", ptyId: 5, savedCwd: "/r/src" } }, "p") };
     const shown: Tab = {
       ...own,
-      views: { ...own.views, v1: { id: "v1", name: "vim", spawnedBy: "own", root: { type: "pane", pane: { id: "h", ptyId: 9, savedCwd: "/elsewhere/other" } }, activePaneId: "h" } },
+      views: { ...own.views, v1: { id: "v1", name: "vim", spawnedBy: "own", root: { type: "pane", pane: { id: "h", ptyId: 9, savedCwd: "/elsewhere/other" } }, activePaneId: "h", restored: false } },
       viewOrder: ["own", "v1"],
       shownView: "v1",
     };

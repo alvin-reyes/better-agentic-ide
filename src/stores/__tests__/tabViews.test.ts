@@ -33,8 +33,8 @@ function twoViewTab(id = "t"): Tab {
     id,
     name: "Terminal",
     views: {
-      own: { id: "own", name: null, spawnedBy: null, root: split(leaf("o1", 1, { savedCwd: "/proj/own" }), leaf("o2", 2)), activePaneId: "o1" },
-      v1: { id: "v1", name: "vim", spawnedBy: "own", root: split(leaf("h1", 11, { savedCwd: "/other/hidden" }), leaf("h2", null)), activePaneId: "h1" },
+      own: { id: "own", name: null, spawnedBy: null, root: split(leaf("o1", 1, { savedCwd: "/proj/own" }), leaf("o2", 2)), activePaneId: "o1", restored: false },
+      v1: { id: "v1", name: "vim", spawnedBy: "own", root: split(leaf("h1", 11, { savedCwd: "/other/hidden" }), leaf("h2", null)), activePaneId: "h1", restored: false },
     },
     viewOrder: ["own", "v1"],
     shownView: "own",
@@ -42,7 +42,7 @@ function twoViewTab(id = "t"): Tab {
 }
 const oneViewTab = (id: string, paneId: string): Tab => ({
   id, name: id,
-  views: { own: { id: "own", name: null, spawnedBy: null, root: leaf(paneId, 50), activePaneId: paneId } },
+  views: { own: { id: "own", name: null, spawnedBy: null, root: leaf(paneId, 50), activePaneId: paneId, restored: false } },
   viewOrder: ["own"], shownView: "own",
 });
 
@@ -179,15 +179,16 @@ describe("tabStore readers with a hidden view", () => {
     useTabStore.setState({ tabs: [twoViewTab()], activeTabId: "t" });
     await saveSession();
     const saved = JSON.parse(localStorage.getItem(KEY)!);
-    // The saved format is unchanged until story 2b: root is the own view's tree.
+    // root is the own view's tree; since story 2b-ii the hidden view is saved in subViews.
     expect(saved.tabs[0].activePaneId).toBe("o1");
     expect(saved.tabs[0].root.children.map((c: { pane: { id: string } }) => c.pane.id)).toEqual(["o1", "o2"]);
     expect(saved.tabs[0].root.children[0].pane).toMatchObject({ serializedBuffer: "own-buf", savedCwd: "/proj/own" });
-    expect(localStorage.getItem(KEY)).not.toContain("hidden-buf");
+    expect(JSON.stringify(saved.tabs[0].root)).not.toContain("hidden-buf");
+    expect(saved.tabs[0].subViews[0].root.children[0].pane).toMatchObject({ serializedBuffer: "hidden-buf", savedCwd: "/other/hidden" });
 
     expect(loadSession()).toBe(true);
     const [restored] = useTabStore.getState().tabs;
-    expect(restored.viewOrder).toEqual(["own"]);
+    expect(restored.viewOrder).toHaveLength(2);
     expect(restored.shownView).toBe("own");
     expect(findAllPanes(restored.views.own.root).map((p) => p.savedCwd)).toEqual(["/proj/own", undefined]);
   });

@@ -812,6 +812,48 @@ mod tests {
     }
 
     #[test]
+    fn value_for_repo_strips_scrollback_in_sub_views() {
+        // A tab with two sub-terminals, one of them split: the command line
+        // lives only in scrollback, and the names are one word.
+        let pane = |id: &str, cwd: &str, buf: &str| {
+            serde_json::json!({ "type": "pane", "pane": { "id": id, "savedCwd": cwd, "serializedBuffer": buf } })
+        };
+        let session = serde_json::json!({
+            "tabs": [{
+                "id": "t1", "name": "api", "activePaneId": "p1",
+                "root": pane("p1", "/work/api", "own-scrollback"),
+                "subViews": [
+                    { "id": "view-1", "name": "npm", "activePaneId": "p2",
+                      "root": pane("p2", "/work/api/web", "$ npm run dev --token=sk-live-123") },
+                    { "id": "view-2", "name": "tests", "activePaneId": "p4",
+                      "root": { "type": "split", "direction": "vertical", "children": [
+                          pane("p3", "/work/api", "$ API_KEY=sk-live-456 npx vitest"),
+                          pane("p4", "/work/api/e2e", "watching"),
+                      ] } },
+                ],
+                "shownView": "view-1",
+            }],
+            "activeTabId": "t1",
+        })
+        .to_string();
+
+        let out = value_for_repo("ade-session", &session);
+
+        assert!(!out.contains("serializedBuffer"), "{out}");
+        for leaked in ["own-scrollback", "sk-live-123", "npm run dev", "sk-live-456", "npx vitest", "watching"] {
+            assert!(!out.contains(leaked), "{leaked} reached the repo: {out}");
+        }
+        // Everything else of the sub-terminals is kept.
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let tab = &v["tabs"][0];
+        assert_eq!(tab["shownView"], "view-1");
+        assert_eq!(tab["subViews"][0]["name"], "npm");
+        assert_eq!(tab["subViews"][0]["root"]["pane"]["savedCwd"], "/work/api/web");
+        assert_eq!(tab["subViews"][1]["root"]["children"][1]["pane"]["savedCwd"], "/work/api/e2e");
+        assert_eq!(tab["subViews"][1]["activePaneId"], "p4");
+    }
+
+    #[test]
     fn first_sync_offline_then_online_merges_unrelated_histories() {
         let root = setup();
         let (a, ca) = machine(&root, "a");

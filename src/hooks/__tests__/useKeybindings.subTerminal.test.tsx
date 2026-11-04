@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, fireEvent, cleanup } from "@testing-library/react";
+import { render, fireEvent, cleanup, act } from "@testing-library/react";
 
 const term = vi.hoisted(() => ({ focusActiveTerminal: vi.fn(() => true) }));
 vi.mock("../useTerminal", () => ({
@@ -22,7 +22,7 @@ const actions = {
   saveNoteScratchpad: noop, sendEnterToTerminal: noop, toggleCommandPalette: noop, toggleAgentPicker: noop,
   togglePreview: noop, toggleBoard: noop, toggleFleet: noop, toggleFileBrowser: noop, openOrchestrator: noop,
   toggleContracts: noop, toggleTokens: noop, toggleIntegrations: noop, toggleShortcuts: noop, toggleTabSwitcher: noop,
-  requestCloseTab: vi.fn(), requestClosePane: vi.fn(), isScratchpadOpen: false,
+  requestCloseTab: vi.fn(), requestClosePane: vi.fn(), requestCloseView: vi.fn(), isScratchpadOpen: false,
 };
 function Host() {
   useKeybindings(actions);
@@ -37,8 +37,16 @@ const press = (dir: "next" | "prev") => {
     : fireEvent.keyDown(window, { code, key: dir === "next" ? "}" : "{", ctrlKey: true, shiftKey: true });
 };
 
+/** ⌘W on macOS, Ctrl+Shift+W elsewhere; true when the default was not prevented. */
+const closeKey = () =>
+  IS_MAC
+    ? fireEvent.keyDown(window, { code: "KeyW", key: "w", metaKey: true })
+    : fireEvent.keyDown(window, { code: "KeyW", key: "W", ctrlKey: true, shiftKey: true });
+
 beforeEach(() => {
   cleanup();
+  actions.requestCloseTab.mockClear();
+  actions.requestCloseView.mockClear();
   term.focusActiveTerminal.mockClear();
   useTabStore.setState({ tabs: [terminalTab("a", "a1"), terminalTab("b", "b1")], activeTabId: "a", closedTabs: [] });
 });
@@ -81,5 +89,21 @@ describe("⌘[ and ⌘] switch sub-terminals", () => {
     expect(after.tabs).toBe(before.tabs);
     expect(after.activeTabId).toBe("a");
     expect(term.focusActiveTerminal).not.toHaveBeenCalled();
+  });
+});
+
+describe("⌘W with sub-terminals", () => {
+  it("⌘W in a sub-terminal calls requestCloseView, and in the own view requestCloseTab", () => {
+    const v1 = useTabStore.getState().addView("a", { name: "dev server", cwd: null, focus: true })!;
+    render(<Host />);
+
+    expect(closeKey()).toBe(false);
+    expect(actions.requestCloseView).toHaveBeenCalledWith("a", v1);
+    expect(actions.requestCloseTab).not.toHaveBeenCalled();
+
+    act(() => useTabStore.getState().showView("a", "own"));
+    closeKey();
+    expect(actions.requestCloseTab).toHaveBeenCalledWith("a");
+    expect(actions.requestCloseView).toHaveBeenCalledTimes(1);
   });
 });

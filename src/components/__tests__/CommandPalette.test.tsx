@@ -36,8 +36,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 // The palette asks the active pane for its folder; there is no terminal here.
-const pane = vi.hoisted(() => ({ cwd: "/code/shop/src" as string | null }));
-vi.mock("../../hooks/useTerminal", () => ({ getPtyCwd: vi.fn(async () => pane.cwd) }));
+const pane = vi.hoisted(() => ({ cwd: "/code/shop/src" as string | null, running: new Map<string, string>() }));
+vi.mock("../../hooks/useTerminal", () => ({
+  getPtyCwd: vi.fn(async () => pane.cwd),
+  // For the guarded close: what each pane runs, and every pane has a terminal.
+  paneBusy: vi.fn(async (paneId: string) => pane.running.get(paneId) ?? null),
+  getTerminalDimensions: () => ({ cols: 80, rows: 24 }),
+  destroyInstance: vi.fn(),
+}));
 
 // jsdom has no layout engine, so it doesn't implement scrollIntoView.
 // The palette calls it to keep the selected row visible.
@@ -49,6 +55,8 @@ import { __resetPromptForTests, useMethodologyPrompt } from "../../lib/methodolo
 import { beginSwitch } from "../../lib/projectSetup";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { shownView, useTabStore } from "../../stores/tabStore";
+import ConfirmDialog from "../ConfirmDialog";
+import { useGuardedClose } from "../../hooks/useGuardedClose";
 
 const COMMAND = "Project: Set up BMAD, methodology and agents";
 const question = () => document.querySelector(".new-tab-ask")?.textContent ?? null;
@@ -255,6 +263,43 @@ describe("Close Tab and Close Pane", () => {
       window.removeEventListener("request-close-pane", onPane);
       closeTab.mockRestore();
       closePane.mockRestore();
+    }
+  });
+});
+
+describe("Close Pane with sub-terminals", () => {
+  /** App's guarded close and its dialog. */
+  function Closer() {
+    const { confirmDialog, setConfirmDialog } = useGuardedClose();
+    return confirmDialog ? (
+      <ConfirmDialog
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(null)}
+      />
+    ) : null;
+  }
+
+  it("Close Pane on a sub-terminal's last pane closes the view", async () => {
+    const { activeTabId, addView } = useTabStore.getState();
+    const viewId = addView(activeTabId, { name: "dev server", cwd: null, focus: true })!;
+    const tab = () => useTabStore.getState().tabs.find((t) => t.id === activeTabId)!;
+    const paneId = shownView(tab()).activePaneId;
+    pane.running.set(paneId, "node");
+    try {
+      render(<><Closer /><CommandPalette onClose={vi.fn()} onToggleScratchpad={vi.fn()} onOpenAgentPicker={vi.fn()} /></>);
+      fireEvent.click(screen.getByText("Close Pane"));
+
+      // The same confirm as ⌘⇧W: the sub-terminal's.
+      await waitFor(() => expect(screen.getByText("Close “dev server”?")).toBeTruthy());
+      expect(screen.getByText("It is running a program (node). Closing ends it.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(tab().views[viewId]).toBeUndefined();
+      expect(tab().shownView).toBe("own");
+    } finally {
+      pane.running.clear();
     }
   });
 });

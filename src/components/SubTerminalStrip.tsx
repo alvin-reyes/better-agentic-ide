@@ -22,6 +22,9 @@ const STRIP_CSS = `
 .subterm-entry[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 1px; background: var(--accent); }
 .subterm-entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .subterm-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.subterm-close { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: -4px; border-radius: var(--radius-sm); color: var(--text-secondary); opacity: 0; flex-shrink: 0; }
+.subterm-entry:hover .subterm-close, .subterm-entry[aria-selected="true"] .subterm-close { opacity: 0.6; }
+.subterm-close:hover { opacity: 1 !important; background: var(--accent-subtle); color: var(--text-primary); }
 @media (max-width: 560px) { .subterm-name { max-width: 96px; } }
 @keyframes subterm-flash { from { background-color: var(--accent-subtle); } to { background-color: transparent; } }
 `;
@@ -46,6 +49,10 @@ function viewCwd(view: View, cwds: Record<string, string>): string | null {
 }
 
 const tooltip = (name: string, cwd: string | null) => (cwd ? `${name} — ${cwd}` : name);
+
+// App owns closing, so it can confirm first (useGuardedClose's requestCloseView).
+const requestCloseView = (tabId: string, viewId: string) =>
+  window.dispatchEvent(new CustomEvent("request-close-view", { detail: { tabId, viewId } }));
 
 /**
  * The views of a terminal tab: its own terminal, pinned first, then each
@@ -115,6 +122,12 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       show(viewId);
+      return;
+    }
+    // Delete is the keyboard route to the ×; the own entry has none.
+    if (e.key === "Delete" && viewId !== viewOrder[0]) {
+      e.preventDefault();
+      requestCloseView(tabId, viewId);
     }
   };
 
@@ -144,6 +157,21 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
           </svg>
         )}
         <span className="subterm-name">{name}</span>
+        {!own && (
+          // A span, not a <button>: no interactive element inside a tab. Out
+          // of the tab order; Delete on the entry is its keyboard route.
+          <span
+            role="button"
+            className="subterm-close"
+            aria-label={`Close ${name}`}
+            tabIndex={-1}
+            onClick={(e) => { e.stopPropagation(); requestCloseView(tabId, viewId); }}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+              <path d="M2 2L8 8M8 2L2 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </span>
+        )}
       </div>
     );
   };
