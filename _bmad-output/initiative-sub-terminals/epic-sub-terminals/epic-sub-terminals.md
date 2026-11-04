@@ -108,3 +108,36 @@ Not run (needs the real app; for the owner to check by eye against the UX spec a
 - A tab without sub-terminals looks unchanged after the App layout wrapper.
 - The strip looks right (sizes, colours, focus ring, the new flash).
 - The ⌘[ and ⌘] keys work in the real app.
+
+## Story 2bii: Verification (QA, 2026-11-05, on aa6a4be)
+
+Verdict: Done. Judged against the 2bii entry in `tickets.toml` (B1b, B8 to B13, B15, B16), with the owner's rulings: the sync surrogate-leak fix added to the story (`value_for_repo` returns `Option` and skips an unparseable `ade-session`; the truncation uses `tail()`), the palette's Close Tab left as it is, and one deliberate 2a assertion change. The code review blocked f7108cf on B11 (K counted views, but the test could not tell views from panes); the re-review of 54088d2 passed with minors, and aa6a4be closes those. A further short re-review of aa6a4be was running in parallel and is not part of this record.
+
+The five approved lines, run in sequence on aa6a4be, all exit 0:
+- `npx tsc --noEmit`: exit 0.
+- `npm test`: 162 files, 1815 tests passed. Three full runs, all identical and green; no failing file, so no flake to attribute.
+- `cd src-tauri && cargo test`: exit 0; lib 468 passed, 0 failed, 1 ignored; other targets ok.
+- `cd relay && cargo test`: exit 0; every result line ok, none failed.
+- `cd mobile && npx tsc --noEmit && npx jest`: tsc exit 0; jest 1 suite, 6 tests passed.
+
+Criteria to tests (each name was looked up in a full vitest JSON report: present, status passed; the Rust test run by name):
+- B1b: subViews.test.ts "closing the last sub-terminal returns the view to own".
+- B8: TabBar.subTerminal.test.tsx "the badge shows the count after the label and is hidden at zero"; "the badge title and aria-label carry the running count"; "the badge is absent on non-terminal tabs".
+- B9: useGuardedClose.test.tsx "requestCloseView asks when a pane of the view is running"; "requestCloseView closes an idle view at once"; "closing the shown sub-terminal shows the entry on its left"; useKeybindings.subTerminal.test.tsx "⌘W in a sub-terminal calls requestCloseView, and in the own view requestCloseTab"; SubTerminalStrip.test.tsx "a sub-terminal's × is labelled Close <name> and is out of the tab order"; "Delete on an entry calls requestCloseView".
+- B10: useGuardedClose.test.tsx "requestClosePane on a sub-terminal's last pane closes the view"; "requestClosePane on the own view's last pane does nothing"; CommandPalette.test.tsx "Close Pane on a sub-terminal's last pane closes the view".
+- B11: useGuardedClose.test.tsx "a tab without sub-terminals keeps today's dialog"; "closing a tab asks when any of its sub-terminals is running, with the UX copy"; "closing a tab whose sub-terminals are idle asks nothing"; "Close Others counts a running sub-terminal in one confirmation".
+- B12: useGuardedClose.test.tsx "a session restored with a sub-terminal that is never shown, then the tab closed, asks nothing"; "a pane with neither instance nor ptyId is not sampled".
+- B13: subViews.test.ts "closeView kills a pane with no instance through its ptyId"; destroyInstance.test.ts "destroyInstance kills by the stored ptyId when no instance exists".
+- B15: subViewSession.test.ts "a tab with sub-terminals round-trips its subViews and shownView"; "a restored sub-terminal has no ptyId, is marked restored and is not counted as running"; "saved sub-terminals carry no spawnedBy, status or command"; "a session over 5 MB whose bulk is in a sub-terminal is truncated"; session.test.ts "a single-view tab saves the same JSON as before the refactor" and "an old session loads as one own view" (both pass, and session.test.ts is not in the diff). Added beyond the criteria: the surrogate and emoji truncation cases, the broken-sub-view skip cases, the storage-full fallback.
+- B16: sync.rs `value_for_repo_strips_scrollback_in_sub_views` (ok), plus the owner's addition `a_session_that_does_not_parse_is_never_exported`.
+No criterion is without a test.
+
+Slice: `git diff ddee841 aa6a4be` touches 24 files. In the slice: tabStore.ts, useGuardedClose.ts, SubTerminalStrip.tsx, TabBar.tsx, useKeybindings.ts, App.tsx (passes `confirmLabel`, and `requestCloseView` to the keybindings), sync.rs, and the named tests. Outside it, only: `restored: false` on View fixtures (subTerminalCallSites, useOwnFolderCwd, detachWindow, tabDisplay, tabViews) and the `getTerminalDimensions` export added to the useTerminal mock in closeConfirm.test.tsx; plus `.ade/context/pane-busy.md`, `.ade/context/terminal-open.md` and `.ade/knowledge/developer.md`. The 2a assertion change is limited to what the owner ruled: in tabViews.test.ts, "saveSession and loadSession with a pane in a hidden view" now expects the hidden view in `subViews` (and not in `root`) and two views after load, replacing "hidden views are not saved" (B15); the other tabViews edits are fixtures only.
+
+Contracts recorded: `.ade/context/terminal-open.md` has `closeView`, `requestCloseView`, the `request-close-view` event, `confirmLabel`, `viewRunning`/`runningSubTerminals` and the badge, the saved session shape (`subViews`, `shownView`, written only for a tab with sub-terminals), the load rules (new ids, `restored: true`, no ptyId, `shownView` remapped), the skipping of a broken `subViews` entry, the truncation walking every tree, the `tail()` rule (last 10,000 UTF-16 code units, one fewer when the cut would split a surrogate pair), and the sync leaving out an unparseable `ade-session`. `.ade/context/pane-busy.md` has the `request-close-view` and `close-view-cancelled` events and the restored-pane skip.
+
+Not run (needs the real app; for the owner to check by eye against the UX spec):
+- The close dialogs' copy as rendered (single close, tab with sub-terminals, "Close" and "Close all" buttons).
+- The count badge: look, position after the label, never changing colour.
+- A restart that restores sub-terminals (names, folders, scrollback, shell starting when first shown).
+- A sync export with sub-terminals present (no scrollback in the repo copy).
