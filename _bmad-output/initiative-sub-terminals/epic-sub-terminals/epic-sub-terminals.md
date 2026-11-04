@@ -12,7 +12,7 @@ risk: high
 
 ## Description
 
-Ten stories, in build order, from the spec's "Suggested stories" as revised after the final review: per-terminal hook tokens (1, Done), the views refactor with no behaviour change (2a), sub-terminals by hand (2b), marks per view (3), `ade open` adding a sub-terminal (4), the hidden-terminal budget and its manual check (4b), moving sub-terminals and Move to New Window (5), the finding surfaces (6), `ade` on PATH (7), `--split` (8), and `-- COMMAND` (9). The spec owns every rule: `docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md`. The entries in `tickets.toml` carry the acceptance criteria inline, because a build reads only its entry.
+Eleven stories, in build order, from the spec's "Suggested stories" as revised after the final review: per-terminal hook tokens (1, Done), the views refactor with no behaviour change (2a), sub-terminals by hand, split on 2026-11-04 into part 1 (2bi, open, switch and see) and part 2 (2bii, close and keep) (2b), marks per view (3), `ade open` adding a sub-terminal (4), the hidden-terminal budget and its manual check (4b), moving sub-terminals and Move to New Window (5), the finding surfaces (6), `ade` on PATH (7), `--split` (8), and `-- COMMAND` (9). The spec owns every rule: `docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md`. The entries in `tickets.toml` carry the acceptance criteria inline, because a build reads only its entry.
 
 ## Outcome
 
@@ -31,10 +31,11 @@ Local to the Mac (macOS and Linux). Not Windows, not an escape-sequence route, n
 ## Notes
 
 - Waiting on outside work, held in each entry's `unknown` so that `next` keeps it blocked:
-  - story 2b needs `hermes-b-busy-panes` on main (the busy check, R1; branch on origin);
+  - Story 2b needs no outside work now: `hermes-b-busy-panes` (the busy check, R1) and story 2a are on main (PR #75 and PR #76). Its open questions are settled (owner rulings, 2026-11-04).
   - story 9 needs story 4, `hermes-a-quoting` (ADR 0008, D9) and `feat/cli-guard` (ADR 0011, the line-editor check) on main.
 - Gate: story 4b's Done needs manual check V3, per ADR 0009 (on the unmerged branch `docs/claude-md-paths`). Story 4 has no manual gate.
-- Decision: stories 2b, 3, 4, 4b, 5, 6, 7, 8 and 9 carry `refine = true`. Each is sharded at summary level and gets its full acceptance criteria when it is pulled, after the story before it is Done.
+- Split, 2026-11-04 (owner): story 2b becomes `2bi` ("Sub-terminals by hand, part 1: open, switch and see", after 2a: the strip, switching, New Sub-terminal, the two shortcuts, the announcement, Move to New Window hidden, App's folder choice in a hook) and `2bii` ("Sub-terminals by hand, part 2: close and keep", after 2bi: closing through the busy check, the count badge, the session). Story 3, 4, 5 and 6 now wait on `2bii`. Ids are letters and digits only, as the ticket tool requires. Owner rulings Q1 to Q11 are applied in both entries.
+- Decision: stories 3, 4, 4b, 5, 6, 7, 8 and 9 carry `refine = true`. Each is sharded at summary level and gets its full acceptance criteria when it is pulled, after the story before it is Done.
 - Story 1 is Done, marked from the repo's `mark`. Story 2a is Done (QA 819171f on `sub-terminals-s2a`, merged).
 
 ## Story 2a verification (QA, 2026-11-02, on 120672e)
