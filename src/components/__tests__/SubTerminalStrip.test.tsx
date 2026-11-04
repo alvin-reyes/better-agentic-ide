@@ -239,10 +239,12 @@ describe("accessibility", () => {
     expect(all.every((e) => e.getAttribute("aria-controls") === SUB_TERMINAL_CONTENT_ID)).toBe(true);
   });
 
-  it("arrow, Home and End keys move focus without wrapping", () => {
+  it("arrow, Home and End keys move focus without wrapping", async () => {
+    withTerminals();
     addView("a", "one");
     addView("a", "two");
-    render(<SubTerminalStrip tabId="a" />);
+    render(<TabScreen tabId="a" />);
+    await settle();
     const all = () => entries();
 
     act(() => all()[0].focus());
@@ -258,14 +260,31 @@ describe("accessibility", () => {
     fireEvent.keyDown(all()[2], { key: "Home" });
     expect(document.activeElement).toBe(all()[0]);
     // Moving focus shows nothing, and focus stays on the strip.
+    await settle();
     expect(tab("a").shownView).toBe("own");
     expect(document.activeElement).toBe(all()[0]);
+    expect(focusedPane()).toBeNull();
 
     // When focus leaves the strip, the selected entry is the way back in.
     fireEvent.keyDown(all()[0], { key: "ArrowRight" });
     expect(all().map((e) => e.getAttribute("tabindex"))).toEqual(["-1", "0", "-1"]);
     act(() => (document.activeElement as HTMLElement).blur());
     expect(all().map((e) => e.getAttribute("tabindex"))).toEqual(["0", "-1", "-1"]);
+  });
+
+  it("Enter on the selected entry moves focus into its terminal", async () => {
+    withTerminals();
+    addView("a", "one");
+    render(<TabScreen tabId="a" />);
+    await settle();
+
+    // Nothing changes view, so no terminal is seated: only the strip can hand focus over.
+    act(() => entries()[0].focus());
+    expect(focusedPane()).toBeNull();
+    fireEvent.keyDown(entries()[0], { key: "Enter" });
+    await settle();
+    expect(tab("a").shownView).toBe("own");
+    expect(focusedPane()).toBe("a1");
   });
 
   it("Enter and Space show the focused entry", async () => {
