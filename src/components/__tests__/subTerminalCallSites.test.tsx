@@ -60,8 +60,8 @@ const tabWithSubInSight: Tab = {
   id: "t",
   name: "Terminal",
   views: {
-    own: { id: "own", name: null, spawnedBy: null, root: leaf("own-pane", 1), activePaneId: "own-pane" },
-    "view-1": { id: "view-1", name: "dev server", spawnedBy: null, root: leaf("sub-pane", 2), activePaneId: "sub-pane" },
+    own: { id: "own", name: null, spawnedBy: null, root: leaf("own-pane", 1), activePaneId: "own-pane", restored: false },
+    "view-1": { id: "view-1", name: "dev server", spawnedBy: null, root: leaf("sub-pane", 2), activePaneId: "sub-pane", restored: false },
   },
   viewOrder: ["own", "view-1"],
   shownView: "view-1",

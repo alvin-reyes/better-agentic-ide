@@ -265,9 +265,28 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
     shown.
   - Shortcuts `prevSubTerminal` ⌘[ and `nextSubTerminal` ⌘] (Ctrl+Shift+[ / ]);
     `shortcutNotes(mac)` in `shortcutList.ts` holds the overlay's Linux note.
+- **Closing a sub-terminal (story 2b-ii).**
+  - `closeView(tabId, viewId)` (store) kills each pane of the view through
+    `destroyInstance(pane.id, pane.ptyId)`, removes the view, and, when it was
+    in sight, shows the entry on its left (`own` when it was first). It ignores
+    `own` and unknown ids. Only `useGuardedClose` calls it for a user's close.
+  - `requestCloseView(tabId, viewId)` (`useGuardedClose`) confirms over the
+    view's panes, then calls `closeView`. The strip's × and Delete reach it by
+    the window event `request-close-view` `{ tabId, viewId }`; ⌘W in a
+    sub-terminal through `useKeybindings`' `requestCloseView` action;
+    `requestClosePane` on a sub-terminal's only pane (⌘⇧W, the palette's Close
+    Pane) calls it too.
+  - `CloseConfirm.confirmLabel` is the confirm button (App passes it to
+    `ConfirmDialog`; absent = "Close Anyway"). "Close" for a sub-terminal,
+    "Close all" for a tab with sub-terminals.
+  - `viewRunning(view)` and `runningSubTerminals(tab)` (exported from
+    `useGuardedClose.ts`) are the one "running" rule, reused by the tab bar's
+    count badge (`[data-subterm-badge]`, title "N sub-terminals: x running",
+    recounted on add, close and menu open).
 - **Killing.** `destroyInstance(paneId, storePtyId?)` kills by the store's
   `ptyId` when the pane has no instance; `closeTab` passes it for every pane
-  of every view, and `closePane` for the pane it closes.
+  of every view, `closeView` for every pane of its view, and `closePane` for
+  the pane it closes.
 - **Attention** is keyed by `tabId/viewId`.
 - **Names.**
   - `--name`, if given.
@@ -276,12 +295,27 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   - A name is never the full command line, because names are saved and
     synced.
 - **The session.** `SavedTab.root` stays the own view, so old sessions load
-  as one view. New fields: `subViews` (name, tree, `activePaneId` (Q4),
-  folders, scrollback) and `shownView`. The 5 MB truncation walks `root` and every `subViews` tree.
+  as one view. New fields (story 2b-ii), written only for a tab with
+  sub-terminals, after the old keys:
+  - `subViews: { id, name, root, activePaneId }[]` in `viewOrder` (`id` is the
+    view id at save time, only to remap `shownView`; `activePaneId` is a saved
+    pane id of that tree);
+  - `shownView`: the saved id of the view in sight.
+  A tab with one view writes neither key (the golden session test). On load,
+  sub-terminals get new view and pane ids, `restored: true`, no `ptyId`;
+  `shownView` is remapped, `own` if unknown. A `subViews` entry that won't
+  load (no tree, an empty split, not a list) is skipped; the rest of the
+  session loads. The 5 MB truncation and the
+  storage-full fallback walk `root` and every `subViews` tree.
   - Restored sub-terminals start when first shown.
   - Commands, status, `spawnedBy` and `restored` are never saved. The line for Insert
     command lives in memory only.
-  - `sync.rs` strips `serializedBuffer` before pushing to the sync repo.
+  - `sync.rs` strips `serializedBuffer` before pushing to the sync repo. An
+    `ade-session` it can't parse is left out of the export (never written
+    raw), so its scrollback can't reach the repo.
+  - The truncation keeps each pane's last 10,000 UTF-16 code units, one fewer
+    when the cut would split a surrogate pair (a lone surrogate makes the
+    JSON unparseable for serde_json).
 - **Detaching** (story 5) sends `views`, `viewOrder` and `shownView`. Until
   story 5, Move to New Window is hidden for a tab with sub-terminals.
   - The detached window reattaches hidden panes at once, headless.

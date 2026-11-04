@@ -44,6 +44,11 @@ export interface View {
   spawnedBy: string | null;
   root: PaneNode;
   activePaneId: string;
+  /**
+   * A sub-terminal loadSession brought back, for the view's life; false on
+   * every other view. Never saved.
+   */
+  restored: boolean;
 }
 
 export interface Tab {
@@ -74,7 +79,7 @@ export interface Tab {
 /** The view fields of a tab whose only view is its own, holding `root`. */
 export function ownViewOnly(root: PaneNode, activePaneId: string): Pick<Tab, "views" | "viewOrder" | "shownView"> {
   return {
-    views: { [OWN_VIEW]: { id: OWN_VIEW, name: null, spawnedBy: null, root, activePaneId } },
+    views: { [OWN_VIEW]: { id: OWN_VIEW, name: null, spawnedBy: null, root, activePaneId, restored: false } },
     viewOrder: [OWN_VIEW],
     shownView: OWN_VIEW,
   };
@@ -171,6 +176,12 @@ interface TabStore {
   addView: (tabId: string, opts: NewView) => string | null;
   /** Shows view `viewId` of tab `tabId`. */
   showView: (tabId: string, viewId: string) => void;
+  /**
+   * Closes sub-terminal `viewId`: kills each of its panes (through the
+   * instance, else the store's ptyId) and removes it. When it was in sight,
+   * the entry on its left is shown. The own view never closes this way.
+   */
+  closeView: (tabId: string, viewId: string) => void;
 }
 
 export interface NewView {
@@ -537,7 +548,7 @@ export const useTabStore = create<TabStore>((set, get) => {
       const tab = get().tabs.find((t) => t.id === tabId);
       if (!tab || (tab.type && tab.type !== "terminal")) return null;
       const pane = createDefaultPane(cwd);
-      const view: View = { id: newViewId(), name, spawnedBy: spawnedBy ?? null, root: { type: "pane", pane }, activePaneId: pane.id };
+      const view: View = { id: newViewId(), name, spawnedBy: spawnedBy ?? null, root: { type: "pane", pane }, activePaneId: pane.id, restored: false };
       set((s) => ({
         tabs: s.tabs.map((t) =>
           t.id === tabId
@@ -553,6 +564,25 @@ export const useTabStore = create<TabStore>((set, get) => {
       set((s) => ({
         tabs: s.tabs.map((t) => (t.id === tabId && t.views[viewId] ? { ...t, shownView: viewId } : t)),
       })),
+
+    closeView: (tabId, viewId) => {
+      const tab = get().tabs.find((t) => t.id === tabId);
+      const view = tab?.views[viewId];
+      if (!tab || !view || viewId === OWN_VIEW) return;
+      import("../hooks/useTerminal").then(({ destroyInstance }) => {
+        for (const pane of findAllPanes(view.root)) destroyInstance(pane.id, pane.ptyId);
+      });
+      set((s) => ({
+        tabs: s.tabs.map((t) => {
+          if (t.id !== tabId) return t;
+          const idx = t.viewOrder.indexOf(viewId);
+          const viewOrder = t.viewOrder.filter((id) => id !== viewId);
+          const { [viewId]: _closed, ...views } = t.views;
+          const shown = t.shownView === viewId ? t.viewOrder[idx - 1] ?? OWN_VIEW : t.shownView;
+          return { ...t, views, viewOrder, shownView: shown };
+        }),
+      }));
+    },
   };
 });
 
@@ -566,11 +596,19 @@ interface SavedPane {
   savedCwd?: string;
 }
 
+/** A sub-terminal as saved: no spawnedBy, status, command or restored. */
+interface SavedView {
+  id: string;
+  name: string | null;
+  root: unknown; // serialized PaneNode tree
+  activePaneId: string;
+}
+
 interface SavedTab {
   id: string;
   name: string;
   type?: string;
-  root: unknown; // serialized PaneNode tree
+  root: unknown; // serialized PaneNode tree: the own view's
   activePaneId: string;
   editorFilePath?: string;
   browserUrl?: string;
@@ -578,6 +616,10 @@ interface SavedTab {
   orchestratorSessionId?: string;
   contractsRoot?: string;
   color?: string;
+  /** Only for a tab with sub-terminals, in viewOrder; absent otherwise. */
+  subViews?: SavedView[];
+  /** Saved with subViews only: the view in sight, by its saved id. */
+  shownView?: string;
 }
 
 interface SavedSession {
@@ -605,7 +647,8 @@ function serializePaneNode(node: PaneNode, paneData: Map<string, SavedPane>): un
   };
 }
 
-function deserializePaneNode(data: any): PaneNode {
+/** A saved tree with new pane ids; `ids` collects saved id -> new id. */
+function deserializePaneNode(data: any, ids?: Map<string, string>): PaneNode {
   if (data.type === "pane") {
     const pane: Pane = {
       id: newPaneId(),
@@ -614,13 +657,30 @@ function deserializePaneNode(data: any): PaneNode {
       serializedBuffer: data.pane.serializedBuffer,
       savedCwd: data.pane.savedCwd,
     };
+    ids?.set(data.pane.id, pane.id);
     return { type: "pane", pane };
   }
   return {
     type: "split",
     direction: data.direction,
-    children: (data.children || []).map(deserializePaneNode),
+    children: (data.children || []).map((c: any) => deserializePaneNode(c, ids)),
   };
+}
+
+/** Every saved pane tree of a tab: the own view's, then each sub-terminal's. */
+function savedTrees(tab: SavedTab): any[] {
+  return [tab.root, ...(tab.subViews ?? []).map((v) => v.root)];
+}
+
+/**
+ * The last `n` UTF-16 code units of `s`, or one fewer when the cut would leave
+ * a lone low surrogate first: JSON.stringify writes that as an escape that
+ * strict parsers (serde_json, so sync.rs) refuse.
+ */
+function tail(s: string, n: number): string {
+  const t = s.slice(-n);
+  const first = t.charCodeAt(0);
+  return first >= 0xdc00 && first <= 0xdfff ? t.slice(1) : t;
 }
 
 async function saveSession(): Promise<void> {
@@ -645,9 +705,9 @@ async function saveSession(): Promise<void> {
       });
       continue;
     }
-    // Only the own view is saved until sub-terminals are (SavedTab.root is its tree).
+    // SavedTab.root is the own view's tree; sub-terminals go in subViews.
     const own = ownView(tab);
-    const panes = findAllPanes(own.root);
+    const panes = allTabPanes(tab);
     const paneData = new Map<string, SavedPane>();
 
     for (const pane of panes) {
@@ -662,14 +722,24 @@ async function saveSession(): Promise<void> {
       });
     }
 
-    savedTabs.push({
+    const saved: SavedTab = {
       id: tab.id,
       name: tab.name,
       type: tab.type,
       root: serializePaneNode(own.root, paneData),
       activePaneId: own.activePaneId,
       color: tab.color,
-    });
+    };
+    // A tab with one view writes exactly what it wrote before sub-terminals.
+    if (tab.viewOrder.length > 1) {
+      saved.subViews = tab.viewOrder.slice(1).flatMap((id) => {
+        const view = tab.views[id];
+        if (!view) return [];
+        return [{ id: view.id, name: view.name, root: serializePaneNode(view.root, paneData), activePaneId: view.activePaneId }];
+      });
+      saved.shownView = tab.shownView;
+    }
+    savedTabs.push(saved);
   }
 
   if (savedTabs.length === 0) {
@@ -690,12 +760,12 @@ async function saveSession(): Promise<void> {
     for (const tab of session.tabs) {
       const truncateNode = (node: any) => {
         if (node.type === "pane" && node.pane.serializedBuffer) {
-          node.pane.serializedBuffer = node.pane.serializedBuffer.slice(-10000);
+          node.pane.serializedBuffer = tail(node.pane.serializedBuffer, 10000);
         } else if (node.children) {
           node.children.forEach(truncateNode);
         }
       };
-      truncateNode(tab.root);
+      savedTrees(tab).forEach(truncateNode);
     }
     json = JSON.stringify(session);
   }
@@ -709,13 +779,51 @@ async function saveSession(): Promise<void> {
       if (node.type === "pane") delete node.pane.serializedBuffer;
       else node.children?.forEach(stripBuffers);
     };
-    session.tabs.forEach((t) => stripBuffers(t.root));
+    session.tabs.forEach((t) => savedTrees(t).forEach(stripBuffers));
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     } catch {
       localStorage.removeItem(SESSION_KEY);
     }
   }
+}
+
+/** Whether every split in a loaded tree has children (a saved `children: []` gives none). */
+function hasEveryPane(node: PaneNode): boolean {
+  return node.type === "pane" ? true : node.children.length > 0 && node.children.every(hasEveryPane);
+}
+
+/**
+ * The views of a loaded tab: its own view holding `root`, then each saved
+ * sub-terminal with new ids, marked restored, with no shell yet (it starts
+ * when the view is first shown). shownView is remapped, own if unknown.
+ */
+function restoreViews(saved: SavedTab, root: PaneNode): Pick<Tab, "views" | "viewOrder" | "shownView"> {
+  const fields = ownViewOnly(root, findAllPanes(root)[0]?.id || "");
+  if (saved.type && saved.type !== "terminal") return fields;
+  let shown = OWN_VIEW;
+  for (const sub of Array.isArray(saved.subViews) ? saved.subViews : []) {
+    const ids = new Map<string, string>();
+    let subRoot: PaneNode;
+    try {
+      subRoot = deserializePaneNode(sub.root, ids);
+    } catch {
+      continue; // A sub-terminal that won't load is skipped; the session is kept.
+    }
+    if (!hasEveryPane(subRoot)) continue;
+    const view: View = {
+      id: newViewId(),
+      name: sub.name ?? null,
+      spawnedBy: null,
+      root: subRoot,
+      activePaneId: ids.get(sub.activePaneId) ?? findAllPanes(subRoot)[0].id,
+      restored: true,
+    };
+    fields.views[view.id] = view;
+    fields.viewOrder.push(view.id);
+    if (sub.id === saved.shownView) shown = view.id;
+  }
+  return { ...fields, shownView: shown };
 }
 
 function loadSession(): boolean {
@@ -736,7 +844,7 @@ function loadSession(): boolean {
         id: newTabId(),
         name: saved.name,
         type: (saved.type as Tab["type"]) || undefined,
-        ...ownViewOnly(root, findAllPanes(root)[0]?.id || ""),
+        ...restoreViews(saved, root),
         editorFilePath: saved.editorFilePath,
         browserUrl: saved.browserUrl,
         previewPath: saved.previewPath,

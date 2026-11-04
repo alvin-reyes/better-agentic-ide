@@ -39,5 +39,12 @@ Story B.
 - `request-close-tab`, `{ tabId }`: the tab bar and the command palette's Close Tab.
 - `request-close-pane`, `{ tabId, paneId }`: the command palette's Close Pane.
 - `request-close-tabs`, `{ tabIds }`: Close others / to the right.
+- `request-close-view`, `{ tabId, viewId }`: a sub-terminal strip entry's ×
+  and Delete (story 2b-ii).
+- `close-view-cancelled`, `{ tabId, viewId }`: sent by `useGuardedClose` when a
+  sub-terminal's confirm goes away without closing it (Cancel, Escape); the
+  strip drops the focus move it planned for that Delete.
+- Every confirm skips a pane with neither a terminal instance nor a `ptyId`
+  (a restored sub-terminal not yet shown): it is not sampled, so not running.
 - Nothing outside `useGuardedClose` and the store's own callers should call
-  `closeTab`/`closePane` for a user's close.
+  `closeTab`/`closePane`/`closeView` for a user's close.

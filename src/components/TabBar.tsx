@@ -1,12 +1,19 @@
 import { requestNewTab } from "../lib/newTab";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { shortcutLabel } from "../lib/shortcuts";
-import { useTabStore, allTabPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes, type Tab } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isPaneActive } from "../hooks/useTerminal";
 import { usePaneCwd, baseName } from "../stores/paneMetaStore";
 import { DEFAULT_NAME, TAB_COLORS, groupRuns, projectColor, tabCwd, tabLabel, tabProject } from "../lib/tabDisplay";
+import { runningSubTerminals } from "../hooks/useGuardedClose";
 import AgentDot from "./AgentDot";
+
+const isTerminal = (t: Tab) => !t.type || t.type === "terminal";
+
+/** The count badge's title and aria-label. */
+const badgeText = (subs: number, running: number) =>
+  `${subs} ${subs === 1 ? "sub-terminal" : "sub-terminals"}: ${running} running`;
 
 // App owns closing, so it can confirm first (unsaved editor, live process).
 function requestCloseTab(tabId: string) {
@@ -51,6 +58,16 @@ export default function TabBar() {
   const [activeTabs, setActiveTabs] = useState<Set<string>>(new Set());
   const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+  // Running sub-terminals per tab, for the count badge. Recounted when a view
+  // is added or closed and when the tab's menu opens; never polled.
+  const [runningSubs, setRunningSubs] = useState<Record<string, number>>({});
+  const recount = useCallback((tab: Tab) => {
+    void runningSubTerminals(tab).then((n) => setRunningSubs((prev) => (prev[tab.id] === n ? prev : { ...prev, [tab.id]: n })));
+  }, []);
+  const viewsKey = tabs.map((t) => `${t.id}:${t.viewOrder.join(",")}`).join("|");
+  useEffect(() => {
+    for (const t of useTabStore.getState().tabs) if (isTerminal(t) && t.viewOrder.length > 1) recount(t);
+  }, [viewsKey, recount]);
 
   // Tabs with a pane producing output, polled every second.
   useEffect(() => {
@@ -221,6 +238,7 @@ export default function TabBar() {
             onContextMenu={(e) => {
               e.preventDefault();
               setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id });
+              if (isTerminal(tab) && tab.viewOrder.length > 1) recount(tab);
             }}
           >
             {/* An agent in this tab needs you, or is waiting for you */}
@@ -285,6 +303,33 @@ export default function TabBar() {
               />
             ) : (
               <span className="truncate max-w-[140px]">{label}</span>
+            )}
+
+            {/* Its sub-terminals: neutral, never coloured; hidden at zero */}
+            {isTerminal(tab) && tab.viewOrder.length > 1 && (
+              <span
+                data-subterm-badge
+                role="img"
+                title={badgeText(tab.viewOrder.length - 1, runningSubs[tab.id] ?? 0)}
+                aria-label={badgeText(tab.viewOrder.length - 1, runningSubs[tab.id] ?? 0)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "3px",
+                  height: "16px",
+                  padding: "0 5px",
+                  borderRadius: "8px",
+                  backgroundColor: "var(--bg-surface)",
+                  color: "var(--text-secondary)",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  lineHeight: 1,
+                  fontVariantNumeric: "tabular-nums",
+                  flexShrink: 0,
+                }}
+              >
+                ▤{tab.viewOrder.length - 1}
+              </span>
             )}
 
             {tab.type === "editor" && dirtyTabs.has(tab.id) && (

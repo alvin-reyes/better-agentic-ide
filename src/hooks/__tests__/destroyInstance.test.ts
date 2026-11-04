@@ -18,3 +18,12 @@ describe("destroyInstance", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 });
+
+describe("destroyInstance, for closing a sub-terminal", () => {
+  it("destroyInstance kills by the stored ptyId when no instance exists", () => {
+    invoke.mockClear();
+    destroyInstance("hidden-sub-terminal-pane", 91);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("kill_pty", { id: 91 });
+  });
+});

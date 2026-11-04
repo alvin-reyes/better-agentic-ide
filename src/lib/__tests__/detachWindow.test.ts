@@ -51,7 +51,7 @@ describe("detachTabToWindow", () => {
         { id: "keep", name: "keep", ...ownViewOnly({ type: "pane", pane: { id: "k", ptyId: 1 } }, "k") },
         {
           id: "go", name: "go",
-          views: { ...own.views, v1: { id: "v1", name: "vim", spawnedBy: "own", root: hidden, activePaneId: "h" } },
+          views: { ...own.views, v1: { id: "v1", name: "vim", spawnedBy: "own", root: hidden, activePaneId: "h", restored: false } },
           viewOrder: ["v1", "own"],
           shownView: "v1",
         },
@@ -67,6 +67,6 @@ describe("detachTabToWindow", () => {
     const t = tabFromDetached({ id: "go", name: "go", root: tree, activePaneId: "b" });
     expect(t.viewOrder).toEqual(["own"]);
     expect(t.shownView).toBe("own");
-    expect(t.views.own).toEqual({ id: "own", name: null, spawnedBy: null, root: tree, activePaneId: "b" });
+    expect(t.views.own).toEqual({ id: "own", name: null, spawnedBy: null, root: tree, activePaneId: "b", restored: false });
   });
 });
