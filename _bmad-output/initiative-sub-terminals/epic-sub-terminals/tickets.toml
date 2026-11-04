@@ -1,0 +1,303 @@
+# Sub-terminals and `ade open`: stories in build order.
+# Spec: docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md, "Suggested stories" and "Testing" (revised after the final review, R1 to R7).
+# UX: docs/superpowers/specs/2026-11-02-sub-terminals-ux.md. Contract: .ade/context/terminal-open.md. ADR 0014.
+# Verification command for every story (the approved one, R4): the five lines of 2026-10-14-relay-pairing-design.md "Verification":
+#   npx tsc --noEmit ; npm test ; cd src-tauri && cargo test ; cd relay && cargo test ; cd mobile && npx tsc --noEmit && npx jest
+# plus cd src-tauri && cargo check -p ade-hook from story 4 on. Each must exit 0.
+# Stories 1 and 2a were started before the revision (owner override, 2026-11-02). The rest carry refine = true: they get full acceptance criteria when pulled.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Per-terminal hook tokens"
+description = '''Each terminal's ADE_HOOK_TOKEN becomes HMAC-SHA-256(master, "pty:<id>") instead of one token per launch, and the endpoint checks the token against the X-ADE-PTY header it parses first. This amends ADR 0003 (ADR 0014, Tokens). Nothing else changes: no route is added, no frontend code changes, and /open does not exist yet (story 4).
+
+Context. Today src-tauri/src/agent_status.rs has one token per launch: AgentStatus::start makes it with new_token(), terminal_env(pty) hands the same value to every terminal, and screen(method, headers, port, token, length) compares X-ADE-Token against it, then parses X-ADE-PTY and answers 400 when that is missing or malformed. The helper (src-tauri/src/hook_forward.rs, also compiled into ade-hook) reads ADE_HOOK_TOKEN and ADE_PTY_ID from its environment and sends both headers. The helper also keys input_hash with the token it was given; ADE itself never computes input_hash.
+
+Slice (the only files to touch):
+- src-tauri/src/agent_status.rs: the master key (32 random bytes from getrandom, held as 32 raw bytes in memory only, never hex-encoded, logged, put in an environment or on a command line; only the per-terminal tokens are hex); a pure function pty_token(master, pty) -> String giving the lowercase hex of HMAC-SHA-256 (hmac and sha2 are already dependencies); terminal_env(pty) sets ENV_TOKEN to pty_token; screen() reads X-ADE-PTY first (missing or malformed is 401), then compares X-ADE-Token in constant time with pty_token for that id (a mismatch is 401), then keeps the existing Origin and Host checks (403), the length check (413) and the method check (405). The test accessor token() is replaced by one that gives a terminal's token. serve() passes the master key through.
+- src-tauri/src/agent_status.rs tests: the existing endpoint tests are updated to use per-PTY tokens; no assertion is weakened.
+- src-tauri/src/pty.rs: test code only (the env tests near lines 640 to 705 read terminal_env, whose signature does not change). reserve_id is not changed.
+- src-tauri/src/hook_forward.rs: no logic change; its tests stay as they are.
+- .ade/context/agent-events.md: the token rows (lines 42 and 126 to 130) change from "Proposed (ADR 0014, not built)" to built for the token part only. The /open rows stay proposed.
+
+Acceptance criteria (each is one test; names are the tests to write or update):
+(1) A terminal's ADE_HOOK_TOKEN is the lowercase hex of HMAC-SHA-256 keyed by the master for the message "pty:<id>", and two terminals never share a token. Test a_terminal_token_is_the_hmac_of_its_pty_id: pty_token with the fixed key [7u8; 32] and id 12 equals a vector computed outside the code (openssl dgst -sha256 -mac HMAC with the same key, message "pty:12"); terminal_env(12) carries that value; terminal_env(13) differs.
+(2) A request with a valid token for PTY 9 but X-ADE-PTY: 7 is refused with 401 and changes no state; and PTY 7's token with X-ADE-PTY: 9 likewise. Test a_pty_token_is_refused_for_another_pty.
+(3) A request with no X-ADE-PTY header is 401, not 400, has body {} and changes no state. Test the_endpoint_refuses_and_changes_nothing (its "no PTY" case now expects 401).
+(4) A malformed X-ADE-PTY (empty, "abc", "-1", "4294967296") is 401 and changes no state, even when the token is the right one for a valid id. Test a_malformed_pty_header_is_401.
+(5) The master key is not accepted as a token: X-ADE-Token equal to the master's hex with a valid X-ADE-PTY is 401. Test the_master_key_is_not_a_token.
+(6) A valid event from PTY 9 with PTY 9's token is 200 and changes the state of pane 9 only. Test the_endpoint_takes_a_right_token_and_answers_empty (updated to per-PTY tokens).
+(7) The screening that already exists is unchanged: a wrong token, an Origin header, a foreign Host, GET and an oversize body all still refuse with the same codes and {} bodies. Test the_endpoint_refuses_and_changes_nothing (its other cases, unchanged except (3)) and the_endpoint_listens_on_loopback_only (updated to call the new screen signature).
+(8) The helper still forwards with the token and PTY id it was given: the existing forwarding test in hook_forward.rs (the one asserting "X-ADE-Token: tok" and "X-ADE-PTY: 7") passes unchanged.
+(9) PTY ids are never reused, so a token is never valid for a second terminal: the existing test the_child_sees_the_reserved_id_and_this_ades_values (pty.rs, asserting reserve_id(&next) == 42 after 41) passes unchanged.
+(10) The input hash is keyed by the terminal's own token: the existing input_hash tests in hook_forward.rs (the same input gives the same hash, a different key gives a different one) pass unchanged.
+
+Verification: the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), and the tests named in (1) to (10) appear in the output by name. Also, grep for the old accessor token() in agent_status.rs finds no uses in tests.
+
+Out of scope: the /open route and CLI (story 4); any change to the helper binary; any frontend change; the Windows path.
+Known uncertainty: the master key lives in ADE's memory for the run; a process that reads a terminal's own environment can use that terminal's token, as before (ADR 0014 consequences).'''
+verify = "the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest); the named tests for ACs (1) to (10) pass, including a_terminal_token_is_the_hmac_of_its_pty_id, a_pty_token_is_refused_for_another_pty, a_malformed_pty_header_is_401 and the_master_key_is_not_a_token."
+covers = []
+after = []
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "2a"
+type = "story"
+title = "Views in the store, no behaviour change"
+description = '''Replaces Tab.root and Tab.activePaneId with explicit views, so that every reader says which view it means, and the TypeScript compiler lists every site that must change. A tab with one view behaves exactly as today. This story creates no second view in production code: it adds no strip, no action that makes a view, and no shortcut. Spec: "The store: views stored explicitly" and the reader table. ADR 0014 "Views are stored explicitly".
+
+Context. src/stores/tabStore.ts holds Tab with root (the pane tree) and activePaneId. About 50 sites in tabStore.ts read them, and about 25 source files outside it do too (App.tsx, DetachedApp.tsx, TerminalPane.tsx, TabBar.tsx, TabSwitcher.tsx, SettingsPanel.tsx, CommandPalette.tsx, FileBrowser.tsx, useKeybindings.ts, useTerminal.ts, useFleetData.ts, useAgentStatusToasts.ts, useProjectSetup.ts, agentStatusStore.ts, tabDisplay.ts, bmadSwitch.ts, terminalCommands.ts, detachWindow.ts). Do not treat other uses of the word root (project roots, board roots, contract roots) as tab fields; tsc decides.
+
+The new shape:
+  interface View { id: string; name: string | null; spawnedBy: string | null; root: PaneNode; activePaneId: string }
+  interface Tab { ...other fields unchanged...; views: Record<string, View>; viewOrder: string[]; shownView: string }
+  // "own" is always views.own and viewOrder[0]. A tab without sub-terminals has only "own".
+
+Accessors, exported from tabStore.ts: shownView(tab), ownView(tab), allTabPanes(tab) (every pane of every view, in viewOrder), viewOfPane(tab, paneId) (the view holding that pane id, or undefined).
+
+Each reader takes the group the revised spec's table gives it (spec "Every reader", as revised after the final review; ADR 0014):
+- view in sight: getActivePane, getActivePtyId, getTabActivePane (and AgentPicker, Scratchpad.tsx:672, OrchestratorTab.tsx:268,275), focusNextPane and focusPrevPane (focusPaneBy), App.tsx:96 (active PTY), App.tsx:481 and DetachedApp.tsx:97 (rendering), TerminalPane.tsx:40,44, useKeybindings.ts:103 (close pane) and :126-127 (splits), CommandPalette.tsx:77-78 (split), :93 (close pane), :200 and :208 (recording), focusActiveTerminal (useTerminal.ts:743), terminalCommands.ts:32 (the new tab of runInNewTabPane);
+- own view: tabCwd, tabLabel, tabProject (tabDisplay.ts:19-20), and so tab titles, project grouping and sortTabsBy; activeCwd (App.tsx:290) and everything it feeds (useProjectSetup, useContextGuard, BoardPanel, ContractsPanel, TokensPanel, IntegrationsPanel, Fleet's "This terminal" in useFleetData, the contract actions at App.tsx:250,257). activeCwd follows the tab, not the view in sight (M4), read through tabFolderPaneId(tab) in tabDisplay.ts. CommandPalette.tsx:65 (the BMAD project) and :125 (Set Up Project), which are the same project actions as useProjectSetup. FileBrowser.tsx:160,179. The closed-tab record (closeTab) and reopenClosedTab. SettingsPanel.tsx:201 (workspace layout);
+- the view holding a given pane: setPtyId, setActivePaneInTab (a pane id no view holds falls back to the view in sight, as main did), closePane (kills by the store's ptyId, as closeTab does; the own view's last pane stays a no-op), splitPane (by pane id, in whichever view holds it);
+- all views: closeTab's kill loop, detachTab, saveSession and loadSession (own view only in this story, as root), tabAgentState (agentStatusStore.ts:38), useAgentStatusToasts.ts:8, TabBar.tsx:60, TabSwitcher.tsx:31, useFleetData.ts:136,201, useTerminal.ts:74,610, bmadSwitch.ts:166, terminalCommands.ts:38, detachWindow.ts:6,27,43 (detachTabToWindow still sends the own view's root and activePaneId in this story).
+
+Slice: the files above and their tests. The list is complete when npx tsc --noEmit is green with Tab.root and Tab.activePaneId removed from the type. Test fixtures that build Tab literals move to the new shape. Nothing else: no Rust, no CSS, no new UI.
+
+Acceptance criteria:
+(1) A new tab has views.own, viewOrder ["own"] and shownView "own", and the Tab type has no root or activePaneId. Test: src/stores/__tests__/tabViews.test.ts, "a new tab has one own view, first in order and shown"; the type removal is enforced by npx tsc --noEmit.
+(2) The four accessors give the right answers with a second, hidden view present: shownView returns the shown view, ownView returns views.own, allTabPanes lists the panes of both views in viewOrder order, viewOfPane finds the hidden view for a hidden pane and returns undefined for an unknown id. Test: tabViews.test.ts, "the accessors read the shown, own and hidden views".
+(3) Every tabStore function named in the spec's reader table has its own test with a pane in a hidden view (the test builds the state; shownView stays own): getActivePane, getActivePtyId, getTabActivePane, focusNextPane, focusPrevPane, splitPane (by pane id in the hidden view), closePane (by pane id in the hidden view), setPtyId (the id is stored on the hidden pane; the agent dot via tabAgentState and the kill path both see it), setActivePaneInTab, closeTab (kills hidden panes, including ones with no instance), detachTab, saveSession and loadSession, tabAgentState, reopenClosedTab (restores the own view only). Each test is named "<function> with a pane in a hidden view" in tabViews.test.ts.
+(4) The tab's own presentation ignores a hidden view: tabLabel, tabProject, tabCwd and sortTabsBy give the same result with a hidden view in another folder as without it. Test: tabDisplay.test.ts, "label, project and sort ignore a hidden view".
+(5) The saved session is unchanged for a one-view tab: saveSession writes root (the own view's tree) and activePaneId exactly as before. Test: src/stores/__tests__/session.test.ts, "a single-view tab saves the same JSON as before the refactor", comparing against a golden file captured from the pre-change code before the first edit.
+(6) A session written before this story loads as one own view with the same tree and activePaneId. Test: session.test.ts, "an old session loads as one own view", using the same golden file.
+(7) detachTabToWindow for a one-view tab sends the same payload as before (root and activePaneId of the own view). Test: a new case in the existing detachWindow test, or src/lib/__tests__/detachWindow.test.ts if none exists.
+(8) The existing suite passes with no assertion changed: only fixtures that construct Tab objects change shape. Checked by the verification step below.
+(9) activeCwd, and everything it feeds, reads the own view: with a sub-terminal in another folder in sight, activeCwd is unchanged. Test: tabViews.test.ts, "activeCwd follows the own view, not the view in sight" (M4).
+(10) Each test in (3) also runs with the hidden view shown, so a view-in-sight reader and an own-view reader cannot be swapped unnoticed (review fix 3f46cdf). Test names as in (3), with the hidden view shown.
+
+Verification: the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest). Then run: git diff origin/main -- "src/**/*.test.ts" "src/**/*.test.tsx" | grep -E "^[-+].*expect\(" and it prints nothing (no assertion changed). Then grep -rn "activePaneId\|\.root\b" src --include=*.ts --include=*.tsx and check that each remaining hit is a View field read through an accessor, or a non-tab root.
+
+Out of scope: any second view created in production (story 2b); the strip; new shortcuts; Rust changes; the session format change (story 2b).
+Known uncertainty: the reader table in the spec was written from the code as it stood on 2026-11-02; a site it misses will show as a tsc error, which is the point of the refactor.'''
+verify = "the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest); tabViews.test.ts has one test per tabStore function in the reader table, each named '<function> with a pane in a hidden view'; the golden session test passes; no assertion changed in the existing tests (the git diff check prints nothing)."
+covers = []
+after = []
+hitl = false
+risk = "high"
+[[entry]]
+id = "2b"
+type = "story"
+title = "Sub-terminals by hand: strip, switching, closing, saving"
+description = '''Adds sub-terminals to the store and the UI, made by hand from the tab menu: the strip, switching, the count badge, the two shortcuts, New Sub-terminal, the busy-checked closing, the live announcement, and saving them in the session. Nothing from the CLI yet (story 4). Starts only when 2a is merged to main and hermes-b-busy-panes is merged to main (R1). Full criteria are refined when this is pulled.
+Busy check (R1): this story adds no busy check of its own. Every sub-terminal confirm uses hermes-b-busy-panes: the Rust command pty_foreground_job, paneBusy and decideBusy, applied by useGuardedClose. pty_shell_idle is not added. A view is running when paneBusy is non-null for any of its panes; a tab is running when any of its views is, its own included.
+Summary of criteria, each a test at refinement:
+(1) The strip shows only while the tab has at least one sub-terminal; it appears with the first and disappears with the last, and the view returns to own.
+(2) The tab's own entry is pinned and shows the tab's label; a sub-terminal entry shows its name; the full command line is never shown.
+(3) addView adds a sub-terminal in the background: selection and focus stay. With focus (--focus, used by story 4) it becomes the shown view and its tab becomes active (U1).
+(4) New Sub-terminal (U5), in the terminal tab's context menu, adds a view named "Terminal" in the tab's folder and shows it. No + on the strip.
+(5) prevSubTerminal (Cmd+[ / Ctrl+Shift+[) and nextSubTerminal (Cmd+] / Ctrl+Shift+]) cycle the views. In a tab without sub-terminals they do nothing and do not preventDefault. On Linux isAppShortcut keeps those keys from the shell.
+(6) Each tab remembers its shown view; each view remembers its active pane.
+(7) Badge: "▤N" after the tab label, title and aria-label "N sub-terminals: x running, y exited", neutral colour, hidden at 0.
+(8) Closing a sub-terminal (x, Cmd+W in it, Delete on its entry) uses requestCloseView; Cmd+Shift+W on its last pane uses requestClosePane and then closes the view. A running view confirms (paneBusy over its panes); an idle prompt asks nothing.
+(9) Closing a tab (x, Cmd+W on its own view) uses requestCloseTab over allTabPanes, and confirms when any view is running (U4), with the UX dialog wording; Close Others / to the Right uses the existing one confirmation over allTabPanes of each tab.
+(10) Restored-not-shown guard: useGuardedClose skips a pane with neither an instance nor a ptyId. Test: a session restored with a sub-terminal that is never shown, then the tab closed, asks nothing.
+(11) requestCloseView and Cmd+Shift+W on a sub-terminal's last pane kill every pane through the instance or, with none, the store's ptyId (kill_pty). Test: a pane with no instance is killed. (N4; 2a's closePane already kills by the store's ptyId.)
+(12) Move to New Window is hidden in the tab menu for a tab with sub-terminals (M9), and present for a tab without. Story 5 brings it back for tabs with sub-terminals.
+(13) Session: SavedTab gains subViews (name, tree, folders, scrollback) and shownView. The 5 MB truncation in saveSession keeps the tail of each pane's scrollback across root and every subViews tree. Test: a session over 5 MB whose bulk is in a sub-terminal is truncated. An old session loads unchanged as one own view. Restored sub-terminals start when first shown and do not count as running. Commands, status, spawnedBy and the typed line are never saved.
+(14) sync.rs value_for_repo strips serializedBuffer from an ade-session with subViews, and no command line appears in the output (Rust test in sync.rs).
+(15) An aria-live polite region announces a background add ("Sub-terminal X opened in Y") and merges adds within 1 s. Roving tabindex and the arrow, Home, End, Enter and Delete keys work on the strip (UX, Accessibility).
+(16) Own-view folder under a sub-terminal in sight (N1 from the 2a code review): a component-level test, with a sub-terminal in another folder shown, checks that each of these keeps the own view's folder: App's activeCwd (App.tsx ~291, folderPaneId); the Command Palette's "Set up project" and BMAD switch (CommandPalette.tsx :66 and :127); and FileBrowser (FileBrowser.tsx :161). Each assertion checks the folder it passes or shows, not a helper's return value. A mutant that reads shownView directly at any of those call sites must fail the test. The 2a helpers tabFolderPaneId and tabFolderPtyId are already pinned; these call-site tests pin the callers.
+Slice: src/stores/tabStore.ts (addView, shownView changes, session), the strip component (new), TabBar.tsx and TabSwitcher.tsx only where the strip needs it, src/lib/shortcuts.ts, App.tsx, src/lib/terminalCommands.ts (New Sub-terminal), the useGuardedClose and the detached-window menu only for the M9 hide, src-tauri/src/sync.rs, and their tests. No Rust busy check is added here.
+Verification: the five approved lines (see the header) each exit 0, with a named test for each of criteria (1) to (16) (full names fixed at refinement).'''
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (16) (full names fixed at refinement)."
+unknown = "Waiting on outside work: hermes-b-busy-panes (busy check: pty_foreground_job, paneBusy, decideBusy, useGuardedClose; branch hermes-b-busy-panes, on origin, not yet on main) must be merged to main before this starts (R1). Also waits for 2a on main."
+covers = []
+after = ["2a"]
+hitl = false
+risk = "high"
+refine = true
+
+[[entry]]
+id = 3
+type = "story"
+title = "Marks per view: attention, activity, roll-up and exited"
+description = '''Gives each sub-terminal its own attention and activity marks, rolls them up into the tab's marks, and shows the exited state. Full criteria are refined when this is pulled.
+Summary of criteria, each a test at refinement:
+(1) Attention is keyed tabId/viewId: output finished while a view is not in sight marks that view; showing the view clears it.
+(2) Activity is per view and works from creation, including while hidden and headless (the pane's terminal exists before first show).
+(3) The tab's agent dot is the most urgent state over all its views (AgentDot, rolled up by tabAgentState).
+(4) The tab's attention and activity marks cover all views; on the active tab, as today, the dot shows and attention and activity are hidden, while the strip shows them per view.
+(5) An agent in a sub-terminal raises the dot on that sub-terminal's entry as well as the tab's.
+(6) When a sub-terminal's shell exits, its entry shows "exited" (text in #8B929E, name at 60% opacity; no exit code), and its view shows a bar "This shell has exited." with [Close sub-terminal]. The tab's own shell exiting keeps today's [Process exited]; sub-terminals keep running.
+(7) A restored sub-terminal keeps "restored" on its entry for its life (tooltip: "Restored after restart: a new shell in <folder>. <name> was not run again.").
+Slice: src/stores/agentStatusStore.ts, src/hooks/useAgentStatusToasts.ts only where the view key changes, src/components/TabBar.tsx, the strip component, src/hooks/useTerminal.ts (exit handling), and their tests.
+Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion.'''
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (7) (full names fixed at refinement)."
+covers = []
+after = ["2b"]
+hitl = false
+risk = "medium"
+refine = true
+
+[[entry]]
+id = 4
+type = "story"
+title = "ade open adds a sub-terminal"
+description = '''Adds the CLI verb ade open, no-flags form: it adds a sub-terminal to the caller's tab, in the caller's folder or --cwd, optionally named, optionally focused, through POST /open on the existing endpoint. Command and split answer 422 "not supported yet" in this story (stories 8 and 9). No manual check gates this story; the hidden-terminal budget and V3 are story 4b. Starts after story 1 and 2b are on main. Full criteria are refined when this is pulled. Large: may be split into 4a (route, threads, claim, limits) and 4c (CLI) when pulled.
+Terminal creation (R5): the window creates the new pane's terminal at once, through today's createInstance with no container, at the caller's size (24x80 if no instance), then create_pty with the requestId. Rust never spawns or kills.
+Summary of criteria, each a test at refinement:
+(1) ade-hook acts as the CLI only when argv0 is ade or ade.exe or args[0] is open, help or --help. mode(argv0, args) is a pure function in src-tauri/src/ade_cli.rs, one test per case; guard is never the CLI (keep guard ahead of mode(); feat/cli-guard rebases onto this or the reverse).
+(2) CLI exit codes per the contract table: 0 opened; 1 for any answer other than 200, 401 or 410, or no answer within 15 s, with ADE's message (a 400 with {} says "this ADE is too old for ade open; restart ADE"); 2 usage (for example "--cwd: no such folder"); 3 a variable unset or malformed; 4 connection refused, 401 or 410 (message mentions tmux and screen); 5 is story 9's. Tests against a local TcpListener, one per row.
+(3) POST /open is screened by the same screen() (405, 403, 401, 413); unknown fields and wrong types are 400; a bad cwd, name or command shape is 422 per the contract.
+(4) The CLI resolves --cwd against $PWD logically, like cd, checks it is a folder with stat, and sends the logical path.
+(5) Routing: / is hook events, /open is this, anything else is 404 {}. Hook events are still served while an /open waits (test).
+(6) Threads and the handler (N7): serve screens, reads the body and calls admit(caller_pty) on its own thread. A refusal is answered there. An admitted request and its tiny_http::Request go to a new thread that calls handle(admission, body) and answers. AgentStatus::set_open_handler(Arc<dyn OpenHandler>) is called once in .setup(); until then /open answers 409 "ADE is still starting". Tests inject a fake handler.
+(7) The in-flight slot is an RAII Admission whose Drop releases it. Tests: a handler that panics, and an injected spawn failure (answered 503 on the serve thread), each leave the count where it started.
+(8) Owner window: a listener per window (409 if none; dropped on WindowEvent::Destroyed); the caller pane must be live (410 if not).
+(9) expiresAt is 5 s after the request. A window past it does nothing. On timeout Rust answers 504 "ADE didn't answer; no terminal was opened", types nothing, and sends expired; the window closes whatever it added late.
+(10) The PTY claim: at the request Rust records floor (the next PTY id). create_pty stores the requestId on the new PtyInstance. Rust accepts ptyId only if it was created with that requestId, is at or above floor, is unclaimed, is live and is owned by that window. Each of these gives typed:false in a test: below the floor; already claimed; dead; foreign window; created without this requestId.
+(11) Exactly one create_pty: a test opens with --focus and counts one create_pty; another does a background add shown at once.
+(12) --focus resize (N10): if the mounted size differs from the size the PTY was created with, once create_pty returns the window sends resize_pty with the pane's current size. Test: mount with a different size before create_pty resolves; one resize_pty follows.
+(13) PtyInstance fields: the owner window label (create_pty sets it; reattach replaces it) and requestId. Merge pair with feat/cli-guard: if feat/cli-guard is on main first, add the fields after PtyInstance::new; otherwise carry them through new()'s arguments. Either way one test covers construction with both fields.
+(14) Limits: 8 per caller pane, refilling 1 per second; at most 32 /open shells running, counting admitted requests in flight; both answer 429. Tests with an injected clock.
+(15) Naming: --name wins; else the command's first word after leading VAR=value words; else the folder basename; else "Terminal". Never the full line. Tests: "npm run dev" gives npm; "env TOKEN=x npm run dev" gives env; "FOO=1 make" gives make; no command gives the folder name or Terminal.
+(16) Flattening: a sub-terminal's own ade open adds a sibling to the same tab (spawnedBy = the caller's view name), never a nested strip.
+Slice: src-tauri/src/ade_cli.rs (new), src-tauri/ade-hook/src/main.rs, src-tauri/src/hook_forward.rs (CLI HTTP client), src-tauri/src/agent_status.rs (route /open, thread per request, set_open_handler, Admission), src-tauri/src/terminal_open.rs (new: validation, limits, claim, expiry), src-tauri/src/pty.rs (requestId, owner label, PtyInstance::new pair), src/lib/terminalOpen.ts (new), src/hooks/useTerminal.ts (creation at once, resize), the .setup() wiring in src-tauri/src/lib.rs, and tests.
+Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook (added from this story on, since no other line compiles the helper), each exit 0, with a named test for each criterion (1) to (16). No manual check.'''
+verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest; cd src-tauri && cargo check -p ade-hook), with a named test for each of criteria (1) to (16) (full names fixed at refinement)."
+covers = []
+after = [1, "2b"]
+hitl = false
+risk = "high"
+refine = true
+
+[[entry]]
+id = "4b"
+type = "story"
+title = "Hidden-terminal budget, dev helpers and V3"
+description = '''The cost budget for terminals created without a container (story 4's ade open, and story 5's detached-window reattach), with the dev helpers that measure it, the "only the last 1000 lines" tooltip, and manual check V3. V3 gates this story's Done (ADR 0009, on the unmerged branch docs/claude-md-paths), and does not gate story 4. Starts after story 4 is on main. Full criteria are refined when this is pulled.
+Budget. It applies to every terminal created without a container: createInstance with a null container and createReattachedInstance for a hidden pane. A terminal created with a container (every normal mount, and a restored session's panes whose saved scrollback is written before the seat) is unchanged.
+(1) Until its first seatTerminal: scrollback is min(setting, 1000); refreshAllTerminals keeps the cap on a not-yet-seated instance; no ImageAddon.
+(2) At its first seatTerminal, before the renderer is decided: scrollback becomes the setting and the ImageAddon is loaded before loadGpu (D3 of #73), and also on the paths where WebGL is off or unavailable. An instance is marked seated so this happens once.
+(3) Tests: a hidden instance has the capped scrollback and no image addon; refreshAllTerminals keeps the cap; the first seat loads the image addon before the WebGL addon (order of loadAddon calls) and lifts the cap; a normal mount is unchanged; a restored pane keeps more than 1000 lines of saved scrollback.
+(4) Dev helpers, dev builds only (import.meta.env.DEV): window.__adeEchoProbe(200) writes 200 single characters to the visible pane's PTY, 50 ms apart, and records for each the time from the write_pty call to xterm's onWriteParsed seeing it echoed; it prints p50, p95 and the maximum. window.__adeTypeInHidden(command) types command and Enter into every sub-terminal of the active tab that has not been shown.
+(5) The tooltip "Opened in the background: only the last 1000 lines are kept until you view it" ships here, not before (N6).
+(6) Manual check V3 (gates this story's Done). Load: run plain ade open --name load1 ... load8 from the visible pane, then window.__adeTypeInHidden('yes "$(printf %0100d 0)" | head -c 10000000 | pv -qL 1m') (1 MB/s for 10 s each; pv from Homebrew). Starting it by hand instead means showing each sub-terminal, which lifts its budget; record which way was used. Measure: window.__adeEchoProbe(200) in the visible pane while the load runs. Passes when p95 is under 50 ms. The machine, macOS version and the three numbers go in this story's Verification section. Until the owner runs it, QA records "not run, pending the owner" and the story is not Done.
+Slice: src/hooks/useTerminal.ts, the instance module that owns createInstance and refreshAllTerminals, the dev-helper module (new, DEV-gated), the tooltip in the strip component, and tests.
+Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (5), and V3 recorded per (6).'''
+verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (5); AND manual check V3 (criterion 6) run by the owner on a Mac and recorded here with p50, p95, max, the machine and the macOS version (p95 under 50 ms). Until then, QA records 'not run, pending the owner' and the story is not Done."
+covers = []
+after = [4]
+hitl = true
+risk = "medium"
+refine = true
+
+[[entry]]
+id = 5
+type = "story"
+title = "Moving sub-terminals and tabs; Move to New Window back"
+description = '''Move to New Tab for a sub-terminal; Move to New Window carrying every view (and shown again for tabs with sub-terminals, which 2b hid, M9); the headless reattach of hidden panes in the detached window; kill on destroy; and the strip and shortcuts in DetachedApp. Full criteria are refined when this is pulled.
+Summary of criteria, each a test at refinement:
+(1) Move to New Tab (sub-terminal context menu): it becomes a top-level tab right after its tab, with its panes and shells (no restart) and its name, and becomes the active tab. Afterwards ade open from it adds sub-terminals to the new tab.
+(2) Move to New Window carries every view: detachTabToWindow sends views, viewOrder and shownView; detachTab detaches every view's instances. Present again in the tab menu for tabs with sub-terminals.
+(3) The detached window reattaches the shown view on mount and every hidden pane at once, headless (createReattachedInstance without a container). The hidden-terminal budget covers this once story 4b is in (whichever lands first). The PTY owner label moves to the new window.
+(4) The destroy handler kills allTabPanes, so closing the detached window ends all its shells.
+(5) DetachedApp shows the strip (left inset 84 px for the window controls), supports the two shortcuts and the closing confirms; Move to New Tab is hidden there.
+(6) No Move to New Window for a single sub-terminal (cut in v1).
+Slice: src/lib/detachWindow.ts, src/DetachedApp.tsx, src/stores/tabStore.ts (move action), src/hooks/useTerminal.ts (reattach), the strip component, the tab menu (restore the item for sub-terminal tabs), src-tauri/src/pty.rs (owner label if needed), and tests.
+Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion (full names fixed at refinement).'''
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (6) (full names fixed at refinement)."
+covers = []
+after = ["2b"]
+hitl = false
+risk = "high"
+refine = true
+
+[[entry]]
+id = 6
+type = "story"
+title = "Finding sub-terminals: switcher rows, Fleet labels, toasts"
+description = '''Makes sub-terminals findable: indented rows under their tab in the Cmd+K switcher, Fleet labels, and agent-status toasts and switcher choices that show the sub-terminal rather than the tab. Full criteria are refined when this is pulled.
+Summary of criteria, each a test at refinement:
+(1) Cmd+K: each sub-terminal is a row under its tab, indented with the arrow mark, showing name and folder, never the command; search matches its name or folder; choosing it shows that sub-terminal.
+(2) Fleet: an agent in a sub-terminal is listed in its tab's group labelled "api > claude: auth" or "api > npm" (the name rule of story 4); choosing it shows the sub-terminal.
+(3) An agent-status toast for an agent in a sub-terminal names it and, when clicked, shows that sub-terminal in its tab, focused (allTabPanes and viewOfPane).
+(4) A tab with no sub-terminals gets no sub rows and no change.
+Slice: src/components/TabSwitcher.tsx, src/hooks/useFleetData.ts, src/hooks/useAgentStatusToasts.ts, the Fleet row component, src/components/CommandPalette.tsx (only the switch), and tests.
+Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion (full names fixed at refinement).'''
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (4) (full names fixed at refinement)."
+covers = []
+after = ["2b"]
+hitl = false
+risk = "medium"
+refine = true
+
+[[entry]]
+id = 7
+type = "story"
+title = "ade on PATH"
+description = '''Puts a symlink named ade on PATH in a checked folder that ADE owns, so an agent can run ade open without knowing where ADE is, and strips inherited ADE bin folders from other builds. Starts after story 4 is on main. Full criteria are refined when this is pulled.
+Summary of criteria, each a test at refinement:
+(1) The folder is <app data dir>/bin/release (re-pointed each launch) or bin/debug-<16 hex of sha256 of the helper path>. Each holds a symlink named ade to the helper. A debug-* folder whose target is gone is deleted at launch.
+(2) ADE uses the folder only if it is the user's, mode 0700, not a symlink, holds only ade (readdir and lstat), and ade is a symlink whose readlink target is exactly this launch's helper path. Checked at launch and in every create_pty.
+(3) create_pty always strips inherited ADE bin folders from PATH, and prepends its own only when it sets the ADE_* variables.
+(4) Recognising an inherited bin folder from any ADE build (another app data dir, a dev build, a different bundle id, an older install): a PATH entry is stripped when its last two components are bin/release or bin/debug-<16 hex>, and it holds an ade that is a symlink whose target's file name is ade-hook (or ade-hook.exe). Checked with lstat and readlink only, never by running anything; the target need not exist. Tests: a folder from another app data dir is stripped; one whose target is gone is stripped; a look-alike (bin/release without that symlink) is kept.
+(5) The name ade is kept (D8); agents use $ADE_HOOK_BIN.
+(6) Windows is out of scope: /open answers 422 there.
+Slice: src-tauri/src/pty.rs (apply_hook_env, create_pty), a new bin-folder module in src-tauri/src/, launch code in src-tauri/src/lib.rs, and tests.
+Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each criterion (1) to (6) (full names fixed at refinement).'''
+verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (6) (full names fixed at refinement)."
+covers = []
+after = [4]
+hitl = false
+risk = "medium"
+refine = true
+
+[[entry]]
+id = 8
+type = "story"
+title = "ade open --split, in any view"
+description = '''Adds --split right|down to ade open: it splits the caller's pane, in the caller's view (hidden or not), and makes no sub-terminal. Until now split answers 422 "not supported yet" (story 4). Starts after story 4 is on main. Full criteria are refined when this is pulled.
+Summary of criteria, each a test at refinement:
+(1) split right or down is accepted; splitPane runs by pane id in whichever view holds the caller's pane, so it works from a hidden view.
+(2) The split limit is 4 per direction per view; the window refuses past it with 409 and the CLI exits 1 with ADE's message.
+(3) --split from a pane whose tab is not a terminal tab is refused with 409.
+(4) --name is refused together with --split (CLI usage error, exit 2; the Rust body refuses with 422).
+(5) A split never creates a sub-terminal; the new pane's terminal is created at once, as in story 4.
+Slice: src-tauri/src/terminal_open.rs, src-tauri/ade-hook (CLI check), src/lib/terminalOpen.ts, src/stores/tabStore.ts (splitPane), and tests.
+Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each criterion (1) to (5) (full names fixed at refinement).'''
+verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (5) (full names fixed at refinement)."
+covers = []
+after = [4]
+hitl = false
+risk = "medium"
+refine = true
+
+[[entry]]
+id = 9
+type = "story"
+title = "ade open -- COMMAND: typing the command into the new shell"
+description = '''Adds the command: the words after -- are typed into the new shell with Enter, through feat/cli-guard's line-editor check and writer thread (R2). Adds exit code 5 (opened, command not typed), the not-typed notice with Insert command (N1), the amendment to ADR 0011 for the guard's resolution of "$ADE_HOOK_BIN" open (M6), and the guide entry (R6). Full criteria are refined when this is pulled.
+BLOCKED on outside work, held in unknown until all are true: story 4 on main; hermes-a-quoting on main (shellQuote, ADR 0008, D9); feat/cli-guard on main (line_editor_ready, the PTY writer thread, the guard, ADR 0011).
+Summary of criteria, each a test at refinement:
+(1) Typing (R2): Rust polls line_editor_ready(master, shell pid) every 50 ms and types after two ready answers in a row, for at most 5 s after the window's answer. Not ready by then: nothing is typed, typed:false, why "the shell's line editor didn't start". The line goes through the new PtyInstance's input channel to its writer thread, so a terminal that doesn't read never blocks Rust. Tests: types only after two ready answers; not ready in 5 s gives typed:false; a terminal that doesn't read doesn't block the answer; one real PTY case on Unix reusing feat/cli-guard's test helpers; a 5,000-byte line arrives whole.
+(2) Quoting: the window quotes each word with shellQuote (ADR 0008); bare words matching ^[\w./-]+$ are left as they are. Words are printable ASCII (D6; non-ASCII is refused, never altered). At most 64 words; at most 4096 bytes for the typed line.
+(3) Rust refuses a command unless the shell is sh, bash, zsh, fish, dash or ksh (422). A shell with no line editor (dash; ksh without emacs or vi) never becomes ready, so it gives typed:false.
+(4) A command that can't be typed leaves the shell alone and gives typed:false: CLI exit 5, and a typed message to the window that clears the spinner.
+(5) Worst case about 10 s from request to answer (5 s for the window, 5 s for the line editor); ADE answers within 11 s; the CLI gives up at 15 s. Test with injected clocks.
+(6) Insert command (N1, R1): the notice shows only the first word and an ellipsis, never the full line. Insert writes the full quoted line at the prompt without Enter, and is enabled only when paneBusy is null for the pane AND line_editor_ready is true for its PTY; both are checked again on click, and if either fails nothing is written. Disabled titles: "Available once the shell is back at its prompt" (busy or not yet ready) and "This shell has no line editor; type the command yourself" (dash, ksh without editing, known from the shell's name). Tests: disabled while paneBusy names a program, while line_editor_ready is false (a read -s prompt), and for dash; re-checked on click. The line is held in memory only.
+(7) The ADR 0011 amendment (M6): "$ADE_HOOK_BIN" (also $ADE_HOOK_BIN and ${ADE_HOOK_BIN}) unassigned on the line resolves to the helper; with the verb open, the words after -- are classified as the command, as a runner (env, xargs) is. Tests: "$ADE_HOOK_BIN" open -- gh repo delete o/r asks as the bare gh line does; "$ADE_HOOK_BIN" open --name x does not ask; a line that assigns ADE_HOOK_BIN asks; ade open with no -- is not guarded; the verb constant is enumerated by the guard's test (P6(b)). guard and hook mode are unchanged.
+(8) Guide entry (R6): typed commands run after the user's rc files and through their aliases and functions, which the guard cannot see; how to expand secrets inside the new terminal (D3). Documented, not asked.
+(9) The spinner clears when the typed result arrives.
+Slice: src/lib/terminalOpen.ts, src/lib/shellQuote.ts (from hermes-a-quoting), src-tauri/src/terminal_open.rs (typing), src-tauri/ade-hook (exit 5), src-tauri/src/pty.rs (input channel use), the notice and Insert command in the strip component, the guard's runner table (on feat/cli-guard), the ADR 0011 amendment, the guide entry, and tests.
+Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (9) (full names fixed at refinement). Not pulled while unknown is set.'''
+verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (9) (full names fixed at refinement); held until the unknown is gone."
+unknown = "Waiting on outside work, all three must be on main: story 4 (ade open); hermes-a-quoting (shellQuote, ADR 0008, D9; branch hermes-a-quoting, on origin); feat/cli-guard (line_editor_ready, PTY writer thread, the CLI-library guard, ADR 0011; origin/feat/cli-guard). Not started until all are merged, or the owner rules otherwise."
+covers = []
+after = [4]
+hitl = false
+risk = "high"
+refine = true

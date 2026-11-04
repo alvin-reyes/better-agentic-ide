@@ -17,7 +17,7 @@ import {
   type TerminalTabInfo,
 } from "../stores/fleetStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes } from "../stores/tabStore";
 import type { SessionUsage, UsageReport } from "../lib/tokenUsage";
 
 // ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
   const panes = useMemo<PaneInfo[]>(() => {
     const out: PaneInfo[] = [];
     for (const tab of tabs) {
-      for (const pane of findAllPanes(tab.root)) {
+      for (const pane of allTabPanes(tab)) {
         out.push({
           paneId: pane.id,
           tabId: tab.id,
@@ -198,7 +198,7 @@ export function useFleetData(activeCwd: string | null, scope: FleetScope = "acti
     () =>
       tabs
         .filter((t) => !t.type || t.type === "terminal")
-        .map((t) => ({ id: t.id, name: t.name, paneIds: findAllPanes(t.root).map((p) => p.id) })),
+        .map((t) => ({ id: t.id, name: t.name, paneIds: allTabPanes(t).map((p) => p.id) })),
     [tabs],
   );
 

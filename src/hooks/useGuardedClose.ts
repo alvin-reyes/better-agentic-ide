@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes } from "../stores/tabStore";
 import { editorDirty, unsavedEditorTabs } from "../lib/editorDirty";
 import { paneBusy } from "./useTerminal";
 
@@ -40,7 +40,7 @@ export function useGuardedClose() {
       return;
     }
 
-    const activeProcesses = await busyIn(findAllPanes(tab.root).map((p) => p.id));
+    const activeProcesses = await busyIn(allTabPanes(tab).map((p) => p.id));
     if (activeProcesses.length > 0) {
       setConfirmDialog({
         title: "Active process running",
@@ -91,7 +91,7 @@ export function useGuardedClose() {
       // "Close others" discarded unsaved files with no prompt, while closing
       // the same tab on its own warned.
       void Promise.all([
-        Promise.all(targets.map((t) => busyIn(findAllPanes(t.root).map((p) => p.id)))),
+        Promise.all(targets.map((t) => busyIn(allTabPanes(t).map((p) => p.id)))),
         unsavedEditorTabs(targets),
       ]).then(([busy, unsaved]) => {
         const live = targets.filter((_, i) => busy[i].length > 0);

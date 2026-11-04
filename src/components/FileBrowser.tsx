@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { useFileBrowserStore, type TreeNode, type FileEntry } from "../stores/fileBrowserStore";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, ownView } from "../stores/tabStore";
 import { getPtyCwd } from "../hooks/useTerminal";
 
 interface WatchEvent {
@@ -149,6 +149,7 @@ export default function FileBrowser() {
 
   const { tabs, activeTabId } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const activePaneId = activeTab ? ownView(activeTab).activePaneId : undefined;
 
   // CWD sync: poll active terminal's CWD every 3s
   useEffect(() => {
@@ -157,7 +158,7 @@ export default function FileBrowser() {
       return;
     }
 
-    const paneId = activeTab.activePaneId;
+    const paneId = ownView(activeTab).activePaneId;
     let cancelled = false;
 
     const syncCwd = async () => {
@@ -176,7 +177,7 @@ export default function FileBrowser() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [activeTab?.id, activeTab?.activePaneId, activeTab?.type, setRootPath]);
+  }, [activeTab?.id, activePaneId, activeTab?.type, setRootPath]);
 
   // File watcher for auto-refresh
   useEffect(() => {

@@ -46,7 +46,7 @@ Element.prototype.scrollIntoView = vi.fn();
 import ConfirmDialog from "../components/ConfirmDialog";
 import CommandPalette from "../components/CommandPalette";
 import { useGuardedClose } from "../hooks/useGuardedClose";
-import { findAllPanes, useTabStore } from "../stores/tabStore";
+import { allTabPanes, shownView, useTabStore } from "../stores/tabStore";
 
 /** App's part in closing: the guarded close and its dialog. */
 function Host() {
@@ -54,7 +54,7 @@ function Host() {
   const closeActivePane = () => {
     const { tabs, activeTabId } = useTabStore.getState();
     const tab = tabs.find((t) => t.id === activeTabId)!;
-    requestClosePane(tab.id, tab.activePaneId);
+    requestClosePane(tab.id, shownView(tab).activePaneId);
   };
   return (
     <>
@@ -75,15 +75,15 @@ const flush = () => act(async () => { for (let i = 0; i < 5; i++) await new Prom
 const tabExists = (id: string) => useTabStore.getState().tabs.some((t) => t.id === id);
 const paneExists = (tabId: string, paneId: string) => {
   const tab = useTabStore.getState().tabs.find((t) => t.id === tabId);
-  return !!tab && findAllPanes(tab.root).some((p) => p.id === paneId);
+  return !!tab && allTabPanes(tab).some((p) => p.id === paneId);
 };
 
 /** A new tab with two panes; the second is active. Returns the tab and its active pane. */
 function splitTab(name: string) {
   const tabId = useTabStore.getState().addTab(name);
-  const first = useTabStore.getState().tabs.find((t) => t.id === tabId)!.activePaneId;
+  const first = shownView(useTabStore.getState().tabs.find((t) => t.id === tabId)!).activePaneId;
   useTabStore.getState().splitPane(tabId, first, "horizontal");
-  const paneId = useTabStore.getState().tabs.find((t) => t.id === tabId)!.activePaneId;
+  const paneId = shownView(useTabStore.getState().tabs.find((t) => t.id === tabId)!).activePaneId;
   return { tabId, paneId };
 }
 

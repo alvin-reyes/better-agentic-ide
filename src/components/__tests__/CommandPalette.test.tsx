@@ -48,7 +48,7 @@ import MethodologyPromptHost from "../MethodologyPrompt";
 import { __resetPromptForTests, useMethodologyPrompt } from "../../lib/methodologyPrompt";
 import { beginSwitch } from "../../lib/projectSetup";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { useTabStore } from "../../stores/tabStore";
+import { shownView, useTabStore } from "../../stores/tabStore";
 
 const COMMAND = "Project: Set up BMAD, methodology and agents";
 const question = () => document.querySelector(".new-tab-ask")?.textContent ?? null;
@@ -228,7 +228,7 @@ describe("BMAD: Switch to the other version", () => {
 describe("Close Tab and Close Pane", () => {
   it("close actions go through the confirmation", () => {
     const { activeTabId, tabs } = useTabStore.getState();
-    const paneId = tabs.find((t) => t.id === activeTabId)!.activePaneId;
+    const paneId = shownView(tabs.find((t) => t.id === activeTabId)!).activePaneId;
     const closeTab = vi.spyOn(useTabStore.getState(), "closeTab");
     const closePane = vi.spyOn(useTabStore.getState(), "closePane");
     const tabRequests: unknown[] = [];
