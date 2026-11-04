@@ -21,7 +21,7 @@ vi.mock("../useTerminal", () => ({
 }));
 
 import ConfirmDialog from "../../components/ConfirmDialog";
-import { useGuardedClose } from "../useGuardedClose";
+import { useGuardedClose, runningSubTerminals } from "../useGuardedClose";
 import { paneBusy, destroyInstance } from "../useTerminal";
 import { useTabStore, ownViewOnly, findAllPanes, loadSession, type Tab, type PaneNode } from "../../stores/tabStore";
 import { usePaneCwd } from "../../stores/paneMetaStore";
@@ -212,14 +212,22 @@ describe("closing a tab", () => {
     const dev = addSub("a", "dev server");
     addSub("a", "idle one");
     const agent = addSub("a", "claude: auth");
+    // A split sub-terminal with both panes busy: one running view, named once, by its first busy pane.
+    const tests = addSub("a", "tests");
+    act(() => useTabStore.getState().splitPane("a", tests.paneId, "vertical"));
+    const testsSecond = findAllPanes(tab("a")!.views[tests.viewId].root)[1];
+    act(() => useTabStore.getState().setPtyId(testsSecond.id, 52));
+    t.instances.add(testsSecond.id);
     t.running.set(dev.paneId, "node");
     t.running.set(agent.paneId, "claude");
+    t.running.set(tests.paneId, "vitest");
+    t.running.set(testsSecond.id, "node");
     render(<Host />);
 
     await act(async () => { await api.requestCloseTab("a"); });
 
-    expect(screen.getByText("Close “api” and its 3 sub-terminals?")).toBeTruthy();
-    expect(screen.getByText("2 are running a program (node, claude). Closing ends them.")).toBeTruthy();
+    expect(screen.getByText("Close “api” and its 4 sub-terminals?")).toBeTruthy();
+    expect(screen.getByText("3 are running a program (node, claude, vitest). Closing ends them.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Close Anyway" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close all" }));
     expect(tab("a")).toBeUndefined();
@@ -319,5 +327,29 @@ describe("restored sub-terminals not yet shown", () => {
     await act(async () => { await api.requestCloseTab("a"); });
     expect(paneBusy).toHaveBeenCalledWith(withPty.paneId);
     expect(paneBusy).toHaveBeenCalledWith(mountedPane);
+  });
+});
+
+describe("the running counts", () => {
+  it("the badge count leaves out the own view", async () => {
+    addSub("a", "one");
+    addSub("a", "two");
+    t.running.set("a1", "claude");
+    expect(await runningSubTerminals(tab("a")!)).toBe(0);
+  });
+
+  it("requestClosePane skips a pane with no terminal yet", async () => {
+    // The own view split: its new pane has neither an instance nor a ptyId.
+    act(() => useTabStore.getState().splitPane("a", "a1", "vertical"));
+    const fresh = findAllPanes(tab("a")!.views.own.root)[1];
+    expect(fresh.ptyId).toBeNull();
+    t.running.set(fresh.id, "node");
+    render(<Host />);
+
+    await act(async () => { await api.requestClosePane("a", fresh.id); });
+
+    expect(paneBusy).not.toHaveBeenCalledWith(fresh.id);
+    expect(dialogOpen()).toBe(false);
+    expect(findAllPanes(tab("a")!.views.own.root).map((p) => p.id)).toEqual(["a1"]);
   });
 });

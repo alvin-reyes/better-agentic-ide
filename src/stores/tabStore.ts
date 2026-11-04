@@ -672,6 +672,17 @@ function savedTrees(tab: SavedTab): any[] {
   return [tab.root, ...(tab.subViews ?? []).map((v) => v.root)];
 }
 
+/**
+ * The last `n` UTF-16 code units of `s`, or one fewer when the cut would leave
+ * a lone low surrogate first: JSON.stringify writes that as an escape that
+ * strict parsers (serde_json, so sync.rs) refuse.
+ */
+function tail(s: string, n: number): string {
+  const t = s.slice(-n);
+  const first = t.charCodeAt(0);
+  return first >= 0xdc00 && first <= 0xdfff ? t.slice(1) : t;
+}
+
 async function saveSession(): Promise<void> {
   const { serializeTerminalBuffer, getPtyCwd } = await import("../hooks/useTerminal");
   const state = useTabStore.getState();
@@ -749,7 +760,7 @@ async function saveSession(): Promise<void> {
     for (const tab of session.tabs) {
       const truncateNode = (node: any) => {
         if (node.type === "pane" && node.pane.serializedBuffer) {
-          node.pane.serializedBuffer = node.pane.serializedBuffer.slice(-10000);
+          node.pane.serializedBuffer = tail(node.pane.serializedBuffer, 10000);
         } else if (node.children) {
           node.children.forEach(truncateNode);
         }
@@ -777,6 +788,11 @@ async function saveSession(): Promise<void> {
   }
 }
 
+/** Whether every split in a loaded tree has children (a saved `children: []` gives none). */
+function hasEveryPane(node: PaneNode): boolean {
+  return node.type === "pane" ? true : node.children.length > 0 && node.children.every(hasEveryPane);
+}
+
 /**
  * The views of a loaded tab: its own view holding `root`, then each saved
  * sub-terminal with new ids, marked restored, with no shell yet (it starts
@@ -786,9 +802,15 @@ function restoreViews(saved: SavedTab, root: PaneNode): Pick<Tab, "views" | "vie
   const fields = ownViewOnly(root, findAllPanes(root)[0]?.id || "");
   if (saved.type && saved.type !== "terminal") return fields;
   let shown = OWN_VIEW;
-  for (const sub of saved.subViews ?? []) {
+  for (const sub of Array.isArray(saved.subViews) ? saved.subViews : []) {
     const ids = new Map<string, string>();
-    const subRoot = deserializePaneNode(sub.root, ids);
+    let subRoot: PaneNode;
+    try {
+      subRoot = deserializePaneNode(sub.root, ids);
+    } catch {
+      continue; // A sub-terminal that won't load is skipped; the session is kept.
+    }
+    if (!hasEveryPane(subRoot)) continue;
     const view: View = {
       id: newViewId(),
       name: sub.name ?? null,

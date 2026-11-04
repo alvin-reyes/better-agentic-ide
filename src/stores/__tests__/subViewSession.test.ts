@@ -153,3 +153,93 @@ describe("saving sub-terminals", () => {
     expect(saved().tabs[0].root.pane.serializedBuffer).toBe("own-buf");
   });
 });
+
+describe("truncation and surrogate pairs", () => {
+  it("truncation never splits an emoji into a lone surrogate", async () => {
+    // 10,000 code units from the end falls inside an emoji: "😀" is two.
+    const big = "x".repeat(6 * 1024 * 1024) + "😀".repeat(5000) + "x";
+    live.set("a1", { buffer: "own-buf", cwd: "/code/api" });
+    live.set("d1", { buffer: big, cwd: "/code/api/web" });
+    useTabStore.setState({ tabs: [tabWithSubTerminals()], activeTabId: "tab-api" });
+
+    await saveSession();
+    const json = localStorage.getItem(KEY)!;
+    expect(json.length).toBeLessThan(5 * 1024 * 1024);
+    // JSON.stringify writes a lone surrogate as an escape; no such escape is there.
+    expect(json).not.toMatch(/\\ud[89a-f][0-9a-f]{2}/i);
+    const buf: string = saved().tabs[0].subViews[0].root.pane.serializedBuffer;
+    expect(buf).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/);
+    expect(buf.endsWith("😀x")).toBe(true);
+    expect(buf.length).toBeLessThanOrEqual(10000);
+    expect(buf.length).toBeGreaterThanOrEqual(9999);
+  });
+});
+
+describe("a saved session with broken sub-terminals", () => {
+  const good = { id: "view-1", name: "npm", activePaneId: "s1", root: { type: "pane", pane: { id: "s1", savedCwd: "/code/api/web" } } };
+  const BROKEN: [string, unknown][] = [
+    ["an entry with no root", { id: "view-2", name: "x", activePaneId: "z" }],
+    ["a split with no children", { id: "view-2", name: "x", activePaneId: "z", root: { type: "split", direction: "vertical", children: [] } }],
+    ["a pane node with no pane", { id: "view-2", name: "x", activePaneId: "z", root: { type: "pane" } }],
+    ["a null entry", null],
+  ];
+  /** Tab "api" with `subViews`, then tab "web" whose scrollback must survive. */
+  const store = (subViews: unknown) => localStorage.setItem(KEY, JSON.stringify({
+    tabs: [
+      { id: "t1", name: "api", activePaneId: "a", root: { type: "pane", pane: { id: "a", savedCwd: "/code/api" } }, subViews, shownView: "view-1" },
+      { id: "t2", name: "web", activePaneId: "b", root: { type: "pane", pane: { id: "b", savedCwd: "/code/web", serializedBuffer: "web-history" } } },
+    ],
+    activeTabId: "t2",
+  }));
+  const webKept = () => {
+    const web = useTabStore.getState().tabs.find((t) => t.name === "web")!;
+    expect(findAllPanes(ownView(web).root)[0].serializedBuffer).toBe("web-history");
+    expect(localStorage.getItem(KEY)).not.toBeNull();
+  };
+
+  for (const [what, entry] of BROKEN) {
+    it(`skips ${what} and keeps the rest of the session`, () => {
+      store([good, entry]);
+      expect(loadSession()).toBe(true);
+      const api = useTabStore.getState().tabs.find((t) => t.name === "api")!;
+      expect(api.viewOrder).toHaveLength(2);
+      expect(api.views[api.viewOrder[1]].name).toBe("npm");
+      expect(api.shownView).toBe(api.viewOrder[1]);
+      webKept();
+    });
+  }
+
+  it("skips subViews that are not a list and keeps the rest of the session", () => {
+    store({ "view-1": good });
+    expect(loadSession()).toBe(true);
+    const api = useTabStore.getState().tabs.find((t) => t.name === "api")!;
+    expect(api.viewOrder).toEqual(["own"]);
+    expect(api.shownView).toBe("own");
+    webKept();
+  });
+});
+
+describe("storage full", () => {
+  it("the fallback drops the scrollback of every sub-terminal too", async () => {
+    live.set("a1", { buffer: "own-buf", cwd: "/code/api" });
+    live.set("d1", { buffer: "dev-buf", cwd: "/code/api/web" });
+    live.set("t2", { buffer: "t2-buf", cwd: "/code/api/e2e" });
+    useTabStore.setState({ tabs: [tabWithSubTerminals()], activeTabId: "tab-api" });
+    const real = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => { throw new Error("QuotaExceededError"); });
+    try {
+      await saveSession();
+    } finally {
+      setItem.mockRestore();
+      expect(Storage.prototype.setItem).toBe(real);
+    }
+    const json = localStorage.getItem(KEY)!;
+    expect(json).not.toContain("serializedBuffer");
+    for (const buf of ["own-buf", "dev-buf", "t2-buf"]) expect(json).not.toContain(buf);
+    // The folders and the views are kept.
+    const s = saved().tabs[0];
+    expect(s.subViews).toHaveLength(2);
+    expect(s.subViews[0].root.pane.savedCwd).toBe("/code/api/web");
+    expect(s.subViews[1].root.children[1].pane.savedCwd).toBe("/code/api/e2e");
+  });
+});

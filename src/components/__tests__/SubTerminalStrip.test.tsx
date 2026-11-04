@@ -56,6 +56,7 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: async () => {} }));
 
 import SubTerminalStrip, { SubTerminalAnnouncer, SUB_TERMINAL_CONTENT_ID } from "../SubTerminalStrip";
 import { useTerminal, destroyInstance, stopIdlePolling } from "../../hooks/useTerminal";
+import { useGuardedClose } from "../../hooks/useGuardedClose";
 import { useTabStore, ownViewOnly, findAllPanes, shownView, type Tab, type PaneNode } from "../../stores/tabStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { usePaneCwd } from "../../stores/paneMetaStore";
@@ -335,6 +336,25 @@ describe("closing from the strip", () => {
     expect(tab("a").shownView).toBe("own");
     expect(closeRequests(() => fireEvent.click(screen.getByRole("button", { name: "Close dev server" }))))
       .toEqual([{ tabId: "a", viewId: dev }]);
+  });
+
+  it("after Delete closes an entry not in sight, focus moves to the entry on its left", async () => {
+    addView("a", "one");
+    addView("a", "two");
+    function Closer() {
+      useGuardedClose();
+      return null;
+    }
+    render(<><Closer /><SubTerminalStrip tabId="a" /></>);
+
+    // Shells not started yet: nothing runs, so Delete closes at once.
+    act(() => entries()[2].focus());
+    fireEvent.keyDown(entries()[2], { key: "Delete" });
+    await settle();
+
+    expect(entries().map((e) => e.textContent)).toEqual(["api", "one"]);
+    expect(tab("a").shownView).toBe("own");
+    expect(document.activeElement).toBe(entries()[1]);
   });
 
   it("Delete on an entry calls requestCloseView", () => {

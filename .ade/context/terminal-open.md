@@ -303,12 +303,19 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   - `shownView`: the saved id of the view in sight.
   A tab with one view writes neither key (the golden session test). On load,
   sub-terminals get new view and pane ids, `restored: true`, no `ptyId`;
-  `shownView` is remapped, `own` if unknown. The 5 MB truncation and the
+  `shownView` is remapped, `own` if unknown. A `subViews` entry that won't
+  load (no tree, an empty split, not a list) is skipped; the rest of the
+  session loads. The 5 MB truncation and the
   storage-full fallback walk `root` and every `subViews` tree.
   - Restored sub-terminals start when first shown.
   - Commands, status, `spawnedBy` and `restored` are never saved. The line for Insert
     command lives in memory only.
-  - `sync.rs` strips `serializedBuffer` before pushing to the sync repo.
+  - `sync.rs` strips `serializedBuffer` before pushing to the sync repo. An
+    `ade-session` it can't parse is left out of the export (never written
+    raw), so its scrollback can't reach the repo.
+  - The truncation keeps each pane's last 10,000 UTF-16 code units, one fewer
+    when the cut would split a surrogate pair (a lone surrogate makes the
+    JSON unparseable for serde_json).
 - **Detaching** (story 5) sends `views`, `viewOrder` and `shownView`. Until
   story 5, Move to New Window is hidden for a tab with sub-terminals.
   - The detached window reattaches hidden panes at once, headless.

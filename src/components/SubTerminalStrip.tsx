@@ -72,6 +72,22 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
 
   const viewOrder = tab?.viewOrder;
   const shown = tab?.shownView;
+  // An entry closed with Delete takes the keyboard focus with it: the entry on
+  // its left gets it, once the close (after any confirm) removes it.
+  const refocusAfter = useRef<{ viewId: string; order: string[] } | null>(null);
+  useEffect(() => {
+    const pending = refocusAfter.current;
+    if (!pending || !viewOrder || viewOrder.includes(pending.viewId)) return;
+    refocusAfter.current = null;
+    // Only when focus was lost with the entry, not taken by something else meanwhile.
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const left = pending.order.slice(0, pending.order.indexOf(pending.viewId)).reverse().find((id) => viewOrder.includes(id));
+    const target = left ?? shown;
+    if (target) {
+      setFocusId(target);
+      entryRefs.current.get(target)?.focus();
+    }
+  }, [viewOrder, shown]);
 
   // A view that appears while mounted and is not shown was added in the background.
   useEffect(() => {
@@ -127,6 +143,7 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
     // Delete is the keyboard route to the ×; the own entry has none.
     if (e.key === "Delete" && viewId !== viewOrder[0]) {
       e.preventDefault();
+      refocusAfter.current = { viewId, order: viewOrder };
       requestCloseView(tabId, viewId);
     }
   };
@@ -158,8 +175,9 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
         )}
         <span className="subterm-name">{name}</span>
         {!own && (
-          // A span, not a <button>: no interactive element inside a tab. Out
-          // of the tab order; Delete on the entry is its keyboard route.
+          // A span with role "button", not a <button>. It is still a control
+          // nested in a tab for assistive tech; it is kept out of the tab
+          // order, and Delete on the entry is its keyboard route.
           <span
             role="button"
             className="subterm-close"
