@@ -417,7 +417,7 @@ Every one awaits `paneBusy`. The dialogs keep their wording ("a live X session")
   - An idle prompt with a slow prompt hook (for example, a git status prompt in a large repository).
 - Close Tab and Close Pane from the command palette ask first over a running agent.
 
-**Results (B):** to be filled in by QA.
+**Results (B):** see "Story B: Verification" at the end of this file.
 
 ---
 
@@ -659,3 +659,40 @@ All six were answered by the owner on 2026-10-17, as recommended, when the plan 
   - combined short flags (`zsh -il`, `bash -li`) are parsed in B rather than noted, with a cluster containing `c` treated as `-c` (B-AC1).
 
   Also corrected: `nix develop` runs a plain `bash --rcfile`, not a `-wrapped` bash.
+
+---
+
+# Story B: Verification
+
+QA, 2026-11-04, worktree `hermes-b-busy-panes` at df90180 (PR #75). `docs/architecture.md` does not exist in this repo, so the command is the one the plan's "Verification (B)" names as "the repo's verification command, unchanged". The five lines were run one after another.
+
+| Line | Result |
+|---|---|
+| `cd relay && cargo test` | exit 0; every suite `ok`, 0 failed (9, 2, 68, 14, 11, 61, 29, 8 passed across the suites) |
+| `npx tsc --noEmit` | exit 0 |
+| `npm test` | `Test Files 149 passed (149)`, `Tests 1670 passed (1670)`; no failures, so the `BoardPanel.test.tsx` flake did not appear |
+| `cd src-tauri && cargo test` | `462 passed; 0 failed; 1 ignored` (unit), then `12 passed` and `2 passed` (other targets); the 18 `pty::` tests pass, including `foreground_tests::classify_judges_by_name_argv_and_pid` and `foreground_pty_tests::{reports_a_running_command, reports_a_running_shell_script, reports_an_execd_process, a_nested_shell_at_its_prompt_is_idle}` |
+| `cd mobile && npx tsc --noEmit && npx jest` | tsc exit 0; `Test Suites: 1 passed`, `Tests: 6 passed, 6 total` |
+
+**Acceptance criteria against tests**
+
+| AC | Covering test |
+|---|---|
+| 1 `classify` | `pty.rs` `classify_judges_by_name_argv_and_pid` (also asserts `-il`, `-li`, `-ic`, `.zsh-wrapped`, empty argv, "unknown program"; the 15 and 14 character prefix cases are in the normalise test) |
+| 2 real ptys | `pty.rs` `reports_a_running_command`, `reports_a_running_shell_script`, `reports_an_execd_process`, `a_nested_shell_at_its_prompt_is_idle` |
+| 3 `decideBusy` | `paneBusy.test.ts` "a pane is busy by tracked session or foreground program, for any provider", "a brief foreground program is not busy", "the agent is named only when it is the foreground program" (Ollama, `python3.12`, macOS-style `2.1.301`/`claude`, git then Shell, rejection, fallback) |
+| 4 Picker | `AgentPicker.test.tsx` "a busy or unchecked pane is never offered as This terminal, whatever the provider" |
+| 5 Enter over a busy pane | `AgentPicker.test.tsx` "Enter on This terminal over a busy pane types nothing" |
+| 6 Five close paths | `closeConfirm.test.tsx` "every close path asks first when a pane runs any agent" (five paths, each for a Hermes and an Ollama pane, plus idle and Cancel cases) |
+| 7 Palette dispatches events | `CommandPalette.test.tsx` "close actions go through the confirmation" |
+| 8 `hasActiveProcess` only a fallback | `paneBusy.test.ts` "the text heuristic is only a fallback" (source scan) |
+
+No criterion lacks a covering test.
+
+**Slice.** The diff against origin/main is the plan commit f947aaa (plan, ADR, knowledge, journal) plus Story B: `pty.rs`, `lib.rs` registration, `paneBusy.ts`, `useGuardedClose.ts`, `useTerminal.ts`, `App.tsx`, `AgentPicker.tsx`, `CommandPalette.tsx`, their tests, one guide paragraph in `docs/guide/agents.md`, and the contract `.ade/context/pane-busy.md`. Nothing for Stories A or C.
+
+**Contract.** Recorded in `.ade/context/pane-busy.md` (`pty_foreground_job` shape, `paneBusy`, the close events).
+
+**Not run:** the manual checks listed under "Verification (B)" (a real Ollama agent, vim, `exec tmux`, a slow prompt hook). They need a running app.
+
+**Verdict: Done.**
