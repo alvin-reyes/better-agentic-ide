@@ -23,7 +23,7 @@ interface MenuItem {
 }
 
 export default function TabBar() {
-  const { tabs, activeTabId, setActiveTab, addTab, renameTab, reorderTabs, setTabColor, sortTabsBy, reopenClosedTab, closedTabs } =
+  const { tabs, activeTabId, setActiveTab, addTab, addView, renameTab, reorderTabs, setTabColor, sortTabsBy, reopenClosedTab, closedTabs } =
     useTabStore();
   const { cwds, projects, attention, collapsedGroups, toggleGroup, clearAttention } = usePaneCwd();
   const stripRef = useRef<HTMLDivElement>(null);
@@ -120,7 +120,14 @@ export default function TabBar() {
   const menuItems: MenuItem[] = contextMenu ? [
     { label: "Rename", action: () => { if (menuTab) startRename(menuTab.id, menuTab.name); } },
     { label: "Duplicate", action: () => { if (menuTab) addTab(DEFAULT_NAME.test(menuTab.name) ? menuTab.name : menuTab.name + " (copy)", info[menuIdx]?.cwd ?? undefined); } },
-    { label: "Move to New Window", action: () => { import("../lib/detachWindow").then(({ detachTabToWindow }) => { detachTabToWindow(contextMenu.tabId); }); } },
+    // Terminal tabs only: a sub-terminal named "Terminal" in the tab's own folder, shown, since the user asked.
+    ...(menuTab && (!menuTab.type || menuTab.type === "terminal")
+      ? [{ label: "New Sub-terminal", action: () => { addView(menuTab.id, { name: "Terminal", cwd: info[menuIdx]?.cwd ?? null, focus: true }); } }]
+      : []),
+    // A detached window can't carry sub-terminals yet (story 5).
+    ...(menuTab && menuTab.viewOrder.length > 1
+      ? []
+      : [{ label: "Move to New Window", action: () => { import("../lib/detachWindow").then(({ detachTabToWindow }) => { detachTabToWindow(contextMenu.tabId); }); } }]),
     { label: "Sort Tabs by Project", action: () => sortTabsBy(projectKey), separated: true },
     { label: "Reopen Closed Tab", action: reopenClosedTab, disabled: closedTabs.length === 0 },
     { label: "Close Others", action: () => closeMany(tabs.filter((t) => t.id !== contextMenu.tabId).map((t) => t.id)), disabled: tabs.length < 2, separated: true },

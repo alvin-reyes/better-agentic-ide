@@ -337,9 +337,10 @@ contract says, nothing else calls `hasActiveProcess`; this plan doesn't.
 every tab holds its views explicitly:
 
 ```ts
-interface View { id: string; name: string | null; spawnedBy: string | null; root: PaneNode; activePaneId: string }
+interface View { id: string; name: string | null; spawnedBy: string | null; root: PaneNode; activePaneId: string; restored: boolean }
 interface Tab { /* ...unchanged fields... */ views: Record<string, View>; viewOrder: string[]; shownView: string }
 // "own" is always views.own and viewOrder[0]. A tab without sub-terminals has only "own".
+// restored: true only on a sub-terminal loadSession restored; never saved (ruling Q3, 2026-11-04).
 ```
 
 **Why not swap the view in sight into `tab.root`, as the last draft did?**
@@ -415,15 +416,15 @@ already goes through an accessor.
   - On Linux, `isAppShortcut` keeps Ctrl+Shift+[ and ] from reaching the
     shell in every tab. Some terminals send those keys as Esc; documented.
 - **Saving the session.** `SavedTab` keeps `root` as the own view's tree, so
-  old readers and old sessions work. It gains `subViews` (name, tree, folders,
-  scrollback) and `shownView`. Old sessions load as one "own" view.
+  old readers and old sessions work. It gains `subViews` (name, tree,
+  `activePaneId` (ruling Q4), folders, scrollback) and `shownView`. Old sessions load as one "own" view.
   - Over 5 MB, `saveSession` keeps the tail of each pane's scrollback. That
     walk covers `root` and every `subViews` tree (today it walks only
     `tab.root`). A test saves a session over 5 MB whose bulk is in a
     sub-terminal and checks it is truncated.
   - Restored sub-terminals start lazily, when first shown, and don't count as
     running (see "Busy check").
-  - Commands, status, `spawnedBy` and the typed line are never saved.
+  - Commands, status, `spawnedBy`, `restored` and the typed line are never saved.
   - The command line for Insert command lives in memory only.
   - `sync.rs` `value_for_repo` strips `serializedBuffer` before pushing.
     With command-derived names limited to one word, no command line reaches

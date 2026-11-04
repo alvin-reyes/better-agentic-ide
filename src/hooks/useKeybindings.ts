@@ -2,7 +2,7 @@ import { requestNewTab } from "../lib/newTab";
 import { useEffect } from "react";
 import { useTabStore, shownView } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
+import { refreshAllTerminals, getPtyCwd, focusActiveTerminal } from "./useTerminal";
 import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
 
 type SettingsState = ReturnType<typeof useSettingsStore.getState>;
@@ -116,6 +116,17 @@ export function useKeybindings(actions: KeybindingActions) {
         return run(() => {
           const next = tabs[activeIdx + step];
           if (next) setActiveTab(next.id);
+        });
+      }
+      // ⌘[ / ⌘]: the views of the tab, stopping at the ends. A tab without
+      // sub-terminals leaves the keys alone, default included.
+      const viewStep = is("prevSubTerminal") ? -1 : is("nextSubTerminal") ? 1 : null;
+      if (viewStep !== null && activeTab && activeTab.viewOrder.length > 1) {
+        return run(() => {
+          const next = activeTab.viewOrder[activeTab.viewOrder.indexOf(activeTab.shownView) + viewStep];
+          if (!next) return;
+          useTabStore.getState().showView(activeTabId, next);
+          focusActiveTerminal();
         });
       }
 

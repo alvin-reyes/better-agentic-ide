@@ -88,37 +88,130 @@ after = []
 hitl = false
 risk = "high"
 [[entry]]
-id = "2b"
+id = "2bi"
 type = "story"
-title = "Sub-terminals by hand: strip, switching, closing, saving"
-description = '''Adds sub-terminals to the store and the UI, made by hand from the tab menu: the strip, switching, the count badge, the two shortcuts, New Sub-terminal, the busy-checked closing, the live announcement, and saving them in the session. Nothing from the CLI yet (story 4). Starts only when 2a is merged to main and hermes-b-busy-panes is merged to main (R1). Full criteria are refined when this is pulled.
-Busy check (R1): this story adds no busy check of its own. Every sub-terminal confirm uses hermes-b-busy-panes: the Rust command pty_foreground_job, paneBusy and decideBusy, applied by useGuardedClose. pty_shell_idle is not added. A view is running when paneBusy is non-null for any of its panes; a tab is running when any of its views is, its own included.
-Summary of criteria, each a test at refinement:
-(1) The strip shows only while the tab has at least one sub-terminal; it appears with the first and disappears with the last, and the view returns to own.
-(2) The tab's own entry is pinned and shows the tab's label; a sub-terminal entry shows its name; the full command line is never shown.
-(3) addView adds a sub-terminal in the background: selection and focus stay. With focus (--focus, used by story 4) it becomes the shown view and its tab becomes active (U1).
-(4) New Sub-terminal (U5), in the terminal tab's context menu, adds a view named "Terminal" in the tab's folder and shows it. No + on the strip.
-(5) prevSubTerminal (Cmd+[ / Ctrl+Shift+[) and nextSubTerminal (Cmd+] / Ctrl+Shift+]) cycle the views. In a tab without sub-terminals they do nothing and do not preventDefault. On Linux isAppShortcut keeps those keys from the shell.
-(6) Each tab remembers its shown view; each view remembers its active pane.
-(7) Badge: "▤N" after the tab label, title and aria-label "N sub-terminals: x running, y exited", neutral colour, hidden at 0.
-(8) Closing a sub-terminal (x, Cmd+W in it, Delete on its entry) uses requestCloseView; Cmd+Shift+W on its last pane uses requestClosePane and then closes the view. A running view confirms (paneBusy over its panes); an idle prompt asks nothing.
-(9) Closing a tab (x, Cmd+W on its own view) uses requestCloseTab over allTabPanes, and confirms when any view is running (U4), with the UX dialog wording; Close Others / to the Right uses the existing one confirmation over allTabPanes of each tab.
-(10) Restored-not-shown guard: useGuardedClose skips a pane with neither an instance nor a ptyId. Test: a session restored with a sub-terminal that is never shown, then the tab closed, asks nothing.
-(11) requestCloseView and Cmd+Shift+W on a sub-terminal's last pane kill every pane through the instance or, with none, the store's ptyId (kill_pty). Test: a pane with no instance is killed. (N4; 2a's closePane already kills by the store's ptyId.)
-(12) Move to New Window is hidden in the tab menu for a tab with sub-terminals (M9), and present for a tab without. Story 5 brings it back for tabs with sub-terminals.
-(13) Session: SavedTab gains subViews (name, tree, folders, scrollback) and shownView. The 5 MB truncation in saveSession keeps the tail of each pane's scrollback across root and every subViews tree. Test: a session over 5 MB whose bulk is in a sub-terminal is truncated. An old session loads unchanged as one own view. Restored sub-terminals start when first shown and do not count as running. Commands, status, spawnedBy and the typed line are never saved.
-(14) sync.rs value_for_repo strips serializedBuffer from an ade-session with subViews, and no command line appears in the output (Rust test in sync.rs).
-(15) An aria-live polite region announces a background add ("Sub-terminal X opened in Y") and merges adds within 1 s. Roving tabindex and the arrow, Home, End, Enter and Delete keys work on the strip (UX, Accessibility).
-(16) Own-view folder under a sub-terminal in sight (N1 from the 2a code review): a component-level test, with a sub-terminal in another folder shown, checks that each of these keeps the own view's folder: App's activeCwd (App.tsx ~291, folderPaneId); the Command Palette's "Set up project" and BMAD switch (CommandPalette.tsx :66 and :127); and FileBrowser (FileBrowser.tsx :161). Each assertion checks the folder it passes or shows, not a helper's return value. A mutant that reads shownView directly at any of those call sites must fail the test. The 2a helpers tabFolderPaneId and tabFolderPtyId are already pinned; these call-site tests pin the callers.
-Slice: src/stores/tabStore.ts (addView, shownView changes, session), the strip component (new), TabBar.tsx and TabSwitcher.tsx only where the strip needs it, src/lib/shortcuts.ts, App.tsx, src/lib/terminalCommands.ts (New Sub-terminal), the useGuardedClose and the detached-window menu only for the M9 hide, src-tauri/src/sync.rs, and their tests. No Rust busy check is added here.
-Verification: the five approved lines (see the header) each exit 0, with a named test for each of criteria (1) to (16) (full names fixed at refinement).'''
-verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (16) (full names fixed at refinement)."
-unknown = "Waiting on outside work: hermes-b-busy-panes (busy check: pty_foreground_job, paneBusy, decideBusy, useGuardedClose; branch hermes-b-busy-panes, on origin, not yet on main) must be merged to main before this starts (R1). Also waits for 2a on main."
-covers = []
+title = "Sub-terminals by hand, part 1: open, switch and see"
+description = '''Part 1 of the former story 2b, split by the owner on 2026-11-04. Adds sub-terminals to the store and the UI, made by hand from the tab menu: the strip, switching, the two shortcuts, New Sub-terminal, the live announcement, the hidden Move to New Window, and App's folder choice moved into a hook. Closing, the count badge and saving come in 2b-ii. Nothing from the CLI (story 4).
+
+Owner rulings, 2026-11-04: Q1 to Q10 as proposed; Q11 = hook (useOwnFolderCwd, tested directly); restored: boolean on View accepted (2b-ii); the split accepted. All open questions are settled, so this entry is not blocked.
+
+Prerequisites, on main: story 2a (PR #76) and hermes-b-busy-panes (PR #75: pty_foreground_job, paneBusy, decideBusy, and useGuardedClose, which reads allTabPanes). This story adds no busy check.
+
+Sources. The spec owns every rule: docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md, sections "The store: views stored explicitly", "Busy check (R1)", "Closing and detaching", "Saving the session" and "Testing". The UX spec owns what the user sees, its copy, colours and keys: docs/superpowers/specs/2026-11-02-sub-terminals-ux.md, sections "Look", "When the strip shows", "The tab's own entry", "A sub-terminal entry", "Keyboard and focus" and "Accessibility". Contracts: .ade/context/terminal-open.md and .ade/context/pane-busy.md.
+
+Not in 2b-i, do not build: closing a sub-terminal, its confirm, the × and Delete on entries (2b-ii); the count badge (2b-ii, per the owner's split); saving and restoring sessions (2b-ii); the agent dot, attention and activity marks, and the exited and restored states on entries (story 3); the CLI and ade open (4); the hidden-terminal budget (4b); Move to New Tab, Move to New Window and DetachedApp's strip (5); the ⌘K sub rows, toasts and Fleet labels (6); Insert command, the not-typed notice, the starting spinner and the "This shell has exited." bar (4 and 9).
+
+Deviation from the summary, owner to note: the summary put some close-related clauses in criteria kept here. They move to 2b-ii with their test names: the "Close <name>" label and the × out of the tab order (B2, B17), Delete on an entry (B18), and "closing the last sub-terminal returns the view to own" (B1). 2b-i has no close control, so a sub-terminal in 2b-i is closed only with its tab.
+
+Names fixed here so the tests can be named (the spec does not name them):
+- src/stores/tabStore.ts: addView(tabId, { name, cwd, focus, spawnedBy }) returns the new view id. spawnedBy is optional and defaults to null; it holds the spawning view's id, "own" for the own view. New Sub-terminal passes null. showView(tabId, viewId).
+- src/hooks/useOwnFolderCwd.ts (new): useOwnFolderCwd(activeTab: Tab | undefined, folderPtyId: number | null): string | null. It holds App's current folder logic unchanged: it polls getPtyCwd on tabFolderPaneId(tab) every CWD_POLL_MS, skips non-terminal tabs, keeps the last value for them, and re-runs when folderPtyId lands. App calls it in place of its activeCwd state.
+- src/components/SubTerminalStrip.tsx (new), rendered in App.tsx above the shown view's PaneContainer for a terminal tab that has sub-terminals.
+- src/lib/shortcuts.ts: prevSubTerminal { key: "[" } and nextSubTerminal { key: "]" }, both listed in src/lib/shortcutList.ts.
+- src/components/TabBar.tsx: the "New Sub-terminal" menu item and the Move to New Window hide.
+
+Acceptance criteria. Each is one or more named tests in the file given. Write each test first, see it fail, then write the minimal code. Labels B1 to B21 are the summary's numbering, kept so the cross-references stay valid.
+
+B1 (summary 1). The strip is shown only while the tab has at least one sub-terminal: it shows when the tab has views beyond own, and is absent when it has none.
+  Tests: src/components/__tests__/SubTerminalStrip.test.tsx "the strip shows only while the tab has a sub-terminal". The closing clause ("closing the last sub-terminal returns the view to own") is in 2b-ii as B1b.
+
+B2 (summary 2). The own entry is first and pinned, shows tabLabel of the tab, and has no close button. A sub-terminal entry shows its name. No entry, tooltip or text shows a command line. The tooltip is "name — /full/cwd".
+  Tests: SubTerminalStrip.test.tsx "the own entry is pinned, shows the tab label and has no close button"; "a sub-terminal entry shows its name and tooltip, never a command".
+
+B3 (summary 3). addView without focus appends the view to viewOrder and leaves shownView, activeTabId and keyboard focus as they were. addView with focus: true makes the view shownView and makes its tab activeTabId (U1).
+  Tests: src/stores/__tests__/subViews.test.ts "addView in the background keeps the selection"; "addView with focus shows the sub-terminal and activates its tab"; "addView stores spawnedBy and defaults it to null".
+
+B4 (summary 4). The terminal tab's context menu has "New Sub-terminal" (U5). It adds a view named "Terminal" in the own view's folder, makes it shownView, and activates its tab, even when that tab was not active (Q9). The strip has no add control. The item is absent from the menus of editor, browser, fleet, orchestrator and contracts tabs.
+  Tests: src/components/__tests__/TabBar.subTerminal.test.tsx "New Sub-terminal adds a Terminal in the own folder and shows it"; "New Sub-terminal activates its tab"; "New Sub-terminal is only in terminal tabs' menus"; "the strip has no add control".
+
+B5 (summary 5). prevSubTerminal is ⌘[ (Ctrl+Shift+[ on Linux). nextSubTerminal is ⌘] (Ctrl+Shift+] on Linux). Both are listed in the shortcuts overlay. On Linux, the overlay note reads "On Linux, Ctrl+Shift+[ and Ctrl+Shift+] switch sub-terminals in every tab, so the shell does not receive them." (Q10). isAppShortcut keeps those keys from the shell in every tab.
+  Tests: src/lib/__tests__/shortcuts.test.ts "prevSubTerminal and nextSubTerminal are ⌘[ and ⌘] and map to Ctrl+Shift+[ and ] on Linux"; "isAppShortcut keeps Ctrl+Shift+[ and ] from the shell"; "the overlay carries the Linux note"; the existing "lists every shortcut, with no combo used twice" still passes with the two new ids.
+
+B6 (summary 5, cycling). In a tab with sub-terminals, ⌘] shows the next view (own, then each sub-terminal in viewOrder) and ⌘[ the previous. Both stop at the ends and do not wrap, as tab switching does. In a tab without sub-terminals, neither key calls preventDefault or changes any state.
+  Tests: src/hooks/__tests__/useKeybindings.subTerminal.test.tsx "⌘] and ⌘[ step through the views and stop at the ends"; "without sub-terminals the two keys neither prevent default nor change the view".
+
+B7 (summary 6). Each tab keeps its shownView across tab switches. Each view keeps its activePaneId. Showing a view focuses its active pane.
+  Tests: src/stores/__tests__/subViews.test.ts "a tab remembers the view it last showed"; "each view keeps its own active pane"; SubTerminalStrip.test.tsx "showing a view focuses its active pane".
+
+B14 (summary 12). Move to New Window is absent from the terminal tab menu when the tab has sub-terminals, and present when it has none (M9). Story 5 brings it back.
+  Tests: TabBar.subTerminal.test.tsx "Move to New Window is hidden for a tab with sub-terminals"; "Move to New Window is present for a tab without".
+
+B17 (summary 15, ARIA). The strip is role "tablist" with aria-label "Terminals in <tab label>". Entries are role "tab" with aria-selected, and aria-controls pointing at the content area. The selected entry has tabindex 0 and the others -1. (The × and its tabindex are 2b-ii.)
+  Test: SubTerminalStrip.test.tsx "the strip is a tablist with a roving tabindex".
+
+B18 (summary 15, keys). On the strip, ←/→ move focus between entries without wrapping. Home and End go to the first and last. Enter or Space shows the focused entry and moves focus into its terminal. (Delete is 2b-ii.)
+  Tests: SubTerminalStrip.test.tsx "arrow, Home and End keys move focus without wrapping"; "Enter and Space show the focused entry".
+
+B19 (summary 15, announcement). One visually hidden aria-live="polite" region per window. A background add says "Sub-terminal <name> opened in <tab label>". Adds within one second merge into "N sub-terminals opened in <tab label>". An add with focus says nothing extra.
+  Tests: SubTerminalStrip.test.tsx "a background add is announced"; "adds within one second are merged"; "an add with focus is not announced" (fake timers).
+
+B20 (summary 16). With a sub-terminal in another folder in sight, each call site uses the own view's folder, and each test asserts the folder that is passed or shown, not a helper's return value. The sites: App's activeCwd, which now comes from useOwnFolderCwd (App.tsx, about lines 76 and 286 to 299 on main); CommandPalette "Set up project" and the BMAD switch (CommandPalette.tsx, about lines 63 to 66 and 125 to 133); FileBrowser's root (FileBrowser.tsx, about lines 151 to 161). The App test targets the hook. A mutant that reads shownView at any of these sites must fail its test.
+  Tests: src/hooks/__tests__/useOwnFolderCwd.test.tsx "the folder poll reads the own view's folder with a sub-terminal in sight"; src/components/__tests__/subTerminalCallSites.test.tsx "Set up project and the BMAD switch use the own folder"; "FileBrowser shows the own folder".
+
+B21 (not in the summary; UX "The 'new' flash"). A background-added entry flashes its background to --accent-subtle once, over 1.2 s. No flash under prefers-reduced-motion. Built here (Q7).
+  Test: SubTerminalStrip.test.tsx "a background add flashes once, and not under reduced motion".
+
+Verification: the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest). cargo check -p ade-hook is not part of this story (from story 4 on, R4). Every test named above exists and passes. B20 needs its mutant check: a mutant reading shownView at each site must fail. Sizes, colours and the focus ring come from the UX spec's Look; QA checks them by eye against the UX spec and mockup.
+
+Slice: src/stores/tabStore.ts (addView, showView, spawnedBy); src/components/SubTerminalStrip.tsx (new); src/components/TabBar.tsx (menu items only); src/lib/shortcuts.ts and src/lib/shortcutList.ts; src/hooks/useKeybindings.ts (⌘[ and ⌘] only); src/hooks/useOwnFolderCwd.ts (new), and App.tsx (renders the strip, calls the hook); the tests above. Nothing else, except the two files the owner approved during the build (2026-11-05): src/hooks/useTerminal.ts (the B7 split-view focus fix: when terminals mount, only the active pane takes focus) and src/components/ShortcutsOverlay.tsx (rendered by B5's test).'''
+verify = '''the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), and every test named in the acceptance criteria exists and passes. cargo check -p ade-hook is not part of this story (from story 4 on, R4).'''
 after = ["2a"]
+covers = []
 hitl = false
 risk = "high"
-refine = true
+
+[[entry]]
+id = "2bii"
+type = "story"
+title = "Sub-terminals by hand, part 2: close and keep"
+description = '''Part 2 of the former story 2b, split by the owner on 2026-11-04. Needs 2b-i on main. Adds closing a sub-terminal through the busy check, the count badge, and saving sub-terminals in the session. The behaviour is the one the spec and the UX spec define, with the owner's rulings below.
+
+Owner rulings, 2026-11-04: Q1 to Q10 as proposed; Q11 = hook (useOwnFolderCwd, built in 2b-i); restored: boolean on View accepted; the split accepted.
+
+Busy check: this part adds none of its own. Every confirm uses paneBusy through useGuardedClose, from hermes-b-busy-panes (on main).
+
+Sources. docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md, sections "Busy check (R1)", "Closing and detaching", "Saving the session" and "Testing". docs/superpowers/specs/2026-11-02-sub-terminals-ux.md, sections "Closing", "The count on the main tab", "Persistence, windows, switcher, toasts, fleet" (restart only), "Keyboard and focus" (⌘W, ⌘⇧W), and "Notices" (not used here). Contracts: .ade/context/terminal-open.md (View, the session) and .ade/context/pane-busy.md.
+
+Not in 2b-ii: the agent dot, attention and activity marks, and the exited and restored labels on entries (story 3); the "y exited" part of the badge title (story 3); the CLI (4); the hidden-terminal budget (4b); Move to New Window coming back (5); ⌘K rows, toasts and Fleet labels (6); Insert command and the notices (4 and 9).
+
+Names fixed here so the tests can be named. The store: closeView(tabId, viewId). The hook: requestCloseView(tabId, viewId); CloseConfirm gains an optional confirmLabel, which App passes to ConfirmDialog (its default is "Close Anyway"). The View type gains restored: boolean, set by loadSession and never saved (Q3). The session: subViews and shownView, as in B15.
+
+Acceptance criteria. Each is one or more named tests in the file given. Write each test first, see it fail, then write the minimal code. Labels B1 to B21 are the summary's numbering.
+
+B1b (summary 1, closing). Closing the last sub-terminal returns the view to own and removes the strip.
+  Test: src/stores/__tests__/subViews.test.ts "closing the last sub-terminal returns the view to own".
+
+B8 (summary 7). The count badge "▤N" sits after the tab label, shows when the tab has sub-terminals, and is hidden at zero. Its aria-label and title are "N sub-terminals: x running", where x is the number of views that paneBusy reports as running (a view is running when any of its panes is). The badge is recounted when a view is added or closed and when the tab's menu opens; it is not polled. The "y exited" part comes in story 3. The badge never changes colour and is absent from non-terminal tabs.
+  Tests: src/components/__tests__/TabBar.subTerminal.test.tsx "the badge shows the count after the label and is hidden at zero"; "the badge title and aria-label carry the running count"; "the badge is absent on non-terminal tabs".
+
+B9 (summary 8). The entry's × (aria-label "Close <name>"), ⌘W while the sub-terminal is in view, and Delete on its entry call requestCloseView(tabId, viewId). requestCloseView asks only when paneBusy names a program in any pane of that view: title "Close “<name>”?", message "It is running a program (<label>). Closing ends it.", where label is paneBusy's label for the view's first busy pane (Q2). Buttons Cancel and Close. An idle view closes at once. Closing kills every pane of the view (through its instance, or with none through the store's ptyId via kill_pty), removes the view, and moves shownView to the entry on its left (the own view when it was first).
+  Tests: src/hooks/__tests__/useGuardedClose.test.tsx "requestCloseView asks when a pane of the view is running"; "requestCloseView closes an idle view at once"; "closing the shown sub-terminal shows the entry on its left"; src/hooks/__tests__/useKeybindings.subTerminal.test.tsx "⌘W in a sub-terminal calls requestCloseView, and in the own view requestCloseTab"; src/components/__tests__/SubTerminalStrip.test.tsx "a sub-terminal's × is labelled Close <name> and is out of the tab order"; "Delete on an entry calls requestCloseView".
+
+B10 (summary 8, last pane). ⌘⇧W on a sub-terminal's last pane closes the sub-terminal through the same confirm: requestClosePane closes the view when the view has one pane. The palette's Close Pane (it shows ⌘⇧W) takes the same path (Q8). On the own view's last pane it stays a no-op, as closePane does today.
+  Tests: src/hooks/__tests__/useGuardedClose.test.tsx "requestClosePane on a sub-terminal's last pane closes the view"; "requestClosePane on the own view's last pane does nothing"; src/components/__tests__/CommandPalette.test.tsx "Close Pane on a sub-terminal's last pane closes the view".
+
+B11 (summary 9). requestCloseTab asks over allTabPanes(tab) and confirms when any view is running. For a tab without sub-terminals the dialog is unchanged: title "Active process running", message "This tab has a live <label> session. Closing it will terminate the process. Are you sure?", button "Close Anyway" (Q1). For a tab with sub-terminals: title "Close “<tab label>” and its N sub-terminals?" (for one, "and its sub-terminal"), message "K are running a program (<labels>). Closing ends them." (K counts running views; for one, "1 is running a program (<label>). Closing ends it."), buttons Cancel and "Close all" (Q1, Q2). The labels are paneBusy's, one per running view, from its first busy pane, in viewOrder. Idle sub-terminals and restored ones not yet shown are neither counted nor named. Close Others and Close Tabs to the Right keep one confirmation, computed over allTabPanes of each tab.
+  Tests: src/hooks/__tests__/useGuardedClose.test.tsx "a tab without sub-terminals keeps today's dialog"; "closing a tab asks when any of its sub-terminals is running, with the UX copy"; "closing a tab whose sub-terminals are idle asks nothing"; "Close Others counts a running sub-terminal in one confirmation".
+
+B12 (summary 10). Restored-not-shown guard: useGuardedClose skips a pane that has neither an instance nor a ptyId, and does not call pty_foreground_job for it.
+  Tests: src/hooks/__tests__/useGuardedClose.test.tsx "a session restored with a sub-terminal that is never shown, then the tab closed, asks nothing"; "a pane with neither instance nor ptyId is not sampled".
+
+B13 (summary 11). Closing a view, and ⌘⇧W on a last pane, kill every pane: through its instance, or with none through the store's ptyId (kill_pty).
+  Tests: src/stores/__tests__/subViews.test.ts "closeView kills a pane with no instance through its ptyId" (destroyInstance mocked, asserted with (paneId, ptyId)); src/hooks/__tests__/destroyInstance.test.ts "destroyInstance kills by the stored ptyId when no instance exists" (pins today's behaviour).
+
+B15 (summary 13). The session. SavedTab gains subViews, one entry per sub-terminal in viewOrder, holding name, the view's tree, its activePaneId (Q4), and per pane the folder and scrollback as SavedPane has them; and shownView. A tab with one view writes exactly the JSON it wrote before this story, with neither key present. An old session loads as one own view. Loaded sub-terminals get new view ids, shownView is remapped (own if unknown), restored is true, and they have no ptyId, so their shell starts when first shown and they do not count as running. spawnedBy, status, commands and the typed line are never saved. saveSession's 5 MB truncation walks root and every subViews tree.
+  Tests: src/stores/__tests__/subViewSession.test.ts "a tab with sub-terminals round-trips its subViews and shownView"; "a restored sub-terminal has no ptyId, is marked restored and is not counted as running"; "saved sub-terminals carry no spawnedBy, status or command"; "a session over 5 MB whose bulk is in a sub-terminal is truncated". Also the existing src/stores/__tests__/session.test.ts "a single-view tab saves the same JSON as before the refactor" and "an old session loads as one own view" must pass unchanged.
+
+B16 (summary 14). sync.rs value_for_repo strips serializedBuffer from every subViews tree of an ade-session, and no command line reaches its output. The stripping already recurses (strip_fields_deep), so this test pins existing behaviour and passes as soon as it is written.
+  Test: src-tauri/src/sync.rs, Rust test value_for_repo_strips_scrollback_in_sub_views.
+
+Verification: the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), and every test named above exists and passes. cargo check -p ade-hook is not part of this story (from story 4 on, R4). The View fixtures in existing tests gain restored: false.
+
+Slice: src/stores/tabStore.ts (closeView, restored on View, session fields, truncation walk, loadSession); src/hooks/useGuardedClose.ts (requestCloseView, requestClosePane's view rule, requestCloseTab's dialog, confirmLabel, restored skip, closeMany); src/components/SubTerminalStrip.tsx (× and Delete); src/components/TabBar.tsx (the badge); src/hooks/useKeybindings.ts (⌘W in a sub-terminal, ⌘⇧W); src/App.tsx (passes confirmLabel); src-tauri/src/sync.rs (one test); the tests above. Nothing else.'''
+after = ["2bi"]
+covers = []
+hitl = false
+risk = "high"
 
 [[entry]]
 id = 3
@@ -133,11 +226,12 @@ Summary of criteria, each a test at refinement:
 (5) An agent in a sub-terminal raises the dot on that sub-terminal's entry as well as the tab's.
 (6) When a sub-terminal's shell exits, its entry shows "exited" (text in #8B929E, name at 60% opacity; no exit code), and its view shows a bar "This shell has exited." with [Close sub-terminal]. The tab's own shell exiting keeps today's [Process exited]; sub-terminals keep running.
 (7) A restored sub-terminal keeps "restored" on its entry for its life (tooltip: "Restored after restart: a new shell in <folder>. <name> was not run again.").
+(8) Narrow widths (UX spec, "Narrow widths and many sub-terminals"): the strip keeps its entries at full size and shows a 24 px fade at each scrolled edge that has entries past it; no fade shows when all entries fit. Test: src/components/__tests__/SubTerminalStrip.test.tsx "a 24 px fade shows at each scrolled edge that has entries past it". Owned here because story 3's slice already includes the strip component; the scroll itself is 2bi's strip.
 Slice: src/stores/agentStatusStore.ts, src/hooks/useAgentStatusToasts.ts only where the view key changes, src/components/TabBar.tsx, the strip component, src/hooks/useTerminal.ts (exit handling), and their tests.
 Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion.'''
-verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (7) (full names fixed at refinement)."
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (8) (full names fixed at refinement)."
 covers = []
-after = ["2b"]
+after = ["2bii"]
 hitl = false
 risk = "medium"
 refine = true
@@ -146,7 +240,7 @@ refine = true
 id = 4
 type = "story"
 title = "ade open adds a sub-terminal"
-description = '''Adds the CLI verb ade open, no-flags form: it adds a sub-terminal to the caller's tab, in the caller's folder or --cwd, optionally named, optionally focused, through POST /open on the existing endpoint. Command and split answer 422 "not supported yet" in this story (stories 8 and 9). No manual check gates this story; the hidden-terminal budget and V3 are story 4b. Starts after story 1 and 2b are on main. Full criteria are refined when this is pulled. Large: may be split into 4a (route, threads, claim, limits) and 4c (CLI) when pulled.
+description = '''Adds the CLI verb ade open, no-flags form: it adds a sub-terminal to the caller's tab, in the caller's folder or --cwd, optionally named, optionally focused, through POST /open on the existing endpoint. Command and split answer 422 "not supported yet" in this story (stories 8 and 9). No manual check gates this story; the hidden-terminal budget and V3 are story 4b. Starts after story 1 and 2b-ii are on main. Full criteria are refined when this is pulled. Large: may be split into 4a (route, threads, claim, limits) and 4c (CLI) when pulled.
 Terminal creation (R5): the window creates the new pane's terminal at once, through today's createInstance with no container, at the caller's size (24x80 if no instance), then create_pty with the requestId. Rust never spawns or kills.
 Summary of criteria, each a test at refinement:
 (1) ade-hook acts as the CLI only when argv0 is ade or ade.exe or args[0] is open, help or --help. mode(argv0, args) is a pure function in src-tauri/src/ade_cli.rs, one test per case; guard is never the CLI (keep guard ahead of mode(); feat/cli-guard rebases onto this or the reverse).
@@ -169,7 +263,7 @@ Slice: src-tauri/src/ade_cli.rs (new), src-tauri/ade-hook/src/main.rs, src-tauri
 Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook (added from this story on, since no other line compiles the helper), each exit 0, with a named test for each criterion (1) to (16). No manual check.'''
 verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest; cd src-tauri && cargo check -p ade-hook), with a named test for each of criteria (1) to (16) (full names fixed at refinement)."
 covers = []
-after = [1, "2b"]
+after = [1, "2bii"]
 hitl = false
 risk = "high"
 refine = true
@@ -199,7 +293,7 @@ refine = true
 id = 5
 type = "story"
 title = "Moving sub-terminals and tabs; Move to New Window back"
-description = '''Move to New Tab for a sub-terminal; Move to New Window carrying every view (and shown again for tabs with sub-terminals, which 2b hid, M9); the headless reattach of hidden panes in the detached window; kill on destroy; and the strip and shortcuts in DetachedApp. Full criteria are refined when this is pulled.
+description = '''Move to New Tab for a sub-terminal; Move to New Window carrying every view (and shown again for tabs with sub-terminals, which 2b-ii hid, M9); the headless reattach of hidden panes in the detached window; kill on destroy; and the strip and shortcuts in DetachedApp. Full criteria are refined when this is pulled.
 Summary of criteria, each a test at refinement:
 (1) Move to New Tab (sub-terminal context menu): it becomes a top-level tab right after its tab, with its panes and shells (no restart) and its name, and becomes the active tab. Afterwards ade open from it adds sub-terminals to the new tab.
 (2) Move to New Window carries every view: detachTabToWindow sends views, viewOrder and shownView; detachTab detaches every view's instances. Present again in the tab menu for tabs with sub-terminals.
@@ -207,11 +301,12 @@ Summary of criteria, each a test at refinement:
 (4) The destroy handler kills allTabPanes, so closing the detached window ends all its shells.
 (5) DetachedApp shows the strip (left inset 84 px for the window controls), supports the two shortcuts and the closing confirms; Move to New Tab is hidden there.
 (6) No Move to New Window for a single sub-terminal (cut in v1).
+(7) Guard inside detachTabToWindow itself, not only at the menu: 2bi hides the menu item, and detachTab removes the whole tab while detachTabToWindow sends only the own view, so a call on a tab with sub-terminals would drop them from the main window while their PTYs live on. Called directly on such a tab, detachTabToWindow sends every view, viewOrder and shownView (as in (2)); if it cannot carry a view it refuses and changes nothing. A sub-terminal never leaves the main window except in the same call that carries it. Test: src/lib/__tests__/detachWindow.test.ts "detachTabToWindow on a tab with sub-terminals carries every view and leaves none in the main window", calling detachTabToWindow directly, not through the menu.
 Slice: src/lib/detachWindow.ts, src/DetachedApp.tsx, src/stores/tabStore.ts (move action), src/hooks/useTerminal.ts (reattach), the strip component, the tab menu (restore the item for sub-terminal tabs), src-tauri/src/pty.rs (owner label if needed), and tests.
 Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion (full names fixed at refinement).'''
-verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (6) (full names fixed at refinement)."
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (7) (full names fixed at refinement)."
 covers = []
-after = ["2b"]
+after = ["2bii"]
 hitl = false
 risk = "high"
 refine = true
@@ -230,7 +325,7 @@ Slice: src/components/TabSwitcher.tsx, src/hooks/useFleetData.ts, src/hooks/useA
 Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion (full names fixed at refinement).'''
 verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (4) (full names fixed at refinement)."
 covers = []
-after = ["2b"]
+after = ["2bii"]
 hitl = false
 risk = "medium"
 refine = true

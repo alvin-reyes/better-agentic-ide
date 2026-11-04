@@ -183,7 +183,9 @@ type OpenMessage =
 - **Before acting:** after `expiresAt` it does nothing. It finds the caller
   through `allTabPanes` over its tabs.
 - **Default:** it appends a sub-terminal to the caller's tab. It never nests
-  (`spawnedBy` = the caller's view name). With `focus` it shows the
+  (`spawnedBy` = the caller's view **id**, or `"own"` for the tab's own
+  view; story 4 shows the spawner's name, or the tab label for `"own"`;
+  owner ruling Q5). With `focus` it shows the
   sub-terminal and activates the tab.
 - **Split:** `splitPane` within the caller's view (hidden or not), which
   returns the new pane id or null (the limit).
@@ -209,12 +211,20 @@ type OpenMessage =
 ## Store shape (`src/stores/tabStore.ts`)
 
 ```ts
-interface View { id: string; name: string | null; spawnedBy: string | null; root: PaneNode; activePaneId: string }
+interface View { id: string; name: string | null; spawnedBy: string | null; root: PaneNode; activePaneId: string; restored: boolean }
 interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOrder: string[]; shownView: string }
 ```
 
 - **The fields.** `Tab.root` and `Tab.activePaneId` no longer exist.
   `views.own` is always present and is always `viewOrder[0]`.
+- **`restored`** (owner ruling Q3, 2026-11-04; story 2b-ii, ADR 0014):
+  - `loadSession` sets it to true on each sub-terminal it restores. Every
+    other view, the own view included, has false.
+  - It is never saved, and stays true for the view's life. Story 3 shows the
+    "restored" label on the strip entry from it.
+  - It does not drive the close guard. `useGuardedClose` still skips a pane
+    with neither an instance nor a `ptyId`, by that rule alone (see
+    "Running"); a restored view's panes match it until first shown.
 - **The accessors:**
   - `shownView(tab)`;
   - `ownView(tab)`: used by the label, cwd, project, sorting, the closed-tab
@@ -234,6 +244,27 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   view in sight.
   The file browser and the palette's BMAD switch and "Set up project" follow
   the own view too; the palette's pane actions act on the view in sight.
+- **Adding and showing (story 2b-i).**
+  - `addView(tabId, { name, cwd, focus?, spawnedBy? }): string | null` appends
+    a view with one pane in `cwd` (no PTY yet) and returns its id
+    (`view-<n>`); null for an unknown or non-terminal tab. Without `focus` the
+    selection is untouched; with it the view is `shownView` and its tab
+    `activeTabId`. `spawnedBy` defaults to null and holds the spawning
+    **view's id** (`"own"` for the own view), per the 2b-i ticket; New
+    Sub-terminal passes null.
+  - `showView(tabId, viewId)` sets `shownView` only (an unknown id is ignored).
+    Callers that show a view also call `focusActiveTerminal()`.
+  - `useOwnFolderCwd(activeTab, folderPtyId)` (`src/hooks/useOwnFolderCwd.ts`)
+    is App's `activeCwd`; `CWD_POLL_MS` lives there.
+  - `SubTerminalStrip` (`src/components/SubTerminalStrip.tsx`) is mounted by App
+    above the shown view for the active tab and renders only with a
+    sub-terminal; its entries' `aria-controls` is `SUB_TERMINAL_CONTENT_ID`
+    (`"tab-content"`), the id App gives the content area.
+    `SubTerminalAnnouncer`, from the same file, is the window's one
+    `aria-live="polite"` region: it watches the store for views added while not
+    shown.
+  - Shortcuts `prevSubTerminal` ⌘[ and `nextSubTerminal` ⌘] (Ctrl+Shift+[ / ]);
+    `shortcutNotes(mac)` in `shortcutList.ts` holds the overlay's Linux note.
 - **Killing.** `destroyInstance(paneId, storePtyId?)` kills by the store's
   `ptyId` when the pane has no instance; `closeTab` passes it for every pane
   of every view, and `closePane` for the pane it closes.
@@ -245,10 +276,10 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   - A name is never the full command line, because names are saved and
     synced.
 - **The session.** `SavedTab.root` stays the own view, so old sessions load
-  as one view. New fields: `subViews` (name, tree, folders, scrollback) and
-  `shownView`. The 5 MB truncation walks `root` and every `subViews` tree.
+  as one view. New fields: `subViews` (name, tree, `activePaneId` (Q4),
+  folders, scrollback) and `shownView`. The 5 MB truncation walks `root` and every `subViews` tree.
   - Restored sub-terminals start when first shown.
-  - Commands, status and `spawnedBy` are never saved. The line for Insert
+  - Commands, status, `spawnedBy` and `restored` are never saved. The line for Insert
     command lives in memory only.
   - `sync.rs` strips `serializedBuffer` before pushing to the sync repo.
 - **Detaching** (story 5) sends `views`, `viewOrder` and `shownView`. Until

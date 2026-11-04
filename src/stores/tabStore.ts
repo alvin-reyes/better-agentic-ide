@@ -161,12 +161,31 @@ interface TabStore {
    * globally active pane would then act on their terminal instead.
    */
   getTabActivePane: (tabId: string) => Pane | null;
+
+  /**
+   * Adds a sub-terminal to a terminal tab, at the end of `viewOrder`, with one
+   * pane in `cwd`; returns its view id (null for an unknown or non-terminal
+   * tab). Without `focus` the selection is left alone; with it the view is
+   * shown and its tab activated. `spawnedBy` is the spawning view's id.
+   */
+  addView: (tabId: string, opts: NewView) => string | null;
+  /** Shows view `viewId` of tab `tabId`. */
+  showView: (tabId: string, viewId: string) => void;
+}
+
+export interface NewView {
+  name: string;
+  cwd: string | null;
+  focus?: boolean;
+  spawnedBy?: string | null;
 }
 
 let paneCounter = 0;
 const newPaneId = () => `pane-${++paneCounter}`;
 let tabCounter = 0;
 const newTabId = () => `tab-${++tabCounter}`;
+let viewCounter = 0;
+const newViewId = () => `view-${++viewCounter}`;
 
 function createDefaultPane(initialCwd?: string | null): Pane {
   const pane: Pane = { id: newPaneId(), ptyId: null };
@@ -513,6 +532,27 @@ export const useTabStore = create<TabStore>((set, get) => {
       const view = shownView(tab);
       return findPane(view.root, view.activePaneId);
     },
+
+    addView: (tabId, { name, cwd, focus, spawnedBy }) => {
+      const tab = get().tabs.find((t) => t.id === tabId);
+      if (!tab || (tab.type && tab.type !== "terminal")) return null;
+      const pane = createDefaultPane(cwd);
+      const view: View = { id: newViewId(), name, spawnedBy: spawnedBy ?? null, root: { type: "pane", pane }, activePaneId: pane.id };
+      set((s) => ({
+        tabs: s.tabs.map((t) =>
+          t.id === tabId
+            ? { ...t, views: { ...t.views, [view.id]: view }, viewOrder: [...t.viewOrder, view.id], shownView: focus ? view.id : t.shownView }
+            : t,
+        ),
+        ...(focus ? { activeTabId: tabId } : {}),
+      }));
+      return view.id;
+    },
+
+    showView: (tabId, viewId) =>
+      set((s) => ({
+        tabs: s.tabs.map((t) => (t.id === tabId && t.views[viewId] ? { ...t, shownView: viewId } : t)),
+      })),
   };
 });
 
