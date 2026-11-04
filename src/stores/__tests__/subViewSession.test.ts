@@ -173,6 +173,19 @@ describe("truncation and surrogate pairs", () => {
     expect(buf.length).toBeLessThanOrEqual(10000);
     expect(buf.length).toBeGreaterThanOrEqual(9999);
   });
+
+  it("a cut that falls between two emoji keeps the full tail", async () => {
+    // Nothing after the emoji: 10,000 code units from the end is a pair boundary.
+    const big = "x".repeat(6 * 1024 * 1024) + "😀".repeat(5000);
+    live.set("d1", { buffer: big, cwd: "/code/api/web" });
+    useTabStore.setState({ tabs: [tabWithSubTerminals()], activeTabId: "tab-api" });
+
+    await saveSession();
+    const buf: string = saved().tabs[0].subViews[0].root.pane.serializedBuffer;
+    expect(buf.length).toBe(10000);
+    expect(buf).toBe("😀".repeat(5000));
+    expect(localStorage.getItem(KEY)!).not.toMatch(/\\ud[89a-f][0-9a-f]{2}/i);
+  });
 });
 
 describe("a saved session with broken sub-terminals", () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTabStore, allTabPanes, findAllPanes, viewOfPane, OWN_VIEW, type Pane, type Tab, type View } from "../stores/tabStore";
 import { editorDirty, unsavedEditorTabs } from "../lib/editorDirty";
 import { getTerminalDimensions, paneBusy } from "./useTerminal";
@@ -73,6 +73,15 @@ export function useGuardedClose() {
   const closeTab = useTabStore((s) => s.closeTab);
   const closePane = useTabStore((s) => s.closePane);
   const closeView = useTabStore((s) => s.closeView);
+  // The sub-terminal confirm on screen, if any: when it goes without closing
+  // the view (Cancel, Escape, another dialog), `close-view-cancelled` says so.
+  const viewConfirm = useRef<{ dialog: CloseConfirm; tabId: string; viewId: string } | null>(null);
+  useEffect(() => {
+    const open = viewConfirm.current;
+    if (!open || confirmDialog === open.dialog) return;
+    viewConfirm.current = null;
+    window.dispatchEvent(new CustomEvent("close-view-cancelled", { detail: { tabId: open.tabId, viewId: open.viewId } }));
+  }, [confirmDialog]);
 
   const requestCloseTab = useCallback(async (tabId: string) => {
     // Read now, not from a render: the tab may be newer than the last one.
@@ -117,15 +126,18 @@ export function useGuardedClose() {
     if (!view || viewId === OWN_VIEW) return;
     const label = await viewRunning(view);
     if (label) {
-      setConfirmDialog({
+      const dialog: CloseConfirm = {
         title: `Close “${view.name ?? "Terminal"}”?`,
         message: `It is running a program (${label}). Closing ends it.`,
         confirmLabel: "Close",
         onConfirm: () => {
+          viewConfirm.current = null;
           closeView(tabId, viewId);
           setConfirmDialog(null);
         },
-      });
+      };
+      viewConfirm.current = { dialog, tabId, viewId };
+      setConfirmDialog(dialog);
     } else {
       closeView(tabId, viewId);
     }

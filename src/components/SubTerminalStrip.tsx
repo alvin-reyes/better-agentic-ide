@@ -88,6 +88,15 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
       entryRefs.current.get(target)?.focus();
     }
   }, [viewOrder, shown]);
+  // A Delete whose confirm was cancelled leaves nothing to refocus later.
+  useEffect(() => {
+    const onCancelled = (e: Event) => {
+      const { tabId: t, viewId } = (e as CustomEvent).detail ?? {};
+      if (t === tabId && refocusAfter.current?.viewId === viewId) refocusAfter.current = null;
+    };
+    window.addEventListener("close-view-cancelled", onCancelled);
+    return () => window.removeEventListener("close-view-cancelled", onCancelled);
+  }, [tabId]);
 
   // A view that appears while mounted and is not shown was added in the background.
   useEffect(() => {

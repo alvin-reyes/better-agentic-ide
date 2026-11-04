@@ -57,6 +57,8 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: async () => {} }));
 import SubTerminalStrip, { SubTerminalAnnouncer, SUB_TERMINAL_CONTENT_ID } from "../SubTerminalStrip";
 import { useTerminal, destroyInstance, stopIdlePolling } from "../../hooks/useTerminal";
 import { useGuardedClose } from "../../hooks/useGuardedClose";
+import ConfirmDialog from "../ConfirmDialog";
+import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
 import { useTabStore, ownViewOnly, findAllPanes, shownView, type Tab, type PaneNode } from "../../stores/tabStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { usePaneCwd } from "../../stores/paneMetaStore";
@@ -125,6 +127,7 @@ beforeEach(() => {
   useTabStore.setState({ tabs: [terminalTab("a", "a1"), terminalTab("b", "b1")], activeTabId: "a", closedTabs: [] });
 });
 afterEach(async () => {
+  useAgentTrackerStore.setState({ sessions: [] });
   const panes = useTabStore.getState().tabs.flatMap((t) => t.viewOrder.flatMap((v) => findAllPanes(t.views[v].root)));
   cleanup();
   vi.useRealTimers();
@@ -354,6 +357,82 @@ describe("closing from the strip", () => {
 
     expect(entries().map((e) => e.textContent)).toEqual(["api", "one"]);
     expect(tab("a").shownView).toBe("own");
+    expect(document.activeElement).toBe(entries()[1]);
+  });
+
+  /** App's guarded close with its dialog. */
+  function CloserWithDialog() {
+    const { confirmDialog, setConfirmDialog } = useGuardedClose();
+    return confirmDialog ? (
+      <ConfirmDialog title={confirmDialog.title} message={confirmDialog.message} confirmLabel={confirmDialog.confirmLabel}
+        onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />
+    ) : null;
+  }
+  /** Sub-terminal `name` with a shell running an agent, so closing it asks first. */
+  const addRunning = (name: string) => {
+    const id = addView("a", name);
+    const paneId = tab("a").views[id].activePaneId;
+    act(() => useTabStore.getState().setPtyId(paneId, 900));
+    useAgentTrackerStore.setState({
+      sessions: [{ paneId, agentName: "Claude", agentIcon: "", provider: "claude", status: "running" }] as never,
+    });
+    return id;
+  };
+
+  it("a cancelled Delete does not move focus when the view closes later", async () => {
+    addView("a", "one");
+    const two = addRunning("two");
+    render(<><CloserWithDialog /><SubTerminalStrip tabId="a" /></>);
+
+    act(() => entries()[2].focus());
+    fireEvent.keyDown(entries()[2], { key: "Delete" });
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await settle();
+    expect(tab("a").views[two]).toBeDefined();
+
+    // Later, by another route, with nothing focused: the strip doesn't take focus.
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    act(() => useTabStore.getState().closeView("a", two));
+    await settle();
+    expect(entries().map((e) => e.textContent)).toEqual(["api", "one"]);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("after a confirmed Delete, focus that moved elsewhere stays there", async () => {
+    addView("a", "one");
+    const two = addRunning("two");
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    try {
+      render(<><CloserWithDialog /><SubTerminalStrip tabId="a" /></>);
+
+      act(() => entries()[2].focus());
+      fireEvent.keyDown(entries()[2], { key: "Delete" });
+      await settle();
+      act(() => input.focus());
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      await settle();
+
+      expect(tab("a").views[two]).toBeUndefined();
+      expect(document.activeElement).toBe(input);
+    } finally {
+      input.remove();
+    }
+  });
+
+  it("after a confirmed Delete, focus lost with the dialog goes to the entry on its left", async () => {
+    addView("a", "one");
+    addRunning("two");
+    render(<><CloserWithDialog /><SubTerminalStrip tabId="a" /></>);
+
+    act(() => entries()[2].focus());
+    fireEvent.keyDown(entries()[2], { key: "Delete" });
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await settle();
+
+    expect(entries().map((e) => e.textContent)).toEqual(["api", "one"]);
     expect(document.activeElement).toBe(entries()[1]);
   });
 
