@@ -242,6 +242,27 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   view in sight.
   The file browser and the palette's BMAD switch and "Set up project" follow
   the own view too; the palette's pane actions act on the view in sight.
+- **Adding and showing (story 2b-i).**
+  - `addView(tabId, { name, cwd, focus?, spawnedBy? }): string | null` appends
+    a view with one pane in `cwd` (no PTY yet) and returns its id
+    (`view-<n>`); null for an unknown or non-terminal tab. Without `focus` the
+    selection is untouched; with it the view is `shownView` and its tab
+    `activeTabId`. `spawnedBy` defaults to null and holds the spawning
+    **view's id** (`"own"` for the own view), per the 2b-i ticket; New
+    Sub-terminal passes null.
+  - `showView(tabId, viewId)` sets `shownView` only (an unknown id is ignored).
+    Callers that show a view also call `focusActiveTerminal()`.
+  - `useOwnFolderCwd(activeTab, folderPtyId)` (`src/hooks/useOwnFolderCwd.ts`)
+    is App's `activeCwd`; `CWD_POLL_MS` lives there.
+  - `SubTerminalStrip` (`src/components/SubTerminalStrip.tsx`) is mounted by App
+    above the shown view for the active tab and renders only with a
+    sub-terminal; its entries' `aria-controls` is `SUB_TERMINAL_CONTENT_ID`
+    (`"tab-content"`), the id App gives the content area.
+    `SubTerminalAnnouncer`, from the same file, is the window's one
+    `aria-live="polite"` region: it watches the store for views added while not
+    shown.
+  - Shortcuts `prevSubTerminal` ⌘[ and `nextSubTerminal` ⌘] (Ctrl+Shift+[ / ]);
+    `shortcutNotes(mac)` in `shortcutList.ts` holds the overlay's Linux note.
 - **Killing.** `destroyInstance(paneId, storePtyId?)` kills by the store's
   `ptyId` when the pane has no instance; `closeTab` passes it for every pane
   of every view, and `closePane` for the pane it closes.

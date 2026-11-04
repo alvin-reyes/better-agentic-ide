@@ -29,6 +29,8 @@ export const SHORTCUTS = {
   closePane: { key: "w", shift: true },
   prevTab: { key: "[", shift: true },
   nextTab: { key: "]", shift: true },
+  prevSubTerminal: { key: "[" },
+  nextSubTerminal: { key: "]" },
   renameTab: { key: "r" },
   splitHorizontal: { key: "d" },
   splitVertical: { key: "d", shift: true },

@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState, lazy, Suspense } from "react"
 import TabBar from "./components/TabBar";
 import PaneContainer from "./components/PaneContainer";
 import TerminalPane from "./components/TerminalPane";
+import SubTerminalStrip, { SubTerminalAnnouncer, SUB_TERMINAL_CONTENT_ID } from "./components/SubTerminalStrip";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
@@ -39,7 +40,8 @@ const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
 import { useTabStore, saveSession, loadSession, shownView } from "./stores/tabStore";
-import { tabFolderPaneId, tabFolderPtyId } from "./lib/tabDisplay";
+import { tabFolderPtyId } from "./lib/tabDisplay";
+import { useOwnFolderCwd } from "./hooks/useOwnFolderCwd";
 import { flushNow } from "./lib/persistence";
 import { listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
@@ -53,8 +55,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { watchAgentStatus } from "./stores/agentStatusStore";
 import { useAgentStatusToasts } from "./hooks/useAgentStatusToasts";
 
-/** How often the active terminal's folder is re-read to follow `cd`. */
-const CWD_POLL_MS = 3000;
 /** Session auto-save: after a tab/pane change, and periodically. */
 const SESSION_SAVE_DEBOUNCE_MS = 2000;
 const SESSION_SAVE_INTERVAL_MS = 20000;
@@ -73,10 +73,6 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const showShortcutBar = useSettingsStore((s) => s.showShortcutBar);
-  const [activeCwd, setActiveCwd] = useState<string | null>(null);
-  // For event handlers registered once.
-  const activeCwdRef = useRef<string | null>(null);
-  activeCwdRef.current = activeCwd;
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<GuardToast | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
@@ -91,6 +87,11 @@ export default function App() {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
     return tab ? tabFolderPtyId(tab) : null;
   });
+  // The active tab's folder: its own view's, whatever view is in sight.
+  const activeCwd = useOwnFolderCwd(activeTab, folderPtyId);
+  // For event handlers registered once.
+  const activeCwdRef = useRef<string | null>(null);
+  activeCwdRef.current = activeCwd;
 
   // The first render is on screen: fade out the launch splash.
   useEffect(() => hideSplash(), []);
@@ -268,36 +269,6 @@ export default function App() {
     };
   }, []);
 
-  // Resolve the active tab's folder eagerly: its own view's active pane,
-  // whatever view is in sight. Non-terminal tabs (fleet, editor,
-  // browser, orchestrator) have no PTY, so keep the last resolved value rather
-  // than clearing it — the fleet views read this while a fleet tab is focused.
-  //
-  // folderPtyId is in the dependency list on purpose: getPtyCwd resolves null
-  // (it does not reject) while the pane's PTY has not been created yet, which is
-  // the state of every pane on the first render. Depending on the PTY id makes
-  // this re-run the moment create_pty lands, which is the only recovery path in
-  // a single-pane layout.
-  //
-  // It is also re-read every few seconds: a `cd` inside the terminal changes the
-  // folder without any React state changing, and the BMAD banner and the
-  // "This terminal" fleet view would otherwise keep using the old folder.
-  // (The file browser polls on its own for the same reason.)
-  const folderPaneId = activeTab ? tabFolderPaneId(activeTab) : undefined;
-  useEffect(() => {
-    const paneId = folderPaneId;
-    if (!paneId) return;
-    if (activeTab?.type && activeTab.type !== "terminal") return;
-    let cancelled = false;
-    const resolve = () =>
-      import("./hooks/useTerminal").then(({ getPtyCwd }) =>
-        getPtyCwd(paneId).then((cwd) => { if (cwd && !cancelled) setActiveCwd(cwd); }),
-      ).catch(() => {});
-    resolve();
-    const id = window.setInterval(resolve, CWD_POLL_MS);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [activeTab?.type, folderPaneId, folderPtyId]);
-
   // Not over the BMAD version question or the switch's confirm step.
   const toggleCommandPalette = useCallback(() => setPaletteOpen(togglePalette), []);
 
@@ -396,9 +367,15 @@ export default function App() {
                     ? <Suspense fallback={null}>
                         <ContractsWorkbench key={activeTab.contractsRoot} root={activeTab.contractsRoot} />
                       </Suspense>
-                    : zoomedPane
-                    ? <TerminalPane paneId={shownView(activeTab).activePaneId} tabId={activeTab.id} />
-                    : <PaneContainer node={shownView(activeTab).root} tabId={activeTab.id} />
+                    : <div className="flex flex-col h-full">
+                        {/* Shows only while the tab has a sub-terminal. */}
+                        <SubTerminalStrip key={activeTab.id} tabId={activeTab.id} />
+                        <div id={SUB_TERMINAL_CONTENT_ID} className="flex-1 min-h-0">
+                          {zoomedPane
+                            ? <TerminalPane paneId={shownView(activeTab).activePaneId} tabId={activeTab.id} />
+                            : <PaneContainer node={shownView(activeTab).root} tabId={activeTab.id} />}
+                        </div>
+                      </div>
           )}
         </div>
         {previewOpen && (
@@ -464,6 +441,7 @@ export default function App() {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
+      <SubTerminalAnnouncer />
       {/* After the panels in the DOM, so it sits over one that raised it. */}
       <MethodologyPromptHost />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
