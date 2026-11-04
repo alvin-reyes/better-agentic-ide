@@ -370,7 +370,11 @@ export default function App() {
                     : <div className="flex flex-col h-full">
                         {/* Shows only while the tab has a sub-terminal. */}
                         <SubTerminalStrip key={activeTab.id} tabId={activeTab.id} />
-                        <div id={SUB_TERMINAL_CONTENT_ID} className="flex-1 min-h-0">
+                        <div
+                          id={SUB_TERMINAL_CONTENT_ID}
+                          className="flex-1 min-h-0"
+                          role={activeTab.viewOrder.length > 1 ? "tabpanel" : undefined}
+                        >
                           {zoomedPane
                             ? <TerminalPane paneId={shownView(activeTab).activePaneId} tabId={activeTab.id} />
                             : <PaneContainer node={shownView(activeTab).root} tabId={activeTab.id} />}

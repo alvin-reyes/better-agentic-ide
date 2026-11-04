@@ -151,7 +151,13 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
   return (
     <>
       <style>{STRIP_CSS}</style>
-      <div className="subterm-strip" role="tablist" aria-label={`Terminals in ${label}`}>
+      <div
+      className="subterm-strip"
+      role="tablist"
+      aria-label={`Terminals in ${label}`}
+      // Focus leaving the strip: the selected entry is the way back in.
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusId(null); }}
+    >
         {entry(viewOrder[0], label, tooltip(label, ownCwd), true)}
         <div className="subterm-divider" aria-hidden="true" />
         <div className="subterm-scroller" data-sub-scroller>
@@ -173,7 +179,9 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
  * are merged, and an add with focus says nothing (the focus move is heard).
  */
 export function SubTerminalAnnouncer() {
-  const [text, setText] = useState("");
+  // Each announcement is a new node: a live region reads changes, so the
+  // same words set twice would otherwise be heard once.
+  const [said, setSaid] = useState({ text: "", n: 0 });
   useEffect(() => {
     const pending = new Map<string, { names: string[]; timer: number }>();
     const unsubscribe = useTabStore.subscribe((state, prev) => {
@@ -195,7 +203,8 @@ export function SubTerminalAnnouncer() {
             const now = useTabStore.getState().tabs.find((x) => x.id === t.id);
             if (!now) return;
             const label = tabLabel(now, tabCwd(now, usePaneCwd.getState().cwds));
-            setText(names.length === 1 ? `Sub-terminal ${names[0]} opened in ${label}` : `${names.length} sub-terminals opened in ${label}`);
+            const text = names.length === 1 ? `Sub-terminal ${names[0]} opened in ${label}` : `${names.length} sub-terminals opened in ${label}`;
+            setSaid((prev) => ({ text, n: prev.n + 1 }));
           }, MERGE_MS);
           pending.set(t.id, { names, timer });
         }
@@ -206,5 +215,5 @@ export function SubTerminalAnnouncer() {
       for (const b of pending.values()) window.clearTimeout(b.timer);
     };
   }, []);
-  return <div aria-live="polite" style={VISUALLY_HIDDEN}>{text}</div>;
+  return <div aria-live="polite" style={VISUALLY_HIDDEN}>{said.text && <span key={said.n}>{said.text}</span>}</div>;
 }

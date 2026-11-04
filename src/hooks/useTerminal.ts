@@ -640,10 +640,12 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       seatTerminal(paneId, container, inst);
       termRef.current = inst.term;
 
-      // Fit to new container size
+      // Fit to new container size. Every pane of a view is seated, so only
+      // the one you are in takes the keyboard: otherwise the last pane seated
+      // would, whichever pane is active.
       requestAnimationFrame(() => {
         inst!.fitAddon.fit();
-        inst!.term.focus();
+        if (isFocusedPane(paneId)) inst!.term.focus();
       });
 
       resizeObserver = new ResizeObserver(() => {
@@ -759,6 +761,13 @@ function getTerminalDimensions(paneId: string): { cols: number; rows: number } |
   const inst = instances.get(paneId);
   if (!inst) return null;
   return { cols: inst.term.cols, rows: inst.term.rows };
+}
+
+/** Whether `paneId` is the active pane of the active tab's view in sight. */
+function isFocusedPane(paneId: string): boolean {
+  const { tabs, activeTabId } = useTabStore.getState();
+  const tab = tabs.find((t) => t.id === activeTabId);
+  return !!tab && shownView(tab).activePaneId === paneId;
 }
 
 /** Focus the active tab's active pane, when it's a terminal. */
