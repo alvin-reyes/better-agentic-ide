@@ -183,7 +183,9 @@ type OpenMessage =
 - **Before acting:** after `expiresAt` it does nothing. It finds the caller
   through `allTabPanes` over its tabs.
 - **Default:** it appends a sub-terminal to the caller's tab. It never nests
-  (`spawnedBy` = the caller's view name). With `focus` it shows the
+  (`spawnedBy` = the caller's view **id**, or `"own"` for the tab's own
+  view; story 4 shows the spawner's name, or the tab label for `"own"`;
+  owner ruling Q5). With `focus` it shows the
   sub-terminal and activates the tab.
 - **Split:** `splitPane` within the caller's view (hidden or not), which
   returns the new pane id or null (the limit).
