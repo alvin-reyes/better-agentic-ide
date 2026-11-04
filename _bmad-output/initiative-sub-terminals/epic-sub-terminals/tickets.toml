@@ -153,7 +153,7 @@ B21 (not in the summary; UX "The 'new' flash"). A background-added entry flashes
 
 Verification: the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest). cargo check -p ade-hook is not part of this story (from story 4 on, R4). Every test named above exists and passes. B20 needs its mutant check: a mutant reading shownView at each site must fail. Sizes, colours and the focus ring come from the UX spec's Look; QA checks them by eye against the UX spec and mockup.
 
-Slice: src/stores/tabStore.ts (addView, showView, spawnedBy); src/components/SubTerminalStrip.tsx (new); src/components/TabBar.tsx (menu items only); src/lib/shortcuts.ts and src/lib/shortcutList.ts; src/hooks/useKeybindings.ts (⌘[ and ⌘] only); src/hooks/useOwnFolderCwd.ts (new), and App.tsx (renders the strip, calls the hook); the tests above. Nothing else.'''
+Slice: src/stores/tabStore.ts (addView, showView, spawnedBy); src/components/SubTerminalStrip.tsx (new); src/components/TabBar.tsx (menu items only); src/lib/shortcuts.ts and src/lib/shortcutList.ts; src/hooks/useKeybindings.ts (⌘[ and ⌘] only); src/hooks/useOwnFolderCwd.ts (new), and App.tsx (renders the strip, calls the hook); the tests above. Nothing else, except the two files the owner approved during the build (2026-11-05): src/hooks/useTerminal.ts (the B7 split-view focus fix: when terminals mount, only the active pane takes focus) and src/components/ShortcutsOverlay.tsx (rendered by B5's test).'''
 verify = '''the five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), and every test named in the acceptance criteria exists and passes. cargo check -p ade-hook is not part of this story (from story 4 on, R4).'''
 after = ["2a"]
 covers = []
@@ -226,9 +226,10 @@ Summary of criteria, each a test at refinement:
 (5) An agent in a sub-terminal raises the dot on that sub-terminal's entry as well as the tab's.
 (6) When a sub-terminal's shell exits, its entry shows "exited" (text in #8B929E, name at 60% opacity; no exit code), and its view shows a bar "This shell has exited." with [Close sub-terminal]. The tab's own shell exiting keeps today's [Process exited]; sub-terminals keep running.
 (7) A restored sub-terminal keeps "restored" on its entry for its life (tooltip: "Restored after restart: a new shell in <folder>. <name> was not run again.").
+(8) Narrow widths (UX spec, "Narrow widths and many sub-terminals"): the strip keeps its entries at full size and shows a 24 px fade at each scrolled edge that has entries past it; no fade shows when all entries fit. Test: src/components/__tests__/SubTerminalStrip.test.tsx "a 24 px fade shows at each scrolled edge that has entries past it". Owned here because story 3's slice already includes the strip component; the scroll itself is 2bi's strip.
 Slice: src/stores/agentStatusStore.ts, src/hooks/useAgentStatusToasts.ts only where the view key changes, src/components/TabBar.tsx, the strip component, src/hooks/useTerminal.ts (exit handling), and their tests.
 Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion.'''
-verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (7) (full names fixed at refinement)."
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (8) (full names fixed at refinement)."
 covers = []
 after = ["2bii"]
 hitl = false
@@ -300,9 +301,10 @@ Summary of criteria, each a test at refinement:
 (4) The destroy handler kills allTabPanes, so closing the detached window ends all its shells.
 (5) DetachedApp shows the strip (left inset 84 px for the window controls), supports the two shortcuts and the closing confirms; Move to New Tab is hidden there.
 (6) No Move to New Window for a single sub-terminal (cut in v1).
+(7) Guard inside detachTabToWindow itself, not only at the menu: 2bi hides the menu item, and detachTab removes the whole tab while detachTabToWindow sends only the own view, so a call on a tab with sub-terminals would drop them from the main window while their PTYs live on. Called directly on such a tab, detachTabToWindow sends every view, viewOrder and shownView (as in (2)); if it cannot carry a view it refuses and changes nothing. A sub-terminal never leaves the main window except in the same call that carries it. Test: src/lib/__tests__/detachWindow.test.ts "detachTabToWindow on a tab with sub-terminals carries every view and leaves none in the main window", calling detachTabToWindow directly, not through the menu.
 Slice: src/lib/detachWindow.ts, src/DetachedApp.tsx, src/stores/tabStore.ts (move action), src/hooks/useTerminal.ts (reattach), the strip component, the tab menu (restore the item for sub-terminal tabs), src-tauri/src/pty.rs (owner label if needed), and tests.
 Verification: the five approved lines (see the header) each exit 0, with a named test for each criterion (full names fixed at refinement).'''
-verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (6) (full names fixed at refinement)."
+verify = "The five approved lines each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest), with a named test for each of criteria (1) to (7) (full names fixed at refinement)."
 covers = []
 after = ["2bii"]
 hitl = false
