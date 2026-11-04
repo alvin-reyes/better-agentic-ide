@@ -48,6 +48,7 @@ import MethodologyPromptHost from "../MethodologyPrompt";
 import { __resetPromptForTests, useMethodologyPrompt } from "../../lib/methodologyPrompt";
 import { beginSwitch } from "../../lib/projectSetup";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { shownView, useTabStore } from "../../stores/tabStore";
 
 const COMMAND = "Project: Set up BMAD, methodology and agents";
 const question = () => document.querySelector(".new-tab-ask")?.textContent ?? null;
@@ -221,5 +222,39 @@ describe("BMAD: Switch to the other version", () => {
     // The setup command's refusal keeps the setup title.
     expect((seen.failed.mock.calls[0][0] as CustomEvent<{ title?: string }>).detail.title).toBeUndefined();
     seen.stop();
+  });
+});
+
+describe("Close Tab and Close Pane", () => {
+  it("close actions go through the confirmation", () => {
+    const { activeTabId, tabs } = useTabStore.getState();
+    const paneId = shownView(tabs.find((t) => t.id === activeTabId)!).activePaneId;
+    const closeTab = vi.spyOn(useTabStore.getState(), "closeTab");
+    const closePane = vi.spyOn(useTabStore.getState(), "closePane");
+    const tabRequests: unknown[] = [];
+    const paneRequests: unknown[] = [];
+    const onTab = (e: Event) => tabRequests.push((e as CustomEvent).detail);
+    const onPane = (e: Event) => paneRequests.push((e as CustomEvent).detail);
+    window.addEventListener("request-close-tab", onTab);
+    window.addEventListener("request-close-pane", onPane);
+    try {
+      const first = renderPalette();
+      fireEvent.click(screen.getByText("Close Tab"));
+      first.unmount();
+      renderPalette();
+      fireEvent.click(screen.getByText("Close Pane"));
+
+      expect(tabRequests).toEqual([{ tabId: activeTabId }]);
+      expect(paneRequests).toEqual([{ tabId: activeTabId, paneId }]);
+      expect(closeTab).not.toHaveBeenCalled();
+      expect(closePane).not.toHaveBeenCalled();
+      const source = readFileSync(resolve(__dirname, "../CommandPalette.tsx"), "utf8");
+      expect(source).not.toMatch(/\.close(Tab|Pane)\(/);
+    } finally {
+      window.removeEventListener("request-close-tab", onTab);
+      window.removeEventListener("request-close-pane", onPane);
+      closeTab.mockRestore();
+      closePane.mockRestore();
+    }
   });
 });

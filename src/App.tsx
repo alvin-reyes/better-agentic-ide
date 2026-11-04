@@ -13,7 +13,6 @@ import Toast from "./components/Toast";
 import MethodologyPromptHost from "./components/MethodologyPrompt";
 import { togglePalette, useMethodologyPrompt } from "./lib/methodologyPrompt";
 import { hideSplash } from "./lib/splash";
-import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
 import { useContextGuard, toastLifetime, withdrawToast, type GuardToast } from "./hooks/useContextGuard";
 
@@ -39,7 +38,7 @@ const ShortcutsOverlay = lazy(() => import("./components/ShortcutsOverlay"));
 const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
-import { useTabStore, saveSession, loadSession, shownView, allTabPanes } from "./stores/tabStore";
+import { useTabStore, saveSession, loadSession, shownView } from "./stores/tabStore";
 import { tabFolderPaneId, tabFolderPtyId } from "./lib/tabDisplay";
 import { flushNow } from "./lib/persistence";
 import { listenForFileOpens } from "./lib/openFile";
@@ -47,7 +46,8 @@ import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
 import { useKeybindings } from "./hooks/useKeybindings";
-import { hasActiveProcess, stopIdlePolling } from "./hooks/useTerminal";
+import { stopIdlePolling } from "./hooks/useTerminal";
+import { useGuardedClose } from "./hooks/useGuardedClose";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { watchAgentStatus } from "./stores/agentStatusStore";
@@ -81,12 +81,7 @@ export default function App() {
   const [toast, setToast] = useState<GuardToast | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
   const fileBrowserOpen = useFileBrowserStore((s) => s.isOpen);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
-  const { tabs, activeTabId, getActivePtyId, closeTab, closePane } = useTabStore();
+  const { tabs, activeTabId, getActivePtyId } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
   // The PTY id of the pane whose folder is the active tab's folder (the own
   // view's active pane), as a primitive so the subscription only fires when it
@@ -342,88 +337,9 @@ export default function App() {
     });
   }, []);
 
-  // Guarded close: confirm before discarding unsaved edits or killing a live process.
-  const requestCloseTab = useCallback((tabId: string) => {
-    const tab = tabs.find((t) => t.id === tabId);
-    if (!tab) return;
-
-    if (tab.type === "editor") {
-      editorDirty(tabId).then((isDirty) => {
-        if (isDirty && !confirm("This file has unsaved changes. Close anyway?")) return;
-        closeTab(tabId);
-      });
-      return;
-    }
-
-    const activeProcesses = allTabPanes(tab)
-      .map((p) => hasActiveProcess(p.id))
-      .filter((name): name is string => name !== null);
-
-    if (activeProcesses.length > 0) {
-      setConfirmDialog({
-        title: "Active process running",
-        message: `This tab has a live ${activeProcesses[0]} session. Closing it will terminate the process. Are you sure?`,
-        onConfirm: () => {
-          closeTab(tabId);
-          setConfirmDialog(null);
-        },
-      });
-    } else {
-      closeTab(tabId);
-    }
-  }, [tabs, closeTab]);
-
-  const requestClosePane = useCallback((tabId: string, paneId: string) => {
-    const processName = hasActiveProcess(paneId);
-    if (processName) {
-      setConfirmDialog({
-        title: "Active process running",
-        message: `This pane has a live ${processName} session. Closing it will terminate the process. Are you sure?`,
-        onConfirm: () => {
-          closePane(tabId, paneId);
-          setConfirmDialog(null);
-        },
-      });
-    } else {
-      closePane(tabId, paneId);
-    }
-  }, [closePane]);
-
-  // Tab close requests from TabBar (X button / context menu).
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { tabId } = (e as CustomEvent).detail;
-      requestCloseTab(tabId);
-    };
-    window.addEventListener("request-close-tab", handler);
-    // Close others / to the right: one confirmation for all of them.
-    const closeMany = (e: Event) => {
-      const ids: string[] = (e as CustomEvent).detail?.tabIds ?? [];
-      const targets = tabs.filter((t) => ids.includes(t.id));
-      const live = targets.filter((t) => allTabPanes(t).some((p) => hasActiveProcess(p.id) !== null));
-      const close = () => { for (const t of targets) closeTab(t.id); setConfirmDialog(null); };
-      // hasActiveProcess reads an xterm buffer, so it is null for every editor
-      // tab. Without asking them too, "Close others" discarded unsaved files
-      // with no prompt, while closing the same tab on its own warned.
-      void unsavedEditorTabs(targets).then((unsaved) => {
-      if (live.length === 0 && unsaved.length === 0) return close();
-      const parts = [
-        live.length > 0 && `${live.length} ${live.length === 1 ? "has" : "have"} a live session that will be terminated`,
-        unsaved.length > 0 && `${unsaved.length} ${unsaved.length === 1 ? "has" : "have"} unsaved changes that will be lost`,
-      ].filter(Boolean) as string[];
-      setConfirmDialog({
-        title: unsaved.length > 0 ? "Unsaved changes" : "Active process running",
-        message: `Of these ${targets.length} tabs, ${parts.join(", and ")}. Close ${targets.length} tabs?`,
-        onConfirm: close,
-      });
-      });
-    };
-    window.addEventListener("request-close-tabs", closeMany);
-    return () => {
-      window.removeEventListener("request-close-tab", handler);
-      window.removeEventListener("request-close-tabs", closeMany);
-    };
-  }, [requestCloseTab, tabs, closeTab]);
+  // Guarded close: confirm before discarding unsaved edits or killing a live
+  // process, on every close path (see useGuardedClose).
+  const { confirmDialog, setConfirmDialog, requestCloseTab, requestClosePane } = useGuardedClose();
 
   useKeybindings({
     toggleScratchpad,
