@@ -65,6 +65,7 @@ describe("ROLES", () => {
     // the narrow value when the catalog began parsing the vendored files.
     expect(getRole("technical-writer")!.owns, "the docs catch-all").toContain("docs/**");
     expect(getRole("product-manager")!.owns, "beats the catch-all").toContain("docs/prd.md");
+    expect(getRole("product-manager")!.owns, "its improvement proposals beat the catch-all").toContain("docs/improvements.md");
     expect(getRole("sre")!.owns, "beats the catch-all").toContain("docs/runbooks/**");
   });
 
