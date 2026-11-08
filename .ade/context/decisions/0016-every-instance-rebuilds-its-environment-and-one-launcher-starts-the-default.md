@@ -1,0 +1,32 @@
+# 0016: Every ADE instance rebuilds its environment from the login session; only the default launcher and the engagement starter start ADE
+
+- **Status:** Accepted (2026-11-08). Approved by the owner on 2026-11-08 with the F1 plan; accepted on 2026-11-08, when the delta review of revisions 5 to 5g of the F1 design passed. With the F1 design (section 4, section 16).
+- **Revisions:** 2026-11-08 first version; revised the same day after the adversarial review (B1, B2, M9, minors 2 and 11); revision 3 after the re-review (NB1, M-a, minors 2, 4, 7 and 8); revision 4 (minors 1 to 3).
+- **Context:**
+  - PE-13 AC9 requires that the default instance never takes its environment or working folder from whatever launched it, through one default launcher, with the started process enforcing it too.
+  - Evidence (design E6): on macOS, `open` passes the caller's entire environment to the app it starts (seen: a planted marker variable and `ADE_HOOK_TOKEN`), so a LaunchServices launch is not clean.
+  - Evidence (design E7.1): the OS keeps a process's start-time environment readable for its life (`KERN_PROCARGS2`, `/proc/<pid>/environ`); `unsetenv` does not change what `ps eww` shows, `execve` does.
+- **Decision:**
+  - **Mode, from the arguments only.** `--ade-profile <id>` is engagement mode and needs a start ticket the default redeems, else exits 2; without it, default mode.
+  - **The rebuild,** before Tauri and before any thread: read the ticket (and, in debug builds, the flag switch) into memory, once; build the login-session environment (macOS from passwd, `confstr` and `launchctl print gui/<uid>`; Linux from `systemctl --user show-environment`; Windows from `CreateEnvironmentBlock(token, FALSE)`), or a defined fallback found only at standard OS places; and the folder (home, or the engagement's root).
+  - **Unix applies it by re-exec,** judged on the OS's start-time view, never the live `environ`: CoreFoundation adds `__CF_USER_TEXT_ENCODING` to `environ` before `main` in any AppKit or WebKit binary (measured, design E7.5). The process compares its own `KERN_PROCARGS2` (macOS) or `/proc/self/environ` (Linux) as a set, and its canonicalised folder, with the built set and canonicalised folder. If they differ, it writes a record (a count, a SHA-256 digest of the built set, folder and arguments, the launcher path it took, the ticket and the flag) to a pipe whose read end it keeps open across `execve`, and execs its own image (`/proc/self/exe` on Linux, AppImage included; `_NSGetExecutablePath` on macOS) with `--ade-rebuilt=<fd>`.
+  - **The second image reads no login-session source.** It reads the pipe non-blocking; a read that would block (`EAGAIN`, the write end still held open elsewhere) marks the pipe foreign, so a hand-run `--ade-rebuilt=<fd>` cannot hang the start. It proceeds when the pipe's digest equals the one computed from its own start-time view, and reports the launcher path from the record. A missing, foreign or malformed pipe means it rebuilds again. A fresh start has count 0; the count stops at two execs, and only a mismatch at count 2 exits 2, naming the variables that differ. A same-user program that forges a pipe with a matching digest is outside what the rebuild defends. So a source that changes or times out between two reads cannot fail a start.
+  - **Nothing ADE carries is in the rebuilt environment:** the ticket and the flag travel only in the pipe, so `ADE_START_TICKET` never reaches the second image's start-time environment or A's terminals.
+  - **Windows applies it in place:** `SetEnvironmentVariableW` and `SetCurrentDirectoryW` update the PEB, which is what other processes read; the ticket is removed before any thread or terminal.
+  - **Linux AppImage:** the rebuild keeps only the packaging variables of the process's own mount (`APPDIR` a prefix of `current_exe()`), never `OWD`; the launchers spawn `$APPIMAGE`, not the mounted binary.
+  - **Harness home:** under the cargo feature `isotest-driver` only, the home comes from a root compiled into the binary (`ADE_ISOTEST_HOME`, `env!` at build time) in place of passwd, `confstr` and Known Folders; on Windows `USERPROFILE`, `APPDATA` and `LOCALAPPDATA` are built under it, and `ProfilePaths` takes every Windows base from it (Known Folders ignore the variables). Its values are applied last, over any login-session block. No caller's variable decides it. Release builds have no such root.
+  - **The F1 flag** is compiled on in `isotest-driver` and `f1-forced` builds; in debug builds the rebuild carries it in the pipe and both launchers pass `--ade-feature-f1`; release builds ignore it.
+  - It records which path it took (`login-session` or `fallback`, plus `harness-home`).
+  - The rebuild lives in `launcher/rebuild.rs`; the one-launcher test allows it one `execve` of the process's own image and no spawn.
+  - **Only two code paths start ADE's binary,** `launcher/default_launcher.rs` (`reach_default`) and `launcher/engagement_starter.rs` (`start_engagement(&EngagementProfile, ..)`). The starter's type cannot name the default profile.
+  - Both spawn directly and detached, with an explicit environment; never through `open`, a shell or `ShellExecute`. On Windows, a job that forbids breakaway gets one retry without `CREATE_BREAKAWAY_FROM_JOB`.
+  - **Engagement mode** runs only with a single-use ticket the default redeems over the control channel (ADR 0018). That is also how it receives its start info and PE-2 AC5 verdict.
+  - **The one-launcher test** (allowlist, Rust and TypeScript, following own-binary paths across functions, one planted violation per rule) is the static backstop.
+- **Consequences:**
+  - Nothing has to detect "started from an engagement".
+  - Runs (a) to (f') test it.
+  - Linux CI reaches only the fallback, so RC-2 runs the login-session path there.
+  - Most Unix starts cost one extra `execve` (milliseconds); a launcher's spawn of the default that is already clean costs none.
+  - The rebuild must be tested with the real app binary (AppKit and WebKit linked), not a plain C stand-in: revision 2's spike missed the CoreFoundation variable for that reason.
+  - Linux desktops without a systemd user manager, and SSH or X-forwarded logins, get the fallback: no input-method variables. Declared unsupported for the login-session path.
+  - Default-instance terminals start from the login session's environment, the same as a Finder or Start-menu launch today. A user who launched ADE from a terminal to pass it variables can no longer do so. That is intended.
