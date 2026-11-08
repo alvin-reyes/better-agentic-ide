@@ -19,5 +19,5 @@ jobs:
     steps:
       - name: Stub
         run: |
-          echo "stub"
+          echo "branch-file"
           exit 1
