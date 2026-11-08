@@ -14,7 +14,7 @@ risk: high
 
 Slice 1 is the first slice that changes ADE's behaviour. An engineer, in the default profile's ADE, creates one engagement from one starter persona with no options. The engagement gets its own profile, its own ADE process, and its own shell history, temp folder, Agent status lock folder and webview store. The default profile starts it through the default launcher's one path, and the engagement's instance can send the engineer back to the default with Open engagements. Everything is behind F1's flag. The isolation test (PE-4 AC9) runs the slice 1 scenario and must pass on macOS, Linux and Windows, with its mark removed.
 
-Spec: PRD F1.8 slice 1; design sections 2 to 6, 9, 14, 15, 16, 20, 21 (and appendix A for the macOS probe); ADRs 0015 to 0018, 0019 (the settings file is slice 2, not built here), 0021 (history only in this slice), 0023 (not built here: see Q7).
+Spec: PRD F1.8 slice 1; design sections 2 to 6, 9, 14, 15, 16, 20, 21 (and appendix A for the macOS probe); ADRs 0015 to 0018, 0019 (the settings file is slice 2, not built here), 0021 (history only in this slice), 0023 (not built here: slice 2; decided 2026-11-08, see Notes), 0024 (Accepted 2026-11-08: `--open-engagements`, in e24).
 
 ## Outcome
 
@@ -35,18 +35,21 @@ Not in slice 1: the engagement's Claude Code settings file and the split home (s
 
 ## Notes
 
+Decisions (owner, 2026-11-08):
+
+- **Q7 closed: no real Claude Code step in slice 1.** The slice 1 scenario leaves out `h18`'s step 4 (the real `claude mcp add` and `claude mcp list`) and any write into A's Claude config dir. These join the scenario in slice 2, with ADR 0023's split home. `e29` and `e30` are updated, and `e29`'s `unknown` is removed.
+- **Q16 closed: slice 1 stays behind all of slice 0.** The epic-level `after` on `epic-harness` stands, so no slice 1 story starts before slice 0 is Done. The earlier idea of starting the pure foundations (`e1`, `e2`, `e7`) early is dropped.
+
 Preconditions and assumptions (confirm before the story they gate starts):
 
 - **e0 (owner, architect).** The Dock probe (appendix A, step 3b) and the architect's first check for PE-13 AC8 come before the first story of this epic is built (owner's ruling, F1.12). The answer selects the macOS branch of design section 6, which `e26` and the macOS run depend on.
-- **Q7 (architect; blocks `e29` and `e30`).** What "writes into A's Claude config dir as Claude Code would write them" means in slice 1. If the scenario runs the real `claude mcp add` and `claude mcp list` (`h18`, step 4), those write Claude Code's cache folders to the real `~/Library/Caches/claude-cli-nodejs` on macOS and `%LOCALAPPDATA%\claude-cli-nodejs` on Windows until the split home (ADR 0023) exists, and F1.8 puts that in slice 2. The scan treats those folders as attributable, so slice 1 would be red on those platforms with a marker of A. Options: (a) slice 1's scenario leaves the real Claude steps out and writes a stand-in config dir; (b) the split home moves into slice 1. The owner decides, with the architect.
 - **Q8 (product manager, architect).** Creation scope. This plan has slice 1 create only the engagement root folder, the profile root and the registry entry, from a typed engagements folder and a typed root name, with no ADE folder picker (ADR 0021 says the picker replaces the native dialog where ADE picks folders, and its slice is not stated). The PE-2 AC2 files (STATE, ACCESS, memory, named agent), the git identity and the full PE-2 AC5 verdict are slice 4. Confirm, or name what slice 1 must create.
-- **Q9 (product manager).** The starter persona: which one, and its text. The repository holds no starter. Held in `e7`'s `unknown`.
-- **Q10 (designer).** `docs/ux-spec.md` is not in the repository. The engagement list, the form, the menus and the engagement header (`e24`, `e31`) need the designer's spec. They are held in `unknown`. `e27a`'s history warning uses a placeholder that the designer replaces.
+- **Q9 resolved (2026-11-08).** The starter is `src-tauri/resources/personas/software-engineer/persona.md` (Software Engineer, `defaultModel: sonnet`), confirmed by the owner with PRD revision 9k and design revision 5h (A1 to A4). `e7`'s `unknown` is cleared; e7 bundles the file.
+- **Q10 resolved (2026-11-08).** `docs/ux-spec.md` and `docs/mockup.html` are in the repository and confirmed by the owner. The copy and layout are the UX spec's: the Open engagements header, menus and title (section 7) for `e24`; the warning bar and tab mark (section 8, copy 8.2) for `e27r`; the list and form (sections 4 to 6) for `e31`. `unknown` is cleared on `e7`, `e24` and `e31`, and the placeholder warning text is gone.
 - **Q12 (architect).** Where the real-binary rebuild tests of design 21 run: here they run in the `launch` suite of `e25` (on macOS and Linux, through the harness build), and the unit tests run in `cargo test`. Confirm.
 - **Q13 (architect).** Slice 1 holds the hand-off mutex in-process only, and the reconcile is a no-op until hand-offs exist (slice 4). Every verdict is clear until PE-2 AC5 is built (slice 4). Confirm.
 - **Q14 (architect).** Design 16.2 gives runs (a) and (b) together and does not say how they differ. `e25` asks the architect to name the difference before it is built.
-- **Q15 (architect).** Shell integration in slice 1 writes only what history needs (zsh and bash wrappers, fish's data folder, PowerShell's history path). The OSC 7 and 7717 hooks and the start-up check are slice 2 (PE-4 AC7, AC12). Confirm (`e27a`, `e27b`).
-- **Q16 (architect, owner).** This epic waits for the whole of `epic-harness` (the epic-level `after`). Pure foundations (`e1`, `e2`, `e7`) could start earlier; the owner decides.
+- **Q15 answered (architect, design revision 5h G7; confirmed 2026-11-08).** Slice 1 emits a one-shot history report (OSC 7717, `history` key only): zsh and bash in `e27a`, PowerShell in `e27b`, fish none. `e27r` reads it and shows the warning. The OSC 7 hooks, the per-prompt check and the start-up check stay in slice 2 (PE-4 AC7, AC12). This is a scope change to `e27a` and `e27b`, and it is why `e27r` exists.
 - **Q18 (architect).** The AppImage packaging list of `e16` is pinned from the AppRun that `release.yml` builds. First check: build the AppImage and print its AppRun environment; the fixture is written from that output. Until it exists, `e16`'s fixture test is not written.
 
 Parallel groups (dependencies are in each entry's `after`):
@@ -57,8 +60,29 @@ Parallel groups (dependencies are in each entry's `after`):
 - Rebuild: `e15` (after `e14`), then `e17` (Windows, after `e15` and `e16`).
 - Start path: `e18` (tickets and redeem, after `e12`, `e6`, `e15`), `e19` (the starter, after `e10`, `e11`, `e13`, `e18`), `e20` (A's start, after `e18` and `e6`), `e21` (per-profile variables, after `e15`, `e16`, `e17`), `e22` (the flag, after `e9`, `e13`, `e15`), `e23` (windows, after `e20`).
 - Launch and routes: `e24` (after `e12`, `e13`, `e20`); `e25` (after `e15`, `e17`, `e21`); `e26` (after `e25`, `e24`, `e0`).
-- Scenario and UI: `e8` (after `e6`, `e7`), `e27a` (after `e21`, `e1`), `e27b` (after `e27a`, `pb7`), `e28` (after `e3`, `e21`), `e29` (after `e8`, `e19`, `e20`, `e3`, `e6`, `e28`, `e27a`), `e31` (after `e8`, `e20`, `e24`).
+- Scenario and UI: `e8a` (after `e6`), then `e8` (after `e6`, `e7`, `e8a`); `e27r` (after `e21`, `e1`), then `e27a` (after `e27r`), `e27b` (after `e27a`, `pb7`); `e28` (after `e3`, `e21`), `e29` (after `e8`, `e19`, `e20`, `e3`, `e6`, `e28`, `e27a`), `e31` (after `e8`, `e20`, `e24`).
 - Gate, last: `e30` (after `e22`, `e23`, `e26`, `e27b`, `e29`, `e31`).
+
+## Re-shard, 2026-11-08 (owner confirmed design revision 5j, ADR 0024, PRD revision 9k, the UX spec and the starter)
+
+Decided and recorded here; the stories hold the detail.
+
+- **Brand.** The on-screen name is "Better Terminal" everywhere; "ADE" never appears in the UI; the default profile is "your main Better Terminal" (the owner's decision, PRD F1.1, UX section 2 and G9). Every UI string in `e24`, `e27r`, `e27a`, `e27b` and `e31` follows it.
+- **`e6`.** `engagementsFolder` is `null` until the first create. The `ProfilePaths` accessors for the OS temp folder, the system temp folders, the runtime folder and the profiles base are added in `e6`, not `e1`, because `e1` is the pure path set and the temp folder is read from the OS. Design 5j and ADR 0024 are cited as Accepted.
+- **`e7`.** The starter is bundled at `src-tauri/resources/personas/software-engineer/persona.md`. The bundle entry is added to `tauri.conf.json`. The bundled file has no `version` and no `starter`; the copy sets them. Slug, `defaultModel` form, `list_persona_choices` and the once-only rule are tested.
+- **`e8` split into `e8a` and `e8`.** `e8a` (new, after `e6`) is the engagements folder check (PE-2 AC1, checks 1 to 6 in contract order, with the PRD 9k tests). `e8` (after `e8a`) is the create: the persona input, the text rules, the one critical section under `registry.lock`, the making of the folders and the registry write. The split keeps the check testable on its own.
+- **`e24` (engagement side) and `e31` (default side).** The macOS app-menu item, the Dock menu, the Windows system menu, the jump list, the Linux header and desktop action, and the engagement header and window title are `e24`. The default profile's command palette entries and its macOS app-menu item are `e31`, because they open the list that `e31` builds. The title's words (`<name> — Better Terminal`) are `e24`'s; `e20` sets only the name.
+- **`e27a`, `e27r`, `e27b` (Q15).** The history report is split. `e27r` (new, after `e21` and `e1`) is the reader (`ptysink.rs`), the escalate-only state machine with its 10 s timer for zsh and bash, and the bar and tab mark (UX 8.1 to 8.3). `e27a` (after `e27r`) is the zsh and bash emitters and their real-shell tests. `e27b` (after `e27a`) is fish's history path (no check, no warning in slice 1) and PowerShell's report with no fallback. Its first step is the ConPTY passthrough check; a failure stops it and returns it to the architect. Fish's warning work moves to slice 2.
+- **`e20`.** Only the window name is set there; the title format is `e24`'s (UX 7.3).
+- **G5 (PE-13 AC4, "every window shows A's name").** Belongs to `e24`: the header (UX 7.1) and the window title (UX 7.3), with the test in `e24` (11).
+
+**Open, for the owner or the named role:**
+
+1. **The `ade-hook` session-start check story.** The brief expected a story for the session-start check ("Better Terminal could not check this session's logs"). No such entry exists in slice 0 or 1: design section 8 is slice 2 (Claude Code in an engagement) and PRD PE-4 AC12 is outside this initiative. Nothing was created. The product-name test belongs with that story when it is sharded.
+2. **The `.desktop` template.** UX 7.2 says DevOps owns the desktop template. `e24` (3) adds the `[Desktop Action engagements]` entry, so this needs a decision: `e24` edits the template (as written), or DevOps does and `e24` tests the generated output. Owner or DevOps to confirm before `e24` is pulled.
+3. **The default profile's Dock menu.** UX 7.2 gives `Open Engagements` for the engagement instance's Dock menu only. PRD PE-13 AC4 does not name the default's Dock menu. Not built; the architect or PM to say whether it is wanted.
+4. **Q8 (creation scope)** remains open: slice 1 creates the roots and the registry entry only (`e8`).
+5. **Q7, Q12, Q13, Q14, Q16 and Q18** are unchanged from the notes above.
 
 ## References
 

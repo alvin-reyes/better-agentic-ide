@@ -10,7 +10,7 @@ approval, and the change is noted in that section's history.
 
 | ID | Feature | Status |
 |---|---|---|
-| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f) |
+| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
 
 ---
 
@@ -24,9 +24,10 @@ approval, and the change is noted in that section's history.
   case, revision 9f the text check's two fixes to that case's tests, and revision
   9g the text check's fixes to those tests and delete's not-answering case,
   revision 9h delete's left-behind-process and part-way cases, revision 9i
-  the text check's restatement of that case's limit, and revision 9j the final
-  text check's second restatement of that limit and its widening of that case.
-  Not sharded.
+  the text check's restatement of that case's limit, revision 9j the final
+  text check's second restatement of that limit and its widening of that case,
+  and revision 9k the slice-1 gaps raised by the starter draft and the UX spec
+  (confirmed by the owner 2026-11-08). Not sharded.
 - **Source:** the owner's intent, 2026-11-08: *"I want the ADE to be a AI Agent for
   Engineers to build their persona based on their roles and responsibility that they
   can use for multiple work opportunities."* The owner also wants the behaviours of
@@ -249,6 +250,44 @@ approval, and the change is noted in that section's history.
     engagement root), and the delete report shows, for each process, the evidence
     that matched. Its test gains a fourth run, a default-profile shell whose
     current folder is in A's engagement root. The owner's approval stands.
+  - 2026-11-08, revision 9k (the slice-1 gaps from the starter draft and the UX
+    spec, section 13; small additions, confirmed by the owner 2026-11-08): F1.6's
+    starter row drops "briefing focus", which has no field and belongs with the
+    morning briefing (Later). PE-1 AC3 and F1.8 say slice 1 ships one starter,
+    Software Engineer, and the other two are owed by PE-1 in full (slice 4). PE-2
+    AC1 adds a length and character rule for name, client name and owner (G3) and
+    says how the engagements folder is set and created (G2); a follow-up aligns it
+    with the architect's G2 decision (design revision 5h): one missing level is
+    made, a missing parent is refused, the path must be absolute, outside ADE's
+    app data and profile roots, and a folder if it exists, and it stays set after
+    every engagement is deleted. PE-13 AC10 adds the Windows jump-list task
+    and the Linux desktop action, which open the engagement list through a
+    payload-free start argument (ADR 0024); AC4 lists them among its entry points. F1.1 names the word
+    the engineer sees for the default profile, "your main Better Terminal" (G4). PE-13 AC4
+    names the entry points to the engagement list in the default profile (G6).
+    A second follow-up aligns the PRD with design revision 5i: PE-13 AC10's
+    jump-list task and desktop action exist only in builds with F1 compiled on,
+    and with the flag on a repeated start argument is refused (exit status 2).
+    PE-2 AC1's engagements folder must also not contain home, must not be inside
+    or contain (equal included) ADE's app data, the profile roots' folder, the
+    runtime folder or the OS temp folder, must not be a file-system or volume root
+    and must hold no control or format character; a missing folder is recreated
+    only while no engagement is registered in it. Its text fields refuse format
+    characters (Cf) as well as control characters. Its persona choices are the
+    library plus each starter not yet copied, and a starter is copied once, at the
+    creation that chooses it (PE-1 AC3 says so too). PE-4 AC8 states slice 1's
+    history check: the report and the 10-second fallback for zsh and bash, the
+    report only for PowerShell, nothing for fish until slice 2, and a warning that
+    only escalates and never clears until the terminal closes. On 2026-11-08 the
+    owner confirmed revision 9k, with design 5i, ADR 0024, the UX spec and the
+    starter persona, and decided the brand: the UI names the app "Better
+    Terminal" (the bundle productName) everywhere and never shows "ADE", which
+    stays the name of the methodology and the docs; the default profile is "your
+    main Better Terminal" (F1.1). A last follow-up defines PE-4 AC8's shorter
+    form, and aligns PE-2 AC1 with the architect's folder rules: the macOS
+    `/private/tmp` (`/tmp`) and `/var/tmp` are refused like the OS temp folder,
+    and a missing engagements folder with engagements registered in it is refused
+    as registered, even when its parent is missing too (an unmounted drive).
 
 ### F1.1 Glossary and definitions
 
@@ -265,7 +304,7 @@ Every requirement below uses these terms with exactly these meanings.
 | **Work area** | A named part of an engagement, inside its root, with its own STATE, ACCESS (names and locations, never secret values), memory and named agent. It may name one of the engagement's code repos. |
 | **Profile** | One complete, separate set of everything ADE and Claude Code keep for a user, including a temp folder (listed in PE-4 AC1). Each engagement has its own profile. |
 | **Profile root** | The one folder under which a profile's data lives, whatever the OS default location of that data would be. |
-| **Default profile** | ADE as it is today, with its existing app data and the engineer's own Claude Code config. It is not an engagement. It alone holds the persona library and the engagement registry, and it alone creates, checks, starts, lists and deletes engagements. Every ordinary launch of ADE reaches it (PE-13 AC8), except under the macOS fallback (D32), where a launch may bring a running engagement instance forward; from there, that instance's **Open engagements** action reaches it (PE-13 AC10). |
+| **Default profile** | ADE as it is today, with its existing app data and the engineer's own Claude Code config. It is not an engagement. It alone holds the persona library and the engagement registry, and it alone creates, checks, starts, lists and deletes engagements. Every ordinary launch of ADE reaches it (PE-13 AC8), except under the macOS fallback (D32), where a launch may bring a running engagement instance forward; from there, that instance's **Open engagements** action reaches it (PE-13 AC10). Where the UI must name it, the engineer sees it called "your main Better Terminal"; the internal terms profile, registry, instance and starter are not shown. The UI names the app by its bundle productName, "Better Terminal", and never shows "ADE"; "ADE" names the product and its methodology only in prose and docs, such as this PRD. |
 | **Engagement registry** | The default profile's list of engagements: for each, its name, client name, persona, engagement root, checkouts, profile root, git identity (PE-2 AC1) and the identifier acknowledgements of PE-1 AC5. It exists to list, open and check engagements, is never synced, and never reaches a session's instructions. |
 | **Instance** | One running ADE process on one profile, with all its windows. An engagement's instance is the only instance that ever runs on that engagement's profile, and only the default profile starts it (PE-13). |
 | **Default launcher** | The one code path through which ADE starts the default profile's instance, whatever triggered the start (PE-13 AC9). It builds the instance's environment and working folder from the engineer's OS login session (or the defined headless fallback), never from its caller. No other code in ADE starts the default instance. The guarantee does not rest on the launcher alone: the started process itself, whenever it becomes the default instance, discards the environment and working folder it inherited and rebuilds them the same way, whoever started it (PE-13 AC9). |
@@ -505,7 +544,7 @@ implementation. This public document describes only the behaviours, not the setu
 
 | Behaviour | F1 decision |
 |---|---|
-| Starter personas, each with a title, default work areas, model and briefing focus | **MVP**: 3 generic starters written fresh, which the engineer copies into their own library (D21) |
+| Starter personas, each with a title, default work areas and model | **MVP**: 3 generic starters written fresh, which the engineer copies into their own library (D21). A per-persona briefing focus is Later, with the morning briefing |
 | Setting up a client's folder from one persona | **MVP**: "new engagement", with the persona referenced, not copied (PE-2) |
 | Work areas with STATE, ACCESS, memory and a named agent; adding one | **MVP** (PE-8) |
 | Shared working rules: verified not vibed, cite sources, never print secrets, deploys and messages only on the owner's word, client decisions recorded | **MVP** (PE-5) |
@@ -543,10 +582,13 @@ outlive any single engagement.
    areas, and a default model. Unknown front-matter fields are kept on save, not
    dropped.
 3. ADE ships 3 generic starter personas (their provenance is D21). Choosing one
-   creates a copy in the engineer's library. Editing that copy never changes the
+   creates a copy in the engineer's library, once, at the engagement creation that
+   chooses it (PE-2 AC1). Editing that copy never changes the
    starter, and an ADE update never overwrites the engineer's copy. Test: choosing a
    starter adds a copy to the library; editing the copy leaves the starter unchanged;
-   an ADE update that changes the starter leaves the copy unchanged.
+   an ADE update that changes the starter leaves the copy unchanged. Slice 1 ships
+   one starter, **Software Engineer**, which is all slice 1 needs; the other two are
+   owed by PE-1 in full (F1.8, slice 4), and the product manager drafts them.
 4. The library is in the default profile, outside every engagement's profile root
    and engagement root and outside every ADE project folder, and no session
    instruction source (S1 to S12) of any engagement contains the library's path.
@@ -578,13 +620,64 @@ As an engineer starting new work, I want to create an engagement from one of my
 personas in a few steps, so I'm working within minutes.
 
 1. Engagements are created only from the default profile's ADE. The engineer gives: a
-   name, a client name, their own name as owner, a persona from their library, an
+   name, a client name, their own name as owner, a persona, an
    engagement root (under the engagements folder where PE-4 AC13 applies), and optionally work areas (default: the persona's), code repos
    (name plus checkout path) and a git identity (name and email). No other input is
-   required. The engagement root's folder name is made of ASCII letters, digits, `-`,
+   required. The persona choices are every persona in the engineer's library plus
+   every starter (PE-1 AC3) not yet copied into it, so each starter appears once,
+   as its copy or as itself. A starter is copied into the library once, at the
+   creation that chooses it; a later creation that chooses it uses that copy. The name, client name and owner are each trimmed of leading and
+   trailing whitespace, and must then be 1 to 80 characters (Unicode code points)
+   with no control or format characters (Unicode categories Cc and Cf), line breaks,
+   right-to-left overrides and zero-width characters included; creation refuses any other
+   value, naming the field and why. The engagements folder is chosen at the first
+   creation (default `~/Engagements`) and is then fixed: every later engagement is
+   created in it, it stays set when every engagement is deleted, and changing it is
+   Later. It must be an absolute path once `~` is expanded, must contain no control
+   or format character (Cc or Cf), and, if it exists, must be a folder. With its
+   links resolved, and with "inside" and "contains" each including "equal to", it
+   must not be inside, or contain, the default profile's app data, the folder
+   holding the engagements' profile roots, the folder holding ADE's sockets (the
+   runtime folder), the OS temp folder, `/private/tmp` (macOS's `/tmp`) or `/var/tmp`; it must not contain the home folder; and
+   it must not be the root of a file system or volume (`/`, a drive root, a mount
+   point). Creation refuses any other, naming the path and saying why. If
+   it does not exist when an engagement is created, creation creates it, one level
+   only, but only while no registered engagement's root is inside it (at the first
+   creation, or once every engagement in it has been deleted); otherwise creation
+   is refused, naming the folder and saying engagements are registered in it (its
+   drive may not be connected), and makes nothing; this refusal wins over the
+   missing-parent one below, so a folder on a drive that is not connected is
+   reported as registered, not as a missing parent. Otherwise, if its parent does not exist or is not
+   a folder, creation is refused, naming the parent, and makes no folder. The engagement root's folder name is made of ASCII letters, digits, `-`,
    `_` and `.`, is 3 to 64 characters long, and is unique case-insensitively in the
    engagements folder (PE-4 AC13 depends on it); creation refuses any other name,
-   saying why. The git identity is kept in the engagement registry with the
+   saying why. Tests: a name of 81 characters, an empty client name after trimming,
+   and an owner containing a line break are each refused, naming the field; a name,
+   a client name and an owner each containing U+202E or U+200B are refused, naming
+   the field; a name
+   of 80 characters with surrounding spaces is kept trimmed; the first creation
+   with a missing engagements folder (its parent present) creates it, and so does a
+   later creation after that folder was removed after every engagement was deleted;
+   a later creation whose engagements folder was removed while an engagement is
+   still registered in it is refused and makes no folder; a later creation whose
+   engagements folder is `/Volumes/<x>/Engagements` on an unmounted drive (so its
+   parent is missing too) while an engagement is registered in it is refused,
+   saying engagements are registered in it and not naming a missing parent, and
+   makes no folder; a creation whose engagements
+   folder's parent is missing is refused, naming the parent, and makes no folder; a
+   relative path, a path inside the default profile's app data, a path inside the
+   folder holding the profile roots, and a path that is a file are each refused; so
+   are, each naming the path, `~` itself, a folder containing home, `/` (and a drive
+   root on Windows), a mount point, the OS temp folder and a folder inside it,
+   `/private/tmp`, `/tmp`, `/var/tmp`, a folder inside each, `/private` and `/var`
+   (each contains one), and a
+   path containing U+202E; a
+   later creation in a different engagements folder is refused, also after every
+   engagement has been deleted. When starters are offered: with an empty library,
+   the choices include Software Engineer as a starter; after a creation that chose
+   it, the library holds one copy of it, the choices show that copy and not the
+   starter, and a creation that chooses the starter after a copy exists (from a form
+   opened before the copy was made) uses that copy and makes no second one. The git identity is kept in the engagement registry with the
    engagement's other entries (F1.1); how it reaches A's instance is the
    architect's.
 2. The new engagement has, for each work area: a STATE file with the sections Live,
@@ -892,10 +985,27 @@ separate ADE, so nothing of one client can reach another through my tools (J3).
    macOS and Linux; PowerShell 7 and Windows PowerShell 5.1 on Windows. When ADE cannot
    confirm that a terminal's shell writes to the profile's history file (an
    unsupported shell, or a start-up file that sets its own history path), the
-   terminal's tab shows a visible warning that its history is not isolated. Test, per
+   terminal's tab shows a visible warning that its history is not isolated. **Slice
+   1's check** (design G7): zsh and bash terminals report their history path once,
+   after the start-up files; a path other than A's history file shows the full
+   warning naming the variable (`HISTFILE`), and no report within 10 seconds of the
+   shell's first output shows the warning's shorter form, which is the warning's
+   first sentence alone ("History is not isolated for this terminal.") and means
+   ADE cannot confirm; "the shorter form" means that sentence wherever it is used below.
+   PowerShell terminals send the same report (`HistorySavePath`) with no 10-second
+   fallback, pending the design's first check that ConPTY passes the report
+   through. fish terminals have no check until slice 2. Once shown, a warning only
+   escalates (from none, to the shorter form, to the full warning) and never clears
+   until the terminal closes, whatever later reports say; an escalation shows it
+   again even if the engineer dismissed it. Test, per
    supported shell: a command typed in A is in A's history file and absent from the
    default profile's and B's; a start-up file that sets `HISTFILE` produces the
-   warning.
+   warning. Slice 1 tests: a zsh start-up file that `exec`s `sh` shows the shorter
+   form after 10 seconds; a mismatching report after the 10 seconds upgrades it to
+   the full warning, and a matching one leaves the shorter form; a matching report
+   after a mismatching one leaves the full warning; a PowerShell profile that moves
+   `HistorySavePath` shows the full warning naming it, and a PowerShell terminal
+   with no report shows no warning; a fish terminal shows none.
 9. **The isolation test (G3).** An automated test, run on macOS, Linux and Windows
    (F1.8 says how it gates), through the product's own code paths. It proves the
    isolation rule (F1.1) for an engagement A. This criterion states what the test
@@ -1365,7 +1475,15 @@ so I never type into the wrong client's terminal and never mix their windows.
 3. The default profile's instance and several engagement instances can run at once.
 4. Every window of A's instance shows A's name. Nothing in A's instance shows another
    engagement's name or the engagement list; engagements are listed, created and
-   opened only from the default profile.
+   opened only from the default profile. With F1's flag on, the default profile
+   reaches the engagement list from its command palette (**Open Engagements**, and
+   **New Engagement** for the create form) on every platform, from its app menu on
+   macOS (the same **Open Engagements** item, in the same place, as in an engagement
+   instance), from an engagement's Open engagements request (AC10), and, on Windows
+   and Linux, from the OS shell's **Open Engagements** (the jump-list task and the
+   desktop action, in builds with F1 compiled on, AC10). Test: with the flag on, the default's palette has both
+   entries and its macOS app menu the item, each opening the list (or the form);
+   with the flag off, none of them exists; the OS-shell entries are tested in AC10.
 5. **Restore.** After A's instance quits (normally, or killed in the test) and the
    default profile starts it again, A's workspace is restored: every tab of every
    window, with its panes and sub-terminals, their names, folders and scrollback; no
@@ -1531,13 +1649,35 @@ so I never type into the wrong client's terminal and never mix their windows.
     starts it or reaches it already running (AC9). It appears in the engagement
     instance's app menu and, on macOS, in its Dock menu; on Windows and Linux, in the
     equivalent menus (the architect names them, F1.12). It works on macOS, Linux and
-    Windows. It shows nothing of the default profile or the engagement list in A's
+    Windows. **From the OS shell (Windows and Linux).** With F1's flag on, the
+    Windows taskbar jump list (Tasks) and the Linux desktop entry's actions also have
+    **Open Engagements**. It starts a new process of ADE's binary with one start
+    argument that carries no value and means only "show the engagement list" (the
+    architect names it, ADR 0024). That start is an ordinary launch with no
+    engagement named (AC8, AC9): if the default's instance runs, it is brought
+    forward showing the engagement list and the new process exits; otherwise the new
+    process becomes the default's instance and shows the list once its window is up.
+    Nothing rides on the argument: with the flag on, a start that gives it a value,
+    gives it more than once, or gives it with an engagement named, is refused (the
+    process exits with status 2). The jump-list task and the desktop action exist
+    only in builds with F1 compiled on (the architect's and DevOps'); a build with
+    F1 switched on only at run time has neither, and its system menu and palette
+    still hold Open Engagements. With the flag off, the argument changes nothing,
+    in every form, repeats included. It shows nothing of the default profile or the engagement list in A's
     instance (AC4); A's windows are unchanged. So, even under the macOS fallback
     (AC8, D32), the engineer reaches the engagement list, opens B and creates an
     engagement without quitting A. Test: AC9's run (f), with every assert of AC9 on
     the instance it starts; and AC9's run (f'), with the default's instance already
     running: the action brings it forward, no second default instance starts, A's
-    windows are unchanged, and every assert of AC9 holds.
+    windows are unchanged, and every assert of AC9 holds. For the OS-shell entries:
+    with the flag on, a start with the argument while the default's instance runs
+    brings it forward showing the engagement list, and without the argument brings
+    it forward only; with the default's instance not running, the start becomes the
+    default's instance and shows the list; the argument with a value, given twice,
+    or with an engagement named, is refused with exit status 2; with the flag off,
+    the start is the same as one
+    without the argument; the jump-list task's arguments are exactly that argument,
+    and the desktop action's command is ADE's binary with exactly that argument.
 
 #### PE-14. The engagement brain, fed by its terminals (Next)
 
@@ -1656,7 +1796,7 @@ ranking and indexing design are the architect's.
      this on 2026-11-08 (D28). How the mark is made is
      the architect's (F1.12).
   1. **Slice 1, the profile and the rule:** create an engagement with one starter
-     persona and no options, from the default profile's UI; it gets its own profile
+     persona (Software Engineer, PE-1 AC3) and no options, from the default profile's UI; it gets its own profile
      with everything of PE-4 AC1 (ADE's files outside app data, Agent status's lock
      folder and the temp folder of PE-4 AC11 included), its own shell history
      (PE-4 AC8), nothing taken from another engagement (PE-4 AC2) and ADE sync off
@@ -1674,7 +1814,7 @@ ranking and indexing design are the architect's.
   2. Claude Code in an engagement (PE-4 AC3); the one Claude config-dir resolver
      (PE-4 AC5); the start-up check (PE-4 AC12).
   3. PE-7, per-engagement secrets; the scenario gains its scoped-secret step.
-  4. PE-1 in full; PE-2 in full with PE-5 and PE-6; PE-4 AC4 and AC7; PE-4 AC13,
+  4. PE-1 in full, with the other two starter personas; PE-2 in full with PE-5 and PE-6; PE-4 AC4 and AC7; PE-4 AC13,
      once the architect's first check (PE-4 AC13) says it works, otherwise it is back
      with the owner. The scenario gains a checkout with the client-name marker in its
      path, and a default-profile terminal opened at A's root.

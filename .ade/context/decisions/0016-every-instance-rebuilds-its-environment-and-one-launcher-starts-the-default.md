@@ -1,7 +1,7 @@
 # 0016: Every ADE instance rebuilds its environment from the login session; only the default launcher and the engagement starter start ADE
 
 - **Status:** Accepted (2026-11-08). Approved by the owner on 2026-11-08 with the F1 plan; accepted on 2026-11-08, when the delta review of revisions 5 to 5g of the F1 design passed. With the F1 design (section 4, section 16).
-- **Revisions:** 2026-11-08 first version; revised the same day after the adversarial review (B1, B2, M9, minors 2 and 11); revision 3 after the re-review (NB1, M-a, minors 2, 4, 7 and 8); revision 4 (minors 1 to 3).
+- **Revisions:** 2026-11-08 first version; revised the same day after the adversarial review (B1, B2, M9, minors 2 and 11); revision 3 after the re-review (NB1, M-a, minors 2, 4, 7 and 8); revision 4 (minors 1 to 3); 2026-11-08, amended by ADR 0024 (Accepted 2026-11-08, design revisions 5h to 5j): one more default-mode argument, `--open-engagements`, which only the OS launchers pass; mode is still decided by `--ade-profile` alone, and the argument changes only what a default-mode start sends or shows.
 - **Context:**
   - PE-13 AC9 requires that the default instance never takes its environment or working folder from whatever launched it, through one default launcher, with the started process enforcing it too.
   - Evidence (design E6): on macOS, `open` passes the caller's entire environment to the app it starts (seen: a planted marker variable and `ADE_HOOK_TOKEN`), so a LaunchServices launch is not clean.

@@ -9,7 +9,9 @@ AC8 and AC10, PE-2 AC5 and AC8.
 - ADR: 0018.
 
 Status: approved with the F1 plan by the owner on 2026-11-08; revision 5's fold-in
-pending the delta review; not built.
+accepted when the delta review of revisions 5 to 5g passed (2026-11-08); the
+slice-1 additions (revisions 5h to 5j, Open engagements from the OS launchers)
+approved by the owner on 2026-11-08; not built.
 
 ## Rules
 
@@ -40,7 +42,7 @@ pending the delta review; not built.
 |---|---|---|---|---|
 | `hello` | `v: 1` | anyone of the same user; the default sends it to A under its hand-off mutex (writer step 6, and the probe of the starter, delete and PE-12 AC1's close when A's lock is held, or, on Unix, to check that an endpoint whose lock the prober took is not A's), waiting at most 1 s; no answer is "not answering", never "not running" (invariant L, `engagement-profiles.md`) | any; the handler answers at once and never waits on a hand-off mutex | `{"ok":true,"v":1,"profile":"<id>"\|"default"}` |
 | `activate` | none | a second start of the binary; `reach_default`; `start_engagement` | any | `{"ok":true}`, after bringing the instance's windows forward |
-| `open_engagements` | **none** | an engagement instance's Open engagements action | default | `{"ok":true}`, after bringing the default forward and showing the engagement list |
+| `open_engagements` | **none** | an engagement instance's Open engagements action; a second start of the binary with `--open-engagements` (the OS launchers; revision 5h, ADR 0024) | default | `{"ok":true}`, after bringing the default forward and showing the engagement list |
 | `redeem_start_ticket` | `ticket: string` (64 hex) | a starting engagement instance, after it has bound its own channel | default; the handler marks the ticket used under the ticket table's lock, writes the ticket's new control key to A's registry entry (registry file lock only), then signals the waiting starter, which releases A's hand-off mutex; it never takes a hand-off mutex itself | `StartInfo` (below), or `ok:false` if unknown, used, expired, or the key write failed (the starter then kills the child) |
 | `checkout_request` | `profile: string`, `key: string`, `op: "add"\|"remove"`, `path: string` | an engagement instance (PE-8 AC5) | default | `{"ok":true,"verdict":Verdict}` |
 | `first_start_done` | `profile: string`, `key: string` | an engagement instance, after applying the seed and project setup | default | `{"ok":true}`; the default clears `seed` and `firstStartPending` |
@@ -77,6 +79,8 @@ type StartInfo = {
   ok: true;
   profile: string;             // A's id
   name: string;                // engagement name (window titles, PE-13 AC4)
+                               // no clientName, on purpose (revision 5h): A's UI shows
+                               // the name only, and StartInfo carries only what A uses
   root: string;
   checkouts: Checkout[];
   personaId: string;

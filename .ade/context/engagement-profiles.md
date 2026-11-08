@@ -8,8 +8,9 @@ How ADE runs one process per profile (PRD F1, PE-4, PE-13).
   (control channel).
 - Requests on the channel: `engagement-requests.md`.
 
-Status: approved with the F1 plan by the owner on 2026-11-08; revisions 5 to 5d
-pending the delta review; not built.
+Status: approved with the F1 plan by the owner on 2026-11-08; revisions 5 to 5g
+accepted when their delta review passed (2026-11-08); the slice-1 additions
+(revisions 5h to 5j) approved by the owner on 2026-11-08; not built.
 
 ## Profile id
 
@@ -63,7 +64,11 @@ file `ade-<h>.lock`, the default's included. It is not a profile root (not a
 `src/lib/profilePaths.ts` (from the `profile_paths` command) in the frontend. A
 static test fails on any other code building these paths, or calling
 `app_data_dir()`, `app_local_data_dir()`, `app_log_dir()`, `app_cache_dir()` or a
-non-test `temp_dir()`.
+non-test `temp_dir()`. `ProfilePaths` also answers the OS temp folder (its one
+non-test `temp_dir()` call), the system temp folders (`/tmp`, `/var/tmp` on macOS
+and Linux; none on Windows), the per-user runtime folder and the profiles base;
+other code asks it for them (revision 5j, N5; the engagements-folder check in
+`engagement-registry.md` is the first user).
 
 ## Variables ADE sets per profile
 
@@ -97,6 +102,19 @@ session's value if the login session sets it, and is otherwise absent.
   needs a start ticket (the starter passes `ADE_START_TICKET` to the first image;
   the rebuild carries it on in the rebuild pipe) that the default redeems, else it
   exits 2. Without `--ade-profile`: **default mode**.
+- **`--open-engagements` (revision 5h, G1; ADR 0024):** a token with no value,
+  set only by the OS launchers (the Windows jump-list task and the Linux
+  `[Desktop Action engagements]`); no ADE code passes it. With F1 on it is valid
+  only in default mode and once: with `--ade-profile`, in the form
+  `--open-engagements=<x>`, or given twice (revision 5i), the process prints why
+  and exits 2; a default-mode
+  start that carries it sends `open_engagements` in place of `activate` when the
+  default answers, or, when it becomes the default itself, shows the engagement
+  list once its window is up. With F1 off it is ignored in every form (today's
+  start). Both OS entries exist only in builds with F1 compiled on
+  (`f1-forced`, `isotest-driver`; revision 5i): the jump-list code is `cfg`-gated
+  there, and only the default instance registers the task (ADR 0024). It is an
+  ordinary argument for the rebuild (in the digest, kept across the re-exec).
 - **Arguments the rebuild and launchers use:** `--ade-rebuilt=<fd>` (Unix, set only
   by the rebuild) and `--ade-feature-f1` (debug builds only; added by both
   launchers when the running instance has F1 on; ignored by release builds).

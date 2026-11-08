@@ -6,13 +6,21 @@ The on-disk formats F1 stories share (PRD F1.1, PE-1, PE-2, PE-3, PE-12).
   sections 11 and 12.
 
 Status: approved with the F1 plan by the owner on 2026-11-08; revision 5's fold-in
-(M-A, M-F, minors 1, 7 and 8 below) pending the delta review; not built.
+(M-A, M-F, minors 1, 7 and 8 below) accepted when the delta review of revisions 5
+to 5g passed (2026-11-08); not built.
+Revision 5h (2026-11-08, the slice-1 gaps: starters A1 to A4 and the engagements
+folder G2), with revision 5i's answers to its review (M2, M5, minors 4 to 6, 10
+and 11) and revision 5j's fold-in of the delta check of 5i (N1, N3 to N7 here),
+approved by the owner on 2026-11-08; not built.
 
 All writes below are atomic (`fsx::write_atomic`: a temp file in the same folder,
 synced, renamed, then the folder synced), under the named advisory lock (`fs4`).
 "Synced" and "flushed" mean `fsx::sync_file` / `fsx::sync_dir`: `F_FULLFSYNC` on
 macOS, `fsync` on Linux, `FlushFileBuffers` on Windows (design section 20). Paths
-are compared with `fsx::same_path` (case-insensitive on Windows).
+are compared with `fsx::same_path` (design section 20, revision 5i): the existing
+part canonicalised; the part that does not exist yet compared ignoring case on
+Windows, on macOS ignoring case only when its deepest existing folder's volume
+ignores case (`pathconf(_PC_CASE_SENSITIVE)` is 0), and byte-equal on Linux.
 
 ## Persona library (default profile only; never synced, D13)
 
@@ -24,7 +32,69 @@ are compared with `fsx::same_path` (case-insensitive on Windows).
 - `versions/<n>.md`: the text as it was at version n.
 - Lock: `<default app data>/personas/.lock`.
 - Starters: bundled resources, copied into the library on choice; never written
-  back (PE-1 AC3).
+  back (PE-1 AC3). Revision 5h (slice-1 gaps A1 to A4):
+  - **Location (A1).** In the repository:
+    `src-tauri/resources/personas/<starter id>/persona.md`, one folder per
+    starter. Bundled by a `tauri.conf.json` `bundle.resources` entry
+    `"resources/personas/": "resources/personas/"` (added by e7, beside the
+    `bmad` entries), and read at run time with
+    `resolve("resources/personas", BaseDirectory::Resource)`, as `bmad.rs`
+    does. Tests read the same folder through `CARGO_MANIFEST_DIR`. No copy of a
+    persona lives under `docs/` (the public site).
+  - **Starter id (A2).** The starter's folder name, a slug:
+    `^[a-z0-9]+(-[a-z0-9]+)*$`, 3 to 64 characters (for example
+    `software-engineer`). It is stable across releases and installs; renaming a
+    starter's folder is a new starter. It is not a persona id: the 16-hex id is
+    minted for each library copy, and a starter has none.
+  - **Fields (A3).** The bundled file carries `title`, `defaultModel`,
+    `workAreas`, any other keys, and the body. It carries **neither `version` nor
+    `starter`**: the copy step sets `version: 1` and `starter: <starter id>` (the
+    folder name), so the folder is the one source of the id. A test fails if a
+    bundled file holds either key, if its `title` is missing or empty, or if its
+    folder name breaks the slug rule, or if its `defaultModel` is present and not
+    of the A4 form (revision 5i). Other keys, unknown ones included, are copied
+    as they are.
+  - **When a starter is copied, and once only (revision 5i, M5).** Slice 1
+    copies at the create, never at start-up and never when the form opens:
+    - `list_persona_choices()` (a default-only command, e7) returns, in this
+      order, every library persona (`{ "kind": "library", "personaId", "title" }`,
+      ordered by title, then id), then every bundled starter that **no** library
+      persona names in its `starter` key (`{ "kind": "starter", "starterId",
+      "title" }`). So a starter appears once, either as its copy or as itself,
+      never both. A starter whose file cannot be read or parsed is left out and
+      its reason returned beside the list (`starterErrors`), so the form can say
+      why the list is empty.
+    - The create (e8) takes `persona: { "library": "<persona id>" }` or
+      `{ "starter": "<starter id>" }`. For a starter it takes the personas lock,
+      re-reads the library, and uses the library persona whose `starter` equals
+      the id if there is one (several: the lowest persona id); only if there is
+      none does it copy the starter (`version: 1`, `starter: <id>`, a new
+      persona id). It releases the personas lock before it takes the registry
+      lock; the two are never held together. A create refused after the copy
+      leaves the copy, which the next create reuses: the dedup rule above.
+    - A library persona named by id must exist when the registry lock is taken,
+      else the create is refused ("the persona was removed").
+  - **`defaultModel` (A4).** A Claude Code model name as `claude --model` takes
+    it: an alias (`sonnet`, `opus`, `haiku`, ...) or a full model id. Starters
+    use an alias, so they follow Claude Code's current model. ADE keeps no list
+    of models: it checks only the form, `^[A-Za-z0-9][A-Za-z0-9._:\[\]-]{0,99}$`.
+    A value of that form is passed as one argument, through ADE's one shell
+    quoter (ADR 0008; `[` and `]` glob in zsh). On PowerShell, which ADR 0008
+    does not cover, the value is put in single quotes: inside them PowerShell
+    treats only `'` and the typographic quotes U+2018 to U+201B as special, and
+    the form's character set holds none of them, so the value is literal
+    (revision 5i). Whether the name is known is Claude Code's to report, in the
+    terminal, when and how it chooses (at start or at the first request); ADE
+    does not detect it. The value must be a YAML **string**: quoted, or a plain
+    scalar that YAML 1.2's core schema does not resolve to null, a boolean, an
+    integer or a float. A number (`3.5`), `true`, `null`, `~`, a list or a map is
+    malformed (revision 5i); the YAML 1.1 words `yes`, `no`, `on`, `off` are
+    strings under 1.2 and pass the form check. A malformed value, a value not of
+    the form, or an empty one is treated as absent (no `--model`; Claude Code's
+    own default) and the persona editor (slice 4) names the field. Absent is
+    allowed. Slice 1 stores and copies the key; it starts no agent with it.
+    e7's tests: `3.5` and `true` are malformed, `'3.5'` and `yes` are strings,
+    and the bundled starter's value matches the form.
 - An engagement's hook reads only `personas/<its persona id>/persona.md` (allowed
   inflow 1). No file of an engagement holds the library's path (PE-1 AC4).
 
@@ -37,7 +107,7 @@ file after a delete, so it never keeps a deleted engagement).
 ```json
 {
   "schema": 1,
-  "engagementsFolder": "/Users/me/Engagements",
+  "engagementsFolder": "/Users/me/Engagements",   // null until the first create
   "engagements": [{
     "profileId": "3f9c0a1b2c3d4e5f",
     "name": "…", "clientName": "…", "owner": "…",
@@ -58,11 +128,85 @@ file after a delete, so it never keeps a deleted engagement).
 }
 ```
 
+- **`engagementsFolder` (revisions 5h and 5i, G2)** is `null` until the first
+  successful create, which sets it in the same registry write as the new entry.
+  It is then fixed: a create whose engagements folder is not the same path
+  (`fsx::same_path`, after `~` is expanded and the path resolved) is refused,
+  naming the set folder. It stays set when every engagement is deleted;
+  changing it is Later. Every create checks the typed folder `F`, in this order,
+  and refuses at the first failure, naming the path and the reason:
+  1. **Text.** Not empty; no character of Unicode general category Cc (control)
+     or Cf (format: U+200B to U+200F, U+202A to U+202E, U+2060 to U+2064,
+     U+2066 to U+2069, U+FEFF, U+00AD, ...); absolute after `~` expansion; no
+     `.` or `..` segment.
+  2. **Resolved.** The longest existing prefix of `F` is canonicalised (links
+     followed) and the rest appended. Every check below uses this path, `P`.
+  3. **Not ADE's or the system's places (revision 5i, M2; ordered and
+     completed in revision 5j, N1 and N3 to N6).** "Inside" and "contains" each
+     include "equal to". **Comparands (N4, N5):** every folder `P` is compared
+     with comes from `ProfilePaths` (never a direct `temp_dir()` call or an
+     environment variable read here) and is resolved exactly as `P` is (check
+     2: longest existing prefix canonicalised, the rest appended) before
+     `fsx::same_path`; so where `/home` is a link to `/var/home` (Fedora
+     Silverblue), a typed `/var/home` still contains home. Tested in this
+     order, each with its own message:
+     1. **Contains home.** `P` contains the home folder (so `~` itself is
+        refused as home, not as an overlap with app data).
+     2. **A root.** `P` is the root of its file system or volume: Unix, `/` or
+        a mount point (its `st_dev` differs from its parent's), which covers
+        `/Volumes/<x>` on macOS; Windows, a path that `GetVolumePathNameW`
+        returns unchanged (a drive root, a folder a volume is mounted on, a
+        share's root). **A `P` that does not exist is not a root (N3):** the
+        create makes it in its parent, on the parent's volume, so only an
+        existing `P` is tested. On btrfs a subvolume has its own `st_dev` and
+        so reads as a mount point and is refused; that refusal is the safe
+        side, and the engineer can pick a plain folder.
+     3. **Overlaps.** `P` is inside, or contains, any of: `<default app data>`,
+        `<profiles base>` (its `.run/` included), the per-user runtime folder
+        that holds the sockets, the OS temp folder, and (macOS and Linux) the
+        system temp folders `/tmp` and `/var/tmp`, resolved (so `/private/tmp`
+        and `/private/var/tmp` on macOS; N6). Windows has no system temp
+        folder in this list: its user temp folder is the OS temp folder.
+     Why: PE-4 AC13 denies every sibling of A's root inside the engagements
+     folder, so the folder must hold nothing an engagement needs except the
+     engagements' own roots; and OS cleaners age the temp folders, system
+     ones included (`dirhelper`, `systemd-tmpfiles`).
+  4. **A folder.** A path that exists and is not a folder is refused.
+  5. **Missing (revision 5i, minor 5; order fixed in revision 5j, N7).** If
+     `P` does not exist, two refusals are tested **in this order**:
+     1. **Engagements are registered in it.** When a registered engagement's
+        root is inside `P`, the create is refused, naming the folder and
+        saying engagements are registered in it (its volume may not be
+        mounted); nothing is made. This comes first, so with `/Volumes/Work`
+        unmounted, `/Volumes/Work/Engagements` reads "registered in it", not
+        "parent missing".
+     2. **Parent missing.** Its parent must exist and be a folder, else it is
+        refused naming the parent.
+     Otherwise (`engagementsFolder` is `null`, or every engagement under it has
+     been deleted) the create makes it, one level only.
+  6. **The set folder.** When `engagementsFolder` is set, `P` must be the same
+     path.
+- **One critical section (revision 5i, minor 4).** Checks 1 to 4 may run early
+  to answer the form. The create then takes `registry.lock`, re-reads the
+  registry, and inside that one critical section re-runs check 5 ("still
+  `null`" or "registered under it"), check 6 against the re-read value, the
+  folder-name uniqueness and PE-2 AC5's containment, makes the missing
+  engagements folder and the engagement root, and writes the registry. So two
+  creates racing for the first folder cannot both set it. A create refused
+  after the folders were made leaves them empty, which is harmless.
+- **Text fields (revision 5i, minor 11; e8 enforces, the form mirrors):**
+  `name`, `clientName` and `owner` are trimmed of leading and trailing
+  whitespace (Unicode `White_Space`), then must be 1 to 80 Unicode code points
+  with no character of general category Cc (control, line breaks and tabs
+  included) or Cf (format, as listed in check 1: right-to-left overrides and
+  zero-width characters included). Any other value is refused, naming the
+  field. The frontend counts code points (`[...s].length`), not UTF-16 units.
 - **Engagement folder names** (the root's last segment): ASCII `[A-Za-z0-9._-]`, 3
   to 64 characters, unique case-insensitively in `engagementsFolder` (needed by
   the PE-4 AC13 deny set).
-- **Paths** are stored resolved (symlinks followed), and compared as the volume
-  compares them (PE-2 AC5).
+- **Paths** are stored resolved (symlinks followed), and compared with
+  `fsx::same_path` (PE-2 AC5; revision 5i, minor 6: the one rule in this file's
+  header, which is how the volume compares them).
 - **Acks:** an acknowledgement is cleared when its identifier changes (PE-1 AC5).
 
 ## Engagement status file (in A's root)

@@ -45,5 +45,5 @@ Slices 0 and 1 only. Not in this initiative: slice 2 onward (Claude Code in an e
 ## Notes
 
 - Convention: stories are `[[entry]]` rows in each epic's `tickets.toml`, with the full criteria in `description` and the verification in `verify`. Each story has a `story-<slug>-plan.md` stub beside it whose `## Verification` section is left empty for QA.
-- Ids are strings (letters and digits). `pa` and `pb1` to `pb7` are the DevOps prerequisites of slice 0, in the order the owner gave; `h1` to `h22` are slice 0; `pc1` to `pc4` are the DevOps set-up of the isolation job; `e0` to `e31` are slice 1.
+- Ids are strings (letters and digits). `pa` and `pb1` to `pb7` are the DevOps prerequisites of slice 0, in the order the owner gave; `h1` to `h22` are slice 0; `pc1` to `pc4` are the DevOps set-up of the isolation job; `e0` to `e31` are slice 1, with `e8a` and `e27r` added by the 2026-11-08 re-shard (see the epic's notes).
 - Open questions are listed in the epic notes of each epic. The ones that gate a story are held in that entry's `unknown`.

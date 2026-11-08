@@ -4,7 +4,13 @@ The technical design for PRD F1 (`docs/prd.md`, revision 9j, approved by the own
 on 2026-11-08). Every PRD item handed to the architect (F1.12) is settled here,
 returned to the owner, or listed as an early check that is still open.
 
-- **Status:** **approved at revision 5g, 2026-11-08.** The delta review of
+- **Status:** **approved at revision 5j, 2026-11-08.** The owner confirmed the
+  slice-1 additions (revisions 5h and 5i, with ADR 0024, PRD 9k and the slice-1
+  UX spec) on 2026-11-08 and asked for the eight minors of the delta check of
+  5i (N1 to N7 and the brand) to be folded in; revision 5j is that fold-in
+  (table below), text and rule fixes inside 5i's additions, no redesign;
+  invariant L is untouched. The rest of this paragraph is the history to 5g.
+  **Approved at revision 5g, 2026-11-08.** The delta review of
   revisions 5 to 5g passed on 2026-11-08; its reviewer marked minors m2 to m7
   of the text check of 5f non-blocking, and revision 5g folds them in (table
   below). Ready to shard. Revision 5g is revision 5f plus those minors, text
@@ -45,7 +51,9 @@ returned to the owner, or listed as an early check that is still open.
     engagement status file and the onboarding hand-off.
 - **ADRs** in `.ade/context/decisions/`, approved with the plan on 2026-11-08.
   0015 to 0021 and 0023 are Accepted (2026-11-08, the date the delta review
-  passed); 0022 stays Proposed (direction only, O6), as does 0014. Each ADR
+  passed); 0022 stays Proposed (direction only, O6), as does 0014; 0024
+  (revisions 5h and 5i) is Accepted (2026-11-08, the owner's confirmation of
+  the slice-1 additions). Each ADR
   keeps its revision history on a separate line:
   - 0015: process per profile, one path resolver;
   - 0016: every instance rebuilds its environment; one launcher;
@@ -56,7 +64,8 @@ returned to the owner, or listed as an early check that is still open.
   - 0021: shell integration and ADE's own folder picker;
   - 0022: Windows `ade open` (direction only);
   - 0023: a split home for Claude Code's process (O1 option A, chosen by the
-    owner).
+    owner);
+  - 0024: the OS launchers' `--open-engagements` (revision 5h, G1).
 
   ADR 0014 (`0014-terminals-open-terminals-through-the-hook-endpoint`) keeps its
   provisional number and is cited by slug. 0015 is the next free number across all
@@ -64,6 +73,64 @@ returned to the owner, or listed as an early check that is still open.
   section 10).
 - **Not here:** screens and copy (the designer); CI jobs, release, the RC-2
   build's publishing (DevOps); story slicing (the scrum-master).
+
+**Revision 5j: the delta check of revision 5i (2026-11-08; approved by the owner
+with its fold-in).** The owner confirmed 5h and 5i and asked for the check's eight
+minors to be folded in, and decided that the app's on-screen name is "Better
+Terminal" everywhere ("ADE" names the methodology in docs and never appears on
+screen; the default profile is "your main Better Terminal"). Text and rule fixes;
+no approved decision is reversed, and invariant L is untouched.
+
+| Finding | Answer | Where |
+|---|---|---|
+| N1 the order inside check 3 | "contains home" is tested first, then "is a file-system or volume root", then the overlaps (app data, profiles base, runtime folder, temp folders), so `~` and `/` each get their own message | 11; `engagement-registry.md` check 3 |
+| N2 the report cap | 4,096 bytes escaped six-fold is 24,576; with `{"v":1,"history":""}` that is 24,596 bytes, 32,796 in base64, over 32 KiB (32,768). The cap is **40 KiB** (40,960) | 9; 21 test map |
+| N3 a missing folder and roots | a folder that does not exist is not a root: the create makes it on its parent's volume. A btrfs subvolume (its own `st_dev`) reads as a mount point and is refused; refusing is the safe side | 11; `engagement-registry.md` check 3 |
+| N4 comparands canonicalised | home, app data, the runtime folder, the temp folders and the profiles base are each resolved as `P` is (longest existing prefix canonicalised, the rest appended) before `fsx::same_path`; so Fedora Silverblue's `/home` link to `/var/home` cannot slip past | 11; `engagement-registry.md` check 3 |
+| N5 where the temp and runtime folders come from | from `ProfilePaths` (`profile.rs`), never a direct `temp_dir()` call, so the static path test is not tripped | 3, 11; `engagement-profiles.md`, `engagement-registry.md` |
+| N6 system temp folders | refused as well (option one of two: widen the set, not narrow the reason): on macOS and Linux `/tmp` and `/var/tmp`, canonicalised (so `/private/tmp` and `/private/var/tmp` on macOS), and anything inside or containing them; on Windows the user's temp folder only | 11; `engagement-registry.md` check 3 |
+| N7 a drive that is gone | in check 5, "engagements are registered in it" is tested before "its parent is missing": with `/Volumes/Work` unmounted, `/Volumes/Work/Engagements` is refused as registered (the volume may not be mounted), not as a missing parent; G2's tests gain that case | 11, 21; `engagement-registry.md` check 5 |
+| Brand | copy cited here uses "Better Terminal": the hook's no-process warning, the native-title alternative, the default profile's name ("your main Better Terminal"); 4.4 says "ADE" never appears on screen | 4.4, 7, 8 |
+
+**Revision 5h: the slice-1 gaps (2026-11-08; confirmed by the owner with revision
+5j).** Raised by the starter persona draft (Q9) and the UX spec
+(Q10, `docs/ux-spec.md` section 13). Additions that settle what slice 1 left open;
+no approved decision is reversed, and invariant L is untouched.
+
+| Gap | Answer | Where |
+|---|---|---|
+| A1 starter location | `src-tauri/resources/personas/<starter id>/persona.md`, bundled by a `tauri.conf.json` `bundle.resources` entry (e7), read through `BaseDirectory::Resource`; no persona under `docs/` | 11; `engagement-registry.md` |
+| A2 starter id | the starter's folder name, a slug (`^[a-z0-9]+(-[a-z0-9]+)*$`, 3 to 64); never a 16-hex persona id | 11; `engagement-registry.md` |
+| A3 `version`, `starter` | not in the bundled file; the copy step sets `version: 1` and `starter: <folder name>`; a test refuses a bundled file holding either | 11; `engagement-registry.md` |
+| A4 `defaultModel` | what `claude --model` takes, alias or full id; form-checked only, passed as one quoted argument; unknown values are Claude Code's to report; malformed or empty is absent | 11; `engagement-registry.md` |
+| G1 OS launchers | `--open-engagements`, a token with no value, run by the jump-list task and the desktop action; default mode only; ignored with F1 off; label "Open Engagements" | 4.1, 6; ADR 0024; `engagement-profiles.md`, `engagement-requests.md` |
+| G2 engagements folder | `null` until the first create, then fixed; a create in another folder is refused; a missing folder is made, one level, at any create | 11; `engagement-registry.md` |
+| G7 slice-1 history check | the slice-2 check OSC, emitted once at the first prompt with only `history`; Rust compares; no OSC in 10 s shows the warning's first sentence. **This answers the epic's Q15 differently, and is a scope change to `e27a` (revision 5i, M6):** Q15 put the OSC 7 and 7717 hooks and the start-up check in slice 2; slice 1 now has a one-shot 7717 emitter (zsh, bash; PowerShell in `e27b`), a minimal `ptysink.rs`, the 10 s timer and their tests. OSC 7 and the per-prompt check stay in slice 2. The scrum-master re-shards `e27a` and `e27b` | 9 |
+| Client name in `StartInfo` | left out on purpose: A shows the engagement name only, and `StartInfo` carries only what A uses | 4.4; `engagement-requests.md` |
+
+**Revision 5i: the review of revision 5h (2026-11-08; confirmed by the owner with
+revision 5j).** The review blocked on six majors (M1 to
+M6). Text and rule fixes inside 5h's additions; no approved decision is reversed,
+and invariant L is untouched.
+
+| Finding | Answer | Where |
+|---|---|---|
+| M1 the jump-list task in a debug build starts an F1-off process | the task is registered only in builds with F1 compiled on (`f1-forced`, `isotest-driver`), like the `.desktop` action, so its arguments are exactly `--open-engagements`; builds without F1 compiled on (release and plain debug) call no jump-list API at all; only the default registers it | 6; ADR 0024 |
+| M2 an engagements folder that contains home or a root | refused when it is inside or contains (both including equal) ADE's data, the profiles base, the runtime folder or the OS temp folder, when it contains home, and when it is a file-system or volume root | 11; `engagement-registry.md` |
+| M3 a check after the 10 s fallback | a per-PTY state machine: every well-formed report is evaluated, the warning only escalates (none, first sentence, full copy) and never clears until the terminal closes; a late mismatch upgrades the copy, a late match changes nothing | 9, 21 |
+| M4 fish and PowerShell in slice 1 | the 10 s fallback is armed only for zsh and bash; `e27b` emits the same one-shot report from PowerShell (`HistorySavePath`), with no fallback; fish has no check until slice 2 | 9 |
+| M5 when the starter is copied | at the create, once: the persona choices list a starter only while no library persona names it in `starter`; the create re-checks under the personas lock and reuses a copy | 11; `engagement-registry.md` |
+| M6 Q15 answered without saying so | named in the 5h table as Q15's answer and a scope change to `e27a` (and `e27b`) | table above |
+| Minor 1 | the F1-off row reads "today's start" | 6 |
+| Minor 2 | release builds call no jump-list API; only the default registers; the task holds nothing of an engagement; the registration code is a real-non-start fixture of 16.1 | 6, 16.1; ADR 0024 |
+| Minor 3 | ADR 0016 gains a revision line; a repeated `--open-engagements` exits 2 with F1 on | 4.1; ADRs 0016, 0024 |
+| Minors 4, 5, 6 | the first-folder race is one critical section under `registry.lock`; a missing folder with engagements still registered under it is refused; `fsx::same_path` follows the volume on macOS for the part that does not exist yet | 11, 20; `engagement-registry.md` |
+| Minor 8 | the report's JSON escaping, base64 without line breaks, a 32 KiB cap (40 KiB in revision 5j, N2), relative or uncanonicalisable paths as a mismatch | 9 |
+| Minor 9 | no first-only rule: a report printed before ADE's own cannot pre-empt it; a forged one is not a boundary; slice 2 extends the reader | 9 |
+| Minor 10 | `defaultModel`: safe in PowerShell single quotes, YAML type rule, Claude Code reports unknown names when it chooses, `e7` tests the starter's value | `engagement-registry.md` |
+| Minor 11 (registry side) | the text-field rule (no Cc or Cf characters) and the engagements folder's | `engagement-registry.md` |
+| Minor 14 | 4.1 names the case where the process becomes the default and shows the list | 4.1 |
+| Minor 13 (brand, architect side) | titles and menus use the bundle's `productName` at run time ("Better Terminal" today); A's windows are `<engagement name> — <productName>` | 4.4 |
 
 **Revision 5: the fold-in the owner's approval asked for (re-review of revision 4)**
 
@@ -638,6 +705,12 @@ vitest scans `src/`: outside `profile.rs` and the frontend's `profilePaths.ts`,
 no code may build `.claude`, `.claude-mem` or `.ade` from a home folder, call
 `app_data_dir()`, `app_local_data_dir()`, `app_log_dir()` or `app_cache_dir()`, or
 call `temp_dir()` outside tests. Each rule has a fixture that must be caught.
+**Temp and runtime folders (revision 5j, N5).** `ProfilePaths` also answers the
+OS temp folder (its one non-test `temp_dir()` call), the system temp folders
+(`/tmp` and `/var/tmp` on macOS and Linux; none on Windows), the per-user runtime
+folder that holds the sockets, and the profiles base. Code that needs them, such
+as the engagements-folder check (section 11), asks `ProfilePaths`, never
+`temp_dir()` or an environment variable.
 
 **Agent status's lock folder per profile.** Locking across profiles is not needed:
 an Agent status lock guards one project's `.claude/settings.local.json`. A
@@ -658,6 +731,16 @@ the arguments only:
   below) that the default redeems (4.4); without one it prints why and exits 2.
   It never falls back to default mode;
 - `--ade-profile` absent: **default mode**, whatever started it.
+- `--open-engagements` (revisions 5h and 5i, ADR 0024): a token with no value
+  that only the OS launchers pass (section 6). With F1 on it is valid only in
+  default mode and only once: with `--ade-profile`, as `--open-engagements=<x>`,
+  or given twice, the process prints why and exits 2. A default-mode start that
+  carries it then goes the usual way (section 6's first row) with one change at
+  each end: if the default answers `hello`, it sends `open_engagements` in place
+  of `activate` and exits; if it becomes the default itself (no default was
+  running), it shows the engagement list once its main window is up (minor 14 of
+  revision 5i). With F1 off it is ignored in every form, repeats included: the
+  start is today's. The rebuild treats it as any other argument.
 
 **The rebuild is a re-exec (B2).** A process's start-time environment stays
 readable by the OS for its whole life: `/proc/<pid>/environ` on Linux,
@@ -942,6 +1025,27 @@ sequenceDiagram
   info goes over the channel; A writes its own copy. The verdict at each start
   (PE-2 AC5) and the git identity (PE-2 AC1, kept in the registry) travel the same
   way.
+- **No client name in `StartInfo` (revision 5h).** A's header and window titles
+  show the engagement name only (PE-13 AC4 asks for the name), so A is not sent
+  the client name. This is minimality, not isolation: A's own client name is not
+  hidden from A (A's root and checkouts are that client's). A later story that
+  shows it in A adds the field to `StartInfo` then.
+- **The brand string (revision 5i, review minor 13).** The product's name in every
+  title and menu is the bundle's `productName`, read at run time from Tauri's
+  package info, never a literal: today "Better Terminal" (`tauri.conf.json`;
+  the binary is `better-terminal`). macOS builds the app menu's About item and
+  the menu title from the bundle name, so "About ADE" cannot appear without
+  renaming the bundle, which F1 does not do. A's window titles are
+  `<engagement name> — <productName>`; the default's windows keep today's empty
+  title. ADE has no custom menu today (Tauri 2's default macOS menu): `e24` adds
+  one, keeping the default items and inserting Open Engagements after About.
+  **Revision 5j (the owner's decision):** the app's on-screen name is "Better
+  Terminal" everywhere; "ADE" names the methodology in docs and never appears
+  in a title, menu, message, notice, tab or warning. The default profile is
+  called "your main Better Terminal" in copy (the designer's wording governs).
+  Text not drawn by the Tauri app (the `ade-hook` helper's warnings in a
+  session's context, section 8) uses the literal "Better Terminal", which a
+  test checks against `tauri.conf.json`'s `productName`.
 - **Control key (M1).** Each start mints a 32-byte key, kept with the ticket. The
   redeem handler writes it to A's registry entry (so a restarted default still has
   it) only once the ticket is redeemed, and before it replies with `StartInfo`,
@@ -1435,6 +1539,7 @@ instances talk (ADR 0018, contract `engagement-requests.md`).
 | Trigger | What reaches ADE | What happens |
 |---|---|---|
 | Start menu (Windows), desktop entry (Linux), a second run of the binary (all) | a new process, default mode | rebuild (4.1); if the default's channel answers, send `activate` and exit; else take the default's lock and become the default instance (section 5); a default that holds its lock without answering makes this start exit 2 after 2 s |
+| Jump-list task (Windows), desktop action (Linux): `better-terminal --open-engagements` (revision 5h, ADR 0024); present only in builds with F1 compiled on (revision 5i) | a new process, default mode | the same, but with F1 on it sends `open_engagements` in place of `activate`, or, when it becomes the default itself, shows the engagement list once its window is up; with F1 off, today's start (F1 off binds no channel, so there is nothing to send to; minor 1 of revision 5i) |
 | Finder, Spotlight, Dock icon with no instance running (macOS) | a new process | the same |
 | Finder or Spotlight with instances running (macOS) | a `rapp` Apple Event to **one** running instance (E2), maybe A's | in the default instance: come forward. In A: see below |
 | A's own Dock tile, taskbar button or window | activation, or a `rapp` from the Dock (macOS) | A comes forward. Not a launch |
@@ -1465,11 +1570,28 @@ no payload. It sits in:
 - macOS: the app menu (first item after About) and the Dock menu
   (`applicationDockMenu:`);
 - Windows: the window's system menu (Alt+Space) and the taskbar jump list's Tasks
-  category. A jump-list task runs `better-terminal` with no arguments, which is
-  the default-mode route above and carries nothing;
+  category. The jump-list task runs `better-terminal --open-engagements`
+  (revision 5h, ADR 0024): the default-mode route above, carrying only "show the
+  list". **Revision 5i (M1, minor 2):** it exists only in builds with F1 compiled
+  on (`f1-forced`, `isotest-driver`), as the Linux desktop action does, so its
+  arguments are exactly that token and never need `--ade-feature-f1`. A plain
+  debug build with F1 switched on at run time has no jump-list task (the system
+  menu and the palette still hold Open Engagements). Builds without F1 compiled
+  on contain no jump-list code (`cfg`-gated) and call no jump-list API, so a
+  release build's jump list is today's. In an F1-compiled build only the
+  default instance registers it, once its main window is up, through
+  `ICustomDestinationList` (`BeginList`, `AddUserTasks` with one `IShellLinkW`,
+  `CommitList`) under the process's AppUserModelID; engagement instances never
+  call a jump-list API. The task holds only the default's `current_exe()`, the
+  token, the label and the binary's icon: nothing of an engagement, so the
+  shell's `CustomDestinations` file holds nothing of A (the isolation test's
+  OLE-file scan, section 15, still checks it). A task left behind after an
+  F1-compiled build is replaced by a release build runs the release binary with
+  the token, which it ignores: today's start;
 - Linux: the window menu ADE draws in its title area, and a desktop action
-  `[Desktop Action engagements]` in the `.desktop` file, which also runs the binary
-  with no arguments;
+  `[Desktop Action engagements]` in the `.desktop` file, whose `Exec` runs the
+  binary with `--open-engagements` and no field codes. It is in the bundle's template only in builds with F1 compiled on, until
+  F1 ships in release builds (DevOps owns the template);
 - all platforms: ADE's command palette, and the engagement header the designer
   places.
 
@@ -1572,7 +1694,8 @@ their state through `state/kv` inside the profile root.** ADR 0017.
   no app on this Mac has written there since July. So the write is
   setting-dependent, which is why the design prevents it rather than relying on the
   machine. Window titles keep A's name (PE-13 AC4). If the owner prefers belt and
-  braces, the native title can instead read "ADE" with A's name only inside the
+  braces, the native title can instead read "Better Terminal" (the
+  `productName`, 4.4) with A's name only inside the
   webview; not proposed, since `setRestorable: NO` removes the store.
 - **D30:** no macOS minimum is needed. The non-persistent store exists on every
   macOS ADE supports. The alternative, `data_store_identifier`, needs macOS 14
@@ -1747,7 +1870,8 @@ afterwards to its own environment and to every child it spawns. So:
   journal entry, and A's instance shows "this session's logs are not isolated" on
   that tab. **When it finds no Claude Code process** (`find_claude` returns none
   within its five levels, or a process cannot be read), it gives the same warning
-  worded "ADE could not check this session's logs"; the check never passes by
+  worded "Better Terminal could not check this session's logs" (revision 5j,
+  4.4); the check never passes by
   default. Nested sessions run the same hook (they load A's user settings through
   the inherited `CLAUDE_CONFIG_DIR`), so a nested Claude Code started by absolute
   path warns in its own session and the journal.
@@ -2010,6 +2134,109 @@ profile also needs folder tracking (PE-4 AC7). ADR 0021.
 | fish | `fish -l -C 'source <shell dir>/fish/init.fish'` (`-C` runs after the configuration) | `XDG_DATA_HOME=<root>/shell/fish-data` for the fish process (fish's history folder follows only that). Side effect: programs started from that terminal see it too |
 | PowerShell 7, Windows PowerShell 5.1 | `-NoLogo -NoProfile -NoExit -EncodedCommand <base64 UTF-16LE>` (M10). The integration is **inline text**, not a script file, so the `Restricted` execution policy (the Windows client default, which refuses every `.ps1`) does not stop it. It sets PSReadLine's `HistorySavePath`, clears in-memory history and loads A's, then loads the four profile scripts in PowerShell's order **under PowerShell's own rule**: only when `Get-ExecutionPolicy` allows scripts, and each through `. $path` inside `try`, so a policy or signature refusal shows PowerShell's usual error and the shell goes on, as it would without ADE. Then it adds hooks. Kept under 8 KiB of script, so the command line stays far below Windows' 32,767-character limit. An optional start-up command (ADR 0022) is appended to the same text, never a second `-Command` | `<root>\history\pwsh_history.txt` |
 
+- **Slice 1's history check (revisions 5h and 5i, G7; `e27a` for zsh and bash,
+  `e27b` for PowerShell).** Slice 1 has no OSC 7 and no per-prompt check, but
+  PE-4 AC8's warning needs to know the history path the shell ended up with after
+  the user's start-up files. So slice 1 emits the check OSC below, **once**, with
+  only the `history` key:
+  `ESC ] 7717 ; check ; <base64 of {"v":1,"history":"<value>"}> BEL`. This answers
+  the epic's Q15 differently and is a scope change to `e27a` (revision 5i, M6;
+  table at the top).
+  - **Who emits, and when.** Engagement terminals only; the default's terminals
+    emit nothing in slice 1.
+    - zsh (`e27a`): a one-shot `precmd` function that ADE's `.zshrc` wrapper adds
+      after sourcing the user's `.zshrc` and that removes itself, so it runs at
+      the first prompt, after `.zlogin`. The value is `$HISTFILE` (empty if
+      unset). Expected: `<root>/history/zsh_history`.
+    - bash (`e27a`): the last line of `init.bash`, after every user file it
+      sources. The value is `$HISTFILE`. Expected: `<root>/history/bash_history`.
+    - PowerShell 7 and Windows PowerShell 5.1 (`e27b`, revision 5i, M4): the
+      last statement of the inline integration, after the profile scripts. The
+      value is `(Get-PSReadLineOption).HistorySavePath`, or empty when PSReadLine
+      is not loaded (PowerShell then writes no history file). Written with
+      `[Console]::Out.Write`, the escape and bell as `[char]27` and `[char]7`
+      (5.1 has no `` `e ``), base64 by `[Convert]::ToBase64String` over UTF-8
+      (never wrapped). Expected: `<root>\history\pwsh_history.txt`. **First
+      check of `e27b`:** that ConPTY passes this OSC through to `create_pty`'s
+      reader, for `pwsh` and `powershell` on the Windows CI runner. If it does
+      not, `e27b` stops and returns to the architect; slice 2's check on Windows
+      rests on the same passage.
+    - fish: **no check in slice 1.** fish's history follows `XDG_DATA_HOME`,
+      which ADE sets for the fish process; a `config.fish` that changes it is
+      caught only by slice 2's check. So UX 8.2's `XDG_DATA_HOME` row is slice
+      2, and a fish terminal in slice 1 shows no G7 warning of either kind.
+    - Unsupported shells: the unsupported-shell warning, known from the program
+      at spawn, as before; no timer.
+  - **Encoding, shell side (minor 8 of revision 5i).** The JSON string escapes
+    `\` as `\\`, `"` as `\"`, and each control character (U+0000 to U+001F and
+    U+007F) as `\u00XX`; every other byte is written as it is. zsh and bash pipe
+    the JSON through `base64 | tr -d '\r\n'` (GNU `base64` wraps at 76 columns;
+    macOS's does not). A shell without `base64` sends nothing, which the 10 s
+    fallback then covers.
+  - **Decoding, Rust side (a minimal `ptysink.rs`, which slice 2 extends).** The
+    parser takes BEL or ST as the terminator, keeps at most **40 KiB** (40,960
+    bytes) of one OSC's payload (revision 5j, N2: a 4,096-byte path escaped
+    six-fold is 24,576 bytes; inside `{"v":1,"history":""}` it is 24,596, which
+    base64 makes 32,796, so a 32 KiB cap would refuse it; 40 KiB fits it with
+    room for slice 2's extra keys) and
+    discards a longer one up to its terminator, and skips ASCII whitespace inside
+    the base64. A report is **well-formed** when it decodes to a UTF-8 JSON object
+    whose `v` is 1 and whose `history`, if present, is a string; unknown keys are
+    ignored. Anything else (over the cap, bad base64, bad UTF-8 or JSON, another
+    `v`, a non-string `history`) is **malformed** and changes nothing. A
+    well-formed report without `history` says nothing about history (slice 2's
+    reports always carry it). A `history` value gives:
+    - **empty**: OK (the shell writes no history);
+    - **relative**, or with a parent folder that cannot be canonicalised:
+      **mismatch**;
+    - otherwise OK only when its canonical parent is `fsx::same_path` as A's
+      canonical `<root>/history` (which ADE creates before the shell starts) and
+      its file name equals the expected one under the same rule; else
+      **mismatch**.
+  - **The state machine, per PTY (revision 5i, M3).** One per engagement
+    terminal that ADE started with its integration (zsh, bash, PowerShell). The
+    timer is armed **only for zsh and bash** (M4): their integration is a file the
+    shell sources, which a start-up file can skip by `exec`ing another shell.
+    PowerShell's is the start command itself, and an unproven ConPTY passage must
+    not warn every PowerShell terminal.
+
+    | State | Event | Next state | What the tab shows |
+    |---|---|---|---|
+    | `Waiting` (at spawn) | first output byte (zsh, bash) | `Waiting`, 10 s timer started | nothing |
+    | `Waiting` | well-formed report, OK | `Confirmed` (timer stopped) | nothing |
+    | `Waiting` | well-formed report, mismatch | `Mismatch(var)` (timer stopped) | the full "start-up file" copy naming `var` |
+    | `Waiting` | timer ends (zsh, bash) | `Unconfirmed` | the first sentence alone |
+    | `Confirmed` | well-formed report, OK | `Confirmed` | nothing |
+    | `Confirmed` | well-formed report, mismatch | `Mismatch(var)` | the full copy |
+    | `Unconfirmed` | well-formed report, OK | `Unconfirmed` | the first sentence stays |
+    | `Unconfirmed` | well-formed report, mismatch | `Mismatch(var)` | the full copy replaces the first sentence |
+    | `Mismatch(var)` | any report | `Mismatch(var)` | unchanged |
+    | any | malformed OSC | unchanged | unchanged |
+    | any | the terminal closes | gone | the bar and the tab mark go |
+
+    `var` is `HISTFILE` (zsh, bash) or `HistorySavePath` (PowerShell). The rule
+    the table encodes: **every well-formed report is evaluated, and the warning
+    only escalates** (nothing, then the first sentence, then the full copy),
+    **never clearing** until the terminal closes, which is UX 8.1's "the mark is
+    the record". It never clears because a report is unauthenticated: a program
+    could print a matching report after ADE's mismatching one. Each escalation,
+    and only an escalation, sends `PtyEvent::Integrity { level: "unconfirmed" |
+    "mismatch", var }`; the frontend shows the bar again on each event, even if
+    the engineer dismissed an earlier one (the copy changed). The timer runs on
+    a clock the tests can pause. Slice 1 refuses no launch action for either
+    state; slice 2 adds that.
+  - **Forged reports (minor 9 of revision 5i).** Because no report is first-only,
+    output printed before ADE's own report (a start-up file, a program it runs)
+    cannot pre-empt it: ADE's report is still evaluated and still escalates. A
+    forged report can only add a warning to its own terminal, or, if ADE's
+    integration never runs and the forged report is an OK one printed within
+    10 s, stop the fallback. Both need the engineer's own start-up files to print
+    ADE's OSC; as for every OSC this is **not a boundary** (below, "Anyone can
+    print an OSC"), and there is no nonce.
+  - **Slice 2 extends this reader** (the other keys, a report at every prompt,
+    "cannot confirm" refusing launches, the default profile, fish, and the timer
+    for the shells where the passage is proven); it keeps this history rule:
+    every report evaluated, escalation only.
 - **The default profile keeps today's history.** Its zsh wrapper puts `HISTFILE`
   back to `${original ZDOTDIR:-$HOME}/.zsh_history` when `/etc/zshrc` pointed it at
   ADE's folder. bash, fish and PowerShell are left as they were.
@@ -2126,7 +2353,17 @@ All four formats are in `.ade/context/engagement-registry.md`. In short:
   increments `version` and keeps the previous text as
   `versions/<n>.md`. Starters ship as resources and are copied on choice (PE-1
   AC3). The library is never synced (D13): it is not in `state/kv`, and sync's
-  export is pinned by a test.
+  export is pinned by a test. **Starters (revision 5h, A1 to A4):** in the
+  repository at `src-tauri/resources/personas/<starter id>/persona.md`, bundled
+  through `tauri.conf.json` `bundle.resources` and read with
+  `BaseDirectory::Resource`; the starter id is the folder name, a slug; the
+  bundled file holds neither `version` nor `starter`, which the copy sets
+  (`1` and the folder name); `defaultModel` is what `claude --model` takes, an
+  alias or a full id, checked for form only. **When (revision 5i, M5):** a
+  starter is copied at the create that chooses it, once: the form's choices
+  list a starter only while no library persona names it in `starter`, and the
+  create re-checks under the personas lock and reuses an existing copy. Details
+  in `engagement-registry.md`.
 - **Engagement registry:** `<default app data>/engagements/registry.json`, written
   atomically (temp file, then rename in the same folder) under an advisory lock
   (`fs4`). Each entry holds: profile id, name, client name, persona id, root,
@@ -2139,7 +2376,22 @@ All four formats are in `.ade/context/engagement-registry.md`. In short:
   backup again from the new file, so no copy keeps A after delete. A corrupt
   registry is never overwritten: ADE stops, names the file and offers the backup.
 - **Engagements folder:** default `~/Engagements`, set once in the default
-  profile. Engagement folder names: ASCII letters, digits, `-`, `_`, `.`, 3 to 64
+  profile: `engagementsFolder` is `null` until the first create sets it, then
+  fixed (a create in any other folder is refused; changing it is Later), because
+  PE-4 AC13's deny set is relative to one folder. A create makes a missing
+  folder, one level only (its parent must exist), at the first create, or at a
+  later one only while no registered engagement's root is inside it (revisions
+  5h and 5i, G2, minor 5). Revision 5i (M2), ordered by revision 5j (N1): the
+  folder must not contain home, must not be a file-system or volume root, and
+  must not be inside or contain (either including equal) ADE's data, the
+  profiles base, the runtime folder, the OS temp folder or the system temp
+  folders (`/tmp`, `/var/tmp`; N6), since AC13 denies every sibling of A's root
+  inside it. Every comparand comes from `ProfilePaths` (N5) and is resolved as
+  the typed folder is before `fsx::same_path` (N4). A folder that does not exist
+  yet is not a root (N3). When the set folder is missing and engagements are
+  still registered in it, that refusal comes before a missing parent's (N7). The check of the set folder, the first set and the write are one critical
+  section under `registry.lock` (minor 4). The ordered checks are in
+  `engagement-registry.md`. Engagement folder names: ASCII letters, digits, `-`, `_`, `.`, 3 to 64
   characters, unique case-insensitively in that folder (from E1).
 - **Engagement status file:** `<A root>/.ade/engagement-status.json`:
   `{ "schema": 1, "personaId", "personaVersionLastUsed", "closed": bool,
@@ -3325,7 +3577,11 @@ build:
   `AppHandle::restart` and by `relaunch()` (`.ts`); R5 by `openPath` (`.ts`). The
   test must flag every one; a run that misses any is red. It also runs on fixture
   copies of the real non-starts (`helper_beside_exe`, `agent_status.rs:387`; the
-  test binary, `usage.rs:1874`), and a run that flags either is red.
+  test binary, `usage.rs:1874`; and, from revision 5i, the jump-list
+  registration, which puts `current_exe()` into `IShellLinkW::SetPath` and
+  commits it through `ICustomDestinationList`, section 6), and a run that flags
+  any is red. Storing the path in a shell link is not a start; the rule stays
+  that it must never reach `ShellExecute*` or any R1 sink.
 - **What it cannot see:** starts whose target is only known at run time
   (`useTerminal.ts:374`'s `openUrl`). The rebuild (4.1) covers them.
 
@@ -3718,7 +3974,13 @@ filled (separately, with the owner), F1 stories follow these:
   both paths absolute and canonicalised where they exist; on Windows, a `\\?\`
   or `\\?\UNC\` prefix removed and the rest compared case-insensitively
   (ordinal, ignoring case, as NTFS does: `CompareStringOrdinal` with
-  `bIgnoreCase`); on macOS and Linux, byte-equal. Every path comparison in F1
+  `bIgnoreCase`); on macOS and Linux, byte-equal. **Revision 5i (minor 6):**
+  that holds for the canonicalised part, and macOS's `realpath` returns an
+  existing path's on-disk case (checked). The part that does not exist yet (a
+  history file before its first write, a folder a create will make) is compared
+  ignoring case on Windows, on macOS ignoring case only when
+  `pathconf(<deepest existing folder>, _PC_CASE_SENSITIVE)` is 0 (APFS's
+  default), and byte-equal on Linux. Every path comparison in F1
   code (hand-off acceptance, checkouts, `ProfilePaths` checks, `isotest`'s
   location classes, the leak detector) uses it.
 - **Durable writes (M-F of revision 5).** Wherever this design claims something is
@@ -3803,7 +4065,9 @@ filled (separately, with the owner), F1 stories follow these:
 | `open_engagements` carries nothing | unit test on the request enum (section 6) plus run (f') |
 | PE-12 AC1 | lock-based probe tests (MJ-6 of revision 5c; invariant L, revision 5d): A killed (lock free, socket refusing: not running), a stale socket with the lock free (not running), lock held with `hello` paused (not answering, never not running). **A foreign listener, by platform (minor m6 of revision 5d):** Unix, a same-user listener at A's socket path with A's lock free reads "not answering" (L3: the endpoint accepts), the starter spawns nothing, and a binder for A started directly, with a well-formed placeholder ticket so that it passes the ticket check (4.1) and reaches the lock (the ticket is never redeemed, as the bind fails first; minor 8 of revision 5e), exits 2 naming the path; Windows, a squatted pipe name (another account on the runner, and a same-user server that does not answer) reads "not answering". The `flock` inode check, and a no-root binder leaving no lock file (m9). The disturbance tests of section 11: lock file unlinked under a live A, socket unlinked, the Windows accept-error paths, the shutdown path probed after each step, the lock not inherited by a child. PE-12 AC1's close under A's hand-off mutex: a close queued behind a start waits, then finds A running and sends `close`; Force quit refuses a process whose start time differs from the record's (m10), and one that does not run ADE's binary (per platform: Linux `exe` with the ` (deleted)` suffix and an AppImage's own mount, macOS the code-signing identifier, Windows the image path), giving the generic route instead (minors 2, 3 of revision 5e); on macOS, a target that is an unsigned binary (no identifier; built with `-Wl,-no_adhoc_codesign`) and, through the signing seam, a default with no identifier, each give the generic route, never a kill (minor 5 of revision 5f). **A quit is not a close (MJ-3 of revision 5e):** A is quit (not closed), then the default's engagement list shows A as not closed and the status file is unchanged since before the quit; A closed from inside, and A closed by the `close` request, each show it closed. **A close is cleared by the next start (MJ-A of revision 5f):** A closed, reopened, then quit: the list shows A as not closed, and the status file holds `closed: false` and `closedAt: null`; the same with the close written by the default (A not running) before the reopen; **a failed start write (minor m6 of revision 5g):** A closed, then reopened with the start write failing (seam): A logs the error, shows the notice and opens its windows; with the seam lifted, after the next 60 s tick (paused clock) the file holds `closed: false` and `closedAt: null`; with the seam kept and A quit, the file still holds `closed: true`, and the next start clears it; a start whose child exits before it redeems leaves `closed: true`. **The WebView2 wait (Windows; minor 7 of revision 5f):** a stand-in A with one webview quits; its log records the browser process gone within the 5 s, not a timeout, and the wait ran off the main thread (seam) |
 | PE-2 AC8 | hand-off tests: exact path (case-insensitive on Windows), slug twins, idempotent apply; a crash at each of steps 1 to 6 with A running, not running, and **starting**, never leaves a file in the default's stores without a record (M-c, M4); the tombstone is removed only after the record; the starter reconciles before it spawns A; delete with a pending removal finishes it or refuses (minor 7). **The "A starting" scenario, in this order** (minor 8 of revision 5): (1) the default runs steps 1 to 3 and stops (seam); (2) A starts, applies, creates and flushes the tombstone, and pauses (seam) before deleting `<uuid>/`; (3) the reconcile `stat`s `<uuid>/` (present) and pauses (seam); (4) A deletes `<uuid>/`; (5) the reconcile `stat`s `<uuid>.applied` (present) and finishes steps 4 and 5; repeated with A's pause moved to each point (before the tombstone, between tombstone and delete, after the delete) against the reconcile's pause before, between and after its two `stat`s: in every order the record is finished, never dropped. **In-process (M-A):** the writer and a reconcile in one instance, interleaved through seams at each step boundary: a reconcile waits for the mutex and never drops a `writing` record of a writer still running; two reconciles of one record run one after the other; **no self-deadlock (MJ-1 of revision 5a; minor 1 of revision 5b):** the default's start, the starter (with a stand-in A that redeems), the writer (its step 5 calls the sweep), then the delete flow (it calls the reconcile, which calls the sweep), and in A its start's clean-up and apply and an `apply_handoff`, in one instance each under a 10 s timeout; `hello`, `apply_handoff` and `close` to an A that never replies end at their bounds (paused clock or injected bounds) with the mutex released and the records unchanged; with the default's mutex held, every A-to-default request (`checkout_request`, `first_start_done`, `redeem_start_ticket`, `hello`, `activate`, `open_engagements`) is answered within 1 s, and A's `hello` within 1 s with A's mutex held. **Starter and delete (MJ-5 of revision 5b):** a seam pauses A between spawn and bind, then delete starts: delete waits on the mutex while A is paused, then, once A binds and redeems, sees A answer `hello` and sends `close`; a start queued behind a delete that removed A's entry returns `StartError::Deleted` and spawns nothing; an A that never redeems releases the starter's mutex at the ticket's 60 s (paused clock) and its late redeem is refused. **The starter's kill and positive evidence (MJ-6 of revision 5c):** an A paused before bind past 60 s, with a delete: the child is killed and reaped before the starter releases, and nothing of A is left; an A holding its lock with `hello` paused, with a delete: delete refuses and removes nothing; the same, with a start: no spawn and `controlKey` unchanged; a failed start or failed key write leaves `controlKey` unchanged; a redeem racing the ticket's end counts as redeemed (section 11). **Owed tombstones (minor 7):** cleared before A applies, then A applies: the sweep after A's reply deletes the tombstone; a crash between clearing and deleting: the next reconcile deletes it. **Durability (M-F):** a test `fsx` backend records the sync calls and asserts their order (step 1's file and folder synced before step 2's first write; each step's sync before the next); on macOS a `macos_only` test asserts, through `fsx`'s syscall seam, that `sync_file` and `sync_dir` issue `F_FULLFSYNC`, and `fsync` (with the fallback recorded) after a planted `ENOTSUP`, `EINVAL` or `ENOTTY`. **Windows (minor 8):** a `windows_only` test of the tombstone's write-through rename (no replace) and folder flush |
-| `fsx` (minors 1, 2; M-D of revision 5) | `same_path` vectors (case, `\\?\` and `\\?\UNC\` prefixes, non-ASCII) on every platform; `windows_only`: a junction to a sentinel folder is recorded and not entered by the walk and removed as a link by the delete; a tree whose deepest path passes 400 characters is walked and deleted |
+| G7, slice 1's history check (revision 5i, M3, M4, minors 8 and 9; revision 5j, N2; `e27a`, `e27b`) | the state machine, every row, on a paused clock: a report at 9.9 s and at 10.1 s (a late mismatch upgrades the copy, a late OK keeps the first sentence), an OK report printed before ADE's mismatching one ends in `Mismatch`, a mismatch never clears; a report whose `history` is 4,096 bytes of control characters (32,796 bytes of base64) is well-formed (N2); malformed reports change nothing (over 40 KiB, bad base64, bad JSON, `v` 2, a non-string `history`); base64 with line breaks decodes; a relative `HISTFILE` and one whose parent cannot be canonicalised are mismatches; PowerShell and fish PTYs never arm the timer; a dismissed bar shows again on an escalation. Real shells: a `HISTFILE` holding `"`, `\`, a tab and a line break gives a well-formed report and a mismatch naming `HISTFILE`; a `.zshrc` that `exec`s `sh` gives the first sentence after 10 s; `pwsh` and `powershell` with a profile that moves `HistorySavePath` give a mismatch naming it (`e27b` (3)), and with PSReadLine removed, no warning |
+| G2, the engagements folder (revision 5i, M2, minors 4 and 5; revision 5j, N1, N3, N4, N6, N7; `e8`) | refusals, each naming the path: `~` itself (the "contains home" message, N1), `/` (the "root" message, not "contains home"; and a drive root on Windows), a mount point, a missing folder under an existing parent is made, not refused as a root (N3), a home reached through a link (a temporary home whose path is a symlink to the real folder, as Silverblue's `/home` to `/var/home`; N4) and a folder containing it, `/tmp`, `/private/tmp`, `/var/tmp` and a folder inside each (macOS and Linux, N6), the set folder `/Volumes/<x>/Engagements` (a temporary stand-in on Linux) with `<x>` missing and an engagement registered in it, refused as registered, not as a missing parent (N7), a folder containing home, `<default app data>` and a folder containing it, `<profiles base>`, its `.run/`, the runtime folder, the OS temp folder and a folder inside it, a path with U+202E or U+200B; a missing set folder with an engagement still registered under it is refused and nothing is made, while after every engagement is deleted it is made again; two creates racing on a `null` folder with different paths (seam inside the lock): one sets it, the other is refused naming it. Text fields: U+202E, U+200B and U+FEFF in each field are refused |
+| `fsx` (minors 1, 2; M-D of revision 5) | `same_path` vectors (case, `\\?\` and `\\?\UNC\` prefixes, non-ASCII) on every platform; `macos_only` (revision 5i): a not-yet-existing file name differing in case is equal on a case-insensitive volume and different on a case-sensitive disk image; `windows_only`: a junction to a sentinel folder is recorded and not entered by the walk and removed as a link by the delete; a tree whose deepest path passes 400 characters is walked and deleted |
 | PE-3 AC4, AC5 | helper tests: N concurrent appends, overlapping commits, ended without hook |
 | PE-7 | vault tests per service, opt-in, name clash, delete by enumeration (per platform) |
 | PE-13 AC7 | release-profile flag test (slice 7) |
