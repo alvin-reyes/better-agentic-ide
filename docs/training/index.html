@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A quick, hands-on training guide: two 15-minute tracks, one for ADE (install, project setup, plan to verify, sub-terminals, the stage board) and one for the agent hub (make a hub, focus terminals, the brain, journal, auto sync, the briefing).">
+<title>ADE Quick Training</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="icon" href="/assets/img/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #17202b; --muted: #566273; --line: #dde2e9;
+  --accent: #c2410c; --accent-soft: #fdeee6; --two: #1d5fd1; --two-soft: #e6eefc;
+  --code-bg: #eef1f5; --ok: #1f7a4d; --ok-soft: #e4f4ec;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c; --surface: #161d26; --fg: #e4e9f0; --muted: #9aa6b6; --line: #273240;
+    --accent: #fb923c; --accent-soft: #2f1d12; --two: #7aa8ff; --two-soft: #1b2b45;
+    --code-bg: #1c2531; --ok: #5fd39a; --ok-soft: #12291e; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151c; --surface: #161d26; --fg: #e4e9f0; --muted: #9aa6b6; --line: #273240;
+  --accent: #fb923c; --accent-soft: #2f1d12; --two: #7aa8ff; --two-soft: #1b2b45;
+  --code-bg: #1c2531; --ok: #5fd39a; --ok-soft: #12291e; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--body); }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.wrap { max-width: 860px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { border-bottom: 1px solid var(--line); background: var(--surface); }
+header.top .wrap { padding-block: 40px 32px; display: grid; gap: 14px; }
+.crumbs { font: 600 13px/1 var(--mono); color: var(--muted); }
+.crumbs a { color: var(--muted); }
+.eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; }
+h1 { font-size: clamp(32px, 5vw, 48px); margin: 0; letter-spacing: -.01em; }
+.lede { font-size: 19px; margin: 0; color: var(--muted); max-width: 64ch; }
+.tracks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 8px; }
+.track-link { display: grid; gap: 4px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; text-decoration: none; color: var(--fg); background: var(--bg); }
+.track-link b { font-family: var(--display); font-size: 20px; }
+.track-link span { color: var(--muted); font-size: 15px; }
+.track-link.one { border-left: 4px solid var(--accent); }
+.track-link.two { border-left: 4px solid var(--two); }
+main { padding-block: 24px 80px; }
+section.track { margin-top: 40px; }
+.track-head { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 2px solid var(--accent); }
+.track.two .track-head { border-color: var(--two); }
+.track-head h2 { font-size: clamp(26px, 4vw, 34px); margin: 0; }
+.track-head p { margin: 0; color: var(--muted); }
+.time { font: 600 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.track.two .time { color: var(--two); }
+ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 20px 0 0; display: grid; gap: 14px; }
+ol.steps > li { counter-increment: step; position: relative; padding: 18px 20px 16px 64px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+ol.steps > li::before { content: counter(step); position: absolute; left: 18px; top: 16px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 700 15px/1 var(--display); background: var(--accent-soft); color: var(--accent); }
+.track.two ol.steps > li::before { background: var(--two-soft); color: var(--two); }
+ol.steps h3 { margin: 0 0 6px; font-size: 19px; }
+ol.steps p { margin: 6px 0; }
+pre { background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 10px 0; font: 14px/1.5 var(--mono); }
+code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+kbd { font: 600 13px/1 var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 2px 6px; background: var(--surface); white-space: nowrap; }
+.see { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--ok-soft); color: var(--fg); font-size: 15px; }
+.see b { color: var(--ok); font: 600 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; margin-right: 6px; }
+.note { font-size: 15px; color: var(--muted); }
+.check { margin-top: 20px; padding: 18px 20px; border: 1px dashed var(--line); border-radius: 12px; background: var(--surface); }
+.check h3 { margin: 0 0 8px; font-size: 18px; }
+.check ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 2px; font: 600 13px/1 var(--mono); }
+.flow span { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); }
+.flow i { color: var(--muted); font-style: normal; }
+footer { border-top: 1px solid var(--line); padding-block: 24px; color: var(--muted); font-size: 15px; }
+@media (max-width: 560px) {
+  .tracks { grid-template-columns: minmax(0, 1fr); }
+  ol.steps > li { padding: 56px 16px 14px; }
+  ol.steps > li::before { left: 16px; top: 14px; }
+}
+</style>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="crumbs"><a href="/">ADE</a> / <a href="/guide/">Guide</a> / Training</div>
+    <span class="eyebrow">Quick training · two 15-minute tracks</span>
+    <h1>Learn ADE and the agent hub by doing</h1>
+    <p class="lede">Two short, hands-on tracks. Each step has the exact command or click and what you should see. Shortcuts show macOS first, then Linux.</p>
+    <div class="tracks">
+      <a class="track-link one" href="#ade"><b>Track 1 · ADE</b><span>Install, set up a project, plan → approve → shard → build → verify, sub-terminals, the stage board.</span></a>
+      <a class="track-link two" href="#hub"><b>Track 2 · Agent hub</b><span>Make a hub, the first session, focus terminals, the brain, the journal, auto sync and the briefing.</span></a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section class="track one" id="ade" aria-labelledby="ade-h">
+  <div class="track-head">
+    <span class="time">Track 1 · about 15 minutes</span>
+    <h2 id="ade-h">ADE: one project, from plan to a verified story</h2>
+    <p>You need macOS or Linux, git, and <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> (<code>npm install -g @anthropic-ai/claude-code</code>).</p>
+  </div>
+
+  <ol class="steps">
+    <li>
+      <h3>Install ADE</h3>
+      <pre><code>curl -fsSL https://ade.ardata.tech/install.sh | bash</code></pre>
+      <p>It picks the build for your machine, checks it against the release's <code>SHA256SUMS</code> and installs without sudo. Run it again later to upgrade. You can also use the <a href="/#downloads">download page</a>.</p>
+      <div class="see"><b>You should see</b>ADE in <code>/Applications</code> on macOS, or the AppImage in <code>~/.local/bin</code> on Linux.</div>
+    </li>
+    <li>
+      <h3>Make a tiny practice project</h3>
+      <pre><code>mkdir -p ~/Project/hello-ade &amp;&amp; cd ~/Project/hello-ade &amp;&amp; git init</code></pre>
+      <p>Launch ADE. It opens with one terminal in your home folder and a short tour. Then <code>cd ~/Project/hello-ade</code> in that terminal.</p>
+      <div class="see"><b>You should see</b>the file browser and fleet view follow the terminal into <code>hello-ade</code>.</div>
+    </li>
+    <li>
+      <h3>Let project setup run</h3>
+      <p>The first time a terminal enters a project ADE has no record of, it sets it up for agents, adding only files that are missing. Opened from the New tab dialog, it first asks <b>BMAD v6 (default)</b> or <b>BMAD v4</b>; set up any other way, it gets v6. You can also run <em>Project: Set up BMAD, methodology and agents</em> from the command palette (<kbd>⌘P</kbd> / <kbd>Ctrl+Shift+P</kbd>).</p>
+      <div class="see"><b>You should see</b>a toast, then <code>.claude/agents/</code> with eight roles (product manager, architect, designer, scrum master, developer, QA, DevOps, adversarial reviewer), BMAD v6 skills in <code>.claude/skills/</code>, <code>_bmad/</code>, and the rules in <code>.ade/rules.md</code>, loaded from <code>CLAUDE.md</code>.</div>
+    </li>
+    <li>
+      <h3>Start an agent</h3>
+      <p>Type <code>claude</code>, or press <kbd>⌘⇧A</kbd> / <kbd>Ctrl+Alt+Shift+A</kbd> for the agent picker. For longer prompts, open the scratchpad with <kbd>⌘J</kbd> / <kbd>Ctrl+Shift+J</kbd> and send with <kbd>⌘↵</kbd> / <kbd>Ctrl+Enter</kbd>.</p>
+      <div class="see"><b>You should see</b>Claude Code running in the project, with the eight roles available as sub-agents.</div>
+    </li>
+    <li>
+      <h3>Plan: ask the planning roles</h3>
+      <p>The work flows in five steps:</p>
+      <div class="flow" aria-label="Plan, Approve, Shard, Build, Verify"><span>Plan</span><i>→</i><span>Approve</span><i>→</i><span>Shard</span><i>→</i><span>Build</span><i>→</i><span>Verify</span></div>
+      <p>Ask by name, for example:</p>
+      <pre><code>Use the product-manager agent to write a PRD for a CLI that adds two numbers.
+Then use the architect agent to write the architecture, with one verification command.</code></pre>
+      <div class="see"><b>You should see</b><code>docs/prd.md</code> and <code>docs/architecture.md</code>, which names the one verification command (for example <code>npm test</code>) under "Verification command". On v6, BMAD skills write their documents under <code>_bmad-output/</code>; where the two differ, the BMAD location is the one to use.</div>
+    </li>
+    <li>
+      <h3>Approve, after the skeptic</h3>
+      <pre><code>Have the adversarial-reviewer look at the PRD and the architecture.</code></pre>
+      <p>Fix what it blocks on, then approve the plan yourself. Approval fixes the verification command; changing it later needs your approval again.</p>
+      <div class="see"><b>You should see</b>a review with findings by severity, and after you approve, a dated line in the journal <code>.ade/session.md</code>.</div>
+    </li>
+    <li>
+      <h3>Shard into stories</h3>
+      <pre><code>Use the scrum-master agent to shard the plan into stories.</code></pre>
+      <div class="see"><b>You should see</b>small, independently testable stories in <code>docs/stories/</code>, one file each, and a journal line per story.</div>
+    </li>
+    <li>
+      <h3>Build one story, test-first</h3>
+      <pre><code>Use the developer agent to build story 1, test-first.</code></pre>
+      <p>The developer writes the failing test, then the code, runs the verification command and reports its real output. It does not mark the story Done. Several developers can run in parallel, each in its own git worktree.</p>
+      <div class="see"><b>You should see</b>a new test, the code, and the command's output in the agent's report.</div>
+    </li>
+    <li>
+      <h3>Verify: the only path to Done</h3>
+      <pre><code>Use the qa agent to verify story 1.</code></pre>
+      <div class="see"><b>You should see</b>the real output recorded in the story's Verification section and a journal line. A story is Done only when the verification command passes; no agent certifies its own work.</div>
+    </li>
+    <li>
+      <h3>Watch it on the stage board</h3>
+      <p>Open it with <kbd>⌘⇧Y</kbd> / <kbd>Ctrl+Alt+Shift+Y</kbd> (<em>View: Toggle stage board</em>). On a v6 project it maps BMAD's four phases (Analysis, Planning, Implementation, Validation) and refreshes as agents write files. You can <b>Approve</b> a draft and <b>Dispatch</b> an approved story to a developer agent in a new tab.</p>
+      <div class="see"><b>You should see</b>your documents listed by phase; a story that says it is done without a passing QA gate shows as <b>claimed</b>.</div>
+    </li>
+    <li>
+      <h3>Run a side shell with a sub-terminal</h3>
+      <p>Right-click the tab and choose <b>New Sub-terminal</b>. Switch between a tab's sub-terminals with <kbd>⌘[</kbd> and <kbd>⌘]</kbd> (<kbd>Ctrl+Shift+[</kbd> and <kbd>Ctrl+Shift+]</kbd> on Linux). Closing one that is still running something asks first.</p>
+      <div class="see"><b>You should see</b>a second shell in the same tab and folder, for a test watcher or a dev server beside the agent.</div>
+    </li>
+  </ol>
+
+  <div class="check">
+    <h3>Check yourself</h3>
+    <ul>
+      <li>Where do the eight role agents live, and what file holds the rules? (<code>.claude/agents/</code>, <code>.ade/rules.md</code>)</li>
+      <li>Which document names the verification command, and who can change it? (<code>docs/architecture.md</code>; only with your approval)</li>
+      <li>Who marks a story Done? (Nobody by assertion: only a passing verification command, recorded by QA or you.)</li>
+      <li>How do you open the stage board and switch sub-terminals?</li>
+    </ul>
+    <p class="note">Go deeper: <a href="/guide/project-setup/">Project setup</a>, <a href="/guide/agents/">Agents &amp; fleet</a>, <a href="/guide/shortcuts/">Keyboard shortcuts</a>.</p>
+  </div>
+</section>
+
+<section class="track two" id="hub" aria-labelledby="hub-h">
+  <div class="track-head">
+    <span class="time">Track 2 · about 15 minutes</span>
+    <h2 id="hub-h">Agent hub: a persona that remembers one client's work</h2>
+    <p>The <code>ai-agent-hub-template</code> is private for now; this track assumes you have access. You need macOS, git, <code>gh</code>, Claude Code, and <code>gitleaks</code> for auto sync. Ollama is optional.</p>
+  </div>
+
+  <ol class="steps">
+    <li>
+      <h3>Pick a persona</h3>
+      <pre><code>gh repo create my-acme-sre --private --template alvin-reyes/ai-agent-hub-template --clone
+cd my-acme-sre
+bin/init --list</code></pre>
+      <div class="see"><b>You should see</b>the personas: staff software engineer, DevOps/SRE, data, ML/AI, frontend, mobile, QA, security, solutions architect, tech lead, engineering manager, technical product manager, fractional CTO.</div>
+    </li>
+    <li>
+      <h3>Make the hub</h3>
+      <pre><code>bin/init --persona devops-sre --client "Acme Corp" --owner "Sam Lee" \
+  --repo acme/infra=~/code/infra --briefing 08:00</code></pre>
+      <p>Without GitHub, add <code>--dest ~/Project/acme-sre</code> to copy the template to a new folder first.</p>
+      <div class="see"><b>You should see</b><code>hub.conf</code> (names and locations, never secrets), the persona in <code>CLAUDE.md</code>, and one folder per work area, such as <code>ops/environments</code>.</div>
+    </li>
+    <li>
+      <h3>Commit <code>hub.conf</code> once, by hand</h3>
+      <pre><code>git add -A &amp;&amp; git commit -m "Initialize the hub" &amp;&amp; git push -u origin main</code></pre>
+      <p><code>bin/init</code> commits nothing and <code>bin/sync</code> leaves <code>hub.conf</code> out, so this is the one commit you make yourself. <code>push -u</code> also sets the upstream auto sync needs.</p>
+      <div class="see"><b>You should see</b>the hub on GitHub, with <code>hub.conf</code> in it.</div>
+    </li>
+    <li>
+      <h3>Link it to Claude, and check this Mac</h3>
+      <pre><code>bin/setup &amp;&amp; bin/doctor</code></pre>
+      <div class="see"><b>You should see</b><code>OK</code> or <code>MISSING</code> per tool, login, repo, box and secret name. <code>bin/doctor</code> never prints a secret.</div>
+    </li>
+    <li>
+      <h3>First session in the hub</h3>
+      <pre><code>claude</code></pre>
+      <div class="see"><b>You should see</b>the session start with what is live, open and waiting, from each folder's <code>STATE.md</code>.</div>
+    </li>
+    <li>
+      <h3>Open a focus terminal</h3>
+      <pre><code>bin/work ops/environments
+bin/work --model opus --prompt "Check the last pipeline run" ops/ci-cd</code></pre>
+      <p>Each folder opens in its own Terminal, in the folder's repo checkout, with its named agent and hooks. <code>--model</code> sets the session's model; <code>--agent-model</code> sets the folder's specialist agents.</p>
+      <div class="see"><b>You should see</b>a new Terminal window. Other terminals hear what it changed on their next prompt.</div>
+    </li>
+    <li>
+      <h3>Search the brain</h3>
+      <pre><code>ollama pull nomic-embed-text     # once per Mac, optional
+bin/brain index
+bin/brain search "what did the client decide about SMS"</code></pre>
+      <div class="see"><b>You should see</b>file, line, heading and a snippet for each match: SQLite keywords plus local Ollama vectors, on this Mac only. Without Ollama it still works, keyword only.</div>
+    </li>
+    <li>
+      <h3>Write to the journal</h3>
+      <pre><code>bin/journal ops/environments "Rotated the staging certificate"</code></pre>
+      <div class="see"><b>You should see</b>a dated entry in <code>journal/&lt;UTC date&gt;.md</code>, the timeline every agent and hook shares.</div>
+    </li>
+    <li>
+      <h3>Sync, with the secret scan</h3>
+      <pre><code>bin/sync           # review first
+bin/sync --yes     # commit and push the hub's files</code></pre>
+      <p>Auto sync (<code>bin/sync --auto</code>) also runs at every focus session's end. It refuses to run without gitleaks, scans every commit to push, retries a rejected push once with a rebase, and never force-pushes or touches the client's code.</p>
+      <div class="see"><b>You should see</b>the hub's changes pushed. Auto sync logs one line per run in <code>~/.agent-hub/&lt;name&gt;/logs/sync.log</code>.</div>
+    </li>
+    <li>
+      <h3>Turn on the scheduled jobs</h3>
+      <pre><code>bin/schedule install
+bin/schedule status</code></pre>
+      <div class="see"><b>You should see</b>three launchd jobs: the weekday morning briefing (read-only, on Haiku, into the journal and a notification), <code>bin/monitor</code> every 30 minutes, and <code>bin/sync --auto</code> every 30 minutes.</div>
+    </li>
+  </ol>
+
+  <div class="check">
+    <h3>Check yourself</h3>
+    <ul>
+      <li>Which file must you commit by hand, and why? (<code>hub.conf</code>; nothing else commits it)</li>
+      <li>How do you open a focus terminal on one folder with a different model?</li>
+      <li>Where does the brain live, and does it ever leave the Mac? (<code>.local/brain.db</code>, gitignored; no)</li>
+      <li>What does auto sync refuse to do? (Run without gitleaks, force-push, or push the client's code)</li>
+    </ul>
+    <p class="note">Go deeper: the full <a href="/agent-hub/">agent hub guide</a>, with flow diagrams and every setting.</p>
+  </div>
+</section>
+
+</main>
+<footer>
+  <div class="wrap">ADE · <a href="/">ade.ardata.tech</a> · <a href="/guide/">Guide</a> · <a href="/agent-hub/">Agent hub guide</a></div>
+</footer>
+</body>
+</html>

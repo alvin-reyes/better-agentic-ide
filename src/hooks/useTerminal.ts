@@ -14,9 +14,10 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes, shownView } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { isAnsweringKey, reportAnsweringKey } from "../stores/agentStatusStore";
+import { decideBusy, type Fg } from "../lib/paneBusy";
 
 interface PtyEvent {
   type: "output" | "exit" | "error";
@@ -71,7 +72,7 @@ function checkIdleTransition(paneId: string) {
   if (prevActive && !active) {
     // Output finished in a tab you aren't looking at: flag it in the tab bar.
     const { tabs, activeTabId } = useTabStore.getState();
-    const owner = tabs.find((t) => findAllPanes(t.root).some((p) => p.id === paneId));
+    const owner = tabs.find((t) => allTabPanes(t).some((p) => p.id === paneId));
     if (owner && owner.id !== activeTabId) {
       void import("../stores/paneMetaStore").then(({ usePaneCwd }) => usePaneCwd.getState().markAttention(owner.id));
     }
@@ -145,9 +146,14 @@ function isPaneActive(paneId: string): boolean {
   return Date.now() - last < ACTIVITY_TIMEOUT;
 }
 
-function destroyInstance(paneId: string) {
+/**
+ * Dispose a pane's terminal and kill its shell. `storePtyId` is the store's
+ * id for the pane: it kills a pane that has a shell but no instance yet.
+ */
+function destroyInstance(paneId: string, storePtyId?: number | null) {
   const inst = instances.get(paneId);
-  if (inst?.ptyId != null) invoke("kill_pty", { id: inst.ptyId });
+  const ptyId = inst ? inst.ptyId : storePtyId;
+  if (ptyId != null) invoke("kill_pty", { id: ptyId });
   detachInstance(paneId);
 }
 
@@ -163,39 +169,173 @@ function detachInstance(paneId: string) {
 }
 
 /**
- * WebGL rendering, when it's on and available. Browsers cap WebGL contexts per
- * page (WebKit drops the oldest past the cap), and a terminal whose context is
- * lost stops drawing entirely: blank text, no cursor. So at most MAX_GPU
- * terminals use WebGL, the rest use xterm's DOM renderer, and a terminal that
- * loses its context switches to the DOM renderer and keeps going.
+ * WebGL rendering follows the terminals on screen, when it's on and available.
+ * Browsers cap WebGL contexts per page (WebKit drops the oldest past the cap),
+ * and a terminal whose context is lost stops drawing entirely: blank text, no
+ * cursor. So at most MAX_GPU terminals hold a WebGL slot. A terminal takes one
+ * each time it is seated in a pane (seatTerminal); when all are taken, the
+ * least recently seated terminal whose pane is not mounted gives its slot up
+ * and draws with xterm's DOM renderer while hidden, until it is shown again.
+ * Mounted terminals are never evicted: past MAX_GPU on screen, the rest use
+ * the DOM renderer. A terminal that loses its context switches to the DOM
+ * renderer and keeps going.
  */
 const MAX_GPU = 8;
-const gpuTerminals = new Map<Terminal, WebglAddon>();
 
-function releaseGpu(term: Terminal) {
-  const addon = gpuTerminals.get(term);
-  if (!addon) return;
-  gpuTerminals.delete(term);
+/** Slot holders, least recently seated first (Map insertion order). */
+const gpuSlots = new Map<Terminal, { paneId: string; addon: WebglAddon; gl: WebGL2RenderingContext | null }>();
+
+/** Mounted useTerminal effects per pane: a count, as StrictMode mounts twice. */
+const mountedPanes = new Map<string, number>();
+
+// WebGL stops being tried, until restart, once it is unsupported or keeps failing.
+let gpuUnavailable = false;
+let gpuFailures = 0;
+const MAX_GPU_FAILURES = 3;
+
+export function notePaneMounted(paneId: string) {
+  mountedPanes.set(paneId, (mountedPanes.get(paneId) ?? 0) + 1);
+}
+
+export function notePaneUnmounted(paneId: string) {
+  const n = (mountedPanes.get(paneId) ?? 0) - 1;
+  if (n > 0) mountedPanes.set(paneId, n);
+  else mountedPanes.delete(paneId);
+}
+
+const isPaneMounted = (paneId: string) => (mountedPanes.get(paneId) ?? 0) > 0;
+
+function loseContext(gl: WebGL2RenderingContext | null) {
   try {
-    addon.dispose();
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
   } catch {
-    // Already gone with its context.
+    // Already lost.
   }
 }
 
-function enableGpuRenderer(term: Terminal) {
-  if (!useSettingsStore.getState().gpuRendering || gpuTerminals.size >= MAX_GPU) return;
+const canvasesOf = (term: Terminal) => Array.from(term.element?.querySelectorAll("canvas") ?? []);
+
+/** The canvas's existing WebGL2 context: null for a 2D canvas, and none is created. */
+const webgl2Of = (canvas: HTMLCanvasElement) => canvas.getContext("webgl2") as WebGL2RenderingContext | null;
+
+function releaseGpu(term: Terminal) {
+  const slot = gpuSlots.get(term);
+  if (!slot) return;
+  // Gone first, so a context loss fired while disposing finds no slot.
+  gpuSlots.delete(term);
   try {
-    const addon = new WebglAddon();
-    addon.onContextLoss(() => {
-      releaseGpu(term);
-      term.refresh(0, term.rows - 1);
-    });
-    term.loadAddon(addon);
-    gpuTerminals.set(term, addon);
+    slot.addon.dispose();
   } catch {
-    // No WebGL here: the DOM renderer is already in place.
+    // Already gone with its context.
   }
+  // The addon never releases its context itself; after dispose, so the
+  // renderer's context-loss listener is already gone.
+  loseContext(slot.gl);
+}
+
+function gpuLoadFailed(unsupported: boolean, err: unknown) {
+  gpuFailures++;
+  if (!unsupported && gpuFailures < MAX_GPU_FAILURES) return;
+  gpuUnavailable = true;
+  const reason = unsupported ? "WebGL2 is not supported" : `${gpuFailures} WebGL loads failed in a row`;
+  void invoke("log_error", { message: `GPU rendering off until restart: ${reason}. Last error: ${err}` }).catch(() => {});
+}
+
+/** A new WebglAddon for `term`; false when it couldn't be loaded. */
+function loadGpu(paneId: string, term: Terminal): boolean {
+  let addon: WebglAddon;
+  try {
+    addon = new WebglAddon();
+  } catch (err) {
+    gpuLoadFailed(true, err); // only thrown where WebGL2 is unsupported
+    return false;
+  }
+  addon.onContextLoss(() => {
+    if (gpuSlots.get(term)?.addon !== addon) return;
+    releaseGpu(term);
+    term.refresh(0, term.rows - 1);
+  });
+  const before = new Set(canvasesOf(term));
+  try {
+    term.loadAddon(addon);
+  } catch (err) {
+    // The renderer appends its canvas before it can fail: take it back out.
+    const added = canvasesOf(term).filter((c) => !before.has(c));
+    try {
+      addon.dispose();
+    } catch {
+      // Half-built.
+    }
+    for (const canvas of added) {
+      loseContext(webgl2Of(canvas));
+      canvas.remove();
+    }
+    gpuLoadFailed(err instanceof Error && err.message.startsWith("WebGL2 not supported"), err);
+    return false;
+  }
+  gpuFailures = 0;
+  const gl = canvasesOf(term).filter((c) => !before.has(c)).map(webgl2Of).find((c) => c !== null) ?? null;
+  gpuSlots.set(term, { paneId, addon, gl });
+  return true;
+}
+
+/**
+ * The DOM renderer measures its letter spacing when built, and a terminal
+ * opened in a detached wrapper measures it wrong (a whole cell). Any option
+ * change re-measures it; this one changes nothing on screen and is put back.
+ */
+function respaceDomRenderer(term: Terminal) {
+  const sensitivity = term.options.scrollSensitivity!;
+  term.options.scrollSensitivity = sensitivity + 1;
+  term.options.scrollSensitivity = sensitivity;
+}
+
+/**
+ * Seat the pane's terminal in `container`, and decide its renderer: the one
+ * place WebGL is given out. The addon is loaded after the wrapper is attached,
+ * as the WebGL renderer reads whether its element is connected.
+ */
+export function seatTerminal(paneId: string, container: HTMLElement, inst: TerminalInstance): void {
+  attachSolely(container, inst.wrapper);
+  const { term } = inst;
+  if (!useSettingsStore.getState().gpuRendering) {
+    releaseGpu(term);
+    respaceDomRenderer(term);
+    return;
+  }
+  const held = gpuSlots.get(term);
+  if (held) {
+    // Most recently seated now.
+    gpuSlots.delete(term);
+    gpuSlots.set(term, held);
+    return;
+  }
+  if (gpuUnavailable) {
+    respaceDomRenderer(term);
+    return;
+  }
+  if (gpuSlots.size >= MAX_GPU) {
+    const victim = [...gpuSlots].find(([, slot]) => !isPaneMounted(slot.paneId));
+    if (!victim) {
+      respaceDomRenderer(term);
+      return;
+    }
+    releaseGpu(victim[0]);
+  }
+  if (!loadGpu(paneId, term)) respaceDomRenderer(term);
+}
+
+/** Test seam: free every slot and forget the mounts and the failures. */
+export function __resetGpuForTests() {
+  for (const term of [...gpuSlots.keys()]) releaseGpu(term);
+  mountedPanes.clear();
+  gpuUnavailable = false;
+  gpuFailures = 0;
+}
+
+/** Test seam: put an instance in the pane map. */
+export function __setInstanceForTests(paneId: string, inst: TerminalInstance) {
+  instances.set(paneId, inst);
 }
 
 /**
@@ -237,7 +377,7 @@ function openTerminal(paneId: string) {
   term.open(wrapper);
   registerFileLinks(term, () => getPtyCwd(paneId), openFileFromTerminal);
 
-  enableGpuRenderer(term);
+  // WebGL comes later, when the terminal is seated (seatTerminal).
   try {
     term.loadAddon(new ImageAddon({ sixelSupport: true, iipSupport: true }));
   } catch {
@@ -399,7 +539,7 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
   // Seat and fit the terminal before anything is decided from its size.
   let fitted = false;
   if (container) {
-    attachSolely(container, wrapper);
+    seatTerminal(paneId, container, inst);
     fitted = await fitToPane(paneId, inst);
     if (instances.get(paneId) !== inst) return inst; // closed meanwhile
   }
@@ -444,6 +584,9 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    // Counted here, before any await: every pane of a commit is marked on
+    // screen before the first of them is seated, so none is evicted as hidden.
+    notePaneMounted(paneId);
 
     let resizeObserver: ResizeObserver | null = null;
 
@@ -470,7 +613,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       if (!inst) {
         // A pane with a ptyId already has a shell (a detached window's tab):
         // reattach to it instead of starting a new one.
-        const pane = useTabStore.getState().tabs.flatMap((t) => findAllPanes(t.root)).find((p) => p.id === paneId);
+        const pane = useTabStore.getState().tabs.flatMap((t) => allTabPanes(t)).find((p) => p.id === paneId);
         if (pane?.ptyId) {
           inst = await createReattachedInstance(paneId, pane.ptyId, setPtyId);
         } else {
@@ -492,14 +635,17 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
       // exists to prevent.
       if (cancelled || instances.get(paneId) !== inst) return;
 
-      // Move the wrapper element into this container, as its ONLY child.
-      attachSolely(container, inst.wrapper);
+      // Move the wrapper element into this container, as its ONLY child, on
+      // its renderer before the next frame.
+      seatTerminal(paneId, container, inst);
       termRef.current = inst.term;
 
-      // Fit to new container size
+      // Fit to new container size. Every pane of a view is seated, so only
+      // the one you are in takes the keyboard: otherwise the last pane seated
+      // would, whichever pane is active.
       requestAnimationFrame(() => {
         inst!.fitAddon.fit();
-        inst!.term.focus();
+        if (isFocusedPane(paneId)) inst!.term.focus();
       });
 
       resizeObserver = new ResizeObserver(() => {
@@ -513,6 +659,7 @@ export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDi
     // On unmount: detach the wrapper (but DON'T destroy the terminal)
     return () => {
       cancelled = true;
+      notePaneUnmounted(paneId);
       resizeObserver?.disconnect();
       const inst = instances.get(paneId);
       if (inst && inst.wrapper.parentElement === container) {
@@ -556,6 +703,7 @@ async function getPtyCwd(paneId: string): Promise<string | null> {
 }
 
 // "Claude" when the last 50 lines of a pane look like a running Claude session.
+// Only paneBusy's fallback uses it, for when the terminal cannot say what runs.
 function hasActiveProcess(paneId: string): string | null {
   const inst = instances.get(paneId);
   if (!inst) return null;
@@ -570,6 +718,24 @@ function hasActiveProcess(paneId: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * What is running in a pane, by name, or null when it is free for an agent.
+ * Any provider counts, not only Claude: see decideBusy.
+ */
+async function paneBusy(paneId: string): Promise<string | null> {
+  const { useAgentTrackerStore } = await import("../stores/agentTrackerStore");
+  return decideBusy({
+    sessions: useAgentTrackerStore.getState().sessions.filter((s) => s.paneId === paneId),
+    sample: async () => {
+      const ptyId = instances.get(paneId)?.ptyId ?? null;
+      if (ptyId === null) throw new Error("no terminal");
+      return invoke<Fg>("pty_foreground_job", { id: ptyId });
+    },
+    wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+    fallback: () => hasActiveProcess(paneId),
+  });
 }
 
 // Scrollback as escape sequences, for session persistence.
@@ -597,14 +763,21 @@ function getTerminalDimensions(paneId: string): { cols: number; rows: number } |
   return { cols: inst.term.cols, rows: inst.term.rows };
 }
 
+/** Whether `paneId` is the active pane of the active tab's view in sight. */
+function isFocusedPane(paneId: string): boolean {
+  const { tabs, activeTabId } = useTabStore.getState();
+  const tab = tabs.find((t) => t.id === activeTabId);
+  return !!tab && shownView(tab).activePaneId === paneId;
+}
+
 /** Focus the active tab's active pane, when it's a terminal. */
 function focusActiveTerminal(): boolean {
   const { tabs, activeTabId } = useTabStore.getState();
   const tab = tabs.find((t) => t.id === activeTabId);
-  const inst = tab ? instances.get(tab.activePaneId) : undefined;
+  const inst = tab ? instances.get(shownView(tab).activePaneId) : undefined;
   if (!inst) return false;
   inst.term.focus();
   return true;
 }
 
-export { focusActiveTerminal, destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, hasActiveProcess, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };
+export { MAX_GPU, focusActiveTerminal, destroyInstance, detachInstance, refreshAllTerminals, getSearchAddon, paneBusy, isPaneActive, getPtyCwd, serializeTerminalBuffer, setRecordingTap, getTerminalDimensions };

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { SHORTCUT_GROUPS } from "../lib/shortcutList";
+import { SHORTCUT_GROUPS, shortcutNotes } from "../lib/shortcutList";
 import { shortcutLabel } from "../lib/shortcuts";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useEscapeToClose } from "./useEscapeToClose";
@@ -56,6 +56,7 @@ export default function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
               <input type="checkbox" checked={showBar} onChange={(e) => setShowBar(e.target.checked)} />
               Show the shortcut bar at the bottom of the window
             </label>
+            {shortcutNotes().map((note) => <span key={note}>{note}</span>)}
             <span>Open this list with {shortcutLabel("shortcuts")}. Every command is also in the palette ({shortcutLabel("palette")}).</span>
           </div>
         </div>

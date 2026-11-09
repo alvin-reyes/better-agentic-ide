@@ -1013,3 +1013,72 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
   .fleetx { font-size: 11px; }
   .fleetx-path { display: none; }
 }
+
+/* Orchestration: three diagrams (BMAD v6 flow, focus terminals, brain sync).
+   Inline SVG coloured through the page tokens, so both themes follow; each
+   sits in its own sideways scroller so the page itself never scrolls at phone width. */
+.orx .section-head h2 { text-wrap: balance; }
+.orx-fig { margin: 0 0 44px; padding: 0; }
+.orx-fig figcaption { display: flex; gap: 16px; align-items: flex-start; max-width: 820px; margin: 0 0 18px; }
+.orx-fig h3 { font-size: 20px; letter-spacing: -0.02em; margin: 0 0 6px; text-wrap: balance; }
+.orx-fig figcaption p { color: var(--text-2); font-size: 15px; line-height: 1.6; margin: 0; }
+.orx-fig figcaption div { min-width: 0; }
+.orx-num {
+  flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  font: 600 12px/1 var(--mono); color: var(--accent-text); background: var(--grad-soft);
+  border: 1px solid var(--line-2);
+}
+.orx-scroll {
+  overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); padding: 18px; box-shadow: var(--card-shadow);
+}
+.orx-scroll:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.orx-svg { display: block; width: 100%; min-width: 860px; height: auto; font-family: var(--sans); }
+.orx-band { fill: var(--bg-2); stroke: var(--line); }
+.orx-phase { font: 600 11px var(--mono); letter-spacing: .12em; fill: var(--text-3); }
+.orx-node rect { fill: var(--panel); stroke: var(--line-3); stroke-width: 1; }
+.orx-node--role rect:first-child { stroke: var(--agent-c); }
+.orx-tick { fill: var(--agent-c); stroke: none !important; }
+.orx-node--you rect { fill: var(--panel-2); stroke: var(--orange); stroke-width: 1.5; }
+.orx-node--ade rect { fill: var(--panel-2); stroke: var(--violet); }
+.orx-node--done rect { fill: var(--panel-2); stroke: var(--agent-green); stroke-width: 1.5; }
+.orx-node--tag rect { fill: var(--bg-2); stroke: var(--line-2); stroke-dasharray: 4 3; }
+.orx-node--tag .orx-t { font: 500 12px var(--mono); }
+.orx-t { font-size: 14px; font-weight: 600; fill: var(--text); }
+.orx-t--big { font-size: 18px; letter-spacing: -0.02em; }
+.orx-s { font: 11.5px var(--mono); fill: var(--text-2); }
+.orx-l { font: 11.5px var(--mono); fill: var(--text-3); }
+.orx-l--back { fill: var(--agent-red); }
+.orx-l--soft { fill: var(--text-3); opacity: .8; }
+.orx-edge { fill: none; stroke: var(--text-3); stroke-width: 1.4; }
+.orx-edge--dash { stroke-dasharray: 4 4; }
+.orx-edge--back { stroke: var(--agent-red); stroke-dasharray: 5 4; }
+.orx-arrow { fill: var(--text-3); }
+.orx-arrow--back { fill: var(--agent-red); }
+.orx-hub { fill: var(--bg-2); stroke: var(--line-2); }
+.orx-pill rect { fill: var(--panel); stroke: var(--line-2); }
+.orx-term rect { fill: var(--panel); stroke: var(--line-3); }
+.orx-term-bar { fill: var(--term-bg); }
+.orx-term circle { fill: rgba(255, 255, 255, 0.28); }
+.orx-cmd { font: 500 12px var(--mono); fill: #e8e8ec; }
+.orx-next figcaption .compose-label { display: inline-block; margin: 0 0 8px; }
+.orx-next .orx-scroll { border-style: dashed; }
+.orx-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.orx-card {
+  min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); box-shadow: var(--card-shadow);
+}
+.orx-card h3 { font-size: 17px; margin: 0 0 8px; letter-spacing: -0.015em; }
+.orx-card p { color: var(--text-2); font-size: 14.5px; line-height: 1.6; margin: 0 0 10px; }
+.orx-card kbd { font: 12px var(--mono); padding: 1px 5px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--code-bg); }
+@media (max-width: 900px) { .orx-cards { grid-template-columns: 1fr; } }
+@media (max-width: 620px) {
+  .orx-scroll { padding: 12px; }
+  .orx-fig figcaption { gap: 12px; }
+}
+
+/* Agent hub tour and the v0.21.1 strip */
+.hub-tour .orx-card code { font: 12.5px var(--mono); }
+.hub-tour .orx-card h3 code { font-size: 15px; }
+.new-strip kbd { font: 12px var(--mono); padding: 1px 5px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--code-bg); }
+.new-strip a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }

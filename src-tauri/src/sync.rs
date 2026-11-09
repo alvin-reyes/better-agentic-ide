@@ -81,19 +81,18 @@ fn strip_fields_deep(v: &mut serde_json::Value, fields: &[&str]) {
     }
 }
 
-/// The value of `key` as written to the repo.
-fn value_for_repo(key: &str, raw: &str) -> String {
+/// The value of `key` as written to the repo, or None when it must not go out.
+/// A session that doesn't parse can't have its scrollback stripped (a lone
+/// surrogate escape, from truncation splitting an emoji, is enough), so it is
+/// left out of the export rather than written raw.
+fn value_for_repo(key: &str, raw: &str) -> Option<String> {
     let value = strip_secrets(raw);
     if key != "ade-session" {
-        return value;
+        return Some(value);
     }
-    match serde_json::from_str::<serde_json::Value>(&value) {
-        Ok(mut v) => {
-            strip_fields_deep(&mut v, SESSION_LOCAL_FIELDS);
-            v.to_string()
-        }
-        Err(_) => value,
-    }
+    let mut v = serde_json::from_str::<serde_json::Value>(&value).ok()?;
+    strip_fields_deep(&mut v, SESSION_LOCAL_FIELDS);
+    Some(v.to_string())
 }
 
 /// Put this machine's secret fields back into a value pulled from the repo.
@@ -265,7 +264,7 @@ fn export_state(paths: &Paths, device: &str) -> Result<(), String> {
         for key in keys {
             let local = state::kv_path(&paths.kv, key);
             let Ok(raw) = fs::read_to_string(&local) else { continue };
-            let value = value_for_repo(key, &raw);
+            let Some(value) = value_for_repo(key, &raw) else { continue };
             let local_at = mtime_ms(&local);
             let target = key_path(&paths.repo, dir, key);
             let write = match read_json::<Wrapped>(&target) {
@@ -809,6 +808,67 @@ mod tests {
         assert!(copy.contains("/work") && !copy.contains("sk-live-123"), "{copy}");
         // The local session keeps its scrollback.
         assert!(get(&a, "ade-session").unwrap().contains("sk-live-123"));
+    }
+
+    #[test]
+    fn value_for_repo_strips_scrollback_in_sub_views() {
+        // A tab with two sub-terminals, one of them split: the command line
+        // lives only in scrollback, and the names are one word.
+        let pane = |id: &str, cwd: &str, buf: &str| {
+            serde_json::json!({ "type": "pane", "pane": { "id": id, "savedCwd": cwd, "serializedBuffer": buf } })
+        };
+        let session = serde_json::json!({
+            "tabs": [{
+                "id": "t1", "name": "api", "activePaneId": "p1",
+                "root": pane("p1", "/work/api", "own-scrollback"),
+                "subViews": [
+                    { "id": "view-1", "name": "npm", "activePaneId": "p2",
+                      "root": pane("p2", "/work/api/web", "$ npm run dev --token=sk-live-123") },
+                    { "id": "view-2", "name": "tests", "activePaneId": "p4",
+                      "root": { "type": "split", "direction": "vertical", "children": [
+                          pane("p3", "/work/api", "$ API_KEY=sk-live-456 npx vitest"),
+                          pane("p4", "/work/api/e2e", "watching"),
+                      ] } },
+                ],
+                "shownView": "view-1",
+            }],
+            "activeTabId": "t1",
+        })
+        .to_string();
+
+        let out = value_for_repo("ade-session", &session).expect("a session that parses is exported");
+
+        assert!(!out.contains("serializedBuffer"), "{out}");
+        for leaked in ["own-scrollback", "sk-live-123", "npm run dev", "sk-live-456", "npx vitest", "watching"] {
+            assert!(!out.contains(leaked), "{leaked} reached the repo: {out}");
+        }
+        // Everything else of the sub-terminals is kept.
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let tab = &v["tabs"][0];
+        assert_eq!(tab["shownView"], "view-1");
+        assert_eq!(tab["subViews"][0]["name"], "npm");
+        assert_eq!(tab["subViews"][0]["root"]["pane"]["savedCwd"], "/work/api/web");
+        assert_eq!(tab["subViews"][1]["root"]["children"][1]["pane"]["savedCwd"], "/work/api/e2e");
+        assert_eq!(tab["subViews"][1]["activePaneId"], "p4");
+    }
+
+    #[test]
+    fn a_session_that_does_not_parse_is_never_exported() {
+        // JSON.stringify writes a lone surrogate as an escape when truncation
+        // splits an emoji; serde_json refuses it. The raw session must not go out.
+        let session = r#"{"tabs":[{"root":{"type":"pane","pane":{"id":"p1","savedCwd":"/work","serializedBuffer":"TOKEN=sk-live-777 \ude00x"}}}]}"#;
+        assert!(serde_json::from_str::<serde_json::Value>(session).is_err(), "the probe must not parse");
+        assert_eq!(value_for_repo("ade-session", session), None);
+
+        let root = setup();
+        let (a, ca) = machine(&root, "a");
+        set(&a, "ade-session", session);
+        run_sync(&a, &ca, false, None).unwrap();
+        let copy = key_path(&a.repo, "devices/a", "ade-session");
+        let text = fs::read_to_string(&copy).unwrap_or_default();
+        assert!(!text.contains("sk-live-777"), "{text}");
+        // Other keys still go out as before.
+        assert_eq!(value_for_repo("better-terminal-saved-notes", "not json").as_deref(), Some("not json"));
     }
 
     #[test]

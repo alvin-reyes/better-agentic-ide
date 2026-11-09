@@ -73,7 +73,7 @@ import {
 } from "../bmadSwitch";
 import { SWITCH_RUNNING, addStackAgents, isKept, isSettingUp, isSwitching, onProjectHasBmad, onSwitchChange, setUpProject, setupDeclined, wasSetUp } from "../projectSetup";
 import { useFleetStore } from "../../stores/fleetStore";
-import { useTabStore, type Tab } from "../../stores/tabStore";
+import { useTabStore, ownViewOnly, type Tab } from "../../stores/tabStore";
 import { __resetPromptForTests, askMethodology, useMethodologyPrompt } from "../methodologyPrompt";
 
 const PLAN: SwitchPlan = {
@@ -328,7 +328,7 @@ describe("runSwitch", () => {
 });
 
 const tabOf = (id: string, name: string, paneId: string): Tab => ({
-  id, name, activePaneId: paneId, root: { type: "pane", pane: { id: paneId, ptyId: 1 } },
+  id, name, ...ownViewOnly({ type: "pane", pane: { id: paneId, ptyId: 1 } }, paneId),
 });
 
 describe("openInProject", () => {

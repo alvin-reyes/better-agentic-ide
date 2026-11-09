@@ -20,6 +20,8 @@ export const SHORTCUT_GROUPS: { group: string; items: ShortcutItem[] }[] = [
       { keys: L("tabSwitcher"), action: "Go to tab (search by name or folder)", short: "Go to tab" },
       { keys: `${MOD}1-9`, action: "Switch tab", short: "Switch tab" },
       { keys: `${modLabel(true)}[ / ]`, action: "Previous / next tab", short: "Prev/next tab" },
+      { keys: L("prevSubTerminal"), action: "Previous sub-terminal in the tab", short: "Prev sub-term" },
+      { keys: L("nextSubTerminal"), action: "Next sub-terminal in the tab", short: "Next sub-term" },
       { keys: L("renameTab"), action: "Rename tab", short: "Rename tab" },
       { keys: L("splitHorizontal"), action: "Split side by side", short: "Split horiz" },
       { keys: L("splitVertical"), action: "Split top and bottom", short: "Split vert" },
@@ -63,5 +65,11 @@ export const SHORTCUT_GROUPS: { group: string; items: ShortcutItem[] }[] = [
     ],
   },
 ];
+
+/** Notes shown under the shortcuts list, for this platform. */
+export function shortcutNotes(mac = IS_MAC): string[] {
+  // isAppShortcut is static, so these keys never reach the shell, in any tab.
+  return mac ? [] : ["On Linux, Ctrl+Shift+[ and Ctrl+Shift+] switch sub-terminals in every tab, so the shell does not receive them."];
+}
 
 export const ALL_SHORTCUTS: ShortcutItem[] = SHORTCUT_GROUPS.flatMap((g) => g.items);

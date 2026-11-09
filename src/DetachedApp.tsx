@@ -1,14 +1,14 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import PaneContainer from "./components/PaneContainer";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
-import { useTabStore } from "./stores/tabStore";
+import { useTabStore, shownView } from "./stores/tabStore";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
-import type { Tab } from "./stores/tabStore";
+import { tabFromDetached, type SerializedTab } from "./lib/detachWindow";
 import { SHORTCUTS, matches } from "./lib/shortcuts";
 import { watchAgentStatus } from "./stores/agentStatusStore";
 
 interface DetachedAppProps {
-  tab: Tab;
+  tab: SerializedTab;
 }
 
 export default function DetachedApp({ tab }: DetachedAppProps) {
@@ -18,7 +18,7 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
   // This window's tab store holds only the detached tab.
   useEffect(() => {
     useTabStore.setState({
-      tabs: [tab],
+      tabs: [tabFromDetached(tab)],
       activeTabId: tab.id,
     });
     setIsReady(true);
@@ -94,7 +94,7 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
         </span>
       </div>
       <div className="flex-1 overflow-hidden">
-        <PaneContainer node={activeTab.root} tabId={activeTab.id} />
+        <PaneContainer node={shownView(activeTab).root} tabId={activeTab.id} />
       </div>
       <Scratchpad ref={scratchpadRef} />
     </div>

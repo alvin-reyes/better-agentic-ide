@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
 import { needsYouToasts, useAgentStatusStore } from "../stores/agentStatusStore";
-import { findAllPanes, useTabStore } from "../stores/tabStore";
+import { allTabPanes, useTabStore } from "../stores/tabStore";
 import type { GuardToast } from "./useContextGuard";
 
 /** The tab of this window that holds the PTY, if any. */
 function tabOfPty(ptyId: number) {
-  return useTabStore.getState().tabs.find((t) => findAllPanes(t.root).some((p) => p.ptyId === ptyId));
+  return useTabStore.getState().tabs.find((t) => allTabPanes(t).some((p) => p.ptyId === ptyId));
 }
 
 /**

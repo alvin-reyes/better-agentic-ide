@@ -69,3 +69,47 @@ describe("keyboard shortcuts list", () => {
     expect(new Set(combos).size).toBe(combos.length);
   });
 });
+
+describe("sub-terminal shortcuts", () => {
+  it("prevSubTerminal and nextSubTerminal are ⌘[ and ⌘] and map to Ctrl+Shift+[ and ] on Linux", () => {
+    expect(matches(ev("BracketLeft", { meta: true }, "["), SHORTCUTS.prevSubTerminal, true)).toBe(true);
+    expect(matches(ev("BracketRight", { meta: true }, "]"), SHORTCUTS.nextSubTerminal, true)).toBe(true);
+    // ⌘⇧[ and ⌘⇧] stay the tab keys.
+    expect(matches(ev("BracketLeft", { meta: true, shift: true }, "{"), SHORTCUTS.prevSubTerminal, true)).toBe(false);
+    // Linux: Ctrl+Shift+[ reports "{" and Ctrl+Shift+] reports "}".
+    expect(matches(ev("BracketLeft", { ctrl: true, shift: true }, "{"), SHORTCUTS.prevSubTerminal, false)).toBe(true);
+    expect(matches(ev("BracketRight", { ctrl: true, shift: true }, "}"), SHORTCUTS.nextSubTerminal, false)).toBe(true);
+    expect(shortcutLabel("prevSubTerminal", true)).toBe("⌘[");
+    expect(shortcutLabel("nextSubTerminal", true)).toBe("⌘]");
+    expect(shortcutLabel("prevSubTerminal", false)).toBe("Ctrl+Shift+[");
+    expect(shortcutLabel("nextSubTerminal", false)).toBe("Ctrl+Shift+]");
+  });
+
+  it("isAppShortcut keeps Ctrl+Shift+[ and ] from the shell", () => {
+    expect(isAppShortcut(ev("BracketLeft", { ctrl: true, shift: true }, "{"), false)).toBe(true);
+    expect(isAppShortcut(ev("BracketRight", { ctrl: true, shift: true }, "}"), false)).toBe(true);
+    // Plain Ctrl+[ is Esc and stays the shell's.
+    expect(isAppShortcut(ev("BracketLeft", { ctrl: true }, "["), false)).toBe(false);
+    expect(isAppShortcut(ev("BracketLeft", { meta: true }, "["), true)).toBe(true);
+  });
+
+  it("the overlay carries the Linux note", async () => {
+    const { shortcutNotes, ALL_SHORTCUTS } = await import("../shortcutList");
+    const NOTE = "On Linux, Ctrl+Shift+[ and Ctrl+Shift+] switch sub-terminals in every tab, so the shell does not receive them.";
+    expect(shortcutNotes(false)).toContain(NOTE);
+    expect(shortcutNotes(true)).not.toContain(NOTE);
+    // Both keys are listed rows.
+    expect(ALL_SHORTCUTS.some((s) => s.keys === shortcutLabel("prevSubTerminal") && /sub-terminal/i.test(s.action))).toBe(true);
+    expect(ALL_SHORTCUTS.some((s) => s.keys === shortcutLabel("nextSubTerminal") && /sub-terminal/i.test(s.action))).toBe(true);
+
+    // The overlay shows this platform's notes (jsdom is not a Mac, so the Linux one).
+    const { createElement } = await import("react");
+    const { render, screen, cleanup } = await import("@testing-library/react");
+    const { default: ShortcutsOverlay } = await import("../../components/ShortcutsOverlay");
+    const { IS_MAC } = await import("../shortcuts");
+    expect(IS_MAC).toBe(false);
+    render(createElement(ShortcutsOverlay, { onClose: () => {} }));
+    expect(screen.getByText(NOTE)).toBeTruthy();
+    cleanup();
+  });
+});

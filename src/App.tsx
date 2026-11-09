@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState, lazy, Suspense } from "react"
 import TabBar from "./components/TabBar";
 import PaneContainer from "./components/PaneContainer";
 import TerminalPane from "./components/TerminalPane";
+import SubTerminalStrip, { SubTerminalAnnouncer, SUB_TERMINAL_CONTENT_ID } from "./components/SubTerminalStrip";
 import Scratchpad, { type ScratchpadHandle } from "./components/Scratchpad";
 import ShortcutsBar from "./components/ShortcutsBar";
 import ConfirmDialog from "./components/ConfirmDialog";
@@ -13,7 +14,6 @@ import Toast from "./components/Toast";
 import MethodologyPromptHost from "./components/MethodologyPrompt";
 import { togglePalette, useMethodologyPrompt } from "./lib/methodologyPrompt";
 import { hideSplash } from "./lib/splash";
-import { editorDirty, unsavedEditorTabs } from "./lib/editorDirty";
 import { useTerminalFocusGuard } from "./hooks/useTerminalFocusGuard";
 import { useContextGuard, toastLifetime, withdrawToast, type GuardToast } from "./hooks/useContextGuard";
 
@@ -39,21 +39,22 @@ const ShortcutsOverlay = lazy(() => import("./components/ShortcutsOverlay"));
 const TabSwitcher = lazy(() => import("./components/TabSwitcher"));
 const ContractsWorkbench = lazy(() => import("./components/ContractsWorkbench"));
 
-import { useTabStore, findAllPanes, saveSession, loadSession } from "./stores/tabStore";
+import { useTabStore, saveSession, loadSession, shownView } from "./stores/tabStore";
+import { tabFolderPtyId } from "./lib/tabDisplay";
+import { useOwnFolderCwd } from "./hooks/useOwnFolderCwd";
 import { flushNow } from "./lib/persistence";
 import { listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
 import { useKeybindings } from "./hooks/useKeybindings";
-import { hasActiveProcess, stopIdlePolling } from "./hooks/useTerminal";
+import { stopIdlePolling } from "./hooks/useTerminal";
+import { useGuardedClose } from "./hooks/useGuardedClose";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { watchAgentStatus } from "./stores/agentStatusStore";
 import { useAgentStatusToasts } from "./hooks/useAgentStatusToasts";
 
-/** How often the active terminal's folder is re-read to follow `cd`. */
-const CWD_POLL_MS = 3000;
 /** Session auto-save: after a tab/pane change, and periodically. */
 const SESSION_SAVE_DEBOUNCE_MS = 2000;
 const SESSION_SAVE_INTERVAL_MS = 20000;
@@ -72,29 +73,25 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const showShortcutBar = useSettingsStore((s) => s.showShortcutBar);
-  const [activeCwd, setActiveCwd] = useState<string | null>(null);
-  // For event handlers registered once.
-  const activeCwdRef = useRef<string | null>(null);
-  activeCwdRef.current = activeCwd;
   const [zoomedPane, setZoomedPane] = useState(false);
   const [toast, setToast] = useState<GuardToast | null>(null);
   const [recordingPlayerOpen, setRecordingPlayerOpen] = useState(false);
   const fileBrowserOpen = useFileBrowserStore((s) => s.isOpen);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
-  const { tabs, activeTabId, getActivePtyId, closeTab, closePane } = useTabStore();
+  const { tabs, activeTabId, getActivePtyId } = useTabStore();
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  // The active pane's PTY id, as a primitive so the subscription only fires when
-  // it actually changes. Panes start with ptyId: null and are filled in
+  // The PTY id of the pane whose folder is the active tab's folder (the own
+  // view's active pane), as a primitive so the subscription only fires when it
+  // actually changes. Panes start with ptyId: null and are filled in
   // asynchronously once create_pty resolves; cwd resolution must wait for that.
-  const activePtyId = useTabStore((s) => {
+  const folderPtyId = useTabStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
-    if (!tab) return null;
-    return findAllPanes(tab.root).find((p) => p.id === tab.activePaneId)?.ptyId ?? null;
+    return tab ? tabFolderPtyId(tab) : null;
   });
+  // The active tab's folder: its own view's, whatever view is in sight.
+  const activeCwd = useOwnFolderCwd(activeTab, folderPtyId);
+  // For event handlers registered once.
+  const activeCwdRef = useRef<string | null>(null);
+  activeCwdRef.current = activeCwd;
 
   // The first render is on screen: fade out the launch splash.
   useEffect(() => hideSplash(), []);
@@ -272,34 +269,6 @@ export default function App() {
     };
   }, []);
 
-  // Resolve the active terminal's cwd eagerly. Non-terminal tabs (fleet, editor,
-  // browser, orchestrator) have no PTY, so keep the last resolved value rather
-  // than clearing it — the fleet views read this while a fleet tab is focused.
-  //
-  // activePtyId is in the dependency list on purpose: getPtyCwd resolves null
-  // (it does not reject) while the pane's PTY has not been created yet, which is
-  // the state of every pane on the first render. Depending on the PTY id makes
-  // this re-run the moment create_pty lands, which is the only recovery path in
-  // a single-pane layout.
-  //
-  // It is also re-read every few seconds: a `cd` inside the terminal changes the
-  // folder without any React state changing, and the BMAD banner and the
-  // "This terminal" fleet view would otherwise keep using the old folder.
-  // (The file browser polls on its own for the same reason.)
-  useEffect(() => {
-    const paneId = activeTab?.activePaneId;
-    if (!paneId) return;
-    if (activeTab?.type && activeTab.type !== "terminal") return;
-    let cancelled = false;
-    const resolve = () =>
-      import("./hooks/useTerminal").then(({ getPtyCwd }) =>
-        getPtyCwd(paneId).then((cwd) => { if (cwd && !cancelled) setActiveCwd(cwd); }),
-      ).catch(() => {});
-    resolve();
-    const id = window.setInterval(resolve, CWD_POLL_MS);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [activeTab?.type, activeTab?.activePaneId, activePtyId]);
-
   // Not over the BMAD version question or the switch's confirm step.
   const toggleCommandPalette = useCallback(() => setPaletteOpen(togglePalette), []);
 
@@ -339,88 +308,9 @@ export default function App() {
     });
   }, []);
 
-  // Guarded close: confirm before discarding unsaved edits or killing a live process.
-  const requestCloseTab = useCallback((tabId: string) => {
-    const tab = tabs.find((t) => t.id === tabId);
-    if (!tab) return;
-
-    if (tab.type === "editor") {
-      editorDirty(tabId).then((isDirty) => {
-        if (isDirty && !confirm("This file has unsaved changes. Close anyway?")) return;
-        closeTab(tabId);
-      });
-      return;
-    }
-
-    const activeProcesses = findAllPanes(tab.root)
-      .map((p) => hasActiveProcess(p.id))
-      .filter((name): name is string => name !== null);
-
-    if (activeProcesses.length > 0) {
-      setConfirmDialog({
-        title: "Active process running",
-        message: `This tab has a live ${activeProcesses[0]} session. Closing it will terminate the process. Are you sure?`,
-        onConfirm: () => {
-          closeTab(tabId);
-          setConfirmDialog(null);
-        },
-      });
-    } else {
-      closeTab(tabId);
-    }
-  }, [tabs, closeTab]);
-
-  const requestClosePane = useCallback((tabId: string, paneId: string) => {
-    const processName = hasActiveProcess(paneId);
-    if (processName) {
-      setConfirmDialog({
-        title: "Active process running",
-        message: `This pane has a live ${processName} session. Closing it will terminate the process. Are you sure?`,
-        onConfirm: () => {
-          closePane(tabId, paneId);
-          setConfirmDialog(null);
-        },
-      });
-    } else {
-      closePane(tabId, paneId);
-    }
-  }, [closePane]);
-
-  // Tab close requests from TabBar (X button / context menu).
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { tabId } = (e as CustomEvent).detail;
-      requestCloseTab(tabId);
-    };
-    window.addEventListener("request-close-tab", handler);
-    // Close others / to the right: one confirmation for all of them.
-    const closeMany = (e: Event) => {
-      const ids: string[] = (e as CustomEvent).detail?.tabIds ?? [];
-      const targets = tabs.filter((t) => ids.includes(t.id));
-      const live = targets.filter((t) => findAllPanes(t.root).some((p) => hasActiveProcess(p.id) !== null));
-      const close = () => { for (const t of targets) closeTab(t.id); setConfirmDialog(null); };
-      // hasActiveProcess reads an xterm buffer, so it is null for every editor
-      // tab. Without asking them too, "Close others" discarded unsaved files
-      // with no prompt, while closing the same tab on its own warned.
-      void unsavedEditorTabs(targets).then((unsaved) => {
-      if (live.length === 0 && unsaved.length === 0) return close();
-      const parts = [
-        live.length > 0 && `${live.length} ${live.length === 1 ? "has" : "have"} a live session that will be terminated`,
-        unsaved.length > 0 && `${unsaved.length} ${unsaved.length === 1 ? "has" : "have"} unsaved changes that will be lost`,
-      ].filter(Boolean) as string[];
-      setConfirmDialog({
-        title: unsaved.length > 0 ? "Unsaved changes" : "Active process running",
-        message: `Of these ${targets.length} tabs, ${parts.join(", and ")}. Close ${targets.length} tabs?`,
-        onConfirm: close,
-      });
-      });
-    };
-    window.addEventListener("request-close-tabs", closeMany);
-    return () => {
-      window.removeEventListener("request-close-tab", handler);
-      window.removeEventListener("request-close-tabs", closeMany);
-    };
-  }, [requestCloseTab, tabs, closeTab]);
+  // Guarded close: confirm before discarding unsaved edits or killing a live
+  // process, on every close path (see useGuardedClose).
+  const { confirmDialog, setConfirmDialog, requestCloseTab, requestClosePane, requestCloseView } = useGuardedClose();
 
   useKeybindings({
     toggleScratchpad,
@@ -443,6 +333,7 @@ export default function App() {
     toggleTabSwitcher,
     requestCloseTab,
     requestClosePane,
+    requestCloseView,
     isScratchpadOpen: scratchpadRef.current?.isOpen ?? false,
   });
 
@@ -477,9 +368,19 @@ export default function App() {
                     ? <Suspense fallback={null}>
                         <ContractsWorkbench key={activeTab.contractsRoot} root={activeTab.contractsRoot} />
                       </Suspense>
-                    : zoomedPane
-                    ? <TerminalPane paneId={activeTab.activePaneId} tabId={activeTab.id} />
-                    : <PaneContainer node={activeTab.root} tabId={activeTab.id} />
+                    : <div className="flex flex-col h-full">
+                        {/* Shows only while the tab has a sub-terminal. */}
+                        <SubTerminalStrip key={activeTab.id} tabId={activeTab.id} />
+                        <div
+                          id={SUB_TERMINAL_CONTENT_ID}
+                          className="flex-1 min-h-0"
+                          role={activeTab.viewOrder.length > 1 ? "tabpanel" : undefined}
+                        >
+                          {zoomedPane
+                            ? <TerminalPane paneId={shownView(activeTab).activePaneId} tabId={activeTab.id} />
+                            : <PaneContainer node={shownView(activeTab).root} tabId={activeTab.id} />}
+                        </div>
+                      </div>
           )}
         </div>
         {previewOpen && (
@@ -541,10 +442,12 @@ export default function App() {
         <ConfirmDialog
           title={confirmDialog.title}
           message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
           onConfirm={confirmDialog.onConfirm}
           onCancel={() => setConfirmDialog(null)}
         />
       )}
+      <SubTerminalAnnouncer />
       {/* After the panels in the DOM, so it sits over one that raised it. */}
       <MethodologyPromptHost />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
