@@ -522,6 +522,7 @@ pub fn run() {
             pty::create_pty,
             pty::write_pty,
             pty::pty_line_editor_ready,
+            pty::pty_shell_name,
             pty::resize_pty,
             pty::reattach_pty,
             pty::kill_pty,
