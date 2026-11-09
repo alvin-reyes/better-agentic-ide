@@ -2311,11 +2311,12 @@ clarification for slice 0.
 <!-- F2 begins -->
 ## F2: Agentic-environment onboarding
 
-- **Status:** Draft (revision 2, 2026-11-09). The owner answered F2.9 Q1 to Q8
-  (2026-11-09); revision 1's adversarial review BLOCKED it, and revision 2 answers
-  every finding (F2.12). Not approved, not sharded. Next: a delta review of revision
-  2, the owner's answers to the new questions (F2.9 Q9 to Q11), then the designer
-  (screens and copy) and the architect (how ADE runs the steps).
+- **Status:** Draft (revision 3, 2026-11-09). The owner answered F2.9 Q1 to Q11
+  (2026-11-09). Revision 1's review BLOCKED it and revision 2 answered it; revision
+  2's delta review BLOCKED it on N1 and N2, and revision 3 answers every finding of
+  both (F2.12). Not approved, not sharded. Next: a delta review of revision 3, the
+  owner's answer to F2.9 Q12, then the designer (screens and copy) and the architect
+  (how ADE runs the steps).
 - **Source:** the owner, 2026-11-09: *"in ADE a user can choose to open terminal or set
   up your agentic environment with questions to configure the ai-agent for the
   developer for a project."* And: *"when the developer uses ADE, it starts a claude code
@@ -2344,6 +2345,18 @@ clarification for slice 0.
     first-launch default, preflight for the Command Line Tools and the git identity,
     the completion rule for an existing hub, and slice 1 cut to questions 2 to 7 and
     9. G4 restated. Q1 recorded in F1's history as a change note.
+  - 2026-11-09: the owner's answers to F2.9 Q9 to Q11 recorded (commit 48a2921).
+  - 2026-11-09, revision 3: answers revision 2's delta review (N1 to N6 and its
+    minors, F2.12) and applies Q9 to Q11. Main changes: the git identity is checked
+    as git resolves it for a new repository (OB-4 AC2); the bundled-tarball
+    comparison and parity test are release gates in `release.yml`'s macOS job, with
+    a PR-CI twin on a fixture tarball (OB-5 AC6, AC7); the run's steps start from an
+    argument vector, never typed into a shell (OB-4 AC6); `bin/setup`'s memory
+    links are disclosed and undone (OB-3 AC3, OB-5 AC4); OB-13's marker is the
+    template's own top-level files; relay masking waits for phone-watch story 8
+    (F2.8) under a new contract `.ade/context/remote-tabs.md`; the hub-tab flag is
+    defined across tab operations (OB-14 AC5); OB-12 follows Q9 (exit 1 opens no
+    window). New question Q12.
 
 ### F2.1 Problem
 
@@ -2498,11 +2511,14 @@ where the developer is.
    refused inline: "this hub was not finished: hub.conf is not committed", with the
    two ways on: commit it by hand (`git add -A && git commit`), or move the folder to
    the Trash and start a new hub. Any other folder is refused inline ("not a hub: no
-   hub.conf"). Nothing is written in any case. An option, off by default, runs
-   `bin/setup` then `bin/doctor` there first (for a hub cloned onto this Mac by hand).
-   Tests: a finished hub starts the session with nothing written to the folder; an
-   unfinished one and a folder without `hub.conf` are each refused; the option on
-   runs both scripts first, in that tab.
+   hub.conf"). In every case nothing is written to the folder **by ADE**; the persona
+   session (Claude Code and the hub's hooks) and, when chosen, the scripts below write
+   there as they do when run by hand. An option, off by default, runs `bin/setup`
+   then `bin/doctor` there first (for a hub cloned onto this Mac by hand); the
+   option shows OB-3 AC3's memory notice. Tests: with a stub Claude command that
+   writes nothing, a finished hub's folder is byte-for-byte unchanged after the
+   session starts; an unfinished one and a folder without `hub.conf` are each
+   refused; the option on runs both scripts first, in that tab.
 3. **New hub at an existing path:** a hub folder path that is a finished hub is
    refused inline with an offer to use it as an existing hub instead (AC2). Any other
    existing path, an unfinished hub included, is refused ("already exists"); the run
@@ -2588,9 +2604,26 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
 3. **The review step** lists every answer, the folders the run will create (the hub
    folder, and its parent when OB-2 AC4 applies), and the exact commands the run
    will execute, in order, before anything is written. It says the hub folder's name
-   holds the client's name and is kept in ADE's saved session (OB-14). Confirming runs
+   holds the client's name and is kept in ADE's saved session, and in any saved
+   workspace the developer saves with the hub tab in it (OB-14). Confirming runs
    the preflight (OB-4 AC2) and then starts the run; Back keeps the answers. Test: the
    listed `bin/init` command equals the one the run executes.
+   - **The memory notice.** When question 7 has a repo with a checkout, the review
+     step says what step (f)'s `bin/setup` does to Claude's memory for that
+     checkout, before anything is written: it copies Claude's existing memory for
+     the checkout's path (in the Claude config folder, `projects/<encoded
+     path>/memory`) into the hub's work-area `memory/` folder, without overwriting
+     (`cp -n`), where the hub's git can commit it and the hub's sync can push it;
+     it renames the original folder to `memory.bak-<timestamp>` beside it; and it
+     links the checkout's memory to the hub's from then on, so every Claude session
+     in that checkout, started in the hub or not, reads and writes the hub's memory.
+     The notice names each checkout path, and says that undo (OB-5 AC4) restores
+     the originals. Test: a run with a repo `o/r=/x/r` lists `/x/r` in the notice;
+     a run without a checkout shows no notice.
+   - The review step also says, for every run, that `bin/setup` links the hub's
+     `bmad-*` skills into the Claude config folder's `skills/` (skipping any name
+     already there), so every Claude session using that config folder loads them.
+     Test: the line is present.
 4. Answering only questions 2 to 5 is enough to start the run. Test: a run with only
    those answers completes (OB-5) on a fixture template.
 
@@ -2603,8 +2636,9 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      command in the terminal: the tab shows one line saying what was unpacked where.
    - (b) `bin/init` with the answers, in place;
    - (c) a first local commit of the hub (`git add -A`, `git commit -m "Initialize
-     the hub"`), so `hub.conf` is committed as the README requires and the hub is
-     finished (F2.5);
+     the hub"`), then `git ls-files --error-unmatch hub.conf`, so `hub.conf` is
+     proven committed as the README requires and the hub is finished (F2.5); if the
+     check fails (for example a template that ignores `hub.conf`), (c) fails;
    - (d) for each secret name, `bin/secret --set <name>`, as OB-7 says;
    - (e) OB-8's GitHub step, if chosen (slice 2);
    - (f) `bin/setup`;
@@ -2613,9 +2647,10 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    - (g) `bin/schedule install`, if chosen (slice 2);
    - (h) `bin/doctor`;
    - (i) the persona session (OB-6).
-   Each command of (b) to (i) is shown in that terminal with its full output. Test:
+   Each command of (b) to (i) is shown in that terminal with its full output. Tests:
    on a fixture template, the tab shows the line for (a), then each command and its
-   output in this order.
+   output in this order; a fixture template whose `.gitignore` lists `hub.conf`
+   fails at (c).
 2. **Preflight,** when the review step is confirmed and before (a); a failure names
    what is missing and how to fix it, writes nothing and keeps the answers:
    - the Command Line Tools: `xcode-select -p` succeeds. On a Mac without them,
@@ -2623,13 +2658,24 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      so ADE checks this first and never runs either stub; the fix is
      `xcode-select --install`;
    - `git` and `python3` run (`bin/init` needs both);
-   - a git identity: `git config user.name` and `git config user.email` both give a
-     value for the hub folder's parent (step (c) commits); the fix is the two
+   - a git identity (step (c) commits): `user.name` and `user.email` both have a
+     value **as git resolves them outside any repository**, that is from the system
+     and global config (`/etc/gitconfig` or its equivalent, `~/.gitconfig`,
+     `~/.config/git/config`) and the files they include unconditionally. Not from
+     the hub folder's parent or any existing ancestor: the parent may not exist yet
+     (OB-2 AC4, `~/hubs` on a fresh Mac), and the hub is a new repository of its own
+     (`bin/init` runs `git init`), so no enclosing repository's local config ever
+     applies to it. The stated limit: an identity set only by a conditional include
+     (`includeIf "gitdir:…"`) that would match the hub once it exists is not seen,
+     so that setup is refused with the fix. The fix is the two
      `git config --global` commands.
    Tests: with `xcode-select -p` failing, no `git` or `python3` is started and the
    message names the Command Line Tools; with `python3` absent from `PATH`, the
-   message names it; with no `user.email`, the message names it; nothing is written
-   in each case.
+   message names it; with no `~/hubs` and a valid global identity (an isolated
+   `HOME` holding only `.gitconfig`), the preflight passes; with no global
+   `user.email`, the message names it, also when the hub folder's would-be parent
+   sits inside a repository whose local config sets one; nothing is written in each
+   case.
 3. **The run works with no network:** (a) to (d) and (f) to (h) need none, and the
    template is bundled (ADR 0025; ADE never downloads it). (e) needs the network and
    says so if it fails; `bin/doctor` reports what it cannot reach, as it does today.
@@ -2641,16 +2687,36 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    prints `MISSING` lines still leads to (i).
 5. The tab's label is "Agent hub" (the bundling plan's label), not the client's or
    hub's name. Test: the label.
-6. **Answers are arguments, never shell text.** Every answer reaches `bin/init` (and
-   every other step) as exactly one argument, byte for byte, and is never
-   interpreted by a shell: no expansion, substitution, history expansion or word
-   splitting. The command shown in the tab and in the review step is quoted so that,
-   copied into a shell, it means the same. How ADE does this (an argument vector, or
-   proven quoting) is the architect's. Tests: a client and owner of `a!b`,
-   `$(touch /tmp/pwned)`, `` `id` ``, `O'Brien "Bob"`, `Zoë 日本` and `a;b|c` each
-   reach `hub.conf` unchanged (as `bin/init`'s `printf %q` writes them) and run
-   nothing (no `/tmp/pwned`); a value with U+202E (right-to-left override) or U+200B
-   is refused before the run by the text rule.
+6. **Answers are arguments, never shell text.** ADE starts each command of (b) to
+   (i) in the hub tab's terminal **from an argument vector** (the program and its
+   arguments, as `execve` takes them), never by typing it into an interactive shell.
+   So every answer reaches `bin/init` (and every other step) as exactly one argument,
+   byte for byte, and no shell reads it: no expansion, substitution, history
+   expansion or word splitting, and **no line in the developer's shell history**
+   (`~/.zsh_history` never holds a client's or owner's name from a run). Answers are
+   not limited to typeable characters: any value the text rule (F2.5) accepts is
+   passed as it is. Each command runs with the environment a new terminal tab gets
+   (its login shell's `PATH`), so `claude`, `gh` and `python3` resolve as they do
+   when typed; how ADE builds that environment and observes each command's exit is
+   the architect's.
+   - **The command shown** in the tab before each step, and in the review step, is
+     quoted with ADE's one shell quoter (`shellQuote`, ADR 0008), so that, copied
+     into sh, bash, zsh or fish, it means the same arguments. It is shown only; it
+     is never typed.
+   - **After the persona session exits**, or when the run ends at a failed step
+     without going on (Keep it, or the failure notice closed without Retry), the
+     tab starts the developer's login shell in the hub folder, as a new terminal tab
+     does, and stays open. Nothing is re-run.
+   Tests: a client and owner of `a!b`, `$(touch /tmp/pwned)`, `` `id` ``,
+   `O'Brien "Bob"`, `Zoë 日本`, `a;b|c`, `C:\x\y` and `a\'; touch /tmp/pwned2; #`
+   (ADR 0008's fish case) each reach `hub.conf` unchanged (as `bin/init`'s
+   `printf %q` writes them) and run nothing (no `/tmp/pwned`, no `/tmp/pwned2`);
+   the shown command for each, run through `sh`, `bash`, `zsh` and `fish` (when
+   present) with a stub `bin/init` that prints its arguments, gives the same
+   arguments; after a run with an isolated `HISTFILE`, the history file holds no
+   answer; when the stub Claude command exits, the tab shows a shell prompt in the
+   hub folder; a value with U+202E (right-to-left override) or U+200B is refused
+   before the run by the text rule.
 
 #### OB-5. Failure and undo (MVP)
 
@@ -2686,11 +2752,16 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    it does, in order:
    - if (g) ran in this run: `bin/schedule uninstall` in the hub, shown in the tab;
    - if (f) ran in this run: `bin/setup --unlink` (template change T4), which
-     removes the links `bin/setup` made into the hub from the Claude config folder
-     (each folder's `projects/<encoded path>/memory` link, and each `skills/bmad-*`
-     link whose target is inside the hub) and restores any memory folder it set
-     aside. While the bundled template has no T4, the confirmation lists those links
-     by path to remove by hand instead;
+     removes every link `bin/setup` made into the hub from the Claude config folder:
+     the `projects/<encoded path>/memory` link of the hub folder, of each work area
+     and of **each checkout path** (question 7), and each `skills/bmad-*` link whose
+     target is inside the hub; and then, for each of those memory links, renames the
+     `memory.bak-<timestamp>` folder set aside in this run back to `memory`. "Set
+     aside in this run" means a timestamp at or after the run's start; an older
+     `.bak-` folder is left alone. While the bundled template has no T4, ADE does
+     neither: the confirmation lists each link by path, and each `.bak-` folder of
+     this run with the two commands that restore it (`rm <link>`, then
+     `mv <bak> <original>`), to do by hand;
    - moves the hub folder to the Trash, and its parent too when this run created it
      and it is then empty (OB-2 AC4).
    It never touches a GitHub repo or Keychain entries: the confirmation lists, as
@@ -2698,8 +2769,14 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    (with `gh repo delete` and `bin/secret --forget <name>` to remove them by hand;
    it runs `--forget` only if the developer later runs it). Tests: a folder with a
    later commit is not offered; a pre-existing folder is never removed; after (g),
-   removal runs `bin/schedule uninstall` and no hub job stays loaded; after (f),
-   with T4, no link into the removed folder stays in the Claude config folder.
+   removal runs `bin/schedule uninstall` and no hub job stays loaded; after (f) on
+   a run with a checkout `/x/r` whose Claude memory existed before the run (and an
+   older `memory.bak-` folder beside it), with T4: no link into the removed folder
+   stays in the Claude config folder, `/x/r`'s memory folder is back with its
+   original files, and the older `.bak-` folder is untouched; without T4: the
+   confirmation lists the hub, work-area and `/x/r` links and this run's `.bak-`
+   folder with its restore commands, and nothing in the Claude config folder is
+   changed by ADE.
 5. **Closing the hub tab, or quitting, during the run.**
    - During (a) or (b): ADE asks "Stop setting up and remove <hub folder>?" with
      **Remove** (stops the run and does AC4's removal) and **Keep** (stops the run
@@ -2710,10 +2787,25 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    - **After a restart** (Better Terminal quit, crashed, or the Mac restarted during
      the run), the run never resumes and ADE does not record runs in progress. The
      tab, if restored, is an ordinary hub tab in the folder (OB-14), with no command
-     re-run. The folder is then a finished hub (if (c) ran), opened through OB-2 AC2,
-     or an unfinished one, which OB-2 AC2 and AC3 refuse with the way on. Test: kill
-     Better Terminal during (b), relaunch: no step runs, the folder is refused as
-     unfinished by both paths.
+     re-run. What is left depends on when the run stopped:
+     - **during (a):** the hub folder does not exist (S4a renames into it only at
+       the end). S4a's hidden temporary sibling, `<parent>/.<name>.ade-tmp-<random>`,
+       may be left, because S4a removes it only on an error it sees. ADE does not
+       treat it as a hub, OB-13 keeps project setup out of it, and a new run to the
+       same hub folder works (the temporary name is random). The guide says it can
+       be deleted.
+     - **during (b), before `bin/init` has written `hub.conf`:** the folder holds
+       the unpacked template and no `hub.conf`; OB-2 AC2 refuses it as "not a hub"
+       and OB-2 AC3 as "already exists".
+     - **after `hub.conf` is written and before (c) commits it:** an unfinished hub,
+       which OB-2 AC2 and AC3 refuse with the way on.
+     - **from (c) on:** a finished hub, opened through OB-2 AC2.
+     Tests, one per case, each by killing Better Terminal at that point (a fixture
+     `bin/init` that blocks before, and one that blocks after, writing `hub.conf`)
+     and relaunching: no step runs; during (a), no hub folder, and a new run to the
+     same path succeeds; before `hub.conf`, refused as "not a hub" and "already
+     exists"; after it, refused as unfinished by both paths; after (c), opened as an
+     existing hub.
 6. **Same hub as the CLI (G2).** For a fixed set of answers, the hub folder after (b)
    equals, file by file (content, mode and symlink target), what `bin/init --dest
    <tmp> <same options>` makes from the same template, with these normalisations and
@@ -2728,20 +2820,37 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      both.
    Both runs use the same isolated `HOME` and the same `--claude-config-dir` (a
    temporary folder), so neither reads the developer's or the runner's real
-   `~/.claude` or global git config. The test runs against the **bundled template
-   tarball** (S2's artifact, as a release build ships it), not the template's source
-   tree, on a **macOS runner** in CI. Test: that comparison; and a planted difference
-   (an extra file in ADE's tree) fails it.
-7. **Options and checks stay in step with the template.** A release check fails the
-   release if any `bin/init` option ADE can pass is missing from the bundled
-   `bin/init`'s usage text. A **parity table test** runs each row of a table of
-   inputs (at least one accepted and one refused value per OB-3 AC2 rule, including
-   a hub name starting with `-`, an empty-slug client, and a `--claude` value with a
-   space) through ADE's checks and through the bundled `bin/init` (in a temporary
-   folder), and fails when they disagree on accept or refuse, except for rows marked
-   as the text rule's stricter refusals. Tests: a fixture whose usage drops
-   `--staging-url` fails the release check; a fixture `bin/init` that accepts
-   `-x-engineer` as a name fails the parity test.
+   `~/.claude` or global git config. The comparison runs in two places, on macOS:
+   - **In PR CI (a test):** against a **fixture tarball** built by S2's own
+     archiver (`scripts/hub-template/bundle.sh`, with its manifest and S2's check)
+     from a **public fixture template** kept in this repository's test fixtures: a
+     small hub template with its own `bin/init` that takes the options of OB-3 and
+     writes the absolute hub path into the files listed above. The private
+     template's tarball exists only inside a release run (the bundling plan's
+     section 2.2, step 8), so PR CI never has it. This proves ADE's run, the
+     normalisations and the comparison itself.
+   - **In a release (a gate):** against the **bundled template tarball** that the
+     release ships (S2's artifact), in `release.yml`'s macOS build job, after the
+     tarball is downloaded and before any installer is uploaded. A failure fails
+     the release.
+   Tests: in PR CI, the fixture comparison passes, and a planted difference (an
+   extra file in ADE's tree) fails it; the release gate is a step of the macOS job
+   that S3's structure tests assert exists and runs before the upload.
+7. **Options and checks stay in step with the template.** Two checks, each run in
+   the same two places as AC6 (PR CI on the fixture tarball; a gate in the release's
+   macOS build job on the bundled tarball):
+   - an **options check** fails if any `bin/init` option ADE can pass is missing
+     from that `bin/init`'s usage text;
+   - a **parity table test** runs each row of a table of inputs (at least one
+     accepted and one refused value per OB-3 AC2 rule, including a hub name starting
+     with `-`, an empty-slug client, and a `--claude` value with a space) through
+     ADE's checks and through that `bin/init` (in a temporary folder), and fails
+     when they disagree on accept or refuse, except for rows marked as the text
+     rule's stricter refusals. The fixture `bin/init` implements the same checks as
+     the bundled one for every row, so the table passes on both.
+   Tests (PR CI): a fixture whose usage drops `--staging-url` fails the options
+   check; a fixture `bin/init` that accepts `-x-engineer` as a name fails the parity
+   test; both gates exist in the release's macOS build job before the upload.
 
 #### OB-6. The persona session starts in Better Terminal (MVP)
 
@@ -2749,17 +2858,21 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    tab, with `CLAUDE_CONFIG_DIR` set to the hub's `HUB_CLAUDE_CONFIG_DIR` when
    `hub.conf` sets one (as the template's own launchers do); when it sets none,
    `CLAUDE_CONFIG_DIR` is left as the tab's environment has it. The install is
-   question 14's, or, for an existing hub, `HUB_CLAUDE` in its `hub.conf`. Tests: the
-   tab's last command is the configured Claude command in the hub folder; with
-   `--claude claude-work` it is `claude-work`; with `--claude-config-dir /x/cfg`, the
-   session's environment has `CLAUDE_CONFIG_DIR=/x/cfg`.
+   question 14's (slice 2; in slice 1, `bin/init`'s default `claude`), or, for an
+   existing hub, `HUB_CLAUDE` in its `hub.conf`. Tests (slice 1): the run's last
+   command is `claude` in the hub folder; an existing hub whose `hub.conf` has
+   `HUB_CLAUDE=claude-work` and `HUB_CLAUDE_CONFIG_DIR=/x/cfg` starts `claude-work`
+   with `CLAUDE_CONFIG_DIR=/x/cfg`. Tests (slice 2, with question 14): a run with
+   `--claude claude-work` ends in `claude-work`; with `--claude-config-dir /x/cfg`,
+   the session's environment has `CLAUDE_CONFIG_DIR=/x/cfg`.
 2. **Reading `hub.conf` without running it.** ADE never runs `hub.conf` as a script in
    its own process. It reads `HUB_CLAUDE` and `HUB_CLAUDE_CONFIG_DIR` as literal
    values in the forms `bin/init` writes (one `KEY=value` line each, quoted with
    `printf %q`). A value it cannot read as a literal (an expansion, a command
    substitution, a line that is not a plain assignment, or a `HUB_CLAUDE` outside
-   `^[A-Za-z0-9._/-]+$`) is not used: the hub tab opens in the folder with no
-   command typed, and a notice says which line and to start Claude by hand. Tests: a
+   `^[A-Za-z0-9._/-]+$`) is not used: the hub tab opens in the folder with only the
+   login shell running (OB-4 AC6), and a notice says which line and to start Claude
+   by hand. Tests: a
    `hub.conf` written by `bin/init` is read; one with `HUB_CLAUDE=$(evil)` starts
    nothing and shows the notice.
 3. If the Claude command is not found, the tab says so, and the hub is kept. Test.
@@ -2786,7 +2899,9 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    logs, recordings), in nothing ADE syncs (Settings → Sync), and in nothing it
    relays to a paired phone (a capture of the relayed traffic, decrypted with the
    test's keys). The marker is in the Keychain under the hub's service. Test: a scan
-   for the marker after the run.
+   for the marker after the run. The relay capture applies once phone-watch story 8
+   (ADE's Remote bridge) exists (F2.8); until then ADE relays nothing and that part
+   of the scan is not run.
 
 #### OB-8. A private GitHub repo, optional (MVP slice 2)
 
@@ -2840,23 +2955,32 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    prompt history, notes, snapshots, agent tracker or logs, and so never synced or
    relayed. Test: after a run with marker answers, a scan of ADE's data folder and of
    the relayed traffic finds no answer, except the hub folder's path as AC2 allows.
+   The relayed-traffic part applies once phone-watch story 8 exists (F2.8).
 2. **What ADE does keep and send about a hub,** stated honestly:
    - **The hub folder's path** (which holds the client's name by default) is kept in
      ADE's saved session (`ade-session`), as every tab's folder is, so the tab can be
-     restored. The session stays on this Mac and is pushed to the developer's own
+     restored (owner's answer to Q11), and in a saved workspace that holds the tab
+     (OB-14 AC5). The session stays on this Mac and is pushed to the developer's own
      sync repo when Settings → Sync is on. The review step says so (OB-3 AC3).
    - **Nothing a hub tab shows** is kept: its scrollback is not saved (OB-14 AC1).
-   - **The paired phone** sees a hub tab as "Agent hub", not its folder or project
-     name (OB-14 AC2). If the developer opens a hub tab on the phone, the phone shows
-     that tab's live output, end-to-end encrypted (ADR 0005), as for any tab.
+   - **The paired phone** (the approved phone piece 2a, watching only) receives, for
+     each tab, its title, its project and its agent's state with the state's age,
+     end-to-end encrypted (ADR 0005); never a tab's output. A hub tab is sent with
+     "Agent hub" as both title and project, not its folder or project name (OB-14
+     AC2), and its agent state as for any tab. A later phone piece that relays more
+     of a tab must state its rule for hub tabs.
    - **A recording** the developer makes of a hub tab holds what the tab showed (but
      not a secret value, which `bin/secret` does not echo).
    - **What Claude Code and the template keep** (Claude's own transcripts and
      memory, the hub's journal and git history) is theirs, in the hub and the Claude
      config folder, not ADE's.
 3. ADE sends nothing about onboarding anywhere: no telemetry, no network request
-   except OB-8's when question 8 is turned on. Test: a run without question 8 makes no
-   network request from ADE's own process.
+   except OB-8's when question 8 is turned on (its `gh auth status` and step (e)).
+   This covers ADE's own process only. The run's child processes are the
+   template's scripts, git and Claude Code, which reach the network as they do when
+   run by hand (`bin/doctor`'s checks, the persona session), and are not counted.
+   Test: a run without question 8 makes no network request from ADE's own process
+   (child processes excluded from the measurement).
 4. The hub repo, when created, is private (OB-8 AC1).
 
 #### OB-11. Accessibility (MVP)
@@ -2875,8 +2999,11 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    and its options) and each secret's Store/Skip notice are announced through a live
    region when they appear, and focus moves to them. The secret notice says that the
    value goes into a hidden prompt in the terminal, that nothing will appear while
-   typing, and to press Enter when done. Tests: each notice is announced and takes
-   focus.
+   typing, and to press Enter when done. After **Store**, focus moves to the hub
+   tab's terminal, where `bin/secret`'s hidden prompt waits, so the value is typed
+   there with no extra key; after Skip, focus moves to the next notice, or to the
+   terminal when there is none. Tests: each notice is announced and takes focus;
+   after Store, the terminal has focus and keystrokes reach the prompt.
 4. Focus moves into the choice and the questionnaire when they open, is trapped there
    while open, and returns to a sensible place when they close (the new tab, or the
    control that opened them). Test.
@@ -2889,13 +3016,21 @@ The template side is the template's story W1 (PR #10 in `ai-agent-hub-template`)
 this requirement is what ADE and W1 must agree on.
 
 1. **Inside an ADE terminal** means, as W1 decides it, that `ADE_HOOK_BIN` is an
-   executable file and `ADE_HOOK_PORT`, `ADE_HOOK_TOKEN` and `ADE_PTY_ID` are all
-   set. There, `bin/work <folder>` runs `"$ADE_HOOK_BIN" open --cwd <checkout> --name
-   <folder> --focus -- bash -l <launcher>` and never `osascript`, so the focus session
-   opens as a sub-terminal of the caller's tab in Better Terminal. A sub-terminal of a
-   hub tab is a hub tab (OB-14). Test (template side, with `ade open` stubbed): with
-   the four variables set, `bin/work` calls `ade open` with those arguments and never
-   `osascript`.
+   executable file, `ADE_HOOK_PORT`, `ADE_HOOK_TOKEN` and `ADE_PTY_ID` are all set,
+   and `"$ADE_HOOK_BIN" help` answers as the `ade` CLI. A Better Terminal build
+   without the CLI (before story 4) sets the variables but its hook binary is not
+   the CLI, so `bin/work` takes today's window path there. Note for W1: today's hook
+   mode exits 0 for any argument (`.ade/context/terminal-open.md`, "Mode"), so the
+   probe must check what `help` prints (the usage naming `open`), not only its exit
+   status. Inside an ADE terminal, `bin/work <folder>` runs `"$ADE_HOOK_BIN" open
+   --cwd <checkout> --name <folder> --focus -- bash -l <launcher>` and never
+   `osascript`, so the focus session opens as a sub-terminal of the caller's tab in
+   Better Terminal. A sub-terminal of a hub tab is a hub tab (OB-14). Tests
+   (template side, with `ade open` stubbed): with the four variables set and a
+   `help` that prints the CLI's usage, `bin/work` calls `ade open` with those
+   arguments and never `osascript`; with the four variables set and a hook binary
+   whose `help` prints nothing and exits 0, `bin/work` opens today's window and
+   never calls `open`.
 2. **What each `ade open` exit means to `bin/work`** (`.ade/context/terminal-open.md`):
    - **0** (opened and typed): done.
    - **5** (opened, not typed): `bin/work` says so and prints the command to type in
@@ -2904,12 +3039,20 @@ this requirement is what ADE and W1 must agree on.
      never run, they stay in the temporary folder; they hold no secret value. Test:
      exit 5 prints a command that, run in the sub-terminal, starts the session and
      removes the files.
-   - **1** (ADE answered with a refusal, or did not answer in 15 s), **3** (the ADE
-     variables are unset or malformed) and **4** (that ADE is gone or the terminal
-     closed): `bin/work` prints a warning with `ade open`'s message and falls back to
-     today's Terminal.app or iTerm window.
+   - **1** (ADE answered with a refusal, or did not answer in 15 s): `bin/work`
+     never opens a window outside Better Terminal (owner's answer to Q9). It prints
+     `ade open`'s message (ADE's error) and the manual hint: the command that starts
+     the focus session by hand, in a terminal the developer chooses. The launcher
+     and its temporary files are kept, as for exit 5, so the hint works. It exits
+     non-zero.
+   - **3** (the ADE variables are unset or malformed) and **4** (that ADE is gone,
+     or the terminal closed): ADE cannot be reached, so `bin/work` prints a warning
+     with `ade open`'s message and falls back to today's Terminal.app or iTerm
+     window. These are the only exits that open a window.
    - **2** (usage): `bin/work` fails with the message and opens nothing.
-   Outside an ADE terminal, `bin/work` behaves as today. Test: one case per exit code.
+   Outside an ADE terminal, `bin/work` behaves as today. Tests: one case per exit
+   code; exit 1 (a refusal, and a 15 s timeout) runs no `osascript` and prints the
+   message and the hint, and the hint run by hand starts the session.
 3. Requires ADE stories 4 and 9 and template story W1 (F2.8). Until all three are
    done, `bin/work` behaves as today; nothing else in F2 waits for them.
 
@@ -2930,18 +3073,33 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
    - a hub folder of an F2 run in this launch of Better Terminal, from the moment the
      run starts (a) until it ends, so the unpacked template is covered before
      `bin/init` has written `hub.conf`; or
-   - an unpacked hub template, recognised by a marker in the bundled template that
-     the architect names (for example the bundle's manifest from S2), so a folder
-     left by a run interrupted before `hub.conf`, after a restart, is covered too.
-   Asked-for setup of such a folder is refused, naming the hub; setup of a folder
-   that **contains** a hub sets up only that folder and writes nothing into the hub.
+   - **an unpacked hub template**, recognised by the template's own top-level
+     files: a folder with, at its top, an executable `bin/init`, a `templates/hub/`
+     folder and a `personas/` folder. (The bundle's manifest, `hub-template.json`,
+     is never unpacked into the hub folder, so it cannot be the marker.) This
+     covers a folder left by a run interrupted before `hub.conf`, after a restart,
+     S4a's hidden `.<name>.ade-tmp-*` folder, and every hub (`bin/init` copies
+     these files into it). It also covers **the template's own source**: a clone of
+     the hub template on this Mac is excluded from project setup too, which is
+     intended (it is the template's repository, not a project of the developer's).
+   "Project setup" here includes every way ADE writes its methodology into a
+   folder: the first setup, the keep-or-switch question, a BMAD version switch (the
+   palette's "BMAD: Switch to v6…" and "…v4", and the stage board's switch), and
+   the Agents tab's Set up now and Re-check
+   (`docs/guide/project-setup.md`). Asked-for setup or a switch of such a folder is
+   refused, naming the hub; setup of a folder that **contains** a hub sets up only
+   that folder and writes nothing into the hub.
 2. Tests, on both paths (as F1's PE-2 AC9 does):
    - **automatic:** a terminal `cd` into a finished hub, into a hub's `projects/<x>`,
-     into a hub folder during (a) and (b) of a run, and into an unpacked template
-     with no `hub.conf` after a restart, each gets no setup question and no file
-     written, and nothing is added to `ade-project-setup-done`;
-   - **asked for:** setting up each of those folders from the New tab dialog is
-     refused and writes nothing;
+     into a hub folder during (a) and (b) of a run, into an unpacked template with
+     no `hub.conf` after a restart, into a leftover `.<name>.ade-tmp-*` folder, and
+     into a clone of a fixture template's source, each gets no setup question and
+     no file written, and nothing is added to `ade-project-setup-done`;
+   - **asked for:** setting up each of those folders from the New tab dialog, the
+     palette and the Agents tab is refused and writes nothing; a BMAD version switch
+     to v6 and to v4 (palette and stage board) in a finished hub is refused and
+     moves nothing; opening a hub from the New tab dialog never shows the
+     keep-or-switch question;
    - **the run end to end:** after a run, `git -C <hub> status --porcelain` is empty
      and no `.ade/methodology`, `llms.txt` or ADE-written agent is in the hub's
      history.
@@ -2955,11 +3113,17 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
    a hub tab), with no command re-run and an empty screen. Test: after a run, the
    saved session holds the tab with no scrollback; a relaunch restores it empty, still
    labelled "Agent hub".
-2. **Masked on the phone.** Wherever ADE relays a tab's project or folder to a paired
-   phone (each tab's project, today the base name of its folder), a hub tab is sent
-   as "Agent hub" and its folder is not sent. Test: a capture of the relayed tab list
-   (decrypted with the test's keys) has "Agent hub" for a hub tab and neither the hub
-   folder's path nor its base name anywhere.
+2. **Masked on the phone.** Wherever ADE relays a tab to a paired phone (phone-watch
+   story 8's `remote_tabs_set` entries `{tab_id, title, project, pty_ids}`, in the
+   relay-pairing design; the project is the base name of the tab's folder), a hub
+   tab is sent with **"Agent hub" as its title and its project**, whatever title the
+   tab's programs set, and its folder is not sent. Story 8 is not built yet, so
+   F2.8 makes this land with whichever of story 8 and F2's slice 1 ships second,
+   and the hub-tab flag's contract is recorded in `.ade/context/remote-tabs.md`
+   (AC5). Test (once story 8 exists): a capture of the relayed tab list (decrypted
+   with the test's keys) has "Agent hub" as the title and project of a hub tab
+   whose program set another title, and neither the hub folder's path nor its base
+   name anywhere.
 3. **Not in the agent tracker's synced record, nor in recent projects.** The agent
    tracker (`better-terminal-agent-tracker`) records a session started in a hub tab
    under "Agent hub", without the hub folder's path; the hub folder is not added to
@@ -2969,6 +3133,28 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
 4. Other tabs are unchanged: a plain terminal the developer `cd`s into a hub is an
    ordinary tab, and is saved and relayed as today (OB-10 AC2 says so). Test: a plain
    tab in a hub keeps its scrollback in the saved session.
+5. **The hub-tab flag.** Being a hub tab is a flag of the tab, set when the tab is
+   made (the run's tab, a tab for an existing hub, a sub-terminal of a hub tab,
+   OB-12) and never set by a `cd`. It covers every pane of the tab, splits
+   included, and it travels with the tab:
+   - **Duplicate** of a hub tab gives a hub tab in the same folder, labelled
+     "Agent hub", with an empty screen and no command run (no persona session);
+   - **Reopen Closed Tab** reopens a hub tab as a hub tab, empty (its scrollback
+     was never kept);
+   - **Move to New Window** keeps the flag; the tab is the same tab;
+   - **saved workspaces** (Settings → Workspace, layouts only): saving one that
+     holds a hub tab saves the flag with the tab's folder, as for any tab's folder,
+     and opening it opens a hub tab, empty and labelled "Agent hub". The review
+     step's notice (OB-3 AC3) says the folder path is kept in saved workspaces too;
+   - a saved session restores it as AC1 says.
+   ADE's rules for a hub tab (AC1 to AC3) follow the flag in each case.
+   `.ade/context/remote-tabs.md` records the flag for the relay: that a tab entry
+   for a flagged tab carries "Agent hub" as title and project and never the
+   folder. **It is created by whichever ships first** of phone-watch story 8 and
+   F2's slice 1, and the other follows it. Tests: each operation on a hub tab gives
+   a hub tab (label, empty screen, no scrollback in the saved session or the
+   workspace, "Agent hub" in the tracker); a plain tab in a hub folder duplicated
+   or moved stays plain.
 
 ### F2.7 Constraints
 
@@ -2984,17 +3170,19 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
 
 | Needed | For | State |
 |---|---|---|
-| Bundling **S2** (bundle format and manifest) | everything: a local or fixture template to unpack; OB-5 AC6's tarball | planned, PR #91 (Proposed) |
+| Bundling **S2** (bundle format and manifest) | everything: a local or fixture template to unpack; its archiver builds OB-5 AC6/AC7's PR-CI fixture tarball | planned, PR #91 (Proposed) |
+| **Public fixture template** (new, slice 1): a small hub template in this repository's test fixtures, with its own `bin/init` taking OB-3's options and checks | OB-5 AC6/AC7 in PR CI; OB-13's source-clone test | new; built with slice 1 |
 | Bundling **S4a** (`hub_template_info`, `hub_template_create`) | OB-1 AC10, OB-4 (a), OB-5 AC1 | planned, PR #91 |
 | **Persona list from the bundle** (new): read each `personas/*.md` slug and `title` (and the *persona* defaults of OB-3) from the bundled tarball without unpacking it | OB-3 AC1 | new; the architect adds it beside S4a |
-| Bundling **S3** (release workflow) | release builds that actually contain the template; until then F2 shows OB-1 AC10's message | planned, PR #91 |
+| Bundling **S3** (release workflow) | release builds that actually contain the template (until then F2 shows OB-1 AC10's message); the macOS build job that carries OB-5 AC6/AC7's release gates | planned, PR #91 |
 | Bundling **S4b** (palette "New hub from template…") | not needed; F2 reuses its typed-path rules and wording, and both entries stay (owner's answer to Q5) | planned, PR #91 |
 | Sub-terminals **story 4** (`ade open` endpoint and CLI) | OB-12 | in review, PRs #95 to #97 |
 | Sub-terminals **story 9** (`-- COMMAND`, typing; needs `feat/cli-guard`, PR #94) | OB-12 | pending |
 | Template **T1**: `bin/init` options for providers (allowlist, default provider, own hub) | OB-9 | the template's backlog (owner's answer to Q8) |
-| Template **T2 = story W1**: `bin/work` uses `ade open` inside ADE, with OB-12 AC2's exits | OB-12 | in progress, template PR #10 |
-| Template **T3**: `bin/secret --set` passes the value to `security` without putting it on the command line (on `security`'s standard input, or its own prompt), so `ps` never shows it | G4's stated limit closes | not filed; template repo (F2.9 Q10) |
-| Template **T4**: `bin/setup --unlink` removes the links `bin/setup` made into this hub (memory links, `bmad-*` skill links) and restores set-aside memory folders | OB-5 AC4's full undo after (f); without it the confirmation lists the links | not filed; template repo (F2.9 Q10) |
+| Template **T2 = story W1**: `bin/work` uses `ade open` inside ADE (detected with the `help` probe), with OB-12 AC2's exits (exit 1 opens no window, owner's answer to Q9) | OB-12 | in progress, template PR #10, being updated to Q9's answer |
+| Phone-watch **story 8** (ADE's Remote bridge: `remote_tabs_set`, the tab registry) | OB-14 AC2's masking; the relay captures of OB-7 AC3, OB-10 AC1 and OB-14 AC2 | not built (`_bmad-output/initiative-phone-remote/epic-phone-watch/tickets.toml`). **Whichever of story 8 and F2's slice 1 ships second carries the masking and its test**; whichever ships first creates `.ade/context/remote-tabs.md` (OB-14 AC5) |
+| Template **T3**: `bin/secret --set` passes the value to `security` without putting it on the command line (on `security`'s standard input, or its own prompt), so `ps` never shows it | G4's stated limit closes | the template's backlog (owner's answer to Q10) |
+| Template **T4**: `bin/setup --unlink` removes the links `bin/setup` made into this hub (memory links, `bmad-*` skill links) and restores set-aside memory folders | OB-5 AC4's full undo after (f), checkout links and this run's `.bak-` folders included; without it the confirmation lists them with restore commands | the template's backlog (owner's answer to Q10) |
 
 **Order.**
 
@@ -3008,7 +3196,9 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
 4. **Slice 4 (needs stories 4 and 9 and W1):** OB-12.
 
 T3 and T4 are not blocking: slice 1 states T3's absence in G4 and lists the links
-by path while T4 is missing.
+and `.bak-` folders by path while T4 is missing. Story 8 is not blocking either:
+slice 1 ships the hub-tab flag and, if story 8 is not there yet, leaves the masking
+to story 8 under `.ade/context/remote-tabs.md`.
 
 ### F2.9 Open questions for the owner
 
@@ -3024,33 +3214,33 @@ by path while T4 is missing.
   - Q8: T1 (`bin/init` provider options) goes into the template's backlog; ADE never
     edits `hub.conf` itself. T2 is the template story W1 (`bin/work` opens
     sub-terminals in ADE), already in progress.
-- **Q9. A refusal inside an engagement.** W1 falls back to a Terminal.app or iTerm
-  window on `ade open` exit 1, which is also what an F1 engagement instance's
-  refusal gives (PE-10 AC3: a folder outside the engagement). So `bin/work`, run in
-  an engagement's terminal against a folder outside it, would open an external
-  window, which PE-10 AC1 rules out for F1's own focus work. Recommended: accept it
-  for now (F2 never puts a template hub in an engagement, F2.13, and PE-10 binds
-  F1's focus-work command, not the template's `bin/work`), and ask W1 to fall back
-  only on 3 and 4 in a later template change. Or change W1 now?
-- **Q10. T3 and T4.** Confirm they go into the template's backlog: T3 (`bin/secret`
-  never puts a value on `security`'s command line) and T4 (`bin/setup --unlink` for
-  OB-5's undo). Recommended: yes, both small; slice 1 does not wait for them.
-- **Q11. Restored hub tabs.** OB-14 restores a hub tab after a relaunch, empty and
-  labelled "Agent hub", and keeps its folder path in the saved session (synced when
-  Sync is on). Alternative: never restore hub tabs, so no hub path is ever saved, at
-  the cost of reopening the hub through OB-2 after each restart. Recommended: restore
-  (as proposed).
-
-**Owner answers (2026-11-09, revision 2's questions).**
-- Q9: inside ADE, bin/work never opens a window outside ADE because ADE refused: `ade open` exit 1 shows ADE's error and the manual fallback hint, with no window. Only exits 3 and 4 (ADE unreachable) fall back to a window. Template story W1 is updated to match; OB-12 follows it.
-- Q10: T3 (bin/secret keeps the value off `security`'s command line) and T4 (`bin/setup --unlink`) go into the template's backlog; slice 1 does not wait for them.
-- Q11: hub tabs are restored after a relaunch, empty and labelled "Agent hub"; the folder path stays in the saved session.
+- **Q9 to Q11** were put in revision 2 and answered on 2026-11-09 (commit 48a2921):
+  - Q9: inside ADE, `bin/work` never opens a window outside ADE because ADE
+    refused: `ade open` exit 1 shows ADE's error and the manual fallback hint, with
+    no window. Only exits 3 and 4 (ADE unreachable) fall back to a window. Template
+    story W1 is updated to match; OB-12 follows it (revision 3).
+  - Q10: T3 (`bin/secret` keeps the value off `security`'s command line) and T4
+    (`bin/setup --unlink`) go into the template's backlog; slice 1 does not wait for
+    them.
+  - Q11: hub tabs are restored after a relaunch, empty and labelled "Agent hub";
+    the folder path stays in the saved session.
+- **Q12. The private template named in this public repository.** F2 names the
+  private template's repository, its commit, its pull request and its scripts and
+  folders (`bin/init`, `bin/setup`, `personas/`, `templates/hub/`, …), because its
+  requirements are about running them. This repository is public, and F1
+  (revision 2) removed the same kind of detail from `docs/`. `docs/prd.md` is excluded from the published site (`docs/_config.yml`)
+  but is readable on GitHub. Recommended: keep the script and folder names (they
+  are the interface ADE runs, and the bundled template ships them to every user of
+  a release build anyway), and replace the repository's name, commit and pull
+  request number with "the agent hub template" and "its story W1". Or keep F2 as
+  it is?
 
 ### F2.10 Risks
 
 - **The template moves.** A changed `bin/init` option or check breaks the
-  questionnaire. OB-5 AC7's release check and parity table test catch it before
-  release.
+  questionnaire. OB-5 AC7's options check and parity table test, run as gates in
+  the release's macOS build job against the bundled tarball, catch it before
+  release; their PR-CI twins only prove ADE's side against the fixture template.
 - **Default-profile hubs.** A client hub opened in the default profile shares ADE's
   history, recents and sync with every other client (F1's isolation problem). OB-14
   removes the hub tab's scrollback, phone project name, tracker path and recents
@@ -3069,7 +3259,8 @@ by path while T4 is missing.
 
 ### F2.11 Handoff
 
-- **Adversarial reviewer:** a delta review of revision 2 against F2.12.
+- **Adversarial reviewer:** a delta review of revision 3 against F2.12's second
+  table.
 - **Designer:** the choice (first launch, default "Open a terminal", the F1 third
   option when F1's flag is on, the New tab row), the questionnaire's required, common
   and advanced groups, the review step (folders to create, commands, the session
@@ -3077,16 +3268,26 @@ by path while T4 is missing.
   run) and the removal confirmation.
 - **Architect:** how ADE runs and observes the run's steps in a visible terminal and
   knows each step's result (OB-4, OB-5); passing answers as arguments (OB-4 AC6);
-  the persona list from the tarball; reading `hub.conf` literals (OB-6 AC2); the
-  unpacked-template marker and the project-setup exclusion (OB-13); a hub tab's flag,
-  its unsaved scrollback and its masking on the phone and in the tracker (OB-14);
+  starting each step from an argument vector in a terminal with a login shell's
+  environment, and the login shell after the session (OB-4 AC6); the git identity
+  check outside any repository (OB-4 AC2); the persona list from the tarball;
+  reading `hub.conf` literals (OB-6 AC2); the template-files marker and the
+  project-setup exclusion across setup, switch and re-check (OB-13); a hub tab's
+  flag across tab operations, its unsaved scrollback and its masking on the phone
+  and in the tracker, and `.ade/context/remote-tabs.md` if slice 1 ships before
+  phone-watch story 8 (OB-14);
   recording the first-launch answer (OB-1 AC1); moving a folder to the Trash; the
-  OB-5 AC6 comparison, AC7 release check and parity test; the OB-7 AC3 and OB-10
-  AC1 scans.
-- **Template (ai-agent-hub-template):** T1, T3, T4 and W1's exit handling (OB-12
-  AC2).
+  public fixture template, and OB-5 AC6/AC7's PR-CI tests and release gates in
+  `release.yml`'s macOS build job; the OB-7 AC3 and OB-10 AC1 scans.
+- **Template (ai-agent-hub-template):** T1, T3, T4, and W1's detection (the `help`
+  probe) and exit handling after Q9 (OB-12 AC1, AC2).
+- **Phone-watch story 8:** if it ships before F2's slice 1, it creates
+  `.ade/context/remote-tabs.md`; if after, it carries OB-14 AC2's masking and its
+  test (F2.8).
 
-### F2.12 Revision 1's review: findings and answers
+### F2.12 Reviews: findings and answers
+
+**Revision 1's review (answered in revision 2).**
 
 | Finding | Answer in revision 2 |
 |---|---|
@@ -3118,6 +3319,27 @@ by path while T4 is missing.
 | m12 OB-4 AC1 and (a) | **OB-4 AC1**: (a) is ADE's own work, shown as one line, not a terminal command. |
 | m13 agent tracker | **OB-14 AC3**: the tracker records "Agent hub", without the path; nor recent projects. |
 
+**Revision 2's delta review (BLOCKED on N1 and N2; answered in revision 3).**
+
+| Finding | Answer in revision 3 |
+|---|---|
+| **N1** (blocker) git identity checked "for the hub folder's parent", which does not exist on a fresh Mac | **OB-4 AC2**: identity checked as git resolves it outside any repository (system and global config and their unconditional includes), never from the parent or an ancestor, because the hub is a new repository; the `includeIf "gitdir:"` limit stated. Tests: no `~/hubs` with a valid global identity passes; an identity only in an enclosing repo's local config is refused. |
+| **N2** (blocker) OB-5 AC6 and AC7's bundled side cannot run in PR CI | **OB-5 AC6/AC7**: on the bundled tarball they are **release gates** in `release.yml`'s macOS build job, before any upload; in PR CI they run on a **fixture tarball** built by S2's archiver from a **public fixture template** (new row in F2.8). S3's structure tests assert the gates exist. |
+| **N3** OB-14 AC2's relay masking targets unbuilt code | **F2.8**: phone-watch story 8 added; whichever of story 8 and slice 1 ships second carries the masking and its test; whichever ships first creates `.ade/context/remote-tabs.md` (**OB-14 AC5**). Relay captures in **OB-14 AC2, OB-7 AC3, OB-10 AC1** apply once story 8 exists. |
+| **N4** M8's mechanism and its effects | **OB-4 AC6**: steps start from an **argument vector**, never typed into a shell, so no answer enters shell history and answers are not limited to typeable characters; the shown command uses ADR 0008's `shellQuote`; tests add `C:\x\y` and ADR 0008's fish case `a\'; touch …; #`, and a four-shell round trip of the shown command; after the session exits the tab starts a login shell in the hub folder. |
+| **N5** `bin/setup` copies each checkout's Claude memory into the hub and renames the original to `.bak-<ts>` | **OB-3 AC3**: a memory notice on the review step naming each checkout path (and a line on the `bmad-*` skill links); **OB-5 AC4**: undo removes checkout-path links too and restores this run's `.bak-` folders (by T4, or listed with restore commands); tests. **OB-2 AC2**'s setup option shows the notice. |
+| **N6** OB-13's marker: `hub-template.json` is never in the hub folder | **OB-13 AC1**: the marker is the template's own top-level files (`bin/init`, `templates/hub/`, `personas/`); it also excludes the template's own source clone, stated as intended; tests for a source clone and S4a's temporary folder. |
+| minor: (c) does not prove `hub.conf` is committed | **OB-4 AC1** (c) adds `git ls-files --error-unmatch hub.conf`; a fixture that ignores `hub.conf` fails (c). |
+| minor: OB-5 AC5's restart tests | **OB-5 AC5**: four cases (during (a) with S4a's hidden `.<name>.ade-tmp-*` folder; during (b) before and after `hub.conf`; from (c) on), each with its test. |
+| minor: the hub-tab flag across tab operations | **OB-14 AC5**: Duplicate, Reopen Closed Tab, Move to New Window, saved workspaces and the saved session; panes and splits included; tests. |
+| minor: OB-10 AC2 "live output" | **OB-10 AC2**: matches approved phone piece 2a, state only (title, project, agent state and age; never output); a hub tab is "Agent hub" as title and project. |
+| minor: OB-6 AC1's `--claude`/`--claude-config-dir` tests | **OB-6 AC1**: those tests are slice 2 (question 14); slice 1 tests the default `claude` and an existing hub's `hub.conf` values. |
+| minor: OB-13 tests miss the BMAD version switch | **OB-13 AC1/AC2**: setup includes the keep-or-switch question, the switch (palette and stage board) and the Agents tab's Set up now and Re-check; tests for each. |
+| minor: OB-2 AC2 "nothing is written" | **OB-2 AC2**: "nothing is written **by ADE**"; the session and chosen scripts write as by hand; tested with a stub Claude. |
+| minor: OB-11 AC3 focus after Store | **OB-11 AC3**: after Store, focus moves to the terminal's hidden prompt; test. |
+| minor: OB-10 AC3 and child processes | **OB-10 AC3**: covers ADE's own process; the run's child processes (scripts, git, Claude Code) are not counted, and the test excludes them. |
+| owner's answer to Q9 | **OB-12 AC2**: exit 1 prints ADE's error and the manual hint and opens no window; only 3 and 4 open one. **OB-12 AC1**: W1's `help` probe, so builds without the CLI take the window path. **F2.13** updated. |
+
 ### F2.13 F1 and F2 together
 
 - **The owner's decision (Q1, 2026-11-09):** F2 makes agent hubs from the bundled
@@ -3136,7 +3358,9 @@ by path while T4 is missing.
   engagement instance; a hub folder inside an engagement root is refused.
 - **Focus terminals:** inside an engagement instance, **F1's PE-10 wins**: `ade open`
   there answers as PE-10 says. In the default profile, **OB-12** applies to template
-  hubs. The two do not overlap, except for `bin/work` run by hand in an engagement's
-  terminal, which is Q9.
+  hubs. The two do not overlap. `bin/work` run by hand in an engagement's terminal
+  against a folder outside the engagement gets exit 1 (PE-10 AC3's refusal), and by
+  the owner's answer to Q9 it then prints the error and the manual hint and opens
+  no window (OB-12 AC2), so PE-10 AC1 holds.
 - **Project setup:** both exclude their own folders from it (PE-2 AC9, OB-13).
 <!-- F2 ends -->
