@@ -197,6 +197,13 @@ describe("the one quoter", () => {
     "src/lib/bmadRuntime/render.ts": "Python repr() in rendered templates, not a shell word",
     "src/lib/bmadRuntime/initSkill.ts": "a YAML single-quoted scalar, not a shell word",
     "src/lib/bmadRuntime/compat.ts": "HTML attribute escaping, not a shell word",
+    // Story 9 took this file from hermes-a-quoting (8b06ea4) without that
+    // branch's migration of these four. hermes-a-quoting migrates them to
+    // shellQuote and drops these lines (its side wins the merge).
+    "src/lib/agentCommand.ts": "pre-ADR 0008 quoter; migrated by hermes-a-quoting",
+    "src/lib/contracts.ts": "pre-ADR 0008 quoter; migrated by hermes-a-quoting",
+    "src/components/AntiSlopTab.tsx": "pre-ADR 0008 quoting; migrated by hermes-a-quoting",
+    "src/components/ContractsWorkbench.tsx": "pre-ADR 0008 quoting; migrated by hermes-a-quoting",
   };
   const SRC = resolve(__dirname, "..", "..");
   const ROOT = resolve(SRC, "..");
