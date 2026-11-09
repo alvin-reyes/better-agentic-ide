@@ -2925,8 +2925,15 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      and it is then empty (OB-2 AC4).
    It never touches a GitHub repo or Keychain entries: the confirmation lists, as
    left behind, the private repo of OB-8 and the secret names stored in this run
-   (with `gh repo delete` and `bin/secret --forget <name>` to remove them by hand;
-   it runs `--forget` only if the developer later runs it). Tests: a folder with a
+   (with `gh repo delete` and, per name,
+   `security delete-generic-password -s <service> -a <name>` to remove them by
+   hand, where `<service>` is the hub's Keychain service: the template's
+   `keychain_service` value, or the hub folder's base name when it has none, read
+   before the folder goes to the Trash). The `security` command is shown with a copy
+   button; ADE never runs it. Test: after Remove on a run that stored one secret name `k`
+   in hub `/x/acme-hub` with no `keychain_service` set, the confirmation shows
+   `security delete-generic-password -s acme-hub -a k` with a copy button, and the
+   Keychain entry is still present (ADE ran no `security` command). Tests: a folder with a
    later commit is not offered; a pre-existing folder is never removed; after (g),
    removal runs `bin/schedule uninstall` and no hub job stays loaded; after (f) on
    a run with a checkout `/x/r` whose Claude memory existed before the run (and an
