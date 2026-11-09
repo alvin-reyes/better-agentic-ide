@@ -5,6 +5,9 @@
 #   npx tsc --noEmit ; npm test ; cd src-tauri && cargo test ; cd relay && cargo test ; cd mobile && npx tsc --noEmit && npx jest
 # plus cd src-tauri && cargo check -p ade-hook from story 4 on. Each must exit 0.
 # Stories 1 and 2a were started before the revision (owner override, 2026-11-02). The rest carry refine = true: they get full acceptance criteria when pulled.
+# 2026-11-09: story 4 is split into 4a (endpoint and window) and 4c (CLI). Both are refined: their plans are in this folder
+# (story-ade-open-adds-a-sub-terminal-endpoint-and-window-plan.md, story-ade-open-the-cli-and-its-exit-codes-plan.md).
+# Where another entry says "story 4", it means 4a and 4c together. The contract is .ade/context/terminal-open.md (on main).
 
 [[entry]]
 id = 1
@@ -237,42 +240,37 @@ risk = "medium"
 refine = true
 
 [[entry]]
-id = 4
+id = "4a"
 type = "story"
-title = "ade open adds a sub-terminal"
-description = '''Adds the CLI verb ade open, no-flags form: it adds a sub-terminal to the caller's tab, in the caller's folder or --cwd, optionally named, optionally focused, through POST /open on the existing endpoint. Command and split answer 422 "not supported yet" in this story (stories 8 and 9). No manual check gates this story; the hidden-terminal budget and V3 are story 4b. Starts after story 1 and 2b-ii are on main. Full criteria are refined when this is pulled. Large: may be split into 4a (route, threads, claim, limits) and 4c (CLI) when pulled.
-Terminal creation (R5): the window creates the new pane's terminal at once, through today's createInstance with no container, at the caller's size (24x80 if no instance), then create_pty with the requestId. Rust never spawns or kills.
-Summary of criteria, each a test at refinement:
-(1) ade-hook acts as the CLI only when argv0 is ade or ade.exe or args[0] is open, help or --help. mode(argv0, args) is a pure function in src-tauri/src/ade_cli.rs, one test per case; guard is never the CLI (keep guard ahead of mode(); feat/cli-guard rebases onto this or the reverse).
-(2) CLI exit codes per the contract table: 0 opened; 1 for any answer other than 200, 401 or 410, or no answer within 15 s, with ADE's message (a 400 with {} says "this ADE is too old for ade open; restart ADE"); 2 usage (for example "--cwd: no such folder"); 3 a variable unset or malformed; 4 connection refused, 401 or 410 (message mentions tmux and screen); 5 is story 9's. Tests against a local TcpListener, one per row.
-(3) POST /open is screened by the same screen() (405, 403, 401, 413); unknown fields and wrong types are 400; a bad cwd, name or command shape is 422 per the contract.
-(4) The CLI resolves --cwd against $PWD logically, like cd, checks it is a folder with stat, and sends the logical path.
-(5) Routing: / is hook events, /open is this, anything else is 404 {}. Hook events are still served while an /open waits (test).
-(6) Threads and the handler (N7): serve screens, reads the body and calls admit(caller_pty) on its own thread. A refusal is answered there. An admitted request and its tiny_http::Request go to a new thread that calls handle(admission, body) and answers. AgentStatus::set_open_handler(Arc<dyn OpenHandler>) is called once in .setup(); until then /open answers 409 "ADE is still starting". Tests inject a fake handler.
-(7) The in-flight slot is an RAII Admission whose Drop releases it. Tests: a handler that panics, and an injected spawn failure (answered 503 on the serve thread), each leave the count where it started.
-(8) Owner window: a listener per window (409 if none; dropped on WindowEvent::Destroyed); the caller pane must be live (410 if not).
-(9) expiresAt is 5 s after the request. A window past it does nothing. On timeout Rust answers 504 "ADE didn't answer; no terminal was opened", types nothing, and sends expired; the window closes whatever it added late.
-(10) The PTY claim: at the request Rust records floor (the next PTY id). create_pty stores the requestId on the new PtyInstance. Rust accepts ptyId only if it was created with that requestId, is at or above floor, is unclaimed, is live and is owned by that window. Each of these gives typed:false in a test: below the floor; already claimed; dead; foreign window; created without this requestId.
-(11) Exactly one create_pty: a test opens with --focus and counts one create_pty; another does a background add shown at once.
-(12) --focus resize (N10): if the mounted size differs from the size the PTY was created with, once create_pty returns the window sends resize_pty with the pane's current size. Test: mount with a different size before create_pty resolves; one resize_pty follows.
-(13) PtyInstance fields: the owner window label (create_pty sets it; reattach replaces it) and requestId. Merge pair with feat/cli-guard: if feat/cli-guard is on main first, add the fields after PtyInstance::new; otherwise carry them through new()'s arguments. Either way one test covers construction with both fields.
-(14) Limits: 8 per caller pane, refilling 1 per second; at most 32 /open shells running, counting admitted requests in flight; both answer 429. Tests with an injected clock.
-(15) Naming: --name wins; else the command's first word after leading VAR=value words; else the folder basename; else "Terminal". Never the full line. Tests: "npm run dev" gives npm; "env TOKEN=x npm run dev" gives env; "FOO=1 make" gives make; no command gives the folder name or Terminal.
-(16) Flattening: a sub-terminal's own ade open adds a sibling to the same tab (spawnedBy = the caller's view name), never a nested strip.
-Slice: src-tauri/src/ade_cli.rs (new), src-tauri/ade-hook/src/main.rs, src-tauri/src/hook_forward.rs (CLI HTTP client), src-tauri/src/agent_status.rs (route /open, thread per request, set_open_handler, Admission), src-tauri/src/terminal_open.rs (new: validation, limits, claim, expiry), src-tauri/src/pty.rs (requestId, owner label, PtyInstance::new pair), src/lib/terminalOpen.ts (new), src/hooks/useTerminal.ts (creation at once, resize), the .setup() wiring in src-tauri/src/lib.rs, and tests.
-Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook (added from this story on, since no other line compiles the helper), each exit 0, with a named test for each criterion (1) to (16). No manual check.'''
-verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0 (npx tsc --noEmit; npm test; cd src-tauri && cargo test; cd relay && cargo test; cd mobile && npx tsc --noEmit && npx jest; cd src-tauri && cargo check -p ade-hook), with a named test for each of criteria (1) to (16) (full names fixed at refinement)."
+title = "ade open adds a sub-terminal (endpoint and window)"
+description = '''Split from story 4 on 2026-11-09. The endpoint and the window: POST /open on the existing loopback endpoint (routing by path, screening as for hook events, validation, a thread per request, the in-flight slot, limits, owner listener, expiry and the 504, the PTY claim), and the window's creation of the sub-terminal at once through createInstance with no container. No CLI in this story: ade-hook is unchanged. --split and -- COMMAND answer 422 "not supported yet" (stories 8 and 9). Naming, flattening, the spawner tooltip ("Opened from") and --focus are here too. The plan is story-ade-open-adds-a-sub-terminal-endpoint-and-window-plan.md, with criteria A1 to A17 (each one or more named tests) and the test-first order.
+Summary of criteria, each a named test in the plan: A1 screening (was 3); A2 body types and A3 field rules, 422 and 400 (was 3); A4 routing and hook events served while an open waits (was 5); A5 threads and the handler, 409 before it is set (was 6); A6 the RAII in-flight slot (was 7); A7 owner window, 409 and 410 (was 8); A8 expiry, 504 and expired (was 9); A9 the PTY claim (was 10); A10 exactly one create_pty (was 11); A11 the resize after a focused mount (was 12); A12 owner and request on the instance (was 13); A13 limits, 8 per pane and 32 running (was 14); A14 naming (was 15); A15 flattening and the Opened from tooltip (was 16); A16 creation at once; A17 the answer and the add.
+Slice: src-tauri/src/terminal_open.rs (new), src-tauri/src/agent_status.rs, src-tauri/src/pty.rs, src-tauri/src/lib.rs (mod, setup, invoke_handler), src/lib/terminalOpen.ts (new), src/hooks/useTerminal.ts, src/App.tsx (one call), src/components/SubTerminalStrip.tsx (the tooltip line), .ade/context/agent-events.md (the /open rows), and tests.'''
+verify = "The six lines of docs/architecture.md (Verification command, in force) each exit 0: npx tsc --noEmit; npm test; (cd src-tauri && cargo test); (cd relay && cargo test); (cd mobile && npx tsc --noEmit && npx jest); (cd src-tauri && cargo check -p ade-hook). Every test named in A1 to A17 of the plan appears by name in the output and passes. No manual check."
 covers = []
 after = [1, "2bii"]
 hitl = false
 risk = "high"
-refine = true
+
+[[entry]]
+id = "4c"
+type = "story"
+title = "ade open: the CLI and its exit codes"
+description = '''Split from story 4 on 2026-11-09, after story 4a. The CLI: ade-hook is the CLI under its second name, decided by mode(argv0, args) in src-tauri/src/ade_cli.rs (guard is never the CLI). Flags --cwd, --split (sent, so 422 "not supported yet" for now), --name, --focus and -- COMMAND (sent, so 422 "not supported yet" for now); exit codes per the contract table; --cwd joined to $PWD and checked with stat; the token read from the environment only. Tests against a local TcpListener, one per row of the exit table. The plan is story-ade-open-the-cli-and-its-exit-codes-plan.md, with criteria C1 to C6 (each one or more named tests) and the test-first order.
+Summary of criteria, each a named test in the plan: C1 mode() (was 1); C2 exit codes, one per row (was 2); C3 --cwd (was 4); C4 the request body and headers (contract); C5 usage and help, and the flag rules; C6 hook mode unchanged.
+Exit codes follow the contract's table on main (.ade/context/terminal-open.md): 410 is exit 4, with connection refused and 401.
+Slice: src-tauri/src/ade_cli.rs (new), src-tauri/ade-hook/src/main.rs (the #[path] include and the dispatch), src-tauri/src/lib.rs (one mod line), and tests.'''
+verify = "The six lines of docs/architecture.md (Verification command, in force) each exit 0: npx tsc --noEmit; npm test; (cd src-tauri && cargo test); (cd relay && cargo test); (cd mobile && npx tsc --noEmit && npx jest); (cd src-tauri && cargo check -p ade-hook). Every test named in C1 to C6 of the plan appears by name in the output and passes. No manual check."
+covers = []
+after = ["4a"]
+hitl = false
+risk = "medium"
 
 [[entry]]
 id = "4b"
 type = "story"
 title = "Hidden-terminal budget, dev helpers and V3"
-description = '''The cost budget for terminals created without a container (story 4's ade open, and story 5's detached-window reattach), with the dev helpers that measure it, the "only the last 1000 lines" tooltip, and manual check V3. V3 gates this story's Done (ADR 0009, on the unmerged branch docs/claude-md-paths), and does not gate story 4. Starts after story 4 is on main. Full criteria are refined when this is pulled.
+description = '''The cost budget for terminals created without a container (story 4's ade open, and story 5's detached-window reattach), with the dev helpers that measure it, the "only the last 1000 lines" tooltip, and manual check V3. V3 gates this story's Done (ADR 0009, on the unmerged branch docs/claude-md-paths), and does not gate story 4. Starts after stories 4a and 4c are on main. Full criteria are refined when this is pulled.
 Budget. It applies to every terminal created without a container: createInstance with a null container and createReattachedInstance for a hidden pane. A terminal created with a container (every normal mount, and a restored session's panes whose saved scrollback is written before the seat) is unchanged.
 (1) Until its first seatTerminal: scrollback is min(setting, 1000); refreshAllTerminals keeps the cap on a not-yet-seated instance; no ImageAddon.
 (2) At its first seatTerminal, before the renderer is decided: scrollback becomes the setting and the ImageAddon is loaded before loadGpu (D3 of #73), and also on the paths where WebGL is off or unavailable. An instance is marked seated so this happens once.
@@ -284,7 +282,7 @@ Slice: src/hooks/useTerminal.ts, the instance module that owns createInstance an
 Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (5), and V3 recorded per (6).'''
 verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (5); AND manual check V3 (criterion 6) run by the owner on a Mac and recorded here with p50, p95, max, the machine and the macOS version (p95 under 50 ms). Until then, QA records 'not run, pending the owner' and the story is not Done."
 covers = []
-after = [4]
+after = ["4a", "4c"]
 hitl = true
 risk = "medium"
 refine = true
@@ -334,7 +332,7 @@ refine = true
 id = 7
 type = "story"
 title = "ade on PATH"
-description = '''Puts a symlink named ade on PATH in a checked folder that ADE owns, so an agent can run ade open without knowing where ADE is, and strips inherited ADE bin folders from other builds. Starts after story 4 is on main. Full criteria are refined when this is pulled.
+description = '''Puts a symlink named ade on PATH in a checked folder that ADE owns, so an agent can run ade open without knowing where ADE is, and strips inherited ADE bin folders from other builds. Starts after stories 4a and 4c are on main. Full criteria are refined when this is pulled.
 Summary of criteria, each a test at refinement:
 (1) The folder is <app data dir>/bin/release (re-pointed each launch) or bin/debug-<16 hex of sha256 of the helper path>. Each holds a symlink named ade to the helper. A debug-* folder whose target is gone is deleted at launch.
 (2) ADE uses the folder only if it is the user's, mode 0700, not a symlink, holds only ade (readdir and lstat), and ade is a symlink whose readlink target is exactly this launch's helper path. Checked at launch and in every create_pty.
@@ -346,7 +344,7 @@ Slice: src-tauri/src/pty.rs (apply_hook_env, create_pty), a new bin-folder modul
 Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each criterion (1) to (6) (full names fixed at refinement).'''
 verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (6) (full names fixed at refinement)."
 covers = []
-after = [4]
+after = ["4a", "4c"]
 hitl = false
 risk = "medium"
 refine = true
@@ -355,7 +353,7 @@ refine = true
 id = 8
 type = "story"
 title = "ade open --split, in any view"
-description = '''Adds --split right|down to ade open: it splits the caller's pane, in the caller's view (hidden or not), and makes no sub-terminal. Until now split answers 422 "not supported yet" (story 4). Starts after story 4 is on main. Full criteria are refined when this is pulled.
+description = '''Adds --split right|down to ade open: it splits the caller's pane, in the caller's view (hidden or not), and makes no sub-terminal. Until now split answers 422 "not supported yet" (story 4). Starts after stories 4a and 4c are on main. Full criteria are refined when this is pulled.
 Summary of criteria, each a test at refinement:
 (1) split right or down is accepted; splitPane runs by pane id in whichever view holds the caller's pane, so it works from a hidden view.
 (2) The split limit is 4 per direction per view; the window refuses past it with 409 and the CLI exits 1 with ADE's message.
@@ -366,7 +364,7 @@ Slice: src-tauri/src/terminal_open.rs, src-tauri/ade-hook (CLI check), src/lib/t
 Verification: the five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each criterion (1) to (5) (full names fixed at refinement).'''
 verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (5) (full names fixed at refinement)."
 covers = []
-after = [4]
+after = ["4a", "4c"]
 hitl = false
 risk = "medium"
 refine = true
@@ -376,7 +374,7 @@ id = 9
 type = "story"
 title = "ade open -- COMMAND: typing the command into the new shell"
 description = '''Adds the command: the words after -- are typed into the new shell with Enter, through feat/cli-guard's line-editor check and writer thread (R2). Adds exit code 5 (opened, command not typed), the not-typed notice with Insert command (N1), the amendment to ADR 0011 for the guard's resolution of "$ADE_HOOK_BIN" open (M6), and the guide entry (R6). Full criteria are refined when this is pulled.
-BLOCKED on outside work, held in unknown until all are true: story 4 on main; hermes-a-quoting on main (shellQuote, ADR 0008, D9); feat/cli-guard on main (line_editor_ready, the PTY writer thread, the guard, ADR 0011).
+BLOCKED on outside work, held in unknown until all are true: stories 4a and 4c on main; hermes-a-quoting on main (shellQuote, ADR 0008, D9); feat/cli-guard on main (line_editor_ready, the PTY writer thread, the guard, ADR 0011).
 Summary of criteria, each a test at refinement:
 (1) Typing (R2): Rust polls line_editor_ready(master, shell pid) every 50 ms and types after two ready answers in a row, for at most 5 s after the window's answer. Not ready by then: nothing is typed, typed:false, why "the shell's line editor didn't start". The line goes through the new PtyInstance's input channel to its writer thread, so a terminal that doesn't read never blocks Rust. Tests: types only after two ready answers; not ready in 5 s gives typed:false; a terminal that doesn't read doesn't block the answer; one real PTY case on Unix reusing feat/cli-guard's test helpers; a 5,000-byte line arrives whole.
 (2) Quoting: the window quotes each word with shellQuote (ADR 0008); bare words matching ^[\w./-]+$ are left as they are. Words are printable ASCII (D6; non-ASCII is refused, never altered). At most 64 words; at most 4096 bytes for the typed line.
@@ -392,7 +390,7 @@ Verification: the five approved lines plus cd src-tauri && cargo check -p ade-ho
 verify = "The five approved lines plus cd src-tauri && cargo check -p ade-hook each exit 0, with a named test for each of criteria (1) to (9) (full names fixed at refinement); held until the unknown is gone."
 unknown = "Waiting on outside work, all three must be on main: story 4 (ade open); hermes-a-quoting (shellQuote, ADR 0008, D9; branch hermes-a-quoting, on origin); feat/cli-guard (line_editor_ready, PTY writer thread, the CLI-library guard, ADR 0011; origin/feat/cli-guard). Not started until all are merged, or the owner rules otherwise."
 covers = []
-after = [4]
+after = ["4a", "4c"]
 hitl = false
 risk = "high"
 refine = true
