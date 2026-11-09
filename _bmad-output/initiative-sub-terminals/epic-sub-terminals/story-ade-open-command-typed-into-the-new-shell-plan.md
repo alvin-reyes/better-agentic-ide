@@ -243,43 +243,43 @@ These are the spec's V2 and the owner's real-session check. They are recorded in
 
 ## Verification (QA)
 
-**Verdict: Done pending re-check PASS.** QA run 2026-11-09 at 39e24c7 (branch `st9-typed-command`, PR #100), in the worktree `.claude/worktrees/st9`, scratch `HOME` (not `~/.claude`; `CARGO_HOME` and `RUSTUP_HOME` kept so cargo works), each line in its own subshell from the repo root. The verification command is the seven lines of `docs/architecture.md` "In force" (the seventh, `cargo test -p ade-hook`, owner-approved, merged to main as cf0d295 and in this branch). This story's own "Verification" section above lists six; the architecture's seven decide.
+**Verdict: Done pending re-check PASS.** QA re-run 2026-11-09 at 71bb5c6 (branch `st9-typed-command`, PR #100, `git pull` already up to date), in the worktree `.claude/worktrees/st9`. This supersedes the run at 39e24c7 (commit 27046fb), whose conditional Done is void because its re-check blocked. Each of the seven lines of `docs/architecture.md` "In force" ran from the repository root in its own subshell, with a scratch `HOME` (not `~/.claude`; `CARGO_HOME` and `RUSTUP_HOME` kept so cargo works). This story's own "Verification" section above lists six; the architecture's seven decide.
 
-Done depends on the separate adversarial re-check of the last fix (39e24c7, the cli guard's `--` split) returning PASS. If it does not, this verdict is void.
+Done depends on the separate adversarial re-check of 71bb5c6 (the fail-closed guard) returning PASS. If it does not, this verdict is void.
 
 | # | Line | Exit | Counts |
 |---|---|---|---|
 | 1 | `npx tsc --noEmit` | 0 | no errors |
 | 2 | `npm test` | 0 | 177 files, 1965 tests passed |
-| 3 | `(cd src-tauri && cargo test)` | 0 | lib 659 passed, 0 failed, 1 ignored (`usage.rs`, as before); plus 12 and 2 in the other targets |
+| 3 | `(cd src-tauri && cargo test)` | 0 | lib 661 passed, 0 failed, 1 ignored (`usage.rs`, as before); plus 12 and 2 in the other targets |
 | 4 | `(cd relay && cargo test)` | 0 | 11, 2, 86, 14, 32, 11, 68, 33, 9 passed across targets; 0 failed |
 | 5 | `(cd mobile && npx tsc --noEmit && npx jest)` | 0 | jest 1 suite, 6 tests passed |
 | 6 | `(cd src-tauri && cargo check -p ade-hook)` | 0 | Finished, no errors |
-| 7 | `(cd src-tauri && cargo test -p ade-hook)` | 0 | 91 passed (bin), 9 passed; 0 failed |
+| 7 | `(cd src-tauri && cargo test -p ade-hook)` | 0 | 93 passed (bin), 9 passed; 0 failed |
 
 ### Criteria to tests (every named test exists and passed)
 
-Rust tests were each found by name as `... ok` in the line 3 output; TypeScript tests by name in a verbose vitest run of their four files (61 passed), on top of line 2.
+Every Rust test below was found by name as `... ok` in the line 3 output (and the cli_guard and ade_cli ones again in line 7). Every TypeScript test was found by name in a verbose vitest run of the five files `terminalOpen.test.ts`, `SubTerminalNotice.test.tsx`, `SubTerminalStrip.test.tsx`, `guideOpen.test.ts` and `shellQuote.test.ts` (68 passed, none skipped), on top of line 2.
 
 - **T1** `terminal_open.rs`: `types_only_after_two_ready_answers_in_a_row`, `not_ready_for_five_seconds_gives_typed_false`, `a_shell_that_exits_first_gives_typed_false`, `a_terminal_that_never_reads_does_not_block_the_answer`, `a_5000_byte_line_arrives_whole`, `a_shell_that_never_prompts_gives_typed_false`.
-- **T2** `shellQuote.test.ts` (real sh, bash, zsh and fish present locally, so none skipped); `terminalOpen.test.ts` `the_line_quotes_each_word_with_shellQuote_except_bare_words`, `a_word_with_a_quote_or_backslash_is_one_word_in_sh_and_fish`; `terminal_open.rs` `a_non_ascii_or_control_word_is_422`, `more_than_64_words_is_422`, `an_empty_word_is_422`, `a_command_line_over_4096_bytes_is_422`, `a_line_that_fails_the_recheck_is_not_typed`.
+- **T2** `shellQuote.test.ts`; `terminalOpen.test.ts` `the_line_quotes_each_word_with_shellQuote_except_bare_words`, `a_word_with_a_quote_or_backslash_is_one_word_in_sh_and_fish`; `terminal_open.rs` `a_non_ascii_or_control_word_is_422`, `more_than_64_words_is_422`, `an_empty_word_is_422`, `a_command_line_over_4096_bytes_is_422`, `a_line_that_fails_the_recheck_is_not_typed`.
 - **T3** `terminal_open.rs` `a_shell_outside_the_allowlist_is_422_and_types_nothing`, `the_allowlist_accepts_each_listed_basename`; `pty.rs` `the_shell_basename_is_kept_on_the_instance`.
 - **T4** `ade_cli.rs` `exit_5_when_opened_but_not_typed`, `typed_true_prints_nothing_and_exits_0`; `terminal_open.rs` `typed_false_is_200_and_the_window_gets_typed`; `terminalOpen.test.ts` `typed_false_sets_the_entry_to_not_typed_with_the_why`.
 - **T5** `terminal_open.rs` `the_typing_budget_starts_at_the_windows_answer`, `a_window_answer_after_expiry_types_nothing`.
 - **T6** `SubTerminalNotice.test.tsx`: `the_notice_shows_only_the_first_word_and_an_ellipsis`, `insert_is_disabled_while_paneBusy_names_a_program`, `insert_is_disabled_while_the_line_editor_is_not_ready`, `insert_is_disabled_for_dash_with_its_own_title`, `insert_rechecks_both_on_click_and_writes_nothing_if_either_fails`, `insert_writes_the_full_quoted_line_without_enter`.
-- **T7** `cli_guard/mod.rs`: `open_double_dash_gh_repo_delete_asks_as_the_bare_line_does`, `open_with_name_and_no_double_dash_does_not_ask`, `a_line_that_assigns_ade_hook_bin_still_asks`, `the_ade_verbs_are_enumerated`, `guard_and_hook_mode_are_unchanged`. ADR 0011 amendment present (including the review fix B1 and the `--` split rule of 39e24c7).
+- **T7** `cli_guard/mod.rs`: `open_double_dash_gh_repo_delete_asks_as_the_bare_line_does`, `open_with_name_and_no_double_dash_does_not_ask`, `a_line_that_assigns_ade_hook_bin_still_asks`, `the_ade_verbs_are_enumerated`, `guard_and_hook_mode_are_unchanged`. The guard hardening rows, both ok: `a_flag_value_or_verb_that_may_split_asks` and `the_prepass_fails_closed_on_what_it_cant_name`. ADR 0011 amendments (the `--` split rule; amendment 4, variable resolution fails closed) present.
 - **T8** `guideOpen.test.ts` `the_guide_documents_aliases_and_secrets`; section "Opening terminals from a terminal" in `docs/guide/terminal.md`.
 - **T9** `terminalOpen.test.ts` `the_spinner_clears_when_typed_arrives`; `SubTerminalStrip.test.tsx` `no_spinner_without_a_command`.
-- **T10** `ade_cli.rs` `help_lists_the_command_capability`, `help_capabilities_line_is_one_line`; the line is in `.ade/context/terminal-open.md` (CLI section, "Capabilities (story 9)").
-- **H1 to H3** `terminal_open_e2e.rs`: `e2e_open_from_a_caller_adds_types_and_keeps_the_caller_running`, `e2e_a_shell_that_never_prompts_keeps_the_caller_running_and_exits_5`, `e2e_a_closed_caller_gets_exit_4_and_opens_nothing`, all ok (real PTYs, real bash, run on macOS).
+- **T10** `ade_cli.rs` `help_lists_the_command_capability`, `help_capabilities_line_is_one_line`; the line is in `.ade/context/terminal-open.md`.
+- **H1 to H3** `terminal_open_e2e.rs`: `e2e_open_from_a_caller_adds_types_and_keeps_the_caller_running`, `e2e_a_shell_that_never_prompts_keeps_the_caller_running_and_exits_5`, `e2e_a_closed_caller_gets_exit_4_and_opens_nothing`, all ok (real PTYs, real bash, macOS).
 
 ### Slice and contracts
 
-- The diff against main is 32 files. Outside the story's list, and agreed: the three quoter files cherry-picked from 8b06ea4 (one-quoter scan exemptions tagged "migrated by hermes-a-quoting"), the CI step installing zsh and fish, the EINTR retry (`bcc384c`). Small necessary changes: `agent_status.rs` (`admit` takes the body, for the shell allowlist before a token is spent; T3), `lib.rs` (the e2e module and `pty_shell_name`), the design spec and UX spec status edits, `tickets.toml`, knowledge notes. Nothing in `docs/architecture.md`, `agentCommand.ts`, `contracts.ts`, `tabStore.ts`.
-- Contracts recorded: `.ade/context/terminal-open.md` (typing built, capabilities line, exit 5 text, admit and typed-line recheck, notice word) and the ADR 0011 amendment.
+- Since the previous QA (27046fb) the code changed only in `cli_guard/` (`lexer.rs`, `mod.rs`, `resolve.rs`, `scripts.rs`) and `ade_cli.rs` (20 lines), plus context and knowledge notes. The slice outside the story's file list is the agreed set: the three quoter files cherry-picked from 8b06ea4, the CI zsh and fish step, the EINTR retry, and the guard hardening; small necessary changes in `agent_status.rs` and `lib.rs`. Nothing in `docs/architecture.md`, `agentCommand.ts`, `contracts.ts` or `tabStore.ts`.
+- Contracts recorded: `.ade/context/terminal-open.md` (typing built, capabilities line, exit 5, admit and recheck, notice word), `.ade/context/cli-guard.md` ("Variable resolution fails closed"), and the ADR 0011 amendments (open/`--` rules and amendment 4).
 
 ### Limits of this verdict
 
-- Manual checks M1 to M5 are recorded as not gating and were not run here: they need a running ADE with a real Claude Code session, the user's rc files and a fish shell. M5 (harness on Linux) is for CI to show on the PR; QA ran macOS only.
-- The tests that run real zsh and fish passed here because both are installed; CI installs them by the new step.
-- Hand mutation of the 39e24c7 guard code was not done by QA; that is the re-check's job.
+- Correction to the 39e24c7 run: `fish` is not installed on this machine (`which fish` finds nothing; `zsh` is present), so in this run the fish cases of `shellQuote.test.ts` and `a_word_with_a_quote_or_backslash_is_one_word_in_sh_and_fish` were verified by the reference tokenizer only ("fish not found" is printed), not against a real fish. The earlier statement that real fish ran is withdrawn. The real-fish proof is CI's new zsh and fish install step; the PR's CI run must show it.
+- Manual checks M1 to M5 are recorded as not gating and were not run: they need a running ADE with a real Claude Code session. QA ran macOS only; the Linux harness run (M5) is for CI.
+- QA did not hand-mutate the 71bb5c6 guard code; that is the adversarial re-check's job.
