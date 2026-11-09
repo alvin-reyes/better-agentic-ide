@@ -5,8 +5,9 @@
 //! gh keeps its token in the system keyring (service `gh:github.com`), or in
 //! plain text in `hosts.yml` under its config folder.
 
+use super::lexer::Simple;
 use super::resolve::W;
-use super::resolve::{Scope, Q_PH, U_PH};
+use super::resolve::{cred_alt, Scope, NAMED_DIRS, Q_PH, U_PH};
 use super::unwrap::abs;
 use super::{Ctx, Guard};
 use std::path::{Path, PathBuf};
@@ -283,31 +284,48 @@ fn sed_only_substitutes(script: &str) -> bool {
 }
 
 impl<'c, 'a> Guard<'c, 'a> {
-    /// gh's credential folders, plus `$GH_CONFIG_DIR` and
-    /// `$XDG_CONFIG_HOME/gh` when this line assigns them (strictly resolved).
-    fn line_cred_dirs(&self, sc: &Scope) -> Vec<PathBuf> {
+    /// gh's credential folders, plus the stand-ins for `$GH_CONFIG_DIR`,
+    /// `$XDG_CONFIG_HOME/gh` and `$HOME/.config/gh` ([`NAMED_DIRS`]).
+    fn line_cred_dirs(&self) -> Vec<PathBuf> {
         let mut v = cred_dirs(self.ctx);
-        if let Some(d) = self.resolve(sc, "GH_CONFIG_DIR", usize::MAX, 1).filter(|d| d.starts_with('/')) {
-            v.push(PathBuf::from(d));
-        }
-        if let Some(d) = self.resolve(sc, "XDG_CONFIG_HOME", usize::MAX, 1).filter(|d| d.starts_with('/')) {
-            v.push(PathBuf::from(d).join("gh"));
+        for (name, d) in NAMED_DIRS {
+            v.push(match *name {
+                "GH_CONFIG_DIR" => PathBuf::from(d),
+                "XDG_CONFIG_HOME" => PathBuf::from(d).join("gh"),
+                _ => PathBuf::from(d).join(".config/gh"),
+            });
         }
         v
+    }
+
+    /// A simple command whose words name `$HOME`, `$GH_CONFIG_DIR` or
+    /// `$XDG_CONFIG_HOME`: checked again with each as its stand-in.
+    pub fn cred_named(&mut self, sc: &Scope, s: &Simple) {
+        let alt: Vec<Option<W>> = s.words.iter().map(cred_alt).collect();
+        let targets: Vec<W> = s.redirs.iter().filter(|r| r.op != super::lexer::RedirOp::HereDoc).filter_map(|r| cred_alt(&r.target)).collect();
+        if alt.iter().all(Option::is_none) && targets.is_empty() {
+            return;
+        }
+        let words: Vec<W> = alt.iter().zip(&s.words).map(|(a, w)| a.clone().unwrap_or_else(|| W::lit(w.literal().unwrap_or_else(|| Q_PH.to_string())))).collect();
+        self.cred_words(sc, &words, &targets);
+        if let Some(name) = words.first().filter(|w| !w.computed()) {
+            let base = super::unwrap::basename(&name.text).to_string();
+            self.reader_check(sc, &base, &words[1..]);
+        }
     }
 
     /// Words and redirect targets that name a credential file exactly or as
     /// a glob, or that start inside a credential folder and go on with a
     /// glob or a computed part (`~/.config/gh/*`, `~/.config/gh/$F`).
     pub fn cred_words(&mut self, sc: &Scope, words: &[W], targets: &[W]) {
-        let dirs = self.line_cred_dirs(sc);
+        let dirs = self.line_cred_dirs();
         let files: Vec<PathBuf> = dirs.iter().map(|d| d.join("hosts.yml")).collect();
         for w in words.iter().chain(targets) {
             // The literal text before the first glob or computed part.
             let cut = w.text.find([Q_PH, U_PH]).into_iter().chain(w.glob_at.first().copied()).min();
             if let Some(cut) = cut {
                 let tail = w.text.rsplit([Q_PH, U_PH]).next().unwrap_or("");
-                if w.computed() && tail.ends_with("gh/hosts.yml") {
+                if w.computed() && tail.ends_with("hosts.yml") {
                     return self.ask(format!("ADE: this reads gh's stored credential ({})", w.show()));
                 }
                 let head = &w.text[..cut];
@@ -324,6 +342,10 @@ impl<'c, 'a> Guard<'c, 'a> {
                 }
             }
             let Some((p, glob)) = word_path(self.ctx, &sc.cwd, w) else { continue };
+            // `hosts.yml` in a folder the line computes (`cd "$D" && cat hosts.yml`).
+            if p.starts_with(super::unwrap::UNKNOWN_DIR) && p.ends_with("hosts.yml") {
+                return self.ask(format!("ADE: this reads a hosts.yml in a folder the command computes ({})", w.show()));
+            }
             let ps = p.to_string_lossy();
             for f in &files {
                 if p == *f || (glob && glob_match(&ps, &f.to_string_lossy())) {
@@ -442,7 +464,7 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
             _ => {}
         }
-        let dirs = self.line_cred_dirs(sc);
+        let dirs = self.line_cred_dirs();
         if !TEXT_ONLY.contains(&base) && !(base == "git" && matches!(first, "commit" | "log" | "tag")) {
             let names: Vec<String> = dirs.iter().map(|d| d.join("hosts.yml").to_string_lossy().into_owned()).collect();
             // sed's own script quoting the path edits text, unless it reads or writes files.

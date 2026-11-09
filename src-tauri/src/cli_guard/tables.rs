@@ -554,11 +554,15 @@ impl Table {
         if flags.iter().any(|(f, v)| (f == "help" || f == "h") && truthy(v)) {
             return (GhOut::None, Some(p));
         }
-        // A computed positional could be a flag; a computed value matters only
-        // for a flag that decides the risk (`gh api -X`). `gh api`'s endpoint
-        // is judged by its literal parts.
+        // A computed positional could be a flag (`gh api`'s endpoint is judged
+        // by its literal parts, and `api` judges a computed `-X` itself). A
+        // word that may split (an unquoted expansion) can bring in any flag,
+        // wherever it sits.
         let skip_endpoint = usize::from(class == Sp(Special::Api));
-        let computed = pos.iter().skip(skip_endpoint).any(|w| w.computed()) || flags.iter().any(|(f, v)| f == "method" && v.as_ref().is_some_and(W::computed));
+        let splits = |w: &W| w.text.contains(super::resolve::U_PH);
+        let computed = pos.iter().skip(skip_endpoint).any(|w| w.computed())
+            || pos.iter().any(|w| splits(w))
+            || flags.iter().any(|(_, v)| v.as_ref().is_some_and(splits));
         let out = match class {
             Risk(r) => GhOut::Risk(format!("ADE: gh {p} {r}")),
             Read | Known => GhOut::None,

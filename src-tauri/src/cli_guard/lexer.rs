@@ -15,6 +15,9 @@ pub enum ParseError {
     Unclosed(&'static str),
     TooDeep,
     Syntax(String),
+    /// A word followed straight by `(`: a zsh glob qualifier, which may
+    /// run code (`*(e:…:)`, `*(+f)`), or zsh's `=(…)`, which runs its text.
+    GlobQualifier,
 }
 
 type R<T> = Result<T, ParseError>;
@@ -32,8 +35,8 @@ pub enum Part {
     Sub { list: List, quoted: bool },
     /// `<( … )` or `>( … )`.
     ProcSub { list: List },
-    /// `$(( … ))`. `assigns` is true when the expression assigns.
-    Arith { quoted: bool, assigns: bool },
+    /// `$(( … ))` or `$[ … ]`, with the expression's text.
+    Arith { quoted: bool, text: String },
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +85,8 @@ pub enum RedirOp {
 #[derive(Debug, Clone)]
 pub struct Redir {
     pub op: RedirOp,
+    /// `{NAME}>…`: the shell assigns the descriptor's number to NAME.
+    pub var: Option<String>,
     pub target: Word,
     /// For a here-doc: its index in [`Script::heredocs`].
     pub heredoc: Option<usize>,
@@ -96,6 +101,8 @@ pub struct Heredoc {
 #[derive(Debug, Clone)]
 pub struct Assign {
     pub name: String,
+    /// `NAME[…]=`: the subscript's text.
+    pub subscript: Option<String>,
     pub append: bool,
     pub array: bool,
     pub value: Word,
@@ -108,6 +115,8 @@ pub struct Simple {
     pub assigns: Vec<Assign>,
     pub words: Vec<Word>,
     pub redirs: Vec<Redir>,
+    /// `declare A=(…)`: the array's words, by the index of the `A=` word.
+    pub arrays: Vec<(usize, Vec<Word>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,12 +127,13 @@ pub enum Cmd {
     If(Vec<(List, List)>, Option<List>, Vec<Redir>),
     Loop { cond: List, body: List, redirs: Vec<Redir> },
     /// `for`/`select NAME [in WORDS]`; `words` is None without `in`.
-    /// An arithmetic `for ((…))` has an empty `var`.
-    For { var: String, words: Option<Vec<Word>>, body: List, select: bool, arith_assigns: bool, redirs: Vec<Redir> },
+    /// An arithmetic `for ((…))` has an empty `var` and its text in `arith`.
+    For { var: String, words: Option<Vec<Word>>, body: List, select: bool, arith: Option<String>, redirs: Vec<Redir> },
     Case { word: Word, arms: Vec<(Vec<Word>, List)>, redirs: Vec<Redir> },
     Func { name: String, body: Box<Cmd> },
     Coproc(Box<Cmd>),
-    Arith { assigns: bool },
+    /// `(( … ))`, with the expression's text.
+    Arith { text: String },
     Cond(Vec<Word>),
 }
 
@@ -498,10 +508,10 @@ impl Parser {
         if self.peek() == Some(b'(') {
             if self.at(1) == Some(b'(') {
                 if let Some(end) = self.arith_end(self.i + 2) {
-                    let assigns = arith_assigns(&self.src[self.i + 2..end]);
+                    let text = String::from_utf8_lossy(&self.src[self.i + 2..end]).into_owned();
                     self.i = end + 2;
                     let _ = self.trailing_redirs()?;
-                    return Ok(Cmd::Arith { assigns });
+                    return Ok(Cmd::Arith { text });
                 }
             }
             self.i += 1;
@@ -613,10 +623,10 @@ impl Parser {
         self.skip_blanks();
         let mut var = String::new();
         let mut words = None;
-        let mut arith_assigns_ = false;
+        let mut arith = None;
         if self.starts(b"((") {
             let end = self.arith_end(self.i + 2).ok_or(ParseError::Unclosed("(("))?;
-            arith_assigns_ = arith_assigns(&self.src[self.i + 2..end]);
+            arith = Some(String::from_utf8_lossy(&self.src[self.i + 2..end]).into_owned());
             self.i = end + 2;
         } else {
             let w = self.read_word()?.ok_or_else(|| ParseError::Syntax("for without a name".into()))?;
@@ -642,7 +652,7 @@ impl Parser {
         let body = self.parse_do()?;
         self.leave();
         let redirs = self.trailing_redirs()?;
-        Ok(Cmd::For { var, words, body, select, arith_assigns: arith_assigns_, redirs })
+        Ok(Cmd::For { var, words, body, select, arith, redirs })
     }
 
     fn parse_case(&mut self) -> R<Cmd> {
@@ -776,7 +786,8 @@ impl Parser {
     }
 
     fn parse_simple(&mut self) -> R<Cmd> {
-        let mut s = Simple { assigns: Vec::new(), words: Vec::new(), redirs: Vec::new() };
+        let mut s = Simple { assigns: Vec::new(), words: Vec::new(), redirs: Vec::new(), arrays: Vec::new() };
+        let mut word_end = usize::MAX;
         loop {
             self.skip_blanks();
             match self.peek() {
@@ -791,6 +802,18 @@ impl Parser {
                 }
             }
             if self.peek() == Some(b'(') {
+                // `local a=(…)`: an array argument.
+                if self.i == word_end && s.words.last().and_then(assignment).is_some_and(|a| a.value.parts.is_empty()) {
+                    self.i += 1;
+                    let words = self.array_words()?;
+                    s.arrays.push((s.words.len() - 1, words));
+                    continue;
+                }
+                // Any other `word(…)` with no blank between: a zsh glob
+                // qualifier or `=(…)` (`f()` is a function).
+                if self.i == word_end && self.at(1) != Some(b')') {
+                    return Err(ParseError::GlobQualifier);
+                }
                 if s.words.len() == 1 && s.assigns.is_empty() && s.redirs.is_empty() {
                     self.i += 1;
                     self.skip_blanks();
@@ -812,26 +835,14 @@ impl Parser {
                     if a.value.parts.is_empty() && self.peek() == Some(b'(') {
                         self.i += 1;
                         a.array = true;
-                        loop {
-                            self.skip_ws_nl()?;
-                            match self.peek() {
-                                Some(b')') => {
-                                    self.i += 1;
-                                    break;
-                                }
-                                None => return Err(ParseError::Unclosed("(")),
-                                _ => match self.read_word()? {
-                                    Some(w) => a.array_words.push(w),
-                                    None => return Err(ParseError::Syntax("bad array".into())),
-                                },
-                            }
-                        }
+                        a.array_words = self.array_words()?;
                     }
                     s.assigns.push(a);
                     continue;
                 }
             }
             s.words.push(w);
+            word_end = self.i;
         }
         if s.words.is_empty() && s.assigns.is_empty() && s.redirs.is_empty() {
             return Err(ParseError::Syntax(format!("empty command at {:?}", self.peek().map(|b| b as char))));
@@ -839,8 +850,38 @@ impl Parser {
         Ok(Cmd::Simple(s))
     }
 
+    /// An array's words, after its `(`, through the closing `)`.
+    fn array_words(&mut self) -> R<Vec<Word>> {
+        let mut words = Vec::new();
+        loop {
+            self.skip_ws_nl()?;
+            match self.peek() {
+                Some(b')') => {
+                    self.i += 1;
+                    return Ok(words);
+                }
+                None => return Err(ParseError::Unclosed("(")),
+                _ => match self.read_word()? {
+                    Some(w) => words.push(w),
+                    None => return Err(ParseError::Syntax("bad array".into())),
+                },
+            }
+        }
+    }
+
     fn try_redir(&mut self) -> R<Option<Redir>> {
         let mut j = self.i;
+        let mut var = None;
+        if self.peek() == Some(b'{') && self.at(1).is_some_and(is_name_start) {
+            let mut e = self.i + 1;
+            while self.src.get(e).is_some_and(|&b| is_name(b)) {
+                e += 1;
+            }
+            if self.src.get(e) == Some(&b'}') && matches!(self.src.get(e + 1), Some(b'<' | b'>')) {
+                var = Some(String::from_utf8_lossy(&self.src[self.i + 1..e]).into_owned());
+                j = e + 1;
+            }
+        }
         while self.src.get(j).is_some_and(u8::is_ascii_digit) {
             j += 1;
         }
@@ -900,7 +941,7 @@ impl Parser {
             self.pending.push(Pending { id, delim: delim.into_bytes(), strip, quoted });
             heredoc = Some(id);
         }
-        Ok(Some(Redir { op, target, heredoc }))
+        Ok(Some(Redir { op, var, target, heredoc }))
     }
 
     fn read_word(&mut self) -> R<Option<Word>> {
@@ -1043,9 +1084,9 @@ impl Parser {
             Some(b'(') => {
                 if self.at(2) == Some(b'(') {
                     if let Some(end) = self.arith_end(self.i + 3) {
-                        let assigns = arith_assigns(&self.src[self.i + 3..end]);
+                        let text = String::from_utf8_lossy(&self.src[self.i + 3..end]).into_owned();
                         self.i = end + 2;
-                        ps.part(Part::Arith { quoted, assigns });
+                        ps.part(Part::Arith { quoted, text });
                         return Ok(true);
                     }
                 }
@@ -1065,6 +1106,24 @@ impl Parser {
                 let p = self.braced(quoted)?;
                 ps.part(p);
             }
+            // `$[ … ]`: arithmetic, as `$(( … ))`.
+            Some(b'[') => {
+                let mut depth = 0usize;
+                let mut k = self.i + 2;
+                loop {
+                    match self.src.get(k) {
+                        None => return Err(ParseError::Unclosed("$[")),
+                        Some(b'[') => depth += 1,
+                        Some(b']') if depth == 0 => break,
+                        Some(b']') => depth -= 1,
+                        _ => {}
+                    }
+                    k += 1;
+                }
+                let text = String::from_utf8_lossy(&self.src[self.i + 2..k]).into_owned();
+                self.i = k + 1;
+                ps.part(Part::Arith { quoted, text });
+            }
             Some(c) if is_name_start(c) => {
                 self.i += 1;
                 let start = self.i;
@@ -1079,7 +1138,8 @@ impl Parser {
                 ps.part(Part::Param { name: (c as char).to_string(), plain: true, quoted, inner: Vec::new() });
             }
             // zsh's `$=X` (split), `$~X` (glob) and `$^X` (rc-expand), alone
-            // or combined: not plain, so the value is never known text.
+            // or combined: not plain, so the value is never known text. It
+            // reads as `${~X}` does: no name, the prefix and name inside.
             Some(b'=' | b'~' | b'^') => {
                 let mut j = self.i + 1;
                 while matches!(self.src.get(j), Some(b'=' | b'~' | b'^')) {
@@ -1097,9 +1157,9 @@ impl Parser {
                 } else {
                     return Ok(false);
                 };
-                let name = String::from_utf8_lossy(&self.src[j..end]).into_owned();
+                let text = String::from_utf8_lossy(&self.src[self.i + 1..end]).into_owned();
                 self.i = end;
-                ps.part(Part::Param { name, plain: false, quoted, inner: Vec::new() });
+                ps.part(Part::Param { name: String::new(), plain: false, quoted, inner: vec![Part::Lit { text, quoted }] });
             }
             _ => return Ok(false),
         }
@@ -1110,6 +1170,8 @@ impl Parser {
     fn braced(&mut self, quoted: bool) -> R<Part> {
         self.enter()?;
         let mut plain = true;
+        // `${!x}`: indirect, named `!x`; `${#x}`: a length.
+        let bang = self.peek() == Some(b'!') && self.at(1) != Some(b'}');
         if matches!(self.peek(), Some(b'#' | b'!')) && self.at(1) != Some(b'}') {
             plain = false;
             self.i += 1;
@@ -1123,10 +1185,11 @@ impl Parser {
             while self.peek().is_some_and(|c| c.is_ascii_digit()) {
                 self.i += 1;
             }
-        } else if self.peek().is_some_and(|c| matches!(c, b'@' | b'*' | b'#' | b'?' | b'-' | b'$' | b'!')) {
+        } else if self.peek().is_some_and(|c| matches!(c, b'@' | b'*' | b'#' | b'?' | b'-' | b'$' | b'!')) && !(self.peek() == Some(b'$') && matches!(self.at(1), Some(b'{' | b'('))) {
+            // (zsh's `${${x}}` nests: its `$` starts an expansion, not `$$`.)
             self.i += 1;
         }
-        let name = String::from_utf8_lossy(&self.src[start..self.i]).into_owned();
+        let name = format!("{}{}", if bang { "!" } else { "" }, String::from_utf8_lossy(&self.src[start..self.i]));
         let mut inner = Vec::new();
         if self.peek() == Some(b'}') {
             self.i += 1;
@@ -1310,19 +1373,13 @@ impl Parser {
     }
 }
 
-/// Whether an arithmetic expression assigns: `=` other than a comparison, or `++`/`--`.
-fn arith_assigns(s: &[u8]) -> bool {
-    for (k, &b) in s.iter().enumerate() {
-        let prev = if k > 0 { s[k - 1] } else { b' ' };
-        let next = s.get(k + 1).copied().unwrap_or(b' ');
-        if b == b'=' && !matches!(prev, b'=' | b'!' | b'<' | b'>') && next != b'=' {
-            return true;
-        }
-        if (b == b'+' && next == b'+') || (b == b'-' && next == b'-') {
-            return true;
-        }
-    }
-    false
+/// Whether an arithmetic expression's operands are all literal integers:
+/// only digits, operators, parentheses and blanks, and the shell's own
+/// integers `$?`, `$#`, `$$` and `$!`. A name, any other `$`, a quote or a
+/// subscript is evaluated recursively by the shell: code from data.
+pub fn arith_literal(s: &str) -> bool {
+    let s = s.replace("$?", "0").replace("$#", "0").replace("$$", "0").replace("$!", "0");
+    s.bytes().all(|b| b.is_ascii_digit() || b.is_ascii_whitespace() || b"+-*/%<>=!&|^~?:,()".contains(&b))
 }
 
 /// `NAME=…`, `NAME+=…` or `NAME[…]=…` at the start of a word.
@@ -1338,8 +1395,10 @@ pub fn assignment(w: &Word) -> Option<Assign> {
     }
     let name = text[..k].to_string();
     let mut array = false;
+    let mut subscript = None;
     if b.get(k) == Some(&b'[') {
         let close = text[k..].find(']')? + k;
+        subscript = Some(text[k + 1..close].to_string());
         k = close + 1;
         array = true;
     }
@@ -1356,7 +1415,7 @@ pub fn assignment(w: &Word) -> Option<Assign> {
         parts.push(Part::Lit { text: rest.to_string(), quoted: false });
     }
     parts.extend(w.parts[1..].iter().cloned());
-    Some(Assign { name, append, array, value: Word { parts, pos: w.pos }, array_words: Vec::new(), pos: w.pos })
+    Some(Assign { name, subscript, append, array, value: Word { parts, pos: w.pos }, array_words: Vec::new(), pos: w.pos })
 }
 
 #[cfg(test)]
@@ -1389,7 +1448,6 @@ mod tests {
             ("$'\\u0067\\150' pr view 1", &["gh pr view"]),
             ("g\"\"h repo view", &["gh repo view"]),
             ("{gh,} repo view", &["gh repo view"]),
-            ("x=g; ${x}h repo view", &["gh repo view"]),
             ("gh repo \\\n view", &["gh repo view"]),
             ("bash <<'EOF'\ngh repo view\nEOF", &["gh repo view"]),
             ("cat <<EOF > notes.txt\nhello\nEOF\ngh pr view 1", &["gh pr view"]),
@@ -1408,9 +1466,6 @@ mod tests {
             ("coproc w { gh repo view; }", &["gh repo view"]),
             ("time gh repo view", &["gh repo view"]),
             ("time -p gh repo view", &["gh repo view"]),
-            ("f() { gh \"$@\"; }; f repo view", &["gh repo view"]),
-            ("function f { gh \"$@\"; }; f pr view 1", &["gh pr view"]),
-            ("function f() { gh $1 $2; }\nf repo view", &["gh repo view"]),
             ("[ -x x ] && gh repo view", &["gh repo view"]),
             ("[[ -n $x && $y == a ]] && gh repo view", &["gh repo view"]),
             ("x=(a b); gh repo view 2>&1 >/dev/null </dev/null", &["gh repo view"]),
@@ -1433,11 +1488,8 @@ mod tests {
 
         // Found and risky: asks through the table.
         for cmd in [
-            "x=g; ${x}h repo delete o/r",
-            "\"$VIRTUAL_ENV/bin/gh\" repo delete o/r",
             "./deploy repo delete o/r",
             "f() { gh repo delete o/r; }",
-            "function f { gh \"$@\"; }; f repo delete o/r",
             "$'\\x67\\x68' repo delete o/r",
         ] {
             match seen(&fs, cmd) {
@@ -1448,6 +1500,13 @@ mod tests {
 
         // Computed: each asks because the name can't be known, and bash would run gh for each.
         for cmd in [
+            // ADR 0011 amendment 5: no expansion is resolved, a function's
+            // arguments included.
+            "x=g; ${x}h repo view",
+            "\"$VIRTUAL_ENV/bin/gh\" repo delete o/r",
+            "f() { gh \"$@\"; }; f repo view",
+            "function f { gh \"$@\"; }; f pr view 1",
+            "function f() { gh $1 $2; }\nf repo view",
             "printf gh | xargs -I{} {} repo view",
             "x=g; false && x=y; ${x}h repo delete o/r",
             "x=g; (x=y); ${x}h repo delete o/r",
