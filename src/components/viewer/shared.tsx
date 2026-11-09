@@ -20,6 +20,25 @@ export function Centered({ children, color }: { children: ReactNode; color?: str
   );
 }
 
+/**
+ * A message shown in place of content (truncated, binary, can't open...),
+ * announced politely to screen readers. `inline` drops the padding, for a
+ * note in a toolbar.
+ */
+export function Status({ children, inline = false }: { children: ReactNode; inline?: boolean }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={inline
+        ? { color: "var(--text-muted)" }
+        : { padding: "20px", fontSize: "12px", color: "var(--text-muted)" }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const toolbarButton = {
   display: "inline-flex", alignItems: "center", justifyContent: "center",
   minWidth: "24px", height: "22px", padding: "0 6px",

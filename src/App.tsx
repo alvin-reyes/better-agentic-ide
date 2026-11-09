@@ -43,7 +43,7 @@ import { useTabStore, saveSession, loadSession, shownView } from "./stores/tabSt
 import { tabFolderPtyId } from "./lib/tabDisplay";
 import { useOwnFolderCwd } from "./hooks/useOwnFolderCwd";
 import { flushNow } from "./lib/persistence";
-import { listenForFileOpens } from "./lib/openFile";
+import { handlePreviewOpen, listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
@@ -54,6 +54,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { watchAgentStatus } from "./stores/agentStatusStore";
 import { useAgentStatusToasts } from "./hooks/useAgentStatusToasts";
+import { usePreviewPanel } from "./lib/previewFocus";
 
 /** Session auto-save: after a tab/pane change, and periodically. */
 const SESSION_SAVE_DEBOUNCE_MS = 2000;
@@ -63,7 +64,14 @@ export default function App() {
   const scratchpadRef = useRef<ScratchpadHandle>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  // Open state and the ⌘⇧B focus request (rules in previewFocus.ts).
+  const {
+    open: previewOpen,
+    focusRequest: previewFocusRequest,
+    toggle: togglePreview,
+    close: closePreview,
+    openForFile: openPreviewForFile,
+  } = usePreviewPanel();
   const [fleetOpen, setFleetOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
@@ -141,16 +149,13 @@ export default function App() {
   // follows it.
   useEffect(() => {
     const handler = (e: Event) => {
-      const path = (e as CustomEvent).detail?.path;
-      if (path) {
-        const { activeTabId, setPreviewPath } = useTabStore.getState();
-        setPreviewPath(activeTabId, path);
-      }
-      setPreviewOpen(true);
+      const { activeTabId, setPreviewPath } = useTabStore.getState();
+      // A path:line link also asks the panel to land on that line.
+      handlePreviewOpen((e as CustomEvent).detail, { activeTabId, setPreviewPath, openPanel: openPreviewForFile });
     };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
-  }, []);
+  }, [openPreviewForFile]);
 
   // Files clicked in detached windows' terminals open here.
   useEffect(() => {
@@ -288,7 +293,6 @@ export default function App() {
   }, []);
 
   const toggleAgentPicker = useCallback(() => setAgentPickerOpen((prev) => !prev), []);
-  const togglePreview = useCallback(() => setPreviewOpen((prev) => !prev), []);
   const toggleFileBrowser = useCallback(() => useFileBrowserStore.getState().toggle(), []);
   const sendScratchpad = useCallback(() => scratchpadRef.current?.send(), []);
   const copyScratchpad = useCallback(() => scratchpadRef.current?.copy(), []);
@@ -386,7 +390,8 @@ export default function App() {
         {previewOpen && (
           <Suspense fallback={null}>
             <PreviewPanel
-              onClose={() => setPreviewOpen(false)}
+              onClose={closePreview}
+              focusRequest={previewFocusRequest}
             />
           </Suspense>
         )}
