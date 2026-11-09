@@ -947,6 +947,8 @@ hub tabs only; `remote-tabs.md` created now.
 
 For the owner:
 
+**Owner answers (2026-11-09):** Q-A1: refuse at the preflight with a clear message naming the supported shells (no fallback to zsh). Q-A2: allow; hub tabs in a saved workspace keep their folder, and the review step's sync disclosure names workspaces too. Q-A3: stop before the Trash and offer Retry or Keep. Q-A4: noted for the agent hub template's maintainers (keep T4's usage line in the documented form).
+
 - **Q-A1. Other login shells.** A developer whose login shell is not sh, bash, zsh,
   ksh, dash or fish (nushell, xonsh, tcsh) is refused at the preflight with the fix
   (`chsh -s /bin/zsh`). Alternative: run the steps from `/bin/zsh -l -i` with a
