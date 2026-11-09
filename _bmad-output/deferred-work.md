@@ -40,3 +40,9 @@
 - source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-the-cli-and-its-exit-codes-plan.md`
   summary: For story 7: a mistyped verb under the helper's own name (`ade-hook opne`) is the hook mode, which reads stdin, prints `{}` and exits 0, so the typo is silent.
   evidence: PR #97 review, minor 6. By contract only `open`, `help` and `--help` select the CLI under the name `ade-hook`; the hook ignores arguments. Under the name `ade` the same typo is a usage error (exit 2). Story 7, which tells agents to use `"$ADE_HOOK_BIN" open`, could make an unknown first argument under `ade-hook` an error when stdin is a terminal, or document `ade open` as the form to type.
+- source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-adds-a-sub-terminal-endpoint-and-window-plan.md`
+  summary: The hook endpoint's `serve` loop reads a request body with no read timeout, so a client that sends headers and then stalls holds the serve thread (hook events and `/open` wait behind it).
+  evidence: Code review m6 of PR #96 (story 4a), deferred as pre-existing: hook events were read the same way before `/open`. A per-connection read deadline (or reading the body on the handler thread) would bound it.
+- source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-adds-a-sub-terminal-endpoint-and-window-plan.md`
+  summary: An `ade open` run while the shell starts (from an rc file) can reach the window before `setPtyId` has stored the caller's PTY id, so the window doesn't find the caller and answers 409.
+  evidence: Code review m8 of PR #96 (story 4a), deferred. The window finds the caller by `ptyId` through `allTabPanes`; `create_pty` returns, then `setPtyId` runs, and a fast rc-time request can arrive between them. Holding requests for an unknown caller briefly (until `expiresAt`), or mapping the PTY id before the shell starts, would fix it.

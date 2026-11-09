@@ -3,15 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The window's half of `ade open`: what it does with each message from Rust.
 // The terminal itself is faked here (createSubTerminal); the real
 // createInstance is exercised in src/hooks/__tests__/createAtOnce.test.tsx.
-const h = vi.hoisted(() => ({ destroyInstance: vi.fn() }));
+const h = vi.hoisted(() => ({ destroyInstance: vi.fn(), invoke: vi.fn(async (..._args: unknown[]) => null) }));
 vi.mock("../../hooks/useTerminal", () => ({
   destroyInstance: h.destroyInstance,
   createSubTerminalInstance: vi.fn(),
   getTerminalDimensions: () => null,
 }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null), Channel: class { onmessage: unknown = null; } }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke, Channel: class { onmessage: unknown = null; } }));
 
-import { handleOpenMessage, defaultSubTerminalName, type OpenDeps, type OpenMessage } from "../terminalOpen";
+import { handleOpenMessage, defaultSubTerminalName, startTerminalOpen, type OpenDeps, type OpenMessage } from "../terminalOpen";
 import { useTabStore, ownViewOnly, OWN_VIEW, type Tab, type PaneNode } from "../../stores/tabStore";
 
 const leaf = (id: string, ptyId: number | null): PaneNode => ({ type: "pane", pane: { id, ptyId } });
@@ -66,16 +66,28 @@ describe("adding a sub-terminal", () => {
     expect(view.name).toBe("api");
     expect(a.shownView).toBe(OWN_VIEW);
     expect(useTabStore.getState().activeTabId).toBe("b");
-    expect(done(invoked)).toEqual([{ requestId: 1, error: null, ptyId: 40, line: null }]);
+    expect(done(invoked)).toEqual([{ requestId: 1, error: null, ptyId: 40, line: null, focused: false }]);
   });
 
-  it("--focus switches to it and activates its tab", async () => {
+  it("--focus from the active tab switches to the new sub-terminal", async () => {
+    useTabStore.setState({ activeTabId: "a" });
     const { d, invoked } = deps();
     await handleOpenMessage(request({ focus: true }), d);
     const a = tab("a");
     expect(a.shownView).toBe(a.viewOrder[1]);
     expect(useTabStore.getState().activeTabId).toBe("a");
-    expect(done(invoked)).toEqual([{ requestId: 1, error: null, ptyId: 40, line: null }]);
+    expect(done(invoked)).toEqual([{ requestId: 1, error: null, ptyId: 40, line: null, focused: true }]);
+  });
+
+  it("--focus from a background tab adds in the background and says so", async () => {
+    // Tab b is in sight: a command in tab a can't take the window over.
+    const { d, invoked } = deps();
+    await handleOpenMessage(request({ focus: true }), d);
+    const a = tab("a");
+    expect(a.viewOrder).toHaveLength(2);
+    expect(a.shownView).toBe(OWN_VIEW);
+    expect(useTabStore.getState().activeTabId).toBe("b");
+    expect(done(invoked)).toEqual([{ requestId: 1, error: null, ptyId: 40, line: null, focused: false }]);
   });
 
   it("a sub-terminal's add is a sibling in the same tab, spawned by its view", async () => {
@@ -121,12 +133,21 @@ describe("adding a sub-terminal", () => {
     expect(typeof answer.error).toBe("string");
   });
 
-  it("a shell that fails to start is answered with an error", async () => {
+  it("a shell that fails to start is answered with an error, and its view is closed", async () => {
     const { d, invoked } = deps({ createSubTerminal: async () => ({ ptyId: null }) });
-    await handleOpenMessage(request(), d);
+    await handleOpenMessage(request({ focus: true }), d);
     const [answer] = done(invoked);
     expect(answer).toMatchObject({ requestId: 1, ptyId: null });
     expect(typeof answer.error).toBe("string");
+    // No dead "Failed to start shell" sub-terminal is left behind.
+    const a = tab("a");
+    expect(a.viewOrder).toEqual([OWN_VIEW]);
+    expect(a.shownView).toBe(OWN_VIEW);
+    await flush();
+    expect(h.destroyInstance).toHaveBeenCalledTimes(1);
+    // A later expiry for it closes nothing more.
+    await handleOpenMessage({ expired: 1 }, d);
+    expect(h.destroyInstance).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -188,8 +209,30 @@ describe("default names", () => {
     expect(defaultSubTerminalName(null, null, "/work/web/")).toBe("web");
     expect(defaultSubTerminalName(null, ["FOO=1"], "/work/web")).toBe("web");
   });
+  it("format and separator characters are cleaned out of a derived name", () => {
+    expect(defaultSubTerminalName(null, null, "/work/evil\u202Egpj.exe")).toBe("evilgpj.exe");
+    expect(defaultSubTerminalName(null, null, "/work/a\u200Bb\u2028c\u2029d\uFEFF\u0007")).toBe("abcd");
+    expect(defaultSubTerminalName(null, ["np\u200Dm", "run"], "/work/web")).toBe("npm");
+    // Nothing left: the next fallback.
+    expect(defaultSubTerminalName(null, ["\u200B"], "/work/web")).toBe("web");
+    expect(defaultSubTerminalName(null, null, "/work/\u202E\u200B")).toBe("Terminal");
+    expect(defaultSubTerminalName(null, null, "/work/日本語")).toBe("日本語");
+  });
   it("no command and no folder is named Terminal", () => {
     expect(defaultSubTerminalName(null, null, null)).toBe("Terminal");
     expect(defaultSubTerminalName(null, null, "/")).toBe("Terminal");
+  });
+});
+
+describe("listening", () => {
+  it("listens once per window until stopped", () => {
+    h.invoke.mockClear();
+    const stop = startTerminalOpen();
+    startTerminalOpen();
+    expect(h.invoke.mock.calls.filter(([cmd]) => cmd === "terminal_open_listen")).toHaveLength(1);
+    stop();
+    const again = startTerminalOpen();
+    expect(h.invoke.mock.calls.filter(([cmd]) => cmd === "terminal_open_listen")).toHaveLength(2);
+    again();
   });
 });
