@@ -1,0 +1,26 @@
+# 0021: Terminals report their folder through ADE's shell integration; ADE uses its own folder picker
+
+- **Status:** Accepted (2026-11-08). Approved by the owner on 2026-11-08 with the F1 plan; accepted on 2026-11-08, when the delta review of revisions 5 to 5g of the F1 design passed. With the F1 design (section 9; item P1 for the product manager).
+- **Revisions:** 2026-11-08 first version; revised the same day after the adversarial review (M10, minor 9).
+- **Context:**
+  - PE-4 AC7, AC8 and AC12 need the current folder (PowerShell's `Set-Location` included), per-profile history, and a check that start-up files did not undo the profile.
+  - macOS `/etc/zshrc` overwrites `HISTFILE` (design E6).
+  - The OS's native folder picker writes the chosen path into per-app and OS recent stores (macOS `NSNavLastRootDirectory` and `sharedfilelist`, Windows `ComDlg32` MRUs, GTK `recently-used.xbel`). G3 forbids that for engagement paths, in both profiles (F1.12 N-B2).
+- **Decision:**
+  - Every profile's terminals start their shell with ADE's integration, which runs after the user's start-up files:
+    - zsh through a `ZDOTDIR` wrapper;
+    - bash through `--init-file` emulating login order;
+    - fish through `-C`;
+    - PowerShell through `-NoProfile -EncodedCommand` with the integration inline (so the `Restricted` execution policy does not stop it), which sets PSReadLine's history first, then loads the profiles only where PowerShell's own policy would.
+  - At each prompt the integration emits OSC 7 and a private `OSC 7717;check` with the effective `CLAUDE_CONFIG_DIR`, temp variables and history location.
+  - `ptysink.rs` parses both from the PTY byte stream.
+  - The launch actions read `pty_folder_now` at the moment of launch.
+  - In engagements, history lives in `<root>/history/` (fish through `XDG_DATA_HOME`). The default profile keeps today's history files.
+  - ADE replaces the native folder picker with its own in-webview picker (on `list_directory`) wherever it picks folders. Its last folder is kept in memory only.
+- **Consequences:**
+  - Unsupported shells get "folder unknown" and "history not isolated" warnings; launch actions refuse in engagements only. In the default profile, a terminal whose folder is unknown is treated as having been in an engagement's folders for PE-4 AC4.
+  - On macOS, listing protected folders (Desktop, Documents, Downloads, removable and network volumes) triggers the OS's privacy prompt, once per class.
+  - The isolation test's folder-picker step starts in the slice that builds this picker, not in slice 0.
+  - fish terminals in an engagement export `XDG_DATA_HOME` (side effect, design P4).
+  - The PRD's scenario wording "OS's native folder picker" needs the product manager's update (P1).
+  - The designer owns the picker's screens.

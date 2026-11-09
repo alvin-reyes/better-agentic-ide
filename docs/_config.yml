@@ -43,3 +43,7 @@ exclude:
   - plans/
   - superpowers/
   - bmad-vendoring.md
+  - prd.md
+  - architecture.md
+  - ux-spec.md
+  - mockup.html
