@@ -21,7 +21,8 @@ paired phone, and the rule for agent hub tabs.
 - Each entry: `{ tab_id, title, project, pty_ids, hub }`.
   - `project`: the base name of the tab's active pane's folder (live, else saved,
     else initial, else empty).
-  - `hub`: `true` for a hub tab (`Tab.hub`), else `false`.
+  - `hub`: `true` for a hub tab (`Tab.hub`), `"removed"` for a "Hub removed" tab
+    (`Tab.hubRemoved`, F2 revision 3), else `false`.
 - The bridge keys entries by `(window_label, tab_id)` and gives each an opaque random
   remote id; PTY ids never leave the Mac.
 
@@ -30,8 +31,11 @@ paired phone, and the rule for agent hub tabs.
 - The webview builds every entry with `remoteTabEntry(tab)` (`src/lib/remoteTabs.ts`).
   For a hub tab it returns `title: "Agent hub"`, `project: "Agent hub"`,
   `hub: true`, whatever title the tab's programs set.
+  For a "Hub removed" tab it returns `title: "Hub removed"`, `project: "Hub
+  removed"`, `hub: "removed"`.
 - The Rust bridge **re-applies** the mask: an entry with `hub: true` is relayed with
-  title and project "Agent hub", whatever the webview sent.
+  title and project "Agent hub", and one with `hub: "removed"` with "Hub removed",
+  whatever the webview sent.
 - No entry ever carries a folder path; a hub tab's folder base name is never sent.
 - A later phone piece that relays more of a tab (output, input) states its own rule
   for hub tabs before it ships (F2 OB-10 AC2).

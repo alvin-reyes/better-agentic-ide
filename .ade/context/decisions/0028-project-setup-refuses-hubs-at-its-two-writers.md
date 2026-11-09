@@ -1,6 +1,6 @@
 # 0028: Project setup refuses agent hubs at its two writers
 
-- Status: Proposed (2026-11-09), revised with the F2 design revision 2; not yet
+- Status: Proposed (2026-11-09), revised with the F2 design revision 3; not yet
   reviewed or approved.
 - Context:
   - A hub has `_bmad/` and no `.ade/methodology`, so automatic project setup would
@@ -13,8 +13,10 @@
 - Decision:
   - `hubmark::hub_reason(dir)`: `dir` or an ancestor below `HOME` has `hub.conf` at its top, or
     has an executable `bin/init`, a `templates/hub/` folder and a `personas/`
-    folder at its top, or is the hub folder of an onboarding run of this launch
-    (an in-memory registry from the run's start to its end).
+    folder at its top, or is the hub folder of an onboarding run in progress in this
+    launch (the app-wide folder registry, from the run's reservation at
+    `hub_run_prepare` until it stops being in progress; revision 3, which also uses
+    the registry to refuse a second run on the same folder, OB-4 AC7).
   - `set_up` and `bmad_switch_apply` refuse such a root next to
     `refuse_unfinished`, writing nothing (the backstop).
   - The webview asks `hub_guard_status(path)` before any question or action

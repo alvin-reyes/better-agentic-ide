@@ -1,7 +1,7 @@
 # 0029: A finished hub is judged by HEAD, with ADE's own git
 
-- Status: Proposed (2026-11-09). With the F2 design revision 2; not yet reviewed or
-  approved.
+- Status: Proposed (2026-11-09). With the F2 design revision 2, revised in revision 3
+  (the joint review's X3); not yet reviewed or approved.
 - Context:
   - F2.5 defines a **finished hub** as a folder whose `hub.conf` is tracked in the
     folder's git `HEAD`; an unfinished one has a `hub.conf` that is not committed.
@@ -20,14 +20,26 @@
     Command Line Tools stubs open an install dialog, which is why the preflight runs
     `/usr/bin/xcode-select -p` first.
   - Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md`, section 6.7.
+  - Revision 2's single `git cat-file -e HEAD:hub.conf` exits 128 both for "not in
+    `HEAD`" and for a broken repository, so a failed check was reported as
+    `unfinished`; and it relied on the preflight having run `xcode-select -p`, so on
+    a fresh launch every existing hub was `tools_missing` (review finding X3).
 - Decision:
-  - `hub_folder_kind` decides `finished` with ADE's own
-    `/usr/bin/git --git-dir=<path>/.git cat-file -e HEAD:hub.conf` (cwd the folder,
-    10 s limit, stdin `/dev/null`), with `GIT_DIR`, `GIT_WORK_TREE` and the other
-    repository-locating variables removed, `GIT_CONFIG_NOSYSTEM=1` and
-    `GIT_CONFIG_GLOBAL=/dev/null`; exit 0 is `finished`, anything else `unfinished`.
-  - It runs only after `xcode-select -p` has returned 0 in this launch; before that
-    it answers `tools_missing` and starts no `git`.
+  - `hub_folder_kind` decides `finished` with ADE's own `/usr/bin/git` (cwd the
+    folder, 10 s limit, stdin `/dev/null`, `GIT_DIR`, `GIT_WORK_TREE` and the other
+    repository-locating variables removed, `GIT_CONFIG_NOSYSTEM=1`,
+    `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_OPTIONAL_LOCKS=0`):
+    no `<path>/.git` → `unfinished` (no git run);
+    `git --git-dir=<path>/.git rev-parse -q --verify HEAD` exit 1 (no commit yet) →
+    `unfinished`; then `rev-parse -q --verify HEAD^{commit}` must exit 0 (else the
+    repository is damaged: `check_failed`); then `git --git-dir=<path>/.git ls-tree HEAD -- hub.conf`: one
+    `blob` line → `finished`, an empty listing → `unfinished`. Any other outcome of
+    either (exit 128, a signal, a spawn error, the time limit) → `check_failed
+    {reason}`, reported as such, never as `unfinished`.
+  - The Command Line Tools check is the folder check's own: `hub_folder_kind` runs
+    `/usr/bin/xcode-select -p` itself when no 0 is cached for this launch and caches
+    a 0 (a non-zero is not cached). With the tools missing it answers
+    `tools_missing` and starts no `git`.
   - Every "finished" decision uses it: the questionnaire's inline errors, the
     preflight's folder check, Open Hub's re-check, folders met after a restart. The
     only other test of `hub.conf` being tracked is the PRD's own c3
@@ -42,4 +54,7 @@
     parent's.
   - Without the Command Line Tools the questionnaire cannot tell finished from
     unfinished and says the tools are missing, which the preflight would refuse
-    anyway.
+    anyway. With them, the first folder check of a launch pays one `xcode-select -p`.
+  - A broken repository, or git that does not answer in 10 s, is `check_failed`,
+    so the developer is told the check failed rather than that the hub is
+    unfinished.

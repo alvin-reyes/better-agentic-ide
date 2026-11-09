@@ -1,7 +1,7 @@
 # 0026: Hub setup steps run under a runner that leads one PTY
 
-- Status: Proposed (2026-11-09), revised with the F2 design revision 2; not yet
-  reviewed or approved.
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 and 3; not
+  yet reviewed or approved.
 - Context:
   - F2 (`docs/prd.md` OB-4 AC1, AC6) runs the bundled agent hub template's steps
     (`bin/init`, the first commit, `bin/secret`, `bin/setup`, `bin/brain index`,
@@ -52,6 +52,14 @@
   - After (a) the runner `chdir`s into the hub folder. At the end it resets every
     signal and the mask and `execve`s the login shell a new terminal would get, in
     the hub folder: same PID, PTY id and token.
+  - The runner prints no words of its own. Every line shown in the tab (each
+    command, each note) is text the webview supplies for a fact ADE names
+    (`awaiting_line`, `hub_run_show`; owner Q10), checked by ADE (SGR escapes only).
+  - The preflight can be cancelled (`hub_run_cancel`): the runner's `cancel` kills
+    every process group it started and exits, and ADE kills its own children and
+    the PTY, so a cancelled preflight leaves nothing running (OB-2 AC5).
+  - After a finished removal the runner `execve`s the login shell in `HOME`
+    (the "Hub removed" tab), not in the removed hub folder.
   - The runner executes only what ADE sends (newline-delimited JSON, types in
     `hubrun_proto.rs`, shared by `#[path]`); all policy is in `hubrun.rs`. The
     preflight runs in the same runner while the PTY is still hidden, and the tab is
@@ -69,7 +77,9 @@
   - A `claude` alias or shell function is not used; the command is found on `PATH`.
   - `ade-hook` gains two hidden verbs and a `libc` dependency; `cargo check -p
     ade-hook` covers the build, and the binary's behaviour is tested by
-    `cargo test -p ade-hook --test hubrun` (macOS), which CI's `backend-macos` job
-    runs as it runs `--test dispatch`.
+    `ade-hook/tests/hubrun.rs` (macOS), which the verification command's seventh
+    line, `cd src-tauri && cargo test -p ade-hook` (owner-approved Q-A5, in force on
+    main since PR #103), runs on every Mac, and CI's `backend-macos` job runs as
+    `--test hubrun`.
   - ADR 0021's shell integration, when built, changes `terminal_spawn_spec`, and the
     runner follows it.
