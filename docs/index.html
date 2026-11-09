@@ -8,7 +8,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="#new"><b>v0.21.1</b><span>Sub-terminals, and more →</span></a>
+      <a class="pill" href="#new"><b data-latest-version>v0.22.0</b><span>Code viewer, and more →</span></a>
       <p class="hero-kicker">Verified, not vibed &middot; for Claude Code developers and architects</p>
       <h1>A team of agents. <span class="grad-text">One gate for&nbsp;Done.</span></h1>
       <p class="sub">ADE runs your coding agents as BMAD&nbsp;v6 roles. A PM, an architect and a designer plan; a reviewer tries to break the plan; developers build stories in parallel git worktrees; QA runs the one verification command that decides when the work is done.</p>
@@ -211,7 +211,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
       <div class="pillar-head">
         <span class="pillar-num">01</span>
         <div>
-          <h2>The IDE</h2>
+          <h2>The terminal</h2>
           <p>Any CLI agent, side by side, in projects set up for them, with cost and context tracked per session.</p>
         </div>
       </div>
@@ -530,7 +530,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
 
     <div class="new-strip" id="new">
       <span class="badge">New</span>
-      <p><strong>v0.21.1:</strong> <strong>Sub-terminals</strong> (several shells in one tab, <kbd>&#8984;[</kbd> and <kbd>&#8984;]</kbd> to switch), a <strong>busy check</strong> before any terminal closes, and <strong>sharp text with many tabs</strong> (the WebGL renderer now follows the tabs on screen). <a href="{{ site.repo }}/releases/tag/v0.21.1">Release notes</a>. Recently: the <strong>agent hub guide</strong>, <strong>switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>BMAD v6</strong>, <strong>Anti-slop</strong>, the <strong>MCP library</strong> and the <strong>Secrets vault</strong>.</p>
+      <p><strong>v0.22.0:</strong> the <strong>code viewer</strong>: code opens in the side panel, and a click on <code>path:line</code> in a terminal opens that file at that line. <a href="{{ site.repo }}/releases/latest">Release notes</a>. Recently: <strong>sub-terminals</strong> (several shells in one tab, <kbd>&#8984;[</kbd> and <kbd>&#8984;]</kbd> to switch), a <strong>busy check</strong> before any terminal closes, sharp text with many tabs, the <strong>agent hub guide</strong>, <strong>switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>Anti-slop</strong>, the <strong>MCP library</strong> and the <strong>Secrets vault</strong>.</p>
     </div>
   </div>
 </section>
@@ -694,7 +694,6 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
       </a>
       {% endfor %}
     </div>
-    <p class="built-foot">And hundreds of proofs of concept and pilot projects.</p>
   </div>
 </section>
 
