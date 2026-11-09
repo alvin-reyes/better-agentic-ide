@@ -3,14 +3,14 @@
 What F2's onboarding (agentic-environment setup) fixes for other stories and for
 the agent hub template.
 
-- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 6).
+- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 7).
 - ADRs: `decisions/0026-hub-setup-steps-run-under-a-runner-in-one-pty.md`,
   `0027-a-hub-tab-is-a-tab-flag-and-keeps-no-scrollback.md`,
   `0028-project-setup-refuses-hubs-at-its-two-writers.md`,
   `0029-a-finished-hub-is-judged-by-head-with-ades-own-git.md`.
 - Builds on `bundled-sources.md` (S4a's commands), `terminal-open.md` (`ade-hook`
   modes, shell set) and `remote-tabs.md` (the relay mask).
-- Status: proposed 2026-11-09 (revision 6), not yet approved or built. macOS only.
+- Status: proposed 2026-11-09 (revision 7), not yet approved or built. macOS only.
 
 ## The runner (`ade-hook`)
 
@@ -46,6 +46,10 @@ the agent hub template.
   the runner takes the foreground, flushes input and sets echo off. The runner
   ignores SIGINT, SIGQUIT, SIGTSTP, SIGTTIN, SIGTTOU for itself only. `exec_shell`
   resets every signal and the mask before `execve`.
+- **The socket closes before every `execve` of the shell** (revision 7): on
+  `exec_shell`, on a protocol error and on EOF after `hub_run_start`, the runner
+  calls `shutdown(SHUT_RDWR)` and `close` on it (it is also close-on-exec). So every
+  normal end reaches ADE as EOF; ADE's driver has stopped reading by then (below).
 - Messages: newline-delimited JSON, `{"type": ...}`, types in
   `src-tauri/src/hubrun_proto.rs`.
   - ADE → runner: `capture_env {program, args, timeout_ms}`, `chdir {path}`,
@@ -103,16 +107,30 @@ queued.
 - `hub_plan(answers) -> {plan_id, folders_to_create, steps: [{key, commands:
   [{argv, cwd, env_set}]}], memory_checkouts: [{path, exists}], t4, claude_memory:
   {config_dir, encoded_hub, entry, prediction: true}} | {errors: [{field, code,
-  message}]}` (`errors`: the answers fail `hub_check`; no plan stored; a rejected
-  call is an internal failure); `hub_plan_drop(plan_id)`.
+  message}]} | {superseded: true}` (`errors`: the answers fail `hub_check`; no plan
+  stored; a rejected call is an internal failure; `superseded`: a later call in the
+  same window overtook this one); `hub_plan_drop(plan_id)`.
+  **Concurrent calls (revision 7):** a call takes the window's next sequence number
+  when it starts and stores its result only if that number is still the window's
+  latest when it finishes (a plan becomes current; `errors` or a rejection leaves no
+  current plan); an overtaken call stores nothing and answers `{superseded: true}`;
+  `hub_runs_reset` takes a number too. `hub_plan_drop(plan_id)` does nothing unless
+  `plan_id` is the window's current plan. **The webview uses only the answer to its
+  latest call.**
   **Lifetime (revision 5):** one current plan per window, kept until that window's
-  next `hub_plan`, `hub_plan_drop` (questionnaire closed by the developer) or
+  next stored `hub_plan`, `hub_plan_drop` (questionnaire closed by the developer) or
   `hub_runs_reset`; no time limit; a run never drops it (`hub_run_prepare` copies
-  it). **The webview calls `hub_plan(answers)` every time it enters Review** (first
-  time, after Back, after `unpack_failed` or `edit_answers`) and keeps Set Up Hub
-  disabled until it answers. Review Again: `{errors}` → the first answer with an
-  error, shown inline; rejected → the failure with its message and Review Again, Set
-  Up Hub disabled. After `preflight_failed` the questionnaire stays in Review (no
+  it). **The webview calls `hub_plan(answers)` on every entry into Review** (UX
+  revision 6, 05fa3c4, §6.5: always through Review Setup, the first time, after
+  Back, after a link refusal's Edit Answers, after `edit_answers`), and **Review
+  opens only when it answers** (Review Setup reads Preparing…): a plan → Review, Set
+  Up Hub enabled; `{errors}` → stays on the answers, the first answer with an error,
+  shown inline; rejected → Review without a plan, the failure with its message and
+  Review Again (same three outcomes), Set Up Hub disabled. A plan answering after
+  the questionnaire closed is dropped (`hub_plan_drop`). **After `unpack_failed`**
+  (UX §7.3) `hub_plan` is called at once and the tab stays open ("Opening your
+  answers again…") until it answers; only then does the tab close and the
+  questionnaire return (Review, the answers, or Review without a plan). After `preflight_failed` the questionnaire stays in Review (no
   re-plan): Set Up Hub calls `hub_run_prepare` with the same `plan_id`, and
   `hub_plan_drop` is not called (revision 6).
   The plan stays in Rust; the webview shows `shellQuote(argv)` (ADR 0008's quoter
@@ -124,10 +142,14 @@ queued.
   or dropped), never by time or because a run of it ended. Returns at once after
   reserving the folder; the outcome comes as `prepared` or `preflight_failed`. A prepared run not
   started in 60 s is killed.
-- `hub_run_cancel(run_id)`: until `hub_run_start`; stops every process the
+- `hub_run_cancel(run_id)`: until `hub_run_start` (refused once its `started` flag
+  is set); stops every process the
   preflight started, starts nothing more, releases the folder, `run_ended
   {how: "cancelled"}`.
-- `hub_run_start(run_id, tab_id)`.
+- `hub_run_start(run_id, tab_id)`: sets `RunHandle.started` before it sends `Start`;
+  from then on the run counts as **making** for every close and quit decision, even
+  while its phase is still `ready` (revision 7). A prepared run's 60 s expiry does
+  not fire once `started` is set.
 - `hub_run_show(run_id, token, text)`: the text for an `awaiting_line` (the line
   channel, below).
 - `hub_run_decide(run_id, token, decision)`, decision one of `store`, `skip`,
@@ -269,7 +291,9 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
   `pathconf(ancestor, _PC_CASE_SENSITIVE)` is 0. The fold and the `pathconf` call
   are `#[cfg(target_os = "macos")]` (`hubmark.rs` builds on every platform); the key
   function is `registry_key(path, Case)` with `Case { Sensitive, Insensitive }` from
-  `volume_case(dir)` (`Sensitive` off macOS). **Off macOS the key is NFC only**; the
+  `volume_case(dir)` (`Sensitive` off macOS; on macOS through
+  `case_from_pathconf(ret)`: `1` → `Sensitive`, `0`, **`-1` (pathconf failed)** and
+  anything else → `Insensitive`, the safe direction, revision 7). **Off macOS the key is NFC only**; the
   registry is never filled there, because F2's commands fail off macOS. `ß`/`ss`
   and `σ`/`ς` are one key on a case-insensitive volume, as APFS itself treats them
   (not an over-fold). A non-UTF-8 ancestor is kept as raw bytes. Two keys **conflict** when equal or when
@@ -299,8 +323,14 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
     unwinding included, its `Drop` sets `ending`, sends `SocketClosed {cause: eof |
     error | panic}` to the driver, then calls `wake()`; it cannot panic. (The
     driver's channel never disconnects while the run lives: `RunHandle` keeps a
-    `Sender`.)
-  - `RunHandle {ending: Arc<AtomicBool>, phase: AtomicU8, tx, …}`: `phase` is a
+    `Sender`.) **After `exec_shell`, and after any `run_ended`, the driver reads its
+    channel no more** (its thread returns, dropping the receiver), so the EOF of a
+    normal end is never handled as a failure and never kills the handed-over shell;
+    commands on an ended run act without the driver (`hub_run_close` kills the PTY
+    itself) (revision 7).
+  - `RunHandle {ending: Arc<AtomicBool>, phase: AtomicU8, started: AtomicBool, tx,
+    …}`: `started` is set by `hub_run_start` before it sends `Start`; outside the
+    driver, `ready` with `started` reads as `making` (revision 7). `phase` is a
     `Phase` (`spawning`, `preflight`, `ready`, `making`, `setting_up`, `removing`,
     `ended`) stored **only** by the run's driver thread (`Release`, before the event
     that reports it) and loaded by anyone (`Acquire`). `RunEvent::ExitRequested`
@@ -327,7 +357,12 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
     unwrapped.
   - A panicked driver: the guard's drop frees nothing; the `catch_unwind` handler
     stores `phase = ended`, kills the PTY, **then** evicts, releases the folder,
-    `run_ended failed`. A panic inside the handler aborts the process
+    `run_ended failed`. **The kill (revision 7):** `RunIo {writer, rx, pty_id,
+    runner_pid}` is made before `catch_unwind`; the handler sends `stop {grace_ms:
+    3000}` on `writer`, reads `rx` up to 4 s for `exited` or `SocketClosed`, then
+    `killpg(SIGKILL)`s the PTY's foreground group if it is not the runner's
+    (`tcgetpgrp` on the master), kills the PTY, `SIGKILL`s the runner and waits for
+    its pid to be reaped, and only then evicts. A panic inside the handler aborts the process
     (`AbortOnPanic`). No `panic = "abort"` profile.
   - **A holder releases only after its PTY is killed, on every path, a panic
     included**; a waiter leaves at once. Every way out releases: `bin/setup` exited,
@@ -450,6 +485,10 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
   re-plans on entering Review with Set Up Hub disabled until `hub_plan` answers;
   `hub_plan`'s `{errors}`; `unknown_plan` never by time; the Keychain service
   usually from `HUB_KEYCHAIN_SERVICE`.
+- Revision 7 (spec 11.3): only the latest `hub_plan` call's answer is used
+  (`{superseded: true}` ignored); a late plan for a closed questionnaire is dropped
+  and a drop of a non-current plan does nothing; after (a) fails the tab stays until
+  `hub_plan` answers (UX 7.3 as written); a run tab is making from `hub_run_start`.
 
 ## Tests
 
@@ -462,6 +501,20 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
 - `app.exit` is called only through the `AppExit` seam (`trait AppExit { fn
   exit(&self, code: i32) }` in Tauri state; `TauriAppExit` in production,
   `RecordingAppExit` in tests).
+- `HubRuns::new(trasher: Arc<dyn Trasher>, #[cfg(test)] faults:
+  Arc<HubRunFaults>)`; `trait Trasher: Send + Sync { fn trash(&self, path: &Path)
+  -> Result<(), String> }` (`NsTrasher` in production). **`HubRunFaults` exists only
+  under `#[cfg(test)]`** (type, field, parameter, every fault point): never in a
+  release build, so it needs no feature, sentinel or release check (unlike F1's
+  `isotest-driver`, a built harness). Its tests are unit tests in the main crate,
+  never in `src-tauri/tests/`. Faults: `PanicWhileHolding` (driver, right after
+  `bin/setup`'s `run` is sent), `PanicInReader` (armed, then `shutdown(Read)` on a
+  registered socket clone wakes the read), `PauseAfterLinkCheck`, `PauseBeforeStart`.
+  Trace events, one ordered list for all runs: `lock_queued`, `lock_taken`,
+  `lock_left`, `lock_released`, `lock_evicted`, `setup_started`, `stop_sent`,
+  `fg_group_killed {pgid}`, `pty_killed` (master dropped and runner reaped),
+  `exec_shell_sent`, `socket_closed {cause, handled}`, `panic_caught`, `run_ended
+  {how}`, `driver_exited`; never pushed under the `SetupLock.state` mutex.
 - Public fixture template: `src-tauri/src/fixtures/hub-template/`. Its `bin/setup`
   sleeps before its first `link` when `$HOME/.fixture-setup-sleep` exists (seconds;
   test-only, for the setup-lock test).

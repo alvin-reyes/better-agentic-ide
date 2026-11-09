@@ -1,6 +1,6 @@
 # Agentic-environment onboarding (F2): technical design
 
-- **Status:** Proposed, revision 6 (2026-11-09). Revision 1 was blocked by the
+- **Status:** Proposed, revision 7 (2026-11-09). Revision 1 was blocked by the
   adversarial review (B1, M1 to M9, minors 1 to 11); revision 2 was blocked by the
   joint review of architecture revision 2 and UX revision 2 (X1, X3, X4, M1, M3, M5,
   M6, M8 to M10, M12, minors 3 to 7, N4) and amended by the owner's decisions of
@@ -10,7 +10,9 @@
   revision 4 was blocked by the round-4 delta review on M1 (the setup lock
   under-specified), with minors n1 to n5 and n7, which revision 5 answers; the
   round-5 delta review closed M1 and found minors L1 to L4, D1 to D3 and T1, which
-  revision 6 answers. Section 15 maps every finding to its answer. Not yet approved.
+  revision 6 answers; the round-6 joint review passed revision 6 and left minors R1
+  to R7, which revision 7 folds in. Section 15 maps every finding to its answer. Not
+  yet approved.
 - **Owner:** architect.
 - **PRD:** `docs/prd.md` F2, approved by the owner 2026-11-09 (revision 4 + minors
   n1 to n6), with the owner's decisions of 2026-11-09 (PR #98, 3e215aa: OB-4 AC7,
@@ -26,8 +28,10 @@
   `.ade/context/remote-tabs.md` (new; the relay's tab entries and the hub-tab mask,
   shared with phone-watch story 8).
 - **UX:** `docs/superpowers/specs/2026-11-09-onboarding-ux.md` (PR #102), revision 4
-  (f8cdeed). Section 11 gives each of its needs N1 to N23 one row; sections 11.1 and
-  11.2 list what revisions 4 and 5 add or rename for the designer.
+  (f8cdeed). Section 11 gives each of its needs N1 to N23 one row; sections 11.1,
+  11.2 and 11.3 list what revisions 4, 5 and 7 add or rename for the designer.
+  Revision 7 follows UX revision 6 (05fa3c4, §6.5 and §7.3) for the re-plan on
+  entering Review and for the return after step (a) fails.
 - **Builds on:** the bundling plan (PR #91, ADR 0025, `bundled-sources.md`: S2's
   tarball and archiver, S3's release jobs, S4a's `hub_template_info` and
   `hub_template_create`); sub-terminals (`terminal-open.md`, ADR 0014; story 9's
@@ -510,11 +514,29 @@ facts (6.4). Nothing a probe prints reaches the tab.
   restores the cooked settings, **resets every signal disposition to `SIG_DFL` and
   clears the signal mask** (an ignored `SIGINT` survives `execve`, and a bash that
   starts with `SIGINT` ignored passes the ignore to every command it runs, so Ctrl-C
-  would stop nothing), closes the socket and `execve`s it. The PID, PTY id and token
+  would stop nothing), **closes the socket** and `execve`s it. The PID, PTY id and token
   stay; ADE removes the input gate; the tab is now an ordinary terminal (OB-4 AC6
   "after the persona session exits"). The same message ends a run that stops at a
   failed step (Stop, Keep it, or the failure notice closed without Retry), a removal
   kept after a failure (Q-A3), and a finished removal (in `HOME`). Nothing is re-run.
+- **The expected EOF (revision 7, R7).** The runner closes its socket
+  (`shutdown(SHUT_RDWR)`, then `close`) **before every `execve` of the shell**: on
+  `exec_shell`, on a protocol error (4.8: it execs the shell) and on socket EOF after
+  `hub_run_start` (4.8). The descriptor is also close-on-exec (4.2), a second
+  guarantee, not the one relied on. So every normal end of a run reaches ADE as EOF
+  on the socket, and the reader thread's `ReaderExit` sentinel fires
+  (`SocketClosed { cause: eof }`, 4.10.1) on every one. **The driver never reads its
+  channel after it has sent `exec_shell`:** it stores `phase = ended`, emits
+  `run_ended`, and its thread returns, dropping the channel's receiver, so the
+  sentinel's send fails and is ignored. The "runner's socket closing" row of
+  4.10.1's table (kill the PTY) therefore applies only while the driver still reads,
+  before `exec_shell`, and never kills the shell a run handed over. The same holds
+  after every `run_ended` that leaves the PTY alive for the tab to close
+  (`unpack_failed`, `edit_answers`, 6.2): the driver reads nothing more. Commands on
+  an ended run never message the driver: `hub_run_close` kills the PTY itself (an
+  ordinary close, 6.5's `ended` column) and returns `{ closed }`; `hub_run_show` and
+  `hub_run_decide` are ignored; a send that fails because the driver has gone is
+  read as "ended", never as an error to show.
 
 ### 4.8 The protocol
 
@@ -534,7 +556,7 @@ ADE's wording is the designer's, 4.8.1); ADE ends the run with `run_ended { how:
 failed { message } }`, and the webview's notice says so. Socket EOF: ADE treats it as
 the tab closed; the runner, **before `hub_run_start`** (the preflight), does what
 `cancel` does; **after it**, kills any step or probe still running (as `cancel`) and
-execs the shell (ADE quit).
+execs the shell (ADE quit), closing the socket first (4.7, R7).
 
 **`chdir`.** The runner's own working folder is `HOME` until the hub folder exists.
 Right after (a) succeeds ADE sends `chdir { path: H }`, so between steps the PTY's
@@ -628,7 +650,7 @@ stateDiagram-v2
   WaitLock --> Step: lock taken (second link check, then bin/setup)
   WaitLock --> [*]: run ended while waiting (leaves the queue at once)
   Step --> Failed: exited non-zero / link refusal
-  Step --> [*]: (a) unpack failed (run_ended unpack_failed, tab closes)
+  Step --> [*]: (a) unpack failed (run_ended unpack_failed; tab closes once hub_plan answers)
   Secret --> Failed: exited non-zero / prompt_not_hidden
   Failed --> Step: Retry
   Failed --> Step: Skip (not for c)
@@ -662,6 +684,9 @@ on the same folder (4.10.1).
 **Prepared but not started; reloads.** A run that passed the preflight waits for
 `hub_run_start` at most 60 s (the window opens the tab at once); after that, or when
 its window's webview (re)loads, ADE kills the hidden PTY and forgets the run.
+The 60 s limit is the driver's own wait for `Start`; when it runs out the driver
+loads `RunHandle.started` (4.10.1) and, when `hub_run_start` has set it, waits for
+the `Start` already sent or being sent instead of expiring (revision 7, R5).
 Every window calls `hub_runs_reset(window)` when its webview starts: any run that
 window owned is ended as **Keep** (a `stop`, then the PTY is killed; nothing is
 removed, because no one was asked), its registry entry is dropped, it leaves or
@@ -742,6 +767,15 @@ every window sees one registry):
     `#[cfg_attr(not(target_os = "macos"), ignore = "case folding and
     _PC_CASE_SENSITIVE are macOS-only")]` (section 13's rule): the Ubuntu and
     Windows CI jobs build them and report them ignored.
+  - **When `pathconf` fails (revision 7, R6).** `volume_case(dir)` on macOS maps
+    `pathconf`'s answer through one pure function, `case_from_pathconf(ret: i64) ->
+    Case`: `1` → `Sensitive`; `0` → `Insensitive`; **`-1` (any `errno`: the ancestor
+    gone between `realpath` and the call, or a file system that does not know
+    `_PC_CASE_SENSITIVE`) and any other value → `Insensitive`**, the safe direction:
+    folding can only merge keys, so the error can only refuse a second run that would
+    have been safe, never let two runs share a folder (the same direction as D3's
+    rule above). `case_from_pathconf` carries no `cfg`, so its unit test runs on
+    every CI OS; the call through the real `pathconf` is tested on macOS (O1).
   - A canonical ancestor whose bytes are not UTF-8 (possible only off APFS and HFS+,
     for example on some network volumes) is kept as raw bytes, neither normalised nor
     folded.
@@ -819,7 +853,9 @@ memory to the other hub. Within ADE that window is closed by **one app-wide lock
   sentinel's `Drop` cannot panic (a failed send, the driver already gone, is
   ignored; `wake` recovers poison), so it never turns an unwinding panic into an
   abort. The driver handles every `cause` alike (the socket row of the table
-  below).
+  below) **while it still reads its channel**; after `exec_shell`, and after any
+  `run_ended`, it reads nothing, so the EOF that every normal end produces is never
+  handled as a failure (4.7, revision 7, R7).
 - **Commands and window handlers never wait on the lock.** The run's Tauri commands
   (`hub_run_start`, `hub_run_show`, `hub_run_decide`, `hub_run_close`,
   `hub_run_cancel`, `hub_quit_answer`, `hub_runs_reset`) and the handlers of
@@ -845,7 +881,10 @@ LockEntry  { run_id, ticket: u64, hub: PathBuf, tab_id: Option<TabId>,
 SetupGuard { lock: Arc<SetupLock>, run_id, ticket }     // Drop releases
 RunHandle  { ending: Arc<AtomicBool>,
              phase: AtomicU8,          // a Phase; stored by the run's driver thread only
+             started: AtomicBool,      // set by hub_run_start before it sends Start (rev 7, R5)
              tx: mpsc::Sender<DriverInput>, … }
+RunIo      { writer: UnixStream,       // the driver's end of the socket (rev 7, R4)
+             rx: mpsc::Receiver<DriverInput>, pty_id, runner_pid }   // made before catch_unwind
 ```
 
 - **The phase, readable without the driver (revision 6, L3).** `RunHandle.phase`
@@ -862,6 +901,20 @@ RunHandle  { ending: Arc<AtomicBool>,
   driver before deciding. A phase that moves on after the load stays safe: the
   driver maps whatever answer then arrives by its phase at receipt (6.5's table),
   and a run never goes back to `making` once it has left it.
+- **Started but not yet making (revision 7, R5).** Between `hub_run_start` and the
+  driver taking `Start` from its channel, `phase` is still `ready`, which a quit
+  would otherwise treat as a run with no tab (cancelled, as `hub_run_cancel` does),
+  although its tab is already open. So `hub_run_start` stores `RunHandle.started =
+  true` (`Release`) **before** it sends `Start`, and nothing clears it. Every
+  decision by phase made outside the driver (`ExitRequested`, `hub_run_close`,
+  `WindowEvent::Destroyed`, `hub_runs_reset`, and `quit_requested`'s list) reads
+  `ready` with `started` as **making**; `hub_run_cancel` is refused once `started` is
+  set. A close whose message reaches the driver while it is still `ready` (the
+  message overtook `Start` in the channel: a destroyed window, for example) is mapped
+  as making's Keep or Remove with nothing begun, which kills the PTY and writes
+  nothing; a `Start` after it finds the run ended and is ignored. Chosen over
+  documenting a gap: the gap would cancel, without the question OB-5 AC5 asks, a run
+  whose tab the developer can already see.
 
 The entries carry everything `setup_waiting` reports about the run in the way
 (`hub`, `tab_id`, `key`), so the lock never reads `HubRuns` or the registry.
@@ -922,7 +975,7 @@ the queue or drops its guard, and only its panic handler evicts):
 | a close of its tab, a batch or window close, a quit answer (C2, C3, C4) | leaves at once (`Left`) | driver stops the step, kills the PTY, then drops the guard |
 | `hub_runs_reset(window)` | leaves at once | as a close, then `run_ended reset` |
 | `WindowEvent::Destroyed` of the owner window | leaves at once | as a close (6.5's "Window destroyed" row) |
-| the runner's socket closing, or the reader thread ending any other way, a panic included (its `ReaderExit` sentinel, revision 6, L2) | leaves at once | driver kills the PTY, drops the guard, `run_ended failed` |
+| the runner's socket closing, or the reader thread ending any other way, a panic included (its `ReaderExit` sentinel, revision 6, L2) | leaves at once | driver kills the PTY, drops the guard, `run_ended failed` (only while the driver still reads: never after `exec_shell`, 4.7, R7) |
 | **a panic in the driver** | the handler kills the PTY, then evicts | the guard's drop frees nothing (`thread::panicking()`); the handler kills the PTY, **then** evicts (revision 6, L1) |
 
 - **A holder releases only after its step is gone, on every path** (revision 6, L1:
@@ -934,11 +987,27 @@ the queue or drops its guard, and only its panic handler evicts):
 - **Free on panic, after the kill (revision 6, L1; chosen over "when its tab
   closes").** The driver's body runs inside `std::panic::catch_unwind`. The guard is
   a local of that body, so unwinding drops it, and its `Drop` sees
-  `thread::panicking()` and frees nothing. The handler then, on the same driver
-  thread and in this order: stores `phase = ended`; kills the PTY by the close
-  path's procedure (the step's group `SIGHUP`, then `SIGKILL` after the grace, the
-  runner with it); **only then** calls `evict(run_id)`; releases the folder
-  reservation; emits `run_ended { how: failed { message } }`. Until the evict the
+  `thread::panicking()` and frees nothing. **How the handler kills (revision 7, R4;
+  option (a) chosen):** the run's `RunIo` (the driver's end of the socket, the
+  channel's receiver, the PTY id and the runner's pid) is made **before**
+  `catch_unwind` and only lent to the closure, so it survives the unwinding; the
+  state machine's own state inside the closure is lost. The handler then, on the same
+  driver thread and in this order: stores `phase = ended`; sends `stop { grace_ms:
+  3000 }` on `RunIo.writer` (each frame is built whole in memory and written by one
+  `write_all`, so a panic can never leave half a frame on the socket; a write error
+  is ignored); reads `RunIo.rx` for at most 4 s (the grace and 1 s) for the step's
+  `exited` or a `SocketClosed`, answering any command waiting on it as for an ended
+  run; then, **whatever the runner did**, reads the PTY's foreground process group
+  (`tcgetpgrp` on the master, as `pty_foreground_job` does) and, when it is not the
+  runner's own group, `killpg(pgid, SIGKILL)` (so a runner that never acted on `stop`
+  cannot leave `bin/setup` running); kills the PTY (`kill_pty`: the master dropped,
+  `SIGHUP`), `SIGKILL`s the runner's pid and **waits for that pid to be reaped**
+  (at most 2 s; the PTY layer's child wait); **only then** calls `evict(run_id)`;
+  releases the folder reservation; emits `run_ended { how: failed { message } }`.
+  Option (b), relying on the runner's kill on EOF, is not used: the reader thread
+  holds its own clone of the socket, so the driver's unwinding does not give the
+  runner EOF at all, and a runner that did see EOF would exec a shell under the same
+  pid, which must be killed anyway. Until the evict the
   waiters keep waiting, still naming the panicked run. The kill and the evict
   contain no `unwrap` or `expect` (a kill error means the group is already gone and
   is ignored). A panic inside the handler itself would leave the lock held by a run
@@ -975,6 +1044,69 @@ possible"; O7 tests each):
 5. So the only unbounded wait is the holder's own `bin/setup`: a hung one holds the
    others until it is stopped or its tab closed (section 14), and the waiting tabs
    name it.
+
+**Test seams (revision 7, R3).** `hubrun.rs`'s seams are constructor parameters of
+`HubRuns`, the app-wide run map in Tauri state:
+
+```
+HubRuns::new(trasher: Arc<dyn Trasher>,              // every build
+             #[cfg(test)] faults: Arc<HubRunFaults>) // test builds only
+trait Trasher: Send + Sync { fn trash(&self, path: &Path) -> Result<(), String>; }
+                // production NsTrasher (the trash crate, NsFileManager, 6.4); O8 a fake
+```
+
+`AppExit` (6.5) is the third seam, in Tauri state for the same reason (one production
+implementation, a recording one in O8). **`HubRunFaults` has no production
+implementation and is compiled only under `#[cfg(test)]`:** the parameter, the
+type, the `faults` field and every fault point (a `fault!(…)` macro that expands to
+nothing outside `cfg(test)`) are absent from every non-test build, so a release
+binary contains no fault, no trace and no pause. `cfg(test)` is set by rustc only
+when it compiles the crate's own unit-test harness (`cargo test`); `cargo build`,
+`cargo tauri build` and `release.yml` cannot turn it on, and there is no feature to
+pass by mistake. **Checked against F1's compiled-out driver (`isotest-driver`, F1
+design 14 and 15.1):** F1 needed a cargo feature, a `#[used]` sentinel and
+`scripts/check-no-driver` because its harness is a built, bundled app driven from
+outside; `HubRunFaults` is used only by unit tests inside the main crate, so the
+stronger `cfg(test)` applies and no sentinel or release check is needed. The
+consequence: the tests that use it (O7, O8) are unit tests in the main crate
+(`#[cfg(test)]` modules under `src-tauri/src/hubrun/`), never in `src-tauri/tests/`,
+whose crates link the library built without `cfg(test)`; macOS-only ones follow
+section 13's `cfg_attr(..., ignore)` rule.
+
+```
+#[cfg(test)] struct HubRunFaults {
+    armed:   Mutex<Vec<(RunId, Fault)>>,
+    trace:   Mutex<Vec<Trace>>,                  // one order for every run
+    sockets: Mutex<HashMap<RunId, UnixStream>>,  // a try_clone each reader registers
+}
+#[cfg(test)] enum Fault {
+    PanicWhileHolding,             // driver: panics right after sending bin/setup's `run`
+    PanicInReader,                 // reader: panics when its next read returns
+    PauseAfterLinkCheck(Receiver<()>), // driver: after the second link check passes,
+                                   //   before its second load of `ending`
+    PauseBeforeStart(Receiver<()>),    // driver: in `ready`, before it takes `Start`
+}
+```
+
+`panic_in_reader(run)` arms the fault, then calls `shutdown(Shutdown::Read)` on the
+registered clone, which wakes the reader's blocked read with 0 bytes (checked on
+macOS: a blocked `recv` returns at once and the socket's write side still works); the
+reader's fault point, after every read, panics instead of reporting EOF, and its
+`ReaderExit` sentinel does the rest. The pauses resume when the test sends `()`.
+**The trace's events,** each pushed with the run's id, in one `Vec` under its own
+mutex (never pushed while the `SetupLock.state` mutex is held: rule 1):
+`lock_queued`, `lock_taken` (after `acquire` returns a guard), `lock_left` (after it
+returns `Left`), `lock_released` (after a guard's drop released; a drop while
+panicking pushes nothing), `lock_evicted` (after `evict` returns), `setup_started`
+(the `run` for `bin/setup` sent), `stop_sent`, `fg_group_killed { pgid }` (the panic
+handler's `killpg`), `pty_killed` (after the master is dropped **and** the runner's
+pid reaped, so the step's group has had `SIGHUP` and, by the runner's `stop` or the
+handler's `killpg`, `SIGKILL`), `exec_shell_sent`, `socket_closed { cause, handled }`
+(pushed by the sentinel before its send; `handled` false when the driver had gone),
+`panic_caught`, `run_ended { how }`, and `driver_exited` (the driver thread's last
+act). Ordering is asserted through the trace, never through sleeps; O7's check that
+a handed-over shell is still alive 3 s after `run_ended` is a liveness check, not an
+ordering one.
 
 **Waiting is reported, not asked.** While another run is in the way, the run emits
 **`setup_waiting { key, state: "waiting", holder: { hub, tab_id?, key } }`**: `key`
@@ -1030,29 +1162,48 @@ The Tauri commands (shapes in `hub-onboarding.md`):
 - `hub_plan(answers) -> { plan_id, folders_to_create, steps: [{ key, commands:
   [{ argv, cwd, env_set }] }], memory_checkouts: [{ path, exists }], t4,
   claude_memory: { config_dir, encoded_hub, entry, prediction: true } } | { errors:
-  [{ field, code, message }] }`: the plan is **kept in Rust** (`HubPlans`, one
+  [{ field, code, message }] } | { superseded: true }`: the plan is **kept in Rust** (`HubPlans`, one
   current plan per window). `{ errors }` is `hub_check`'s answer when the answers do
   not pass (no plan is made); a rejected call is an internal failure (for example
   ADE's `HOME` unreadable). **The plan's lifetime (revision 5, n2):** it lives until
-  the same window's next `hub_plan` replaces it, `hub_plan_drop(plan_id)` (the
+  the same window's next stored `hub_plan` replaces it, `hub_plan_drop(plan_id)` (the
   questionnaire closed by the developer), or that window's `hub_runs_reset`. **No
   time limit, and a run never drops it:** `hub_run_prepare` copies the plan into the
   run (`Arc<Plan>`), so a refused, cancelled or failed preflight leaves the review's
-  plan usable. **The webview re-plans on return (the choice):** every time the
-  questionnaire enters Review (the first time, after Back, and when it comes back
-  after `run_ended unpack_failed` or `edit_answers`) it calls `hub_plan(answers)`
-  and shows that plan; Set Up Hub is disabled until that call answers. So after an
-  unpack failure Set Up Hub prepares the fresh plan and never meets `unknown_plan`,
-  even when another questionnaire in the window planned meanwhile. **After
-  `preflight_failed`** the questionnaire stays in Review (it does not enter it again,
-  so it does not re-plan): Set Up Hub calls `hub_run_prepare` with **the same
-  `plan_id`**, and `hub_plan_drop` is not called (revision 6, T1; O10b). **When
-  `hub_plan` fails on such a return, or on Review Again:** `{ errors }` takes the
-  questionnaire to the first answer with an error, showing the inline errors as
-  `hub_check` would (a pure check, so this happens only after the developer changed
-  an answer); a rejected call keeps the review without a plan, shows the failure
-  with its message and a Review Again that calls `hub_plan` again, and keeps Set Up
-  Hub disabled; Back still returns to the answers.
+  plan usable. **Concurrent calls (revision 7, R1).** `HubPlans` keeps, per window, a
+  sequence number and the current plan. A `hub_plan` call **takes the window's next
+  sequence number when it starts** (under the `HubPlans` mutex, released before the
+  plan is built, which reads the file system), and when it finishes **stores its
+  result only if its number is still the window's latest**: a plan becomes the
+  window's current plan, and `{ errors }` or a rejection leaves the window with no
+  current plan. A call overtaken by a later one stores nothing and answers
+  `{ superseded: true }`, with no `plan_id` to prepare: a stale call can never
+  replace a newer one. `hub_runs_reset` also takes a number, so a call in flight
+  across a reset stores nothing. **`hub_plan_drop(plan_id)` does nothing unless
+  `plan_id` is the window's current plan**, so a late drop never removes a newer
+  questionnaire's plan. **The webview uses only the answer to its latest call**: it
+  ignores `superseded` and any answer to a call it has since replaced.
+  **The webview re-plans on every entry into Review (revision 5; UX revision 6,
+  05fa3c4, §6.5).** Every way into Review from the answers goes through Review Setup
+  (the first time, after Back, after a link refusal's Edit Answers, and after Edit
+  answers, whose Move to Trash and Edit reopens the questionnaire on the answers).
+  With the fields passing their checks it calls `hub_plan(answers)`; Review Setup
+  reads Preparing… (focused, `aria-disabled`, the form inert) and **Review opens only
+  when that call answers**: a plan → Review, Set Up Hub enabled; `{ errors }` → the
+  dialog stays on the answers with the errors inline (as `hub_check` shows them) and
+  focus on the first answer with an error; rejected → Review **without a plan**, the
+  failure with its message and Review Again (which calls `hub_plan` again, with the
+  same three outcomes), Set Up Hub disabled; Back still returns to the answers. A
+  questionnaire closed while it waits calls `hub_plan_drop` with the plan when it
+  arrives. **After `run_ended unpack_failed`** (UX §7.3) the webview calls
+  `hub_plan(answers)` at once; the tab stays open, its run bar reading "Opening your
+  answers again…", and closes only when the call answers; the questionnaire then
+  comes back on Review with the new plan (Set Up Hub prepares it and never meets
+  `unknown_plan`, even when another questionnaire in the window planned meanwhile),
+  on the answers for `{ errors }`, or on Review without a plan for a rejection (6.2).
+  **After `preflight_failed`** the questionnaire stays in Review (it does not enter
+  it again, so it does not re-plan): Set Up Hub calls `hub_run_prepare` with **the
+  same `plan_id`**, and `hub_plan_drop` is not called (revision 6, T1; O10b).
   The review shows `shellQuote(argv)` for each (OB-3 AC3). `memory_checkouts` lists
   each question-7 checkout after `~` expansion, with `exists` from `is_dir` in ADE's
   process (as `repos_of`'s `[ -d ]`), so the review can say no link is made for a
@@ -1082,10 +1233,13 @@ The Tauri commands (shapes in `hub-onboarding.md`):
   (4.8), waits at most 1 s for it to exit, then kills the PTY (`SIGHUP`) and
   `SIGKILL`s the runner's pid, removes the socket folder, releases the reservation,
   and emits `run_ended { how: cancelled }`. Nothing was written (the preflight
-  writes nothing, 5.5) and nothing it started is left running. After
-  `hub_run_start` it returns an error; the close rules (6.5) apply instead.
+  writes nothing, 5.5) and nothing it started is left running. Once
+  `hub_run_start` has set the run's `started` flag it returns an error; the close
+  rules (6.5) apply instead (revision 7, R5).
 - `hub_run_start(run_id, tab_id)`: after the window has opened the hub tab with `pty_id` and
-  attached (`reattach_pty` flushes the backlog: the start-up output).
+  attached (`reattach_pty` flushes the backlog: the start-up output). It stores
+  `RunHandle.started` **before** it sends `Start` to the driver (4.10.1, revision 7,
+  R5), so from this call on the run is treated as making.
 - `hub_run_show(run_id, token, text)`: the text of a line ADE is waiting to print
   (4.8.1).
 - `hub_run_decide(run_id, token, decision)`: `store | skip | retry | keep |
@@ -1429,9 +1583,15 @@ records which have succeeded; Retry resumes at the first that has not, except (c
   is left (S4a's guarantee: `H` itself never existed, because S4a renames into it
   only at the end, and its temporary sibling is removed on the error it sees); a
   parent the run created is removed with `rmdir` (only if empty) and listed in
-  `removed` (N8; empty when no parent was created or the `rmdir` failed); the tab
-  closes without a Reopen Closed Tab entry (8); the questionnaire returns on Review
-  with the answers kept (from `hubRunStore`, 6.5.1).
+  `removed` (N8; empty when no parent was created or the `rmdir` failed). The
+  webview then calls `hub_plan(answers)` at once (the answers from `hubRunStore`,
+  6.5.1), and **the tab stays open** until that call answers, its run bar reading
+  "Opening your answers again…" (UX revision 6, §7.3; revision 7, R2); the PTY stays
+  alive (the runner holds, and the driver reads nothing more, 4.7). **Only when
+  `hub_plan` answers** does the tab close, without a Reopen Closed Tab entry (8), and
+  the questionnaire come back with the answers kept: on Review with the new plan, on
+  the answers for `{ errors }`, or on Review without a plan for a rejection
+  (4.10.2).
 - **(b)** fails → `bin/init`'s own stderr is in the tab; options **Edit answers**
   (confirm, then 6.4's removal, then the questionnaire with the answers kept;
   confirming the review again prepares a new run from (a)), **Remove the hub
@@ -1654,7 +1814,9 @@ batch's one answer sent for every run in it, always does the safe thing:
 
 So `keep` on a removing run **is** `stop_removal`, and `remove` never removes outside
 the making phase (a run that reached (c) between the confirm and the answer is kept,
-as OB-5 AC5 asks for (c) to (h)).
+as OB-5 AC5 asks for (c) to (h)). A run whose `hub_run_start` has been called but
+whose driver has not yet taken `Start` (`ready` with `started`) is mapped as
+**making** (4.10.1, revision 7, R5).
 
 **What happens to the runner** for each action, with `close_progress` events:
 
@@ -1684,7 +1846,9 @@ exits nothing; every exit F2's quit handling makes goes through it); when one
 failed, the quit is dropped, those runs' tabs show `removal_failed`, and the other
 runs have already ended as answered. When every run is setting_up, nothing asks:
 Rust ends each as Close and lets the exit go on. Runs with no tab yet (`spawning`,
-`preflight`, `ready`) are cancelled as `hub_run_cancel` does, and ended runs are
+`preflight`, and `ready` without `started`) are cancelled as `hub_run_cancel` does,
+while a `ready` run with `started` set counts as **making** and is asked about in C4
+(revision 7, R5), and ended runs are
 closed. A run whose phase moved after the load (a notice on (c) answered Remove in
 that instant) gets the Close mapped by its phase at receipt (6.5's table: Stop for
 a removing run), the same safe outcome as a batch's late answer. F1's design also handles
@@ -2302,6 +2466,26 @@ it as written (also in `hub-onboarding.md`).
 7. **The Keychain service** is usually `HUB_KEYCHAIN_SERVICE` (the hub's name as
    `bin/init` writes it); see 11.1's item 11 as amended (n3).
 
+### 11.3 What revision 7 asks the designer to adopt
+
+UX revision 6 (05fa3c4) already matches revision 7 on the re-plan and on the return
+after (a); these are what revision 7 adds or makes exact.
+
+1. **The webview uses only the answer to its latest `hub_plan` call** (R1). Rust
+   stores only the latest call's result per window and answers an overtaken call
+   `{ superseded: true }` (a new, fourth answer, with no `plan_id`); the webview
+   ignores it, and ignores any answer to a call it has since replaced. No copy.
+2. **A plan that answers after the questionnaire closed** is dropped with
+   `hub_plan_drop(plan_id)` (UX 6.5 already says so). Rust ignores a drop of
+   anything but the window's current plan, so a late drop can never remove a newer
+   questionnaire's plan.
+3. **After step (a) fails the tab stays open until `hub_plan` answers** (UX 7.3,
+   adopted as written): 6.2 now says the same, and the questionnaire comes back on
+   Review, on the answers or on Review without a plan by that answer.
+4. **A run tab is making from the moment `hub_run_start` is called** (R5), before
+   its first `step_started`: `closeFacts` reports `making` for it, so C1 (one tab)
+   and C4 (batch, window, quit) ask as for (a).
+
 ## 12. Verification command
 
 **Seven lines, in force on main** (the six approved 2026-11-02, plus the seventh the
@@ -2350,17 +2534,17 @@ passed) or lives in `ade-hook/tests/hubrun.rs` (`#![cfg(target_os = "macos")]`).
 
 | Story | Scope | PRD ACs | Tests (where) |
 |---|---|---|---|
-| **O1. Hubs are not projects** | `hubmark.rs` (walk stops below `HOME`), the **app-wide folder registry** (4.10.1: key NFC-normalised, case-folded on a case-insensitive volume, conflicts by component prefix, reserve/release; NFC by `icu_normalizer =2.1.1` with `default-features = false, features = ["compiled_data"]` on every platform (D1), and folding by `CFStringFold` through `core-foundation-sys =0.8.7` as a `cfg(target_os = "macos")` dependency, both already in `Cargo.lock`, n4; the fold and the `pathconf` call `#[cfg(target_os = "macos")]`, the key NFC only off macOS, D2), `refuse_hub` in `set_up` and `bmad_switch_apply`, `hub_guard_status`, `hubGuard` in every asker | OB-13 AC1; AC2's automatic and asked-for paths and its webview half (7.2) | Rust: marker cases (`hub.conf` finished and not, template files, `.x.ade-tmp-*`, source clone, `projects/x`, a registry entry, a stray `~/hub.conf` marks nothing under `HOME`); **registry: a second reserve of `~/hubs/a` and of `~/hubs/A` (case-insensitive volume) is refused `relation: same`, `~/hubs/b` is not, a path through a symbolic link to `~/hubs` is the same key, a released key can be reserved again, reserve is atomic under two threads; with `~/hubs/a` held, `~/hubs/a/b` is refused `inside` and `~/hubs` `contains` (each naming `~/hubs/a`), and `~/hubs/ab` is not refused; `~/hubs/café` precomposed (U+00E9) and decomposed (`e` U+0301) are one key, on a case-insensitive and (by a key-function test with the volume flag forced) a case-sensitive volume**; **`~/hubs/ΣΟΦΟΣ`, `~/hubs/σοφος` (final `ς`) and `~/hubs/σοφοσ` are one key on a case-insensitive volume (lowercasing would make the last a second key: n4, folding, not lowercasing) and three with the flag forced case-sensitive; `~/hubs/straße` and `~/hubs/strasse` are one key on a case-insensitive volume (APFS identifies the pair too, revision 6, D3)**; **the tests that fold or read the volume (`~/hubs/A`, the case-insensitive `café`, sigma and `ß` cases) carry `#[cfg_attr(not(target_os = "macos"), ignore = "case folding and _PC_CASE_SENSITIVE are macOS-only")]` and call only `registry_key`, `Case` and `volume_case`, so `cargo test` builds them on Ubuntu and Windows and reports them ignored; the forced case-sensitive cases run on every platform; `cargo metadata --locked --format-version 1` succeeds with the committed lock (D1)**; writers refuse and write nothing; a folder containing a hub sets up only itself; vitest: `useProjectSetup` asks nothing and records nothing for each case; the `cd` hook driven through a run's three phases asks, records and applies nothing; palette, board, Agents tab, New tab dialog refuse; switch v6 and v4 refused |
+| **O1. Hubs are not projects** | `hubmark.rs` (walk stops below `HOME`), the **app-wide folder registry** (4.10.1: key NFC-normalised, case-folded on a case-insensitive volume, conflicts by component prefix, reserve/release; NFC by `icu_normalizer =2.1.1` with `default-features = false, features = ["compiled_data"]` on every platform (D1), and folding by `CFStringFold` through `core-foundation-sys =0.8.7` as a `cfg(target_os = "macos")` dependency, both already in `Cargo.lock`, n4; the fold and the `pathconf` call `#[cfg(target_os = "macos")]`, the key NFC only off macOS, D2), `refuse_hub` in `set_up` and `bmad_switch_apply`, `hub_guard_status`, `hubGuard` in every asker | OB-13 AC1; AC2's automatic and asked-for paths and its webview half (7.2) | Rust: marker cases (`hub.conf` finished and not, template files, `.x.ade-tmp-*`, source clone, `projects/x`, a registry entry, a stray `~/hub.conf` marks nothing under `HOME`); **registry: a second reserve of `~/hubs/a` and of `~/hubs/A` (case-insensitive volume) is refused `relation: same`, `~/hubs/b` is not, a path through a symbolic link to `~/hubs` is the same key, a released key can be reserved again, reserve is atomic under two threads; with `~/hubs/a` held, `~/hubs/a/b` is refused `inside` and `~/hubs` `contains` (each naming `~/hubs/a`), and `~/hubs/ab` is not refused; `~/hubs/café` precomposed (U+00E9) and decomposed (`e` U+0301) are one key, on a case-insensitive and (by a key-function test with the volume flag forced) a case-sensitive volume**; **`~/hubs/ΣΟΦΟΣ`, `~/hubs/σοφος` (final `ς`) and `~/hubs/σοφοσ` are one key on a case-insensitive volume (lowercasing would make the last a second key: n4, folding, not lowercasing) and three with the flag forced case-sensitive; `~/hubs/straße` and `~/hubs/strasse` are one key on a case-insensitive volume (APFS identifies the pair too, revision 6, D3)**; **the tests that fold or read the volume (`~/hubs/A`, the case-insensitive `café`, sigma and `ß` cases) carry `#[cfg_attr(not(target_os = "macos"), ignore = "case folding and _PC_CASE_SENSITIVE are macOS-only")]` and call only `registry_key`, `Case` and `volume_case`, so `cargo test` builds them on Ubuntu and Windows and reports them ignored; the forced case-sensitive cases run on every platform; `cargo metadata --locked --format-version 1` succeeds with the committed lock (D1)**; writers refuse and write nothing; a folder containing a hub sets up only itself; vitest: `useProjectSetup` asks nothing and records nothing for each case; the `cd` hook driven through a run's three phases asks, records and applies nothing; palette, board, Agents tab, New tab dialog refuse; switch v6 and v4 refused; **`case_from_pathconf` (revision 7, R6): `1` → `Sensitive`, `0` → `Insensitive`, `-1` → `Insensitive` (no `cfg`, every OS); on macOS, `volume_case` of a folder removed after its `realpath` (the real `pathconf` answers -1) is `Insensitive`, and its key is folded** |
 | **O2. The hub-tab and "Hub removed" flags** | `Tab.hub`, `Tab.hubRemoved`, label, session, closed, Duplicate, detach, workspaces, tracker, notice-waiting flag field, `remoteTabs.ts`; `remote-tabs.md` as written here | OB-14 AC1, AC3, AC4, AC5; OB-5 AC4's "Hub removed" persistence rules; AC2's mask function (capture test with story 8) | vitest: session holds no buffer and restores empty "Agent hub"; each operation keeps the flag; a plain tab in a hub keeps its scrollback and stays plain; tracker has "Agent hub" and no path; `remoteTabEntry` masks both kinds; **a "Hub removed" tab: label, absent from `saveSession`'s output, from a workspace saved while it is open and from `ClosedTab` after closing it; Duplicate hidden; the notice-waiting flag never reaches `SavedTab`** |
 | **O3. Personas and features from the tarball** | `hub_template_personas`, `hub_template_features` (exact T4 line) | OB-3 AC1; T4 detection (OB-3 AC3, OB-5 AC4) | Rust: an added persona appears; front matter parsed as `fm()`; nested and oversize entries ignored; sha mismatch is an error; T4 present only with the exact line (a line naming both flags in other words is absent) |
-| **O4. Answers, checks, the plan and the folder** | `textrule.rs`, `hubanswers.rs` (plan by id, **6.8's path rule**, `memory_checkouts` with `exists`, `claude_memory` prediction), `hubconf.rs` (`\$` forms), `hubfolder.rs` (`tools_ready()` with its cache, `hub_folder_kind` by 6.7, `hub_existing_info` with ACCESS.md checkouts, `hub_prefill`), `hub_check`, `hub_plan`, `hub_plan_drop`; `src/lib/hubPathRule.ts` and `fixtures/hub-path-rule-cases.json` | OB-3 AC2 (incl. checkouts and Cc/Cf, OB-7 AC2's prefixes `sk-`, `glpat-`, `^xox[a-z]-`); OB-2 AC2 (kinds), AC3, AC4; OB-6 AC2; F2.13 path refusal; OB-1 AC8's origin detection (the command; O10a the prefill) | Rust: one case per rule; derived name and empty slug; secret names (`ghost-api-key`, `xoxo-shop-key` stated limit, `xoxb-1` refused, `sky-key` accepted); **the path-rule case file (also run by a vitest against `hubPathRule.ts`): U+202E and U+200B in the hub folder, U+FEFF, **U+202E and a tab (U+0009)** in a checkout (OB-3 AC2's cases, m8), `r`, `./r`, bare `~`, `~bob/r` refused, `~/src/api` and `/x/r` accepted**; **every `FolderKind`: `missing_ok`, `parent_missing`, `ancestor_missing` naming the highest missing folder (`/a/b/hub`, no `/a` → `/a`), `parent_not_folder`, `not_absolute`, `bad_characters`, `missing` vs `not_hub` (existing), `not_a_folder` (file, dangling link), `exists`; `finished` only with `hub.conf` in `HEAD`: index-only and no-`.git` are `unfinished`; a corrupt `.git` (`HEAD` pointing at a missing object) and a git seam that times out are `check_failed`; with a fake `xcode-select` returning 2 → `tools_missing` and no git started; on a fresh `tools_ready()` cache, an existing finished hub is `finished` (xcode-select run once, cached)**; `in_setup` set for a reserved key, with `relation` `same`, `inside` and `contains` (uses O1's registry, m9); **an existing folder holding `hub.conf` is `exists` in the preflight's file-system part (m5) and `finished`/`unfinished` inline**; a hub inside an enclosing repo is judged by its own `.git`; `hub.conf` literal forms incl. `cost\$5`, and `$(evil)` refused; origin forms (scp, ssh, https, `.git`, trailing `/`, non-GitHub → null, outside git → null); plan argv for the four slice-1 shapes; `~/src/api` expanded in the argv; **`memory_checkouts` `exists` true and false; `claude_memory` for `/Users/dana/hubs/acme` is `-Users-dana-hubs-acme`**; `hub_existing_info` reads checkouts from ACCESS.md rows starting `/` or `~`; `prepare` with an unknown `plan_id` refused; **a plan outlives its run (n2): `hub_run_prepare` with one `plan_id` is accepted again after that plan's run ended `preflight_failed`, `cancelled` and `unpack_failed`; the plan is replaced by the same window's next `hub_plan` (the old id then `unknown_plan`), not by another window's; dropped by `hub_plan_drop` and by `hub_runs_reset`, never by time; `hub_plan` with answers that fail `hub_check` returns `{ errors }` and stores no plan** |
+| **O4. Answers, checks, the plan and the folder** | `textrule.rs`, `hubanswers.rs` (plan by id, **6.8's path rule**, `memory_checkouts` with `exists`, `claude_memory` prediction), `hubconf.rs` (`\$` forms), `hubfolder.rs` (`tools_ready()` with its cache, `hub_folder_kind` by 6.7, `hub_existing_info` with ACCESS.md checkouts, `hub_prefill`), `hub_check`, `hub_plan`, `hub_plan_drop`; `src/lib/hubPathRule.ts` and `fixtures/hub-path-rule-cases.json` | OB-3 AC2 (incl. checkouts and Cc/Cf, OB-7 AC2's prefixes `sk-`, `glpat-`, `^xox[a-z]-`); OB-2 AC2 (kinds), AC3, AC4; OB-6 AC2; F2.13 path refusal; OB-1 AC8's origin detection (the command; O10a the prefill) | Rust: one case per rule; derived name and empty slug; secret names (`ghost-api-key`, `xoxo-shop-key` stated limit, `xoxb-1` refused, `sky-key` accepted); **the path-rule case file (also run by a vitest against `hubPathRule.ts`): U+202E and U+200B in the hub folder, U+FEFF, **U+202E and a tab (U+0009)** in a checkout (OB-3 AC2's cases, m8), `r`, `./r`, bare `~`, `~bob/r` refused, `~/src/api` and `/x/r` accepted**; **every `FolderKind`: `missing_ok`, `parent_missing`, `ancestor_missing` naming the highest missing folder (`/a/b/hub`, no `/a` → `/a`), `parent_not_folder`, `not_absolute`, `bad_characters`, `missing` vs `not_hub` (existing), `not_a_folder` (file, dangling link), `exists`; `finished` only with `hub.conf` in `HEAD`: index-only and no-`.git` are `unfinished`; a corrupt `.git` (`HEAD` pointing at a missing object) and a git seam that times out are `check_failed`; with a fake `xcode-select` returning 2 → `tools_missing` and no git started; on a fresh `tools_ready()` cache, an existing finished hub is `finished` (xcode-select run once, cached)**; `in_setup` set for a reserved key, with `relation` `same`, `inside` and `contains` (uses O1's registry, m9); **an existing folder holding `hub.conf` is `exists` in the preflight's file-system part (m5) and `finished`/`unfinished` inline**; a hub inside an enclosing repo is judged by its own `.git`; `hub.conf` literal forms incl. `cost\$5`, and `$(evil)` refused; origin forms (scp, ssh, https, `.git`, trailing `/`, non-GitHub → null, outside git → null); plan argv for the four slice-1 shapes; `~/src/api` expanded in the argv; **`memory_checkouts` `exists` true and false; `claude_memory` for `/Users/dana/hubs/acme` is `-Users-dana-hubs-acme`**; `hub_existing_info` reads checkouts from ACCESS.md rows starting `/` or `~`; `prepare` with an unknown `plan_id` refused; **a plan outlives its run (n2): `hub_run_prepare` with one `plan_id` is accepted again after that plan's run ended `preflight_failed`, `cancelled` and `unpack_failed`; the plan is replaced by the same window's next `hub_plan` (the old id then `unknown_plan`), not by another window's; dropped by `hub_plan_drop` and by `hub_runs_reset`, never by time; `hub_plan` with answers that fail `hub_check` returns `{ errors }` and stores no plan**; **concurrent calls (revision 7, R1), through `HubPlans`' two steps (`begin(window) -> seq` when a call starts, `finish(window, seq, result)` when it ends), with no sleeps: two calls in one window, the second begun after the first and finished before it: the second's plan is current, the first answers `{ superseded: true }` and stores nothing, and `hub_run_prepare` with the second's `plan_id` is accepted; the first finishing first, then the second: the second replaces it (the first's id is then `unknown_plan`); a call begun before `hub_runs_reset` and finished after it stores nothing; a latest call answering `{ errors }` or rejected leaves no current plan; calls in two windows never supersede each other; `hub_plan_drop` with an overtaken id, an unknown id or another window's current id leaves the window's current plan in place, and with the current id drops it** |
 | **O5. Fixture template, options and parity (PR CI)** | `src-tauri/src/fixtures/hub-template/` (its `bin/lib.sh` with `claude_home`, `folders`, `repos_of`, `encode_path`, `keychain_service`, `hub_name` and `hub_root`, m7; `bin/setup`'s `~/.fixture-setup-sleep` hook), `fixture_tarball()`, `hubgate.rs` options and parity (incl. 6.8's rows, the U+202E and tab checkouts among them), `setup-node` in `backend-macos` | OB-5 AC7 (PR CI side) | Rust (macOS): options check passes, a fixture without `--staging-url` fails it; parity passes, a fixture accepting `-x-engineer` fails it; **the path rows marked `text_rule_stricter` pass where the fixture accepts them**; **each of the six `lib.sh` functions, sourced under `/bin/bash` with `HUB=<hub>`, prints what the bundled template's prints for the same `hub.conf` and environment (`keychain_service` with `HUB_KEYCHAIN_SERVICE` set and unset, and with `HUB_NAME` set and unset); the fixture `bin/init` writes `HUB_KEYCHAIN_SERVICE=<name>` as well as `HUB_NAME=<name>`, as the bundled one does (n3)**; ignored on Linux and Windows |
 | **O6. The runner** | `spawn_runner_pty` (exclusive socket folder, `sun_path` fallback, peer pid, hello timeout), `terminal_spawn_spec`, `input_gate` in `write_pty`, `hubrun_proto.rs` (incl. `cancel`), `hubrun_child.rs` (foreground procedure, signal reset, framed env on fd 57, `chdir`, prompt ready, `cancel` and EOF kill every child group), `ade_cli::dispatch` arms, `libc` in `ade-hook`; `ade-hook/tests/hubrun.rs` and its CI step | OB-4 AC6 (argv, env, history, shell after); **OB-7 AC1** (the terminal side: hidden prompt, the paste rule); OB-2 AC5's "starts nothing" (runner side) | `cargo test -p ade-hook --test hubrun` (macOS; also the seventh verification line): stub `bin/init` receives each PRD answer byte for byte and nothing runs (`/tmp/pwned*` absent); isolated `HISTFILE` holds no answer; `.zshrc`-only `PATH` finds a stub `claude` that sees the four `ADE_*` variables; exit codes and signals reported; Ctrl-C reaches the step; **Ctrl-C stops `sleep 30` typed into the bash login shell after `exec_shell`** (and in zsh); **Ctrl-Z during the fixture `bin/secret` leaves it running and reading, and the value typed after it is stored**; a step sees only fds 0 to 2 and an empty signal mask; env timeout; **env: a value with a newline and an environment over 64 KiB arrive whole; a `.zshrc` that starts `sleep 600 &` still gives `env_ready`; a `.zshrc` that runs `exec 3>/dev/null` is harmless; `PWD`, `OLDPWD`, `SHLVL`, `_` absent; a shell that exits 1 gives `env_failed`**; `GIT_DIR` exported by `.zshrc` does not reach a step; **keys written to the master between steps never reach the next step; `prompt_ready` comes only after `read -rs` started; a fixture `bin/secret` that never hides echo gives `prompt_not_hidden`; a second line after the value is flushed, not run by the shell**; `exec_shell` leaves a prompt in the folder with the same PTY id; unknown verbs refused; plus **`cancel` during `capture_env` (a `.zshrc` that sleeps) and during a probe that sleeps leaves no process of the run alive (checked by process group) and the runner exits 0; socket EOF before the start does the same**; the runner prints nothing of its own on a protocol error. Main crate: a peer with another pid is ignored; a wrong key is ignored; no hello in 10 s fails `helper`; a pre-existing socket folder name is not used; the gate drops typed bytes when closed, passes `\x03`; **the paste rule (OB-7 AC1) exactly, with the gate secret: `abc`, `abc\r`, `abc\n` and `abc\r\n` pass whole; `ab\rc`, `ab\ncd\r`, `\rabc` and `abc\r\r` reach the PTY with no byte at all and emit one `secret_paste_refused`** |
-| **O7. The run** | `hubrun.rs` state machine and commands, `hub_run_prepare` returning at once with the folder reserved, `hub_run_cancel`, `preflight_check`/`prepared`/`preflight_failed`, preflight in 5.0's order, steps (a) to (i), Retry/Skip/**Stop** (incl. (c)'s rule), secrets, **the line channel** (`awaiting_line`, `hub_run_show`, the text rules), `step_started` counts | OB-4 AC1 to AC5, **AC7** (incl. the setup lock); OB-5 AC1, AC2, AC3 (incl. Stop); OB-6 AC1, AC3; OB-7 AC1 (Store/Skip; through `write_pty` during the fixture `bin/secret`'s prompt, a paste `a\rb\r` stores nothing of it and the value stored is the one typed next, and a paste `abc\r` stores `abc`); OB-3 AC3's "listed equals executed"; OB-3 AC4; OB-2 AC5 (cancel); OB-13 AC2's run half; OB-5 AC6 comparison (PR CI) | Rust (macOS, fixture): each preflight case of OB-4 AC2's test list; **5.0's order observed in the events; a failed `clt` still reports `login_shell`, `helper` and `folder` and skips `env` onward with no git or shell started; a refused shell and a missing helper reported together**; **`hub_run_prepare` returns before the first check; `hub_run_cancel` during `env` and during `links` leaves no process, writes nothing, releases the folder, ends `cancelled`**; **two runs to `~/hubs/a` and `~/hubs/b` together both reach (i), each hub equal to a run made alone; with a run at (a) or (d) to `~/hubs/a`, a second prepare to `~/hubs/a` and `~/hubs/A` is refused `in_setup` and writes nothing; after Stop, (i) or removal it is accepted; two runs with checkout `/x/r`: the second's (f) fails `links_refused`**; **the setup lock (M-A): two runs listing checkout `/x/r` whose fixture `bin/setup` sleeps before linking (`~/.fixture-setup-sleep`), started so their (f) overlap: exactly one `bin/setup` links `/x/r`'s entry (into its hub), the other run emits `setup_waiting waiting` naming the first hub, then `done`, then fails (f) with `links_refused`, and its `bin/setup` never starts; the lock is released when the holder's `bin/setup` exits non-zero, when it is closed mid-sleep (the waiter then proceeds), and on Stop; a waiting run closed leaves the queue; two runs with different checkouts both reach (i)**; **the setup lock's rules (revision 5, M1). Unit tests of `SetupLock` with threads, no PTY: FIFO for three acquirers; the third's `setup_waiting waiting` names the first (`holder.key` included), then is sent again naming the second when the second takes the lock; a waiter whose `ending` is set and woken returns `Left` and emits `done`, the holder is untouched and the next waiter is served; a stale guard (an earlier ticket of the same run) dropped after a re-acquire frees nothing; with the mutex poisoned (a test thread panics while holding it), acquire, release, evict and wake still work; a guard dropped while its thread is panicking frees nothing, and `evict` then frees it and serves the next waiter (revision 6, L1); acquire runs only on a `hub-run-*` thread (asserted). With the fixture's sleeping `bin/setup`: the runner's socket closing (the holder's runner `SIGKILL`ed mid-sleep: the waiter takes the lock only after the holder's PTY was killed, then proceeds; a waiter's runner killed: it leaves the queue and the holder is unaffected); a waiter that cancels (its tab closed by C2 while it waits: it leaves the queue, emits `done`, ends `closed`, its `bin/setup` never starts, and a third run queued behind it is served next)**; **revision 6, with the fixture's sleeping `bin/setup` and the `HubRunFaults` seam's ordered trace (`pty_killed { run }`, the runner reaped and the step's group sent `SIGKILL`; `lock_taken { run }`): a panic while holding (`HubRunFaults::panic_while_holding`, fired mid-sleep): the waiter takes the lock only after the holder's PTY was killed (the trace has the holder's `pty_killed` before the waiter's `lock_taken`), the holder's `bin/setup` linked nothing, the waiter's `bin/setup` then runs, and the panicked run ends `failed` with its folder released (L1); a panic in the reader thread (`HubRunFaults::panic_in_reader`): the holder's reader panicking mid-sleep makes its driver end `failed` with the PTY killed before the waiter's `lock_taken`, and the waiter proceeds; a waiter's reader panicking makes it leave the queue (`done`), end `failed`, and the holder is unaffected (L2); a close landing after the lock is taken and before `bin/setup` starts (`HubRunFaults::pause_after_link_check`) starts no `bin/setup`, and the next waiter is served (L3)**; the identity passes by config and fails by an empty exported `GIT_AUTHOR_NAME`; **every skipped check carries `detail.because` naming the first failed check it depends on (m4)**; **every printed line came through `hub_run_show` (a run whose webview answers with marker texts shows only those, and nothing else of ADE's); an empty text prints nothing; a text with `\x1b]0;` or `\x07` is refused; no answer in 10 s prints nothing and the run goes on; each `awaiting_line { command }` argv equals the plan's**; `step_started` `count` 8 with secrets and 7 without, the same `index` on Retry; `.gitignore`d `hub.conf` fails (c), and after removing the ignore line Retry stages and commits `hub.conf`; (c)'s options are `retry, remove, keep`; **Stop at (c), (d) and (f): no later step or name runs, the shell starts in `H`, `run_ended stopped`, the folder is unchanged, the token's later decisions are ignored**; a link created at (d) fails (f) with `links_refused` without starting `bin/setup`; MISSING lines still reach (i); offline run reaches (i); Store/Skip and two names give one OK and one MISSING; a run with only questions 2 to 5 answered completes; `git status --porcelain` empty after a run; `hub_guard_status(H)` is `Some` and `set_up(H)` refuses from the reservation on, at each of the three phases; comparison passes and its planted difference fails; `claude` absent → `awaiting_line { claude_not_found }`, a shell, `run_ended session_skipped` |
-| **O8. Undo, close, quit and restart** | `hub_run_removal_plan` (argv, Keychain service per secret through `keychain_service`, `restorable_bak`), Remove, Edit answers, Trash (behind a `Trasher` seam), the removal record and `removal_done`, `exec_shell` in `HOME`, T4 and manual lists (T4's `--unlink` under the setup lock), `removal_failed` Retry/Keep (no `parent` part), the input gate closed for removal commands, `hub_run_close` with 6.5's phase mapping and `kept_open`, close-with-Remove killing the PTY only after the Trash (M-B), `ExitRequested` and `hub_quit_answer`, `WindowEvent::Destroyed`, `hub_runs_reset`, prepared-run expiry | OB-5 AC1, AC2 (options), AC4 (incl. the "Hub removed" tab's shell in `HOME`), AC5 | Rust (macOS): eligibility as revision 2 (not offered after a later commit or for an existing hub: `existing_hub`; offered with no `H/.git` and no git started; `GIT_DIR` does not change the count; re-checked at confirm); **every command in `RemovalPlan` and `removal` is an argv array; the service in **the usual case** comes from `HUB_KEYCHAIN_SERVICE` as the fixture `bin/init` writes it (with `--name` unlike the folder's base name, so `HUB_KEYCHAIN_SERVICE` and `HUB_NAME` both hold that name), and a variant that edits only `HUB_KEYCHAIN_SERVICE` to a third value gets that value (the source proved); `AGENT_KEYCHAIN_SERVICE` (steps' environment) wins over everything; **the fallback case** removes the `HUB_KEYCHAIN_SERVICE` line and gets `HUB_NAME`; with both lines removed, the folder's base name (n3)**; with T4 (fixture variant), `--unlink` gets the since-time, the old `.bak-` stays, `restored_bak_count` is 1; a failing `--unlink` stops before the Trash, Retry and Keep work, Keep leaves a shell in `H` and `run_ended removal_kept`; **keys written to the master during `--unlink` never reach it**; without T4 the list names hub, work-area and `/x/r` links and this run's `.bak-` as argv and nothing changes; **after the Trash the runner's cwd was `HOME` before the move, `removal_done` lists `trash` and `rmdir_parent`, a non-empty parent gives `kept_parent { not_empty }` and no `removal_failed`, and the PTY's shell runs in `HOME` with the same PTY id**; parent removed only when empty; **6.5's runner table: Keep and Remove in (a) (waits for the unpack) and (b), Close in (d), Stop during `--unlink` leaves the Trash undone. Close with Remove (M-B), with a `Trasher` seam: the PTY is alive and the runner holding (same PTY id, process alive) when the Trash is called, and is killed only after it returns Ok; with the seam failing, `hub_run_close` returns `kept_open { trash_failed }`, the PTY is alive, `removal_failed { part: trash, options: [retry, keep] }` is emitted, Retry calls the Trash again and on Ok kills the PTY (`closed`), Keep gives a shell in `H` with the same PTY id and `run_ended removal_kept { part: trash }`; a quit answered Remove whose Trash fails returns `cancelled { runs }` and the `AppExit` seam (`RecordingAppExit`) records no call (the other runs have ended as answered); a quit whose answers all succeed records exactly one `exit(0)` (n7); a window close likewise leaves the window open. The answer mapping (m1): `keep` on a removing run stops the removal (as `stop_removal`), `remove` on a setting_up run closes and keeps the hub, `stop_removal` on a making run keeps; a close in the setup-lock wait or while holding it releases the lock; **the setup lock on every way out (revision 5, M1): `hub_runs_reset` of the owner window while a run waits (it leaves at once, `setup_waiting done`, `run_ended reset`) and while a run holds (the lock is released only after that run's PTY is killed, and the waiter then proceeds); `WindowEvent::Destroyed` of the owner window, the same two ways; a T4 `--unlink` waiting behind a holder (fixture T4 variant: run A's (f) sleeping, run B's Remove confirmed: B emits `setup_waiting { key: removal, state: waiting, holder: { hub: A, key: f } }`, its `--unlink` starts only after A's `bin/setup` exited, then `done`; and a new hub's (f) waiting behind that `--unlink` names `holder.key: removal`)**; kill during (a), during (b) before and after `hub.conf`, between c1 and c2, and after (c), then relaunch cases; a destroyed window ends making as Keep and removing as Stop; a prepared run not started in 60 s is killed; ⌘Q with one run in (b) and one in (d) asks once, Don't Quit keeps both running (on a built app, recorded); **the quit decision is made from `RunHandle.phase` alone (revision 6, L3): with one run waiting in the setup lock's `Condvar::wait` and one making, the `ExitRequested` handler returns, having prevented the exit and emitted `quit_requested` naming the making run, before any message reaches either driver; with every run setting_up, one of them waiting for the lock, it ends each as Close and the `AppExit` seam records no call (the exit was not prevented)** |
+| **O7. The run** | `hubrun.rs` state machine and commands, `hub_run_prepare` returning at once with the folder reserved, `hub_run_cancel`, `preflight_check`/`prepared`/`preflight_failed`, preflight in 5.0's order, steps (a) to (i), Retry/Skip/**Stop** (incl. (c)'s rule), secrets, **the line channel** (`awaiting_line`, `hub_run_show`, the text rules), `step_started` counts | OB-4 AC1 to AC5, **AC7** (incl. the setup lock); OB-5 AC1, AC2, AC3 (incl. Stop); OB-6 AC1, AC3; OB-7 AC1 (Store/Skip; through `write_pty` during the fixture `bin/secret`'s prompt, a paste `a\rb\r` stores nothing of it and the value stored is the one typed next, and a paste `abc\r` stores `abc`); OB-3 AC3's "listed equals executed"; OB-3 AC4; OB-2 AC5 (cancel); OB-13 AC2's run half; OB-5 AC6 comparison (PR CI) | Rust (macOS, fixture): each preflight case of OB-4 AC2's test list; **5.0's order observed in the events; a failed `clt` still reports `login_shell`, `helper` and `folder` and skips `env` onward with no git or shell started; a refused shell and a missing helper reported together**; **`hub_run_prepare` returns before the first check; `hub_run_cancel` during `env` and during `links` leaves no process, writes nothing, releases the folder, ends `cancelled`**; **two runs to `~/hubs/a` and `~/hubs/b` together both reach (i), each hub equal to a run made alone; with a run at (a) or (d) to `~/hubs/a`, a second prepare to `~/hubs/a` and `~/hubs/A` is refused `in_setup` and writes nothing; after Stop, (i) or removal it is accepted; two runs with checkout `/x/r`: the second's (f) fails `links_refused`**; **the setup lock (M-A): two runs listing checkout `/x/r` whose fixture `bin/setup` sleeps before linking (`~/.fixture-setup-sleep`), started so their (f) overlap: exactly one `bin/setup` links `/x/r`'s entry (into its hub), the other run emits `setup_waiting waiting` naming the first hub, then `done`, then fails (f) with `links_refused`, and its `bin/setup` never starts; the lock is released when the holder's `bin/setup` exits non-zero, when it is closed mid-sleep (the waiter then proceeds), and on Stop; a waiting run closed leaves the queue; two runs with different checkouts both reach (i)**; **the setup lock's rules (revision 5, M1). Unit tests of `SetupLock` with threads, no PTY: FIFO for three acquirers; the third's `setup_waiting waiting` names the first (`holder.key` included), then is sent again naming the second when the second takes the lock; a waiter whose `ending` is set and woken returns `Left` and emits `done`, the holder is untouched and the next waiter is served; a stale guard (an earlier ticket of the same run) dropped after a re-acquire frees nothing; with the mutex poisoned (a test thread panics while holding it), acquire, release, evict and wake still work; a guard dropped while its thread is panicking frees nothing, and `evict` then frees it and serves the next waiter (revision 6, L1); acquire runs only on a `hub-run-*` thread (asserted). With the fixture's sleeping `bin/setup`: the runner's socket closing (the holder's runner `SIGKILL`ed mid-sleep: the waiter takes the lock only after the holder's PTY was killed, then proceeds; a waiter's runner killed: it leaves the queue and the holder is unaffected); a waiter that cancels (its tab closed by C2 while it waits: it leaves the queue, emits `done`, ends `closed`, its `bin/setup` never starts, and a third run queued behind it is served next)**; **revision 6, with the fixture's sleeping `bin/setup` and the `HubRunFaults` seam's ordered trace (`pty_killed { run }`, the runner reaped and the step's group sent `SIGKILL`; `lock_taken { run }`): a panic while holding (`HubRunFaults::panic_while_holding`, fired mid-sleep): the waiter takes the lock only after the holder's PTY was killed (the trace has the holder's `pty_killed` before the waiter's `lock_taken`), the holder's `bin/setup` linked nothing, the waiter's `bin/setup` then runs, and the panicked run ends `failed` with its folder released (L1); a panic in the reader thread (`HubRunFaults::panic_in_reader`): the holder's reader panicking mid-sleep makes its driver end `failed` with the PTY killed before the waiter's `lock_taken`, and the waiter proceeds; a waiter's reader panicking makes it leave the queue (`done`), end `failed`, and the holder is unaffected (L2); a close landing after the lock is taken and before `bin/setup` starts (`HubRunFaults::pause_after_link_check`) starts no `bin/setup`, and the next waiter is served (L3)**; the identity passes by config and fails by an empty exported `GIT_AUTHOR_NAME`; **every skipped check carries `detail.because` naming the first failed check it depends on (m4)**; **every printed line came through `hub_run_show` (a run whose webview answers with marker texts shows only those, and nothing else of ADE's); an empty text prints nothing; a text with `\x1b]0;` or `\x07` is refused; no answer in 10 s prints nothing and the run goes on; each `awaiting_line { command }` argv equals the plan's**; `step_started` `count` 8 with secrets and 7 without, the same `index` on Retry; `.gitignore`d `hub.conf` fails (c), and after removing the ignore line Retry stages and commits `hub.conf`; (c)'s options are `retry, remove, keep`; **Stop at (c), (d) and (f): no later step or name runs, the shell starts in `H`, `run_ended stopped`, the folder is unchanged, the token's later decisions are ignored**; a link created at (d) fails (f) with `links_refused` without starting `bin/setup`; MISSING lines still reach (i); offline run reaches (i); Store/Skip and two names give one OK and one MISSING; a run with only questions 2 to 5 answered completes; `git status --porcelain` empty after a run; `hub_guard_status(H)` is `Some` and `set_up(H)` refuses from the reservation on, at each of the three phases; comparison passes and its planted difference fails; `claude` absent → `awaiting_line { claude_not_found }`, a shell, `run_ended session_skipped`; **revision 7 (R4): the panicked holder's trace is `panic_caught`, `stop_sent`, `pty_killed` (the runner's pid reaped), `lock_evicted`, then the waiter's `lock_taken`; with the holder's runner `SIGSTOP`ped by the test before the panic (so it never acts on `stop`), the trace also has `fg_group_killed` naming `bin/setup`'s group before `pty_killed`, and no process of that group is left; (R7) the shell after (i) and the shell after Stop at (c) are each alive 3 s after `run_ended`: the PTY's first process has the runner's pid and is the login shell (`proc_pidpath`), the PTY is still registered, and `write_pty` of `echo ok\r` shows `ok`; that run's trace has `exec_shell_sent`, `run_ended`, `driver_exited` and `socket_closed { cause: eof, handled: false }`, and no `pty_killed`; `hub_run_close` on it then kills the PTY itself and returns `closed`** |
+| **O8. Undo, close, quit and restart** | `hub_run_removal_plan` (argv, Keychain service per secret through `keychain_service`, `restorable_bak`), Remove, Edit answers, Trash (behind a `Trasher` seam), the removal record and `removal_done`, `exec_shell` in `HOME`, T4 and manual lists (T4's `--unlink` under the setup lock), `removal_failed` Retry/Keep (no `parent` part), the input gate closed for removal commands, `hub_run_close` with 6.5's phase mapping and `kept_open`, close-with-Remove killing the PTY only after the Trash (M-B), `ExitRequested` and `hub_quit_answer`, `WindowEvent::Destroyed`, `hub_runs_reset`, prepared-run expiry | OB-5 AC1, AC2 (options), AC4 (incl. the "Hub removed" tab's shell in `HOME`), AC5 | Rust (macOS): eligibility as revision 2 (not offered after a later commit or for an existing hub: `existing_hub`; offered with no `H/.git` and no git started; `GIT_DIR` does not change the count; re-checked at confirm); **every command in `RemovalPlan` and `removal` is an argv array; the service in **the usual case** comes from `HUB_KEYCHAIN_SERVICE` as the fixture `bin/init` writes it (with `--name` unlike the folder's base name, so `HUB_KEYCHAIN_SERVICE` and `HUB_NAME` both hold that name), and a variant that edits only `HUB_KEYCHAIN_SERVICE` to a third value gets that value (the source proved); `AGENT_KEYCHAIN_SERVICE` (steps' environment) wins over everything; **the fallback case** removes the `HUB_KEYCHAIN_SERVICE` line and gets `HUB_NAME`; with both lines removed, the folder's base name (n3)**; with T4 (fixture variant), `--unlink` gets the since-time, the old `.bak-` stays, `restored_bak_count` is 1; a failing `--unlink` stops before the Trash, Retry and Keep work, Keep leaves a shell in `H` and `run_ended removal_kept`; **keys written to the master during `--unlink` never reach it**; without T4 the list names hub, work-area and `/x/r` links and this run's `.bak-` as argv and nothing changes; **after the Trash the runner's cwd was `HOME` before the move, `removal_done` lists `trash` and `rmdir_parent`, a non-empty parent gives `kept_parent { not_empty }` and no `removal_failed`, and the PTY's shell runs in `HOME` with the same PTY id**; parent removed only when empty; **6.5's runner table: Keep and Remove in (a) (waits for the unpack) and (b), Close in (d), Stop during `--unlink` leaves the Trash undone. Close with Remove (M-B), with a `Trasher` seam: the PTY is alive and the runner holding (same PTY id, process alive) when the Trash is called, and is killed only after it returns Ok; with the seam failing, `hub_run_close` returns `kept_open { trash_failed }`, the PTY is alive, `removal_failed { part: trash, options: [retry, keep] }` is emitted, Retry calls the Trash again and on Ok kills the PTY (`closed`), Keep gives a shell in `H` with the same PTY id and `run_ended removal_kept { part: trash }`; a quit answered Remove whose Trash fails returns `cancelled { runs }` and the `AppExit` seam (`RecordingAppExit`) records no call (the other runs have ended as answered); a quit whose answers all succeed records exactly one `exit(0)` (n7); a window close likewise leaves the window open. The answer mapping (m1): `keep` on a removing run stops the removal (as `stop_removal`), `remove` on a setting_up run closes and keeps the hub, `stop_removal` on a making run keeps; a close in the setup-lock wait or while holding it releases the lock; **the setup lock on every way out (revision 5, M1): `hub_runs_reset` of the owner window while a run waits (it leaves at once, `setup_waiting done`, `run_ended reset`) and while a run holds (the lock is released only after that run's PTY is killed, and the waiter then proceeds); `WindowEvent::Destroyed` of the owner window, the same two ways; a T4 `--unlink` waiting behind a holder (fixture T4 variant: run A's (f) sleeping, run B's Remove confirmed: B emits `setup_waiting { key: removal, state: waiting, holder: { hub: A, key: f } }`, its `--unlink` starts only after A's `bin/setup` exited, then `done`; and a new hub's (f) waiting behind that `--unlink` names `holder.key: removal`)**; kill during (a), during (b) before and after `hub.conf`, between c1 and c2, and after (c), then relaunch cases; a destroyed window ends making as Keep and removing as Stop; a prepared run not started in 60 s is killed; ⌘Q with one run in (b) and one in (d) asks once, Don't Quit keeps both running (on a built app, recorded); **the quit decision is made from `RunHandle.phase` alone (revision 6, L3): with one run waiting in the setup lock's `Condvar::wait` and one making, the `ExitRequested` handler returns, having prevented the exit and emitted `quit_requested` naming the making run, before any message reaches either driver; with every run setting_up, one of them waiting for the lock, it ends each as Close and the `AppExit` seam records no call (the exit was not prevented)**; **started but not yet making (revision 7, R5), with `HubRunFaults::pause_before_start` holding the driver in `ready` after `hub_run_start` returned: `ExitRequested` prevents the exit and `quit_requested` lists the run with phase `making` (it is not cancelled); `hub_run_close(keep)` and `hub_run_close(remove)` are each mapped as making (PTY killed, nothing written, no Trash called); `hub_run_cancel` returns an error; `WindowEvent::Destroyed` ends it as Keep, and the `Start` taken after the pause resumes is ignored** |
 | **O9. Existing hub** | `hub_open_existing` (returns at once; reserves only with `run_setup`), the option with the link check and `checkouts` on success, `finished` as its own check | OB-2 AC2; OB-4 AC7 (the option on a folder being set up); OB-6 AC1 (existing hub's `HUB_CLAUDE`/`HUB_CLAUDE_CONFIG_DIR`) | Rust: finished hub byte-for-byte unchanged with a stub Claude; `unfinished` (incl. index-only), `check_failed` and `not_hub` refused with their kinds; option runs both scripts and `links` passed lists the checkouts; option refused for a linked `/x/r`; **option refused `in_setup` while a new run on that folder is at (d); Open Hub without the option is not refused; the option's `bin/setup` takes the setup lock (it waits while a new run's fixture `bin/setup` sleeps, then its link check refuses a checkout that run linked); a new hub's (f) waiting behind the option's `bin/setup` reports `holder.key: open_setup`**; `claude-work` with `CLAUDE_CONFIG_DIR=/x/cfg`; `hub_existing_info` runs nothing (a `hub.conf` holding `$(touch /tmp/pwned)`); vitest: the option's notice has no undo sentence and has the refusal sentence |
 | **O10a. The choice and its entries** | first launch, Esc, cancel, quit, tour order, upgrade, new windows, New tab row, palette entry, no-template message, prefill (`hub_prefill`), F2 entries hidden in an engagement instance (F1's fact) | OB-1 AC1 to AC10 | vitest |
-| **O10b. Questionnaire and review** | new/existing, questions 2 to 7 and 9, inline errors (every `FolderKind`, `in_setup`, the path rule through `hubPathRule.ts`), review list with folders, shown commands (`shellQuote`), the memory notice with `memory_checkouts[].exists` and `claude_memory`, the skills and session notices, the preflight list in 5.0's order with every failure shown, **Cancel during the preflight (`hub_run_cancel`)**, the answers kept in `hubRunStore` and handed back after `unpack_failed` | OB-2 AC1, AC4, AC5; OB-3 AC2 (inline), AC3; OB-4 AC7 (inline refusal); OB-11 AC1, AC2, AC4, AC5 | vitest (RTL roles, `aria-describedby`, live region, focus trap); events mocked with the contract's shapes; shown command for each PRD answer round-trips through sh, bash, zsh and fish when present; **every preflight check shown in order, skipped ones as skipped with their `detail.because`, two failures shown together; `refused in_setup` for each `relation`; `refused "unknown_plan"`; Cancel calls `hub_run_cancel` and opens no tab; `prepared` opens the tab and calls `hub_run_start(run_id, tab_id)`; `refused in_setup` shows the refusal naming the folder; `unpack_failed` returns to Review with the answers and `removed`**; **after `unpack_failed`, the questionnaire calls `hub_plan(answers)` on returning to Review, Set Up Hub is disabled until it answers, and Set Up Hub then calls `hub_run_prepare` with the new `plan_id` and is not refused `unknown_plan` (n2); **after `preflight_failed`, Set Up Hub calls `hub_run_prepare` with the same `plan_id`, and `hub_plan_drop` is not called (revision 6, T1)**; Review Again with `hub_plan` answering `{ errors }` goes to the first answer with an error and shows it inline; with `hub_plan` rejected it shows the failure with its message and Review Again, and Set Up Hub stays disabled**; after `run_ended`, `hubRunStore` holds no answers |
+| **O10b. Questionnaire and review** | new/existing, questions 2 to 7 and 9, inline errors (every `FolderKind`, `in_setup`, the path rule through `hubPathRule.ts`), review list with folders, shown commands (`shellQuote`), the memory notice with `memory_checkouts[].exists` and `claude_memory`, the skills and session notices, the preflight list in 5.0's order with every failure shown, **Cancel during the preflight (`hub_run_cancel`)**, the answers kept in `hubRunStore` and handed back after `unpack_failed`; **the re-plan on every entry into Review, Preparing…, and the wait after (a) fails, as UX revision 6 (05fa3c4) §6.5 and §7.3 give them (revision 7, R2); only the latest `hub_plan` call's answer used (R1)** | OB-2 AC1, AC4, AC5; OB-3 AC2 (inline), AC3; OB-4 AC7 (inline refusal); OB-11 AC1, AC2, AC4, AC5 | vitest (RTL roles, `aria-describedby`, live region, focus trap); events mocked with the contract's shapes, `hub_plan` mocked as a promise the test resolves; shown command for each PRD answer round-trips through sh, bash, zsh and fish when present; **every preflight check shown in order, skipped ones as skipped with their `detail.because`, two failures shown together; `refused in_setup` for each `relation`; `refused "unknown_plan"`; Cancel calls `hub_run_cancel` and opens no tab; `prepared` opens the tab and calls `hub_run_start(run_id, tab_id)`; `refused in_setup` shows the refusal naming the folder**. **The plan (revision 7, R2), each outcome tested on the first Review Setup, not only on Review Again: (1) Preparing…: Review Setup with no field error calls `hub_plan(answers)` once; until it answers Review Setup reads Preparing… with `aria-disabled="true"` (not `disabled`) and keeps focus, the form is `inert`, a second press and Enter call nothing, Cancel, Esc and ✕ still close the dialog, and no part of Review is shown; (2) the first Review Setup answered with a plan: Review opens, Set Up Hub enabled and focused; answered `{ errors }`: the dialog stays on the answers, the errors show inline, focus is on the first answer with an error, no block shows; rejected: Review opens without a plan, the "couldn't make the review" block shows its message with focus on its heading, Set Up Hub is disabled, and Review Again calls `hub_plan` again; (3) Review Again with the same three outcomes; (4) Back, then Review Setup, calls `hub_plan` again; after `run_ended edit_answers` the questionnaire opens on the answers and Review Setup plans; (5) after `unpack_failed`: `hub_plan` is called at once with the kept answers; while it waits the tab stays open with its run bar reading "Opening your answers again…" and the questionnaire is not shown; a plan then closes the tab and opens Review with the unpack block and Set Up Hub enabled, which calls `hub_run_prepare` with the new `plan_id` and is not refused `unknown_plan`; `{ errors }` closes the tab and opens the answers with the block and the inline errors, focus on the first answer with an error; rejected closes the tab and opens Review without a plan with both blocks, Set Up Hub disabled; (6) a plan that answers after the dialog closed (Cancel, Esc and ✕, each closed during Preparing…) is dropped: `hub_plan_drop` is called with its `plan_id`, nothing opens and focus does not move; (7) only the latest call counts (R1): with an older call still pending when a newer one is made (the dialog closed during Preparing… and opened again), the older one answering last with a plan changes nothing on the newer review, Set Up Hub prepares the newer `plan_id`, and an answer `{ superseded: true }` changes nothing; (8) after `preflight_failed`, Set Up Hub calls `hub_run_prepare` with the same `plan_id`, and neither `hub_plan` nor `hub_plan_drop` is called (revision 6, T1); (9) Cancel, Esc or ✕ with a plan held calls `hub_plan_drop` with that plan's id**; after `run_ended`, `hubRunStore` holds no answers |
 | **O10c. Run notices, lines and close rules** | Store/Skip, "type now" only after `secret_prompt_ready`, `focusHubPrompt`, paste refusal (OB-7 AC1), the `setup_waiting` bar state, failure options incl. **Stop** (`keep`) and `steps_left`, **the line channel's webview half** (answering each `awaiting_line` with the designer's text through `hub_run_show`), removal confirmation from `hub_run_removal_plan`, `removal_failed`, the removal summary and the "Hub removed" tab, **the notice-waiting flag (N14)**, 6.5's close table in `useGuardedClose` and `App.tsx`, Move to New Window refused during a run and for a "Hub removed" tab while its summary shows | OB-11 AC1, AC3; OB-5 AC2 to AC5 (UI); **OB-7 AC1** (the webview half of the paste rule) | vitest: announced and focused; after `secret_prompt_ready` the terminal has focus, not before; **a paste into the hub pane during a secret prompt reaches `write_pty` as one call, unsplit (xterm `onData` with `ab\rc\r` gives exactly one `write_pty` with those bytes), and `secret_paste_refused` turns the bar to the refusal copy without showing or keeping the pasted text**; **`setup_waiting waiting` shows the designer's bar state naming `holder.hub`, sets no notice-waiting flag, and `done` clears it; a second `waiting` with another `holder` replaces the name and the `holder.key` wording (n1)**; **Stop shown on (c) to (h) and per secret, absent after it is chosen; each `awaiting_line` kind answered once with the designer's text (snapshot of the texts), commands built with `shellQuote` from the event's argv**; **the notice-waiting flag set on a background tab with agent status display off drives the dot and the toast, and is cleared when the notice is answered**; **each row of 6.5's close table: one confirm only on every path; tab close in making (Cancel/Keep/Remove), setting_up (the busy confirm with the run's label, never `ade-hook`), removing (Cancel/Stop); a batch with a making run offers Remove and Cancel aborts it all; window close and quit with a making run ask once and nothing with only setting_up runs**; Move to New Window absent from a running hub tab's menu and refused by `detachTabToWindow`, present after `exec_shell`; **the summary stays until Dismiss and Esc does nothing on it; Move to New Window is absent from a "Hub removed" tab's menu and refused by `detachTabToWindow` while its summary shows, and present after Dismiss (m11)**; **close with Remove answered `kept_open`: the tab stays with the Retry/Keep notice, a window close leaves the window open, a quit is dropped; one batch answer is sent for every run of a C4 batch** |
 | **O11. Release gates** | the `release.yml` step, S3 structure-test assertions | OB-5 AC6, AC7 (release side) | vitest (`bundledSources.test.ts`): step exists, sets `ADE_HUB_TEMPLATE_TARBALL`, precedes upload |
 | **O12. Privacy scans** | 10.5's Rust and webview layers (incl. `hubRunStore`), the no-network test, the manual check's script | OB-7 AC3, OB-10 AC1, AC3 (relay parts with story 8) | Rust and vitest as 10.5 |
@@ -2418,6 +2602,18 @@ passed) or lives in `ade-hook/tests/hubrun.rs` (`#![cfg(target_os = "macos")]`).
   failure behind a closed window.
 
 ## 15. Review findings and their answers
+
+### 15.00 Revision 7: the round-6 joint review (passed; minors R1 to R7)
+
+| Finding | Answer | Where |
+|---|---|---|
+| **R1** concurrent `hub_plan` calls | Each call takes the window's next sequence number when it starts and stores its result only if still the latest; an overtaken call stores nothing and answers `{ superseded: true }`; `hub_runs_reset` takes a number too; `hub_plan_drop(id)` does nothing unless `id` is the current plan. The webview uses only its latest call's answer (11.3). O4 tests both rules; O10b the webview's side | 4.10.2, 11.3, contract, O4, O10b |
+| **R2** O10b's tests | O10b rewritten to UX revision 6 (05fa3c4, §6.5, §7.3): Preparing…; `{ errors }` and a rejection on the first Review Setup as well as Review Again; after `unpack_failed` the tab stays, reading "Opening your answers again…", until `hub_plan` answers, and only then the questionnaire returns; a plan answering after the dialog closed is dropped. 6.2's "the tab closes" now has that timing | 4.10, 4.10.2, 6.2, 11.3, contract, O10b |
+| **R3** the `HubRunFaults` seam | A constructor parameter of `HubRuns` beside `Trasher` (`AppExit` stays in Tauri state), compiled only under `#[cfg(test)]` (type, field, parameter and every fault point), so absent from release; the faults (`PanicWhileHolding`, `PanicInReader`, `PauseAfterLinkCheck`, `PauseBeforeStart`) and the trace's events listed; checked against F1's `isotest-driver`, which needed a feature and a release check only because its harness is a built app | 4.10.1, contract, O7, O8 |
+| **R4** the panic handler's kill | Option (a): `RunIo` (socket writer, channel receiver, PTY id, runner pid) is made before `catch_unwind`; the handler sends `stop { grace_ms: 3000 }`, waits up to 4 s, `killpg`s the PTY's foreground group if it is not the runner's, kills the PTY, `SIGKILL`s and reaps the runner, then evicts. (b) rejected: the reader's clone keeps the socket open, so the runner would see no EOF | 4.10.1, ADR 0026, contract, O7 |
+| **R5** a run entering making during a quit | `RunHandle.started`, set by `hub_run_start` before it sends `Start`; every outside decision reads `ready` with `started` as making; `hub_run_cancel` refused once set; the driver maps a close that overtakes `Start` as making's and ignores the later `Start`; the 60 s expiry yields to `started` | 4.10, 4.10.1, 4.10.2, 6.5, 11.3, ADR 0026, contract, O8 |
+| **R6** `pathconf` failure | `case_from_pathconf`: `1` Sensitive, `0` and `-1` (and anything else) Insensitive on macOS, the safe direction; unit-tested on every OS, the real call on macOS | 4.10.1, ADR 0028, contract, O1 |
+| **R7** the expected EOF after `exec_shell` | The runner closes the socket before every `execve` of the shell (also close-on-exec), so `ReaderExit` fires on every normal end; the driver reads nothing after `exec_shell` or any `run_ended`; commands on an ended run act without the driver. O7: the shell after (i) and after Stop is alive 3 s after `run_ended`, with no `pty_killed` in the trace | 4.7, 4.8, 4.10.1, ADR 0026, contract, O7 |
 
 ### 15.0 Revision 6: the round-5 delta review (M1 closed; minors)
 
@@ -2544,7 +2740,11 @@ reader thread per run, the setup lock a `std::sync` `Mutex` + `Condvar` with an
 approved); the `AppExit` seam. Revision 6: the setup lock freed on a panic only
 after the kill, with an abort on a panic in the panic handler; a drop sentinel in
 the reader thread; the run's phase in an `AtomicU8` for the quit decision; folding
-macOS-only, with NFC-only keys elsewhere.
+macOS-only, with NFC-only keys elsewhere. Revision 7: per-window sequence numbers
+for `hub_plan`; the panic handler kills through I/O held outside `catch_unwind`
+(option (a)); a `started` flag so a run whose tab is open counts as making; a failed
+`pathconf` reads as case-insensitive; the `HubRunFaults` seam under `cfg(test)`
+only.
 
 **Owner answers (2026-11-09), all applied:** Q-A1 refuse other login shells, naming
 the six (4.3, 5.0). Q-A2 hub tabs in a saved workspace keep their folder; the review's

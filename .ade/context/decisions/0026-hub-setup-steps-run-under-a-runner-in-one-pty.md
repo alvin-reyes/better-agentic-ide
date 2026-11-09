@@ -1,6 +1,6 @@
 # 0026: Hub setup steps run under a runner that leads one PTY
 
-- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 to 6;
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 to 7;
   not yet reviewed or approved.
 - Context:
   - F2 (`docs/prd.md` OB-4 AC1, AC6) runs the bundled agent hub template's steps
@@ -51,7 +51,10 @@
     terminal, with pipes. ADE never writes to the PTY's input for a step.
   - After (a) the runner `chdir`s into the hub folder. At the end it resets every
     signal and the mask and `execve`s the login shell a new terminal would get, in
-    the hub folder: same PID, PTY id and token.
+    the hub folder: same PID, PTY id and token. It closes its socket before every
+    `execve` of the shell, so every normal end reaches ADE as EOF, and ADE stops
+    reading the run's channel once it has sent `exec_shell` (or ended the run), so
+    that EOF never kills the shell it handed over (revision 7).
   - The runner prints no words of its own. Every line shown in the tab (each
     command, each note) is text the webview supplies for a fact ADE names
     (`awaiting_line`, `hub_run_show`; owner Q10), checked by ADE (SGR escapes only).
@@ -80,7 +83,14 @@
     the run (revision 6). A reader thread that exits in any way, a panic included,
     ends its run through a drop sentinel that sends `SocketClosed`. The quit
     decision reads each run's phase from an atomic the driver alone writes. A
-    holder releases only after its PTY is killed, on every path.
+    holder releases only after its PTY is killed, on every path. The panic handler
+    kills through the run's I/O held outside `catch_unwind` (the socket writer, the
+    channel, the PTY id, the runner's pid): `stop`, a bounded wait, a `killpg` of
+    the PTY's foreground group if the runner did not act, the PTY killed and the
+    runner reaped, then the evict (revision 7). `hub_run_start` sets a `started`
+    flag before it sends `Start`, and every close or quit decision reads a started
+    run still in `ready` as making, so a quit cannot cancel a run whose tab is open
+    (revision 7).
   - The runner executes only what ADE sends (newline-delimited JSON, types in
     `hubrun_proto.rs`, shared by `#[path]`); all policy is in `hubrun.rs`. The
     preflight runs in the same runner while the PTY is still hidden, and the tab is

@@ -1,6 +1,6 @@
 # 0028: Project setup refuses agent hubs at its two writers
 
-- Status: Proposed (2026-11-09), revised with the F2 design revisions 3 to 6; not
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 3 to 7; not
   yet reviewed or approved.
 - Context:
   - A hub has `_bmad/` and no `.ade/methodology`, so automatic project setup would
@@ -29,6 +29,8 @@
     fold and the `_PC_CASE_SENSITIVE` probe are `#[cfg(target_os = "macos")]`, so
     `hubmark.rs` still builds on every platform. Off macOS the key is NFC only; the
     registry is never filled there, because F2 runs only on macOS (revision 6).
+    When `pathconf(_PC_CASE_SENSITIVE)` fails (returns -1), the volume is taken as
+    case-insensitive, so the key is folded (revision 7).
   - Refusing a folder inside or containing a reserved one goes beyond OB-4 AC7 as
     approved (the same folder only). It is the architect's decision: the outer run's
     unpack collides with the inner one, and the outer `bin/init` would commit it. The
@@ -46,7 +48,9 @@
     APFS treats them as one name too (`mkdir strasse` after `mkdir straße` fails with
     "File exists"); they are not over-folds (revision 6 corrects revision 5). Should
     full folding ever identify a pair the volume keeps apart, the cost is a refused
-    second run that would have been safe, never two runs on one folder.
+    second run that would have been safe, never two runs on one folder. A failed
+    `pathconf` errs the same way: folding a key on a case-sensitive volume can only
+    refuse a safe second run.
   - `HOME` and its ancestors are never hub roots by their files, so a stray
     `~/hub.conf` does not stop project setup everywhere; a stray `hub.conf` outside
     `HOME` still marks the folders under it, and the refusal names its folder.
