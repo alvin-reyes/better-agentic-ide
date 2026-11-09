@@ -8,10 +8,10 @@ description: ADE is a desktop terminal where your coding agents work as a team o
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="#orchestration"><b>NEW</b><span>Orchestrate agents with BMAD v6, focus terminals and brain sync →</span></a>
-      <p class="hero-kicker">The IDE built for Claude Code developers and architects</p>
-      <h1>Verified, <span class="grad-text">not&nbsp;vibed.</span></h1>
-      <p class="sub">A desktop terminal that orchestrates your developer tooling with a team of agents: architect, developer, QA, each in its own lane. Nothing ships until the gate says it&rsquo;s done.</p>
+      <a class="pill" href="#new"><b>v0.21.1</b><span>Sub-terminals, and more →</span></a>
+      <p class="hero-kicker">Verified, not vibed &middot; for Claude Code developers and architects</p>
+      <h1>A team of agents. <span class="grad-text">One gate for&nbsp;Done.</span></h1>
+      <p class="sub">ADE orchestrates your developer tooling with BMAD&nbsp;v6 roles. A PM, an architect and a designer plan; a reviewer tries to break the plan; developers build stories in parallel git worktrees; QA runs the one verification command that decides when the work is done.</p>
       <div class="hero-cta">
         <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
         <a class="btn btn-primary" href="#downloads" data-download="auto">
@@ -130,14 +130,73 @@ description: ADE is a desktop terminal where your coding agents work as a team o
         <p>The hub sets defaults per persona, and <code>hub.conf</code> or the command line overrides them: one model for focus sessions and the persona agent, one for folder specialists (default Sonnet), and one for the morning briefing (default Haiku).</p>
       </article>
       <article class="orx-card">
+        <span class="compose-label">Agent hub</span>
+        <h3>Everything the hub does</h3>
+        <p>Thirteen personas, focus terminals, state and memory, the brain, auto sync, monitors and the access tools: one card each in the tour below.</p>
+        <a class="more" href="#agent-hub">See the agent hub tour <span aria-hidden="true">&darr;</span></a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section hub-tour" id="agent-hub">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Agent hub</span>
+      <h2>A hub that remembers each client&rsquo;s work.</h2>
+      <p>The agent hub template turns a private repo into an AI technical persona for one client: its context, state and history in Bash and Markdown, while the client&rsquo;s code stays in its own repos. Every session starts with what is live, open and waiting.</p>
+    </div>
+    <div class="orx-cards hub-cards">
+      <article class="orx-card">
         <span class="compose-label">Thirteen personas</span>
-        <h3>A hub for each role you play</h3>
-        <p>Staff engineer, DevOps/SRE, data, ML, security, tech lead, fractional CTO and more. <code>bin/init</code> makes the hub; <code>bin/doctor</code> checks it; launchd runs the briefing, monitors and sync.</p>
+        <h3>Pick a role, run <code>bin/init</code></h3>
+        <p>Staff engineer, DevOps/SRE, data, ML/AI, mobile, frontend, QA, security, solutions architect, tech lead, engineering manager, technical PM or fractional CTO. <code>bin/init</code> writes the hub for one client and owner.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Focus terminals</span>
+        <h3>One terminal per work area</h3>
+        <p><code>bin/work &lt;folder&gt;</code> opens the folder&rsquo;s code checkout with its named agent, hooks and model. <code>--model</code> and <code>--agent-model</code> set the session and its specialists per run.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">State, memory, journal</span>
+        <h3>Nothing lives only in a chat</h3>
+        <p>Each folder keeps <code>STATE.md</code> (live, open, waiting on, next) and <code>memory/</code>; the journal is the shared timeline. Hooks show every terminal what the others changed since its last prompt.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">The brain</span>
+        <h3>Search by words and by meaning</h3>
+        <p><code>bin/brain</code> indexes the hub&rsquo;s Markdown into SQLite: FTS5 keywords plus vectors from a local Ollama model. Nothing leaves the Mac; without Ollama it still works, keyword only.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Auto sync</span>
+        <h3>Pushed, and scanned first</h3>
+        <p><code>bin/sync --auto</code> commits and pushes the hub every 30 minutes and at each session end: refused without gitleaks, every commit scanned before the push, one rebase retry, never a force push.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Monitors and briefing</span>
+        <h3>Watching while you&rsquo;re away</h3>
+        <p>launchd runs read-only monitors every 30 minutes (an <code>ALERT</code> line journals once and notifies) and a weekday morning briefing on Haiku.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Access</span>
+        <h3>Reach the box, keep the secrets</h3>
+        <p><code>bin/remote</code> for SSH to the client&rsquo;s box, <code>bin/secret</code> for the macOS Keychain (names in the repo, never values), and <code>bin/doctor</code> for what this Mac can reach.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">BMAD v6 inside</span>
+        <h3>The same discipline as ADE</h3>
+        <p>BMAD v6 skills for PRDs, specs, stories, builds and reviews ship in the hub, under the ADE rules: the verification command decides Done.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">The guide</span>
+        <h3>Every setting, with diagrams</h3>
+        <p>Making a hub, the daily flow, the hooks, the brain, auto sync, monitors and troubleshooting.</p>
         <a class="more" href="{{ '/agent-hub/' | relative_url }}">Read the agent hub guide <span aria-hidden="true">&rarr;</span></a>
       </article>
     </div>
   </div>
 </section>
+
 
 <section class="section" id="features">
   <div class="wrap">
@@ -470,7 +529,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
 
     <div class="new-strip" id="new">
       <span class="badge">New</span>
-      <p><strong>Sub-terminals</strong>, the <strong>agent hub guide</strong>, <strong>Switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>BMAD v6</strong>, <strong>Project setup</strong>, <strong>Anti-slop</strong>, <strong>MCP library</strong> and <strong>Secrets vault</strong>.</p>
+      <p><strong>v0.21.1:</strong> <strong>Sub-terminals</strong> (several shells in one tab, <kbd>&#8984;[</kbd> and <kbd>&#8984;]</kbd> to switch), a <strong>busy check</strong> before any terminal closes, and <strong>sharp text with many tabs</strong> (the WebGL renderer now follows the tabs on screen). <a href="{{ site.repo }}/releases/tag/v0.21.1">Release notes</a>. Recently: the <strong>agent hub guide</strong>, <strong>switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>BMAD v6</strong>, <strong>Anti-slop</strong>, the <strong>MCP library</strong> and the <strong>Secrets vault</strong>.</p>
     </div>
   </div>
 </section>

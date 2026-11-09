@@ -1076,3 +1076,9 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
   .orx-scroll { padding: 12px; }
   .orx-fig figcaption { gap: 12px; }
 }
+
+/* Agent hub tour and the v0.21.1 strip */
+.hub-tour .orx-card code { font: 12.5px var(--mono); }
+.hub-tour .orx-card h3 code { font-size: 15px; }
+.new-strip kbd { font: 12px var(--mono); padding: 1px 5px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--code-bg); }
+.new-strip a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
