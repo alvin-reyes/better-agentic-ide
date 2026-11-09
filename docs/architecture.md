@@ -34,6 +34,7 @@ cd src-tauri && cargo test
 cd relay && cargo test
 cd mobile && npx tsc --noEmit && npx jest
 cd src-tauri && cargo check -p ade-hook        # sub-terminals story 4 on
+cd src-tauri && cargo test -p ade-hook         # owner-approved 2026-11-09 (F2 design Q-A5)
 ```
 
 Green means: the app and `packages/protocol` type-check; every vitest, Rust, relay
