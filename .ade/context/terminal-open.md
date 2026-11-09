@@ -12,7 +12,7 @@ its pane.
   `pty_line_editor_ready` of `feat/cli-guard` (ADR 0011), and `shellQuote`
   (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`, `origin/hermes-a-quoting`).
 
-Status: approved by the owner 2026-11-02 (revised the same day after the final review and its re-review, rulings R1 to R7); not yet built. macOS and Linux only.
+Status: approved by the owner 2026-11-02 (revised the same day after the final review and its re-review, rulings R1 to R7); approved for build on 2026-11-09 as stories 4a (endpoint and window) and 4c (CLI). Not yet built. macOS and Linux only.
 
 ## The CLI
 
