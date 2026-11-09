@@ -79,7 +79,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke, Channel: class { onme
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "0.0.0" }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: async () => {} }));
 
-import { useTerminal, destroyInstance, stopIdlePolling } from "../useTerminal";
+import { useTerminal, destroyInstance, stopIdlePolling, createSubTerminalInstance } from "../useTerminal";
 import { handleOpenMessage } from "../../lib/terminalOpen";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useTabStore, ownViewOnly, findAllPanes, type Tab } from "../../stores/tabStore";
@@ -147,6 +147,8 @@ const callsOf = (cmd: string) => h.calls.filter(([c]) => c === cmd).map(([, args
 
 describe("one PTY per add", () => {
   it("a focused add makes exactly one create_pty", async () => {
+    // --focus is honoured from the tab in sight.
+    useTabStore.setState({ activeTabId: "a" });
     const handled = open(1, true);
     // --focus: the new view is in sight, so it mounts while create_pty awaits.
     render(<Pane id={newPane()} />);
@@ -156,7 +158,7 @@ describe("one PTY per add", () => {
     await act(async () => { await handled; });
     await settle();
     expect(callsOf("create_pty")).toHaveLength(1);
-    expect(callsOf("terminal_open_done")).toEqual([{ requestId: 1, error: null, ptyId: 12, line: null }]);
+    expect(callsOf("terminal_open_done")).toEqual([{ requestId: 1, error: null, ptyId: 12, line: null, focused: true }]);
   });
 
   it("a background add shown at once makes exactly one create_pty", async () => {
@@ -179,6 +181,7 @@ describe("one PTY per add", () => {
 
 describe("the size", () => {
   it("a focused mount at another size gets one resize_pty after create_pty", async () => {
+    useTabStore.setState({ activeTabId: "a" });
     const handled = open(3, true);
     // Made at the caller's size: 24x80, as the caller has no instance here.
     expect(callsOf("create_pty")[0]).toMatchObject({ rows: 24, cols: 80, requestId: 3 });
@@ -191,6 +194,20 @@ describe("the size", () => {
     expect(callsOf("resize_pty")).toEqual([{ id: 14, rows: 40, cols: 120 }]);
     const order = h.calls.map(([c]) => c);
     expect(order.indexOf("resize_pty")).toBeGreaterThan(order.indexOf("create_pty"));
+  });
+
+  it("is made at the caller's size when the caller has a terminal here", async () => {
+    // The caller's terminal is 132x43, not xterm's 80x24 or a mount's 120x40.
+    const caller = createSubTerminalInstance("a1", () => {}, { cwd: null, size: { cols: 132, rows: 43 }, requestId: 0 });
+    h.starts[0](5);
+    await act(async () => { await caller; });
+    h.calls.length = 0;
+    const handled = open(5, false);
+    expect(callsOf("create_pty")).toHaveLength(1);
+    expect(callsOf("create_pty")[0]).toMatchObject({ rows: 43, cols: 132, requestId: 5 });
+    h.starts[1](16);
+    await act(async () => { await handled; });
+    expect(callsOf("resize_pty")).toEqual([]);
   });
 
   it("a terminal still at its creation size is not resized", async () => {

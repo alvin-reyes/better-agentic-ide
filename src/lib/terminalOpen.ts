@@ -57,14 +57,23 @@ const added = new Map<number, { tabId: string; viewId: string; expiresAt: number
 const FORGET_AFTER_MS = 60_000;
 
 /**
- * A sub-terminal's name: the one given; else the command's first word after
- * any leading `VAR=value` words (its basename); else the folder's name; else
- * "Terminal". Never the command line: names are saved and synced.
+ * Characters a name can't hold: control (Cc), format (Cf: bidi overrides,
+ * zero-width characters...), line and paragraph separators (Zl, Zp). Rust
+ * refuses a `--name` with any of them; a derived name has them removed.
+ */
+const UNSAFE_NAME_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+
+/**
+ * A sub-terminal's name: the one given (Rust has checked it); else the
+ * command's first word after any leading `VAR=value` words (its basename);
+ * else the folder's name; else "Terminal". A derived name has its unsafe
+ * characters removed, and one left empty falls through. Never the command
+ * line: names are saved and synced.
  */
 export function defaultSubTerminalName(name: string | null, command: string[] | null, cwd: string | null): string {
   if (name) return name;
   const word = (command ?? []).find((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
-  const base = (path: string) => path.split("/").filter(Boolean).pop() ?? "";
+  const base = (path: string) => (path.split("/").filter(Boolean).pop() ?? "").replace(UNSAFE_NAME_CHARS, "");
   return (word && base(word)) || (cwd && base(cwd)) || "Terminal";
 }
 
@@ -74,11 +83,12 @@ export async function handleOpenMessage(msg: OpenMessage, deps: OpenDeps = defau
   // `typed` sets an entry's status once commands are typed (story 9).
 }
 
-function answer(d: OpenDeps, requestId: number, result: { error: string } | { ptyId: number }) {
+function answer(d: OpenDeps, requestId: number, result: { error: string } | { ptyId: number; focused: boolean }) {
   const error = "error" in result ? result.error : null;
   const ptyId = "ptyId" in result ? result.ptyId : null;
+  const focused = "focused" in result ? result.focused : false;
   // The line to type is story 9's.
-  void d.invoke("terminal_open_done", { requestId, error, ptyId, line: null }).catch(() => {});
+  void d.invoke("terminal_open_done", { requestId, error, ptyId, line: null, focused }).catch(() => {});
 }
 
 async function onRequest(r: OpenRequest, d: OpenDeps): Promise<void> {
@@ -92,12 +102,15 @@ async function onRequest(r: OpenRequest, d: OpenDeps): Promise<void> {
   const spawner = tab && caller && viewOfPane(tab, caller.id);
   if (!tab || !caller || !spawner) return answer(d, r.requestId, { error: "the terminal you ran this from isn't in this ADE window" });
 
+  // --focus is honoured only from the tab in sight: a command in a
+  // background tab can't take the window over (the answer says so).
+  const focus = r.focus && state.activeTabId === tab.id;
   // Always a sibling in the caller's tab, never nested: spawnedBy is the
   // caller's view ("own" for the tab's own terminal).
   const viewId = state.addView(tab.id, {
     name: defaultSubTerminalName(r.name, r.command, r.cwd),
     cwd: r.cwd,
-    focus: r.focus,
+    focus,
     spawnedBy: spawner.id,
   });
   const view = viewId ? d.store.getState().tabs.find((t) => t.id === tab.id)?.views[viewId] : undefined;
@@ -114,8 +127,13 @@ async function onRequest(r: OpenRequest, d: OpenDeps): Promise<void> {
     if (ptyId !== null) void d.invoke("kill_pty", { id: ptyId }).catch(() => {});
     return;
   }
-  if (ptyId === null) return answer(d, r.requestId, { error: "the new terminal's shell didn't start" });
-  answer(d, r.requestId, { ptyId });
+  if (ptyId === null) {
+    // No dead "Failed to start shell" sub-terminal is left behind.
+    added.delete(r.requestId);
+    d.store.getState().closeView(tab.id, viewId);
+    return answer(d, r.requestId, { error: "the new terminal's shell didn't start" });
+  }
+  answer(d, r.requestId, { ptyId, focused: focus });
 }
 
 function onExpired(requestId: number, d: OpenDeps) {
@@ -127,13 +145,21 @@ function onExpired(requestId: number, d: OpenDeps) {
 
 let listening = false;
 
-/** Listen for `ade open` requests to this window. Once per window. */
-export function startTerminalOpen() {
-  if (listening) return;
+/**
+ * Listen for `ade open` requests to this window. Once per window: a second
+ * call while listening does nothing. The returned function stops handling
+ * them (Rust forgets the listener when the window is destroyed).
+ */
+export function startTerminalOpen(): () => void {
+  if (listening) return () => {};
   listening = true;
   const onEvent = new Channel<OpenMessage>();
   onEvent.onmessage = (msg) => void handleOpenMessage(msg);
   invoke("terminal_open_listen", { onEvent }).catch(() => {
     listening = false;
   });
+  return () => {
+    onEvent.onmessage = () => {};
+    listening = false;
+  };
 }
