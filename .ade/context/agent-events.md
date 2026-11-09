@@ -70,7 +70,7 @@ a `Host` other than `127.0.0.1:<port>` (403), a body over 16 KB (413).
 surrounding whitespace, a leading `+` and leading zeros are accepted and mean
 the same id (` 9`, `+9` and `009` are all PTY 9). Anything else (empty, a sign
 `-`, non-digits, a value above 4294967295) is malformed, so 401. No CORS
-headers, bodies never logged. Every answer's body is `{}`. **Proposed (ADR 0014, not built):** this holds for `/` only; `serve` routes by path, `/open` answers per `terminal-open.md` on a thread of its own (so hook events are not held up), other paths 404.
+headers, bodies never logged. Every answer's body is `{}`. **Built (ADR 0014, sub-terminals story 4a):** this holds for `/` only; `serve` screens every request, then routes by path: `/open` answers per `terminal-open.md` on a thread of its own (so hook events are not held up), other paths 404 `{}`.
 
 ## States
 
@@ -135,8 +135,8 @@ Turning Agent status off drops the sessions whose `cwd` is in the project.
   reused (`reserve_id`), so a token never becomes valid for a second terminal.
   Any process of the same user can still read another terminal's environment,
   and its token with it, so this is not a boundary between them.
-  **Proposed (ADR 0014, not built):** the token also opens terminals and types
-  commands (`terminal-open.md`).
+  **Built (ADR 0014, story 4a):** the token also opens terminals
+  (`terminal-open.md`). **Proposed (story 9, not built):** it also types commands.
   Piece 2 must not let a phone approve a `PermissionRequest` on this alone.
 - **Stale environment.** A long-lived process started in an ADE terminal (a
   tmux server) keeps that ADE's variables after it quits; its sessions report

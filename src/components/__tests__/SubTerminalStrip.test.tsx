@@ -183,6 +183,25 @@ describe("entries", () => {
     const strip = screen.getByRole("tablist");
     expect(strip.textContent).toBe("apidev server");
   });
+
+  it("a tooltip says Opened from the spawner, and the tab's label for an own spawn", () => {
+    let fromOwn = "";
+    let fromSub = "";
+    act(() => { fromOwn = useTabStore.getState().addView("a", { name: "dev server", cwd: "/work/api", spawnedBy: "own" })!; });
+    act(() => { fromSub = useTabStore.getState().addView("a", { name: "tests", cwd: "/work/api", spawnedBy: fromOwn })!; });
+    render(<SubTerminalStrip tabId="a" />);
+    expect(fromSub).not.toBe("");
+    // The first line is the entry's own tooltip, unchanged.
+    expect(entries()[1].getAttribute("title")).toBe("dev server — /work/api\nOpened from api");
+    expect(entries()[2].getAttribute("title")).toBe("tests — /work/api\nOpened from dev server");
+  });
+
+  it("a sub-terminal with no spawner has no Opened from line", () => {
+    addView("a", "dev server", "/work/api");
+    render(<SubTerminalStrip tabId="a" />);
+    expect(entries()[1].getAttribute("title")).toBe("dev server — /work/api");
+    expect(entries()[0].getAttribute("title")).toBe("api — /code/api");
+  });
 });
 
 describe("showing", () => {

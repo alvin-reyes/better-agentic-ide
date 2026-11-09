@@ -14,6 +14,18 @@ pub struct PtyInstance {
     pid: Option<u32>,
     /// Where this PTY's output goes. The reader thread holds the other handle.
     sink: Arc<Mutex<Sink>>,
+    /// The label of the window showing it: `create_pty` sets it, `reattach_pty` replaces it.
+    owner: Option<String>,
+    /// The `/open` request it was created for, if any.
+    request_id: Option<u64>,
+    /// A `/open` request claimed it, so it counts toward the cap.
+    opened_by_open: bool,
+}
+
+impl PtyInstance {
+    fn set_owner(&mut self, owner: &str) {
+        self.owner = Some(owner.to_string());
+    }
 }
 
 pub struct PtyManager {
@@ -27,6 +39,29 @@ impl PtyManager {
             instances: Arc::new(Mutex::new(HashMap::new())),
             next_id: AtomicU32::new(1),
         }
+    }
+
+    /// What `/open` knows of PTY `id`; None once it is gone.
+    pub(crate) fn facts(&self, id: u32) -> Option<crate::terminal_open::PtyFacts> {
+        let instances = self.instances.lock().unwrap();
+        let inst = instances.get(&id)?;
+        Some(crate::terminal_open::PtyFacts { owner: inst.owner.clone(), request_id: inst.request_id, opened_by_open: inst.opened_by_open })
+    }
+
+    /// The id `reserve_id` hands out next.
+    pub(crate) fn next_id(&self) -> u32 {
+        self.next_id.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn mark_opened(&self, id: u32) {
+        if let Some(inst) = self.instances.lock().unwrap().get_mut(&id) {
+            inst.opened_by_open = true;
+        }
+    }
+
+    /// Live PTYs a `/open` request claimed.
+    pub(crate) fn opened_count(&self) -> usize {
+        self.instances.lock().unwrap().values().filter(|i| i.opened_by_open).count()
     }
 }
 
@@ -122,11 +157,13 @@ fn apply_hook_env(cmd: &mut CommandBuilder, vars: Option<Vec<(&'static str, Stri
 #[tauri::command(async)]
 pub fn create_pty(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, PtyManager>,
     agent: tauri::State<'_, crate::agent_status::AgentStatus>,
     rows: u16,
     cols: u16,
     cwd: Option<String>,
+    request_id: Option<u64>,
     on_event: Channel<PtyEvent>,
 ) -> Result<u32, String> {
     let pty_system = NativePtySystem::default();
@@ -179,16 +216,19 @@ pub fn create_pty(
     let reader = clone_reader(pair.master.as_ref())?;
     let sink = Arc::new(Mutex::new(Sink::new(channel_out(on_event))));
 
-    state.instances.lock().unwrap().insert(
-        id,
-        PtyInstance {
-            writer,
-            _child: child,
-            master: pair.master,
-            pid: child_pid,
-            sink: sink.clone(),
-        },
-    );
+    let mut instance = PtyInstance {
+        writer,
+        _child: child,
+        master: pair.master,
+        pid: child_pid,
+        sink: sink.clone(),
+        owner: None,
+        request_id: None,
+        opened_by_open: false,
+    };
+    instance.set_owner(window.label());
+    instance.request_id = request_id;
+    state.instances.lock().unwrap().insert(id, instance);
 
     // Started after the insert, so a shell that exits at once still finds
     // its entry to remove.
@@ -242,11 +282,15 @@ pub fn resize_pty(
 /// The window that had it receives nothing more.
 #[tauri::command]
 pub fn reattach_pty(
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, PtyManager>,
     agent: tauri::State<'_, crate::agent_status::AgentStatus>,
     id: u32,
     on_event: Channel<PtyEvent>,
 ) -> Result<(), String> {
+    if let Some(inst) = state.instances.lock().unwrap().get_mut(&id) {
+        inst.set_owner(window.label());
+    }
     attach(&state.instances, &agent, id, channel_out(on_event))
 }
 
@@ -702,7 +746,7 @@ mod tests {
         let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
         instances.lock().unwrap().insert(
             id,
-            PtyInstance { writer, _child: child, master: pair.master, pid, sink: sink.clone() },
+            PtyInstance { writer, _child: child, master: pair.master, pid, sink: sink.clone(), owner: None, request_id: None, opened_by_open: false },
         );
         let table = instances.clone();
         start_reader(reader, sink.clone(), move || {
@@ -748,6 +792,46 @@ mod tests {
         assert!(!second.exited() && !first.exited());
         assert!(!first.text().contains("C3") && !first.text().contains("D4"));
         assert!(third.text().find("D4").is_some() && !third.text().contains("C3"));
+    }
+
+    /// The owner window and the `/open` request a terminal was made for, as
+    /// the claim reads them; a reattach replaces the owner.
+    #[test]
+    fn a_terminal_records_its_owner_and_request_id() {
+        use crate::terminal_open::PtyFacts;
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.args(["-c", "sleep 5"]);
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id();
+        let writer = pair.master.take_writer().unwrap();
+        let sink = Arc::new(Mutex::new(Sink::unattached()));
+
+        let manager = PtyManager::new();
+        let id = reserve_id(&manager.next_id);
+        let mut instance = PtyInstance { writer, _child: child, master: pair.master, pid, sink, owner: None, request_id: None, opened_by_open: false };
+        instance.set_owner("main");
+        instance.request_id = Some(7);
+        manager.instances.lock().unwrap().insert(id, instance);
+
+        assert_eq!(manager.facts(id), Some(PtyFacts { owner: Some("main".into()), request_id: Some(7), opened_by_open: false }));
+        assert_eq!(manager.next_id(), id + 1, "the id reserve_id hands out next");
+        assert_eq!(manager.opened_count(), 0);
+        manager.mark_opened(id);
+        assert!(manager.facts(id).unwrap().opened_by_open);
+        assert_eq!(manager.opened_count(), 1);
+
+        // A tab moved to another window: reattach_pty's setter.
+        manager.instances.lock().unwrap().get_mut(&id).unwrap().set_owner("detached-1");
+        assert_eq!(manager.facts(id), Some(PtyFacts { owner: Some("detached-1".into()), request_id: Some(7), opened_by_open: true }));
+
+        manager.instances.lock().unwrap().remove(&id);
+        assert_eq!(manager.facts(id), None, "a gone terminal has no facts");
+        assert_eq!(manager.opened_count(), 0, "and no longer counts");
+        manager.mark_opened(id);
     }
 }
 
@@ -807,7 +891,7 @@ mod hook_env_tests {
         let writer = pair.master.take_writer().unwrap();
         let sink = Arc::new(Mutex::new(Sink::unattached()));
         assert!(!lock(&sink).finish(), "no window was told");
-        instances.lock().unwrap().insert(id, PtyInstance { writer, _child: child, master: pair.master, pid, sink });
+        instances.lock().unwrap().insert(id, PtyInstance { writer, _child: child, master: pair.master, pid, sink, owner: None, request_id: None, opened_by_open: false });
     }
 
     fn agent_with_a_session(id: u32) -> crate::agent_status::AgentStatus {
