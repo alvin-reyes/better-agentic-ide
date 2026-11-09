@@ -3350,6 +3350,8 @@ to story 8 under `.ade/context/remote-tabs.md`.
   OB-4 AC2). Or leave `bin/setup` as it is, with OB-2 AC2's notice as the only
   guard?
 
+**Owner answer (2026-11-09), Q13:** yes: template change T5 — `bin/setup` refuses to replace a memory link that points outside its own hub, with the same message and ways forward as OB-4 AC2's preflight. T5 joins T3 and T4 in the template's backlog.
+
 ### F2.10 Risks
 
 - **The template moves.** A changed `bin/init` option or check breaks the
