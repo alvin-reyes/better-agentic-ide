@@ -3041,6 +3041,11 @@ by path while T4 is missing.
   the cost of reopening the hub through OB-2 after each restart. Recommended: restore
   (as proposed).
 
+**Owner answers (2026-11-09, revision 2's questions).**
+- Q9: inside ADE, bin/work never opens a window outside ADE because ADE refused: `ade open` exit 1 shows ADE's error and the manual fallback hint, with no window. Only exits 3 and 4 (ADE unreachable) fall back to a window. Template story W1 is updated to match; OB-12 follows it.
+- Q10: T3 (bin/secret keeps the value off `security`'s command line) and T4 (`bin/setup --unlink`) go into the template's backlog; slice 1 does not wait for them.
+- Q11: hub tabs are restored after a relaunch, empty and labelled "Agent hub"; the folder path stays in the saved session.
+
 ### F2.10 Risks
 
 - **The template moves.** A changed `bin/init` option or check breaks the
