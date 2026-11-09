@@ -11,6 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
+| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Draft (revision 1, 2026-11-09); not reviewed or approved |
 
 ---
 
@@ -2296,3 +2297,447 @@ clarification for slice 0.
   (PE-13 AC9, AC10, slice 1, RC-2, F1.12). Then revision 9c's line edits, against
   the approved architecture, and revision 9d's minors (the history lists them).
 <!-- F1 ends -->
+
+---
+
+<!-- F2 begins -->
+## F2: Agentic-environment onboarding
+
+- **Status:** Draft (revision 1, 2026-11-09). Not reviewed, not approved, not sharded.
+  Next: adversarial review, then the owner's answers to F2.9, then the designer
+  (screens and copy) and the architect (how ADE runs the steps).
+- **Source:** the owner, 2026-11-09: *"in ADE a user can choose to open terminal or set
+  up your agentic environment with questions to configure the ai-agent for the
+  developer for a project."* And: *"when the developer uses ADE, it starts a claude code
+  session. On the claude code session, developer can spawn focus work using our
+  ai-agent template bin … terminals should spawn INSIDE ADE."*
+- **Builds on, does not repeat:**
+  - the agent hub template (`alvin-reyes/ai-agent-hub-template`, `main` at f490cb4):
+    `bin/init`, `personas/`, `bin/secret`, `bin/setup`, `bin/doctor`, `bin/work`, the
+    provider rules (`.ade/context/providers.md`, its ADR 0002);
+  - the bundling plan (PR #91: `docs/superpowers/specs/2026-11-09-bundle-ade-setup-and-hub-template-design.md`,
+    ADR 0025, contract `.ade/context/bundled-sources.md`), stories S2, S3, S4a and S4b;
+  - sub-terminals and `ade open` (`docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md`,
+    contract `.ade/context/terminal-open.md`), stories 4 and 9;
+  - the New tab dialog and project setup (`docs/guide/project-setup.md`), the tour, and
+    ADR 0021 (no native folder picker).
+- **History:**
+  - 2026-11-09, revision 1: first draft.
+
+### F2.1 Problem
+
+A developer who installs Better Terminal today gets a terminal. Getting from there to
+a persona agent that knows the client, the repos and the work takes the hub
+template's README: create a repo, clone, run `bin/init` with up to twenty options,
+commit `hub.conf` by hand, store secrets, `bin/setup`, `bin/doctor`, `claude`. The
+bundling plan puts the template inside the installer, but its palette command stops
+at "here is the folder, now type `bin/init …`". And `bin/work` opens focus sessions
+in Terminal.app or iTerm, outside ADE, so the work the developer fans out is not
+where the developer is.
+
+### F2.2 Users and jobs
+
+- **U1, a developer starting work for a client or project** (primary; the same U1 and
+  U2 as F1.3). Has Claude Code, git and a GitHub login; may not have read the hub
+  README.
+- **U2, a developer who already has a hub** (made by hand or on another Mac) and wants
+  ADE to open it.
+- **U3, a developer who just wants a terminal.** Must not be slowed down.
+
+- J1. "When I open Better Terminal for a new client or project, I want to answer a few
+  questions and land in my persona's Claude Code session, so I don't learn `bin/init`
+  first."
+- J2. "When I already have a hub, I want to point at it and start its session."
+- J3. "When my agent fans out focus work, I want those terminals inside Better
+  Terminal, next to the session that started them."
+- J4. "When I just want a shell, I want one, with nothing in the way."
+
+### F2.3 Goals (measurable)
+
+- **G1. Minutes, not a README.** From choosing "Set up your agentic environment" to
+  the persona's Claude Code session starting, with only the required questions
+  answered and no secrets, takes at most 3 minutes on a Mac with Claude Code, git and
+  python3 installed. Release check RC-F2-1: the owner times 3 runs by people who have
+  not read the hub README; all 3 are within 3 minutes.
+- **G2. Same hub as the CLI.** A hub made through onboarding is the hub the bundled
+  template's own `bin/init` makes from the same answers: same files, same `hub.conf`
+  (OB-5 AC6). ADE adds no files of its own to a hub.
+- **G3. Terminals stay free.** Choosing "Open a terminal" gives exactly today's
+  behaviour, and once it is chosen at first launch the choice never shows again
+  unasked (OB-1).
+- **G4. No secret value touches ADE.** No secret value entered during onboarding is
+  in any file ADE writes, syncs or relays (OB-7 AC3).
+
+### F2.4 Non-goals (out of scope)
+
+- Windows and Linux. The template is macOS-first (Keychain, launchd, Terminal.app);
+  the bundling plan hides its command on Windows and does not run `bin/init` on Linux.
+  On both, F2 shows nothing new and first launch is today's.
+- Re-implementing `bin/init` in ADE, or a second hub format. ADE collects answers and
+  runs the bundled template's scripts; the template stays the source of truth.
+- Editing an existing hub's settings, upgrading a hub to a newer template, or
+  deleting a hub (the guide says how by hand).
+- Cloning an existing hub from GitHub onto a new Mac (U2 points at a folder that is
+  already there).
+- Creating a public repo, or any GitHub action other than OB-8's optional private repo.
+- Writing or editing personas (F1's persona library is separate; F2.9 Q1).
+- A native folder picker (ADR 0021); F2 uses a typed path field, as S4b does.
+- Running `bin/schedule install` by default (it is an advanced, opt-in step, OB-4).
+- Screens, layout and copy (the designer), and how ADE runs and observes the steps
+  (the architect).
+
+### F2.5 Glossary
+
+- **The choice:** the two-option start, "Open a terminal" or "Set up your agentic
+  environment".
+- **The questionnaire:** the short guided form behind the second option.
+- **The run:** what happens after the questionnaire is confirmed: unpack the bundled
+  template, `bin/init`, the optional steps of OB-4 and OB-8, then the session.
+- **Hub folder:** the new folder the run creates (the bundling plan's `dest`).
+- **Persona session:** Claude Code started with the hub's Claude install in the hub
+  folder, where the hub's `CLAUDE.md` holds the persona and its SessionStart hook
+  prints the state.
+- **Own hub:** a hub for the developer's own work (`HUB_OWNED_BY_OWNER=1`). Every
+  other hub is a **client hub**.
+
+### F2.6 Requirements
+
+#### OB-1. Who sees the choice, and when (MVP)
+
+1. **First launch.** On macOS, the first launch of a Better Terminal that has no saved
+   session and has never recorded an answer to the choice shows the choice in the
+   window before any terminal starts. "Open a terminal" opens one terminal tab, as
+   today's first launch does. Either answer is recorded, locally, and the choice is
+   not shown at launch again. The tour runs after the choice is answered (after
+   "Open a terminal", or when the persona session starts or the questionnaire is
+   cancelled), not on top of it. Test: a fresh state shows the choice and no terminal
+   tab; answering "Open a terminal" opens exactly one tab and the next launch shows no
+   choice; the tour does not show while the choice or questionnaire is open.
+2. **An upgrade is not a first launch.** A Better Terminal with a saved session, or
+   with the tour already done, never shows the choice at launch. Test: state with
+   `better-terminal-tour-done` set shows no choice at launch.
+3. **New windows.** A new window opens as today, with no choice. Test: opening a
+   second window shows no choice.
+4. **The New tab dialog.** The dialog gains one row, "Set up your agentic
+   environment…", after its existing rows for a plain terminal, New project and Open
+   project, while "Ask on new tab" is on. Test: the row exists and opens the
+   questionnaire; with the setting off, no dialog and no row (today's behaviour).
+5. **The palette.** A Command Palette entry, category Project, opens the
+   questionnaire at any time. Test: the entry exists on macOS.
+6. **For a project.** When the questionnaire opens from a tab whose folder is inside a
+   git repository with a GitHub `origin`, it prefills one code repo (OB-3, question
+   7) as `owner/name=<the repository's root>`, removable. No new prompt is added to
+   New project, Open project or a terminal `cd` (the BMAD question stays the only one
+   there; F2.9 Q3). Test: opened from a tab in a clone of `o/r` at `/x/r`, the repo
+   field holds `o/r=/x/r`; opened from a tab outside git, it is empty.
+7. **Not on Windows or Linux.** There, none of AC1 to AC6 exists. Test: the row, the
+   palette entry and the first-launch choice are absent on both.
+8. **No bundled template.** When the build has no bundled template (S4a's
+   `hub_template_info` is empty: local, PR and debug builds), the choice is not shown
+   at first launch, and the row and palette entry open a message that says the build
+   has no bundled agent hub template and release builds include it (S4b's wording).
+   Test: with no template, first launch opens a terminal and the row shows the
+   message.
+
+#### OB-2. The questionnaire: new hub or existing hub (MVP)
+
+1. The questionnaire first asks: **New hub** (default) or **Use an existing hub**.
+2. **Existing hub (U2):** one typed path field. A folder with a `hub.conf` at its top
+   opens a terminal tab in that folder and starts its persona session (OB-6). Any
+   other folder is refused inline ("not a hub: no hub.conf"), and nothing is written.
+   An option, off by default, runs `bin/setup` then `bin/doctor` there first (for a
+   hub cloned onto this Mac by hand). Test: a folder with `hub.conf` starts the
+   session with nothing written to the folder; one without is refused; the option on
+   runs both scripts first, in that tab.
+3. **New hub at an existing hub:** a hub folder path that is an existing hub is
+   refused inline with an offer to use it as an existing hub instead (AC2). Any other
+   existing path is refused ("already exists"); the run never writes into an existing
+   folder (S4a's rule). Test: both refusals, nothing written.
+4. Cancel or Esc at any point before the run starts writes nothing and starts nothing.
+   Test: cancel after answering every question leaves the file system unchanged.
+
+#### OB-3. The questions and their defaults (MVP)
+
+ADE asks only what the run needs. Every answer maps to one `bin/init` option; ADE
+passes nothing `bin/init` does not take, except the folder (S4a) and OB-4/OB-8's
+steps. **Required** questions are always shown; **common** ones are shown with
+defaults; **advanced** ones are folded away. Defaults marked *persona* are read from
+the chosen persona's front matter in the bundled template.
+
+| # | Question | Kind | Default | `bin/init` option |
+|---|---|---|---|---|
+| 1 | Whose work is this: a client's, or your own? | required | a client's | sets client vs own hub (OB-9) |
+| 2 | Your role (persona) | required | Staff Software Engineer (F2.9 Q2) | `--persona <slug>` |
+| 3 | Who the work is for (client) | required | empty; for an own hub, your name | `--client` |
+| 4 | Your name (owner) | required | `git config --global user.name`, if set | `--owner` |
+| 5 | Hub folder | required | `~/hubs/<hub name>` (F2.9 Q4) | S4a's `dest` (init then runs in place) |
+| 6 | Secret names, e.g. `grafana-token` | common | none | `--secret` (repeated) |
+| 7 | Code repos, `owner/name[=checkout]` | common | none, or OB-1 AC6's prefill | `--repo` (repeated) |
+| 8 | Create a private GitHub repo for the hub | common | off | OB-8 |
+| 9 | Hub name | advanced | `<client slug>-<persona>` | `--name` |
+| 10 | Work areas | advanced | *persona* | `--folders` |
+| 11 | GitHub owner for repos named without one | advanced | none | `--code-owner` |
+| 12 | Remote box, its key and folder | advanced | none | `--remote`, `--remote-key`, `--remote-dir` |
+| 13 | Staging URL | advanced | none | `--staging-url` |
+| 14 | Claude install and its config folder | advanced | `claude`; config folder as `bin/init` resolves it | `--claude`, `--claude-config-dir` |
+| 15 | Model and effort | advanced | *persona* | `--model`, `--effort` |
+| 16 | Folder agents' model; briefing model | advanced | `sonnet`; `haiku` | `--agent-model`, `--briefing-model` |
+| 17 | Extra brain paths; embedding model and Ollama address | advanced | none; `nomic-embed-text`, `http://localhost:11434` | `--brain-path`, `--embed-model`, `--ollama-url` |
+| 18 | Auto sync | advanced | on when question 8 is on, else off | `--auto-sync on\|off` |
+| 19 | Morning briefing time, and install scheduled jobs | advanced | 08:00; off | `--briefing`; OB-4 step |
+| 20 | Providers (own hubs only) | advanced | Anthropic only | OB-9 |
+
+1. The persona list is read from the bundled template's `personas/` (slug and
+   `title`), not from a list in ADE. Test: a bundled template fixture with an added
+   persona shows it.
+2. Each answer is checked as `bin/init` checks it, before the run, with the error
+   inline next to the question: hub name `a-z 0-9 -`; secret names `a-z 0-9 -`;
+   briefing `HH:MM`; repos `owner/name[=checkout]`; remote `user@host[:port]`; work
+   areas `projects/<x>` or `ops/<x>`; effort one of `low|medium|high|xhigh|max`;
+   model names `A-Z a-z 0-9 . _ : / -`; client and owner non-empty. Test: one case
+   per rule.
+3. A review step lists every answer, and the exact commands the run will execute, in
+   order, before anything is written. Confirming starts the run; Back keeps the
+   answers. Test: the listed `bin/init` command equals the one the run executes.
+4. Answering only questions 1 to 5 is enough to start the run. Test: a run with only
+   those answers completes (OB-5) on a fixture template.
+
+#### OB-4. The run, in a visible terminal (MVP)
+
+1. The run happens in one new terminal tab in the hub folder, in this order, stopping
+   at the first step that fails: (a) unpack the bundled template into the hub folder
+   (S4a); (b) `bin/init` with the answers, in place; (c) a first local commit of the
+   hub (`git add -A`, `git commit -m "Initialize the hub"`), so `hub.conf` is
+   committed as the README requires; (d) for each secret name, `bin/secret --set
+   <name>` (OB-7); (e) OB-8's GitHub step, if chosen; (f) `bin/setup`; (g)
+   `bin/schedule install`, if chosen; (h) `bin/doctor`; (i) the persona session
+   (OB-6). Every command of (b) to (i) is shown in that terminal with its full
+   output. Test: on a fixture template, the tab shows each command and its output in
+   this order.
+2. Before (a), ADE checks that `git` and `python3` run (`bin/init` needs both) and,
+   if either does not, says which is missing and how to install it, and writes
+   nothing. Test: with `python3` absent from `PATH`, nothing is written and the
+   message names it.
+3. The run works with no network: (a) to (d) and (f) to (h) need none, and the
+   template is bundled (ADR 0025; ADE never downloads it). (e) needs the network
+   and says so if it fails; `bin/doctor` reports what it cannot reach, as it does
+   today. Test: with the network off, a run without question 8 reaches (i).
+4. The tab's label is "Agent hub" (the bundling plan's label), not the client's or
+   hub's name (OB-10 AC2). Test: the label.
+
+#### OB-5. Failure and undo (MVP)
+
+1. A failure at (a) leaves nothing (S4a's guarantee) and returns to the questionnaire
+   with the answers kept.
+2. A failure at (b) shows `bin/init`'s own message and offers: **Edit answers**
+   (removes the hub folder this run created, then returns to the questionnaire with
+   the answers kept), **Remove the hub folder**, or **Keep it** (leaves the tab open).
+   Test: a bad answer that passes ADE's checks but fails `bin/init` (fixture) shows
+   its stderr and each option does what it says.
+3. A failure at (c) to (h) leaves the hub in place (it is a valid hub from (b) on),
+   names the failed step, and offers **Retry this step**, **Skip it** (except (c)
+   when (e) is chosen, since (e) needs the commit), and **Remove the hub folder**.
+   Test: one failure per step, each option.
+4. "Remove the hub folder" moves the folder to the Trash after a confirmation that
+   names it, and only a folder this run created and that still holds no commit other
+   than (c). It never touches a folder ADE did not create in this run, a GitHub repo,
+   Keychain entries or launchd jobs; the confirmation lists what it leaves behind
+   (the private repo of OB-8, stored secret names, scheduled jobs) and how to remove
+   them by hand. Test: a folder with a later commit is not offered for removal; a
+   pre-existing folder is never removed.
+5. Closing the run's tab stops the run; the hub folder stays, and a later new hub at
+   that path is refused (OB-2 AC3).
+6. **Same hub as the CLI (G2).** For a fixed set of answers, the hub folder after (b)
+   equals, file by file, what `bin/init --dest <tmp> <same options>` makes from the
+   same bundled template, except for files the template writes with the date or the
+   path (the journal entry, `_bmad/config.toml`'s `output_folder`,
+   `hub.conf`'s `HUB_CLAUDE_CONFIG_DIR` when it reads a home path). Test: the
+   comparison in CI on a fixture template.
+7. **Options stay in step with the template.** A release check fails the release if
+   any `bin/init` option ADE can pass is missing from the bundled `bin/init`'s usage
+   text. Test: a fixture whose usage drops `--staging-url` fails the check.
+
+#### OB-6. The persona session starts in Better Terminal (MVP)
+
+1. After (h), the run starts the hub's Claude install (question 14; for an existing
+   hub, the `HUB_CLAUDE` in its `hub.conf`) in the hub folder, in the same tab. ADE
+   never runs `hub.conf` as a script in its own process. Test: the tab's last command
+   is the configured Claude command in the hub folder; with `--claude claude-work`
+   it is `claude-work`.
+2. If the Claude command is not found, the tab says so, and the hub is kept. Test.
+
+#### OB-7. Secrets: names in ADE, values only in the Keychain (MVP)
+
+1. ADE asks for secret **names** only (question 6). Values are typed into
+   `bin/secret --set`'s hidden prompt in the run's terminal, one per name, and any
+   prompt can be skipped (Enter on an empty value, or a Skip action); a skipped name
+   is reported missing by `bin/doctor`, as today.
+2. The questionnaire has no field that takes a value. Besides `bin/init`'s rule
+   (`a-z 0-9 -`), it refuses a "name" that looks like a value: longer than 64
+   characters, or starting with a known token prefix (`sk-`, `ghp`, `gho`, `glpat-`,
+   `xox`). Test: one case per rule.
+3. **G4 test.** A run that stores a marker value through `bin/secret --set` leaves
+   that marker in no file under ADE's data folder (state, settings, snapshots,
+   session, scratchpad, notes, prompt history, logs, recordings), in nothing ADE
+   syncs (Settings → Sync), and in nothing it relays to a paired phone. The marker is
+   in the Keychain under the hub's service. Test: a scan for the marker after the run.
+
+#### OB-8. A private GitHub repo, optional (MVP slice 2)
+
+1. Question 8 is off by default. When on, step (e) creates a **private** repo named
+   the hub name under the developer's GitHub account and pushes `main` with its
+   upstream set (what the README's `gh repo create … --private` and `git push -u`
+   do). There is no option for a public repo. Test: the command ADE runs contains
+   `--private` and no visibility other than private.
+2. When `gh` is not installed or not logged in, question 8 is disabled with the reason
+   and the command to fix it (`gh auth login`). Test.
+3. When question 8 is off, auto sync defaults to off (question 18), because auto sync
+   pushes and a hub without a remote cannot. Turning auto sync on without a repo
+   shows a warning and is allowed. Test.
+
+#### OB-9. Providers and the own-hub rule (Next)
+
+1. Question 1's answer decides the hub kind. Only an **own hub** gets
+   `HUB_OWNED_BY_OWNER=1`.
+2. In a **client hub**, question 20 does not exist and DeepSeek is offered nowhere;
+   the hub keeps the template default `HUB_PROVIDERS_ALLOWED="anthropic"`. Test:
+   choosing "a client's" hides question 20, and the resulting `hub.conf` has no
+   `HUB_OWNED_BY_OWNER=1` and no `deepseek`.
+3. In an **own hub**, question 20 offers "Anthropic only" (default) or "Anthropic and
+   DeepSeek", and, for DeepSeek, whether it is the default for every session. Choosing
+   DeepSeek shows, before the review step, that everything a DeepSeek session reads
+   goes to DeepSeek, which may train on it and stores it in the People's Republic of
+   China (ADR 0002 of the template), and adds the secret name `deepseek-api-key` to
+   question 6. Test: the notice, and the secret name added.
+4. ADE sets these through `bin/init` options, not by editing `hub.conf` (dependency
+   T1, F2.8). Test: the review step's `bin/init` command carries them.
+
+#### OB-10. Privacy (MVP)
+
+1. The answers (client, owner, hub name, repos, remote, secret names) are kept only in
+   memory while the questionnaire is open, and are written only into the hub folder
+   by the template's scripts. They are not written to ADE's settings, state, prompt
+   history, notes, snapshots or logs, and so never synced or relayed. Test: after a
+   run with marker answers, a scan of ADE's data folder finds no answer, except as
+   AC2 allows.
+2. The terminal tab of the run, like any terminal, saves its folder in the session,
+   which stays on this device (never applied elsewhere) but is pushed to the
+   developer's own sync repo when sync is on. The default hub folder name holds the
+   client's name, so the review step says so. The tab label is "Agent hub" (OB-4 AC4).
+3. ADE sends nothing about onboarding anywhere: no telemetry, no network request
+   except OB-8's when chosen. Test: a run without question 8 makes no network request
+   from ADE's own process.
+4. The hub repo, when created, is private (OB-8 AC1).
+
+#### OB-11. Accessibility (MVP)
+
+1. The choice and the questionnaire can be completed with the keyboard only: Tab
+   order follows the visual order, Enter takes the default action, Esc cancels (OB-2
+   AC4). Test: a keyboard-only test reaches a confirmed run.
+2. Every field and option has an accessible name; each inline error is tied to its
+   field and announced through a live region; the review step is readable by a screen
+   reader as a list. Test: role and name assertions; the error has
+   `aria-describedby` on its field and is announced.
+3. Focus moves into the choice and the questionnaire when they open, is trapped there
+   while open, and returns to a sensible place when they close (the new tab, or the
+   control that opened them). Test.
+4. Nothing in F2 has a time limit, and no step relies on colour alone. Test: the
+   inline errors carry text, not only colour.
+
+#### OB-12. Focus terminals inside Better Terminal (Next, after dependencies)
+
+1. In a persona session that ADE started, `bin/work <folder>` opens the focus session
+   as a sub-terminal of the session's tab (through `ade open`), not in Terminal.app or
+   iTerm, with the folder's name as its name and the launcher already typed. Test (on
+   the template side, with ADE's `ade open` stubbed): inside an ADE terminal,
+   `bin/work` calls `"$ADE_HOOK_BIN" open --cwd <checkout> --name <folder> -- …` and
+   never `osascript`.
+2. Outside ADE, or when `ade open` exits 3 or 4 (not in an ADE terminal, or that ADE
+   is gone), `bin/work` falls back to today's Terminal.app or iTerm. On exit 5 (opened,
+   not typed), it says so and prints the command to type. Test: one case per exit
+   code.
+3. Requires ADE stories 4 and 9 and template story T2 (F2.8). Until all three are
+   done, `bin/work` behaves as today; nothing else in F2 waits for them.
+
+### F2.7 Constraints
+
+- macOS only (F2.4). The template's scripts need Bash 3.2+, git and python3.
+- The bundled template is the only source of a hub; ADE never fetches it (ADR 0025).
+- ADE's own folder picker does not exist yet (ADR 0021): every folder answer is a
+  typed path, `~` expanded, as in S4b.
+- UI copy says "Better Terminal", never "ADE" (owner's brand rule, 2026-11-08).
+
+### F2.8 Dependencies and what ships first
+
+| Needed | For | State |
+|---|---|---|
+| Bundling **S2** (bundle format and manifest) | everything: a local or fixture template to unpack | planned, PR #91 (Proposed) |
+| Bundling **S4a** (`hub_template_info`, `hub_template_create`) | OB-1 AC8, OB-4 (a), OB-5 AC1 | planned, PR #91 |
+| Bundling **S3** (release workflow) | release builds that actually contain the template; until then F2 shows OB-1 AC8's message | planned, PR #91 |
+| Bundling **S4b** (palette "New hub from template…") | not needed; F2 reuses its typed-path rules and wording. Both entries can coexist (F2.9 Q5) | planned, PR #91 |
+| Sub-terminals **story 4** (`ade open` endpoint and CLI) | OB-12 | in review, PRs #95 to #97 |
+| Sub-terminals **story 9** (`-- COMMAND`, typing; needs `feat/cli-guard`, PR #94) | OB-12 | pending |
+| Template **T1**: `bin/init` options for providers (allowlist, default provider, own hub) | OB-9 | not filed; template repo |
+| Template **T2**: `bin/work` uses `ade open` inside ADE, with OB-12 AC2's fallback | OB-12 | not filed; template repo |
+
+**Order.**
+
+1. **Slice 1, ships first (needs S2 and S4a; S3 to reach users):** OB-1 to OB-7,
+   OB-10, OB-11. The choice, the questionnaire without question 8 and 20, the run in
+   a visible terminal, failure and undo, secrets by name, the persona session.
+2. **Slice 2:** OB-8 (private GitHub repo) and the auto-sync default that follows it.
+3. **Slice 3 (needs T1):** OB-9 providers.
+4. **Slice 4 (needs stories 4 and 9 and T2):** OB-12 focus terminals inside Better
+   Terminal.
+
+### F2.9 Open questions for the owner
+
+- **Q1. F1 or the hub template?** F1 (approved, behind a flag) builds ADE's own
+  persona library and isolated engagements; it never mentions the hub template. F2
+  makes template hubs, which run in the default profile, with no F1 isolation. Is F2
+  the onboarding for now, with F1 engagements becoming a third option when F1's flag
+  turns on? (Recommended.) Or should onboarding wait for F1?
+- **Q2. Default persona.** Staff Software Engineer is proposed (the audience is
+  developers). Or no default, forcing a choice?
+- **Q3. "New project folder".** Proposed: no new prompt on New project, Open project
+  or `cd` (the BMAD question already asks there); the questionnaire prefills the repo
+  when opened from a project tab (OB-1 AC6). Or offer it after the BMAD question?
+- **Q4. Default hub location.** `~/hubs/<hub name>` (the bundling plan's example) or
+  `~/Project/<hub name>` (the README's `--dest` example, beside the checkouts
+  `bin/work` clones into `~/Project`)?
+- **Q5. Two palette entries.** Keep S4b's "New hub from template…" (copy only, for
+  people who want `bin/init` by hand) beside F2's guided entry, or replace S4b with F2?
+  (Recommended: keep both; S4b can ship before F2.)
+- **Q6. New windows.** Proposed: never show the choice in a new window (OB-1 AC3).
+  Confirm.
+- **Q7. Scheduled jobs.** Proposed: `bin/schedule install` is opt-in (question 19,
+  off). Turn it on by default, since the morning briefing and monitors are part of
+  the hub's value?
+- **Q8. T1 and T2** are template changes. Confirm they go into the template's backlog,
+  so ADE never edits `hub.conf` itself.
+
+### F2.10 Risks
+
+- **The template moves.** A changed `bin/init` option breaks the questionnaire. OB-5
+  AC7's release check catches it before release.
+- **Default-profile hubs.** A client hub opened in the default profile shares ADE's
+  history, recents and sync with every other client (F1's isolation problem). The
+  review step's notice (OB-10 AC2) states the visible part; full isolation is F1's.
+- **Secrets through the PTY.** Keystrokes for `bin/secret --set` pass through ADE's
+  terminal. The prompt does not echo, so scrollback does not hold them, but any
+  feature that records input would. OB-7 AC3's scan is the guard.
+- **First-launch friction.** A choice before the first terminal slows U3 once. OB-1
+  AC1's Enter-for-default (designer to decide which is the default) keeps it to one key.
+
+### F2.11 Handoff
+
+- **Adversarial reviewer:** this section, before the owner sees it.
+- **Designer:** the choice (first launch and New tab row), the questionnaire's
+  required, common and advanced groups, the review step, the run's failure notices
+  and the removal confirmation; which choice is the default at first launch.
+- **Architect:** how ADE runs and observes the run's steps in a visible terminal and
+  knows each step's result (OB-4, OB-5); reading the persona list and `HUB_CLAUDE`
+  without running `hub.conf`; recording the first-launch answer locally; moving a
+  folder to the Trash; the OB-5 AC6 comparison and AC7 release check; the OB-7 AC3
+  and OB-10 AC1 scans.
+<!-- F2 ends -->
