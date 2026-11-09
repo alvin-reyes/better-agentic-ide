@@ -149,6 +149,7 @@ legend{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--
 .checks li{display:flex;gap:8px;align-items:center}
 .checks .w{min-width:108px;font-size:12px;color:var(--text-secondary)}
 .checks .okw{color:var(--green)} .checks .bad{color:var(--red)}
+.box ul.pfl{list-style:none;padding-left:0;margin:6px 0 0}.box .pfl>li{border-top:1px solid var(--red-line);padding-top:6px;margin-top:6px}.box .pfl strong{display:flex;gap:6px;align-items:flex-start;color:var(--text-primary)}.box .pfl strong svg{margin-top:3px;color:var(--red)}
 /* welcome */
 .welcome{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg-primary);z-index:4}
 .wcard{width:min(560px,100%);background:var(--bg-secondary);border:1px solid var(--border-strong);border-radius:12px;padding:24px;box-shadow:var(--shadow)}
@@ -212,7 +213,7 @@ aside{display:grid;gap:14px}
 <header class="page">
   <div>
     <h1>Set up your agentic environment (F2)</h1>
-    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 2 (answers the review that blocked revision 1; spec section 16). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
+    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 3 (answers the joint review of the architecture's and this spec's revision 2, the owner's decisions and the PRD's amendment of 2026-11-09; spec section 16). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
   </div>
   <div class="themes" role="group" aria-label="Theme">
     <button class="btn sm" data-theme-set="dark" aria-pressed="true">Dark (Precision)</button>
@@ -283,19 +284,19 @@ const FS = {
   "/": "dir", "/Users": "dir", [HOME]: "dir", [HOME + "/src"]: "dir", [HOME + "/src/api"]: "dir", [HOME + "/src/web"]: "dir",
   [HOME + "/notes.txt"]: "file", [HOME + "/hubs-file"]: "file", [HOME + "/work"]: "dir", [HOME + "/work/hubs"]: "dir",
   [HOME + "/work/hubs/globex-staff-engineer"]: "hub", [HOME + "/work/hubs/old-unfinished"]: "unfinished",
-  [HOME + "/work/hubs/half-unpacked"]: "dir", [HOME + "/Engagements"]: "dir", [HOME + "/Engagements/initech"]: "dir",
+  [HOME + "/work/hubs/half-unpacked"]: "dir", [HOME + "/hubs-file"]: "file", [HOME + "/Engagements"]: "dir", [HOME + "/Engagements/initech"]: "dir",
 };
 const HUB_CHECKOUTS = { [HOME + "/work/hubs/globex-staff-engineer"]: ["~/src/web"] };
 
 /* ---------------- state ---------------- */
-const SIM0 = { template: "yes", f1: "off", inst: "main", t4: "yes", hubs: "no", gitname: "yes", clone: "no", roles: "ok", preflight: "pass", pfmode: "per", exgit: "ok", fail: "none", removal: "ok", otherrun: "no", sync: "on", cfgdir: "no", agentstatus: "on", speed: "normal", later: "off", hubconf: "ok", commits: "no", mac: "yes" };
+const SIM0 = { template: "yes", f1: "off", inst: "main", t4: "yes", hubs: "no", gitname: "yes", clone: "no", roles: "ok", preflight: "pass", exgit: "ok", fail: "none", removal: "ok", samefolder: "no", secretprompt: "ok", sync: "on", cfgdir: "no", agentstatus: "on", speed: "normal", later: "off", hubconf: "ok", commits: "no", mac: "yes" };
 let S;
 function freshQ() {
   return {
     mode: "new", step: "answers", role: "staff-engineer", client: "", owner: S && S.sim.gitname === "no" ? "" : "Dana Reyes",
     folder: "", folderEdited: false, hubname: "", secrets: [], secretIn: "", secretErr: "", repos: S && S.sim.clone === "yes" ? [{ v: "acme/api=" + HOME + "/src/api", tag: "from this tab" }] : [],
     repoIn: "", repoErr: "", more: false, touched: {}, submitted: false, shownErrs: {},
-    ex: { path: "", setup: false, kind: null, pf: null }, pf: null, aFail: null, from: null, rolesState: S ? S.sim.roles : "ok",
+    ex: { path: "", setup: false, kind: null, pf: null, inUse: null }, pf: null, aFail: null, inUse: null, from: null, rolesState: S ? S.sim.roles : "ok",
   };
 }
 function fresh(keepSim) {
@@ -352,18 +353,30 @@ function textRule(v, which) {
   if (cps(t) > 80) return `The ${W} can be at most 80 characters. This one has ${cps(t)}.`;
   return null;
 }
+// The folder kinds of hub_folder_kind(path, new) (design 6.7, revision 3 names), with the webview's empty and Cc/Cf checks first.
+const INUSE = HOME + "/hubs/acme-corp-staff-engineer";
+const exPath = () => expand(S.q.ex.path.trim()).replace(/\/+$/, "");
+// OB-4 AC7: a folder a counting run uses; compared after ~ expansion, case-insensitively (the default APFS volume).
+function inUseBy(p, onPress) {
+  const runs = S.tabs.filter((t) => t.run && ["running", "notice", "awaitPrompt", "awaitValue", "removing"].includes(t.run.state)).map((t) => t.folder);
+  if (S.sim.samefolder === "yes" || (S.sim.samefolder === "race" && onPress)) runs.push(INUSE);
+  return runs.find((r) => r.toLowerCase() === p.toLowerCase()) || null;
+}
+const caseNote = (p, r) => (r !== p ? ` That tab is setting up ${C(tilde(r))}; on this Mac the two names are the same folder.` : "");
 function checkNewFolder(v) {
   const t = v.trim(); const sug = `~/hubs/${hubName() || "acme-corp-staff-engineer"}`;
   if (!t) return { m: "Enter a folder for the hub." };
   if (CCF.test(t)) return { m: "The path can't contain invisible formatting marks (such as right-to-left marks or zero-width spaces) or other control characters." };
   if (!(t.startsWith("/") || t === "~" || t.startsWith("~/"))) return { m: `Use a full path, such as ${C(sug)}.`, html: true };
   const p = expand(t).replace(/\/+$/, "") || "/";
+  const iu = inUseBy(p); if (iu) return { m: `${C(tilde(p))} is in use by a setup running in another tab. Choose another folder, or wait until that setup ends.${caseNote(p, iu)}`, html: true };
   const ty = fsType(p);
   if (ty === "hub") return { m: `${C(tilde(p))} is already a finished hub.`, html: true, act: "useExisting", path: p };
-  if (ty === "file") return { m: `${C(tilde(p))} is a file, not a folder. Choose a new folder.`, html: true };
+  if (ty === "unfinished") return { m: `${C(tilde(p))} already exists: it's a hub that was not finished (hub.conf is not committed). Choose a new folder: setup never writes into an existing one.`, html: true };
+  if (ty === "file") return { m: `${C(tilde(p))} exists but isn't a folder. Choose a new folder.`, html: true };
   if (ty) return { m: `${C(tilde(p))} already exists. Choose a new folder: setup never writes into an existing one.`, html: true };
   const par = parentOf(p); const pt = fsType(par);
-  if (pt === "file") return { m: `${C(tilde(par))} is a file, not a folder.`, html: true };
+  if (pt === "file") return { m: `${C(tilde(par))} exists but isn't a folder, so Better Terminal can't create ${C(tilde(p))} in it.`, html: true };
   if (!pt && !fsType(parentOf(par))) { let m = par; while (!fsType(parentOf(m)) && m !== "/") m = parentOf(m); return { m: `${C(tilde(m))} doesn't exist, so Better Terminal can't create ${C(tilde(p))}. It creates only the one folder above the hub, such as ${C("~/hubs")}.`, html: true }; }
   if (S.sim.f1 === "on" && p.startsWith(HOME + "/Engagements/initech")) return { m: `This folder would be inside the engagement “Initech” (${C("~/Engagements/initech")}). Choose a folder outside it.`, html: true };
   return null;
@@ -387,7 +400,7 @@ function errText(x) { return typeof x === "string" ? esc(x) : x.html ? x.m : esc
 function addSecret() {
   const q = S.q; const v = q.secretIn.trim(); q.secretErr = ""; if (!v) return;
   if (v.length > 64) { q.secretIn = ""; q.secretErr = "That looks like a secret's value, not its name, so it was cleared. Names are at most 64 characters. You'll type the value later, in the terminal's hidden prompt."; }
-  else if (/^(sk-|ghp|gho|glpat-|xox)/.test(v)) { q.secretIn = ""; q.secretErr = "That looks like a secret's value, not its name, so it was cleared. You'll type the value later, in the terminal's hidden prompt."; }
+  else if (/^(sk-|glpat-|xox[a-z]-)/.test(v)) { q.secretIn = ""; q.secretErr = "That looks like a secret's value, not its name, so it was cleared. You'll type the value later, in the terminal's hidden prompt."; }
   else if (!/^[a-z0-9-]+$/.test(v)) q.secretErr = "Use only lowercase letters a–z, digits and “-” in a secret name, such as grafana-token.";
   else if (q.secrets.includes(v)) q.secretErr = `${v} is already in the list.`;
   else { q.secrets.push(v); q.secretIn = ""; }
@@ -440,86 +453,111 @@ ${gone ? `<li><b>If that hub is gone, remove the link:</b><div class="cmdl">${C(
 }
 
 /* ---------------- preflight (7.2) ---------------- */
-const SHELL_NAME = () => (S.sim.preflight === "shell" ? "nu" : "zsh");
+// Check names are the architecture's (preflight_check, design 5.0); the order is M9's.
+const ROW_LABEL = { clt: "Command Line Tools", login_shell: "Login shell", helper: "Better Terminal's helper", folder: "Hub folder", finished: "Hub is finished", env: "Starting your shell", tools: "git and python3", identity: "git name and email", links: "Claude memory links" };
+// What a check needs (design 5.0's skipped {because}): a failed clt skips finished, env and later; login_shell, helper and folder still run.
+const NEEDS = { finished: ["clt", "folder"], env: ["clt", "login_shell", "helper"], tools: ["env"], identity: ["env", "tools"], links: ["env", "finished"] };
 function pfRows(existing) {
-  const r = [["clt", "Command Line Tools"], ["shell", `Login shell (${SHELL_NAME()})`], ["helper", "Better Terminal's helper"], ["folder", "Hub folder"], ["env", "Starting your shell"]];
-  if (existing) { r.push(["finished", "Hub is finished"]); if (S.q.ex.setup) r.push(["links", "Claude memory links"]); }
-  else r.push(["tools", "git and python3"], ["ident", "git name and email"], ["links", "Claude memory links"]);
-  return r;
+  if (!existing) return ["clt", "login_shell", "helper", "folder", "env", "tools", "identity", "links"];
+  return ["clt", "login_shell", "helper", "folder", "finished", "env", ...(S.q.ex.setup ? ["tools", "links"] : [])];
 }
-const PF_WORD = { clt: "Missing", shell: "Not supported", helper: "Not available", folder: "Changed", env: "Timed out", tools: "Missing", ident: "Missing", links: "Refused" };
-function pfFailingRow(existing) {
-  const k = S.sim.preflight;
-  const m = { clt: "clt", shell: "shell", helper: "helper", folder: "folder", envtimeout: "env", git: "tools", python: "tools", identity: "ident", "identity-both": "ident", "link-live": "links", "link-gone": "links" }[k];
-  if (existing) { if (m === "tools" || m === "ident") return null; if (S.sim.exgit !== "ok") return "finished"; if (m === "links" && !S.q.ex.setup) return null; if (m === "folder") return null; }
-  return m || null;
+const PF_WORD = { finished: "Not finished", clt: "Missing", login_shell: "Not supported", helper: "Not available", folder: "Changed", env: "Timed out", tools: "Missing", identity: "Missing", links: "Refused" };
+function pfFails(existing) {
+  const m = { clt: [{ k: "clt" }], shell: [{ k: "login_shell" }], helper: [{ k: "helper" }], folder: [{ k: "folder" }], envtimeout: [{ k: "env", d: "timeout" }], envended: [{ k: "env", d: "ended" }], git: [{ k: "tools", d: "git" }], python: [{ k: "tools", d: "python3" }], identity: [{ k: "identity", d: "email" }], "identity-both": [{ k: "identity", d: "both" }], "link-live": [{ k: "links", d: "live" }], "link-gone": [{ k: "links", d: "gone" }], several: [{ k: "tools", d: "python3" }, { k: "identity", d: "email" }], several2: [{ k: "login_shell" }, { k: "folder" }], clthelper: [{ k: "clt" }, { k: "helper" }] }[S.sim.preflight] || [];
+  const rows = pfRows(existing); return m.filter((f) => rows.includes(f.k) && !(existing && f.k === "folder"));
 }
+const SHELL_NAME = () => (pfFails(false).some((f) => f.k === "login_shell") ? "nu" : "zsh");
 // target: the object that holds .pf (S.q for a new hub, S.q.ex for an existing one)
 function startPreflight(instant, existing) {
-  const tgt = existing ? S.q.ex : S.q; const rows = pfRows(existing).map((r) => r[0]); const failAt = pfFailingRow(existing);
-  tgt.pf = { state: "running", res: {}, fail: null, cur: rows[0], slow: false, existing };
+  const tgt = existing ? S.q.ex : S.q;
+  const path = existing ? exPath() : expand(folderValue().trim()).replace(/\/+$/, "");
+  // 5.6, PRD OB-4 AC7: a folder another tab's setup uses is refused before any check; nothing is written.
+  const iu = (!existing || S.q.ex.setup) ? inUseBy(path, true) : null;
+  if (iu) { tgt.pf = null; tgt.inUse = { p: path, r: iu }; S.focus = "#iu-h"; render(); say(`${tilde(path)} is in use by a setup running in another tab.`, true); return; }
+  tgt.inUse = null;
+  const rows = pfRows(existing); const fails = pfFails(existing); const failed = new Set();
+  tgt.pf = { state: "running", res: {}, because: {}, fails: [], cur: rows[0], slow: false, existing };
   S.focus = "#pf-h";
-  const finish = (failed) => {
-    if (S.sim.pfmode === "one") { for (const k of rows) { if (k === failed) { tgt.pf.res[k] = "bad"; break; } tgt.pf.res[k] = "ok"; } }
-    rows.forEach((k) => { if (!tgt.pf.res[k]) tgt.pf.res[k] = "skip"; });
+  const finish = () => {
     tgt.pf.cur = null;
-    if (failed) { tgt.pf.state = "failed"; tgt.pf.fail = failed; S.focus = "#pf-title"; render(); say(txt(pfFailBlock(failed, existing).title), true); return; }
+    if (tgt.pf.fails.length) { tgt.pf.state = "failed"; S.focus = "#pf-title"; render(); const b = pfBlock(tgt.pf, existing); say([b.head, ...(b.items.length > 1 ? b.items.map((i) => i.title) : [])].join(" "), true); return; }
     tgt.pf.state = "ok"; render();
-    later(() => { if (existing) startExisting(expand(S.q.ex.path.trim()).replace(/\/+$/, ""), instant); else startRun(instant); }, 300, instant);
+    later(() => { if (existing) startExisting(exPath(), instant); else startRun(instant); }, 300, instant);
   };
   let i = 0;
-  const tick = () => {
+  const step = () => {
     if (tgt.pf.state !== "running") return;
+    if (i >= rows.length) return finish();
     const k = rows[i]; tgt.pf.cur = k;
-    if (S.sim.pfmode !== "one") {
-      if (k === failAt) return finish(k);
-      tgt.pf.res[k] = "ok";
-    } else if (k === failAt) return finish(k);
-    i++;
-    if (i < rows.length) { tgt.pf.cur = rows[i]; if (rows[i] === "env" && S.sim.speed === "slow") later(() => { if (tgt.pf.state === "running" && tgt.pf.cur === "env") { tgt.pf.slow = true; render(); } }, 900, instant); render(); later(tick, rows[i] === "env" ? 900 : 350, instant); return; }
-    finish(null);
+    // identity needs git only: a missing python3 doesn't skip it (design 5.0).
+    const blocker = (NEEDS[k] || []).find((n) => (k === "identity" && n === "tools" ? tgt.pf.fails.some((x) => x.k === "tools" && x.d === "git") : failed.has(n) || tgt.pf.res[n] === "skip"));
+    if (blocker) { tgt.pf.res[k] = "skip"; tgt.pf.because[k] = blocker; i++; return step(); }
+    const run = () => {
+      if (tgt.pf.state !== "running") return;
+      const f = fails.filter((x) => x.k === k);
+      if (f.length) { failed.add(k); tgt.pf.res[k] = "bad"; tgt.pf.fails.push(...f); } else tgt.pf.res[k] = "ok";
+      i++; render(); step();
+    };
+    // The slow line is a webview timer started by the row's running event (m8); Rust sends nothing for it.
+    if (k === "env" && S.sim.speed === "slow" && !instant) later(() => { if (tgt.pf.state === "running" && tgt.pf.cur === "env") { tgt.pf.slow = true; render(); } }, 1000, instant);
+    render(); later(run, k === "env" ? 900 : 300, instant);
   };
-  render(); later(tick, 350, instant);
+  render(); step();
 }
-function pfFailBlock(k, existing) {
+function pfItem(f, existing) {
   const again = existing ? "Open Hub" : "Set Up Hub";
   const copyBtn = (c) => `<div class="cmdl">${C(c)} <button class="btn sm" data-copy="${esc(c)}">Copy Command</button></div>`;
+  const k = f.k;
   if (k === "clt") return { title: "The Command Line Tools aren't installed.", body: `<p>Setup needs them for git and python3. Install them, then choose ${again} again:</p>${copyBtn("xcode-select --install")}<p>The other checks run once they're installed.</p>` };
-  if (k === "shell") return { title: "Setup can't use your login shell, nu.", body: `<p>Setup reads your environment by starting your login shell once, as a new terminal does, and it supports only sh, bash, zsh, ksh, dash and fish. Your login shell is ${C("/opt/homebrew/bin/nu")}.</p><p>To ${existing ? "open a hub" : "set up a hub"}, make one of those your login shell, then quit and reopen Better Terminal:</p>${copyBtn(cmd(["chsh", "-s", "/bin/zsh"]))}<p>Your terminals keep working with nu either way.</p>` };
-  if (k === "helper") return { title: "Better Terminal's helper isn't available, so setup can't run.", body: `<p>Setup needs the helper to run each step in the tab and report back. Quit Better Terminal and open it again. If this keeps happening, reinstall Better Terminal.</p>` };
-  if (k === "folder") { const f = tilde(expand(folderValue().trim())); return { title: `${f} changed since you checked your answers.`, titleHtml: `${C(f)} changed since you checked your answers.`, body: `<p>It now exists. Setup never writes into an existing folder. Choose Back to pick another folder.</p>` }; }
-  if (k === "env") return { title: "Your shell's start-up files didn't finish within 30 seconds.", body: `<p>Setup starts your login shell once, as a new terminal does, to read its environment. A start-up file may be waiting for input, such as an update question or a password prompt.</p><p>Open a new terminal tab to see what it asks, answer or fix it, then choose ${again} again.</p>` };
-  if (k === "tools") return S.sim.preflight === "git" ? { title: "git didn't run: exec format error.", body: `<p>Setup needs git. Check that ${C("git --version")} works in a new terminal tab.</p>` } : { title: "python3 isn't on your PATH.", body: `<p>bin/init needs it. Check that ${C("python3 --version")} works in a new terminal tab.</p>` };
-  if (k === "ident") {
-    const both = S.sim.preflight === "identity-both"; const cmds = (both ? [cmd(["git", "config", "--global", "user.name", "Your Name"])] : []).concat([cmd(["git", "config", "--global", "user.email", "you@example.com"])]);
-    return { title: `git has no ${both ? "user.name and user.email" : "user.email"} for new repositories.`, body: `<p>The first commit needs both. Set ${both ? "them" : "it"}, then choose Set Up Hub again:</p>${cmds.map((c) => `<div class="cmdl">${C(c)}</div>`).join("")}<div class="cmdl"><button class="btn sm" data-copy="${esc(cmds.join("\n"))}">Copy Command${cmds.length > 1 ? "s" : ""}</button></div><p><em>An identity set only by an includeIf "gitdir:…" rule doesn't count here, because the hub isn't a repository yet.</em></p>` };
+  if (k === "login_shell") return { title: "Setup can't use your login shell, nu.", body: `<p>Setup reads your environment by starting your login shell once, as a new terminal does, and it supports only sh, bash, zsh, ksh, dash and fish. Your login shell is ${C("/opt/homebrew/bin/nu")}.</p><p>To ${existing ? "open a hub" : "set up a hub"}, make one of those your login shell, then quit and reopen Better Terminal:</p>${copyBtn(cmd(["chsh", "-s", "/bin/zsh"]))}<p>Your terminals keep working with nu either way.</p>` };
+  if (k === "helper") return { title: "Better Terminal's helper didn't start, so setup can't run.", body: `<p>It didn't answer within 10 seconds. Quit Better Terminal and open it again. If this keeps happening, reinstall Better Terminal.</p>` };
+  if (k === "folder") { const fo = tilde(expand(folderValue().trim())); return { title: `${fo} changed since you checked your answers.`, titleHtml: `${C(fo)} changed since you checked your answers.`, body: `<p>It now exists. Setup never writes into an existing folder. Choose Back to pick another folder.</p>` }; }
+  if (k === "env") return f.d === "ended" ? { title: "Your login shell ended before setup could read its environment (exit code 1).", body: `<p>Setup starts your login shell once, as a new terminal does; something in a start-up file ended it. Open a new terminal tab to see the error, fix it, then choose ${again} again.</p>` }
+    : { title: "Your shell's start-up files didn't finish within 30 seconds.", body: `<p>Setup starts your login shell once, as a new terminal does, to read its environment. A start-up file may be waiting for input, such as an update question or a password prompt.</p><p>Open a new terminal tab to see what it asks, answer or fix it, then choose ${again} again.</p>` };
+  if (k === "tools") return f.d === "git" ? { title: "git didn't run: exec format error.", body: `<p>Setup needs git. Check that ${C("git --version")} works in a new terminal tab.</p>` } : { title: "python3 isn't on your PATH.", body: `<p>bin/init needs it. Check that ${C("python3 --version")} works in a new terminal tab.</p>` };
+  if (k === "identity") {
+    const both = f.d === "both"; const cmds = (both ? [cmd(["git", "config", "--global", "user.name", "Your Name"])] : []).concat([cmd(["git", "config", "--global", "user.email", "you@example.com"])]);
+    return { title: `git has no ${both ? "user.name and user.email" : "user.email"} for new repositories.`, body: `<p>The first commit needs ${both ? "both" : "it"}. Set ${both ? "them" : "it"}, then choose Set Up Hub again:</p>${cmds.map((c) => `<div class="cmdl">${C(c)}</div>`).join("")}<div class="cmdl"><button class="btn sm" data-copy="${esc(cmds.join("\n"))}">Copy Command${cmds.length > 1 ? "s" : ""}</button></div><p><em>An identity set only by an includeIf "gitdir:…" rule doesn't count here, because the hub isn't a repository yet.</em></p>` };
   }
-  if (k === "finished") {
-    const p = expand(S.q.ex.path.trim()).replace(/\/+$/, "");
-    if (S.sim.exgit === "unfinished") { const c = cmd(["cd", p]) + " && git add -A && git commit"; return { title: "This hub was not finished: hub.conf is not committed.", body: `<p>Finish it by hand: in that folder, commit everything.</p><div class="cmdl">${C("git add -A && git commit")} <button class="btn sm" data-copy="${esc(c)}">Copy Command</button></div><p>Or move the folder to the Trash yourself and start a new hub. <button class="btn sm" id="start-new">Start a New Hub</button></p>` }; }
-    return { title: "Better Terminal couldn't check this hub: git didn't run: exec format error.", body: `<p>Checking that hub.conf is committed needs git. Check that ${C("git --version")} works in a new terminal tab, then choose Open Hub again.</p>` };
-  }
-  const co = existing ? expand((HUB_CHECKOUTS[expand(S.q.ex.path.trim()).replace(/\/+$/, "")] || ["~/src/web"])[0]) : (checkouts().filter((c) => fsType(c))[0] || expand(folderValue()));
-  const b = linkBlock(co, S.sim.preflight === "link-gone", existing ? "existing" : "review");
+  const co = existing ? expand((HUB_CHECKOUTS[exPath()] || ["~/src/web"])[0]) : (checkouts().filter((c) => fsType(c))[0] || expand(folderValue()));
+  const b = linkBlock(co, f.d === "gone", existing ? "existing" : "review");
   return { title: txt(b.title), titleHtml: b.title, body: b.body };
+}
+function pfBlock(pf, existing) {
+  const items = pf.fails.map((f) => pfItem(f, existing)); const n = items.length;
+  return { items, head: n === 1 ? items[0].title : `${n} things on this Mac need fixing before setup can start.`, notChecked: Object.values(pf.res).includes("skip") };
+}
+function pfBlockHtml(pf, existing) {
+  const b = pfBlock(pf, existing); const one = b.items.length === 1;
+  const inner = one ? b.items[0].body : `<ul class="pfl">${b.items.map((it) => `<li><strong>${XI}<span>${it.titleHtml || esc(it.title)}</span></strong>${it.body}</li>`).join("")}</ul>`;
+  return `<div class="box fail" role="group" aria-labelledby="pf-title"><h4 id="pf-title" tabindex="-1">${FAILI}<span>${one ? (b.items[0].titleHtml || esc(b.items[0].title)) : esc(b.head)}</span></h4>${inner}${b.notChecked ? "<p><em>Rows marked Not checked run once these are fixed.</em></p>" : ""}</div>`;
 }
 function pfSection(pf, existing) {
   const w = (k) => {
     const v = pf.res[k];
     if (v === "ok") return `<span class="w okw">${OKI} OK</span>`;
-    if (v === "bad") return `<span class="w bad">${XI} ${k === "finished" ? (S.sim.exgit === "unfinished" ? "Not committed" : "Check failed") : PF_WORD[k]}</span>`;
-    if (v === "skip") return `<span class="w">— Not checked</span>`;
-    if (pf.state === "running" && (S.sim.pfmode === "one" || pf.cur === k)) return `<span class="w"><span class="spin" aria-hidden="true"></span> Checking…</span>`;
-    return `<span class="w">—</span>`;
+    if (v === "bad") { const f = pf.fails.find((x) => x.k === k); const word = k === "env" && f.d === "ended" ? "Ended" : k === "tools" && f.d === "git" ? "Failed" : PF_WORD[k]; return `<span class="w bad">${XI} ${word}</span>`; }
+    if (v === "skip") return `<span class="w">– Not checked</span>`;
+    if (pf.state === "running" && pf.cur === k) return `<span class="w"><span class="spin" aria-hidden="true"></span> Checking…</span>`;
+    return `<span class="w">– Waiting</span>`;
   };
-  const label = (k, l) => { if (k === "env" && pf.state === "running" && pf.cur === "env") return `Starting your shell…${pf.slow ? `<br><small class="hint">Your shell's start-up files are still running. Setup waits up to 30 seconds.</small>` : ""}`; if (k === "links" && existing && pf.res.links === "ok") return `${l} <small class="hint" style="display:inline">· ${(HUB_CHECKOUTS[expand(S.q.ex.path.trim()).replace(/\/+$/, "")] || []).join(", ") || "no checkouts"}</small>`; return l; };
-  const fb = pf.state === "failed" ? (() => { const b = pfFailBlock(pf.fail, existing); return `<div class="box fail" role="group" aria-labelledby="pf-title"><h4 id="pf-title" tabindex="-1">${FAILI}<span>${b.titleHtml || esc(b.title)}</span></h4>${b.body}</div>`; })() : "";
-  return `${fb}<section class="rv" aria-labelledby="pf-h"><h3 id="pf-h" tabindex="-1">Checking this Mac</h3><ul class="checks" aria-live="off">${pfRows(existing).map(([k, l]) => `<li>${w(k)}<span>${label(k, l)}</span></li>`).join("")}</ul></section>`;
+  const label = (k) => {
+    const l = k === "login_shell" ? `Login shell (${SHELL_NAME()})` : ROW_LABEL[k];
+    if (pf.res[k] === "skip") return `${l} <small class="hint" style="display:inline">· needs ${esc(ROW_LABEL[pf.because[k]])}</small>`;
+    if (k === "env" && pf.state === "running" && pf.cur === "env") return `Starting your shell…${pf.slow ? `<br><small class="hint">Your shell's start-up files are still running. Setup waits up to 30 seconds.</small>` : ""}`;
+    if (k === "links" && existing && pf.res.links === "ok") return `${l} <small class="hint" style="display:inline">· ${(HUB_CHECKOUTS[exPath()] || []).join(", ") || "no checkouts"}</small>`;
+    return l;
+  };
+  const fb = pf.state === "failed" ? pfBlockHtml(pf, existing) : "";
+  return `${fb}<section class="rv" aria-labelledby="pf-h"><h3 id="pf-h" tabindex="-1">Checking this Mac</h3><ul class="checks" aria-live="off">${pfRows(existing).map((k) => `<li>${w(k)}<span>${label(k)}</span></li>`).join("")}</ul></section>`;
+}
+// 5.6: the refusal before any check (no "Checking this Mac" section).
+function inUseBlock(iu, existing) {
+  return `<div class="box fail" role="group" aria-labelledby="iu-h"><h4 id="iu-h" tabindex="-1">${FAILI}<span>${C(tilde(iu.p))} is in use by a setup running in another tab.</span></h4><p>Two setups can't use the same folder at once, so nothing was checked or written. Your answers are kept.${caseNote(iu.p, iu.r)}</p><p>${existing ? "Choose Open Hub again after that setup ends, or turn off Run bin/setup and bin/doctor first." : "Choose Back to pick another folder, or choose Set Up Hub again after that setup ends."}</p></div>`;
 }
 
 /* ---------------- the run (8) ---------------- */
 const later = (fn, ms, instant) => { if (instant) fn(); else setTimeout(fn, S.sim.speed === "slow" ? ms * 5 : ms); };
-function otherRunGoing() { return S.sim.otherrun === "yes" || S.tabs.some((t) => t.run && ["running", "notice", "awaitPrompt", "awaitValue", "removing"].includes(t.run.state)); }
 function startRun(instant, opts = {}) {
   const folder = expand(folderValue().trim()).replace(/\/+$/, "");
   const fromChoice = S.q.from === "choice";
@@ -567,10 +605,10 @@ function exec(t) {
   }
   if (st.k === "d") { secretNotice(t); return; }
   if (st.k === "i") {
-    if (S.sim.hubconf === "bad" && r.existing) { r.bar = null; r.state = "ended"; setNotice(t, { kind: "warn", icon: WARNI, title: "Better Terminal didn't start Claude.", body: `<p>Line 7 of hub.conf (HUB_CLAUDE) isn't a plain value Better Terminal can read safely, so it started nothing. Start Claude by hand in this tab.</p>`, acts: [["Dismiss", "dismiss", "primary"]], esc: "dismiss" }); t.lines.push(shellPrompt(t.folder)); runEnded(); render(); return; }
+    if (S.sim.hubconf === "bad" && r.existing) { r.bar = null; r.state = "ended"; setNotice(t, { kind: "warn", icon: WARNI, title: "Better Terminal didn't start Claude.", body: `<p>Line 7 of hub.conf (HUB_CLAUDE) isn't a plain value Better Terminal can read safely, so it started nothing. Start Claude by hand in this tab.</p>`, acts: [["Dismiss", "dismiss", "primary"]], esc: "dismiss" }); t.lines.push(L.ade("Better Terminal didn't start Claude: line 7 of hub.conf (HUB_CLAUDE) isn't a plain value it can read safely. Start Claude by hand in this tab."), shellPrompt(t.folder)); runEnded(); render(); return; }
     // 8.7: once hub.conf is read, the line shows CLAUDE_CONFIG_DIR with only its value quoted.
     t.lines.push(S.sim.cfgdir === "yes" ? `<b class="cmd">CLAUDE_CONFIG_DIR=${esc(shq(HOME + "/Claude configs/acme"))} claude</b>` : L.cmd(st.cmds[0]));
-    if (failsHere(r, "i")) { t.lines.push(L.out("zsh: command not found: claude", "r"), L.ade(`Claude Code wasn't found: claude isn't on your PATH. The hub is ready in ${tilde(t.folder)}; start Claude there by hand.`)); r.bar = null; r.state = "ended"; setNotice(t, { kind: "warn", icon: WARNI, title: "Claude Code wasn't found.", body: `<p>${C("claude")} isn't on your PATH in this tab. The hub is set up and kept. Install Claude Code, then run ${C("claude")} in this tab.</p>`, acts: [["Dismiss", "dismiss", "primary"]], esc: "dismiss" }); t.lines.push(shellPrompt(t.folder)); runEnded(); render(); return; }
+    if (failsHere(r, "i")) { t.lines.push(L.out("zsh: command not found: claude", "r"), L.ade(`Claude Code wasn't found: claude isn't on your PATH, and a shell alias or function named claude isn't used. The hub is ready in ${tilde(t.folder)}; start Claude there by hand.`)); r.bar = null; r.state = "ended"; setNotice(t, { kind: "warn", icon: WARNI, title: "Claude Code wasn't found.", body: `<p>${C("claude")} isn't on your PATH in this tab. Better Terminal looks for the program itself, so a shell alias or function named claude isn't used. The hub is set up and kept. Install Claude Code or put it on your PATH, then run ${C("claude")} in this tab.</p>`, acts: [["Dismiss", "dismiss", "primary"]], esc: "dismiss" }); t.lines.push(shellPrompt(t.folder)); runEnded(); render(); return; }
     t.lines.push(L.out("╭──────────────────────────────────────────╮", "dim"), L.out("│ ✻ Welcome to Claude Code                 │", "dim"), L.out("╰──────────────────────────────────────────╯", "dim"));
     t.lines.push(L.out(`SessionStart: ${r.existing ? t.folder.split("/").pop() : hubName()} · ${PERSONA_TITLE(S.q.role)}`, "y"));
     t.lines.push(L.out(`  ${r.stored.length ? r.stored.map((s) => s + " OK").join(" · ") : "no secrets stored"}`, "dim"), "", `<span class="ade">&gt;</span> <span class="cursor"></span>`);
@@ -611,7 +649,7 @@ function failNotice(t, st) {
   const r = t.run; r.state = "notice"; r.bar = null;
   const n = r.steps.length, num = r.i + 1; const offer = removeOffered(r);
   const rm = offer ? [["Remove Hub Folder", "remove", "danger"]] : [];
-  const tail = !offer && !r.existing ? `<p><em>Remove Hub Folder isn't offered: the hub has commits after setup's first one.</em></p>` : "";
+  const tail = offer ? "" : r.existing ? `<p><em>Remove Hub Folder isn't offered: setup didn't create this folder.</em></p>` : `<p><em>Remove Hub Folder isn't offered: the hub has commits after setup's first one.</em></p>`;
   const left = r.steps.slice(r.i + 1).map((s) => s.name);
   const stopP = `<p><b>Stop Here</b> ends setup and keeps the hub: the steps after this one don't run${left.length ? ` (${left.join(", ")})` : ""}${offer ? ", and Remove Hub Folder won't be offered again" : ""}.</p>`;
   const skipP = `<p>Skip goes on to the next step; the hub is kept either way.</p>`;
@@ -630,7 +668,7 @@ function secretNotice(t) {
   r.state = "notice"; r.bar = `Step ${r.i + 1} of ${r.steps.length}: Store secrets`;
   const sc = cmd(["bin/secret", "--set", name]);
   setNotice(t, { kind: "key", icon: KEYI, title: `Store the secret ${name}?`, count: `${r.ci + 1} of ${names.length}`,
-    body: `<p>Store asks for its value in a hidden prompt in the terminal below. Nothing appears while you type or paste; press Enter when done. Use a single-line value: the prompt reads up to the first line break, and Better Terminal discards the rest. The value goes to your Keychain; Better Terminal doesn't keep it.</p><p>Skip stores nothing now. bin/doctor will list it as missing, and you can store it later in this hub with ${C(sc)}.</p>${PAUSED}`,
+    body: `<p>Store asks for its value in a hidden prompt in the terminal below. Nothing appears while you type or paste; press Enter when done. The value must be one line: a paste with a line break anywhere but at its end is refused whole, and none of it is sent. The value goes to your Keychain; Better Terminal doesn't keep it.</p><p>Skip stores nothing now. bin/doctor will list it as missing, and you can store it later in this hub with ${C(sc)}.</p>${PAUSED}`,
     acts: [["Store", "store", "primary"], ["Skip", "skipsecret", ""]], esc: "skipsecret" });
   say(`Store the secret ${name}? ${r.ci + 1} of ${names.length}. Store asks for its value in a hidden prompt in the terminal below. Nothing appears while you type or paste; press Enter when done.`);
   render();
@@ -642,7 +680,8 @@ function store(t, hold, live) {
   r.state = "awaitPrompt"; r.typed = 0;
   setNotice(t, { kind: "key", slim: true, spin: true, icon: KEYI, title: `Starting bin/secret for ${name}. Don't type yet.` });
   S.focus = "#term"; render();
-  if (!hold) later(() => promptReady(t), 700, r.instant && !live);
+  // No time-based "type now" (X2): the terminal opens only on secret_prompt_ready; at 15 s, prompt_not_hidden fails the name.
+  if (!hold) later(() => (S.sim.secretprompt === "nothidden" ? promptNotHidden(t) : promptReady(t)), S.sim.secretprompt === "nothidden" ? 1500 : 700, r.instant && !live);
 }
 function promptReady(t) {
   const r = t.run; if (r.state !== "awaitPrompt") return; const name = S.q.secrets[r.ci];
@@ -652,13 +691,29 @@ function promptReady(t) {
   setNotice(t, { kind: "key", slim: true, icon: KEYI, title: m });
   S.focus = "#term"; say(m); render();
 }
+function promptNotHidden(t) {
+  const r = t.run; if (r.state !== "awaitPrompt") return; const name = S.q.secrets[r.ci];
+  t.lines.push(L.ade(`Stopped bin/secret for ${name}: its prompt didn't hide what you type, so you weren't asked to type the value.`));
+  secretFailNotice(t, name, true);
+}
+function pasteRefused(t) {
+  // secret_paste_refused: a paste with an inner line break is dropped whole; the prompt is still waiting.
+  setNotice(t, { kind: "key", slim: true, icon: KEYI, title: "That paste had more than one line, so none of it was sent. Paste or type a one-line value, then press Enter. Nothing appears while you type." });
+  S.focus = "#term"; say("That paste had more than one line, so none of it was sent."); render();
+}
+function secretFailNotice(t, name, notHidden) {
+  const r = t.run; t.notice = null; r.state = "notice";
+  const left = S.q.secrets.slice(r.ci + 1); const later2 = r.steps.slice(r.i + 1).map((s) => s.name); const offer = removeOffered(r);
+  const first = notHidden ? `<p>Better Terminal waited 15 seconds for bin/secret to ask for the value with typing hidden. It didn't, so Better Terminal stopped it before you typed anything, and nothing was stored. This hub template's bin/secret may ask differently from the one Better Terminal knows.</p>` : `<p>bin/secret stopped with an error, for example because the value was empty. Its message is in the terminal below.</p>`;
+  const stopP = `<p><b>Stop Here</b> ends setup and keeps the hub: ${left.length ? `the secret names not yet asked (${left.join(", ")}) aren't asked, ` : ""}the steps after this one don't run (${later2.join(", ")})${offer ? ", and Remove Hub Folder won't be offered again" : ""}.</p>`;
+  const nn = { kind: "fail", icon: FAILI, title: notHidden ? `${name} wasn't stored: bin/secret didn't hide what you type` : `${name} wasn't stored`, body: `${first}<p>Skip goes on to the next step; the hub is kept either way.</p>${stopP}${PAUSED}`, acts: [[`Retry ${name}`, "retrysecret", ""], [`Skip ${name}`, "skipsecret", ""], ...(offer ? [["Remove Hub Folder", "remove", "danger"]] : []), ["Stop Here", "stop", "ghost"]], esc: "skipsecret" };
+  setNotice(t, nn); say(`${nn.title}. Options: ${nn.acts.map((a) => a[0]).join(", ")}.`, true); render();
+}
 function valueEntered(t) {
   const r = t.run; const name = S.q.secrets[r.ci];
   t.lines[t.lines.length - 1] = `Value for ${esc(name)} (hidden): `;
-  // bin/secret has exited: input off and flushed before the next notice or step (N7).
-  if (!r.typed) { t.lines.push(L.out(`bin/secret: ${name}: empty; nothing stored`, "r")); t.notice = null; r.state = "notice";
-    const nn = { kind: "fail", icon: FAILI, title: `${name} wasn't stored`, body: `<p>bin/secret stopped with an error, for example because the value was empty. Its message is in the terminal below.</p><p>Skip goes on to the next step; the hub is kept either way.</p>${PAUSED}`, acts: [[`Retry ${name}`, "retrysecret", ""], [`Skip ${name}`, "skipsecret", ""], ...(removeOffered(r) ? [["Remove Hub Folder", "remove", "danger"]] : [])], esc: "skipsecret" };
-    setNotice(t, nn); say(`${nn.title}. Options: ${nn.acts.map((a) => a[0]).join(", ")}.`, true); render(); return; }
+  // bin/secret has exited: input flushed and closed before the next notice or step (design 4.5).
+  if (!r.typed) { t.lines.push(L.out(`bin/secret: ${name}: empty; nothing stored`, "r")); secretFailNotice(t, name, false); return; }
   t.lines.push(L.out(`Stored ${name} in the Keychain (service hub.${hubName()}).`, "g")); r.stored.push(name); t.notice = null; r.ci++; r.state = "running"; render(); secretNotice(t);
 }
 function runEnded() { if (S.tour === "waiting") S.tour = "shown"; }
@@ -674,21 +729,33 @@ function act(t, a) {
   if (a === "skipsecret") { const name = S.q.secrets[r.ci]; t.lines.push(L.ade(`Skipped storing ${name}.`)); t.notice = null; r.ci++; r.state = "running"; S.focus = "#term"; render(); secretNotice(t); return; }
   if (a === "retrysecret") { t.notice = null; t.lines.push(L.ade(`Retrying: store ${S.q.secrets[r.ci]}.`)); return store(t, false, true); }
   if (a === "retry") { const st = r.steps[r.i]; r.failedOnce.add(st.k); t.notice = null; r.state = "running"; t.lines.push(L.ade(`Retrying: ${st.name}.`)); S.focus = "#term"; render(); exec(t); return; }
-  if (a === "skip") { const st = r.steps[r.i]; t.lines.push(L.ade(`Skipped ${st.cmds[0][0]}.`)); t.notice = null; r.state = "running"; r.i++; S.focus = "#term"; render(); exec(t); return; }
+  if (a === "skip") { const st = r.steps[r.i]; t.lines.push(L.ade(`Skipped ${st.name}.`)); t.notice = null; r.state = "running"; r.i++; S.focus = "#term"; render(); exec(t); return; }
   if (a === "keep") { stopRun(t, "Stopped. The unfinished hub folder is kept; this tab is now a shell in it."); return; }
-  if (a === "stop") { stopRun(t); return; }
+  if (a === "stop") { const st = r.steps[r.i]; const left = st && st.k === "d" ? S.q.secrets.slice(r.ci + 1) : []; stopRun(t, left.length ? `Stopped. The hub is kept; ${left.length} secret name${left.length > 1 ? "s weren't" : " wasn't"} asked: ${left.join(", ")}. Store ${left.length > 1 ? "them" : "it"} later with bin/secret --set ${left.length > 1 ? "<name>" : left[0]}.` : null); return; }
   if (a === "remove") { S.confirm = { kind: "remove", tab: t.id }; S.focus = "#cf-safe"; render(); return; }
   if (a === "edit") { S.confirm = { kind: "edit", tab: t.id }; S.focus = "#cf-safe"; render(); return; }
   if (a === "rretry") { t.notice = null; r.rm.retried = true; t.lines.push(L.ade(r.rm.part === "unlink" ? "Retrying: undo bin/setup's links." : "Retrying: move the hub folder to the Trash.")); render(); return startRemoval(t, r.rm.after); }
   if (a === "rkeep") return removalKept(t);
 }
+// 9.3: one table, at most one confirm per close.
+function runPhase(t) {
+  const r = t && t.run; if (!r) return null;
+  if (r.state === "removing") return "removing";
+  if (!["running", "notice", "awaitPrompt", "awaitValue"].includes(r.state)) return null;
+  const k = (r.steps[r.i] || {}).k; if (k === "a" || k === "b") return "making"; if (k === "i") return null; return "setting";
+}
 function closeTab(id, quitting) {
-  const t = S.tabs.find((x) => x.id === id);
-  if (t && t.run && t.run.state !== "stopped" && t.run.state !== "session" && t.run.state !== "ended" && t.run.state !== "removed" && ["a", "b"].includes(t.run.steps[t.run.i] && t.run.steps[t.run.i].k)) {
-    S.confirm = { kind: quitting ? "quit" : "close", tab: id }; S.focus = "#cf-safe"; render(); return false;
-  }
+  const t = S.tabs.find((x) => x.id === id); const ph = runPhase(t);
+  if (ph) { S.confirm = { kind: ph === "making" ? "close" : ph === "setting" ? "c2" : "c3", tab: id }; S.focus = "#cf-safe"; render(); return false; }
   if (t && t.run) t.run.state = "stopped";
   S.tabs = S.tabs.filter((x) => x.id !== id); if (S.active === id) S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : null; render(); return true;
+}
+function pauseRemoving(t) { const r = t.run; t.notice = null; r.state = "removing"; r.bar = "Removing the hub folder"; t.lines.push(L.cmd(["bin/setup", "--unlink", "--since", RUN_START])); S.focus = "#term"; }
+// Batch, window and quit: one confirm over the making and removing runs (design 6.5); none when the only runs are in (c)-(h).
+function batchClose(ids, quit) {
+  const asks = ids.map((id) => S.tabs.find((x) => x.id === id)).filter((x) => ["making", "removing"].includes(runPhase(x)));
+  if (!asks.length) { if (quit) return relaunch(); S.tabs = S.tabs.filter((x) => !ids.includes(x.id)); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); render(); return; }
+  S.confirm = { kind: "batch", tabs: ids, quit, total: ids.length }; S.focus = "#cf-safe"; render();
 }
 /* ---------------- removal (9.1, 9.4, 9.5) ---------------- */
 const SERVICE = () => `hub.${hubName()}`;
@@ -716,7 +783,7 @@ function removalStopped(t, part) {
   const r = t.run; r.state = "notice"; r.bar = null; r.rm.part = part; r.rm.retried = false;
   const f = tilde(t.folder);
   const nn = part === "unlink"
-    ? { title: "Removal stopped: bin/setup --unlink failed", body: `<p>Its message is in the terminal below. Better Terminal didn't move ${C(f)} to the Trash, and Claude's memory links are unchanged, so the hub still works.</p><p><b>Retry</b> runs bin/setup --unlink again and, if it succeeds, finishes the removal. <b>Keep</b> ends the removal and keeps the hub as it is.</p>${PAUSED}` }
+    ? { title: "Removal stopped: bin/setup --unlink failed", body: `<p>Its message is in the terminal below, and says which links, if any, it undid before it stopped. Better Terminal didn't move ${C(f)} to the Trash, so the hub is still there.</p><p><b>Retry</b> runs bin/setup --unlink again and, if it succeeds, finishes the removal. <b>Keep</b> ends the removal and keeps the hub as it is.</p>${PAUSED}` }
     : { title: `Couldn't move ${f} to the Trash`, titleHtml: `Couldn't move ${C(f)} to the Trash`, body: `<p>The Trash refused it: the volume has no Trash. ${r.rm.unlinked ? "Claude's memory links for this hub were already undone (see the terminal), so they no longer point here. " : ""}</p><p><b>Retry</b> tries the Trash again. <b>Keep</b> ends the removal and leaves the folder where it is.</p>${PAUSED}` };
   Object.assign(nn, { kind: "fail", icon: FAILI, acts: [["Retry", "rretry", ""], ["Keep", "rkeep", ""]], esc: "rkeep" });
   setNotice(t, nn); say(`${nn.title}. Options: Retry, Keep.`, true); render();
@@ -803,13 +870,12 @@ function fieldHtml(id, label, control, hint, err, { full, req, okHint } = {}) {
 function renderQ() {
   const q = S.q;
   const head = `<div class="ph"><h2 id="q-h">Set up your agentic environment</h2><nav class="stepper" aria-label="Steps"><span ${q.step === "answers" ? 'aria-current="step"' : ""}>Answers</span><span aria-hidden="true">›</span><span ${q.step === "review" ? 'aria-current="step"' : ""}>Review</span></nav><button class="x" id="q-x" aria-label="Close" title="Close (Esc)">✕</button></div>`;
-  let body, foot; const other = otherRunGoing();
-  const otherLine = other ? `<div class="pother" role="status">${INFOI}<span>Another agent hub is being set up in another tab. Finish or stop that setup, then choose ${q.mode === "existing" && q.step !== "review" ? "Open Hub" : "Set Up Hub"}.</span> <button class="btn sm" id="show-other">Show That Tab</button></div>` : "";
+  let body, foot;
   if (q.step === "review") { body = renderReview(); const busy = q.pf && (q.pf.state === "running" || q.pf.state === "ok");
-    foot = `<button class="btn ghost left" id="q-back" ${busy ? "disabled" : ""}>Back</button><button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-go" ${busy || other ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Set Up Hub"}</button>`; }
+    foot = `<button class="btn ghost left" id="q-back" ${busy ? "disabled" : ""}>Back</button><button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-go" ${busy ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Set Up Hub"}</button>`; }
   else { body = renderAnswers(); const busy = q.mode === "existing" && q.ex.pf && (q.ex.pf.state === "running" || q.ex.pf.state === "ok");
-    foot = q.mode === "new" ? `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-review" ${q.rolesState === "error" ? 'disabled title="Needs a role"' : ""}>Review Setup</button>` : `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-open" ${busy || other ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Open Hub"}</button>`; }
-  foot = otherLine + `<div class="pbtns">${foot}</div>`;
+    foot = q.mode === "new" ? `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-review" ${q.rolesState === "error" ? 'disabled title="Needs a role"' : ""}>Review Setup</button>` : `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-open" ${busy ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Open Hub"}</button>`; }
+  foot = `<div class="pbtns">${foot}</div>`;
   return `<div class="panel" role="dialog" aria-modal="true" aria-labelledby="q-h" id="qdlg" data-trap>${head}<div class="pbody">${body}</div><div class="pfoot">${foot}</div></div>`;
 }
 function renderAnswers() {
@@ -842,34 +908,49 @@ ${S.sim.later === "on" ? `<div class="field full later"><span class="tag">slice 
 }
 function renderExisting() {
   const x = S.q.ex; const busy = x.pf && (x.pf.state === "running" || x.pf.state === "ok");
-  let hint = "The folder that holds the hub's hub.conf. Type a full path; ~ is your home folder.", err = null, ok = false;
-  const p = tilde(expand(x.path.trim()).replace(/\/+$/, ""));
-  const K = { empty: "Enter the hub's folder.", notfull: `Use a full path, such as ${C("~/hubs/acme-corp-staff-engineer")}.`, missing: `${C(p)} doesn't exist.`, file: `${C(p)} is a file, not a folder.`, nothub: `${C(p)} is not a hub: it has no hub.conf.` };
-  if (x.kind === "hasconf") { hint = `${OKI} hub.conf found. Better Terminal checks that it's committed when you choose Open Hub.`; ok = true; }
+  let hint = "The hub's folder, the one that holds hub.conf. Type a full path; ~ is your home folder.", err = null, ok = false;
+  const pp = exPath(); const p = tilde(pp); const copy = (c) => `<span class="cmdl" style="display:inline-flex">${C(c)} <button class="btn sm" data-copy="${esc(c)}">Copy Command</button></span>`;
+  const fin = cmd(["cd", pp]) + " && git add -A && git commit";
+  // hub_folder_kind(path, existing): the copy of spec 6.3. Unfinished shows inline now (ADE's own git, X3).
+  const K = { empty: "Enter the hub's folder.", ccf: "The path can't contain invisible formatting marks (such as right-to-left marks or zero-width spaces) or other control characters.", notfull: `Use a full path, such as ${C("~/hubs/acme-corp-staff-engineer")}.`, missing: `${C(p)} doesn't exist.`, notfolder: `${C(p)} exists but isn't a folder.`, nothub: `${C(p)} is not a hub: it has no hub.conf.`,
+    unfinished: `This hub was not finished: hub.conf is not committed.<br>Finish it by hand: in that folder, commit everything. ${copy("git add -A && git commit").replace(/data-copy="[^"]*"/, `data-copy="${esc(fin)}"`)}<br>Or move the folder to the Trash yourself and start a new hub. <button class="btn sm" id="start-new">Start a New Hub</button>`,
+    tools: `Better Terminal can't check this hub yet: the Command Line Tools aren't installed. Install them, then check again: ${copy("xcode-select --install")}`,
+    checkfailed: `Better Terminal couldn't check this hub: git didn't run (exec format error). Check that ${C("git --version")} works in a new terminal tab, then try again.`,
+    inuse: (() => { const r = inUseBy(pp) || pp; return `${C(p)} is in use by a setup running in another tab. Run bin/setup and bin/doctor after that setup ends.${caseNote(pp, r)}`; })() };
+  if (x.kind === "checking") hint = `<span class="spin" aria-hidden="true"></span> Checking the folder…`;
+  else if (x.kind === "finished") { hint = `${OKI} A finished hub: hub.conf is committed.`; ok = true; }
   else if (x.kind && K[x.kind]) err = K[x.kind];
+  if (x.kind === "finished" && S.sim.hubconf === "bad") hint += `<br><span style="color:var(--text-secondary)">Better Terminal won't start Claude in this hub: line 7 of hub.conf (HUB_CLAUDE) isn't a plain value it can read safely. The tab opens as a shell in the hub.</span>`;
   let notice = "";
-  if (x.setup) notice = `<div class="box warn" role="note" aria-labelledby="exn-h"><h4 id="exn-h">${WARNI}<span>What bin/setup does to Claude's memory</span></h4><p>bin/setup links Claude's memory for each checkout this hub's hub.conf lists, and for the hub's own folders, to the hub. For each, it copies Claude's existing memory for that path (in ${C("~/.claude/projects/…/memory")}) into the hub's ${C("memory/")} folder without overwriting, where the hub's git can commit it and its sync can push it; renames the original folder to ${C("memory.bak-<time>")} beside it; and links the path's memory to the hub's, so every Claude session in that folder, started in the hub or not, reads and writes the hub's memory. It also links the hub's bmad-* skills into ${C("~/.claude/skills")} (skipping any name already there), so every Claude session using that config folder loads them.</p><p>When you choose Open Hub, Better Terminal lists the checkouts it found and refuses to go on when one's memory is already linked to another hub, so this option never replaces such a link.</p><p><b>Better Terminal offers no undo for an existing hub.</b></p></div>`;
-  const pf = x.pf ? pfSection(x.pf, true) : "";
-  return `${pf}<div class="grid2">${fieldHtml("f-ex", "Hub folder", (a) => `<div class="row"><input type="text" class="mono" id="f-ex" value="${esc(x.path)}" placeholder="~/work/hubs/globex-staff-engineer" autocomplete="off" spellcheck="false" ${busy ? "disabled" : ""} ${a}>${browseSlot()}</div>`, hint, err, { full: true, okHint: ok })}
+  const cos = HUB_CHECKOUTS[pp] || [];
+  if (x.setup) notice = `<div class="box warn" role="note" aria-labelledby="exn-h"><h4 id="exn-h">${WARNI}<span>What bin/setup does to Claude's memory</span></h4><p>bin/setup links Claude's memory for this hub's own folders ${cos.length ? `and for the checkouts its hub.conf lists, here ${cos.map(C).join(", ")}, ` : ""}to the hub${cos.length ? "" : " (its hub.conf lists no checkouts)"}. For each, it copies Claude's existing memory for that path (in ${C("~/.claude/projects/…/memory")}) into the hub's ${C("memory/")} folder without overwriting, where the hub's git can commit it and its sync can push it; renames the original folder to ${C("memory.bak-<time>")} beside it; and links the path's memory to the hub's, so every Claude session in that folder, started in the hub or not, reads and writes the hub's memory. It also links the hub's bmad-* skills into ${C("~/.claude/skills")} (skipping any name already there), so every Claude session using that config folder loads them.</p><p>Better Terminal read that list from hub.conf without running it. When you choose Open Hub, it asks the hub's own scripts for the list again and refuses to go on when one's memory is already linked to another hub, so this option never replaces such a link.</p><p><b>Better Terminal offers no undo for an existing hub.</b></p></div>`;
+  const pf = x.inUse ? inUseBlock(x.inUse, true) : x.pf ? pfSection(x.pf, true) : "";
+  return `${pf}<div class="grid2">${fieldHtml("f-ex", "Hub folder", (a) => `<div class="row"><input type="text" class="mono" id="f-ex" value="${esc(x.path)}" placeholder="~/work/hubs/globex-staff-engineer" autocomplete="off" spellcheck="false" ${busy ? "disabled" : ""} ${a}>${browseSlot()}</div>`, err ? null : hint, err, { full: true, okHint: ok })}
 <div class="field full"><label style="display:flex;gap:8px;align-items:flex-start;font-weight:500"><input type="checkbox" id="f-exsetup" ${x.setup ? "checked" : ""} ${busy ? "disabled" : ""} aria-describedby="f-exsetup-hint"><span>Run bin/setup and bin/doctor first<p class="hint" id="f-exsetup-hint">For a hub you cloned onto this Mac by hand.</p></span></label></div></div>${notice}`;
 }
-// Blur / debounced check: file system only. No git, no shell, hub.conf is never run (spec 6.3, N3).
+// hub_folder_kind(path, existing) as the developer types: may run Better Terminal's own git; never a shell, never sources hub.conf (spec 6.3, X3).
 function fsKindExisting() {
   const x = S.q.ex; const t = x.path.trim();
   if (!t) return "empty";
+  if (CCF.test(t)) return "ccf";
   if (!(t.startsWith("/") || t === "~" || t.startsWith("~/"))) return "notfull";
-  const ty = fsType(expand(t).replace(/\/+$/, ""));
-  return !ty ? "missing" : ty === "file" ? "file" : ty === "dir" ? "nothub" : "hasconf";
+  const p = exPath(); const ty = fsType(p);
+  if (!ty) return "missing"; if (ty === "file") return "notfolder"; if (ty === "dir") return "nothub";
+  if (x.setup && inUseBy(p)) return "inuse";
+  if (S.sim.exgit === "tools") return "tools"; if (S.sim.exgit === "fails") return "checkfailed";
+  if (ty === "unfinished" || S.sim.exgit === "unfinished") return "unfinished";
+  return "finished";
 }
+const EX_SAY = { empty: "Enter the hub's folder.", ccf: "The path can't contain invisible formatting marks or other control characters.", notfull: "Use a full path, such as ~/hubs/acme-corp-staff-engineer.", missing: "That folder doesn't exist.", notfolder: "That path exists but isn't a folder.", nothub: "That folder is not a hub: it has no hub.conf.", unfinished: "This hub was not finished: hub.conf is not committed.", tools: "Better Terminal can't check this hub yet: the Command Line Tools aren't installed.", checkfailed: "Better Terminal couldn't check this hub: git didn't run.", inuse: "That folder is in use by a setup running in another tab." };
 function checkExisting() {
-  const x = S.q.ex; const prev = x.kind; x.kind = fsKindExisting();
-  if (x.kind !== prev) { if (x.kind === "hasconf") say("hub.conf found. Better Terminal checks that it's committed when you choose Open Hub."); else say(txt({ empty: "Enter the hub's folder.", notfull: "Use a full path, such as ~/hubs/acme-corp-staff-engineer.", missing: "That folder doesn't exist.", file: "That path is a file, not a folder.", nothub: "That folder is not a hub: it has no hub.conf." }[x.kind]), "alert"); }
-  render();
+  const x = S.q.ex; const prev = x.kind; x.kind = "checking"; render();
+  setTimeout(() => { if (S.q.ex !== x) return; x.kind = fsKindExisting();
+    if (x.kind !== prev) { if (x.kind === "finished") say("A finished hub: hub.conf is committed."); else say(EX_SAY[x.kind], "alert"); }
+    render(); }, 350);
 }
 function openExisting(instant) {
   const x = S.q.ex; x.kind = fsKindExisting();
-  if (x.kind !== "hasconf") { S.focus = "#f-ex"; render(); return; }
-  if (otherRunGoing()) return;
+  if (x.kind !== "finished") { S.focus = "#f-ex"; render(); return; }
   startPreflight(instant, true);
 }
 function renderReview() {
@@ -885,11 +966,11 @@ function renderReview() {
   }
   notes.push(`<div class="box" role="note" aria-labelledby="rn2"><h4 id="rn2">${INFOI}<span>Claude skills</span></h4><p>bin/setup also links the hub's bmad-* skills into ${C("~/.claude/skills")} (skipping any name already there), so every Claude session using that config folder loads them.</p></div>`);
   const syncLi = S.sim.sync === "on" ? `<li><b>Your sync repo</b>, because Settings → Sync is on: the saved session and your saved workspaces both sync.</li>` : `<li><b>Your sync repo</b>, if you turn Settings → Sync on later: the saved session and saved workspaces sync then.</li>`;
-  notes.push(`<div class="box" role="note" aria-labelledby="rn3"><h4 id="rn3">${INFOI}<span>Where the hub's path is kept</span></h4><p>The hub folder's path, ${C(tilde(folder))}, holds the client's name. It ends up in these places:</p><ul><li><b>Better Terminal's saved session</b>, so the tab reopens after a restart, and <b>any workspace you save</b> with the tab in it.</li>${syncLi}<li><b>Claude's config folder</b>: bin/setup names a folder after the path, ${C(tilde(HOME + "/.claude/projects/" + encodeMem(folder)) + "/")} (and one per work area), to link the hub's memory.</li><li><b>A screen recording</b> you make of the Agent hub tab, which holds what the tab shows: every command and its output (but never a secret's value, which bin/secret doesn't echo).</li></ul><p>Your other answers go only into the hub folder and its git history, and into your Keychain under each stored secret's name. Better Terminal doesn't keep them, and never saves what the Agent hub tab shows. A paired phone sees the tab only as “Agent hub”.</p></div>`);
+  notes.push(`<div class="box" role="note" aria-labelledby="rn3"><h4 id="rn3">${INFOI}<span>Where the hub's path is kept</span></h4><p>The hub folder's path, ${C(tilde(folder))}, holds the client's name. It ends up in these places:</p><ul><li><b>Better Terminal's saved session</b>, so the tab reopens after a restart, and <b>any workspace you save</b> with the tab in it.</li>${syncLi}<li><b>Claude's config folder</b>: bin/setup names a folder after the path to link the hub's memory. Better Terminal expects it to be ${C(tilde(HOME + "/.claude/projects/" + encodeMem(folder)) + "/")} (and one per work area); that is a prediction from your environment, and bin/setup works the folder out itself when it runs.</li><li><b>A screen recording</b> you make of the Agent hub tab, which holds what the tab shows: every command and its output (but never a secret's value, which bin/secret doesn't echo).</li></ul><p>Your other answers go only into the hub folder and its git history, and into your Keychain under each stored secret's name. Better Terminal doesn't keep them, and never saves what the Agent hub tab shows. A paired phone sees the tab only as “Agent hub”.</p></div>`);
   const stepLi = (s, i) => `<li><b>${esc(s.name)}</b>${s.k === "a" ? `<br><small>Better Terminal copies the bundled agent hub template (${TEMPLATE_REF}) into the hub folder itself; this is not a command.</small>` : s.cmds.map((a) => `<code>${esc(cmd(a))}</code>`).join("")}${s.k === "d" ? "<small>Before each, you choose Store or Skip.</small>" : ""}${s.k === "h" ? "<small>It reports what's missing; it never stops setup.</small>" : ""}${s.k === "i" ? "<small>with CLAUDE_CONFIG_DIR from hub.conf, when the hub sets one.</small>" : ""}</li>`;
   const laterLi = S.sim.later === "on" ? `<li class="later" style="list-style:none;margin-left:-20px"><span class="tag">slice 2</span>Create the private GitHub repo (after Store secrets) and Install scheduled jobs (after Index) join this list when chosen. With question 14 set, step “Start the persona session” shows <code>CLAUDE_CONFIG_DIR=&lt;value&gt; claude</code> instead of the note.</li>` : "";
-  const pf = q.pf ? pfSection(q.pf, false) : "";
-  const aFail = q.aFail ? `<div class="box fail" role="group" aria-labelledby="af-h"><h4 id="af-h" tabindex="-1">${FAILI}<span>Better Terminal couldn't unpack the agent hub template: the disk is full.</span></h4><p>Nothing was left behind: ${C(tilde(folder))}${q.aFail.parent ? ` and ${C(tilde(q.aFail.parent))}, which setup had created, were` : " was"} removed. Your answers are kept. Choose Set Up Hub to try again.</p></div>` : "";
+  const pf = q.inUse ? inUseBlock(q.inUse, false) : q.pf ? pfSection(q.pf, false) : "";
+  const aFail = q.aFail ? `<div class="box fail" role="group" aria-labelledby="af-h"><h4 id="af-h" tabindex="-1">${FAILI}<span>Better Terminal couldn't unpack the agent hub template: the disk is full.</span></h4><p>Nothing was left behind${q.aFail.parent ? `: ${C(tilde(q.aFail.parent))}, which setup had created, was removed` : ""}. Your answers are kept. Choose Set Up Hub to try again.</p></div>` : "";
   return `${aFail}${pf}<section class="rv" aria-labelledby="rv1"><h3 id="rv1">Your answers</h3><dl>${ans.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></section>
 <section class="rv" aria-labelledby="rv2"><h3 id="rv2">Folders Better Terminal will create</h3><ul>${cp ? `<li>${C(tilde(cp))} <small>doesn't exist yet; created for the hub, and only it.</small></li>` : ""}<li>${C(tilde(folder))} <small>the hub folder</small></li></ul></section>
 <section class="rv" aria-labelledby="rv3"><h3 id="rv3">What will run, in this order</h3><ol>${steps.map(stepLi).join("")}${laterLi}</ol></section>
@@ -910,6 +991,7 @@ function renderPalette() {
 function renderConfirm() {
   const cf = S.confirm; if (!cf) return "";
   const t = S.tabs.find((x) => x.id === cf.tab); const r = t && t.run; const f = t ? tilde(t.folder) : "";
+  const no = cf.quit ? "Don't Quit" : "Cancel";
   const par = r && r.createdParent ? tilde(r.createdParent) : null;
   let title, body, btns;
   if (cf.kind === "remove") {
@@ -927,6 +1009,20 @@ function renderConfirm() {
   } else if (cf.kind === "edit") {
     title = `Move ${f} to the Trash and edit your answers?`; body = `<p>bin/init stopped partway, so the folder is unfinished. Better Terminal moves it to the Trash${par ? ` (and ${C(par)}, which setup created, if it's then empty)` : ""}, then reopens your answers. Set Up Hub starts over from the beginning.</p>`;
     btns = `<button class="btn" id="cf-safe" data-cf="cancel">Cancel</button><button class="btn danger" data-cf="edit">Move to Trash and Edit</button>`;
+  } else if (cf.kind === "c2") {
+    // The generic busy confirm; only the label and sentence are this spec's (OB-5 AC5: nothing about the hub is asked).
+    const st = r.steps[r.i]; title = "Close this tab?"; body = `<p>It's running agent hub setup (step ${r.i + 1} of ${r.steps.length}: ${esc(st.name)}). Closing stops setup there; the hub is kept as it is.</p>`;
+    btns = `<button class="btn" id="cf-safe" data-cf="cancel">Cancel</button><button class="btn danger" data-cf="stopclose">Close</button>`;
+  } else if (cf.kind === "c3") {
+    title = `Stop removing ${f}?`; body = `<p>Better Terminal is removing the hub folder. Stop ends the removal where it is and closes the tab: what it hasn't done yet stays as it is, and the removal summary isn't kept. The folder is not moved to the Trash.</p>`;
+    btns = `<button class="btn" id="cf-safe" data-cf="cancel">Cancel</button><button class="btn danger" data-cf="stopclose">Stop</button>`;
+  } else if (cf.kind === "batch") {
+    const run = cf.tabs.map((id) => S.tabs.find((x) => x.id === id)).filter((x) => ["making", "removing"].includes(runPhase(x))); const making = run.some((x) => runPhase(x) === "making");
+    const busy = cf.tabs.map((id) => S.tabs.find((x) => x.id === id)).filter((x) => runPhase(x) === "setting").length;
+    const ph = (x) => { const p2 = runPhase(x); const r2 = x.run; return p2 === "removing" ? "removing the hub folder" : `${p2 === "making" ? "making the hub" : "setting up"} (step ${r2.i + 1} of ${r2.steps.length})`; };
+    title = cf.quit ? `Quit Better Terminal? ${run.length} tabs are setting up agent hubs.` : `Close ${cf.total} tabs? ${run.length} of them are setting up agent hubs.`;
+    body = `<ul>${run.map((x) => `<li>${C(tilde(x.folder))}: ${ph(x)}</li>`).join("")}${busy ? `<li>${busy} other tab${busy > 1 ? "s are" : " is"} running a program.</li>` : ""}</ul><p><b>Close</b> stops each setup and keeps what it made (an unfinished folder stays), stops each removal where it is, and closes the tabs.${making ? " <b>Remove</b> does the same, but moves each unfinished hub folder to the Trash." : ""}</p>`;
+    btns = `<button class="btn" id="cf-safe" data-cf="cancel">${no}</button><button class="btn" data-cf="batchclose">${cf.quit ? "Close and Quit" : "Close"}</button>${making ? `<button class="btn danger" data-cf="batchremove">${cf.quit ? "Remove and Quit" : "Remove"}</button>` : ""}`;
   } else {
     title = `Stop setting up and remove ${f}?`; body = `<p>Setup is still making the hub.</p><p><b>Remove</b> stops it and moves the folder to the Trash${par ? ` (and ${C(par)}, which setup created, if it's then empty)` : ""}.</p><p><b>Keep</b> stops it and leaves the unfinished folder. Better Terminal won't open it as a hub until hub.conf is committed.</p>`;
     btns = `<button class="btn" id="cf-safe" data-cf="cancel">${cf.kind === "quit" ? "Don't Quit" : "Cancel"}</button><button class="btn" data-cf="keep">Keep</button><button class="btn danger" data-cf="removeclose">Remove</button>`;
@@ -952,11 +1048,11 @@ const SIMS = [
   ["gitname", "git user.name", [["yes", "set"], ["no", "not set"]]],
   ["clone", "Opened from a clone tab", [["no", "no"], ["yes", "yes (acme/api)"]]],
   ["roles", "Persona list", [["ok", "loaded"], ["loading", "loading"], ["error", "failed"]]],
-  ["otherrun", "Another setup running", [["no", "no"], ["yes", "yes"]]],
+  ["samefolder", "~/hubs/acme-corp-staff-engineer in use by another tab", [["no", "no"], ["yes", "yes"], ["race", "starts after the inline check"]]],
   ["sync", "Settings → Sync", [["on", "on"], ["off", "off"]]],
-  ["pfmode", "Preflight feedback", [["per", "per check (preferred)"], ["one", "one result (fallback)"]]],
-  ["preflight", "Preflight", [["pass", "passes"], ["clt", "no Command Line Tools"], ["shell", "login shell nu"], ["helper", "helper missing"], ["folder", "folder now exists"], ["envtimeout", "start-up > 30 s"], ["git", "git fails"], ["python", "no python3"], ["identity", "no user.email"], ["identity-both", "no name or email"], ["link-live", "memory link: live hub"], ["link-gone", "memory link: hub gone"]]],
-  ["exgit", "Existing: committed check", [["ok", "committed"], ["unfinished", "not committed"], ["fails", "git fails"]]],
+  ["preflight", "Preflight", [["pass", "passes"], ["clt", "no Command Line Tools"], ["shell", "login shell nu"], ["helper", "helper missing"], ["folder", "folder now exists"], ["envtimeout", "start-up > 30 s"], ["envended", "login shell exits"], ["git", "git fails"], ["python", "no python3"], ["identity", "no user.email"], ["identity-both", "no name or email"], ["link-live", "memory link: live hub"], ["link-gone", "memory link: hub gone"], ["several", "no python3 + no user.email"], ["several2", "login shell nu + folder exists"], ["clthelper", "no Command Line Tools + helper missing"]]],
+  ["exgit", "Existing: committed check", [["ok", "committed"], ["unfinished", "not committed"], ["fails", "git fails"], ["tools", "no Command Line Tools"]]],
+  ["secretprompt", "bin/secret's prompt", [["ok", "hides typing"], ["nothidden", "never hides (15 s)"]]],
   ["fail", "Fail at step", [["none", "none"], ["a", "(a) unpack"], ["b", "(b) bin/init"], ["c", "(c) first commit"], ["f", "(f) bin/setup"], ["flink", "(f) link appeared"], ["f2", "(f2) bin/brain"], ["claude", "(i) claude missing"]]],
   ["cfgdir", "hub.conf sets config dir", [["no", "no"], ["yes", "yes (with a space)"]]],
   ["removal", "Removal", [["ok", "succeeds"], ["unlink", "--unlink fails"], ["trash", "Trash fails"]]],
@@ -998,29 +1094,39 @@ const P = [
     ["git has no user.name", "OB-3 Q4", () => { base({ gitname: "no" }); openQ("palette"); }],
     ["Errors: client, owner, repo, secret", "OB-3 AC2", () => { base(); openQ("palette", SAMPLE({ client: "Acme‮corp", owner: "x".repeat(84), secrets: [], repos: [], repoIn: "acme api", secretIn: "Grafana_Token", submitted: true })); addRepo(); addSecret(); S.caption = "<b>6.4</b> · text rule (U+202E), 84 characters, repo and secret rules; each error is its field's role=alert (announced once)"; }],
     ["Clone path with an invisible mark", "OB-3 Q3, m1", () => { base(); openQ("palette", SAMPLE({ repos: [], repoIn: "acme/web=~/src/web​" })); addRepo(); S.focus = "#f-repo"; }],
-    ["Secret name that looks like a value", "OB-7 AC2", () => { base(); openQ("palette", SAMPLE({ secrets: [], secretIn: "ghp_x7Kq2" })); addSecret(); S.caption = "<b>6.4</b> · cleared, never echoed"; }],
-    ["Real name refused by the PRD rule (P1)", "OB-7 AC2, m8", () => { base(); openQ("palette", SAMPLE({ secrets: [], secretIn: "ghost-api-key" })); addSecret(); S.focus = "#f-secret"; S.caption = "<b>15.2 P1</b> · the PRD's gho prefix refuses a real name; sent to the PM"; }],
+    ["Secret name that looks like a value", "OB-7 AC2", () => { base(); openQ("palette", SAMPLE({ secrets: [], secretIn: "xoxb-1234-x7Kq2" })); addSecret(); S.caption = "<b>6.4</b> · cleared, never echoed (sk-, glpat-, xox?-)"; }],
+    ["ghost-api-key is accepted (PRD amended)", "OB-7 AC2, P1", () => { base(); openQ("palette", SAMPLE({ secrets: [], secretIn: "ghost-api-key" })); addSecret(); S.focus = "#f-secret"; S.caption = "<b>6.4</b> · the amended PRD refuses only sk-, glpat- and xox[a-z]-"; }],
+    ["Clone path not starting with / or ~/", "OB-3 AC2", () => { base(); openQ("palette", SAMPLE({ repos: [], repoIn: "acme/web=~bob/web" })); addRepo(); S.focus = "#f-repo"; }],
     ["Empty-slug client (日本)", "OB-3 AC2", () => { base(); openQ("palette", SAMPLE({ client: "日本", touched: { client: true } })); S.caption = "<b>6.2</b> · More options opens; Hub name required"; }],
     ["Bad hub name (-x-engineer)", "OB-3 AC2", () => { base(); openQ("palette", SAMPLE({ hubname: "-x-engineer", more: true, touched: { hubname: true } })); }],
     ["Hub folder: a finished hub", "OB-2 AC3", () => { base(); openQ("palette", SAMPLE({ folder: "~/work/hubs/globex-staff-engineer", folderEdited: true, touched: { folder: true } })); }],
-    ["Hub folder: already exists", "OB-2 AC3", () => { base(); openQ("palette", SAMPLE({ folder: "~/work/hubs/old-unfinished", folderEdited: true, touched: { folder: true } })); }],
-    ["Hub folder: is a file", "OB-2 AC3", () => { base(); openQ("palette", SAMPLE({ folder: "~/notes.txt", folderEdited: true, touched: { folder: true } })); }],
+    ["Hub folder: already exists", "OB-2 AC3", () => { base(); openQ("palette", SAMPLE({ folder: "~/work/hubs/half-unpacked", folderEdited: true, touched: { folder: true } })); }],
+    ["Hub folder: an unfinished hub", "OB-2 AC3, X3", () => { base(); openQ("palette", SAMPLE({ folder: "~/work/hubs/old-unfinished", folderEdited: true, touched: { folder: true } })); }],
+    ["Hub folder: not a folder", "OB-2 AC3, X3", () => { base(); openQ("palette", SAMPLE({ folder: "~/notes.txt", folderEdited: true, touched: { folder: true } })); }],
+    ["Hub folder: parent not a folder", "OB-2 AC4, X3", () => { base(); openQ("palette", SAMPLE({ folder: "~/hubs-file/acme", folderEdited: true, touched: { folder: true } })); }],
+    ["Hub folder: in use by another tab", "OB-4 AC7, P4", () => { base({ samefolder: "yes" }); openQ("palette", SAMPLE({ touched: { folder: true } })); S.focus = "#f-folder"; S.caption = "<b>5.6</b> · the same folder is refused inline; other folders are fine"; }],
+    ["Hub folder: in use, differs only in case", "OB-4 AC7", () => { base({ samefolder: "yes" }); openQ("palette", SAMPLE({ folder: "~/hubs/Acme-Corp-Staff-Engineer", folderEdited: true, touched: { folder: true } })); S.focus = "#f-folder"; }],
     ["Hub folder: /a/b/hub, no /a", "OB-2 AC4", () => { base(); openQ("palette", SAMPLE({ folder: "/a/b/hub", folderEdited: true, touched: { folder: true } })); }],
     ["Hub folder: ~/hubs will be created", "OB-2 AC4", () => { base(); openQ("palette", SAMPLE()); }],
     ["F1 flag: inside an engagement", "F2.13", () => { base({ f1: "on" }); openQ("palette", SAMPLE({ folder: "~/Engagements/initech/hub", folderEdited: true, touched: { folder: true } })); }],
     ["Later slices marked (and Browse… room)", "OB-3 slice column, m13", () => { base({ later: "on" }); openQ("palette", SAMPLE({ more: true })); }],
   ]],
   ["Questionnaire: existing hub (6.3)", [
-    ["hub.conf found (blur, no git)", "OB-2 AC2, M4", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "hasconf" } })); }],
-    ["Blur: doesn't exist", "OB-2 AC2, M4", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/nope", setup: false, kind: "missing" } })); }],
-    ["Blur: a file", "OB-2 AC2, M4", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/notes.txt", setup: false, kind: "file" } })); }],
-    ["Blur: not a hub", "OB-2 AC2, M4", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/src/api", setup: false, kind: "nothub" } })); }],
-    ["Option on: the notice (no checkouts named)", "OB-2 AC2, M4", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "hasconf" } })); }],
-    ["Open Hub: checking (slow shell)", "OB-2 AC2, B3, M4", () => { base({ speed: "slow" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "hasconf" } })); S.q.ex.pf = { state: "running", res: { clt: "ok", shell: "ok", helper: "ok", folder: "ok" }, cur: "env", slow: true, existing: true }; S.focus = "#pf-h"; }],
-    ["Open Hub: unfinished, ways on", "OB-2 AC2", () => { base({ exgit: "unfinished" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/old-unfinished", setup: false, kind: "hasconf" } })); startPreflight(true, true); }],
-    ["Open Hub: git check failed", "OB-2 AC2, M4", () => { base({ exgit: "fails" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "hasconf" } })); startPreflight(true, true); }],
-    ["Open Hub: login shell not supported", "Q-A1, B3", () => { base({ preflight: "shell" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "hasconf" } })); startPreflight(true, true); }],
-    ["Option on: link refused", "OB-2 AC2, n3", () => { base({ preflight: "link-live" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "hasconf" } })); startPreflight(true, true); }],
+    ["Finished hub (inline, ADE's own git)", "OB-2 AC2, X3, m1", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "finished" } })); }],
+    ["Inline: checking the folder", "X3", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "checking" } })); }],
+    ["Inline: doesn't exist", "OB-2 AC2, X3", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/nope", setup: false, kind: "missing" } })); }],
+    ["Inline: not a folder", "OB-2 AC2, X3", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/notes.txt", setup: false, kind: "notfolder" } })); }],
+    ["Inline: not a hub", "OB-2 AC2, X3", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/src/api", setup: false, kind: "nothub" } })); }],
+    ["Inline: unfinished, ways on", "OB-2 AC2, X3", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/old-unfinished", setup: false, kind: "unfinished" } })); }],
+    ["Inline: no Command Line Tools", "X3", () => { base({ exgit: "tools" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "tools" } })); }],
+    ["Inline: git check failed", "X3", () => { base({ exgit: "fails" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "checkfailed" } })); }],
+    ["Inline: in use by another tab (option on)", "OB-4 AC7", () => { base(); S.q = SAMPLE(); const t0 = runTo({}, { secrets: [] }, { pauseAt: "f" }); S.q = SAMPLE({ mode: "existing", ex: { path: tilde(t0.folder), setup: true, kind: "inuse" } }); S.q.from = "palette"; S.overlay = "q"; S.focus = "#f-ex"; S.caption = "<b>5.6</b> · a run in the other tab is using this folder"; }],
+    ["Option on: notice names the checkouts", "OB-2 AC2", () => { base(); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "finished" } })); }],
+    ["hub.conf not a plain value (before Open Hub)", "OB-6 AC2", () => { base({ hubconf: "bad" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "finished" } })); }],
+    ["Open Hub: checking (slow shell)", "OB-2 AC2, B3, m8", () => { base({ speed: "slow" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "finished" } })); S.q.ex.pf = { state: "running", res: { clt: "ok", login_shell: "ok", helper: "ok", folder: "ok", finished: "ok" }, because: {}, fails: [], cur: "env", slow: true, existing: true }; S.focus = "#pf-h"; }],
+    ["Open Hub: login shell not supported", "Q-A1, B3", () => { base({ preflight: "shell" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: false, kind: "finished" } })); startPreflight(true, true); }],
+    ["Open Hub: link refused (option on)", "OB-2 AC2, n3", () => { base({ preflight: "link-live" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "finished" } })); startPreflight(true, true); }],
+    ["Open Hub: folder in use (race)", "OB-4 AC7", () => { base({ samefolder: "race" }); openQ("palette", SAMPLE({ mode: "existing", ex: { path: "~/hubs/acme-corp-staff-engineer", setup: true, kind: "finished" } })); S.created.add(INUSE); startPreflight(true, true); }],
   ]],
   ["Review and preflight (7)", [
     ["Review: checkouts, secrets, ~/hubs (T4)", "OB-3 AC3, B1", () => { review(); S.caption = "<b>7.1</b> · memory notice with T4; where the hub's path is kept (Sync on)"; }],
@@ -1028,15 +1134,17 @@ const P = [
     ["Review: a checkout that doesn't exist", "OB-3 Q3, m10", () => { review({}, { repos: [{ v: "acme/api=" + HOME + "/src/api" }, { v: "acme/web=" + HOME + "/src/web-new" }] }); S.scrollTo = "#rn1"; }],
     ["Review: template without T4", "OB-3 AC3", () => { review({ t4: "no" }); }],
     ["Review: minimal (no checkout)", "OB-3 AC3, AC4", () => { review({ hubs: "yes" }, { secrets: [], repos: [] }); }],
-    ["Review: another setup is running", "m6, P4", () => { review({ otherrun: "yes" }); S.focus = "#show-other"; }],
-    ["Preflight: checking, per check (slow shell)", "OB-4 AC2, B3, M7", () => { review({ speed: "slow" }); S.q.pf = { state: "running", res: { clt: "ok", shell: "ok", helper: "ok", folder: "ok" }, cur: "env", slow: true }; S.focus = "#pf-h"; }],
-    ["Preflight: checking, one result (fallback)", "OB-4 AC2, B3", () => { review({ pfmode: "one" }); S.q.pf = { state: "running", res: {}, cur: "clt", slow: false }; S.focus = "#pf-h"; }],
-    ["Preflight: one result, failed (Not checked rows)", "OB-4 AC2, B3", () => pfState({ pfmode: "one", preflight: "identity" })],
+    ["Set Up Hub: folder in use (race), no checks", "OB-4 AC7, P4", () => { review({ samefolder: "race" }); startPreflight(true, false); S.caption = "<b>5.6</b> · refused before the preflight; nothing checked or written"; }],
+    ["Preflight: checking (slow shell, webview timer)", "OB-4 AC2, M9, m8", () => { review({ speed: "slow" }); S.q.pf = { state: "running", res: { clt: "ok", login_shell: "ok", helper: "ok", folder: "ok" }, because: {}, fails: [], cur: "env", slow: true }; S.focus = "#pf-h"; }],
+    ["Preflight: two failures at once", "M9", () => pfState({ preflight: "several" })],
+    ["Preflight: two failures, Not checked rows", "M9", () => pfState({ preflight: "several2" })],
+    ["Preflight: no Command Line Tools + helper", "M9", () => pfState({ preflight: "clthelper" })],
     ["Preflight: no Command Line Tools", "OB-4 AC2", () => pfState({ preflight: "clt" })],
     ["Preflight: login shell not supported", "Q-A1, B3", () => pfState({ preflight: "shell" })],
     ["Preflight: helper not available", "B3", () => pfState({ preflight: "helper" })],
     ["Preflight: hub folder changed", "B3", () => pfState({ preflight: "folder" })],
     ["Preflight: start-up files timed out", "B3", () => pfState({ preflight: "envtimeout" })],
+    ["Preflight: login shell exits", "M9", () => pfState({ preflight: "envended" })],
     ["Preflight: no python3", "OB-4 AC2", () => pfState({ preflight: "python" })],
     ["Preflight: no user.email", "OB-4 AC2", () => pfState({ preflight: "identity" })],
     ["Preflight: memory link to another hub", "OB-4 AC2, n5", () => pfState({ preflight: "link-live" })],
@@ -1049,7 +1157,10 @@ const P = [
     ["Secret: Store or Skip", "OB-7 AC1, B4", () => { runTo(); }],
     ["Secret: after Store, don't type yet", "OB-11 AC3, B4", () => { const t = runTo(); store(t, true); }],
     ["Secret: prompt ready, type now", "OB-11 AC3, B4", () => { const t = runTo(); store(t); }],
+    ["Secret: multi-line paste refused", "X2, B4", () => { const t = runTo(); store(t); pasteRefused(t); }],
+    ["Secret: prompt not hidden (15 s)", "X2", () => { const t = runTo({ secretprompt: "nothidden" }); store(t); }],
     ["(d) secret not stored (empty value)", "OB-7 AC1", () => { const t = runTo(); store(t); valueEntered(t); }],
+    ["(d) Stop Here: other names not asked", "OB-5 AC3", () => { const t = runTo(); store(t); valueEntered(t); act(t, "stop"); }],
     ["(b) bin/init failed", "OB-5 AC2", () => { runTo({ fail: "b" }); }],
     ["(c) first commit failed: no Skip", "OB-5 AC3, M2", () => { runTo({ fail: "c" }); }],
     ["(f) bin/setup failed", "OB-5 AC3, M2", () => { runTo({ fail: "f" }, { secrets: [] }); }],
@@ -1062,7 +1173,7 @@ const P = [
     ["Session with CLAUDE_CONFIG_DIR from hub.conf", "OB-6 AC1, M3", () => { runTo({ cfgdir: "yes" }, { secrets: [] }); S.caption = "<b>8.7</b> · only the value is quoted; works in sh-family shells and fish 3.1+"; }],
     ["Claude not found", "OB-6 AC3", () => { runTo({ fail: "claude" }, { secrets: [] }); }],
     ["Session exited: login shell", "OB-4 AC6", () => { runTo({}, { secrets: [] }); exitSession(); }],
-    ["Existing hub: session", "OB-2 AC2, OB-6", () => { base(); S.q = SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "hasconf" } }); startExisting(HOME + "/work/hubs/globex-staff-engineer", true); }],
+    ["Existing hub: session", "OB-2 AC2, OB-6", () => { base(); S.q = SAMPLE({ mode: "existing", ex: { path: "~/work/hubs/globex-staff-engineer", setup: true, kind: "finished" } }); startExisting(HOME + "/work/hubs/globex-staff-engineer", true); }],
     ["Existing hub: hub.conf unreadable", "OB-6 AC2", () => { base({ hubconf: "bad" }); S.q = SAMPLE({ mode: "existing", ex: { path: "", setup: false } }); startExisting(HOME + "/work/hubs/globex-staff-engineer", true); }],
   ]],
   ["Remove and its record (9)", [
@@ -1074,13 +1185,21 @@ const P = [
     ["Removal stopped: after Keep", "Q-A3, B2", () => { const t = runTo({ fail: "f2", removal: "unlink" }, { secrets: [] }); startRemoval(t); act(t, "rkeep"); }],
     ["Removal stopped: Trash failed", "OB-5 AC4", () => { const t = runTo({ fail: "f2", removal: "trash" }, { secrets: [] }); startRemoval(t); }],
     ["Edit answers after (b)", "OB-5 AC2", () => { const t = runTo({ fail: "b" }); act(t, "edit"); }],
-    ["Close the tab during bin/init", "OB-5 AC5", () => { const t = runTo({}, {}, { pauseAt: "b" }); closeTab(t.id); }],
-    ["Quit during bin/init", "OB-5 AC5", () => { const t = runTo({}, {}, { pauseAt: "b" }); closeTab(t.id, true); }],
+    ["C1 close the tab during bin/init", "OB-5 AC5, M3", () => { const t = runTo({}, {}, { pauseAt: "b" }); closeTab(t.id); }],
+    ["C4 quit during bin/init (Don't Quit)", "OB-5 AC5, M3", () => { runTo({}, {}, { pauseAt: "b" }); quit(); }],
+    ["C2 close the tab during bin/setup (busy confirm)", "OB-5 AC5, M3", () => { const t = runTo({}, { secrets: [] }, { pauseAt: "f" }); closeTab(t.id); }],
+    ["C3 close the tab during removal", "M3", () => { const t = runTo({ fail: "f2" }, { secrets: [] }); pauseRemoving(t); closeTab(t.id); }],
+    ["C4 Close Others: two setups running", "M3", () => { twoRuns(); const p0 = S.tabs.find((x) => x.kind === "term"); S.active = p0.id; batchClose(S.tabs.filter((x) => x.id !== p0.id).map((x) => x.id), false); S.caption = "<b>9.3 C4</b> · one confirm for the whole batch; Cancel aborts it"; }],
+    ["C4 quit: two setups running", "M3", () => { twoRuns(); quit(); }],
   ]],
   ["After a restart (10)", [
     ["Restored hub tab: empty, shell", "OB-14 AC1, Q11", () => { base(); addHubTab(HOME + "/hubs/acme-corp-staff-engineer", true); S.caption = "<b>10</b> · “Agent hub”, empty, no command re-run"; }],
   ]],
 ];
+function twoRuns() {
+  base(); S.q = SAMPLE({ secrets: [] }); startRun(true, { pauseAt: "b" });
+  S.sim.fail = "f2"; S.q = SAMPLE({ client: "Globex", secrets: [], repos: [] }); startRun(true); pauseRemoving(activeTab()); S.sim.fail = "none";
+}
 function renderStates() {
   let n = 0;
   $("#states").innerHTML = P.map(([g, items]) => `<h3>${esc(g)}</h3>${items.map(([l, ref]) => `<button data-p="${n++}">${esc(l)} <small>${esc(ref)}</small></button>`).join("")}`).join("");
@@ -1126,18 +1245,17 @@ document.addEventListener("click", (ev) => {
   if (el.dataset.tour !== undefined) { S.tour = "done"; render(); return; }
   if (el.dataset.rm) { const k = el.dataset.rm[0], i = +el.dataset.rm.slice(1); (k === "s" ? S.q.secrets : S.q.repos).splice(i, 1); S.focus = k === "s" ? "#f-secret" : "#f-repo"; render(); return; }
   if (el.name === "mode") { S.q.mode = el.value; S.focus = "#mode-" + el.value; render(); return; }
-  if (el.id === "f-exsetup") { S.q.ex.setup = el.checked; S.q.ex.pf = null; S.focus = "#f-exsetup"; render(); return; }
+  if (el.id === "f-exsetup") { S.q.ex.setup = el.checked; S.q.ex.pf = null; S.q.ex.inUse = null; if (S.q.ex.kind) S.q.ex.kind = fsKindExisting(); S.focus = "#f-exsetup"; render(); return; }
   switch (el.id) {
     case "q-x": case "q-cancel": return cancelQ();
     case "q-review": return submitAnswers();
-    case "q-back": S.q.step = "answers"; S.q.pf = null; S.q.aFail = null; S.focus = "#f-role"; render(); return;
-    case "show-other": { const o = S.tabs.find((x) => x.run && ["running", "notice", "awaitPrompt", "awaitValue", "removing"].includes(x.run.state)); if (o) { S.overlay = null; S.active = o.id; S.focus = "#term"; } else { S.toast = "Switches to the tab whose setup is running."; } render(); return; }
-    case "q-go": S.q.aFail = null; return startPreflight(false, false);
+    case "q-back": S.q.step = "answers"; S.q.pf = null; S.q.aFail = null; S.q.inUse = null; S.focus = "#f-role"; render(); return;
+    case "q-go": S.q.aFail = null; S.q.inUse = null; return startPreflight(false, false);
     case "q-open": return openExisting(false);
     case "more": S.q.more = !S.q.more; S.focus = "#more"; render(); return;
     case "add-secret": addSecret(); S.focus = "#f-secret"; render(); return;
     case "add-repo": addRepo(); S.focus = "#f-repo"; render(); return;
-    case "use-existing": { const p = errors().folder.path; S.q.mode = "existing"; S.q.ex.path = tilde(p); S.q.ex.kind = "hasconf"; S.q.ex.pf = null; S.focus = "#f-ex"; render(); return; }
+    case "use-existing": { const p = errors().folder.path; S.q.mode = "existing"; S.q.ex.path = tilde(p); S.q.ex.kind = "finished"; S.q.ex.pf = null; S.focus = "#f-ex"; render(); return; }
     case "start-new": S.q.mode = "new"; S.focus = "#f-client"; render(); return;
     case "b-fresh": S.sim = { ...SIM0, ...S.sim }; fresh(true); S.focus = "#ch-0"; render(); return;
     case "b-quit": return quit();
@@ -1156,7 +1274,7 @@ document.addEventListener("input", (ev) => {
   const map = { "f-client": "client", "f-owner": "owner", "f-hubname": "hubname", "f-secret": "secretIn", "f-repo": "repoIn" };
   if (map[el.id]) { q[map[el.id]] = el.value; if (el.id === "f-secret") q.secretErr = ""; if (el.id === "f-repo") q.repoErr = ""; announceNewErrors(); render(); return; }
   if (el.id === "f-folder") { q.folder = el.value; q.folderEdited = true; announceNewErrors(); render(); return; }
-  if (el.id === "f-ex") { q.ex.path = el.value; q.ex.kind = null; q.ex.pf = null; clearTimeout(S.exT); S.exT = setTimeout(() => { if (S.q === q && S.overlay === "q") checkExisting(); }, 400); render(); return; }
+  if (el.id === "f-ex") { q.ex.path = el.value; q.ex.kind = null; q.ex.pf = null; q.ex.inUse = null; clearTimeout(S.exT); S.exT = setTimeout(() => { if (S.q === q && S.overlay === "q") checkExisting(); }, 400); render(); return; }
   if (el.id === "pal-in") { S.pal.text = el.value; S.pal.cursor = 0; render(); }
 });
 document.addEventListener("focusout", (ev) => {
@@ -1165,17 +1283,29 @@ document.addEventListener("focusout", (ev) => {
   if (map[el.id] && !S.q.touched[map[el.id]]) { S.q.touched[map[el.id]] = true; setTimeout(() => { announceNewErrors(); render(); }, 0); }
   if (el.id === "f-ex" && !S.q.ex.kind) setTimeout(() => { if (S.overlay === "q" && S.q.mode === "existing") checkExisting(); }, 0);
 });
+// secret_paste_refused: a paste with an inner line break is dropped whole (design 4.5).
+document.addEventListener("paste", (ev) => {
+  const t = S && activeTab(); if (!t || !t.run || ev.target.id !== "term") return;
+  ev.preventDefault();
+  if (t.run.state !== "awaitValue") return;
+  const s = (ev.clipboardData && ev.clipboardData.getData("text")) || "";
+  if (/[\r\n]/.test(s.replace(/(\r\n|\r|\n)$/, ""))) return pasteRefused(t);
+  t.run.typed += s.replace(/[\r\n]+$/, "").length; if (/[\r\n]$/.test(s)) valueEntered(t);
+});
 function announceNewErrors() {
   const e = errors(); const shown = S.q.shownErrs;
   for (const k of Object.keys(e)) { const vis = k === "hubname" ? (slugRequired() || shownErr(k, e)) : shownErr(k, e); const t = txt(errText(e[k])); if (vis && shown[k] !== t) { shown[k] = t; if (k === "hubname" && slugRequired()) say("Hub name is now required."); say(t, "alert"); } if (!vis) delete shown[k]; }
   for (const k of Object.keys(shown)) if (!e[k]) delete shown[k];
 }
-function confirmAnswer(a) {
+function confirmAnswer(a0) { let a = a0;
   const cf = S.confirm; const t = S.tabs.find((x) => x.id === cf.tab); S.confirm = null;
   if (a === "cancel") { S.focus = t && t.notice ? "#notice .acts button" : "#term"; render(); return; }
   if (a === "remove") { startRemoval(t); return; }
   if (a === "removeclose") { closeRemove(t); if (cf.kind === "quit") return relaunch(); S.focus = "#term"; render(); return; }
   if (a === "edit") { startRemoval(t, () => { S.q.step = "answers"; S.q.pf = null; S.overlay = "q"; S.focus = "#f-role"; }); return; }
+  if (a === "batchremove") { cf.tabs.forEach((id) => { const x = S.tabs.find((y) => y.id === id); if (x && runPhase(x) === "making") { closeRemove(x); } }); a = "batchclose"; }
+  if (a === "stopclose") { t.run.state = "stopped"; S.tabs = S.tabs.filter((x) => x.id !== t.id); if (cf.quit) return relaunch(); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); S.focus = "#term"; say("Setup stopped. The hub is kept."); render(); return; }
+  if (a === "batchclose") { if (cf.quit) return relaunch(); cf.tabs.forEach((id) => { const x = S.tabs.find((y) => y.id === id); if (x && x.run) x.run.state = "stopped"; }); S.tabs = S.tabs.filter((x) => !cf.tabs.includes(x.id)); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); S.focus = "#term"; render(); return; }
   if (a === "keep") { stopRun(t, "Stopped. The unfinished hub folder is kept."); S.tabs = S.tabs.filter((x) => x.id !== t.id); if (!S.tabs.length) addPlainTab(false); else S.active = S.tabs[S.tabs.length - 1].id; if (cf.kind === "quit") return relaunch(); render(); }
 }
 function closeRemove(t) {
@@ -1184,9 +1314,8 @@ function closeRemove(t) {
   S.tabs = S.tabs.filter((x) => x.id !== t.id); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); say(`Removed ${tilde(t.folder)}.`); runEnded();
 }
 function quit() {
-  const t = S.tabs.find((x) => x.run && ["running", "notice"].includes(x.run.state) && ["a", "b"].includes((x.run.steps[x.run.i] || {}).k));
-  if (t) { S.active = t.id; closeTab(t.id, true); return; }
-  relaunch();
+  // 9.3 / design 6.5: quit shows one confirm over the making and removing runs; nothing when the only runs are in (c)-(h).
+  return batchClose(S.tabs.map((x) => x.id), true);
 }
 function relaunch() {
   S.tabs.forEach((t) => { if (t.run) t.run.state = "stopped"; });
