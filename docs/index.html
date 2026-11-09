@@ -104,6 +104,20 @@ description: ADE is a desktop terminal where your coding agents work as a team o
       </div>
     </figure>
 
+    <figure class="orx-fig orx-next" id="coming-next">
+      <figcaption>
+        <span class="orx-num">D</span>
+        <div>
+          <span class="compose-label">Coming next &middot; planned, not shipped yet</span>
+          <h3>Agents on DeepSeek, GLM and Meta Muse</h3>
+          <p>Planned for the agent hub template: Claude Code agents that run on other providers through their Anthropic-compatible APIs. Each provider is opt-in per hub, and its API key stays in the macOS Keychain. One session will hand tasks to agents on different providers and models with <code>bin/agent</code>: read-only by default, with every answer returned as untrusted data. Meta Muse support depends on confirming Meta&rsquo;s endpoint.</p>
+        </div>
+      </figcaption>
+      <div class="orx-scroll" tabindex="0" aria-label="Planned provider delegation diagram, scrolls sideways">
+<svg class="orx-svg" viewBox="0 0 1080 330" role="img" aria-labelledby="orx-d-t orx-d-d"><title id="orx-d-t">Planned: one session delegating to agents on other providers</title><desc id="orx-d-d">Planned, not shipped. A Claude Code session on Anthropic hands tasks with bin/agent to three agents, each Claude Code running on another provider through its Anthropic-compatible API: a coder on DeepSeek, a reviewer on GLM from Zhipu z.ai, and a researcher on Meta Muse, which depends on confirming Meta's endpoint. Each provider is opt-in per hub and its API key stays in the macOS Keychain. Agents are read-only by default, and each answer comes back framed as untrusted data.</desc><defs><marker id="mD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="orx-arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs><text class="orx-phase" x="20" y="22" text-anchor="start">PLANNED  ·  NOT SHIPPED YET</text><g class="orx-node orx-node--you"><rect x="20" y="120" width="250" height="90" rx="10"/><text class="orx-t" x="38" y="152">Your session</text><text class="orx-s" x="38" y="172">Claude Code on Anthropic</text><text class="orx-s" x="38" y="190">e.g. Opus, plans the work</text></g><path class="orx-edge" d="M270,165 C330,165 330,75 418,75" marker-end="url(#mD)"/><path class="orx-edge" d="M270,165 L418,165" marker-end="url(#mD)"/><path class="orx-edge" d="M270,165 C330,165 330,255 418,255" marker-end="url(#mD)"/><g class="orx-pill"><rect x="292" y="155" width="84" height="20" rx="10"/><text class="orx-l" x="334" y="169" text-anchor="middle">bin/agent</text></g><g class="orx-node orx-node--ade"><rect x="420" y="40" width="300" height="70" rx="10"/><text class="orx-t" x="438" y="68">Coder · DeepSeek</text><text class="orx-s" x="438" y="88">Claude Code → DeepSeek API</text></g><g class="orx-node orx-node--ade"><rect x="420" y="130" width="300" height="70" rx="10"/><text class="orx-t" x="438" y="158">Reviewer · GLM (Zhipu z.ai)</text><text class="orx-s" x="438" y="178">Claude Code → z.ai API</text></g><g class="orx-node orx-node--tag"><rect x="420" y="220" width="300" height="70" rx="10"/><text class="orx-t" x="438" y="248">Researcher · Meta Muse</text><text class="orx-s" x="438" y="268">pending: Meta's endpoint</text></g><path class="orx-edge orx-edge--dash" d="M720,75 C780,75 780,165 818,165" marker-end="url(#mD)"/><path class="orx-edge orx-edge--dash" d="M720,165 L818,165" marker-end="url(#mD)"/><path class="orx-edge orx-edge--dash" d="M720,255 C780,255 780,165 818,165" marker-end="url(#mD)"/><g class="orx-node"><rect x="820" y="120" width="240" height="90" rx="10"/><text class="orx-t" x="838" y="152">Framed answers</text><text class="orx-s" x="838" y="172">untrusted data, read-only</text><text class="orx-s" x="838" y="190">back to your session</text></g><text class="orx-l" x="570" y="318" text-anchor="middle">each provider opt-in per hub · API keys in the macOS Keychain</text></svg>
+      </div>
+    </figure>
+
     <div class="orx-cards">
       <article class="orx-card">
         <span class="compose-label">In ADE</span>

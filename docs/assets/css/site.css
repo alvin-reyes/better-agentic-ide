@@ -1061,6 +1061,8 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
 .orx-term-bar { fill: var(--term-bg); }
 .orx-term circle { fill: rgba(255, 255, 255, 0.28); }
 .orx-cmd { font: 500 12px var(--mono); fill: #e8e8ec; }
+.orx-next figcaption .compose-label { display: inline-block; margin: 0 0 8px; }
+.orx-next .orx-scroll { border-style: dashed; }
 .orx-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .orx-card {
   min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius);
