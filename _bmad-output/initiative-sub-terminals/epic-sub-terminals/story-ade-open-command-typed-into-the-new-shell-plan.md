@@ -130,7 +130,12 @@ Each criterion is one or more named tests. Write the test first, watch it fail, 
   - **H2.** `e2e_a_shell_that_never_prompts_keeps_the_caller_running_and_exits_5`: the window's new shell is `sh -c 'exec sleep 30'` (T1's never-ready case). After about 5 s the CLI exits 5 with the not-typed message on stderr, no marker is written, and the caller is still live.
   - **H3.** `e2e_a_closed_caller_gets_exit_4_and_opens_nothing`: the caller PTY is killed before the CLI runs. The CLI exits 4 (the 410 row), the window receives no request, and no PTY is created.
 
-**Entry criteria are complete when:** every test named in T1 to T9, H1 to H3 and T7's `cli_guard` tests appears by name in the verification output and passes.
+**T10. The capability line (added 2026-11-09, owner-approved need from the agent hub template).** Once this story's typing works, `ade help` (and `ade-hook help`) prints a line that is exactly `capabilities: command`. It is how a caller (the template's `bin/work`, story W1) tells a build that can type `-- COMMAND` from one that only has story 4, so it never sends a command a build can't type. Before this story, the line is absent; `--split` support (story 8) will add its own token to the same line later (`capabilities: command split`), so callers match the word, not the whole line.
+  - `ade_cli` test `help_lists_the_command_capability`: `help` output contains a line whose words include `command`.
+  - `ade_cli` test `help_capabilities_line_is_one_line`: exactly one line starts with `capabilities:`.
+  - Contract: add the line to `.ade/context/terminal-open.md`'s CLI section.
+
+**Entry criteria are complete when:** every test named in T1 to T10, H1 to H3 and T7's `cli_guard` tests appears by name in the verification output and passes.
 
 ## Test-first order
 
@@ -204,7 +209,7 @@ npm test
 (cd src-tauri && cargo check -p ade-hook)
 ```
 
-Plus: every test named in T1 to T9, H1 to H3 and T7 appears by name in the output and passes. No manual check gates this story.
+Plus: every test named in T1 to T10, H1 to H3 and T7 appears by name in the output and passes. No manual check gates this story.
 
 ## Manual checks (recorded, not gating)
 
