@@ -172,7 +172,7 @@ describe("keyboard and the side panel", () => {
         toggleAgentPicker: noop, togglePreview: noop, toggleBoard: noop, toggleFleet: noop,
         toggleFileBrowser: noop, openOrchestrator: noop, toggleContracts: noop, toggleTokens: noop,
         toggleIntegrations: noop, toggleShortcuts: noop, toggleTabSwitcher: noop,
-        requestCloseTab: noop, requestClosePane: noop, isScratchpadOpen: false,
+        requestCloseTab: noop, requestClosePane: noop, requestCloseView: noop, isScratchpadOpen: false,
       });
       return null;
     }
