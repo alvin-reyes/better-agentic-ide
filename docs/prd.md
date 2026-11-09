@@ -2394,6 +2394,14 @@ clarification for slice 0.
     what is left behind stays until dismissed, and the tab stays as a "Hub removed"
     shell in the home folder, never saved or restored (OB-5 AC4, P3); OB-10 AC2
     names the Claude config folder and says saved workspaces sync (P5).
+  - 2026-11-09: **the owner's further decisions**: a pasted secret value with a
+    line break anywhere but at its end is refused whole, nothing stored and the
+    prompt still waiting (OB-7 AC1, replacing "only its first line"); closing a
+    busy hub tab during (c) to (h) shows only the ordinary "a program is
+    running" confirm, and closing several tabs, a window or the app during the
+    making or removing phase shows one combined confirm (OB-5 AC5); the Keychain
+    service falls back to `hub_name()` (`${HUB_NAME:-<hub folder base name>}`),
+    with its test using `HUB_NAME=acme` (OB-5 AC4).
 
 ### F2.1 Problem
 
@@ -2927,12 +2935,16 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    left behind, the private repo of OB-8 and the secret names stored in this run
    (with `gh repo delete` and, per name,
    `security delete-generic-password -s <service> -a <name>` to remove them by
-   hand, where `<service>` is the hub's Keychain service: the template's
-   `keychain_service` value, or the hub folder's base name when it has none, read
-   before the folder goes to the Trash). The `security` command is shown with a copy
+   hand, where `<service>` is the hub's Keychain service, read before the folder
+   goes to the Trash: the template's `keychain_service` value; when it has none,
+   the template's `hub_name()`, which is `${HUB_NAME:-<hub folder base name>}`.
+   `bin/init` always writes `HUB_NAME`, so for a hub ADE made the fallback is
+   `HUB_NAME`, and the folder's base name applies only when `HUB_NAME` is unset).
+   The `security` command is shown with a copy
    button; ADE never runs it. Test: after Remove on a run that stored one secret name `k`
-   in hub `/x/acme-hub` with no `keychain_service` set, the confirmation shows
-   `security delete-generic-password -s acme-hub -a k` with a copy button, and the
+   in hub `/x/acme-hub` with `HUB_NAME=acme` and no `keychain_service` set, the
+   confirmation shows
+   `security delete-generic-password -s acme -a k` with a copy button, and the
    Keychain entry is still present (ADE ran no `security` command). Tests: a folder with a
    later commit is not offered; a pre-existing folder is never removed; after (g),
    removal runs `bin/schedule uninstall` and no hub job stays loaded; after (f) on
@@ -2967,9 +2979,17 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    - During (a) or (b): ADE asks "Stop setting up and remove <hub folder>?" with
      **Remove** (stops the run and does AC4's removal) and **Keep** (stops the run
      and leaves the unfinished folder). Quitting Better Terminal asks the same.
+     When several tabs, a window or the app are closed while one or more runs
+     are in the making phase ((a) or (b)) or the removing phase (AC4's removal
+     under way), ADE shows **one combined confirm** covering those runs, which
+     satisfies "asks the same"; it does not ask once per run.
      Test: closing during (b), each answer.
    - During (c) to (h): closing stops the run and keeps the hub, as closing any
-     terminal does; nothing asks.
+     terminal does; nothing hub-specific asks (owner, 2026-11-09). Closing one
+     busy hub tab shows Better Terminal's ordinary "a program is running"
+     confirm (Cancel/Close), the same one any busy terminal tab gets, and
+     nothing else. Closing a window, or quitting, when every run is in (c) to
+     (h) asks nothing hub-specific either.
    - **After a restart** (Better Terminal quit, crashed, or the Mac restarted during
      the run), the run never resumes and ADE does not record runs in progress. The
      tab, if restored, is an ordinary hub tab in the folder (OB-14), with no command
@@ -3096,15 +3116,21 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    treats any non-zero exit as that name's failure and offers OB-5 AC3's options
    for it (Retry and Skip for that name, Remove the hub folder, Stop).
    **A secret value is a single line** (owner, 2026-11-09): `bin/secret` reads
-   one line, and the Store notice says so. When a pasted value holds a line
-   break, only its first line reaches `bin/secret`; the rest is discarded and
-   reaches no later step, shell or the persona session. Tests: Skip runs no
+   one line, and the Store notice says so. A pasted value that holds a line
+   break anywhere but at its end is **refused whole** (owner, 2026-11-09):
+   nothing is stored, nothing of it reaches `bin/secret`, and the prompt keeps
+   waiting for the value and says why (the value must be one line). No part of
+   it reaches a later step, the shell or the persona session. A single line
+   break at the end ends the value as usual. Tests: Skip runs no
    `bin/secret` for that name (the fixture records calls); an empty value then
    Skip moves on to the next name; two names, one stored and one skipped, give
    one `OK` and one `MISSING` line from `bin/doctor`; the Store notice says the
-   value is one line; a pasted `abc⏎echo leaked` stores `abc`, and `echo leaked`
-   reaches neither the hub tab's shell (no output, nothing in an isolated
-   `HISTFILE`) nor the stub Claude command's input.
+   value is one line; a pasted `abc⏎echo leaked` stores nothing (no Keychain
+   entry for the name, and the fixture records no `bin/secret` value), the prompt
+   still waits and says why, and `echo leaked` reaches no later step, neither
+   the hub tab's shell (no output, nothing in an isolated `HISTFILE`) nor the
+   stub Claude command's input; a pasted `abc⏎` (one trailing line break) stores
+   `abc`.
 2. The questionnaire has no field that takes a value. Besides `bin/init`'s rule
    (`a-z 0-9 -`), it refuses a "name" that looks like a value: longer than 64
    characters, starting with `sk-` or `glpat-`, or matching `^xox[a-z]-` (Slack's
