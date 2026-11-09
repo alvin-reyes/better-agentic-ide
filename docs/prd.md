@@ -2317,7 +2317,8 @@ clarification for slice 0.
   answered both; revision 3's delta review BLOCKED it on B1, and revision 4 answered
   every finding of it; revision 4's delta review PASSED with six minors (n1 to n6),
   which the owner's approval required folded in, with an explicit allowance for
-  the manual `AGENT_TERMINAL` override (F2.12). Not sharded. Next: the designer
+  the manual `AGENT_TERMINAL` override (F2.12). Amended the same day by the
+  owner's decisions of 2026-11-09 (History, last entry). Not sharded. Next: the designer
   (screens and copy) and the architect (design spec, ADRs and slice plan), F2.11.
 - **Source:** the owner, 2026-11-09: *"in ADE a user can choose to open terminal or set
   up your agentic environment with questions to configure the ai-agent for the
@@ -2382,6 +2383,17 @@ clarification for slice 0.
     step (f) (n4); the refusal adds the "move the claim" way on (n5); OB-12 AC1's
     `capabilities:` line is on stdout (n6), and the developer's `AGENT_TERMINAL`
     override is allowed to open a window on purpose.
+  - 2026-11-09: **the owner's decisions** after approval, partly answering the
+    designer's PRD notes P1 to P5 (UX spec section 15.2): a failed step also
+    offers **Stop** (OB-5 AC3, OB-4 AC6, OB-7 AC1); several runs may go at once in
+    different tabs, but not two on one hub folder (new OB-4 AC7; this relaxes the
+    UX spec's "one setup at a time", P4); the hub folder and checkout paths refuse
+    Cc and Cf characters, and a checkout is a full path or `~/…` (OB-3 AC2); the
+    token-prefix rule drops `ghp` and `gho` and narrows `xox` to `^xox[a-z]-` (OB-7
+    AC2, P1); secret values are single-line (OB-7 AC1, P2); the removal's list of
+    what is left behind stays until dismissed, and the tab stays as a "Hub removed"
+    shell in the home folder, never saved or restored (OB-5 AC4, P3); OB-10 AC2
+    names the Claude config folder and says saved workspaces sync (P5).
 
 ### F2.1 Problem
 
@@ -2636,6 +2648,15 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    - secret names `^[a-z0-9-]+$` (and OB-7 AC2);
    - briefing `^([01][0-9]|2[0-3]):[0-5][0-9]$`;
    - repos `^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$` before an optional `=checkout`;
+   - the hub folder (question 5) and each checkout (question 7's part after `=`):
+     no control or format character (Unicode categories Cc and Cf), the rule F1
+     applies to its folder paths (PE-2 AC1); and a checkout is a full path
+     (starting with `/`) or starts with `~/`, so a relative path (`r`, `./r`,
+     `../r`), a bare `~` and `~user/…` are refused. Where `bin/init` would take
+     such a value, the parity table marks the row as a stricter refusal (OB-5
+     AC7). Tests: a hub folder with U+200B, and a checkout with U+202E or a tab
+     character, are each refused naming the field; checkouts `r`, `./r`, `~` and
+     `~bob/r` are refused; `/x/r` and `~/r` are accepted;
    - remote `user@host[:port]` as `bin/init`'s pattern;
    - work areas `^(projects|ops)/[a-z0-9-]+$`;
    - effort one of `low|medium|high|xhigh|max`;
@@ -2799,7 +2820,7 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      into sh, bash, zsh or fish, it means the same arguments. It is shown only; it
      is never typed.
    - **After the persona session exits**, or when the run ends at a failed step
-     without going on (Keep it, or the failure notice closed without Retry), the
+     without going on (Stop, Keep it, or the failure notice closed without Retry), the
      tab starts the developer's login shell in the hub folder, as a new terminal tab
      does, and stays open. Nothing is re-run.
    Tests: a client and owner of `a!b`, `$(touch /tmp/pwned)`, `` `id` ``,
@@ -2815,6 +2836,28 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    no other file) adds a folder to `PATH`, and a stub `claude` only in that folder,
    step (i) starts the stub, and the stub sees the four `ADE_*` variables set
    (zsh as the login shell).
+7. **Several runs at once, never two on one hub folder** (owner, 2026-11-09).
+   Runs may go at the same time in different tabs (in one window or several),
+   each in its own hub tab, each with its own notices, failure options and undo.
+   A run is **in progress** from the confirmation of its review step until it
+   reaches the persona session (i), ends at a failed step (Stop, Keep it, or the
+   notice closed without Retry), its tab is closed, or its removal (OB-5 AC4)
+   has finished; the persona session does not count. Confirming a review step
+   whose hub folder is the hub folder of a run in progress in another tab is
+   refused inline, before the preflight, naming the folder and saying another tab
+   is setting it up; nothing is written. The same applies to OB-2 AC2's
+   existing-hub option that runs `bin/setup` and `bin/doctor` in that folder.
+   "The same folder" is compared after `~` is expanded, and on a case-insensitive
+   volume names that differ only in case are the same folder. This holds during
+   (a), before the hub folder exists. Two runs that list the same checkout are
+   not refused here; OB-4 AC2's second check (just before (f)) refuses the later
+   one. Tests: two runs to `~/hubs/a` and `~/hubs/b` started together both reach
+   (i), each hub equal to a run made alone; with a run to `~/hubs/a` held at (a)
+   or at (d), a second confirmation to `~/hubs/a`, and to `~/hubs/A` on a
+   case-insensitive volume, is refused and writes nothing; after the first run
+   reaches (i), stops, or is removed, the refusal no longer applies (and OB-2 AC3
+   then decides); two runs listing the same checkout `/x/r`: the first to reach
+   (f) links it, and the other's (f) fails with OB-4 AC2's message.
 
 #### OB-5. Failure and undo (MVP)
 
@@ -2832,11 +2875,21 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    its stderr, and each option does what it says; after Edit answers, a second
    confirm runs (a) again into an empty path.
 3. **(c) to (h) fail:** the hub stays (it is a hub from (b) on, finished from (c) on).
-   ADE names the failed step and offers **Retry this step** and **Remove the hub
-   folder**, and **Skip it** for every step except (c): (c) cannot be skipped,
-   because without it the hub is unfinished (F2.5) and (e) has nothing to push.
-   Test: one failure per step, each option; (c) offers no Skip.
-   - **(d)** works per secret name (OB-7 AC1): Retry and Skip apply to the one name.
+   ADE names the failed step and offers four options: **Retry this step**,
+   **Remove the hub folder** (AC4), **Skip it**, and **Stop**. Skip is offered
+   for every step except (c): (c) cannot be skipped, because without it the hub
+   is unfinished (F2.5) and (e) has nothing to push. **Stop** (owner, 2026-11-09)
+   ends the run there and keeps the hub as it is: no later step runs, nothing is
+   undone or removed, and the tab starts the developer's login shell in the hub
+   folder (OB-4 AC6) and stays a hub tab, for the developer to finish by hand.
+   The run has then ended, so its failure options, Remove included, are not
+   offered again. Tests: one failure per step, each option; (c) offers Retry,
+   Remove and Stop and no Skip; Stop after a failed (f) starts no later step
+   (no `bin/brain`, `bin/doctor` or Claude command is started), leaves the hub
+   folder's files as they were at the failure, and the tab shows a shell prompt
+   in the hub folder, still labelled "Agent hub".
+   - **(d)** works per secret name (OB-7 AC1): Retry and Skip apply to the one
+     name; Stop ends the run, and the names after it are not asked.
    - **(e) retried** does only what is left: it does not create the repo again when
      the first attempt created it (a private repo of the hub's name under the
      developer's account whose URL the hub's `origin` already holds); it then pushes.
@@ -2885,6 +2938,24 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    confirmation lists the hub, work-area and `/x/r` links and this run's `.bak-`
    folder with its restore commands, and nothing in the Claude config folder is
    changed by ADE.
+   - **The list stays.** After the removal, the list of what was done and what is
+     left behind (the private repo, the secret names, and without T4 the links
+     and `.bak-` folders), with its commands, stays visible in the tab until the
+     developer dismisses it.
+   - **The tab after removal** chosen from a failure notice (AC2, AC3) stays
+     open as a **"Hub removed"** tab (owner, 2026-11-09): it starts the
+     developer's login shell in the home folder, since the hub folder is gone.
+     It is no longer a hub tab, and it is never saved or restored: not in the
+     saved session, not in a saved workspace, not brought back by a relaunch or
+     by Reopen Closed Tab, and its scrollback is never saved (it shows the hub's
+     path).
+   Tests (both): after Remove at a failed (f), the tab is labelled "Hub
+   removed" and shows a shell prompt whose working folder is the home folder;
+   the left-behind list and its commands are visible, stay visible after other
+   tabs are used, and are gone once dismissed; the saved session, and a
+   workspace saved while the tab is open, hold no entry for it; after a
+   relaunch, and after closing it and choosing Reopen Closed Tab, no such tab
+   exists.
 5. **Closing the hub tab, or quitting, during the run.**
    - During (a) or (b): ADE asks "Stop setting up and remove <hub folder>?" with
      **Remove** (stops the run and does AC4's removal) and **Keep** (stops the run
@@ -3015,14 +3086,28 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    for that name at all; `bin/doctor` then reports it missing, as today. Store runs
    `bin/secret --set <name>`, whose hidden prompt takes the value in the terminal.
    An empty value there makes `bin/secret` exit 1 ("empty; nothing stored"); ADE
-   treats any non-zero exit as that name's failure and offers Retry or Skip for it
-   (OB-5 AC3). Tests: Skip runs no `bin/secret` for that name (the fixture records
-   calls); an empty value then Skip moves on to the next name; two names, one
-   stored and one skipped, give one `OK` and one `MISSING` line from `bin/doctor`.
+   treats any non-zero exit as that name's failure and offers OB-5 AC3's options
+   for it (Retry and Skip for that name, Remove the hub folder, Stop).
+   **A secret value is a single line** (owner, 2026-11-09): `bin/secret` reads
+   one line, and the Store notice says so. When a pasted value holds a line
+   break, only its first line reaches `bin/secret`; the rest is discarded and
+   reaches no later step, shell or the persona session. Tests: Skip runs no
+   `bin/secret` for that name (the fixture records calls); an empty value then
+   Skip moves on to the next name; two names, one stored and one skipped, give
+   one `OK` and one `MISSING` line from `bin/doctor`; the Store notice says the
+   value is one line; a pasted `abc⏎echo leaked` stores `abc`, and `echo leaked`
+   reaches neither the hub tab's shell (no output, nothing in an isolated
+   `HISTFILE`) nor the stub Claude command's input.
 2. The questionnaire has no field that takes a value. Besides `bin/init`'s rule
    (`a-z 0-9 -`), it refuses a "name" that looks like a value: longer than 64
-   characters, or starting with a known token prefix (`sk-`, `ghp`, `gho`, `glpat-`,
-   `xox`). Test: one case per rule.
+   characters, starting with `sk-` or `glpat-`, or matching `^xox[a-z]-` (Slack's
+   `xoxb-`, `xoxp-` and the like). GitHub's `ghp_` and `gho_` tokens need no
+   prefix rule: their `_` already fails `bin/init`'s rule, with its plainer
+   message. Ordinary names such as `ghost-api-key` and `gholdings-token` are
+   accepted. The stated limit: a name like `xoxo-shop-key` matches `^xox[a-z]-`
+   and is refused. Tests: one case per rule (65 characters, `sk-x`, `glpat-x`,
+   `xoxb-1`); `ghp_abc` is refused by the `a-z 0-9 -` rule, not a prefix rule;
+   `ghost-api-key`, `gholdings-token`, `ghp`, `xox-a` and `sky-key` are accepted.
 3. **G4 test.** A run that stores a marker value through `bin/secret --set` leaves
    that marker in no file under ADE's data folder (state, settings, snapshots,
    session and its scrollback, scratchpad, notes, prompt history, agent tracker,
@@ -3090,8 +3175,15 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    - **The hub folder's path** (which holds the client's name by default) is kept in
      ADE's saved session (`ade-session`), as every tab's folder is, so the tab can be
      restored (owner's answer to Q11), and in a saved workspace that holds the tab
-     (OB-14 AC5). The session stays on this Mac and is pushed to the developer's own
-     sync repo when Settings → Sync is on. The review step says so (OB-3 AC3).
+     (OB-14 AC5). The session and saved workspaces stay on this Mac, and both are
+     pushed to the developer's own sync repo when Settings → Sync is on. The
+     review step says so (OB-3 AC3).
+   - **Claude's config folder** holds the hub's path in a folder name:
+     `~/.claude/projects/<encoded hub path>` (in the Claude config folder as
+     `bin/setup` resolves it; `~/.claude` by default), and one for each work area
+     inside the hub, made by `bin/setup` and Claude Code, not by ADE. Undo (OB-5
+     AC4) removes only `bin/setup`'s links there, so those folders stay after the
+     hub is removed.
    - **Nothing a hub tab shows** is kept: its scrollback is not saved (OB-14 AC1).
    - **The paired phone** (the approved phone piece 2a, watching only) receives, for
      each tab, its title, its project and its agent's state with the state's age,
