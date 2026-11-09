@@ -1,4 +1,4 @@
-import { findAllPanes, type Tab } from "../stores/tabStore";
+import { findAllPanes, ownView, type Tab } from "../stores/tabStore";
 import { baseName } from "../stores/paneMetaStore";
 
 /** Colors offered in a tab's context menu. */
@@ -13,11 +13,28 @@ export const TAB_COLORS = [
 
 export const DEFAULT_NAME = /^Terminal( \d+)?$/;
 
+/**
+ * The pane whose folder is the tab's folder (App's activeCwd, and so project
+ * setup, the board, Fleet's "This terminal" and the context guard; the
+ * palette's BMAD switch and "Set up project"): the own view's active pane,
+ * whatever view is in sight.
+ */
+export function tabFolderPaneId(tab: Tab): string {
+  return ownView(tab).activePaneId;
+}
+
+/** The PTY id of tabFolderPaneId's pane: App's folder poll re-runs when it lands. */
+export function tabFolderPtyId(tab: Tab): number | null {
+  const paneId = tabFolderPaneId(tab);
+  return findAllPanes(ownView(tab).root).find((p) => p.id === paneId)?.ptyId ?? null;
+}
+
 /** The folder a tab's active pane is in, if known. */
 export function tabCwd(tab: Tab, cwds: Record<string, string>): string | null {
   if (tab.type && tab.type !== "terminal") return null;
-  const panes = findAllPanes(tab.root);
-  const pane = panes.find((p) => p.id === tab.activePaneId) ?? panes[0];
+  const own = ownView(tab);
+  const panes = findAllPanes(own.root);
+  const pane = panes.find((p) => p.id === own.activePaneId) ?? panes[0];
   return (pane && (cwds[pane.id] || pane.savedCwd || pane.initialCwd)) || null;
 }
 

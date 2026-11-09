@@ -69,7 +69,7 @@ export const ROLES: Role[] = [
   {
     name: "product-manager",
     title: "Product Manager (PM)",
-    description: "Owns docs/prd.md. Use to turn the owner's intent into a PRD with testable acceptance criteria, or when scope changes.",
+    description: "Owns docs/prd.md and docs/improvements.md. Use to turn the owner's intent into a PRD with testable acceptance criteria, when scope changes, or to evaluate what the product should improve next.",
     body: vendoredBody("product-manager"),
   },
   {

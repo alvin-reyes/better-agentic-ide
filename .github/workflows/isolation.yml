@@ -1,0 +1,23 @@
+name: Isolation
+
+# Dispatch-only stub (F1 story pa, architecture item 4). GitHub dispatches only a
+# workflow whose file is on the default branch, then runs the file as it is on
+# --ref; this stub puts the file on main so story branches can be dispatched.
+# Slice 0 replaces it with the real isolation workflow. It always fails, so a
+# stub run can never count as green. No concurrency group, by design (item 4).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stub:
+    name: Isolation stub (always red)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stub
+        run: |
+          echo "stub"
+          exit 1
