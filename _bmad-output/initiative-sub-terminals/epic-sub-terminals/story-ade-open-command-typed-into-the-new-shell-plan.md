@@ -1,14 +1,19 @@
 ---
 title: "ade open -- COMMAND: typing the command into the new shell"
 ticket: 9
-status: ready-for-dev
+status: in-review
 ---
 
 # Story 9: ade open -- COMMAND: typing the command into the new shell
 
 Ticket 9 in `tickets.toml`, in this folder. It refines the entry of 2026-11-02 for build on 2026-11-09. This file holds the build plan and the acceptance criteria; QA's Verification section is at the end and stays empty until QA runs it.
 
-**Not yet buildable.** The entry's `unknown` holds it blocked until the owner answers two questions (see "Status and blockers"). The criteria below are final for those answers' recommended options.
+**Built; in review (PR #100, branch `st9-typed-command`).** The two questions were answered by the orchestrator's rulings (2026-11-09), recorded here:
+
+- **D9 route:** the three quoter files (`src/lib/shellQuote.ts`, `src/lib/__tests__/shellQuote.test.ts`, `src/lib/__tests__/shellTokenize.ts`) are cherry-picked from `origin/hermes-a-quoting` 8b06ea4. `shellQuote.test.ts`'s one-quoter scan has four exemptions, the call sites `hermes-a-quoting` migrates, each tagged "migrated by hermes-a-quoting"; they go when that branch lands.
+- **Build base:** `main` at 90f4f6f (stories 4a and 4c and `feat/cli-guard` are on it), not the integration branch described under "The build base".
+- **Guide page (entry 8's choice):** the section "Opening terminals from a terminal" is in `docs/guide/terminal.md`, the guide's terminals page (neither `agents.md` nor `index.md`).
+- **Code review (2026-11-09), fixed test-first:** B1 (the guard judges `ade open`'s command in its `--cwd`, ADR 0011's amendment), M1 (the line-editor check also needs ECHO off), M2 (the notice's word skips `VAR=value`), m1 (the shell allowlist at admit, before any token), m3 (Rust types only `typed_line(command)`), m4 (the check classifies outside the PTY table's lock), m5 (a closed view drops its status), m8 (PTY tests end their shells on failure).
 
 ## Goal
 
@@ -231,11 +236,10 @@ These are the spec's V2 and the owner's real-session check. They are recorded in
 
 ## Known uncertainty
 
-- **Owner decision, D9 route:** cherry-pick the quoter (recommended) or wait for `hermes-a-quoting`. The entry's `unknown` stays until the owner answers.
-- **Owner decision, build base:** the integration of `st4c-open-cli` and `feat/cli-guard` (as asked), or wait for #94, #96 and #97 to merge to main. Both are workable; the integration is only a stop-gap.
+- **D9 route and build base:** answered (see the top: cherry-picked from 8b06ea4; base `main` 90f4f6f).
 - The shell's basename on the instance (T3) is a new field; if `create_pty` does not already return the shell path, the Dev adds it at creation and says so.
 - `bash --norc -i` is the harness shell. macOS's `/bin/bash` is 3.2; if its readline behaves differently from the user's shell, the harness is still a valid line-editor test, and M2 and M3 cover the user's own shells.
-- Entry 8's guide page: the Dev picks `agents.md` or `index.md` and says which in the Verification section.
+- Entry 8's guide page: `docs/guide/terminal.md` (see the top).
 
 ## Verification (QA)
 

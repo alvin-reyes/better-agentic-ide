@@ -52,7 +52,13 @@ pub fn basename(p: &str) -> &str {
     p.rsplit('/').next().unwrap_or(p)
 }
 
+/// The folder of `ade open --cwd DIR` when DIR is computed: nothing can be
+/// there, and a read under it asks (`Guard::unknown_dir`).
+pub const UNKNOWN_DIR: &str = "/\u{0}ade open --cwd (computed)";
+
 /// `p` made absolute against `cwd` and normalised without touching the disk.
+/// A relative path never climbs out of [`UNKNOWN_DIR`]: `..` there is
+/// still a folder the guard can't name.
 pub fn abs(cwd: &Path, p: &str) -> PathBuf {
     let joined = if p.starts_with('/') { PathBuf::from(p) } else { cwd.join(p) };
     let mut out = PathBuf::new();
@@ -64,6 +70,9 @@ pub fn abs(cwd: &Path, p: &str) -> PathBuf {
             Component::CurDir => {}
             c => out.push(c),
         }
+    }
+    if !p.starts_with('/') && cwd.starts_with(UNKNOWN_DIR) && !out.starts_with(UNKNOWN_DIR) {
+        return PathBuf::from(UNKNOWN_DIR);
     }
     out
 }
@@ -559,18 +568,62 @@ impl<'c, 'a> Guard<'c, 'a> {
         Out::Unknown
     }
 
-    /// A function's body, classified at this call site with its arguments.
     /// ADE's helper: `open ... -- COMMAND` types COMMAND into a new
-    /// terminal, so COMMAND is classified as a runner's is. Without `--`, and
-    /// for every other verb (`help`, `guard`, the hook), nothing runs.
+    /// terminal, so COMMAND is classified as a runner's is, in the folder the
+    /// new shell starts in: `--cwd` resolved lexically against this scope's
+    /// folder, as `ade_cli::normalise` does, else this folder. A computed
+    /// `--cwd` is a folder the guard can't name ([`UNKNOWN_DIR`]): any read
+    /// relative to it asks. Without `--`, and for every other verb (`help`,
+    /// `guard`, the hook), nothing runs.
     fn ade(&mut self, sc: &mut Scope, args: &[W], run: Run) -> Out {
         let verb = args.first().is_some_and(|v| super::tables::ADE_VERBS.iter().any(|x| v.is(x)));
-        match args.iter().position(|a| a.is("--")) {
-            Some(k) if verb => self.command(sc, &args[k + 1..], In::None, run),
-            _ => Out::Unknown,
+        if !verb {
+            return Out::Unknown;
         }
+        // `open`'s flags, as `ade_cli::parse` reads them: a flag's value is
+        // never the separator (`--name -- -- CMD`).
+        let mut dir: Option<&W> = None;
+        let mut k = 1;
+        let command = loop {
+            let Some(a) = args.get(k) else { return Out::Unknown };
+            if a.computed() {
+                self.trigger(sc, format!("ADE: ade open has a computed argument ({}), so the guard can't tell what it types", a.show()));
+                return Out::Unknown;
+            }
+            match a.text.as_str() {
+                "--" => break &args[k + 1..],
+                "--cwd" => {
+                    dir = args.get(k + 1);
+                    k += 2;
+                }
+                "--name" | "--split" => k += 2,
+                "--focus" => k += 1,
+                // The CLI refuses anything else (usage, exit 2): nothing runs.
+                _ => return Out::Unknown,
+            }
+        };
+        let cwd = match dir {
+            None => sc.cwd.clone(),
+            Some(d) if d.computed() => PathBuf::from(UNKNOWN_DIR),
+            Some(d) => abs(&sc.cwd, &d.text),
+        };
+        let caller = std::mem::replace(&mut sc.cwd, cwd);
+        let out = self.command(sc, command, In::None, run);
+        sc.cwd = caller;
+        out
     }
 
+    /// A read of `path` in the folder of a computed `ade open --cwd`: the
+    /// guard can't see what is there, so it asks. True when it asked.
+    pub fn unknown_dir(&mut self, path: &Path) -> bool {
+        if !path.starts_with(UNKNOWN_DIR) {
+            return false;
+        }
+        self.ask("ADE: this reads a file in the folder ade open's --cwd computes, so the guard can't see what it runs".into());
+        true
+    }
+
+    /// A function's body, classified at this call site with its arguments.
     fn call(&mut self, sc: &mut Scope, name: &str, body: &Cmd, args: &[W], stdin: In) -> Out {
         let key = (name.to_string(), args.iter().map(|a| a.text.clone()).collect::<Vec<_>>());
         if self.calling.iter().any(|c| c == name) || self.memo.contains(&key) {

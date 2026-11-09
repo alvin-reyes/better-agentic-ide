@@ -10,7 +10,7 @@ const AT_PROMPT = "Available once the shell is back at its prompt";
 const NO_LINE_EDITOR = "This shell has no line editor; type the command yourself";
 
 export interface SubTerminalNoticeProps {
-  /** The command's first word: all of it the notice shows (the masked-line rule). */
+  /** The command's word after any leading `VAR=value` (`noticeWord`): all of it the notice shows (the masked-line rule). */
   firstWord: string;
   /** The full quoted line, from memory only, for Insert command. */
   line: string;

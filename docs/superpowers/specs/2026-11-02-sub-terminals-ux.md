@@ -337,8 +337,10 @@ A 28 px bar above the terminal, inside the view, never a modal:
   background, yellow `!`:
   "The command (`npm …`) wasn't typed: <why>." **[Insert command]**
   **[Dismiss]**.
-  - **Masked:** the notice shows only the first word of the command and `…`,
-    never the full line, because an argument may hold a secret the caller's
+  - **Masked:** the notice shows only the command's word and `…`: the name
+    rule's word, the first after any leading `VAR=value` words (for a
+    command of assignments only, the first one's `NAME=…`; never a value).
+    Never the full line, because an argument may hold a secret the caller's
     shell expanded. This is the only place any part of the command is shown
     beyond the name rule above.
   - *Insert command* puts the full quoted line at the prompt **without

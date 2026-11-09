@@ -89,7 +89,7 @@ impl<'c, 'a> Guard<'c, 'a> {
     /// Read a script under the caps and the read budget, then classify it
     /// under the disk-text rule.
     pub fn read_script(&mut self, sc: &mut Scope, path: &Path, args: Vec<W>, how: Exec) -> Out {
-        if self.done() {
+        if self.done() || self.unknown_dir(path) {
             return Out::Unknown;
         }
         let fs = self.ctx.fs;
@@ -163,6 +163,9 @@ impl<'c, 'a> Guard<'c, 'a> {
     pub fn path_command(&mut self, sc: &mut Scope, p: &str, args: &[W], stdin: In, run: Run) -> Out {
         let _ = stdin;
         let path = abs(&sc.cwd, p);
+        if self.unknown_dir(&path) {
+            return Out::Unknown;
+        }
         if let Some(w) = self.writes.get(&path).cloned() {
             return self.run_written(sc, &path, w, args.to_vec(), Exec::Path);
         }
@@ -490,6 +493,9 @@ impl<'c, 'a> Guard<'c, 'a> {
     /// guarded bin. A missing or unreadable one asks only when the command
     /// text names a guarded bin.
     fn read_pkg(&mut self, sc: &Scope, path: &Path) -> Option<(Value, bool)> {
+        if self.unknown_dir(path) {
+            return None;
+        }
         let fd = self.ctx.fs.read(path, PARSE_CAP.min(self.budget));
         let parsed = fd.as_ref().filter(|f| f.len as usize <= f.bytes.len()).and_then(|f| serde_json::from_slice::<Value>(&f.bytes).ok());
         match (fd, parsed) {

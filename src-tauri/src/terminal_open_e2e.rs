@@ -107,6 +107,13 @@ impl Ade {
     }
 }
 
+/// Every shell the test made ends with it, a failing assertion included.
+impl Drop for Ade {
+    fn drop(&mut self) {
+        self.ptys.kill_all_for_test();
+    }
+}
+
 /// `ade open ARGS` from the caller's folder with its variables, and no TTY.
 fn ade_open(args: &[&str], dir: &Path, vars: Vec<(&'static str, String)>) -> (i32, String, String) {
     let args: Vec<OsString> = args.iter().map(OsString::from).collect();
@@ -140,6 +147,26 @@ fn caller_keeps_running(ade: &Ade, caller: u32, dir: &Path) {
     wait_for("the caller to run a line after the open", Duration::from_secs(10), || marker.exists());
 }
 
+/// Review finding m8: an e2e test that fails still ends every shell it made.
+#[test]
+fn e2e_a_failing_test_leaves_no_shell_behind() {
+    let dir = folder("m8");
+    let ptys = {
+        let ade = Ade::start(&BASH, "true");
+        let caller = ade.caller(&dir);
+        let ptys = ade.ptys.clone();
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _ade = ade;
+            panic!("an assertion fails");
+        }));
+        assert!(failed.is_err());
+        assert!(Ptys::facts(&*ptys, caller).is_none(), "the caller's PTY was killed and forgotten");
+        ptys
+    };
+    assert_eq!(ptys.live_for_test(), 0, "no PTY is left");
+    std::fs::remove_dir_all(dir).ok();
+}
+
 #[test]
 fn e2e_open_from_a_caller_adds_types_and_keeps_the_caller_running() {
     let dir = folder("h1");
@@ -163,9 +190,6 @@ fn e2e_open_from_a_caller_adds_types_and_keeps_the_caller_running() {
     wait_for("the typed command's marker", Duration::from_secs(10), || sub.join("smoke-marker").exists());
     assert_eq!(Ptys::opened_count(&*ade.ptys), 1, "the sub-terminal is claimed");
     caller_keeps_running(&ade, caller, &dir);
-    for id in [caller, caller + 1] {
-        ade.ptys.kill_for_test(id);
-    }
     std::fs::remove_dir_all(dir).ok();
 }
 
@@ -185,9 +209,6 @@ fn e2e_a_shell_that_never_prompts_keeps_the_caller_running_and_exits_5() {
     assert!(took >= Duration::from_secs(5) && took < Duration::from_secs(11), "answered at {took:?}");
     assert!(!dir.join("sub/never-marker").exists(), "nothing was typed");
     caller_keeps_running(&ade, caller, &dir);
-    for id in [caller, caller + 1] {
-        ade.ptys.kill_for_test(id);
-    }
     std::fs::remove_dir_all(dir).ok();
 }
 

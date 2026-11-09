@@ -118,6 +118,21 @@ impl PtyManager {
         }
     }
 
+    /// Kill every PTY's shell and forget it: a test's guard, on failure too.
+    #[cfg(test)]
+    pub(crate) fn kill_all_for_test(&self) {
+        let ids: Vec<u32> = self.instances.lock().unwrap().keys().copied().collect();
+        for id in ids {
+            self.kill_for_test(id);
+        }
+    }
+
+    /// How many PTYs the table holds.
+    #[cfg(test)]
+    pub(crate) fn live_for_test(&self) -> usize {
+        self.instances.lock().unwrap().len()
+    }
+
     /// The basename of the shell PTY `id` started; None once it is gone.
     pub(crate) fn shell_name(&self, id: u32) -> Option<String> {
         self.instances.lock().unwrap().get(&id)?.shell.clone()
@@ -139,9 +154,12 @@ impl crate::terminal_open::Ptys for PtyManager {
         PtyManager::opened_count(self)
     }
     fn line_editor_ready(&self, id: u32) -> Option<bool> {
-        let instances = self.instances.lock().unwrap();
-        let instance = instances.get(&id)?;
-        line_editor_ready(instance.master.as_ref(), instance.pid)
+        let facts = {
+            let instances = self.instances.lock().unwrap();
+            let instance = instances.get(&id)?;
+            editor_facts(instance.master.as_ref(), instance.pid)
+        };
+        editor_ready(facts)
     }
     fn type_line(&self, id: u32, line: Vec<u8>) -> bool {
         let instances = self.instances.lock().unwrap();
@@ -368,9 +386,12 @@ fn write_to(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32, data: Vec<u8>
 /// not ready, and the webview's 10 s cap applies.
 #[tauri::command]
 pub fn pty_line_editor_ready(state: tauri::State<'_, PtyManager>, id: u32) -> Option<bool> {
-    let instances = state.instances.lock().unwrap();
-    let instance = instances.get(&id)?;
-    line_editor_ready(instance.master.as_ref(), instance.pid)
+    let facts = {
+        let instances = state.instances.lock().unwrap();
+        let instance = instances.get(&id)?;
+        editor_facts(instance.master.as_ref(), instance.pid)
+    };
+    editor_ready(facts)
 }
 
 /// The basename of the shell PTY `id` started (`zsh`, `dash`...), or None
@@ -380,18 +401,49 @@ pub fn pty_shell_name(state: tauri::State<'_, PtyManager>, id: u32) -> Option<St
     state.shell_name(id)
 }
 
-/// `pty_line_editor_ready` for one master and its shell's pid. portable-pty
-/// makes the shell a session leader, so its pid is its process group. A
-/// nested interactive shell at its prompt (another group, which `classify`
-/// calls a Shell, as the busy check does) counts as the shell in front.
-fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool> {
+/// What the line-editor check judges, read from the master alone (no
+/// process lookup), so callers read it under the instances lock and judge it
+/// with [`editor_ready`] after releasing the lock.
+#[derive(Clone, Copy, Debug, Default)]
+struct EditorFacts {
+    /// `(canonical, echo)` from the terminal's termios; None when unreadable.
+    modes: Option<(bool, bool)>,
+    /// The terminal's foreground process group.
+    fg: Option<i32>,
+    shell: Option<u32>,
+}
+
+fn editor_facts(master: &dyn MasterPty, shell: Option<u32>) -> EditorFacts {
     #[cfg(unix)]
     {
-        let (Some(t), Some(fg), Some(shell)) = (master.get_termios(), master.process_group_leader(), shell) else {
+        let modes = master.get_termios().map(|t| {
+            let t: libc::termios = t.into();
+            (t.c_lflag & libc::ICANON != 0, t.c_lflag & libc::ECHO != 0)
+        });
+        EditorFacts { modes, fg: master.process_group_leader(), shell }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (master, shell);
+        EditorFacts::default()
+    }
+}
+
+/// Whether the facts show a line editor reading: out of canonical mode, ECHO
+/// off, and the shell in front. Readline, ZLE and fish turn ECHO off and echo
+/// what they draw themselves; a start-up `read -n` (bash) or `read -k` (zsh)
+/// leaves canonical mode with ECHO on, so it is not a line editor (review
+/// finding M1). portable-pty makes the shell a session leader, so its pid is
+/// its process group. A nested interactive shell at its prompt (another
+/// group, which `classify` calls a Shell, as the busy check does) counts as
+/// the shell in front.
+fn editor_ready(facts: EditorFacts) -> Option<bool> {
+    #[cfg(unix)]
+    {
+        let (Some((canonical, echo)), Some(fg), Some(shell)) = (facts.modes, facts.fg, facts.shell) else {
             return Some(false);
         };
-        let t: libc::termios = t.into();
-        if t.c_lflag & libc::ICANON != 0 || fg <= 0 {
+        if canonical || echo || fg <= 0 {
             return Some(false);
         }
         let fg = fg as u32;
@@ -399,9 +451,16 @@ fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool>
     }
     #[cfg(not(unix))]
     {
-        let _ = (master, shell);
+        let _ = facts;
         None
     }
+}
+
+/// `pty_line_editor_ready` for one master and its shell's pid, in one step:
+/// for tests, which hold no table lock that matters.
+#[cfg(test)]
+fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool> {
+    editor_ready(editor_facts(master, shell))
 }
 
 #[tauri::command]
@@ -1112,6 +1171,26 @@ mod wiring_tests {
         rest[..rest.find("\n}\n").expect("the command's end")].to_string()
     }
 
+    /// Review finding m4: the line-editor check copies the shell's pid, the
+    /// foreground group and the termios under the instances lock, and
+    /// classifies (sysinfo, through `foreground_job`) after releasing it, so a
+    /// slow process lookup never stalls every other terminal's command.
+    #[test]
+    fn the_line_editor_check_classifies_outside_the_instances_lock() {
+        let source = include_str!("pty.rs").replace("\r\n", "\n");
+        let command = command_body(&source, "pty_line_editor_ready");
+        let start = source.find(concat!("fn line_editor_ready(&self, ", "id: u32)")).expect("Ptys::line_editor_ready");
+        let rest = &source[start..];
+        let ptys = &rest[..rest.find("\n    }\n").unwrap()];
+        for (what, body) in [("pty_line_editor_ready", command.as_str()), ("Ptys::line_editor_ready", ptys)] {
+            let facts = body.find(concat!("editor_facts(", "instance.master.as_ref(), instance.pid)")).unwrap_or_else(|| panic!("{what}: copies the facts under the lock"));
+            let judged = body.find(concat!("editor_ready(", "facts)")).unwrap_or_else(|| panic!("{what}: judges the copied facts"));
+            let released = body[facts..judged].contains("};");
+            assert!(facts < judged && released, "{what}: the lock's block ends before the facts are judged:\n{body}");
+            assert!(!body.contains(concat!("line_editor_ready(", "instance.master")), "{what}: no check under the lock");
+        }
+    }
+
     /// `/open`'s bookkeeping is done by the commands: create_pty records the
     /// window that asked and the request (the claim and the cap read them),
     /// and reattach_pty records the window a tab moved to. The setters are
@@ -1243,13 +1322,13 @@ mod line_editor_tests {
         // Raw with the shell in front: no job control keeps sh's group in the
         // foreground. This must hold on macOS too (CI's backend-macos job):
         // it is what catches tcgetpgrp or tcgetattr failing on the master.
-        let (front, _w2) = spawn(2, &["/bin/sh", "-c", "stty -icanon; sleep 3"]);
+        let (front, _w2) = spawn(2, &["/bin/sh", "-c", "stty -icanon -echo; sleep 3"]);
         instances.lock().unwrap().insert(2, front);
         within("raw with the shell in front reads Some(true)", Duration::from_secs(2), || ready(&instances, 2) == Some(true));
 
         // Raw with a job in front: with job control, sleep is its own
         // foreground group, as zsh runs rc commands.
-        let (behind, _w3) = spawn(3, &["/bin/sh", "-c", "set -m; stty -icanon; sleep 3; :"]);
+        let (behind, _w3) = spawn(3, &["/bin/sh", "-c", "set -m; stty -icanon -echo; sleep 3; :"]);
         instances.lock().unwrap().insert(3, behind);
         within("the job's terminal to go raw", Duration::from_secs(2), || raw(instances.lock().unwrap()[&3].master.as_ref()));
         std::thread::sleep(Duration::from_millis(200));
@@ -1269,6 +1348,37 @@ mod line_editor_tests {
         for id in [1, 2, 3] {
             stop(&instances, id);
         }
+    }
+
+    /// Stops its PTYs when dropped, so a failing assertion leaves no shell behind.
+    struct Stop<'a>(&'a Mutex<HashMap<u32, PtyInstance>>, Vec<u32>);
+
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            for &id in &self.1 {
+                stop(self.0, id);
+            }
+        }
+    }
+
+    /// Review finding M1: a start-up `read -n` (bash) leaves canonical mode
+    /// with the shell in front but keeps ECHO on. Readline, ZLE and fish turn
+    /// ECHO off, so a line editor is out of canonical mode AND not echoing.
+    #[test]
+    fn a_raw_read_with_echo_on_is_not_a_line_editor() {
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        let _stop = Stop(&instances, vec![6, 7]);
+        let (echoing, _w6) = spawn(6, &["/bin/sh", "-c", "stty -icanon echo; sleep 3"]);
+        instances.lock().unwrap().insert(6, echoing);
+        within("the terminal to go raw", Duration::from_secs(2), || raw(instances.lock().unwrap()[&6].master.as_ref()));
+        let until = Instant::now() + Duration::from_millis(500);
+        while Instant::now() < until {
+            assert_eq!(ready(&instances, 6), Some(false), "raw, the shell in front, but echoing: a read, not a line editor");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let (quiet, _w7) = spawn(7, &["/bin/sh", "-c", "stty -icanon -echo; sleep 3"]);
+        instances.lock().unwrap().insert(7, quiet);
+        within("raw and not echoing reads Some(true)", Duration::from_secs(2), || ready(&instances, 7) == Some(true));
     }
 
     #[test]

@@ -501,11 +501,92 @@ mod tests {
     /// `tables::ADE_VERBS` without a row here fails `the_ade_verbs_are_enumerated`.
     const ADE_VERB_ROWS: &[(&str, &str, bool)] = &[("open", "\"$ADE_HOOK_BIN\" open --cwd . -- gh repo delete o/r", true)];
 
+    /// The helper path a session gives: absolute, so `"$ADE_HOOK_BIN"` is a
+    /// path whose basename is `ade-hook` and reaches the guard's `ade` dispatch
+    /// (a bare `ade-hook` would reach the fallback's scan instead).
+    fn hook_bin_env(k: &str) -> Option<String> {
+        (k == "ADE_HOOK_BIN").then(|| "/Applications/ADE.app/Contents/MacOS/ade-hook".to_string())
+    }
+
+    /// `check`, with the session's absolute `ADE_HOOK_BIN`.
+    fn check_bin(fs: &FakeFs, cases: &[(&str, bool)]) {
+        let bad: Vec<String> = cases
+            .iter()
+            .filter_map(|(c, want)| {
+                let v = classify(c, &ctx(fs, &hook_bin_env));
+                (matches!(v, Verdict::Ask(_)) != *want).then(|| format!("{c:?}: want ask={want}, got {v:?}"))
+            })
+            .collect();
+        assert!(bad.is_empty(), "{} of {} cases wrong:\n{}", bad.len(), cases.len(), bad.join("\n"));
+    }
+
+    /// /w (the caller's folder) holds harmless scripts; /o holds scripts of
+    /// the same names that delete a repository.
+    fn two_folders_fs() -> FakeFs {
+        let bad = "#!/bin/sh\ngh repo delete o/r --yes\n";
+        let ok = "#!/bin/sh\necho hi\n";
+        gh_fs().file("/w/x.sh", ok).file("/w/.ade/x.sh", ok).file("/o/x.sh", bad).file("/o/.ade/x.sh", bad)
+    }
+
+    #[test]
+    fn open_judges_the_command_in_the_folder_it_runs_in() {
+        let fs = two_folders_fs();
+        // The control: the same scripts, reached with cd, ask; in /w they don't.
+        check_bin(&fs, &[("cd /o && sh ./x.sh", true), ("sh ./x.sh", false)]);
+        check_bin(
+            &fs,
+            &[
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- . ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd ../o -- sh ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh .ade/x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --name n --focus --cwd /o -- sh ./x.sh", true),
+                ("ade open --cwd /o -- sh ./x.sh", true),
+                // A flag's value that is `--` is not the separator.
+                ("\"$ADE_HOOK_BIN\" open --name -- -- gh repo delete o/r", true),
+                // Without --cwd the new shell starts in the caller's folder.
+                ("\"$ADE_HOOK_BIN\" open -- sh ./x.sh", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /w -- sh ./x.sh", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd . -- . ./x.sh", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh /w/x.sh", false),
+                // The caller's own folder is unchanged after the open.
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- echo hi; sh ./x.sh", false),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_computed_cwd_asks_when_the_command_reads_a_file() {
+        let fs = two_folders_fs();
+        check_bin(
+            &fs,
+            &[
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- . x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$(pwd)/../o\" -- sh x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh -c 'cd .. && sh ./x.sh'", true),
+                // `..` of an unknown folder is unknown too, not the root.
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh ../w/x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh -c 'cd ../w && sh ./x.sh'", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- npm run x", true),
+                // A computed flag: where the command starts is unknown.
+                ("\"$ADE_HOOK_BIN\" open $FLAGS gh repo delete o/r", true),
+                // Nothing read relative to the folder: nothing to ask about.
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- echo hi", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh /w/x.sh", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\"", false),
+            ],
+        );
+    }
+
     #[test]
     fn open_double_dash_gh_repo_delete_asks_as_the_bare_line_does() {
         let fs = gh_fs();
         assert!(asks(&fs, "gh repo delete o/r"), "the bare line asks");
-        check(
+        check_bin(
             &fs,
             &[
                 ("\"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
@@ -522,7 +603,7 @@ mod tests {
 
     #[test]
     fn open_with_name_and_no_double_dash_does_not_ask() {
-        check(
+        check_bin(
             &gh_fs(),
             &[
                 ("\"$ADE_HOOK_BIN\" open --name x", false),
@@ -530,13 +611,17 @@ mod tests {
                 ("\"$ADE_HOOK_BIN\" open --cwd /w --focus", false),
                 ("\"$ADE_HOOK_BIN\" help", false),
                 ("ade open --name gh", false),
+                // Only `open` types its words after `--`: another verb runs nothing.
+                ("\"$ADE_HOOK_BIN\" help -- gh repo delete o/r", false),
+                ("\"$ADE_HOOK_BIN\" guard -- gh repo delete o/r", false),
+                ("\"$ADE_HOOK_BIN\" opener -- gh repo delete o/r", false),
             ],
         );
     }
 
     #[test]
     fn a_line_that_assigns_ade_hook_bin_still_asks() {
-        check(
+        check_bin(
             &gh_fs(),
             &[
                 ("ADE_HOOK_BIN=/x \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
@@ -552,6 +637,7 @@ mod tests {
         for verb in tables::ADE_VERBS {
             let (_, line, want) = ADE_VERB_ROWS.iter().find(|(v, _, _)| v == verb).unwrap_or_else(|| panic!("no test row for the ADE verb {verb}"));
             assert_eq!(asks(&fs, line), *want, "{line}");
+            check_bin(&fs, &[(line, *want)]);
         }
     }
 

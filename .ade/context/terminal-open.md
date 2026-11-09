@@ -139,7 +139,10 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
 - **Threads.** `serve` stays one loop. For `/open` it runs `screen()`, reads
   the body and calls the injected handler's `admit` (the limits) on its own
   thread, then hands the admitted request to a new thread that calls
-  `handle` and answers. `admit` returns an `Admission` whose `Drop` releases
+  `handle` and answers. `admit(caller_pty, body)` refuses a command for a
+  shell outside the allowlist (422) before the running cap and the bucket,
+  so that refusal spends no token; a body it can't parse is `handle`'s to
+  refuse. `admit` returns an `Admission` whose `Drop` releases
   the in-flight slot, so a panic in `handle` or a failed thread spawn (503)
   can't leak it. `admit` reads the running count under its limits lock (a
   finishing request claims its PTY before releasing its slot, so it is
@@ -172,12 +175,15 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
     - it is owned by that window.
     Otherwise the result is `typed:false`.
   - An accepted PTY is marked as made by `/open`, for the cap.
-  - It re-checks `line`: printable ASCII, at most 4096 bytes.
+  - It re-checks `line`: printable ASCII, at most 4096 bytes, and exactly
+    `typed_line(command)` (the window's rule, rebuilt in Rust); a different
+    line is `typed:false`, why "the window's line isn't the command's".
 - **Typing** (`feat/cli-guard`'s PTY layer):
   - Poll `line_editor_ready(master, shell pid)` (the check behind
-    `pty_line_editor_ready`: out of canonical mode, and `tcgetpgrp` is the
-    shell or a nested interactive shell at its prompt, as `classify` judges
-    it) every 50 ms; type after two ready answers in a row. Not ready
+    `pty_line_editor_ready`: out of canonical mode, ECHO off, and
+    `tcgetpgrp` is the shell or a nested interactive shell at its prompt, as
+    `classify` judges it; the facts are copied under the instances lock and
+    judged after releasing it) every 50 ms; type after two ready answers in a row. Not ready
     within 5 s of the window's answer: `typed:false`. Never use `pgrep -P`.
   - Write `line + "\r"` through the PTY's `input` channel (its writer
     thread), never a blocking write.
@@ -240,7 +246,11 @@ type OpenMessage =
 - A shell that fails to start (or a terminal replaced meanwhile) after the
   add: the window closes the view it added (`closeView`) and answers the
   error, so no dead "Failed to start shell" sub-terminal is left.
-- `typed` sets the entry's status.
+- `typed` sets the entry's status (`useOpenStatus`, keyed `tabId/viewId`).
+  The not-typed notice shows `noticeWord(command)`: the command word after
+  any leading `VAR=value` words, or `NAME=…` for assignments only; never a
+  value. An entry is dropped when its view or tab is gone (closeView,
+  closeTab).
 - The line is held in memory only.
 
 ## Store shape (`src/stores/tabStore.ts`)

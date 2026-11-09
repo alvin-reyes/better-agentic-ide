@@ -25,4 +25,11 @@ describe("the guide's terminals page", () => {
       expect(text, word).toContain(word);
     }
   });
+
+  // Review finding M1: the known typing failure a reader can cause.
+  it("the_guide_names_the_echo_off_start_up_prompt", () => {
+    const text = section(page, "Opening terminals from a terminal")!.toLowerCase();
+    expect(text).toContain("read -s");
+    expect(text).toContain("echo off");
+  });
 });

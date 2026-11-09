@@ -300,6 +300,41 @@ describe("typed (T4, T9)", () => {
     expect(openStatusOf(useOpenStatus.getState(), tabId, viewId)?.status).toBe("not-typed");
   });
 
+  // Review finding M2: a leading VAR=value word may hold a secret the caller's
+  // shell expanded, so the notice shows the name rule's command word.
+  it("the notice's word skips leading VAR=value words and never shows a value", async () => {
+    const { d } = deps();
+    await handleOpenMessage(request({ requestId: 8, command: ["TOKEN=s3cret", "A_B=x", "npm", "publish"] }), d);
+    const { tabId, viewId } = sub();
+    await handleOpenMessage({ typed: 8, ok: false, why: "x" }, d);
+    const entry = openStatusOf(useOpenStatus.getState(), tabId, viewId)!;
+    expect(entry.firstWord).toBe("npm");
+    // The full line stays in memory for Insert command.
+    expect(entry.line).toBe(commandLine(["TOKEN=s3cret", "A_B=x", "npm", "publish"]));
+    // Only assignments: the first one's name, never its value.
+    await handleOpenMessage(request({ requestId: 9, command: ["TOKEN=s3cret"] }), d);
+    const only = openStatusOf(useOpenStatus.getState(), "a", tab("a").viewOrder[2])!;
+    expect(only.firstWord).toBe("TOKEN=…");
+    expect(only.firstWord).not.toContain("s3cret");
+  });
+
+  // Review finding m5: a closed sub-terminal's status goes with it.
+  it("closing a sub-terminal or its tab drops its status", async () => {
+    const { d } = deps();
+    await handleOpenMessage(request({ requestId: 10, command: ["ls"] }), d);
+    await handleOpenMessage({ typed: 10, ok: false, why: "x" }, d);
+    const { tabId, viewId } = sub();
+    expect(openStatusOf(useOpenStatus.getState(), tabId, viewId)?.status).toBe("not-typed");
+    useTabStore.getState().closeView(tabId, viewId);
+    expect(openStatusOf(useOpenStatus.getState(), tabId, viewId)).toBeNull();
+    expect(useOpenStatus.getState().byView).toEqual({});
+
+    await handleOpenMessage(request({ requestId: 11, command: ["ls"] }), d);
+    expect(Object.keys(useOpenStatus.getState().byView)).toHaveLength(1);
+    useTabStore.getState().closeTab("a");
+    expect(useOpenStatus.getState().byView).toEqual({});
+  });
+
   it("the_spinner_clears_when_typed_arrives", async () => {
     const { d } = deps();
     await handleOpenMessage(request({ requestId: 5, command: ["ls"] }), d);

@@ -65,7 +65,7 @@ const added = new Map<number, { tabId: string; viewId: string; expiresAt: number
  */
 export interface OpenStatus {
   status: "starting" | "not-typed";
-  /** The command's first word: all the notice shows of it. */
+  /** `noticeWord(command)`: the command word after any `VAR=value`, all the notice shows of it. */
   firstWord: string;
   line: string;
   why: string | null;
@@ -94,6 +94,19 @@ export function clearOpenStatus(tabId: string, viewId: string) {
   setStatus(tabId, viewId, null);
 }
 
+// A view that is gone (closeView, closeTab, a detach) takes its status, and
+// the line held for Insert command, with it (review finding m5).
+useTabStore.subscribe((state) => {
+  const byView = useOpenStatus.getState().byView;
+  const keys = Object.keys(byView);
+  if (keys.length === 0) return;
+  const live = keys.filter((key) => {
+    const cut = key.lastIndexOf("/");
+    return state.tabs.find((t) => t.id === key.slice(0, cut))?.views[key.slice(cut + 1)] !== undefined;
+  });
+  if (live.length !== keys.length) useOpenStatus.setState({ byView: Object.fromEntries(live.map((k) => [k, byView[k]])) });
+});
+
 /** A word typed as it is. Anything else goes through the quoter. */
 const BARE_WORD = /^[\w./-]+$/;
 
@@ -115,6 +128,25 @@ const FORGET_AFTER_MS = 60_000;
  */
 const UNSAFE_NAME_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
 
+/** A leading `VAR=value` word: the shell's assignment before a command. */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/** The command's word: the first after any leading `VAR=value` words. */
+function commandWord(command: string[]): string | undefined {
+  return command.find((w) => !ASSIGNMENT.test(w));
+}
+
+/**
+ * All the not-typed notice shows of a command: the name rule's command word,
+ * or, for a command of assignments only, the first one's `NAME=…`. Never a
+ * value, which may be a secret the caller's shell expanded (review finding M2).
+ */
+export function noticeWord(command: string[]): string {
+  const word = commandWord(command);
+  if (word !== undefined) return word;
+  return `${(command[0] ?? "").split("=")[0]}=…`;
+}
+
 /**
  * A sub-terminal's name: the one given (Rust has checked it); else the
  * command's first word after any leading `VAR=value` words (its basename);
@@ -124,7 +156,7 @@ const UNSAFE_NAME_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
  */
 export function defaultSubTerminalName(name: string | null, command: string[] | null, cwd: string | null): string {
   if (name) return name;
-  const word = (command ?? []).find((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+  const word = commandWord(command ?? []);
   const base = (path: string) => (path.split("/").filter(Boolean).pop() ?? "").replace(UNSAFE_NAME_CHARS, "");
   return (word && base(word)) || (cwd && base(cwd)) || "Terminal";
 }
@@ -179,7 +211,7 @@ async function onRequest(r: OpenRequest, d: OpenDeps): Promise<void> {
   added.set(r.requestId, { tabId: tab.id, viewId, expiresAt: r.expiresAt });
   const line = r.command && r.command.length > 0 ? commandLine(r.command) : null;
   if (r.command && line !== null) {
-    setStatus(tab.id, viewId, { status: "starting", firstWord: r.command[0], line, why: null, paneId: view.activePaneId });
+    setStatus(tab.id, viewId, { status: "starting", firstWord: noticeWord(r.command), line, why: null, paneId: view.activePaneId });
   }
 
   // Created now, headless, at the caller's size: a sub-terminal is usually
