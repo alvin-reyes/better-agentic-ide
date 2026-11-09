@@ -802,6 +802,8 @@ mod tests {
 
     // ---- C3: --cwd ----
 
+    // Unix paths: the CLI is Unix-only for now (ADE answers every open with 422 on Windows).
+    #[cfg(unix)]
     #[test]
     fn cwd_joins_pwd_and_normalises_lexically() {
         assert_eq!(normalise("/a/b", "../x/./y"), "/a/x/y");
