@@ -33,6 +33,11 @@ interface TerminalInstance {
   serializeAddon: SerializeAddon;
   ptyId: number | null;
   wrapper: HTMLDivElement; // the DOM element xterm renders into
+  /**
+   * True while the user's input must not reach the PTY: an `ade open`
+   * sub-terminal whose command isn't typed yet (hotfix 0.23.2).
+   */
+  inputHeld?: () => boolean;
 }
 
 const instances = new Map<string, TerminalInstance>();
@@ -410,14 +415,22 @@ function ptyChannel(paneId: string, term: Terminal): Channel<PtyEvent> {
  * handler. A real key press that answers an agent's prompt is reported to
  * Agent status from here, never from onData: that also carries bytes xterm
  * generates itself (focus, mouse and device reports).
+ *
+ * While `inputHeld()` (an `ade open` sub-terminal whose command isn't typed
+ * yet), the user's input is dropped, so nothing lands in front of the line
+ * ADE types: xterm ignores every key, and text that reaches onData anyway (a
+ * paste, an IME commit) is dropped. xterm's own replies, which start with
+ * ESC, still go through: a starting shell may be waiting for one.
  */
 export function wireInput(inst: TerminalInstance) {
   // Every other key, including plain Ctrl combos, goes to the shell.
   inst.term.attachCustomKeyEventHandler((e) => {
+    if (inst.inputHeld?.()) return false;
     if (inst.ptyId !== null && isAnsweringKey(e)) reportAnsweringKey(inst.ptyId);
     return !isAppShortcut(e);
   });
   inst.term.onData((data) => {
+    if (inst.inputHeld?.() && !data.startsWith("\x1b")) return;
     if (inst.ptyId !== null) writePty(inst.ptyId, data);
   });
   inst.term.onResize(({ cols, rows }) => {
@@ -529,16 +542,18 @@ interface NewInstanceOptions {
   size?: { cols: number; rows: number };
   /** The `ade open` request this terminal is created for. */
   requestId?: number;
+  /** Whether the user's input is held back (see TerminalInstance.inputHeld). */
+  inputHeld?: () => boolean;
 }
 
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, opts: NewInstanceOptions): Promise<TerminalInstance> {
-  const { initialCwd, serializedBuffer, isNewTab = false, container, size, requestId } = opts;
+  const { initialCwd, serializedBuffer, isNewTab = false, container, size, requestId, inputHeld } = opts;
   const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
   if (size && !container) term.resize(size.cols, size.rows);
 
   if (serializedBuffer) term.write(serializedBuffer);
 
-  const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper };
+  const inst: TerminalInstance = { term, fitAddon, searchAddon, serializeAddon, ptyId: null, wrapper, inputHeld };
   instances.set(paneId, inst);
 
   // Seat and fit the terminal before anything is decided from its size.
@@ -596,9 +611,9 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
 export function createSubTerminalInstance(
   paneId: string,
   setPtyId: (paneId: string, ptyId: number) => void,
-  { cwd, size, requestId }: { cwd: string | null; size: { cols: number; rows: number }; requestId: number },
+  { cwd, size, requestId, inputHeld }: { cwd: string | null; size: { cols: number; rows: number }; requestId: number; inputHeld?: () => boolean },
 ): Promise<TerminalInstance> {
-  return createInstance(paneId, setPtyId, { initialCwd: cwd, size, requestId, container: null });
+  return createInstance(paneId, setPtyId, { initialCwd: cwd, size, requestId, inputHeld, container: null });
 }
 
 export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDivElement | null>) {

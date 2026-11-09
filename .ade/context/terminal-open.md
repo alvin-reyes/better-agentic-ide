@@ -253,6 +253,34 @@ type OpenMessage =
   value. An entry is dropped when its view or tab is gone (closeView,
   closeTab).
 - The line is held in memory only.
+- **Input is held while `starting`** (hotfix 0.23.2). `onRequest` passes
+  `inputHeld` (true while the view's status is `starting`) to
+  `createSubTerminal`. It is stored on the `TerminalInstance`, and
+  `wireInput` then drops the user's input to that PTY:
+  - The key handler returns false for every key, so xterm sends no bytes for
+    it. App shortcuts still reach the window.
+  - `onData` drops anything that doesn't start with ESC (a paste or an IME
+    commit).
+  - xterm's own replies (device attributes, cursor reports, focus reports)
+    start with ESC and still go through, because a starting shell (fish 4,
+    some prompts) may be waiting for one.
+  - Input flows again when the status leaves `starting`: on `typed` ok (no
+    entry), on `typed` not ok (`not-typed`, exit 5), or when the view goes
+    (expired, closed).
+  - Why: v0.23.1's `--focus` gave the new terminal the keyboard while its
+    shell started. Keys the owner was typing into another pane reached the
+    new PTY ahead of the line. zsh echoed them in canonical mode (its `%`
+    partial-line mark), kept them as typeahead, and ran `ut abash -l …`.
+  - Dropping was chosen over two other fixes:
+    - Queueing the keys and sending them after the line would hand keys
+      meant for another pane to the launched command, where they could
+      answer one of its prompts.
+    - Delaying the keyboard focus would not help: `--focus` must still show
+      the new sub-terminal at once (everything opens inside ADE), and the
+      pane the user was typing in is then hidden, so its keys have nowhere
+      to go anyway.
+  - The hold lasts at most about 11 s (ADE's answer bound). Until the command
+    is typed, Ctrl+C doesn't reach the new shell either.
 
 ## Store shape (`src/stores/tabStore.ts`)
 
