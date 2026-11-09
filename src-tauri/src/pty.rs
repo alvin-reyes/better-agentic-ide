@@ -22,12 +22,6 @@ pub struct PtyInstance {
     opened_by_open: bool,
 }
 
-impl PtyInstance {
-    fn set_owner(&mut self, owner: &str) {
-        self.owner = Some(owner.to_string());
-    }
-}
-
 pub struct PtyManager {
     instances: Arc<Mutex<HashMap<u32, PtyInstance>>>,
     next_id: AtomicU32,
@@ -38,6 +32,21 @@ impl PtyManager {
         Self {
             instances: Arc::new(Mutex::new(HashMap::new())),
             next_id: AtomicU32::new(1),
+        }
+    }
+
+    /// Adds a new PTY as `create_pty` makes it: shown in window `owner`, made
+    /// for `/open` request `request_id` if any. The claim and the cap read both.
+    pub(crate) fn insert_new(&self, id: u32, mut inst: PtyInstance, owner: &str, request_id: Option<u64>) {
+        inst.owner = Some(owner.to_string());
+        inst.request_id = request_id;
+        self.instances.lock().unwrap().insert(id, inst);
+    }
+
+    /// PTY `id` is now shown in window `owner` (`reattach_pty`).
+    pub(crate) fn set_owner(&self, id: u32, owner: &str) {
+        if let Some(inst) = self.instances.lock().unwrap().get_mut(&id) {
+            inst.owner = Some(owner.to_string());
         }
     }
 
@@ -216,7 +225,7 @@ pub fn create_pty(
     let reader = clone_reader(pair.master.as_ref())?;
     let sink = Arc::new(Mutex::new(Sink::new(channel_out(on_event))));
 
-    let mut instance = PtyInstance {
+    let instance = PtyInstance {
         writer,
         _child: child,
         master: pair.master,
@@ -226,9 +235,7 @@ pub fn create_pty(
         request_id: None,
         opened_by_open: false,
     };
-    instance.set_owner(window.label());
-    instance.request_id = request_id;
-    state.instances.lock().unwrap().insert(id, instance);
+    state.insert_new(id, instance, window.label(), request_id);
 
     // Started after the insert, so a shell that exits at once still finds
     // its entry to remove.
@@ -288,9 +295,7 @@ pub fn reattach_pty(
     id: u32,
     on_event: Channel<PtyEvent>,
 ) -> Result<(), String> {
-    if let Some(inst) = state.instances.lock().unwrap().get_mut(&id) {
-        inst.set_owner(window.label());
-    }
+    state.set_owner(id, window.label());
     attach(&state.instances, &agent, id, channel_out(on_event))
 }
 
@@ -812,10 +817,9 @@ mod tests {
 
         let manager = PtyManager::new();
         let id = reserve_id(&manager.next_id);
-        let mut instance = PtyInstance { writer, _child: child, master: pair.master, pid, sink, owner: None, request_id: None, opened_by_open: false };
-        instance.set_owner("main");
-        instance.request_id = Some(7);
-        manager.instances.lock().unwrap().insert(id, instance);
+        // What create_pty records: the window that asked and the request.
+        let instance = PtyInstance { writer, _child: child, master: pair.master, pid, sink, owner: None, request_id: None, opened_by_open: false };
+        manager.insert_new(id, instance, "main", Some(7));
 
         assert_eq!(manager.facts(id), Some(PtyFacts { owner: Some("main".into()), request_id: Some(7), opened_by_open: false }));
         assert_eq!(manager.next_id(), id + 1, "the id reserve_id hands out next");
@@ -824,14 +828,16 @@ mod tests {
         assert!(manager.facts(id).unwrap().opened_by_open);
         assert_eq!(manager.opened_count(), 1);
 
-        // A tab moved to another window: reattach_pty's setter.
-        manager.instances.lock().unwrap().get_mut(&id).unwrap().set_owner("detached-1");
+        // A tab moved to another window: what reattach_pty records.
+        manager.set_owner(id, "detached-1");
         assert_eq!(manager.facts(id), Some(PtyFacts { owner: Some("detached-1".into()), request_id: Some(7), opened_by_open: true }));
 
         manager.instances.lock().unwrap().remove(&id);
         assert_eq!(manager.facts(id), None, "a gone terminal has no facts");
         assert_eq!(manager.opened_count(), 0, "and no longer counts");
         manager.mark_opened(id);
+        manager.set_owner(id, "main");
+        assert_eq!(manager.facts(id), None, "setting a gone terminal's owner makes nothing");
     }
 }
 
@@ -945,6 +951,28 @@ mod wiring_tests {
         let source = include_str!("pty.rs");
         assert_eq!(source.matches(concat!("try_clone", "_reader(")).count(), 1);
         assert_eq!(source.matches(concat!("thread::", "spawn(")).count(), 1);
+    }
+
+    /// The body of command `name` in this file, up to its closing brace.
+    fn command_body(source: &str, name: &str) -> String {
+        let start = source.find(&format!("pub fn {name}(")).unwrap_or_else(|| panic!("no {name}"));
+        let rest = &source[start..];
+        rest[..rest.find("\n}\n").expect("the command's end")].to_string()
+    }
+
+    /// `/open`'s bookkeeping is done by the commands: create_pty records the
+    /// window that asked and the request (the claim and the cap read them),
+    /// and reattach_pty records the window a tab moved to. The setters are
+    /// tested in `a_terminal_records_its_owner_and_request_id`; this pins
+    /// that the commands call them with their own window and request.
+    #[test]
+    fn the_commands_record_the_owner_and_the_request() {
+        let source = include_str!("pty.rs");
+        let create = command_body(source, "create_pty");
+        assert!(create.contains(concat!("state.insert_new(id, instance, window.label(), ", "request_id)")), "create_pty records owner and request");
+        assert!(!create.contains(concat!(".instances.lock().unwrap().", "insert(")), "and inserts only through insert_new");
+        let reattach = command_body(source, "reattach_pty");
+        assert!(reattach.contains(concat!("state.set_owner(id, ", "window.label())")), "reattach_pty records the new owner");
     }
 
     #[test]

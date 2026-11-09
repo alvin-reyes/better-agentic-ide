@@ -87,8 +87,8 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
 | `cwd` | string, required | absolute, an existing folder |
 | `command` | string[] or null | 1–64 words, each non-empty, bytes `0x20`–`0x7e`; typed line at most 4096 bytes; shell basename one of `sh`, `bash`, `zsh`, `fish`, `dash`, `ksh` |
 | `split` | `"right"`, `"down"` or null | null = a new sub-terminal of the caller's tab |
-| `name` | string or null | 1–64 characters, no control characters; null when `split` is set |
-| `focus` | bool, default false | true = show the new sub-terminal (or pane), focus it, activate its tab |
+| `name` | string or null | 1–64 characters, none of them control (Cc), format (Cf: bidi overrides, zero-width characters, tags) or line/paragraph separators (Zl, Zp); null when `split` is set |
+| `focus` | bool, default false | true = show the new sub-terminal (or pane) and focus it, **only when the caller's tab is the active tab in its window**; otherwise it is added in the background and the answer says `focused:false` |
 
 - Unknown fields or wrong types are 400 `{"error":...}`.
 - On Windows, every `/open` is 422.
@@ -98,7 +98,7 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
 
 | Code | Body | When |
 |---|---|---|
-| 200 | `{"ok":true,"typed":true}` | added; command typed, or none given |
+| 200 | `{"ok":true,"typed":true}` | added; command typed, or none given. With `focus` asked, the body also has `"focused":true` or `"focused":false` (see below) |
 | 200 | `{"ok":true,"typed":false,"why":"..."}` | added; command not typed (the shell's line editor wasn't ready within 5 s of the window's answer, the shell exited first, or the acknowledged PTY failed the claim check) |
 | 400 | `{"error":"..."}` | not JSON, unknown field, wrong type |
 | 409 | `{"error":"..."}` | no open handler yet ("ADE is still starting"); no listener for the caller's window; the window refused (caller pane not found, split from a non-terminal tab, split limit) |
@@ -107,6 +107,14 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
 | 429 | `{"error":"..."}` | caller pane's bucket empty (8, refills 1/s) or 32 running `/open` shells, counting requests in flight |
 | 504 | `{"error":"ADE didn't answer; no terminal was opened"}` | no `terminal_open_done` before `expiresAt` |
 | from `screen()`, 404 | `{}` | as for hook events |
+
+**Focus (owner decision delegated to the developer, 2026-11-09, review
+finding m7; conservative).** A command in a background tab must not take the
+window over. The window honours `--focus` only when the caller's tab is its
+`activeTabId`; otherwise it adds the sub-terminal in the background. It tells
+Rust in `terminal_open_done`'s `focused`, and a request that asked for focus
+gets `"focused": <bool>` in its 200 body (absent when focus wasn't asked). The
+CLI still exits 0 either way.
 
 ADE answers within 11 s (5 s for the window, then at most 5 s for the line
 editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
@@ -119,7 +127,10 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
   thread, then hands the admitted request to a new thread that calls
   `handle` and answers. `admit` returns an `Admission` whose `Drop` releases
   the in-flight slot, so a panic in `handle` or a failed thread spawn (503)
-  can't leak it. Hook events are served meanwhile. The handler is
+  can't leak it. `admit` reads the running count under its limits lock (a
+  finishing request claims its PTY before releasing its slot, so it is
+  counted once), and drops buckets that have refilled. Hook events are
+  served meanwhile. The handler is
   set by `AgentStatus::set_open_handler(Arc<dyn OpenHandler>)` in `.setup()`,
   since `AgentStatus::start` has no `AppHandle` or `PtyManager`.
 
@@ -127,8 +138,14 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
   `reattach_pty` replaces it.
 - `terminal_open_listen({ onEvent: Channel<OpenMessage> })` keeps one
   listener per window label. It is dropped on that window's
-  `WindowEvent::Destroyed`, because a send to a closed window doesn't fail.
-- `terminal_open_done({ requestId, error: string | null, ptyId: number | null, line: string | null })`:
+  `WindowEvent::Destroyed`, because a send to a closed window doesn't fail;
+  the destroy hook is added on a label's first listen only (a reload's listen
+  just replaces the listener). A send that fails forgets the listener (409).
+  A request's pending entry is removed however `handle` ends, a panic
+  included.
+- Both App and DetachedApp call `startTerminalOpen()` on mount; it returns a
+  stop function (DetachedApp's effect cleanup).
+- `terminal_open_done({ requestId, error: string | null, ptyId: number | null, line: string | null, focused: boolean })`:
   - Unknown or late ids are ignored.
   - **The claim check.** At the request, Rust records `floor`, the next PTY
     id (`reserve_id`'s counter). The window passes `requestId` into
@@ -205,6 +222,9 @@ type OpenMessage =
   `line = words.map(w => /^[\w./-]+$/.test(w) ? w : shellQuote(w)).join(" ")`.
   `shellQuote` is from `src/lib/shellQuote.ts` (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`).
 - `expired` closes what it added for that request.
+- A shell that fails to start (or a terminal replaced meanwhile) after the
+  add: the window closes the view it added (`closeView`) and answers the
+  error, so no dead "Failed to start shell" sub-terminal is left.
 - `typed` sets the entry's status.
 - The line is held in memory only.
 
@@ -292,6 +312,9 @@ interface Tab { /* other fields unchanged */ views: Record<string, View>; viewOr
   - `--name`, if given.
   - Else the command's first word, skipping leading `VAR=value` words.
   - Else the folder's basename, else "Terminal".
+  - A derived name (command word or folder) has its Cc, Cf, Zl and Zp
+    characters removed; one left empty falls through to the next rule.
+    `--name` is checked by Rust (422), not cleaned.
   - A name is never the full command line, because names are saved and
     synced.
 - **The session.** `SavedTab.root` stays the own view, so old sessions load

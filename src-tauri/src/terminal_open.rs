@@ -7,7 +7,7 @@
 //! The contract is `.ade/context/terminal-open.md` (ADR 0014).
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -59,8 +59,8 @@ pub fn validate(req: &OpenRequest) -> Result<(), OpenAnswer> {
         if n == 0 || n > MAX_NAME {
             return refuse("a name must be 1 to 64 characters");
         }
-        if name.chars().any(char::is_control) {
-            return refuse("a name can't contain control characters");
+        if !name.chars().all(name_char_ok) {
+            return refuse("a name can't contain control, format or line-separator characters");
         }
     }
     match req.split.as_deref() {
@@ -72,6 +72,41 @@ pub fn validate(req: &OpenRequest) -> Result<(), OpenAnswer> {
         return refuse("a command is not supported yet; open the terminal and type it");
     }
     Ok(())
+}
+
+/// Whether `c` may be in a name: not a control character (Cc), a format
+/// character (Cf: bidi overrides, zero-width characters, tags...), or a line
+/// or paragraph separator (Zl, Zp). Names are shown in the strip and saved.
+pub fn name_char_ok(c: char) -> bool {
+    !(c.is_control() || is_format_or_separator(c))
+}
+
+/// Unicode's Cf (as of Unicode 15.1), Zl and Zp.
+fn is_format_or_separator(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x00AD
+            | 0x0600..=0x0605
+            | 0x061C
+            | 0x06DD
+            | 0x070F
+            | 0x0890..=0x0891
+            | 0x08E2
+            | 0x180E
+            | 0x200B..=0x200F
+            | 0x2028..=0x202E
+            | 0x2060..=0x2064
+            | 0x2066..=0x206F
+            | 0xFEFF
+            | 0xFFF9..=0xFFFB
+            | 0x110BD
+            | 0x110CD
+            | 0x13430..=0x1343F
+            | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A
+            | 0xE0001
+            | 0xE0020..=0xE007F
+    )
 }
 
 /// What Rust knows of a live PTY, for the owner lookup and the claim.
@@ -128,6 +163,11 @@ impl Bucket {
         Bucket { tokens: BUCKET_SIZE, at: now }
     }
 
+    /// Refilled to `BUCKET_SIZE` by `now`.
+    fn full_at(&self, now: Instant) -> bool {
+        self.tokens + now.saturating_duration_since(self.at).as_secs_f64() / REFILL_EVERY.as_secs_f64() >= BUCKET_SIZE
+    }
+
     fn take(&mut self, now: Instant) -> bool {
         let refilled = now.saturating_duration_since(self.at).as_secs_f64() / REFILL_EVERY.as_secs_f64();
         self.tokens = (self.tokens + refilled).min(BUCKET_SIZE);
@@ -173,6 +213,9 @@ pub struct RequestMessage {
 pub struct Done {
     pub error: Option<String>,
     pub pty_id: Option<u32>,
+    /// The window showed and focused the new terminal. It does so for
+    /// `--focus` only when the caller's tab is its active tab.
+    pub focused: bool,
 }
 
 type Listener = Arc<dyn Fn(OpenMessage) -> bool + Send + Sync>;
@@ -188,6 +231,8 @@ pub struct OpenService {
     limits: Arc<Mutex<Limits>>,
     /// One per window label.
     listeners: Mutex<HashMap<String, Listener>>,
+    /// Windows whose destroy already forgets their listener.
+    hooked: Mutex<HashSet<String>>,
     /// Requests waiting for their window's answer.
     pending: Mutex<HashMap<u64, mpsc::Sender<Done>>>,
     next_request: AtomicU64,
@@ -217,6 +262,19 @@ impl Ptys for AppPtys {
     }
 }
 
+/// A request's entry in `pending`, removed when its handling ends.
+struct PendingEntry<'a> {
+    pending: &'a Mutex<HashMap<u64, mpsc::Sender<Done>>>,
+    request_id: u64,
+}
+
+impl Drop for PendingEntry<'_> {
+    fn drop(&mut self) {
+        // A poisoned lock still holds the map.
+        self.pending.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.request_id);
+    }
+}
+
 fn epoch_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
@@ -235,15 +293,25 @@ impl OpenService {
             on_windows,
             limits: Arc::new(Mutex::new(Limits::default())),
             listeners: Mutex::new(HashMap::new()),
+            hooked: Mutex::new(HashSet::new()),
             pending: Mutex::new(HashMap::new()),
             next_request: AtomicU64::new(1),
             claims: Mutex::new(()),
         }
     }
 
-    /// Window `label` listens; a second listen from it replaces the first.
-    pub fn listen(&self, label: &str, sink: Listener) {
+    /// Window `label` listens; a second listen from it (a reload) replaces
+    /// the first. True the first time a window listens: the caller hooks its
+    /// destroy to `window_gone` then, and only then.
+    pub fn listen(&self, label: &str, sink: Listener) -> bool {
         self.listeners.lock().unwrap().insert(label.to_string(), sink);
+        self.hooked.lock().unwrap().insert(label.to_string())
+    }
+
+    /// Window `label` was destroyed.
+    pub fn window_gone(&self, label: &str) {
+        self.hooked.lock().unwrap().remove(label);
+        self.forget_listener(label);
     }
 
     /// Window `label` is gone.
@@ -261,8 +329,9 @@ impl OpenService {
         }
     }
 
-    /// The window's answer, as `/open`'s.
-    fn answer(&self, request_id: u64, floor: u32, window: &str, done: Done) -> OpenAnswer {
+    /// The window's answer, as `/open`'s. With `focus` asked, it says whether
+    /// the window honoured it.
+    fn answer(&self, request_id: u64, floor: u32, window: &str, focus: bool, done: Done) -> OpenAnswer {
         if let Some(error) = done.error {
             return OpenAnswer::error(409, &error);
         }
@@ -277,10 +346,14 @@ impl OpenService {
                 ok
             }
         };
-        match claimed {
-            Ok(()) => OpenAnswer::json(200, serde_json::json!({ "ok": true, "typed": true })),
-            Err(why) => OpenAnswer::json(200, serde_json::json!({ "ok": true, "typed": false, "why": why })),
+        let mut body = match claimed {
+            Ok(()) => serde_json::json!({ "ok": true, "typed": true }),
+            Err(why) => serde_json::json!({ "ok": true, "typed": false, "why": why }),
+        };
+        if focus {
+            body["focused"] = serde_json::Value::Bool(done.focused);
         }
+        OpenAnswer::json(200, body)
     }
 
     #[cfg(test)]
@@ -294,9 +367,14 @@ impl OpenHandler for OpenService {
         if self.on_windows {
             return Err(OpenAnswer::error(422, "ade open isn't available on Windows yet"));
         }
-        let opened = self.ptys.opened_count();
         let now = (self.clock)();
         let mut limits = self.limits.lock().unwrap();
+        // Read under the limits lock: a request finishing meanwhile is
+        // counted once, as running or as in flight (its PTY is claimed
+        // before its slot is released).
+        let opened = self.ptys.opened_count();
+        // A full bucket is the same as none.
+        limits.buckets.retain(|_, bucket| !bucket.full_at(now));
         // The running count first, so a request it refuses spends no token.
         if opened + limits.in_flight >= MAX_RUNNING {
             return Err(OpenAnswer::error(429, "32 terminals opened with ade open are already running; close some first"));
@@ -326,6 +404,8 @@ impl OpenHandler for OpenService {
         let request_id = self.next_request.fetch_add(1, Ordering::Relaxed);
         let (answered, answer) = mpsc::channel();
         self.pending.lock().unwrap().insert(request_id, answered);
+        // Removes the entry however this returns, a panic included.
+        let _waiting = PendingEntry { pending: &self.pending, request_id };
         let request = RequestMessage {
             request_id,
             expires_at: epoch_ms() + self.wait.as_millis() as u64,
@@ -336,8 +416,8 @@ impl OpenHandler for OpenService {
             name: req.name,
             focus: req.focus,
         };
+        let focus = request.focus;
         if !listener(OpenMessage::Request { request }) {
-            self.pending.lock().unwrap().remove(&request_id);
             self.forget_listener(&window);
             return OpenAnswer::error(409, "the ADE window for this terminal has closed");
         }
@@ -350,7 +430,7 @@ impl OpenHandler for OpenService {
             },
         };
         match done {
-            Some(done) => self.answer(request_id, floor, &window, done),
+            Some(done) => self.answer(request_id, floor, &window, focus, done),
             None => {
                 listener(OpenMessage::Expired { expired: request_id });
                 OpenAnswer::error(504, "ADE didn't answer; no terminal was opened")
@@ -366,22 +446,25 @@ impl OpenHandler for OpenService {
 #[tauri::command]
 pub fn terminal_open_listen(window: tauri::WebviewWindow, state: tauri::State<'_, Arc<OpenService>>, on_event: Channel<OpenMessage>) {
     let label = window.label().to_string();
-    state.listen(&label, Arc::new(move |m| on_event.send(m).is_ok()));
+    if !state.listen(&label, Arc::new(move |m| on_event.send(m).is_ok())) {
+        return; // a reload: its window's destroy is already hooked
+    }
     // A send to a closed window doesn't fail, so the listener is dropped here.
     let service = state.inner().clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::Destroyed = event {
-            service.forget_listener(&label);
+            service.window_gone(&label);
         }
     });
 }
 
 /// The window's answer to request `request_id`: the new terminal's PTY, or why
-/// it couldn't. `line` is for typing a command, which is story 9.
+/// it couldn't, and whether it showed and focused it. `line` is for typing a
+/// command, which is story 9.
 #[tauri::command]
-pub fn terminal_open_done(state: tauri::State<'_, Arc<OpenService>>, request_id: u64, error: Option<String>, pty_id: Option<u32>, line: Option<String>) {
+pub fn terminal_open_done(state: tauri::State<'_, Arc<OpenService>>, request_id: u64, error: Option<String>, pty_id: Option<u32>, line: Option<String>, focused: Option<bool>) {
     let _ = line;
-    state.done(request_id, Done { error, pty_id });
+    state.done(request_id, Done { error, pty_id, focused: focused.unwrap_or(false) });
 }
 
 #[cfg(test)]
@@ -563,6 +646,89 @@ mod tests {
         assert_eq!(svc.in_flight(), 0);
     }
 
+    /// A PTY table whose `opened_count` runs `hook` once, after reading the
+    /// count: what another thread does between the read and its use.
+    struct RacyPtys {
+        inner: Arc<FakePtys>,
+        hook: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    }
+
+    impl Ptys for RacyPtys {
+        fn facts(&self, id: u32) -> Option<PtyFacts> {
+            self.inner.facts(id)
+        }
+        fn next_id(&self) -> u32 {
+            self.inner.next_id()
+        }
+        fn mark_opened(&self, id: u32) {
+            self.inner.mark_opened(id)
+        }
+        fn opened_count(&self) -> usize {
+            let n = self.inner.opened_count();
+            let hook = self.hook.lock().unwrap().take();
+            if let Some(hook) = hook {
+                hook();
+            }
+            n
+        }
+    }
+
+    /// 31 running and one in flight: the in-flight request finishes (its PTY
+    /// claimed, then its slot released) between another admit's reading of
+    /// the running count and its check. Read outside the limits lock, the
+    /// stale 31 plus the released slot admitted a 33rd.
+    #[test]
+    fn a_request_finishing_during_admit_cannot_let_a_thirty_third_in() {
+        let fake = FakePtys::new();
+        for _ in 0..31 {
+            let id = fake.create("main", Some(1));
+            fake.mark_opened(id);
+        }
+        let in_flight_pty = fake.create("main", Some(2));
+        let ptys = Arc::new(RacyPtys { inner: fake.clone(), hook: Mutex::new(None) });
+        let (clock, _) = manual_clock();
+        let svc = OpenService::with(ptys.clone(), clock, ANSWER_WITHIN, false);
+        let finishing = svc.admit(9).expect("31 running, one more may start");
+        let marked = fake.clone();
+        *ptys.hook.lock().unwrap() = Some(Box::new(move || {
+            marked.mark_opened(in_flight_pty);
+            let (released, wait) = mpsc::channel();
+            std::thread::spawn(move || {
+                drop(finishing);
+                let _ = released.send(());
+            });
+            // The release waits for the limits lock if admit holds it.
+            let _ = wait.recv_timeout(Duration::from_millis(300));
+        }));
+        let refused = svc.admit(3).err().expect("32 are running: a 33rd is refused");
+        assert_eq!(refused.status, 429);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while svc.in_flight() != 0 {
+            assert!(Instant::now() < deadline, "the finished request's slot was never released");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(fake.opened_count(), 32);
+    }
+
+    #[test]
+    fn full_buckets_are_dropped() {
+        let (clock, offset) = manual_clock();
+        let svc = OpenService::with(FakePtys::new(), clock, ANSWER_WITHIN, false);
+        for _ in 0..8 {
+            drop(svc.admit(3).unwrap());
+        }
+        drop(svc.admit(4).unwrap());
+        *offset.lock().unwrap() = Duration::from_millis(1500);
+        drop(svc.admit(5).unwrap());
+        let mut kept: Vec<u32> = svc.limits.lock().unwrap().buckets.keys().copied().collect();
+        kept.sort();
+        // 4 spent one and has refilled; 3 is still short; 5 just spent one.
+        assert_eq!(kept, vec![3, 5], "a refilled bucket is the same as none");
+        *offset.lock().unwrap() = Duration::from_secs(60);
+        drop(svc.admit(6).unwrap());
+        assert_eq!(svc.limits.lock().unwrap().buckets.keys().copied().collect::<Vec<_>>(), vec![6]);
+    }
+
     // -- A2 and A3: the body ------------------------------------------------
 
     #[test]
@@ -603,6 +769,17 @@ mod tests {
             ("long name", OpenRequest { name: Some("n".repeat(65)), ..req(&dir) }),
             ("control character", OpenRequest { name: Some("a\u{7}b".into()), ..req(&dir) }),
             ("newline", OpenRequest { name: Some("a\nb".into()), ..req(&dir) }),
+            ("C1 control", OpenRequest { name: Some("a\u{85}b".into()), ..req(&dir) }),
+            // Format characters (Cf) and the line and paragraph separators (Zl, Zp).
+            ("right-to-left override", OpenRequest { name: Some("evil\u{202E}gpj.exe".into()), ..req(&dir) }),
+            ("zero-width space", OpenRequest { name: Some("a\u{200B}b".into()), ..req(&dir) }),
+            ("zero-width joiner", OpenRequest { name: Some("a\u{200D}b".into()), ..req(&dir) }),
+            ("byte order mark", OpenRequest { name: Some("\u{FEFF}api".into()), ..req(&dir) }),
+            ("soft hyphen", OpenRequest { name: Some("a\u{AD}b".into()), ..req(&dir) }),
+            ("isolate", OpenRequest { name: Some("a\u{2066}b".into()), ..req(&dir) }),
+            ("tag character", OpenRequest { name: Some("a\u{E0041}b".into()), ..req(&dir) }),
+            ("line separator", OpenRequest { name: Some("a\u{2028}b".into()), ..req(&dir) }),
+            ("paragraph separator", OpenRequest { name: Some("a\u{2029}b".into()), ..req(&dir) }),
         ];
         for (name, r) in cases {
             let refused = validate(&r).err().unwrap_or_else(|| panic!("{name} was accepted"));
@@ -613,6 +790,19 @@ mod tests {
         assert_eq!(validate(&req(&dir)), Ok(()));
         assert_eq!(validate(&OpenRequest { name: Some("n".repeat(64)), ..req(&dir) }), Ok(()), "64 characters");
         assert_eq!(validate(&OpenRequest { name: Some("é".repeat(64)), ..req(&dir) }), Ok(()), "characters, not bytes");
+        for fine in ["api server", "日本語", "🚀 deploy", "a-b_c.d"] {
+            assert_eq!(validate(&OpenRequest { name: Some(fine.into()), ..req(&dir) }), Ok(()), "{fine}");
+        }
+    }
+
+    #[test]
+    fn a_name_character_is_refused_by_its_category() {
+        for c in ['\u{0}', '\u{1f}', '\u{7f}', '\u{9f}', '\u{ad}', '\u{600}', '\u{61c}', '\u{180e}', '\u{200b}', '\u{200f}', '\u{202a}', '\u{202e}', '\u{2028}', '\u{2029}', '\u{2060}', '\u{2064}', '\u{2066}', '\u{206f}', '\u{feff}', '\u{fff9}', '\u{fffb}', '\u{110bd}', '\u{1d173}', '\u{e0001}', '\u{e007f}'] {
+            assert!(!name_char_ok(c), "U+{:04X} is refused", c as u32);
+        }
+        for c in ['a', ' ', '~', '\u{a0}', '\u{e9}', '\u{2010}', '\u{2065}', '\u{2070}', '\u{fffc}', '\u{1f680}', '\u{e0080}'] {
+            assert!(name_char_ok(c), "U+{:04X} is allowed", c as u32);
+        }
     }
 
     #[test]
@@ -685,11 +875,11 @@ mod tests {
         let made = ptys.clone();
         let got = window(&svc, "main", move |svc, r| {
             let pty = made.create("main", Some(r.request_id));
-            svc.done(r.request_id, Done { error: None, pty_id: Some(pty) });
+            svc.done(r.request_id, Done { error: None, pty_id: Some(pty), focused: true });
         });
         let before = epoch_ms();
         let answer = open(&svc, caller, serde_json::json!({ "cwd": folder(), "name": "api", "focus": true }).to_string().into_bytes());
-        assert_eq!((answer.status, answer.body.as_str()), (200, r#"{"ok":true,"typed":true}"#));
+        assert_eq!((answer.status, answer.body.as_str()), (200, r#"{"focused":true,"ok":true,"typed":true}"#));
         let sent = got.lock().unwrap().clone();
         let [OpenMessage::Request { request }] = sent.as_slice() else { panic!("one request: {sent:?}") };
         assert_eq!((request.caller_pty_id, request.cwd.as_str(), request.name.as_deref(), request.focus), (caller, folder().as_str(), Some("api"), true));
@@ -713,7 +903,7 @@ mod tests {
         window(&svc, "main", move |svc, r| {
             // The user's own terminal, not the request's.
             let pty = made.create("main", None);
-            svc.done(r.request_id, Done { error: None, pty_id: Some(pty) });
+            svc.done(r.request_id, Done { error: None, pty_id: Some(pty), ..Default::default() });
         });
         let answer = open(&svc, caller, body(&folder()));
         let v: serde_json::Value = serde_json::from_str(&answer.body).unwrap();
@@ -727,7 +917,7 @@ mod tests {
         let ptys = FakePtys::new();
         let caller = ptys.create("main", None);
         let svc = service(ptys);
-        window(&svc, "main", |svc, r| svc.done(r.request_id, Done { error: Some("the terminal you ran this from isn't here".into()), pty_id: None }));
+        window(&svc, "main", |svc, r| svc.done(r.request_id, Done { error: Some("the terminal you ran this from isn't here".into()), pty_id: None, ..Default::default() }));
         let answer = open(&svc, caller, body(&folder()));
         assert_eq!(answer.status, 409);
         assert_eq!(error_of(&answer), "the terminal you ran this from isn't here");
@@ -772,6 +962,81 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_send_forgets_the_listener_and_the_request() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let svc = service(ptys);
+        let sends = Arc::new(Mutex::new(0));
+        let counted = sends.clone();
+        svc.listen(
+            "main",
+            Arc::new(move |_| {
+                *counted.lock().unwrap() += 1;
+                false
+            }),
+        );
+        let answer = open(&svc, caller, body(&folder()));
+        assert_eq!(answer.status, 409);
+        assert_eq!(error_of(&answer), "the ADE window for this terminal has closed");
+        assert!(svc.pending.lock().unwrap().is_empty(), "the request is not left waiting");
+        assert!(!svc.listeners.lock().unwrap().contains_key("main"), "the listener is forgotten");
+        let again = open(&svc, caller, body(&folder()));
+        assert_eq!(again.status, 409);
+        assert!(error_of(&again).contains("no ADE window is listening"), "{}", again.body);
+        assert_eq!(*sends.lock().unwrap(), 1, "a forgotten listener is not sent to again");
+        assert_eq!(svc.in_flight(), 0);
+    }
+
+    #[test]
+    fn a_panic_while_handling_leaves_no_request_waiting() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let svc = service(ptys);
+        svc.listen("main", Arc::new(|_| panic!("a listener bug")));
+        let handled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| open(&svc, caller, body(&folder()))));
+        assert!(handled.is_err());
+        assert!(svc.pending.lock().unwrap().is_empty(), "the panicked request's entry is removed");
+        assert_eq!(svc.in_flight(), 0);
+    }
+
+    #[test]
+    fn only_a_windows_first_listen_needs_a_destroy_hook() {
+        let svc = service(FakePtys::new());
+        assert!(svc.listen("main", Arc::new(|_| true)), "first listen");
+        assert!(!svc.listen("main", Arc::new(|_| true)), "a reload's listen replaces it; the hook is already there");
+        assert!(svc.listen("detached-1", Arc::new(|_| true)));
+        // A failed send forgets the listener, not the window: still hooked.
+        svc.forget_listener("main");
+        assert!(!svc.listen("main", Arc::new(|_| true)));
+        svc.window_gone("main");
+        assert!(!svc.listeners.lock().unwrap().contains_key("main"));
+        assert!(svc.listen("main", Arc::new(|_| true)), "a new window with the label is hooked again");
+    }
+
+    // -- m7: --focus only from the active tab --------------------------------
+
+    fn answered(focus: bool, focused: bool) -> serde_json::Value {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let svc = service(ptys.clone());
+        let made = ptys.clone();
+        window(&svc, "main", move |svc, r| {
+            let pty = made.create("main", Some(r.request_id));
+            svc.done(r.request_id, Done { error: None, pty_id: Some(pty), focused });
+        });
+        let answer = open(&svc, caller, serde_json::json!({ "cwd": folder(), "focus": focus }).to_string().into_bytes());
+        assert_eq!(answer.status, 200);
+        serde_json::from_str(&answer.body).unwrap()
+    }
+
+    #[test]
+    fn the_answer_says_whether_focus_was_honoured() {
+        assert_eq!(answered(true, true), serde_json::json!({ "ok": true, "typed": true, "focused": true }));
+        assert_eq!(answered(true, false), serde_json::json!({ "ok": true, "typed": true, "focused": false }));
+        assert_eq!(answered(false, false), serde_json::json!({ "ok": true, "typed": true }), "no focus asked: no focused key");
+    }
+
+    #[test]
     fn a_bad_body_opens_nothing() {
         let ptys = FakePtys::new();
         let caller = ptys.create("main", None);
@@ -810,8 +1075,8 @@ mod tests {
             other => panic!("{other:?}"),
         };
         let pty = ptys.create("main", Some(id));
-        svc.done(id, Done { error: None, pty_id: Some(pty) });
-        svc.done(9999, Done { error: None, pty_id: Some(pty) });
+        svc.done(id, Done { error: None, pty_id: Some(pty), ..Default::default() });
+        svc.done(9999, Done { error: None, pty_id: Some(pty), ..Default::default() });
         assert_eq!(ptys.opened_count(), 0, "a late answer claims nothing");
         assert!(svc.pending.lock().unwrap().is_empty());
     }

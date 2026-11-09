@@ -6,6 +6,7 @@ import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { tabFromDetached, type SerializedTab } from "./lib/detachWindow";
 import { SHORTCUTS, matches } from "./lib/shortcuts";
 import { watchAgentStatus } from "./stores/agentStatusStore";
+import { startTerminalOpen } from "./lib/terminalOpen";
 
 interface DetachedAppProps {
   tab: SerializedTab;
@@ -26,6 +27,9 @@ export default function DetachedApp({ tab }: DetachedAppProps) {
 
   // Agent status, so an answering key in this window's terminals counts.
   useEffect(() => watchAgentStatus(), []);
+
+  // `ade open` from this window's terminals.
+  useEffect(() => startTerminalOpen(), []);
 
   useEffect(() => {
     const colors = useSettingsStore.getState().getActiveTheme();
