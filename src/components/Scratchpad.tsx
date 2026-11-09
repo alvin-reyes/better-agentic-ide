@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { useTabStore } from "../stores/tabStore";
 import { isPaneActive } from "../hooks/useTerminal";
-import { writePty } from "../lib/terminalCommands";
+import { PtyStartingError, writePty } from "../lib/terminalCommands";
 import { compactText, estimateTokens, type CompactResult } from "../lib/compactText";
 import { fmtInt } from "../lib/tokenUsage";
 import { lintPrompt } from "../lib/promptLint";
@@ -644,7 +644,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     try {
       await writePty(ptyId, fullText + "\r");
     } catch (err) {
-      console.error("write_pty failed:", err);
+      // A terminal still starting refuses the send with a toast; the text stays.
+      if (!(err instanceof PtyStartingError)) console.error("write_pty failed:", err);
       return;
     }
 
@@ -679,6 +680,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
 
     addToHistory(text.trim());
 
+    let unsent = false;
     for (let i = 0; i < steps.length; i++) {
       if (chainCancelledRef.current) break;
 
@@ -686,6 +688,8 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
       try {
         await writePty(ptyId, steps[i].trim() + "\r");
       } catch {
+        // Nothing was sent (a terminal still starting refuses it): keep the text.
+        if (i === 0) unsent = true;
         break;
       }
 
@@ -712,7 +716,7 @@ const Scratchpad = forwardRef<ScratchpadHandle>((_props, ref) => {
     setChainRunning(false);
     setChainStep(0);
     setChainTotal(0);
-    if (!chainCancelledRef.current) {
+    if (!chainCancelledRef.current && !unsent) {
       setText("");
       flash(setSent);
     }

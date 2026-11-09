@@ -6,7 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { registerFileLinks } from "../lib/terminalFileLinks";
 import { isAppShortcut } from "../lib/shortcuts";
 import { openFileFromTerminal } from "../lib/openFile";
-import { writePty } from "../lib/terminalCommands";
+import { writePtyInput } from "../lib/terminalCommands";
 import { bannerLines, shouldShowBanner } from "../lib/banner";
 import { SearchAddon } from "@xterm/addon-search";
 import { ImageAddon } from "@xterm/addon-image";
@@ -410,6 +410,9 @@ function ptyChannel(paneId: string, term: Terminal): Channel<PtyEvent> {
   return onEvent;
 }
 
+/** How a bracketed paste starts: ESC, but the user's text, not xterm's reply. */
+const BRACKETED_PASTE = "\x1b[200~";
+
 /**
  * Keys and resizes go to the PTY; app shortcuts pass through to the window's
  * handler. A real key press that answers an agent's prompt is reported to
@@ -418,20 +421,26 @@ function ptyChannel(paneId: string, term: Terminal): Channel<PtyEvent> {
  *
  * While `inputHeld()` (an `ade open` sub-terminal whose command isn't typed
  * yet), the user's input is dropped, so nothing lands in front of the line
- * ADE types: xterm ignores every key, and text that reaches onData anyway (a
- * paste, an IME commit) is dropped. xterm's own replies, which start with
- * ESC, still go through: a starting shell may be waiting for one.
+ * ADE types: xterm ignores every key (and the browser's default for it, so
+ * Tab doesn't move focus; app shortcuts are left to the window), and text
+ * that reaches onData anyway (a paste, bracketed or not, an IME commit) is
+ * dropped. xterm's own replies, which start with ESC, still go through: a
+ * starting shell may be waiting for one. App-level writes to the PTY are
+ * refused by `writePty` itself; this writes through `writePtyInput`.
  */
 export function wireInput(inst: TerminalInstance) {
   // Every other key, including plain Ctrl combos, goes to the shell.
   inst.term.attachCustomKeyEventHandler((e) => {
-    if (inst.inputHeld?.()) return false;
+    if (inst.inputHeld?.()) {
+      if (!isAppShortcut(e)) e.preventDefault();
+      return false;
+    }
     if (inst.ptyId !== null && isAnsweringKey(e)) reportAnsweringKey(inst.ptyId);
     return !isAppShortcut(e);
   });
   inst.term.onData((data) => {
-    if (inst.inputHeld?.() && !data.startsWith("\x1b")) return;
-    if (inst.ptyId !== null) writePty(inst.ptyId, data);
+    if (inst.inputHeld?.() && (!data.startsWith("\x1b") || data.startsWith(BRACKETED_PASTE))) return;
+    if (inst.ptyId !== null) writePtyInput(inst.ptyId, data);
   });
   inst.term.onResize(({ cols, rows }) => {
     if (inst.ptyId !== null) invoke("resize_pty", { id: inst.ptyId, rows, cols });

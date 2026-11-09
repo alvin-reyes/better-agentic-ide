@@ -10,6 +10,12 @@ import { join, relative, resolve } from "node:path";
  * With a nonce in the directive, browsers ignore `'unsafe-inline'`, so the
  * element's rules never apply (v0.23.1's sub-terminal strip rendered as plain
  * text). Component CSS goes in a stylesheet Vite bundles, served from 'self'.
+ *
+ * Review finding M2, the root cause: the nonce exists only because of
+ * index.html's inline `<style>`. Without one, `'unsafe-inline'` holds, and the
+ * `<style>` elements libraries create at runtime (xterm 6's scrollbar and DOM
+ * renderer, Monaco, mermaid, cytoscape, pdf.js) apply. So index.html holds no
+ * `<style>` element and no `style` attribute; the splash links its CSS.
  */
 
 const REPO = resolve(__dirname, "../../..");
@@ -24,6 +30,29 @@ function sources(dir: string): string[] {
 }
 
 const read = (rel: string) => readFileSync(resolve(REPO, rel), "utf8");
+
+describe("index.html gives style-src no nonce", () => {
+  const html = read("index.html");
+
+  it("has no <style> element", () => {
+    expect(html).not.toMatch(/<style[\s>]/i);
+  });
+
+  it("has no inline style attribute", () => {
+    expect(html).not.toMatch(/\sstyle\s*=/i);
+  });
+
+  it("links the splash's stylesheet, served from 'self', before any script", () => {
+    const link = html.indexOf('<link rel="stylesheet" href="/splash.css" />');
+    expect(link).toBeGreaterThan(-1);
+    expect(link).toBeLessThan(html.indexOf("</head>"));
+    expect(link).toBeLessThan(html.indexOf("<script"));
+    const css = read("public/splash.css");
+    for (const rule of ["#splash {", "#splash.splash--out { opacity: 0; }", "@keyframes splash-draw", "@media (prefers-reduced-motion: reduce)"]) {
+      expect(css).toContain(rule);
+    }
+  });
+});
 
 describe("no component renders an inline <style> element", () => {
   it("no .tsx under src renders a <style> element", () => {

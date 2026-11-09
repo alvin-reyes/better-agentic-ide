@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { shellQuote } from "./shellQuote";
 import { useTabStore, allTabPanes, viewOfPane } from "../stores/tabStore";
 import { createSubTerminalInstance, getTerminalDimensions } from "../hooks/useTerminal";
+import { holdPtyInput } from "./terminalCommands";
 
 /**
  * The window's half of `ade open` (`.ade/context/terminal-open.md`): Rust
@@ -118,6 +119,14 @@ const BARE_WORD = /^[\w./-]+$/;
 export function commandLine(words: string[]): string {
   return words.map((w) => (BARE_WORD.test(w) ? w : shellQuote(w))).join(" ");
 }
+
+/**
+ * How long after `expiresAt` the window stops holding input if no `typed`
+ * arrives (review finding m1): Rust answers within 5 s of the window's
+ * answer, which comes before `expiresAt`; 1 s more is the margin.
+ */
+const HOLD_RELEASE_AFTER_EXPIRY_MS = 5_000 + 1_000;
+
 /** Entries this long past their expiry can't be expired any more. */
 const FORGET_AFTER_MS = 60_000;
 
@@ -218,12 +227,20 @@ async function onRequest(r: OpenRequest, d: OpenDeps): Promise<void> {
   // this terminal takes the keyboard while its shell starts, and keys meant
   // for another pane would land in front of the typed line (hotfix 0.23.2).
   // Typed or not (`typed`), expired or closed, the status goes and input flows.
-  const inputHeld = () => openStatusOf(useOpenStatus.getState(), tab.id, viewId)?.status === "starting";
+  // If no `typed` ever comes, input flows again after a bounded time.
+  // The terminal's own keys are held by wireInput (inputHeld); every other
+  // write from this window by writePty, which is told the PTY id as it lands.
+  const releaseAt = r.expiresAt + HOLD_RELEASE_AFTER_EXPIRY_MS;
+  const inputHeld = () => d.now() < releaseAt && openStatusOf(useOpenStatus.getState(), tab.id, viewId)?.status === "starting";
+  const setPtyId = (paneId: string, ptyId: number) => {
+    if (inputHeld()) holdPtyInput(ptyId, inputHeld);
+    state.setPtyId(paneId, ptyId);
+  };
 
   // Created now, headless, at the caller's size: a sub-terminal is usually
   // never shown, and a later mount finds this instance.
   const size = d.dimensions(caller.id) ?? FALLBACK_SIZE;
-  const { ptyId } = await d.createSubTerminal(view.activePaneId, state.setPtyId, { cwd: r.cwd, size, requestId: r.requestId, inputHeld });
+  const { ptyId } = await d.createSubTerminal(view.activePaneId, setPtyId, { cwd: r.cwd, size, requestId: r.requestId, inputHeld });
 
   if (!added.has(r.requestId)) {
     // Expired meanwhile: its view is closed, so the terminal goes too.

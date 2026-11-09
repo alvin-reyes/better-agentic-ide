@@ -253,20 +253,41 @@ type OpenMessage =
   value. An entry is dropped when its view or tab is gone (closeView,
   closeTab).
 - The line is held in memory only.
-- **Input is held while `starting`** (hotfix 0.23.2). `onRequest` passes
-  `inputHeld` (true while the view's status is `starting`) to
-  `createSubTerminal`. It is stored on the `TerminalInstance`, and
-  `wireInput` then drops the user's input to that PTY:
-  - The key handler returns false for every key, so xterm sends no bytes for
-    it. App shortcuts still reach the window.
-  - `onData` drops anything that doesn't start with ESC (a paste or an IME
-    commit).
-  - xterm's own replies (device attributes, cursor reports, focus reports)
-    start with ESC and still go through, because a starting shell (fish 4,
-    some prompts) may be waiting for one.
+- **Input is held while `starting`** (hotfix 0.23.2; review B1, M1, m1, m2).
+  `onRequest` builds `inputHeld()`: true while the view's status is
+  `starting` **and** the time is before `expiresAt` + 6 s (Rust answers
+  `typed` within 5 s of the window's answer, plus a 1 s margin; if no `typed`
+  ever comes, the hold releases itself then). It is used in two places:
+  - **The terminal's own input** (`createSubTerminal` stores it on the
+    `TerminalInstance`; `wireInput` applies it). Held:
+    - every key: the key handler returns false (xterm sends no bytes) and
+      calls `preventDefault()`, so Tab and the like don't move DOM focus;
+    - plain text in `onData` (a paste without bracketing, an IME commit);
+    - a bracketed paste: `onData` data starting with `\x1b[200~`.
+  - **App-level writes** (`src/lib/terminalCommands.ts`). The `setPtyId`
+    `onRequest` passes registers `holdPtyInput(ptyId, inputHeld)` before the
+    store sees the PTY id. `writePty` is the one choke point for every app
+    write (the scratchpad's ⌘↵ send and its multi-step send, Send Enter,
+    `sendToActiveTerminal` from Toast, TokensPanel, AntiSlopTab, ContractsPanel
+    and `contractRunner`, Insert command): while `ptyInputHeld(id)` it writes
+    nothing, raises the toast "Not sent" / `PTY_STARTING_MESSAGE` ("This
+    terminal is still starting; try again in a moment") through the
+    `agent-notification` window event, and rejects with `PtyStartingError`.
+    `sendToActiveTerminal` turns that into `false`; the scratchpad keeps its
+    text. A hold whose predicate says no is forgotten.
+  - **What passes:**
+    - xterm's own replies: `onData` data that starts with ESC and isn't a
+      bracketed paste (device attributes, cursor and focus reports), because a
+      starting shell (fish 4, some prompts) may be waiting for one. They go
+      through `writePtyInput`, which only `wireInput` calls and which applies
+      no hold;
+    - app shortcuts: the key handler still returns false for them (xterm
+      ignores them) but doesn't `preventDefault`, so the window's handler runs;
+    - ADE's typed line: Rust writes it through the PTY's `input` channel
+      (`Ptys::type_line`), never through `write_pty` from the window.
   - Input flows again when the status leaves `starting`: on `typed` ok (no
-    entry), on `typed` not ok (`not-typed`, exit 5), or when the view goes
-    (expired, closed).
+    entry), on `typed` not ok (`not-typed`, exit 5), when the view goes
+    (expired, closed), or at `expiresAt` + 6 s.
   - Why: v0.23.1's `--focus` gave the new terminal the keyboard while its
     shell started. Keys the owner was typing into another pane reached the
     new PTY ahead of the line. zsh echoed them in canonical mode (its `%`
@@ -279,8 +300,14 @@ type OpenMessage =
       the new sub-terminal at once (everything opens inside ADE), and the
       pane the user was typing in is then hidden, so its keys have nowhere
       to go anyway.
-  - The hold lasts at most about 11 s (ADE's answer bound). Until the command
-    is typed, Ctrl+C doesn't reach the new shell either.
+  - The hold lasts at most `expiresAt` + 6 s (about 11 s after the request).
+    Until the command is typed, Ctrl+C doesn't reach the new shell either.
+  - **The CSP** (hotfix 0.23.2, review M2). index.html holds no `<style>`
+    element and no `style` attribute (the splash CSS is `public/splash.css`,
+    linked). An inline style there makes Tauri put a nonce in `style-src`,
+    and with a nonce browsers ignore `'unsafe-inline'`, which blocks every
+    `<style>` element made at runtime (xterm 6, Monaco, mermaid, cytoscape,
+    pdf.js). `src/components/__tests__/noInlineStyles.test.ts` checks it.
 
 ## Store shape (`src/stores/tabStore.ts`)
 

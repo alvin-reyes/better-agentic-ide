@@ -78,12 +78,17 @@ vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "0.0.0" }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: async () => {} }));
 
 import { destroyInstance, stopIdlePolling, wireInput } from "../useTerminal";
+import { PTY_STARTING_MESSAGE, sendToActiveTerminal } from "../../lib/terminalCommands";
+import { isAppShortcut } from "../../lib/shortcuts";
 import { handleOpenMessage, useOpenStatus } from "../../lib/terminalOpen";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useTabStore, ownViewOnly, findAllPanes, type Tab } from "../../stores/tabStore";
 
-const keydown = (key: string) =>
-  ({ type: "keydown", key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, isComposing: false }) as KeyboardEvent;
+const keydown = (key: string, mods: Partial<Record<"ctrlKey" | "metaKey" | "altKey" | "shiftKey", boolean>> = {}) => {
+  const e = { type: "keydown", key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, isComposing: false, defaultPrevented: false, ...mods } as unknown as KeyboardEvent & { defaultPrevented: boolean };
+  (e as { preventDefault: () => void }).preventDefault = () => { (e as { defaultPrevented: boolean }).defaultPrevented = true; };
+  return e;
+};
 
 /** The text each write_pty carried, in order. */
 const written = () =>
@@ -133,13 +138,60 @@ describe("a sub-terminal whose command is not yet typed", () => {
     expect(written()).toEqual([]);
   });
 
-  it("still passes xterm's own replies to the shell", async () => {
+  it("still passes xterm's own replies to the shell, and nothing else that starts with ESC", async () => {
     const term = await openStarting(2);
-    // A device-attributes reply and a cursor position report: a starting
-    // shell (fish 4, some prompts) waits for these.
+    // A device-attributes reply, a cursor position report and a focus
+    // report: a starting shell (fish 4, some prompts) waits for these.
     term.data!("\x1b[?1;2c");
     term.data!("\x1b[3;1R");
-    expect(written()).toEqual(["\x1b[?1;2c", "\x1b[3;1R"]);
+    term.data!("\x1b[I");
+    // A bracketed paste starts with ESC too, but it is the user's text.
+    term.data!("\x1b[200~ut a\x1b[201~");
+    expect(written()).toEqual(["\x1b[?1;2c", "\x1b[3;1R", "\x1b[I"]);
+  });
+
+  it("drops a bracketed paste (review finding M1)", async () => {
+    const term = await openStarting(5);
+    term.data!("\x1b[200~rm -rf build\r\x1b[201~");
+    expect(written()).toEqual([]);
+  });
+
+  it("stops the browser's default for the keys it drops, so Tab doesn't move focus (m2)", async () => {
+    const term = await openStarting(6);
+    const tab = keydown("Tab");
+    expect(term.key!(tab)).toBe(false);
+    expect(tab.defaultPrevented).toBe(true);
+    const letter = keydown("u");
+    term.key!(letter);
+    expect(letter.defaultPrevented).toBe(true);
+  });
+
+  it("leaves app shortcuts to the window (no preventDefault)", async () => {
+    const term = await openStarting(7);
+    // Whatever the platform: the first of these the app claims (a new tab).
+    const claimed = [keydown("t", { metaKey: true }), keydown("T", { ctrlKey: true, shiftKey: true }), keydown("t", { ctrlKey: true, shiftKey: true })].find((e) => isAppShortcut(e))!;
+    expect(claimed).toBeDefined();
+    expect(term.key!(claimed)).toBe(false);
+    expect(claimed.defaultPrevented).toBe(false);
+  });
+
+  it("refuses app-level writes too: sendToActiveTerminal writes nothing, then goes through once typed (B1)", async () => {
+    const toasts: string[] = [];
+    const onToast = (e: Event) => toasts.push((e as CustomEvent).detail.body);
+    window.addEventListener("agent-notification", onToast);
+    try {
+      await openStarting(8);
+      // --focus from the tab in sight: the new sub-terminal is the active PTY.
+      expect(useTabStore.getState().getActivePtyId()).toBe(41);
+      expect(await sendToActiveTerminal("ls", true)).toBe(false);
+      expect(written()).toEqual([]);
+      expect(toasts).toEqual([PTY_STARTING_MESSAGE]);
+      await handleOpenMessage({ typed: 8, ok: true, why: null });
+      expect(await sendToActiveTerminal("ls", true)).toBe(true);
+      expect(written()).toEqual(["ls\r"]);
+    } finally {
+      window.removeEventListener("agent-notification", onToast);
+    }
   });
 
   it("takes input again once the command is typed", async () => {

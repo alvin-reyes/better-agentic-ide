@@ -13,6 +13,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke, Channel: class { onme
 
 import { handleOpenMessage, defaultSubTerminalName, startTerminalOpen, commandLine, openStatusOf, useOpenStatus, type OpenDeps, type OpenMessage } from "../terminalOpen";
 import { shellQuote } from "../shellQuote";
+import { ptyInputHeld } from "../terminalCommands";
 import { tokenizeFish, tokenizePosix, REAL_SHELLS, shellAvailable, runShell } from "./shellTokenize";
 import { useTabStore, ownViewOnly, OWN_VIEW, type Tab, type PaneNode } from "../../stores/tabStore";
 
@@ -410,5 +411,45 @@ describe("input is held while the command is not yet typed", () => {
     const { d, created } = deps();
     await handleOpenMessage(request({ requestId: 25 }), d);
     expect(created[0].opts.inputHeld()).toBe(false);
+  });
+
+  it("holds the window's writes to its PTY too (writePty), from the moment the PTY id lands (B1)", async () => {
+    let start: (ptyId: number) => void = () => {};
+    let heldWhenSet: boolean | null = null;
+    const { d } = deps({
+      createSubTerminal: async (paneId, setPtyId) => {
+        const ptyId = await new Promise<number>((resolve) => { start = resolve; });
+        setPtyId(paneId, ptyId);
+        // Before anything else runs: the store has the id, so the hold must too.
+        heldWhenSet = ptyInputHeld(ptyId);
+        return { ptyId };
+      },
+    });
+    const handled = handleOpenMessage(request({ requestId: 26, command: ["ls"] }), d);
+    start(46);
+    await handled;
+    expect(heldWhenSet).toBe(true);
+    expect(ptyInputHeld(46)).toBe(true);
+    await handleOpenMessage({ typed: 26, ok: true, why: null }, d);
+    expect(ptyInputHeld(46)).toBe(false);
+  });
+
+  it("never holds the PTY of a sub-terminal opened without a command", async () => {
+    const { d } = deps({}, 47);
+    await handleOpenMessage(request({ requestId: 27 }), d);
+    expect(ptyInputHeld(47)).toBe(false);
+  });
+
+  it("releases itself if typed never arrives: expiresAt + 5 s + a 1 s margin (m1)", async () => {
+    let now = 1_000;
+    const { d, created } = deps({ now: () => now }, 48);
+    // expiresAt is 6_000: Rust answers typed within 5 s of the window's answer.
+    await handleOpenMessage(request({ requestId: 28, command: ["ls"] }), d);
+    now = 11_999;
+    expect(created[0].opts.inputHeld()).toBe(true);
+    expect(ptyInputHeld(48)).toBe(true);
+    now = 12_000;
+    expect(created[0].opts.inputHeld()).toBe(false);
+    expect(ptyInputHeld(48)).toBe(false);
   });
 });

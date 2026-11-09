@@ -1,19 +1,75 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useTabStore, allTabPanes, shownView } from "../stores/tabStore";
 
-/** Send text to a PTY as if typed. */
+/** What a refused write tells the user (a toast). */
+export const PTY_STARTING_MESSAGE = "This terminal is still starting; try again in a moment";
+
+/** `writePty`'s rejection for a PTY whose input is held. */
+export class PtyStartingError extends Error {
+  constructor() {
+    super(PTY_STARTING_MESSAGE);
+    this.name = "PtyStartingError";
+  }
+}
+
+/**
+ * PTYs whose input is held (hotfix 0.23.2): an `ade open` sub-terminal whose
+ * command isn't typed yet. `terminalOpen` registers one as its PTY id lands;
+ * the predicate says whether it is still held, and once it says no the entry
+ * is forgotten.
+ */
+const holds = new Map<number, () => boolean>();
+
+/** Hold the window's writes to PTY `id` while `held()` is true. */
+export function holdPtyInput(id: number, held: () => boolean) {
+  holds.set(id, held);
+}
+
+/** Whether the window's writes to PTY `id` are held now. */
+export function ptyInputHeld(id: number): boolean {
+  const held = holds.get(id);
+  if (!held) return false;
+  if (held()) return true;
+  holds.delete(id);
+  return false;
+}
+
+/**
+ * Send text to a PTY as if typed. Every app-level write goes through here.
+ * A write to a PTY whose input is held (`ptyInputHeld`) is refused: nothing
+ * is written, a toast says so, and the promise rejects with
+ * `PtyStartingError`, so the caller keeps what it was sending.
+ */
 export function writePty(id: number, text: string): Promise<void> {
+  if (ptyInputHeld(id)) {
+    window.dispatchEvent(new CustomEvent("agent-notification", { detail: { title: "Not sent", body: PTY_STARTING_MESSAGE } }));
+    return Promise.reject(new PtyStartingError());
+  }
+  return writePtyInput(id, text);
+}
+
+/**
+ * Write a terminal's own input (xterm's onData) to its PTY. Only `wireInput`
+ * calls this: it applies the hold itself, letting xterm's replies through.
+ */
+export function writePtyInput(id: number, text: string): Promise<void> {
   return invoke("write_pty", { id, data: Array.from(new TextEncoder().encode(text)) });
 }
 
 /**
  * Put a command in the active terminal. With `run`, press Enter too;
- * otherwise it's left on the prompt for you to review and edit.
+ * otherwise it's left on the prompt for you to review and edit. False when
+ * there is no active terminal, or it is still starting (`writePty`).
  */
 export async function sendToActiveTerminal(command: string, run: boolean): Promise<boolean> {
   const ptyId = useTabStore.getState().getActivePtyId();
   if (ptyId === null) return false;
-  await writePty(ptyId, command + (run ? "\r" : ""));
+  try {
+    await writePty(ptyId, command + (run ? "\r" : ""));
+  } catch (err) {
+    if (err instanceof PtyStartingError) return false;
+    throw err;
+  }
   return true;
 }
 
