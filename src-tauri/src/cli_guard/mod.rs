@@ -123,6 +123,18 @@ pub struct Guard<'c, 'a> {
     pub calling: Vec<String>,
     pub script_depth: usize,
     pub gh_config: Option<Option<String>>,
+    /// Every name the texts parsed so far may assign, and how many times
+    /// (see [`resolve::Scope::assigned`]).
+    pub assigned: std::collections::HashMap<String, usize>,
+    /// A text parsed so far may assign names the pre-pass can't read.
+    pub disq: bool,
+    /// The functions the texts parsed so far define.
+    pub defined: std::collections::HashSet<String>,
+    /// How many texts have parsed so far.
+    pub parsed: usize,
+    /// The `for ((…))` counters seen, and whether their text is strict:
+    /// checked once every text is read ([`trace`]).
+    pub counters: Vec<(String, bool)>,
 }
 
 impl<'c, 'a> Guard<'c, 'a> {
@@ -143,6 +155,11 @@ impl<'c, 'a> Guard<'c, 'a> {
             calling: Vec::new(),
             script_depth: 0,
             gh_config: None,
+            assigned: Default::default(),
+            disq: false,
+            defined: Default::default(),
+            parsed: 0,
+            counters: Vec::new(),
         }
     }
     pub fn done(&self) -> bool {
@@ -175,7 +192,14 @@ pub fn trace(command: &str, ctx: &Ctx) -> (Verdict, Vec<String>) {
     }
     let mut g = Guard::new(ctx);
     g.line_names = tables::names_guarded(command.as_bytes());
-    g.run_text(command, true, ctx.cwd.clone(), None);
+    g.run_text(command, true, ctx.cwd.clone());
+    // A `for ((…))` counter assigned anywhere else, or one the shell sets
+    // by itself, may hold code.
+    for (c, strict) in std::mem::take(&mut g.counters) {
+        if strict && !g.done() && (g.disq || g.assigned.get(&c) != Some(&1) || !resolve::plain_counter(&c)) {
+            g.ask(format!("ADE: the for loop's counter {c} is assigned elsewhere or set by the shell itself, and the shell evaluates it as code"));
+        }
+    }
     (g.asked.map_or(Verdict::NoDecision, Verdict::Ask), g.seen)
 }
 
@@ -401,7 +425,9 @@ pub(crate) mod corpus {
             format!("echo $({c})"),
             format!("echo `{c}`"),
             format!("! {c}"),
-            format!("f() {{ gh \"$@\"; }}; f {rest}"),
+            // A function is followed at its call site (its arguments are
+            // never resolved: ADR 0011 amendment 5).
+            format!("f() {{ {c}; }}; f"),
             format!("find . -maxdepth 0 -exec {c} \\;"),
             format!("parallel {c} ::: 1"),
             format!("git -c alias.x='!{c}' x"),
@@ -493,6 +519,956 @@ mod tests {
     #[test]
     fn gh_hand_corpus() {
         check(&gh_fs(), GH_HAND);
+    }
+
+    // ---- Story 9, T7: `"$ADE_HOOK_BIN" open -- COMMAND` (ADR 0011 amendment) ----
+
+    /// One row per ADE verb: what the guard does with it. A verb added to
+    /// `tables::ADE_VERBS` without a row here fails `the_ade_verbs_are_enumerated`.
+    const ADE_VERB_ROWS: &[(&str, &str, bool)] = &[("open", "\"$ADE_HOOK_BIN\" open --cwd . -- gh repo delete o/r", true)];
+
+    /// The helper path a session gives: absolute, so `"$ADE_HOOK_BIN"` is a
+    /// path whose basename is `ade-hook` and reaches the guard's `ade` dispatch
+    /// (a bare `ade-hook` would reach the fallback's scan instead).
+    fn hook_bin_env(k: &str) -> Option<String> {
+        (k == "ADE_HOOK_BIN").then(|| "/Applications/ADE.app/Contents/MacOS/ade-hook".to_string())
+    }
+
+    /// `check`, with the session's absolute `ADE_HOOK_BIN`.
+    fn check_bin(fs: &FakeFs, cases: &[(&str, bool)]) {
+        let bad: Vec<String> = cases
+            .iter()
+            .filter_map(|(c, want)| {
+                let v = classify(c, &ctx(fs, &hook_bin_env));
+                (matches!(v, Verdict::Ask(_)) != *want).then(|| format!("{c:?}: want ask={want}, got {v:?}"))
+            })
+            .collect();
+        assert!(bad.is_empty(), "{} of {} cases wrong:\n{}", bad.len(), cases.len(), bad.join("\n"));
+    }
+
+    /// /w (the caller's folder) holds harmless scripts; /o holds scripts of
+    /// the same names that delete a repository.
+    fn two_folders_fs() -> FakeFs {
+        let bad = "#!/bin/sh\ngh repo delete o/r --yes\n";
+        let ok = "#!/bin/sh\necho hi\n";
+        gh_fs().file("/w/x.sh", ok).file("/w/.ade/x.sh", ok).file("/o/x.sh", bad).file("/o/.ade/x.sh", bad)
+    }
+
+    #[test]
+    fn open_judges_the_command_in_the_folder_it_runs_in() {
+        let fs = two_folders_fs();
+        // The control: the same scripts, reached with cd, ask; in /w they don't.
+        check_bin(&fs, &[("cd /o && sh ./x.sh", true), ("sh ./x.sh", false)]);
+        check_bin(
+            &fs,
+            &[
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- . ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd ../o -- sh ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh .ade/x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --name n --focus --cwd /o -- sh ./x.sh", true),
+                ("ade open --cwd /o -- sh ./x.sh", true),
+                // A flag's value that is `--` is not the separator.
+                ("\"$ADE_HOOK_BIN\" open --name -- -- gh repo delete o/r", true),
+                // Without --cwd the new shell starts in the caller's folder.
+                ("\"$ADE_HOOK_BIN\" open -- sh ./x.sh", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /w -- sh ./x.sh", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd . -- . ./x.sh", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- sh /w/x.sh", false),
+                // The caller's own folder is unchanged after the open.
+                ("\"$ADE_HOOK_BIN\" open --cwd /o -- echo hi; sh ./x.sh", false),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_computed_cwd_asks_when_the_command_reads_a_file() {
+        let fs = two_folders_fs();
+        check_bin(
+            &fs,
+            &[
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- ./x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- . x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$(pwd)/../o\" -- sh x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh -c 'cd .. && sh ./x.sh'", true),
+                // `..` of an unknown folder is unknown too, not the root.
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh ../w/x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh -c 'cd ../w && sh ./x.sh'", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- npm run x", true),
+                // A computed flag: where the command starts is unknown.
+                ("\"$ADE_HOOK_BIN\" open $FLAGS gh repo delete o/r", true),
+                // Amendment 5: a computed --cwd asks whatever the command.
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- echo hi", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- sh /w/x.sh", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"$D\"", true),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_flag_value_or_verb_that_may_split_asks() {
+        // Re-review N1: an unquoted expansion or a glob in a value slot may
+        // split into `x -- CMD`, and the CLI then types CMD.
+        check_bin(
+            &gh_fs(),
+            &[
+                ("X='a -- gh repo delete o/r'; \"$ADE_HOOK_BIN\" open --name $X", true),
+                ("\"$ADE_HOOK_BIN\" open --name $X", true),
+                ("\"$ADE_HOOK_BIN\" open --split $X", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd $X", true),
+                ("\"$ADE_HOOK_BIN\" open --name $(cat f)", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd $X -- echo hi", true),
+                ("\"$ADE_HOOK_BIN\" open --name a* -- echo hi", true),
+                // A computed verb word, and a glob where a flag goes (a file
+                // named `--` would make it the separator).
+                ("\"$ADE_HOOK_BIN\" $X", true),
+                ("\"$ADE_HOOK_BIN\" open -* gh repo delete o/r", true),
+                // M1: a glob verb (`op?n` matches a file named `open`).
+                ("\"$ADE_HOOK_BIN\" op?n -- gh repo delete o/r", true),
+                // B1: a quoted expansion that can still be several words.
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"x$@\"; }; f a -- gh repo delete o/r", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${a[@]}\"", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${(@)a}\"", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"$a[@]\"", true),
+                ("\"$ADE_HOOK_BIN\" open --name \"$@\"", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"${@:2}\"", true),
+                ("\"$ADE_HOOK_BIN\" open --split \"${(f)X}\"", true),
+                // Re-check 3: only a plain scalar (`$x`, `${x}`, `$1`, `${10}`)
+                // is one word the guard can be sure of. Any operator, nesting,
+                // `!`, `#`, subscript or zsh flag may split.
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${1+\"$@\"}\"; }; f x -- gh repo delete o/r", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${1+$@}\"; }; f x -- gh repo delete o/r", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${x:-$@}\"; }; f x -- gh repo delete o/r", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${x-\"$@\"}\"; }; f x -- gh repo delete o/r", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${x:-${a[@]}}\"", true),
+                ("x=1; a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${x:+${a[@]}}\"", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${x-\"${a[@]}\"}\"", true),
+                ("a=(x -- gh repo delete o/r); x='a[@]'; \"$ADE_HOOK_BIN\" open --name \"${!x}\"", true),
+                ("f() { x=@; \"$ADE_HOOK_BIN\" open --name \"${!x}\"; }; f x -- gh repo delete o/r", true),
+                ("\"$ADE_HOOK_BIN\" open --name \"${#a[@]}\"", true),
+                // A subscript joins with IFS: conservatively, it may split.
+                ("\"$ADE_HOOK_BIN\" open --name \"${a[*]}\"", true),
+                // zsh's `"$a[1,4]"` is a slice of `$a`, not `$a` then `[1,4]`.
+                ("a=openX; \"$ADE_HOOK_BIN\" \"$a[1,4]\" -- gh repo delete o/r", true),
+                // B2: `"$*"` joins with IFS's first character, not a space.
+                ("IFS=; f() { \"$ADE_HOOK_BIN\" open \"$*\" gh repo delete o/r; }; f - -", true),
+                ("IFS=; f() { \"$ADE_HOOK_BIN\" \"$*\" -- gh repo delete o/r; }; f op en", true),
+                ("IFS=; f() { \"$*\" repo delete o/r; }; f g h", true),
+                ("f() { \"$ADE_HOOK_BIN\" \"$*\" -- gh repo delete o/r; }; f op en", true),
+                // IFS set on the line splits an unquoted value the guard knows.
+                ("IFS=/; X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r", true),
+                ("y=IFS; : ${!y:=/}; X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r", true),
+                ("IFS=/; eval 'X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r'", true),
+                // An unquoted `$@` splits each argument again and drops empty ones.
+                ("f() { \"$ADE_HOOK_BIN\" $@; }; f 'open -- gh repo delete o/r'", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name $@ -- gh repo delete o/r; }; f '' x", true),
+                // Amendment 5: quoted, one word, still computed: it asks.
+                ("\"$ADE_HOOK_BIN\" open --name \"$X\"", true),
+                ("\"$ADE_HOOK_BIN\" open --name \"${X}\"", true),
+                ("\"$ADE_HOOK_BIN\" open --split \"$X\" --cwd \"$D\"", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"x$@\"; }; f a", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"$1\" --split \"${10}\"; }; f a", true),
+                ("\"$ADE_HOOK_BIN\" open --name \"$*\"", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"$*\"; }; f a b", true),
+                ("\"$ADE_HOOK_BIN\" open --name \"$a[1]\"", true),
+                // Literal values stay quiet.
+                ("\"$ADE_HOOK_BIN\" open --name x --split down --cwd /w", false),
+            ],
+        );
+    }
+
+    /// Re-check 4 (owner, 2026-11-09): the pre-pass fails closed. A command
+    /// it can't name (computed, a glob, a wrapper with a computed target)
+    /// or a builtin that may assign in ways it can't follow stops all
+    /// variable resolution and opens IFS; an assignment builtin, plain or
+    /// through `builtin`/`command`, makes the names it assigns unknown.
+    #[test]
+    fn the_prepass_fails_closed_on_what_it_cant_name() {
+        let tail = "X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r";
+        let mut rows: Vec<(String, bool)> = [
+            "builtin printf -v IFS /",
+            "command printf -v IFS /",
+            "command -p printf -v IFS /",
+            "builtin read IFS <<< /",
+            "command read IFS <<< /",
+            "builtin export IFS=/",
+            "builtin declare IFS=/",
+            "builtin eval IFS=/",
+            "command eval IFS=/",
+            "trap IFS=/ DEBUG",
+            "p=printf; $p -v IFS /",
+            "${p} -v IFS /",
+            "$(echo printf) -v IFS /",
+            "print?f -v IFS /",
+            "builtin $p -v IFS /",
+            "command $p -v IFS /",
+            "noglob printf -v IFS /",
+            "builtin typeset IFS=/",
+            "builtin local IFS=/",
+            "builtin readonly IFS=/",
+            "builtin let IFS=1",
+            "builtin mapfile IFS <<< /",
+            "builtin readarray IFS <<< /",
+            "vared IFS",
+            "getln IFS",
+            "zparseopts -a IFS x",
+            "o=-v; printf $o IFS /",
+            "exec 3>&1; source ./f",
+            "fc -s x",
+            // zsh: `read NAME?prompt` assigns NAME.
+            "read 'IFS?p' <<< /",
+            "integer IFS=1",
+            "print -v IFS /",
+            "print -rv IFS /",
+            "print -C 3 -v IFS /",
+            "coproc IFS { cat; }",
+            "S=printf; $S -v IFS /",
+            "S=builtin; $S printf -v IFS /",
+            "E=; $E printf -v IFS /",
+            "p=printf; \"$p\" -v IFS /",
+            "p=printf; builtin $p -v IFS /",
+            "n=IFS; printf -v $n /",
+            "p=eval; $p IFS=/",
+            "p=trap; $p IFS=/ DEBUG",
+            "p=printf; command \"$p\" -v IFS /",
+            "n=IFS; read $n <<< /",
+            "printf -vIFS /",
+            "stat -A IFS /x",
+            "nocorrect printf -v IFS /",
+            "- printf -v IFS /",
+            "ADE_HOOK_BIN=printf; \"$ADE_HOOK_BIN\" -v IFS /",
+            "setopt shwordsplit",
+            "emulate sh",
+            "unsetopt x",
+            "set -o shwordsplit",
+            "set -y",
+        ]
+        .iter()
+        .map(|p| (format!("{p}; {tail}"), true))
+        .collect();
+        let more: &[(&str, bool)] = &[
+            ("builtin printf -v IFS /; f() { \"$ADE_HOOK_BIN\" $1 repo delete o/r; }; f open/--/gh", true),
+            ("builtin printf -v IFS /; X=gh/repo/delete; $X o/r", true),
+            ("X=echo; builtin eval X=gh; $X repo delete o/r", true),
+            ("X=echo; command printf -v X gh; $X repo delete o/r", true),
+            ("X=echo; builtin read X <<< gh; $X repo delete o/r", true),
+            ("X=echo; trap X=gh DEBUG; $X repo delete o/r", true),
+            ("X=echo; builtin export X=gh; $X repo delete o/r", true),
+            ("X=echo; wait -p X; $X repo delete o/r", true),
+            ("X=echo; IFS=/; S=builtin/printf; $S -v X gh; \"$X\" repo delete o/r", true),
+            ("X=echo; S='builtin printf'; $S -v X gh; \"$X\" repo delete o/r", true),
+            // `exec CMD` disqualifies (nothing after it runs anyway).
+            ("X=open; exec echo; \"$ADE_HOOK_BIN\" $X --name x", true),
+            ("exec 2>&1; \"$ADE_HOOK_BIN\" open --name x", false),
+            // Through a wrapper, even a plain export's value is unknown.
+            ("builtin export X=open; \"$ADE_HOOK_BIN\" $X --name x", true),
+            ("X=a/gh; sh <<E\n$X:t repo delete o/r\nE", true),
+            // Positional parameters a function body may reset.
+            ("f() { shift; \"$ADE_HOOK_BIN\" \"$1\" -- gh repo delete o/r; }; f x open", true),
+            ("f() { set -- open; \"$ADE_HOOK_BIN\" \"$1\" -- gh repo delete o/r; }; f x", true),
+            ("f() { eval 'set -- open'; \"$ADE_HOOK_BIN\" \"$1\" -- gh repo delete o/r; }; f x", true),
+            // zsh `$=X`, `$~X`, `$^X` split, quoted or not.
+            ("X=\"$(printf 'a -- gh repo delete o/r')\"; \"$ADE_HOOK_BIN\" open --name $=X", true),
+            ("f() { \"$ADE_HOOK_BIN\" open --name $=1; }; f 'a -- gh repo delete o/r'", true),
+            ("X='gh repo delete o/r'; $=X", true),
+            ("X='gh repo delete o/r'; $~X", true),
+            ("X='gh repo delete o/r'; $^X", true),
+            ("X='gh repo delete o/r'; \"$=X\"", true),
+            ("X='a -- gh repo delete o/r'; \"$ADE_HOOK_BIN\" open --name ${=X}", true),
+            ("X='a -- gh repo delete o/r'; \"$ADE_HOOK_BIN\" open --name \"${=X}\"", true),
+            ("X='a -- gh repo delete o/r'; \"$ADE_HOOK_BIN\" open --name ${~X}", true),
+            ("X='a -- gh repo delete o/r'; \"$ADE_HOOK_BIN\" open --name ${^X}", true),
+            // zsh modifiers: `$X:t` is computed text.
+            ("X=a/--; \"$ADE_HOOK_BIN\" open \"$X:t\" gh repo delete o/r", true),
+            ("X=a/--; \"$ADE_HOOK_BIN\" open $X:t gh repo delete o/r", true),
+            ("X=a/open; \"$ADE_HOOK_BIN\" \"$X:t\" -- gh repo delete o/r", true),
+            ("f() { \"$ADE_HOOK_BIN\" open \"$1:t\" gh repo delete o/r; }; f a/--", true),
+            ("X=a/gh; $X:t repo delete o/r", true),
+            ("X=a/gh; Y=$X:t; $Y repo delete o/r", true),
+            // zsh `${x::=v}` assigns unconditionally.
+            ("setopt shwordsplit; : ${IFS::=/}; X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r", true),
+            (": ${IFS::=/}; X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r", true),
+            // Mutation pins: each fails if its condition is dropped.
+            ("eval IFS=/; f() { \"$ADE_HOOK_BIN\" $1 repo delete o/r; }; f open/--/gh", true),
+            ("eval IFS=/; \"$ADE_HOOK_BIN\" $(cat <<'E'\nopen/--/gh\nE\n) repo delete o/r", true),
+            ("IFS=/; f() { \"$ADE_HOOK_BIN\" $* repo delete o/r; }; f open/--/gh", true),
+            ("IFS=/; \"$ADE_HOOK_BIN\" $(cat <<'E'\nopen/--/gh\nE\n) repo delete o/r", true),
+            // Amendment 5: nothing resolves any more; these ask.
+            ("X=open; \"$ADE_HOOK_BIN\" $X --name x", true),
+            ("\"$ADE_HOOK_BIN\" $(cat <<'E'\nopen\nE\n) --name x", true),
+            ("f() { \"$ADE_HOOK_BIN\" $* --name x; }; f open", true),
+            ("\"$ADE_HOOK_BIN\" open --name \"$X\"", true),
+            ("\"$ADE_HOOK_BIN\" open --name \"${X}\"", true),
+            ("f() { \"$ADE_HOOK_BIN\" open --name \"$1\"; }; f a", true),
+            ("\"$ADE_HOOK_BIN\" open --name \"$*\"", true),
+            ("\"$ADE_HOOK_BIN\" open --name \"$a[1]\"", true),
+            ("X=1; echo $X", false),
+            ("trap 'rm -f t' EXIT; echo hi", false),
+            // Any trap disqualifies: a computed command name after it asks.
+            ("trap 'rm -f t' EXIT; X=echo; $X hi", true),
+            ("set -euo pipefail; gh pr view 1", false),
+            ("builtin echo hi; command -v gh; gh pr view 1", false),
+            // A computed command word asks, a quoted path too.
+            ("S=/tmp/x; $S/walk; X=open; \"$ADE_HOOK_BIN\" $X --name x", true),
+            ("\"$D/x\"; X=open; \"$ADE_HOOK_BIN\" $X --name x", true),
+            ("$D/x; X=open; \"$ADE_HOOK_BIN\" $X --name x", true),
+        ];
+        rows.extend(more.iter().map(|(c, w)| (c.to_string(), *w)));
+        let rows: Vec<(&str, bool)> = rows.iter().map(|(c, w)| (c.as_str(), *w)).collect();
+        check_bin(&gh_fs(), &rows);
+        check_bin(&two_folders_fs(), &[("X=/w; builtin printf -v X /o; \"$ADE_HOOK_BIN\" open --cwd $X -- sh ./x.sh", true), ("X=/w; \"$ADE_HOOK_BIN\" open --cwd $X -- sh ./x.sh", true), ("\"$ADE_HOOK_BIN\" open --cwd /w -- sh ./x.sh", false)]);
+        // Everyday commands are unchanged.
+        check(
+            &gh_fs(),
+            &[("git status", false), ("npm test", false), ("cargo test", false), ("ls -la", false), ("cd x && git log", false), ("X=1; echo $X", false), ("gh pr view 1", false), ("set -e; npm test", false)],
+        );
+    }
+
+    /// Owner decision 1 (2026-11-09, ADR 0011 amendment 5): the guard never
+    /// works out what an expansion holds. An unknown word in a command-name
+    /// position, a verb or option slot of `ade open`, a word after `--` the
+    /// guard judges, or an argument a guarded CLI's rules read, asks. The
+    /// one exception is `"$ADE_HOOK_BIN"` as the command word, from the
+    /// session, on a line that can't assign it.
+    #[test]
+    fn expansions_are_never_resolved() {
+        let tail = "\"$ADE_HOOK_BIN\" $X repo delete o/r";
+        let mut rows: Vec<(String, bool)> = [": $[IFS=1]", ": ${A[IFS=1]}", "A[IFS=1]=x", "[[ IFS=1 -eq 1 ]]", "declare -i N; N=IFS=1", ": ${X:IFS=1}", ": ${X:0:IFS=1}", ": {IFS}>/dev/null", "{ :; } {IFS}>/dev/null"]
+            .iter()
+            .map(|p| (format!("X=open1--1gh; {p}; {tail}"), true))
+            .collect();
+        let more: &[(&str, bool)] = &[
+            // The re-check's B1, B2, B4, B5 and the brace-expansion row.
+            ("_=echo; : gh; $_ repo delete o/r", true),
+            ("f() { argv=(open); \"$ADE_HOOK_BIN\" \"$1\" -- gh repo delete o/r; }; f x", true),
+            ("f() { argv[1]=open; \"$ADE_HOOK_BIN\" \"$1\" -- gh repo delete o/r; }; f x", true),
+            ("f() { 1=open; \"$ADE_HOOK_BIN\" \"$1\" -- gh repo delete o/r; }; f x", true),
+            ("N=X; X=echo; : ${(P)N::=gh}; $X repo delete o/r", true),
+            ("X=echo; mapfile -C 'X=gh;:' -c 1 A <<< a; $X repo delete o/r", true),
+            ("X=open/--/gh; {printf,-v,IFS,/}; \"$ADE_HOOK_BIN\" $X repo delete o/r", true),
+            // Asks by design now: a variable as the command name.
+            ("X=gh; $X pr view", true),
+            ("S=/usr/local/bin; $S/gh pr view", true),
+            ("X=echo; \"$X\" hi", true),
+            ("\"$D/x\" hi", true),
+            ("\"$(git rev-parse --show-toplevel)/x.sh\"", true),
+            // An unknown verb or option value of `ade open`.
+            ("X=open; \"$ADE_HOOK_BIN\" $X --name x", true),
+            ("X=open; \"$ADE_HOOK_BIN\" \"$X\" --name x", true),
+            ("\"$ADE_HOOK_BIN\" open --name \"$X\"", true),
+            ("\"$ADE_HOOK_BIN\" open --split \"${X}\"", true),
+            ("\"$ADE_HOOK_BIN\" open --cwd \"$D\" -- echo hi", true),
+            ("\"$ADE_HOOK_BIN\" open --cwd \"$D\"", true),
+            ("f() { \"$ADE_HOOK_BIN\" open --name \"$1\"; }; f a", true),
+            ("\"$ADE_HOOK_BIN\" $(cat <<'E'\nopen\nE\n) --name x", true),
+            // A quoted `$(cat <<'E' … E)` is static text, not a variable.
+            ("\"$ADE_HOOK_BIN\" \"$(cat <<'E'\nopen\nE\n)\" --name x", false),
+            ("cat() { echo delete; }; gh repo \"$(cat <<'E'\nview\nE\n)\" o/r", true),
+            ("cat() { echo delete; }; eval 'gh repo \"$(cat <<E\nview\nE\n)\" o/r'", true),
+            // A word after `--` the guard judges.
+            ("\"$ADE_HOOK_BIN\" open -- \"$X\" pr view 1", true),
+            ("\"$ADE_HOOK_BIN\" open -- gh \"$V\" delete o/r", true),
+            // An argument gh's rules read.
+            ("X=delete; gh repo $X o/r", true),
+            ("gh api -X \"$M\" repos/o/r", true),
+            // `$ADE_HOOK_BIN` assigned anywhere on the line, in any form.
+            ("ADE_HOOK_BIN=/x; \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            ("export ADE_HOOK_BIN=/x; \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            ("read ADE_HOOK_BIN <<< gh; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            ("eval ADE_HOOK_BIN=gh; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            ("ADE_HOOK_BIN=gh; eval '\"$ADE_HOOK_BIN\" repo delete o/r'", true),
+            ("y=ADE_HOOK_BIN; : ${!y:=gh}; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            ("N=ADE_HOOK_BIN; : ${(P)N::=gh}; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            (": ${ADE_HOOK_BIN:=gh}; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            (": {ADE_HOOK_BIN}>/dev/null; \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            ("unset ADE_HOOK_BIN; $ADE_HOOK_BIN gh repo delete o/r", true),
+            ("f() { ADE_HOOK_BIN=gh; }; f; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            ("echo $(ADE_HOOK_BIN=gh); \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            ("$P x; \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            ("source ./env.sh; \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            ("printf -v \"$N\" gh; \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            ("for ADE_HOOK_BIN in gh; do :; done; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            // A wrapper's `NAME=VALUE` sets it in the child's environment.
+            ("env ADE_HOOK_BIN=gh bash -c '\"$ADE_HOOK_BIN\" repo delete o/r'", true),
+            ("env -i ADE_HOOK_BIN=gh bash -c '\"$ADE_HOOK_BIN\" repo delete o/r'", true),
+            ("env -S 'ADE_HOOK_BIN=gh bash' -c '\"$ADE_HOOK_BIN\" repo delete o/r'", true),
+            ("sudo ADE_HOOK_BIN=gh bash -c '\"$ADE_HOOK_BIN\" repo delete o/r'", true),
+            ("env FOO=1 bash -c '\"$ADE_HOOK_BIN\" open -- gh pr view 1'", false),
+            ("sudo FOO=1 bash -c '\"$ADE_HOOK_BIN\" open -- gh pr view 1'", false),
+            // `set -k` puts every `NAME=VALUE` argument in the environment.
+            ("set -k; bash -c '\"$ADE_HOOK_BIN\" repo delete o/r' ADE_HOOK_BIN=gh", true),
+            ("set -ek; bash -c '\"$ADE_HOOK_BIN\" repo delete o/r' ADE_HOOK_BIN=gh", true),
+            ("set -o keyword; bash -c '\"$ADE_HOOK_BIN\" repo delete o/r' ADE_HOOK_BIN=gh", true),
+            ("set -o $O; bash -c '\"$ADE_HOOK_BIN\" repo delete o/r' ADE_HOOK_BIN=gh", true),
+            ("set $O; bash -c '\"$ADE_HOOK_BIN\" repo delete o/r' ADE_HOOK_BIN=gh", true),
+            ("set -euo pipefail; \"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+            ("shopt -so keyword; bash -c '\"$ADE_HOOK_BIN\" repo delete o/r' ADE_HOOK_BIN=gh", true),
+            ("set -- $X; \"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+            ("set - $X; \"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+            ("${ADE_HOOK_BIN:-gh} repo delete o/r", true),
+            ("env \"$ADE_HOOK_BIN\" open -- npm test", true),
+            ("set -x; set +e; set -- a b; \"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+            ("exec 2>&1; \"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+            // Unquoted, IFS set on the line may split the session's path.
+            ("IFS=/; $ADE_HOOK_BIN open -- gh pr view 1", true),
+            ("IFS=/; ${ADE_HOOK_BIN} open -- gh pr view 1", true),
+            // Only as the command word.
+            ("sudo \"$ADE_HOOK_BIN\" open -- gh pr view 1", true),
+            // The exception: quoted or not, `$` or `${}`.
+            ("\"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+            ("$ADE_HOOK_BIN open --name x", false),
+            ("${ADE_HOOK_BIN} open --name x", false),
+            ("\"${ADE_HOOK_BIN}\" open --name x --split right --cwd /w -- npm test", false),
+            ("IFS=/; \"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+            ("[ -d x ] && \"$ADE_HOOK_BIN\" open -- npm test", false),
+            // Unknown words given to commands the guard doesn't guard.
+            ("X=1; echo $X", false),
+            ("for f in *.ts; do echo \"$f\"; done", false),
+            ("gh pr view \"$N\"", false),
+            ("\"$ADE_HOOK_BIN\" open -- gh pr view \"$N\"", false),
+            ("git commit -m \"$(cat <<'EOF'\nmsg\nEOF\n)\"", false),
+            ("gh pr create --title t --body \"$(cat <<'EOF'\nbody\nEOF\n)\"", false),
+        ];
+        rows.extend(more.iter().map(|(c, w)| (c.to_string(), *w)));
+        let rows: Vec<(&str, bool)> = rows.iter().map(|(c, w)| (c.as_str(), *w)).collect();
+        check_bin(&gh_fs(), &rows);
+        // `~` (and a bare `cd`) is the session's home only while nothing on
+        // the line can assign HOME.
+        let home_fs = gh_fs().file("/home/u/x.sh", "#!/bin/sh\necho hi\n").file("/o/x.sh", "#!/bin/sh\ngh repo delete o/r --yes\n").file("/o/h.sh", "HOME=/o\n").file("/w/ok.sh", "echo hi\n");
+        // Sourced files the guard can't parse: a syntax error, too large.
+        let big = format!("HOME=/o\n{}", "# x\n".repeat(70_000));
+        // `/w/x.sh` and `/w/~/x.sh` are harmless: a computed home must not
+        // fall back to either.
+        let home_fs = home_fs.file("/w/x.sh", "echo hi\n").file("/w/~/x.sh", "echo hi\n").file("/o/bad.sh", "HOME=/o\nif\n").file("/o/big.sh", &big).file("/w/lib.sh", "f() { i='x[$(echo pwned >&2)]'; }\n");
+        check_bin(
+            &home_fs,
+            &[
+                ("HOME=/o; source ~/x.sh", true),
+                ("HOME=/o; bash ~/x.sh", true),
+                ("env HOME=/o bash -c 'sh ~/x.sh'", true),
+                ("read HOME <<< /o; sh ~/x.sh", true),
+                ("eval \"$S\"; sh ~/x.sh", true),
+                ("HOME=/o; cd && sh x.sh", true),
+                ("HOME=/o; sh ~/x.sh", true),
+                // A sourced file is followed: what it assigns counts from
+                // there on; in a loop or function body, a later pass may
+                // see it, so it disqualifies the line.
+                (". /o/h.sh; sh ~/x.sh", true),
+                ("for i in 1 2; do sh ~/x.sh; . /w/ok.sh; done", true),
+                ("while :; do sh ~/x.sh; source /w/ok.sh; done", true),
+                ("f() { sh ~/x.sh; . /w/ok.sh; }; f", true),
+                (". /w/ok.sh && sh ~/x.sh", false),
+                (". /o/bad.sh; sh ~/x.sh", true),
+                // A `for ((…))` counter is checked once every text is read.
+                (". /w/lib.sh; for ((i=0;i<3;i++)); do f; done", true),
+                (". /w/ok.sh; for ((i=0;i<3;i++)); do echo hi; done", false),
+                (". /o/big.sh; sh ~/x.sh", true),
+                ("source ~/x.sh", false),
+                ("cd && sh x.sh", false),
+                ("cd ~ && sh x.sh", false),
+                ("[ -f ~/x.sh ] && source ~/x.sh", false),
+            ],
+        );
+        // An unknown folder asks when a command reads a file relative to it.
+        check_bin(
+            &two_folders_fs(),
+            &[
+                ("cd \"$D\" && sh ./x.sh", true),
+                ("cd $D && ./x.sh", true),
+                ("cd - && sh ./x.sh", true),
+                ("pushd \"$D\" && sh x.sh", true),
+                ("cd \"$D\" && cd .. && sh ./x.sh", true),
+                ("cd /o && pushd /w && popd && sh ./x.sh", true),
+                ("cd \"$D\" && echo hi", false),
+                ("cd \"$D\" && sh /w/x.sh", false),
+                ("cd /w && sh ./x.sh", false),
+            ],
+        );
+        // Everyday lines stay quiet.
+        check(
+            &gh_fs(),
+            &[
+                ("git status", false),
+                ("npm test", false),
+                ("cargo test", false),
+                ("ls -la", false),
+                ("cd x && git log", false),
+                ("X=1; echo $X", false),
+                ("for f in *.ts; do echo \"$f\"; done", false),
+                ("gh pr view 12", false),
+            ],
+        );
+    }
+
+    /// Owner decision 2 (2026-11-09, ADR 0011 amendment 5): a line asks when
+    /// it holds a construct that can remap what a command name runs, or run
+    /// code taken from data.
+    #[test]
+    fn remapping_and_code_from_data_ask() {
+        let y = "Y='x[$(gh repo delete o/r --yes >&2)]';";
+        let mut rows: Vec<(String, bool)> = [": $((Y))", "[[ $Y -eq 1 ]]", "let Y", "printf -v \"A[$Y]\" x"].iter().map(|p| (format!("{y} {p}"), true)).collect();
+        let more: &[(&str, bool)] = &[
+            // Code from data: zsh's `e` flag, bash's `@P`.
+            ("Y='$(gh repo delete o/r --yes >&2)'; : ${(e)Y}", true),
+            (": \"${Y@P}\"", true),
+            (": ${(%)Y}", true),
+            (": ${(Le)Y}", true),
+            (": ${${(e)Y}}", true),
+            (": \"${(e)Y}\"", true),
+            ("cat <<E\n${(e)Y}\nE", true),
+            // Arithmetic with an operand that isn't a literal integer.
+            (": $((Y+1))", true),
+            (": $(($Y))", true),
+            (": $[Y]", true),
+            ("((Y))", true),
+            ("(( 1 + Y ))", true),
+            ("let 'Y+1'", true),
+            ("let \"$Y\"", true),
+            ("A[Y]=x", true),
+            ("A[$Y]=x", true),
+            ("export A[Y]=x", true),
+            ("declare A[Y]=x", true),
+            (": ${A[Y]}", true),
+            (": ${A[$Y]}", true),
+            (": \"${#A[Y]}\"", true),
+            (": \"$A[Y]\"", true),
+            (": $A[$Y]", true),
+            (": ${X:Y}", true),
+            (": ${X:0:Y}", true),
+            (": ${X:$Y}", true),
+            ("[[ $Y -ne 1 ]]", true),
+            ("[[ 1 -lt $Y ]]", true),
+            ("[[ Y -le 1 ]]", true),
+            ("[[ 1 -gt Y ]]", true),
+            ("[[ $Y -ge 1 ]]", true),
+            ("cat <<E\n$((Y))\nE", true),
+            ("declare -i N", true),
+            ("typeset -i N=1", true),
+            ("local -i N", true),
+            ("integer N", true),
+            ("float N", true),
+            ("read 'A[Y]' <<< 1", true),
+            ("read -r \"A[$Y]\" <<< 1", true),
+            ("mapfile 'A[Y]' <<< 1", true),
+            ("unset 'A[Y]'", true),
+            ("printf -v 'A[Y]' x", true),
+            ("mapfile -C f -c 1 A <<< a", true),
+            ("readarray -tC f A <<< a", true),
+            ("for ((i=0;i<j;i++)); do echo hi; done", true),
+            ("for ((i=0;i<3;i++)); do i='x[$(gh repo delete o/r --yes >&2)]'; done", true),
+            ("for ((i=k;i<3;i++)); do echo hi; done", true),
+            ("for ((i=0;j<3;i++)); do echo hi; done", true),
+            ("eval 'i=x'; for ((i=0;i<3;i++)); do echo hi; done", true),
+            // Remapping a command name.
+            ("functions[ls]='gh repo delete o/r --yes'; ls", true),
+            ("functions[f]='X=gh'; X=echo; f; $X repo delete o/r", true),
+            ("aliases[ls]=x; ls", true),
+            ("galiases[x]=y", true),
+            ("saliases[x]=y", true),
+            ("commands[ls]=/usr/local/bin/gh; ls repo delete o/r", true),
+            ("builtins[x]=y", true),
+            ("dis_functions[x]=y", true),
+            ("functions_source[x]=y", true),
+            ("typeset -A functions; functions[ls]=x", true),
+            ("read 'functions[ls]' <<< x; ls", true),
+            ("hash -p /usr/local/bin/gh ls; ls repo delete o/r", true),
+            ("hash ls=/usr/local/bin/gh; ls repo delete o/r", true),
+            ("hash -dp /usr/local/bin/gh ls", true),
+            ("shopt -s expand_aliases\nalias ls='gh repo delete o/r'\nls", true),
+            ("alias ls=x", true),
+            ("unalias ls", true),
+            ("shopt -s expand_aliases", true),
+            ("builtin alias ls=x", true),
+            ("autoload -U f", true),
+            ("enable -n ls; ls", true),
+            ("disable ls", true),
+            ("functions -c f ls; ls", true),
+            // bash evaluates a subscript reached through `${!Y}`, `-v`, an
+            // offset after a subscript, or a compound array's `[KEY]=`.
+            ("Y='A[$(gh repo delete o/r --yes >&2)]'; echo ${!Y}", true),
+            (": ${!Y:-d}", true),
+            ("[[ -v $Y ]]", true),
+            ("[[ -v A[i] ]]", true),
+            ("[[ -n x && -v \"$Y\" ]]", true),
+            ("test -v \"$Y\"", true),
+            ("[ -v \"$Y\" ]", true),
+            ("[ -v 'A[i]' ]", true),
+            (": ${A[@]:Y}", true),
+            (": ${A[@]:1:Y}", true),
+            (": \"${A[*]:$Y}\"", true),
+            ("A=([$Y]=1)", true),
+            ("A=(a [i]=b)", true),
+            ("declare -a A=([$Y]=1)", true),
+            ("A+=([i]=1)", true),
+            ("A=([i]+=1)", true),
+            ("printf -v'A[Y]' x", true),
+            (": $1[$Y]", true),
+            ("=_f x", true),
+            ("local a=x(+f)", true),
+            ("zsh -o \"$O\" -c 'echo hi'", true),
+            // An argument `NAME=(…)` is an array too.
+            ("Y='x[$(g\"\"h repo delete o/r --yes >&2)]'; declare -a A=([$Y]=1)", true),
+            ("local -a A=(x [i]=y)", true),
+            ("local a=(x); g\"\"h repo delete o/r", true),
+            ("declare -a A=($(g\"\"h repo delete o/r))", true),
+            // zsh's `=(…)` runs its text.
+            ("cat =(g\"\"h repo delete o/r)", true),
+            // BASH_ENV names a file bash runs before the command.
+            ("BASH_ENV=/tmp/e bash -c 'echo hi'", true),
+            ("export BASH_ENV=/tmp/e; bash -c 'echo hi'", true),
+            ("env BASH_ENV=/tmp/e bash -c 'echo hi'", true),
+            ("sudo BASH_ENV=/tmp/e bash -c 'echo hi'", true),
+            // Prompt strings bash expands, substitutions and all.
+            ("PS4='$(g\"\"h repo delete o/r)'; set -x; :", true),
+            ("env PS4='$(g\"\"h repo delete o/r)' bash -xc :", true),
+            ("PROMPT_COMMAND=x bash -i", true),
+            ("export PS1=x PS0=y PS2=z", true),
+            // zsh: `~` (and the globsubst option) globs a value, whose
+            // qualifiers (`*(e:…:)`) run code; `(P)` evaluates a subscript.
+            ("Y=x; echo ${~Y}", true),
+            ("echo $~Y", true),
+            ("echo \"$~Y\"", true),
+            (": ${^~Y}", true),
+            (": ${=~Y}", true),
+            (": ${(f)~Y}", true),
+            ("setopt globsubst; echo $Y", true),
+            ("setopt GLOB_SUBST; echo $Y", true),
+            ("unsetopt noglobsubst; echo $Y", true),
+            ("setopt $O; echo $Y", true),
+            ("set -o globsubst; echo $Y", true),
+            ("emulate sh; echo $Y", true),
+            ("emulate ksh -c 'echo $Y'", true),
+            ("emulate zsh -c 'g\"\"h repo delete o/r'", true),
+            ("zsh -o globsubst -c 'echo $Y'", true),
+            ("zsh --glob-subst -c 'echo $Y'", true),
+            ("echo ${(P)Y}", true),
+            ("echo ${(Pf)Y}", true),
+            // trap runs its action as code.
+            ("trap \"$Y\" EXIT", true),
+            ("trap -- \"$Y\" EXIT", true),
+            // zsh `=cmd`: the path of cmd.
+            ("=gh repo delete o/r", true),
+            ("=ls", true),
+            // zsh glob qualifiers that run code.
+            ("ls *(e:'g''h repo delete o/r':)", true),
+            ("ls *(+f)", true),
+            ("echo (a|b)(e:'eval \"$(<cmd.txt)\"':)", true),
+            ("ls (a|b)", true),
+            ("ls (a|b)(+f)", true),
+            // bash's `f ( )`, with blanks, is still a function.
+            ("f ( ) { echo hi; }; f", false),
+            ("echo x (*(e:'eval \"$(<cmd.txt)\"':))", true),
+            // Quiet: literal arithmetic, literal subscripts and offsets.
+            ("echo $((2+3))", false),
+            ("echo $[2*3]", false),
+            ("(( 1 < 2 ))", false),
+            ("let 1+1", false),
+            ("for ((i=0;i<3;i++)); do echo hi; done", false),
+            ("for (( i = 0 ; i < 10 ; i += 2 )); do echo \"$i\"; done", false),
+            ("echo \"${A[0]}\" \"${A[@]}\" \"${#A[*]}\" \"$A[1]\" \"$A[-1]\"", false),
+            ("A[0]=x; echo ${X:1} ${X:0:2} ${X: -1} ${X:-d} ${X:+y} ${X:=z}", false),
+            ("[[ 1 -eq 1 ]] && [[ -n $X ]] && [[ $X == y ]]", false),
+            ("[ \"$X\" -eq 1 ] && test \"$X\" -lt 2", false),
+            ("hash -r; hash", false),
+            ("printf -v x %s y; read -r line <<< a; mapfile -t A <<< a", false),
+            ("declare -a A; typeset -r R=1; local x=1", false),
+            ("shopt -s nullglob", false),
+            ("echo \"=x\" a=b", false),
+            ("ls *.ts", false),
+            ("echo ${!P@} ${!P*} \"${!A[@]}\" ${!A[*]} ${!}", false),
+            ("[[ $# -eq 0 && $? -ne 1 && $$ -gt 0 && $! -ge 0 && '' -eq 0 ]]", false),
+            ("echo $(( $# + $? + $$ + $! ))", false),
+            (": ${X:?m} ${X::=v} ${X: }", false),
+            ("emulate -R zsh; emulate -LR zsh; emulate -RL zsh", false),
+            ("A=('[i]=1' \"[j]=2\")", false),
+            ("[[ -v X ]] && [[ -v A[1] ]] && test -v X && [ -v X ] && [ -n \"$Y\" ]", false),
+            ("echo \"${A[@]:1:2}\" ${A[*]:1}", false),
+            ("A=([0]=a [1]=b); B=(a b); C+=(c)", false),
+            ("local a=(x y) b=([0]=z); declare -a C=(); typeset D=(\"$1\" *.ts); echo \"${a[@]}\"", false),
+            ("setopt extendedglob nullglob; unsetopt nomatch; ls *.ts", false),
+            ("emulate -L zsh; echo hi", false),
+            ("trap - EXIT; trap 'rm -f t' EXIT INT; trap -p", false),
+            ("echo ${(f)Y} ${(U)Y} $=Y ${^A} ${=Y}", false),
+            ("zsh -o extendedglob -c 'echo hi'", false),
+            ("ENV=prod npm test", false),
+        ];
+        rows.extend(more.iter().map(|(c, w)| (c.to_string(), *w)));
+        let rows: Vec<(&str, bool)> = rows.iter().map(|(c, w)| (c.as_str(), *w)).collect();
+        check_bin(&gh_fs(), &rows);
+    }
+
+    /// Rows that each isolate one rule of amendment 5, found by its mutation
+    /// pass (each rule's mutant survived until its row was added).
+    #[test]
+    fn amendment_5_mutation_pins() {
+        let fs = gh_fs()
+            .file("/w/e.sh", ": ${(e)Y}\n")
+            .file("/w/loop.sh", "for ((i=0;i<3;i++)); do :; done\ni=1\n")
+            .file("/w/ok.sh", "echo hi\n");
+        let rows: &[(&str, bool)] = &[
+            // Each prompt variable on its own.
+            ("PS0=x", true),
+            ("PS1=x", true),
+            ("PS2=x", true),
+            // zsh's remapping arrays, assigned whole (no subscript to flag).
+            ("functions=(ls 'gh repo delete o/r')", true),
+            ("aliases=(ls x)", true),
+            ("galiases=(x y)", true),
+            ("saliases=(x y)", true),
+            ("commands=(ls /usr/local/bin/gh)", true),
+            ("builtins=(x y)", true),
+            ("functions_source=(x y)", true),
+            ("dis_aliases=(x y)", true),
+            // `NAME[…]=` assigns NAME.
+            ("ADE_HOOK_BIN[0]=gh; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            ("read 'ADE_HOOK_BIN[0]' <<< gh; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            // A flagged construct in disk text that names no guarded CLI
+            // asks nothing, but may assign anything.
+            (". /w/e.sh; \"$ADE_HOOK_BIN\" open -- npm test", true),
+            (". /w/e.sh", false),
+            // A counter in disk text that names no guarded CLI asks nothing.
+            (". /w/loop.sh", false),
+            // A line that disqualifies leaves no counter certain.
+            ("for x in 1; do . /w/ok.sh; done; for ((i=0;i<3;i++)); do echo hi; done", true),
+            // Literal subscripts: zsh ranges, blanks.
+            ("echo \"$A[1,2]\" \"${A[ 1 ]}\" \"${A[1, -1]}\"", false),
+            // The step and condition may use only the counter.
+            ("for ((i=0;i<3;i+=k)); do echo hi; done", true),
+            ("for ((i=0;i<3;i+=$1)); do echo hi; done", true),
+            ("select ADE_HOOK_BIN in gh; do break; done; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            ("printf -v \"$N\" x", true),
+            ("set -o \"$O\"", true),
+            // Assigning forms of `${…}` for ADE_HOOK_BIN.
+            (": ${ADE_HOOK_BIN=gh}; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            (": ${ADE_HOOK_BIN::=gh}; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            (": ${(L)ADE_HOOK_BIN::=gh}; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            // bash 5.1's `wait -p` and zsh's `stat -A` assign.
+            ("wait -p ADE_HOOK_BIN; \"$ADE_HOOK_BIN\" open -- npm test", true),
+            ("stat -A ADE_HOOK_BIN x; \"$ADE_HOOK_BIN\" open -- npm test", true),
+            // declare's forms.
+            ("declare -n R=ADE_HOOK_BIN; R=gh; \"$ADE_HOOK_BIN\" repo delete o/r", true),
+            ("typeset -E N", true),
+            ("typeset -F N", true),
+            ("declare 'A[Y]'", true),
+            ("declare \"$N\"", true),
+            ("shopt -s \"$O\"", true),
+            ("hash \"$P\"", true),
+            // A single computed command word is never the helper.
+            ("\"$P\" repo delete o/r", true),
+            ("$P pr view", true),
+            // Unquoted, an expansion may split into a flag of a gh leaf
+            // whose flags decide the risk.
+            ("gh api repos/o/r/issues/$N", true),
+            ("gh api --jq $Q repos/o/r/issues", true),
+            ("gh pr close 1 --comment $C", true),
+            ("gh api \"repos/o/r/issues/$N\"", false),
+            ("gh api repos/o/r/issues --jq \"$Q\"", false),
+            ("gh pr close 1 --comment \"$C\"", false),
+            // Quoted, only a plain scalar is one word; unquoted arithmetic
+            // splits on IFS.
+            ("gh pr close 1 --comment \"${A[@]}\"", true),
+            ("gh pr close 1 --comment \"$A[@]\"", true),
+            ("gh pr close 1 --comment $((1+2))", true),
+            ("gh pr close 1 --comment \"$((1+2))\"", false),
+            // A computed path ending hosts.yml; one in a computed folder.
+            ("cat \"$D\"/hosts.yml", true),
+            ("cd \"$D\" && cat hosts.yml", true),
+        ];
+        check_bin(&fs, rows);
+        // `$ADE_HOOK_BIN` is the helper only when the session gives an
+        // absolute path: unset, an unquoted one vanishes and the next word
+        // runs; a relative one is looked up on PATH.
+        let unset = |_: &str| None;
+        let relative = |k: &str| (k == "ADE_HOOK_BIN").then(|| "gh".to_string());
+        let named = |k: &str| (k == "ADE_HOOK_BIN").then(|| "ade-hook".to_string());
+        let other = |k: &str| matches!(k, "ADE_HOOK_BIN" | "P").then(|| "/Applications/ADE.app/Contents/MacOS/ade-hook".to_string());
+        let spaced = |k: &str| (k == "ADE_HOOK_BIN").then(|| "/Applications/My ADE.app/ade-hook".to_string());
+        let cases: &[(&dyn Fn(&str) -> Option<String>, &str, bool)] = &[
+            (&unset, "$ADE_HOOK_BIN gh repo delete o/r", true),
+            (&unset, "\"$ADE_HOOK_BIN\" open -- npm test", true),
+            (&relative, "\"$ADE_HOOK_BIN\" repo delete o/r", true),
+            (&named, "\"$ADE_HOOK_BIN\" open -- npm test", true),
+            // Only ADE_HOOK_BIN is the helper, whatever another variable holds.
+            (&other, "\"$P\" open -- npm test", true),
+            (&other, "\"$ADE_HOOK_BIN\" open -- npm test", false),
+            (&spaced, "$ADE_HOOK_BIN open -- npm test", true),
+            (&spaced, "\"$ADE_HOOK_BIN\" open -- npm test", false),
+        ];
+        let bad: Vec<String> = cases
+            .iter()
+            .filter_map(|(env, c, want)| {
+                let v = classify(c, &ctx(&fs, *env));
+                (matches!(v, Verdict::Ask(_)) != *want).then(|| format!("{c:?}: want ask={want}, got {v:?}"))
+            })
+            .collect();
+        assert!(bad.is_empty(), "{} cases wrong:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// B3 of the sixth re-check: a `for ((…))` counter the shell sets by
+    /// itself (`_`, `BASH_REMATCH`, `REPLY`, zsh's lowercase specials) may
+    /// hold code although the line assigns it nowhere else.
+    #[test]
+    fn for_counters_the_shell_sets_ask() {
+        let fs = gh_fs().file("/w/data.txt", "x\n");
+        check_bin(
+            &fs,
+            &[
+                ("for ((_=0;_<3;_++)); do echo 'a[$(gh repo delete o/r --yes >&2)]' >/dev/null; done", true),
+                ("for ((BASH_REMATCH=0;BASH_REMATCH<3;BASH_REMATCH++)); do [[ \"$(cat data.txt)\" =~ (.*) ]]; done", true),
+                ("for ((REPLY=0;REPLY<3;REPLY++)); do select x in a; do break; done; done < data.txt", true),
+                // Uppercase on its own, with nothing else on the line.
+                ("for ((N=0;N<3;N++)); do echo hi; done", true),
+                // Plain lowercase counters stay quiet.
+                ("for ((i=0;i<3;i++)); do echo hi; done", false),
+                ("for ((n_2=0;n_2<3;n_2++)); do echo hi; done", false),
+            ],
+        );
+        // Every lowercase name bash or zsh sets by itself (an independent
+        // record of `resolve::SHELL_SET`).
+        let specials = [
+            "argv", "status", "pipestatus", "path", "cdpath", "fpath", "manpath", "module_path", "mailpath", "psvar", "watch", "fignore", "histchars",
+            "prompt", "signals", "match", "mbegin", "mend", "reply", "options", "parameters", "commands", "functions", "functions_source", "builtins",
+            "reswords", "patchars", "aliases", "galiases", "saliases", "dis_aliases", "dis_galiases", "dis_saliases", "dis_functions",
+            "dis_functions_source", "dis_builtins", "dis_reswords", "dis_patchars", "modules", "dirstack", "history", "historywords", "jobdirs",
+            "jobstates", "jobtexts", "nameddirs", "userdirs", "usergroups", "funcstack", "functrace", "funcfiletrace", "funcsourcetrace", "termcap",
+            "terminfo", "mapfile", "errnos", "sysparams", "epochtime", "langinfo", "zsh_eval_context", "zsh_scheduled_events", "keymaps", "widgets",
+            "killring", "region_highlight", "registers", "precmd_functions", "preexec_functions", "chpwd_functions", "periodic_functions",
+            "zshaddhistory_functions", "zshexit_functions", "zsh_directory_name_functions", "ttyidle",
+        ];
+        let rows: Vec<String> = specials.iter().map(|n| format!("for (({n}=0;{n}<3;{n}++)); do echo hi; done")).collect();
+        check_bin(&fs, &rows.iter().map(|r| (r.as_str(), true)).collect::<Vec<_>>());
+    }
+
+    /// `select` assigns REPLY as well as its own name.
+    #[test]
+    fn select_assigns_reply() {
+        let script = lexer::parse("select x in a; do break; done").unwrap();
+        let sc = resolve::Scope::new(&script, true, false, PathBuf::from("/w"));
+        assert_eq!(sc.assigned.get("REPLY"), Some(&1));
+        assert_eq!(sc.assigned.get("x"), Some(&1));
+        let script = lexer::parse("for x in a; do break; done").unwrap();
+        let sc = resolve::Scope::new(&script, true, false, PathBuf::from("/w"));
+        assert_eq!(sc.assigned.get("REPLY"), None);
+    }
+
+    /// B4 of the sixth re-check: `.`/`source` of a name with no slash
+    /// searches PATH first, so the guard can't tell which file it reads.
+    #[test]
+    fn sourcing_a_name_with_no_slash_asks() {
+        let fs = two_folders_fs().file("/home/u/.cargo/env", "export PATH=\"$HOME/.cargo/bin:$PATH\"\n");
+        check_bin(
+            &fs,
+            &[
+                ("PATH=$PWD/o:$PATH; . x.sh", true),
+                (". x.sh", true),
+                ("source x.sh", true),
+                ("source -- x.sh", true),
+                (". ./x.sh", false),
+                ("source ./x.sh", false),
+                (". /w/x.sh", false),
+                (". ~/.cargo/env", false),
+            ],
+        );
+    }
+
+    /// The story-9 part of B1: the terminal `ade open` makes has none of the
+    /// caller's functions, so the command it types is judged as the real one.
+    #[test]
+    fn open_never_resolves_the_typed_command_to_a_function_on_the_line() {
+        let fs = gh_fs()
+            .file("/w/f.sh", "gh() { :; }\n")
+            .file("/w/g.sh", "gh() { :; }\n\"$ADE_HOOK_BIN\" open -- gh repo delete o/r\n");
+        check_bin(
+            &fs,
+            &[
+                ("gh() { :; }; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("function gh { :; }; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("gh() { :; }; \"$ADE_HOOK_BIN\" open -- sudo gh repo delete o/r", true),
+                ("gh() { :; }; \"$ADE_HOOK_BIN\" open -- command gh repo delete o/r", true),
+                (". /w/f.sh; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                (". /w/g.sh", true),
+                // A function that opens a terminal running itself: the new
+                // terminal has no such function, so nothing is typed that runs gh.
+                ("f() { \"$ADE_HOOK_BIN\" open -- f; }; f", false),
+                // Functions still resolve on the caller's own line, after it too.
+                ("f() { gh repo delete o/r; }; \"$ADE_HOOK_BIN\" open -- ls; f", true),
+            ],
+        );
+    }
+
+    #[test]
+    fn open_double_dash_gh_repo_delete_asks_as_the_bare_line_does() {
+        let fs = gh_fs();
+        assert!(asks(&fs, "gh repo delete o/r"), "the bare line asks");
+        check_bin(
+            &fs,
+            &[
+                ("\"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("$ADE_HOOK_BIN open -- gh repo delete o/r", true),
+                ("${ADE_HOOK_BIN} open -- gh repo delete o/r", true),
+                ("\"${ADE_HOOK_BIN}\" open --cwd /w --name x --focus -- gh repo delete o/r", true),
+                ("\"$ADE_HOOK_BIN\" open -- sudo gh repo delete o/r", true),
+                ("ade open -- gh repo delete o/r", true),
+                ("\"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /w -- npm run dev", false),
+            ],
+        );
+    }
+
+    #[test]
+    fn open_with_name_and_no_double_dash_does_not_ask() {
+        check_bin(
+            &gh_fs(),
+            &[
+                ("\"$ADE_HOOK_BIN\" open --name x", false),
+                ("\"$ADE_HOOK_BIN\" open", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /w --focus", false),
+                ("\"$ADE_HOOK_BIN\" help", false),
+                ("ade open --name gh", false),
+                // Only `open` types its words after `--`: another verb runs nothing.
+                ("\"$ADE_HOOK_BIN\" help -- gh repo delete o/r", false),
+                ("\"$ADE_HOOK_BIN\" guard -- gh repo delete o/r", false),
+                ("\"$ADE_HOOK_BIN\" opener -- gh repo delete o/r", false),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_line_that_assigns_ade_hook_bin_still_asks() {
+        check_bin(
+            &gh_fs(),
+            &[
+                ("ADE_HOOK_BIN=/x \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("ADE_HOOK_BIN=/usr/bin/env; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+            ],
+        );
+    }
+
+    #[test]
+    fn the_ade_verbs_are_enumerated() {
+        assert_eq!(tables::ADE_VERBS, &["open"]);
+        let fs = gh_fs();
+        for verb in tables::ADE_VERBS {
+            let (_, line, want) = ADE_VERB_ROWS.iter().find(|(v, _, _)| v == verb).unwrap_or_else(|| panic!("no test row for the ADE verb {verb}"));
+            assert_eq!(asks(&fs, line), *want, "{line}");
+            check_bin(&fs, &[(line, *want)]);
+        }
+    }
+
+    #[test]
+    fn guard_and_hook_mode_are_unchanged() {
+        // The guard's own corpora are unchanged by the amendment.
+        check(&gh_fs(), GH_HAND);
+        // A helper path the session gave is what `$ADE_HOOK_BIN` names.
+        let env = |k: &str| (k == "ADE_HOOK_BIN").then(|| "/Applications/ADE.app/Contents/MacOS/ade-hook".to_string());
+        let fs = gh_fs();
+        let ctx = ctx(&fs, &env);
+        assert!(matches!(classify("\"$ADE_HOOK_BIN\" open -- gh repo delete o/r", &ctx), Verdict::Ask(_)));
+        assert!(!matches!(classify("\"$ADE_HOOK_BIN\" open --name x", &ctx), Verdict::Ask(_)));
+        assert!(!matches!(classify("\"$ADE_HOOK_BIN\" guard", &ctx), Verdict::Ask(_)), "guard is not ade open");
     }
 
     fn hook_input(tool: &str, command: &str) -> String {
@@ -653,7 +1629,7 @@ mod tests {
         for (text, want) in [(&scan, Verdict::NoDecision), (&named, Verdict::Ask(String::new()))] {
             let fs = FakeFs::new().file("/w/head.sh", &head).file("/w/scan.sh", text);
             let t = Instant::now();
-            let v = verdict(&fs, "source head.sh");
+            let v = verdict(&fs, "source ./head.sh");
             let took = t.elapsed();
             eprintln!("4 MB budget: {took:?}");
             assert_eq!(std::mem::discriminant(&v), std::mem::discriminant(&want), "{v:?}");
@@ -729,9 +1705,10 @@ mod tests {
                 // A use before the assignment, and indirection, are computed.
                 ("${x}h repo view; x=g", true),
                 ("x=gh; ${!x} repo view", true),
-                // export NAME=literal is tracked like a plain assignment.
-                ("export S=/tmp/x; $S/walk/walk", false),
-                ("d=~/bin; $d/tool", false),
+                // Amendment 5: a variable in the command name asks, whatever
+                // it was assigned.
+                ("export S=/tmp/x; $S/walk/walk", true),
+                ("d=~/bin; $d/tool", true),
                 // gh: unknown leaves, computed subcommands, computed words in risky-flag leaves.
                 ("gh repo frobnicate o/r", true),
                 ("gh \"$sub\" o/r", true),

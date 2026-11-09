@@ -3,6 +3,8 @@ import { useTabStore, findAllPanes, OWN_VIEW, type View } from "../stores/tabSto
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { tabCwd, tabLabel } from "../lib/tabDisplay";
 import { focusActiveTerminal } from "../hooks/useTerminal";
+import { useOpenStatus, openStatusOf, clearOpenStatus } from "../lib/terminalOpen";
+import SubTerminalNotice from "./SubTerminalNotice";
 
 /** The id of the content area the strip's entries control (App sets it). */
 export const SUB_TERMINAL_CONTENT_ID = "tab-content";
@@ -26,6 +28,10 @@ const STRIP_CSS = `
 .subterm-entry:hover .subterm-close, .subterm-entry[aria-selected="true"] .subterm-close { opacity: 0.6; }
 .subterm-close:hover { opacity: 1 !important; background: var(--accent-subtle); color: var(--text-primary); }
 @media (max-width: 560px) { .subterm-name { max-width: 96px; } }
+.subterm-spinner { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--text-secondary); border-top-color: transparent; flex-shrink: 0; animation: subterm-spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .subterm-spinner { animation: none; } }
+.subterm-not-typed { color: var(--yellow); font-weight: 700; flex-shrink: 0; }
+@keyframes subterm-spin { to { transform: rotate(360deg); } }
 @keyframes subterm-flash { from { background-color: var(--accent-subtle); } to { background-color: transparent; } }
 `;
 
@@ -53,6 +59,13 @@ const tooltip = (name: string, cwd: string | null) => (cwd ? `${name} — ${cwd}
 /** The second tooltip line of a sub-terminal another terminal opened. */
 const openedFrom = (spawner: string | null) => (spawner ? `\nOpened from ${spawner}` : "");
 
+/** Story 9: the spinner while a command is being typed, the mark when it wasn't. */
+function statusMark(status: "starting" | "not-typed" | undefined) {
+  if (status === "starting") return <span className="subterm-spinner" role="img" aria-label="starting" title="Starting: typing the command" />;
+  if (status === "not-typed") return <span className="subterm-not-typed" role="img" aria-label="command not typed" title="Command not typed">!</span>;
+  return null;
+}
+
 // App owns closing, so it can confirm first (useGuardedClose's requestCloseView).
 const requestCloseView = (tabId: string, viewId: string) =>
   window.dispatchEvent(new CustomEvent("request-close-view", { detail: { tabId, viewId } }));
@@ -67,6 +80,7 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
   const tab = useTabStore((s) => s.tabs.find((t) => t.id === tabId));
   const showView = useTabStore((s) => s.showView);
   const cwds = usePaneCwd((s) => s.cwds);
+  const openStatus = useOpenStatus();
   const [focusId, setFocusId] = useState<string | null>(null);
   const [flashing, setFlashing] = useState<ReadonlySet<string>>(new Set());
   const seen = useRef<Set<string> | null>(null);
@@ -125,6 +139,10 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
   const ownCwd = tabCwd(tab, cwds);
   const label = tabLabel(tab, ownCwd);
   const rovingId = focusId && viewOrder.includes(focusId) ? focusId : shown;
+  // The view in sight's not-typed notice, just above its terminal.
+  const notTyped = openStatusOf(openStatus, tabId, shown);
+  const shownRoot = tab.views[shown]?.root;
+  const noticePane = notTyped && shownRoot ? findAllPanes(shownRoot).find((p) => p.id === notTyped.paneId) : undefined;
 
   const show = (viewId: string) => {
     showView(tabId, viewId);
@@ -186,6 +204,7 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
           </svg>
         )}
         <span className="subterm-name">{name}</span>
+        {!own && statusMark(openStatusOf(openStatus, tabId, viewId)?.status)}
         {!own && (
           // A span with role "button", not a <button>. It is still a control
           // nested in a tab for assistive tech; it is kept out of the tab
@@ -229,6 +248,17 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
           })}
         </div>
       </div>
+      {notTyped?.status === "not-typed" && (
+        <SubTerminalNotice
+          key={shown}
+          firstWord={notTyped.firstWord}
+          line={notTyped.line}
+          why={notTyped.why}
+          paneId={notTyped.paneId}
+          ptyId={noticePane ? noticePane.ptyId : null}
+          onDismiss={() => clearOpenStatus(tabId, shown)}
+        />
+      )}
     </>
   );
 }
@@ -270,8 +300,18 @@ export function SubTerminalAnnouncer() {
         }
       }
     });
+    // A command that wasn't typed: "npm: command not typed" (the name, never the command).
+    const unsubscribeTyped = useOpenStatus.subscribe((state, prev) => {
+      for (const [key, entry] of Object.entries(state.byView)) {
+        if (entry.status !== "not-typed" || prev.byView[key]?.status === "not-typed") continue;
+        const [tabId, viewId] = key.split("/");
+        const name = useTabStore.getState().tabs.find((t) => t.id === tabId)?.views[viewId]?.name ?? "Terminal";
+        setSaid((p) => ({ text: `${name}: command not typed`, n: p.n + 1 }));
+      }
+    });
     return () => {
       unsubscribe();
+      unsubscribeTyped();
       for (const b of pending.values()) window.clearTimeout(b.timer);
     };
   }, []);

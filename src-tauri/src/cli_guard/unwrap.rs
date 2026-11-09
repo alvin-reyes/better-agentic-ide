@@ -52,7 +52,13 @@ pub fn basename(p: &str) -> &str {
     p.rsplit('/').next().unwrap_or(p)
 }
 
+/// The folder after `cd DIR` when DIR is computed (or `cd -`): nothing can
+/// be there, and a read under it asks (`Guard::unknown_dir`).
+pub const UNKNOWN_DIR: &str = "/\u{0}computed folder";
+
 /// `p` made absolute against `cwd` and normalised without touching the disk.
+/// A relative path never climbs out of [`UNKNOWN_DIR`]: `..` there is
+/// still a folder the guard can't name.
 pub fn abs(cwd: &Path, p: &str) -> PathBuf {
     let joined = if p.starts_with('/') { PathBuf::from(p) } else { cwd.join(p) };
     let mut out = PathBuf::new();
@@ -65,23 +71,10 @@ pub fn abs(cwd: &Path, p: &str) -> PathBuf {
             c => out.push(c),
         }
     }
+    if !p.starts_with('/') && cwd.starts_with(UNKNOWN_DIR) && !out.starts_with(UNKNOWN_DIR) {
+        return PathBuf::from(UNKNOWN_DIR);
+    }
     out
-}
-
-/// The literal basename of a path-form name whose directory part is
-/// computed, when the plan lets it stand: every expansion in the directory
-/// is double-quoted or strictly resolved, and the basename is literal.
-fn path_basename(w: &W) -> Option<String> {
-    let slash = w.text.rfind('/')?;
-    let base = &w.text[slash + 1..];
-    let dir = &w.text[..slash];
-    if base.is_empty() || base.contains([Q_PH, super::resolve::U_PH]) || dir.contains(super::resolve::U_PH) || w.glob_at.iter().any(|&k| k > slash) {
-        return None;
-    }
-    if w.glob_at.iter().any(|&k| matches!(w.text.as_bytes()[k], b'*' | b'?' | b'[')) {
-        return None;
-    }
-    Some(base.to_string())
 }
 
 /// Skip a wrapper's options. `vals` are the short options that take a
@@ -154,6 +147,17 @@ fn is_assignment(w: &W) -> bool {
 }
 
 impl<'c, 'a> Guard<'c, 'a> {
+    /// A wrapper's `NAME=VALUE` (`env`, `sudo`) sets NAME in the child's
+    /// environment: it counts as an assignment ([`Guard::hook_bin`]).
+    fn child_env(&mut self, sc: &Scope, a: &W) {
+        if let Some((n, _)) = a.text.split_once('=') {
+            if super::resolve::CODE_VARS.contains(&n) {
+                self.trigger(sc, super::resolve::code_var(n));
+            }
+            *self.assigned.entry(n.to_string()).or_default() += 1;
+        }
+    }
+
     /// Classify a list; returns what its last command prints, when known.
     pub fn list(&mut self, sc: &mut Scope, list: &List) -> Out {
         let mut last = Out::Unknown;
@@ -264,11 +268,9 @@ impl<'c, 'a> Guard<'c, 'a> {
                 // Classified at its call sites; a function never called is
                 // classified as if run, with computed arguments.
                 if !sc.called.contains(name) {
-                    let args = sc.args.take();
                     self.depth += 1;
                     self.cmd(sc, body, In::None);
                     self.depth -= 1;
-                    sc.args = args;
                 }
             }
             Cmd::Coproc(b) => {
@@ -308,9 +310,15 @@ impl<'c, 'a> Guard<'c, 'a> {
                 self.expand(sc, w);
             }
         }
+        for w in s.arrays.iter().flat_map(|(_, ws)| ws) {
+            self.expand(sc, w);
+        }
         let mut words = Vec::new();
-        for w in &s.words {
-            words.extend(self.expand(sc, w));
+        for (k, w) in s.words.iter().enumerate() {
+            match self.hook_bin(w).filter(|_| k == 0) {
+                Some(h) => words.push(h),
+                None => words.extend(self.expand(sc, w)),
+            }
         }
         let mut stdin = stdin;
         let mut outs: Vec<(PathBuf, bool)> = Vec::new();
@@ -341,6 +349,7 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
         }
         self.cred_words(sc, &words, &targets);
+        self.cred_named(sc, s);
         if self.done() {
             return Out::Unknown;
         }
@@ -374,13 +383,8 @@ impl<'c, 'a> Guard<'c, 'a> {
             return Out::Unknown;
         }
         if name.computed() || name.glob() || name.brace() {
-            return match path_basename(name) {
-                Some(base) => self.named(sc, &base, None, args, stdin, run),
-                None => {
-                    self.trigger(sc, format!("ADE: the command name is computed here ({}), so the guard can't tell what runs", name.show()));
-                    Out::Unknown
-                }
-            };
+            self.trigger(sc, format!("ADE: the command name is computed here ({}), so the guard can't tell what runs", name.show()));
+            return Out::Unknown;
         }
         let text = name.text.clone();
         let base = basename(&text).to_string();
@@ -415,7 +419,8 @@ impl<'c, 'a> Guard<'c, 'a> {
                     return Out::Unknown;
                 }
                 let mut k = skip_opts(args, "CDghpRrtTUu", &["chdir", "close-from", "group", "host", "prompt", "chroot", "role", "type", "command-timeout", "other-user", "user"]);
-                while args.get(k).is_some_and(is_assignment) {
+                while let Some(a) = args.get(k).filter(|a| is_assignment(a)) {
+                    self.child_env(sc, a);
                     k += 1;
                 }
                 return self.command(sc, wrapped(k), stdin, run);
@@ -466,13 +471,13 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
             "script" => {
                 if let Some(c) = opt_value(args, 'c', "command") {
-                    return self.code(sc, &c, None);
+                    return self.code(sc, &c);
                 }
                 return Out::Unknown;
             }
             "su" => {
                 if let Some(c) = opt_value(args, 'c', "command") {
-                    return self.code(sc, &c, None);
+                    return self.code(sc, &c);
                 }
                 return Out::Unknown;
             }
@@ -482,9 +487,18 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
             "tmux" => return self.tmux(sc, args),
             "screen" => return self.screen(sc, args, stdin, run),
-            "eval" => return self.code_text(sc, &join(args), sc.args.clone()),
+            "eval" => return self.code_text(sc, &join(args)),
+            // trap runs its action as code.
+            "trap" => {
+                let k = usize::from(args.first().is_some_and(|a| a.is("--")));
+                if let Some(a) = args.get(k).filter(|a| a.computed()) {
+                    self.trigger(sc, format!("ADE: trap runs computed text as code ({})", a.show()));
+                    return Out::Unknown;
+                }
+            }
             "source" | "." => return self.source(sc, args),
             "git" => return self.git(sc, args),
+            "ade" | "ade-hook" => return self.ade(sc, args, run),
             "npx" | "bunx" => return self.npx(sc, args, run),
             "npm" => return self.npm(sc, args, run),
             "pnpm" => return self.pnpm(sc, args, run),
@@ -495,6 +509,11 @@ impl<'c, 'a> Guard<'c, 'a> {
             "which" | "type" | "whereis" | "hash" => return Out::Unknown,
             "cd" | "pushd" => {
                 self.cd(sc, args);
+                return Out::Unknown;
+            }
+            // Back to a folder the guard doesn't track.
+            "popd" => {
+                sc.cwd = PathBuf::from(UNKNOWN_DIR);
                 return Out::Unknown;
             }
             "cp" | "mv" => {
@@ -547,7 +566,7 @@ impl<'c, 'a> Guard<'c, 'a> {
             _ => {}
         }
         if SHELLS.contains(&base) {
-            return self.shell(sc, base, args, stdin, run);
+            return self.shell(sc, base, args, stdin);
         }
         if let Some(p) = path {
             return self.path_command(sc, p, args, stdin, run);
@@ -556,6 +575,70 @@ impl<'c, 'a> Guard<'c, 'a> {
             self.fallback(sc, args);
         }
         Out::Unknown
+    }
+
+    /// ADE's helper: `open ... -- COMMAND` types COMMAND into a new
+    /// terminal, so COMMAND is classified as a runner's is, in the folder the
+    /// new shell starts in: `--cwd` resolved lexically against this scope's
+    /// folder, as `ade_cli::normalise` does, else this folder. A computed
+    /// verb, flag or flag value asks (ADR 0011 amendment 5). Without `--`,
+    /// and for every other verb (`help`, `guard`, the hook), nothing runs.
+    fn ade(&mut self, sc: &mut Scope, args: &[W], run: Run) -> Out {
+        if let Some(v) = args.first().filter(|v| v.computed() || v.glob()) {
+            self.trigger(sc, format!("ADE: ade has a computed verb ({}), so the guard can't tell what it types", v.show()));
+            return Out::Unknown;
+        }
+        let verb = args.first().is_some_and(|v| super::tables::ADE_VERBS.iter().any(|x| v.is(x)));
+        if !verb {
+            return Out::Unknown;
+        }
+        // `open`'s flags, as `ade_cli::parse` reads them: a flag's value is
+        // never the separator (`--name -- -- CMD`).
+        let mut dir: Option<&W> = None;
+        let mut k = 1;
+        let command = loop {
+            let Some(a) = args.get(k) else { return Out::Unknown };
+            if a.computed() || a.glob() {
+                self.trigger(sc, format!("ADE: ade open has a computed argument ({}), so the guard can't tell what it types", a.show()));
+                return Out::Unknown;
+            }
+            if matches!(a.text.as_str(), "--cwd" | "--name" | "--split") {
+                if let Some(v) = args.get(k + 1).filter(|v| v.computed() || v.glob()) {
+                    self.trigger(sc, format!("ADE: ade open's {} value ({}) is computed, so the guard can't tell what it types or where", a.text, v.show()));
+                    return Out::Unknown;
+                }
+            }
+            match a.text.as_str() {
+                "--" => break &args[k + 1..],
+                "--cwd" => {
+                    dir = args.get(k + 1);
+                    k += 2;
+                }
+                "--name" | "--split" => k += 2,
+                "--focus" => k += 1,
+                // The CLI refuses anything else (usage, exit 2): nothing runs.
+                _ => return Out::Unknown,
+            }
+        };
+        let cwd = dir.map_or_else(|| sc.cwd.clone(), |d| abs(&sc.cwd, &d.text));
+        let caller = std::mem::replace(&mut sc.cwd, cwd);
+        // The new terminal has none of this line's functions: COMMAND is
+        // judged as the real command its words name.
+        let funcs = std::mem::take(&mut sc.funcs);
+        let out = self.command(sc, command, In::None, run);
+        sc.funcs = funcs;
+        sc.cwd = caller;
+        out
+    }
+
+    /// A read of `path` in a folder the line computes (`cd "$D"`): the guard
+    /// can't see what is there, so it asks. True when it asked.
+    pub fn unknown_dir(&mut self, path: &Path) -> bool {
+        if !path.starts_with(UNKNOWN_DIR) {
+            return false;
+        }
+        self.ask("ADE: this reads a file in a folder the command computes, so the guard can't see what it runs".into());
+        true
     }
 
     /// A function's body, classified at this call site with its arguments.
@@ -572,9 +655,7 @@ impl<'c, 'a> Guard<'c, 'a> {
         self.memo.insert(key);
         self.calling.push(name.to_string());
         self.depth += 1;
-        let saved = sc.args.replace(args.to_vec());
         let out = self.cmd(sc, body, stdin);
-        sc.args = saved;
         self.depth -= 1;
         self.calling.pop();
         out
@@ -643,11 +724,14 @@ impl<'c, 'a> Guard<'c, 'a> {
                 _ => break,
             }
         }
-        while args.get(k).is_some_and(is_assignment) {
-            k += 1;
-        }
+        // `-S`'s words come first, then the rest; either may start with
+        // `NAME=VALUE`s.
         pre.extend(args.get(k..).unwrap_or(&[]).iter().cloned());
-        self.command(sc, &pre, stdin, run)
+        let n = pre.iter().take_while(|a| is_assignment(a)).count();
+        for a in &pre[..n] {
+            self.child_env(sc, a);
+        }
+        self.command(sc, &pre[n..], stdin, run)
     }
 
     fn xargs(&mut self, sc: &mut Scope, args: &[W]) -> Out {
@@ -776,7 +860,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                 break;
             }
             match t {
-                "-c" | "--command" => return args.get(k + 1).map_or(Out::Unknown, |c| self.code(sc, &c.clone(), None)),
+                "-c" | "--command" => return args.get(k + 1).map_or(Out::Unknown, |c| self.code(sc, &c.clone())),
                 "-w" | "-E" | "--timeout" | "--wait" | "--conflict-exit-code" => k += 2,
                 _ if t.starts_with('-') && t.len() > 1 => k += 1,
                 _ => break,
@@ -784,7 +868,7 @@ impl<'c, 'a> Guard<'c, 'a> {
         }
         k += 1; // the lock file or descriptor
         match args.get(k) {
-            Some(a) if a.is("-c") || a.is("--command") => args.get(k + 1).map_or(Out::Unknown, |c| self.code(sc, &c.clone(), None)),
+            Some(a) if a.is("-c") || a.is("--command") => args.get(k + 1).map_or(Out::Unknown, |c| self.code(sc, &c.clone())),
             Some(_) => self.command(sc, &args[k..], stdin, run),
             None => Out::Unknown,
         }
@@ -794,7 +878,7 @@ impl<'c, 'a> Guard<'c, 'a> {
         let k = skip_opts(args, "LSfc", &[]);
         // tmux's own `-c shell-command` runs it.
         if let Some(c) = args[..k].iter().position(|a| a.is("-c")).and_then(|i| args.get(i + 1)) {
-            return self.code(sc, &c.clone(), None);
+            return self.code(sc, &c.clone());
         }
         let Some(sub) = args.get(k) else { return Out::Unknown };
         let rest = &args[k + 1..];
@@ -803,7 +887,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                 let j = skip_opts(rest, "ceFlnpstxy", &[]);
                 match &rest[j..] {
                     [] => Out::Unknown,
-                    [one] => self.code(sc, &one.clone(), None),
+                    [one] => self.code(sc, &one.clone()),
                     many => self.command(sc, &many.to_vec(), In::None, Run::default()),
                 }
             }
@@ -831,7 +915,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                 let rest = &args[k + 1..];
                 if rest.first().is_some_and(|w| w.is("stuff")) {
                     if let Some(s) = rest.get(1) {
-                        return self.code(sc, &s.clone(), None);
+                        return self.code(sc, &s.clone());
                     }
                 }
                 return Out::Unknown;
@@ -844,7 +928,7 @@ impl<'c, 'a> Guard<'c, 'a> {
         }
     }
 
-    fn shell(&mut self, sc: &mut Scope, base: &str, args: &[W], stdin: In, run: Run) -> Out {
+    fn shell(&mut self, sc: &mut Scope, base: &str, args: &[W], stdin: In) -> Out {
         let mut k = 0;
         let mut c = false;
         let mut from_stdin = false;
@@ -861,10 +945,14 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
             if let Some(l) = t.strip_prefix("--") {
                 if let Some(v) = l.strip_prefix("command=") {
-                    return self.code(sc, &W { text: v.to_string(), ..a.clone() }, None);
+                    return self.code(sc, &W { text: v.to_string(), ..a.clone() });
                 }
                 if l == "command" {
                     c = true;
+                }
+                if super::resolve::globsubst(l) {
+                    self.trigger(sc, format!("ADE: {base} --{l} makes every value a glob, whose qualifiers can run code"));
+                    return Out::Unknown;
                 }
                 k += if matches!(l, "rcfile" | "init-file" | "init-command") { 2 } else { 1 };
                 continue;
@@ -875,7 +963,13 @@ impl<'c, 'a> Guard<'c, 'a> {
                     match ch {
                         'c' => c = true,
                         's' => from_stdin = true,
-                        'o' | 'O' => skip += 1,
+                        'o' | 'O' => {
+                            if args.get(k + skip).is_some_and(|o| o.computed() || super::resolve::globsubst(&o.text)) {
+                                self.trigger(sc, format!("ADE: {base} -o {} may make every value a glob, whose qualifiers can run code", args[k + skip].show()));
+                                return Out::Unknown;
+                            }
+                            skip += 1
+                        }
                         _ => {}
                     }
                 }
@@ -886,15 +980,14 @@ impl<'c, 'a> Guard<'c, 'a> {
         }
         if c {
             let Some(code) = args.get(k) else { return Out::Unknown };
-            let pos = (!run.runtime).then(|| args.get(k + 2..).unwrap_or(&[]).to_vec());
-            return self.code(sc, &code.clone(), pos);
+            return self.code(sc, &code.clone());
         }
         if k < args.len() && !from_stdin {
-            return self.shell_file(sc, &args[k], &args[k + 1..]);
+            return self.shell_file(sc, &args[k]);
         }
         match stdin {
-            In::Text(t) => self.code_text(sc, &t, None),
-            In::File(p) => self.read_script(sc, &p, Vec::new(), Exec::Shell),
+            In::Text(t) => self.code_text(sc, &t),
+            In::File(p) => self.read_script(sc, &p, Exec::Shell),
             In::Opaque | In::CredNames => {
                 self.trigger(sc, format!("ADE: {base} reads commands from a pipe the guard can't see into"));
                 Out::Unknown
@@ -903,36 +996,51 @@ impl<'c, 'a> Guard<'c, 'a> {
         }
     }
 
-    fn shell_file(&mut self, sc: &mut Scope, w: &W, rest: &[W]) -> Out {
+    fn shell_file(&mut self, sc: &mut Scope, w: &W) -> Out {
         if w.computed() {
             self.trigger(sc, format!("ADE: this runs a script whose path is computed ({})", w.show()));
             return Out::Unknown;
         }
         let p = abs(&sc.cwd, &w.text);
         if let Some(wr) = self.writes.get(&p).cloned() {
-            return self.run_written(sc, &p, wr, rest.to_vec(), Exec::Shell);
+            return self.run_written(sc, &p, wr, Exec::Shell);
         }
-        self.read_script(sc, &p, rest.to_vec(), Exec::Shell)
+        self.read_script(sc, &p, Exec::Shell)
     }
 
+    /// `source FILE`: followed. When no text of it parsed (missing, too
+    /// large, a syntax error, content the guard can't see), what it assigns
+    /// is unknown, which disqualifies the line.
     fn source(&mut self, sc: &mut Scope, args: &[W]) -> Out {
+        let parsed = self.parsed;
+        let out = self.source_at(sc, args);
+        self.disq |= self.parsed == parsed;
+        out
+    }
+
+    fn source_at(&mut self, sc: &mut Scope, args: &[W]) -> Out {
         let args = if args.first().is_some_and(|a| a.is("--")) { &args[1..] } else { args };
         let Some(w) = args.first() else { return Out::Unknown };
         if w.computed() {
             self.trigger(sc, format!("ADE: this sources a computed path ({}), so the guard can't see what it runs", w.show()));
             return Out::Unknown;
         }
-        let p = abs(&sc.cwd, &w.text);
-        let pos = if args.len() > 1 { args[1..].to_vec() } else { sc.args.clone().unwrap_or_default() };
-        if let Some(wr) = self.writes.get(&p).cloned() {
-            return self.run_written(sc, &p, wr, pos, Exec::Source);
+        // bash's `.`/`source` and zsh's `.` look a name with no slash up on
+        // PATH before the current folder.
+        if !w.text.contains('/') {
+            self.trigger(sc, format!("ADE: this sources {}, a name with no slash that the shell may find on PATH, so the guard can't tell which file it reads", w.show()));
+            return Out::Unknown;
         }
-        self.read_script(sc, &p, pos, Exec::Source)
+        let p = abs(&sc.cwd, &w.text);
+        if let Some(wr) = self.writes.get(&p).cloned() {
+            return self.run_written(sc, &p, wr, Exec::Source);
+        }
+        self.read_script(sc, &p, Exec::Source)
     }
 
     /// A code argument (`bash -c`, `su -c`, …): parsed as a template.
-    pub fn code(&mut self, sc: &mut Scope, w: &W, args: Option<Vec<W>>) -> Out {
-        self.code_text(sc, &w.text, args)
+    pub fn code(&mut self, sc: &mut Scope, w: &W) -> Out {
+        self.code_text(sc, &w.text)
     }
 
     /// Words joined into one command line (`ssh host CMD…`, `watch CMD…`).
@@ -940,12 +1048,12 @@ impl<'c, 'a> Guard<'c, 'a> {
         if ws.is_empty() {
             return Out::Unknown;
         }
-        self.code_text(sc, &join(ws), None)
+        self.code_text(sc, &join(ws))
     }
 
-    pub fn code_text(&mut self, sc: &mut Scope, text: &str, args: Option<Vec<W>>) -> Out {
+    pub fn code_text(&mut self, sc: &mut Scope, text: &str) -> Out {
         let cwd = sc.cwd.clone();
-        self.run_text(text, sc.strict, cwd, args);
+        self.run_text(text, sc.strict, cwd);
         Out::Unknown
     }
 
@@ -984,7 +1092,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                     if !w.computed() && w.text.to_ascii_lowercase().starts_with("alias.") {
                         if let Some(v) = rest.get(i + 1) {
                             if v.text.starts_with('!') {
-                                self.code_text(sc, &v.text[1..], None);
+                                self.code_text(sc, &v.text[1..]);
                             } else if v.text.starts_with([Q_PH, super::resolve::U_PH]) {
                                 self.trigger(sc, format!("ADE: git config sets an alias to computed text ({})", v.show()));
                             }
@@ -1005,7 +1113,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                         None
                     };
                     if let Some(c) = code {
-                        self.code(sc, &c, None);
+                        self.code(sc, &c);
                     }
                 }
                 self.tree_changed = true;
@@ -1039,7 +1147,7 @@ impl<'c, 'a> Guard<'c, 'a> {
             return;
         }
         if let Some(code) = val.strip_prefix('!') {
-            self.code_text(sc, code, None);
+            self.code_text(sc, code);
         } else if val.starts_with([Q_PH, super::resolve::U_PH]) {
             self.trigger(sc, format!("ADE: git -c sets an alias to computed text ({})", v.show()));
         }
@@ -1048,13 +1156,10 @@ impl<'c, 'a> Guard<'c, 'a> {
     fn cd(&mut self, sc: &mut Scope, args: &[W]) {
         let k = args.iter().take_while(|a| a.text.starts_with('-') && a.text.len() > 1).count();
         match args.get(k) {
-            None => {
-                if let Some(h) = &self.ctx.home {
-                    sc.cwd = h.clone();
-                }
-            }
+            None => sc.cwd = self.home().map_or_else(|| PathBuf::from(UNKNOWN_DIR), PathBuf::from),
             Some(a) if !a.computed() && a.text != "-" => sc.cwd = abs(&sc.cwd, &a.text),
-            _ => {}
+            // A computed folder, or `cd -`: one the guard can't name.
+            _ => sc.cwd = PathBuf::from(UNKNOWN_DIR),
         }
     }
 
@@ -1566,13 +1671,14 @@ nvm_process_parameters "$@"
         ("make && ./bin/gh repo delete o/r", true),
         ("bash missing.sh", true),
         // directory variables (m-b, round 6)
-        ("S=/tmp/x; $S/walk/walk", false),
-        ("S=/x; P=$S/y; $P/run", false),
-        ("A=/a; B=$A/b; C=$B/c; D=$C/d; $D/run", false),
+        // (ADR 0011 amendment 5: a variable in the command name asks.)
+        ("S=/tmp/x; $S/walk/walk", true),
+        ("S=/x; P=$S/y; $P/run", true),
+        ("A=/a; B=$A/b; C=$B/c; D=$C/d; $D/run", true),
         ("S=\"/tmp/x y\"; $S/walk", true),
         ("A=/a; B=$A/b; C=$B/c; D=$C/d; E=$D/e; $E/run", true),
         // $HOME and ~ (round 6)
-        (". \"$HOME/.cargo/env\"", false),
+        (". \"$HOME/.cargo/env\"", true),
         ("source ~/.cargo/env", false),
         (". \"$NVM_DIR/nvm.sh\"", true),
         // wrapped and run-by-runner names (round 6)

@@ -28,6 +28,9 @@ mod state;
 mod subagent;
 mod sync;
 mod terminal_open;
+// Story 9: the `ade open -- COMMAND` flow end to end, with real PTYs (H1 to H3).
+#[cfg(all(test, unix))]
+mod terminal_open_e2e;
 mod usage;
 mod vault;
 mod watcher;
@@ -522,6 +525,7 @@ pub fn run() {
             pty::create_pty,
             pty::write_pty,
             pty::pty_line_editor_ready,
+            pty::pty_shell_name,
             pty::resize_pty,
             pty::reattach_pty,
             pty::kill_pty,

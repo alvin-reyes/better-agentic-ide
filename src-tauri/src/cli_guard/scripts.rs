@@ -60,8 +60,7 @@ pub fn is_shell_script(head: &[u8]) -> bool {
 
 impl<'c, 'a> Guard<'c, 'a> {
     /// Parse and classify `text`. `strict`: fail-closed triggers ask.
-    /// `args`: `$1`… when bound.
-    pub fn run_text(&mut self, text: &str, strict: bool, cwd: PathBuf, args: Option<Vec<W>>) {
+    pub fn run_text(&mut self, text: &str, strict: bool, cwd: PathBuf) {
         if self.done() {
             return;
         }
@@ -72,13 +71,25 @@ impl<'c, 'a> Guard<'c, 'a> {
                     self.ask(format!("ADE: the command nests deeper than {MAX_DEPTH} levels, which the guard doesn't follow"));
                 }
             }
+            Err(ParseError::GlobQualifier) if strict => self.ask("ADE: a zsh glob qualifier (word(…)) can run code for each file it matches".into()),
             Err(e) => {
                 if names {
                     self.ask(format!("ADE: the guard can't parse this ({}), and it names a guarded CLI", describe(&e)));
                 }
             }
             Ok(script) => {
-                let mut sc = Scope::new(&script, strict, names, cwd, args);
+                self.parsed += 1;
+                let mut sc = Scope::new(&script, strict, names, cwd);
+                // What a text may assign counts for every text walked after it.
+                for (n, k) in &sc.assigned {
+                    *self.assigned.entry(n.clone()).or_default() += k;
+                }
+                self.disq |= sc.disq;
+                self.defined.extend(sc.funcs.keys().cloned());
+                self.counters.extend(std::mem::take(&mut sc.counters).into_iter().map(|c| (c, strict)));
+                if let Some(r) = sc.flag.clone() {
+                    self.trigger(&sc, r);
+                }
                 self.depth += 1;
                 self.list(&mut sc, &script.list);
                 self.depth -= 1;
@@ -88,8 +99,8 @@ impl<'c, 'a> Guard<'c, 'a> {
 
     /// Read a script under the caps and the read budget, then classify it
     /// under the disk-text rule.
-    pub fn read_script(&mut self, sc: &mut Scope, path: &Path, args: Vec<W>, how: Exec) -> Out {
-        if self.done() {
+    pub fn read_script(&mut self, sc: &mut Scope, path: &Path, how: Exec) -> Out {
+        if self.done() || self.unknown_dir(path) {
             return Out::Unknown;
         }
         let fs = self.ctx.fs;
@@ -133,14 +144,14 @@ impl<'c, 'a> Guard<'c, 'a> {
         }
         let text = String::from_utf8_lossy(&fd.bytes).into_owned();
         let strict = names_guarded(text.as_bytes());
-        self.run_text(&text, strict, sc.cwd.clone(), Some(args));
+        self.run_text(&text, strict, sc.cwd.clone());
         Out::Unknown
     }
 
     /// Run a path an earlier command on the line wrote.
-    pub fn run_written(&mut self, sc: &mut Scope, path: &Path, w: Written, args: Vec<W>, how: Exec) -> Out {
+    pub fn run_written(&mut self, sc: &mut Scope, path: &Path, w: Written, how: Exec) -> Out {
         match w {
-            Written::Text { text, strict } => self.run_text(&text, strict, sc.cwd.clone(), Some(args)),
+            Written::Text { text, strict } => self.run_text(&text, strict, sc.cwd.clone()),
             Written::Append { text } => {
                 let base = self.ctx.fs.read(path, PARSE_CAP.min(self.budget)).map(|f| {
                     self.budget -= f.bytes.len();
@@ -148,9 +159,9 @@ impl<'c, 'a> Guard<'c, 'a> {
                 });
                 let all = format!("{}{text}", base.unwrap_or_default());
                 let strict = names_guarded(all.as_bytes());
-                self.run_text(&all, strict, sc.cwd.clone(), Some(args));
+                self.run_text(&all, strict, sc.cwd.clone());
             }
-            Written::Copy(src) => return self.read_script(sc, &src, args, how),
+            Written::Copy(src) => return self.read_script(sc, &src, how),
             Written::Opaque => {
                 self.trigger(sc, format!("ADE: this runs {}, written on this line from content the guard can't see", path.display()));
             }
@@ -163,8 +174,11 @@ impl<'c, 'a> Guard<'c, 'a> {
     pub fn path_command(&mut self, sc: &mut Scope, p: &str, args: &[W], stdin: In, run: Run) -> Out {
         let _ = stdin;
         let path = abs(&sc.cwd, p);
+        if self.unknown_dir(&path) {
+            return Out::Unknown;
+        }
         if let Some(w) = self.writes.get(&path).cloned() {
-            return self.run_written(sc, &path, w, args.to_vec(), Exec::Path);
+            return self.run_written(sc, &path, w, Exec::Path);
         }
         let fs = self.ctx.fs;
         if fs.exists(&path) {
@@ -178,7 +192,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                     return Out::Unknown;
                 }
             }
-            return self.read_script(sc, &path, args.to_vec(), Exec::Path);
+            return self.read_script(sc, &path, Exec::Path);
         }
         if self.tree_changed {
             self.trigger(
@@ -221,12 +235,12 @@ impl<'c, 'a> Guard<'c, 'a> {
                     k += 1;
                     break;
                 }
-                "-c" | "--call" => return args.get(k + 1).map_or(Out::Unknown, |c| self.code(sc, &c.clone(), None)),
+                "-c" | "--call" => return args.get(k + 1).map_or(Out::Unknown, |c| self.code(sc, &c.clone())),
                 "-p" | "--package" => {
                     pkg_given = true;
                     k += 2;
                 }
-                _ if t.starts_with("--call=") => return self.code_text(sc, &t[7..], None),
+                _ if t.starts_with("--call=") => return self.code_text(sc, &t[7..]),
                 _ if t.starts_with("--package=") => {
                     pkg_given = true;
                     k += 1;
@@ -482,7 +496,7 @@ impl<'c, 'a> Guard<'c, 'a> {
             return;
         }
         self.script_depth += 1;
-        self.run_text(text, strict, dir, None);
+        self.run_text(text, strict, dir);
         self.script_depth -= 1;
     }
 
@@ -490,6 +504,9 @@ impl<'c, 'a> Guard<'c, 'a> {
     /// guarded bin. A missing or unreadable one asks only when the command
     /// text names a guarded bin.
     fn read_pkg(&mut self, sc: &Scope, path: &Path) -> Option<(Value, bool)> {
+        if self.unknown_dir(path) {
+            return None;
+        }
         let fd = self.ctx.fs.read(path, PARSE_CAP.min(self.budget));
         let parsed = fd.as_ref().filter(|f| f.len as usize <= f.bytes.len()).and_then(|f| serde_json::from_slice::<Value>(&f.bytes).ok());
         match (fd, parsed) {
@@ -635,6 +652,7 @@ fn describe(e: &ParseError) -> String {
         ParseError::Unclosed(what) => format!("an unclosed {what}"),
         ParseError::TooDeep => "too deep".into(),
         ParseError::Syntax(s) => s.clone(),
+        ParseError::GlobQualifier => "a glob qualifier".into(),
     }
 }
 

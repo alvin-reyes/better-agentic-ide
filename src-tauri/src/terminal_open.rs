@@ -23,9 +23,23 @@ const REFILL_EVERY: Duration = Duration::from_secs(1);
 /// At most this many shells made by `/open` run at once, counting requests in flight.
 const MAX_RUNNING: usize = 32;
 /// The window has this long to answer; `expiresAt` is the request's creation plus this.
-const ANSWER_WITHIN: Duration = Duration::from_secs(5);
+pub(crate) const ANSWER_WITHIN: Duration = Duration::from_secs(5);
 /// A name's length, in characters.
 const MAX_NAME: usize = 64;
+/// A command's words: at most this many...
+const MAX_WORDS: usize = 64;
+/// ...and the line typed from them, in bytes.
+const MAX_LINE: usize = 4096;
+/// The shells a command may be typed into, by basename.
+const SHELLS_THAT_TYPE: [&str; 6] = ["sh", "bash", "zsh", "fish", "dash", "ksh"];
+/// Typing waits this long for the line editor, from the window's answer.
+const TYPE_WITHIN: Duration = Duration::from_secs(5);
+/// The line editor is polled this often.
+const POLL_EVERY: Duration = Duration::from_millis(50);
+const NOT_READY: &str = "the shell's line editor didn't start";
+const EXITED: &str = "the shell exited before the command was typed";
+/// The window's line isn't the one Rust builds from the request's words.
+const LINE_MISMATCH: &str = "the window's line isn't the command's";
 
 /// The body of `POST /open`. Unknown fields and wrong types are refused.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -68,10 +82,96 @@ pub fn validate(req: &OpenRequest) -> Result<(), OpenAnswer> {
         Some("right" | "down") => return refuse("--split is not supported yet"),
         Some(_) => return refuse(r#"split must be "right", "down" or null"#),
     }
-    if req.command.is_some() {
-        return refuse("a command is not supported yet; open the terminal and type it");
+    if let Some(words) = &req.command {
+        validate_command(words)?;
     }
     Ok(())
+}
+
+/// A command's rules: 1 to 64 words, each non-empty printable ASCII, and the
+/// line typed from them at most 4096 bytes. Otherwise 422.
+pub fn validate_command(words: &[String]) -> Result<(), OpenAnswer> {
+    let refuse = |message: &str| Err(OpenAnswer::error(422, message));
+    if words.is_empty() || words.len() > MAX_WORDS {
+        return refuse("a command must be 1 to 64 words");
+    }
+    if words.iter().any(String::is_empty) {
+        return refuse("a command's words can't be empty");
+    }
+    if !words.iter().all(|w| w.bytes().all(printable)) {
+        return refuse("a command's words must be printable ASCII; expand anything else inside the new terminal");
+    }
+    if typed_line(words).len() > MAX_LINE {
+        return refuse("the command is longer than 4096 bytes when typed");
+    }
+    Ok(())
+}
+
+fn printable(b: u8) -> bool {
+    (0x20..=0x7e).contains(&b)
+}
+
+/// The line the window types for `words`, as `terminalOpen.ts` builds it: a
+/// word matching `^[\w./-]+$` bare, any other through ADR 0008's quoter.
+/// Rust uses it for the length rule, and types the window's line only when
+/// it is exactly this one.
+pub fn typed_line(words: &[String]) -> String {
+    let bare = |w: &str| !w.is_empty() && w.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'/' | b'-'));
+    let quote = |w: &str| -> String {
+        if w.is_empty() {
+            return "''".into();
+        }
+        let mut out = String::new();
+        let mut run = String::new();
+        for c in w.chars() {
+            if c == '\'' || c == '\\' {
+                if !run.is_empty() {
+                    out.push_str(&format!("'{run}'"));
+                    run.clear();
+                }
+                out.push('\\');
+                out.push(c);
+            } else {
+                run.push(c);
+            }
+        }
+        if !run.is_empty() {
+            out.push_str(&format!("'{run}'"));
+        }
+        out
+    };
+    words.iter().map(|w| if bare(w) { w.clone() } else { quote(w) }).collect::<Vec<_>>().join(" ")
+}
+
+/// Whether the window's `line` may be typed: printable ASCII, 1 to 4096 bytes.
+pub fn line_ok(line: &str) -> bool {
+    !line.is_empty() && line.len() <= MAX_LINE && line.bytes().all(printable)
+}
+
+/// Whether a command may be typed into `shell` (a path or a name), by its basename.
+pub fn shell_types(shell: &str) -> bool {
+    let base = shell.rsplit('/').next().unwrap_or(shell);
+    SHELLS_THAT_TYPE.contains(&base)
+}
+
+/// Wait for the line editor: `probe` every `POLL_EVERY` until it answers
+/// ready twice in a row (Ok), the shell is gone (`None`), or `deadline` passes.
+pub fn type_when_ready(mut probe: impl FnMut() -> Option<bool>, now: &dyn Fn() -> Instant, sleep: &dyn Fn(Duration), deadline: Instant) -> Result<(), &'static str> {
+    let mut in_a_row = 0;
+    loop {
+        match probe() {
+            None => return Err(EXITED),
+            Some(true) => in_a_row += 1,
+            Some(false) => in_a_row = 0,
+        }
+        if in_a_row >= 2 {
+            return Ok(());
+        }
+        if now() >= deadline {
+            return Err(NOT_READY);
+        }
+        sleep(POLL_EVERY);
+    }
 }
 
 /// Whether `c` may be in a name: not a control character (Cc), a format
@@ -129,6 +229,11 @@ pub trait Ptys: Send + Sync {
     fn mark_opened(&self, id: u32);
     /// Live PTYs claimed by a request.
     fn opened_count(&self) -> usize;
+    /// `pty_line_editor_ready` for PTY `id`; None once it is gone.
+    fn line_editor_ready(&self, id: u32) -> Option<bool>;
+    /// Queue `line` for PTY `id`'s writer thread; never waits on the
+    /// terminal. False when the PTY is gone.
+    fn type_line(&self, id: u32, line: Vec<u8>) -> bool;
 }
 
 /// Whether request `request_id`, made in `window` when the next PTY id was
@@ -192,6 +297,8 @@ struct Limits {
 pub enum OpenMessage {
     Request { request: RequestMessage },
     Expired { expired: u64 },
+    /// Whether the command of request `typed` was typed.
+    Typed { typed: u64, ok: bool, why: Option<String> },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -216,15 +323,22 @@ pub struct Done {
     /// The window showed and focused the new terminal. It does so for
     /// `--focus` only when the caller's tab is its active tab.
     pub focused: bool,
+    /// The command's line to type, built by the window.
+    pub line: Option<String>,
 }
 
 type Listener = Arc<dyn Fn(OpenMessage) -> bool + Send + Sync>;
 pub type Clock = Arc<dyn Fn() -> Instant + Send + Sync>;
+pub type Sleep = Arc<dyn Fn(Duration) + Send + Sync>;
 
 /// The open handler the endpoint is given in `.setup()`.
 pub struct OpenService {
     ptys: Arc<dyn Ptys>,
     clock: Clock,
+    /// Typing's wait between polls.
+    sleep: Sleep,
+    /// The shell `create_pty` starts: a command is typed only into the listed ones.
+    shell: String,
     /// How long the window has to answer.
     wait: Duration,
     on_windows: bool,
@@ -258,7 +372,15 @@ impl Ptys for AppPtys {
     }
     fn opened_count(&self) -> usize {
         use tauri::Manager;
-        self.0.state::<crate::pty::PtyManager>().opened_count()
+        Ptys::opened_count(self.0.state::<crate::pty::PtyManager>().inner())
+    }
+    fn line_editor_ready(&self, id: u32) -> Option<bool> {
+        use tauri::Manager;
+        Ptys::line_editor_ready(self.0.state::<crate::pty::PtyManager>().inner(), id)
+    }
+    fn type_line(&self, id: u32, line: Vec<u8>) -> bool {
+        use tauri::Manager;
+        Ptys::type_line(self.0.state::<crate::pty::PtyManager>().inner(), id, line)
     }
 }
 
@@ -281,14 +403,17 @@ fn epoch_ms() -> u64 {
 
 impl OpenService {
     pub fn new(app: tauri::AppHandle) -> OpenService {
-        OpenService::with(Arc::new(AppPtys(app)), Arc::new(Instant::now), ANSWER_WITHIN, crate::platform::IS_WINDOWS)
+        let (shell, _) = crate::platform::shell_from(crate::platform::IS_WINDOWS, |k| std::env::var(k).ok());
+        OpenService::with(Arc::new(AppPtys(app)), Arc::new(Instant::now), ANSWER_WITHIN, crate::platform::IS_WINDOWS).with_shell(&shell)
     }
 
     /// `new`, with the PTY table, the clock, the window's time and the platform given.
-    fn with(ptys: Arc<dyn Ptys>, clock: Clock, wait: Duration, on_windows: bool) -> OpenService {
+    pub(crate) fn with(ptys: Arc<dyn Ptys>, clock: Clock, wait: Duration, on_windows: bool) -> OpenService {
         OpenService {
             ptys,
             clock,
+            sleep: Arc::new(std::thread::sleep),
+            shell: "/bin/sh".into(),
             wait,
             on_windows,
             limits: Arc::new(Mutex::new(Limits::default())),
@@ -298,6 +423,18 @@ impl OpenService {
             next_request: AtomicU64::new(1),
             claims: Mutex::new(()),
         }
+    }
+
+    /// The shell new terminals start (`create_pty`'s).
+    pub(crate) fn with_shell(mut self, shell: &str) -> OpenService {
+        self.shell = shell.to_string();
+        self
+    }
+
+    /// Typing's sleep between polls, for a test's clock.
+    pub(crate) fn with_sleep(mut self, sleep: Sleep) -> OpenService {
+        self.sleep = sleep;
+        self
     }
 
     /// Window `label` listens; a second listen from it (a reload) replaces
@@ -331,7 +468,10 @@ impl OpenService {
 
     /// The window's answer, as `/open`'s. With `focus` asked, it says whether
     /// the window honoured it.
-    fn answer(&self, request_id: u64, floor: u32, window: &str, focus: bool, done: Done) -> OpenAnswer {
+    /// `expected` is the line `typed_line` builds from the request's words
+    /// (None without a command): the window's line must be exactly it.
+    fn answer(&self, request_id: u64, floor: u32, window: &str, focus: bool, expected: Option<&str>, listener: &Listener, done: Done) -> OpenAnswer {
+        let command = expected.is_some();
         if let Some(error) = done.error {
             return OpenAnswer::error(409, &error);
         }
@@ -346,7 +486,17 @@ impl OpenService {
                 ok
             }
         };
-        let mut body = match claimed {
+        // The claim is done and its lock released: typing waits on the shell.
+        let typed = match (claimed, done.pty_id, expected) {
+            // Only the request's own words are typed (review finding m3).
+            (Ok(()), Some(_), Some(expected)) if done.line.as_deref() != Some(expected) => Err(LINE_MISMATCH),
+            (Ok(()), Some(pty), Some(_)) => self.type_command(pty, done.line.as_deref()),
+            (claimed, _, _) => claimed,
+        };
+        if command {
+            listener(OpenMessage::Typed { typed: request_id, ok: typed.is_ok(), why: typed.err().map(String::from) });
+        }
+        let mut body = match typed {
             Ok(()) => serde_json::json!({ "ok": true, "typed": true }),
             Err(why) => serde_json::json!({ "ok": true, "typed": false, "why": why }),
         };
@@ -356,6 +506,32 @@ impl OpenService {
         OpenAnswer::json(200, body)
     }
 
+    /// Type the window's `line` into PTY `pty` with Enter, once its line
+    /// editor is ready, within `TYPE_WITHIN` of now (the window's answer).
+    pub(crate) fn type_command(&self, pty: u32, line: Option<&str>) -> Result<(), &'static str> {
+        let Some(line) = line.filter(|l| line_ok(l)) else {
+            return Err("the window's line isn't printable ASCII of at most 4096 bytes");
+        };
+        let deadline = (self.clock)() + TYPE_WITHIN;
+        type_when_ready(|| self.ptys.line_editor_ready(pty), &*self.clock, &*self.sleep, deadline)?;
+        self.type_ready_line(pty, line)
+    }
+
+    /// `line` and Enter to PTY `pty`'s writer thread.
+    fn type_ready_line(&self, pty: u32, line: &str) -> Result<(), &'static str> {
+        if self.ptys.type_line(pty, format!("{line}\r").into_bytes()) {
+            Ok(())
+        } else {
+            Err(EXITED)
+        }
+    }
+
+    /// The 422 for a command when the new shell isn't on the allowlist.
+    fn cant_type(&self) -> OpenAnswer {
+        let base = self.shell.rsplit('/').next().unwrap_or(&self.shell);
+        OpenAnswer::error(422, &format!("ADE can't type a command into {base}; open the terminal and type it"))
+    }
+
     #[cfg(test)]
     fn in_flight(&self) -> usize {
         self.limits.lock().unwrap().in_flight
@@ -363,9 +539,16 @@ impl OpenService {
 }
 
 impl OpenHandler for OpenService {
-    fn admit(&self, caller_pty: u32) -> Result<Admission, OpenAnswer> {
+    fn admit(&self, caller_pty: u32, body: &[u8]) -> Result<Admission, OpenAnswer> {
         if self.on_windows {
             return Err(OpenAnswer::error(422, "ade open isn't available on Windows yet"));
+        }
+        // The shell allowlist before the limits, so a request it refuses
+        // spends no token (review finding m1). A body that doesn't parse is
+        // `handle`'s to refuse.
+        let command = parse_body(body).ok().is_some_and(|req| req.command.is_some());
+        if command && !shell_types(&self.shell) {
+            return Err(self.cant_type());
         }
         let now = (self.clock)();
         let mut limits = self.limits.lock().unwrap();
@@ -392,6 +575,11 @@ impl OpenHandler for OpenService {
             Ok(req) => req,
             Err(refused) => return refused,
         };
+        // Checked at admit too; kept here so `handle` alone never types into
+        // a shell outside the allowlist.
+        if req.command.is_some() && !shell_types(&self.shell) {
+            return self.cant_type();
+        }
         let caller = admission.caller_pty;
         let Some(facts) = self.ptys.facts(caller) else {
             return OpenAnswer::error(410, "the terminal you ran this from is gone");
@@ -417,6 +605,7 @@ impl OpenHandler for OpenService {
             focus: req.focus,
         };
         let focus = request.focus;
+        let expected = request.command.as_deref().map(typed_line);
         if !listener(OpenMessage::Request { request }) {
             self.forget_listener(&window);
             return OpenAnswer::error(409, "the ADE window for this terminal has closed");
@@ -430,7 +619,7 @@ impl OpenHandler for OpenService {
             },
         };
         match done {
-            Some(done) => self.answer(request_id, floor, &window, focus, done),
+            Some(done) => self.answer(request_id, floor, &window, focus, expected.as_deref(), &listener, done),
             None => {
                 listener(OpenMessage::Expired { expired: request_id });
                 OpenAnswer::error(504, "ADE didn't answer; no terminal was opened")
@@ -459,12 +648,11 @@ pub fn terminal_open_listen(window: tauri::WebviewWindow, state: tauri::State<'_
 }
 
 /// The window's answer to request `request_id`: the new terminal's PTY, or why
-/// it couldn't, and whether it showed and focused it. `line` is for typing a
-/// command, which is story 9.
+/// it couldn't, whether it showed and focused it, and the command's line to
+/// type, if the request had a command.
 #[tauri::command]
 pub fn terminal_open_done(state: tauri::State<'_, Arc<OpenService>>, request_id: u64, error: Option<String>, pty_id: Option<u32>, line: Option<String>, focused: Option<bool>) {
-    let _ = line;
-    state.done(request_id, Done { error, pty_id, focused: focused.unwrap_or(false) });
+    state.done(request_id, Done { error, pty_id, focused: focused.unwrap_or(false), line });
 }
 
 #[cfg(test)]
@@ -477,11 +665,20 @@ mod tests {
     struct FakePtys {
         table: Mutex<HashMap<u32, PtyFacts>>,
         next: AtomicU32,
+        /// What the line-editor probe answers, in order; then `Some(true)`.
+        ready: Mutex<std::collections::VecDeque<Option<bool>>>,
+        /// Every probe, by PTY.
+        probes: Mutex<Vec<u32>>,
+        /// Every line typed, by PTY.
+        typed: Mutex<Vec<(u32, Vec<u8>)>>,
     }
 
     impl FakePtys {
         fn new() -> Arc<FakePtys> {
-            Arc::new(FakePtys { table: Mutex::new(HashMap::new()), next: AtomicU32::new(1) })
+            Arc::new(FakePtys { next: AtomicU32::new(1), ..Default::default() })
+        }
+        fn script(&self, answers: &[Option<bool>]) {
+            *self.ready.lock().unwrap() = answers.iter().copied().collect();
         }
         /// A PTY as `create_pty` makes one: the next id.
         fn create(&self, owner: &str, request_id: Option<u64>) -> u32 {
@@ -508,6 +705,14 @@ mod tests {
         }
         fn opened_count(&self) -> usize {
             self.table.lock().unwrap().values().filter(|f| f.opened_by_open).count()
+        }
+        fn line_editor_ready(&self, id: u32) -> Option<bool> {
+            self.probes.lock().unwrap().push(id);
+            self.ready.lock().unwrap().pop_front().unwrap_or(Some(true))
+        }
+        fn type_line(&self, id: u32, line: Vec<u8>) -> bool {
+            self.typed.lock().unwrap().push((id, line));
+            true
         }
     }
 
@@ -586,22 +791,22 @@ mod tests {
         let (clock, offset) = manual_clock();
         let svc = OpenService::with(FakePtys::new(), clock, ANSWER_WITHIN, false);
         for i in 0..8 {
-            assert!(svc.admit(3).is_ok(), "request {i}");
+            assert!(svc.admit(3, b"{}").is_ok(), "request {i}");
         }
-        let refused = svc.admit(3).err().expect("the ninth is refused");
+        let refused = svc.admit(3, b"{}").err().expect("the ninth is refused");
         assert_eq!(refused.status, 429);
         error_of(&refused);
-        assert!(svc.admit(4).is_ok(), "another pane has its own bucket");
+        assert!(svc.admit(4, b"{}").is_ok(), "another pane has its own bucket");
         *offset.lock().unwrap() = Duration::from_millis(500);
-        assert_eq!(svc.admit(3).err().map(|a| a.status), Some(429), "half a second refills nothing");
+        assert_eq!(svc.admit(3, b"{}").err().map(|a| a.status), Some(429), "half a second refills nothing");
         *offset.lock().unwrap() = Duration::from_millis(1000);
-        assert!(svc.admit(3).is_ok(), "a second refills one");
-        assert_eq!(svc.admit(3).err().map(|a| a.status), Some(429));
+        assert!(svc.admit(3, b"{}").is_ok(), "a second refills one");
+        assert_eq!(svc.admit(3, b"{}").err().map(|a| a.status), Some(429));
         *offset.lock().unwrap() = Duration::from_secs(60);
         for i in 0..8 {
-            assert!(svc.admit(3).is_ok(), "refilled to eight, not more: {i}");
+            assert!(svc.admit(3, b"{}").is_ok(), "refilled to eight, not more: {i}");
         }
-        assert_eq!(svc.admit(3).err().map(|a| a.status), Some(429));
+        assert_eq!(svc.admit(3, b"{}").err().map(|a| a.status), Some(429));
     }
 
     #[test]
@@ -613,18 +818,18 @@ mod tests {
         }
         let (clock, offset) = manual_clock();
         let svc = OpenService::with(ptys.clone(), clock, ANSWER_WITHIN, false);
-        let refused = svc.admit(3).err().expect("32 are running");
+        let refused = svc.admit(3, b"{}").err().expect("32 are running");
         assert_eq!(refused.status, 429);
         error_of(&refused);
         // The running count is checked first: the refusal spent no token.
         ptys.kill(1);
         for i in 0..8 {
             *offset.lock().unwrap() = Duration::ZERO;
-            let a = svc.admit(3);
+            let a = svc.admit(3, b"{}");
             assert!(a.is_ok(), "token {i} was not spent by the refusal");
             drop(a);
         }
-        assert_eq!(svc.admit(3).err().map(|a| a.status), Some(429));
+        assert_eq!(svc.admit(3, b"{}").err().map(|a| a.status), Some(429));
     }
 
     #[test]
@@ -635,13 +840,13 @@ mod tests {
             ptys.mark_opened(id);
         }
         let svc = service(ptys);
-        let first = svc.admit(3).unwrap();
-        let second = svc.admit(4).unwrap();
+        let first = svc.admit(3, b"{}").unwrap();
+        let second = svc.admit(4, b"{}").unwrap();
         assert_eq!(svc.in_flight(), 2);
-        assert_eq!(svc.admit(5).err().map(|a| a.status), Some(429));
+        assert_eq!(svc.admit(5, b"{}").err().map(|a| a.status), Some(429));
         drop(first);
         assert_eq!(svc.in_flight(), 1, "dropping an admission releases its slot");
-        assert!(svc.admit(5).is_ok());
+        assert!(svc.admit(5, b"{}").is_ok());
         drop(second);
         assert_eq!(svc.in_flight(), 0);
     }
@@ -662,6 +867,12 @@ mod tests {
         }
         fn mark_opened(&self, id: u32) {
             self.inner.mark_opened(id)
+        }
+        fn line_editor_ready(&self, id: u32) -> Option<bool> {
+            self.inner.line_editor_ready(id)
+        }
+        fn type_line(&self, id: u32, line: Vec<u8>) -> bool {
+            self.inner.type_line(id, line)
         }
         fn opened_count(&self) -> usize {
             let n = self.inner.opened_count();
@@ -688,7 +899,7 @@ mod tests {
         let ptys = Arc::new(RacyPtys { inner: fake.clone(), hook: Mutex::new(None) });
         let (clock, _) = manual_clock();
         let svc = OpenService::with(ptys.clone(), clock, ANSWER_WITHIN, false);
-        let finishing = svc.admit(9).expect("31 running, one more may start");
+        let finishing = svc.admit(9, b"{}").expect("31 running, one more may start");
         let marked = fake.clone();
         *ptys.hook.lock().unwrap() = Some(Box::new(move || {
             marked.mark_opened(in_flight_pty);
@@ -700,7 +911,7 @@ mod tests {
             // The release waits for the limits lock if admit holds it.
             let _ = wait.recv_timeout(Duration::from_millis(300));
         }));
-        let refused = svc.admit(3).err().expect("32 are running: a 33rd is refused");
+        let refused = svc.admit(3, b"{}").err().expect("32 are running: a 33rd is refused");
         assert_eq!(refused.status, 429);
         let deadline = Instant::now() + Duration::from_secs(5);
         while svc.in_flight() != 0 {
@@ -715,17 +926,17 @@ mod tests {
         let (clock, offset) = manual_clock();
         let svc = OpenService::with(FakePtys::new(), clock, ANSWER_WITHIN, false);
         for _ in 0..8 {
-            drop(svc.admit(3).unwrap());
+            drop(svc.admit(3, b"{}").unwrap());
         }
-        drop(svc.admit(4).unwrap());
+        drop(svc.admit(4, b"{}").unwrap());
         *offset.lock().unwrap() = Duration::from_millis(1500);
-        drop(svc.admit(5).unwrap());
+        drop(svc.admit(5, b"{}").unwrap());
         let mut kept: Vec<u32> = svc.limits.lock().unwrap().buckets.keys().copied().collect();
         kept.sort();
         // 4 spent one and has refilled; 3 is still short; 5 just spent one.
         assert_eq!(kept, vec![3, 5], "a refilled bucket is the same as none");
         *offset.lock().unwrap() = Duration::from_secs(60);
-        drop(svc.admit(6).unwrap());
+        drop(svc.admit(6, b"{}").unwrap());
         assert_eq!(svc.limits.lock().unwrap().buckets.keys().copied().collect::<Vec<_>>(), vec![6]);
     }
 
@@ -806,7 +1017,7 @@ mod tests {
     }
 
     #[test]
-    fn split_and_command_answer_not_supported_yet() {
+    fn split_answers_not_supported_yet() {
         let dir = folder();
         for split in ["right", "down"] {
             let refused = validate(&OpenRequest { split: Some(split.into()), ..req(&dir) }).unwrap_err();
@@ -817,11 +1028,8 @@ mod tests {
         assert_eq!(left.status, 422);
         assert!(!error_of(&left).contains("not supported yet"), "an invalid split says what is valid");
         assert!(error_of(&left).contains("right"));
-        for command in [vec![], vec!["npm".to_string(), "run".into(), "dev".into()]] {
-            let refused = validate(&OpenRequest { command: Some(command), ..req(&dir) }).unwrap_err();
-            assert_eq!(refused.status, 422);
-            assert!(error_of(&refused).contains("not supported yet"));
-        }
+        // Story 9: a command is supported now.
+        assert_eq!(validate(&OpenRequest { command: Some(vec!["npm".into(), "run".into(), "dev".into()]), ..req(&dir) }), Ok(()));
     }
 
     #[test]
@@ -829,7 +1037,7 @@ mod tests {
         let (clock, _) = manual_clock();
         let svc = OpenService::with(FakePtys::new(), clock, ANSWER_WITHIN, true);
         for _ in 0..12 {
-            let refused = svc.admit(3).err().expect("refused on Windows");
+            let refused = svc.admit(3, b"{}").err().expect("refused on Windows");
             assert_eq!(refused.status, 422);
             error_of(&refused);
         }
@@ -861,7 +1069,7 @@ mod tests {
     }
 
     fn open(svc: &OpenService, caller: u32, body: Vec<u8>) -> OpenAnswer {
-        match svc.admit(caller) {
+        match svc.admit(caller, &body) {
             Ok(admission) => svc.handle(admission, body),
             Err(refused) => refused,
         }
@@ -875,7 +1083,7 @@ mod tests {
         let made = ptys.clone();
         let got = window(&svc, "main", move |svc, r| {
             let pty = made.create("main", Some(r.request_id));
-            svc.done(r.request_id, Done { error: None, pty_id: Some(pty), focused: true });
+            svc.done(r.request_id, Done { error: None, pty_id: Some(pty), focused: true, ..Default::default() });
         });
         let before = epoch_ms();
         let answer = open(&svc, caller, serde_json::json!({ "cwd": folder(), "name": "api", "focus": true }).to_string().into_bytes());
@@ -917,7 +1125,7 @@ mod tests {
         let ptys = FakePtys::new();
         let caller = ptys.create("main", None);
         let svc = service(ptys);
-        window(&svc, "main", |svc, r| svc.done(r.request_id, Done { error: Some("the terminal you ran this from isn't here".into()), pty_id: None, ..Default::default() }));
+        window(&svc, "main", |svc, r| svc.done(r.request_id, Done { error: Some("the terminal you ran this from isn't here".into()), ..Default::default() }));
         let answer = open(&svc, caller, body(&folder()));
         assert_eq!(answer.status, 409);
         assert_eq!(error_of(&answer), "the terminal you ran this from isn't here");
@@ -1022,7 +1230,7 @@ mod tests {
         let made = ptys.clone();
         window(&svc, "main", move |svc, r| {
             let pty = made.create("main", Some(r.request_id));
-            svc.done(r.request_id, Done { error: None, pty_id: Some(pty), focused });
+            svc.done(r.request_id, Done { error: None, pty_id: Some(pty), focused, ..Default::default() });
         });
         let answer = open(&svc, caller, serde_json::json!({ "cwd": folder(), "focus": focus }).to_string().into_bytes());
         assert_eq!(answer.status, 200);
@@ -1087,8 +1295,8 @@ mod tests {
     struct Panics(Arc<OpenService>);
 
     impl OpenHandler for Panics {
-        fn admit(&self, caller_pty: u32) -> Result<Admission, OpenAnswer> {
-            self.0.admit(caller_pty)
+        fn admit(&self, caller_pty: u32, body: &[u8]) -> Result<Admission, OpenAnswer> {
+            self.0.admit(caller_pty, body)
         }
         fn handle(&self, _admission: Admission, _body: Vec<u8>) -> OpenAnswer {
             panic!("a handler bug");
@@ -1121,6 +1329,446 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         // The endpoint still serves, and the next request gets a slot.
-        assert!(svc.admit(4).is_ok());
+        assert!(svc.admit(4, b"{}").is_ok());
+    }
+
+    // -- Story 9: typing the command (T1 to T5) -------------------------------
+
+    fn with_command(cwd: &str, words: &[&str]) -> Vec<u8> {
+        serde_json::json!({ "cwd": cwd, "command": words }).to_string().into_bytes()
+    }
+
+    fn strings(words: &[&str]) -> Vec<String> {
+        words.iter().map(|w| w.to_string()).collect()
+    }
+
+    /// A clock that only the injected sleep moves, so typing's polls take no
+    /// real time.
+    fn stepped_clock() -> (Clock, Sleep, Arc<Mutex<Duration>>) {
+        let (clock, offset) = manual_clock();
+        let step = offset.clone();
+        (clock, Arc::new(move |d: Duration| *step.lock().unwrap() += d), offset)
+    }
+
+    /// A service on `ptys` with the stepped clock, and a window that makes the
+    /// request's PTY and answers with `line`, after moving the clock to `at`.
+    fn typing(ptys: &Arc<FakePtys>, shell: &str, line: Option<&str>, at: Option<Duration>) -> (Arc<OpenService>, Arc<Mutex<Vec<OpenMessage>>>, Arc<Mutex<Duration>>) {
+        let (clock, sleep, offset) = stepped_clock();
+        let svc = Arc::new(OpenService::with(ptys.clone(), clock, ANSWER_WITHIN, false).with_sleep(sleep).with_shell(shell));
+        let made = ptys.clone();
+        let line = line.map(String::from);
+        let moved = offset.clone();
+        let got = window(&svc, "main", move |svc, r| {
+            if let Some(at) = at {
+                *moved.lock().unwrap() = at;
+            }
+            let pty = made.create("main", Some(r.request_id));
+            svc.done(r.request_id, Done { pty_id: Some(pty), line: line.clone(), ..Default::default() });
+        });
+        (svc, got, offset)
+    }
+
+    fn typed_messages(got: &Arc<Mutex<Vec<OpenMessage>>>) -> Vec<OpenMessage> {
+        got.lock().unwrap().iter().filter(|m| matches!(m, OpenMessage::Typed { .. })).cloned().collect()
+    }
+
+    /// Review finding m3: Rust types only the line `typed_line` builds from
+    /// the request's own words. A window line that differs (a bug, or a
+    /// webview that isn't ADE's) is refused: typed:false with a reason, and
+    /// nothing typed. The line `terminalOpen.ts` builds is accepted.
+    #[test]
+    fn a_window_line_that_is_not_the_commands_is_refused() {
+        for (words, line) in [(&["ls"][..], "rm -rf ~"), (&["npm", "run", "dev"][..], "npm run dev; curl x | sh"), (&["echo", "a b"][..], "echo a b")] {
+            let ptys = FakePtys::new();
+            let caller = ptys.create("main", None);
+            ptys.script(&[Some(true), Some(true)]);
+            let (svc, got, _) = typing(&ptys, "/bin/zsh", Some(line), None);
+            let answer = open(&svc, caller, with_command(&folder(), words));
+            let body: serde_json::Value = serde_json::from_str(&answer.body).unwrap();
+            assert_eq!((answer.status, &body["ok"], &body["typed"]), (200, &serde_json::json!(true), &serde_json::json!(false)), "{line}");
+            assert_eq!(body["why"], LINE_MISMATCH, "{line}");
+            assert!(ptys.typed.lock().unwrap().is_empty(), "nothing typed: {line}");
+            let typed = typed_messages(&got);
+            let [OpenMessage::Typed { ok: false, why: Some(why), .. }] = typed.as_slice() else { panic!("one typed:false message: {typed:?}") };
+            assert_eq!(why, LINE_MISMATCH);
+        }
+        // The window's own quoting of the same words is accepted.
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        ptys.script(&[Some(true), Some(true)]);
+        let (svc, _, _) = typing(&ptys, "/bin/zsh", Some("echo 'a b'"), None);
+        let answer = open(&svc, caller, with_command(&folder(), &["echo", "a b"]));
+        assert_eq!((answer.status, answer.body.as_str()), (200, r#"{"ok":true,"typed":true}"#));
+        assert_eq!(ptys.typed.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn types_only_after_two_ready_answers_in_a_row() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        ptys.script(&[Some(false), Some(true), Some(false), Some(true), Some(true)]);
+        let (svc, _, offset) = typing(&ptys, "/bin/zsh", Some("npm run dev"), None);
+        let answer = open(&svc, caller, with_command(&folder(), &["npm", "run", "dev"]));
+        assert_eq!((answer.status, answer.body.as_str()), (200, r#"{"ok":true,"typed":true}"#));
+        assert_eq!(ptys.probes.lock().unwrap().as_slice(), &[2, 2, 2, 2, 2], "typed on the fifth poll of the new PTY");
+        assert_eq!(*offset.lock().unwrap(), Duration::from_millis(200), "four 50 ms waits between five polls");
+        assert_eq!(ptys.typed.lock().unwrap().as_slice(), &[(2, b"npm run dev\r".to_vec())], "typed once, with Enter");
+    }
+
+    #[test]
+    fn type_when_ready_needs_two_in_a_row() {
+        let (clock, sleep, _) = stepped_clock();
+        let deadline = clock() + TYPE_WITHIN;
+        let mut answers = vec![Some(true), Some(false), Some(true), Some(true)].into_iter();
+        let mut polls = 0;
+        let got = type_when_ready(
+            || {
+                polls += 1;
+                answers.next().unwrap()
+            },
+            &*clock,
+            &*sleep,
+            deadline,
+        );
+        assert_eq!((got, polls), (Ok(()), 4));
+    }
+
+    #[test]
+    fn not_ready_for_five_seconds_gives_typed_false() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        ptys.script(&[Some(false); 500]);
+        let (svc, _, offset) = typing(&ptys, "/bin/zsh", Some("npm run dev"), None);
+        let answer = open(&svc, caller, with_command(&folder(), &["npm", "run", "dev"]));
+        assert_eq!(answer.status, 200);
+        assert_eq!(answer.body, r#"{"ok":true,"typed":false,"why":"the shell's line editor didn't start"}"#);
+        assert_eq!(*offset.lock().unwrap(), Duration::from_secs(5), "gave up at 5 s on the injected clock");
+        assert!(ptys.typed.lock().unwrap().is_empty(), "nothing was typed");
+    }
+
+    #[test]
+    fn a_shell_that_exits_first_gives_typed_false() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        ptys.script(&[Some(false), Some(true), None]);
+        let (svc, _, _) = typing(&ptys, "/bin/bash", Some("ls"), None);
+        let answer = open(&svc, caller, with_command(&folder(), &["ls"]));
+        assert_eq!(answer.body, r#"{"ok":true,"typed":false,"why":"the shell exited before the command was typed"}"#);
+        assert!(ptys.typed.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn typed_false_is_200_and_the_window_gets_typed() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        ptys.script(&[None]);
+        let (svc, got, _) = typing(&ptys, "/bin/bash", Some("ls"), None);
+        let answer = open(&svc, caller, with_command(&folder(), &["ls"]));
+        assert_eq!(answer.status, 200);
+        let request_id = match &got.lock().unwrap()[0] {
+            OpenMessage::Request { request } => request.request_id,
+            other => panic!("{other:?}"),
+        };
+        let typed = typed_messages(&got);
+        assert_eq!(typed, vec![OpenMessage::Typed { typed: request_id, ok: false, why: Some("the shell exited before the command was typed".into()) }], "sent once");
+        assert_eq!(
+            serde_json::to_value(&typed[0]).unwrap(),
+            serde_json::json!({ "typed": request_id, "ok": false, "why": "the shell exited before the command was typed" }),
+            "the wire shape of the contract's OpenMessage"
+        );
+
+        // Typed: the message says so, with no why.
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let (svc, got, _) = typing(&ptys, "/bin/bash", Some("ls"), None);
+        assert_eq!(open(&svc, caller, with_command(&folder(), &["ls"])).body, r#"{"ok":true,"typed":true}"#);
+        let typed = typed_messages(&got);
+        assert_eq!(serde_json::to_value(&typed[0]).unwrap(), serde_json::json!({ "typed": 1, "ok": true, "why": null }));
+        assert_eq!(typed.len(), 1);
+
+        // No command: no typed message and nothing typed.
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let (svc, got, _) = typing(&ptys, "/bin/bash", None, None);
+        assert_eq!(open(&svc, caller, body(&folder())).body, r#"{"ok":true,"typed":true}"#);
+        assert!(typed_messages(&got).is_empty());
+        assert!(ptys.probes.lock().unwrap().is_empty() && ptys.typed.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_non_ascii_or_control_word_is_422() {
+        let dir = folder();
+        for word in ["café", "a\tb", "a\u{1b}[31m", "a\nb", "\u{7f}", "日本"] {
+            let refused = validate(&OpenRequest { command: Some(strings(&["echo", word])), ..req(&dir) }).unwrap_err();
+            assert_eq!(refused.status, 422, "{word:?}");
+            error_of(&refused);
+        }
+        assert_eq!(validate(&OpenRequest { command: Some(strings(&["echo", " !~'\\\"$`"])), ..req(&dir) }), Ok(()), "printable ASCII");
+    }
+
+    #[test]
+    fn more_than_64_words_is_422() {
+        let dir = folder();
+        let words = |n: usize| Some(vec!["w".to_string(); n]);
+        assert_eq!(validate(&OpenRequest { command: words(64), ..req(&dir) }), Ok(()));
+        assert_eq!(validate(&OpenRequest { command: words(65), ..req(&dir) }).unwrap_err().status, 422);
+        assert_eq!(validate(&OpenRequest { command: words(0), ..req(&dir) }).unwrap_err().status, 422, "no words");
+    }
+
+    #[test]
+    fn an_empty_word_is_422() {
+        let refused = validate(&OpenRequest { command: Some(strings(&["echo", ""])), ..req(&folder()) }).unwrap_err();
+        assert_eq!(refused.status, 422);
+        error_of(&refused);
+    }
+
+    #[test]
+    fn a_command_line_over_4096_bytes_is_422() {
+        let dir = folder();
+        let line = |words: Vec<String>| validate(&OpenRequest { command: Some(words), ..req(&dir) });
+        // Bare words: the line is the words and the spaces between them.
+        assert_eq!(line(vec!["x".repeat(4096)]), Ok(()));
+        assert_eq!(line(vec!["x".repeat(4097)]).unwrap_err().status, 422);
+        assert_eq!(line(vec!["x".repeat(2047), "y".repeat(2048)]), Ok(()), "2047 + 1 + 2048");
+        assert_eq!(line(vec!["x".repeat(2048), "y".repeat(2048)]).unwrap_err().status, 422);
+        // A quoted word counts as typed: 'a b...' is two bytes longer.
+        let spaced = |n: usize| format!("a{}", " ".repeat(n - 1));
+        assert_eq!(line(vec![spaced(4094)]), Ok(()));
+        assert_eq!(line(vec![spaced(4095)]).unwrap_err().status, 422);
+        assert_eq!(typed_line(&strings(&["sh", "-c", "echo 'a b'; ls"])), r"sh -c 'echo '\''a b'\''; ls'");
+    }
+
+    #[test]
+    fn a_line_that_fails_the_recheck_is_not_typed() {
+        for bad in ["npm\u{1b}[2J run", "npm\rrm -rf x", "café", "", &"x".repeat(4097)] {
+            let ptys = FakePtys::new();
+            let caller = ptys.create("main", None);
+            let (svc, got, _) = typing(&ptys, "/bin/zsh", Some(bad), None);
+            let answer = open(&svc, caller, with_command(&folder(), &["npm", "run"]));
+            let v: serde_json::Value = serde_json::from_str(&answer.body).unwrap();
+            assert_eq!((answer.status, &v["typed"]), (200, &serde_json::json!(false)), "{bad:?}");
+            assert!(v["why"].is_string());
+            assert!(ptys.typed.lock().unwrap().is_empty(), "{bad:?}: nothing written");
+            assert!(ptys.probes.lock().unwrap().is_empty(), "{bad:?}: refused before waiting");
+            assert_eq!(typed_messages(&got).len(), 1);
+        }
+        // A command with no line from the window is not typed either.
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let (svc, _, _) = typing(&ptys, "/bin/zsh", None, None);
+        let v: serde_json::Value = serde_json::from_str(&open(&svc, caller, with_command(&folder(), &["ls"])).body).unwrap();
+        assert_eq!(v["typed"], false);
+        assert!(ptys.typed.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_shell_outside_the_allowlist_is_422_and_types_nothing() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let (svc, got, _) = typing(&ptys, "/bin/tcsh", Some("ls"), None);
+        let refused = open(&svc, caller, with_command(&folder(), &["ls"]));
+        assert_eq!(refused.status, 422);
+        assert!(error_of(&refused).contains("tcsh"), "{}", refused.body);
+        assert!(got.lock().unwrap().is_empty(), "the window is not asked");
+        assert!(ptys.typed.lock().unwrap().is_empty());
+        // Without a command, any shell opens.
+        assert_eq!(open(&svc, caller, body(&folder())).status, 200);
+    }
+
+    /// Review finding m1: the allowlist is checked at admit, before the
+    /// running cap and the bucket, so a refused request spends no token.
+    #[test]
+    fn a_shell_outside_the_allowlist_spends_no_token() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let (svc, _, _) = typing(&ptys, "/bin/tcsh", Some("ls"), None);
+        for _ in 0..12 {
+            let refused = open(&svc, caller, with_command(&folder(), &["ls"]));
+            assert_eq!(refused.status, 422, "{}", refused.body);
+            assert!(error_of(&refused).contains("tcsh"), "{}", refused.body);
+        }
+        assert_eq!(svc.limits.lock().unwrap().buckets.get(&caller).map(|b| b.tokens), None, "no token was spent");
+        assert_eq!(svc.in_flight(), 0);
+
+        // Without a command the shell doesn't matter: admitted, one token spent.
+        let admitted = svc.admit(caller, &body(&folder())).expect("admitted");
+        assert_eq!(svc.limits.lock().unwrap().buckets.get(&caller).map(|b| b.tokens), Some(7.0));
+        drop(admitted);
+        // A body admit can't read is handle's to refuse (400), as before.
+        assert!(svc.admit(caller, b"{not json").is_ok());
+    }
+
+    #[test]
+    fn the_allowlist_accepts_each_listed_basename() {
+        for name in ["sh", "bash", "zsh", "fish", "dash", "ksh"] {
+            let ptys = FakePtys::new();
+            let caller = ptys.create("main", None);
+            let (svc, _, _) = typing(&ptys, &format!("/opt/homebrew/bin/{name}"), Some("ls"), None);
+            let answer = open(&svc, caller, with_command(&folder(), &["ls"]));
+            assert_eq!((answer.status, answer.body.as_str()), (200, r#"{"ok":true,"typed":true}"#), "{name}");
+            assert!(shell_types(name), "{name}");
+        }
+        for other in ["tcsh", "csh", "nu", "elvish", "mksh", "pwsh", "zsh5", ""] {
+            assert!(!shell_types(&format!("/bin/{other}")), "{other}");
+        }
+    }
+
+    #[test]
+    fn the_typing_budget_starts_at_the_windows_answer() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        ptys.script(&[Some(false); 500]);
+        // The window answers at 4.9 s of its 5 s.
+        let (svc, _, offset) = typing(&ptys, "/bin/zsh", Some("ls"), Some(Duration::from_millis(4900)));
+        let answer = open(&svc, caller, with_command(&folder(), &["ls"]));
+        assert_eq!(answer.status, 200);
+        assert!(answer.body.contains(r#""typed":false"#), "{}", answer.body);
+        let at = *offset.lock().unwrap();
+        assert_eq!(at, Duration::from_millis(9900), "typing gave up 5 s after the window's answer");
+        assert!(at < Duration::from_secs(11), "ADE answers within 11 s");
+    }
+
+    #[test]
+    fn a_window_answer_after_expiry_types_nothing() {
+        let ptys = FakePtys::new();
+        let caller = ptys.create("main", None);
+        let svc = Arc::new(OpenService::with(ptys.clone(), Arc::new(Instant::now), Duration::from_millis(100), false).with_shell("/bin/zsh"));
+        let made = ptys.clone();
+        let (late, answered) = mpsc::channel();
+        let got = window(&svc, "main", move |svc, r| {
+            std::thread::sleep(Duration::from_millis(300));
+            let pty = made.create("main", Some(r.request_id));
+            svc.done(r.request_id, Done { pty_id: Some(pty), line: Some("ls".into()), ..Default::default() });
+            let _ = late.send(());
+        });
+        assert_eq!(open(&svc, caller, with_command(&folder(), &["ls"])).status, 504);
+        answered.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(ptys.typed.lock().unwrap().is_empty() && ptys.probes.lock().unwrap().is_empty(), "nothing typed after expiry");
+        assert!(typed_messages(&got).is_empty());
+        assert_eq!(ptys.opened_count(), 0);
+    }
+}
+
+/// T1 with real PTYs: typing goes through the new terminal's writer thread
+/// and waits for a real line editor. Unix only: `/open` is 422 on Windows,
+/// and these shells and termios checks are Unix's.
+#[cfg(all(test, unix))]
+mod typing_pty_tests {
+    use super::*;
+    use crate::pty::{create_pty_core, NewPty, PtyManager};
+    use crate::ptysink::testing::Window;
+
+    /// `argv` in a real PTY of `manager`, made as `create_pty` makes one.
+    fn spawn(manager: &PtyManager, argv: &[&str]) -> (u32, Window) {
+        let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
+        let window = Window::new();
+        let shell = (argv[0].to_string(), argv[1..].iter().map(|a| a.to_string()).collect());
+        let new = NewPty { rows: 24, cols: 80, cwd: None, request_id: Some(1), owner: "main", shell, vault: vec![] };
+        (create_pty_core(manager, &agent, new, window.out()).unwrap(), window)
+    }
+
+    fn service(manager: &Arc<PtyManager>) -> OpenService {
+        OpenService::with(manager.clone(), Arc::new(Instant::now), ANSWER_WITHIN, false).with_shell("/bin/bash")
+    }
+
+    /// Kills PTY `.1` when dropped, so a failing assertion leaves no shell behind.
+    struct Kill<'a>(&'a PtyManager, u32);
+
+    impl Drop for Kill<'_> {
+        fn drop(&mut self) {
+            self.0.kill_for_test(self.1);
+        }
+    }
+
+    /// Review finding m8: a test that fails still ends its shells.
+    #[test]
+    fn a_failing_test_leaves_no_shell_behind() {
+        let manager = Arc::new(PtyManager::new());
+        let (id, _w) = spawn(&manager, &["sh", "-c", "exec sleep 30"]);
+        assert!(Ptys::facts(&*manager, id).is_some());
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _kill = Kill(&manager, id);
+            panic!("an assertion fails");
+        }));
+        assert!(failed.is_err());
+        assert!(Ptys::facts(&*manager, id).is_none(), "the guard killed and forgot the PTY");
+    }
+
+    /// Review finding M1: an rc file's `read -n 1 -p ...` is out of canonical
+    /// mode with the shell in front, but it is not a line editor (ECHO is on).
+    /// Nothing is typed into the read; the line is typed once the interactive
+    /// shell's line editor is up, and runs there.
+    #[test]
+    fn a_start_up_read_n_gets_nothing_typed_into_it() {
+        let manager = Arc::new(PtyManager::new());
+        let dir = std::env::temp_dir().join(format!("ade-read-n-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("typed-marker");
+        let _ = std::fs::remove_file(&marker);
+        let script = "read -t 2 -n 1 -p 'Update? [Y/n] ' a; echo \"got=[$a]\"; exec bash --norc --noprofile -i";
+        let (id, window) = spawn(&manager, &["bash", "--norc", "--noprofile", "-c", script]);
+        let _kill = Kill(&manager, id);
+        let svc = service(&manager);
+        within("the read's prompt", Duration::from_secs(5), || window.text().contains("Update? [Y/n]"));
+        let line = format!("touch {}", marker.display());
+        assert_eq!(svc.type_command(id, Some(&line)), Ok(()), "typed once the line editor is up");
+        within("the typed line to run in the interactive shell", Duration::from_secs(10), || marker.exists());
+        assert!(window.text().contains("got=[]"), "nothing was typed into the read: {:?}", window.text());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    fn within(what: &str, limit: Duration, done: impl Fn() -> bool) {
+        let deadline = Instant::now() + limit;
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out after {limit:?} waiting for {what}");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn a_terminal_that_never_reads_does_not_block_the_answer() {
+        let manager = Arc::new(PtyManager::new());
+        // Out of canonical mode with sh itself in front (no job control), so
+        // it is ready, but nothing ever reads the terminal.
+        let (id, _w) = spawn(&manager, &["/bin/sh", "-c", "stty -icanon -echo; sleep 30"]);
+        let _kill = Kill(&manager, id);
+        let svc = service(&manager);
+        within("the terminal to be ready", Duration::from_secs(5), || Ptys::line_editor_ready(&*manager, id) == Some(true));
+        // 1 MiB queued first: the writer thread is now blocked on the terminal.
+        assert!(Ptys::type_line(&*manager, id, vec![b'y'; 1 << 20]));
+        std::thread::sleep(Duration::from_millis(300));
+        let start = Instant::now();
+        assert_eq!(svc.type_command(id, Some("echo hi")), Ok(()));
+        assert!(start.elapsed() < Duration::from_secs(1), "typing took {:?}", start.elapsed());
+    }
+
+    #[test]
+    fn a_5000_byte_line_arrives_whole() {
+        let manager = Arc::new(PtyManager::new());
+        let (id, window) = spawn(&manager, &["bash", "--norc", "--noprofile", "-i"]);
+        let _kill = Kill(&manager, id);
+        let svc = service(&manager);
+        // The wait of `type_command`, then the write past the 4096-byte /open
+        // limit: what the writer thread delivers over macOS's 1024-byte and
+        // Linux's 4096-byte canonical buffers.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        type_when_ready(|| Ptys::line_editor_ready(&*manager, id), &Instant::now, &std::thread::sleep, deadline).expect("bash's line editor");
+        let line = format!("printf %s {} | wc -c", "x".repeat(4982));
+        assert_eq!(line.len(), 5000);
+        assert_eq!(svc.type_ready_line(id, &line), Ok(()));
+        within("the whole line counted", Duration::from_secs(10), || window.text().split("wc -c").nth(1).is_some_and(|after| after.contains("4982")));
+    }
+
+    #[test]
+    fn a_shell_that_never_prompts_gives_typed_false() {
+        let manager = Arc::new(PtyManager::new());
+        // Canonical and in front: never ready (spec, "Known typing failures").
+        let (id, _w) = spawn(&manager, &["sh", "-c", "exec sleep 30"]);
+        let _kill = Kill(&manager, id);
+        let svc = service(&manager);
+        let start = Instant::now();
+        assert_eq!(svc.type_command(id, Some("echo hi")), Err(NOT_READY));
+        let took = start.elapsed();
+        assert!(took >= Duration::from_secs(5) && took < Duration::from_secs(7), "gave up at {took:?}");
     }
 }

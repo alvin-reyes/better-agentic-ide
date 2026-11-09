@@ -477,7 +477,9 @@ impl Drop for Admission {
 /// `admit` is quick and runs on the serve thread; `handle` may wait and runs
 /// on a thread of its own.
 pub trait OpenHandler: Send + Sync {
-    fn admit(&self, caller_pty: u32) -> Result<Admission, OpenAnswer>;
+    /// The limits, and the checks that must refuse before a token is spent
+    /// (the shell allowlist reads `body`).
+    fn admit(&self, caller_pty: u32, body: &[u8]) -> Result<Admission, OpenAnswer>;
     fn handle(&self, admission: Admission, body: Vec<u8>) -> OpenAnswer;
 }
 
@@ -699,7 +701,7 @@ fn open(status: &AgentStatus, request: tiny_http::Request, pty: u32, body: Vec<u
     let Some(handler) = status.0.open.lock().unwrap().clone() else {
         return respond(request, 409, &OpenAnswer::error(409, "ADE is still starting").body);
     };
-    let admission = match handler.admit(pty) {
+    let admission = match handler.admit(pty, &body) {
         Ok(admission) => admission,
         Err(refused) => return respond(request, refused.status, &refused.body),
     };
@@ -1424,7 +1426,7 @@ mod tests {
     }
 
     impl OpenHandler for FakeOpen {
-        fn admit(&self, caller_pty: u32) -> Result<Admission, OpenAnswer> {
+        fn admit(&self, caller_pty: u32, _body: &[u8]) -> Result<Admission, OpenAnswer> {
             self.admitted.lock().unwrap().push(std::thread::current().id());
             if let Some(refused) = &self.refuse {
                 return Err(refused.clone());

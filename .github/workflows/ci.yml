@@ -36,6 +36,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # shellQuote.test.ts runs real zsh and fish, and fails on CI without them (ADR 0008).
+      - name: Install zsh and fish
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fish zsh
+
       - name: Unit tests
         run: npm test
 

@@ -12,7 +12,7 @@ its pane.
   `pty_line_editor_ready` of `feat/cli-guard` (ADR 0011), and `shellQuote`
   (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`, `origin/hermes-a-quoting`).
 
-Status: approved by the owner 2026-11-02 (revised the same day after the final review and its re-review, rulings R1 to R7); approved for build on 2026-11-09 as stories 4a (endpoint and window) and 4c (CLI). Not yet built. macOS and Linux only.
+Status: approved by the owner 2026-11-02 (revised the same day after the final review and its re-review, rulings R1 to R7); approved for build on 2026-11-09 as stories 4a (endpoint and window) and 4c (CLI). Typing (`-- COMMAND`): built in story 9 (2026-11-09). macOS and Linux only.
 
 ## The CLI
 
@@ -40,12 +40,19 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   - `create_pty` always strips inherited entries for these folders. It
     prepends its own only when it sets the `ADE_*` variables.
   - Agents and scripts use `"$ADE_HOOK_BIN" open`.
+  - The command guard never resolves a variable (ADR 0011 amendment 5; `cli-guard.md`, "Expansions are never resolved"): a computed verb, `--name`, `--split` or `--cwd` value, or a computed word after `--` that it judges, asks. `"$ADE_HOOK_BIN"` as the command word is the one exception, while the session's value is absolute and nothing on the line can assign `ADE_HOOK_BIN`.
 - **The working folder:** `$PWD` when it is absolute and it and `getcwd`
   canonicalise to the same existing folder; else `getcwd`.
 - **`--cwd`:** joined to the working folder,
   normalised lexically, checked with `stat`. The logical path is sent; the
   default is the working folder. `--name` is refused with `--split`.
 - **Output:** nothing on success. Errors go to stderr as `ade: <message>`.
+- **Capabilities (story 9):** `ade help` (and `ade-hook help`, `--help`)
+  exits 0 and prints, on **stdout**, exactly one line that starts at column 0
+  with `capabilities:`, followed by space-separated words. This build prints
+  `capabilities: command` (it can type `-- COMMAND`); `--split` (story 8)
+  will add `split`. Callers match a word, never the whole line, and never
+  read stderr for it.
 - **Exit codes** (the same table as the spec):
   - `0`: opened; the command, if any, was typed.
   - `1`: any answer other than 200, 401 or 410 (400, 404, 409, 422, 429,
@@ -61,7 +68,8 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   - `4`: connection refused, 401, or 410 (this terminal has closed), or the
     connection closed before any answer. Mention tmux and screen in the
     message, and a sandboxed Bash for the close.
-  - `5`: opened, but the command was not typed (`typed:false`).
+  - `5`: opened, but the command was not typed (`typed:false`); stderr is
+    `ade: opened, but the command wasn't typed: <why>`.
 - Never put the token on a command line: `ps` shows it.
 
 ## Tokens (amends ADR 0003)
@@ -132,7 +140,10 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
 - **Threads.** `serve` stays one loop. For `/open` it runs `screen()`, reads
   the body and calls the injected handler's `admit` (the limits) on its own
   thread, then hands the admitted request to a new thread that calls
-  `handle` and answers. `admit` returns an `Admission` whose `Drop` releases
+  `handle` and answers. `admit(caller_pty, body)` refuses a command for a
+  shell outside the allowlist (422) before the running cap and the bucket,
+  so that refusal spends no token; a body it can't parse is `handle`'s to
+  refuse. `admit` returns an `Admission` whose `Drop` releases
   the in-flight slot, so a panic in `handle` or a failed thread spawn (503)
   can't leak it. `admit` reads the running count under its limits lock (a
   finishing request claims its PTY before releasing its slot, so it is
@@ -165,12 +176,15 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
     - it is owned by that window.
     Otherwise the result is `typed:false`.
   - An accepted PTY is marked as made by `/open`, for the cap.
-  - It re-checks `line`: printable ASCII, at most 4096 bytes.
+  - It re-checks `line`: printable ASCII, at most 4096 bytes, and exactly
+    `typed_line(command)` (the window's rule, rebuilt in Rust); a different
+    line is `typed:false`, why "the window's line isn't the command's".
 - **Typing** (`feat/cli-guard`'s PTY layer):
   - Poll `line_editor_ready(master, shell pid)` (the check behind
-    `pty_line_editor_ready`: out of canonical mode, and `tcgetpgrp` is the
-    shell or a nested interactive shell at its prompt, as `classify` judges
-    it) every 50 ms; type after two ready answers in a row. Not ready
+    `pty_line_editor_ready`: out of canonical mode, ECHO off, and
+    `tcgetpgrp` is the shell or a nested interactive shell at its prompt, as
+    `classify` judges it; the facts are copied under the instances lock and
+    judged after releasing it) every 50 ms; type after two ready answers in a row. Not ready
     within 5 s of the window's answer: `typed:false`. Never use `pgrep -P`.
   - Write `line + "\r"` through the PTY's `input` channel (its writer
     thread), never a blocking write.
@@ -233,7 +247,11 @@ type OpenMessage =
 - A shell that fails to start (or a terminal replaced meanwhile) after the
   add: the window closes the view it added (`closeView`) and answers the
   error, so no dead "Failed to start shell" sub-terminal is left.
-- `typed` sets the entry's status.
+- `typed` sets the entry's status (`useOpenStatus`, keyed `tabId/viewId`).
+  The not-typed notice shows `noticeWord(command)`: the command word after
+  any leading `VAR=value` words, or `NAME=…` for assignments only; never a
+  value. An entry is dropped when its view or tab is gone (closeView,
+  closeTab).
 - The line is held in memory only.
 
 ## Store shape (`src/stores/tabStore.ts`)

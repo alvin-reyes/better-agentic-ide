@@ -21,6 +21,8 @@ pub struct PtyInstance {
     request_id: Option<u64>,
     /// A `/open` request claimed it, so it counts toward the cap.
     opened_by_open: bool,
+    /// The basename of the shell it started, set at creation.
+    shell: Option<String>,
 }
 
 impl PtyInstance {
@@ -52,7 +54,7 @@ impl PtyInstance {
                 }
             })
             .map_err(|e| format!("can't start the terminal's writer: {e}"))?;
-        Ok(Self { input, _child: child, master, pid, sink, owner: None, request_id: None, opened_by_open: false })
+        Ok(Self { input, _child: child, master, pid, sink, owner: None, request_id: None, opened_by_open: false, shell: None })
     }
 }
 
@@ -105,6 +107,63 @@ impl PtyManager {
     /// Live PTYs a `/open` request claimed.
     pub(crate) fn opened_count(&self) -> usize {
         self.instances.lock().unwrap().values().filter(|i| i.opened_by_open).count()
+    }
+
+    /// Kill PTY `id`'s shell and forget it: tests that make real PTYs end them.
+    #[cfg(test)]
+    pub(crate) fn kill_for_test(&self, id: u32) {
+        let removed = self.instances.lock().unwrap().remove(&id);
+        if let Some(mut instance) = removed {
+            instance._child.kill().ok();
+        }
+    }
+
+    /// Kill every PTY's shell and forget it: a test's guard, on failure too.
+    #[cfg(test)]
+    pub(crate) fn kill_all_for_test(&self) {
+        let ids: Vec<u32> = self.instances.lock().unwrap().keys().copied().collect();
+        for id in ids {
+            self.kill_for_test(id);
+        }
+    }
+
+    /// How many PTYs the table holds.
+    #[cfg(test)]
+    pub(crate) fn live_for_test(&self) -> usize {
+        self.instances.lock().unwrap().len()
+    }
+
+    /// The basename of the shell PTY `id` started; None once it is gone.
+    pub(crate) fn shell_name(&self, id: u32) -> Option<String> {
+        self.instances.lock().unwrap().get(&id)?.shell.clone()
+    }
+}
+
+/// `/open`'s view of the table: the claim, the cap and typing.
+impl crate::terminal_open::Ptys for PtyManager {
+    fn facts(&self, id: u32) -> Option<crate::terminal_open::PtyFacts> {
+        PtyManager::facts(self, id)
+    }
+    fn next_id(&self) -> u32 {
+        PtyManager::next_id(self)
+    }
+    fn mark_opened(&self, id: u32) {
+        PtyManager::mark_opened(self, id)
+    }
+    fn opened_count(&self) -> usize {
+        PtyManager::opened_count(self)
+    }
+    fn line_editor_ready(&self, id: u32) -> Option<bool> {
+        let facts = {
+            let instances = self.instances.lock().unwrap();
+            let instance = instances.get(&id)?;
+            editor_facts(instance.master.as_ref(), instance.pid)
+        };
+        editor_ready(facts)
+    }
+    fn type_line(&self, id: u32, line: Vec<u8>) -> bool {
+        let instances = self.instances.lock().unwrap();
+        instances.get(&id).is_some_and(|instance| instance.input.send(line).is_ok())
     }
 }
 
@@ -209,6 +268,36 @@ pub fn create_pty(
     request_id: Option<u64>,
     on_event: Channel<PtyEvent>,
 ) -> Result<u32, String> {
+    let shell = crate::platform::shell_from(crate::platform::IS_WINDOWS, |k| std::env::var(k).ok());
+    // Vault secrets, so agents and MCP servers started here can use them.
+    let vault = crate::vault::env_for_terminals(&app).into_iter().collect();
+    let new = NewPty { rows, cols, cwd, request_id, owner: window.label(), shell, vault };
+    create_pty_core(&state, &agent, new, channel_out(on_event))
+}
+
+/// What `create_pty` is asked for, without the window.
+pub(crate) struct NewPty<'a> {
+    pub rows: u16,
+    pub cols: u16,
+    pub cwd: Option<String>,
+    pub request_id: Option<u64>,
+    /// The label of the window that asked.
+    pub owner: &'a str,
+    /// The program and its arguments: the user's shell in the app.
+    pub shell: (String, Vec<String>),
+    /// The vault's variables.
+    pub vault: Vec<(String, String)>,
+}
+
+/// `create_pty`'s body: everything but the window, so `/open`'s end-to-end
+/// test can make terminals as the app does.
+pub(crate) fn create_pty_core(
+    state: &PtyManager,
+    agent: &crate::agent_status::AgentStatus,
+    new: NewPty<'_>,
+    out: Out,
+) -> Result<u32, String> {
+    let NewPty { rows, cols, cwd, request_id, owner, shell: (shell, shell_args), vault } = new;
     let pty_system = NativePtySystem::default();
 
     let pair = pty_system
@@ -220,8 +309,6 @@ pub fn create_pty(
         })
         .map_err(|e| format!("openpty failed: {}", e))?;
 
-    let (shell, shell_args) =
-        crate::platform::shell_from(crate::platform::IS_WINDOWS, |k| std::env::var(k).ok());
     let mut cmd = CommandBuilder::new(&shell);
     for arg in &shell_args {
         cmd.arg(arg);
@@ -244,8 +331,7 @@ pub fn create_pty(
     if let Some((name, value)) = crate::platform::default_locale(crate::platform::IS_MACOS, |k| std::env::var(k).ok()) {
         cmd.env(name, value);
     }
-    // Vault secrets, so agents and MCP servers started here can use them.
-    for (name, value) in crate::vault::env_for_terminals(&app) {
+    for (name, value) in vault {
         cmd.env(name, value);
     }
     let id = reserve_id(&state.next_id);
@@ -256,15 +342,16 @@ pub fn create_pty(
     drop(pair.slave);
 
     let reader = clone_reader(pair.master.as_ref())?;
-    let sink = Arc::new(Mutex::new(Sink::new(channel_out(on_event))));
-    let instance = PtyInstance::new(id, child, pair.master, child_pid, sink.clone())?;
+    let sink = Arc::new(Mutex::new(Sink::new(out)));
+    let mut instance = PtyInstance::new(id, child, pair.master, child_pid, sink.clone())?;
+    instance.shell = shell.rsplit(['/', '\\']).next().map(String::from);
 
-    state.insert_new(id, instance, window.label(), request_id);
+    state.insert_new(id, instance, owner, request_id);
 
     // Started after the insert, so a shell that exits at once still finds
     // its entry to remove.
     let instances = state.instances.clone();
-    let agent = agent.inner().clone();
+    let agent = agent.clone();
     start_reader(reader, sink, move || remove(&instances, &agent, id));
 
     Ok(id)
@@ -299,23 +386,64 @@ fn write_to(instances: &Mutex<HashMap<u32, PtyInstance>>, id: u32, data: Vec<u8>
 /// not ready, and the webview's 10 s cap applies.
 #[tauri::command]
 pub fn pty_line_editor_ready(state: tauri::State<'_, PtyManager>, id: u32) -> Option<bool> {
-    let instances = state.instances.lock().unwrap();
-    let instance = instances.get(&id)?;
-    line_editor_ready(instance.master.as_ref(), instance.pid)
+    let facts = {
+        let instances = state.instances.lock().unwrap();
+        let instance = instances.get(&id)?;
+        editor_facts(instance.master.as_ref(), instance.pid)
+    };
+    editor_ready(facts)
 }
 
-/// `pty_line_editor_ready` for one master and its shell's pid. portable-pty
-/// makes the shell a session leader, so its pid is its process group. A
-/// nested interactive shell at its prompt (another group, which `classify`
-/// calls a Shell, as the busy check does) counts as the shell in front.
-fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool> {
+/// The basename of the shell PTY `id` started (`zsh`, `dash`...), or None
+/// once it is gone. Insert command reads it to say a shell has no line editor.
+#[tauri::command]
+pub fn pty_shell_name(state: tauri::State<'_, PtyManager>, id: u32) -> Option<String> {
+    state.shell_name(id)
+}
+
+/// What the line-editor check judges, read from the master alone (no
+/// process lookup), so callers read it under the instances lock and judge it
+/// with [`editor_ready`] after releasing the lock.
+#[derive(Clone, Copy, Debug, Default)]
+struct EditorFacts {
+    /// `(canonical, echo)` from the terminal's termios; None when unreadable.
+    modes: Option<(bool, bool)>,
+    /// The terminal's foreground process group.
+    fg: Option<i32>,
+    shell: Option<u32>,
+}
+
+fn editor_facts(master: &dyn MasterPty, shell: Option<u32>) -> EditorFacts {
     #[cfg(unix)]
     {
-        let (Some(t), Some(fg), Some(shell)) = (master.get_termios(), master.process_group_leader(), shell) else {
+        let modes = master.get_termios().map(|t| {
+            let t: libc::termios = t.into();
+            (t.c_lflag & libc::ICANON != 0, t.c_lflag & libc::ECHO != 0)
+        });
+        EditorFacts { modes, fg: master.process_group_leader(), shell }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (master, shell);
+        EditorFacts::default()
+    }
+}
+
+/// Whether the facts show a line editor reading: out of canonical mode, ECHO
+/// off, and the shell in front. Readline, ZLE and fish turn ECHO off and echo
+/// what they draw themselves; a start-up `read -n` (bash) or `read -k` (zsh)
+/// leaves canonical mode with ECHO on, so it is not a line editor (review
+/// finding M1). portable-pty makes the shell a session leader, so its pid is
+/// its process group. A nested interactive shell at its prompt (another
+/// group, which `classify` calls a Shell, as the busy check does) counts as
+/// the shell in front.
+fn editor_ready(facts: EditorFacts) -> Option<bool> {
+    #[cfg(unix)]
+    {
+        let (Some((canonical, echo)), Some(fg), Some(shell)) = (facts.modes, facts.fg, facts.shell) else {
             return Some(false);
         };
-        let t: libc::termios = t.into();
-        if t.c_lflag & libc::ICANON != 0 || fg <= 0 {
+        if canonical || echo || fg <= 0 {
             return Some(false);
         }
         let fg = fg as u32;
@@ -323,9 +451,16 @@ fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool>
     }
     #[cfg(not(unix))]
     {
-        let _ = (master, shell);
+        let _ = facts;
         None
     }
+}
+
+/// `pty_line_editor_ready` for one master and its shell's pid, in one step:
+/// for tests, which hold no table lock that matters.
+#[cfg(test)]
+fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool> {
+    editor_ready(editor_facts(master, shell))
 }
 
 #[tauri::command]
@@ -894,6 +1029,26 @@ mod tests {
         manager.set_owner(id, "main");
         assert_eq!(manager.facts(id), None, "setting a gone terminal's owner makes nothing");
     }
+
+    /// Story 9 (T3): `create_pty`'s core keeps the shell's basename on the
+    /// instance, for Insert command's "no line editor" title, and records the
+    /// owner and request as `create_pty` did.
+    #[test]
+    fn the_shell_basename_is_kept_on_the_instance() {
+        use crate::ptysink::testing::Window;
+        let manager = PtyManager::new();
+        let agent = crate::agent_status::AgentStatus::start(Err("helper missing".into()));
+        let window = Window::new();
+        let new = NewPty { rows: 24, cols: 80, cwd: None, request_id: Some(3), owner: "main", shell: ("/bin/sh".into(), vec!["-c".into(), "sleep 3".into()]), vault: vec![] };
+        let id = create_pty_core(&manager, &agent, new, window.out()).unwrap();
+        assert_eq!(manager.shell_name(id).as_deref(), Some("sh"));
+        assert_eq!(manager.facts(id).map(|f| (f.owner, f.request_id)), Some((Some("main".into()), Some(3))));
+        assert_eq!(manager.shell_name(id + 100), None, "an unknown terminal has none");
+        let removed = manager.instances.lock().unwrap().remove(&id);
+        if let Some(mut inst) = removed {
+            inst._child.kill().ok();
+        }
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -1016,6 +1171,26 @@ mod wiring_tests {
         rest[..rest.find("\n}\n").expect("the command's end")].to_string()
     }
 
+    /// Review finding m4: the line-editor check copies the shell's pid, the
+    /// foreground group and the termios under the instances lock, and
+    /// classifies (sysinfo, through `foreground_job`) after releasing it, so a
+    /// slow process lookup never stalls every other terminal's command.
+    #[test]
+    fn the_line_editor_check_classifies_outside_the_instances_lock() {
+        let source = include_str!("pty.rs").replace("\r\n", "\n");
+        let command = command_body(&source, "pty_line_editor_ready");
+        let start = source.find(concat!("fn line_editor_ready(&self, ", "id: u32)")).expect("Ptys::line_editor_ready");
+        let rest = &source[start..];
+        let ptys = &rest[..rest.find("\n    }\n").unwrap()];
+        for (what, body) in [("pty_line_editor_ready", command.as_str()), ("Ptys::line_editor_ready", ptys)] {
+            let facts = body.find(concat!("editor_facts(", "instance.master.as_ref(), instance.pid)")).unwrap_or_else(|| panic!("{what}: copies the facts under the lock"));
+            let judged = body.find(concat!("editor_ready(", "facts)")).unwrap_or_else(|| panic!("{what}: judges the copied facts"));
+            let released = body[facts..judged].contains("};");
+            assert!(facts < judged && released, "{what}: the lock's block ends before the facts are judged:\n{body}");
+            assert!(!body.contains(concat!("line_editor_ready(", "instance.master")), "{what}: no check under the lock");
+        }
+    }
+
     /// `/open`'s bookkeeping is done by the commands: create_pty records the
     /// window that asked and the request (the claim and the cap read them),
     /// and reattach_pty records the window a tab moved to. The setters are
@@ -1024,9 +1199,17 @@ mod wiring_tests {
     #[test]
     fn the_commands_record_the_owner_and_the_request() {
         let source = include_str!("pty.rs");
+        // create_pty passes its own window and request to its core (story 9's
+        // split), and the core records them.
         let create = command_body(source, "create_pty");
-        assert!(create.contains(concat!("state.insert_new(id, instance, window.label(), ", "request_id)")), "create_pty records owner and request");
-        assert!(!create.contains(concat!(".instances.lock().unwrap().", "insert(")), "and inserts only through insert_new");
+        assert!(create.contains(concat!("owner: window.label()", ", shell, vault")), "create_pty passes its window as the owner");
+        assert!(create.contains(concat!("NewPty { rows, cols, cwd, ", "request_id,")), "and its request");
+        assert!(create.contains(concat!("create_pty_core(&state, &agent, new, ", "channel_out(on_event))")), "through the core");
+        let core = source.replace("\r\n", "\n");
+        let core = &core[core.find(concat!("pub(crate) fn ", "create_pty_core(")).expect("the core")..];
+        let core = &core[..core.find("\n}\n").unwrap()];
+        assert!(core.contains(concat!("state.insert_new(id, instance, owner, ", "request_id)")), "the core records owner and request");
+        assert!(!core.contains(concat!(".instances.lock().unwrap().", "insert(")), "and inserts only through insert_new");
         let reattach = command_body(source, "reattach_pty");
         assert!(reattach.contains(concat!("state.set_owner(id, ", "window.label())")), "reattach_pty records the new owner");
     }
@@ -1139,13 +1322,13 @@ mod line_editor_tests {
         // Raw with the shell in front: no job control keeps sh's group in the
         // foreground. This must hold on macOS too (CI's backend-macos job):
         // it is what catches tcgetpgrp or tcgetattr failing on the master.
-        let (front, _w2) = spawn(2, &["/bin/sh", "-c", "stty -icanon; sleep 3"]);
+        let (front, _w2) = spawn(2, &["/bin/sh", "-c", "stty -icanon -echo; sleep 3"]);
         instances.lock().unwrap().insert(2, front);
         within("raw with the shell in front reads Some(true)", Duration::from_secs(2), || ready(&instances, 2) == Some(true));
 
         // Raw with a job in front: with job control, sleep is its own
         // foreground group, as zsh runs rc commands.
-        let (behind, _w3) = spawn(3, &["/bin/sh", "-c", "set -m; stty -icanon; sleep 3; :"]);
+        let (behind, _w3) = spawn(3, &["/bin/sh", "-c", "set -m; stty -icanon -echo; sleep 3; :"]);
         instances.lock().unwrap().insert(3, behind);
         within("the job's terminal to go raw", Duration::from_secs(2), || raw(instances.lock().unwrap()[&3].master.as_ref()));
         std::thread::sleep(Duration::from_millis(200));
@@ -1165,6 +1348,37 @@ mod line_editor_tests {
         for id in [1, 2, 3] {
             stop(&instances, id);
         }
+    }
+
+    /// Stops its PTYs when dropped, so a failing assertion leaves no shell behind.
+    struct Stop<'a>(&'a Mutex<HashMap<u32, PtyInstance>>, Vec<u32>);
+
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            for &id in &self.1 {
+                stop(self.0, id);
+            }
+        }
+    }
+
+    /// Review finding M1: a start-up `read -n` (bash) leaves canonical mode
+    /// with the shell in front but keeps ECHO on. Readline, ZLE and fish turn
+    /// ECHO off, so a line editor is out of canonical mode AND not echoing.
+    #[test]
+    fn a_raw_read_with_echo_on_is_not_a_line_editor() {
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        let _stop = Stop(&instances, vec![6, 7]);
+        let (echoing, _w6) = spawn(6, &["/bin/sh", "-c", "stty -icanon echo; sleep 3"]);
+        instances.lock().unwrap().insert(6, echoing);
+        within("the terminal to go raw", Duration::from_secs(2), || raw(instances.lock().unwrap()[&6].master.as_ref()));
+        let until = Instant::now() + Duration::from_millis(500);
+        while Instant::now() < until {
+            assert_eq!(ready(&instances, 6), Some(false), "raw, the shell in front, but echoing: a read, not a line editor");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let (quiet, _w7) = spawn(7, &["/bin/sh", "-c", "stty -icanon -echo; sleep 3"]);
+        instances.lock().unwrap().insert(7, quiet);
+        within("raw and not echoing reads Some(true)", Duration::from_secs(2), || ready(&instances, 7) == Some(true));
     }
 
     #[test]

@@ -42,6 +42,23 @@ Drag tabs to reorder them. A tab whose terminal is busy shows an activity pulse;
 
 New panes open in the same folder as the pane you split. Drag the divider to resize.
 
+## Opening terminals from a terminal
+
+A program running in an ADE terminal (a script, or Claude Code's Bash tool) can open a sub-terminal in its own tab and type a command into it. The sub-terminal appears in the strip above the terminal; the session that asked keeps running.
+
+```sh
+"$ADE_HOOK_BIN" open --cwd ~/src/api --name api -- npm run dev
+```
+
+- `--cwd DIR` is the new terminal's folder (default: the current one), `--name NAME` its name in the strip, and `--focus` shows it if the tab is in sight.
+- Everything after `--` is typed into the new shell with Enter once its prompt is up. A spinner shows on the strip entry until then. If it can't be typed (the shell never showed a prompt), the command exits 5 and the sub-terminal shows a notice with **Insert command**, which puts the line at the prompt for you to run.
+- A start-up prompt in your rc files is waited out: ADE types only once the shell's own line editor is up. One exception: a prompt that reads with echo off (`read -s`, as for a passphrase) looks like a line editor, so the command is typed into it. Avoid such prompts in rc files, or answer them before opening terminals from scripts.
+- `"$ADE_HOOK_BIN" help` prints the options; its `capabilities:` line says what this ADE can do.
+
+**What runs is what your shell makes of it.** The command is typed into a new login shell, so it runs after your rc files (`.zshrc`, `.bashrc`, `config.fish`) and through your aliases and functions. ADE's command guard checks the words you pass, but it can't see what an alias or function of the same name does.
+
+**Pass secrets by name, not by value.** The words you pass are typed into the new terminal, where they stay in its scrollback and shell history. To use a secret, have the new terminal expand it itself: pass `-- sh -c 'deploy --token "$API_TOKEN"'`, with the variable set in the new terminal (for example from ADE's vault), rather than the secret's value.
+
 ## Clickable files
 
 Any file path printed in a terminal becomes a link once the file exists. That covers the paths agents print as they work:

@@ -154,8 +154,9 @@ sequenceDiagram
   - `AgentStatus::start` has no `AppHandle` and no `PtyManager`, so the open
     logic is injected: `AgentStatus::set_open_handler(Arc<dyn OpenHandler>)`,
     called once in `.setup()` after both exist. The trait has two methods:
-    `admit(caller_pty) -> Result<Admission, OpenAnswer>`, which is quick and
-    applies the limits, and `handle(admission, body) -> OpenAnswer`, which
+    `admit(caller_pty, body) -> Result<Admission, OpenAnswer>`, which is
+    quick and applies the shell allowlist (when the body has a command) and
+    then the limits, and `handle(admission, body) -> OpenAnswer`, which
     may wait. Until a handler is set, `/open` answers 409 "ADE is still
     starting". Tests inject a fake handler.
   - On the `serve` thread: `screen()`, read the body, `admit`. A refusal is
@@ -200,9 +201,13 @@ sequenceDiagram
   which story 9 waits for:
   - **Ready** is `feat/cli-guard`'s `line_editor_ready(master, shell pid)`,
     the function behind `pty_line_editor_ready`: the terminal is out of
-    canonical mode and the shell, or a nested interactive shell at its
+    canonical mode with ECHO off (readline, ZLE and fish turn it off; a
+    start-up `read -n` or `read -k` keeps it on, so it is not a line editor;
+    review finding M1, 2026-11-09) and the shell, or a nested interactive shell at its
     prompt (a group whose leader `classify` calls a shell), is the
-    foreground process group (`tcgetpgrp`). Rust polls it every 50 ms and types after two ready
+    foreground process group (`tcgetpgrp`). The termios, the group and the
+    shell's pid are copied under the PTY table's lock and judged after it is
+    released, so the process lookup never holds the table. Rust polls it every 50 ms and types after two ready
     answers in a row, as `whenLineEditorReady` does, for at most 5 s after
     the window's answer. Not ready by then: nothing is typed, `typed:false`,
     why "the shell's line editor didn't start".
@@ -220,7 +225,12 @@ sequenceDiagram
   (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`); bare words
   matching `^[\w./-]+$` are left as they are.
   - Rust refuses a command unless the shell is `sh`, `bash`, `zsh`, `fish`,
-    `dash` or `ksh`.
+    `dash` or `ksh`, at `admit`, before any bucket token is spent (`admit`
+    reads the body for it; review finding m1).
+  - Rust types the window's line only when it is exactly the line it builds
+    from the request's own words (`typed_line`, the same rule); a different
+    line is `typed:false`, why "the window's line isn't the command's", and
+    nothing is typed (review finding m3).
   - Words must be printable ASCII (D6).
   - A typed line may be at most 4096 bytes. This is no longer about the
     canonical buffer (the line editor takes any length). It is a sanity
@@ -234,6 +244,11 @@ sequenceDiagram
     "Busy check"); the user types the command.
   - `exec tmux` (or an rc file that `exec`s any raw-mode program) takes the
     line: the process keeps the shell's pid and leaves canonical mode.
+  - A start-up prompt that reads with echo off (`read -s`, with `-n` or
+    `-k`, in an rc file) looks like a line editor: out of canonical mode,
+    ECHO off, the shell in front. The line is typed into that prompt. A
+    start-up `read -n`/`read -k` with echo on is not ready, so it is waited
+    out (review finding M1).
 - **Deadline.** Each request carries `expiresAt`, 5 s after it is sent.
   - A window past it does nothing.
   - On timeout Rust answers 504, types nothing, and sends `{expired}`. The
