@@ -3,14 +3,14 @@
 What F2's onboarding (agentic-environment setup) fixes for other stories and for
 the agent hub template.
 
-- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 3).
+- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 4).
 - ADRs: `decisions/0026-hub-setup-steps-run-under-a-runner-in-one-pty.md`,
   `0027-a-hub-tab-is-a-tab-flag-and-keeps-no-scrollback.md`,
   `0028-project-setup-refuses-hubs-at-its-two-writers.md`,
   `0029-a-finished-hub-is-judged-by-head-with-ades-own-git.md`.
 - Builds on `bundled-sources.md` (S4a's commands), `terminal-open.md` (`ade-hook`
   modes, shell set) and `remote-tabs.md` (the relay mask).
-- Status: proposed 2026-11-09 (revision 3), not yet approved or built. macOS only.
+- Status: proposed 2026-11-09 (revision 4), not yet approved or built. macOS only.
 
 ## The runner (`ade-hook`)
 
@@ -72,8 +72,12 @@ the agent hub template.
 `closed` (runner holding, a secret step before `prompt_ready`, every removal
 command): bytes dropped,
 `\x03`, `\x1c`, `\x1a` pass; `open` (other steps, Claude): as today; `secret` (after
-`prompt_ready`): a write with an inner `\r`/`\n` is dropped whole
-(`secret_paste_refused`). Removed at `exec_shell`. Dropped bytes are never queued.
+`prompt_ready`): **the paste rule (OB-7 AC1)**: strip one trailing line break (a
+final `\r\n`, else `\r`, else `\n`); if any `\r` or `\n` remains, the write is
+dropped whole and `secret_paste_refused {name}` is emitted once; otherwise the whole
+write passes (`abc\r` passes, `ab\rc` and `abc\r\r` are refused). A paste reaches
+`write_pty` as one call, unsplit. Removed at `exec_shell`. Dropped bytes are never
+queued.
 
 ## Tauri commands (macOS; elsewhere they return an error)
 
@@ -85,9 +89,11 @@ command): bytes dropped,
   name_required}`. Path codes: `path_not_absolute`, `path_tilde_user`,
   `path_bad_characters` (with the code point), `checkout_not_full`.
 - `hub_folder_kind(path, intent: "new" | "existing") -> {kind: FolderKind,
-  in_setup?: {hub, tab_id?}}`. `in_setup`: another tab's run in progress holds the
-  folder (for `new` a refusal; for `existing` it refuses only the `bin/setup`
-  option).
+  in_setup?: InSetup}`. `InSetup` = `{hub, tab_id?, relation: "same" | "inside" |
+  "contains"}`: another run in progress holds a conflicting folder (`hub` is that
+  run's folder; `inside`: the asked folder is inside it; `contains`: the asked folder
+  contains it). For `new` a refusal; for `existing` it refuses only the `bin/setup`
+  option.
 - `hub_existing_info(path) -> {kind, checkouts: [{path, exists}], claude: {command?,
   config_dir?, not_literal?: {line, key}}}`: static, never sources `hub.conf`;
   checkouts from each work area's `ACCESS.md` rows whose second cell starts with `/`
@@ -100,8 +106,8 @@ command): bytes dropped,
   The plan stays in Rust; the webview shows `shellQuote(argv)` (ADR 0008's quoter
   with the bare-word fast path, used only in the webview). `claude_memory` is
   `<ADE's HOME>/.claude` and `[^A-Za-z0-9]` → `-` per Unicode scalar: a prediction.
-- `hub_run_prepare(plan_id, rows, cols, onEvent) -> {run_id} | {refused:
-  {in_setup: {hub, tab_id?}} | "unknown_plan"}`: returns at once after reserving the
+- `hub_run_prepare(plan_id, rows, cols, onEvent) -> {run_id} | {refused: {in_setup:
+  InSetup}} | {refused: "unknown_plan"}`: returns at once after reserving the
   folder; the outcome comes as `prepared` or `preflight_failed`. A prepared run not
   started in 60 s is killed.
 - `hub_run_cancel(run_id)`: until `hub_run_start`; stops every process the
@@ -119,10 +125,26 @@ command): bytes dropped,
   manual_restore: [{kind: "unlink" | "restore" | "skill", argv}], restorable_bak:
   [{entry, bak}], left_behind: [{kind: "secret", name, service, account, argv}]}`.
   Every command is an argv array; the webview quotes it.
-- `hub_run_close(run_id, answer: "remove" | "keep" | "stop_removal")`;
-  `hub_quit_answer(answer: "cancel" | "keep" | "remove")`; `hub_runs_reset(window)`.
+- `hub_run_close(run_id, answer: "remove" | "keep" | "stop_removal") -> {closed} |
+  {kept_open: {reason: "trash_failed"}}`; `hub_quit_answer(answer: "cancel" | "keep"
+  | "remove") -> {quitting} | {cancelled: {runs: [run_id]}}`; `hub_runs_reset(window)`.
+  **Rust maps the answer by its own phase of the run at the call** (spec 6.5):
+
+  | answer | making | setting_up | removing | ended |
+  |---|---|---|---|---|
+  | `keep` | Keep | Close | Stop | close |
+  | `remove` | Remove | Close | Stop | close |
+  | `stop_removal` | Keep | Close | Stop | close |
+
+  Keep: stop, kill the PTY, folder kept. Remove (making only): stop, the runner
+  holds, removal (Trash, parent `rmdir`), and the PTY is killed **only after the
+  Trash succeeds**; on a Trash failure the PTY stays, `removal_failed {part:
+  "trash"}` is shown (Retry trashes again; Keep `exec_shell`s in the hub folder,
+  `run_ended {removal_kept: {part: "trash"}}`), the call returns `kept_open`, and a
+  window close or quit that asked is cancelled. Close: stop, kill the PTY, hub kept.
+  Stop: stop the removal command, wait for a Trash already called, kill the PTY.
 - `hub_open_existing(path, run_setup, rows, cols, onEvent) -> {run_id} | {refused:
-  {in_setup}}`: reserves the folder only with `run_setup`; then `prepared {run_id,
+  {in_setup: InSetup}}`: reserves the folder only with `run_setup`; then `prepared {run_id,
   pty_id, steps}` or `preflight_failed`; then `hub_run_start`.
 - `hub_guard_status(path) -> {hub, why} | null`.
 
@@ -143,19 +165,24 @@ folder without `hub.conf`), `not_hub` (existing intent, folder without `hub.conf
 `unfinished`; anything else → `check_failed`. Only after `xcode-select -p`
 returned 0 (run and cached by `hub_folder_kind` itself; a non-zero is not cached).
 
-`CheckResult`: `{check, state: "passed" | "failed" | "skipped", detail?}`. One order
+`CheckResult`: `{check, state: "passed" | "failed" | "skipped", detail?}`; a skipped
+check's `detail` is `{because: <check>}`, the first check in this order whose
+failure caused the skip. One order
 and one set of names, new hub and Open Hub: `platform`, `template` (new only),
 `clt`, `login_shell` (from the basename, before the spawn), `helper`, `folder`,
 `finished` (Open Hub only), `env`, `tools`, `identity` (new only), `links`. A failed
 `clt` skips `finished`, `env` and later; every other failure skips only what
 depends on it, so several failures are reported at once. No `slow` state (the
 webview times `env` itself). `links` passed: `{config_dir, entries: [{path,
-encoded, entry}], checkouts: [path]}`.
+encoded, entry}], checkouts: [path]}`. `folder` for a new hub runs only the
+file-system part: **any existing folder fails `{kind: "exists"}`**, `hub.conf` or not
+(no git before `clt`); the inline `hub_folder_kind` still answers
+`finished`/`unfinished` for one holding `hub.conf`.
 
 Events:
 
 - `preflight_check {check, state: "running" | "passed" | "failed" | "skipped",
-  detail?}`, `prepared {run_id, pty_id, steps?}`, `preflight_failed {run_id,
+  detail?}` (skipped: `detail: {because: <check>}`), `prepared {run_id, pty_id, steps?}`, `preflight_failed {run_id,
   results: [CheckResult]}`
 - `step_started {key, index, count, name}`, `step_ended {key, ok, skipped}`.
   `count`: top-level steps of the plan ((d) once, only with a secret name; 8 with
@@ -164,6 +191,9 @@ Events:
   `doctor`, `session`.
 - `awaiting_secret {name, index, count, token}`, `secret_prompt_ready {name, token}`,
   `secret_paste_refused {name}`
+- `setup_waiting {key: "f" | "removal", state: "waiting" | "done", holder?: {hub,
+  tab_id?}}`: the run waits for the setup lock (below); a run-bar state, not a
+  notice (no buttons, no notice-waiting flag, no line, no time limit)
 - `step_failed {key, token, options, remove_unavailable?, steps_left: [key],
   reason}`; `options` in order: (b) `edit_answers, remove, keep`; (c) `retry,
   remove, keep`; (d) per name, (f), (f2) `retry, skip, remove, keep`; existing
@@ -182,7 +212,7 @@ Events:
   path?}], kept_parent?: {path, reason: "not_empty" | "error"}, restored_bak_count,
   manual_restore: [{kind, argv}], left_behind: [{kind: "secret", name, service,
   account, argv}]}`
-- `close_progress {run_id, state: "stopping" | "removing" | "done"}`
+- `close_progress {run_id, state: "stopping" | "removing" | "done" | "kept_open"}`
 - `quit_requested {runs: [{run_id, tab_id, window, folder, phase}]}`
 - `run_ended {how}`, `how` one of `"session_ended"`, `{session_skipped: {reason:
   {claude_not_found: {command}} | {hubconf_not_literal: {line, key}}}}`,
@@ -212,11 +242,21 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
   or expires.
 - One app-wide registry (Rust, `hubmark.rs`) holds the hub folder of each run in
   progress, keyed by: `~` expanded with ADE's `HOME`, normalised, the nearest
-  existing ancestor canonicalised, missing parts appended; case-folded when
-  `pathconf(ancestor, _PC_CASE_SENSITIVE)` is 0. `hub_run_prepare` and
+  existing ancestor canonicalised, missing parts appended, **NFC-normalised**;
+  then case-folded (and NFC again) when `pathconf(ancestor, _PC_CASE_SENSITIVE)` is
+  0. Two keys **conflict** when equal or when one is an ancestor of the other by whole
+  components (`~/hubs/a` vs `~/hubs/a/b`; not `~/hubs/ab`). `hub_run_prepare` and
   `hub_open_existing` with `run_setup` reserve atomically before anything starts and
-  are refused `in_setup` when the key is held. Open Hub without `bin/setup` is not
-  refused. Two runs on one checkout are settled by the second link check.
+  are refused `in_setup` (with `relation`) on a conflict. Open Hub without
+  `bin/setup` is not refused.
+- **The setup lock** (`hubrun.rs`, app-wide, first come first served): every run
+  takes it before the second link check, on every attempt (a new hub's (f), Open
+  Hub's `bin/setup` with `run_setup`, a T4 removal's `bin/setup --unlink`), and holds
+  it until that `bin/setup` exits; it is released at once when the check refuses
+  (`links_refused`, `link_probe_failed`) and whenever the run ends or stops. While
+  another run holds it, the run emits `setup_waiting`. So of two runs on one
+  checkout, the later one's second check sees the earlier one's link and fails (f)
+  with `links_refused`; its `bin/setup` never starts.
 
 ## The path rule (owner Q4; OB-3 AC2)
 
@@ -259,14 +299,18 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
 - `Tab.hubRemoved?: true`: set on `run_ended {how: "removed"}`, which also clears
   `hub` (the only case that clears it). Label "Hub removed"; never written to the
   saved session or a saved workspace, no `ClosedTab` entry, not restored, scrollback
-  never saved; carried by `SerializedTab.hubRemoved`; Duplicate hidden. Its shell
+  never saved; carried by `SerializedTab.hubRemoved`, but Move to New Window is
+  hidden and refused while its removal summary shows (until Dismiss); Duplicate
+  hidden. Its shell
   runs in `HOME`. Tabs the run closes itself (`unpack_failed`, `edit_answers`) and
   tabs closed during removal or with Remove get no `ClosedTab` entry either.
 - A per-tab notice-waiting flag (memory only, never in `SavedTab`) drives the
   attention dot and toast whatever the agent status setting is.
 - While a run is in progress: Move to New Window refused; closing follows the
-  spec's 6.5 table (at most one confirm on every path; the busy label comes from the
-  run, never `ade-hook`).
+  spec's 6.5 table (at most one confirm on every path; one busy hub tab in (c) to (h)
+  gets the app's ordinary busy confirm, C2; window close and quit ask nothing
+  hub-specific when every run is in (c) to (h); the busy label comes from the run,
+  never `ade-hook`).
 
 ## Asked of the agent hub template (backlog note; owner Q-A6: on the backlog)
 
@@ -283,8 +327,11 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
 - The since-time is UTC `%Y%m%dT%H%M%SZ`, as `bin/setup` stamps `memory.bak-` folders.
 - ADE's second memory-link check and the removal plan run `/bin/bash`, source
   `bin/lib.sh` with `HUB=<hub>` and call `claude_home`, `folders`, `repos_of`,
-  `encode_path` and `keychain_service`. Renaming or removing those breaks them (the
-  check then fails safe: step (f) does not start).
+  `encode_path` and `keychain_service` (which calls `hub_name`, `${HUB_NAME:-<folder
+  base name>}`; so the Keychain service falls back to `HUB_NAME`, which `bin/init`
+  always writes). The fixture's `bin/lib.sh` defines these six (and `hub_root`).
+  Renaming or removing those breaks them (the check then fails safe: step (f) does
+  not start).
 - `bin/secret --set` must read the value with a prompt that turns echo off
   (`read -rs`): ADE lets the developer type only after it sees echo off.
 
@@ -314,6 +361,11 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
   {remove_unavailable, steps_left}`. N20 `removal_progress`, `hub_run_close(...,
   "stop_removal")`. N21 `hub_plan.claude_memory` (prediction), then `links` passed.
   N22 ADR 0008's quoter with the bare-word fast path. N23 `hub_prefill`.
+- Revision 4 (spec 11.1): `setup_waiting` (a bar state), `in_setup.relation`, the
+  paste rule, C2 for a busy hub tab, `kept_open` and the cancelled close or quit on a
+  failed Trash, answers mapped by phase, `detail.because`, a new hub's preflight
+  `exists`, Move to New Window hidden for a "Hub removed" tab with its summary,
+  `{refused: "unknown_plan"}`.
 
 ## Tests
 
@@ -323,4 +375,6 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
   the verification command's seventh line, `cd src-tauri && cargo test -p ade-hook`
   (in force on main since 2026-11-09, PR #103), and by CI's `backend-macos` job
   (`cargo test --locked -p ade-hook --test hubrun`).
-- Public fixture template: `src-tauri/src/fixtures/hub-template/`.
+- Public fixture template: `src-tauri/src/fixtures/hub-template/`. Its `bin/setup`
+  sleeps before its first `link` when `$HOME/.fixture-setup-sleep` exists (seconds;
+  test-only, for the setup-lock test).

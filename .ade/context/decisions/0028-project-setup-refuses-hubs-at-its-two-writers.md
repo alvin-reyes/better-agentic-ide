@@ -1,6 +1,6 @@
 # 0028: Project setup refuses agent hubs at its two writers
 
-- Status: Proposed (2026-11-09), revised with the F2 design revision 3; not yet
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 3 and 4; not yet
   reviewed or approved.
 - Context:
   - A hub has `_bmad/` and no `.ade/methodology`, so automatic project setup would
@@ -16,7 +16,10 @@
     folder at its top, or is the hub folder of an onboarding run in progress in this
     launch (the app-wide folder registry, from the run's reservation at
     `hub_run_prepare` until it stops being in progress; revision 3, which also uses
-    the registry to refuse a second run on the same folder, OB-4 AC7).
+    the registry to refuse a second run on the same folder, OB-4 AC7). Its key is
+    the canonical path, NFC-normalised (APFS and HFS+ treat NFC and NFD as one name)
+    and case-folded on a case-insensitive volume; a second run is refused on the same
+    folder and on one inside or containing a reserved folder (revision 4).
   - `set_up` and `bmad_switch_apply` refuse such a root next to
     `refuse_unfinished`, writing nothing (the backstop).
   - The webview asks `hub_guard_status(path)` before any question or action

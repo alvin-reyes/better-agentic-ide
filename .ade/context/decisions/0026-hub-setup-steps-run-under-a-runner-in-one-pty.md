@@ -1,7 +1,7 @@
 # 0026: Hub setup steps run under a runner that leads one PTY
 
-- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 and 3; not
-  yet reviewed or approved.
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 2, 3 and 4;
+  not yet reviewed or approved.
 - Context:
   - F2 (`docs/prd.md` OB-4 AC1, AC6) runs the bundled agent hub template's steps
     (`bin/init`, the first commit, `bin/secret`, `bin/setup`, `bin/brain index`,
@@ -60,6 +60,12 @@
     the PTY, so a cancelled preflight leaves nothing running (OB-2 AC5).
   - After a finished removal the runner `execve`s the login shell in `HOME`
     (the "Hub removed" tab), not in the removed hub folder.
+  - Runs are concurrent (one runner per tab), so the memory-link step is ordered
+    across them in ADE, not in the runner: an app-wide setup lock in `hubrun.rs`
+    (first come, first served) is taken before each run's second link check and held
+    until its `bin/setup` (or a T4 `bin/setup --unlink`) exits, so no other run's
+    `bin/setup` can link between one run's check and its `link()` (revision 4). A
+    waiting run emits `setup_waiting` and runs nothing.
   - The runner executes only what ADE sends (newline-delimited JSON, types in
     `hubrun_proto.rs`, shared by `#[path]`); all policy is in `hubrun.rs`. The
     preflight runs in the same runner while the PTY is still hidden, and the tab is
@@ -81,5 +87,7 @@
     line, `cd src-tauri && cargo test -p ade-hook` (owner-approved Q-A5, in force on
     main since PR #103), runs on every Mac, and CI's `backend-macos` job runs as
     `--test hubrun`.
+  - Every `bin/setup` in the app runs one at a time; a run can wait for another's,
+    and a hung `bin/setup` holds the others until it is stopped or its tab closed.
   - ADR 0021's shell integration, when built, changes `terminal_spawn_spec`, and the
     runner follows it.

@@ -1,7 +1,7 @@
 # 0029: A finished hub is judged by HEAD, with ADE's own git
 
 - Status: Proposed (2026-11-09). With the F2 design revision 2, revised in revision 3
-  (the joint review's X3); not yet reviewed or approved.
+  (the joint review's X3) and revision 4 (wording, m2); not yet reviewed or approved.
 - Context:
   - F2.5 defines a **finished hub** as a folder whose `hub.conf` is tracked in the
     folder's git `HEAD`; an unfinished one has a `hub.conf` that is not committed.
@@ -49,7 +49,8 @@
   - A run killed between `git add -A` and `git commit` leaves an `unfinished` hub,
     as F2.5 intends; O8 tests it.
   - The check does not use the developer's shell environment (no `GIT_CONFIG_GLOBAL`
-    from start-up files); it needs no config, since `cat-file` reads only objects.
+    from start-up files); it needs no config, since `rev-parse --verify` and
+    `ls-tree` read only refs and objects.
   - A hub inside an enclosing repository is judged by its own `.git`, never the
     parent's.
   - Without the Command Line Tools the questionnaire cannot tell finished from

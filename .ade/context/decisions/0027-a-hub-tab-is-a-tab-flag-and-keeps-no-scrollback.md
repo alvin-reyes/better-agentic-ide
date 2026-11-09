@@ -1,7 +1,7 @@
 # 0027: A hub tab is a flag on the tab, and keeps no scrollback
 
-- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 and 3; not
-  yet reviewed or approved.
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 2, 3 and 4;
+  not yet reviewed or approved.
 - Context:
   - F2's OB-14 says a hub tab (the onboarding run's tab, an existing hub's tab and
     their sub-terminals) keeps no scrollback in the saved session or snapshots, is
@@ -38,7 +38,10 @@
   - While a run is in progress in the tab, Move to New Window is refused (hidden in
     the menu and refused by `detachTabToWindow`), because the run's channel and
     notices belong to the opening window; after the run hands over to the login
-    shell, the tab moves with its flag.
+    shell, the tab moves with its flag. A "Hub removed" tab is likewise refused Move
+    to New Window while its removal summary shows (until Dismiss), because the
+    summary lives in the opening window's run store (revision 4); after Dismiss it
+    moves with `hubRemoved`.
   - The relay mask is a function, `remoteTabEntry(tab)`, and a `hub` field in the
     relay's tab entries, which the Rust bridge re-applies
     (`.ade/context/remote-tabs.md`, created with this ADR for phone-watch story 8).
