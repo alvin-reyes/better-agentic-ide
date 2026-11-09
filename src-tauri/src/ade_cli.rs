@@ -946,7 +946,10 @@ mod tests {
     fn help_lists_the_command_capability() {
         for verb in ["help", "--help"] {
             let (code, out, err, _) = cli(&[verb], 1, "/");
-            assert_eq!(code, 0);
+            assert_eq!(code, 0, "{verb}: help exits 0");
+            // On stdout (callers drop stderr), at column 0, a whole line.
+            assert!(out.starts_with("capabilities: ") || out.contains("\ncapabilities: "), "{verb}: at column 0 on stdout: {out}");
+            assert!(!out.lines().any(|l| l.trim_start().starts_with("capabilities:") && !l.starts_with("capabilities:")), "{verb}: no indented copy");
             let line = out.lines().find(|l| l.starts_with("capabilities:")).unwrap_or_else(|| panic!("{verb}: no capabilities line on stdout: {out}"));
             assert!(line.split_whitespace().skip(1).any(|w| w == "command"), "{line}");
             assert!(!err.contains("capabilities:"), "{verb}: on stdout, not stderr");

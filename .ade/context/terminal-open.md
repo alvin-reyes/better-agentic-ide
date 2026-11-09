@@ -12,7 +12,7 @@ its pane.
   `pty_line_editor_ready` of `feat/cli-guard` (ADR 0011), and `shellQuote`
   (`0008-one-shell-quoter-safe-in-posix-shells-and-fish`, `origin/hermes-a-quoting`).
 
-Status: approved by the owner 2026-11-02 (revised the same day after the final review and its re-review, rulings R1 to R7); approved for build on 2026-11-09 as stories 4a (endpoint and window) and 4c (CLI). Not yet built. macOS and Linux only.
+Status: approved by the owner 2026-11-02 (revised the same day after the final review and its re-review, rulings R1 to R7); approved for build on 2026-11-09 as stories 4a (endpoint and window) and 4c (CLI). Typing (`-- COMMAND`): built in story 9 (2026-11-09). macOS and Linux only.
 
 ## The CLI
 
@@ -46,6 +46,12 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   normalised lexically, checked with `stat`. The logical path is sent; the
   default is the working folder. `--name` is refused with `--split`.
 - **Output:** nothing on success. Errors go to stderr as `ade: <message>`.
+- **Capabilities (story 9):** `ade help` (and `ade-hook help`, `--help`)
+  exits 0 and prints, on **stdout**, exactly one line that starts at column 0
+  with `capabilities:`, followed by space-separated words. This build prints
+  `capabilities: command` (it can type `-- COMMAND`); `--split` (story 8)
+  will add `split`. Callers match a word, never the whole line, and never
+  read stderr for it.
 - **Exit codes** (the same table as the spec):
   - `0`: opened; the command, if any, was typed.
   - `1`: any answer other than 200, 401 or 410 (400, 404, 409, 422, 429,
@@ -61,7 +67,8 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   - `4`: connection refused, 401, or 410 (this terminal has closed), or the
     connection closed before any answer. Mention tmux and screen in the
     message, and a sandboxed Bash for the close.
-  - `5`: opened, but the command was not typed (`typed:false`).
+  - `5`: opened, but the command was not typed (`typed:false`); stderr is
+    `ade: opened, but the command wasn't typed: <why>`.
 - Never put the token on a command line: `ps` shows it.
 
 ## Tokens (amends ADR 0003)

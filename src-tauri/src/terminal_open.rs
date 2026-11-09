@@ -23,7 +23,7 @@ const REFILL_EVERY: Duration = Duration::from_secs(1);
 /// At most this many shells made by `/open` run at once, counting requests in flight.
 const MAX_RUNNING: usize = 32;
 /// The window has this long to answer; `expiresAt` is the request's creation plus this.
-const ANSWER_WITHIN: Duration = Duration::from_secs(5);
+pub(crate) const ANSWER_WITHIN: Duration = Duration::from_secs(5);
 /// A name's length, in characters.
 const MAX_NAME: usize = 64;
 /// A command's words: at most this many...
@@ -405,7 +405,7 @@ impl OpenService {
     }
 
     /// `new`, with the PTY table, the clock, the window's time and the platform given.
-    fn with(ptys: Arc<dyn Ptys>, clock: Clock, wait: Duration, on_windows: bool) -> OpenService {
+    pub(crate) fn with(ptys: Arc<dyn Ptys>, clock: Clock, wait: Duration, on_windows: bool) -> OpenService {
         OpenService {
             ptys,
             clock,
