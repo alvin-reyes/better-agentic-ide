@@ -40,20 +40,27 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   - `create_pty` always strips inherited entries for these folders. It
     prepends its own only when it sets the `ADE_*` variables.
   - Agents and scripts use `"$ADE_HOOK_BIN" open`.
-- **`--cwd`:** joined to `$PWD` (when that names the working folder),
+- **The working folder:** `$PWD` when it is absolute and it and `getcwd`
+  canonicalise to the same existing folder; else `getcwd`.
+- **`--cwd`:** joined to the working folder,
   normalised lexically, checked with `stat`. The logical path is sent; the
-  default is `$PWD`. `--name` is refused with `--split`.
+  default is the working folder. `--name` is refused with `--split`.
 - **Output:** nothing on success. Errors go to stderr as `ade: <message>`.
 - **Exit codes** (the same table as the spec):
   - `0`: opened; the command, if any, was typed.
   - `1`: any answer other than 200, 401 or 410 (400, 404, 409, 422, 429,
-    504), with the message from the body; or no answer within 15 s. A 400
-    with `{}` means "this ADE is too old for ade open; restart ADE".
-  - `2`: usage.
+    504), with the message from the body; or no answer within 15 s ("a
+    terminal may or may not have opened"). A 400 with `{}` means "this ADE is
+    too old for ade open; restart ADE". A 200 without `"ok":true`, or bytes
+    that aren't an HTTP answer, is "unexpected answer from ADE". Any other
+    connection error gives the system's text.
+  - `2`: usage, a flag given twice, an argument that isn't UTF-8 (the body is
+    JSON), or a current folder that is gone or isn't UTF-8.
   - `3`: `ADE_HOOK_PORT`, `ADE_HOOK_TOKEN` or `ADE_PTY_ID` is unset or
-    malformed.
-  - `4`: connection refused, 401, or 410 (this terminal has closed). Mention
-    tmux and screen in the message.
+    malformed (port 0; a token that isn't lowercase hex).
+  - `4`: connection refused, 401, or 410 (this terminal has closed), or the
+    connection closed before any answer. Mention tmux and screen in the
+    message, and a sandboxed Bash for the close.
   - `5`: opened, but the command was not typed (`typed:false`).
 - Never put the token on a command line: `ps` shows it.
 

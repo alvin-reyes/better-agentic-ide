@@ -10,6 +10,7 @@
 #![allow(dead_code)]
 
 use serde_json::{json, Value};
+use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Component, Path, PathBuf};
@@ -66,6 +67,29 @@ pub fn mode(argv0: &str, args: &[String]) -> Mode {
     }
 }
 
+/// What `ade-hook` does with its whole argv (argv0 first).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Action {
+    /// The CLI, with the arguments from the verb on, as given.
+    Cli(Vec<OsString>),
+    /// Claude Code's hook.
+    Hook,
+}
+
+/// `mode()` over the process's argv, keeping the CLI's arguments as given.
+/// Non-UTF-8 bytes can't match a name or a verb, so `mode()` sees them lossily;
+/// the CLI gets them as they were.
+pub fn dispatch(argv: Vec<OsString>) -> Action {
+    let mut argv = argv.into_iter();
+    let Some(argv0) = argv.next() else { return Action::Hook };
+    let args: Vec<OsString> = argv.collect();
+    let first: Vec<String> = args.iter().take(1).map(|a| a.to_string_lossy().into_owned()).collect();
+    match mode(&argv0.to_string_lossy(), &first) {
+        Mode::Cli => Action::Cli(args),
+        Mode::Hook => Action::Hook,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Split {
     Right,
@@ -88,6 +112,15 @@ pub enum Command {
     Open(OpenArgs),
 }
 
+/// `value` into `slot`, unless the flag was given before.
+fn once(slot: &mut Option<String>, flag: &str, value: String) -> Result<(), String> {
+    if slot.is_some() {
+        return Err(format!("{flag} given twice"));
+    }
+    *slot = Some(value);
+    Ok(())
+}
+
 /// The CLI's arguments (the verb first), or a usage error's message.
 pub fn parse(args: &[String]) -> Result<Command, String> {
     let open = match args.first().map(String::as_str) {
@@ -100,8 +133,9 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             while let Some(arg) = rest.next() {
                 let mut value = |flag: &str| rest.next().cloned().ok_or(format!("{flag} needs a value"));
                 match arg.as_str() {
-                    "--cwd" => open.cwd = Some(value("--cwd")?),
-                    "--name" => open.name = Some(value("--name")?),
+                    "--cwd" => once(&mut open.cwd, "--cwd", value("--cwd")?)?,
+                    "--name" => once(&mut open.name, "--name", value("--name")?)?,
+                    "--split" if open.split.is_some() => return Err("--split given twice".into()),
                     "--split" => {
                         open.split = Some(match value("--split")?.as_str() {
                             "right" => Split::Right,
@@ -109,6 +143,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
                             other => return Err(format!("--split takes right or down, not {other:?}")),
                         })
                     }
+                    "--focus" if open.focus => return Err("--focus given twice".into()),
                     "--focus" => open.focus = true,
                     "--" => {
                         let words: Vec<String> = rest.by_ref().cloned().collect();
@@ -175,9 +210,11 @@ pub fn body(cwd: &str, open: &OpenArgs) -> Value {
 fn ade_vars(var: impl Fn(&str) -> Option<String>) -> Result<(u16, String, u32), String> {
     let get = |name: &str| var(name).ok_or(format!("{name} is not set; run this in an ADE terminal"));
     let bad = |name: &str| format!("{name} is malformed; run this in an ADE terminal");
-    let port = get(ENV_PORT)?.trim().parse::<u16>().map_err(|_| bad(ENV_PORT))?;
+    let port = get(ENV_PORT)?.trim().parse::<u16>().ok().filter(|&p| p != 0).ok_or_else(|| bad(ENV_PORT))?;
+    // The contract: the lowercase hex of an HMAC. Anything else, CR and LF
+    // included, never reaches the request's headers.
     let token = get(ENV_TOKEN)?;
-    if token.is_empty() {
+    if token.is_empty() || !token.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
         return Err(bad(ENV_TOKEN));
     }
     let pty = get(ENV_PTY)?.trim().parse::<u32>().map_err(|_| bad(ENV_PTY))?;
@@ -187,8 +224,28 @@ fn ade_vars(var: impl Fn(&str) -> Option<String>) -> Result<(u16, String, u32), 
 /// Why no answer came back.
 #[derive(Debug)]
 enum Failure {
+    /// Nothing listens on the port.
     Refused,
+    /// No answer before the deadline.
     NoAnswer,
+    /// The connection closed or was reset before any answer.
+    Reset,
+    /// Something came back that isn't an HTTP answer.
+    Garbled,
+    /// Any other error, as the system words it.
+    Unreachable(String),
+}
+
+impl From<std::io::Error> for Failure {
+    fn from(e: std::io::Error) -> Self {
+        use std::io::ErrorKind::*;
+        match e.kind() {
+            ConnectionRefused => Failure::Refused,
+            TimedOut | WouldBlock => Failure::NoAnswer,
+            ConnectionReset | ConnectionAborted | BrokenPipe | UnexpectedEof => Failure::Reset,
+            _ => Failure::Unreachable(e.to_string()),
+        }
+    }
 }
 
 /// `POST /open` to ADE, and its status and body, giving up after `timeout`.
@@ -196,17 +253,13 @@ fn post_open(port: u16, pty: u32, token: &str, body: &str, timeout: Duration) ->
     let deadline = Instant::now() + timeout;
     let left = || deadline.saturating_duration_since(Instant::now()).max(Duration::from_millis(1));
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    let mut stream = match TcpStream::connect_timeout(&addr, left()) {
-        Ok(stream) => stream,
-        Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => return Err(Failure::Refused),
-        Err(_) => return Err(Failure::NoAnswer),
-    };
+    let mut stream = TcpStream::connect_timeout(&addr, left())?;
     let request = format!(
         "POST /open HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{HEADER_TOKEN}: {token}\r\n{HEADER_PTY}: {pty}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     let _ = stream.set_write_timeout(Some(left()));
-    stream.write_all(request.as_bytes()).map_err(|_| Failure::NoAnswer)?;
+    stream.write_all(request.as_bytes())?;
     let mut got = Vec::new();
     let mut buf = [0u8; 4096];
     loop {
@@ -218,9 +271,10 @@ fn post_open(port: u16, pty: u32, token: &str, body: &str, timeout: Duration) ->
         }
         let _ = stream.set_read_timeout(Some(left()));
         match stream.read(&mut buf) {
-            Ok(0) => return parse_answer_at_end(&got).ok_or(Failure::NoAnswer),
+            Ok(0) if got.is_empty() => return Err(Failure::Reset),
+            Ok(0) => return parse_answer_at_end(&got).ok_or(Failure::Garbled),
             Ok(n) => got.extend_from_slice(&buf[..n]),
-            Err(_) => return Err(Failure::NoAnswer),
+            Err(e) => return Err(e.into()),
         }
     }
 }
@@ -247,32 +301,41 @@ fn parse_answer_at_end(got: &[u8]) -> Option<(u16, Vec<u8>)> {
 }
 
 const GONE_HINT: &str = "if this shell runs in tmux or screen, it may have outlived the ADE terminal that started it";
+const SANDBOX_HINT: &str = "if this runs in a sandboxed Bash, run it outside the sandbox";
+const UNEXPECTED: &str = "unexpected answer from ADE";
 
 /// The exit code and message for ADE's answer, or for its absence.
 fn outcome(answer: Result<(u16, Vec<u8>), Failure>) -> (i32, Option<String>) {
     let (status, body) = match answer {
         Ok(answer) => answer,
         Err(Failure::Refused) => return (4, Some(format!("ADE isn't listening on {ENV_PORT}; {GONE_HINT}"))),
-        Err(Failure::NoAnswer) => return (1, Some("ADE didn't answer in 15 s; nothing was opened".into())),
+        Err(Failure::Reset) => return (4, Some(format!("ADE closed the connection without answering; {SANDBOX_HINT}; {GONE_HINT}"))),
+        Err(Failure::NoAnswer) => {
+            return (1, Some(format!("ADE didn't answer in {} s; a terminal may or may not have opened", DEADLINE.as_secs())))
+        }
+        Err(Failure::Garbled) => return (1, Some(UNEXPECTED.into())),
+        Err(Failure::Unreachable(e)) => return (1, Some(format!("couldn't reach ADE on {ENV_PORT}: {e}; {SANDBOX_HINT}"))),
     };
-    let error = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(String::from));
+    let json = serde_json::from_slice::<Value>(&body).ok();
+    let error = json.as_ref().and_then(|v| v.get("error").and_then(Value::as_str).map(String::from));
     match status {
-        200 => (0, None),
+        200 if json.as_ref().and_then(|v| v.get("ok")) == Some(&Value::Bool(true)) => (0, None),
         401 => (4, Some(format!("ADE didn't accept this terminal's token; {GONE_HINT}"))),
         410 => {
             let message = error.unwrap_or_else(|| "the terminal you ran this from is gone".into());
             (4, Some(format!("{message}; {GONE_HINT}")))
         }
         400 if error.is_none() => (1, Some("this ADE is too old for ade open; restart ADE".into())),
-        _ => (1, Some(error.unwrap_or_else(|| format!("ADE answered {status}; nothing was opened")))),
+        200 => (1, Some(format!("{UNEXPECTED} (HTTP 200)"))),
+        _ => (1, Some(error.unwrap_or_else(|| format!("{UNEXPECTED} (HTTP {status})")))),
     }
 }
 
 /// The CLI's whole run apart from the process. `args` starts at the verb.
 pub fn run(
-    args: &[String],
+    args: &[OsString],
     var: impl Fn(&str) -> Option<String>,
-    pwd: &str,
+    pwd: Result<String, String>,
     out: &mut impl Write,
     err: &mut impl Write,
     timeout: Duration,
@@ -284,7 +347,11 @@ pub fn run(
         }
         code
     };
-    let open = match parse(args) {
+    let args = match utf8_args(args) {
+        Ok(args) => args,
+        Err(message) => return fail(2, &message, false),
+    };
+    let open = match parse(&args) {
         Ok(Command::Help) => {
             let _ = out.write_all(USAGE.as_bytes());
             return 0;
@@ -292,7 +359,11 @@ pub fn run(
         Ok(Command::Open(open)) => open,
         Err(message) => return fail(2, &message, true),
     };
-    let cwd = match resolve_cwd(pwd, open.cwd.as_deref()) {
+    let pwd = match pwd {
+        Ok(pwd) => pwd,
+        Err(message) => return fail(2, &message, false),
+    };
+    let cwd = match resolve_cwd(&pwd, open.cwd.as_deref()) {
         Ok(cwd) => cwd,
         Err(message) => return fail(2, &message, false),
     };
@@ -307,23 +378,35 @@ pub fn run(
     }
 }
 
-/// The working folder: `$PWD` when it names the current folder (so a path
-/// through a symlink stays as the user typed it), or the current folder.
-fn working_folder() -> String {
-    let here = std::env::current_dir().ok();
-    if let (Ok(pwd), Some(here)) = (std::env::var("PWD"), &here) {
-        let same = Path::new(&pwd).is_absolute()
-            && std::fs::canonicalize(&pwd).ok() == std::fs::canonicalize(here).ok();
-        if same {
-            return pwd;
+/// The arguments as text: the request is JSON, which can't carry other bytes.
+fn utf8_args(args: &[OsString]) -> Result<Vec<String>, String> {
+    let text = |(i, a): (usize, &OsString)| {
+        a.to_str().map(String::from).ok_or(format!("argument {} is not UTF-8 text; ade open can't send it", i + 1))
+    };
+    args.iter().enumerate().map(text).collect()
+}
+
+/// The working folder, from `$PWD` and `getcwd`: `$PWD` when it is absolute
+/// and names the same existing folder as `here` (so a path through a symlink
+/// stays as the user typed it), else `here`. An error when `here` is unknown
+/// or no longer exists, or isn't UTF-8.
+fn working_folder(pwd: Option<OsString>, here: std::io::Result<PathBuf>) -> Result<String, String> {
+    let gone = || "the current folder is gone".to_string();
+    let here = here.map_err(|_| gone())?;
+    let here_text = here.to_str().ok_or("the current folder's path is not UTF-8 text; ade open can't send it")?.to_string();
+    let real = std::fs::canonicalize(&here).map_err(|_| gone())?;
+    if let Some(pwd) = pwd.as_deref().and_then(OsStr::to_str) {
+        if Path::new(pwd).is_absolute() && std::fs::canonicalize(pwd).is_ok_and(|p| p == real) {
+            return Ok(pwd.to_string());
         }
     }
-    here.map(|h| h.to_string_lossy().into_owned()).unwrap_or_else(|| "/".into())
+    Ok(here_text)
 }
 
 /// The CLI as a process: `args` starts at the verb. Returns the exit code.
-pub fn main(args: &[String]) -> i32 {
-    run(args, |k| std::env::var(k).ok(), &working_folder(), &mut std::io::stdout().lock(), &mut std::io::stderr().lock(), DEADLINE)
+pub fn main(args: &[OsString]) -> i32 {
+    let pwd = working_folder(std::env::var_os("PWD"), std::env::current_dir());
+    run(args, |k| std::env::var(k).ok(), pwd, &mut std::io::stdout().lock(), &mut std::io::stderr().lock(), DEADLINE)
 }
 
 #[cfg(test)]
@@ -334,6 +417,10 @@ mod tests {
 
     fn s(words: &[&str]) -> Vec<String> {
         words.iter().map(|w| w.to_string()).collect()
+    }
+
+    fn os(words: &[&str]) -> Vec<OsString> {
+        words.iter().map(OsString::from).collect()
     }
 
     // ---- C1: mode ----
@@ -391,10 +478,149 @@ mod tests {
     #[test]
     fn the_hook_mode_is_what_ade_hook_did_before() {
         assert_eq!(mode("ade-hook", &[]), Mode::Hook);
-        let main_rs = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("ade-hook/src/main.rs")).unwrap();
+        // From ADE's manifest or, under `cargo test -p ade-hook`, the helper's.
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let main_rs = if manifest.ends_with("ade-hook") { manifest.join("src/main.rs") } else { manifest.join("ade-hook/src/main.rs") };
+        let main_rs = std::fs::read_to_string(main_rs).unwrap();
         assert_eq!(main_rs.matches("hook_forward::main()").count(), 1, "one call to the hook");
-        assert!(main_rs.contains("Mode::Hook => hook_forward::main()"), "only the Hook arm reaches hook_forward::main");
-        assert!(main_rs.contains("Mode::Cli => std::process::exit(ade_cli::main("), "the Cli arm runs the CLI");
+        assert!(main_rs.contains("ade_cli::Action::Hook => hook_forward::main()"), "only the Hook arm reaches hook_forward::main");
+        // The Cli arm passes dispatch's arguments through untouched.
+        assert!(main_rs.contains("ade_cli::Action::Cli(args) => std::process::exit(ade_cli::main(&args))"), "the Cli arm runs the CLI");
+        assert!(main_rs.contains("std::env::args_os().collect()"), "one argv, as given");
+        assert!(main_rs.contains("ade_cli::dispatch(argv)"), "dispatch decides");
+    }
+
+    // ---- M2: dispatch over the whole argv ----
+
+    #[test]
+    fn dispatch_hands_the_cli_its_arguments_from_the_verb() {
+        assert_eq!(dispatch(os(&["/x/ade-hook", "open", "--focus"])), Action::Cli(os(&["open", "--focus"])));
+        assert_eq!(dispatch(os(&["ade-hook", "help"])), Action::Cli(os(&["help"])));
+        assert_eq!(dispatch(os(&["/a/bin/release/ade", "help"])), Action::Cli(os(&["help"])));
+        assert_eq!(dispatch(os(&["ade"])), Action::Cli(vec![]));
+        assert_eq!(dispatch(os(&["ade", "frob", "x"])), Action::Cli(os(&["frob", "x"])));
+    }
+
+    #[test]
+    fn dispatch_keeps_hook_mode_for_the_hook_and_guard() {
+        assert_eq!(dispatch(os(&["/Applications/ADE.app/Contents/MacOS/ade-hook"])), Action::Hook);
+        assert_eq!(dispatch(os(&["ade-hook", "frob"])), Action::Hook);
+        assert_eq!(dispatch(os(&["ade", "guard"])), Action::Hook);
+        assert_eq!(dispatch(vec![]), Action::Hook, "an empty argv is the hook");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dispatch_keeps_non_utf8_arguments_as_given() {
+        use std::os::unix::ffi::OsStringExt;
+        let bad = OsString::from_vec(b"caf\xe9".to_vec());
+        let argv = vec![OsString::from("/b/ade"), OsString::from("open"), OsString::from("--name"), bad.clone()];
+        assert_eq!(dispatch(argv), Action::Cli(vec![OsString::from("open"), OsString::from("--name"), bad]));
+        // A non-UTF-8 argv0 whose basename is `ade` is still the CLI.
+        let argv0 = OsString::from_vec(b"/\xff/ade".to_vec());
+        assert_eq!(dispatch(vec![argv0, OsString::from("help")]), Action::Cli(os(&["help"])));
+    }
+
+    // ---- M8: non-UTF-8 arguments ----
+
+    #[cfg(unix)]
+    #[test]
+    fn a_non_utf8_argument_is_usage_2_and_sends_nothing() {
+        use std::os::unix::ffi::OsStringExt;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let tmp = temp_dir("non-utf8");
+        let args = vec![OsString::from("open"), OsString::from("--name"), OsString::from_vec(b"caf\xe9".to_vec())];
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let code = run(&args, env_fn(port), Ok(tmp), &mut out, &mut err, Duration::from_secs(5));
+        let err = String::from_utf8(err).unwrap();
+        assert_eq!(code, 2, "{err}");
+        assert_eq!(err.trim_end(), "ade: argument 3 is not UTF-8 text; ade open can't send it");
+        assert!(listener.accept().is_err(), "no connection was made");
+    }
+
+    // ---- M1: the working folder ----
+
+    #[test]
+    fn working_folder_is_pwd_when_it_names_the_current_folder() {
+        let tmp = temp_dir("wf-pwd");
+        assert_eq!(working_folder(Some(tmp.clone().into()), Ok(PathBuf::from(&tmp))), Ok(tmp.clone()));
+        // Without PWD, the current folder.
+        assert_eq!(working_folder(None, Ok(PathBuf::from(&tmp))), Ok(tmp));
+    }
+
+    #[test]
+    fn working_folder_ignores_a_spoofed_pwd() {
+        let tmp = temp_dir("wf-spoof");
+        std::fs::create_dir_all(format!("{tmp}/here")).unwrap();
+        std::fs::create_dir_all(format!("{tmp}/elsewhere")).unwrap();
+        let here = format!("{tmp}/here");
+        for pwd in [format!("{tmp}/elsewhere"), format!("{tmp}/missing"), "here".to_string(), "/".to_string()] {
+            assert_eq!(working_folder(Some(pwd.clone().into()), Ok(PathBuf::from(&here))), Ok(here.clone()), "PWD={pwd}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn working_folder_keeps_pwd_through_a_symlink() {
+        let tmp = temp_dir("wf-link");
+        std::fs::create_dir_all(format!("{tmp}/real")).unwrap();
+        std::os::unix::fs::symlink(format!("{tmp}/real"), format!("{tmp}/link")).unwrap();
+        // getcwd gives the physical folder; the shell's PWD is the path typed.
+        let physical = std::fs::canonicalize(format!("{tmp}/real")).unwrap();
+        assert_eq!(working_folder(Some(format!("{tmp}/link").into()), Ok(physical)), Ok(format!("{tmp}/link")));
+    }
+
+    #[test]
+    fn working_folder_of_a_deleted_folder_is_an_error() {
+        let tmp = temp_dir("wf-gone");
+        let gone = format!("{tmp}/gone");
+        std::fs::create_dir_all(&gone).unwrap();
+        std::fs::remove_dir(&gone).unwrap();
+        let message = Err("the current folder is gone".to_string());
+        // getcwd failed.
+        assert_eq!(working_folder(Some(tmp.clone().into()), Err(std::io::ErrorKind::NotFound.into())), message);
+        assert_eq!(working_folder(None, Err(std::io::ErrorKind::NotFound.into())), message);
+        // getcwd answered, but neither it nor PWD exists any more (None == None before).
+        assert_eq!(working_folder(Some(gone.clone().into()), Ok(PathBuf::from(&gone))), message);
+        assert_eq!(working_folder(None, Ok(PathBuf::from(&gone))), message);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn working_folder_with_a_non_utf8_path_is_an_error() {
+        use std::os::unix::ffi::OsStringExt;
+        let here = PathBuf::from(OsString::from_vec(b"/tmp/caf\xe9".to_vec()));
+        assert_eq!(working_folder(None, Ok(here)), Err("the current folder's path is not UTF-8 text; ade open can't send it".to_string()));
+    }
+
+    #[test]
+    fn a_gone_folder_is_exit_2_and_help_still_works() {
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let code = run(&os(&["open"]), env_fn(1), Err("the current folder is gone".into()), &mut out, &mut err, Duration::from_secs(5));
+        assert_eq!(code, 2);
+        assert_eq!(String::from_utf8(err).unwrap(), "ade: the current folder is gone\n");
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let code = run(&os(&["help"]), env_fn(1), Err("the current folder is gone".into()), &mut out, &mut err, Duration::from_secs(5));
+        assert_eq!(code, 0);
+        assert!(String::from_utf8(out).unwrap().contains("ade open"));
+    }
+
+    // ---- minor 7: a repeated flag ----
+
+    #[test]
+    fn a_repeated_flag_is_usage_2() {
+        for args in [
+            &["open", "--cwd", "a", "--cwd", "b"][..],
+            &["open", "--name", "a", "--name", "b"][..],
+            &["open", "--split", "right", "--split", "down"][..],
+            &["open", "--focus", "--focus"][..],
+        ] {
+            let (code, _, err, _) = cli(args, 1, "/");
+            assert_eq!(code, 2, "{args:?}");
+            assert!(err.starts_with("ade: ") && err.contains("given twice"), "{args:?}: {err}");
+        }
     }
 
     // ---- C5: usage ----
@@ -536,13 +762,17 @@ mod tests {
     fn the_token_comes_from_the_environment_only() {
         let tmp = temp_dir("token");
         let token = "f00dfeedcafe0123456789abcdef0123456789abcdef0123456789abcdef0123";
-        let args = s(&["open", "--focus"]);
-        assert!(!args.iter().any(|a| a.contains(token)), "the argv carries no token");
+        // The very argv handed to the CLI below.
+        let argv = ["open", "--focus"];
+        assert!(!argv.iter().any(|a| a.contains(token)), "the argv carries no token");
         let (port, rx) = answer_once("HTTP/1.1 200 OK\r\nContent-Length: 24\r\n\r\n{\"ok\":true,\"typed\":true}");
         let env = vec![(ENV_PORT, port.to_string()), (ENV_TOKEN, token.to_string()), (ENV_PTY, "7".to_string())];
-        let (code, _, err, _) = cli_env(&["open", "--focus"], |k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()), &tmp, None);
+        let (code, _, err, _) = cli_env(&argv, |k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()), &tmp, None);
         assert_eq!(code, 0, "{err}");
-        assert!(rx.recv().unwrap().contains(&format!("\r\nX-ADE-Token: {token}\r\n")));
+        let request = rx.recv().unwrap();
+        assert!(request.contains(&format!("\r\nX-ADE-Token: {token}\r\n")), "{request}");
+        assert_eq!(request.matches(token).count(), 1, "only in the header: {request}");
+        // The argv of the real process is checked in ade-hook/tests/dispatch.rs.
         // No flag takes a token.
         assert!(!USAGE.to_lowercase().contains("token "), "no --token flag");
         assert_eq!(cli(&["open", "--token", token], 1, &tmp).0, 2);
@@ -625,8 +855,71 @@ mod tests {
         let (code, _, err, _) = cli_env(&["open"], env_fn(port), &tmp, Some(Duration::from_millis(200)));
         drop(hold_tx);
         assert_eq!(code, 1);
-        assert!(err.starts_with("ade: ") && err.trim_end().len() > 5, "{err}");
+        assert_eq!(err.trim_end(), "ade: ADE didn't answer in 15 s; a terminal may or may not have opened");
         assert!(started.elapsed() < Duration::from_secs(5), "the injected deadline is used");
+    }
+
+    #[test]
+    fn exit_4_when_ade_closes_without_answering() {
+        let tmp = temp_dir("exit4-closed");
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream); // close before any answer
+        });
+        let started = Instant::now();
+        let (code, _, err, _) = cli_env(&["open"], env_fn(port), &tmp, Some(Duration::from_secs(10)));
+        assert_eq!(code, 4, "{err}");
+        assert!(err.starts_with("ade: ADE closed the connection without answering"), "{err}");
+        assert!(err.contains("sandboxed Bash") && err.contains("tmux"), "{err}");
+        assert!(started.elapsed() < Duration::from_secs(5), "not the deadline: {:?}", started.elapsed());
+    }
+
+    #[test]
+    fn exit_1_for_an_unexpected_answer() {
+        let tmp = temp_dir("exit1-unexpected");
+        for answer in [
+            http(200, "{}"),
+            http(200, r#"{"ok":false}"#),
+            http(200, r#"{"ok":"true"}"#),
+            http(200, "oops"),
+            http(500, ""),
+            "garbage\r\n\r\n".to_string(),
+            "HTTP/1.1 200 OK\r\n\r\n{\"ok\":true}".to_string(), // no Content-Length, then closed: fine
+        ] {
+            let (port, _rx) = answer_once(&answer);
+            let (code, _, err, _) = cli(&["open"], port, &tmp);
+            if answer.ends_with("{\"ok\":true}") {
+                assert_eq!(code, 0, "{answer:?}: {err}");
+                continue;
+            }
+            assert_eq!(code, 1, "{answer:?}: {err}");
+            assert!(err.starts_with("ade: unexpected answer from ADE"), "{answer:?}: {err}");
+        }
+    }
+
+    #[test]
+    fn each_failure_has_its_own_message() {
+        let message = |f: Failure| outcome(Err(f));
+        let refused = message(Failure::Refused);
+        let reset = message(Failure::Reset);
+        let timeout = message(Failure::NoAnswer);
+        let garbled = message(Failure::Garbled);
+        let unreachable = message(Failure::Unreachable("Operation not permitted (os error 1)".into()));
+        assert_eq!(refused.0, 4);
+        assert_eq!(reset.0, 4);
+        assert_eq!(timeout.0, 1);
+        assert_eq!(garbled.0, 1);
+        assert_eq!(unreachable.0, 1);
+        let texts = [&refused.1, &reset.1, &timeout.1, &garbled.1, &unreachable.1].map(|m| m.clone().unwrap());
+        for (i, a) in texts.iter().enumerate() {
+            for b in &texts[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+        assert!(texts[4].contains("Operation not permitted") && texts[4].contains("sandboxed Bash"), "{}", texts[4]);
+        assert!(!texts[2].contains("nothing was opened"), "after a timeout a terminal may have opened");
     }
 
     #[test]
@@ -645,7 +938,12 @@ mod tests {
             (ENV_PORT, Some("abc")),
             (ENV_PORT, Some("70000")),
             (ENV_TOKEN, None),
+            (ENV_PORT, Some("0")),
             (ENV_TOKEN, Some("")),
+            (ENV_TOKEN, Some("a-test-token")),
+            (ENV_TOKEN, Some("ABCDEF0123")),
+            (ENV_TOKEN, Some("abc\r\nX-Evil: 1")),
+            (ENV_TOKEN, Some(" abc")),
             (ENV_PTY, None),
             (ENV_PTY, Some("x7")),
         ] {
@@ -699,7 +997,7 @@ mod tests {
     fn env_fn(port: u16) -> impl Fn(&str) -> Option<String> {
         move |k: &str| match k {
             ENV_PORT => Some(port.to_string()),
-            ENV_TOKEN => Some("a-test-token".to_string()),
+            ENV_TOKEN => Some("0123456789abcdef".to_string()),
             ENV_PTY => Some("7".to_string()),
             _ => None,
         }
@@ -712,7 +1010,7 @@ mod tests {
 
     fn cli_env(args: &[&str], var: impl Fn(&str) -> Option<String>, pwd: &str, timeout: Option<Duration>) -> (i32, String, String, ()) {
         let (mut out, mut err) = (Vec::new(), Vec::new());
-        let code = run(&s(args), var, pwd, &mut out, &mut err, timeout.unwrap_or(Duration::from_secs(5)));
+        let code = run(&os(args), var, Ok(pwd.to_string()), &mut out, &mut err, timeout.unwrap_or(Duration::from_secs(5)));
         (code, String::from_utf8(out).unwrap(), String::from_utf8(err).unwrap(), ())
     }
 
