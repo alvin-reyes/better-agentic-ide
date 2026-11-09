@@ -1,0 +1,32 @@
+# 0018: A per-profile local channel is both the single-instance lock and the only transport between instances
+
+- **Status:** Accepted (2026-11-08). Approved by the owner on 2026-11-08 with the F1 plan; accepted on 2026-11-08, when the delta review of revisions 5 to 5g of the F1 design passed. With the F1 design (section 5), contracts `engagement-profiles.md` and `engagement-requests.md`.
+- **Revisions:** 2026-11-08 first version; revised the same day after the adversarial review (M1, M2); revision 5c (MJ-6): "not running" needs positive evidence, the control key is written at the redeem; revision 5d (MJ-A, MJ-B): invariant L, the lock file moved to `<profiles base>/.run/`, the endpoint check, the keep-alive pass, the lock held until exit, an advisory lock record; revision 5f (minors 1, 6): the keep-alive pass checks the lock file first and a lost lock never rebinds the socket; the lock and channel exist only with F1 on; revision 5g (minors m2, m3): a lost lock also needs the second binder to be serving, and a lost-lock A stops writing `terminal-sessions.json`.
+- **Context:**
+  - Several requirements need a lock and a transport:
+    - one instance per profile (PE-13 AC1);
+    - the default telling whether A runs, reading nothing in A's profile root but a lock, with a stale lock or reused PID reading as not running (PE-12 AC1);
+    - requests from A (PE-8 AC5, Open engagements, PE-13 AC10);
+    - requests to A (close, hand-off).
+  - A must not read the default's data to find it.
+- **Decision:**
+  - One endpoint per profile, named `ade-<16 hex of SHA-256(profiles base, id or "default")>`:
+    - a Unix socket in the per-user `DARWIN_USER_TEMP_DIR` on macOS;
+    - a Unix socket file in `$XDG_RUNTIME_DIR/ade/` (a checked 0700 folder; `/tmp/ade-<uid>/` with the same checks if there is no runtime folder) on Linux, not an abstract socket, whose global, predictable name anyone could bind first;
+    - a named pipe with `FILE_FLAG_FIRST_PIPE_INSTANCE`, `PIPE_REJECT_REMOTE_CLIENTS` and an owner-SID-only DACL on Windows.
+  - **Both ends verify the peer** before the request: `getpeereid` (macOS), `SO_PEERCRED` (Linux), `GetNamedPipeServerProcessId` / `GetNamedPipeClientProcessId` plus the process token's user SID (Windows). Another user's endpoint is refused.
+  - **Invariant L** (design section 5) is what every use of the lock rests on: (1) an instance takes its lock before it binds or writes in its profile root, and holds it until its process exits, released only by the kernel; (2) its last write into its root precedes its exit; (3) "not running" only from a prober that took the lock itself and then found the endpoint absent or refusing; (4) a held lock with anything but a correct `hello` within 1 s is "not answering", on which nothing is spawned, removed or written.
+  - **The lock.** On Unix, an exclusive `flock` on `<profiles base>/.run/ade-<h>.lock` (a checked 0700 folder outside every profile root, which no OS cleaner ages; revision 5c's place beside the socket was exposed to macOS's `dirhelper`, the XDG runtime-folder rule and `systemd-tmpfiles`). The take is non-blocking, retried up to 2 s; a binder checks that the file it locked is still the one at the path; probe, unlink of a refusing socket and bind happen under it. The descriptor lives in a never-dropped `static` with `FD_CLOEXEC`. On Windows, the pipe name with `FILE_FLAG_FIRST_PIPE_INSTANCE`; A keeps a lock instance it never closes and creates each next instance before it releases one, all handles non-inheritable. Shutdown ends with `std::process::exit` after the last write into the root; on Windows A first waits up to 5 s for WebView2's browser process.
+  - **Keep-alive.** On Unix, every 60 s, A first re-takes a removed lock file, then rebinds a removed socket, only while it holds the lock on the file at the lock path. If another binder holds the new file, A has lost its lock: it never touches the socket path again, tells the engineer, and writes nothing more in its root. Chosen over the sticky bit and a 6-hourly touch, which only the XDG runtime folder honours.
+  - **Only with F1 on.** With F1 off no instance takes a lock or binds a channel, as today's ADE.
+  - **The probe** takes the lock itself, as delete does until it has removed A. "Running" means the lock is held and the endpoint answers `hello` with the expected profile within 1 s. A stale socket with a free lock is not running; a socket that accepts while the lock is free is not answering.
+  - **The lock record** (Unix: process id and start time written into the lock file; Windows: the pipe server's process id) names a hung A and lets Force quit end it after a start-time and executable check. It never decides liveness.
+  - Requests are one closed serde enum with `deny_unknown_fields`.
+  - `open_engagements` is a unit variant, tested to carry nothing.
+  - **A control key** per engagement start (32 random bytes, written to A's registry entry by the redeem handler only once A redeems, so a failed start keeps the old key, and sent in `StartInfo`, kept in A's memory only) authenticates every request that changes something: `checkout_request` and `first_start_done` from A, `registry_update`, `close` and `apply_handoff` to A. It replaces revision 1's `confirm_nonce` call-back. A refuses a `StartInfo` whose `profile` is not its `--ade-profile`.
+- **Consequences:**
+  - No liveness from PID files (the lock record is advisory) and no reads of another profile's files.
+  - A crash frees the pipe name (Windows) or leaves a refusing socket file and releases the `flock` (macOS, Linux).
+  - The socket and lock files sit outside A's profile root, named by an opaque hash. They are named exemptions in the isolation test.
+  - Processes A started can outlive A; the lock does not cover them. Delete checks for them separately (design section 11) and refuses while one runs.
+  - The channel stops other users and remote clients. It is not a boundary between processes of the same user, who can read the registry and its keys, like ADR 0014's token.

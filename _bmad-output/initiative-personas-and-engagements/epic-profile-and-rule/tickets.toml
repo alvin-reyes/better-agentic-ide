@@ -1,0 +1,1012 @@
+# F1 slice 1: the profile and the rule. Built only after epic-harness is Done (the epic's after) and after e0 (the owner's Dock probe).
+# Spec: PRD F1.8 slice 1; design sections 2 to 6, 9, 14, 15, 16, 20, 21; contracts engagement-profiles.md, engagement-registry.md, engagement-requests.md; ADRs 0015 to 0018, 0021.
+# Verification: architecture item 1 (eight local lines), item 3 (the backend jobs, every F1 story), and item 2 (isolation runs, every F1 story that touches I/O, on three platforms, two runners each).
+# "I/O" below means: any file, folder, environment, process, socket, pipe, OS secret store, registry, webview or network code, in Rust or the frontend, or the harness itself (architecture item 2).
+
+# ---------- The owner's precondition (not a build story) ----------
+
+[[entry]]
+id = "e0"
+type = "spike"
+title = "Owner's Dock probe (appendix A with the pinned-icon step) and the architect's PE-13 AC8 check"
+description = '''Spike. Precondition for the build of slice 1 (owner's ruling, design O7, F1.12 "first, before slice 1"). Not a gate on slice 0. Owner: the owner runs it; architect: reads it. Who waits on the answer: every story of this epic. The branch it selects decides e26's macOS run and how a reopen from Finder or Spotlight is handled. Where recorded: design section 6 and this spike's Verification section.
+
+The owner runs design appendix A on a Mac, from an empty folder: build the probe, start two instances, click the second instance's Dock tile, open the app from Finder and from Spotlight; then step 3b, the pinned icon: keep the probe in the Dock, quit both, start one instance, click the pinned icon, and read the log. Then step 4's reading.
+
+The architect records, in design section 6 and in this spike:
+(1) whether a Dock click's sender is com.apple.dock and arrives at the instance whose tile was clicked (yes or no);
+(2) whether a Finder or Spotlight reopen names another sender (yes or no);
+(3) what the pinned icon's click shows (one tile or two; the sender);
+(4) which branch of section 6 applies: the sender check, or D32's fallback (every reopen brings A forward; the route home covers it).
+
+Acceptance: the four answers are recorded with the log lines quoted; the branch is named; e26 is re-read against it and its entry updated if the branch changes what it tests.'''
+verify = '''The four answers and the branch are recorded in this spike's Verification section and in design section 6, with the probe's log lines. No code. Isolation: not applicable (a manual probe).'''
+covers = ["PE-13"]
+after = []
+hitl = true
+risk = "high"
+
+# ---------- Foundations ----------
+
+[[entry]]
+id = "e1"
+type = "story"
+title = "Profile ids and the one path resolver: ProfilePaths with default parity"
+description = '''F1 slice 1. Contracts engagement-profiles.md ("Profile id", "Profile root", "One resolver"); design section 3 (the table of rows); ADR 0015.
+
+Adds src-tauri/src/profile.rs. Types:
+- ProfileId: parses only 16 lowercase hex characters (^[0-9a-f]{16}$), opaque, serialisable.
+- enum Profile { Default, Engagement(ProfileId) }. The default is never a ProfileId value.
+- ProfilePaths, built once from a Profile and the OS base folders, which are passed in as values (a seam), so tests run with fake bases.
+Methods, one per row of design section 3 for this slice: app, webview (Windows), claude, claude_home (macOS), claude_local (Windows), tmp, cache, images, roles, crash_log, shell, shell_fish_data, history, sessions, engagement_json, terminal_sessions_json, handoff, run_dir (<profiles base>/.run/), lock_file(id), socket_name(id). shim and brain are not added here.
+Profiles base per OS, as the contract gives it. The lock and socket names: the first 16 hex characters of SHA-256 over "ade-ctl\0" + canonical profiles base + "\0" + (id or "default"), as the contract gives them. For the default profile, every method returns today's path, taken from the current code.
+
+Acceptance, each a test in profile.rs:
+(1) profile_id_parses_16_lowercase_hex.
+(2) profile_id_refuses_uppercase_short_long_and_the_word_default.
+(3) default_paths_match_golden_table: every default method against a table written from the current code, per OS.
+(4) engagement_paths_are_under_the_root: every row of this slice, for a fake root.
+(5) profiles_base_per_os (fake bases).
+(6) run_dir_is_beside_the_profiles_not_in_a_root.
+(7) socket_and_lock_names_match_the_sha256_vector.
+Pure functions: no file or environment access in this story.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (7) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: not required (pure path functions, item 2).'''
+covers = ["PE-4"]
+after = ["e0"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "e2"
+type = "story"
+title = "profile_paths command and the frontend mirror profilePaths.ts, with one golden table"
+description = '''F1 slice 1. Design section 3 ("One resolver"); contract engagement-profiles.md.
+
+Adds the Tauri command profile_paths, which returns the active profile's ProfilePaths table as a JSON object with one string per method of e1. Adds src/lib/profilePaths.ts, the frontend mirror: it reads the table through the command once per instance and caches it.
+
+Both sides read one fixture, src-tauri/tests/fixtures/profile_paths_golden.json, which e1's golden test and the vitest mirror test use. A key added on one side and not the other fails both.
+
+Acceptance:
+(1) profile_paths_command_returns_every_key (Rust).
+(2) mirror_keys_equal_the_rust_table (vitest, reads the fixture).
+(3) default_profile_mirror_returns_todays_paths (vitest).
+(4) the command takes no argument from the caller (a test on the command's signature).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (4) appear by name in cargo test and npm test. CI: three backend jobs green. Isolation: not required (returns strings; no file access, item 2).'''
+covers = ["PE-4"]
+after = ["e1"]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = "e3"
+type = "story"
+title = "Reroute every Rust path call site to ProfilePaths, with the static test that bans the rest"
+description = '''F1 slice 1. ADR 0015 ("Every existing path call site moves to the resolver, one story-sized refactor in slice 1"); design section 3 ("The static test (PE-4 AC5, widened)"); PRD PE-4 AC5.
+
+Moves every Rust call site that builds an ADE-owned path, or a Claude Code path, to ProfilePaths. The list: app_data_dir() users (state, sync, snapshots); env_home() plus .ade (pasted images in lib.rs, roles); crashlog::log_path; usage.rs lock_dir; the readers of ~/.claude and ~/.claude.json in usage.rs, subagent.rs, sync.rs and check_claude_plugin, which read claude_config_dir() (the login session's CLAUDE_CONFIG_DIR if set, else ~/.claude, in the default profile); the cache folder ~/.cache/ade; temp_dir() uses outside tests. The claude-mem folder is offered only by the default profile. The plan lists each call site found by a grep, and the list is complete when the static test passes.
+
+Adds src-tauri/tests/profile_paths_static.rs. It scans src-tauri/src and fails on code outside profile.rs that calls app_data_dir(), app_local_data_dir(), app_log_dir() or app_cache_dir(), builds .claude, .claude-mem or .ade from a home folder, or calls temp_dir() outside tests. Fixtures under src-tauri/tests/fixtures/profile_paths/, one per rule, must be flagged.
+
+The default profile's behaviour does not change. No existing test expectation is edited to pass; a test whose path moves says so in the plan.
+
+Acceptance:
+(1) static_flags_each_fixture (one test per rule).
+(2) static_passes_on_the_tree.
+(3) default_profile_paths_unchanged (the golden table of e1 passes through the call sites).
+(4) every existing test passes unchanged.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (4) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2), a story whose change touches app data, temp, log and Claude Code paths; the isolation run must end with the default profile unchanged (no marker, the scenario's default stores as today).'''
+covers = ["PE-4"]
+after = ["e2"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e4"
+type = "story"
+title = "Reroute frontend path reads to profilePaths.ts, with the vitest static test"
+description = '''F1 slice 1. Design section 3 ("The static test"); contract engagement-profiles.md ("One resolver": profilePaths.ts is the frontend's mirror).
+
+Finds every frontend read that builds an ADE-owned path or a Claude Code path (for example bmadRuntime/registry.ts, and the call sites a grep for .claude, .ade and home-folder joins finds in src/), and moves each to profilePaths.ts. The plan lists them.
+
+Adds src/lib/__tests__/profilePathsStatic.test.ts: it scans src/ and fails on any file other than profilePaths.ts that builds .claude, .claude-mem or .ade from a home folder. Fixtures under src/lib/__tests__/fixtures/ must be flagged.
+
+Acceptance:
+(1) each fixture is flagged (one test per fixture).
+(2) the tree passes.
+(3) every existing vitest test passes unchanged.
+(4) the default profile's frontend reads return today's paths (a test against the golden fixture of e2).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (4) appear by name in npm test. CI: three backend jobs green. Isolation: required (item 2), a story whose change touches paths the frontend reads; the default profile must be unchanged in the isolation run.'''
+covers = ["PE-4"]
+after = ["e2"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "e5"
+type = "story"
+title = "Durable writes in fsx: sync_file, sync_dir, write_atomic, and the macOS fallback"
+description = '''F1 slice 1. Design section 20 ("Durable writes (M-F of revision 5)", "A syscall seam"); the contract's "Durable writes" references; ADR 0015 for the deletes.
+
+Extends src-tauri/src/fsx.rs (h5) with:
+- sync_file(file) and sync_dir(dir): on Linux, fsync and fsync of the folder read-only; on Windows, File::sync_all and FlushFileBuffers on a folder handle opened with backup semantics, where that is refused the write-through rename is the guarantee; on macOS, fcntl(F_FULLFSYNC) itself, with a fallback to fsync only when it fails with ENOTSUP, EINVAL or ENOTTY, the fallback recorded once per volume through a callback to the log. Any other error is returned.
+- the syscall seam trait Sys with full_fsync, fsync, flush_file_buffers and move_file_ex; the production implementation, and a recording one for tests.
+- write_atomic(path, bytes): a temp file in the same folder, synced, renamed over the path (no replace on the tombstone case, Windows MoveFileExW with MOVEFILE_WRITE_THROUGH), then the folder synced.
+
+Acceptance:
+(1) write_atomic_leaves_old_or_new_never_partial (a kill between steps, recording seam).
+(2) order_file_sync_then_rename_then_dir_sync (the recording backend asserts the order).
+(3) macos_only: sync_file_issues_f_fullsync and sync_dir_issues_f_fullsync.
+(4) macos_only: enotsup_falls_back_to_fsync_and_records_once.
+(5) windows_only: write_through_rename_has_no_replace.
+(6) windows_only: folder_flush_is_issued.
+(7) The macos_only and windows_only tests are in src-tauri/platform-tests.txt with the crate app.'''
+verify = '''Local: all eight lines exit 0 and tests (1) and (2) appear by name in cd src-tauri && cargo test. CI: the backend-macos job prints tests (3) and (4) as ok; backend-windows prints (5) and (6) as ok; the platform tests line lists them. Isolation: required (item 2), a file-writing change.'''
+covers = ["PE-4"]
+after = ["e1"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e6"
+type = "story"
+title = "The engagement registry: the file, its lock, the folder-name rules and the resolved paths"
+covers = ["PE-2", "PE-4"]
+after = ["e5"]
+hitl = false
+risk = "high"
+description = '''F1 slice 1. Contract engagement-registry.md ("Engagement registry", "Engagement folder names", "Paths"); design section 11 (the registry and hand-off) and section 3 ("Temp and runtime folders", revision 5j, N5); ADR 0015 (folder names are ASCII, 3 to 64 characters; PE-4 AC13 depends on them); PRD PE-2 AC1 (folder names, AC5, and revision 9k). Cited as Accepted: design revision 5j (confirmed by the owner 2026-11-08) and ADR 0024 (Accepted 2026-11-08). ADR 0024's launcher argument is built in e24, not here.
+
+Adds src-tauri/src/registry.rs. The file is <default app data>/engagements/registry.json (schema 1), with the lock engagements/registry.lock (fs4 advisory lock) and the backup registry.json.bak, which holds the file as it was before the last write. Every write goes through fsx::write_atomic (e5) under the lock.
+
+Top level: schema 1, and engagementsFolder, which is null until the first successful create. e8 sets it in the same write as the first entry. This story has no setter for it: a new registry reads engagementsFolder null, and the field survives a round trip as null. The set-once rule and the folder checks are e8a's and e8's.
+
+Each entry has the fields the contract lists: profileId, name, clientName, owner, personaId, root, checkouts (empty in slice 1), gitIdentity (null), deployCommands (empty), acks (empty), controlKey (empty until the first redeem), firstStartPending, seed (null), pendingRemovals (empty), tombstonesOwed (empty), deleting (false), createdAt and updatedAt. Unknown keys are kept on save.
+
+Rules:
+- engagement folder names (the root's last segment): ASCII [A-Za-z0-9._-], 3 to 64 characters, unique case-insensitively in engagementsFolder;
+- stored paths are resolved (symlinks followed) and compared with fsx::same_path.
+
+ProfilePaths accessors (added here, in profile.rs, because they read the OS and e1's set is pure): os_temp_dir() (the one non-test temp_dir() call in the crate, which stays in profile.rs), system_temp_dirs() (/tmp and /var/tmp on macOS and Linux; empty on Windows, each returned as given, resolution is the caller's job as design 11 N4 says), runtime_dir() (the per-user folder that holds the sockets, the value e9 uses) and profiles_base(). Each takes its OS base as a value through e1's seam, so the tests run with fake bases. No other code calls temp_dir(); e3's static test enforces it.
+
+Acceptance:
+(1) registry_round_trips_schema_1.
+(2) unknown_keys_are_kept_on_save.
+(3) folder_name_rules_table (accepts and refuses, including 2 characters, 65 characters, a space, non-ASCII and a slash).
+(4) folder_name_is_unique_case_insensitively.
+(5) stored_paths_are_resolved (a symlink fixture).
+(6) two_writers_serialise_on_the_lock (two threads).
+(7) write_keeps_the_previous_file_as_bak.
+(8) the registry is never read by an engagement instance (a test that the path is the default profile's only: ProfilePaths of an engagement has no registry row).
+(9) a_new_registry_has_engagements_folder_null (and null survives a round trip).
+(10) profile_paths_temp_and_runtime_accessors (fake bases: os_temp_dir, system_temp_dirs per OS as above, runtime_dir, profiles_base).
+'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (10) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2), the file and lock writes of the default profile; the isolation run must hold the registry as the only place of A's names (the marker rule).'''
+
+[[entry]]
+id = "e7"
+type = "story"
+title = "Persona library, minimal: copy one starter persona into the library, and keep unknown keys"
+covers = ["PE-1"]
+after = ["e6"]
+hitl = false
+risk = "medium"
+description = '''F1 slice 1. PRD PE-1 (AC2 unknown keys kept, AC3 starters copied and never written back), limited to what slice 1 needs; PRD revision 9k (PE-1 AC3: slice 1 ships one starter, Software Engineer). Contract engagement-registry.md ("Persona library", with the starter rules A1 to A4 and "When a starter is copied", M5); design revision 5h (A1 to A4) and 5i (M5, minor 10). The editing UI is slice 4.
+
+Adds src-tauri/src/personas.rs. The library is <default app data>/personas/<persona id>/persona.md (persona id: 16 hex characters), with the lock personas/.lock. The file has YAML front matter (title, version starting at 1 and +1 per save, defaultModel, workAreas, starter) and a Markdown body. Unknown keys are kept on save.
+
+The starter is in the repository (Q9 is resolved): src-tauri/resources/personas/software-engineer/persona.md, title "Software Engineer", defaultModel sonnet. This story adds the bundle entry "resources/personas/": "resources/personas/" to src-tauri/tauri.conf.json bundle.resources, beside the bmad entries, and reads the folder at run time with resolve("resources/personas", BaseDirectory::Resource), as bmad.rs does. Tests read the same folder through CARGO_MANIFEST_DIR. No persona lives under docs/.
+
+Rules:
+- Starter id (A2): the folder name, a slug, ^[a-z0-9]+(-[a-z0-9]+)*$, 3 to 64 characters. A test checks the folder of every bundled starter.
+- Fields (A3): the bundled file carries no version and no starter key. The copy step sets version 1 and starter <starter id>. A bundled file with either key, a missing or empty title, or a folder name that breaks the slug rule fails the test.
+- defaultModel (A4): a Claude Code model name, form-checked only: ^[A-Za-z0-9][A-Za-z0-9._:\[\]-]{0,99}$, and a YAML string. A number, a boolean, null, ~, a list or a map is malformed; a malformed, not-of-form or empty value is treated as absent. Slice 1 stores and copies the key and starts no agent with it.
+- list_persona_choices() (default profile only): every library persona, ordered by title then id, as { kind: "library", personaId, title }; then every bundled starter that no library persona names in its starter key, as { kind: "starter", starterId, title }. A starter whose file cannot be read or parsed is left out, and its reason is returned beside the list as starterErrors.
+- The copy (copy_starter): the bundled file's text, with version 1 and starter set; the other keys and the body are kept as they are. The once-only rule (a create reuses an existing copy) is e8's.
+
+Only the copy, the list and the read are built here.
+
+Acceptance:
+(1) starter_copy_creates_persona_dir_at_version_1_with_starter_set.
+(2) starter_resource_is_not_modified (the bundled bytes are equal before and after the copy).
+(3) unknown_front_matter_keys_are_kept (an unknown key in the bundled file survives the copy and a later save).
+(4) persona_id_is_16_lowercase_hex.
+(5) library_lock_serialises_two_writers.
+(6) an engagement instance has no path to the library (a ProfilePaths test: the engagement's paths hold no personas row).
+(7) bundled_starters_hold_no_version_or_starter (the shipped software-engineer file passes; a fixture holding either key fails).
+(8) starter_id_slug_rule_table (accepts software-engineer and abc; refuses ab, a 65-character name, Software-Engineer, a leading hyphen and an underscore).
+(9) default_model_yaml_string_rule (sonnet, '3.5' and yes are strings and kept; 3.5, true, null, ~, a list and a map are absent; the bundled starter's value sonnet matches the A4 form).
+(10) list_persona_choices_lists_each_starter_once (a starter with a copy that names it is left out; a starter without one is listed; a starter with an unparseable file is left out, with starterErrors).
+(11) tauri_conf_bundles_the_starter_folder (tauri.conf.json's bundle.resources holds the entry, and resolving it finds software-engineer/persona.md).
+'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (11) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2), file writes in the default profile.'''
+
+[[entry]]
+id = "e8a"
+type = "story"
+title = "Engagements folder rules: the checks before a create, and their refusals"
+covers = ["PE-2"]
+after = ["e6"]
+hitl = false
+risk = "high"
+description = '''F1 slice 1. PRD PE-2 AC1 (revision 9k: the folder paragraph and its tests); design section 11 and revisions 5h (G2), 5i (M2, minors 4 to 6) and 5j (N1, N3 to N7); contract engagement-registry.md, the engagementsFolder checks 1 to 6; UX spec docs/ux-spec.md section 6.2 (the folder rows, in the contract's order). This story is the check only. The make, the lock and the set-once write are e8's.
+
+Adds src-tauri/src/engagement_folder.rs: check_engagements_folder(typed, ctx) returns Checked::Existing, Checked::Missing { parent }, or the first FolderRefusal. The inputs are values (seams): the typed string, the home folder, a registry snapshot (engagementsFolder and the roots of the registered engagements), the ProfilePaths of e1 and e6, and two seams: resolve (the longest existing prefix canonicalised, the rest appended, as P is) and volume_of (the device id of a folder, for the volume-root test). Checks, in this order, first failure returned:
+1. Text: not empty; no character of Unicode general category Cc or Cf (the contract's list, U+200B to U+200F, U+202A to U+202E, U+2060 to U+2064, U+2066 to U+2069, U+FEFF, U+00AD and the rest); absolute after ~ expansion; no . or .. segment. A path that fails here is never echoed in the refusal.
+2. Resolved P: every later check uses P (N4).
+3. Location, with "inside" and "contains" each including "equal to", tested in this order, each with its own refusal: (a) P contains the home folder (home resolved the same way); (b) P is a file-system or volume root (an existing P whose volume differs from its parent's; a missing P is not a root, N3); (c) P is inside or contains <default app data>, the profiles base (with its .run/), the runtime folder, the OS temp folder, and on macOS and Linux /tmp and /var/tmp, each comparand from ProfilePaths and resolved as P is (N4 to N6).
+4. An existing P that is not a folder is refused.
+5. A missing P, in this order: (a) a registered engagement's root is inside P: refused as registered (N7), nothing made; (b) its parent is missing or not a folder: refused, naming the parent. Otherwise Checked::Missing, which e8 makes, one level.
+6. engagementsFolder is set: P must be fsx::same_path to it, else refused naming the set folder.
+
+Every comparison is fsx::same_path. The check holds no lock and writes nothing; e8 runs it again inside the registry lock.
+
+FolderRefusal kinds, one per folder row of UX 6.2: Empty, NotAbsolute, InvisibleOrControl (no path carried), ContainsHome, VolumeRoot, OverlapsAppData, OverlapsRuntime, OverlapsSystemTemp, NotAFolder, RegisteredMissing, ParentMissing, SetFolderDiffers. Each refusal carries the path (or the parent, or the set folder) the copy names.
+
+Acceptance:
+(1) text_check_refuses_format_and_control_characters_without_echoing_the_path (U+202E, U+200B, U+FEFF, U+00AD, a tab, a line break).
+(2) relative_path_and_dot_segments_are_refused.
+(3) home_is_refused_first: ~ gives ContainsHome, not an overlap (N1).
+(4) a_volume_root_is_refused_second: / gives VolumeRoot although it contains home; a mount point (a fake volume_of that differs from its parent's) and a btrfs subvolume read as a mount point are refused.
+(5) home_reached_through_a_link: a temporary home that is a symlink to the real folder; a typed path in either form contains home (N4).
+(6) overlaps_are_refused_each_with_its_own_kind: equal to, inside, or containing app data, the profiles base, .run/, the runtime folder, the OS temp folder, /tmp, /var/tmp, /private/tmp and /private/var/tmp (macOS and Linux fake canonical map, N6).
+(7) comparands_are_resolved_like_p: a fake base reached through a link compares equal to its target (N4).
+(8) a_missing_folder_is_not_a_root: a missing P under an existing parent is Checked::Missing (N3).
+(9) an_existing_file_is_refused_as_not_a_folder.
+(10) a_missing_folder_with_a_registered_engagement_is_refused_as_registered: /Volumes/<x>/Engagements with <x> absent and an engagement's root inside it gives RegisteredMissing, not ParentMissing (N7).
+(11) a_missing_folder_with_a_missing_parent_is_refused_naming_the_parent.
+(12) a_set_folder_must_be_the_same_path: the same path through ~ or a symlink is accepted; another path gives SetFolderDiffers naming the set folder.
+(13) a_missing_set_folder_is_made_again_after_every_engagement_is_deleted: Checked::Missing when no registered root lies under it.
+(14) the_check_writes_nothing (a directory snapshot before and after, including a folder that the create would have made).
+(15) refusal_order_matches_the_contract (each check's first failure is returned when several would fail; a table test over the order).
+(16) same_path_follows_the_volume_rule: macos_only and windows_only, a case-only difference on a case-insensitive volume is the same path; Linux is byte-equal.
+'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (15) appear by name in cd src-tauri && cargo test; (16) appears by name on macOS and Windows. CI: three backend jobs green; the platform tests line lists (16) for each platform. Isolation: required (item 2): the check reads the folders, links and volumes that it resolves.'''
+
+[[entry]]
+id = "e8"
+type = "story"
+title = "Create an engagement from a persona, in the default profile only, with the refusals slice 1 needs"
+covers = ["PE-2", "PE-4", "PE-13"]
+after = ["e6", "e7", "e8a"]
+hitl = false
+risk = "high"
+description = '''F1 slice 1. PRD PE-2 steps 1, 4 and 5 (the subset slice 1 needs; Q8), with AC1's text rules (revision 9k); PE-1 AC3 (a starter is copied once, at the create that chooses it); PE-13 AC4 (only the default creates engagements). Contract engagement-registry.md ("Persona library", "Engagement registry", "One critical section", "Text fields"); design revisions 5h (A1 to A4, G2, M5), 5i (M2, minors 4 and 11) and 5j (N1 to N7); design section 4.4 (the profile root).
+
+Adds src-tauri/src/engagement_create.rs: the create command, for the default profile only. Input: name, client name, owner, persona as { "library": "<persona id>" } or { "starter": "<starter id>" }, the engagement folder name, and the engagements folder as a typed path (Q8). Steps, in order:
+1. Refused in an engagement instance (Profile::Engagement), before anything else.
+2. Text fields: name, client name and owner are trimmed of Unicode White_Space and must be 1 to 80 code points with no Cc or Cf character; any other value is refused naming the field. The form mirrors this rule.
+3. Folder name: e6's rules; refused with the reason.
+4. Engagements folder: e8a's check, run once early (it answers the form).
+5. Persona: { library } must name an existing persona, else refused ("the persona was removed"). { starter } takes the personas lock, re-reads the library, reuses the library persona whose starter equals the id (the lowest persona id if there are several), and only if there is none copies the starter (e7). The personas lock is released before any registry lock is taken; the two are never held together.
+6. One critical section under registry.lock: re-read the registry; re-run e8a's check 5 and check 6 against the re-read value; the folder name is unique case-insensitively in the engagements folder; PE-2 AC5's containment (the new root equal to, inside or containing another engagement's root, by fsx::same_path); the profile id is unique among the entries. Then: make the engagements folder if e8a said it is missing (one level); make the profile root <profiles base>/<id> empty (A's first start creates its folders, e20) and the engagement root; write the registry with the new entry (controlKey empty, firstStartPending true, seed null, checkouts, deployCommands, acks, pendingRemovals and tombstonesOwed empty, gitIdentity null, deleting false, createdAt and updatedAt), and, when engagementsFolder was null, set it in the same write.
+7. It pushes, publishes and sends nothing (PE-2 step 4). It creates no STATE, ACCESS or memory file (PE-2 AC2 is slice 4).
+
+A create refused after a copy or after the folders were made leaves them as they are, which is harmless; the next create reuses the copy.
+
+Acceptance:
+(1) create_writes_the_registry_row_and_both_roots (and sets engagementsFolder in the same write when it was null).
+(2) refuses_a_bad_folder_name_and_says_why.
+(3) refuses_a_duplicate_folder_name_case_insensitively.
+(4) refuses_a_root_inside_another.
+(5) refuses_a_root_containing_another.
+(6) refuses_in_an_engagement_instance (a test with Profile::Engagement).
+(7) creates_nothing_outside_the_registry_the_two_roots_and_a_made_engagements_folder (a directory snapshot diff).
+(8) profile_ids_are_unique_among_entries.
+(9) text_fields_are_trimmed_and_refused_by_rule: a name of 80 characters with surrounding spaces is kept, trimmed; 81 is refused; a client name empty after trimming is refused; an owner with a line break is refused; a name, a client name and an owner each containing U+202E or U+200B is refused, naming the field.
+(10) starter_persona_is_copied_once: the first create with { starter } copies it; the second reuses that copy (one persona folder only).
+(11) library_persona_must_exist: an absent { library } id is refused ("the persona was removed") and nothing is made.
+(12) the_personas_lock_is_released_before_the_registry_lock (a seam records the order; never both held).
+(13) a_refused_create_after_the_copy_leaves_the_copy_for_the_next_create.
+(14) the_set_folder_is_fixed: a create in another folder is refused naming the set folder; a create in the same folder through a link is accepted.
+(15) a_missing_engagements_folder_is_made_only_while_nothing_is_registered_in_it: made at the first create; made again after every engagement in it is deleted (a fixture); not made, and refused, while an engagement is registered in it.
+(16) two_creates_racing_on_a_null_folder_with_different_paths: one sets it, the other is refused naming it (a seam inside the lock).
+'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (16) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2): it writes the registry and creates A's roots; the scenario's create step (e29) depends on it.'''
+
+# ---------- Channel, lock and requests ----------
+
+[[entry]]
+id = "e9"
+type = "story"
+title = "Unix channel bind: the flock lock, the socket, the peer check, and the frame"
+description = '''F1 slice 1. ADR 0018 (channel and lock, invariant L); contract engagement-profiles.md ("Control channel", "The bind"); design section 5; design 21 (the listed rows for Linux and macOS).
+
+Adds src-tauri/src/launcher/channel.rs (Unix). The bind runs in this order, and every step is tested:
+1. take the lock: <profiles base>/.run/ade-<h>.lock, created 0600 with O_NOFOLLOW and O_CLOEXEC; flock LOCK_EX|LOCK_NB, retried for 2 s then exit 2; fstat and lstat must give the same device and inode; the lock record is one line (process id and start time). The .run folder is mode 0700, owned by the user, not a symlink, checked before every open.
+2. an engagement instance checks its profile root (lstat, a folder); if absent, it unlinks the lock file it holds (if the path still names it) and exits 2.
+3. connect to the socket: absent or refused, unlink it and bind; accepted, exit 2 naming the path. The socket is $(getconf DARWIN_USER_TEMP_DIR) on macOS, and $XDG_RUNTIME_DIR/ade/ (a 0700 folder with the checks; /tmp/ade-<uid>/ with the same checks when there is no runtime folder) on Linux.
+4. only then, the rest of the start (the log is opened here).
+The descriptor lives in a never-dropped static with FD_CLOEXEC.
+Peer check on accept and connect: getpeereid (macOS) or SO_PEERCRED (Linux) uid equal to the own uid.
+Frame: a u32 big-endian length (at most 65536), then one UTF-8 JSON request per connection. A connection with no request within 5 s is closed.
+The channel exists only with F1 on: the bind function takes the flag as an argument, and with the flag off it creates no .run folder (e22 supplies the flag).
+
+Acceptance:
+(1) frame_length_limit and the one-request rule (unit).
+(2) idle_connection_closed_after_5s (paused clock).
+(3) peer_of_another_uid_is_refused (a seam).
+(4) the bind order (a recording seam: lock, then root check, then socket, then log).
+(5) flag_off_creates_no_run_folder.
+(6) linux_only: the lock file and the socket are unlinked under a live A and the first A never rebinds over its socket (the shared body, called from a linux_only test and a macos_only test).
+(7) linux_only and macos_only: flock_race_two_binds_one_wins.
+(8) linux_only and macos_only: the lock is FD_CLOEXEC and never inherited by a child (a test that spawns a child and reads its fd table).
+(9) linux_only and macos_only: .run is refused when it is a symlink or not mode 0700 or not owned by the user.
+(10) the listed tests (6) to (9) are in src-tauri/platform-tests.txt for their platforms.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test. CI: backend and backend-macos green; the platform tests line lists (6) to (9) for their platforms and prints each as ok. Isolation: required (item 2), it creates files and sockets; the run must show no marker in the channel's paths (they hold the process id and the start time only).'''
+covers = ["PE-13", "PE-12"]
+after = ["e5", "e6"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e10"
+type = "story"
+title = "Unix probe, keep-alive and the lost-lock state"
+description = '''F1 slice 1. ADR 0018 ("The probe", "Keep-alive", invariant L); contract engagement-profiles.md ("The probe", "Keep-alive pass"); design section 5; PRD PE-12 AC1.
+
+Adds, on Unix, in launcher/channel.rs and launcher/probe.rs:
+- probe_instance(profile) -> Liveness: takes the lock as a binder does, without writing a record. Taken: connect to the socket; absent or refused is not running, and the function returns the lock guard; accepted is not answering. Held: the endpoint passes the peer check and answers hello with the expected profile within 1 s is running; anything else is not answering. Any other error (no flock, .run failing its checks) is not answering. Not running comes only from this path (invariant L).
+- the keep-alive pass every 60 s, lock file first: a removed lock file is re-opened and its flock taken; then, only while A holds the lock at the lock path, a removed socket is rebound.
+- the lost-lock state: when the take still fails after 5 s of retries, and the new file's record names another live process whose serving is confirmed (the socket path's inode is not A's, or a hello there comes from another pid), A logs the conflict once, never runs the socket check or the take again, stops writing in its root, and tells the engineer to quit the window.
+The clock is injectable.
+
+Acceptance:
+(1) probe_absent_socket_is_not_running.
+(2) probe_stale_socket_with_free_lock_is_not_running.
+(3) probe_lock_held_hello_paused_is_not_answering (paused clock).
+(4) probe_accepting_with_lock_free_is_not_answering.
+(5) keepalive_retakes_a_removed_lock_file (paused clock).
+(6) keepalive_interval_is_60s (injected clock).
+(7) lost_lock_never_rebinds_the_socket (linux_only and macos_only, the shared body; listed).
+(8) lost_lock_writes_nothing_more_in_the_root (listed with (7)).
+(9) a probe error other than the above is not answering (a seam).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (6) and (9) appear by name in cd src-tauri && cargo test. CI: backend-macos and backend green; tests (7) and (8) appear as ok on their platforms in the platform tests line. Isolation: required (item 2), it opens sockets and takes locks.'''
+covers = ["PE-12", "PE-13"]
+after = ["e9"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e11"
+type = "story"
+title = "Windows channel: the named pipe, its lock instance, the peer check, and the create race"
+description = '''F1 slice 1. ADR 0018 (Windows); contract engagement-profiles.md ("Control channel", Windows row); design section 5; design 21 (the Windows listed rows).
+
+Adds, in launcher/channel.rs (Windows): the named pipe \\.\pipe\ade-<h> with FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_REJECT_REMOTE_CLIENTS and an owner-SID-only DACL; the lock instance kept in a never-dropped static and never closed; the next listening instance created before a client is served; all handles non-inheritable; creation retried for 2 s, then exit 2. Peer check: GetNamedPipeClientProcessId (server) or GetNamedPipeServerProcessId (client), then the process token's user SID equals the own SID. The probe on Windows: the create succeeding is not running (with the guard); a name nobody serves ends at the client's own bound. The frame and the bounds are shared with e9 through the common module.
+
+Acceptance:
+(1) windows_only: a_squatted_pipe_name_reads_not_answering (another account, or a same-user server that does not answer).
+(2) windows_only: the lock instance and the others through injected accept errors, the shutdown path probed after each step, non-inheritable handles, the 2 s create retry, and the next listening instance created before the lock instance serves.
+(3) windows_only: two_creates_race_one_wins_and_the_loser_retries_then_exits_2.
+(4) windows_only: the owner-SID DACL refuses another account (a test with a second account if the runner allows; otherwise the test asserts the DACL bytes).
+(5) The windows_only tests are in src-tauri/platform-tests.txt with the platform windows.
+(6) The shared frame and bounds tests pass on Windows (the common module).'''
+verify = '''Local: all eight lines exit 0 on macOS and Linux (the code is cfg-gated); CI: backend-windows green, and the platform tests line lists (1) to (4) as ok. Isolation: required (item 2), it creates a pipe, a DACL and files.'''
+covers = ["PE-12", "PE-13"]
+after = ["e9"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e12"
+type = "story"
+title = "The request enum and the handlers for hello, activate and open_engagements"
+description = '''F1 slice 1. Contract engagement-requests.md ("Rules", "Open engagements carries nothing", "Types"); ADR 0018 (requests are one closed serde enum with deny_unknown_fields); design sections 5 and 6.
+
+Adds src-tauri/src/launcher/requests.rs: the closed enum Request, serde(tag = "type", rename_all = "snake_case", deny_unknown_fields), with three variants in this slice: hello { v: 1 }, activate, and open_engagements (a unit variant, carrying nothing). redeem_start_ticket is added by e18, and the others by the slices that need them. Replies are {"ok":true,...} or {"ok":false,"error":"..."}; an unknown type or field is refused with {"ok":false,"error":"bad request"}. The peer check comes before any read.
+
+Bounds (the contract's table, for these requests): hello 1 s, activate 2 s, open_engagements 5 s.
+Handlers: hello answers at once with the profile id or "default", and never waits on a hand-off mutex; activate brings the instance's windows forward (through a seam into the app); open_engagements on the default shows the engagement list (through a seam) and on an engagement instance it is refused with ok:false.
+
+Acceptance, the names are the contract's required tests, plus the rest:
+(1) open_engagements_serialises_to_exactly_type_only.
+(2) open_engagements_refuses_a_path_field.
+(3) any_extra_field_is_refused.
+(4) unknown_type_is_refused_with_bad_request.
+(5) hello_reply_is_default_or_the_id.
+(6) hello_answers_while_the_hand_off_mutex_is_held (a seam holds the mutex; hello answers within 1 s).
+(7) activate_is_bounded_at_2s (paused clock).
+(8) open_engagements_on_an_engagement_is_refused.
+(9) peer_check_refuses_another_uid (a seam).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (9) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2): the handlers answer on the channel and open the windows.'''
+covers = ["PE-13"]
+after = ["e9"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e13"
+type = "story"
+title = "The launcher core: the one spawn helper and reach_default"
+description = '''F1 slice 1. Design section 4.2 (the two code paths), section 6 (the launches); contracts engagement-profiles.md ("Launcher and starter": spawn and reach_default); ADR 0016.
+
+Adds src-tauri/src/launcher/mod.rs, spawn.rs and default_launcher.rs.
+spawn.rs: the only spawn helper. It starts current_exe() resolved, except on a Linux AppImage (APPIMAGE set and APPDIR a prefix of current_exe()), where it starts $APPIMAGE. It runs with env_clear and then the given environment, detached: setsid on Unix; DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB on Windows, retried once without the breakaway flag when the job refuses with ERROR_ACCESS_DENIED. It never uses open, a shell, LaunchServices or ShellExecute.
+default_launcher.rs: pub enum DefaultRequest { Activate, OpenEngagements } (Checkout arrives in slice 4), and reach_default(req) -> Result<Reply, LaunchError>. If hello answers, it sends req and returns. Otherwise it spawns default mode (cwd = home, the environment given by the caller: the login-session environment of e16 or e17), waits up to 15 s for the channel, then sends req. A default that holds its lock without answering makes the wait end in LaunchError::NotAnswering.
+
+Acceptance, using injected channel and spawner seams:
+(1) reach_default_sends_when_the_channel_answers.
+(2) reach_default_spawns_when_it_does_not_answer_then_sends.
+(3) reach_default_times_out_as_not_answering (paused clock, 15 s).
+(4) spawn_passes_only_the_given_environment (unix: a child prints its environment).
+(5) spawn_is_detached_setsid (unix).
+(6) spawn_uses_the_appimage_path_only_when_appdir_is_a_prefix (a unit on the pure path choice).
+(7) the spawn helper takes no caller environment (the signature has no inherited environment).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (7) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2): it starts processes.'''
+covers = ["PE-13"]
+after = ["e12"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e14"
+type = "story"
+title = "The one-launcher static test: the allowlist over Rust and TypeScript, with planted violations"
+description = '''F1 slice 1. Design section 16.1 (the one-launcher test, in full); ADR 0016 ("The one-launcher test"); PRD PE-13 AC9.
+
+Adds src-tauri/tests/one_launcher.rs, run by cargo test. It enforces the allowlist: only launcher/default_launcher.rs and launcher/engagement_starter.rs may start ADE's binary; launcher/rebuild.rs may only execve the process's own image, exactly one execve or execvpe and no spawn.
+Scanned: every .rs file under src-tauri/src and src-tauri/ade-hook/src, and every .ts and .tsx file under src/, excluding cfg(test) modules, tests/ and __tests__/.
+Own-binary values: current_exe, tauri::process::current_binary, tauri::utils::platform::current_exe, the literal /proc/self/exe, GetModuleFileNameW with a null module, _NSGetExecutablePath, NSBundle mainBundle's bundlePath and executablePath, and APPIMAGE. They are followed across functions in the crate (let bindings, struct fields, returns and arguments; conservative), and followed no further only through .parent(), .with_file_name(a literal not naming ADE), .join(a literal not naming ADE) or .set_file_name.
+Flags (R1 to R5 of design 16.1): R1 an own-binary path reaching Command::new, spawn, posix_spawn, execv*, CreateProcess* or ShellExecute*; R2 open with an own-binary path, a bundle path, or -a, -b or -n naming ADE, or open of a .app without -a; NSWorkspace and LSOpen*; R3 ShellExecute*, xdg-open, gio launch, gtk-launch, opener::open and open_path, tauri_plugin_opener, with an own-binary path or a literal naming ADE; R4 tauri::process::restart, AppHandle::restart, relaunch() from plugin-process; R5 frontend openUrl and openPath with a literal naming ADE.
+The signature check: start_engagement takes &EngagementProfile, and EngagementProfile has one constructor, from a registry entry (e19 completes the type; a stub is enough here).
+Planted violations: src-tauri/tests/fixtures/one_launcher/, one fixture per rule and source (R1 through two functions and a struct field; R1 by current_binary, by platform::current_exe, by /proc/self/exe, by GetModuleFileNameW; R2 by open -a and by open of a .app; R3 by opener::open_path and by xdg-open of a .desktop; R4 by AppHandle::restart and relaunch() in .ts; R5 by openPath in .ts). The TypeScript side uses the TypeScript compiler API if it is already a devDependency; otherwise the plan names the parser.
+Non-starts that must not be flagged: copies of helper_beside_exe (agent_status.rs:387) and the test binary's current_exe (usage.rs:1874).
+
+Acceptance: one test per fixture (each must be flagged), one for each non-start (must not be flagged), one for the real tree (passes), one for the signatures.'''
+verify = '''Local: all eight lines exit 0 and every fixture test appears by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: not required (static scan, no I/O in the change, item 2).'''
+covers = ["PE-13"]
+after = ["e13"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "e15"
+type = "story"
+title = "The rebuild, Unix: the record, the digest, the count, the pipe, and the re-exec"
+description = '''F1 slice 1. Design section 4.1 (the steps on Unix, the record, the count), section 21 ("Section 4.1 (re-exec)": the unit tests and the real-binary runs); contract engagement-profiles.md ("Modes and the rebuild"); ADR 0016.
+
+Adds src-tauri/src/launcher/rebuild.rs (Unix) and the first act of main.rs. Before Tauri and before any thread:
+1. read once into memory the ticket and, in debug builds, the flag switch (the ticket's reader lands in e18; a seam here); parse the arguments, including --ade-rebuilt=<fd>.
+2. a second image (--ade-rebuilt=<fd>) reads the pipe on that fd, non-blocking (O_NONBLOCK set before the first read), to end of file. It must be a pipe (fstat, S_ISFIFO). A read that would block (EAGAIN) marks the pipe foreign. The record: magic and version, count (1 or 2), a SHA-256 digest, the launcher path (login-session or fallback, plus harness-home), the ticket and the flag, under 1 KiB. If the digest equals the image's own start-time view, the image proceeds without reading any login-session source, and reports the launcher path from the record. Otherwise it continues with the count it read, or 0.
+3. build the environment and the folder with the builder given to it (e16 on macOS and Linux; the Windows path is e17).
+4. compare the built set and folder with the OS's start-time view: KERN_PROCARGS2 by sysctl on macOS, /proc/self/environ on Linux, parsed as a set; never the live environ; folders canonicalised with realpath. Equal: proceed. Different: if the count is already 2, exit 2 naming the differing variables by name only.
+5. re-exec: a pipe with O_CLOEXEC on both ends; write the record (count + 1, the digest of the built set, folder and arguments, the launcher path, the ticket, the flag); close the write end; clear O_CLOEXEC on the read end; chdir; execve the process's own image (/proc/self/exe on Linux, including in an AppImage; _NSGetExecutablePath then realpath on macOS) with --ade-rebuilt=<fd>. This is the only execve in the crate (e14 allows exactly one).
+A log line is kept in memory until the instance holds its lock (e9 writes it). Nothing is written in a profile root here.
+
+Acceptance (unit tests in cargo test, with fake environments and pipes):
+(1) record_round_trips.
+(2) digest_is_the_same_for_a_reordered_set.
+(3) foreign_pipe_reads_as_foreign_without_blocking (a pipe whose writer the test keeps open).
+(4) malformed_record_is_rebuilt_not_fatal.
+(5) a_fresh_start_has_count_0.
+(6) count_stops_at_two_execs.
+(7) mismatch_at_count_2_exits_2_naming_names_only.
+(8) linux_only: the rebuild through /proc/self/environ (listed in platform-tests.txt).
+The real-binary runs of design 21 (the harness build started under env -i, from a shell with a marker, through a symlinked folder, by open of the bundle on macOS, by each launcher, and by hand with --ade-rebuilt=3) run in the launch suite (e25; Q12), not here.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (7) appear by name in cd src-tauri && cargo test. CI: backend and backend-macos green; the linux_only test (8) is ok in the backend platform tests line. Isolation: required (item 2): it starts processes and reads a pipe.'''
+covers = ["PE-13"]
+after = ["e14"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e16"
+type = "story"
+title = "The login-session environment for macOS and Linux, with the fallback and the AppImage rule"
+description = '''F1 slice 1. Design section 4.3 (the table, the fallback, the AppImage rule, M9); contract engagement-profiles.md ("Modes and the rebuild", the table). Q18: the AppImage list is checked against the AppRun that release.yml builds (first check: build the AppImage and print its AppRun environment; the fixture pins the list).
+
+Adds src-tauri/src/launcher/login_env.rs: pure builders, each source behind a seam with a 2 s timeout, and a recorded path (login-session or fallback).
+macOS, login-session: HOME, USER, LOGNAME and SHELL from getpwuid_r(getuid()); TMPDIR from confstr(_CS_DARWIN_USER_TEMP_DIR); PATH=/usr/bin:/bin:/usr/sbin:/sbin; plus every variable in the environment block of launchctl print gui/<uid>, parsed only in the block form of macOS 26 (an unparseable block means the fallback, recorded as fallback (launchd block unreadable)). Fallback: the same without the launchd block.
+Linux, login-session: systemctl --user show-environment, used only if it holds DISPLAY or WAYLAND_DISPLAY. Fallback: passwd HOME, USER, LOGNAME and SHELL; PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; LANG=C.UTF-8; XDG_RUNTIME_DIR=/run/user/<uid> if it exists and is owned by the user; DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus if that socket exists; WAYLAND_DISPLAY (the lowest own wayland-<n> socket) or DISPLAY (the lowest own X socket), with XAUTHORITY (the first own of $XDG_RUNTIME_DIR/gdm/Xauthority, the newest $XDG_RUNTIME_DIR/.mutter-Xwaylandauth.*, ~/.Xauthority), each only if present and owned by the user. No input-method variables.
+AppImage: only when APPDIR is a prefix of current_exe(). Keeps APPDIR, APPIMAGE, ARGV0, GDK_PIXBUF_MODULE_FILE, GIO_MODULE_DIR, GSETTINGS_SCHEMA_DIR, GTK_PATH, GTK_EXE_PREFIX and GTK_DATA_PREFIX; for PATH, XDG_DATA_DIRS and LD_LIBRARY_PATH, only the entries under $APPDIR. Never OWD. Each kept value must lie under $APPDIR.
+The Windows builder is e17.
+
+Acceptance:
+(1) macos_fallback_without_the_launchd_block.
+(2) macos_unparseable_launchd_block_is_fallback (a fixture of the block).
+(3) linux_fallback_has_no_input_method_variable.
+(4) linux_systemctl_is_used_only_with_display.
+(5) appimage_keeps_only_entries_under_appdir.
+(6) appimage_never_keeps_owd.
+(7) a_source_timeout_falls_back (paused clock).
+(8) the AppImage list equals the fixture pinned from the AppRun (the fixture is written from the first check, Q18).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (8) appear by name in cd src-tauri && cargo test. CI: backend and backend-macos green. Isolation: required (item 2): it runs commands and reads the login session.'''
+covers = ["PE-13"]
+after = ["e1"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e17"
+type = "story"
+title = "The rebuild, Windows: in-place, the PEB, and the Windows login-session block"
+description = '''F1 slice 1. Design section 4.1 ("Windows has no start-time copy"), section 4.3 (Windows rows); contract engagement-profiles.md ("Modes and the rebuild", Windows); ADR 0016 ("Windows applies it in place").
+
+Adds the Windows half of the rebuild, in launcher/rebuild.rs and launcher/login_env.rs, before any thread: read the ticket and the flag into memory; remove every variable from the process environment block; set the built ones; SetCurrentDirectoryW to the built folder. The ticket is gone from the PEB before any terminal can start. No re-exec, no comparison.
+The built environment: CreateEnvironmentBlock(own token, FALSE), or the fallback: system and user Environment registry values read directly, USERPROFILE and TEMP from Known Folders.
+The spawn retry without CREATE_BREAKAWAY_FROM_JOB (e13) is compiled here too.
+The Windows code is cfg-gated; the static parts compile everywhere.
+
+Acceptance:
+(1) windows_only: the PEB rebuild test: the child started by the test reads its own PEB and finds no marker, no ticket and no ADE_FEATURE_F1 in the rebuilt block (listed).
+(2) windows_only: the built block holds the login-session values, and the working folder is the given one (listed).
+(3) fallback_reads_the_system_then_user_values (a fake registry seam, any platform).
+(4) the ticket is removed before the first thread is created (a recording seam).
+(5) the listed Windows tests are in src-tauri/platform-tests.txt with the platform windows.'''
+verify = '''Local: all eight lines exit 0 and test (3) appears by name in cd src-tauri && cargo test. CI: backend-windows green; the platform tests line lists (1) and (2) as ok. Isolation: required (item 2): it changes the process's environment and folder.'''
+covers = ["PE-13"]
+after = ["e15", "e16"]
+hitl = false
+risk = "high"
+
+# ---------- Tickets, the starter and A's start ----------
+
+[[entry]]
+id = "e18"
+type = "story"
+title = "Engagement mode, tickets, redeem_start_ticket and StartInfo"
+description = '''F1 slice 1. Design section 4.1 (mode), section 4.4 (the start), section 11 (the redeem); contracts engagement-requests.md (redeem_start_ticket, StartInfo) and engagement-profiles.md (Modes); ADR 0016 (mode from the arguments only), ADR 0018 (control key).
+
+(1) Mode: --ade-profile <id> is engagement mode and needs a ticket (ADE_START_TICKET in the first image, or the ticket in the rebuild pipe); without a valid ticket it prints why and exits 2, and never falls back to default mode. Without --ade-profile it is default mode.
+(2) The default's ticket table, in memory, under its own lock. Minting: 32 random bytes as hex, single use, a 60 s life, and a new control key (32 random bytes) kept with the ticket only.
+(3) The request redeem_start_ticket { ticket: 64 hex } on the default's channel (added to e12's enum): the handler marks the ticket used under the table's lock, writes the ticket's control key to the engagement's registry entry (the registry file lock only, no hand-off mutex), and then signals the waiting starter. It replies with StartInfo { ok: true, profile, name, root, checkouts: [], personaId, gitIdentity: null, globalSecretNames: [], deployCommands: [], verdict: { clear: true }, key, seed: null } or ok:false when the ticket is unknown, used or expired, or when the key write fails.
+(4) The redeem handler never takes the hand-off mutex.
+
+Acceptance:
+(1) mode_with_profile_and_no_ticket_exits_2.
+(2) mode_without_profile_is_default.
+(3) ticket_is_single_use.
+(4) ticket_expires_at_60s (paused clock).
+(5) redeem_writes_the_key_only_after_the_mark.
+(6) a_failed_key_write_replies_not_ok_and_keeps_the_old_key.
+(7) startinfo_serialises_to_the_contract_shape (a golden test).
+(8) redeem_answers_while_the_hand_off_mutex_is_held (a seam).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (8) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2): it writes the registry key and reads the ticket.'''
+covers = ["PE-2", "PE-13"]
+after = ["e12", "e6", "e15"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e19"
+type = "story"
+title = "The engagement starter: start_engagement, with the hand-off mutex, the probe, the spawn and the wait"
+description = '''F1 slice 1. Design section 4.2 (the starter), section 4.4 (the sequence); contracts engagement-profiles.md ("Launcher and starter": start_engagement); design section 11 ("the hand-off mutex", the starter's wait); ADR 0016; PRD PE-13 AC1 (one instance per profile; only the default starts one).
+
+Adds src-tauri/src/launcher/engagement_starter.rs.
+- pub struct EngagementProfile(ProfileId), with its only constructor from a registry entry.
+- pub async fn start_engagement(p: &EngagementProfile) -> Result<Started, StartError>:
+  1. take A's hand-off mutex (an in-process mutex of the default instance, taken before the registry file lock and never after it; Q13) and read A's registry entry. Gone: StartError::Deleted, nothing spawned. Marked deleting: StartError::Deleting, nothing spawned.
+  2. the probe (e10 on Unix, e11 on Windows). Running: release the mutex and send activate. Not answering: StartError::NotAnswering, nothing spawned, the control key unchanged. Not running: drop the probe's lock guard and continue.
+  3. the reconcile of hand-off records: a no-op in slice 1 (Q13), called so the order is fixed.
+  4. mint the ticket and the control key (e18). Spawn engagement mode: --ade-profile <id>, environment = the login-session environment + ADE_START_TICKET (the rebuild keeps the ticket out of A's environment), cwd = A's root, and --ade-feature-f1 when the running instance has F1 on in a debug build (e22).
+  5. keep the mutex until A has redeemed the ticket or the child is gone. At 60 s after the spawn: take the ticket out (already used counts as redeemed), kill the child through its handle, wait up to 5 s, then release. A failed key write kills the child.
+
+Acceptance, with a stand-in for A (a seam) and a paused clock where time matters:
+(1) start_spawns_when_not_running.
+(2) start_activates_when_running_and_spawns_nothing.
+(3) start_when_not_answering_spawns_nothing_and_keeps_the_key.
+(4) start_after_delete_returns_deleted.
+(5) start_when_deleting_returns_deleting.
+(6) start_waits_for_the_redeem_then_releases.
+(7) start_ticket_end_kills_the_child_and_releases (paused clock).
+(8) a_second_start_waits_for_the_first (the mutex serialises the two).
+(9) the child's environment has ADE_START_TICKET only on the spawn, and the rebuilt set has none (a test with the rebuild's built set).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (9) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2): it starts a process and waits on the channel.'''
+covers = ["PE-13", "PE-2"]
+after = ["e10", "e11", "e13", "e18"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e20"
+type = "story"
+title = "A's own start: the profile check, the status file, A's folders, engagement.json, and the window name"
+description = '''F1 slice 1. Design section 4.4 (A's steps), section 11 ("Engagement status file"); contracts engagement-registry.md ("Engagement status file"), engagement-profiles.md ("Start write"); PRD PE-13 AC4 (every window shows A's name; nothing of another engagement or the list).
+
+After its ticket is redeemed and before any window opens, A:
+1. checks StartInfo.profile equals --ade-profile, else exits 2.
+2. writes its status file <A root>/.ade/engagement-status.json, under the lock <A root>/.ade/engagement-status.lock, with write_atomic: closed false, closedAt null, personaId from StartInfo, updatedAt now. A missing file is created. If the write fails, A logs it, warns in its window, starts anyway, and retries every 60 s until it succeeds, closes or loses its lock.
+3. creates its profile-root folders (app/, claude/, tmp/, cache/, logs/, history/, sessions/, handoff/, shell/, ade/images/, ade/roles/), each through the checks of e1 and e3.
+4. writes engagement.json (its cached StartInfo, never the key).
+5. keeps the control key in memory only.
+6. sets the name of every window title from StartInfo.name (the words of the title, <name> — Better Terminal, are e24's, UX 7.3). It shows no engagement list and no other engagement's name; it refuses creation.
+
+Acceptance:
+(1) start_refuses_a_profile_mismatch_with_exit_2.
+(2) status_start_write_clears_closed (a fixture with closed: true becomes closed: false, closedAt null).
+(3) start_write_failure_is_retried_every_60s (paused clock).
+(4) engagement_json_has_no_control_key.
+(5) profile_root_folders_are_created_once.
+(6) the window's title is set from StartInfo.name (a fake window); the format is e24's test.
+(7) a_start_that_ends_before_the_redeem_changes_nothing_in_the_root.
+(8) an engagement instance has no engagement list command (a test on the command table).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (8) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2): it writes A's status file and folders.'''
+covers = ["PE-13", "PE-4"]
+after = ["e18", "e6"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e21"
+type = "story"
+title = "The per-profile variables in A's start-time environment and in its terminals"
+description = '''F1 slice 1. Contract engagement-profiles.md ("Variables ADE sets per profile"); design section 4.4 (A's per-profile variables), section 3 (the rows); PRD PE-4 AC6 and AC11 (temp folders).
+
+In an engagement instance, the rebuild's built set (e15, e17) carries these, so they are in A's start-time environment and every process A starts inherits them:
+- ADE_PROFILE=<id>;
+- CLAUDE_CONFIG_DIR=<root>/claude;
+- CLAUDE_CODE_TMPDIR, TMPDIR, TMP and TEMP, each =<root>/tmp;
+- XDG_CACHE_HOME=<root>/cache on Linux.
+In every terminal (create_pty) of an engagement: CLAUDE_SECURESTORAGE_CONFIG_DIR is always removed; ADE_START_TICKET is never set. Git identity variables are slice 4, secrets slice 3, the history variable is e27a.
+In the default profile: every ADE_* variable and every variable in the table has the login session's value if the session sets it, and is otherwise absent.
+
+Acceptance:
+(1) engagement_environment_table_is_exact (a test against the table).
+(2) terminal_environment_removes_claude_securestorage_config_dir.
+(3) terminal_environment_never_has_the_ticket.
+(4) default_profile_has_no_profile_variable_unless_the_session_sets_it (both branches).
+(5) default_mode_rebuild_removes_every_ade_variable_not_in_the_session (a test of the rebuild's built set).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test. CI: three backend jobs green. Isolation: required (item 2): it sets the environment of every terminal of A.'''
+covers = ["PE-4"]
+after = ["e15", "e16", "e17"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e22"
+type = "story"
+title = "The F1 flag: the debug switch, the pipe, the launchers' argument, the frontend import, and no files when off"
+description = '''F1 slice 1. Design section 14 ("The feature flag and the RC-2 build (PE-13 AC7)"); ADR 0016 (the flag); PRD PE-13 AC7.
+
+- cargo feature f1-forced is added to src-tauri/Cargo.toml (compiles the flag on for the RC-2 build; the build itself is slice 7). isotest-driver is already there (h13).
+- Debug builds only (cfg!(debug_assertions)): main reads ADE_FEATURE_F1=1 from the inherited environment, or --ade-feature-f1, once, before any thread. The rebuild carries the result in the pipe (Unix) or in memory (Windows), never in the rebuilt environment. Both launchers (e13 and e19) add --ade-feature-f1 to the spawn when the running instance has F1 on.
+- Release builds ignore the variable and the argument. Harness and f1-forced builds have F1 compiled on.
+- The frontend asks Rust feature_f1() once, and loads the persona and engagement UI only through a dynamic import() when it is true.
+- Flag off: a start creates no .run folder, takes no lock, binds no channel, and with a planted flock failure shows no message box and starts as today.
+
+Acceptance:
+(1) flag_off_in_debug_creates_no_run_folder.
+(2) flag_on_from_the_environment_in_debug.
+(3) flag_on_from_the_argument_in_debug.
+(4) release_ignores_both (the pure function takes the build profile as a parameter).
+(5) the flag is absent from the rebuilt environment (a test on the built set).
+(6) a planted flock failure with the flag off starts with no message box (a seam).
+(7) feature_f1_command_matches_rust (vitest).
+(8) the dynamic import is not loaded when the flag is off (vitest, a spy on the import).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (8) appear by name in cd src-tauri && cargo test, and in npm test. CI: three backend jobs green. Isolation: required (item 2): the flag decides whether files and locks exist.'''
+covers = ["PE-13"]
+after = ["e9", "e13", "e15"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e23"
+type = "story"
+title = "Engagement windows: incognito, no restorable state, Rust-made windows, and the localStorage rule"
+description = '''F1 slice 1. ADR 0017 (every rule); design section 7. This story changes shipped sub-terminal code (detachWindow.ts), approved by the owner with this sharding.
+
+- Every window of an engagement instance is made with incognito(true) (WebKit non-persistent store, WebView2 InPrivate, WebKitGTK ephemeral). On Windows it also gets data_directory(<root>/webview). XDG_CACHE_HOME is <root>/cache (e21).
+- Every NSWindow in every profile gets setRestorable NO. ApplePersistenceIgnoreState YES is registered with registerDefaults: before launch finishes, in every profile, with nothing written to disk.
+- Every window is created in Rust. detachWindow.ts's JavaScript new WebviewWindow is replaced by a command, and core:webview:allow-create-webview-window is removed from the capabilities.
+- The default profile keeps the persistent store.
+- A static test requires every localStorage key to be persisted (PERSISTED_KEYS) or listed as ephemeral with a reason.
+
+Acceptance:
+(1) engagement_windows_are_incognito (a unit on the window configuration).
+(2) default_windows_are_not_incognito.
+(3) detach_creates_the_window_in_rust (a command test; no JavaScript WebviewWindow remains).
+(4) capabilities_no_longer_allow_create_webview_window (a test on the capability file).
+(5) localstorage_keys_are_persisted_or_listed (vitest scan).
+(6) macos_only: restorable_is_no_and_ignore_state_is_registered (listed).
+(7) windows_only: data_directory_is_the_engagement_webview_folder (listed).
+(8) save_state_is_absent_after_a_window_is_created (macos_only, listed; the isolation run also checks .savedState is absent).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test and npm test. CI: backend-macos and backend-windows green; their platform tests lines list (6) to (8). Isolation: required (item 2): it creates windows and webview stores.'''
+covers = ["PE-4", "PE-13"]
+after = ["e20"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e24"
+type = "story"
+title = "Open engagements: the route home from an engagement, and its menus per platform"
+covers = ["PE-13"]
+after = ["e12", "e13", "e20"]
+hitl = false
+risk = "medium"
+description = '''F1 slice 1. PRD PE-13 AC4 (every window shows A's name; the entry points, with F1 on) and AC10 (the route home and the OS-shell entries); design section 6 (the menus; Open engagements) and revisions 5h and 5i; ADR 0024 (Accepted: --open-engagements); contract engagement-requests.md ("Open engagements carries nothing"); UX spec docs/ux-spec.md sections 4.3 and 7.1 to 7.4, confirmed by the owner 2026-11-08. Q10 is resolved: the labels, the header and the title are the UX spec's. This story builds the header and the window title for PE-13 AC4 (design G5).
+
+Scope with e31: this story owns every Open Engagements entry in an engagement instance. The default profile's entries (its palette and its macOS app menu item) are e31's.
+
+In an engagement instance, Open engagements calls reach_default(OpenEngagements) (e13), which sends the unit-variant request. In the default, the handler (e12) brings the default forward and shows the engagement list. Until e31 lands, the default shows its main window.
+
+The start argument (ADR 0024):
+- --open-engagements is a token with no value. Default mode only. With F1 on, a start that gives it with --ade-profile, in the = form, with a value, or more than once prints why and exits 2. With F1 off it is ignored in every form, repeats included, and the start is today's.
+- With F1 on, after the rebuild: if the default answers hello, the process sends open_engagements (not activate) and exits; if it becomes the default itself, it shows the engagement list once its window is up.
+- It is kept in the rebuild digest and across the re-exec (design 4.1).
+
+Menus (UX 7.2, engagement instance only):
+- macOS: the app menu's first item after About Better Terminal, then a separator; and the Dock menu (applicationDockMenu:). The reopen handling follows e0's branch; this story adds the items, not the reopen handler.
+- Windows: the window's system menu (Alt+Space), Open Engagements in its own group above Close, with separators above and below. The taskbar jump list, Tasks category: title Open Engagements, description Show your engagements in Better Terminal, running better-terminal --open-engagements (its arguments exactly that token). It is compiled only in builds with F1 compiled on (f1-forced, isotest-driver). Engagement instances never call a jump-list API; only the default registers it, at every start once its main window is up, through ICustomDestinationList (BeginList, AddUserTasks with one IShellLinkW, CommitList) under the AppUserModelID. Release and plain debug builds call no jump-list API.
+- Linux: the header menu below (the window menu Better Terminal draws in its title area), and a .desktop action [Desktop Action engagements] with Name=Open Engagements and an Exec that ends in --open-engagements, with no field codes. It exists only in builds with F1 compiled on. This story adds the action to the desktop template (who owns that template is an open question, epic notes).
+- All platforms: the header menu and the command palette entry Open Engagements, category Engagements (search also matches home, engagements and default). No keyboard shortcut.
+
+Header (UX 7.1): a 24 px menu button at the left of the tab bar, showing the engagement's name from StartInfo.name (never the client name), with one item, Open Engagements (Close joins in slice 6). It is excluded from the drag region. It is in every window of A, detached windows included (PE-13 AC4).
+
+Window titles (UX 7.3): A's windows are titled <name> — Better Terminal (an em dash with spaces). The product name is the bundle's productName, read at run time. The default profile's windows keep today's empty title. e20 sets the name; this story sets the words.
+
+Copy: every label and title is built from the product name read at run time. No string in this story contains "ADE".
+
+Acceptance:
+(1) open_engagements_is_the_unit_variant (e12's test, re-run here).
+(2) menu_items_per_platform (a table test over the engagement instance's menu builder: the macOS app-menu position after About with its separator, the macOS Dock menu, the Windows system-menu group, the Linux header).
+(3) the_desktop_action_is_in_the_generated_desktop_file (Linux, a unit on the template; absent from a build without F1 compiled on).
+(4) the_palette_entry_exists_in_an_engagement_instance (vitest; category Engagements; the search terms).
+(5) an_engagement_instance_sends_open_engagements_through_reach_default (a test with the seam).
+(6) argument_parser_table: the bare token is accepted in default mode; with F1 on it is refused, exit 2, when given with --ade-profile, as --open-engagements=<x>, or twice; with F1 off it is ignored in every form, repeats included.
+(7) with_f1_on_a_second_start_with_the_token_sends_open_engagements: without it, activate; a start with it that becomes the default shows the list once its window is up (a seam).
+(8) the_jump_list_is_registered_only_by_the_default_in_f1_builds: its arguments are exactly the token; an engagement instance calls no jump-list API; a build without F1 compiled on calls none (a cfg test).
+(9) engagement_window_titles_are_name_dash_better_terminal, and the default's title stays empty (Rust and vitest).
+(10) the_header_has_one_menu_item_and_is_not_a_drag_region (vitest).
+(11) every_window_of_an_engagement_shows_its_name (PE-13 AC4: a fake main window and a fake detached window each show the header and the title).
+(12) no_menu_label_or_title_says_ADE (the strings are built from productName; a test collects them).
+'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (12) appear by name in cd src-tauri && cargo test and npm test. CI: three backend jobs green; backend-macos and backend-windows show their menu tests in the platform tests line where listed. Isolation: required (item 2): it sends a request and opens a window.'''
+
+# ---------- Launch suite ----------
+
+[[entry]]
+id = "e25"
+type = "story"
+title = "The launch suite, part 1: runs (a), (b) and (c) with their asserts"
+description = '''F1 slice 1. Design section 16.2 (the behavioural runs, the set-up and the asserts); PRD PE-13 AC9. Q14: design 16.2 gives (a) and (b) together and does not say how they differ; the architect names the difference before this story is built.
+
+Adds the launch suite to the isotest crate, in isotest/src/launch/. Set-up: cd into A's root; a marker variable exported. Runs:
+- (a) and (b): from a terminal of A's instance, through the driver, typing the harness binary's path;
+- (c): from a plain shell the harness starts with the same folder and marker variable.
+After each run the driver opens B from the default (B is created first).
+Asserts read the default instance's environment and its working folder: /proc/<pid>/environ on Linux, KERN_PROCARGS2 by sysctl on macOS, the PEB through NtQueryInformationProcess on Windows; and the same for the terminals opened after the launch. The default's home and folder are compared with the compiled harness home (h13), so a run cannot pass by inheriting a temporary home. A commit's author is read from each terminal. Each run prints the launcher path taken.
+Adds the launch suite's step to isolation.yml (edited on this story's branch, after pc3).
+
+Acceptance, with fake readers:
+(1) assert_env_has_no_marker_and_no_ticket.
+(2) assert_home_is_the_compiled_root.
+(3) assert_folder_is_the_default_home.
+(4) assert_terminal_author_is_the_engagement_identity_when_set (the identity is slice 4: the assert is written and runs only where the identity exists; the test states it).
+(5) each run prints the launcher path (a test of the printed line).
+The real runs happen in the isolation job on the story's SHA.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: required (item 2) with the launch suite enabled for runs (a), (b) and (c): every launch run passes its asserts on all three platforms, on both runners.'''
+covers = ["PE-13"]
+after = ["e15", "e17", "e21"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e26"
+type = "story"
+title = "The launch suite, part 2: the OS launches (e), and the route home (f) and (f')"
+description = '''F1 slice 1. Design section 16.2 ("PE-13 AC8's OS launches (minor 10)", (e), (f) and (f')); PRD PE-13 AC8 and AC10.
+
+Adds runs to the launch suite:
+- (e): the OS's own launch of the binary with A running and the default not, then with both running. Windows: a Start-menu shortcut (.lnk to the harness executable, made by the harness in the harness home's Start-menu folder), started through ShellExecuteExW with the open verb. Linux: the harness's .desktop file started with gio launch (g_desktop_app_info_launch). macOS: open of the harness bundle while A runs and the default does not, only if e0 confirmed the sender check; otherwise the macOS step is recorded as not run: fallback (E2) and is RC-2's.
+- (f): the driver invokes Open engagements through the same command the menus call, with the default not running.
+- (f'): the same with the default running.
+After each, the driver opens B from the default, and the asserts of e25 run.
+
+Acceptance:
+(1) lnk_is_written_to_the_harness_start_menu_folder (a unit on the path and the file).
+(2) desktop_file_fixture_is_the_one_e24_generates.
+(3) run_e_expects_the_default_started_and_a_unchanged (a test on the expectations).
+(4) run_f_expects_the_default_started.
+(5) run_f_prime_expects_the_default_forward_and_no_second_instance.
+(6) the macOS run is recorded as not run when e0 found the fallback (a test on the branch flag).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (6) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: required (item 2) with runs (e), (f) and (f') enabled: each passes on the three platforms (macOS per e0's branch).'''
+covers = ["PE-13"]
+after = ["e25", "e24", "e0"]
+hitl = false
+risk = "high"
+
+# ---------- Shell history, Agent status, the scenario, the UI, the gate ----------
+
+[[entry]]
+id = "e27r"
+type = "story"
+title = "History report reader and the not-isolated warning: escalate-only check and bar"
+covers = ["PE-4"]
+after = ["e21", "e1"]
+hitl = false
+risk = "high"
+description = '''F1 slice 1. PRD PE-4 AC8 (slice 1's check and its tests, revision 9k); design section 9 ("Slice 1's history check", "Encoding, shell side", "Decoding, Rust side", "The state machine, per PTY", "Forged reports") and revisions 5h (G7), 5i (M3, M4, minors 8 and 9) and 5j (N2: the 40 KiB cap); UX spec docs/ux-spec.md section 8.1 (where the warning shows), 8.2 (its copy and when it shows) and 8.3 (the live announcement). The emitters are e27a (zsh, bash) and e27b (PowerShell). This story is the reader and the warning, which every reporting shell shares. Q10 is resolved: the copy is UX 8.2's.
+
+Adds src-tauri/src/ptysink.rs (minimal; slice 2 extends it), the per-PTY state machine beside it, and the bar and tab mark in the frontend.
+
+- Decoder. The OSC parser takes BEL or ST as the terminator, keeps at most 40 KiB (40,960 bytes) of one OSC's payload, discards a longer one up to its terminator, and skips ASCII whitespace inside the base64, line breaks included. A report is well-formed when it decodes to UTF-8 JSON whose v is 1 and whose history, if present, is a string; unknown keys are ignored. Anything else (over the cap, bad base64, bad UTF-8 or JSON, another v, a non-string history) is malformed and changes nothing. A well-formed report without history says nothing about history. The JSON escapes the shells write (\\, \", \u00XX) are decoded.
+- Evaluating history. Empty: OK (the shell writes no history). Relative, or with a parent that cannot be canonicalised: mismatch. Otherwise OK only when its canonical parent is fsx::same_path to the canonical <root>/history and its file name equals the expected one; else mismatch. The expected path is passed in as a value.
+- State machine, per engagement PTY, states Waiting, Confirmed, Unconfirmed and Mismatch(var): exactly the table of design section 9, every row a test. The 10 s timer is armed from the first output byte, and only for zsh and bash; PowerShell and unsupported shells never arm it, and fish is not checked in slice 1. A timer end in Waiting gives Unconfirmed. Every well-formed report is evaluated; the warning only escalates (none, the first sentence, the full copy) and never clears until the terminal closes. Each escalation, and only an escalation, emits PtyEvent::Integrity { level: "unconfirmed" | "mismatch", var }.
+- Copy: UX 8.2's bar texts, with <VAR> in mono and <shell> for an unsupported shell. The first sentence, History is not isolated for this terminal., is the same string in every case.
+- Unsupported shell: known at spawn; the bar shows at once (UX 8.2's unsupported rows); no timer.
+- Frontend: the tab mark and the pane bar (UX 8.1). Dismiss hides the bar for that terminal only and the tab mark stays until the terminal closes. An escalation shows the bar again even if it was dismissed. Each pane has its own bar; the tab shows one mark. The live announcement is UX 8.3.
+- Slice 1 refuses no launch action; slice 2 adds that.
+
+Acceptance:
+(1) a_report_at_9_9_s_and_at_10_1_s (paused clock): a late mismatch upgrades the copy; a late match keeps the first sentence.
+(2) state_table_rows: every row of design section 9's table is a test (a table test over the states and events).
+(3) an_ok_report_before_a_mismatch_ends_in_mismatch, and a mismatch never clears.
+(4) a_history_of_4096_control_characters_is_well_formed (a 32,796-byte base64 report is accepted).
+(5) malformed_reports_change_nothing: over 40 KiB, bad base64, bad UTF-8, bad JSON, v 2, a non-string history.
+(6) base64_with_line_breaks_decodes.
+(7) a_relative_histfile_and_an_uncanonicalisable_parent_are_mismatches.
+(8) powershell_never_arms_the_timer, and fish is never checked (no event after 10 s on either).
+(9) an_escalation_emits_integrity_and_a_dismissed_bar_shows_again (Rust for the event; vitest for the bar).
+(10) a_history_with_quotes_backslashes_tabs_and_line_breaks_decodes_as_well_formed.
+(11) other_osc_numbers_are_ignored.
+(12) unsupported_shell_warns_at_once_without_a_timer, with the copy naming <shell>.
+(13) the_bar_and_the_tab_mark_follow_ux_8_1 (vitest: dismiss keeps the mark; one mark per tab; one bar per pane).
+(14) the_live_announcement_follows_ux_8_3 (vitest).
+'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (12) appear by name in cd src-tauri && cargo test; (13) and (14) appear by name in npm test. CI: backend and backend-macos green. Isolation: required (item 2): terminals write and read the report.'''
+
+[[entry]]
+id = "e27a"
+type = "story"
+title = "Per-profile shell history for zsh and bash, with the one-shot history report"
+covers = ["PE-4"]
+after = ["e27r"]
+hitl = false
+risk = "high"
+description = '''F1 slice 1. PRD PE-4 AC8 (slice 1's history for zsh and bash, and its tests); design section 9 (the zsh and bash rows; "Slice 1's history check", who emits); ADR 0021 (history in <root>/history/). Q15 is answered by design revision 5h, G7: slice 1 emits the one-shot report only, and nothing else of the OSC family. The reader, the state machine and the warning are e27r.
+
+For engagement terminals only:
+- zsh: ZDOTDIR=<shell dir>/zsh, where the shell dir is <root>/shell. ADE's .zshenv, .zprofile, .zshrc and .zlogin each source the user's own file (from the original ZDOTDIR or HOME), with ZDOTDIR restored around it. ADE's .zshrc sets HISTFILE=<root>/history/zsh_history before it sources the user's .zshrc, after /etc/zshrc has set its own. After the user's files, a one-shot precmd function, added after the user's .zshrc and removing itself when it first runs, emits the report at the first prompt (after .zlogin): ESC ] 7717 ; check ; <base64 of {"v":1,"history":"<$HISTFILE, empty if unset>"}> BEL.
+- bash: bash --init-file <shell dir>/bash/init.bash -i (not -l). init.bash sources /etc/profile and the first of ~/.bash_profile, ~/.bash_login, ~/.profile, as a login shell would, and sets HISTFILE=<root>/history/bash_history before the user's files. Its last line emits the same report with $HISTFILE.
+- Encoding (design 9): the JSON escapes \ and " and each control character U+0000 to U+001F and U+007F as \u00XX; the JSON is piped through base64 | tr -d '\r\n'. A shell without base64 sends nothing, which the reader's 10 s fallback covers.
+- The default profile: its zsh wrapper puts HISTFILE back to ${original ZDOTDIR:-$HOME}/.zsh_history when /etc/zshrc pointed it at ADE's folder; bash is left as it was. The default emits no report.
+- At spawn the PTY is told its shell kind (zsh, bash, or other) for e27r's state machine. fish and PowerShell are not changed here (e27b).
+
+Acceptance, with real shells (listed):
+(1) engagement_zsh_history_is_in_the_profile (linux_only and macos_only): a command typed in A's terminal is in <root>/history/zsh_history.
+(2) engagement_bash_history_is_in_the_profile (both platforms).
+(3) a_command_typed_in_a_is_absent_from_the_default_and_b_histories (asserted inside (1) and (2)).
+(4) start_up_file_setting_histfile_warns (real zsh and bash): the report arrives as a mismatch and e27r's state shows the full copy naming HISTFILE.
+(5) a_histfile_with_quotes_backslash_tab_and_line_break_gives_a_well_formed_report_and_a_mismatch_naming_histfile (real shell).
+(6) a_zshrc_that_execs_sh_gives_the_first_sentence_after_10_seconds (real time).
+(7) default_zsh_keeps_the_home_history (real zsh; the default terminal's HISTFILE is the home file).
+(8) the_one_shot_report_is_emitted_once (zsh: a second prompt emits nothing; bash: the line is last in init.bash and one report arrives at the first prompt).
+(9) the zsh and bash integration tests are listed in src-tauri/platform-tests.txt for their platforms.
+'''
+verify = '''Local: all eight lines exit 0 and tests (8) appears by name in cd src-tauri && cargo test. CI: backend and backend-macos green; the platform tests line lists (1), (2), (4), (5), (6) and (7) as ok on their platforms. Isolation: required (item 2): terminals write history.'''
+
+[[entry]]
+id = "e27b"
+type = "story"
+title = "Per-profile shell history for fish and PowerShell"
+covers = ["PE-4"]
+after = ["e27a"]
+hitl = false
+risk = "high"
+description = '''F1 slice 1. PRD PE-4 AC8 (fish and PowerShell; the PowerShell report with no fallback; fish has no check until slice 2); design section 9 (the fish and PowerShell rows; the PowerShell report under "Slice 1's history check"; revision 5i, M4); ADR 0021 (fish exports XDG_DATA_HOME to its terminal; PowerShell's history path). UX spec docs/ux-spec.md section 8.2 (the PowerShell rows; the fish row is slice 2). The reader, the state machine and the bar are e27r.
+
+- fish: fish -l -C 'source <shell dir>/fish/init.fish', with XDG_DATA_HOME=<root>/shell/fish-data for the fish process, so fish's history goes there. Programs started from that terminal see the variable: the side effect ADR 0021 accepts. Slice 1 has no report, check or warning for fish of either kind (design 9, M4). The fish warning work, which is UX 8.2's XDG_DATA_HOME row and its check, moves to slice 2; this story's notes say so.
+- PowerShell 7 and Windows PowerShell 5.1: -NoLogo -NoProfile -NoExit -EncodedCommand <base64 UTF-16LE>. The integration is inline text, not a script file. It sets PSReadLine's HistorySavePath to <root>\history\pwsh_history.txt first, clears in-memory history, loads the profile scripts under PowerShell's own rule (only when Get-ExecutionPolicy allows scripts), and as its last statement emits the report: the value of (Get-PSReadLineOption).HistorySavePath, empty when PSReadLine is not loaded, written with [Console]::Out.Write, the escape and bell as [char]27 and [char]7, base64 over UTF-8 by [Convert]::ToBase64String, unwrapped. Under 8 KiB of script.
+- No 10 s fallback for PowerShell: a terminal whose report never arrives shows nothing (UX 8.2). A profile that moves HistorySavePath gives a mismatch (e27r).
+- First step, before any code: check that ConPTY passes the private OSC through to create_pty's reader for pwsh and powershell on the Windows CI runner (design 9). If it does not, this story stops and goes back to the architect; no workaround is built here.
+
+Acceptance, with real shells (listed):
+(1) engagement_fish_history_is_in_the_profile (linux_only and macos_only).
+(2) pwsh_history_path_is_in_the_profile (windows_only, pwsh and powershell).
+(3) a_profile_script_that_sets_history_save_path_elsewhere_shows_the_full_copy_naming_it (windows_only).
+(4) the_encoded_command_decodes_to_the_integration_text (a unit, any platform; under 8 KiB).
+(5) a_fish_terminal_emits_no_report_and_shows_no_warning (real fish on linux and macos).
+(6) a_powershell_terminal_with_no_report_shows_no_warning (windows_only).
+(7) the fish and PowerShell integration tests are listed in src-tauri/platform-tests.txt for their platforms.
+(8) the ConPTY check of step one is recorded in this story's Verification with its real output; its pass is a precondition of (2) and (3).
+'''
+verify = '''Local: all eight lines exit 0 and test (4) appears by name in cd src-tauri && cargo test. CI: backend and backend-macos show (1); backend-windows shows (2), (3) and (6) in the platform tests line, as ok. Isolation: required (item 2): terminals write history.'''
+
+[[entry]]
+id = "e28"
+type = "story"
+title = "Agent status's lock folder and records per profile"
+description = '''F1 slice 1. PRD PE-4 AC11 and AC9 (Agent status is not offered on Windows today); design section 3 ("Agent status's lock folder per profile"); contract engagement-profiles.md (cache/agent-status/).
+
+In an engagement, Agent status's locks and records live under <root>/cache/agent-status/. In the default they stay where they are today. Turning Agent status on and off in an engagement writes only there and in the project's own settings file (the project's .claude/settings.local.json, as today). The refusal of Agent status inside an engagement's folders (PE-4 AC7) is slice 2 and is not built here. Agent status stays not offered on Windows.
+
+Acceptance:
+(1) agent_status_lock_path_is_per_profile (a unit on ProfilePaths and the lock_dir reroute of e3).
+(2) enable_and_disable_write_only_the_project_file_and_the_cache_folder (a fake filesystem).
+(3) windows_does_not_offer_agent_status (a test on the offer).
+(4) the default profile's Agent status paths are unchanged (a test against the golden table).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (4) appear by name in cd src-tauri && cargo test and npm test. CI: three backend jobs green. Isolation: required (item 2): it writes the lock and records.'''
+covers = ["PE-4"]
+after = ["e3", "e21"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "e29"
+type = "story"
+title = "The slice 1 scenario: the real create and start, the ProfilePaths table, and the slice 1 steps"
+description = '''F1 slice 1. Design section 15.2, 15.6 (the stand-ins are replaced in this slice), 15.3 (the table built from ProfilePaths); PRD PE-4 AC9 (the slice 1 scenario).
+
+Replaces the slice 0 stand-ins with the real code:
+- create A: through the default's UI (or its command, through the driver), with A's name, client name, owner, folder and persona typed. A's markers reach the registry only (e8).
+- start A: the default starts A's instance through the engagement starter (e19); A's readiness comes from its own report through the driver (e20).
+- the stand-in table of default-owned locations (h11) is replaced by the table built from ProfilePaths (e1). A test asserts that the new table's default-profile rows cover every row of the stand-in table, so the table cannot shrink unseen.
+- the stand-in registry file is replaced by the real registry (e6).
+The slice 1 steps of A's instance are the ones of h17 and h18, less h18's step 4, with (a) the Scratchpad, notes, drafts, Orchestrator, role-file agent launch (Q6), pasted image, recording, saved workspace, local snapshot and crash-log steps, (b) the temp-variable file, (c) Agent status on and off (e28). No Claude Code step: h18's step 4 (the real claude mcp add and claude mcp list) and any write into A's Claude config dir are not in slice 1. Decided by the owner on 2026-11-08 (epic notes): they join the scenario in slice 2, with ADR 0023's split home.
+
+Acceptance, with fake drivers:
+(1) default_table_covers_every_stand_in_row.
+(2) create_a_writes_only_the_registry_and_the_two_roots.
+(3) the step list for slice 1 matches the PRD's list and has no real Claude Code step: no claude mcp add or claude mcp list, and no write into A's Claude config dir (a test that compares the step names).
+(4) the default starts A through the starter, not through a direct spawn (a one-launcher assert on the scenario's start step).
+(5) every step returns could not run on a driver rejection (reused from h17).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: required (item 2): the scenario is the isolation test itself; its real runs are the gate (e30).'''
+covers = ["PE-4", "PE-2", "PE-13"]
+after = ["e8", "e19", "e20", "e3", "e6", "e28", "e27a"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "e31"
+type = "story"
+title = "The default profile's engagement form and list: create one, open one, behind the flag"
+covers = ["PE-2", "PE-12", "PE-13"]
+after = ["e8", "e20", "e24"]
+hitl = false
+risk = "medium"
+description = '''F1 slice 1. PRD F1.8 slice 1 ("from the default profile's UI"); PRD PE-2 steps 1 and 5 (the refusals, shown with the reason); PE-1 AC3 (the persona choices); PE-12 (the list; open only in slice 1); PE-13 AC4 (the default alone lists and creates, and its entry points). UX spec docs/ux-spec.md, confirmed by the owner 2026-11-08: section 2 (words), 4.1 and 4.2 (flows), 5 (the panel, list states and open states), 6.1 to 6.3 (the form, its refusal copy in its order, its states), and 9 to 11 (keys, accessibility, states checklist). Q10 is resolved: the copy and layout are the UX spec's. The mockup is docs/mockup.html.
+
+A frontend story over the commands of e7 (list_persona_choices), e8 and e19. In the default profile only, behind the flag (e22). Nothing else of the list is built here: no close, reopen, delete, persona editing or checkouts.
+
+- Engagements panel (UX 5): the list, with each row's name and client, and Open on each row (the starter of e19, or activate when running). After a create, the new row is selected and its Open has focus (UX 4.1).
+- New Engagement form (UX 6.1): fields 1 to 6, with the Engagements folder as 5a (editable while engagementsFolder is null) or 5b (read-only once set), the Folder name derived from Name with the live preview, the Persona select over list_persona_choices with Software Engineer preselected, and the Cancel and Create Engagement footer. Name, client and owner are trimmed and counted in code points ([...s].length); the form mirrors e8's text rules.
+- Refusals (UX 6.2): each refusal from e8 or e8a is shown on the field it concerns, in the copy and order of UX 6.2, with the fallbacks at the foot of that table.
+- Form states as UX 6.3.
+- Entry points, default profile only, flag on: the command palette entries Open Engagements and New Engagement (category Engagements; New Engagement goes straight to the form, UX 4.1), on every platform; and, on macOS, the app menu's Open Engagements as the first item after About Better Terminal, followed by a separator (PE-13 AC4; UX 7.2). The engagement instance's entries are e24's. Whether the default's Dock menu gets the item is open (epic notes).
+- In an engagement instance neither the form nor the list is loaded.
+- Words: Better Terminal in every title, menu and message; "your main Better Terminal" only where UX 6.2 and 7.4 name it.
+
+Acceptance, with vitest and a fake command layer unless marked:
+(1) form_shows_each_refusal_in_ux_order_with_its_reason (each 6.2 kind maps to its copy and field; the fallbacks).
+(2) form_submits_the_create_command_with_the_typed_values (name, client and owner trimmed by the code-point rule; persona as { library } or { starter }; folder name; engagements folder with ~ expanded).
+(3) list_open_calls_the_starter, and a running row calls activate through the starter's result.
+(4) flag_off_loads_neither_form_nor_list (a spy on the dynamic import).
+(5) an_engagement_instance_loads_neither.
+(6) the_default_palette_has_open_engagements_and_new_engagement_with_the_flag_on, each opening the list or the form; none with the flag off.
+(7) the_default_macos_app_menu_has_open_engagements_after_about (a Rust menu-builder table test, macos_only; none with the flag off).
+(8) the_engagements_folder_is_editable_until_set_then_read_only (5a and 5b; aria-readonly; still focusable).
+(9) the_form_states_follow_ux_6_3 (fresh, invalid, creating, refused, created, persona missing).
+(10) the_list_states_follow_ux_5_3_and_5_4 (opening, and the error copy in place).
+(11) no_copy_says_ADE (the collected strings name Better Terminal).
+'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (6) and (8) to (11) appear by name in npm test; (7) appears by name in cd src-tauri && cargo test on macOS. CI: three backend jobs green (the frontend job is not in the gate); backend-macos shows (7). Isolation: not required (frontend; the commands it calls are tested in e7, e8, e8a and e19, item 2).'''
+
+[[entry]]
+id = "e30"
+type = "story"
+title = "Slice 1 gate: remove the expected-to-fail mark, refuse any xfail, and the three-platform isolation runs"
+description = '''F1 slice 1 gate. Architecture item 2 ("slice 1 on"), design 15.6 ("Slice 1 replaces the line with expect: pass ... that refusal is added by slice 1's story, in the same commit"); ADR 0020 (the mark); PRD F1.8 slice 1 ("its expected-to-fail mark removed").
+
+The change, and nothing else: src-tauri/isotest/EXPECTED holds exactly expect: pass. The workflow isolation.yml gets a first step, before any run, that fails when EXPECTED holds any line other than expect: pass (the xfail refusal, M13). The check-expected subcommand (h21) accepts expect: pass and requires the verdict pass with no findings.
+
+The job is green only when both runs of each platform give pass with no findings, every launch run the slice enables (e25, e26) passes its asserts, and the detector test passes where it runs (no detector in slice 1; design 21).
+
+Slice 1 runs no real Claude Code step (owner's decision, 2026-11-08, epic notes): the scenario's claude mcp steps and any write into A's Claude config dir wait for slice 2 and ADR 0023's split home. The gate checks that the counted runs ran without them (acceptance 7).
+
+Verification for this story is the QA same-SHA evidence, cited as architecture item 4 says: the gh run list for the SHA (every run), the gh run view JSON (headSha, event, attempt and the required jobs' conclusions) for each counted run, the backend jobs' platform tests lines, and each isolation job's summary (verdict, launcher path, kind counts, kind-4 paths, the launch suite's results). The e31 frontend and e0 probe are recorded as the slice's manual and frontend precondition.
+
+Acceptance:
+(1) EXPECTED holds exactly expect: pass (a test reads the file).
+(2) the workflow refuses an EXPECTED with an xfail line (a fixture run on a throwaway branch, recorded; reverted).
+(3) check_expected_is_green_on_pass_with_no_findings (h21's command, the new expectation).
+(4) the isolation runs of the story's SHA: three platforms, two runners each, every counted run completed, attempt 1, verdict pass, no findings, launch suite green.
+(5) the backend jobs are green for the SHA.
+(6) the slice 1 gate is recorded as done only when (4) and (5) hold.
+(7) no real Claude Code step ran: e29's test (3) passes on the story's SHA, so the counted runs write nothing into A's Claude config dir.'''
+verify = '''Local: all eight lines exit 0; test (1) and (3) appear by name in cd src-tauri && cargo test -p isotest, and e29's test (3) appears by name in the same run. CI: ci.yml's three backend jobs green for the SHA; isolation.yml green on macOS, Linux and Windows with two runners each, every counted run cited. Isolation: required (item 2, slice 1 on), the gate of this epic.'''
+covers = ["PE-4", "PE-13"]
+after = ["e22", "e23", "e26", "e27b", "e29", "e31"]
+hitl = false
+risk = "high"
