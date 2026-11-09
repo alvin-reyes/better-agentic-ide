@@ -1,7 +1,7 @@
 ---
 title: "ade open: the CLI and its exit codes"
 ticket: 4c
-status: ready-for-dev
+status: done
 ---
 
 # Story 4c: ade open: the CLI and its exit codes
@@ -104,4 +104,30 @@ The endpoint, the window, the claim, the limits (story 4a). `--split` in the win
 
 ## Verification (QA)
 
-_Empty until QA runs the verification command against the story's work. QA records the real output here._
+QA, 2026-11-09, on branch `st4c-open-cli` after merging `origin/main` (d34412f, story 4a) as 57db7ab, plus two comment-only edits from the reviewer's notes (a line above each of the two `#[cfg(unix)]` tests that read what `main` takes from its process, in `src-tauri/src/ade_cli.rs`; a note above the `backend-windows` job in `.github/workflows/ci.yml`). Run with a temporary `HOME`/`TMPDIR`. The merge conflicted only in `.ade/knowledge/developer.md` and `_bmad-output/deferred-work.md` (main's side empty); HEAD's text was kept. No code file conflicted.
+
+```
+npx tsc --noEmit                                  exit 0
+npm test                                          run 1: exit 1, 1 file failed (BoardPanel.test.tsx, 20 tests; 173 files / 1917 tests passed)
+                                                  BoardPanel.test.tsx alone: 46 passed (not touched by this story or by the merge)
+                                                  run 2, full: exit 0  Test Files 174 passed (174)  Tests 1937 passed (1937)
+(cd src-tauri && cargo test)                      exit 0  lib: 618 passed; 0 failed; 1 ignored (plus 12, 2 in other targets)
+(cd relay && cargo test)                          exit 0  all suites ok (86 passed in the largest)
+(cd mobile && npx tsc --noEmit && npx jest)       exit 0  Test Suites: 1 passed; Tests: 6 passed
+(cd src-tauri && cargo check -p ade-hook)         exit 0  Finished `dev` profile
+cd src-tauri && cargo test -p ade-hook --test dispatch   exit 0  test result: ok. 9 passed; 0 failed
+```
+
+The first `npm test` run had 20 timing-sensitive BoardPanel failures (1 s waitFor timeouts) that did not repeat: the file passes alone and the full suite passed on the second run. BoardPanel is unrelated to this story; recorded as a flake, not hidden.
+
+Criteria map. All 25 tests named in C1 to C6 appear in the `cargo test` output as `ade_cli::tests::<name> ... ok`, and the assertions were read:
+- C1: `ade_and_ade_exe_are_the_cli`, `open_help_and_dash_help_are_the_cli`, `no_arguments_under_the_hook_name_are_the_hook`, `guard_is_never_the_cli`, `the_basename_of_argv0_decides`, `an_unknown_verb_under_ade_is_still_the_cli`.
+- C2: `exit_0_when_opened` (code 0, stdout and stderr empty), `exit_1_for_an_old_ade_that_answers_400_with_empty_object`, `exit_1_for_422_with_its_message`, `exit_1_for_504_with_its_message`, `exit_1_when_no_answer_before_the_deadline` (code 1, message, injected deadline under 5 s), `exit_2_for_usage`, `exit_3_for_an_unset_or_malformed_variable` (one case per variable, malformed port, token and pty id), `exit_4_when_connection_is_refused`, `exit_4_for_401`, `exit_4_for_410_this_terminal_has_closed` (code 4, message names tmux and screen).
+- C3: `cwd_joins_pwd_and_normalises_lexically` (also the symlink case), `a_missing_cwd_folder_is_usage_2`, `without_cwd_the_pwd_is_sent`; plus `main_reads_pwd_getcwd_and_ade_variables_from_the_process` (a real process).
+- C4: `the_body_has_exactly_the_contract_fields` (request line, Host, Content-Type, X-ADE-PTY, exact JSON body), `the_token_comes_from_the_environment_only`, `split_and_command_come_back_422_not_supported_yet_and_exit_1`.
+- C5: `help_prints_usage_and_exits_0`, `an_unknown_verb_is_usage_2`, `name_with_split_is_usage_2_and_sends_nothing`, `a_split_value_other_than_right_or_down_is_usage_2`, `a_flag_missing_its_value_is_usage_2`.
+- C6: `the_hook_mode_is_what_ade_hook_did_before` (Hook mode, and the dispatch in `ade-hook/src/main.rs` reaches `hook_forward::main()` only on the Hook arm), the unchanged `hook_forward` tests, and the 9 `ade-hook` dispatch tests above.
+
+Not covered: Windows (the CLI is Unix-only for now; the two process-level tests are `#[cfg(unix)]`, noted in the code and in CI). The optional smoke from a running ADE was not run; it does not gate Done.
+
+Verdict: PASS.

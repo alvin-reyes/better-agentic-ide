@@ -214,6 +214,7 @@ jobs:
   # The PowerShell installer cannot be executed on a developer Mac: the only
   # PowerShell container images are amd64, and qemu crashes running them under
   # Rosetta. So a real Windows runner checks it instead of nobody checking it.
+  # Note: the ade CLI's binary tests run on Linux and macOS only (the CLI is Unix-only for now), so this job does not exercise them.
   backend-windows:
     name: Backend on Windows (compile + test)
     runs-on: windows-latest

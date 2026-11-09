@@ -637,6 +637,7 @@ mod tests {
         vec![(ENV_PORT, port.to_string()), (ENV_TOKEN, token.to_string()), (ENV_PTY, "7".to_string())]
     }
 
+    // Windows has no coverage of what `main` reads from its process (the $PWD, getcwd and ADE variables): this test is Unix-only.
     #[cfg(unix)]
     #[test]
     fn run_with_takes_the_folder_and_variables_from_its_env() {
@@ -693,6 +694,7 @@ mod tests {
         rx.recv_timeout(Duration::from_secs(10)).expect("main sent a request")
     }
 
+    // Windows has no coverage of what `main` reads from its process (the $PWD, getcwd and ADE variables): this test is Unix-only.
     #[cfg(unix)]
     #[test]
     fn main_reads_pwd_getcwd_and_ade_variables_from_the_process() {
