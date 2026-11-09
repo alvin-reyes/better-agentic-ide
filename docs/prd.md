@@ -2402,6 +2402,12 @@ clarification for slice 0.
     making or removing phase shows one combined confirm (OB-5 AC5); the Keychain
     service falls back to `hub_name()` (`${HUB_NAME:-<hub folder base name>}`),
     with its test using `HUB_NAME=acme` (OB-5 AC4).
+  - 2026-11-09: OB-4 AC7 also refuses a run whose hub folder is inside, or
+    contains, the hub folder of a run in progress in another tab (the outer run's
+    unpack would collide with the inner one), by whole path components; folders
+    are compared after `~` expansion, NFC-normalised, case-folded on a
+    case-insensitive volume. Tests added: `/x/a/b` beside a run to `/x/a` and
+    `/x/a` beside a run to `/x/a/b` are refused; `/x/ab` beside `/x/a` is allowed.
 
 ### F2.1 Problem
 
@@ -2851,18 +2857,26 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    reaches the persona session (i), ends at a failed step (Stop, Keep it, or the
    notice closed without Retry), its tab is closed, or its removal (OB-5 AC4)
    has finished; the persona session does not count. Confirming a review step
-   whose hub folder is the hub folder of a run in progress in another tab is
-   refused inline, before the preflight, naming the folder and saying another tab
-   is setting it up; nothing is written. The same applies to OB-2 AC2's
+   whose hub folder is the hub folder of a run in progress in another tab, or is
+   inside it, or contains it, is refused inline, before the preflight, naming the
+   other tab's folder and saying another tab is setting it up; nothing is
+   written. Nested folders are refused because the outer run's unpack (a) would
+   collide with the inner run's files. The same applies to OB-2 AC2's
    existing-hub option that runs `bin/setup` and `bin/doctor` in that folder.
-   "The same folder" is compared after `~` is expanded, and on a case-insensitive
-   volume names that differ only in case are the same folder. This holds during
-   (a), before the hub folder exists. Two runs that list the same checkout are
+   Folders are compared after `~` is expanded, NFC-normalised, and case-folded on
+   a case-insensitive volume (names that differ only in case are the same
+   folder); "inside" and "contains" go by whole path components, so `/x/ab` is
+   neither inside nor containing `/x/a`. This holds during (a), before the hub
+   folder exists. Two runs that list the same checkout are
    not refused here; OB-4 AC2's second check (just before (f)) refuses the later
    one. Tests: two runs to `~/hubs/a` and `~/hubs/b` started together both reach
    (i), each hub equal to a run made alone; with a run to `~/hubs/a` held at (a)
    or at (d), a second confirmation to `~/hubs/a`, and to `~/hubs/A` on a
-   case-insensitive volume, is refused and writes nothing; after the first run
+   case-insensitive volume, is refused and writes nothing; with a run to `/x/a`
+   in progress, a second confirmation to `/x/a/b` is refused and writes nothing;
+   with a run to `/x/a/b` in progress, a second confirmation to `/x/a` is refused
+   and writes nothing; with a run to `/x/a` in progress, a second confirmation to
+   `/x/ab` is not refused by this rule; after the first run
    reaches (i), stops, or is removed, the refusal no longer applies (and OB-2 AC3
    then decides); two runs listing the same checkout `/x/r`: the first to reach
    (f) links it, and the other's (f) fails with OB-4 AC2's message.
