@@ -62,6 +62,7 @@ import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
 import { useTabStore, ownViewOnly, findAllPanes, shownView, type Tab, type PaneNode } from "../../stores/tabStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { usePaneCwd } from "../../stores/paneMetaStore";
+import { useOpenStatus } from "../../lib/terminalOpen";
 
 const leaf = (id: string): PaneNode => ({ type: "pane", pane: { id, ptyId: null } });
 // "Terminal" tabs show their folder's name: the own view's pane a1 is in /code/api.
@@ -552,5 +553,64 @@ describe("the new flash", () => {
     addView("a", "quiet");
     expect(flashing()).toEqual([]);
     expect(entries().every((e) => !e.style.animation)).toBe(true);
+  });
+});
+
+describe("story 9: the starting spinner and the not-typed mark (T9)", () => {
+  const status = (tabId: string, viewId: string, over: Partial<{ status: "starting" | "not-typed"; why: string | null }> = {}) =>
+    act(() => useOpenStatus.setState({ byView: { [`${tabId}/${viewId}`]: { status: "starting", firstWord: "npm", line: "npm run dev", why: null, paneId: "p", ...over } } }));
+  afterEach(() => useOpenStatus.setState({ byView: {} }));
+
+  it("no_spinner_without_a_command", () => {
+    addView("a", "web");
+    render(<SubTerminalStrip tabId="a" />);
+    expect(screen.queryByLabelText("starting")).toBeNull();
+    expect(screen.queryByLabelText("command not typed")).toBeNull();
+  });
+
+  it("a command's sub-terminal shows the spinner until typed, then the mark if not typed", () => {
+    const id = addView("a", "npm");
+    status("a", id);
+    render(<SubTerminalStrip tabId="a" />);
+    const spinner = screen.getByLabelText("starting");
+    expect(spinner.getAttribute("title")).toBe("Starting: typing the command");
+    expect(within(entries()[1]).getByLabelText("starting")).toBe(spinner);
+    status("a", id, { status: "not-typed", why: "x" });
+    expect(screen.queryByLabelText("starting")).toBeNull();
+    expect(screen.getByLabelText("command not typed").getAttribute("title")).toBe("Command not typed");
+    act(() => useOpenStatus.setState({ byView: {} }));
+    expect(screen.queryByLabelText("command not typed")).toBeNull();
+    // Never the command in the strip.
+    expect(document.body.textContent).not.toContain("npm run dev");
+  });
+
+  it("the shown sub-terminal's not-typed notice sits above its terminal, outside the tablist", () => {
+    const id = addView("a", "npm", null, true);
+    status("a", id, { status: "not-typed", why: "the shell exited before the command was typed" });
+    render(<SubTerminalStrip tabId="a" />);
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("The command (npm …) wasn't typed: the shell exited before the command was typed.");
+    expect(screen.getByRole("tablist").contains(notice)).toBe(false);
+    // Dismiss clears the notice and the mark.
+    fireEvent.click(within(notice).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByLabelText("command not typed")).toBeNull();
+  });
+
+  it("a notice shows only for the view in sight", () => {
+    const id = addView("a", "npm");
+    status("a", id, { status: "not-typed", why: "x" });
+    render(<SubTerminalStrip tabId="a" />);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByLabelText("command not typed")).toBeTruthy();
+  });
+
+  it("a not-typed result is announced by name, never the command", () => {
+    vi.useFakeTimers();
+    const id = addView("a", "npm", null, true);
+    status("a", id);
+    render(<SubTerminalAnnouncer />);
+    status("a", id, { status: "not-typed", why: "x" });
+    expect(live().textContent).toBe("npm: command not typed");
   });
 });

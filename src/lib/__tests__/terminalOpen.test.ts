@@ -11,7 +11,9 @@ vi.mock("../../hooks/useTerminal", () => ({
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke, Channel: class { onmessage: unknown = null; } }));
 
-import { handleOpenMessage, defaultSubTerminalName, startTerminalOpen, type OpenDeps, type OpenMessage } from "../terminalOpen";
+import { handleOpenMessage, defaultSubTerminalName, startTerminalOpen, commandLine, openStatusOf, useOpenStatus, type OpenDeps, type OpenMessage } from "../terminalOpen";
+import { shellQuote } from "../shellQuote";
+import { tokenizeFish, tokenizePosix, REAL_SHELLS, shellAvailable, runShell } from "./shellTokenize";
 import { useTabStore, ownViewOnly, OWN_VIEW, type Tab, type PaneNode } from "../../stores/tabStore";
 
 const leaf = (id: string, ptyId: number | null): PaneNode => ({ type: "pane", pane: { id, ptyId } });
@@ -53,6 +55,7 @@ beforeEach(() => {
   // Tab a's own terminal is PTY 5 (the caller); b is in sight.
   useTabStore.setState({ tabs: [terminalTab("a", "a1", 5), terminalTab("b", "b1", 6)], activeTabId: "b", closedTabs: [] });
   h.destroyInstance.mockClear();
+  useOpenStatus.setState({ byView: {} });
 });
 afterEach(() => vi.useRealTimers());
 
@@ -234,5 +237,86 @@ describe("listening", () => {
     const again = startTerminalOpen();
     expect(h.invoke.mock.calls.filter(([cmd]) => cmd === "terminal_open_listen")).toHaveLength(2);
     again();
+  });
+});
+
+// ---- Story 9: typing the command ----
+
+describe("the typed line (T2)", () => {
+  it("the_line_quotes_each_word_with_shellQuote_except_bare_words", async () => {
+    expect(commandLine(["npm", "run", "dev"])).toBe("npm run dev");
+    expect(commandLine(["./bin/work", "--name", "a_b-c.d/e"])).toBe("./bin/work --name a_b-c.d/e");
+    const words = ["sh", "-c", "echo 'a b'; ls"];
+    expect(commandLine(words)).toBe(`sh -c ${shellQuote("echo 'a b'; ls")}`);
+    expect(commandLine(words)).toBe("sh -c 'echo '\\''a b'\\''; ls'");
+    expect(commandLine(["FOO=1", "make"])).toBe(`${shellQuote("FOO=1")} make`);
+    // The window answers with that line.
+    const { d, invoked } = deps();
+    await handleOpenMessage(request({ command: words }), d);
+    expect(done(invoked)).toEqual([{ requestId: 1, error: null, ptyId: 40, line: "sh -c 'echo '\\''a b'\\''; ls'", focused: false }]);
+  });
+
+  it("a_word_with_a_quote_or_backslash_is_one_word_in_sh_and_fish", () => {
+    const words = ["printf", "%s\\n", "it's", "a\\b", "x'\\'y", "a b", "\\", "'", "-- --x", "~", "$HOME", "`id`", "a;b|c&&d"];
+    const line = commandLine(words);
+    expect(tokenizePosix(line)).toEqual(words);
+    expect(tokenizeFish(line)).toEqual(words);
+    // And in the real shells present here (sh and bash at least).
+    for (const shell of REAL_SHELLS.filter(shellAvailable)) {
+      const got = runShell(shell, line, process.cwd());
+      expect(got.stdout, shell.name).toBe(words.slice(2).map((w) => `${w}\n`).join(""));
+    }
+  });
+});
+
+describe("typed (T4, T9)", () => {
+  const sub = () => {
+    const a = tab("a");
+    return { tabId: "a", viewId: a.viewOrder[1] };
+  };
+
+  it("a request with a command starts with the spinner; one without has none", async () => {
+    const { d } = deps();
+    await handleOpenMessage(request({ requestId: 1, command: ["npm", "run", "dev"] }), d);
+    const { tabId, viewId } = sub();
+    expect(openStatusOf(useOpenStatus.getState(), tabId, viewId)).toMatchObject({ status: "starting", firstWord: "npm", line: "npm run dev" });
+    await handleOpenMessage(request({ requestId: 2 }), d);
+    const plain = tab("a").viewOrder[2];
+    expect(openStatusOf(useOpenStatus.getState(), "a", plain)).toBeNull();
+  });
+
+  it("typed_false_sets_the_entry_to_not_typed_with_the_why", async () => {
+    const { d } = deps();
+    await handleOpenMessage(request({ requestId: 4, command: ["npm", "run", "dev"] }), d);
+    await handleOpenMessage({ typed: 4, ok: false, why: "the shell's line editor didn't start" }, d);
+    const { tabId, viewId } = sub();
+    const entry = openStatusOf(useOpenStatus.getState(), tabId, viewId);
+    expect(entry).toMatchObject({ status: "not-typed", why: "the shell's line editor didn't start", line: "npm run dev", firstWord: "npm" });
+    expect(entry?.paneId).toBe(tab("a").views[viewId].activePaneId);
+    // Held in memory only: nothing of it is in the saved session.
+    expect(JSON.stringify(useTabStore.getState().tabs)).not.toContain("npm run dev");
+    // Another request's typed message changes nothing.
+    await handleOpenMessage({ typed: 99, ok: true, why: null }, d);
+    expect(openStatusOf(useOpenStatus.getState(), tabId, viewId)?.status).toBe("not-typed");
+  });
+
+  it("the_spinner_clears_when_typed_arrives", async () => {
+    const { d } = deps();
+    await handleOpenMessage(request({ requestId: 5, command: ["ls"] }), d);
+    const first = sub();
+    await handleOpenMessage({ typed: 5, ok: true, why: null }, d);
+    expect(openStatusOf(useOpenStatus.getState(), first.tabId, first.viewId)).toBeNull();
+
+    await handleOpenMessage(request({ requestId: 6, command: ["ls"] }), d);
+    const second = tab("a").viewOrder[2];
+    expect(openStatusOf(useOpenStatus.getState(), "a", second)?.status).toBe("starting");
+    await handleOpenMessage({ typed: 6, ok: false, why: "x" }, d);
+    expect(openStatusOf(useOpenStatus.getState(), "a", second)?.status).toBe("not-typed");
+
+    // At expiry the view closes, and its status goes with it.
+    await handleOpenMessage(request({ requestId: 7, command: ["ls"] }), d);
+    const third = tab("a").viewOrder[3];
+    await handleOpenMessage({ expired: 7 }, d);
+    expect(openStatusOf(useOpenStatus.getState(), "a", third)).toBeNull();
   });
 });
