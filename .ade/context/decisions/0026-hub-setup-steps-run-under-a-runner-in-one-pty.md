@@ -1,6 +1,6 @@
 # 0026: Hub setup steps run under a runner that leads one PTY
 
-- Status: Proposed (2026-11-09), revised with the F2 design revisions 2, 3 and 4;
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 to 5;
   not yet reviewed or approved.
 - Context:
   - F2 (`docs/prd.md` OB-4 AC1, AC6) runs the bundled agent hub template's steps
@@ -65,7 +65,18 @@
     (first come, first served) is taken before each run's second link check and held
     until its `bin/setup` (or a T4 `bin/setup --unlink`) exits, so no other run's
     `bin/setup` can link between one run's check and its `link()` (revision 4). A
-    waiting run emits `setup_waiting` and runs nothing.
+    waiting run emits `setup_waiting` (naming the run in the way and its lock key,
+    re-sent when that run changes) and runs nothing.
+  - Revision 5 fixes how the lock behaves (spec 4.10.1). Each run is driven by its
+    own OS thread with its own socket-reader thread; there is no shared socket
+    server, and commands and window handlers never wait on the lock. A waiter blocks
+    only its own driver thread (`std::sync` `Mutex` + `Condvar`, FIFO with tickets);
+    the holder's release path uses only the holder's threads. A run leaves the queue
+    when its `ending` flag is set and the lock's `notify_all` wakes it. The lock's
+    mutex is a leaf, taken holding no other lock (order `HubRuns` → registry → the
+    lock). Poison is recovered, not unwrapped. A panicking driver frees the lock by
+    unwinding (the guard drops; a `catch_unwind` handler evicts and ends the run). A
+    holder releases only after its PTY is killed.
   - The runner executes only what ADE sends (newline-delimited JSON, types in
     `hubrun_proto.rs`, shared by `#[path]`); all policy is in `hubrun.rs`. The
     preflight runs in the same runner while the PTY is still hidden, and the tab is
@@ -89,5 +100,10 @@
     `--test hubrun`.
   - Every `bin/setup` in the app runs one at a time; a run can wait for another's,
     and a hung `bin/setup` holds the others until it is stopped or its tab closed.
+    That is the only unbounded wait: every other way a run ends releases the lock or
+    leaves its queue (tests in O7 and O8).
+  - Two OS threads per run in progress; runs are few (one per tab the developer
+    opened), so this is chosen over adding tokio as a direct dependency for an async
+    lock.
   - ADR 0021's shell integration, when built, changes `terminal_spawn_spec`, and the
     runner follows it.

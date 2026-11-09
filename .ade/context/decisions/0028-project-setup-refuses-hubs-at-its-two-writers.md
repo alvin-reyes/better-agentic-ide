@@ -1,7 +1,7 @@
 # 0028: Project setup refuses agent hubs at its two writers
 
-- Status: Proposed (2026-11-09), revised with the F2 design revisions 3 and 4; not yet
-  reviewed or approved.
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 3, 4 and 5; not
+  yet reviewed or approved.
 - Context:
   - A hub has `_bmad/` and no `.ade/methodology`, so automatic project setup would
     set it up and the hub's first commit would carry ADE's files (F2 OB-13, G2).
@@ -19,7 +19,14 @@
     the registry to refuse a second run on the same folder, OB-4 AC7). Its key is
     the canonical path, NFC-normalised (APFS and HFS+ treat NFC and NFD as one name)
     and case-folded on a case-insensitive volume; a second run is refused on the same
-    folder and on one inside or containing a reserved folder (revision 4).
+    folder and on one inside or containing a reserved folder (revision 4). NFC is
+    `icu_normalizer` 2.1.1 and folding is CoreFoundation's `CFStringFold` with
+    `kCFCompareCaseInsensitive` (through `core-foundation-sys` 0.8.7), both already
+    in `Cargo.lock`; not `to_lowercase`, which is not folding (revision 5).
+  - Refusing a folder inside or containing a reserved one goes beyond OB-4 AC7 as
+    approved (the same folder only). It is the architect's decision: the outer run's
+    unpack collides with the inner one, and the outer `bin/init` would commit it. The
+    product manager is amending the AC to match (revision 5).
   - `set_up` and `bmad_switch_apply` refuse such a root next to
     `refuse_unfinished`, writing nothing (the backstop).
   - The webview asks `hub_guard_status(path)` before any question or action
@@ -29,6 +36,9 @@
 - Consequences:
   - A clone of the hub template's own source is excluded too (intended by OB-13).
   - A code checkout kept inside a hub folder is excluded as well.
+  - Full case folding can identify names the volume keeps apart (`ß` and `ss`); the
+    cost is a refused second run that would have been safe, never two runs on one
+    folder.
   - `HOME` and its ancestors are never hub roots by their files, so a stray
     `~/hub.conf` does not stop project setup everywhere; a stray `hub.conf` outside
     `HOME` still marks the folders under it, and the refusal names its folder.

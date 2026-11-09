@@ -3,14 +3,14 @@
 What F2's onboarding (agentic-environment setup) fixes for other stories and for
 the agent hub template.
 
-- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 4).
+- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 5).
 - ADRs: `decisions/0026-hub-setup-steps-run-under-a-runner-in-one-pty.md`,
   `0027-a-hub-tab-is-a-tab-flag-and-keeps-no-scrollback.md`,
   `0028-project-setup-refuses-hubs-at-its-two-writers.md`,
   `0029-a-finished-hub-is-judged-by-head-with-ades-own-git.md`.
 - Builds on `bundled-sources.md` (S4a's commands), `terminal-open.md` (`ade-hook`
   modes, shell set) and `remote-tabs.md` (the relay mask).
-- Status: proposed 2026-11-09 (revision 4), not yet approved or built. macOS only.
+- Status: proposed 2026-11-09 (revision 5), not yet approved or built. macOS only.
 
 ## The runner (`ade-hook`)
 
@@ -102,13 +102,25 @@ queued.
   "owner/name", root} | null}` (GitHub origins only; null without the tools).
 - `hub_plan(answers) -> {plan_id, folders_to_create, steps: [{key, commands:
   [{argv, cwd, env_set}]}], memory_checkouts: [{path, exists}], t4, claude_memory:
-  {config_dir, encoded_hub, entry, prediction: true}}`; `hub_plan_drop(plan_id)`.
+  {config_dir, encoded_hub, entry, prediction: true}} | {errors: [{field, code,
+  message}]}` (`errors`: the answers fail `hub_check`; no plan stored; a rejected
+  call is an internal failure); `hub_plan_drop(plan_id)`.
+  **Lifetime (revision 5):** one current plan per window, kept until that window's
+  next `hub_plan`, `hub_plan_drop` (questionnaire closed by the developer) or
+  `hub_runs_reset`; no time limit; a run never drops it (`hub_run_prepare` copies
+  it). **The webview calls `hub_plan(answers)` every time it enters Review** (first
+  time, after Back, after `unpack_failed` or `edit_answers`) and keeps Set Up Hub
+  disabled until it answers. Review Again: `{errors}` → the first answer with an
+  error, shown inline; rejected → the failure with its message and Review Again, Set
+  Up Hub disabled.
   The plan stays in Rust; the webview shows `shellQuote(argv)` (ADR 0008's quoter
   with the bare-word fast path, used only in the webview). `claude_memory` is
   `<ADE's HOME>/.claude` and `[^A-Za-z0-9]` → `-` per Unicode scalar: a prediction.
 - `hub_run_prepare(plan_id, rows, cols, onEvent) -> {run_id} | {refused: {in_setup:
-  InSetup}} | {refused: "unknown_plan"}`: returns at once after reserving the
-  folder; the outcome comes as `prepared` or `preflight_failed`. A prepared run not
+  InSetup}} | {refused: "unknown_plan"}`: `unknown_plan` only when `plan_id` is not
+  the calling window's current plan (its webview restarted, or the plan was replaced
+  or dropped), never by time or because a run of it ended. Returns at once after
+  reserving the folder; the outcome comes as `prepared` or `preflight_failed`. A prepared run not
   started in 60 s is killed.
 - `hub_run_cancel(run_id)`: until `hub_run_start`; stops every process the
   preflight started, starts nothing more, releases the folder, `run_ended
@@ -192,8 +204,10 @@ Events:
 - `awaiting_secret {name, index, count, token}`, `secret_prompt_ready {name, token}`,
   `secret_paste_refused {name}`
 - `setup_waiting {key: "f" | "removal", state: "waiting" | "done", holder?: {hub,
-  tab_id?}}`: the run waits for the setup lock (below); a run-bar state, not a
-  notice (no buttons, no notice-waiting flag, no line, no time limit)
+  tab_id?, key: "f" | "removal" | "open_setup"}}`: the run waits for the setup lock
+  (below); `key` is this run's step, `holder.key` what the run in the way is doing;
+  `waiting` is sent again whenever the run in the way changes; a run-bar state, not
+  a notice (no buttons, no notice-waiting flag, no line, no time limit)
 - `step_failed {key, token, options, remove_unavailable?, steps_left: [key],
   reason}`; `options` in order: (b) `edit_answers, remove, keep`; (c) `retry,
   remove, keep`; (d) per name, (f), (f2) `retry, skip, remove, keep`; existing
@@ -242,10 +256,16 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
   or expires.
 - One app-wide registry (Rust, `hubmark.rs`) holds the hub folder of each run in
   progress, keyed by: `~` expanded with ADE's `HOME`, normalised, the nearest
-  existing ancestor canonicalised, missing parts appended, **NFC-normalised**;
-  then case-folded (and NFC again) when `pathconf(ancestor, _PC_CASE_SENSITIVE)` is
-  0. Two keys **conflict** when equal or when one is an ancestor of the other by whole
-  components (`~/hubs/a` vs `~/hubs/a/b`; not `~/hubs/ab`). `hub_run_prepare` and
+  existing ancestor canonicalised, missing parts appended, **NFC-normalised**
+  (`icu_normalizer` 2.1.1, already in `Cargo.lock`, pinned `=2.1.1`); then
+  case-folded by CoreFoundation's `CFStringFold(…, kCFCompareCaseInsensitive, NULL)`
+  (`core-foundation-sys` 0.8.7, already locked, pinned `=0.8.7`; never
+  `to_lowercase`) and NFC again, when `pathconf(ancestor, _PC_CASE_SENSITIVE)` is 0.
+  A non-UTF-8 ancestor is kept as raw bytes. Two keys **conflict** when equal or when
+  one is an ancestor of the other by whole components (`~/hubs/a` vs `~/hubs/a/b`;
+  not `~/hubs/ab`). Refusing `inside` and `contains`, not only `same`, is an
+  **architect decision** (the outer run's unpack collides with the inner one); PRD
+  OB-4 AC7 is being amended to match (eafae5f, not yet approved). `hub_run_prepare` and
   `hub_open_existing` with `run_setup` reserve atomically before anything starts and
   are refused `in_setup` (with `relation`) on a conflict. Open Hub without
   `bin/setup` is not refused.
@@ -256,7 +276,29 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
   (`links_refused`, `link_probe_failed`) and whenever the run ends or stops. While
   another run holds it, the run emits `setup_waiting`. So of two runs on one
   checkout, the later one's second check sees the earlier one's link and fails (f)
-  with `links_refused`; its `bin/setup` never starts.
+  with `links_refused`; its `bin/setup` never starts. Lock keys: `f` (new hub),
+  `open_setup` (Open Hub with `run_setup`), `removal` (T4 `--unlink`).
+- **The setup lock's rules (revision 5; spec 4.10.1):**
+  - Each run has its own driver thread (`hub-run-<id>`) and socket-reader thread
+    (`hub-rd-<id>`); no shared socket server. Only the driver acquires, waits for or
+    drops the lock for its run. Commands and window handlers set flags and send to
+    the driver's channel; those that wait for a reply do so in `spawn_blocking`.
+  - `SetupLock { Mutex<{holder, queue: VecDeque<LockEntry>, next_ticket}>, Condvar
+    }`; `LockEntry {run_id, ticket, hub, tab_id, key}`; `SetupGuard` releases on drop
+    only its own `run_id` + `ticket`; `evict(run_id)` is idempotent.
+  - To leave the queue: the run's `ending` flag is set, its message sent, then
+    `wake()` (`notify_all`); the waiter sees `ending`, leaves, emits `done`.
+  - The lock's mutex is a leaf (no other lock, event, message, I/O or wait under
+    it); order where nested: `HubRuns` → registry → `SetupLock.state`; a run acquires
+    holding no other lock.
+  - Poison is recovered (`unwrap_or_else(PoisonError::into_inner)`), never
+    unwrapped.
+  - A panicked driver frees the lock (unwinding drops the guard; `catch_unwind`
+    handler evicts, kills the PTY, releases the folder, `run_ended failed`). No
+    `panic = "abort"`.
+  - A holder releases only after its PTY is killed; a waiter leaves at once. Every
+    way out releases: `bin/setup` exited, link refusal, close, quit, `hub_runs_reset`,
+    window destroyed, socket EOF, panic.
 
 ## The path rule (owner Q4; OB-3 AC2)
 
@@ -327,9 +369,12 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
 - The since-time is UTC `%Y%m%dT%H%M%SZ`, as `bin/setup` stamps `memory.bak-` folders.
 - ADE's second memory-link check and the removal plan run `/bin/bash`, source
   `bin/lib.sh` with `HUB=<hub>` and call `claude_home`, `folders`, `repos_of`,
-  `encode_path` and `keychain_service` (which calls `hub_name`, `${HUB_NAME:-<folder
-  base name>}`; so the Keychain service falls back to `HUB_NAME`, which `bin/init`
-  always writes). The fixture's `bin/lib.sh` defines these six (and `hub_root`).
+  `encode_path` and `keychain_service` (`AGENT_KEYCHAIN_SERVICE`, else
+  `HUB_KEYCHAIN_SERVICE`, else `hub_name` = `${HUB_NAME:-<folder base name>}`).
+  `bin/init` writes both `HUB_KEYCHAIN_SERVICE=<name>` and `HUB_NAME=<name>`, so the
+  usual service is `HUB_KEYCHAIN_SERVICE` (the hub's name) and `HUB_NAME` is only the
+  fallback; the fixture's `bin/init` writes both too. The fixture's `bin/lib.sh`
+  defines these six (and `hub_root`).
   Renaming or removing those breaks them (the check then fails safe: step (f) does
   not start).
 - `bin/secret --set` must read the value with a prompt that turns echo off
@@ -366,6 +411,11 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
   failed Trash, answers mapped by phase, `detail.because`, a new hub's preflight
   `exists`, Move to New Window hidden for a "Hub removed" tab with its summary,
   `{refused: "unknown_plan"}`.
+- Revision 5 (spec 11.2): `setup_waiting.holder.key` (`f`, `removal`,
+  `open_setup`) and `waiting` re-sent when the run in the way changes; the webview
+  re-plans on entering Review with Set Up Hub disabled until `hub_plan` answers;
+  `hub_plan`'s `{errors}`; `unknown_plan` never by time; the Keychain service
+  usually from `HUB_KEYCHAIN_SERVICE`.
 
 ## Tests
 
@@ -375,6 +425,9 @@ and BMAD switches refuse it (`set_up`, `bmad_switch_apply`); the webview asks
   the verification command's seventh line, `cd src-tauri && cargo test -p ade-hook`
   (in force on main since 2026-11-09, PR #103), and by CI's `backend-macos` job
   (`cargo test --locked -p ade-hook --test hubrun`).
+- `app.exit` is called only through the `AppExit` seam (`trait AppExit { fn
+  exit(&self, code: i32) }` in Tauri state; `TauriAppExit` in production,
+  `RecordingAppExit` in tests).
 - Public fixture template: `src-tauri/src/fixtures/hub-template/`. Its `bin/setup`
   sleeps before its first `link` when `$HOME/.fixture-setup-sleep` exists (seconds;
   test-only, for the setup-lock test).
