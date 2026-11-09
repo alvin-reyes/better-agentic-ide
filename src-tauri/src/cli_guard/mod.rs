@@ -495,6 +495,79 @@ mod tests {
         check(&gh_fs(), GH_HAND);
     }
 
+    // ---- Story 9, T7: `"$ADE_HOOK_BIN" open -- COMMAND` (ADR 0011 amendment) ----
+
+    /// One row per ADE verb: what the guard does with it. A verb added to
+    /// `tables::ADE_VERBS` without a row here fails `the_ade_verbs_are_enumerated`.
+    const ADE_VERB_ROWS: &[(&str, &str, bool)] = &[("open", "\"$ADE_HOOK_BIN\" open --cwd . -- gh repo delete o/r", true)];
+
+    #[test]
+    fn open_double_dash_gh_repo_delete_asks_as_the_bare_line_does() {
+        let fs = gh_fs();
+        assert!(asks(&fs, "gh repo delete o/r"), "the bare line asks");
+        check(
+            &fs,
+            &[
+                ("\"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("$ADE_HOOK_BIN open -- gh repo delete o/r", true),
+                ("${ADE_HOOK_BIN} open -- gh repo delete o/r", true),
+                ("\"${ADE_HOOK_BIN}\" open --cwd /w --name x --focus -- gh repo delete o/r", true),
+                ("\"$ADE_HOOK_BIN\" open -- sudo gh repo delete o/r", true),
+                ("ade open -- gh repo delete o/r", true),
+                ("\"$ADE_HOOK_BIN\" open -- gh pr view 1", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /w -- npm run dev", false),
+            ],
+        );
+    }
+
+    #[test]
+    fn open_with_name_and_no_double_dash_does_not_ask() {
+        check(
+            &gh_fs(),
+            &[
+                ("\"$ADE_HOOK_BIN\" open --name x", false),
+                ("\"$ADE_HOOK_BIN\" open", false),
+                ("\"$ADE_HOOK_BIN\" open --cwd /w --focus", false),
+                ("\"$ADE_HOOK_BIN\" help", false),
+                ("ade open --name gh", false),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_line_that_assigns_ade_hook_bin_still_asks() {
+        check(
+            &gh_fs(),
+            &[
+                ("ADE_HOOK_BIN=/x \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("ADE_HOOK_BIN=/usr/bin/env; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+            ],
+        );
+    }
+
+    #[test]
+    fn the_ade_verbs_are_enumerated() {
+        assert_eq!(tables::ADE_VERBS, &["open"]);
+        let fs = gh_fs();
+        for verb in tables::ADE_VERBS {
+            let (_, line, want) = ADE_VERB_ROWS.iter().find(|(v, _, _)| v == verb).unwrap_or_else(|| panic!("no test row for the ADE verb {verb}"));
+            assert_eq!(asks(&fs, line), *want, "{line}");
+        }
+    }
+
+    #[test]
+    fn guard_and_hook_mode_are_unchanged() {
+        // The guard's own corpora are unchanged by the amendment.
+        check(&gh_fs(), GH_HAND);
+        // A helper path the session gave is what `$ADE_HOOK_BIN` names.
+        let env = |k: &str| (k == "ADE_HOOK_BIN").then(|| "/Applications/ADE.app/Contents/MacOS/ade-hook".to_string());
+        let fs = gh_fs();
+        let ctx = ctx(&fs, &env);
+        assert!(matches!(classify("\"$ADE_HOOK_BIN\" open -- gh repo delete o/r", &ctx), Verdict::Ask(_)));
+        assert!(!matches!(classify("\"$ADE_HOOK_BIN\" open --name x", &ctx), Verdict::Ask(_)));
+        assert!(!matches!(classify("\"$ADE_HOOK_BIN\" guard", &ctx), Verdict::Ask(_)), "guard is not ade open");
+    }
+
     fn hook_input(tool: &str, command: &str) -> String {
         let mut v: Value = serde_json::from_str(include_str!("testdata/pre-tool-use.json")).unwrap();
         v["tool_name"] = Value::String(tool.into());

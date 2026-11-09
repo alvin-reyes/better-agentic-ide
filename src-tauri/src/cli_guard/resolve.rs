@@ -465,6 +465,10 @@ impl<'c, 'a> Guard<'c, 'a> {
         if matches!(name, "GH_CONFIG_DIR" | "XDG_CONFIG_HOME") && !sc.vars.contains_key(name) {
             return (self.ctx.env)(name).filter(|v| v.starts_with('/'));
         }
+        // ADE's helper, from the session, unless the line assigns it (story 9).
+        if name == "ADE_HOOK_BIN" && !sc.vars.contains_key(name) {
+            return Some((self.ctx.env)(name).filter(|v| v.starts_with('/')).unwrap_or_else(|| "ade-hook".into()));
+        }
         if sc.disq || depth > 4 {
             return None;
         }

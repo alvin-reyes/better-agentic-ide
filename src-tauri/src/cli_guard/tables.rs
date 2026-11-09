@@ -17,6 +17,11 @@ pub struct Cli {
 
 pub const CLIS: &[Cli] = &[Cli { id: "gh", bins: &["gh"], packages: &[] }];
 
+/// The verbs of ADE's own helper (`"$ADE_HOOK_BIN"`, or `ade` on `PATH`)
+/// whose words after `--` are a command, classified as a runner's are
+/// (ADR 0011, amended by story 9). The guard's tests enumerate it.
+pub const ADE_VERBS: &[&str] = &["open"];
+
 /// The guarded CLI a command name (a basename) runs, if any.
 pub fn guarded_bin(name: &str) -> Option<&'static str> {
     CLIS.iter().find(|c| c.bins.contains(&name)).map(|c| c.id)

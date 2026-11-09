@@ -33,3 +33,7 @@
   - `disableAllHooks: false` on a guarded launch also re-enables the user's and project's other hooks for that session where a settings file had turned them off. The tab says so. Unguarded launches don't pay this cost.
   - Not covered: Windows, Claude Code sessions outside the repository, other agents, and `allowManagedHooksOnly`, `--safe-mode` or managed `disableAllHooks`.
 - Numbering: final at the merge of `feat/cli-guard` (2026-11-09); 0010 is Orgo's. ADR `0009-manual-checks-do-not-gate-done`, cited above, is unmerged on `docs/claude-md-paths` and needs a new number (0009 on main is the side panel); see the decision log's numbering notes.
+- Amendment (2026-11-09, sub-terminals story 9, from the open-terminals spec's "The guard and `ade open`"):
+  - `"$ADE_HOOK_BIN"`, `$ADE_HOOK_BIN` and `${ADE_HOOK_BIN}` resolve to ADE's helper (the session's absolute value, else `ade-hook`), unless the line assigns `ADE_HOOK_BIN`; then the line's own rules apply, and an unresolved name still asks.
+  - For the helper (`ade-hook` or `ade`) with a verb in `tables::ADE_VERBS` (`open` only), the words after `--` are classified as the command, as a runner's are. Without `--`, and for any other verb (`help`, `guard`, the hook), nothing is classified and nothing asks.
+  - The guard's tests enumerate `ADE_VERBS` and fail on a verb without a test row. `guard` and hook mode are unchanged.

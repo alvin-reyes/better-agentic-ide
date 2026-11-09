@@ -485,6 +485,7 @@ impl<'c, 'a> Guard<'c, 'a> {
             "eval" => return self.code_text(sc, &join(args), sc.args.clone()),
             "source" | "." => return self.source(sc, args),
             "git" => return self.git(sc, args),
+            "ade" | "ade-hook" => return self.ade(sc, args, run),
             "npx" | "bunx" => return self.npx(sc, args, run),
             "npm" => return self.npm(sc, args, run),
             "pnpm" => return self.pnpm(sc, args, run),
@@ -559,6 +560,17 @@ impl<'c, 'a> Guard<'c, 'a> {
     }
 
     /// A function's body, classified at this call site with its arguments.
+    /// ADE's helper: `open ... -- COMMAND` types COMMAND into a new
+    /// terminal, so COMMAND is classified as a runner's is. Without `--`, and
+    /// for every other verb (`help`, `guard`, the hook), nothing runs.
+    fn ade(&mut self, sc: &mut Scope, args: &[W], run: Run) -> Out {
+        let verb = args.first().is_some_and(|v| super::tables::ADE_VERBS.iter().any(|x| v.is(x)));
+        match args.iter().position(|a| a.is("--")) {
+            Some(k) if verb => self.command(sc, &args[k + 1..], In::None, run),
+            _ => Out::Unknown,
+        }
+    }
+
     fn call(&mut self, sc: &mut Scope, name: &str, body: &Cmd, args: &[W], stdin: In) -> Out {
         let key = (name.to_string(), args.iter().map(|a| a.text.clone()).collect::<Vec<_>>());
         if self.calling.iter().any(|c| c == name) || self.memo.contains(&key) {

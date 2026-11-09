@@ -41,8 +41,13 @@ usage: ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COM
 
 exit codes: 0 opened, 1 ADE refused or didn't answer, 2 usage,
             3 not in an ADE terminal (ADE_HOOK_PORT, ADE_HOOK_TOKEN, ADE_PTY_ID),
-            4 ADE or this terminal is gone
+            4 ADE or this terminal is gone, 5 opened but the command wasn't typed
 ";
+
+/// What this build can do, for callers that must not send what it can't.
+/// `help` prints it on stdout as one line; callers match a word, not the line
+/// (`--split` will add `split`).
+pub const CAPABILITIES: &str = "capabilities: command\n";
 
 /// What the helper is in this run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -319,7 +324,13 @@ fn outcome(answer: Result<(u16, Vec<u8>), Failure>) -> (i32, Option<String>) {
     let json = serde_json::from_slice::<Value>(&body).ok();
     let error = json.as_ref().and_then(|v| v.get("error").and_then(Value::as_str).map(String::from));
     match status {
-        200 if json.as_ref().and_then(|v| v.get("ok")) == Some(&Value::Bool(true)) => (0, None),
+        200 if json.as_ref().and_then(|v| v.get("ok")) == Some(&Value::Bool(true)) => match json.as_ref().and_then(|v| v.get("typed")) {
+            Some(Value::Bool(false)) => {
+                let why = json.as_ref().and_then(|v| v.get("why")).and_then(Value::as_str).unwrap_or("no reason given");
+                (5, Some(format!("opened, but the command wasn't typed: {why}")))
+            }
+            _ => (0, None),
+        },
         401 => (4, Some(format!("ADE didn't accept this terminal's token; {GONE_HINT}"))),
         410 => {
             let message = error.unwrap_or_else(|| "the terminal you ran this from is gone".into());
@@ -354,6 +365,7 @@ pub fn run(
     let open = match parse(&args) {
         Ok(Command::Help) => {
             let _ = out.write_all(USAGE.as_bytes());
+            let _ = out.write_all(CAPABILITIES.as_bytes());
             return 0;
         }
         Ok(Command::Open(open)) => open,
@@ -886,20 +898,69 @@ mod tests {
     }
 
     #[test]
-    fn split_and_command_come_back_422_not_supported_yet_and_exit_1() {
+    fn split_answers_not_supported_yet_and_exit_1() {
         let tmp = temp_dir("422");
-        for (args, message) in [
-            (&["open", "--split", "right"][..], "--split is not supported yet"),
-            (&["open", "--", "npm", "run", "dev"][..], "a command is not supported yet; open the terminal and type it"),
-        ] {
-            let (port, rx) = answer_once(&http(422, &json!({ "error": message }).to_string()));
-            let (code, out, err, _) = cli(args, port, &tmp);
-            assert_eq!(code, 1, "{args:?}");
-            assert!(out.is_empty());
-            assert_eq!(err.trim_end(), format!("ade: {message}"), "{args:?}");
-            let sent = request_body(&rx.recv().unwrap());
-            assert!(sent["split"] == "right" || sent["command"] == json!(["npm", "run", "dev"]), "{sent}");
+        let message = "--split is not supported yet";
+        let (port, rx) = answer_once(&http(422, &json!({ "error": message }).to_string()));
+        let (code, out, err, _) = cli(&["open", "--split", "right"], port, &tmp);
+        assert_eq!(code, 1);
+        assert!(out.is_empty());
+        assert_eq!(err.trim_end(), format!("ade: {message}"));
+        assert_eq!(request_body(&rx.recv().unwrap())["split"], "right");
+    }
+
+    // ---- Story 9, T4: typed or not ----
+
+    #[test]
+    fn exit_5_when_opened_but_not_typed() {
+        let tmp = temp_dir("exit5");
+        let why = "the shell's line editor didn't start";
+        let (port, rx) = answer_once(&http(200, &json!({ "ok": true, "typed": false, "why": why }).to_string()));
+        let (code, out, err, _) = cli(&["open", "--", "npm", "run", "dev"], port, &tmp);
+        assert_eq!(code, 5);
+        assert!(out.is_empty());
+        assert_eq!(err, format!("ade: opened, but the command wasn't typed: {why}\n"));
+        assert_eq!(request_body(&rx.recv().unwrap())["command"], json!(["npm", "run", "dev"]));
+        // A typed:false with no why still says what happened.
+        let (port, _rx) = answer_once(&http(200, r#"{"ok":true,"typed":false}"#));
+        let (code, _, err, _) = cli(&["open", "--", "ls"], port, &tmp);
+        assert_eq!(code, 5);
+        assert!(err.starts_with("ade: opened, but the command wasn't typed"), "{err}");
+    }
+
+    #[test]
+    fn typed_true_prints_nothing_and_exits_0() {
+        let tmp = temp_dir("typed");
+        for answer in [r#"{"ok":true,"typed":true}"#, r#"{"focused":false,"ok":true,"typed":true}"#] {
+            let (port, rx) = answer_once(&http(200, answer));
+            let (code, out, err, _) = cli(&["open", "--focus", "--", "npm", "run", "dev"], port, &tmp);
+            assert_eq!(code, 0, "{answer}: {err}");
+            assert!(out.is_empty() && err.is_empty(), "nothing printed: {out:?} {err:?}");
+            assert_eq!(request_body(&rx.recv().unwrap())["command"], json!(["npm", "run", "dev"]));
         }
+    }
+
+    // ---- Story 9, T10: the capability line ----
+
+    #[test]
+    fn help_lists_the_command_capability() {
+        for verb in ["help", "--help"] {
+            let (code, out, err, _) = cli(&[verb], 1, "/");
+            assert_eq!(code, 0);
+            let line = out.lines().find(|l| l.starts_with("capabilities:")).unwrap_or_else(|| panic!("{verb}: no capabilities line on stdout: {out}"));
+            assert!(line.split_whitespace().skip(1).any(|w| w == "command"), "{line}");
+            assert!(!err.contains("capabilities:"), "{verb}: on stdout, not stderr");
+        }
+    }
+
+    #[test]
+    fn help_capabilities_line_is_one_line() {
+        let (_, out, _, _) = cli(&["help"], 1, "/");
+        assert_eq!(out.lines().filter(|l| l.starts_with("capabilities:")).count(), 1);
+        assert_eq!(out.lines().find(|l| l.starts_with("capabilities:")), Some("capabilities: command"));
+        // A usage error's usage (on stderr) is not where callers look.
+        let (_, _, err, _) = cli(&["frob"], 1, "/");
+        assert!(err.contains("usage: ade open"));
     }
 
     // ---- C2: exit codes ----
