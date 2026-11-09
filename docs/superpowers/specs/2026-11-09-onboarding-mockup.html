@@ -216,7 +216,7 @@ aside{display:grid;gap:14px}
 <header class="page">
   <div>
     <h1>Set up your agentic environment (F2)</h1>
-    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 6 (answers the round-5 delta review: Review opens only once hub_plan answers, Set Up Hub disabled without a plan, hub_plan's errors inline, the return after (a) waits for the plan, a removal's lock announcement; spec section 16.00). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
+    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 7 (answers the round-6 joint review's R1 and R8: only the latest hub_plan call's answer is used, Back stays usable while Review Again waits, and the disabled Set Up Hub is described by the block's heading instead of a tooltip; spec section 16.000). Revision 6 answered the round-5 delta review (section 16.00). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
   </div>
   <div class="themes" role="group" aria-label="Theme">
     <button class="btn sm" data-theme-set="dark" aria-pressed="true">Dark (Precision)</button>
@@ -616,17 +616,20 @@ function unpackFailed(t) {
 }
 // rev 6 (X1): hub_plan(answers) on every entry into Review (Review Setup, Review Again, the return after (a));
 // Review opens only once it answers. While it waits, the button keeps focus with aria-disabled (not disabled).
+// rev 7 (R1): every call gets an id; the webview uses only the answer to its LATEST call (q.planCall) and drops
+// every other answer. Back and closing the questionnaire clear q.planCall, so no pending answer is used after them.
+let planSeq = 0;
 function askPlan(via, instant, tab) {
-  const q = S.q; q.preparing = via;
+  const q = S.q; q.preparing = via; const id = q.planCall = ++planSeq;
   if (via === "review") { S.focus = "#q-review"; S.caption = "<b>6.5</b> · Preparing the review: hub_plan asked; Review Setup keeps focus (aria-disabled), the form is inert"; }
   if (via === "again") { S.focus = "#q-replan"; S.caption = "<b>7.2</b> · Review Again asked hub_plan: it keeps focus (aria-disabled); Set Up Hub stays disabled"; }
   render();
   if (S.holdPlan) return;
-  later(() => planAnswered(q, via, tab), 700, instant);
+  later(() => planAnswered(q, via, tab, id), 700, instant);
 }
-function planAnswered(q, via, tab) {
-  if (S.q !== q || q.preparing !== via) return; // the questionnaire was closed: the plan is dropped (hub_plan_drop)
-  q.preparing = null; const ans = S.sim.plan;
+function planAnswered(q, via, tab, id) {
+  if (S.q !== q || q.planCall !== id) return; // not the latest call (Back, a newer call, or the questionnaire closed): dropped
+  q.preparing = null; q.planCall = null; const ans = S.sim.plan;
   if (via === "unpack") {
     S.tabs = S.tabs.filter((x) => x.id !== tab.id); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : null;
     if (!S.tabs.length) q.from = "empty"; S.overlay = "q";
@@ -970,7 +973,9 @@ function renderQ() {
   if (q.step === "review") { body = renderReview(); const busy = q.pf && (q.pf.state === "running" || q.pf.state === "ok");
     // rev 6 (X1): Set Up Hub is enabled only while the review has a plan (not after unknown_plan or a rejection, not while Review Again waits).
     const noPlan = !!q.expired || !!q.preparing;
-    foot = `<button class="btn ghost left" id="q-back" ${busy ? "disabled" : ""}>Back</button><button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-go" ${busy || noPlan ? "disabled" : ""}${noPlan && !busy ? ' title="Review Again first"' : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Set Up Hub"}</button>`; }
+    // rev 7 (R8): no title tooltip (keyboard and screen-reader users never get it on a disabled button); the block's heading,
+    // which is on screen and holds focus, describes the button instead.
+    foot = `<button class="btn ghost left" id="q-back" ${busy ? "disabled" : ""}>Back</button><button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-go" ${busy || noPlan ? "disabled" : ""}${noPlan && !busy ? ' aria-describedby="xp-h"' : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Set Up Hub"}</button>`; }
   else { body = renderAnswers(); const busy = q.mode === "existing" && q.ex.pf && (q.ex.pf.state === "running" || q.ex.pf.state === "ok");
     foot = q.mode === "new" ? `<button class="btn" id="q-cancel">Cancel</button>${q.preparing === "review" ? `<button class="btn primary" id="q-review" aria-disabled="true"><span class="spin" aria-hidden="true"></span>Preparing…</button>` : `<button class="btn primary" id="q-review" ${q.rolesState === "error" ? 'disabled title="Needs a role"' : ""}>Review Setup</button>`}` : `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-open" ${busy ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Open Hub"}</button>`; }
   foot = `<div class="pbtns">${foot}</div>`;
@@ -1254,6 +1259,7 @@ const P = [
     ["Review Setup: hub_plan rejected", "rev 6 X1", () => { base({ plan: "rejected" }); openQ("palette", SAMPLE()); submitAnswers(true); }],
     ["Set Up Hub: the plan is gone", "A m15", () => { review({}); S.q.expired = true; S.focus = "#xp-h"; say("This review is out of date, so setup didn't start.", true); S.caption = "<b>7.2</b> · hub_run_prepare refused unknown_plan: nothing checked or written; Review Again"; }],
     ["Review Again: preparing", "rev 6 X1", () => { review({}); S.q.expired = true; S.holdPlan = true; askPlan("again", false); }],
+    ["Review Again: Back while it waits", "rev 7 R1", () => { review({}); S.q.expired = true; askPlan("again", false); backToAnswers(); }],
     ["Review Again: hub_plan rejected", "rev 6 X1", () => { review({ plan: "rejected" }); S.q.expired = true; askPlan("again", true); }],
     ["Review Again: hub_plan answered errors", "rev 6 X1", () => { review({ plan: "errors" }); S.q.expired = true; askPlan("again", true); }],
     ["Set Up Hub: inside a folder in use", "rev 5 n5", () => { review({ samefolder: "inside" }); startPreflight(true, false); S.caption = "<b>5.6</b> · relation inside: its own body, no “same folder” claim"; }],
@@ -1349,9 +1355,17 @@ function choose(which) {
   openQ("choice"); S.caption = "<b>6</b> · opened from the choice: Cancel or Esc opens one terminal tab"; render();
 }
 function cancelQ() {
-  const from = S.q.from; S.overlay = null; S.q.preparing = null; // a plan that answers after this is dropped (hub_plan_drop)
+  const from = S.q.from; S.overlay = null; S.q.preparing = null; S.q.planCall = null; // a plan that answers after this is dropped (hub_plan_drop)
   if (from === "choice" || !S.tabs.length) { addPlainTab(true); if (S.tour === "waiting") S.tour = "shown"; S.caption = from === "choice" ? "<b>6.5</b> · cancelled from the choice: one terminal tab, recorded" : "<b>4.3</b> · no tab was left: Cancel opens one terminal tab"; }
   else S.focus = "#term";
+  render();
+}
+// Back (7.1): to the answers, every answer kept. rev 7 (R1): Back stays usable while Review Again waits; it ends that wait,
+// and the pending call's answer is dropped when it comes (q.planCall cleared). Review Setup asks a new hub_plan.
+function backToAnswers() {
+  const q = S.q; const wasWaiting = q.preparing === "again";
+  q.step = "answers"; q.pf = null; q.aFail = null; q.inUse = null; q.expired = false; q.preparing = null; q.planCall = null; S.focus = "#f-role";
+  if (wasWaiting) S.caption = "<b>7.2</b> · Back while Review Again waited: the answers, every answer kept; that call's answer is dropped when it comes";
   render();
 }
 function submitAnswers(instant) {
@@ -1384,7 +1398,7 @@ document.addEventListener("click", (ev) => {
   switch (el.id) {
     case "q-x": case "q-cancel": return cancelQ();
     case "q-review": return submitAnswers(false);
-    case "q-back": S.q.step = "answers"; S.q.pf = null; S.q.aFail = null; S.q.inUse = null; S.q.expired = false; S.q.preparing = null; S.focus = "#f-role"; render(); return;
+    case "q-back": backToAnswers(); return;
     case "q-go": S.q.aFail = null; S.q.inUse = null; S.q.expired = false; return startPreflight(false, false);
     case "q-replan": if (S.q.preparing) return; return askPlan("again", false);
     case "q-open": return openExisting(false);

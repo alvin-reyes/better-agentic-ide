@@ -8,7 +8,15 @@ owns how the run, the preflight and the hub-tab flag work. This spec gives the
 screens, the states, the exact words and the keys. What the UX needs from the
 architecture is listed in section 14; PRD notes are in section 15.
 
-Status: **revision 6, 2026-11-09**, answering the round-5 delta review's
+Status: **revision 7, 2026-11-09**, folding in the two UX items left by the
+round-6 joint review (section 16.000): **the webview uses only the answer to
+its latest `hub_plan` call** and drops every other answer (7.2, 14.3);
+**Back stays usable while Review Again waits**, and leaving that way drops
+the pending answer (7.2, 11); and the disabled **Set Up Hub** no longer relies
+on a tooltip: it is described by the block heading that explains it
+(`aria-describedby`, 7.1, 12).
+
+Revision 6, 2026-11-09, answered the round-5 delta review's
 blocker X1 and minor U1 (section 16.00): the review is planned on every entry
 into Review, as the architecture's revision 5 decided (PR #101, `7655ee4`,
 design 11.2; `hub-onboarding.md`'s `hub_plan` lifetime): **Review opens only
@@ -719,7 +727,8 @@ as "Preparing the review" above shows, and Review opens on its answer:
 `hub_plan` is a local call and usually answers within a moment, so the
 waiting state has no announcement and no time limit. If the dialog is
 closed while it waits, its plan is dropped when it arrives
-(`hub_plan_drop`).
+(`hub_plan_drop`). Only the answer to the latest `hub_plan` call is ever
+used (revision 7, R1; the rule is in 7.2).
 
 **Cancel, Esc and ✕** (OB-2 AC5, OB-1 AC2) close the dialog, write nothing
 and start nothing (during a check, they stop it first). From the first-launch
@@ -833,11 +842,18 @@ Footer: **Back** · **Cancel** · **Set Up Hub** (primary, focused when the
 review opens, so Enter confirms). **Set Up Hub is enabled only while the
 review has a plan** (revision 6, X1): Review opens once `hub_plan` has
 answered (6.5), so it is enabled when the review opens with a plan; it is
-**disabled** (the HTML `disabled`, with the title "Review Again first") while
+**disabled** (the HTML `disabled`) while
 the review has none: after `hub_plan` was rejected, after `{refused:
 "unknown_plan"}`, and while Review Again waits. In each of those cases focus
 is on a block's heading or on Review Again, never on Set Up Hub, so the
-disabled button never holds focus. **Back** returns to the answers with every
+disabled button never holds focus. **It has no title tooltip** (revision 7,
+R8): a disabled button's tooltip never reaches keyboard or screen-reader
+users, and the reason is already on screen. Instead, while disabled, Set Up
+Hub has `aria-describedby` pointing to the heading of the block that
+explains it ("This review is out of date, so setup didn't start." or
+"Better Terminal couldn't make the review: …"), so a screen reader reaching
+the button in browse mode hears "Set Up Hub, button, dimmed" followed by
+that heading. When it is enabled again the attribute goes. **Back** returns to the answers with every
 answer kept and focus on the first field, **Your role** (the mode radios are
 above it but are not an answer to check). **Edit Answers** inside a link
 refusal (8.4) instead focuses **Code repos**, the field to change.
@@ -988,7 +1004,31 @@ the top of the review, focus on its heading, title announced assertively, no
 **Review Again** asks `hub_plan(answers)` again. While it waits, it reads
 **Preparing…** with a spinner and keeps focus (`aria-disabled="true"`, as
 Review Setup in 6.5); pressing it again does nothing; Set Up Hub stays
-disabled; Back and Cancel work. On its answer (architecture revision 5,
+disabled; **Back and Cancel stay usable** (revision 7, R1).
+
+*Why Back stays usable here, when Review Setup's form goes `inert` while it
+waits:* the form goes inert so the answers can't change under a call made
+from them; on Review nothing can be edited, so there is nothing to protect.
+And `hub_plan` has no time limit: if it never answers, Back is the only way
+out that keeps the answers (Cancel throws them away), and it is the way the
+"couldn't make the review" block itself points to. **Back during the wait
+ends it:** the dialog returns to the answers as Back always does (every
+answer kept, focus on Your role, nothing announced), and the pending call's
+answer is dropped when it comes, whatever it is. Going on means Review
+Setup, which asks a new `hub_plan` call (6.5).
+
+**Only the latest `hub_plan` call counts** (revision 7, R1). The webview
+uses only the answer to its latest `hub_plan` call and drops every other
+answer, whichever comes first: it shows nothing, moves no focus, announces
+nothing and changes no state for a dropped answer. Back, Cancel, Esc and ✕
+also leave no call current, so an answer arriving after them is dropped too
+(after closing, `hub_plan_drop` covers it, 14.3). The waiting buttons do
+nothing while a call is pending, so in practice the only way to have two
+calls out is Back during Review Again's wait followed by Review Setup; only
+Review Setup's answer is used. Rust also ignores stale calls, so the two
+sides agree. No dropped answer needs a `hub_plan_drop` of its own.
+
+On the latest call's answer (architecture revision 5,
 design 11.2 item 5):
 
 - **a plan**: the review is redrawn from the new plan (the commands may differ
@@ -1791,7 +1831,7 @@ Trash). A red run notice:
 | Choice | Enter = focused option (starts on Open a terminal) · Esc = Open a terminal · ⌘T = Open a terminal · ↑↓ / Tab move · ⌘N, ⌘,, ⌘P, ⌘K, ⌘W inert |
 | Questionnaire | Tab follows visual order: mode radios (←→ inside) → Your role → Who the work is for → Your name → Hub folder → Secret names + Add → chips' ✕ → Code repos + Add → chips' ✕ → More options → (Hub name) → Cancel → Review Setup. Enter in a chip input adds; Enter in another single-line text field = the primary button; Enter elsewhere does what the control does. Esc = Cancel. Backspace in an empty chip input focuses the last chip's ✕. |
 | Preparing the review | focus stays on Review Setup (or Review Again), which reads Preparing… and is `aria-disabled`; Enter and Space do nothing; Tab reaches Cancel (and Back on Review); Esc = Cancel |
-| Review | Set Up Hub focused · Enter confirms · Esc = Cancel · Back is a button (no shortcut, so Esc never means Back) · with no plan, Set Up Hub is disabled and focus is on the block's heading; Tab reaches Review Again |
+| Review | Set Up Hub focused · Enter confirms · Esc = Cancel · Back is a button (no shortcut, so Esc never means Back) · with no plan, Set Up Hub is disabled and focus is on the block's heading; Tab reaches Review Again · while Review Again waits, Back still works and drops that call's answer (7.2) |
 | Preflight | focus on the "Checking this Mac" heading · Tab reaches Cancel · on failure (one or several), focus on the failure block's heading; Tab reaches each item's Copy buttons in order |
 | Same folder in use (5.6) | focus on the block's heading; Back and Set Up Hub as usual |
 | Run notice | focus on the first action button · Tab between buttons · Enter = focused · Esc = the notice's leave action, only with focus in the notice · ⌘` to the terminal and back |
@@ -1833,6 +1873,8 @@ existing sub-terminal region is the polite one). Field errors use
 | `hub_plan` answers `{ errors }` | ui/Field `role="alert"` (only) + focus to the first answer with an error | the error text |
 | The review couldn't be made (`hub_plan` rejected) | (focus to the block heading) + assertive | the block's title |
 | Review Again gets a plan | polite + focus to Set Up Hub | "Review updated." |
+| Back while Review Again waits (revision 7, R1) | none (focus to Your role) | (the pending answer is dropped silently when it comes) |
+| An answer to a call that isn't the latest | none | (dropped: no focus move, no change) |
 | Secret notice | polite + focus | "Store the secret grafana-token? 1 of 2. Store asks for its value in a hidden prompt…" |
 | After Store, prompt ready | polite | "Type the value for grafana-token now, then press Enter. Nothing appears while you type." |
 | Multi-line paste refused | polite | "That paste had more than one line, so none of it was sent." |
@@ -1852,6 +1894,8 @@ existing sub-terminal region is the polite one). Field errors use
 - Notices: `role="group"`, `aria-labelledby` its title,
   `aria-describedby` its body.
 - Icons are `aria-hidden`; the words carry the meaning.
+- A disabled Set Up Hub has no `title`; it has `aria-describedby` the
+  heading of the block that explains why (7.1; revision 7, R8).
 
 ---
 
@@ -1863,7 +1907,7 @@ existing sub-terminal region is the polite one). Field errors use
 | New tab row / palette | absent (setting off, not macOS, engagement instance) | n/a | n/a | no template → 5.3 | opens the questionnaire |
 | Questionnaire (new) | fresh, defaults | roles loading; preparing the review (Review Setup waits for `hub_plan`, focused, `aria-disabled`) | prefilled repo; empty-slug client; parent will be created | every 6.4 row (incl. ancestor missing, parent not a folder, not a folder, unfinished, in use by another tab); roles failed; same folder in use on Set Up Hub; `hub_plan` answers `{ errors }` (focus to the first answer with an error) | Review (opens once `hub_plan` answers a plan) |
 | Questionnaire (existing) | empty path | checking the folder (inline git); checking after Open Hub; slow | option on, notice naming checkouts; hub.conf not readable line | missing; not a folder; not a hub; unfinished + ways; tools missing; check failed; in use; preflight failures; link refusal | finished hint; Agent hub tab opens |
-| Review | no secrets, no repos (no memory notice) | preflight checking (per check, slow line); Review Again waiting for `hub_plan` (Set Up Hub disabled) | parent created; checkout missing; sync off | one preflight failure (each check and detail); several at once with Not checked rows; Command Line Tools stopping the rest; (a) failed: the tab waits for `hub_plan`, then Review with a new plan and Set Up Hub runs again, or Answers with `{ errors }`, or no plan; plan gone ("out of date", Set Up Hub disabled); the review couldn't be made (`hub_plan` rejected: no plan, Set Up Hub disabled); in use: same, inside, contains | run starts |
+| Review | no secrets, no repos (no memory notice) | preflight checking (per check, slow line); Review Again waiting for `hub_plan` (Set Up Hub disabled, described by the block's heading); Back while it waits (its answer dropped) | parent created; checkout missing; sync off | one preflight failure (each check and detail); several at once with Not checked rows; Command Line Tools stopping the rest; (a) failed: the tab waits for `hub_plan`, then Review with a new plan and Set Up Hub runs again, or Answers with `{ errors }`, or no plan; plan gone ("out of date", Set Up Hub disabled); the review couldn't be made (`hub_plan` rejected: no plan, Set Up Hub disabled); in use: same, inside, contains | run starts |
 | Run tab | n/a | run bar, step n of m; (f) waiting for another setup to finish linking, one sentence per `holder.key` (`f`, `open_setup`, `removal`), and the holder changing; secret "don't type yet"; (a) failed, waiting for `hub_plan` ("Opening your answers again…") | secret prompt ready; multi-line paste refused; Skip | (b), (c), (c) commit check, (d), (d) prompt not hidden, (f), (f) link, (f) link check failed, (f2) notices; helper lost; Claude not found; hub.conf unreadable; background-tab dot | session started; shell after exit; stopped (L5) |
 | Removal | n/a | removing… | summary without left-behind; Remove not offered (later commits, not created) | removal stopped (unlink, Trash); kept, with `removal_failed.left`'s lists; Trash failed on close with Remove (tab stays; quit or window close cancelled, and the notice says so) | summary (T4 / no T4); Move to New Window hidden while it shows (m11) |
 | Confirmations | n/a | n/a | n/a | n/a | remove; edit; C1 close or quit during (b); C2 busy confirm during (c)–(h); C3 close during removal; C4 batch / window / quit with a making or removing run (Remove only when one is making; Close stops a removal); C4 with one making run uses C1's question; quit during (c)–(h) asks nothing |
@@ -1987,7 +2031,7 @@ Commands, with what the UX uses each for:
 | `hub_folder_kind` | 6.3, 6.4 inline, 5.6's `in_setup` |
 | `hub_existing_info` | 6.3's notice and hub.conf line |
 | `hub_prefill` | 5.4, 6.2 |
-| `hub_plan` (→ plan \| `{ errors }`; rejected) | the review (7.1), called on every entry into Review and by Review Again; Review opens only once it answers (6.5, 7.2, 7.3) |
+| `hub_plan` (→ plan \| `{ errors }`; rejected) | the review (7.1), called on every entry into Review and by Review Again; Review opens only once it answers (6.5, 7.2, 7.3). **The webview uses only the answer to its latest `hub_plan` call and drops every other answer**; Back and closing the questionnaire leave no call current (revision 7, R1; 7.2). Rust also ignores stale calls |
 | `hub_plan_drop` | only when the questionnaire is closed (Cancel, Esc, ✕, the window closing), including a plan that answers after that; a run never drops its plan; no UI of its own |
 | `hub_run_prepare` (→ `{run_id}` \| `{refused: {in_setup}}` \| `{refused: "unknown_plan"}`), `hub_run_cancel`, `hub_run_start` | 7.2's preflight and its "out of date" block, its Cancel, the tab opening (8.1) |
 | `hub_run_show` | every printed line (8.2.1) |
@@ -2071,6 +2115,13 @@ written.
 ---
 
 ## 16. Review findings and answers
+
+### 16.000 Revision 7: the round-6 joint review's UX items (R1, R8)
+
+| Finding | Answer in this revision | Where |
+|---|---|---|
+| **R1** concurrent `hub_plan` calls | The webview uses only the answer to its latest `hub_plan` call and drops every other answer (no focus, no announcement, no state change); Back, Cancel, Esc and ✕ leave no call current. **Back stays usable while Review Again waits** (chosen over making it inert like Review Setup's form): nothing on Review can change under the call, `hub_plan` has no time limit, and Back is the only way out that keeps the answers and the one the "couldn't make the review" block names. Back ends the wait and the pending answer is dropped; Review Setup asks a new call. Rust also ignores stale calls, so either choice was safe | 6.5, 7.2, 11, 12, 13, 14.3; mockup state "Review Again: Back while it waits" (calls carry an id; `planAnswered` checks it) |
+| **R8** disabled Set Up Hub | The "Review Again first" tooltip is gone. While disabled, Set Up Hub has `aria-describedby` pointing to the explaining block's heading (`xp-h`), which is on screen and holds focus | 7.1, 12, 13; mockup |
 
 ### 16.00 Revision 6: the round-5 delta review (X1 blocker, U1)
 
