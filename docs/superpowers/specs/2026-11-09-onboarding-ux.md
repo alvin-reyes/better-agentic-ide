@@ -8,14 +8,25 @@ owns how the run, the preflight and the hub-tab flag work. This spec gives the
 screens, the states, the exact words and the keys. What the UX needs from the
 architecture is listed in section 14; PRD notes are in section 15.
 
-Status: **revision 5, 2026-11-09**, answering the minors of the round-4 delta
+Status: **revision 6, 2026-11-09**, answering the round-5 delta review's
+blocker X1 and minor U1 (section 16.00): the review is planned on every entry
+into Review, as the architecture's revision 5 decided (PR #101, `7655ee4`,
+design 11.2; `hub-onboarding.md`'s `hub_plan` lifetime): **Review opens only
+once `hub_plan` has answered**, and Review Setup (or Review Again) waits for
+it (6.5, 7.1, 7.2); **Set Up Hub is disabled whenever the review has no plan**;
+`hub_plan`'s `{ errors }` goes to the first answer with an error, inline,
+and only a rejected call shows the "couldn't make the review" block (7.2);
+`hub_plan_drop` is called only when the questionnaire is closed (14.3); after
+step (a) fails, the tab waits for `hub_plan` before the questionnaire comes
+back (7.3); and the setup-lock announcement for a removal no longer says
+"to finish linking" (12).
+
+Revision 5, 2026-11-09, answered the minors of the round-4 delta
 review (n1, n2, n5, n6; m13 and m14 closed; section 16.0): the setup lock's
 holder gets copy for each `holder.key` (8.1), Set Up Hub works again after a
 failure and the "out of date" block names no made-up cause (7.2, 7.3), the
 nested-folder refusal gets a body per relation (5.6), and a Trash failure
 after Remove and Quit or a window close says what didn't happen (9.3, 9.5).
-The architecture's revision 5 (PR #101) is being made in parallel; where this
-spec waits on it, it says so.
 
 Revision 4, 2026-11-09, answered the round-3 joint review of the
 architecture's and this spec's revision 3, which came back BLOCKED (findings
@@ -593,7 +604,8 @@ Checks run as F1's form does: after a field first loses focus, then live as
 the developer types; the hub folder's kind (`hub_folder_kind(path, new)`,
 design 6.7, which may run Better Terminal's own git) on blur, 400 ms after
 typing stops, and on submit. Pressing **Review Setup** with any error moves
-focus to the first field in error and goes nowhere. The backend (the
+focus to the first field in error and goes nowhere; with none, it waits for
+`hub_plan` (6.5), whose `{ errors }` answer is shown the same way. The backend (the
 preflight and `bin/init`) still decides. `<path>` and `<parent>` are
 `~`-abbreviated, in mono. `<n>` is the trimmed value's length in code points.
 
@@ -672,6 +684,7 @@ that control does natively and never submits.
 | State | What shows |
 |---|---|
 | Loading roles | Your role disabled, "Loading roles…"; other fields usable; **Review Setup** enabled (pressing it waits) |
+| Preparing the review (revision 6, X1) | after **Review Setup** passes the field checks: `hub_plan(answers)` is called; **Review Setup** reads **Preparing…** with a spinner and stays focused (`aria-disabled="true"`, not `disabled`, so focus never drops to the page); the form above it is `inert`; pressing it again, or Enter, does nothing; **Cancel**, Esc and ✕ still close the dialog. Review opens when `hub_plan` answers (below) |
 | Fresh | defaults filled, focus on Who the work is for |
 | Prefilled repo | Code repos holds `o/r=/x/r`, "from this tab" |
 | Invalid | field errors; pressing the primary moves focus to the first |
@@ -682,6 +695,31 @@ that control does natively and never submits.
 | Existing: preflight failed | failure block (one or several), **Open Hub** re-runs |
 | Existing: link refused | 8.4's message in the dialog |
 | No template | the empty state (5.3) |
+
+**Review opens only once `hub_plan` has answered** (revision 6, X1;
+architecture revision 5, design 11.2 item 3: the webview calls
+`hub_plan(answers)` on every entry into Review). Every way into Review from
+the answers goes through **Review Setup**: the first time, after **Back**,
+after **Edit Answers** in a link refusal (8.4), and after **Move to Trash and
+Edit** (9.2), which reopens the answers. Pressing it checks the fields (6.4);
+with an error it goes nowhere, as before. With none it waits for `hub_plan`
+as "Preparing the review" above shows, and Review opens on its answer:
+
+- **a plan**: Review opens, focus on **Set Up Hub** (enabled), as 7.1 says.
+  Nothing is announced: focus landing on Set Up Hub says where the developer is.
+- **`{ errors }`** (the answers fail `hub_check` now, for example the folder
+  appeared since its inline check): the dialog stays on the answers, the
+  errors show inline (6.4) and focus moves to the first answer with an
+  error, exactly as pressing Review Setup with a field error does. No block.
+- **rejected** (an internal failure): Review opens **without a plan**: 7.2's
+  "couldn't make the review" block at the top, focus on its heading, **Set Up
+  Hub disabled** (7.1). Your answers show; the sections made from the plan
+  (folders, what will run, the notices) don't.
+
+`hub_plan` is a local call and usually answers within a moment, so the
+waiting state has no announcement and no time limit. If the dialog is
+closed while it waits, its plan is dropped when it arrives
+(`hub_plan_drop`).
 
 **Cancel, Esc and ✕** (OB-2 AC5, OB-1 AC2) close the dialog, write nothing
 and start nothing (during a check, they stop it first). From the first-launch
@@ -792,7 +830,14 @@ Checkout paths appear expanded (no `~`) in commands.
   encoded_hub, entry, prediction: true}` (N21) and says it is a prediction.
 
 Footer: **Back** · **Cancel** · **Set Up Hub** (primary, focused when the
-review opens, so Enter confirms). **Back** returns to the answers with every
+review opens, so Enter confirms). **Set Up Hub is enabled only while the
+review has a plan** (revision 6, X1): Review opens once `hub_plan` has
+answered (6.5), so it is enabled when the review opens with a plan; it is
+**disabled** (the HTML `disabled`, with the title "Review Again first") while
+the review has none: after `hub_plan` was rejected, after `{refused:
+"unknown_plan"}`, and while Review Again waits. In each of those cases focus
+is on a block's heading or on Review Again, never on Set Up Hub, so the
+disabled button never holds focus. **Back** returns to the answers with every
 answer kept and focus on the first field, **Your role** (the mode radios are
 above it but are not an answer to check). **Edit Answers** inside a link
 refusal (8.4) instead focuses **Code repos**, the field to change.
@@ -911,23 +956,24 @@ OK line names the checkouts the template's own code found (`links` passed
 `{checkouts}`): *OK · ~/src/web*. git name and email is not shown: opening a
 hub makes no commit.
 
-**Set Up Hub after a failure works again** (revision 5, n2). After a failed
-preflight (the review stays, with its failure block) and after step (a) fails
-(7.3, the questionnaire returns on Review), **Set Up Hub** starts a new
-preflight and never lands on the "out of date" block below. The architecture's
-revision 5 either keeps the plan until the questionnaire closes or has the
-webview ask `hub_plan(answers)` again on return; either way the developer sees
-the same review. With a re-plan, the review's lists are redrawn from the new
-plan before focus lands on the failure block, and nothing more is said. If
-that re-plan fails, the block of "Review Again fails" (below) shows under the
-failure block, and Review Again is its way on.
+**Set Up Hub after a failure works again** (revision 5, n2; revision 6, X1).
+After a failed preflight the review stays, with its failure block, and so
+does its plan: a run never drops its plan (`hub_run_prepare` copies it), so
+**Set Up Hub** starts a new preflight with the same plan. After step (a)
+fails, the questionnaire returns on Review through a new `hub_plan(answers)`
+(the architecture re-plans on every entry into Review; 7.3 gives the wait),
+so Set Up Hub starts a new preflight with the new plan. Neither lands on the
+"out of date" block below.
 
 **The plan is gone** (`hub_run_prepare` → `{refused: "unknown_plan"}`;
 architecture revision 4, m15). Better Terminal no longer has the plan it made
-for the review. The copy names no cause: plans have no time limit, and a
-reload loses the review anyway, so revision 4's "sat open too long, or the
-window reloaded" was wrong; once the architecture names when this can still
-happen, the body may say so. Nothing was checked or written. Like the same-folder refusal (5.6): a failure block at
+for the review. The architecture's revision 5 (design 11.2 item 4) says when:
+the window's webview restarted since the plan, or this Set Up Hub was pressed
+after the plan was replaced or dropped; never by time. Neither is something
+the developer did or can do differently, so the copy names no cause and never
+says the review "sat open too long" or "expired". Nothing was checked or
+written. The review now has no plan, so **Set Up Hub is disabled** until
+Review Again gets one. Like the same-folder refusal (5.6): a failure block at
 the top of the review, focus on its heading, title announced assertively, no
 "Checking this Mac" section:
 
@@ -939,46 +985,77 @@ the top of the review, focus on its heading, title announced assertively, no
 >
 > **[Review Again]** (the next Tab stop after the heading)
 
-**Review Again** asks `hub_plan(answers)` again and redraws the review from
-the new plan (the commands may differ if something changed); the block goes,
-focus moves to **Set Up Hub** (as when the review first opens), and the
-polite region says "Review updated." Back still returns to the answers.
+**Review Again** asks `hub_plan(answers)` again. While it waits, it reads
+**Preparing…** with a spinner and keeps focus (`aria-disabled="true"`, as
+Review Setup in 6.5); pressing it again does nothing; Set Up Hub stays
+disabled; Back and Cancel work. On its answer (architecture revision 5,
+design 11.2 item 5):
 
-**Review Again fails** (revision 5, n2: `hub_plan` returns an error instead of
-a plan). The block stays in place and its words change; focus moves to its
-heading and the title is announced assertively:
+- **a plan**: the review is redrawn from the new plan (the commands may differ
+  if something changed); the block goes, **Set Up Hub** is enabled and takes
+  focus (as when the review first opens), and the polite region says "Review
+  updated."
+- **`{ errors }`**: not a block. The dialog goes back to the answers, the
+  errors show inline (6.4), and focus moves to the first answer with an
+  error, as Review Setup does with a field error. The answers are kept.
+- **rejected**: the "couldn't make the review" block below replaces the block
+  in place; focus moves to its heading and its title is announced
+  assertively. Set Up Hub stays disabled.
 
-> ✕ **Better Terminal couldn't make the review again: <first line of the
-> error>.**
+**The review couldn't be made** (revision 5, n2; revision 6, X1: `hub_plan`'s
+call was **rejected**, an internal failure, on any entry into Review or on
+Review Again). The review has **no plan**: the block shows at the top, Your
+answers below it, and none of the sections made from the plan (when the review
+already showed a plan's lists, as after the "out of date" block, they go too,
+because they are no longer the plan Rust has). **Set Up Hub is disabled**;
+Back and Cancel work:
+
+> ✕ **Better Terminal couldn't make the review: <first line of the error>.**
 > *Nothing was checked or written, and your answers are kept. Choose Review
 > Again to try once more, or Back to check your answers. If this keeps
 > happening, quit Better Terminal and open it again.*
 >
-> **[Review Again]**
+> **[Review Again]** (the next Tab stop after the heading)
 
-`<first line of the error>` is `hub_plan`'s message in plain words (for
-example "it couldn't read the bundled agent hub template"). When the error is
-an answer that no longer passes its check (a field rule), Review Again does
-what Review Setup does with an error instead: it returns to the answers with
-focus on that field and its inline error (6.4). Set Up Hub stays in the
-footer; pressing it with no plan gets the "out of date" block again.
+`<first line of the error>` is the rejection's message in plain words (for
+example "it couldn't read the bundled agent hub template"). This block is
+only for a rejected call: `hub_plan`'s `{ errors }` answer never shows it,
+and goes to the first answer with an error instead (above).
 
 ### 7.3 When step (a) fails (OB-5 AC1)
 
 Unpacking happens after the tab has opened. When it fails (`run_ended {how:
 unpack_failed {message, removed}}`), nothing is left: the hub folder never
 existed (S4a unpacks beside it and renames at the end), and a `~/hubs` the run
-created is removed again (`removed` lists it). The Agent hub tab closes, and the
-questionnaire comes back on **Review** with every answer kept and this block at
-the top of the body, focus on its heading, assertive announcement of its
-title:
+created is removed again (`removed` lists it).
+
+**Coming back to Review waits for the plan** (revision 6, X1). The webview
+calls `hub_plan(answers)` at once. Until it answers, the Agent hub tab stays
+as it is, its run bar reading *Couldn't unpack the agent hub template ·
+Opening your answers again…* with its spinner; focus stays where it was;
+nothing is announced (the announcement comes with the block). When
+`hub_plan` answers, the tab closes and the questionnaire comes back with
+every answer kept and this block at the top of the body, focus on its
+heading, assertive announcement of its title:
 
 > ✕ **Better Terminal couldn't unpack the agent hub template: <message>.**
 > Nothing was left behind: `~/hubs`, which setup had created, was removed.
 > Your answers are kept. Choose Set Up Hub to try again.
 
-Set Up Hub then starts a new preflight, not the "out of date" block (7.2,
-"Set Up Hub after a failure works again"; revision 5, n2).
+By `hub_plan`'s answer:
+
+- **a plan**: on **Review**, with the new plan's lists; Set Up Hub is enabled
+  and starts a new preflight, not the "out of date" block (7.2, "Set Up Hub
+  after a failure works again").
+- **`{ errors }`**: on **Answers**, this block at the top of the answers'
+  body, the errors inline (6.4), and focus on the first answer with an error
+  (not on the block); the block's title is still announced assertively, then
+  the field's own alert. Its last sentence reads "Fix the answer below, then
+  choose Review Setup."
+- **rejected**: on **Review** without a plan: this block, then 7.2's
+  "couldn't make the review" block under it; focus on this block's heading;
+  both titles announced assertively; Set Up Hub disabled; Review Again is
+  the way on.
 
 `<message>` is the unpack's own error in plain words (for example "the disk is
 full" or "permission denied writing ~/hubs"). The second sentence names only
@@ -1411,7 +1488,9 @@ as is), Esc is the safe answer. They name the folder.
 > **[Cancel]** (focused) **[Move to Trash and Edit]**
 
 Then the tab closes (Q7) and the questionnaire opens on **Answers** with
-everything kept, focus on the first field (**Your role**). No summary is kept:
+everything kept, focus on the first field (**Your role**); Review Setup
+then plans again and waits for it, like every entry into Review (6.5). No
+summary is kept:
 after (b) nothing was linked or stored, so nothing is left behind and there
 is nothing to restore; the polite region says "Moved
 ~/hubs/acme-corp-staff-engineer to the Trash. Your answers are open." If the
@@ -1711,7 +1790,8 @@ Trash). A red run notice:
 |---|---|
 | Choice | Enter = focused option (starts on Open a terminal) · Esc = Open a terminal · ⌘T = Open a terminal · ↑↓ / Tab move · ⌘N, ⌘,, ⌘P, ⌘K, ⌘W inert |
 | Questionnaire | Tab follows visual order: mode radios (←→ inside) → Your role → Who the work is for → Your name → Hub folder → Secret names + Add → chips' ✕ → Code repos + Add → chips' ✕ → More options → (Hub name) → Cancel → Review Setup. Enter in a chip input adds; Enter in another single-line text field = the primary button; Enter elsewhere does what the control does. Esc = Cancel. Backspace in an empty chip input focuses the last chip's ✕. |
-| Review | Set Up Hub focused · Enter confirms · Esc = Cancel · Back is a button (no shortcut, so Esc never means Back) |
+| Preparing the review | focus stays on Review Setup (or Review Again), which reads Preparing… and is `aria-disabled`; Enter and Space do nothing; Tab reaches Cancel (and Back on Review); Esc = Cancel |
+| Review | Set Up Hub focused · Enter confirms · Esc = Cancel · Back is a button (no shortcut, so Esc never means Back) · with no plan, Set Up Hub is disabled and focus is on the block's heading; Tab reaches Review Again |
 | Preflight | focus on the "Checking this Mac" heading · Tab reaches Cancel · on failure (one or several), focus on the failure block's heading; Tab reaches each item's Copy buttons in order |
 | Same folder in use (5.6) | focus on the block's heading; Back and Set Up Hub as usual |
 | Run notice | focus on the first action button · Tab between buttons · Enter = focused · Esc = the notice's leave action, only with focus in the notice · ⌘` to the terminal and back |
@@ -1746,9 +1826,13 @@ existing sub-terminal region is the polite one). Field errors use
 | Run starts | polite | "Setting up the agent hub in a new tab." |
 | (a) failed | (focus to the block heading) + assertive | the block's title |
 | Each step starts | none (the run bar is `role="status"` but `aria-live="off"`) | |
-| (f) or a removal waits for the setup lock (`setup_waiting {state: waiting}`) | polite, once | "Waiting for another agent hub setup to finish linking." |
+| (f) or a removal waits for the setup lock (`setup_waiting {state: waiting}`) | polite, once | by the first `holder.key`: `f` or `open_setup`: "Waiting for another agent hub setup to finish linking."; `removal`: "Waiting for another agent hub setup." (revision 6, U1: a removal holding the lock is undoing links, not linking) |
 | The holder changes (`setup_waiting {state: waiting}` again) | none | (the bar's sentence changes in place) |
-| Review Again fails | (focus to the block heading) + assertive | the block's title |
+| Preparing the review (Review Setup or Review Again waits for `hub_plan`) | none | (focus stays on the button, which reads Preparing…) |
+| Review opens with a plan | (focus to Set Up Hub) | "Set Up Hub, button" |
+| `hub_plan` answers `{ errors }` | ui/Field `role="alert"` (only) + focus to the first answer with an error | the error text |
+| The review couldn't be made (`hub_plan` rejected) | (focus to the block heading) + assertive | the block's title |
+| Review Again gets a plan | polite + focus to Set Up Hub | "Review updated." |
 | Secret notice | polite + focus | "Store the secret grafana-token? 1 of 2. Store asks for its value in a hidden prompt…" |
 | After Store, prompt ready | polite | "Type the value for grafana-token now, then press Enter. Nothing appears while you type." |
 | Multi-line paste refused | polite | "That paste had more than one line, so none of it was sent." |
@@ -1777,10 +1861,10 @@ existing sub-terminal region is the polite one). Field errors use
 |---|---|---|---|---|---|
 | Choice | not shown (upgrade, 2nd window, no template, not macOS, engagement instance) | n/a | [F1 flag] three options | n/a | Enter/Esc/⌘T → one tab, recorded; quit → shown again |
 | New tab row / palette | absent (setting off, not macOS, engagement instance) | n/a | n/a | no template → 5.3 | opens the questionnaire |
-| Questionnaire (new) | fresh, defaults | roles loading | prefilled repo; empty-slug client; parent will be created | every 6.4 row (incl. ancestor missing, parent not a folder, not a folder, unfinished, in use by another tab); roles failed; same folder in use on Set Up Hub | Review |
+| Questionnaire (new) | fresh, defaults | roles loading; preparing the review (Review Setup waits for `hub_plan`, focused, `aria-disabled`) | prefilled repo; empty-slug client; parent will be created | every 6.4 row (incl. ancestor missing, parent not a folder, not a folder, unfinished, in use by another tab); roles failed; same folder in use on Set Up Hub; `hub_plan` answers `{ errors }` (focus to the first answer with an error) | Review (opens once `hub_plan` answers a plan) |
 | Questionnaire (existing) | empty path | checking the folder (inline git); checking after Open Hub; slow | option on, notice naming checkouts; hub.conf not readable line | missing; not a folder; not a hub; unfinished + ways; tools missing; check failed; in use; preflight failures; link refusal | finished hint; Agent hub tab opens |
-| Review | no secrets, no repos (no memory notice) | preflight checking (per check, slow line) | parent created; checkout missing; sync off | one preflight failure (each check and detail); several at once with Not checked rows; Command Line Tools stopping the rest; (a) failed, then Set Up Hub runs again; plan gone ("out of date"); Review Again fails; in use: same, inside, contains | run starts |
-| Run tab | n/a | run bar, step n of m; (f) waiting for another setup to finish linking, one sentence per `holder.key` (`f`, `open_setup`, `removal`), and the holder changing; secret "don't type yet" | secret prompt ready; multi-line paste refused; Skip | (b), (c), (c) commit check, (d), (d) prompt not hidden, (f), (f) link, (f) link check failed, (f2) notices; helper lost; Claude not found; hub.conf unreadable; background-tab dot | session started; shell after exit; stopped (L5) |
+| Review | no secrets, no repos (no memory notice) | preflight checking (per check, slow line); Review Again waiting for `hub_plan` (Set Up Hub disabled) | parent created; checkout missing; sync off | one preflight failure (each check and detail); several at once with Not checked rows; Command Line Tools stopping the rest; (a) failed: the tab waits for `hub_plan`, then Review with a new plan and Set Up Hub runs again, or Answers with `{ errors }`, or no plan; plan gone ("out of date", Set Up Hub disabled); the review couldn't be made (`hub_plan` rejected: no plan, Set Up Hub disabled); in use: same, inside, contains | run starts |
+| Run tab | n/a | run bar, step n of m; (f) waiting for another setup to finish linking, one sentence per `holder.key` (`f`, `open_setup`, `removal`), and the holder changing; secret "don't type yet"; (a) failed, waiting for `hub_plan` ("Opening your answers again…") | secret prompt ready; multi-line paste refused; Skip | (b), (c), (c) commit check, (d), (d) prompt not hidden, (f), (f) link, (f) link check failed, (f2) notices; helper lost; Claude not found; hub.conf unreadable; background-tab dot | session started; shell after exit; stopped (L5) |
 | Removal | n/a | removing… | summary without left-behind; Remove not offered (later commits, not created) | removal stopped (unlink, Trash); kept, with `removal_failed.left`'s lists; Trash failed on close with Remove (tab stays; quit or window close cancelled, and the notice says so) | summary (T4 / no T4); Move to New Window hidden while it shows (m11) |
 | Confirmations | n/a | n/a | n/a | n/a | remove; edit; C1 close or quit during (b); C2 busy confirm during (c)–(h); C3 close during removal; C4 batch / window / quit with a making or removing run (Remove only when one is making; Close stops a removal); C4 with one making run uses C1's question; quit during (c)–(h) asks nothing |
 | Restored | n/a | n/a | n/a | n/a | Agent hub, empty, shell; Hub removed never restored |
@@ -1793,8 +1877,8 @@ The architecture's revision 3 (PR #101, `c52ca49`; design 4.8.1, 5.0, 6.2,
 6.4, 6.5, 6.7 and 11; `hub-onboarding.md`'s "UX needs") answers every item
 revision 2 of this spec listed (N1 to N23). This spec now uses its names as
 they are. 14.1 maps each item; 14.1a lists what the architecture's revision 4
-adds for this spec's revision 4; 14.2 lists what is left; 14.3 lists the
-names.
+adds for this spec's revision 4; 14.1b what its revision 5 adds for this
+spec's revisions 5 and 6; 14.2 lists what is left; 14.3 lists the names.
 
 ### 14.1 Provided by the architecture's revision 3
 
@@ -1832,8 +1916,6 @@ names.
 | Need | Provided by | UX use |
 |---|---|---|
 | M-A: a run waiting for another's linking | `setup_waiting {key: f \| removal, state: waiting \| done, holder?: {hub, tab_id?}}` | 8.1's waiting bar, 5.6, 12 |
-| n1 (architecture revision 5, in progress) | `holder.key: f \| removal \| open_setup`; `setup_waiting {state: waiting}` re-sent when the holder changes | 8.1's sentence per key, updated in place |
-| n2 (architecture revision 5, in progress) | the plan kept until the questionnaire closes, or a re-plan on return; `hub_plan`'s error | 7.2, 7.3 |
 | M-B: close-with-Remove whose Trash fails | `hub_run_close` → `{closed} \| {kept_open: {reason: trash_failed}}`; `close_progress {state: kept_open}`; `hub_quit_answer` → `{quitting} \| {cancelled: {runs}}`; `removal_failed {part: trash}` in that tab | 9.3 |
 | m1: one answer, mapped by phase | `hub_run_close` maps `keep` / `remove` / `stop_removal` by Rust's phase at the call | 9.3's mapping table |
 | m4 (architecture) / m15: Not checked | `preflight_check {state: skipped, detail: {because: <check>}}`, the first failed check in order | 7.2 |
@@ -1843,6 +1925,16 @@ names.
 | m11: the summary survives | Move to New Window hidden and refused for a "Hub removed" tab while its summary shows | 9.4 |
 | m6: Keychain service | the template's `keychain_service`: `AGENT_KEYCHAIN_SERVICE`, `HUB_KEYCHAIN_SERVICE`, then `HUB_NAME`, then the folder's base name | 9.1, 9.4 |
 | m2: finished check | ADE's own `/usr/bin/git`: `rev-parse -q --verify HEAD`, `rev-parse -q --verify HEAD^{commit}`, `ls-tree HEAD -- hub.conf` | 6.3 |
+
+### 14.1b Added by the architecture's revision 5 (PR #101, `7655ee4`, design 11.2)
+
+| Need | Provided by | UX use |
+|---|---|---|
+| n1: the holder's wording | `setup_waiting.holder.key: f \| removal \| open_setup`; `setup_waiting {state: waiting}` re-sent whenever the run in the way changes (design 11.2 items 1, 2) | 8.1's sentence per key, updated in place; 12's announcement by key (U1) |
+| n2: re-plan on entering Review | `hub_plan(answers)` called on every entry into Review (first time, after Back, after `unpack_failed`, after `edit_answers`); Set Up Hub disabled until it answers; one current plan per window, no time limit, a run never drops it (design 11.2 item 3; `hub-onboarding.md`) | 6.5's "Preparing the review" (Review opens only once `hub_plan` answers), 7.1's footer, 7.2, 7.3, 9.2 |
+| n2: `unknown_plan` | only when the webview restarted since the plan, or an older Set Up Hub was pressed after the plan was replaced or dropped; never by time (design 11.2 item 4) | 7.2's "out of date" block, no cause named, Set Up Hub disabled |
+| n2: `hub_plan` fails | `hub_plan` → `{ errors: [{ field, code, message }] }` (the same errors as `hub_check`) or a rejected call (design 11.2 items 5, 6) | `{ errors }`: the first answer with an error, inline (6.5, 7.2); rejected: 7.2's "couldn't make the review" block, no plan, Set Up Hub disabled |
+| n3: Keychain service | usually `HUB_KEYCHAIN_SERVICE` (design 11.2 item 7, 11.1 item 11) | 9.1, 9.4 (as 14.1a's m6 row) |
 
 ### 14.2 Left, or designed around
 
@@ -1895,8 +1987,8 @@ Commands, with what the UX uses each for:
 | `hub_folder_kind` | 6.3, 6.4 inline, 5.6's `in_setup` |
 | `hub_existing_info` | 6.3's notice and hub.conf line |
 | `hub_prefill` | 5.4, 6.2 |
-| `hub_plan` | the review (7.1) |
-| `hub_plan_drop` | when the questionnaire closes (Cancel, Esc, the window closing) and when its run ends; no UI of its own |
+| `hub_plan` (→ plan \| `{ errors }`; rejected) | the review (7.1), called on every entry into Review and by Review Again; Review opens only once it answers (6.5, 7.2, 7.3) |
+| `hub_plan_drop` | only when the questionnaire is closed (Cancel, Esc, ✕, the window closing), including a plan that answers after that; a run never drops its plan; no UI of its own |
 | `hub_run_prepare` (→ `{run_id}` \| `{refused: {in_setup}}` \| `{refused: "unknown_plan"}`), `hub_run_cancel`, `hub_run_start` | 7.2's preflight and its "out of date" block, its Cancel, the tab opening (8.1) |
 | `hub_run_show` | every printed line (8.2.1) |
 | `hub_run_decide` (`store`, `skip`, `retry`, `keep`, `edit_answers`, `remove`) | every notice button (8.3) |
@@ -1980,14 +2072,25 @@ written.
 
 ## 16. Review findings and answers
 
+### 16.00 Revision 6: the round-5 delta review (X1 blocker, U1)
+
+| Finding | Answer in this revision | Where |
+|---|---|---|
+| **X1.1** `hub_plan_drop` | Called only when the questionnaire is closed (Cancel, Esc, ✕, the window closing); "and when its run ends" removed: a run never drops its plan | 14.3 |
+| **X1.2** re-plan on every entry into Review | Chosen: **Review opens only once `hub_plan` has answered**. Review Setup (and Review Again) waits for it, reading Preparing…, focused, `aria-disabled` (not `disabled`), the form `inert`; every entry from the answers goes through Review Setup (first time, after Back, after a link refusal's Edit Answers, after 9.2's Move to Trash and Edit); after step (a) fails the tab waits ("Opening your answers again…") and the questionnaire comes back once `hub_plan` answers. The "either keeps the plan … or re-plans" hedge is gone from 7.2 and 14.1a (14.1b states the re-plan) | 6.5, 7.1, 7.2, 7.3, 9.2, 11, 12, 13, 14.1b; mockup states "Review Setup: preparing the review", "(a) failed: waiting for hub_plan", "Review Again: preparing" |
+| **X1.3** rejected `hub_plan` | Set Up Hub is **disabled** while the review has no plan (after a rejection, after `unknown_plan`, while Review Again waits); focus is then on a block heading or Review Again, never on the disabled button. "Pressing it with no plan gets the 'out of date' block again" removed | 7.1, 7.2, 11; mockup |
+| **X1.4** `{ errors }` | Goes to the first answer with an error, inline (6.4), from Review Setup, Review Again and the return after (a); never the block. The block is renamed "The review couldn't be made" (title "Better Terminal couldn't make the review: <message>.") and is only for a rejected call, on any entry | 6.5, 7.2, 7.3, 12, 13; mockup states "Review Again: hub_plan answered errors", "Review Setup: hub_plan rejected" |
+| **X1.5** stale rows | 14.1a's n1 and n2 rows ("architecture revision 5, in progress") moved to a new 14.1b citing revision 5 (`7655ee4`, design 11.2) | 14.1a, 14.1b |
+| **U1** removal's announcement | By the first `holder.key`: `f` and `open_setup` keep "Waiting for another agent hub setup to finish linking."; `removal` says "Waiting for another agent hub setup." | 12; mockup |
+
 ### 16.0 Revision 5: the round-4 delta review (minors)
 
 | Finding | Answer in this revision | Where |
 |---|---|---|
 | **n1** `setup_waiting`'s `holder.key` | One sentence per key: `f` "Waiting for the setup of `<hub>` to finish linking Claude's memory.", `open_setup` "Waiting for bin/setup in `<hub>`, opened in another tab, to finish linking Claude's memory.", `removal` "Waiting for the removal of `<hub>` to finish undoing its links to Claude's memory." The event is re-sent when the holder changes; the bar replaces the sentence and name in place, announces nothing again, moves no focus. The bar grows to fit (the mockup's fixed 44 px cut the longest sentence off). Open Hub's `bin/setup` waits the same way (8.8) | 8.1, 8.8, 12, 13, 14.1a, 14.3 |
-| **n2** Set Up Hub after a failure | After a failed preflight or a failed (a), Set Up Hub starts a new preflight and never lands on "out of date", whichever way the architecture keeps the plan (kept until the questionnaire closes, or a re-plan on return); a failed re-plan shows the Review Again failure block | 7.2, 7.3 |
+| **n2** Set Up Hub after a failure | After a failed preflight or a failed (a), Set Up Hub starts a new preflight and never lands on "out of date", whichever way the architecture keeps the plan (kept until the questionnaire closes, or a re-plan on return); a failed re-plan shows the Review Again failure block. *Superseded by revision 6 (16.00, X1): the architecture re-plans on every entry into Review.* | 7.2, 7.3 |
 | **n2** "out of date" cause | The made-up cause ("sat open too long, or the window reloaded") is gone; the body says only "Better Terminal no longer has the plan it made for this review."; a real cause can be added once the architecture names one. Review Again is the next Tab stop after the heading (the mockup always focused the heading) | 7.2 |
-| **n2** Review Again when `hub_plan` fails | New copy: "Better Terminal couldn't make the review again: <first line of the error>." with Review Again and Back; a field-rule error returns to the answers like Review Setup; assertive | 7.2, 12, 13 |
+| **n2** Review Again when `hub_plan` fails | New copy: "Better Terminal couldn't make the review again: <first line of the error>." with Review Again and Back; a field-rule error returns to the answers like Review Setup; assertive. *Superseded by revision 6 (16.00, X1): the architecture re-plans on every entry into Review.* | 7.2, 12, 13 |
 | **n5** nested-folder body | The review block's first body sentence per relation, for a new and an existing hub; the case-only sentence for `same` only | 5.6 |
 | **n6** Trash fails after a quit or window close | One sentence after Retry's and Keep's: "Better Terminal didn't quit: choose Retry or Keep, then quit again." / "The window didn't close: choose Retry or Keep, then close it again."; also in the announcement; nothing added for a single tab | 9.3, 9.5, 12 |
 | **m13** C4 with one making run | **Closed.** C4 that lists exactly one run, and it is making, uses C1's question (Keep · Remove; quit: Keep and Quit · Remove and Quit), as in revision 4 | 9.3 |

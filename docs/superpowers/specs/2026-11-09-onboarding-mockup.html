@@ -216,7 +216,7 @@ aside{display:grid;gap:14px}
 <header class="page">
   <div>
     <h1>Set up your agentic environment (F2)</h1>
-    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 5 (answers the round-4 delta review: the setup lock's holder, the review after a failure, nested folders, a Trash failure on quit; spec section 16.0). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
+    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 6 (answers the round-5 delta review: Review opens only once hub_plan answers, Set Up Hub disabled without a plan, hub_plan's errors inline, the return after (a) waits for the plan, a removal's lock announcement; spec section 16.00). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
   </div>
   <div class="themes" role="group" aria-label="Theme">
     <button class="btn sm" data-theme-set="dark" aria-pressed="true">Dark (Precision)</button>
@@ -292,7 +292,7 @@ const FS = {
 const HUB_CHECKOUTS = { [HOME + "/work/hubs/globex-staff-engineer"]: ["~/src/web"] };
 
 /* ---------------- state ---------------- */
-const SIM0 = { template: "yes", f1: "off", inst: "main", t4: "yes", hubs: "no", gitname: "yes", clone: "no", roles: "ok", preflight: "pass", exgit: "ok", fail: "none", removal: "ok", linkwait: "no", replan: "ok", samefolder: "no", secretprompt: "ok", sync: "on", cfgdir: "no", agentstatus: "on", speed: "normal", later: "off", hubconf: "ok", commits: "no", mac: "yes" };
+const SIM0 = { template: "yes", f1: "off", inst: "main", t4: "yes", hubs: "no", gitname: "yes", clone: "no", roles: "ok", preflight: "pass", exgit: "ok", fail: "none", removal: "ok", linkwait: "no", plan: "ok", samefolder: "no", secretprompt: "ok", sync: "on", cfgdir: "no", agentstatus: "on", speed: "normal", later: "off", hubconf: "ok", commits: "no", mac: "yes" };
 let S;
 function freshQ() {
   return {
@@ -347,6 +347,7 @@ function folderValue() {
 function fsType(p) {
   if (p === HOME + "/hubs") return S.sim.hubs === "yes" ? "dir" : null;
   if (S.created.has(p)) return "hub";
+  if (S.q && S.q.appeared === p) return "dir";
   return FS[p] || null;
 }
 function textRule(v, which) {
@@ -564,12 +565,14 @@ function pfSection(pf, existing) {
 }
 // 5.6: the refusal before any check (no "Checking this Mac" section).
 // hub_run_prepare -> {refused: "unknown_plan"}: the plan is gone; nothing checked or written (architecture rev 4, m15).
-// n2 (rev 5): Review Again's own hub_plan failed. The block stays; Review Again tries once more.
+// rev 6 (X1): hub_plan was rejected (an internal failure) on any entry into Review or on Review Again. No plan; Set Up Hub disabled.
+const REJ_TITLE = "Better Terminal couldn't make the review: it couldn't read the bundled agent hub template.";
+const againBtn = () => S.q.preparing === "again" ? `<button class="btn" id="q-replan" aria-disabled="true"><span class="spin" aria-hidden="true"></span>Preparing…</button>` : `<button class="btn" id="q-replan">Review Again</button>`;
 function replanFailedBlock() {
-  return `<div class="box fail" role="group" aria-labelledby="xp-h"><h4 id="xp-h" tabindex="-1">${FAILI}<span>Better Terminal couldn't make the review again: it couldn't read the bundled agent hub template.</span></h4><p>Nothing was checked or written, and your answers are kept. Choose Review Again to try once more, or Back to check your answers. If this keeps happening, quit Better Terminal and open it again.</p><div class="acts" style="margin-top:8px"><button class="btn" id="q-replan">Review Again</button></div></div>`;
+  return `<div class="box fail" role="group" aria-labelledby="xp-h"><h4 id="xp-h" tabindex="-1">${FAILI}<span>${REJ_TITLE}</span></h4><p>Nothing was checked or written, and your answers are kept. Choose Review Again to try once more, or Back to check your answers. If this keeps happening, quit Better Terminal and open it again.</p><div class="acts" style="margin-top:8px">${againBtn()}</div></div>`;
 }
 function expiredBlock() {
-  return `<div class="box fail" role="group" aria-labelledby="xp-h"><h4 id="xp-h" tabindex="-1">${FAILI}<span>This review is out of date, so setup didn't start.</span></h4><p>Better Terminal no longer has the plan it made for this review. Nothing was checked or written, and your answers are kept. Choose Review Again to see the steps and commands for your answers once more, then choose Set Up Hub.</p><div class="acts" style="margin-top:8px"><button class="btn" id="q-replan">Review Again</button></div></div>`;
+  return `<div class="box fail" role="group" aria-labelledby="xp-h"><h4 id="xp-h" tabindex="-1">${FAILI}<span>This review is out of date, so setup didn't start.</span></h4><p>Better Terminal no longer has the plan it made for this review. Nothing was checked or written, and your answers are kept. Choose Review Again to see the steps and commands for your answers once more, then choose Set Up Hub.</p><div class="acts" style="margin-top:8px">${againBtn()}</div></div>`;
 }
 function inUseBlock(iu, existing) {
   return `<div class="box fail" role="group" aria-labelledby="iu-h"><h4 id="iu-h" tabindex="-1">${FAILI}<span>${iuFirst(iu.p, iu.r)}</span></h4><p>${iuBody(iu.p, iu.r, existing)} Your answers are kept.${caseNote(iu.p, iu.r)}</p><p>${existing ? "Choose Open Hub again after that setup ends, or turn off Run bin/setup and bin/doctor first." : "Choose Back to pick another folder, or choose Set Up Hub again after that setup ends."}</p></div>`;
@@ -604,12 +607,50 @@ const L = {
 const PAUSED = `<p><em>The terminal below doesn't take input until you choose.</em></p>`;
 function failsHere(r, k) { const f = r.fail; const hit = (f === k) || (f === "flink" && k === "f") || (f === "claude" && k === "i"); return hit && !r.failedOnce.has(k); }
 function unpackFailed(t) {
-  // 7.3: (a) failed. Nothing is left; the tab closes; the questionnaire returns on Review with the reason.
-  const r = t.run; S.created.delete(t.folder);
-  S.tabs = S.tabs.filter((x) => x.id !== t.id); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : null;
-  S.q.step = "review"; S.q.pf = null; S.q.aFail = { parent: r.createdParent }; if (!S.tabs.length) S.q.from = "empty";
-  S.overlay = "q"; S.focus = "#af-h"; S.caption = "<b>7.3</b> · step (a) failed: the questionnaire returns on Review, answers kept";
-  say("Better Terminal couldn't unpack the agent hub template: the disk is full.", true); render();
+  // 7.3 (rev 6, X1): (a) failed. Nothing is left. hub_plan(answers) is asked at once; the tab stays, its bar
+  // saying so, until it answers; then the tab closes and the questionnaire comes back by the answer.
+  const r = t.run; S.created.delete(t.folder); r.reopening = true; r.state = "ended";
+  S.q.pf = null; S.q.aFail = { parent: r.createdParent }; S.focus = "#term";
+  S.caption = "<b>7.3</b> · step (a) failed: hub_plan is asked again; the tab waits for its answer";
+  render(); askPlan("unpack", r.instant, t);
+}
+// rev 6 (X1): hub_plan(answers) on every entry into Review (Review Setup, Review Again, the return after (a));
+// Review opens only once it answers. While it waits, the button keeps focus with aria-disabled (not disabled).
+function askPlan(via, instant, tab) {
+  const q = S.q; q.preparing = via;
+  if (via === "review") { S.focus = "#q-review"; S.caption = "<b>6.5</b> · Preparing the review: hub_plan asked; Review Setup keeps focus (aria-disabled), the form is inert"; }
+  if (via === "again") { S.focus = "#q-replan"; S.caption = "<b>7.2</b> · Review Again asked hub_plan: it keeps focus (aria-disabled); Set Up Hub stays disabled"; }
+  render();
+  if (S.holdPlan) return;
+  later(() => planAnswered(q, via, tab), 700, instant);
+}
+function planAnswered(q, via, tab) {
+  if (S.q !== q || q.preparing !== via) return; // the questionnaire was closed: the plan is dropped (hub_plan_drop)
+  q.preparing = null; const ans = S.sim.plan;
+  if (via === "unpack") {
+    S.tabs = S.tabs.filter((x) => x.id !== tab.id); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : null;
+    if (!S.tabs.length) q.from = "empty"; S.overlay = "q";
+  }
+  const aTitle = "Better Terminal couldn't unpack the agent hub template: the disk is full.";
+  if (ans === "errors") {
+    q.appeared = expand(folderValue().trim()).replace(/\/+$/, ""); q.step = "answers"; q.submitted = true; q.expired = false;
+    const e = errors(); const first = ["role", "client", "owner", "folder", "hubname"].find((k) => e[k]);
+    S.focus = "#f-" + first;
+    if (via === "unpack") say(aTitle, true);
+    say(txt(errText(e[first])), "alert");
+    S.caption = `<b>${via === "unpack" ? "7.3" : via === "again" ? "7.2" : "6.5"}</b> · hub_plan answered { errors }: the first answer with an error, inline; no block`;
+  } else if (ans === "rejected") {
+    q.step = "review"; q.expired = "rejected";
+    S.focus = via === "unpack" ? "#af-h" : "#xp-h";
+    if (via === "unpack") say(aTitle, true);
+    say(REJ_TITLE, true);
+    S.caption = `<b>7.2</b> · hub_plan rejected: the review has no plan; Set Up Hub disabled; Review Again is the way on`;
+  } else {
+    q.step = "review"; const wasBlock = !!q.expired; q.expired = false;
+    if (via === "unpack") { S.focus = "#af-h"; say(aTitle, true); S.caption = "<b>7.3</b> · step (a) failed: back on Review with a new plan; Set Up Hub starts a new preflight"; }
+    else { S.focus = "#q-go"; if (via === "again" || wasBlock) say("Review updated."); S.caption = via === "again" ? "<b>7.2</b> · Review Again got a plan: the review is redrawn; Set Up Hub enabled" : "<b>7. Review</b> · opened once hub_plan answered; Enter confirms; Back keeps the answers"; }
+  }
+  render();
 }
 // M-A: setup_waiting {key: f | removal, state: waiting, holder}. The bar says so; no line, no notice, no dot.
 // rev 5 (n1): holder {key: f | removal | open_setup, hub}; the event is re-sent when the holder changes, and the bar updates in place.
@@ -618,7 +659,9 @@ const NEXT_HOLDER = { key: "open_setup", hub: "~/work/hubs/initech-sre" };
 function holderChanged(t) { const r = t.run; if (!r || !r.waiting) return; r.waiting.holder = NEXT_HOLDER; render(); }
 function lockWait(t, key, go) {
   const r = t.run; if (r.waiting) return true;
-  r.waiting = { key, holder: HOLDERS[S.sim.linkwait] || HOLDERS.yes }; S.focus = "#term"; say("Waiting for another agent hub setup to finish linking."); render();
+  r.waiting = { key, holder: HOLDERS[S.sim.linkwait] || HOLDERS.yes }; S.focus = "#term";
+  // rev 6 (U1): a removal holding the lock is undoing links, so its announcement doesn't say "to finish linking".
+  say(r.waiting.holder.key === "removal" ? "Waiting for another agent hub setup." : "Waiting for another agent hub setup to finish linking."); render();
   if (S.sim.linkwait === "chain") later(() => { if (t.run === r) holderChanged(t); }, 1500, r.instant);
   if (r.instant) return true;
   later(() => { if (t.run !== r || !r.waiting || r.state === "stopped") return; r.waiting = null; if (key === "f") r.waited = true; else r.rm.waited = true; render(); go(); }, 3000, false);
@@ -890,6 +933,7 @@ function renderContent() {
   if (!t) return `<div class="emptywin">${S.overlay ? "" : "No tabs."}</div>`;
   const r = t.run; let top = "";
   if (t.notice) top = renderNotice(t.notice);
+  else if (r && r.reopening) top = `<div class="runbar" role="status" aria-live="off"><span class="spin" aria-hidden="true"></span><b>Couldn't unpack the agent hub template</b> · Opening your answers again…</div>`;
   else if (r && r.waiting) { const rm = r.waiting.key === "removal"; top = `<div class="runbar wait" role="status" aria-live="off"><span class="spin" aria-hidden="true"></span><span class="rw"><span>${rm ? "<b>Removing the hub folder</b>" : `Setting up the agent hub · <b>${esc(r.bar)}</b>`}</span><small>${waitLine(r.waiting.holder)} ${rm ? "Undoing bin/setup's links" : "This step"} starts by itself when it's done.</small></span></div>`; }
   else if (r && r.bar && (r.state === "running" || r.state === "notice" || r.state === "removing" || r.paused)) top = `<div class="runbar" role="status" aria-live="off"><span class="spin" aria-hidden="true"></span>${r.state === "removing" ? `<b>${esc(r.bar)}</b>` : `Setting up the agent hub · <b>${esc(r.bar)}</b>`}</div>`;
   return `<div class="view">${top}<div class="term" id="term" tabindex="0" aria-label="Terminal: ${esc(t.label)}">${t.lines.join("\n")}</div></div>`;
@@ -924,11 +968,13 @@ function renderQ() {
   const head = `<div class="ph"><h2 id="q-h">Set up your agentic environment</h2><nav class="stepper" aria-label="Steps"><span ${q.step === "answers" ? 'aria-current="step"' : ""}>Answers</span><span aria-hidden="true">›</span><span ${q.step === "review" ? 'aria-current="step"' : ""}>Review</span></nav><button class="x" id="q-x" aria-label="Close" title="Close (Esc)">✕</button></div>`;
   let body, foot;
   if (q.step === "review") { body = renderReview(); const busy = q.pf && (q.pf.state === "running" || q.pf.state === "ok");
-    foot = `<button class="btn ghost left" id="q-back" ${busy ? "disabled" : ""}>Back</button><button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-go" ${busy ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Set Up Hub"}</button>`; }
+    // rev 6 (X1): Set Up Hub is enabled only while the review has a plan (not after unknown_plan or a rejection, not while Review Again waits).
+    const noPlan = !!q.expired || !!q.preparing;
+    foot = `<button class="btn ghost left" id="q-back" ${busy ? "disabled" : ""}>Back</button><button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-go" ${busy || noPlan ? "disabled" : ""}${noPlan && !busy ? ' title="Review Again first"' : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Set Up Hub"}</button>`; }
   else { body = renderAnswers(); const busy = q.mode === "existing" && q.ex.pf && (q.ex.pf.state === "running" || q.ex.pf.state === "ok");
-    foot = q.mode === "new" ? `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-review" ${q.rolesState === "error" ? 'disabled title="Needs a role"' : ""}>Review Setup</button>` : `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-open" ${busy ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Open Hub"}</button>`; }
+    foot = q.mode === "new" ? `<button class="btn" id="q-cancel">Cancel</button>${q.preparing === "review" ? `<button class="btn primary" id="q-review" aria-disabled="true"><span class="spin" aria-hidden="true"></span>Preparing…</button>` : `<button class="btn primary" id="q-review" ${q.rolesState === "error" ? 'disabled title="Needs a role"' : ""}>Review Setup</button>`}` : `<button class="btn" id="q-cancel">Cancel</button><button class="btn primary" id="q-open" ${busy ? "disabled" : ""}>${busy ? '<span class="spin" aria-hidden="true"></span>Checking…' : "Open Hub"}</button>`; }
   foot = `<div class="pbtns">${foot}</div>`;
-  return `<div class="panel" role="dialog" aria-modal="true" aria-labelledby="q-h" id="qdlg" data-trap>${head}<div class="pbody">${body}</div><div class="pfoot">${foot}</div></div>`;
+  return `<div class="panel" role="dialog" aria-modal="true" aria-labelledby="q-h" id="qdlg" data-trap>${head}<div class="pbody"${q.preparing === "review" ? " inert" : ""}>${body}</div><div class="pfoot">${foot}</div></div>`;
 }
 function renderAnswers() {
   const q = S.q; const e = errors();
@@ -956,7 +1002,7 @@ ${S.sim.later === "on" ? `<div class="field full later"><span><span class="tag">
   const more = `<section class="grp"><button class="disclose" id="more" aria-expanded="${open}" aria-controls="more-body">${open ? "▾" : "▸"} More options</button>${open ? `<div id="more-body" class="grid2" style="margin-top:10px">${fieldHtml("f-hubname", "Hub name", (a) => `<input type="text" class="mono" id="f-hubname" value="${esc(q.hubname)}" placeholder="${esc(dn || "")}" autocomplete="off" spellcheck="false" ${slugRequired() ? 'aria-required="true"' : ""} ${a}>`, dn && !q.hubname.trim() ? `Empty means ${C(dn)}, made from the client name and role.` : "Lowercase letters a–z, digits and “-”.", (slugRequired() || se("hubname")) && e.hubname ? esc(e.hubname) : null, { req: slugRequired() })}
 ${S.sim.later === "on" ? `<div class="field full later"><span class="tag">slice 2</span>Work areas (10) · GitHub owner for repos (11) · Remote box, key, folder (12) · Staging URL (13) · Claude install and config folder (14) · Model and effort (15) · Folder agents' and briefing models (16) · Brain paths, embedding model, Ollama address (17) · Auto sync (18; slice 1 passes <code>--auto-sync off</code>) · Morning briefing and Install scheduled jobs (19)</div>` : ""}</div>` : ""}</section>`;
   const s3 = S.sim.later === "on" ? `<div class="later"><span class="tag">slice 3</span><b>Whose work is this: a client's, or your own?</b> (question 1) becomes the first field of “Needed to start”, with the tick “This hub is for my own work, not for a client” and <b>Providers</b> (question 20) after it (OB-9).</div>` : "";
-  return mode + s3 + req + opt + more;
+  return aFailHtml(q, true) + mode + s3 + req + opt + more;
 }
 function renderExisting() {
   const x = S.q.ex; const busy = x.pf && (x.pf.state === "running" || x.pf.state === "ok");
@@ -1021,12 +1067,19 @@ function renderReview() {
   notes.push(`<div class="box" role="note" aria-labelledby="rn3"><h4 id="rn3">${INFOI}<span>Where the hub's path is kept</span></h4><p>The hub folder's path, ${C(tilde(folder))}, holds the client's name. It ends up in these places:</p><ul><li><b>Better Terminal's saved session</b>, so the tab reopens after a restart, and <b>any workspace you save</b> with the tab in it.</li>${syncLi}<li><b>Claude's config folder</b>: bin/setup names a folder after the path to link the hub's memory. Better Terminal expects it to be ${C(tilde(HOME + "/.claude/projects/" + encodeMem(folder)) + "/")} (and one per work area); that is a prediction from your environment, and bin/setup works the folder out itself when it runs.</li><li><b>A screen recording</b> you make of the Agent hub tab, which holds what the tab shows: every command and its output (but never a secret's value, which bin/secret doesn't echo).</li></ul><p>Your other answers go only into the hub folder and its git history, and into your Keychain under each stored secret's name. Better Terminal doesn't keep them, and never saves what the Agent hub tab shows. A paired phone sees the tab only as “Agent hub”.</p></div>`);
   const stepLi = (s, i) => `<li><b>${esc(s.name)}</b>${s.k === "a" ? `<br><small>Better Terminal copies the bundled agent hub template (${TEMPLATE_REF}) into the hub folder itself; this is not a command.</small>` : s.cmds.map((a) => `<code>${esc(cmd(a))}</code>`).join("")}${s.k === "d" ? "<small>Before each, you choose Store or Skip.</small>" : ""}${s.k === "h" ? "<small>It reports what's missing; it never stops setup.</small>" : ""}${s.k === "i" ? "<small>with CLAUDE_CONFIG_DIR from hub.conf, when the hub sets one.</small>" : ""}</li>`;
   const laterLi = S.sim.later === "on" ? `<li class="later" style="list-style:none;margin-left:-20px"><span class="tag">slice 2</span>Create the private GitHub repo (after Store secrets) and Install scheduled jobs (after Index) join this list when chosen. With question 14 set, step “Start the persona session” shows <code>CLAUDE_CONFIG_DIR=&lt;value&gt; claude</code> instead of the note.</li>` : "";
-  const pf = q.expired === "replanfail" ? replanFailedBlock() : q.expired ? expiredBlock() : q.inUse ? inUseBlock(q.inUse, false) : q.pf ? pfSection(q.pf, false) : "";
-  const aFail = q.aFail ? `<div class="box fail" role="group" aria-labelledby="af-h"><h4 id="af-h" tabindex="-1">${FAILI}<span>Better Terminal couldn't unpack the agent hub template: the disk is full.</span></h4><p>Nothing was left behind${q.aFail.parent ? `: ${C(tilde(q.aFail.parent))}, which setup had created, was removed` : ""}. Your answers are kept. Choose Set Up Hub to try again.</p></div>` : "";
-  return `${aFail}${pf}<section class="rv" aria-labelledby="rv1"><h3 id="rv1">Your answers</h3><dl>${ans.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></section>
+  const pf = q.expired === "rejected" ? replanFailedBlock() : q.expired ? expiredBlock() : q.inUse ? inUseBlock(q.inUse, false) : q.pf ? pfSection(q.pf, false) : "";
+  const aFail = aFailHtml(q, false);
+  const ansSec = `<section class="rv" aria-labelledby="rv1"><h3 id="rv1">Your answers</h3><dl>${ans.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></section>`;
+  if (q.expired === "rejected") return `${aFail}${pf}${ansSec}`; // rev 6 (X1): no plan, so none of the plan's sections
+  return `${aFail}${pf}${ansSec}
 <section class="rv" aria-labelledby="rv2"><h3 id="rv2">Folders Better Terminal will create</h3><ul>${cp ? `<li>${C(tilde(cp))} <small>doesn't exist yet; created for the hub, and only it.</small></li>` : ""}<li>${C(tilde(folder))} <small>the hub folder</small></li></ul></section>
 <section class="rv" aria-labelledby="rv3"><h3 id="rv3">What will run, in this order</h3><ol>${steps.map(stepLi).join("")}${laterLi}</ol></section>
 <section class="rv" aria-labelledby="rv4" style="display:grid;gap:8px"><h3 id="rv4">Before you confirm</h3>${notes.join("")}</section>`;
+}
+// 7.3: the (a) block, on Review, or on Answers when hub_plan answered { errors } on the way back (rev 6, X1).
+function aFailHtml(q, onAnswers) {
+  if (!q.aFail) return "";
+  return `<div class="box fail" role="group" aria-labelledby="af-h"><h4 id="af-h" tabindex="-1">${FAILI}<span>Better Terminal couldn't unpack the agent hub template: the disk is full.</span></h4><p>Nothing was left behind${q.aFail.parent ? `: ${C(tilde(q.aFail.parent))}, which setup had created, was removed` : ""}. Your answers are kept.${onAnswers ? " Fix the answer below, then choose Review Setup." : q.expired === "rejected" ? "" : " Choose Set Up Hub to try again."}</p></div>`;
 }
 function renderNewTab() {
   const rows = [["›_", "Terminal", "A shell in your home folder", "T", "plain"], ["+", "New project…", "Pick or create a folder: git, BMAD, the methodology and all agents", "N", "x"], ["⌂", "Open project…", "An existing folder; ADE adds what's missing", "O", "x"], ["◇", "Set up your agentic environment…", "Make an agent hub for a client or project, or open one you have", "A", "setup"]].filter((r) => S.sim.inst === "main" || r[4] !== "setup");
@@ -1116,7 +1169,7 @@ const SIMS = [
   ["fail", "Fail at step", [["none", "none"], ["a", "(a) unpack"], ["b", "(b) bin/init"], ["c", "(c) first commit"], ["f", "(f) bin/setup"], ["flink", "(f) link appeared"], ["f2", "(f2) bin/brain"], ["claude", "(i) claude missing"]]],
   ["cfgdir", "hub.conf sets config dir", [["no", "no"], ["yes", "yes (with a space)"]]],
   ["removal", "Removal", [["ok", "succeeds"], ["unlink", "--unlink fails"], ["trash", "Trash fails"]]],
-  ["replan", "Review Again's hub_plan", [["ok", "succeeds"], ["fail", "fails (template unreadable)"]]],
+  ["plan", "hub_plan answers (every entry into Review, Review Again)", [["ok", "a plan"], ["errors", "{ errors } (the folder appeared)"], ["rejected", "rejected (template unreadable)"]]],
   ["linkwait", "Another tab holds the setup lock", [["no", "no"], ["yes", "a setup's (f) (~/hubs/globex-qa-engineer)"], ["open_setup", "Open Hub's bin/setup (~/work/hubs/initech-sre)"], ["removal", "a removal (~/hubs/globex-qa-engineer)"], ["chain", "a removal, then the holder changes"]]],
   ["commits", "Later commits in hub", [["no", "no"], ["yes", "yes (no Remove)"]]],
   ["hubconf", "Existing hub.conf", [["ok", "readable"], ["bad", "HUB_CLAUDE=$(…)"]]],
@@ -1129,7 +1182,7 @@ function renderSim() {
 }
 const SAMPLE = (extra = {}) => { const q = freshQ(); Object.assign(q, { client: "Acme Corp", owner: "Dana Reyes", secrets: ["grafana-token", "sentry-token"], repos: [{ v: "acme/api=" + HOME + "/src/api" }] }, extra); return q; };
 function openQ(from, q) { S.q = q || freshQ(); S.q.from = from; S.overlay = S.sim.template === "yes" ? "q" : "notemplate"; S.focus = S.overlay === "q" ? (S.q.mode === "existing" ? "#f-ex" : "#f-client") : "#nt-close"; }
-function base(sim) { S.sim = { ...SIM0, ...(sim || {}) }; fresh(true); S.overlay = null; S.tabs = []; addPlainTab(false); S.recorded = true; S.tour = "done"; S.caption = null; logItems.length = 0; $("#log").innerHTML = ""; }
+function base(sim) { S.sim = { ...SIM0, ...(sim || {}) }; fresh(true); S.holdPlan = false; S.overlay = null; S.tabs = []; addPlainTab(false); S.recorded = true; S.tour = "done"; S.caption = null; logItems.length = 0; $("#log").innerHTML = ""; }
 const review = (sim, extra) => { base(sim); openQ("palette", SAMPLE({ step: "review", ...(extra || {}) })); S.focus = "#q-go"; };
 const pfState = (sim) => { review(sim); startPreflight(true, false); };
 const runTo = (sim, extra, opts) => { base(sim); S.q = SAMPLE(extra); startRun(true, opts); return activeTab(); };
@@ -1196,8 +1249,13 @@ const P = [
     ["Review: a checkout that doesn't exist", "OB-3 Q3, m10", () => { review({}, { repos: [{ v: "acme/api=" + HOME + "/src/api" }, { v: "acme/web=" + HOME + "/src/web-new" }] }); S.scrollTo = "#rn1"; }],
     ["Review: template without T4", "OB-3 AC3", () => { review({ t4: "no" }); }],
     ["Review: minimal (no checkout)", "OB-3 AC3, AC4", () => { review({ hubs: "yes" }, { secrets: [], repos: [] }); }],
-    ["Set Up Hub: the plan expired", "A m15", () => { review({}); S.q.expired = true; S.focus = "#xp-h"; say("This review is out of date, so setup didn't start.", true); S.caption = "<b>7.2</b> · hub_run_prepare refused unknown_plan: nothing checked or written; Review Again"; }],
-    ["Review Again: hub_plan failed", "rev 5 n2", () => { review({ replan: "fail" }); S.q.expired = "replanfail"; S.focus = "#xp-h"; say("Better Terminal couldn't make the review again: it couldn't read the bundled agent hub template.", true); S.caption = "<b>7.2</b> · Review Again's hub_plan failed: Review Again tries once more; Back keeps the answers"; }],
+    ["Review Setup: preparing the review", "rev 6 X1", () => { base(); openQ("palette", SAMPLE()); S.holdPlan = true; submitAnswers(false); }],
+    ["Review Setup: hub_plan answered errors", "rev 6 X1", () => { base({ plan: "errors" }); openQ("palette", SAMPLE()); submitAnswers(true); }],
+    ["Review Setup: hub_plan rejected", "rev 6 X1", () => { base({ plan: "rejected" }); openQ("palette", SAMPLE()); submitAnswers(true); }],
+    ["Set Up Hub: the plan is gone", "A m15", () => { review({}); S.q.expired = true; S.focus = "#xp-h"; say("This review is out of date, so setup didn't start.", true); S.caption = "<b>7.2</b> · hub_run_prepare refused unknown_plan: nothing checked or written; Review Again"; }],
+    ["Review Again: preparing", "rev 6 X1", () => { review({}); S.q.expired = true; S.holdPlan = true; askPlan("again", false); }],
+    ["Review Again: hub_plan rejected", "rev 6 X1", () => { review({ plan: "rejected" }); S.q.expired = true; askPlan("again", true); }],
+    ["Review Again: hub_plan answered errors", "rev 6 X1", () => { review({ plan: "errors" }); S.q.expired = true; askPlan("again", true); }],
     ["Set Up Hub: inside a folder in use", "rev 5 n5", () => { review({ samefolder: "inside" }); startPreflight(true, false); S.caption = "<b>5.6</b> · relation inside: its own body, no “same folder” claim"; }],
     ["Set Up Hub: holds a folder in use", "rev 5 n5", () => { review({ samefolder: "contains" }); startPreflight(true, false); S.caption = "<b>5.6</b> · relation contains: its own body"; }],
     ["Set Up Hub: folder in use (race), no checks", "OB-4 AC7, P4", () => { review({ samefolder: "race" }); startPreflight(true, false); S.caption = "<b>5.6</b> · refused before the preflight; nothing checked or written"; }],
@@ -1215,7 +1273,10 @@ const P = [
     ["Preflight: no user.email", "OB-4 AC2", () => pfState({ preflight: "identity" })],
     ["Preflight: memory link to another hub", "OB-4 AC2, n5", () => pfState({ preflight: "link-live" })],
     ["Preflight: link target gone", "OB-4 AC2", () => pfState({ preflight: "link-gone" })],
+    ["(a) failed: waiting for hub_plan", "rev 6 X1", () => { base({ fail: "a" }); S.holdPlan = true; S.q = SAMPLE(); startRun(true); }],
     ["(a) failed: back to Review", "OB-5 AC1, M1", () => { runTo({ fail: "a" }); }],
+    ["(a) failed: hub_plan answered errors", "rev 6 X1", () => { runTo({ fail: "a", plan: "errors" }); }],
+    ["(a) failed: hub_plan rejected", "rev 6 X1", () => { runTo({ fail: "a", plan: "rejected" }); }],
     ["(a) failed on first launch (no tab left)", "OB-5 AC1, M1", () => { S.sim = { ...SIM0, fail: "a" }; fresh(true); S.overlay = null; S.q = SAMPLE(); S.q.from = "choice"; startRun(true); }],
   ]],
   ["Run tab (8)", [
@@ -1253,6 +1314,7 @@ const P = [
     ["Removal stopped: Trash failed", "OB-5 AC4", () => { const t = runTo({ fail: "f2", removal: "trash" }, { secrets: [] }); startRemoval(t); }],
     ["Trash failed, after Keep: L8 lists what's left", "m12", () => { const t = runTo({ fail: "f2", removal: "trash", t4: "no" }, { secrets: ["grafana-token"] }); store(t); t.run.typed = 8; valueEntered(t); startRemoval(t); act(t, "rkeep"); }],
     ["(f) waits: Open Hub's bin/setup holds the lock", "rev 5 n1", () => { runTo({ linkwait: "open_setup" }, { secrets: [] }); S.caption = "<b>8.1</b> · holder.key open_setup: the bar names the hub another tab is opening"; }],
+    ["(f) waits: a removal holds the lock", "rev 6 U1", () => { runTo({ linkwait: "removal" }, { secrets: [] }); S.caption = "<b>8.1, 12</b> · holder.key removal: the bar names the removal; the polite announcement is “Waiting for another agent hub setup.” (no “to finish linking”)"; }],
     ["(f) waits: the holder changed", "rev 5 n1", () => { const t = runTo({ linkwait: "chain" }, { secrets: [] }); holderChanged(t); S.caption = "<b>8.1</b> · setup_waiting re-sent with a new holder: the bar's name and wording update in place; nothing is announced again"; }],
     ["Removal waits for the setup lock", "M-A", () => { const t = runTo({ fail: "f2" }, { secrets: [] }); S.sim.linkwait = "yes"; startRemoval(t); renderSim(); S.caption = "<b>8.1 M-A</b> · a removal's --unlink waits for the setup lock; C3 if closed"; }],
     ["Edit answers after (b)", "OB-5 AC2", () => { const t = runTo({ fail: "b" }); act(t, "edit"); }],
@@ -1287,17 +1349,17 @@ function choose(which) {
   openQ("choice"); S.caption = "<b>6</b> · opened from the choice: Cancel or Esc opens one terminal tab"; render();
 }
 function cancelQ() {
-  const from = S.q.from; S.overlay = null;
+  const from = S.q.from; S.overlay = null; S.q.preparing = null; // a plan that answers after this is dropped (hub_plan_drop)
   if (from === "choice" || !S.tabs.length) { addPlainTab(true); if (S.tour === "waiting") S.tour = "shown"; S.caption = from === "choice" ? "<b>6.5</b> · cancelled from the choice: one terminal tab, recorded" : "<b>4.3</b> · no tab was left: Cancel opens one terminal tab"; }
   else S.focus = "#term";
   render();
 }
-function submitAnswers() {
-  const q = S.q; q.submitted = true; const e = errors();
+function submitAnswers(instant) {
+  const q = S.q; if (q.preparing) return; q.submitted = true; const e = errors();
   const order = ["role", "client", "owner", "folder", "hubname"]; const first = order.find((k) => e[k]);
   if (first) { if (first === "hubname") q.more = true; S.focus = "#f-" + first; render(); say(txt(errText(e[first])), "alert"); return; }
   if (q.secretIn.trim() || q.repoIn.trim()) { if (q.secretIn.trim()) addSecret(); if (q.repoIn.trim()) addRepo(); if (q.secretErr || q.repoErr) { render(); return; } }
-  q.step = "review"; q.pf = null; S.focus = "#q-go"; S.caption = "<b>7. Review</b> · Enter confirms; Back keeps the answers"; render();
+  q.pf = null; askPlan("review", instant);
 }
 document.addEventListener("click", (ev) => {
   const el = ev.target.closest("button, [data-tab], [data-nt], [data-pal], [data-scrim], input[type=radio], input[type=checkbox]"); if (!el) return;
@@ -1321,11 +1383,10 @@ document.addEventListener("click", (ev) => {
   if (el.id === "f-exsetup") { S.q.ex.setup = el.checked; S.q.ex.pf = null; S.q.ex.inUse = null; if (S.q.ex.kind) S.q.ex.kind = fsKindExisting(); S.focus = "#f-exsetup"; render(); return; }
   switch (el.id) {
     case "q-x": case "q-cancel": return cancelQ();
-    case "q-review": return submitAnswers();
-    case "q-back": S.q.step = "answers"; S.q.pf = null; S.q.aFail = null; S.q.inUse = null; S.q.expired = false; S.focus = "#f-role"; render(); return;
+    case "q-review": return submitAnswers(false);
+    case "q-back": S.q.step = "answers"; S.q.pf = null; S.q.aFail = null; S.q.inUse = null; S.q.expired = false; S.q.preparing = null; S.focus = "#f-role"; render(); return;
     case "q-go": S.q.aFail = null; S.q.inUse = null; S.q.expired = false; return startPreflight(false, false);
-    case "q-replan": if (S.sim.replan === "fail") { S.q.expired = "replanfail"; S.focus = "#xp-h"; say("Better Terminal couldn't make the review again: it couldn't read the bundled agent hub template.", true); S.caption = "<b>7.2</b> · Review Again's hub_plan failed: the block says so; Review Again tries once more; Back keeps the answers"; render(); return; }
-      S.q.expired = false; S.focus = "#q-go"; say("Review updated."); S.caption = "<b>7.2</b> · hub_plan asked again; the review is redrawn from the new plan"; render(); return;
+    case "q-replan": if (S.q.preparing) return; return askPlan("again", false);
     case "q-open": return openExisting(false);
     case "more": S.q.more = !S.q.more; S.focus = "#more"; render(); return;
     case "add-secret": addSecret(); S.focus = "#f-secret"; render(); return;
