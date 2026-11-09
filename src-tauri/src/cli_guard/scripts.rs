@@ -79,6 +79,9 @@ impl<'c, 'a> Guard<'c, 'a> {
             }
             Ok(script) => {
                 let mut sc = Scope::new(&script, strict, names, cwd, args);
+                // IFS set anywhere stays set for every text walked after it.
+                sc.ifs_open |= self.ifs_open;
+                self.ifs_open = sc.ifs_open;
                 self.depth += 1;
                 self.list(&mut sc, &script.list);
                 self.depth -= 1;

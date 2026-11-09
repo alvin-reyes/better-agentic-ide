@@ -152,6 +152,11 @@ pub struct Scope<'s> {
     pub args: Option<Vec<W>>,
     pub cwd: PathBuf,
     pub heredocs: &'s [Heredoc],
+    /// `IFS` may not be the default: the line assigns it (in any form, a
+    /// `${…=…}` too, which can assign through `${!x:=…}`), or a disqualifier
+    /// hides what it assigns. Unquoted text the guard knows may then split
+    /// anywhere, and joined text (`"$*"`) is not joined with a space.
+    pub ifs_open: bool,
 }
 
 impl<'s> Scope<'s> {
@@ -166,11 +171,13 @@ impl<'s> Scope<'s> {
             args,
             cwd,
             heredocs: &script.heredocs,
+            ifs_open: false,
         };
         prepass(&mut sc, &script.list, true);
         for h in &script.heredocs {
             prepass_parts(&mut sc, &h.body);
         }
+        sc.ifs_open |= sc.disq || sc.vars.contains_key("IFS");
         sc
     }
 
@@ -264,6 +271,14 @@ fn prepass_parts(sc: &mut Scope, parts: &[Part]) {
     for p in parts {
         match p {
             Part::Sub { list, .. } | Part::ProcSub { list } => prepass_owned(sc, list),
+            Part::Param { name, plain: false, inner, .. } => {
+                // `${x=v}` and `${x:=v}` assign; `${!x:=v}` assigns the name in `$x`.
+                if matches!(inner.first(), Some(Part::Lit { text, .. }) if text.starts_with('=') || text.starts_with(":=")) {
+                    sc.ev(name, 0, false, None);
+                    sc.ifs_open = true;
+                }
+                prepass_parts(sc, inner)
+            }
             Part::Param { inner, .. } => prepass_parts(sc, inner),
             Part::Arith { assigns, .. } => sc.disq |= assigns,
             Part::Lit { .. } => {}
@@ -560,31 +575,46 @@ impl<'c, 'a> Guard<'c, 'a> {
                         self.part_subs(sc, ip);
                     }
                     quoted_any |= quoted;
+                    let ifs = !sc.ifs_open;
                     let positional = name.chars().all(|c| c.is_ascii_digit()) || matches!(name.as_str(), "@" | "*" | "#");
-                    if positional && *plain {
+                    // zsh reads `$a[…]` as a subscript of `$a`: its text is
+                    // not `$a` then `[…]`, and `[@]` (or one the guard can't
+                    // read) makes it several words.
+                    let subscript = match w.parts.get(k + 1) {
+                        Some(Part::Lit { text, .. }) if text.starts_with('[') => Some(text.find(']').is_none_or(|e| text[..e].contains('@'))),
+                        _ => None,
+                    };
+                    let all = name == "@" || name == "*";
+                    if positional && *plain && subscript.is_none() {
                         if let Some(vals) = self.positional(sc, name) {
-                            if (name == "@" || name == "*") && w.parts.len() == 1 && (name == "@" || !quoted) {
+                            if name == "@" && *quoted && w.parts.len() == 1 {
                                 return vals;
                             }
-                            // `"x$@"` is a word per argument.
-                            if name == "@" && *quoted && vals.len() > 1 {
-                                atoms.push((U_PH, false));
+                            // Unquoted, each argument splits again and an
+                            // empty one goes: only plain text is kept as is.
+                            if all && !quoted && w.parts.len() == 1 && ifs && vals.iter().all(|v| plain_text(&v.text)) {
+                                return vals.into_iter().filter(|v| !v.text.is_empty()).collect();
+                            }
+                            // `"x$@"` is a word per argument; `"$*"` is one
+                            // word joined with IFS's first character.
+                            if all && vals.len() > 1 {
+                                atoms.push((if *quoted && name == "*" { Q_PH } else { U_PH }, false));
                             } else {
-                                push_value(&mut atoms, &join(&vals), *quoted);
+                                push_value(&mut atoms, &join(&vals), *quoted, ifs);
                             }
                             continue;
                         }
                     }
-                    // Quoted, it is still several words: `"$@"`, `"${a[@]}"`,
-                    // zsh's `"${(@)a}"`, `"${(f)x}"` and `"$a[@]"`.
-                    let next_at = matches!(w.parts.get(k + 1), Some(Part::Lit { text, .. }) if text.starts_with("[@]"));
-                    if *quoted && may_be_words(name, *plain, inner, next_at) {
+                    // Quoted, only a plain scalar is surely one word: any
+                    // operator, nesting, `!`, `#`, subscript or zsh flag may
+                    // make several (`"${1+"$@"}"`, `"${!x}"`, `"${(f)x}"`).
+                    if *quoted && (!one_word(name, *plain) || subscript == Some(true)) {
                         atoms.push((U_PH, false));
                         continue;
                     }
-                    let v = if *plain && !positional { self.resolve(sc, name, w.pos, 1) } else { None };
+                    let v = if *plain && !positional && subscript.is_none() { self.resolve(sc, name, w.pos, 1) } else { None };
                     match v {
-                        Some(v) => push_value(&mut atoms, &v, *quoted),
+                        Some(v) => push_value(&mut atoms, &v, *quoted, ifs),
                         None => atoms.push((if *quoted { Q_PH } else { U_PH }, false)),
                     }
                 }
@@ -593,7 +623,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                     quoted_any |= quoted;
                     // `$(cat <<'EOF' … EOF)` is the here-doc's literal text.
                     match literal_heredoc(sc, list) {
-                        Some(text) => push_value(&mut atoms, &text, *quoted),
+                        Some(text) => push_value(&mut atoms, &text, *quoted, !sc.ifs_open),
                         None => atoms.push((if *quoted { Q_PH } else { U_PH }, false)),
                     }
                 }
@@ -699,19 +729,30 @@ fn home_text(ctx: &Ctx) -> Option<String> {
     ctx.home.as_ref().map(|h| h.to_string_lossy().into_owned())
 }
 
-/// A quoted parameter expansion that can still become several words:
-/// `$@` in any form, an `[@]` subscript, a `${!prefix@}`, a zsh flag
-/// (`${(@)a}`, `${(f)x}`), or zsh's `$a[@]` (`next_at`).
-fn may_be_words(name: &str, plain: bool, inner: &[Part], next_at: bool) -> bool {
-    let inner_at = inner.iter().any(|p| matches!(p, Part::Lit { text, .. } if text.contains('@')));
-    name == "@" || next_at || (!plain && (name.is_empty() || inner_at))
+/// A quoted parameter expansion that is surely one word: a plain scalar,
+/// `$name`, `${name}`, `$1`, `${10}`, or a special one (`$*`, `$#`, `$?`, `$-`,
+/// `$$`, `$!`). `$@` and every `${…}` with an operator, `!`, `#`, a
+/// subscript or a zsh flag (`plain` false) may be several.
+fn one_word(name: &str, plain: bool) -> bool {
+    let ident = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    let digits = !name.is_empty() && name.chars().all(|c| c.is_ascii_digit());
+    plain && (ident || digits || matches!(name, "*" | "#" | "?" | "-" | "$" | "!"))
+}
+
+/// Text that stays one word unquoted under the default IFS and doesn't glob.
+fn plain_text(v: &str) -> bool {
+    !v.chars().any(|c| is_ph(c) || splits_or_globs(c))
+}
+
+fn splits_or_globs(c: char) -> bool {
+    c.is_whitespace() || "*?[]{}$`'\"\\;&|<>()!#~".contains(c)
 }
 
 /// An expansion's value: quoted, it is literal text; unquoted, a value that
-/// could split or glob is a placeholder.
-fn push_value(atoms: &mut Vec<(char, bool)>, v: &str, quoted: bool) {
-    let unsafe_ = |c: char| c.is_whitespace() || "*?[]{}$`'\"\\;&|<>()!#~".contains(c);
-    if !quoted && v.chars().any(unsafe_) {
+/// could split or glob is a placeholder, and so is any value when `IFS` may
+/// not be the default (`ifs` false).
+fn push_value(atoms: &mut Vec<(char, bool)>, v: &str, quoted: bool, ifs: bool) {
+    if !quoted && (v.chars().any(splits_or_globs) || (!ifs && !v.is_empty())) {
         atoms.push((U_PH, false));
     } else {
         atoms.extend(v.chars().map(|c| if is_ph(c) { (if quoted { Q_PH } else { U_PH }, false) } else { (c, false) }));

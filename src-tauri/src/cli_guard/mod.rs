@@ -123,6 +123,8 @@ pub struct Guard<'c, 'a> {
     pub calling: Vec<String>,
     pub script_depth: usize,
     pub gh_config: Option<Option<String>>,
+    /// A text walked so far may change `IFS` (see [`resolve::Scope::ifs_open`]).
+    pub ifs_open: bool,
 }
 
 impl<'c, 'a> Guard<'c, 'a> {
@@ -143,6 +145,7 @@ impl<'c, 'a> Guard<'c, 'a> {
             calling: Vec::new(),
             script_depth: 0,
             gh_config: None,
+            ifs_open: false,
         }
     }
     pub fn done(&self) -> bool {
@@ -610,12 +613,45 @@ mod tests {
                 ("\"$ADE_HOOK_BIN\" open --name \"$@\"", true),
                 ("\"$ADE_HOOK_BIN\" open --cwd \"${@:2}\"", true),
                 ("\"$ADE_HOOK_BIN\" open --split \"${(f)X}\"", true),
+                // Re-check 3: only a plain scalar (`$x`, `${x}`, `$1`, `${10}`)
+                // is one word the guard can be sure of. Any operator, nesting,
+                // `!`, `#`, subscript or zsh flag may split.
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${1+\"$@\"}\"; }; f x -- gh repo delete o/r", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${1+$@}\"; }; f x -- gh repo delete o/r", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${x:-$@}\"; }; f x -- gh repo delete o/r", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"${x-\"$@\"}\"; }; f x -- gh repo delete o/r", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${x:-${a[@]}}\"", true),
+                ("x=1; a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${x:+${a[@]}}\"", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${x-\"${a[@]}\"}\"", true),
+                ("a=(x -- gh repo delete o/r); x='a[@]'; \"$ADE_HOOK_BIN\" open --name \"${!x}\"", true),
+                ("f() { x=@; \"$ADE_HOOK_BIN\" open --name \"${!x}\"; }; f x -- gh repo delete o/r", true),
+                ("\"$ADE_HOOK_BIN\" open --name \"${#a[@]}\"", true),
+                // A subscript joins with IFS: conservatively, it may split.
+                ("\"$ADE_HOOK_BIN\" open --name \"${a[*]}\"", true),
+                // zsh's `"$a[1,4]"` is a slice of `$a`, not `$a` then `[1,4]`.
+                ("a=openX; \"$ADE_HOOK_BIN\" \"$a[1,4]\" -- gh repo delete o/r", true),
+                // B2: `"$*"` joins with IFS's first character, not a space.
+                ("IFS=; f() { \"$ADE_HOOK_BIN\" open \"$*\" gh repo delete o/r; }; f - -", true),
+                ("IFS=; f() { \"$ADE_HOOK_BIN\" \"$*\" -- gh repo delete o/r; }; f op en", true),
+                ("IFS=; f() { \"$*\" repo delete o/r; }; f g h", true),
+                ("f() { \"$ADE_HOOK_BIN\" \"$*\" -- gh repo delete o/r; }; f op en", true),
+                // IFS set on the line splits an unquoted value the guard knows.
+                ("IFS=/; X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r", true),
+                ("y=IFS; : ${!y:=/}; X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r", true),
+                ("IFS=/; eval 'X=open/--/gh; \"$ADE_HOOK_BIN\" $X repo delete o/r'", true),
+                // An unquoted `$@` splits each argument again and drops empty ones.
+                ("f() { \"$ADE_HOOK_BIN\" $@; }; f 'open -- gh repo delete o/r'", true),
+                ("f() { \"$ADE_HOOK_BIN\" open --name $@ -- gh repo delete o/r; }; f '' x", true),
                 // Quoted: one word, no split.
                 ("\"$ADE_HOOK_BIN\" open --name \"$X\"", false),
+                ("\"$ADE_HOOK_BIN\" open --name \"${X}\"", false),
                 ("\"$ADE_HOOK_BIN\" open --split \"$X\" --cwd \"$D\"", false),
                 ("f() { \"$ADE_HOOK_BIN\" open --name \"x$@\"; }; f a", false),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"$1\" --split \"${10}\"; }; f a", false),
                 ("\"$ADE_HOOK_BIN\" open --name \"$*\"", false),
-                ("\"$ADE_HOOK_BIN\" open --name \"${a[*]}\"", false),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"$*\"; }; f a b", false),
+                // zsh m2: one element is one word.
+                ("\"$ADE_HOOK_BIN\" open --name \"$a[1]\"", false),
             ],
         );
     }
