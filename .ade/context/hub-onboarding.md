@@ -3,14 +3,14 @@
 What F2's onboarding (agentic-environment setup) fixes for other stories and for
 the agent hub template.
 
-- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 5).
+- Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md` (revision 6).
 - ADRs: `decisions/0026-hub-setup-steps-run-under-a-runner-in-one-pty.md`,
   `0027-a-hub-tab-is-a-tab-flag-and-keeps-no-scrollback.md`,
   `0028-project-setup-refuses-hubs-at-its-two-writers.md`,
   `0029-a-finished-hub-is-judged-by-head-with-ades-own-git.md`.
 - Builds on `bundled-sources.md` (S4a's commands), `terminal-open.md` (`ade-hook`
   modes, shell set) and `remote-tabs.md` (the relay mask).
-- Status: proposed 2026-11-09 (revision 5), not yet approved or built. macOS only.
+- Status: proposed 2026-11-09 (revision 6), not yet approved or built. macOS only.
 
 ## The runner (`ade-hook`)
 
@@ -112,7 +112,9 @@ queued.
   time, after Back, after `unpack_failed` or `edit_answers`) and keeps Set Up Hub
   disabled until it answers. Review Again: `{errors}` → the first answer with an
   error, shown inline; rejected → the failure with its message and Review Again, Set
-  Up Hub disabled.
+  Up Hub disabled. After `preflight_failed` the questionnaire stays in Review (no
+  re-plan): Set Up Hub calls `hub_run_prepare` with the same `plan_id`, and
+  `hub_plan_drop` is not called (revision 6).
   The plan stays in Rust; the webview shows `shellQuote(argv)` (ADR 0008's quoter
   with the bare-word fast path, used only in the webview). `claude_memory` is
   `<ADE's HOME>/.claude` and `[^A-Za-z0-9]` → `-` per Unicode scalar: a prediction.
@@ -257,11 +259,20 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
 - One app-wide registry (Rust, `hubmark.rs`) holds the hub folder of each run in
   progress, keyed by: `~` expanded with ADE's `HOME`, normalised, the nearest
   existing ancestor canonicalised, missing parts appended, **NFC-normalised**
-  (`icu_normalizer` 2.1.1, already in `Cargo.lock`, pinned `=2.1.1`); then
-  case-folded by CoreFoundation's `CFStringFold(…, kCFCompareCaseInsensitive, NULL)`
-  (`core-foundation-sys` 0.8.7, already locked, pinned `=0.8.7`; never
-  `to_lowercase`) and NFC again, when `pathconf(ancestor, _PC_CASE_SENSITIVE)` is 0.
-  A non-UTF-8 ancestor is kept as raw bytes. Two keys **conflict** when equal or when
+  (`icu_normalizer` 2.1.1, already in `Cargo.lock`, on every platform as
+  `icu_normalizer = { version = "=2.1.1", default-features = false, features =
+  ["compiled_data"] }`: its default features pull `utf16_iter` and `write16`, which
+  are not locked); then, **on macOS only**, case-folded by CoreFoundation's
+  `CFStringFold(…, kCFCompareCaseInsensitive, NULL)` (`core-foundation-sys` 0.8.7,
+  already locked, as `[target.'cfg(target_os = "macos")'.dependencies]
+  core-foundation-sys = "=0.8.7"`; never `to_lowercase`) and NFC again, when
+  `pathconf(ancestor, _PC_CASE_SENSITIVE)` is 0. The fold and the `pathconf` call
+  are `#[cfg(target_os = "macos")]` (`hubmark.rs` builds on every platform); the key
+  function is `registry_key(path, Case)` with `Case { Sensitive, Insensitive }` from
+  `volume_case(dir)` (`Sensitive` off macOS). **Off macOS the key is NFC only**; the
+  registry is never filled there, because F2's commands fail off macOS. `ß`/`ss`
+  and `σ`/`ς` are one key on a case-insensitive volume, as APFS itself treats them
+  (not an over-fold). A non-UTF-8 ancestor is kept as raw bytes. Two keys **conflict** when equal or when
   one is an ancestor of the other by whole components (`~/hubs/a` vs `~/hubs/a/b`;
   not `~/hubs/ab`). Refusing `inside` and `contains`, not only `same`, is an
   **architect decision** (the outer run's unpack collides with the inner one); PRD
@@ -278,27 +289,50 @@ empty prints nothing; no answer in 10 s → nothing printed, the run goes on.
   checkout, the later one's second check sees the earlier one's link and fails (f)
   with `links_refused`; its `bin/setup` never starts. Lock keys: `f` (new hub),
   `open_setup` (Open Hub with `run_setup`), `removal` (T4 `--unlink`).
-- **The setup lock's rules (revision 5; spec 4.10.1):**
+- **The setup lock's rules (revisions 5 and 6; spec 4.10.1):**
   - Each run has its own driver thread (`hub-run-<id>`) and socket-reader thread
     (`hub-rd-<id>`); no shared socket server. Only the driver acquires, waits for or
-    drops the lock for its run. Commands and window handlers set flags and send to
-    the driver's channel; those that wait for a reply do so in `spawn_blocking`.
+    drops the lock for its run. Commands and window handlers set flags, send to the
+    driver's channel and load the run's `phase`; those that wait for a reply do so
+    in `spawn_blocking`.
+  - The reader's first local is a `ReaderExit` sentinel: on every exit, a panic's
+    unwinding included, its `Drop` sets `ending`, sends `SocketClosed {cause: eof |
+    error | panic}` to the driver, then calls `wake()`; it cannot panic. (The
+    driver's channel never disconnects while the run lives: `RunHandle` keeps a
+    `Sender`.)
+  - `RunHandle {ending: Arc<AtomicBool>, phase: AtomicU8, tx, …}`: `phase` is a
+    `Phase` (`spawning`, `preflight`, `ready`, `making`, `setting_up`, `removing`,
+    `ended`) stored **only** by the run's driver thread (`Release`, before the event
+    that reports it) and loaded by anyone (`Acquire`). `RunEvent::ExitRequested`
+    decides "any run making or removing" from it synchronously on the main thread,
+    messaging no driver.
   - `SetupLock { Mutex<{holder, queue: VecDeque<LockEntry>, next_ticket}>, Condvar
-    }`; `LockEntry {run_id, ticket, hub, tab_id, key}`; `SetupGuard` releases on drop
-    only its own `run_id` + `ticket`; `evict(run_id)` is idempotent.
+    }`; `LockEntry {run_id, ticket, hub, tab_id, key}`. `SetupGuard`'s drop does
+    nothing when `std::thread::panicking()`; otherwise it releases only its own
+    `run_id` + `ticket`. `evict(run_id)` is idempotent and has **one caller**, the
+    run's own panic handler, after the PTY is killed.
   - To leave the queue: the run's `ending` flag is set, its message sent, then
     `wake()` (`notify_all`); the waiter sees `ending`, leaves, emits `done`.
-  - The lock's mutex is a leaf (no other lock, event, message, I/O or wait under
-    it); order where nested: `HubRuns` → registry → `SetupLock.state`; a run acquires
-    holding no other lock.
+    **Outside callers only call `wake()`**, never `evict`.
+  - With the guard in hand, the driver loads `ending` after `acquire` returns and
+    again after the second link check passes, before it starts `bin/setup`; if set,
+    it drops the guard and starts nothing.
+  - The `SetupLock.state` mutex is a leaf: while a thread holds it (one push, removal
+    or assignment), no other lock, event, message, I/O or wait but `wake.wait`.
+    Order where nested: `HubRuns` → registry → `SetupLock.state`. A run acquires
+    holding no other lock and, **while it is the holder** (the logical role, until
+    its guard drops or its panic handler evicts), takes neither `HubRuns` nor the
+    registry except to end itself.
   - Poison is recovered (`unwrap_or_else(PoisonError::into_inner)`), never
     unwrapped.
-  - A panicked driver frees the lock (unwinding drops the guard; `catch_unwind`
-    handler evicts, kills the PTY, releases the folder, `run_ended failed`). No
-    `panic = "abort"`.
-  - A holder releases only after its PTY is killed; a waiter leaves at once. Every
-    way out releases: `bin/setup` exited, link refusal, close, quit, `hub_runs_reset`,
-    window destroyed, socket EOF, panic.
+  - A panicked driver: the guard's drop frees nothing; the `catch_unwind` handler
+    stores `phase = ended`, kills the PTY, **then** evicts, releases the folder,
+    `run_ended failed`. A panic inside the handler aborts the process
+    (`AbortOnPanic`). No `panic = "abort"` profile.
+  - **A holder releases only after its PTY is killed, on every path, a panic
+    included**; a waiter leaves at once. Every way out releases: `bin/setup` exited,
+    link refusal, close, quit, `hub_runs_reset`, window destroyed, socket EOF or the
+    reader thread ending any way, panic.
 
 ## The path rule (owner Q4; OB-3 AC2)
 

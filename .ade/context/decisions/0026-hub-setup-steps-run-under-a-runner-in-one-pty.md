@@ -1,6 +1,6 @@
 # 0026: Hub setup steps run under a runner that leads one PTY
 
-- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 to 5;
+- Status: Proposed (2026-11-09), revised with the F2 design revisions 2 to 6;
   not yet reviewed or approved.
 - Context:
   - F2 (`docs/prd.md` OB-4 AC1, AC6) runs the bundled agent hub template's steps
@@ -74,9 +74,13 @@
     the holder's release path uses only the holder's threads. A run leaves the queue
     when its `ending` flag is set and the lock's `notify_all` wakes it. The lock's
     mutex is a leaf, taken holding no other lock (order `HubRuns` → registry → the
-    lock). Poison is recovered, not unwrapped. A panicking driver frees the lock by
-    unwinding (the guard drops; a `catch_unwind` handler evicts and ends the run). A
-    holder releases only after its PTY is killed.
+    lock). Poison is recovered, not unwrapped. A panicking driver frees the lock only
+    after its PTY is killed: the guard's drop frees nothing while the thread is
+    panicking, and the `catch_unwind` handler kills the PTY, then evicts and ends
+    the run (revision 6). A reader thread that exits in any way, a panic included,
+    ends its run through a drop sentinel that sends `SocketClosed`. The quit
+    decision reads each run's phase from an atomic the driver alone writes. A
+    holder releases only after its PTY is killed, on every path.
   - The runner executes only what ADE sends (newline-delimited JSON, types in
     `hubrun_proto.rs`, shared by `#[path]`); all policy is in `hubrun.rs`. The
     preflight runs in the same runner while the PTY is still hidden, and the tab is
