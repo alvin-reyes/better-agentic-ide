@@ -1082,3 +1082,11 @@ a.cred:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2p
 .hub-tour .orx-card h3 code { font-size: 15px; }
 .new-strip kbd { font: 12px var(--mono); padding: 1px 5px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--code-bg); }
 .new-strip a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Fleet lanes: positions and delays (were inline styles, which the CSP blocks) */
+.fleetx-lanes > li:nth-child(1) { --start:2%; --w:64%; --d:0s; }
+.fleetx-lanes > li:nth-child(2) { --start:6%; --w:14%; --d:0.45s; }
+.fleetx-lanes > li:nth-child(3) { --start:22%; --w:16%; --d:0.9s; }
+.fleetx-lanes > li:nth-child(4) { --start:44%; --w:22%; --d:1.35s; }
+.fleetx-lanes > li:nth-child(5) { --start:70%; --w:28%; --d:1.8s; }
+.fleetx-lanes > li:nth-child(6) { --start:76%; --w:18%; --d:2.25s; }
