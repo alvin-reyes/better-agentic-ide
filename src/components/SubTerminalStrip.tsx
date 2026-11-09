@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { useTabStore, findAllPanes, type View } from "../stores/tabStore";
+import { useTabStore, findAllPanes, OWN_VIEW, type View } from "../stores/tabStore";
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { tabCwd, tabLabel } from "../lib/tabDisplay";
 import { focusActiveTerminal } from "../hooks/useTerminal";
@@ -49,6 +49,9 @@ function viewCwd(view: View, cwds: Record<string, string>): string | null {
 }
 
 const tooltip = (name: string, cwd: string | null) => (cwd ? `${name} — ${cwd}` : name);
+
+/** The second tooltip line of a sub-terminal another terminal opened. */
+const openedFrom = (spawner: string | null) => (spawner ? `\nOpened from ${spawner}` : "");
 
 // App owns closing, so it can confirm first (useGuardedClose's requestCloseView).
 const requestCloseView = (tabId: string, viewId: string) =>
@@ -220,7 +223,9 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
             const view = tab.views[id];
             if (!view) return null;
             const name = view.name ?? "Terminal";
-            return entry(id, name, tooltip(name, viewCwd(view, cwds)), false);
+            const by = view.spawnedBy;
+            const spawner = by === OWN_VIEW ? label : by && tab.views[by] ? tab.views[by].name ?? "Terminal" : null;
+            return entry(id, name, tooltip(name, viewCwd(view, cwds)) + openedFrom(spawner), false);
           })}
         </div>
       </div>

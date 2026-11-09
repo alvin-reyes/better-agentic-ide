@@ -26,6 +26,7 @@ mod ptysink;
 mod state;
 mod subagent;
 mod sync;
+mod terminal_open;
 mod usage;
 mod vault;
 mod watcher;
@@ -508,7 +509,12 @@ pub fn run() {
         // created, so every PTY gets its variables (or none, if it can't).
         .setup(|app| {
             use tauri::Manager;
-            app.manage(agent_status::AgentStatus::start(agent_status::helper_beside_exe()));
+            let agent = agent_status::AgentStatus::start(agent_status::helper_beside_exe());
+            // `ade open`: the endpoint's /open logic needs the app and its PTYs.
+            let open = std::sync::Arc::new(terminal_open::OpenService::new(app.handle().clone()));
+            agent.set_open_handler(open.clone());
+            app.manage(agent);
+            app.manage(open);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -524,6 +530,8 @@ pub fn run() {
             agent_status::agent_status_toggle,
             agent_status::agent_status_watch,
             agent_status::agent_status_key,
+            terminal_open::terminal_open_listen,
+            terminal_open::terminal_open_done,
             watcher::watch_directory,
             watcher::watch_file,
             watcher::unwatch_directory,

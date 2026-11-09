@@ -525,11 +525,16 @@ interface NewInstanceOptions {
    * size rather than xterm's default 80x24.
    */
   container?: HTMLElement | null;
+  /** The size of a terminal created with no container (`ade open`'s caller's). */
+  size?: { cols: number; rows: number };
+  /** The `ade open` request this terminal is created for. */
+  requestId?: number;
 }
 
 async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: number) => void, opts: NewInstanceOptions): Promise<TerminalInstance> {
-  const { initialCwd, serializedBuffer, isNewTab = false, container } = opts;
+  const { initialCwd, serializedBuffer, isNewTab = false, container, size, requestId } = opts;
   const { term, fitAddon, searchAddon, serializeAddon, wrapper } = openTerminal(paneId);
+  if (size && !container) term.resize(size.cols, size.rows);
 
   if (serializedBuffer) term.write(serializedBuffer);
 
@@ -554,10 +559,12 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
   }
 
   try {
+    const made = { rows: term.rows || 24, cols: term.cols || 80 };
     const ptyId = await invoke<number>("create_pty", {
-      rows: term.rows || 24,
-      cols: term.cols || 80,
+      rows: made.rows,
+      cols: made.cols,
       cwd: initialCwd || null,
+      requestId: requestId ?? null,
       onEvent: ptyChannel(paneId, term),
     });
     // The pane can be closed while the shell is starting. destroyInstance ran
@@ -569,12 +576,29 @@ async function createInstance(paneId: string, setPtyId: (paneId: string, ptyId: 
     }
     inst.ptyId = ptyId;
     setPtyId(paneId, ptyId);
+    // A --focus mount can fit the terminal while create_pty awaits, with no
+    // PTY to resize yet: the PTY gets the size it has now.
+    if (requestId != null && (term.cols !== made.cols || term.rows !== made.rows)) {
+      void invoke("resize_pty", { id: ptyId, rows: term.rows, cols: term.cols }).catch(() => {});
+    }
   } catch (err) {
     term.writeln(`\x1b[31mFailed to start shell: ${err}\x1b[0m`);
   }
 
   wireInput(inst);
   return inst;
+}
+
+/**
+ * The terminal of a pane `ade open` just added, created at once with no
+ * container: a later mount finds it, so the pane gets exactly one PTY.
+ */
+export function createSubTerminalInstance(
+  paneId: string,
+  setPtyId: (paneId: string, ptyId: number) => void,
+  { cwd, size, requestId }: { cwd: string | null; size: { cols: number; rows: number }; requestId: number },
+): Promise<TerminalInstance> {
+  return createInstance(paneId, setPtyId, { initialCwd: cwd, size, requestId, container: null });
 }
 
 export function useTerminal(paneId: string, containerRef: React.RefObject<HTMLDivElement | null>) {

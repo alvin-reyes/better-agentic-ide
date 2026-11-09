@@ -53,6 +53,7 @@ import { useGuardedClose } from "./hooks/useGuardedClose";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { watchAgentStatus } from "./stores/agentStatusStore";
+import { startTerminalOpen } from "./lib/terminalOpen";
 import { useAgentStatusToasts } from "./hooks/useAgentStatusToasts";
 import { usePreviewPanel } from "./lib/previewFocus";
 
@@ -107,6 +108,7 @@ export default function App() {
   useEffect(() => {
     applyThemeToDOM(useSettingsStore.getState().getActiveTheme());
     loadSession();
+    startTerminalOpen();
   }, []);
 
   // Auto-save the session (tabs, splits, folders, scrollback) instead of only

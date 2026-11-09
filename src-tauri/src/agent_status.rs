@@ -344,6 +344,13 @@ pub struct AgentStatusUpdate {
 
 type Watcher = Box<dyn Fn(AgentStatusUpdate) -> bool + Send>;
 
+/// How an admitted `/open` gets its thread. A field, so a test can make it fail.
+type Spawn = fn(Box<dyn FnOnce() + Send>) -> std::io::Result<()>;
+
+fn spawn_thread(work: Box<dyn FnOnce() + Send>) -> std::io::Result<()> {
+    std::thread::Builder::new().name("ade-open".into()).spawn(work).map(|_| ())
+}
+
 struct Inner {
     core: Mutex<Core>,
     watchers: Mutex<Vec<Watcher>>,
@@ -354,6 +361,9 @@ struct Inner {
     port: Result<u16, String>,
     /// The helper's absolute path, or why it can't be used.
     helper: Result<PathBuf, String>,
+    /// `/open`'s logic, once `.setup()` has set it.
+    open: Mutex<Option<Arc<dyn OpenHandler>>>,
+    spawn: Mutex<Spawn>,
 }
 
 /// The running service. Cloning shares it.
@@ -424,6 +434,53 @@ pub fn screen(method: &str, headers: &[(String, String)], port: u16, master: &[u
     Ok(pty)
 }
 
+/// What `/open` answers: a status and a JSON body.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OpenAnswer {
+    pub status: u16,
+    pub body: String,
+}
+
+impl OpenAnswer {
+    pub fn json(status: u16, body: serde_json::Value) -> OpenAnswer {
+        OpenAnswer { status, body: body.to_string() }
+    }
+
+    /// `{"error": message}`.
+    pub fn error(status: u16, message: &str) -> OpenAnswer {
+        OpenAnswer::json(status, serde_json::json!({ "error": message }))
+    }
+}
+
+/// An admitted `/open`: it holds the request's in-flight slot, and dropping it
+/// releases the slot, so a panic or a failed thread spawn can't leak one.
+pub struct Admission {
+    pub caller_pty: u32,
+    release: Option<Box<dyn FnOnce() + Send>>,
+}
+
+impl Admission {
+    pub fn new(caller_pty: u32, release: impl FnOnce() + Send + 'static) -> Admission {
+        Admission { caller_pty, release: Some(Box::new(release)) }
+    }
+}
+
+impl Drop for Admission {
+    fn drop(&mut self) {
+        if let Some(release) = self.release.take() {
+            release();
+        }
+    }
+}
+
+/// The open logic (`terminal_open.rs`), injected once `.setup()` has the app.
+/// `admit` is quick and runs on the serve thread; `handle` may wait and runs
+/// on a thread of its own.
+pub trait OpenHandler: Send + Sync {
+    fn admit(&self, caller_pty: u32) -> Result<Admission, OpenAnswer>;
+    fn handle(&self, admission: Admission, body: Vec<u8>) -> OpenAnswer;
+}
+
 impl AgentStatus {
     /// Start the endpoint on a free port of 127.0.0.1 and the liveness check.
     /// When it can't listen, or the helper is missing, terminals get none of
@@ -451,6 +508,8 @@ impl AgentStatus {
             master: master.unwrap_or_default(),
             port,
             helper,
+            open: Mutex::new(None),
+            spawn: Mutex::new(spawn_thread),
         }));
         if let Some(server) = server {
             let weak = Arc::downgrade(&status.0);
@@ -463,6 +522,11 @@ impl AgentStatus {
             AgentStatus(inner).check_processes(crate::hook_forward::start_time);
         });
         status
+    }
+
+    /// Give `/open` its logic. Until then it answers 409.
+    pub fn set_open_handler(&self, handler: Arc<dyn OpenHandler>) {
+        *self.0.open.lock().unwrap() = Some(handler);
     }
 
     /// Why terminals don't get the variables, if they don't.
@@ -553,18 +617,25 @@ impl AgentStatus {
     }
 
     #[cfg(test)]
-    fn port(&self) -> u16 {
+    pub(crate) fn port(&self) -> u16 {
         *self.0.port.as_ref().unwrap()
     }
 
     /// The token terminal `pty` is given.
     #[cfg(test)]
-    fn token_for(&self, pty: u32) -> String {
+    pub(crate) fn token_for(&self, pty: u32) -> String {
         pty_token(&self.0.master, pty)
+    }
+
+    #[cfg(test)]
+    fn set_spawn(&self, spawn: Spawn) {
+        *self.0.spawn.lock().unwrap() = spawn;
     }
 }
 
-/// Answer requests until the service is gone. Every answer is `{}`.
+/// Answer requests until the service is gone. `/` is hook events, answered
+/// `{}`; `/open` goes to the open handler; any other path is 404 `{}`. Every
+/// request is screened first.
 fn serve(server: tiny_http::Server, status: Weak<Inner>) {
     for mut request in server.incoming_requests() {
         let Some(inner) = status.upgrade() else { return };
@@ -575,30 +646,78 @@ fn serve(server: tiny_http::Server, status: Weak<Inner>) {
         let method = request.method().as_str().to_string();
         let code = match screen(&method, &headers, port, &status.0.master, request.body_length()) {
             Err(code) => code,
-            Ok(pty) => {
-                // The length header can be absent (chunked): read one byte
-                // past the limit to tell.
-                let mut body = Vec::new();
-                let read = request.as_reader().take(MAX_BODY as u64 + 1).read_to_end(&mut body);
-                if read.is_err() {
-                    400
-                } else if body.len() > MAX_BODY {
-                    413
-                } else {
-                    match serde_json::from_slice::<HookEvent>(&body) {
+            Ok(pty) => match request.url().split('?').next().unwrap_or("") {
+                "/" => match read_body(&mut request) {
+                    Err(code) => code,
+                    Ok(body) => match serde_json::from_slice::<HookEvent>(&body) {
                         Ok(ev) => {
                             status.apply(pty, &ev);
                             200
                         }
                         Err(_) => 400,
+                    },
+                },
+                "/open" => {
+                    match read_body(&mut request) {
+                        Err(413) => respond(request, 413, "{}"),
+                        Err(code) => respond(request, code, &OpenAnswer::error(code, "couldn't read the request").body),
+                        Ok(body) => open(&status, request, pty, body),
                     }
+                    continue;
                 }
-            }
+                _ => 404,
+            },
         };
-        let response = tiny_http::Response::from_string("{}")
-            .with_status_code(code)
-            .with_header(tiny_http::Header::from_bytes("Content-Type", "application/json").expect("a valid header"));
-        let _ = request.respond(response);
+        respond(request, code, "{}");
+    }
+}
+
+/// The body, at most `MAX_BODY` bytes, or the status to refuse it with.
+fn read_body(request: &mut tiny_http::Request) -> Result<Vec<u8>, u16> {
+    // The length header can be absent (chunked): read one byte past the
+    // limit to tell.
+    let mut body = Vec::new();
+    if request.as_reader().take(MAX_BODY as u64 + 1).read_to_end(&mut body).is_err() {
+        return Err(400);
+    }
+    if body.len() > MAX_BODY {
+        return Err(413);
+    }
+    Ok(body)
+}
+
+fn respond(request: tiny_http::Request, code: u16, body: &str) {
+    let response = tiny_http::Response::from_string(body)
+        .with_status_code(code)
+        .with_header(tiny_http::Header::from_bytes("Content-Type", "application/json").expect("a valid header"));
+    let _ = request.respond(response);
+}
+
+/// An `/open` from terminal `pty`: admitted here, on the serve thread, then
+/// handled and answered on a thread of its own, so hook events keep flowing.
+fn open(status: &AgentStatus, request: tiny_http::Request, pty: u32, body: Vec<u8>) {
+    let Some(handler) = status.0.open.lock().unwrap().clone() else {
+        return respond(request, 409, &OpenAnswer::error(409, "ADE is still starting").body);
+    };
+    let admission = match handler.admit(pty) {
+        Ok(admission) => admission,
+        Err(refused) => return respond(request, refused.status, &refused.body),
+    };
+    // A failed spawn drops its closure, so the request is shared with the
+    // thread rather than moved into it: on failure it is taken back here.
+    let slot = Arc::new(Mutex::new(Some((request, admission, body))));
+    let theirs = slot.clone();
+    let spawn = *status.0.spawn.lock().unwrap();
+    let spawned = spawn(Box::new(move || {
+        let Some((request, admission, body)) = theirs.lock().unwrap().take() else { return };
+        let answer = handler.handle(admission, body);
+        respond(request, answer.status, &answer.body);
+    }));
+    if spawned.is_err() {
+        if let Some((request, admission, _)) = slot.lock().unwrap().take() {
+            drop(admission);
+            respond(request, 503, &OpenAnswer::error(503, "ADE couldn't start a thread for this request").body);
+        }
     }
 }
 
@@ -1062,8 +1181,12 @@ mod tests {
     }
 
     fn request(port: u16, method: &str, extra: &str, body: &str) -> String {
+        request_to(port, method, "/", extra, body)
+    }
+
+    fn request_to(port: u16, method: &str, path: &str, extra: &str, body: &str) -> String {
         format!(
-            "{method} / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
         )
     }
@@ -1284,5 +1407,180 @@ mod tests {
         st.watch(|_| false);
         st.apply(P, &event("session-start.json", S));
         assert!(st.0.watchers.lock().unwrap().is_empty());
+    }
+
+    // -- /open: routing and threads -----------------------------------------
+
+    /// A fake open handler: counts its calls and its in-flight slots, records
+    /// the threads it runs on, answers 200 `{"opened":<caller>}`, and blocks
+    /// in `handle` while `gate` is closed.
+    #[derive(Default)]
+    struct FakeOpen {
+        admitted: Mutex<Vec<std::thread::ThreadId>>,
+        handled: Mutex<Vec<(std::thread::ThreadId, Vec<u8>)>>,
+        in_flight: Arc<Mutex<usize>>,
+        refuse: Option<OpenAnswer>,
+        gate: Option<Mutex<std::sync::mpsc::Receiver<()>>>,
+    }
+
+    impl OpenHandler for FakeOpen {
+        fn admit(&self, caller_pty: u32) -> Result<Admission, OpenAnswer> {
+            self.admitted.lock().unwrap().push(std::thread::current().id());
+            if let Some(refused) = &self.refuse {
+                return Err(refused.clone());
+            }
+            *self.in_flight.lock().unwrap() += 1;
+            let slot = self.in_flight.clone();
+            Ok(Admission::new(caller_pty, move || *slot.lock().unwrap() -= 1))
+        }
+        fn handle(&self, admission: Admission, body: Vec<u8>) -> OpenAnswer {
+            self.handled.lock().unwrap().push((std::thread::current().id(), body));
+            if let Some(gate) = &self.gate {
+                let _ = gate.lock().unwrap().recv();
+            }
+            OpenAnswer::json(200, serde_json::json!({ "opened": admission.caller_pty }))
+        }
+    }
+
+    fn with_open(fake: FakeOpen) -> (AgentStatus, Arc<FakeOpen>) {
+        let st = started();
+        let fake = Arc::new(fake);
+        st.set_open_handler(fake.clone());
+        (st, fake)
+    }
+
+    fn post_open(st: &AgentStatus, pty: u32, body: &str) -> String {
+        let port = st.port();
+        send(port, &request_to(port, "POST", "/open", &format!("X-ADE-Token: {}\r\nX-ADE-PTY: {pty}\r\n", st.token_for(pty)), body))
+    }
+
+    #[test]
+    fn routes_by_path_and_unknown_is_404() {
+        let (st, fake) = with_open(FakeOpen::default());
+        let port = st.port();
+        let token = format!("X-ADE-Token: {}\r\nX-ADE-PTY: 9\r\n", st.token_for(9));
+        let hook = send(port, &request_to(port, "POST", "/", &token, &start_body("r1")));
+        assert!(status_line(&hook).contains(" 200"), "{hook}");
+        assert_eq!(body_of(&hook), "{}");
+        assert_eq!(st.current(), BTreeMap::from([(9, AgentState::Ready)]), "/ is hook events");
+        for path in ["/other", "/open/x", "/opens"] {
+            let answer = send(port, &request_to(port, "POST", path, &token, "{}"));
+            assert!(status_line(&answer).contains(" 404"), "{path}: {answer}");
+            assert_eq!(body_of(&answer), "{}");
+        }
+        // Screened first: a wrong token on an unknown path is 401.
+        let answer = send(port, &request_to(port, "POST", "/other", "X-ADE-Token: nope\r\nX-ADE-PTY: 9\r\n", "{}"));
+        assert!(status_line(&answer).contains(" 401"), "{answer}");
+        let open = post_open(&st, 9, r#"{"cwd":"/"}"#);
+        assert!(status_line(&open).contains(" 200"), "{open}");
+        assert_eq!(body_of(&open), r#"{"opened":9}"#);
+        assert_eq!(fake.handled.lock().unwrap().len(), 1);
+        assert_eq!(fake.handled.lock().unwrap()[0].1, br#"{"cwd":"/"}"#.to_vec(), "the handler gets the body");
+    }
+
+    #[test]
+    fn open_is_screened_like_hook_events() {
+        let (st, fake) = with_open(FakeOpen::default());
+        let port = st.port();
+        let token = format!("X-ADE-Token: {}\r\nX-ADE-PTY: 9\r\n", st.token_for(9));
+        let open = |method: &str, extra: &str, body: &str| request_to(port, method, "/open", extra, body);
+        let big = format!(r#"{{"cwd":"{}"}}"#, "a".repeat(MAX_BODY));
+        let cases = [
+            ("wrong token", 401, open("POST", "X-ADE-Token: nope\r\nX-ADE-PTY: 9\r\n", "{}")),
+            ("another PTY's token", 401, open("POST", &format!("X-ADE-Token: {}\r\nX-ADE-PTY: 9\r\n", st.token_for(8)), "{}")),
+            ("missing X-ADE-PTY", 401, open("POST", &format!("X-ADE-Token: {}\r\n", st.token_for(9)), "{}")),
+            ("Origin", 403, open("POST", &format!("{token}Origin: http://evil.example\r\n"), "{}")),
+            ("foreign Host", 403, open("POST", &token, "{}").replace(&format!("Host: 127.0.0.1:{port}"), &format!("Host: localhost:{port}"))),
+            ("GET", 405, open("GET", &token, "")),
+            ("oversize", 413, open("POST", &token, &big)),
+            (
+                "oversize, chunked",
+                413,
+                format!(
+                    "POST /open HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{token}Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n{big}\r\n0\r\n\r\n",
+                    big.len()
+                ),
+            ),
+        ];
+        for (name, code, raw) in cases {
+            let answer = send(port, &raw);
+            assert!(status_line(&answer).contains(&format!(" {code}")), "{name}: {answer}");
+            assert_eq!(body_of(&answer), "{}", "{name}");
+        }
+        assert!(fake.admitted.lock().unwrap().is_empty(), "nothing refused reached the handler");
+        assert!(fake.handled.lock().unwrap().is_empty());
+        assert_eq!(st.current(), BTreeMap::new());
+    }
+
+    #[test]
+    fn open_before_the_handler_is_set_is_409() {
+        let st = started();
+        let answer = post_open(&st, 9, r#"{"cwd":"/"}"#);
+        assert!(status_line(&answer).contains(" 409"), "{answer}");
+        assert_eq!(body_of(&answer), r#"{"error":"ADE is still starting"}"#);
+    }
+
+    #[test]
+    fn an_admit_refusal_is_answered_with_its_status() {
+        let refused = OpenAnswer::error(429, "too many");
+        let (st, fake) = with_open(FakeOpen { refuse: Some(refused), ..Default::default() });
+        let answer = post_open(&st, 9, r#"{"cwd":"/"}"#);
+        assert!(status_line(&answer).contains(" 429"), "{answer}");
+        assert_eq!(body_of(&answer), r#"{"error":"too many"}"#);
+        assert_eq!(fake.admitted.lock().unwrap().len(), 1);
+        assert!(fake.handled.lock().unwrap().is_empty(), "a refusal is not handled");
+    }
+
+    #[test]
+    fn open_is_answered_on_its_own_thread() {
+        let (st, fake) = with_open(FakeOpen::default());
+        let answer = post_open(&st, 9, "{}");
+        assert!(status_line(&answer).contains(" 200"), "{answer}");
+        let admitted = fake.admitted.lock().unwrap()[0];
+        let handled = fake.handled.lock().unwrap()[0].0;
+        assert_ne!(admitted, handled, "handle runs on a thread of its own");
+        assert_ne!(handled, std::thread::current().id());
+        // The serve thread admits: a second request is admitted on the same one.
+        post_open(&st, 9, "{}");
+        assert_eq!(fake.admitted.lock().unwrap()[1], admitted);
+        assert_eq!(*fake.in_flight.lock().unwrap(), 0);
+    }
+
+    #[test]
+    fn hook_events_are_served_while_an_open_waits() {
+        let (release, gate) = std::sync::mpsc::channel();
+        let (st, fake) = with_open(FakeOpen { gate: Some(Mutex::new(gate)), ..Default::default() });
+        let waiting = {
+            let st = st.clone();
+            std::thread::spawn(move || post_open(&st, 9, "{}"))
+        };
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while fake.handled.lock().unwrap().is_empty() {
+            assert!(std::time::Instant::now() < deadline, "the open never reached its handler");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let port = st.port();
+        let hook = send(port, &request(port, "POST", &format!("X-ADE-Token: {}\r\nX-ADE-PTY: 4\r\n", st.token_for(4)), &start_body("w1")));
+        assert!(status_line(&hook).contains(" 200"), "{hook}");
+        assert_eq!(st.current(), BTreeMap::from([(4, AgentState::Ready)]));
+        assert!(!waiting.is_finished(), "the open is still waiting");
+        release.send(()).unwrap();
+        let answer = waiting.join().unwrap();
+        assert!(status_line(&answer).contains(" 200"), "{answer}");
+    }
+
+    #[test]
+    fn a_failed_spawn_is_503_and_releases_its_slot() {
+        let (st, fake) = with_open(FakeOpen::default());
+        st.set_spawn(|_work| Err(std::io::Error::other("no threads left")));
+        let answer = post_open(&st, 9, "{}");
+        assert!(status_line(&answer).contains(" 503"), "{answer}");
+        assert!(serde_json::from_str::<serde_json::Value>(body_of(&answer)).unwrap()["error"].is_string());
+        assert_eq!(fake.admitted.lock().unwrap().len(), 1);
+        assert!(fake.handled.lock().unwrap().is_empty());
+        assert_eq!(*fake.in_flight.lock().unwrap(), 0, "the slot is released");
+        // The endpoint keeps serving.
+        st.set_spawn(spawn_thread);
+        assert!(status_line(&post_open(&st, 9, "{}")).contains(" 200"));
     }
 }

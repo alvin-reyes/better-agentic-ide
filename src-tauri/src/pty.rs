@@ -15,6 +15,12 @@ pub struct PtyInstance {
     pid: Option<u32>,
     /// Where this PTY's output goes. The reader thread holds the other handle.
     sink: Arc<Mutex<Sink>>,
+    /// The label of the window showing it: `create_pty` sets it, `reattach_pty` replaces it.
+    owner: Option<String>,
+    /// The `/open` request it was created for, if any.
+    request_id: Option<u64>,
+    /// A `/open` request claimed it, so it counts toward the cap.
+    opened_by_open: bool,
 }
 
 impl PtyInstance {
@@ -46,7 +52,7 @@ impl PtyInstance {
                 }
             })
             .map_err(|e| format!("can't start the terminal's writer: {e}"))?;
-        Ok(Self { input, _child: child, master, pid, sink })
+        Ok(Self { input, _child: child, master, pid, sink, owner: None, request_id: None, opened_by_open: false })
     }
 }
 
@@ -61,6 +67,44 @@ impl PtyManager {
             instances: Arc::new(Mutex::new(HashMap::new())),
             next_id: AtomicU32::new(1),
         }
+    }
+
+    /// Adds a new PTY as `create_pty` makes it: shown in window `owner`, made
+    /// for `/open` request `request_id` if any. The claim and the cap read both.
+    pub(crate) fn insert_new(&self, id: u32, mut inst: PtyInstance, owner: &str, request_id: Option<u64>) {
+        inst.owner = Some(owner.to_string());
+        inst.request_id = request_id;
+        self.instances.lock().unwrap().insert(id, inst);
+    }
+
+    /// PTY `id` is now shown in window `owner` (`reattach_pty`).
+    pub(crate) fn set_owner(&self, id: u32, owner: &str) {
+        if let Some(inst) = self.instances.lock().unwrap().get_mut(&id) {
+            inst.owner = Some(owner.to_string());
+        }
+    }
+
+    /// What `/open` knows of PTY `id`; None once it is gone.
+    pub(crate) fn facts(&self, id: u32) -> Option<crate::terminal_open::PtyFacts> {
+        let instances = self.instances.lock().unwrap();
+        let inst = instances.get(&id)?;
+        Some(crate::terminal_open::PtyFacts { owner: inst.owner.clone(), request_id: inst.request_id, opened_by_open: inst.opened_by_open })
+    }
+
+    /// The id `reserve_id` hands out next.
+    pub(crate) fn next_id(&self) -> u32 {
+        self.next_id.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn mark_opened(&self, id: u32) {
+        if let Some(inst) = self.instances.lock().unwrap().get_mut(&id) {
+            inst.opened_by_open = true;
+        }
+    }
+
+    /// Live PTYs a `/open` request claimed.
+    pub(crate) fn opened_count(&self) -> usize {
+        self.instances.lock().unwrap().values().filter(|i| i.opened_by_open).count()
     }
 }
 
@@ -156,11 +200,13 @@ fn apply_hook_env(cmd: &mut CommandBuilder, vars: Option<Vec<(&'static str, Stri
 #[tauri::command(async)]
 pub fn create_pty(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, PtyManager>,
     agent: tauri::State<'_, crate::agent_status::AgentStatus>,
     rows: u16,
     cols: u16,
     cwd: Option<String>,
+    request_id: Option<u64>,
     on_event: Channel<PtyEvent>,
 ) -> Result<u32, String> {
     let pty_system = NativePtySystem::default();
@@ -213,7 +259,7 @@ pub fn create_pty(
     let sink = Arc::new(Mutex::new(Sink::new(channel_out(on_event))));
     let instance = PtyInstance::new(id, child, pair.master, child_pid, sink.clone())?;
 
-    state.instances.lock().unwrap().insert(id, instance);
+    state.insert_new(id, instance, window.label(), request_id);
 
     // Started after the insert, so a shell that exits at once still finds
     // its entry to remove.
@@ -308,11 +354,13 @@ pub fn resize_pty(
 /// The window that had it receives nothing more.
 #[tauri::command]
 pub fn reattach_pty(
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, PtyManager>,
     agent: tauri::State<'_, crate::agent_status::AgentStatus>,
     id: u32,
     on_event: Channel<PtyEvent>,
 ) -> Result<(), String> {
+    state.set_owner(id, window.label());
     attach(&state.instances, &agent, id, channel_out(on_event))
 }
 
@@ -806,6 +854,46 @@ mod tests {
         assert!(!first.text().contains("C3") && !first.text().contains("D4"));
         assert!(third.text().find("D4").is_some() && !third.text().contains("C3"));
     }
+
+    /// The owner window and the `/open` request a terminal was made for, as
+    /// the claim reads them; a reattach replaces the owner.
+    #[test]
+    fn a_terminal_records_its_owner_and_request_id() {
+        use crate::terminal_open::PtyFacts;
+        let pair = NativePtySystem::default()
+            .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+            .unwrap();
+        let mut cmd = CommandBuilder::new("/bin/sh");
+        cmd.args(["-c", "sleep 5"]);
+        let child = pair.slave.spawn_command(cmd).unwrap();
+        drop(pair.slave);
+        let pid = child.process_id();
+        let sink = Arc::new(Mutex::new(Sink::unattached()));
+
+        let manager = PtyManager::new();
+        let id = reserve_id(&manager.next_id);
+        // What create_pty records: the window that asked and the request.
+        let instance = PtyInstance::new(id, child, pair.master, pid, sink).unwrap();
+        manager.insert_new(id, instance, "main", Some(7));
+
+        assert_eq!(manager.facts(id), Some(PtyFacts { owner: Some("main".into()), request_id: Some(7), opened_by_open: false }));
+        assert_eq!(manager.next_id(), id + 1, "the id reserve_id hands out next");
+        assert_eq!(manager.opened_count(), 0);
+        manager.mark_opened(id);
+        assert!(manager.facts(id).unwrap().opened_by_open);
+        assert_eq!(manager.opened_count(), 1);
+
+        // A tab moved to another window: what reattach_pty records.
+        manager.set_owner(id, "detached-1");
+        assert_eq!(manager.facts(id), Some(PtyFacts { owner: Some("detached-1".into()), request_id: Some(7), opened_by_open: true }));
+
+        manager.instances.lock().unwrap().remove(&id);
+        assert_eq!(manager.facts(id), None, "a gone terminal has no facts");
+        assert_eq!(manager.opened_count(), 0, "and no longer counts");
+        manager.mark_opened(id);
+        manager.set_owner(id, "main");
+        assert_eq!(manager.facts(id), None, "setting a gone terminal's owner makes nothing");
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -917,6 +1005,30 @@ mod wiring_tests {
         let source = include_str!("pty.rs");
         assert_eq!(source.matches(concat!("try_clone", "_reader(")).count(), 1);
         assert_eq!(source.matches(concat!("thread::", "spawn(")).count(), 1);
+    }
+
+    /// The body of command `name` in this file, up to its closing brace.
+    fn command_body(source: &str, name: &str) -> String {
+        // A Windows checkout has CRLF line endings; compare on LF.
+        let source = &source.replace("\r\n", "\n");
+        let start = source.find(&format!("pub fn {name}(")).unwrap_or_else(|| panic!("no {name}"));
+        let rest = &source[start..];
+        rest[..rest.find("\n}\n").expect("the command's end")].to_string()
+    }
+
+    /// `/open`'s bookkeeping is done by the commands: create_pty records the
+    /// window that asked and the request (the claim and the cap read them),
+    /// and reattach_pty records the window a tab moved to. The setters are
+    /// tested in `a_terminal_records_its_owner_and_request_id`; this pins
+    /// that the commands call them with their own window and request.
+    #[test]
+    fn the_commands_record_the_owner_and_the_request() {
+        let source = include_str!("pty.rs");
+        let create = command_body(source, "create_pty");
+        assert!(create.contains(concat!("state.insert_new(id, instance, window.label(), ", "request_id)")), "create_pty records owner and request");
+        assert!(!create.contains(concat!(".instances.lock().unwrap().", "insert(")), "and inserts only through insert_new");
+        let reattach = command_body(source, "reattach_pty");
+        assert!(reattach.contains(concat!("state.set_owner(id, ", "window.label())")), "reattach_pty records the new owner");
     }
 
     /// A sync command runs on the main thread, one at a time, in the order its

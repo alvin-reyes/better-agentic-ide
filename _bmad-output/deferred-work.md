@@ -34,6 +34,12 @@
 - source_plan: `_bmad-output/plan-agent-colors.md`
   summary: Bump the ADE Claude Code plugin's version so existing installs pick up the colored agent files.
   evidence: Owner decision 8c (2026-10-16). Story A regenerates `claude-plugin/plugins/ade/agents/*.md` but leaves `plugin.json` at 1.1.0.
+- source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-adds-a-sub-terminal-endpoint-and-window-plan.md`
+  summary: The hook endpoint's `serve` loop reads a request body with no read timeout, so a client that sends headers and then stalls holds the serve thread (hook events and `/open` wait behind it).
+  evidence: Code review m6 of PR #96 (story 4a), deferred as pre-existing: hook events were read the same way before `/open`. A per-connection read deadline (or reading the body on the handler thread) would bound it.
+- source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-adds-a-sub-terminal-endpoint-and-window-plan.md`
+  summary: An `ade open` run while the shell starts (from an rc file) can reach the window before `setPtyId` has stored the caller's PTY id, so the window doesn't find the caller and answers 409.
+  evidence: Code review m8 of PR #96 (story 4a), deferred. The window finds the caller by `ptyId` through `allTabPanes`; `create_pty` returns, then `setPtyId` runs, and a fast rc-time request can arrive between them. Holding requests for an unknown caller briefly (until `expiresAt`), or mapping the PTY id before the shell starts, would fix it.
 - source_plan: `_bmad-output/plan-orgo-agent-computers.md`
   summary: Installing any MCP server but Orgo reads an unreadable `.mcp.json` (a directory, not UTF-8, permission denied) as empty and then replaces it with a file holding only the new server.
   evidence: Pre-existing in `read_config` (`src-tauri/src/mcp.rs`), which maps every read error to an empty map. Orgo's Story 1 refuses it on the Orgo path only (code review of a895c05, CR-m2). Telling `NotFound` apart from other errors for every server fixes it.
