@@ -64,6 +64,9 @@ header.page p{margin:0;color:var(--text-secondary);font-size:12px;max-width:760p
 @media (prefers-reduced-motion:reduce){.cursor,.spin{animation:none!important}}
 .runbar{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px;background:var(--bg-elevated);border-bottom:1px solid var(--border);font-size:12px;color:var(--text-secondary);flex-shrink:0}
 .runbar b{color:var(--text-primary);font-weight:500}
+.runbar.wait{height:44px;align-items:flex-start;padding-top:6px}
+.runbar.wait .rw{display:flex;flex-direction:column;gap:2px;line-height:16px}
+.runbar.wait .rw small{font-size:12px;color:var(--text-secondary)}
 .spin{width:10px;height:10px;border:2px solid var(--text-secondary);border-top-color:transparent;border-radius:50%;display:inline-block;animation:sp 1s linear infinite;flex-shrink:0}
 @keyframes sp{to{transform:rotate(360deg)}}
 /* run notice */
@@ -213,7 +216,7 @@ aside{display:grid;gap:14px}
 <header class="page">
   <div>
     <h1>Set up your agentic environment (F2)</h1>
-    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 3 (answers the joint review of the architecture's and this spec's revision 2, the owner's decisions and the PRD's amendment of 2026-11-09; spec section 16). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
+    <p>Interactive mockup for <code>2026-11-09-onboarding-ux.md</code>, revision 4 (answers the round-3 joint review of the architecture's and this spec's revision 3 and the owner's decisions of 2026-11-09; spec section 16.0). The window on the left works: type, Tab, Enter and Esc as you would in Better Terminal. The right column injects conditions and jumps to every state the PRD's acceptance criteria test. Spec section numbers are in the caption. Names and paths are placeholders.</p>
   </div>
   <div class="themes" role="group" aria-label="Theme">
     <button class="btn sm" data-theme-set="dark" aria-pressed="true">Dark (Precision)</button>
@@ -289,7 +292,7 @@ const FS = {
 const HUB_CHECKOUTS = { [HOME + "/work/hubs/globex-staff-engineer"]: ["~/src/web"] };
 
 /* ---------------- state ---------------- */
-const SIM0 = { template: "yes", f1: "off", inst: "main", t4: "yes", hubs: "no", gitname: "yes", clone: "no", roles: "ok", preflight: "pass", exgit: "ok", fail: "none", removal: "ok", samefolder: "no", secretprompt: "ok", sync: "on", cfgdir: "no", agentstatus: "on", speed: "normal", later: "off", hubconf: "ok", commits: "no", mac: "yes" };
+const SIM0 = { template: "yes", f1: "off", inst: "main", t4: "yes", hubs: "no", gitname: "yes", clone: "no", roles: "ok", preflight: "pass", exgit: "ok", fail: "none", removal: "ok", linkwait: "no", samefolder: "no", secretprompt: "ok", sync: "on", cfgdir: "no", agentstatus: "on", speed: "normal", later: "off", hubconf: "ok", commits: "no", mac: "yes" };
 let S;
 function freshQ() {
   return {
@@ -552,6 +555,10 @@ function pfSection(pf, existing) {
   return `${fb}<section class="rv" aria-labelledby="pf-h"><h3 id="pf-h" tabindex="-1">Checking this Mac</h3><ul class="checks" aria-live="off">${pfRows(existing).map((k) => `<li>${w(k)}<span>${label(k)}</span></li>`).join("")}</ul></section>`;
 }
 // 5.6: the refusal before any check (no "Checking this Mac" section).
+// hub_run_prepare -> {refused: "unknown_plan"}: the plan is gone; nothing checked or written (architecture rev 4, m15).
+function expiredBlock() {
+  return `<div class="box fail" role="group" aria-labelledby="xp-h"><h4 id="xp-h" tabindex="-1">${FAILI}<span>This review is out of date, so setup didn't start.</span></h4><p>Nothing was checked or written, and your answers are kept. Choose Review Again to see the steps and commands for your answers once more, then choose Set Up Hub.</p><div class="acts" style="margin-top:8px"><button class="btn" id="q-replan">Review Again</button></div></div>`;
+}
 function inUseBlock(iu, existing) {
   return `<div class="box fail" role="group" aria-labelledby="iu-h"><h4 id="iu-h" tabindex="-1">${FAILI}<span>${C(tilde(iu.p))} is in use by a setup running in another tab.</span></h4><p>Two setups can't use the same folder at once, so nothing was checked or written. Your answers are kept.${caseNote(iu.p, iu.r)}</p><p>${existing ? "Choose Open Hub again after that setup ends, or turn off Run bin/setup and bin/doctor first." : "Choose Back to pick another folder, or choose Set Up Hub again after that setup ends."}</p></div>`;
 }
@@ -592,6 +599,15 @@ function unpackFailed(t) {
   S.overlay = "q"; S.focus = "#af-h"; S.caption = "<b>7.3</b> · step (a) failed: the questionnaire returns on Review, answers kept";
   say("Better Terminal couldn't unpack the agent hub template: the disk is full.", true); render();
 }
+// M-A: setup_waiting {key: f | removal, state: waiting, holder}. The bar says so; no line, no notice, no dot.
+const HOLDER = "~/hubs/globex-qa-engineer";
+function lockWait(t, key, go) {
+  const r = t.run; if (r.waiting) return true;
+  r.waiting = { key, holder: HOLDER }; S.focus = "#term"; say("Waiting for another agent hub setup to finish linking."); render();
+  if (r.instant) return true;
+  later(() => { if (t.run !== r || !r.waiting || r.state === "stopped") return; r.waiting = null; if (key === "f") r.waited = true; else r.rm.waited = true; render(); go(); }, 3000, false);
+  return true;
+}
 function exec(t) {
   const r = t.run; if (!r || r.state === "stopped") return;
   const st = r.steps[r.i];
@@ -614,6 +630,7 @@ function exec(t) {
     t.lines.push(L.out(`  ${r.stored.length ? r.stored.map((s) => s + " OK").join(" · ") : "no secrets stored"}`, "dim"), "", `<span class="ade">&gt;</span> <span class="cursor"></span>`);
     r.bar = null; r.state = "session"; say("Agent hub set up. The persona session is starting."); runEnded(); render(); return;
   }
+  if (st.k === "f" && S.sim.linkwait === "yes" && !r.waited) { if (lockWait(t, "f", () => exec(t))) return; }
   if (st.k === "f" && failsHere(r, "f") && r.fail === "flink") { failNotice(t, st); render(); return; }
   if (r.pauseAt === st.k) { t.lines.push(L.cmd(st.cmds[0])); r.paused = true; render(); return; }
   st.cmds.forEach((a) => t.lines.push(L.cmd(a)) && outputFor(t, st.k, a, failsHere(r, st.k)));
@@ -758,7 +775,8 @@ function batchClose(ids, quit) {
   S.confirm = { kind: "batch", tabs: ids, quit, total: ids.length }; S.focus = "#cf-safe"; render();
 }
 /* ---------------- removal (9.1, 9.4, 9.5) ---------------- */
-const SERVICE = () => `hub.${hubName()}`;
+// m6: the template's keychain_service: AGENT_KEYCHAIN_SERVICE, HUB_KEYCHAIN_SERVICE, HUB_NAME, then the folder's base name. bin/init writes HUB_NAME and HUB_KEYCHAIN_SERVICE as the hub name.
+const SERVICE = () => hubName();
 const forgetCmd = (name) => cmd(["security", "delete-generic-password", "-s", SERVICE(), "-a", name]);
 function restoreCmds(t) {
   const cmds = []; checkouts().filter((c) => fsType(c)).forEach((c) => { cmds.push(cmd(["rm", memPath(c)]), cmd(["mv", memPath(c).replace(/memory$/, "memory.bak-" + BAK), memPath(c)])); });
@@ -768,6 +786,7 @@ function restoreCmds(t) {
 function startRemoval(t, after) {
   const r = t.run; r.state = "removing"; r.rm.after = after; t.notice = null; r.bar = "Removing the hub folder";
   const f = r.done.has("f");
+  if (f && S.sim.t4 === "yes" && !r.rm.unlinked && S.sim.linkwait === "yes" && !r.rm.waited) { render(); if (lockWait(t, "removal", () => startRemoval(t, after))) return; }
   if (f && S.sim.t4 === "yes" && !r.rm.unlinked) {
     t.lines.push(L.cmd(["bin/setup", "--unlink", "--since", RUN_START]));
     if (S.sim.removal === "unlink" && !r.rm.retried) { t.lines.push(L.out(`bin/setup: --unlink: ${HOME}/.claude/skills/bmad-build: Operation not permitted; nothing changed`, "r")); return removalStopped(t, "unlink"); }
@@ -776,6 +795,7 @@ function startRemoval(t, after) {
   if (S.sim.removal === "trash" && !(r.rm.retried && r.rm.part === "trash")) return removalStopped(t, "trash");
   t.lines.push(L.ade(`Moved ${tilde(t.folder)} to the Trash${r.createdParent ? `, and ${tilde(r.createdParent)}, which was then empty` : ""}.`));
   S.created.delete(t.folder); r.bar = null;
+  if (r.rm.closing) { r.state = "stopped"; S.tabs = S.tabs.filter((x) => x.id !== t.id); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); say(`Removed ${tilde(t.folder)}.`); S.focus = "#term"; S.caption = "<b>9.3 M-B</b> · Retry moved it to the Trash; the tab closed as Remove meant (no summary: nothing was linked or stored)"; runEnded(); render(); return; }
   if (after) { r.state = "stopped"; S.tabs = S.tabs.filter((x) => x.id !== t.id); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : null; if (!S.tabs.length) S.q.from = "empty"; say(`Moved ${tilde(t.folder)} to the Trash. Your answers are open.`); runEnded(); after(); render(); return; }
   removalDone(t);
 }
@@ -790,11 +810,22 @@ function removalStopped(t, part) {
 }
 function removalKept(t) {
   const r = t.run; t.notice = null; r.state = "stopped"; r.noRemove = true; r.bar = null;
-  if (r.rm.part === "unlink") t.lines.push(L.ade(`Removal stopped. ${tilde(t.folder)} is kept and was not moved to the Trash.`), L.ade(`To finish by hand: ${cmd(["bin/setup", "--unlink", "--since", RUN_START])}, then move the folder to the Trash.`));
-  else t.lines.push(L.ade(`Removal stopped. ${tilde(t.folder)} is kept and was not moved to the Trash.`), ...leftLines(t));
+  t.lines.push(L.ade(`Removal stopped. ${tilde(t.folder)} is kept and was not moved to the Trash.`));
+  if (r.rm.part === "unlink") t.lines.push(L.ade(`To finish by hand: ${cmd(["bin/setup", "--unlink", "--since", RUN_START])}, then move the folder to the Trash.`));
+  // m12: after any Keep, L8 lists removal_failed.left (manual_restore, then left_behind), framed as what a by-hand Trash would leave.
+  const left = keptLeft(t); const f = tilde(t.folder);
+  if (left.restore.length) { t.lines.push(L.ade(`If you move ${f} to the Trash yourself, first restore Claude's memory:`)); left.restore.forEach((c) => t.lines.push(L.ade("  " + c))); }
+  if (left.secrets.length) { t.lines.push(L.ade(`If you move ${f} to the Trash yourself, these stay behind:`)); left.secrets.forEach((n) => t.lines.push(L.ade(`  the secret ${n} in your Keychain: ${forgetCmd(n)}`))); }
   t.lines.push(shellPrompt(t.folder));
   if (r.rm.after) { r.rm.after = null; }
-  say("Removal stopped. The hub is kept."); S.focus = "#term"; S.caption = "<b>9.5</b> · after Keep: Agent hub, a shell in the hub, no Remove offered"; runEnded(); render();
+  say("Removal stopped. The hub is kept."); S.focus = "#term"; S.caption = "<b>9.5</b> · after Keep: Agent hub, a shell in the hub, no Remove offered; L8 lists removal_failed.left (m12)"; runEnded(); render();
+}
+// removal_failed.left: the RemovalPlan recomputed at the failure. Links into the hub that are still there need restoring by hand
+// (no T4; or --unlink failed and its message says nothing changed); secrets stored in this run stay in the Keychain.
+function keptLeft(t) {
+  const r = t.run; const f = r.done.has("f");
+  const linksLeft = f && (S.sim.t4 === "no" || (r.rm.part === "unlink" && !r.rm.unlinked));
+  return { restore: linksLeft ? restoreCmds(t) : [], secrets: r.stored.slice() };
 }
 function leftLines(t) {
   const r = t.run; const out = [];
@@ -818,7 +849,7 @@ function removalDone(t) {
   setNotice(t, { kind: "done", icon: DONEI, title: `Removed ${tilde(folder)}`, titleHtml: `Removed ${C(tilde(folder))}`,
     body: `<p><b>Done</b></p><ul>${done.join("")}</ul>${restoreH}${leftH}<p>This tab is now a shell in your home folder. The summary stays until you dismiss it; its commands also stay in the terminal below.</p>`,
     acts: [["Copy Summary", "copysum", "", summaryText], ["Dismiss", "dismiss", ""]], esc: null });
-  S.caption = "<b>9.4</b> · the removal summary stays until Dismiss; the tab is a shell in ~";
+  S.caption = "<b>9.4</b> · the removal summary stays until Dismiss; the tab is a shell in ~; Move to New Window is hidden from its menu while the summary shows (m11)";
   say(`Removed ${tilde(folder)}. ${r.stored.length ? `${r.stored.length} secret${r.stored.length > 1 ? "s" : ""} left behind. ` : ""}The summary is above the terminal.`); runEnded(); render();
 }
 
@@ -841,6 +872,7 @@ function renderContent() {
   if (!t) return `<div class="emptywin">${S.overlay ? "" : "No tabs."}</div>`;
   const r = t.run; let top = "";
   if (t.notice) top = renderNotice(t.notice);
+  else if (r && r.waiting) { const rm = r.waiting.key === "removal"; top = `<div class="runbar wait" role="status" aria-live="off"><span class="spin" aria-hidden="true"></span><span class="rw"><span>${rm ? "<b>Removing the hub folder</b>" : `Setting up the agent hub · <b>${esc(r.bar)}</b>`}</span><small>Waiting for the setup of <code>${esc(r.waiting.holder)}</code> to finish linking Claude's memory. ${rm ? "Undoing bin/setup's links" : "This step"} starts by itself when it's done.</small></span></div>`; }
   else if (r && r.bar && (r.state === "running" || r.state === "notice" || r.state === "removing" || r.paused)) top = `<div class="runbar" role="status" aria-live="off"><span class="spin" aria-hidden="true"></span>${r.state === "removing" ? `<b>${esc(r.bar)}</b>` : `Setting up the agent hub · <b>${esc(r.bar)}</b>`}</div>`;
   return `<div class="view">${top}<div class="term" id="term" tabindex="0" aria-label="Terminal: ${esc(t.label)}">${t.lines.join("\n")}</div></div>`;
 }
@@ -969,7 +1001,7 @@ function renderReview() {
   notes.push(`<div class="box" role="note" aria-labelledby="rn3"><h4 id="rn3">${INFOI}<span>Where the hub's path is kept</span></h4><p>The hub folder's path, ${C(tilde(folder))}, holds the client's name. It ends up in these places:</p><ul><li><b>Better Terminal's saved session</b>, so the tab reopens after a restart, and <b>any workspace you save</b> with the tab in it.</li>${syncLi}<li><b>Claude's config folder</b>: bin/setup names a folder after the path to link the hub's memory. Better Terminal expects it to be ${C(tilde(HOME + "/.claude/projects/" + encodeMem(folder)) + "/")} (and one per work area); that is a prediction from your environment, and bin/setup works the folder out itself when it runs.</li><li><b>A screen recording</b> you make of the Agent hub tab, which holds what the tab shows: every command and its output (but never a secret's value, which bin/secret doesn't echo).</li></ul><p>Your other answers go only into the hub folder and its git history, and into your Keychain under each stored secret's name. Better Terminal doesn't keep them, and never saves what the Agent hub tab shows. A paired phone sees the tab only as “Agent hub”.</p></div>`);
   const stepLi = (s, i) => `<li><b>${esc(s.name)}</b>${s.k === "a" ? `<br><small>Better Terminal copies the bundled agent hub template (${TEMPLATE_REF}) into the hub folder itself; this is not a command.</small>` : s.cmds.map((a) => `<code>${esc(cmd(a))}</code>`).join("")}${s.k === "d" ? "<small>Before each, you choose Store or Skip.</small>" : ""}${s.k === "h" ? "<small>It reports what's missing; it never stops setup.</small>" : ""}${s.k === "i" ? "<small>with CLAUDE_CONFIG_DIR from hub.conf, when the hub sets one.</small>" : ""}</li>`;
   const laterLi = S.sim.later === "on" ? `<li class="later" style="list-style:none;margin-left:-20px"><span class="tag">slice 2</span>Create the private GitHub repo (after Store secrets) and Install scheduled jobs (after Index) join this list when chosen. With question 14 set, step “Start the persona session” shows <code>CLAUDE_CONFIG_DIR=&lt;value&gt; claude</code> instead of the note.</li>` : "";
-  const pf = q.inUse ? inUseBlock(q.inUse, false) : q.pf ? pfSection(q.pf, false) : "";
+  const pf = q.expired ? expiredBlock() : q.inUse ? inUseBlock(q.inUse, false) : q.pf ? pfSection(q.pf, false) : "";
   const aFail = q.aFail ? `<div class="box fail" role="group" aria-labelledby="af-h"><h4 id="af-h" tabindex="-1">${FAILI}<span>Better Terminal couldn't unpack the agent hub template: the disk is full.</span></h4><p>Nothing was left behind${q.aFail.parent ? `: ${C(tilde(q.aFail.parent))}, which setup had created, was removed` : ""}. Your answers are kept. Choose Set Up Hub to try again.</p></div>` : "";
   return `${aFail}${pf}<section class="rv" aria-labelledby="rv1"><h3 id="rv1">Your answers</h3><dl>${ans.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></section>
 <section class="rv" aria-labelledby="rv2"><h3 id="rv2">Folders Better Terminal will create</h3><ul>${cp ? `<li>${C(tilde(cp))} <small>doesn't exist yet; created for the hub, and only it.</small></li>` : ""}<li>${C(tilde(folder))} <small>the hub folder</small></li></ul></section>
@@ -1020,9 +1052,17 @@ function renderConfirm() {
     const run = cf.tabs.map((id) => S.tabs.find((x) => x.id === id)).filter((x) => ["making", "removing"].includes(runPhase(x))); const making = run.some((x) => runPhase(x) === "making");
     const busy = cf.tabs.map((id) => S.tabs.find((x) => x.id === id)).filter((x) => runPhase(x) === "setting").length;
     const ph = (x) => { const p2 = runPhase(x); const r2 = x.run; return p2 === "removing" ? "removing the hub folder" : `${p2 === "making" ? "making the hub" : "setting up"} (step ${r2.i + 1} of ${r2.steps.length})`; };
+    if (run.length === 1 && making) {
+      // Owner, 2026-11-09: C4 that lists one making run uses C1's question.
+      const x = run[0]; const xp = x.run.createdParent ? tilde(x.run.createdParent) : null;
+      title = `Stop setting up and remove ${tilde(x.folder)}?`;
+      body = `<p>Setup is still making the hub. ${cf.quit ? "Quitting Better Terminal closes its tab too." : cf.window ? "Closing this window closes its tab too." : `Closing ${cf.total} tabs closes its tab too.`}</p><p><b>Remove</b> stops it and moves the folder to the Trash${xp ? ` (and ${C(xp)}, which setup created, if it's then empty)` : ""}.</p><p><b>Keep</b> stops it and leaves the unfinished folder. Better Terminal won't open it as a hub until hub.conf is committed.</p>${busy ? `<p>${busy} other tab${busy > 1 ? "s are" : " is"} running a program.</p>` : ""}`;
+      btns = `<button class="btn" id="cf-safe" data-cf="cancel">${no}</button><button class="btn" data-cf="batchclose">${cf.quit ? "Keep and Quit" : "Keep"}</button><button class="btn danger" data-cf="batchremove">${cf.quit ? "Remove and Quit" : "Remove"}</button>`;
+    } else {
     title = cf.quit ? `Quit Better Terminal? ${run.length} tabs are setting up agent hubs.` : `Close ${cf.total} tabs? ${run.length} of them are setting up agent hubs.`;
     body = `<ul>${run.map((x) => `<li>${C(tilde(x.folder))}: ${ph(x)}</li>`).join("")}${busy ? `<li>${busy} other tab${busy > 1 ? "s are" : " is"} running a program.</li>` : ""}</ul><p><b>Close</b> stops each setup and keeps what it made (an unfinished folder stays), stops each removal where it is, and closes the tabs.${making ? " <b>Remove</b> does the same, but moves each unfinished hub folder to the Trash." : ""}</p>`;
     btns = `<button class="btn" id="cf-safe" data-cf="cancel">${no}</button><button class="btn" data-cf="batchclose">${cf.quit ? "Close and Quit" : "Close"}</button>${making ? `<button class="btn danger" data-cf="batchremove">${cf.quit ? "Remove and Quit" : "Remove"}</button>` : ""}`;
+    }
   } else {
     title = `Stop setting up and remove ${f}?`; body = `<p>Setup is still making the hub.</p><p><b>Remove</b> stops it and moves the folder to the Trash${par ? ` (and ${C(par)}, which setup created, if it's then empty)` : ""}.</p><p><b>Keep</b> stops it and leaves the unfinished folder. Better Terminal won't open it as a hub until hub.conf is committed.</p>`;
     btns = `<button class="btn" id="cf-safe" data-cf="cancel">${cf.kind === "quit" ? "Don't Quit" : "Cancel"}</button><button class="btn" data-cf="keep">Keep</button><button class="btn danger" data-cf="removeclose">Remove</button>`;
@@ -1056,6 +1096,7 @@ const SIMS = [
   ["fail", "Fail at step", [["none", "none"], ["a", "(a) unpack"], ["b", "(b) bin/init"], ["c", "(c) first commit"], ["f", "(f) bin/setup"], ["flink", "(f) link appeared"], ["f2", "(f2) bin/brain"], ["claude", "(i) claude missing"]]],
   ["cfgdir", "hub.conf sets config dir", [["no", "no"], ["yes", "yes (with a space)"]]],
   ["removal", "Removal", [["ok", "succeeds"], ["unlink", "--unlink fails"], ["trash", "Trash fails"]]],
+  ["linkwait", "Another tab holds the setup lock", [["no", "no"], ["yes", "yes (~/hubs/globex-qa-engineer)"]]],
   ["commits", "Later commits in hub", [["no", "no"], ["yes", "yes (no Remove)"]]],
   ["hubconf", "Existing hub.conf", [["ok", "readable"], ["bad", "HUB_CLAUDE=$(…)"]]],
   ["agentstatus", "Agent status display", [["on", "on"], ["off", "off"]]],
@@ -1134,6 +1175,7 @@ const P = [
     ["Review: a checkout that doesn't exist", "OB-3 Q3, m10", () => { review({}, { repos: [{ v: "acme/api=" + HOME + "/src/api" }, { v: "acme/web=" + HOME + "/src/web-new" }] }); S.scrollTo = "#rn1"; }],
     ["Review: template without T4", "OB-3 AC3", () => { review({ t4: "no" }); }],
     ["Review: minimal (no checkout)", "OB-3 AC3, AC4", () => { review({ hubs: "yes" }, { secrets: [], repos: [] }); }],
+    ["Set Up Hub: the plan expired", "A m15", () => { review({}); S.q.expired = true; S.focus = "#xp-h"; say("This review is out of date, so setup didn't start.", true); S.caption = "<b>7.2</b> · hub_run_prepare refused unknown_plan: nothing checked or written; Review Again"; }],
     ["Set Up Hub: folder in use (race), no checks", "OB-4 AC7, P4", () => { review({ samefolder: "race" }); startPreflight(true, false); S.caption = "<b>5.6</b> · refused before the preflight; nothing checked or written"; }],
     ["Preflight: checking (slow shell, webview timer)", "OB-4 AC2, M9, m8", () => { review({ speed: "slow" }); S.q.pf = { state: "running", res: { clt: "ok", login_shell: "ok", helper: "ok", folder: "ok" }, because: {}, fails: [], cur: "env", slow: true }; S.focus = "#pf-h"; }],
     ["Preflight: two failures at once", "M9", () => pfState({ preflight: "several" })],
@@ -1166,6 +1208,7 @@ const P = [
     ["(f) bin/setup failed", "OB-5 AC3, M2", () => { runTo({ fail: "f" }, { secrets: [] }); }],
     ["(f) link appeared after preflight", "OB-4 AC2, n4", () => { runTo({ fail: "flink" }, { secrets: [] }); }],
     ["(f2) bin/brain failed", "OB-5 AC3", () => { runTo({ fail: "f2" }, { secrets: [] }); }],
+    ["(f) waiting for another setup to finish linking", "M-A", () => { runTo({ linkwait: "yes" }, { secrets: [] }); S.caption = "<b>8.1 M-A</b> · setup_waiting: the bar says so; no line, no notice, no dot; closing is C2"; }],
     ["Remove not offered (later commits)", "OB-5 AC4", () => { runTo({ fail: "f2", commits: "yes" }, { secrets: [] }); }],
     ["Stopped here", "M2", () => { const t = runTo({ fail: "f2" }, { secrets: [] }); act(t, "stop"); }],
     ["Background tab: notice waiting (agent status off)", "OB-11 AC3, m9", () => { const t = runTo({ agentstatus: "off" }); S.tabs.push(S.tabs.splice(S.tabs.indexOf(t), 1)[0]); const p = S.tabs.find((x) => x.kind === "term"); S.active = p.id; S.focus = "#term"; S.toast = "Agent hub needs you"; S.caption = "<b>8.3</b> · the dot and toast show although Settings' agent status display is off"; }],
@@ -1184,9 +1227,13 @@ const P = [
     ["Removal stopped: --unlink failed", "Q-A3, B2", () => { const t = runTo({ fail: "f2", removal: "unlink" }, { secrets: [] }); startRemoval(t); }],
     ["Removal stopped: after Keep", "Q-A3, B2", () => { const t = runTo({ fail: "f2", removal: "unlink" }, { secrets: [] }); startRemoval(t); act(t, "rkeep"); }],
     ["Removal stopped: Trash failed", "OB-5 AC4", () => { const t = runTo({ fail: "f2", removal: "trash" }, { secrets: [] }); startRemoval(t); }],
+    ["Trash failed, after Keep: L8 lists what's left", "m12", () => { const t = runTo({ fail: "f2", removal: "trash", t4: "no" }, { secrets: ["grafana-token"] }); store(t); t.run.typed = 8; valueEntered(t); startRemoval(t); act(t, "rkeep"); }],
+    ["Removal waits for the setup lock", "M-A", () => { const t = runTo({ fail: "f2" }, { secrets: [] }); S.sim.linkwait = "yes"; startRemoval(t); renderSim(); S.caption = "<b>8.1 M-A</b> · a removal's --unlink waits for the setup lock; C3 if closed"; }],
     ["Edit answers after (b)", "OB-5 AC2", () => { const t = runTo({ fail: "b" }); act(t, "edit"); }],
     ["C1 close the tab during bin/init", "OB-5 AC5, M3", () => { const t = runTo({}, {}, { pauseAt: "b" }); closeTab(t.id); }],
-    ["C4 quit during bin/init (Don't Quit)", "OB-5 AC5, M3", () => { runTo({}, {}, { pauseAt: "b" }); quit(); }],
+    ["Quit, one making run: C1's question", "OB-5 AC5, owner", () => { runTo({}, {}, { pauseAt: "b" }); quit(); S.caption = "<b>9.3</b> · C4 that lists one making run uses C1's question: Don't Quit · Keep and Quit · Remove and Quit"; }],
+    ["Close with Remove: Trash failed (tab stays)", "M-B", () => { const t = runTo({ removal: "trash" }, {}, { pauseAt: "b" }); closeTab(t.id); confirmAnswer("removeclose"); S.caption = "<b>9.3 M-B</b> · the runner is kept; the tab stays with Retry/Keep; Keep opens a shell in the hub folder"; }],
+    ["Quit with Remove: Trash failed (quit cancelled)", "M-B", () => { runTo({ removal: "trash" }, {}, { pauseAt: "b" }); quit(); confirmAnswer("batchremove"); }],
     ["C2 close the tab during bin/setup (busy confirm)", "OB-5 AC5, M3", () => { const t = runTo({}, { secrets: [] }, { pauseAt: "f" }); closeTab(t.id); }],
     ["C3 close the tab during removal", "M3", () => { const t = runTo({ fail: "f2" }, { secrets: [] }); pauseRemoving(t); closeTab(t.id); }],
     ["C4 Close Others: two setups running", "M3", () => { twoRuns(); const p0 = S.tabs.find((x) => x.kind === "term"); S.active = p0.id; batchClose(S.tabs.filter((x) => x.id !== p0.id).map((x) => x.id), false); S.caption = "<b>9.3 C4</b> · one confirm for the whole batch; Cancel aborts it"; }],
@@ -1249,8 +1296,9 @@ document.addEventListener("click", (ev) => {
   switch (el.id) {
     case "q-x": case "q-cancel": return cancelQ();
     case "q-review": return submitAnswers();
-    case "q-back": S.q.step = "answers"; S.q.pf = null; S.q.aFail = null; S.q.inUse = null; S.focus = "#f-role"; render(); return;
-    case "q-go": S.q.aFail = null; S.q.inUse = null; return startPreflight(false, false);
+    case "q-back": S.q.step = "answers"; S.q.pf = null; S.q.aFail = null; S.q.inUse = null; S.q.expired = false; S.focus = "#f-role"; render(); return;
+    case "q-go": S.q.aFail = null; S.q.inUse = null; S.q.expired = false; return startPreflight(false, false);
+    case "q-replan": S.q.expired = false; S.focus = "#q-go"; say("Review updated."); S.caption = "<b>7.2</b> · hub_plan asked again; the review is redrawn from the new plan"; render(); return;
     case "q-open": return openExisting(false);
     case "more": S.q.more = !S.q.more; S.focus = "#more"; render(); return;
     case "add-secret": addSecret(); S.focus = "#f-secret"; render(); return;
@@ -1301,15 +1349,33 @@ function confirmAnswer(a0) { let a = a0;
   const cf = S.confirm; const t = S.tabs.find((x) => x.id === cf.tab); S.confirm = null;
   if (a === "cancel") { S.focus = t && t.notice ? "#notice .acts button" : "#term"; render(); return; }
   if (a === "remove") { startRemoval(t); return; }
-  if (a === "removeclose") { closeRemove(t); if (cf.kind === "quit") return relaunch(); S.focus = "#term"; render(); return; }
+  if (a === "removeclose") { if (!closeRemove(t)) { render(); return; } if (cf.kind === "quit") return relaunch(); S.focus = "#term"; render(); return; }
   if (a === "edit") { startRemoval(t, () => { S.q.step = "answers"; S.q.pf = null; S.overlay = "q"; S.focus = "#f-role"; }); return; }
-  if (a === "batchremove") { cf.tabs.forEach((id) => { const x = S.tabs.find((y) => y.id === id); if (x && runPhase(x) === "making") { closeRemove(x); } }); a = "batchclose"; }
+  if (a === "batchremove") {
+    // hub_run_close(remove) per run, mapped by phase (m1): making runs are removed; the others end as Close (removals stop).
+    const kept = []; cf.tabs.forEach((id) => { const x = S.tabs.find((y) => y.id === id); if (x && runPhase(x) === "making" && !closeRemove(x)) kept.push(x.id); });
+    if (kept.length) {
+      // M-B: a Trash failed. That tab stays with Retry/Keep; the other tabs of a batch close as answered; a quit or window close is cancelled.
+      cf.tabs.filter((id) => !kept.includes(id)).forEach((id) => { const x = S.tabs.find((y) => y.id === id); if (x && x.run) x.run.state = "stopped"; });
+      if (!cf.quit && !cf.window) S.tabs = S.tabs.filter((x) => !cf.tabs.includes(x.id) || kept.includes(x.id));
+      else S.tabs.forEach((x) => { if (cf.tabs.includes(x.id) && !kept.includes(x.id) && x.run && x.kind === "hub") { x.run = null; x.notice = null; x.lines.push(L.ade("Stopped. The hub is kept."), shellPrompt(x.folder)); } });
+      S.active = kept[0]; S.focus = "#notice .acts button";
+      S.caption = `<b>9.3 M-B</b> · the Trash failed: that tab stays with Retry/Keep${cf.quit ? "; the quit was cancelled (Better Terminal keeps running)" : cf.window ? "; the window close was cancelled" : "; the batch's other tabs closed"}`;
+      render(); return;
+    }
+    a = "batchclose";
+  }
   if (a === "stopclose") { t.run.state = "stopped"; S.tabs = S.tabs.filter((x) => x.id !== t.id); if (cf.quit) return relaunch(); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); S.focus = "#term"; say("Setup stopped. The hub is kept."); render(); return; }
   if (a === "batchclose") { if (cf.quit) return relaunch(); cf.tabs.forEach((id) => { const x = S.tabs.find((y) => y.id === id); if (x && x.run) x.run.state = "stopped"; }); S.tabs = S.tabs.filter((x) => !cf.tabs.includes(x.id)); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); S.focus = "#term"; render(); return; }
   if (a === "keep") { stopRun(t, "Stopped. The unfinished hub folder is kept."); S.tabs = S.tabs.filter((x) => x.id !== t.id); if (!S.tabs.length) addPlainTab(false); else S.active = S.tabs[S.tabs.length - 1].id; if (cf.kind === "quit") return relaunch(); render(); }
 }
 function closeRemove(t) {
   // 9.3 Remove during (a)/(b): stop, move to the Trash, close the tab (nothing was linked or stored yet).
+  // M-B: the runner is kept until the Trash succeeds. If it fails, the tab stays with 9.5's Trash notice; returns false.
+  if (S.sim.removal === "trash") {
+    const r = t.run; r.state = "removing"; r.rm = { after: null, closing: true }; r.paused = false; t.notice = null;
+    removalStopped(t, "trash"); S.active = t.id; S.focus = "#notice .acts button"; return false;
+  }
   t.run.state = "stopped"; t.lines.push(L.ade(`Moved ${tilde(t.folder)} to the Trash.`)); S.created.delete(t.folder);
   S.tabs = S.tabs.filter((x) => x.id !== t.id); S.active = S.tabs.length ? S.tabs[S.tabs.length - 1].id : (addPlainTab(false), S.active); say(`Removed ${tilde(t.folder)}.`); runEnded();
 }
