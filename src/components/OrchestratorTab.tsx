@@ -326,13 +326,29 @@ export default function OrchestratorTab({ sessionId }: OrchestratorTabProps) {
     const taskPrompt = `${specRef}Your task: ${task.description}`;
     const cmd = `${launch.command} -p ${shellQuote(taskPrompt)}`;
     // Once the shell's line editor is up: a line typed before then is cut at
-    // 1024 bytes on macOS, and the cut line still runs. A failed write stays
-    // silent, as it always was.
+    // 1024 bytes on macOS, and the cut line still runs. The pane is asked just
+    // before typing whether its shell is in front; a job there (an rc ending
+    // in `tmux attach`) gets nothing. A failed write fails the task.
     const tabExists = (id: string) => useTabStore.getState().tabs.some((t) => t.id === id);
-    const typed = await typeWhenReady(ptyId, cmd, () => tabExists(agentTabId)).catch(() => true);
+    let busyThen: string | null = null;
+    const free = async () => {
+      if (!agentPane) return true;
+      const { paneBusy } = await import("../hooks/useTerminal");
+      busyThen = await paneBusy(agentPane.id);
+      return busyThen === null;
+    };
+    let typed: boolean;
+    try {
+      typed = await typeWhenReady(ptyId, cmd, () => tabExists(agentTabId), free);
+    } catch {
+      updateTaskStatus(sessionId, task.id, "failed");
+      return abortDispatch(`The task for "${task.title}" could not be typed into its tab. Nothing was dispatched.`);
+    }
     if (!typed) {
       updateTaskStatus(sessionId, task.id, "failed");
-      return abortDispatch(`The tab for "${task.title}" was closed before its task was typed. Nothing was dispatched.`);
+      return abortDispatch(busyThen
+        ? `The tab for "${task.title}" was running ${busyThen} when its task was due to be typed. Nothing was dispatched.`
+        : `The tab for "${task.title}" was closed before its task was typed. Nothing was dispatched.`);
     }
 
     if (agentPane) {

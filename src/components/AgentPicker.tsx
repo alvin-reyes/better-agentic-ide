@@ -220,12 +220,27 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
         return;
       }
       // Once its shell's line editor is up: a tab still reading its rc files
-      // can be picked, and a line typed then can be cut. If the terminal
-      // changed by then, nothing is typed and no session starts; the picker
-      // stays open and says so, for another try.
-      const typed = await typeWhenReady(ptyId, cmd, () => getActivePtyId() === ptyId).catch(() => true);
+      // can be picked, and a line typed then can be cut. Asked once more just
+      // before typing, since a job can come to the front during that wait (an
+      // rc ending in `tmux attach`). If the terminal changed or went busy by
+      // then, or the write fails, nothing is typed and no session starts; the
+      // picker stays open and says so, for another try.
+      let busyThen: string | null = null;
+      const free = async () => {
+        busyThen = here ? await paneBusy(here.id) : null;
+        return busyThen === null;
+      };
+      let typed: boolean;
+      try {
+        typed = await typeWhenReady(ptyId, cmd, () => getActivePtyId() === ptyId, free);
+      } catch {
+        setLaunchError("The agent could not be typed into this terminal; nothing was started.");
+        return;
+      }
       if (!typed) {
-        setLaunchError("The terminal changed before the agent was typed; nothing was started.");
+        setLaunchError(busyThen
+          ? `This terminal is running ${busyThen}. Choose New tab.`
+          : "The terminal changed before the agent was typed; nothing was started.");
         return;
       }
       paneId = getActivePane()?.id ?? null;

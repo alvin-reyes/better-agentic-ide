@@ -19,8 +19,8 @@ export async function sendToActiveTerminal(command: string, run: boolean): Promi
 
 /**
  * Wait until the shell in PTY `ptyId` is reading with its own line editor
- * (`pty_line_editor_ready`): out of canonical mode, with the shell in the
- * foreground. Until then the kernel holds typed input as one line of at most
+ * (`pty_line_editor_ready`): out of canonical mode, with the shell (or a
+ * nested interactive shell at its prompt) in the foreground. Until then the kernel holds typed input as one line of at most
  * 1024 bytes on macOS (4096 on Linux), and a longer line is cut and still runs.
  *
  * Polls every 50 ms and returns after two ready answers in a row: one sample
@@ -50,14 +50,32 @@ export async function whenLineEditorReady(ptyId: number, timeoutMs = 10_000): Pr
 /**
  * Type `command` and Enter into PTY `ptyId` once its shell's line editor is
  * up (see `whenLineEditorReady`). Types nothing, and resolves false, when
- * `stillOpen()` says the terminal it was meant for went away meanwhile.
- * Rejects when the write does.
+ * `stillOpen()` says the terminal it was meant for went away meanwhile, or
+ * when `free()`, awaited just before the write, says a job is in front.
+ *
+ * `free` is what decides after the 10 s cap: a line editor that never came up
+ * means either a shell with none (`sh`, `dash`), which is in front and gets
+ * the line, or a job in front (an rc ending in `tmux attach`), which must not.
+ * Rejects when the write does; callers count that as not typed.
  */
-export async function typeWhenReady(ptyId: number, command: string, stillOpen: () => boolean): Promise<boolean> {
+export async function typeWhenReady(
+  ptyId: number,
+  command: string,
+  stillOpen: () => boolean,
+  free: () => Promise<boolean>,
+): Promise<boolean> {
   await whenLineEditorReady(ptyId);
+  if (!stillOpen()) return false;
+  if (!(await free())) return false;
   if (!stillOpen()) return false;
   await writePty(ptyId, command + "\r");
   return true;
+}
+
+/** Whether pane `paneId` has its shell in front (`paneBusy` says null). */
+export async function paneFree(paneId: string): Promise<boolean> {
+  const { paneBusy } = await import("../hooks/useTerminal");
+  return (await paneBusy(paneId)) === null;
 }
 
 /** Open a new terminal tab in `cwd` and run `command` there once its shell is up. */
@@ -69,7 +87,8 @@ export async function runInNewTab(name: string, cwd: string | undefined, command
  * Open a terminal tab and run a command in it once its shell is up. Waits for
  * that tab's own PTY (up to 8 s), never whichever tab is active by then, and
  * then for its line editor (`typeWhenReady`). Returns the new pane's id, or
- * null if the shell didn't start or the tab was closed before it was typed.
+ * null if the shell didn't start, the pane or its tab was closed before it was
+ * typed, or a job was in front of the shell by then.
  */
 export async function runInNewTabPane(name: string, cwd: string | undefined, command: string): Promise<string | null> {
   const tabId = useTabStore.getState().addTab(name, cwd);
@@ -82,8 +101,12 @@ export async function runInNewTabPane(name: string, cwd: string | undefined, com
     if (!tab) return null; // Closed before its shell started.
     const ptyId = allTabPanes(tab).find((p) => p.id === paneId)?.ptyId ?? null;
     if (ptyId !== null) {
-      const stillOpen = () => useTabStore.getState().tabs.some((t) => t.id === tabId);
-      return (await typeWhenReady(ptyId, command, stillOpen)) ? paneId : null;
+      // The pane, still holding this PTY: a tab can outlive a pane closed in it.
+      const stillOpen = () => {
+        const now = useTabStore.getState().tabs.find((t) => t.id === tabId);
+        return !!now && allTabPanes(now).some((p) => p.id === paneId && p.ptyId === ptyId);
+      };
+      return (await typeWhenReady(ptyId, command, stillOpen, () => paneFree(paneId))) ? paneId : null;
     }
   }
   return null;

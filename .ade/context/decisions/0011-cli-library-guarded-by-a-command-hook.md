@@ -32,4 +32,4 @@
   - The guard is a parser that must keep up with shell forms and CLI releases. Unknown leaves and computed names ask, so falling behind adds prompts rather than removing them. The estimated false-ask rate is 0.3–0.7% of Bash calls, to be measured (V8).
   - `disableAllHooks: false` on a guarded launch also re-enables the user's and project's other hooks for that session where a settings file had turned them off. The tab says so. Unguarded launches don't pay this cost.
   - Not covered: Windows, Claude Code sessions outside the repository, other agents, and `allowManagedHooksOnly`, `--safe-mode` or managed `disableAllHooks`.
-- Numbering: provisional until merge (ADR 0012's list). 0010 is Orgo's.
+- Numbering: final at the merge of `feat/cli-guard` (2026-11-09); 0010 is Orgo's. ADR `0009-manual-checks-do-not-gate-done`, cited above, is unmerged on `docs/claude-md-paths` and needs a new number (0009 on main is the side panel); see the decision log's numbering notes.

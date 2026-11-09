@@ -13,6 +13,10 @@ const io = vi.hoisted(() => ({
   /** Every ready answer and every write, in the order they happened, with the fake clock. */
   events: [] as { what: string; at: number }[],
   writes: [] as { id: number; text: string }[],
+  /** What paneBusy says about a pane, asked just before each write. */
+  paneBusy: async (_paneId: string): Promise<string | null> => null,
+  busyAsked: [] as string[],
+  failWrite: false,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -24,6 +28,7 @@ vi.mock("@tauri-apps/api/core", () => ({
       return answer;
     }
     if (cmd === "write_pty") {
+      if (io.failWrite) throw new Error("the terminal is closed");
       io.events.push({ what: "write", at: Date.now() });
       io.writes.push({ id: Number(args.id), text: new TextDecoder().decode(new Uint8Array(args.data as number[])) });
       return null;
@@ -33,7 +38,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 // closeTab lazily imports useTerminal, which pulls in xterm's canvas addons.
-vi.mock("../../hooks/useTerminal", () => ({ destroyInstance: vi.fn() }));
+vi.mock("../../hooks/useTerminal", () => ({
+  destroyInstance: vi.fn(),
+  paneBusy: async (paneId: string) => {
+    io.busyAsked.push(paneId);
+    io.events.push({ what: "busy?", at: Date.now() });
+    return io.paneBusy(paneId);
+  },
+}));
 
 import { runInNewTabPane, typeWhenReady } from "../terminalCommands";
 import { useTabStore, shownView } from "../../stores/tabStore";
@@ -52,6 +64,9 @@ beforeEach(() => {
   io.fallback = false;
   io.events.length = 0;
   io.writes.length = 0;
+  io.paneBusy = async () => null;
+  io.busyAsked.length = 0;
+  io.failWrite = false;
 });
 
 afterEach(() => {
@@ -66,7 +81,7 @@ describe("typing a launch line", () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(await result).toBe(shownView(tab).activePaneId);
     // One write, only after the fifth answer: one true is not enough, and a false resets the count.
-    expect(io.events.map((e) => e.what)).toEqual(["ready:false", "ready:true", "ready:false", "ready:true", "ready:true", "write"]);
+    expect(io.events.map((e) => e.what)).toEqual(["ready:false", "ready:true", "ready:false", "ready:true", "ready:true", "busy?", "write"]);
     // The whole line, whatever its length.
     expect(io.writes).toEqual([{ id: 5, text: command + "\r" }]);
   });
@@ -79,12 +94,12 @@ describe("typing a launch line", () => {
       const { result, tab } = launch(`Unknown ${answer}`, "claude go", 6);
       await vi.advanceTimersByTimeAsync(300);
       expect(await result, String(answer)).toBe(shownView(tab).activePaneId);
-      expect(io.events.map((e) => e.what), String(answer)).toEqual([`ready:${answer}`, "write"]);
+      expect(io.events.map((e) => e.what), String(answer)).toEqual([`ready:${answer}`, "busy?", "write"]);
       expect(io.writes, String(answer)).toEqual([{ id: 6, text: "claude go\r" }]);
     }
   });
 
-  it("types anyway after 10 s", async () => {
+  it("types after 10 s when the shell itself is in front (sh never leaves canonical mode)", async () => {
     io.fallback = false;
     const { result, tab } = launch("Never ready", "claude go", 7);
     // The PTY is found on the first 250 ms poll; the wait starts then.
@@ -116,15 +131,54 @@ describe("typing a launch line", () => {
 
     // typeWhenReady itself says it typed nothing.
     io.answers = [true, true];
-    const typed = typeWhenReady(9, "claude go", () => false);
+    const typed = typeWhenReady(9, "claude go", () => false, async () => true);
     await vi.advanceTimersByTimeAsync(500);
     expect(await typed).toBe(false);
     expect(io.writes).toEqual([]);
     // And true when it typed.
     io.answers = [true, true];
-    const ok = typeWhenReady(9, "claude go", () => true);
+    const ok = typeWhenReady(9, "claude go", () => true, async () => true);
     await vi.advanceTimersByTimeAsync(500);
     expect(await ok).toBe(true);
     expect(io.writes).toEqual([{ id: 9, text: "claude go\r" }]);
+  });
+
+  it("a job in front for the whole wait: nothing typed after 10 s", async () => {
+    // An rc that ends in `tmux attach`: the line editor never comes up, and
+    // what is in front when the wait ends is a job, not the shell.
+    io.fallback = false;
+    io.paneBusy = async () => "tmux";
+    const { result, tab } = launch("Job in front", "claude go", 10);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await result).toBeNull();
+    expect(io.writes).toEqual([]);
+    expect(io.busyAsked).toEqual([shownView(tab).activePaneId]);
+  });
+
+  it("the busy check runs just before the write, whatever the wait said", async () => {
+    // Ready twice in a row, but a job is in front by the time of typing.
+    io.answers = [true, true];
+    let guarded = 0;
+    const typed = typeWhenReady(11, "claude go", () => true, async () => {
+      guarded++;
+      return false;
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await typed).toBe(false);
+    expect(guarded).toBe(1);
+    expect(io.writes).toEqual([]);
+  });
+
+  it("a pane closed while waiting gets nothing, though its tab stays", async () => {
+    io.fallback = false;
+    const { result, tab } = launch("Pane closed", "claude go", 12);
+    const paneId = shownView(tab).activePaneId;
+    useTabStore.getState().splitPane(tab.id, paneId, "horizontal");
+    await vi.advanceTimersByTimeAsync(1000);
+    useTabStore.getState().closePane(tab.id, paneId);
+    expect(useTabStore.getState().tabs.some((t) => t.id === tab.id)).toBe(true);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await result).toBeNull();
+    expect(io.writes).toEqual([]);
   });
 });

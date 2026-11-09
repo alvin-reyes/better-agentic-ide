@@ -842,7 +842,7 @@ The five commands, unchanged.
 
 **QA record (2026-11-02, HEAD `861878f` on `feat/cli-guard`; code `c7d5fa2` + `e13d5e9`, `886ac0a`, `80a0a4d`; plan synced by `3b21b71`, `e197c91`, `7171c09`, `861878f`).**
 
-**Verdict: Story 1 is Done.** The five commands pass run in sequence, every AC maps to a test that ran, the slice is clean, and the contract matches the code. Per ADR 0009 (read on `docs/claude-md-paths`) the manual checks below are recorded, not assumed; this plan names none of them as gating Story 1 (V1, V2 and V5 gate the guide's Continuous-mode claim, not Done; V8's ordinary-sessions sample decides Story 2, not Story 1).
+**Verdict: Story 1 is Done.** The five commands pass run in sequence, every AC maps to a test that ran, the slice is clean, and the contract matches the code. Per ADR `0009-manual-checks-do-not-gate-done` (unmerged on `docs/claude-md-paths`; needs a new number, since 0009 on main is the side panel) the manual checks below are recorded, not assumed; this plan names none of them as gating Story 1 (V1, V2 and V5 gate the guide's Continuous-mode claim, not Done; V8's ordinary-sessions sample decides Story 2, not Story 1).
 
 *Verification command, run by QA in sequence on Linux (root), real output:*
 
@@ -886,7 +886,7 @@ Counts equal the developer's last run (1675 / 503 + 1 ignored / 266 / 6). The 12
 - Design Notes (1) still says `run(stdin, stdout, env, ctx)`; the code, the tests and the contract have `run(stdin, stdout, headless, env, fs)`. The contract is right; the plan line is stale.
 - The four surviving mutants above are untested contract details (the 256 KB cap's exact value, the 2,000-call cap, `-okdir` in the credential rule, `secret-tool search`). Worth a pin the next time the file is open.
 
-*Manual checks, recorded, not assumed (ADR 0009):*
+*Manual checks, recorded, not assumed (`0009-manual-checks-do-not-gate-done`, unmerged, needs a new number):*
 - **Release helper on the reviewer's probe scripts** (`scratchpad/scripts/ghforms.sh`, `scratchpad/probe4/`): not run; the scripts are not in this worktree or any scratchpad QA can reach; pending the owner. (QA's own hand run of the debug helper, above, is a smaller substitute, not this check.)
 - **V8, the local corpus:** the developer's figure in this plan is 0.51% including true asks; QA did not re-measure it; pending the owner.
 - **V8, the ordinary-sessions sample** (at least 500 calls from at least 5 projects): not run; needs the owner's own sessions; pending the owner. If it is above 1% the owner decides before Story 2 ships. It does not gate Story 1.

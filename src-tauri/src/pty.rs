@@ -259,7 +259,9 @@ pub fn pty_line_editor_ready(state: tauri::State<'_, PtyManager>, id: u32) -> Op
 }
 
 /// `pty_line_editor_ready` for one master and its shell's pid. portable-pty
-/// makes the shell a session leader, so its pid is its process group.
+/// makes the shell a session leader, so its pid is its process group. A
+/// nested interactive shell at its prompt (another group, which `classify`
+/// calls a Shell, as the busy check does) counts as the shell in front.
 fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool> {
     #[cfg(unix)]
     {
@@ -267,7 +269,11 @@ fn line_editor_ready(master: &dyn MasterPty, shell: Option<u32>) -> Option<bool>
             return Some(false);
         };
         let t: libc::termios = t.into();
-        Some(t.c_lflag & libc::ICANON == 0 && fg as u32 == shell)
+        if t.c_lflag & libc::ICANON != 0 || fg <= 0 {
+            return Some(false);
+        }
+        let fg = fg as u32;
+        Some(fg == shell || foreground_job(shell, Some(fg)) == Fg::Shell)
     }
     #[cfg(not(unix))]
     {
@@ -1076,6 +1082,33 @@ mod line_editor_tests {
         });
 
         stop(&instances, 4);
+        std::fs::remove_file(rc).ok();
+    }
+
+    #[test]
+    fn a_nested_shell_at_its_prompt_is_ready() {
+        // A shell started from the pane's own shell: another pid and its own
+        // foreground group, but a shell at its prompt all the same (`classify`
+        // says Shell), so a line typed now reaches its line editor whole.
+        let rc = temp_file("nested-rc");
+        std::fs::write(&rc, "PS1='NESTED$ '\n").unwrap();
+        let instances: Mutex<HashMap<u32, PtyInstance>> = Mutex::new(HashMap::new());
+        let (bash, window) = spawn(5, &["bash", "--noprofile", "--norc", "-i"]);
+        instances.lock().unwrap().insert(5, bash);
+        within("the outer shell's line editor", Duration::from_secs(10), || ready(&instances, 5) == Some(true));
+        let nested = format!("bash --noprofile --rcfile {} -i\r", rc.to_str().unwrap());
+        write_to(&instances, 5, nested.into_bytes()).unwrap();
+        within("the nested prompt", Duration::from_secs(10), || window.text().contains("NESTED$ "));
+        let (shell, fg) = {
+            let table = instances.lock().unwrap();
+            let i = &table[&5];
+            (i.pid.unwrap(), i.master.process_group_leader().unwrap() as u32)
+        };
+        assert_ne!(fg, shell, "the nested shell is its own foreground group");
+        within("ready with the nested shell in front", Duration::from_secs(5), || ready(&instances, 5) == Some(true));
+        assert_eq!(ready(&instances, 5), Some(true), "and stays ready");
+
+        stop(&instances, 5);
         std::fs::remove_file(rc).ok();
     }
 }

@@ -29,6 +29,10 @@ const tauri = vi.hoisted(() => ({
   /** What pty_line_editor_ready answers next; null (can't know) once empty, or false forever with `neverReady`. */
   ready: [] as (boolean | null)[],
   neverReady: false,
+  /** write_pty rejects, as it does once the terminal's writer has ended. */
+  failWrite: false,
+  /** What paneBusy says about the agent's pane just before typing. */
+  busy: null as string | null,
   /** Whether a pane still holds this PTY; Rust answers null for a PTY that is gone. */
   ptyOpen: (_id: number): boolean => true,
   /** Every ready answer and every write, in the order they happened. */
@@ -54,6 +58,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         tauri.fileWrites.push({ path: String(args.path), content: String(args.content) });
         return null;
       case "write_pty":
+        if (tauri.failWrite) throw new Error("the terminal is closed");
         tauri.events.push("write");
         tauri.ptyWrites.push({
           id: Number(args.id),
@@ -72,6 +77,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 // so the panes it destroys can be asserted on.
 vi.mock("../../hooks/useTerminal", () => ({
   destroyInstance: vi.fn(),
+  paneBusy: vi.fn(async () => tauri.busy),
 }));
 
 // jsdom has no layout engine, so it doesn't implement scrollIntoView.
@@ -137,6 +143,8 @@ beforeEach(() => {
   tauri.guard = null;
   tauri.ready = [];
   tauri.neverReady = false;
+  tauri.failWrite = false;
+  tauri.busy = null;
   tauri.events.length = 0;
   tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => allTabPanes(t).some((p) => p.ptyId === id));
   __resetLaunchRulesForTests();
@@ -357,6 +365,55 @@ describe("OrchestratorTab dispatch command", () => {
     expect(task.status).toBe("failed");
     expect(screen.getByRole("alert").textContent).toBe(
       'The tab for "Closed auth" was closed before its task was typed. Nothing was dispatched.',
+    );
+  });
+
+  it("a job in front of the agent's shell when typing: nothing typed, the task fails", async () => {
+    tauri.ready = [true, true];
+    tauri.busy = "tmux";
+    const sessionId = seedSession("Busy session", [
+      { title: "Busy auth", description: "Wire up OAuth", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Busy auth").id, 43);
+    await until(() => screen.queryByRole("alert") !== null);
+    expect(tauri.ptyWrites).toEqual([]);
+    const task = useOrchestratorStore.getState().sessions.find((s) => s.id === sessionId)!.tasks[0];
+    expect(task.status).toBe("failed");
+    expect(screen.getByRole("alert").textContent).toBe(
+      'The tab for "Busy auth" was running tmux when its task was due to be typed. Nothing was dispatched.',
+    );
+  });
+
+  it("a write that fails fails the task", async () => {
+    tauri.ready = [true, true];
+    tauri.failWrite = true;
+    const sessionId = seedSession("Write fails session", [
+      { title: "Unwritten auth", description: "Wire up OAuth", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Unwritten auth").id, 44);
+    await until(() => screen.queryByRole("alert") !== null);
+    const task = useOrchestratorStore.getState().sessions.find((s) => s.id === sessionId)!.tasks[0];
+    expect(task.status).toBe("failed");
+    expect(screen.getByRole("alert").textContent).toBe(
+      'The task for "Unwritten auth" could not be typed into its tab. Nothing was dispatched.',
     );
   });
 

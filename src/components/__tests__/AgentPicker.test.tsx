@@ -24,6 +24,8 @@ const tauri = vi.hoisted(() => ({
   /** What pty_line_editor_ready answers next; null (can't know) once empty. */
   ready: [] as (boolean | null)[],
   neverReady: false,
+  /** write_pty rejects, as it does once the terminal's writer has ended. */
+  failWrite: false,
   /** Whether a pane still holds this PTY; Rust answers null for a PTY that is gone. */
   ptyOpen: (_id: number): boolean => true,
   events: [] as string[],
@@ -48,6 +50,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         tauri.fileWrites.push({ path: String(args.path), content: String(args.content) });
         return null;
       case "write_pty":
+        if (tauri.failWrite) throw new Error("the terminal is closed");
         tauri.events.push(`write:${args.id}`);
         tauri.ptyWrites.push({
           id: Number(args.id),
@@ -133,6 +136,7 @@ beforeEach(() => {
   tauri.fileWrites.length = 0;
   tauri.ready = [];
   tauri.neverReady = false;
+  tauri.failWrite = false;
   tauri.events.length = 0;
   tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => allTabPanes(t).some((p) => p.ptyId === id));
   useSettingsStore.getState().setDefaultProvider("claude");
@@ -456,5 +460,52 @@ describe("AgentPicker over a busy pane", () => {
     ));
     expect(tauri.ptyWrites).toHaveLength(0);
     expect(useAgentTrackerStore.getState().sessions.filter((s) => s.paneId === paneId)).toHaveLength(sessionsBefore);
+  });
+});
+
+describe("AgentPicker typing into This terminal", () => {
+  it("free at the check, a job in front for the whole wait: nothing typed, no session", async () => {
+    // An rc that ends in `tmux attach`: the pane is free when the picker asks,
+    // tmux comes to the front during the wait, and the line editor never
+    // comes up. After the 10 s cap the pane is asked again, and is busy.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const start = vi.spyOn(useAgentTrackerStore.getState(), "startSession");
+      start.mockClear();
+      const onClose = vi.fn();
+      act(() => { useTabStore.getState().addTab("Race"); });
+      attachPty(41);
+      let calls = 0;
+      busy.paneBusy.mockImplementation(async () => (calls++ < 2 ? null : "tmux"));
+      tauri.neverReady = true;
+      await renderPicker(onClose);
+      await clickRow("Auth Architect");
+      await act(async () => { await vi.advanceTimersByTimeAsync(11_000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+      expect(tauri.ptyWrites).toEqual([]);
+      expect(start).not.toHaveBeenCalled();
+      // Asked when picked, at the launch check, and once more just before typing.
+      expect(calls).toBe(3);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toBe("This terminal is running tmux. Choose New tab.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a write that fails starts no session", async () => {
+    const start = vi.spyOn(useAgentTrackerStore.getState(), "startSession");
+    start.mockClear();
+    const onClose = vi.fn();
+    act(() => { useTabStore.getState().addTab("Write fails"); });
+    attachPty(42);
+    tauri.failWrite = true;
+    await renderPicker(onClose);
+    await clickRow("Auth Architect");
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe("The agent could not be typed into this terminal; nothing was started."),
+    );
+    expect(start).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
