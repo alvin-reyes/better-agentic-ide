@@ -583,7 +583,6 @@ mod tests {
                 ("sudo cp -a ~/.config/gh /tmp/x", true),
                 ("rsync -a ~/.config/ backup/", true),
                 ("grep -r token ~/.config/gh", true),
-                ("cat ~/.config/g?/hosts.yml", true),
                 ("head -c 100 \"$XDG_CONFIG_HOME/gh/hosts.yml\"", true),
                 ("grep token \"$D/gh/hosts.yml\"", true),
                 ("bash -c 'cat ~/.config/gh/hosts.yml'", true),
@@ -617,5 +616,11 @@ mod tests {
                 ("grep -n hosts.yml docs/gh/hosts.yml.md", false),
             ],
         );
+        // A glob over a credential file matches path text, which is POSIX
+        // only. The guard doesn't run on Windows: ADR 0011 ("Not covered:
+        // Windows") and the CLI plan ("Windows | No guard"), so this case is
+        // checked off Windows, where `\` paths never glob-match.
+        #[cfg(not(windows))]
+        check(&fs, &[("cat ~/.config/g?/hosts.yml", true)]);
     }
 }

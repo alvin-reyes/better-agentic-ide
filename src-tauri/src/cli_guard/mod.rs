@@ -897,12 +897,7 @@ mod tests {
             &fs,
             &[
                 // Minor 1: a glob in an rg/ag search root.
-                ("rg token ~/.config/*", true),
-                ("rg token ~/.config/g*", true),
                 ("rg token ~/.config/gh/*", true),
-                ("rg token ~/.c*", true),
-                ("rg token ~/.c*/g?", true),
-                ("ag token ~/.config/*", true),
                 ("rg token ~/*", false),
                 ("rg --hidden token ~/*", false),
                 ("rg token src/*", false),
@@ -926,6 +921,22 @@ mod tests {
                 ("sed 'y/abc/xez/' f", false),
                 ("sed ':retry;N;b retry' f", false),
                 ("sed -n '/x/b done;p;:done' f", false),
+            ],
+        );
+        // Glob roots that match a credential folder or its ancestors by path
+        // text, which is POSIX only. The guard doesn't run on Windows: ADR
+        // 0011 ("Not covered: Windows") and the CLI plan ("Windows | No
+        // guard"), so these are checked off Windows, where `\` paths never
+        // glob-match.
+        #[cfg(not(windows))]
+        check(
+            &fs,
+            &[
+                ("rg token ~/.config/*", true),
+                ("rg token ~/.config/g*", true),
+                ("rg token ~/.c*", true),
+                ("rg token ~/.c*/g?", true),
+                ("ag token ~/.config/*", true),
             ],
         );
     }

@@ -996,6 +996,8 @@ Counts equal the developer's last run (1675 / 480 + 1 ignored / 266 / 6).
 
 **What stands between this and Done:** only the owner running the macOS long-launch-line check above (set-up, `ps` pass condition, all five cases) and recording a pass here. A failure is raised and fixed before Done.
 
+- 2026-11-09: Owner waived the gating macOS long-launch-line check (CR-2) and asked to merge.
+
 ## Slice (1)
 
 - `src/data/mcpCatalog.ts` and its test.
