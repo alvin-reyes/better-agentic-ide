@@ -1506,6 +1506,8 @@ are applied above (4.3, 8, 6.4, 3.2).
 
 Open for the owner:
 
+**Owner answers (2026-11-09):** Q-A5: approved — the verification command gains a seventh line, `cd src-tauri && cargo test -p ade-hook` (recorded in docs/architecture.md's "Verification command" by its own change; it applies to every story from then on). Q-A6: yes — both asks go to the agent hub template's backlog.
+
 - **Q-A5. The runner's binary tests in the verification command.** O6's most
   important tests (signals, env capture, the secret prompt) run as
   `cargo test -p ade-hook --test hubrun`, which, like the existing
