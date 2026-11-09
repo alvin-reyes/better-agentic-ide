@@ -265,20 +265,31 @@ fn post_open(port: u16, pty: u32, token: &str, body: &str, timeout: Duration) ->
     );
     let _ = stream.set_write_timeout(Some(left()));
     stream.write_all(request.as_bytes())?;
+    read_answer(&mut stream, deadline, |s, left| {
+        let _ = s.set_read_timeout(Some(left));
+    })
+}
+
+/// Reads until a complete answer, the end of the connection or `deadline`.
+/// A read interrupted by a signal (EINTR, seen on Linux CI) is retried, not
+/// reported as a failure.
+fn read_answer<R: Read>(r: &mut R, deadline: Instant, mut before_read: impl FnMut(&mut R, Duration)) -> Result<(u16, Vec<u8>), Failure> {
     let mut got = Vec::new();
     let mut buf = [0u8; 4096];
     loop {
         if let Some(answer) = parse_answer(&got) {
             return Ok(answer);
         }
-        if Instant::now() >= deadline {
+        let now = Instant::now();
+        if now >= deadline {
             return Err(Failure::NoAnswer);
         }
-        let _ = stream.set_read_timeout(Some(left()));
-        match stream.read(&mut buf) {
+        before_read(r, deadline.saturating_duration_since(now).max(Duration::from_millis(1)));
+        match r.read(&mut buf) {
             Ok(0) if got.is_empty() => return Err(Failure::Reset),
             Ok(0) => return parse_answer_at_end(&got).ok_or(Failure::Garbled),
             Ok(n) => got.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.into()),
         }
     }
@@ -1010,6 +1021,29 @@ mod tests {
         let (code, _, err, _) = cli(&["open"], port, &tmp);
         assert_eq!(code, 1);
         assert_eq!(err.trim_end(), "ade: ADE didn't answer; no terminal was opened");
+    }
+
+    /// Fails with EINTR first, then serves `data`.
+    struct InterruptedOnce {
+        interrupted: bool,
+        data: std::io::Cursor<Vec<u8>>,
+    }
+
+    impl Read for InterruptedOnce {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if !self.interrupted {
+                self.interrupted = true;
+                return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+            }
+            self.data.read(buf)
+        }
+    }
+
+    #[test]
+    fn a_read_interrupted_by_a_signal_is_retried() {
+        let mut r = InterruptedOnce { interrupted: false, data: std::io::Cursor::new(http(200, "{}").into_bytes()) };
+        let got = read_answer(&mut r, Instant::now() + Duration::from_secs(5), |_, _| {});
+        assert!(matches!(got, Ok((200, ref body)) if body == b"{}"), "{got:?}");
     }
 
     #[test]
