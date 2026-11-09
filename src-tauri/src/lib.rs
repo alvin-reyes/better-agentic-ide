@@ -2,6 +2,9 @@ mod agent_status;
 mod antislop;
 mod bmad;
 mod bmadconfig;
+mod claude_settings;
+mod cli_guard;
+mod cli_rules;
 // Public so `tests/bmadswitch_e2e.rs` can plan and apply a switch the way the
 // commands do, without the `AppHandle` they take.
 pub mod bmadswitch;
@@ -12,6 +15,7 @@ mod contracts;
 mod crashlog;
 mod git;
 mod mcp;
+mod orgo_rules;
 mod platform;
 // Public so `tests/bmadswitch_e2e.rs` can set a project up with the same
 // `apply` the setup command and the switch use.
@@ -510,6 +514,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pty::create_pty,
             pty::write_pty,
+            pty::pty_line_editor_ready,
             pty::resize_pty,
             pty::reattach_pty,
             pty::kill_pty,
@@ -567,6 +572,7 @@ pub fn run() {
             mcp::mcp_list,
             mcp::mcp_install,
             mcp::mcp_remove,
+            claude_settings::launch_rules,
             antislop::slop_diff,
             antislop::ade_plugin_marketplace,
             projectsetup::project_setup_status,

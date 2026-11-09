@@ -1,9 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const io = vi.hoisted(() => ({ writes: [] as { path: string; content: string }[], ran: [] as string[] }));
+const io = vi.hoisted(() => ({
+  writes: [] as { path: string; content: string }[],
+  ran: [] as string[],
+  /** How many loads of Orgo's rules fail before one succeeds. */
+  failRules: 0,
+  ruleLoads: 0,
+  /** Answer the next load with this instead of the rules. */
+  malformed: undefined as unknown,
+  /** The guard the rules carry (null until the CLI library's guard ships). */
+  guard: null as unknown,
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args: Record<string, unknown>) => {
+    if (cmd === "launch_rules") {
+      io.ruleLoads++;
+      if (io.failRules > 0) { io.failRules--; throw new Error("ipc down"); }
+      if (io.malformed !== undefined) { const m = io.malformed; io.malformed = undefined; return m; }
+      return { ask: ["mcp__*orgo*__*create*", "mcp__*orgo*__*delete*"], continuousDeny: [], guard: io.guard };
+    }
     if (cmd === "create_directory") return "/home/u/.ade/roles";
     if (cmd === "write_text_file") { io.writes.push(args as { path: string; content: string }); return; }
     throw new Error(`unexpected ${cmd}`);
@@ -15,7 +31,18 @@ vi.mock("../terminalCommands", () => ({
 }));
 
 import { dispatchAgent, prepareAgentLaunch } from "../agentLaunch";
+import { __resetLaunchRulesForTests } from "../launchRules";
 import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
+
+const SETTINGS = `--settings '{"permissions":{"ask":["mcp__*orgo*__*create*","mcp__*orgo*__*delete*"]}}'`;
+
+beforeEach(() => {
+  __resetLaunchRulesForTests();
+  io.failRules = 0;
+  io.ruleLoads = 0;
+  io.malformed = undefined;
+  io.guard = null;
+});
 
 describe("prepareAgentLaunch", () => {
   beforeEach(() => { io.writes.length = 0; io.ran.length = 0; });
@@ -23,7 +50,7 @@ describe("prepareAgentLaunch", () => {
   it("writes the role file and returns a command carrying the task", async () => {
     const r = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", { task: "Implement story 1.1" });
     expect(r.ok).toBe(true);
-    expect(r.ok && r.command).toMatch(/^claude --append-system-prompt-file '\/home\/u\/\.ade\/roles\/.+' 'Implement story 1\.1'$/);
+    expect(r.ok && r.command).toMatch(/^claude --settings '.+' --append-system-prompt-file '\/home\/u\/\.ade\/roles\/.+' 'Implement story 1\.1'$/);
     expect(io.writes).toHaveLength(1);
   });
 
@@ -36,10 +63,97 @@ describe("prepareAgentLaunch", () => {
   it("returns an empty error for an unknown role", async () => {
     expect(await prepareAgentLaunch({ roleId: "nope", provider: "claude" }, "/p")).toEqual({ ok: false, error: "" });
   });
+
+  it("no rules, no launch", async () => {
+    for (const provider of ["claude", "deepseek", "ollama"] as const) {
+      __resetLaunchRulesForTests();
+      io.failRules = 1;
+      const r = await prepareAgentLaunch({ roleId: "developer", provider }, "/p", {});
+      expect(r.ok, provider).toBe(false);
+      expect(!r.ok && r.error, provider).toMatch(/couldn't load its permission rules, so the agent was not started/);
+    }
+    expect(io.writes).toEqual([]);
+  });
+
+  it("an answer that isn't a rule list is no rules", async () => {
+    io.malformed = { ask: "mcp__*orgo*__*create*", continuousDeny: [], guard: null };
+    const r = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", {});
+    expect(!r.ok && r.error).toMatch(/couldn't load its permission rules/);
+    expect(io.writes).toEqual([]);
+  });
+
+  it("an empty rule list is no rules", async () => {
+    const bad: unknown[] = [
+      { ask: [], continuousDeny: [], guard: null },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: "x", guard: null },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [1], guard: null },
+      { ask: ["mcp__*orgo*__*create*"], guard: null },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: { interactive: "X" } },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: { headless: "Y" } },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: { interactive: "X", headless: 1 } },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [], guard: "X" },
+      { ask: ["mcp__*orgo*__*create*"], continuousDeny: [] },
+      null,
+    ];
+    for (const answer of bad) {
+      const label = JSON.stringify(answer);
+      io.ruleLoads = 0;
+      io.malformed = answer;
+      const refused = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", {});
+      expect(refused.ok, label).toBe(false);
+      expect(!refused.ok && refused.error, label).toMatch(/couldn't load its permission rules, so the agent was not started/);
+      // Not cached: the next launch asks again, gets the real rules and goes through.
+      const next = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", {});
+      expect(next.ok && next.command, label).toContain(SETTINGS);
+      expect(io.ruleLoads, label).toBe(2);
+      __resetLaunchRulesForTests();
+    }
+  });
+
+  it("a failed load is retried, not cached", async () => {
+    io.failRules = 1;
+    const first = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", {});
+    expect(first.ok).toBe(false);
+    const second = await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", {});
+    expect(second.ok && second.command).toContain(SETTINGS);
+    expect(io.ruleLoads).toBe(2);
+    // Loaded once, it is kept: a third launch doesn't ask again.
+    await prepareAgentLaunch({ roleId: "developer", provider: "claude" }, "/p", {});
+    expect(io.ruleLoads).toBe(2);
+  });
 });
 
 describe("dispatchAgent", () => {
   beforeEach(() => { io.writes.length = 0; io.ran.length = 0; });
+
+  it("board dispatch carries Orgo's ask rules", async () => {
+    const err = await dispatchAgent({
+      name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p/app", task: "Implement story 1.1",
+    });
+    expect(err).toBeNull();
+    expect(io.ran).toHaveLength(1);
+    expect(io.ran[0]).toContain(` ${SETTINGS} `);
+  });
+
+  it("board dispatch is not headless", async () => {
+    io.guard = { interactive: "GUARD-INTERACTIVE", headless: "GUARD-HEADLESS" };
+    const err = await dispatchAgent({
+      name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p", task: "go",
+    });
+    expect(err).toBeNull();
+    expect(io.ran[0]).toContain('"command":"GUARD-INTERACTIVE"');
+    expect(io.ran[0]).not.toContain("GUARD-HEADLESS");
+  });
+
+  it("refuses to dispatch when the rules can't be loaded, and runs nothing", async () => {
+    io.failRules = 1;
+    const err = await dispatchAgent({
+      name: "Developer", icon: "D", spec: { roleId: "developer", provider: "claude" }, cwd: "/p", task: "Implement story 1.1",
+    });
+    expect(err).toMatch(/couldn't load its permission rules/);
+    expect(io.ran).toEqual([]);
+    expect(io.writes).toEqual([]);
+  });
 
   it("runs the command in a new tab and records the session", async () => {
     const start = vi.spyOn(useAgentTrackerStore.getState(), "startSession");

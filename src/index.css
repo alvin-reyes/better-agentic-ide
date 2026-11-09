@@ -637,6 +637,7 @@ select.bench-input option { background: var(--bg-secondary); color: var(--text-p
 .mcp-tag[data-warn] { background: rgba(227,179,65,.15); color: #e3b341; }
 .mcp-secret { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; color: #e3b341; }
 .mcp-secret[data-ok] { color: #3fb950; }
+.mcp-card__main p.mcp-caution { margin-top: 6px; padding-left: 8px; border-left: 2px solid #e3b341; font-size: 11px; }
 .mcp-card__actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .mcp-installed { font-size: 11px; color: #a78bfa; }
 .ig-btn { font-size: 12px; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer; }
