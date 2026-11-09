@@ -15,7 +15,7 @@ designs. The designs themselves stay where this repo keeps them: feature designs
 | Feature | Design | Contracts | ADRs |
 |---|---|---|---|
 | F1 Personas and engagements (`docs/prd.md` F1) | `docs/superpowers/specs/2026-11-08-personas-and-engagements-design.md` (revision 4 approved by the owner 2026-11-08; approved at revision 5g on 2026-11-08, after the delta review of revisions 5 to 5g passed; approved at revision 5j on 2026-11-08: the slice-1 gaps (5h), its review's answers (5i) and the delta check's minors (5j), confirmed by the owner) | `engagement-profiles.md`, `engagement-requests.md`, `engagement-registry.md` | 0015 to 0024 (0024 Accepted 2026-11-08) |
-| F2 Agentic-environment onboarding (`docs/prd.md` F2) | `docs/superpowers/specs/2026-11-09-onboarding-design.md` (proposed 2026-11-09; verification command unchanged) | `hub-onboarding.md`, `remote-tabs.md` | 0026 to 0028 (Proposed) |
+| F2 Agentic-environment onboarding (`docs/prd.md` F2) | `docs/superpowers/specs/2026-11-09-onboarding-design.md` (proposed 2026-11-09, revision 2 after the adversarial review; verification command unchanged, Q-A5 open) | `hub-onboarding.md`, `remote-tabs.md` | 0026 to 0029 (Proposed) |
 | Sub-terminals and `ade open` | `docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md` | `terminal-open.md` | `0014-terminals-open-terminals-through-the-hook-endpoint` |
 | Earlier features | `docs/superpowers/specs/`, `_bmad-output/plan-*.md` | `.ade/context/` | `.ade/context/decisions/` |
 

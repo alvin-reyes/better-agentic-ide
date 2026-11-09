@@ -1,6 +1,7 @@
 # 0026: Hub setup steps run under a runner that leads one PTY
 
-- Status: Proposed (2026-11-09). With the F2 design; not yet reviewed or approved.
+- Status: Proposed (2026-11-09), revised with the F2 design revision 2; not yet
+  reviewed or approved.
 - Context:
   - F2 (`docs/prd.md` OB-4 AC1, AC6) runs the bundled agent hub template's steps
     (`bin/init`, the first commit, `bin/secret`, `bin/setup`, `bin/brain index`,
@@ -15,22 +16,41 @@
     so one PTY cannot host a sequence of session leaders; a PTY per step would also
     change `ADE_PTY_ID` (and so the sub-terminal parent and agent status) at each
     step, and re-run the start-up files each time.
+  - Secrets are typed into `bin/secret`'s hidden prompt in that same terminal, so
+    what the terminal accepts between and before steps matters (G4).
   - Spec: `docs/superpowers/specs/2026-11-09-onboarding-design.md`, section 4.
 - Decision:
   - The hub tab's PTY is spawned by Rust with `ade-hook __hub-run` as its program,
     with a new terminal's environment (`terminal_spawn_spec`, extracted from
-    `create_pty`) plus `ADE_HUB_RUN` (a Unix socket in a 0700 temp folder) and
-    `ADE_HUB_RUN_KEY`. The runner is the session leader for the whole run.
-  - The runner starts the developer's login shell once, as a new terminal starts it
-    plus `-i -c 'exec "$ADE_HOOK_BIN" __hub-env'`, and reads the resulting
-    environment from fd 3 (a pipe, never a file). Only sh, bash, zsh, ksh, dash and
-    fish are accepted. That map is the steps' environment, and the preflight's
-    probes use it too.
-  - Each step is forked from an argv with that environment, in its own process
-    group made the terminal's foreground, and its status is reported over the
-    socket. Probes (identity, tools, link facts) run the same way off the terminal,
-    with pipes. ADE never writes to the PTY's input for a step.
-  - At the end the runner `execve`s the login shell a new terminal would get, in
+    `create_pty`) plus `ADE_HUB_RUN` (a Unix socket in a folder made by an exclusive
+    `mkdir`, mode 0700, owner checked; `/private/tmp` when `sun_path` would be too
+    long) and `ADE_HUB_RUN_KEY`. ADE accepts only a peer whose `LOCAL_PEERPID` is the
+    PTY's first process and whose `hello` carries the key, within 10 s. The runner is
+    the session leader for the whole run.
+  - ADE checks the login shell (only sh, bash, zsh, ksh, dash and fish; the owner
+    answered Q-A1: refuse others, naming them) and sends `capture_env`. The runner
+    starts that shell plus `-i -c 'exec "$ADE_HOOK_BIN" __hub-env'` in the
+    terminal's foreground, with fd 57 a pipe; `__hub-env` writes its environment as
+    framed data (magic, length-prefixed entries, terminator). The runner reads it on
+    a thread and accepts it at `__hub-env`'s exit, not at EOF. `PWD`, `OLDPWD`,
+    `SHLVL` and `_` are dropped. That map is the steps' environment, and the
+    preflight's probes use it too, minus the variables that point git at another
+    repository (`GIT_DIR`, `GIT_WORK_TREE` and kin), removed for every step and
+    probe.
+  - Each step is forked from an argv with that environment by one foreground
+    procedure: flush pending input, cooked settings, own process group made the
+    foreground, every signal disposition reset and the mask cleared before `exec`,
+    `killpg(SIGCONT)` for a stopped group, foreground taken back, input flushed and
+    echo off afterwards. Between steps the runner holds the foreground with echo
+    off, and ADE's input gate on `write_pty` drops typed bytes (signal keys pass).
+  - A secret step opens the gate only when the runner sees `ECHO` cleared (the
+    hidden prompt has started) and reports `prompt_ready`; then the webview tells
+    the developer to type. Multi-line pastes are refused. Without a hidden prompt in
+    15 s the step is stopped and fails.
+  - Probes (identity, tools, link facts, removal facts) run the same way off the
+    terminal, with pipes. ADE never writes to the PTY's input for a step.
+  - After (a) the runner `chdir`s into the hub folder. At the end it resets every
+    signal and the mask and `execve`s the login shell a new terminal would get, in
     the hub folder: same PID, PTY id and token.
   - The runner executes only what ADE sends (newline-delimited JSON, types in
     `hubrun_proto.rs`, shared by `#[path]`); all policy is in `hubrun.rs`. The
@@ -38,13 +58,18 @@
     opened (by `reattach_pty`) only once it passes.
 - Consequences:
   - One PTY id for the tab's life: hooks, `ade open`, the busy check and agent
-    status work for every step and the persona session.
+    status work for every step and the persona session. The busy check cannot name
+    a run's state (between steps it reads the runner as idle), so the close rules
+    use the run's own state (spec 6.5).
   - Start-up files run once per run; their output shows in the tab as in a new
     terminal. A start-up file that waits for input or `exec`s another program makes
     the preflight time out (30 s) with a message.
   - Developers with another login shell (nushell, xonsh, tcsh) cannot run the
-    setup (open question Q-A1).
+    setup; the preflight names the six supported shells.
+  - A `claude` alias or shell function is not used; the command is found on `PATH`.
   - `ade-hook` gains two hidden verbs and a `libc` dependency; `cargo check -p
-    ade-hook` covers them, and their logic is tested in the main crate.
+    ade-hook` covers the build, and the binary's behaviour is tested by
+    `cargo test -p ade-hook --test hubrun` (macOS), which CI's `backend-macos` job
+    runs as it runs `--test dispatch`.
   - ADR 0021's shell integration, when built, changes `terminal_spawn_spec`, and the
     runner follows it.

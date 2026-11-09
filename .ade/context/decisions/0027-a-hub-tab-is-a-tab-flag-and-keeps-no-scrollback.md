@@ -1,6 +1,7 @@
 # 0027: A hub tab is a flag on the tab, and keeps no scrollback
 
-- Status: Proposed (2026-11-09). With the F2 design; not yet reviewed or approved.
+- Status: Proposed (2026-11-09), revised with the F2 design revision 2; not yet
+  reviewed or approved.
 - Context:
   - F2's OB-14 says a hub tab (the onboarding run's tab, an existing hub's tab and
     their sub-terminals) keeps no scrollback in the saved session or snapshots, is
@@ -21,6 +22,10 @@
     `SerializedTab` and Duplicate carry the flag; workspace entries carry `hub` and
     `cwd` for hub tabs only.
   - The agent tracker records "Agent hub" and no `cwd` for its panes.
+  - While a run is in progress in the tab, Move to New Window is refused (hidden in
+    the menu and refused by `detachTabToWindow`), because the run's channel and
+    notices belong to the opening window; after the run hands over to the login
+    shell, the tab moves with its flag.
   - The relay mask is a function, `remoteTabEntry(tab)`, and a `hub` field in the
     relay's tab entries, which the Rust bridge re-applies
     (`.ade/context/remote-tabs.md`, created with this ADR for phone-watch story 8).
@@ -28,7 +33,8 @@
   - A restored, duplicated or reopened hub tab is empty and starts a plain login
     shell; nothing is re-run.
   - The hub folder's path stays in `ade-session` and, for hub tabs in a saved
-    workspace, in the synced workspaces key (OB-10 AC2; open question Q-A2).
+    workspace, in the synced workspaces key (OB-10 AC2; Q-A2, answered by the owner:
+    allow, and the review's sync disclosure names workspaces).
   - A plain tab that `cd`s into a hub is unaffected, by design.
   - Any future store that copies tabs must carry the flag; the tests enumerate the
     current ones.
