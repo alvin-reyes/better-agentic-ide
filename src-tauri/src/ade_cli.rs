@@ -1046,6 +1046,26 @@ mod tests {
         assert!(matches!(got, Ok((200, ref body)) if body == b"{}"), "{got:?}");
     }
 
+    /// Fails with EINTR on every read.
+    struct AlwaysInterrupted;
+
+    impl Read for AlwaysInterrupted {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(std::io::ErrorKind::Interrupted))
+        }
+    }
+
+    #[test]
+    fn reads_interrupted_until_the_deadline_give_no_answer() {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let got = read_answer(&mut AlwaysInterrupted, Instant::now() + Duration::from_millis(300), |_, _| {});
+            let _ = tx.send(got);
+        });
+        let got = rx.recv_timeout(Duration::from_secs(3)).expect("read_answer kept retrying past its deadline");
+        assert!(matches!(got, Err(Failure::NoAnswer)), "{got:?}");
+    }
+
     #[test]
     fn exit_1_when_no_answer_before_the_deadline() {
         let tmp = temp_dir("exit1-silent");

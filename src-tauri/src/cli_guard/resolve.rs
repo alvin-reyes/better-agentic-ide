@@ -543,7 +543,7 @@ impl<'c, 'a> Guard<'c, 'a> {
     pub fn expand(&mut self, sc: &mut Scope, w: &Word) -> Vec<W> {
         let mut atoms: Vec<(char, bool)> = Vec::new();
         let mut quoted_any = false;
-        for p in &w.parts {
+        for (k, p) in w.parts.iter().enumerate() {
             match p {
                 Part::Lit { text, quoted } => {
                     quoted_any |= quoted;
@@ -566,9 +566,21 @@ impl<'c, 'a> Guard<'c, 'a> {
                             if (name == "@" || name == "*") && w.parts.len() == 1 && (name == "@" || !quoted) {
                                 return vals;
                             }
-                            push_value(&mut atoms, &join(&vals), *quoted);
+                            // `"x$@"` is a word per argument.
+                            if name == "@" && *quoted && vals.len() > 1 {
+                                atoms.push((U_PH, false));
+                            } else {
+                                push_value(&mut atoms, &join(&vals), *quoted);
+                            }
                             continue;
                         }
+                    }
+                    // Quoted, it is still several words: `"$@"`, `"${a[@]}"`,
+                    // zsh's `"${(@)a}"`, `"${(f)x}"` and `"$a[@]"`.
+                    let next_at = matches!(w.parts.get(k + 1), Some(Part::Lit { text, .. }) if text.starts_with("[@]"));
+                    if *quoted && may_be_words(name, *plain, inner, next_at) {
+                        atoms.push((U_PH, false));
+                        continue;
                     }
                     let v = if *plain && !positional { self.resolve(sc, name, w.pos, 1) } else { None };
                     match v {
@@ -685,6 +697,14 @@ fn literal_heredoc(sc: &Scope, list: &List) -> Option<String> {
 
 fn home_text(ctx: &Ctx) -> Option<String> {
     ctx.home.as_ref().map(|h| h.to_string_lossy().into_owned())
+}
+
+/// A quoted parameter expansion that can still become several words:
+/// `$@` in any form, an `[@]` subscript, a `${!prefix@}`, a zsh flag
+/// (`${(@)a}`, `${(f)x}`), or zsh's `$a[@]` (`next_at`).
+fn may_be_words(name: &str, plain: bool, inner: &[Part], next_at: bool) -> bool {
+    let inner_at = inner.iter().any(|p| matches!(p, Part::Lit { text, .. } if text.contains('@')));
+    name == "@" || next_at || (!plain && (name.is_empty() || inner_at))
 }
 
 /// An expansion's value: quoted, it is literal text; unquoted, a value that

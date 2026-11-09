@@ -600,9 +600,22 @@ mod tests {
                 // named `--` would make it the separator).
                 ("\"$ADE_HOOK_BIN\" $X", true),
                 ("\"$ADE_HOOK_BIN\" open -* gh repo delete o/r", true),
+                // M1: a glob verb (`op?n` matches a file named `open`).
+                ("\"$ADE_HOOK_BIN\" op?n -- gh repo delete o/r", true),
+                // B1: a quoted expansion that can still be several words.
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"x$@\"; }; f a -- gh repo delete o/r", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${a[@]}\"", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"${(@)a}\"", true),
+                ("a=(x -- gh repo delete o/r); \"$ADE_HOOK_BIN\" open --name \"$a[@]\"", true),
+                ("\"$ADE_HOOK_BIN\" open --name \"$@\"", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd \"${@:2}\"", true),
+                ("\"$ADE_HOOK_BIN\" open --split \"${(f)X}\"", true),
                 // Quoted: one word, no split.
                 ("\"$ADE_HOOK_BIN\" open --name \"$X\"", false),
                 ("\"$ADE_HOOK_BIN\" open --split \"$X\" --cwd \"$D\"", false),
+                ("f() { \"$ADE_HOOK_BIN\" open --name \"x$@\"; }; f a", false),
+                ("\"$ADE_HOOK_BIN\" open --name \"$*\"", false),
+                ("\"$ADE_HOOK_BIN\" open --name \"${a[*]}\"", false),
             ],
         );
     }
