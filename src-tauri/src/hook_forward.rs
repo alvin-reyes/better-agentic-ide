@@ -337,8 +337,16 @@ mod tests {
     use std::net::TcpListener;
     use std::path::PathBuf;
 
+    /// `src-tauri/src/fixtures/agent-events`, from ADE's manifest or, under
+    /// `cargo test -p ade-hook`, the helper's (`src-tauri/ade-hook`).
+    fn fixtures() -> PathBuf {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let src_tauri = if manifest.ends_with("ade-hook") { manifest.parent().unwrap() } else { manifest };
+        src_tauri.join("src/fixtures/agent-events")
+    }
+
     fn fixture(name: &str) -> Value {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixtures/agent-events").join(name);
+        let path = fixtures().join(name);
         serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
     }
 
@@ -500,7 +508,7 @@ mod tests {
     }
 
     fn run_with(port: u16) -> (i32, String, Duration) {
-        let payload = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixtures/agent-events/permission-request.json")).unwrap();
+        let payload = std::fs::read(fixtures().join("permission-request.json")).unwrap();
         let mut out = Vec::new();
         let started = Instant::now();
         let code = run(&payload[..], &mut out, env(port), 0, no_procs);

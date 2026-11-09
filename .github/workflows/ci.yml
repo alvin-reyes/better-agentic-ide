@@ -123,6 +123,12 @@ jobs:
         working-directory: src-tauri
         run: cargo test --locked
 
+      # The built ade-hook binary's tests: `cargo test` above runs the root
+      # package only.
+      - name: Helper binary tests
+        working-directory: src-tauri
+        run: cargo test --locked -p ade-hook --test dispatch
+
   backend-macos:
     name: Backend on macOS (cargo test)
     runs-on: macos-latest
@@ -146,6 +152,12 @@ jobs:
       - name: Tests
         working-directory: src-tauri
         run: cargo test --locked
+
+      # The built ade-hook binary's tests: `cargo test` above runs the root
+      # package only.
+      - name: Helper binary tests
+        working-directory: src-tauri
+        run: cargo test --locked -p ade-hook --test dispatch
 
   # The phone remote's relay: a separate Cargo workspace from src-tauri.
   relay:
@@ -202,6 +214,7 @@ jobs:
   # The PowerShell installer cannot be executed on a developer Mac: the only
   # PowerShell container images are amd64, and qemu crashes running them under
   # Rosetta. So a real Windows runner checks it instead of nobody checking it.
+  # Note: the ade CLI's binary tests run on Linux and macOS only (the CLI is Unix-only for now), so this job does not exercise them.
   backend-windows:
     name: Backend on Windows (compile + test)
     runs-on: windows-latest

@@ -1,3 +1,4 @@
+mod ade_cli;
 mod agent_status;
 mod antislop;
 mod bmad;

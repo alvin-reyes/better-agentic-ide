@@ -34,6 +34,12 @@
 - source_plan: `_bmad-output/plan-agent-colors.md`
   summary: Bump the ADE Claude Code plugin's version so existing installs pick up the colored agent files.
   evidence: Owner decision 8c (2026-10-16). Story A regenerates `claude-plugin/plugins/ade/agents/*.md` but leaves `plugin.json` at 1.1.0.
+- source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-the-cli-and-its-exit-codes-plan.md`
+  summary: For story 7 (`ade` on `PATH`): a Claude Code hook whose command is `ade` (not `ade-hook`) runs the CLI, which exits 2 with usage instead of the hook's `{}` and exit 0.
+  evidence: PR #97 review, minor 5. `mode()` makes any argv0 named `ade` the CLI, by contract. ADE's own hooks call `ade-hook`, so nothing breaks today; once `ade` is on `PATH`, a hand-written hook that uses it would fail. Story 7 should keep hooks on `ade-hook` (or `$ADE_HOOK_BIN`) and say so where it puts `ade` on `PATH`.
+- source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-the-cli-and-its-exit-codes-plan.md`
+  summary: For story 7: a mistyped verb under the helper's own name (`ade-hook opne`) is the hook mode, which reads stdin, prints `{}` and exits 0, so the typo is silent.
+  evidence: PR #97 review, minor 6. By contract only `open`, `help` and `--help` select the CLI under the name `ade-hook`; the hook ignores arguments. Under the name `ade` the same typo is a usage error (exit 2). Story 7, which tells agents to use `"$ADE_HOOK_BIN" open`, could make an unknown first argument under `ade-hook` an error when stdin is a terminal, or document `ade open` as the form to type.
 - source_plan: `_bmad-output/initiative-sub-terminals/epic-sub-terminals/story-ade-open-adds-a-sub-terminal-endpoint-and-window-plan.md`
   summary: The hook endpoint's `serve` loop reads a request body with no read timeout, so a client that sends headers and then stalls holds the serve thread (hook events and `/open` wait behind it).
   evidence: Code review m6 of PR #96 (story 4a), deferred as pre-existing: hook events were read the same way before `/open`. A per-connection read deadline (or reading the body on the handler thread) would bound it.
