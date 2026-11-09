@@ -403,10 +403,33 @@ fn working_folder(pwd: Option<OsString>, here: std::io::Result<PathBuf>) -> Resu
     Ok(here_text)
 }
 
+/// What the CLI reads from its process: `$PWD`, `getcwd` and ADE's variables.
+#[derive(Debug)]
+pub struct Env {
+    pub pwd: Option<OsString>,
+    pub here: std::io::Result<PathBuf>,
+    /// The ADE variables that are set, as text.
+    pub vars: Vec<(&'static str, String)>,
+}
+
+impl Env {
+    /// This process's.
+    pub fn from_process() -> Env {
+        let var = |k: &'static str| std::env::var(k).ok().map(|v| (k, v));
+        Env { pwd: std::env::var_os("PWD"), here: std::env::current_dir(), vars: [ENV_PORT, ENV_TOKEN, ENV_PTY].into_iter().filter_map(var).collect() }
+    }
+}
+
+/// The CLI's run over an `Env`: `args` starts at the verb.
+pub fn run_with(args: &[OsString], env: Env, out: &mut impl Write, err: &mut impl Write, timeout: Duration) -> i32 {
+    let pwd = working_folder(env.pwd, env.here);
+    let vars = env.vars;
+    run(args, |k| vars.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()), pwd, out, err, timeout)
+}
+
 /// The CLI as a process: `args` starts at the verb. Returns the exit code.
 pub fn main(args: &[OsString]) -> i32 {
-    let pwd = working_folder(std::env::var_os("PWD"), std::env::current_dir());
-    run(args, |k| std::env::var(k).ok(), pwd, &mut std::io::stdout().lock(), &mut std::io::stderr().lock(), DEADLINE)
+    run_with(args, Env::from_process(), &mut std::io::stdout().lock(), &mut std::io::stderr().lock(), DEADLINE)
 }
 
 #[cfg(test)]
@@ -607,6 +630,89 @@ mod tests {
         assert!(String::from_utf8(out).unwrap().contains("ade open"));
     }
 
+    // ---- M2 (re-review): what `main` reads from its process ----
+
+    /// ADE's variables for `port`, as `Env::vars`.
+    fn vars(port: u16, token: &str) -> Vec<(&'static str, String)> {
+        vec![(ENV_PORT, port.to_string()), (ENV_TOKEN, token.to_string()), (ENV_PTY, "7".to_string())]
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_with_takes_the_folder_and_variables_from_its_env() {
+        let tmp = temp_dir("run-with");
+        std::fs::create_dir_all(format!("{tmp}/real")).unwrap();
+        std::os::unix::fs::symlink(format!("{tmp}/real"), format!("{tmp}/link")).unwrap();
+        let physical = std::fs::canonicalize(format!("{tmp}/real")).unwrap();
+        let ok = "HTTP/1.1 200 OK\r\nContent-Length: 24\r\n\r\n{\"ok\":true,\"typed\":true}";
+        for (pwd, expected) in [(Some(format!("{tmp}/link")), format!("{tmp}/link")), (None, physical.to_str().unwrap().to_string())] {
+            let (port, rx) = answer_once(ok);
+            let env = Env { pwd: pwd.clone().map(OsString::from), here: Ok(physical.clone()), vars: vars(port, "0123456789abcdef") };
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let code = run_with(&os(&["open"]), env, &mut out, &mut err, Duration::from_secs(5));
+            assert_eq!(code, 0, "PWD={pwd:?}: {}", String::from_utf8_lossy(&err));
+            let request = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(request.contains("\r\nX-ADE-Token: 0123456789abcdef\r\n"), "{request}");
+            assert_eq!(request_body(&request)["cwd"], json!(expected), "PWD={pwd:?}");
+        }
+        // getcwd failed: exit 2, nothing sent.
+        let env = Env { pwd: Some(tmp.clone().into()), here: Err(std::io::ErrorKind::NotFound.into()), vars: vars(1, "0123456789abcdef") };
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        assert_eq!(run_with(&os(&["open"]), env, &mut out, &mut err, Duration::from_secs(5)), 2);
+        assert_eq!(String::from_utf8(err).unwrap(), "ade: the current folder is gone\n");
+    }
+
+    /// Set only in the process `main_reads_pwd_getcwd_and_ade_variables_from_the_process` starts.
+    const PROBE: &str = "ADE_CLI_TEST_PROBE";
+
+    /// The probe: `main` in a process of its own. A no-op unless the test
+    /// below started this process for it.
+    #[test]
+    fn probe_main_in_this_process() {
+        if std::env::var_os(PROBE).is_none() {
+            return;
+        }
+        assert_eq!(main(&os(&["open", "--focus"])), 0);
+    }
+
+    /// Runs `main` (through the probe above, in this test binary) with a
+    /// chosen `$PWD`, current folder and ADE variables; the request it sent.
+    #[cfg(unix)]
+    fn main_in_a_process(dir: &str, pwd: &str, token: &str) -> String {
+        let (port, rx) = answer_once("HTTP/1.1 200 OK\r\nContent-Length: 24\r\n\r\n{\"ok\":true,\"typed\":true}");
+        let probe = format!("{}::probe_main_in_this_process", module_path!().split_once("::").unwrap().1);
+        let mut cmd = std::process::Command::new(std::env::current_exe().unwrap());
+        cmd.args([probe.as_str(), "--exact", "--test-threads=1", "--nocapture"]).current_dir(dir).env(PROBE, "1").env("PWD", pwd);
+        cmd.env(ENV_PORT, port.to_string()).env(ENV_TOKEN, token).env(ENV_PTY, "7");
+        let argv: Vec<String> = std::iter::once(cmd.get_program()).chain(cmd.get_args()).map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(!argv.iter().any(|a| a.contains(token)), "the process's argv carries no token: {argv:?}");
+        let out = cmd.output().unwrap();
+        assert!(out.status.success(), "{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        // The probe ran, rather than matching no test.
+        assert!(String::from_utf8_lossy(&out.stdout).contains("1 passed"), "{}", String::from_utf8_lossy(&out.stdout));
+        rx.recv_timeout(Duration::from_secs(10)).expect("main sent a request")
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn main_reads_pwd_getcwd_and_ade_variables_from_the_process() {
+        let tmp = temp_dir("main-env");
+        std::fs::create_dir_all(format!("{tmp}/real")).unwrap();
+        std::fs::create_dir_all(format!("{tmp}/other")).unwrap();
+        std::os::unix::fs::symlink(format!("{tmp}/real"), format!("{tmp}/link")).unwrap();
+        let token = "f00dfeedcafe0123456789abcdef0123456789abcdef0123456789abcdef0123";
+        // $PWD through a symlink to the current folder: $PWD is what's sent.
+        let request = main_in_a_process(&format!("{tmp}/real"), &format!("{tmp}/link"), token);
+        assert_eq!(request_body(&request)["cwd"], json!(format!("{tmp}/link")), "{request}");
+        assert!(request.contains(&format!("\r\nX-ADE-Token: {token}\r\n")), "{request}");
+        assert_eq!(request.matches(token).count(), 1, "only in the header: {request}");
+        assert!(request.contains("\r\nX-ADE-PTY: 7\r\n"), "{request}");
+        // A $PWD naming another folder: the current folder, from getcwd.
+        let physical = std::fs::canonicalize(format!("{tmp}/real")).unwrap();
+        let request = main_in_a_process(&format!("{tmp}/real"), &format!("{tmp}/other"), token);
+        assert_eq!(request_body(&request)["cwd"], json!(physical.to_str().unwrap()), "{request}");
+    }
+
     // ---- minor 7: a repeated flag ----
 
     #[test]
@@ -762,17 +868,14 @@ mod tests {
     fn the_token_comes_from_the_environment_only() {
         let tmp = temp_dir("token");
         let token = "f00dfeedcafe0123456789abcdef0123456789abcdef0123456789abcdef0123";
-        // The very argv handed to the CLI below.
-        let argv = ["open", "--focus"];
-        assert!(!argv.iter().any(|a| a.contains(token)), "the argv carries no token");
         let (port, rx) = answer_once("HTTP/1.1 200 OK\r\nContent-Length: 24\r\n\r\n{\"ok\":true,\"typed\":true}");
         let env = vec![(ENV_PORT, port.to_string()), (ENV_TOKEN, token.to_string()), (ENV_PTY, "7".to_string())];
-        let (code, _, err, _) = cli_env(&argv, |k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()), &tmp, None);
+        let (code, _, err, _) = cli_env(&["open", "--focus"], |k| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone()), &tmp, None);
         assert_eq!(code, 0, "{err}");
         let request = rx.recv().unwrap();
         assert!(request.contains(&format!("\r\nX-ADE-Token: {token}\r\n")), "{request}");
         assert_eq!(request.matches(token).count(), 1, "only in the header: {request}");
-        // The argv of the real process is checked in ade-hook/tests/dispatch.rs.
+        // The argv of a real process: `main_reads_pwd_getcwd_and_ade_variables_from_the_process`.
         // No flag takes a token.
         assert!(!USAGE.to_lowercase().contains("token "), "no --token flag");
         assert_eq!(cli(&["open", "--token", token], 1, &tmp).0, 2);

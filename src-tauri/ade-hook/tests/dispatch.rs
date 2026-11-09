@@ -1,6 +1,8 @@
 //! Runs the built `ade-hook` binary: the hook mode, the CLI under the `ade`
-//! name and under its own, and the working folder it sends. `cargo test -p
-//! ade-hook` runs these; the logic's own tests are in `src/ade_cli.rs`.
+//! name and under its own, and the working folder it sends. Run them with
+//! `cargo test -p ade-hook --test dispatch` (CI's backend jobs do); the
+//! root package's `cargo test` does not. The logic's own tests, and `main`'s
+//! reading of its process, are in `src/ade_cli.rs`.
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
