@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
-| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Draft (revision 4, 2026-11-09; owner answered Q1 to Q12; revision 4 answers revision 3's blocking delta review; Q13 open, not blocking); not approved |
+| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Approved by the owner, 2026-11-09 (revision 4 + minors; revision 4's delta review passed; owner answered Q1 to Q13); not sharded |
 
 ---
 
@@ -2311,13 +2311,14 @@ clarification for slice 0.
 <!-- F2 begins -->
 ## F2: Agentic-environment onboarding
 
-- **Status:** Draft (revision 4, 2026-11-09). The owner answered F2.9 Q1 to Q12
-  (2026-11-09). Revision 1's review BLOCKED it and revision 2 answered it; revision
-  2's delta review BLOCKED it on N1 and N2, and revision 3 answered both; revision
-  3's delta review BLOCKED it on B1, and revision 4 answers every finding of it
-  (F2.12). Not approved, not sharded. Next: a delta review of revision 4, the
-  owner's answer to F2.9 Q13 (not blocking), then the designer (screens and copy)
-  and the architect (how ADE runs the steps).
+- **Status:** Approved by the owner, 2026-11-09 (revision 4 + minors). The owner
+  answered F2.9 Q1 to Q13 (2026-11-09). Revision 1's review BLOCKED it and revision
+  2 answered it; revision 2's delta review BLOCKED it on N1 and N2, and revision 3
+  answered both; revision 3's delta review BLOCKED it on B1, and revision 4 answered
+  every finding of it; revision 4's delta review PASSED with six minors (n1 to n6),
+  which the owner's approval required folded in, with an explicit allowance for
+  the manual `AGENT_TERMINAL` override (F2.12). Not sharded. Next: the designer
+  (screens and copy) and the architect (design spec, ADRs and slice plan), F2.11.
 - **Source:** the owner, 2026-11-09: *"in ADE a user can choose to open terminal or set
   up your agentic environment with questions to configure the ai-agent for the
   developer for a project."* And: *"when the developer uses ADE, it starts a claude code
@@ -2363,12 +2364,24 @@ clarification for slice 0.
     build that types commands by the `capabilities:` line of `ade help` (story 9's
     T10), probed with stdin from `/dev/null`, so a build with story 4 alone takes
     today's window path (AC1, AC3); the preflight refuses a checkout whose Claude
-    memory is already linked to another hub, so the run never replaces a link
+    memory is already linked to another hub, so the run does not replace a link
     (OB-4 AC2), and T4 is bounded to this run by a since-time (OB-5 AC4); the
     steps' environment is an interactive login shell's plus ADE's variables, and
     the identity check uses it (OB-4 AC2, AC6); the PR-CI comparison runs in the
     `backend-macos` job (OB-5 AC6). Per Q12, F2 names no private repository,
     commit or pull request of the template. New question Q13.
+  - 2026-11-09: the owner's answer to F2.9 Q13 recorded: template change T5
+    (commit 5ab960f).
+  - 2026-11-09: revision 4's delta review PASSED with minors n1 to n6.
+  - 2026-11-09: **approved by the owner** (revision 4 + minors), on condition the
+    six minors are folded in. Folded in (F2.12's fourth table): OB-5 AC6's fixture
+    repository is set up as S2's planned `scripts/hubTemplate.test.ts` will, with an
+    `origin/main` (n1), and its TypeScript tests are skipped off macOS, with slice 1
+    adding Node to `backend-macos` (n2); OB-2 AC2's existing-hub option runs OB-4
+    AC2's link check before `bin/setup` (n3); the link check runs again just before
+    step (f) (n4); the refusal adds the "move the claim" way on (n5); OB-12 AC1's
+    `capabilities:` line is on stdout (n6), and the developer's `AGENT_TERMINAL`
+    override is allowed to open a window on purpose.
 
 ### F2.1 Problem
 
@@ -2526,15 +2539,27 @@ where the developer is.
    hub.conf"). In every case nothing is written to the folder **by ADE**; the persona
    session (Claude Code and the hub's hooks) and, when chosen, the scripts below write
    there as they do when run by hand. An option, off by default, runs `bin/setup`
-   then `bin/doctor` there first (for a hub cloned onto this Mac by hand). The
-   option shows OB-3 AC3's memory notice for the hub's checkouts, **without** its
-   undo sentence, and says instead: ADE offers no undo for an existing hub (OB-5
-   AC4 covers only a hub its own run created), and `bin/setup` replaces a memory
-   link a checkout already has (for example to another hub) without keeping a copy
-   of it. Tests: with a stub Claude command that writes nothing, a finished hub's
-   folder is byte-for-byte unchanged after the session starts; an unfinished one
-   and a folder without `hub.conf` are each refused; the option on runs both
-   scripts first, in that tab; the option's notice names no undo.
+   then `bin/doctor` there first (for a hub cloned onto this Mac by hand). Before
+   `bin/setup`, ADE applies OB-4 AC2's link check to every path that `bin/setup`
+   will link for that hub (the hub folder, its work areas and its checkouts, as
+   its `hub.conf` lists them), with "outside the new hub folder" read as "outside
+   this hub's folder": a memory link pointing outside it refuses the option with
+   the same message and ways on as OB-4 AC2, and neither script runs. The option
+   shows OB-3 AC3's memory notice for the hub's checkouts, **without** its undo
+   sentence, and says instead: ADE offers no undo for an existing hub (OB-5 AC4
+   covers only a hub its own run created), and ADE refuses to go on when a
+   checkout's memory is already linked to another hub, so this option never
+   replaces such a link. `bin/setup` run by hand, outside ADE, is guarded by the
+   template's own T5 (F2.9 Q13), not by ADE. Tests: with a stub Claude command
+   that writes nothing, a finished hub's folder is byte-for-byte unchanged after
+   the session starts; an unfinished one and a folder without `hub.conf` are each
+   refused; the option on runs both scripts first, in that tab; with the option on
+   and a checkout `/x/r` whose memory entry links to another hub's folder, the
+   option is refused with OB-4 AC2's message naming `/x/r`, the link and its
+   target, no script runs and nothing is written; the option's notice names no
+   undo and contains the sentence that ADE refuses a checkout already linked to
+   another hub (and not the earlier sentence that `bin/setup` replaces such a
+   link).
 3. **New hub at an existing path:** a hub folder path that is a finished hub is
    refused inline with an offer to use it as an existing hub instead (AC2). Any other
    existing path, an unfinished hub included, is refused ("already exists"); the run
@@ -2704,12 +2729,21 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      keeping no copy, so undo could not put it back. The message names the
      checkout, the link and its target (and says when the target no longer
      exists), and gives the ways on: list the repo without `=checkout` (the hub
-     then makes no link for it), use the other hub, or, if that hub is gone,
-     remove the link by hand (`rm <link>`). A real folder there is not refused: it
-     is copied and set aside as OB-3 AC3's notice says. So a run never replaces a
-     link, and undo never has one to restore. Choosing refusal over recording and
-     restoring the old link keeps two hubs from silently taking turns owning one
-     checkout's memory; the common case (a checkout no hub has claimed) is not
+     then makes no link for it); use the other hub; if that hub is gone, remove
+     the link by hand (`rm <link>`); or **move the claim**: when the developer
+     wants this hub to take the checkout over from a hub that still exists, they
+     remove or repoint the link deliberately themselves, and the message gives the
+     exact command with the link's full path filled in (`rm <link>`; confirming the
+     review step again, with the answers kept, then makes this hub's link, and
+     the other hub loses its claim on that checkout's memory). A real folder there is not refused: it is copied and set
+     aside as OB-3 AC3's notice says. **The check runs twice:** at the preflight,
+     and again immediately before step (f) starts `bin/setup` (the architect
+     implements it); if a link has appeared since, step (f) fails with the same
+     message and `bin/setup` is not started. So a run does not replace a link,
+     except one created in the negligible window between that second check and
+     `bin/setup`'s own `link()`, and undo has no replaced link to restore.
+     Choosing refusal over recording and restoring the old link keeps two hubs
+     from silently taking turns owning one checkout's memory; the common case (a checkout no hub has claimed) is not
      affected.
    Tests: with `xcode-select -p` failing, no `git` or `python3` is started and the
    message names the Command Line Tools; with `python3` absent from `PATH`, the
@@ -2724,7 +2758,11 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    whose memory entry links to another hub's folder, and with one whose link
    target no longer exists, the run is refused naming `/x/r`, the link and its
    target; with a real memory folder for `/x/r`, it passes; nothing is written in
-   each refused case.
+   each refused case; the refusal's message contains the move-the-claim way on,
+   with the `rm` command naming the link's full path; with no link at the
+   preflight, and a link to another hub's folder created for `/x/r` after it (by
+   a fixture `bin/secret` at step (d), with one secret name), step (f) fails with
+   the same message, `bin/setup` is not started, and the link is unchanged.
 3. **The run works with no network:** (a) to (d) and (f) to (h) need none, and the
    template is bundled (ADR 0025; ADE never downloads it). (e) needs the network and
    says so if it fails; `bin/doctor` reports what it cannot reach, as it does today.
@@ -2823,8 +2861,9 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      since-time. "Set aside in this run" means a `.bak-` timestamp at or after the
      since-time (the form sorts as text in time order); an older `.bak-` folder is
      left alone, and when one path has several of this run's, none is renamed and
-     `--unlink` names them. Because the preflight refuses any link the run would
-     replace (OB-4 AC2), there is no replaced link to restore. While the bundled
+     `--unlink` names them. Because OB-4 AC2's check (at the preflight and again
+     just before (f)) refuses any link the run would replace, there is no
+     replaced link to restore. While the bundled
      template has no T4, ADE does neither: the confirmation lists each link by
      path, and each `.bak-` folder of this run (by the same since-time rule) with
      the two commands that restore it (`rm <link>`, then `mv <bak> <original>`), to
@@ -2894,15 +2933,23 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      `cargo test`; the `frontend` job's `npm test` runs on Ubuntu, so it is not
      used for this). Wherever the architect puts ADE's side of the run and checks,
      these tests run in that job: as cargo tests, or as a step F2's slice 1 adds
-     to that job to run the TypeScript test files on macOS. The comparison is
+     to that job to run the TypeScript test files on macOS. In the second case
+     slice 1 also adds `actions/setup-node` and `npm ci` to `backend-macos`
+     (today it installs only Rust), and because `vitest.config.ts` includes
+     `scripts/**` and `src/**` test files, the same files also run in the Ubuntu
+     `frontend` job: there each such test is skipped off macOS (a macOS-only guard,
+     reported as skipped, never as passed), so it runs, and must pass, only in
+     `backend-macos`. The comparison is
      against a **fixture tarball** built by S2's own archiver
      (`scripts/hub-template/bundle.sh`, with its manifest and S2's check) from a
      **public fixture template** kept in this repository's test fixtures: a small
      hub template with its own `bin/init` that takes the options of OB-3 and writes
      the absolute hub path into the files listed above. The test first commits the
-     fixture template into a temporary git repository with a `main` branch (as
-     `hubTemplate.test.ts` does), because the archiver and the template expect
-     one. The private template's tarball exists only inside a release run (the
+     fixture template into a temporary git repository with a `main` branch and an
+     `origin/main` that contains that commit (a bare temporary remote, pushed to and
+     fetched), as S2's planned `scripts/hubTemplate.test.ts` will set it up,
+     because the archiver and the template expect them: `bundle.sh` checks
+     `git merge-base --is-ancestor HEAD origin/main`. The private template's tarball exists only inside a release run (the
      bundling plan's section 2.2, step 8), so PR CI never has it. This proves ADE's
      run, the normalisations and the comparison itself.
    - **In a release (a gate):** against the **bundled template tarball** that the
@@ -2915,7 +2962,8 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      accepted: the same files ship in every release build's installer, and a
      failed gate publishes nothing.
    Tests: in PR CI (`backend-macos`), the fixture comparison passes, and a planted
-   difference (an extra file in ADE's tree) fails it; the release gate is a step of
+   difference (an extra file in ADE's tree) fails it; in the Ubuntu `frontend`
+   job, any TypeScript comparison test is reported as skipped; the release gate is a step of
    the macOS job that S3's structure tests assert exists and runs before the
    upload.
 7. **Options and checks stay in step with the template.** Two checks, each run in
@@ -3099,9 +3147,10 @@ ADE and W1 must agree on.
 
 1. **Inside an ADE terminal that can type commands** means, as W1 decides it, that
    `ADE_HOOK_BIN` is an executable file, `ADE_HOOK_PORT`, `ADE_HOOK_TOKEN` and
-   `ADE_PTY_ID` are all set, and `"$ADE_HOOK_BIN" help </dev/null` prints a line
-   that starts with `capabilities:` and whose space-separated words after it
-   include `command`. That line is sub-terminals story 9's **T10** (story 9's plan,
+   `ADE_PTY_ID` are all set, and `"$ADE_HOOK_BIN" help </dev/null` prints **on
+   stdout** a line that starts with `capabilities:` and whose space-separated
+   words after it include `command` (story 9's T10 asserts the line is on stdout;
+   W1 reads stdout only). That line is sub-terminals story 9's **T10** (story 9's plan,
    commit e112829 on branch `st9-refine`): once story 9's typing works, `ade help`
    (and `ade-hook help`) prints `capabilities: command`; later stories add words
    to the same line (story 8's `split`), so W1 matches the word, not the whole
@@ -3118,7 +3167,15 @@ ADE and W1 must agree on.
    `"$ADE_HOOK_BIN" open --cwd <checkout> --name <folder> --focus -- bash -l
    <launcher>` and never `osascript`, so the focus session opens as a sub-terminal
    of the caller's tab in Better Terminal. A sub-terminal of a hub tab is a hub tab
-   (OB-14). Tests (template side, with `ade open` stubbed, the four variables set
+   (OB-14).
+   **The developer's manual override.** When the developer sets
+   `AGENT_TERMINAL=terminal` or `AGENT_TERMINAL=iterm` themselves (the hint ADE's
+   exit-1 message prints, AC2), `bin/work` opens a Terminal.app or iTerm window on
+   purpose, inside an ADE terminal too. That is allowed: the rule that nothing
+   opens a window outside Better Terminal binds only `bin/work`'s **automatic**
+   paths (this AC's detection and AC2's exits), never a choice the developer
+   made explicitly.
+   Tests (template side, with `ade open` stubbed, the four variables set
    in each):
    - a `help` that prints `capabilities: command`: `bin/work` calls `ade open` with
      those arguments and never `osascript`;
@@ -3130,7 +3187,12 @@ ADE and W1 must agree on.
    - a hook binary whose `help` prints nothing and exits 0: today's window;
    - a hook binary that, like today's hook mode, reads stdin to its end before
      exiting, with the test's stdin left open: `bin/work` does not hang (the probe
-     gets `/dev/null`) and opens today's window.
+     gets `/dev/null`) and opens today's window;
+   - a `help` that prints `capabilities: command` on stderr only (nothing on
+     stdout): today's window;
+   - with `capabilities: command` on stdout and `AGENT_TERMINAL=terminal` (and,
+     separately, `iterm`) set by the test: `bin/work` opens that window and never
+     calls `open`.
 2. **What each `ade open` exit means to `bin/work`** (`.ade/context/terminal-open.md`):
    - **0** (opened and typed): done.
    - **5** (opened, not typed): `bin/work` says so and prints the command to type in
@@ -3149,7 +3211,8 @@ ADE and W1 must agree on.
      or the terminal closed): ADE cannot be reached, so `bin/work` prints a warning
      with `ade open`'s message and falls back to today's Terminal.app or iTerm
      window. Once `bin/work` has called `ade open`, these are the only exits that
-     open a window.
+     open a window (the developer's own `AGENT_TERMINAL` override, AC1, is not an
+     exit path: with it set, `bin/work` does not call `ade open`).
    - **2** (usage): `bin/work` fails with the message and opens nothing.
    Outside an ADE terminal that can type commands (AC1), `bin/work` behaves as
    today and never calls `ade open`. Tests: one case per exit code; exit 1 (a
@@ -3340,7 +3403,7 @@ to story 8 under `.ade/context/remote-tabs.md`.
   release build, and names no private repository, commit or pull request of the
   template: those are "the agent hub template" and "its story W1" throughout
   (revision 4). F1's change note names none of them, so it is unchanged.
-- **Q13 (new in revision 4, not blocking).** `bin/setup`, run by hand or through
+- **Q13** was put in revision 4 and answered on 2026-11-09 (below). `bin/setup`, run by hand or through
   OB-2 AC2's option for an existing hub, replaces a memory link a checkout already
   has (another hub's claim) with `rm -f`, keeping no copy. ADE's own runs avoid it
   by refusing such a checkout in the preflight (OB-4 AC2), but ADE cannot guard
@@ -3376,34 +3439,45 @@ to story 8 under `.ade/context/remote-tabs.md`.
 
 ### F2.11 Handoff
 
-- **Adversarial reviewer:** a delta review of revision 4 against F2.12's third
-  table.
-- **Designer:** the choice (first launch, default "Open a terminal", the F1 third
-  option when F1's flag is on, the New tab row), the questionnaire's required, common
-  and advanced groups, the review step (folders to create, commands, the session
-  notice), the run's notices (failed step, Store/Skip per secret, close during the
-  run) and the removal confirmation.
-- **Architect:** how ADE runs and observes the run's steps in a visible terminal and
-  knows each step's result (OB-4, OB-5); passing answers as arguments (OB-4 AC6);
-  starting each step from an argument vector in a terminal with a login shell's
-  environment, and the login shell after the session (OB-4 AC6); the git identity
-  check outside any repository, in the steps' environment (OB-4 AC2, AC6); the
-  preflight's check of each path's Claude memory entry and the run's start as
-  T4's since-time (OB-4 AC2, OB-5 AC4); the persona list from the tarball;
-  reading `hub.conf` literals (OB-6 AC2); the template-files marker and the
-  project-setup exclusion across setup, switch and re-check (OB-13); a hub tab's
-  flag across tab operations, its unsaved scrollback and its masking on the phone
-  and in the tracker, and `.ade/context/remote-tabs.md` if slice 1 ships before
-  phone-watch story 8 (OB-14);
-  recording the first-launch answer (OB-1 AC1); moving a folder to the Trash; the
-  public fixture template, and OB-5 AC6/AC7's PR-CI tests in `ci.yml`'s
-  `backend-macos` job and release gates in `release.yml`'s macOS build job; the
-  OB-7 AC3 and OB-10 AC1 scans.
-- **The agent hub template:** T1, T3, T4 (with its since-time), T5 if the owner
-  agrees (Q13), and W1's detection (the `capabilities:` probe with stdin from
-  `/dev/null`) and exit handling after Q9 (OB-12 AC1, AC2).
-- **Sub-terminals story 9:** T10's `capabilities:` line, which OB-12 AC1 relies
-  on.
+F2 is approved (2026-11-09, revision 4 + minors). Next, in parallel:
+
+- **Designer:** screens and copy for the choice (first launch, default "Open a
+  terminal", the F1 third option when F1's flag is on, the New tab row), the
+  questionnaire (its required, common and advanced groups, inline errors), the
+  review step (folders to create, commands, the session notice), the run tab
+  ("Agent hub", the line for (a), each shown command), and the notices (preflight
+  failures including the memory-link refusal and its move-the-claim command,
+  OB-2 AC2's existing-hub option notice, failed step, Store/Skip per secret, close
+  during the run, the removal confirmation). Keyboard use and accessibility per
+  OB-11 (keyboard only with Enter and Esc defaults, accessible names, errors and
+  notices announced through live regions, focus moves and traps, no time limit,
+  nothing by colour alone).
+- **Architect:** a design spec and the ADR(s) it needs, then the slice plan. In
+  it: the step runner, starting each step of (b) to (i) **from an argument
+  vector in the visible hub tab**, with a login shell's environment plus the
+  `ADE_*` variables, observing each step's result, the shown commands quoted with
+  `shellQuote`, and the login shell after the session (OB-4 AC1, AC6); the gates:
+  the preflight (Command Line Tools, `git` and `python3`, the git identity outside
+  any repository in the steps' environment, each path's Claude memory link, OB-4
+  AC2), the same link check again just before (f) and before OB-2 AC2's
+  existing-hub `bin/setup`, and the run's start as T4's since-time (OB-5 AC4);
+  OB-5 AC6/AC7's PR-CI tests in `ci.yml`'s `backend-macos` job (with Node added
+  if they are TypeScript, skipped off macOS) and the release gates in
+  `release.yml`'s macOS build job, the public fixture template and its
+  `origin/main`; **OB-13** (the template-files marker and the project-setup
+  exclusion across setup, switch and re-check) and **OB-14** (a hub tab's flag
+  across tab operations, its unsaved scrollback, its masking on the phone and in
+  the tracker, and `.ade/context/remote-tabs.md` if slice 1 ships before
+  phone-watch story 8); the persona list from the tarball; reading `hub.conf`
+  literals (OB-6 AC2); recording the first-launch answer (OB-1 AC1); moving a
+  folder to the Trash; the OB-7 AC3 and OB-10 AC1 scans. The slice plan follows
+  F2.8 and OB-3's slice column.
+- **The agent hub template:** T1, T3, T4 (with its since-time), T5 (Q13), and
+  W1's detection (the `capabilities:` probe on stdout with stdin from
+  `/dev/null`), its exit handling after Q9 and the `AGENT_TERMINAL` override
+  (OB-12 AC1, AC2).
+- **Sub-terminals story 9:** T10's `capabilities:` line on stdout, which OB-12
+  AC1 relies on.
 - **Phone-watch story 8:** if it ships before F2's slice 1, it creates
   `.ade/context/remote-tabs.md`; if after, it carries OB-14 AC2's masking and its
   test (F2.8).
@@ -3474,6 +3548,19 @@ to story 8 under `.ade/context/remote-tabs.md`.
 | **m2** which PR-CI job; fixture repo; who adds the gates; logs | **OB-5 AC6/AC7**: `ci.yml`'s `backend-macos` job (the `frontend` job is Ubuntu); the fixture is committed into a temporary git repository with `main` first; F2's slice 1 adds the `release.yml` gates and S3's structure-test assertions (also **F2.8**); a failed gate's difference in the public Actions log is accepted (the files ship in every installer; a failed gate publishes nothing). |
 | **m3** the probe must not read the terminal | **OB-12 AC1**: the probe's stdin is `/dev/null`; test with a stdin-reading hook. |
 | owner's answer to Q12 | **F2.9**: generic wording recorded; the template's repository name, commit and pull request number replaced by "the agent hub template" in the header, OB-3 AC2, OB-12, F2.8 and F2.11. F1's change note names none, so it is unchanged. |
+
+**Revision 4's delta review (PASSED with minors n1 to n6; the owner approved F2 on
+2026-11-09 on condition they are folded in).**
+
+| Finding | Answer (revision 4 + minors) |
+|---|---|
+| **n1** OB-5 AC6 cites `hubTemplate.test.ts` as existing; the fixture lacks an `origin/main`, which `bundle.sh` checks with `merge-base --is-ancestor HEAD origin/main` | **OB-5 AC6**: "as S2's planned `scripts/hubTemplate.test.ts` will set it up"; the temporary repository gets a `main` and an `origin/main` containing the commit (a bare temporary remote), with the reason. |
+| **n2** vitest includes `scripts/**` and `src/**`, so a TypeScript test would also run in the Ubuntu `frontend` job; `backend-macos` has no Node | **OB-5 AC6**: such tests are skipped off macOS (a macOS-only guard, reported as skipped) and must pass in `backend-macos`; slice 1 adds `actions/setup-node` and `npm ci` to `backend-macos`; a test that the Ubuntu job reports them skipped. |
+| **n3** OB-2 AC2's existing-hub option runs `bin/setup` with no link check | **OB-2 AC2**: OB-4 AC2's link check runs for that hub's paths before `bin/setup`, refusing with the same message; the notice's replacement sentence (ADE refuses a checkout already linked to another hub) is tested; `bin/setup` run by hand is T5's (Q13). |
+| **n4** "a run never replaces a link" overstates a check made only at the preflight | **OB-4 AC2**: the check runs again immediately before step (f) (the architect implements it), failing (f) with the same message; the claim is softened to "does not replace a link" outside a negligible window; test with a link created after the preflight. OB-5 AC4 and the history follow. |
+| **n5** the refusal gives no way for this hub to take a checkout over from a live hub | **OB-4 AC2**: a "move the claim" way on: remove or repoint the link deliberately, with the exact `rm <link>` command, then confirm again; tested. |
+| **n6** OB-12 AC1 does not say which stream carries the `capabilities:` line | **OB-12 AC1**: on stdout (story 9's T10 asserts stdout); W1 reads stdout only; test with the line on stderr only. |
+| owner's condition: the manual override | **OB-12 AC1**: the developer's `AGENT_TERMINAL=terminal` / `iterm` (the hint of ADE's exit-1 message) opens a window on purpose and is allowed; only the automatic paths never open a window outside Better Terminal; tests for both values. **AC2** notes it is not an exit path. |
 
 ### F2.13 F1 and F2 together
 
