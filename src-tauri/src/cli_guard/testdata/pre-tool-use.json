@@ -1,0 +1,17 @@
+{
+  "session_id": "abc123",
+  "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transcript_path": "/home/user/.claude/projects/.../transcript.jsonl",
+  "cwd": "/home/user/my-project",
+  "scratchpad_dir": "/tmp/claude-1000/-home-user-my-project/abc123/scratchpad",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm test",
+    "description": "Run test suite",
+    "timeout": 120000,
+    "run_in_background": false
+  },
+  "tool_use_id": "toolu_01ABC123..."
+}

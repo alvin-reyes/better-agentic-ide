@@ -14,6 +14,7 @@ use std::time::{Duration, SystemTime};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::claude_settings::{load_settings, merge_rules, save_settings};
 use crate::state::read_json;
 use crate::subagent::claude_project_path;
 
@@ -652,17 +653,7 @@ fn merge_deny(root: &Path, rules: &[String]) -> Result<Vec<String>, String> {
     let path = settings_path(root);
     let mut v = load_settings(&path)?;
     let obj = v.as_object_mut().ok_or("settings.json is not a JSON object")?;
-    let perms = obj.entry("permissions").or_insert_with(|| Value::Object(Default::default()));
-    let perms = perms.as_object_mut().ok_or("permissions is not an object")?;
-    let deny = perms.entry("deny").or_insert_with(|| Value::Array(vec![]));
-    let deny = deny.as_array_mut().ok_or("permissions.deny is not a list")?;
-    let mut added = Vec::new();
-    for r in rules {
-        if !deny.iter().any(|x| x.as_str() == Some(r)) {
-            deny.push(Value::String(r.clone()));
-            added.push(r.clone());
-        }
-    }
+    let added = merge_rules(obj, "deny", rules)?;
     if !added.is_empty() {
         save_settings(&path, &v)?;
     }
@@ -712,20 +703,6 @@ pub fn deny_archive_edits(root: &Path) -> Result<bool, String> {
 /// Personal settings Claude Code keeps out of git; presets are a personal choice.
 fn local_settings_path(root: &Path) -> PathBuf {
     root.join(".claude").join("settings.local.json")
-}
-
-/// A Claude Code settings file, or an empty object when there is none.
-fn load_settings(path: &Path) -> Result<Value, String> {
-    if !path.exists() {
-        return Ok(Value::Object(Default::default()));
-    }
-    read_json::<Value>(path).ok_or_else(|| format!("{} is not valid JSON; fix it first", path.display()))
-}
-
-fn save_settings(path: &Path, v: &Value) -> Result<(), String> {
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-    let text = serde_json::to_string_pretty(v).map_err(|e| e.to_string())? + "\n";
-    crate::state::atomic_write(path, &text).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -908,7 +885,7 @@ fn write_settings_through(path: &Path, v: &Value) -> Result<(), String> {
 /// What an edit of settings.local.json does about the file and `.claude/`
 /// existing.
 #[derive(Clone, Copy, PartialEq)]
-enum Created {
+pub(crate) enum Created {
     /// Nothing beyond the edit.
     Ignore,
     /// Record which of the two this edit created (turning Agent status on).
@@ -924,7 +901,7 @@ enum Created {
 /// happens to a file or folder ADE created; one ADE didn't create is never
 /// removed, and a symlinked file is always written through. A file that
 /// isn't a JSON object is an error and is left alone.
-fn edit_local_settings(
+pub(crate) fn edit_local_settings(
     root: &Path,
     created: Created,
     change: impl FnOnce(&mut serde_json::Map<String, Value>) -> Result<bool, String>,

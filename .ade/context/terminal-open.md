@@ -162,7 +162,8 @@ editor); the CLI gives up at 15 s. Rust never spawns or kills a terminal for
 - **Typing** (`feat/cli-guard`'s PTY layer):
   - Poll `line_editor_ready(master, shell pid)` (the check behind
     `pty_line_editor_ready`: out of canonical mode, and `tcgetpgrp` is the
-    shell) every 50 ms; type after two ready answers in a row. Not ready
+    shell or a nested interactive shell at its prompt, as `classify` judges
+    it) every 50 ms; type after two ready answers in a row. Not ready
     within 5 s of the window's answer: `typed:false`. Never use `pgrep -P`.
   - Write `line + "\r"` through the PTY's `input` channel (its writer
     thread), never a blocking write.
