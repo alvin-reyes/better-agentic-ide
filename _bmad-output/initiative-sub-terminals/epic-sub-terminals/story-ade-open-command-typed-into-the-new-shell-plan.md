@@ -287,3 +287,22 @@ Run 42667181998, head SHA e3c26eb, conclusion success, all ten jobs pass (Fronte
 - `fish` is not installed on this machine, so locally the fish cases ran on the reference tokenizer only ("fish not found" is printed); the real-fish proof is the CI run above.
 - Manual checks M1 to M5 are recorded as not gating and were not run: they need a running ADE with a real Claude Code session. QA ran macOS only locally; the Linux harness run (M5) is CI's.
 - QA did not hand-mutate the e3c26eb guard code; that is the adversarial re-check's job. The developer's `.ade/knowledge/developer.md` carries an uncommitted edit in the worktree that is not part of this verdict and was not committed by QA.
+
+### Re-verification at 6082ad9 (QA, 2026-11-10; ADR 0011 amendment 6)
+
+**Verdict: Done pending the seventh adversarial re-check PASS and PR #100's last two CI jobs.** This supersedes the verdict at e3c26eb. All seven lines of `docs/architecture.md` "In force" ran from the repository root in their own subshells, scratch `HOME`, in order. Every exit was 0.
+
+| # | Line | Exit | Counts |
+|---|---|---|---|
+| 1 | `npx tsc --noEmit` | 0 | no errors |
+| 2 | `npm test` | 0 | 177 files, 1965 tests passed |
+| 3 | `(cd src-tauri && cargo test)` | 0 | lib 668 passed, 0 failed, 1 ignored (`usage.rs`); 12 and 2 in other targets |
+| 4 | `(cd relay && cargo test)` | 0 | all targets passed, 0 failed |
+| 5 | `(cd mobile && npx tsc --noEmit && npx jest)` | 0 | 6 tests passed |
+| 6 | `(cd src-tauri && cargo check -p ade-hook)` | 0 | no errors |
+| 7 | `(cd src-tauri && cargo test -p ade-hook)` | 0 | 100 passed (bin), 9 passed; 0 failed |
+
+- Since e3c26eb the code change is only in `src-tauri/src/cli_guard/` (`lexer.rs`, `mod.rs`, `resolve.rs`, `unwrap.rs`), the guard's own files (T7), plus `.ade/context/cli-guard.md` and ADR 0011 (amendment 6, "Known gaps, deferred to the guard-hardening story"). Nothing else in the slice moved. T1 to T10 and H1 to H3 are unchanged and still pass (lib count 664 to 668).
+- The amendment 6 holes each have a named test, found `ok` in line 3: `for_counters_the_shell_sets_ask`, `select_assigns_reply`, `sourcing_a_name_with_no_slash_asks`, `open_never_resolves_the_typed_command_to_a_function_on_the_line`; `amendment_5_mutation_pins` still ok.
+- Known guard gaps (B1 in general, B2, M1 to M3, m1, m3) are open by the owner's decision and recorded in `cli-guard.md`; this verdict does not claim them closed.
+- CI on 6082ad9 (run 42675510382) at the time of writing: 8 of 10 jobs pass; "Frontend (typecheck, test, build)" and "Backend on Windows" were still pending. The real-fish quoting proof is the Frontend job, so that is not yet re-confirmed on this SHA (it passed on e3c26eb). Local limits as before: no fish here, manual checks M1 to M5 not run.
