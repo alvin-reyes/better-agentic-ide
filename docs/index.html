@@ -1,17 +1,17 @@
 ---
 layout: default
 body_class: home
-description: ADE is a desktop terminal where your coding agents work as a team of 19 roles (architect, developer, QA and more) under a methodology with a gate that decides when the work is actually done. Claude Code, Codex and local models.
+description: ADE is a desktop terminal where your coding agents work as a team of 19 roles (architect, developer, QA and more) under a methodology with a gate that decides when the work is done. It runs Claude Code, Codex and local models.
 ---
 {% assign img = '/assets/img/' | relative_url %}
 <section class="hero">
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="#new"><b>v0.21.1</b><span>Sub-terminals, and more →</span></a>
+      <a class="pill" href="#new"><b data-latest-version>v0.22.0</b><span>Code viewer, and more →</span></a>
       <p class="hero-kicker">Verified, not vibed &middot; for Claude Code developers and architects</p>
       <h1>A team of agents. <span class="grad-text">One gate for&nbsp;Done.</span></h1>
-      <p class="sub">ADE orchestrates your developer tooling with BMAD&nbsp;v6 roles. A PM, an architect and a designer plan; a reviewer tries to break the plan; developers build stories in parallel git worktrees; QA runs the one verification command that decides when the work is done.</p>
+      <p class="sub">ADE runs your coding agents as BMAD&nbsp;v6 roles. A PM, an architect and a designer plan; a reviewer tries to break the plan; developers build stories in parallel git worktrees; QA runs the one verification command that decides when the work is done.</p>
       <div class="hero-cta">
         <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
         <a class="btn btn-primary" href="#downloads" data-download="auto">
@@ -44,7 +44,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
           </a>
         </li>
       </ul>
-      <p class="hero-meta"><span>macOS · Linux · Windows support soon</span> <code>curl -fsSL https://ade.ardata.tech/install.sh | bash</code></p>
+      <p class="hero-meta"><span>macOS · Linux · Windows not yet built</span> <code>curl -fsSL https://ade.ardata.tech/install.sh | bash</code></p>
     </div>
     <figure class="hero-visual">
       <div class="window">
@@ -61,7 +61,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
   <div class="wrap">
     <div class="section-head">
       <span class="kicker">Orchestration</span>
-      <h2>Orchestrate your developer tooling with a team of agents.</h2>
+      <h2>A team of agents, one plan.</h2>
       <p>Many agents, each in its own lane and on its own model, working one plan. BMAD v6 decides who does what, the verification command decides when it is done, and an agent hub remembers all of it between sessions.</p>
     </div>
 
@@ -95,7 +95,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
       <figcaption>
         <span class="orx-num">C</span>
         <div>
-          <h3>Brain sync: every session leaves the next one smarter</h3>
+          <h3>Brain sync: each session&rsquo;s notes are searchable in the next</h3>
           <p>When a focus session ends, its hook commits the folder&rsquo;s notes and the journal, indexes them into the brain, and pushes the hub. The brain is SQLite keyword search plus vectors from a local Ollama model, so nothing leaves the Mac. Sync refuses to run without gitleaks, never force-pushes, and never touches the client&rsquo;s code.</p>
         </div>
       </figcaption>
@@ -126,7 +126,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
       </article>
       <article class="orx-card">
         <span class="compose-label">Different agents, different models</span>
-        <h3>The right model for each job</h3>
+        <h3>A model per session, specialist and briefing</h3>
         <p>The hub sets defaults per persona, and <code>hub.conf</code> or the command line overrides them: one model for focus sessions and the persona agent, one for folder specialists (default Sonnet), and one for the morning briefing (default Haiku).</p>
       </article>
       <article class="orx-card">
@@ -165,7 +165,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
       <article class="orx-card">
         <span class="compose-label">The brain</span>
         <h3>One brain for every agent</h3>
-        <p>All of the hub&rsquo;s work lives in one SQLite brain: STATE, memory, the journal and notes, plus any other folders you point it at with <code>--brain-path</code>. Every agent is told to run <code>bin/brain search</code> before it asks or re-derives, so each one starts with the context of the whole hub. FTS5 keywords plus vectors from a local Ollama model; nothing leaves the Mac.</p>
+        <p>All of the hub&rsquo;s work lives in one SQLite brain: STATE, memory, the journal and notes, plus any other folders you point it at with <code>--brain-path</code>. Every agent is told to run <code>bin/brain search</code> before it asks or re-derives, so each one can draw on the whole hub&rsquo;s context. FTS5 keywords plus vectors from a local Ollama model; nothing leaves the Mac.</p>
       </article>
       <article class="orx-card">
         <span class="compose-label">Auto sync</span>
@@ -189,7 +189,7 @@ description: ADE is a desktop terminal where your coding agents work as a team o
       </article>
       <article class="orx-card">
         <span class="compose-label">The guide</span>
-        <h3>Every setting, with diagrams</h3>
+        <h3>The full guide, with diagrams</h3>
         <p>Making a hub, the daily flow, the hooks, the brain, auto sync, monitors and troubleshooting.</p>
         <a class="more" href="{{ '/agent-hub/' | relative_url }}">Read the agent hub guide <span aria-hidden="true">&rarr;</span></a>
         <a class="more" href="{{ '/training/#hub' | relative_url }}">Or take the 15-minute training <span aria-hidden="true">&rarr;</span></a>
@@ -204,15 +204,15 @@ description: ADE is a desktop terminal where your coding agents work as a team o
     <div class="section-head">
       <span class="kicker">Features</span>
       <h2>AI agents and blockchain tooling, in one window.</h2>
-      <p>Run AI agents well. Ship smart contracts safely.</p>
+      <p>Agent orchestration and cost tracking, plus a smart contract toolchain that never touches private keys.</p>
     </div>
 
     <div class="pillar" id="ai-agents">
       <div class="pillar-head">
         <span class="pillar-num">01</span>
         <div>
-          <h2>The IDE</h2>
-          <p>Any CLI agent, side by side, in projects set up for them, with every token accounted for.</p>
+          <h2>The terminal</h2>
+          <p>Any CLI agent, side by side, in projects set up for them, with cost and context tracked per session.</p>
         </div>
       </div>
 
@@ -297,8 +297,8 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
         </article>
         <article class="feat-card">
           <div class="feat-media"><img src="{{ img }}tokens.webp" width="980" height="720" loading="lazy" alt="Tokens panel: spend, savings from caching, cache hit rate, sessions with context meters and usage by model"></div>
-          <h3>Know the cost, spend less</h3>
-          <p>Cost, cache savings and context per session, with one-click savers.</p>
+          <h3>Cost and context per session</h3>
+          <p>Spend, cache savings and context use per session, with one-click actions to cut cost.</p>
         </article>
       </div>
     </div>
@@ -307,17 +307,17 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
       <div class="pillar-head">
         <span class="pillar-num">02</span>
         <div>
-          <h2>Built for serious software engineering work</h2>
-          <p>An agent will tell you it is finished. The question is who checks. ADE sets every project up with a methodology that answers that, and roles that cannot mark their own homework.</p>
-          <p><b>Anthropic&rsquo;s SDLC is the methodology. BMAD is the framework. Both are baked into ADE.</b></p>
+          <h2>A methodology that decides Done</h2>
+          <p>An agent reporting that it is finished is not evidence that it is. ADE sets every project up with a methodology that names who checks the work, and roles that cannot sign off their own.</p>
+          <p><b>The ADE methodology sets the rules and BMAD supplies the workflows. Both ship with every project.</b></p>
         </div>
       </div>
 
       <div class="feat-grid">
         <article class="feat-card text feat-card--lead">
-          <span class="feat-eyebrow">The root of all of it</span>
-          <h3>BMAD, in every project and actually used</h3>
-          <p>Not a nod to a methodology. The pinned <a href="https://github.com/bmad-code-org/BMAD-METHOD">BMAD-METHOD</a> v6
+          <span class="feat-eyebrow">The framework</span>
+          <h3>BMAD in every project, wired into the roles</h3>
+          <p>The pinned <a href="https://github.com/bmad-code-org/BMAD-METHOD">BMAD-METHOD</a> v6
             goes into every project ADE opens: 33 skills in <code>.claude/skills/</code>, its config in
             <code>_bmad/</code> and tickets in <code>_bmad-output/</code>. No Python or <code>uv</code> for setup,
             tickets and the core workflows: those skills call a bundled Node script. v6 dropped BMAD&rsquo;s QA gate, so ADE keeps its own,
@@ -326,7 +326,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
           <p>The roles name the skills that do their job, so the Scrum Master runs the ticket tree with
             <code>bmad-ticket</code> and QA reviews with <code>bmad-code-review</code> before it records
             the verdict, instead of improvising both. BMAD&rsquo;s two phases, Planning and Dev cycle, are the phases
-            ADE shows you, because they are the ones the work is actually in.</p>
+            ADE shows you, because that is where the work happens.</p>
           <p>BMAD v4 is still a choice for a new project: the classic <code>.bmad-core/</code> with
             21 tasks, 13 templates, 6 workflows, 6 checklists and 6 reference sets, plus 21
             <code>/BMad:tasks:</code> commands for Claude Code. A project already on v4 stays on v4 until you switch it:
@@ -337,8 +337,8 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
             If a step fails, ADE puts everything back.</p>
         </article>
         <article class="feat-card text">
-          <h3>Done is a command, not an opinion</h3>
-          <p>Every project agrees one verification command up front. A story is Done when it passes on that commit, with the output shown. Not when an agent says so.</p>
+          <h3>Done is decided by a command</h3>
+          <p>Every project agrees one verification command up front. A story is Done when that command passes on its commit, with the output shown, and not before.</p>
         </article>
         <article class="feat-card text">
           <h3>No agent certifies its own work</h3>
@@ -346,7 +346,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
         </article>
         <article class="feat-card text">
           <h3>An adversarial reviewer that cannot patch</h3>
-          <p>It ships with a read-only tool allowlist on purpose: <code>Read, Grep, Glob, Bash</code>. It judges and reports. Widening it to unblock a story is how review stops meaning anything.</p>
+          <p>It ships with a read-only tool allowlist on purpose: <code>Read, Grep, Glob, Bash</code>. It judges and reports. Widening the allowlist to unblock a story would let the reviewer fix what it is meant to judge.</p>
         </article>
         <article class="feat-card text">
           <h3>Nineteen roles, each with boundaries</h3>
@@ -364,9 +364,9 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
           <span class="pillar-num">03</span>
           <div>
             <h2>How an agent is composed</h2>
-            <p>A prompt that says &ldquo;you are a senior engineer&rdquo; is a costume. An agent here is two
-              things joined: a role that fixes what it is accountable for, and a domain that narrows
-              what it is working on. The role is the part that holds.</p>
+            <p>A prompt that says &ldquo;you are a senior engineer&rdquo; sets a tone but no limits. An agent here
+              joins two parts: a role that fixes what it is accountable for, and a domain that narrows
+              what it works on. The role sets the boundaries.</p>
           </div>
         </div>
 
@@ -391,20 +391,20 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
               <span class="compose-label">Agent</span>
               <b>47</b>
               <p>Named pairings, ready to launch. <b>Developer &times; Backend API</b> is the API
-                Builder; <b>Developer &times; Database</b> is the Database Engineer. Same
-                accountability, different ground.</p>
+                Builder; <b>Developer &times; Database</b> is the Database Engineer. Both carry the
+                Developer&rsquo;s accountability.</p>
             </div>
           </div>
           <p class="compose-note">The role&rsquo;s definition is handed to the provider <b>verbatim</b>, not
             rebuilt from parsed fields, because it carries sections ADE does not model and a
             recomposition would silently drop them. The domain is appended as a Focus section
-            underneath. Boundaries survive the pairing by construction, not by convention.</p>
+            underneath, so every pairing keeps the role&rsquo;s boundaries intact.</p>
         </div>
 
         <div class="section-head section-head--tight">
           <span class="kicker">The team</span>
-          <h2>Nineteen roles, and the only approval that counts</h2>
-          <p>Not a staffing metaphor. Each one is a definition with owned artifacts and stated
+          <h2>Nineteen roles, and you approve the plan</h2>
+          <p>Each role is a definition with owned artifacts and stated
             boundaries, so two agents working at once do not quietly edit the same file.</p>
         </div>
 
@@ -452,8 +452,8 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
         <div class="section-head section-head--tight">
           <span class="kicker">Execution</span>
           <h2>Where each one acts</h2>
-          <p>Roles are not decoration. Each step of the flow has an owner, and the handoff between
-            them is the point: the agent that builds is never the agent that signs it off.</p>
+          <p>Each step of the flow has an owner, and the agent that builds a story is never the
+            agent that signs it off.</p>
         </div>
 
         <ol class="flow">
@@ -465,7 +465,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
           <li>
             <span class="flow-step">Approve</span>
             <p>The adversarial reviewer attacks each artifact first, defaulting to block on any
-              material flaw. Then you approve. A reviewer that waves things through defeats the point.</p>
+              material flaw. Then you approve.</p>
           </li>
           <li>
             <span class="flow-step">Shard</span>
@@ -480,7 +480,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
           <li>
             <span class="flow-step">Verify</span>
             <p>QA or you run the verification command on that commit, with the output shown. A story
-              is Done when it passes. Not when an agent says so.</p>
+              is Done only when it passes.</p>
           </li>
         </ol>
       </div>
@@ -490,14 +490,14 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
         <span class="pillar-num">04</span>
         <div>
           <h2>Agentic workflow and blockchain engineering</h2>
-          <p>The two places unreviewed code costs the most. Architects for agent design, RAG and LLMOps sit beside Foundry, Hardhat and Anchor. Smart contracts run from first test to reviewed deploy, and ADE never touches private keys.</p>
+          <p>Two areas where unreviewed code is expensive. Architects for agent design, RAG and LLMOps sit beside Foundry, Hardhat and Anchor. Smart contracts run from first test to reviewed deploy, and ADE never touches private keys.</p>
         </div>
       </div>
 
       <div class="feat-grid">
         <article class="feat-card">
           <div class="feat-media"><img src="{{ img }}contracts-panel.webp" width="1440" height="900" loading="lazy" alt="The Contracts panel for a Foundry project with build, test, analyze and local chain actions"></div>
-          <h3>One key for the whole toolchain</h3>
+          <h3>One shortcut for the whole toolchain</h3>
           <p>Build, test, gas, coverage, Slither and a local chain.</p>
         </article>
         <article class="feat-card">
@@ -530,7 +530,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
 
     <div class="new-strip" id="new">
       <span class="badge">New</span>
-      <p><strong>v0.21.1:</strong> <strong>Sub-terminals</strong> (several shells in one tab, <kbd>&#8984;[</kbd> and <kbd>&#8984;]</kbd> to switch), a <strong>busy check</strong> before any terminal closes, and <strong>sharp text with many tabs</strong> (the WebGL renderer now follows the tabs on screen). <a href="{{ site.repo }}/releases/tag/v0.21.1">Release notes</a>. Recently: the <strong>agent hub guide</strong>, <strong>switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>BMAD v6</strong>, <strong>Anti-slop</strong>, the <strong>MCP library</strong> and the <strong>Secrets vault</strong>.</p>
+      <p><strong>v0.22.0:</strong> the <strong>code viewer</strong>: code opens in the side panel, and a click on <code>path:line</code> in a terminal opens that file at that line. <a href="{{ site.repo }}/releases/latest">Release notes</a>. Recently: <strong>sub-terminals</strong> (several shells in one tab, <kbd>&#8984;[</kbd> and <kbd>&#8984;]</kbd> to switch), a <strong>busy check</strong> before any terminal closes, sharp text with many tabs, the <strong>agent hub guide</strong>, <strong>switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>Anti-slop</strong>, the <strong>MCP library</strong> and the <strong>Secrets vault</strong>.</p>
     </div>
   </div>
 </section>
@@ -587,8 +587,8 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
   <div class="wrap">
     <div class="section-head">
       <span class="kicker">Free and open source</span>
-      <h2>Every feature. No licence, no account, no telemetry.</h2>
-      <p>ADE is MIT licensed. Use it at work, fork it, ship your own build, no permission needed.</p>
+      <h2>Free, with no licence key, account or telemetry.</h2>
+      <p>ADE is MIT licensed. You can use it at work, fork it and ship your own build without asking.</p>
       <ul class="repo-stats" data-repo-stats hidden>
         <li><b data-stat="stars">&mdash;</b> <span>stars</span></li>
         <li><b data-stat="forks">&mdash;</b> <span>forks</span></li>
@@ -598,7 +598,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
     <div class="pricing">
       <article class="price-card featured">
         <h3>The whole app</h3>
-        <p class="blurb">There is no paid tier, because there is only one tier.</p>
+        <p class="blurb">There is one tier, and it is free.</p>
         <p class="price"><b>Free</b> <span>forever</span></p>
         <ul class="checks">
           <li>Fleet view, tokens panel, scratchpad, editor and the contract workbench</li>
@@ -637,7 +637,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
   <div class="wrap">
     <div class="section-head">
       <span class="kicker">Used on real work</span>
-      <h2>Not a demo. The tool its author ships with.</h2>
+      <h2>The tool its author ships with</h2>
     </div>
     <div class="training">
       <div class="partner-mark partner-mark--dark">
@@ -681,7 +681,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
     <div class="section-head">
       <span class="kicker">Shipped with it</span>
       <h2>Products built using ADE</h2>
-      <p>Not a feature list. Things in production, built by the people who build ADE.</p>
+      <p>Products in production, built with ADE by the people who build ADE.</p>
     </div>
     <div class="built-grid">
       {% for p in site.data.built_with %}
@@ -694,7 +694,6 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
       </a>
       {% endfor %}
     </div>
-    <p class="built-foot">And hundreds of proofs of concept and pilot projects.</p>
   </div>
 </section>
 
@@ -702,7 +701,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
   <div class="wrap">
     <div class="section-head">
       <span class="kicker">FAQ</span>
-      <h2>Questions, answered</h2>
+      <h2>Common questions</h2>
     </div>
     <div class="faq">
       <details>
@@ -711,7 +710,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
       </details>
       <details>
         <summary>How does licensing work?</summary>
-        <p>It does not. ADE is <a href="{{ site.repo }}/blob/main/LICENSE">MIT licensed</a>: no keys, no accounts, no seats to count. Use it at work, fork it, ship your own build.</p>
+        <p>There is nothing to license. ADE is <a href="{{ site.repo }}/blob/main/LICENSE">MIT licensed</a>: no licence keys, accounts or seats.</p>
       </details>
       <details>
         <summary>Which agents does it support?</summary>
@@ -727,7 +726,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
       </details>
       <details>
         <summary>Which platforms does it run on?</summary>
-        <p>macOS (<a href="{{ site.repo }}/releases/latest" data-download="mac-arm">Apple Silicon</a> and <a href="{{ site.repo }}/releases/latest" data-download="mac-intel">Intel</a>) and Linux (<a href="{{ site.repo }}/releases/latest" data-download="deb">.deb</a> or <a href="{{ site.repo }}/releases/latest" data-download="appimage">AppImage</a>). Or install from the terminal with <code>curl -fsSL https://ade.ardata.tech/install.sh | bash</code>, which picks the right build for your machine. Windows support is coming soon.</p>
+        <p>macOS (<a href="{{ site.repo }}/releases/latest" data-download="mac-arm">Apple Silicon</a> and <a href="{{ site.repo }}/releases/latest" data-download="mac-intel">Intel</a>) and Linux (<a href="{{ site.repo }}/releases/latest" data-download="deb">.deb</a> or <a href="{{ site.repo }}/releases/latest" data-download="appimage">AppImage</a>). Or install from the terminal with <code>curl -fsSL https://ade.ardata.tech/install.sh | bash</code>, which picks the right build for your machine. Windows is not built yet; <a href="{{ site.repo }}/issues/22">track it in issue #22</a>.</p>
       </details>
     </div>
   </div>
