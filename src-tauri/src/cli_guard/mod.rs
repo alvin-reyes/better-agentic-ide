@@ -583,6 +583,31 @@ mod tests {
     }
 
     #[test]
+    fn a_flag_value_or_verb_that_may_split_asks() {
+        // Re-review N1: an unquoted expansion or a glob in a value slot may
+        // split into `x -- CMD`, and the CLI then types CMD.
+        check_bin(
+            &gh_fs(),
+            &[
+                ("X='a -- gh repo delete o/r'; \"$ADE_HOOK_BIN\" open --name $X", true),
+                ("\"$ADE_HOOK_BIN\" open --name $X", true),
+                ("\"$ADE_HOOK_BIN\" open --split $X", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd $X", true),
+                ("\"$ADE_HOOK_BIN\" open --name $(cat f)", true),
+                ("\"$ADE_HOOK_BIN\" open --cwd $X -- echo hi", true),
+                ("\"$ADE_HOOK_BIN\" open --name a* -- echo hi", true),
+                // A computed verb word, and a glob where a flag goes (a file
+                // named `--` would make it the separator).
+                ("\"$ADE_HOOK_BIN\" $X", true),
+                ("\"$ADE_HOOK_BIN\" open -* gh repo delete o/r", true),
+                // Quoted: one word, no split.
+                ("\"$ADE_HOOK_BIN\" open --name \"$X\"", false),
+                ("\"$ADE_HOOK_BIN\" open --split \"$X\" --cwd \"$D\"", false),
+            ],
+        );
+    }
+
+    #[test]
     fn open_double_dash_gh_repo_delete_asks_as_the_bare_line_does() {
         let fs = gh_fs();
         assert!(asks(&fs, "gh repo delete o/r"), "the bare line asks");

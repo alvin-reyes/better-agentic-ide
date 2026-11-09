@@ -576,6 +576,13 @@ impl<'c, 'a> Guard<'c, 'a> {
     /// relative to it asks. Without `--`, and for every other verb (`help`,
     /// `guard`, the hook), nothing runs.
     fn ade(&mut self, sc: &mut Scope, args: &[W], run: Run) -> Out {
+        // A word that may become several (an unquoted expansion or glob)
+        // could split into `x -- CMD`, and the CLI would then type CMD.
+        let splits = |w: &W| w.text.contains(super::resolve::U_PH) || w.glob();
+        if let Some(v) = args.first().filter(|v| v.computed() || v.glob()) {
+            self.trigger(sc, format!("ADE: ade has a computed verb ({}), so the guard can't tell what it types", v.show()));
+            return Out::Unknown;
+        }
         let verb = args.first().is_some_and(|v| super::tables::ADE_VERBS.iter().any(|x| v.is(x)));
         if !verb {
             return Out::Unknown;
@@ -586,9 +593,15 @@ impl<'c, 'a> Guard<'c, 'a> {
         let mut k = 1;
         let command = loop {
             let Some(a) = args.get(k) else { return Out::Unknown };
-            if a.computed() {
+            if a.computed() || a.glob() {
                 self.trigger(sc, format!("ADE: ade open has a computed argument ({}), so the guard can't tell what it types", a.show()));
                 return Out::Unknown;
+            }
+            if matches!(a.text.as_str(), "--cwd" | "--name" | "--split") {
+                if let Some(v) = args.get(k + 1).filter(|v| splits(v)) {
+                    self.trigger(sc, format!("ADE: ade open's {} value ({}) may split into several words, so the guard can't tell what it types", a.text, v.show()));
+                    return Out::Unknown;
+                }
             }
             match a.text.as_str() {
                 "--" => break &args[k + 1..],
