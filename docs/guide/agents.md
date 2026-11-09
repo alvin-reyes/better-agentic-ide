@@ -10,6 +10,8 @@ Every project ADE opens is also set up with BMAD, the ADE methodology and Claude
 
 Press {% include key.html mac="⌘⇧A" other="Ctrl+Alt+Shift+A" %} to pick an agent. When you choose one, ADE asks where to run it: **this terminal** (<kbd>C</kbd>) or a **new tab** in the same folder (<kbd>N</kbd>). If the current terminal is already running something, *New tab* is preselected.
 
+A pane running any program, not only Claude Code, is never offered as *this terminal*, and closing it asks first. A tmux or screen pane always counts as busy, and so do the prompts of wrappers that stay in the foreground (`sudo -s`, `poetry shell`, `xonsh`).
+
 - **47 profiles** across Backend, Frontend, DevOps, Testing, Web3, Architects and General: API Builder, Database Engineer, Senior Go Engineer, Senior Rust Engineer, Smart Contract Auditor, Web3 DevOps Engineer, Debugger, Code Reviewer, Docs Writer and more. Each pairs a **role**: what it is accountable for, the files it owns and the boundaries it works inside, with a **domain** that narrows it to one technical focus. ADE composes the pair into a role definition, writes it to a file and starts the provider against that file, so a long definition never has to survive shell quoting. See [Smart contracts]({{ '/guide/contracts/' | relative_url }}#web3-agents) for the Web3 engineers and [Architects](#architects) below.
 - **Roles**: the last pill filters the list down to the core roles on their own, with no domain. Product Manager, Product Owner and Scrum Master live only here, since no profile pairs with them.
 - **Describe a task** in the search box and the picker suggests the best match.

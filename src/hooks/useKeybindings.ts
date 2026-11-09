@@ -1,8 +1,8 @@
 import { requestNewTab } from "../lib/newTab";
 import { useEffect } from "react";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, shownView, OWN_VIEW } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
-import { refreshAllTerminals, getPtyCwd } from "./useTerminal";
+import { refreshAllTerminals, getPtyCwd, focusActiveTerminal } from "./useTerminal";
 import { SHORTCUTS, matches, tabNumber, pageTab, type ShortcutId } from "../lib/shortcuts";
 
 type SettingsState = ReturnType<typeof useSettingsStore.getState>;
@@ -32,6 +32,7 @@ interface KeybindingActions {
   toggleTabSwitcher: () => void;
   requestCloseTab: (tabId: string) => void;
   requestClosePane: (tabId: string, paneId: string) => void;
+  requestCloseView: (tabId: string, viewId: string) => void;
   isScratchpadOpen: boolean;
 }
 
@@ -100,10 +101,19 @@ export function useKeybindings(actions: KeybindingActions) {
       if (is("sendEnter")) return run(actions.sendEnterToTerminal);
       if (is("closePane")) {
         return run(() => {
-          if (activeTab) actions.requestClosePane(activeTabId, activeTab.activePaneId);
+          if (activeTab) actions.requestClosePane(activeTabId, shownView(activeTab).activePaneId);
         });
       }
-      if (is("closeTab")) return run(() => actions.requestCloseTab(activeTabId));
+      // ⌘W closes what is in sight: a sub-terminal, else the tab.
+      if (is("closeTab")) {
+        return run(() => {
+          if (activeTab && activeTab.shownView !== OWN_VIEW && activeTab.views[activeTab.shownView]) {
+            actions.requestCloseView(activeTabId, activeTab.shownView);
+          } else {
+            actions.requestCloseTab(activeTabId);
+          }
+        });
+      }
 
       const n = tabNumber(e);
       if (n !== null) {
@@ -118,13 +128,25 @@ export function useKeybindings(actions: KeybindingActions) {
           if (next) setActiveTab(next.id);
         });
       }
+      // ⌘[ / ⌘]: the views of the tab, stopping at the ends. A tab without
+      // sub-terminals leaves the keys alone, default included.
+      const viewStep = is("prevSubTerminal") ? -1 : is("nextSubTerminal") ? 1 : null;
+      if (viewStep !== null && activeTab && activeTab.viewOrder.length > 1) {
+        return run(() => {
+          const next = activeTab.viewOrder[activeTab.viewOrder.indexOf(activeTab.shownView) + viewStep];
+          if (!next) return;
+          useTabStore.getState().showView(activeTabId, next);
+          focusActiveTerminal();
+        });
+      }
 
       if (is("splitHorizontal") || is("splitVertical")) {
         const direction = is("splitHorizontal") ? "horizontal" : "vertical";
         return run(() => {
           if (!activeTab) return;
-          getPtyCwd(activeTab.activePaneId).then((cwd) => {
-            splitPane(activeTabId, activeTab.activePaneId, direction, cwd);
+          const paneId = shownView(activeTab).activePaneId;
+          getPtyCwd(paneId).then((cwd) => {
+            splitPane(activeTabId, paneId, direction, cwd);
           });
         });
       }

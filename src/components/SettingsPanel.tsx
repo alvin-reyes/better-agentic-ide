@@ -1,6 +1,6 @@
 import { useSettingsStore, themePresets, applyThemeToDOM, type ThemeColors } from "../stores/settingsStore";
 import { shortcutLabel } from "../lib/shortcuts";
-import { useTabStore } from "../stores/tabStore";
+import { useTabStore, ownView } from "../stores/tabStore";
 import { useEffect, useRef, useState } from "react";
 import { claimKeyboard } from "../lib/keyboardOwner";
 import { invoke } from "@tauri-apps/api/core";
@@ -196,10 +196,10 @@ export default function SettingsPanel() {
     if (!workspaceName.trim()) return;
     store.saveWorkspace(
       workspaceName.trim(),
-      tabStore.tabs.map((t) => ({
-        name: t.name,
-        splits: t.root.type === "split" ? t.root.direction : "none",
-      }))
+      tabStore.tabs.map((t) => {
+        const root = ownView(t).root;
+        return { name: t.name, splits: root.type === "split" ? root.direction : "none" };
+      })
     );
     setWorkspaceName("");
   };
@@ -640,7 +640,7 @@ export default function SettingsPanel() {
                   style={{ accentColor: "var(--accent)" }}
                 />
                 <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                  GPU rendering (WebGL). Turn it off if a terminal goes blank or loses its cursor. Applies to terminals opened after the change.
+                  GPU rendering (WebGL). Turn it off if a terminal goes blank or loses its cursor. Applies to each terminal the next time you switch to it. Windows already detached keep the setting they opened with.
                 </span>
               </label>
             </div>

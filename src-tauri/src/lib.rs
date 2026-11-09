@@ -514,6 +514,7 @@ pub fn run() {
             pty::reattach_pty,
             pty::kill_pty,
             pty::get_pty_cwd,
+            pty::pty_foreground_job,
             agent_status::agent_status_get,
             agent_status::agent_status_toggle,
             agent_status::agent_status_watch,
@@ -700,8 +701,8 @@ mod tests {
     #[test]
     fn read_text_head_binary() {
         let d = head_dir("binary");
-        std::fs::write(d.join("nul"), b"abc\0def").unwrap();
-        let head = head_of(&d.join("nul"), 1024).unwrap();
+        std::fs::write(d.join("with-nul.bin"), b"abc\0def").unwrap();
+        let head = head_of(&d.join("with-nul.bin"), 1024).unwrap();
         assert!(head.binary);
         assert_eq!(head.text, "");
         assert_eq!(head.size, 7);

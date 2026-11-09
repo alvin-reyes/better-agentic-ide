@@ -19,17 +19,16 @@ import {
   applyUpdate, isAnsweringKey, mostUrgent, needsYouToasts, reportAnsweringKey, tabAgentState,
   useAgentStatusStore, watchAgentStatus, type AgentState,
 } from "../agentStatusStore";
-import type { Tab } from "../tabStore";
+import { ownViewOnly, type Tab } from "../tabStore";
 
 const pane = (id: string, ptyId: number | null) => ({ type: "pane" as const, pane: { id, ptyId } });
 
 const tab = (id: string, ...ptys: (number | null)[]): Tab => ({
   id,
   name: id,
-  activePaneId: `${id}-0`,
-  root: ptys.length === 1
+  ...ownViewOnly(ptys.length === 1
     ? pane(`${id}-0`, ptys[0])
-    : { type: "split", direction: "horizontal", children: ptys.map((p, i) => pane(`${id}-${i}`, p)) },
+    : { type: "split", direction: "horizontal", children: ptys.map((p, i) => pane(`${id}-${i}`, p)) }, `${id}-0`),
 });
 
 const key = (key: string, o: Partial<KeyboardEvent> = {}) =>

@@ -1,0 +1,9 @@
+# Epics of the sub-terminals initiative, in build order.
+# Spec: docs/superpowers/specs/2026-11-02-open-terminals-from-a-terminal-design.md
+# (the stories are the spec's "Suggested stories"; the epic's tickets.toml holds them).
+
+[[epic]]
+id = 1
+slug = "epic-sub-terminals"
+title = "Open terminals from a terminal: sub-terminals and ade open"
+covers = []

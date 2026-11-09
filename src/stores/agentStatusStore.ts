@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke, Channel } from "@tauri-apps/api/core";
-import { findAllPanes, type Tab } from "./tabStore";
+import { allTabPanes, type Tab } from "./tabStore";
 
 /**
  * Agent status: what each pane's Claude Code agent is doing, streamed from
@@ -35,7 +35,7 @@ export function applyUpdate(byPty: Record<number, AgentState>, u: AgentStatusUpd
 
 /** A tab's state: the most urgent of its panes'. */
 export function tabAgentState(tab: Tab, byPty: Record<number, AgentState>): AgentState | null {
-  return mostUrgent(findAllPanes(tab.root).map((p) => (p.ptyId === null ? null : byPty[p.ptyId])));
+  return mostUrgent(allTabPanes(tab).map((p) => (p.ptyId === null ? null : byPty[p.ptyId])));
 }
 
 /**
