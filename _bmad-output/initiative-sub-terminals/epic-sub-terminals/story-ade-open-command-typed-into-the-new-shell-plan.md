@@ -243,19 +243,19 @@ These are the spec's V2 and the owner's real-session check. They are recorded in
 
 ## Verification (QA)
 
-**Verdict: Done pending re-check PASS.** QA re-run 2026-11-09 at 71bb5c6 (branch `st9-typed-command`, PR #100, `git pull` already up to date), in the worktree `.claude/worktrees/st9`. This supersedes the run at 39e24c7 (commit 27046fb), whose conditional Done is void because its re-check blocked. Each of the seven lines of `docs/architecture.md` "In force" ran from the repository root in its own subshell, with a scratch `HOME` (not `~/.claude`; `CARGO_HOME` and `RUSTUP_HOME` kept so cargo works). This story's own "Verification" section above lists six; the architecture's seven decide.
+**Verdict: Done pending re-check PASS.** QA re-run 2026-11-10 at e3c26eb (branch `st9-typed-command`, PR #100, `git pull` already up to date), in the worktree `.claude/worktrees/st9`. This supersedes the run at 71bb5c6, whose Done is void because its re-check blocked. Each of the seven lines of `docs/architecture.md` "In force" ran from the repository root in its own subshell, with a scratch `HOME` (not `~/.claude`; `CARGO_HOME` and `RUSTUP_HOME` kept so cargo works). This story's own "Verification" section above lists six; the architecture's seven decide.
 
-Done depends on the separate adversarial re-check of 71bb5c6 (the fail-closed guard) returning PASS. If it does not, this verdict is void.
+Done depends on the separate sixth adversarial re-check of e3c26eb (the guard that never resolves variables) returning PASS. If it does not, this verdict is void.
 
 | # | Line | Exit | Counts |
 |---|---|---|---|
 | 1 | `npx tsc --noEmit` | 0 | no errors |
 | 2 | `npm test` | 0 | 177 files, 1965 tests passed |
-| 3 | `(cd src-tauri && cargo test)` | 0 | lib 661 passed, 0 failed, 1 ignored (`usage.rs`, as before); plus 12 and 2 in the other targets |
+| 3 | `(cd src-tauri && cargo test)` | 0 | lib 664 passed, 0 failed, 1 ignored (`usage.rs`, as before); plus 12 and 2 in the other targets |
 | 4 | `(cd relay && cargo test)` | 0 | 11, 2, 86, 14, 32, 11, 68, 33, 9 passed across targets; 0 failed |
 | 5 | `(cd mobile && npx tsc --noEmit && npx jest)` | 0 | jest 1 suite, 6 tests passed |
 | 6 | `(cd src-tauri && cargo check -p ade-hook)` | 0 | Finished, no errors |
-| 7 | `(cd src-tauri && cargo test -p ade-hook)` | 0 | 93 passed (bin), 9 passed; 0 failed |
+| 7 | `(cd src-tauri && cargo test -p ade-hook)` | 0 | 96 passed (bin), 9 passed; 0 failed |
 
 ### Criteria to tests (every named test exists and passed)
 
@@ -267,7 +267,7 @@ Every Rust test below was found by name as `... ok` in the line 3 output (and th
 - **T4** `ade_cli.rs` `exit_5_when_opened_but_not_typed`, `typed_true_prints_nothing_and_exits_0`; `terminal_open.rs` `typed_false_is_200_and_the_window_gets_typed`; `terminalOpen.test.ts` `typed_false_sets_the_entry_to_not_typed_with_the_why`.
 - **T5** `terminal_open.rs` `the_typing_budget_starts_at_the_windows_answer`, `a_window_answer_after_expiry_types_nothing`.
 - **T6** `SubTerminalNotice.test.tsx`: `the_notice_shows_only_the_first_word_and_an_ellipsis`, `insert_is_disabled_while_paneBusy_names_a_program`, `insert_is_disabled_while_the_line_editor_is_not_ready`, `insert_is_disabled_for_dash_with_its_own_title`, `insert_rechecks_both_on_click_and_writes_nothing_if_either_fails`, `insert_writes_the_full_quoted_line_without_enter`.
-- **T7** `cli_guard/mod.rs`: `open_double_dash_gh_repo_delete_asks_as_the_bare_line_does`, `open_with_name_and_no_double_dash_does_not_ask`, `a_line_that_assigns_ade_hook_bin_still_asks`, `the_ade_verbs_are_enumerated`, `guard_and_hook_mode_are_unchanged`. The guard hardening rows, both ok: `a_flag_value_or_verb_that_may_split_asks` and `the_prepass_fails_closed_on_what_it_cant_name`. ADR 0011 amendments (the `--` split rule; amendment 4, variable resolution fails closed) present.
+- **T7** `cli_guard/mod.rs`: `open_double_dash_gh_repo_delete_asks_as_the_bare_line_does`, `open_with_name_and_no_double_dash_does_not_ask`, `a_line_that_assigns_ade_hook_bin_still_asks`, `the_ade_verbs_are_enumerated`, `guard_and_hook_mode_are_unchanged`. The guard hardening rows, all ok: `a_flag_value_or_verb_that_may_split_asks`, `the_prepass_fails_closed_on_what_it_cant_name` and, new at e3c26eb, `amendment_5_mutation_pins` (its rows pin each prompt variable, zsh's remapping arrays, `NAME[...]=` assignments, the `${ADE_HOOK_BIN=...}` assigning forms, declare/typeset/hash/shopt computed arguments, a computed single command word, unquoted expansions in flag position, `$A[@]` and `$((..))` splitting, and a computed path ending `hosts.yml`; plus the per-session `ADE_HOOK_BIN` value cases: unset, relative, bare name, another variable, a path with a space). ADR 0011 amendments present, including amendment 5 (2026-11-10: the guard never resolves a variable; remapped command names and code built from data ask).
 - **T8** `guideOpen.test.ts` `the_guide_documents_aliases_and_secrets`; section "Opening terminals from a terminal" in `docs/guide/terminal.md`.
 - **T9** `terminalOpen.test.ts` `the_spinner_clears_when_typed_arrives`; `SubTerminalStrip.test.tsx` `no_spinner_without_a_command`.
 - **T10** `ade_cli.rs` `help_lists_the_command_capability`, `help_capabilities_line_is_one_line`; the line is in `.ade/context/terminal-open.md`.
@@ -275,11 +275,15 @@ Every Rust test below was found by name as `... ok` in the line 3 output (and th
 
 ### Slice and contracts
 
-- Since the previous QA (27046fb) the code changed only in `cli_guard/` (`lexer.rs`, `mod.rs`, `resolve.rs`, `scripts.rs`) and `ade_cli.rs` (20 lines), plus context and knowledge notes. The slice outside the story's file list is the agreed set: the three quoter files cherry-picked from 8b06ea4, the CI zsh and fish step, the EINTR retry, and the guard hardening; small necessary changes in `agent_status.rs` and `lib.rs`. Nothing in `docs/architecture.md`, `agentCommand.ts`, `contracts.ts` or `tabStore.ts`.
-- Contracts recorded: `.ade/context/terminal-open.md` (typing built, capabilities line, exit 5, admit and recheck, notice word), `.ade/context/cli-guard.md` ("Variable resolution fails closed"), and the ADR 0011 amendments (open/`--` rules and amendment 4).
+- Since the previous QA (71bb5c6) the only code change is in `src-tauri/src/cli_guard/` (`creds.rs`, `lexer.rs`, `mod.rs`, `resolve.rs`, `scripts.rs`, `tables.rs`, `unwrap.rs`), the guard's own files, which the story's file list names (T7). The rest is `.ade/context/cli-guard.md`, ADR 0011, `terminal-open.md`, knowledge notes, the journal and this plan. The slice outside the story's file list is otherwise the agreed set recorded before: the three quoter files cherry-picked from 8b06ea4, the CI zsh and fish step, the EINTR retry, small necessary changes in `agent_status.rs`, `lib.rs` and `ade_cli.rs`. Nothing in `docs/architecture.md`, `agentCommand.ts`, `contracts.ts` or `tabStore.ts`.
+- Contracts recorded: `.ade/context/terminal-open.md` (typing built, capabilities line, exit 5, admit and recheck, notice word, and the guard rule that no variable is resolved), `.ade/context/cli-guard.md` ("Expansions are never resolved", "Constructs that ask"), and the ADR 0011 amendments (open/`--` rules, amendments 4 and 5).
+
+### CI on e3c26eb
+
+Run 42667181998, head SHA e3c26eb, conclusion success, all ten jobs pass (Frontend, Backend, Backend on macOS, Backend on Windows, Relay, Mobile, Runtime bundle freshness, both installers, vendored-bmad). The Frontend job's "Install zsh and fish" step set up zsh 5.9 and fish 3.7.0 (`Setting up fish (3.7.0-1)`), then `npm test` ran `shellQuote.test.ts` (7 tests passed) and all 177 files; "fish not found" appears nowhere in that log, and ADR 0008 makes the test fail on CI without fish. So the real-fish quoting tests did run against a real fish on CI. The Backend job (Linux) ran `amendment_5_mutation_pins` and the three `terminal_open_e2e` tests ok (664 passed, 1 ignored).
 
 ### Limits of this verdict
 
-- Correction to the 39e24c7 run: `fish` is not installed on this machine (`which fish` finds nothing; `zsh` is present), so in this run the fish cases of `shellQuote.test.ts` and `a_word_with_a_quote_or_backslash_is_one_word_in_sh_and_fish` were verified by the reference tokenizer only ("fish not found" is printed), not against a real fish. The earlier statement that real fish ran is withdrawn. The real-fish proof is CI's new zsh and fish install step; the PR's CI run must show it.
-- Manual checks M1 to M5 are recorded as not gating and were not run: they need a running ADE with a real Claude Code session. QA ran macOS only; the Linux harness run (M5) is for CI.
-- QA did not hand-mutate the 71bb5c6 guard code; that is the adversarial re-check's job.
+- `fish` is not installed on this machine, so locally the fish cases ran on the reference tokenizer only ("fish not found" is printed); the real-fish proof is the CI run above.
+- Manual checks M1 to M5 are recorded as not gating and were not run: they need a running ADE with a real Claude Code session. QA ran macOS only locally; the Linux harness run (M5) is CI's.
+- QA did not hand-mutate the e3c26eb guard code; that is the adversarial re-check's job. The developer's `.ade/knowledge/developer.md` carries an uncommitted edit in the worktree that is not part of this verdict and was not committed by QA.
