@@ -1009,6 +1009,8 @@ mod wiring_tests {
 
     /// The body of command `name` in this file, up to its closing brace.
     fn command_body(source: &str, name: &str) -> String {
+        // A Windows checkout has CRLF line endings; compare on LF.
+        let source = &source.replace("\r\n", "\n");
         let start = source.find(&format!("pub fn {name}(")).unwrap_or_else(|| panic!("no {name}"));
         let rest = &source[start..];
         rest[..rest.find("\n}\n").expect("the command's end")].to_string()
