@@ -193,10 +193,11 @@ pub fn trace(command: &str, ctx: &Ctx) -> (Verdict, Vec<String>) {
     let mut g = Guard::new(ctx);
     g.line_names = tables::names_guarded(command.as_bytes());
     g.run_text(command, true, ctx.cwd.clone());
-    // A `for ((…))` counter assigned anywhere else may hold code.
+    // A `for ((…))` counter assigned anywhere else, or one the shell sets
+    // by itself, may hold code.
     for (c, strict) in std::mem::take(&mut g.counters) {
-        if strict && !g.done() && (g.disq || g.assigned.get(&c) != Some(&1)) {
-            g.ask(format!("ADE: the for loop's counter {c} is assigned elsewhere, and the shell evaluates it as code"));
+        if strict && !g.done() && (g.disq || g.assigned.get(&c) != Some(&1) || !resolve::plain_counter(&c)) {
+            g.ask(format!("ADE: the for loop's counter {c} is assigned elsewhere or set by the shell itself, and the shell evaluates it as code"));
         }
     }
     (g.asked.map_or(Verdict::NoDecision, Verdict::Ask), g.seen)
@@ -1154,6 +1155,12 @@ mod tests {
             // zsh glob qualifiers that run code.
             ("ls *(e:'g''h repo delete o/r':)", true),
             ("ls *(+f)", true),
+            ("echo (a|b)(e:'eval \"$(<cmd.txt)\"':)", true),
+            ("ls (a|b)", true),
+            ("ls (a|b)(+f)", true),
+            // bash's `f ( )`, with blanks, is still a function.
+            ("f ( ) { echo hi; }; f", false),
+            ("echo x (*(e:'eval \"$(<cmd.txt)\"':))", true),
             // Quiet: literal arithmetic, literal subscripts and offsets.
             ("echo $((2+3))", false),
             ("echo $[2*3]", false),
@@ -1298,6 +1305,98 @@ mod tests {
             })
             .collect();
         assert!(bad.is_empty(), "{} cases wrong:\n{}", bad.len(), bad.join("\n"));
+    }
+
+    /// B3 of the sixth re-check: a `for ((…))` counter the shell sets by
+    /// itself (`_`, `BASH_REMATCH`, `REPLY`, zsh's lowercase specials) may
+    /// hold code although the line assigns it nowhere else.
+    #[test]
+    fn for_counters_the_shell_sets_ask() {
+        let fs = gh_fs().file("/w/data.txt", "x\n");
+        check_bin(
+            &fs,
+            &[
+                ("for ((_=0;_<3;_++)); do echo 'a[$(gh repo delete o/r --yes >&2)]' >/dev/null; done", true),
+                ("for ((BASH_REMATCH=0;BASH_REMATCH<3;BASH_REMATCH++)); do [[ \"$(cat data.txt)\" =~ (.*) ]]; done", true),
+                ("for ((REPLY=0;REPLY<3;REPLY++)); do select x in a; do break; done; done < data.txt", true),
+                // Uppercase on its own, with nothing else on the line.
+                ("for ((N=0;N<3;N++)); do echo hi; done", true),
+                // Plain lowercase counters stay quiet.
+                ("for ((i=0;i<3;i++)); do echo hi; done", false),
+                ("for ((n_2=0;n_2<3;n_2++)); do echo hi; done", false),
+            ],
+        );
+        // Every lowercase name bash or zsh sets by itself (an independent
+        // record of `resolve::SHELL_SET`).
+        let specials = [
+            "argv", "status", "pipestatus", "path", "cdpath", "fpath", "manpath", "module_path", "mailpath", "psvar", "watch", "fignore", "histchars",
+            "prompt", "signals", "match", "mbegin", "mend", "reply", "options", "parameters", "commands", "functions", "functions_source", "builtins",
+            "reswords", "patchars", "aliases", "galiases", "saliases", "dis_aliases", "dis_galiases", "dis_saliases", "dis_functions",
+            "dis_functions_source", "dis_builtins", "dis_reswords", "dis_patchars", "modules", "dirstack", "history", "historywords", "jobdirs",
+            "jobstates", "jobtexts", "nameddirs", "userdirs", "usergroups", "funcstack", "functrace", "funcfiletrace", "funcsourcetrace", "termcap",
+            "terminfo", "mapfile", "errnos", "sysparams", "epochtime", "langinfo", "zsh_eval_context", "zsh_scheduled_events", "keymaps", "widgets",
+            "killring", "region_highlight", "registers", "precmd_functions", "preexec_functions", "chpwd_functions", "periodic_functions",
+            "zshaddhistory_functions", "zshexit_functions", "zsh_directory_name_functions", "ttyidle",
+        ];
+        let rows: Vec<String> = specials.iter().map(|n| format!("for (({n}=0;{n}<3;{n}++)); do echo hi; done")).collect();
+        check_bin(&fs, &rows.iter().map(|r| (r.as_str(), true)).collect::<Vec<_>>());
+    }
+
+    /// `select` assigns REPLY as well as its own name.
+    #[test]
+    fn select_assigns_reply() {
+        let script = lexer::parse("select x in a; do break; done").unwrap();
+        let sc = resolve::Scope::new(&script, true, false, PathBuf::from("/w"));
+        assert_eq!(sc.assigned.get("REPLY"), Some(&1));
+        assert_eq!(sc.assigned.get("x"), Some(&1));
+        let script = lexer::parse("for x in a; do break; done").unwrap();
+        let sc = resolve::Scope::new(&script, true, false, PathBuf::from("/w"));
+        assert_eq!(sc.assigned.get("REPLY"), None);
+    }
+
+    /// B4 of the sixth re-check: `.`/`source` of a name with no slash
+    /// searches PATH first, so the guard can't tell which file it reads.
+    #[test]
+    fn sourcing_a_name_with_no_slash_asks() {
+        let fs = two_folders_fs().file("/home/u/.cargo/env", "export PATH=\"$HOME/.cargo/bin:$PATH\"\n");
+        check_bin(
+            &fs,
+            &[
+                ("PATH=$PWD/o:$PATH; . x.sh", true),
+                (". x.sh", true),
+                ("source x.sh", true),
+                ("source -- x.sh", true),
+                (". ./x.sh", false),
+                ("source ./x.sh", false),
+                (". /w/x.sh", false),
+                (". ~/.cargo/env", false),
+            ],
+        );
+    }
+
+    /// The story-9 part of B1: the terminal `ade open` makes has none of the
+    /// caller's functions, so the command it types is judged as the real one.
+    #[test]
+    fn open_never_resolves_the_typed_command_to_a_function_on_the_line() {
+        let fs = gh_fs()
+            .file("/w/f.sh", "gh() { :; }\n")
+            .file("/w/g.sh", "gh() { :; }\n\"$ADE_HOOK_BIN\" open -- gh repo delete o/r\n");
+        check_bin(
+            &fs,
+            &[
+                ("gh() { :; }; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("function gh { :; }; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                ("gh() { :; }; \"$ADE_HOOK_BIN\" open -- sudo gh repo delete o/r", true),
+                ("gh() { :; }; \"$ADE_HOOK_BIN\" open -- command gh repo delete o/r", true),
+                (". /w/f.sh; \"$ADE_HOOK_BIN\" open -- gh repo delete o/r", true),
+                (". /w/g.sh", true),
+                // A function that opens a terminal running itself: the new
+                // terminal has no such function, so nothing is typed that runs gh.
+                ("f() { \"$ADE_HOOK_BIN\" open -- f; }; f", false),
+                // Functions still resolve on the caller's own line, after it too.
+                ("f() { gh repo delete o/r; }; \"$ADE_HOOK_BIN\" open -- ls; f", true),
+            ],
+        );
     }
 
     #[test]
@@ -1530,7 +1629,7 @@ mod tests {
         for (text, want) in [(&scan, Verdict::NoDecision), (&named, Verdict::Ask(String::new()))] {
             let fs = FakeFs::new().file("/w/head.sh", &head).file("/w/scan.sh", text);
             let t = Instant::now();
-            let v = verdict(&fs, "source head.sh");
+            let v = verdict(&fs, "source ./head.sh");
             let took = t.elapsed();
             eprintln!("4 MB budget: {took:?}");
             assert_eq!(std::mem::discriminant(&v), std::mem::discriminant(&want), "{v:?}");

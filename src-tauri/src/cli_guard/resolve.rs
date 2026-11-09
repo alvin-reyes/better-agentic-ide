@@ -281,9 +281,13 @@ fn prepass_cmd<'s>(sc: &mut Scope<'s>, c: &'s Cmd) {
 /// hold no function to keep.
 fn prepass_compound(sc: &mut Scope, c: &Cmd) {
     match c {
-        Cmd::For { var, words, arith, redirs, .. } => {
+        Cmd::For { var, words, arith, redirs, select, .. } => {
             if !var.is_empty() {
                 sc.ev(var);
+            }
+            // `select` also sets REPLY to the line it reads.
+            if *select {
+                sc.ev("REPLY");
             }
             if let Some(t) = arith {
                 match for_counter(t) {
@@ -368,6 +372,27 @@ fn for_counter(text: &str) -> Option<String> {
     }
     let only = |t: &str| super::lexer::arith_literal(&t.replace(name, "0")) && t.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).all(|w| w.is_empty() || w == name || w.bytes().all(|b| b.is_ascii_digit()));
     (only(cond) && only(step)).then(|| name.to_string())
+}
+
+/// Names bash or zsh set by themselves (zsh's lowercase specials and the
+/// arrays its modules tie), so a `for ((…))` counter of that name may hold
+/// text the line never assigned. (zsh's remapping arrays, `functions`,
+/// `aliases`, `dis_*` and the rest, ask through the remap rule first.)
+const SHELL_SET: &[&str] = &[
+    "argv", "status", "pipestatus", "path", "cdpath", "fpath", "manpath", "module_path", "mailpath", "psvar", "watch", "fignore", "histchars",
+    "prompt", "signals", "match", "mbegin", "mend", "reply", "options", "parameters", "reswords", "patchars", "modules", "dirstack", "history",
+    "historywords", "jobdirs", "jobstates", "jobtexts", "nameddirs", "userdirs", "usergroups", "funcstack", "functrace", "funcfiletrace",
+    "funcsourcetrace", "termcap", "terminfo", "mapfile", "errnos", "sysparams", "epochtime", "langinfo", "zsh_eval_context", "zsh_scheduled_events",
+    "keymaps", "widgets", "killring", "region_highlight", "registers", "precmd_functions", "preexec_functions", "chpwd_functions",
+    "periodic_functions", "zshaddhistory_functions", "zshexit_functions", "zsh_directory_name_functions", "ttyidle",
+];
+
+/// A `for ((…))` counter the shell never sets by itself: lowercase, not
+/// `_` (the last argument of the previous command), and not one of
+/// [`SHELL_SET`]. Uppercase names include bash's and zsh's specials
+/// (`BASH_REMATCH`, `REPLY`, `MATCH`, …), so none is plain.
+pub fn plain_counter(name: &str) -> bool {
+    name != "_" && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') && !SHELL_SET.contains(&name)
 }
 
 /// Arithmetic: operands that aren't all literal integers are evaluated

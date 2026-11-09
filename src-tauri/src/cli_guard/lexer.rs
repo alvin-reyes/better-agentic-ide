@@ -817,14 +817,17 @@ impl Parser {
                 if s.words.len() == 1 && s.assigns.is_empty() && s.redirs.is_empty() {
                     self.i += 1;
                     self.skip_blanks();
+                    // `echo (a|b)…`: a zsh glob group, which a qualifier
+                    // can follow (bash rejects it).
                     if self.peek() != Some(b')') {
-                        return Err(ParseError::Syntax("bad function definition".into()));
+                        return Err(ParseError::GlobQualifier);
                     }
                     self.i += 1;
                     let name = s.words[0].literal().ok_or_else(|| ParseError::Syntax("computed function name".into()))?;
                     return self.func_body(name);
                 }
-                return Err(ParseError::Syntax("unexpected (".into()));
+                // `ls x (a|b)…`: a zsh glob group too.
+                return Err(ParseError::GlobQualifier);
             }
             let w = match self.read_word()? {
                 Some(w) => w,

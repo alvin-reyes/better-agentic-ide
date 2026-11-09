@@ -622,7 +622,11 @@ impl<'c, 'a> Guard<'c, 'a> {
         };
         let cwd = dir.map_or_else(|| sc.cwd.clone(), |d| abs(&sc.cwd, &d.text));
         let caller = std::mem::replace(&mut sc.cwd, cwd);
+        // The new terminal has none of this line's functions: COMMAND is
+        // judged as the real command its words name.
+        let funcs = std::mem::take(&mut sc.funcs);
         let out = self.command(sc, command, In::None, run);
+        sc.funcs = funcs;
         sc.cwd = caller;
         out
     }
@@ -1019,6 +1023,12 @@ impl<'c, 'a> Guard<'c, 'a> {
         let Some(w) = args.first() else { return Out::Unknown };
         if w.computed() {
             self.trigger(sc, format!("ADE: this sources a computed path ({}), so the guard can't see what it runs", w.show()));
+            return Out::Unknown;
+        }
+        // bash's `.`/`source` and zsh's `.` look a name with no slash up on
+        // PATH before the current folder.
+        if !w.text.contains('/') {
+            self.trigger(sc, format!("ADE: this sources {}, a name with no slash that the shell may find on PATH, so the guard can't tell which file it reads", w.show()));
             return Out::Unknown;
         }
         let p = abs(&sc.cwd, &w.text);
