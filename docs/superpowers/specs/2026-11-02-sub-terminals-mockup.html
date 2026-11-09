@@ -57,32 +57,38 @@ header.page p { margin:0; color:var(--text-secondary); font-size:12px; line-heig
 /* new: count badge on the main tab */
 .count { display:inline-flex; align-items:center; gap:3px; height:16px; padding:0 5px; border-radius:8px; background:var(--bg-surface); color:var(--text-secondary); font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; flex-shrink:0; }
 
-/* new: sub-terminal strip */
-.substrip { display:flex; align-items:center; height:30px; padding:0 12px; background:var(--bg-primary); border-bottom:1px solid var(--border); gap:2px; user-select:none; }
-.substrip .scroller { display:flex; align-items:center; gap:2px; overflow-x:auto; scrollbar-width:none; min-width:0; flex:1 1 auto; height:100%; position:relative; }
+/* new: sub-terminal strip (amended 2026-11-09: child tabs on a rail) */
+.substrip { display:flex; align-items:flex-end; height:30px; padding:0 12px; background:var(--bg-primary); box-shadow:inset 0 -1px 0 var(--border-strong); gap:2px; user-select:none; }
+.substrip .scroller { display:flex; align-items:flex-end; gap:2px; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; min-width:0; flex:1 1 auto; height:100%; position:relative; }
 .substrip .scroller::-webkit-scrollbar { display:none; }
 .substrip .scroller.fade-r { -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent); mask-image:linear-gradient(to right,#000 calc(100% - 24px),transparent); }
 .substrip .scroller.fade-l { -webkit-mask-image:linear-gradient(to left,#000 calc(100% - 24px),transparent); mask-image:linear-gradient(to left,#000 calc(100% - 24px),transparent); }
 .substrip .scroller.fade-l.fade-r { -webkit-mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent); mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent); }
-.divider { width:1px; height:16px; background:var(--border-strong); margin:0 6px 0 4px; flex-shrink:0; }
-.sub { display:flex; align-items:center; gap:6px; height:24px; padding:0 8px 0 10px; border-radius:var(--radius-sm); color:var(--text-secondary); font-size:12px; cursor:pointer; flex-shrink:0; position:relative; white-space:nowrap; }
-.sub:hover { background:var(--bg-tertiary); }
-.sub.sel { background:var(--bg-elevated); color:var(--text-primary); font-weight:500; }
-.sub.sel::after { content:""; position:absolute; left:8px; right:8px; bottom:-3px; height:2px; border-radius:1px; background:var(--accent); }
+.divider { width:1px; height:16px; background:var(--border-strong); margin:0 6px 5px 4px; flex-shrink:0; align-self:flex-end; }
+/* Every entry is a tab: top corners rounded, square bottom standing on the rail, a visible body. */
+.sub { display:flex; align-items:center; gap:6px; height:26px; padding:0 8px 0 10px; border:1px solid var(--border-strong); border-bottom:0; border-radius:var(--radius-sm) var(--radius-sm) 0 0; background:var(--bg-tertiary); color:var(--text-secondary); font-size:12px; cursor:pointer; flex-shrink:0; position:relative; white-space:nowrap; }
+.sub:hover { background:var(--bg-elevated); color:var(--text-primary); }
+/* Selected: the terminal's own surface, so it opens into the terminal below (covers the rail), 2 px accent along its top. */
+.sub.sel, .sub.sel:hover { background:var(--bg-primary); color:var(--text-primary); font-weight:500; box-shadow:inset 0 2px 0 var(--accent); }
 .sub.own { padding-right:10px; }
 .sub .name { max-width:160px; overflow:hidden; text-overflow:ellipsis; }
 .win.narrow .sub .name { max-width:96px; }
 .sub.dead .name { opacity:.6; }
 .status { font-size:11px; font-weight:500; }
-.status.exited { color:var(--text-exited); }
-.sub:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+/* amended: --text-secondary, since #8B929E on the tab body fails 4.5:1 in Nord, Monokai, Dracula, Solarized, One Dark */
+.status.exited { color:var(--text-secondary); }
+.sub:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .btn:disabled { opacity:.45; cursor:default; }
 .nottyped { width:14px; height:14px; border-radius:50%; background:var(--yellow-subtle); color:var(--yellow); font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
 .spin { width:10px; height:10px; border-radius:50%; border:1.5px solid var(--text-muted); border-top-color:var(--text-secondary); animation:spin .8s linear infinite; flex-shrink:0; }
 @keyframes spin { to { transform:rotate(360deg); } }
-.sub.flash { animation:flash 1.2s ease-out; }
-@keyframes flash { 0%{ background:rgba(124,143,255,.35);} 100%{ background:transparent; } }
+/* Arrival: hold an accent wash and ring, then fade back to the tab body (2 s, once). */
+.sub.flash { animation:arrive 2s ease-out 1; }
+@keyframes arrive {
+  0%, 25% { background-color:color-mix(in srgb, var(--accent) 15%, var(--bg-tertiary)); box-shadow:inset 0 0 0 1px var(--accent); color:var(--text-primary); }
+  100% { background-color:var(--bg-tertiary); box-shadow:inset 0 0 0 1px transparent; }
+}
 @media (prefers-reduced-motion: reduce){ .sub.flash, .pulse, .spin { animation:none; } }
 
 /* content */
@@ -142,7 +148,9 @@ kbd { font-family:var(--font-mono); font-size:11px; background:var(--bg-elevated
 .gallery h2 { font-size:14px; font-weight:600; margin:8px 0 10px; }
 .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
 .card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:12px; }
-.card .demo { display:flex; align-items:center; gap:4px; background:var(--bg-primary); border-radius:6px; padding:6px 8px; min-height:38px; }
+.card .demo { display:flex; align-items:flex-end; gap:4px; background:var(--bg-primary); border-radius:6px 6px 0 0; padding:8px 8px 0; min-height:38px; box-shadow:inset 0 -1px 0 var(--border-strong); }
+.card .demo.plain { align-items:center; padding:6px 8px; border-radius:6px; box-shadow:none; }
+aside select { width:100%; height:28px; background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-strong); border-radius:6px; font-family:inherit; font-size:12px; padding:0 6px; }
 .card .cap { font-size:11.5px; color:var(--text-secondary); margin-top:8px; line-height:1.45; }
 .card .cap b { color:var(--text-primary); font-weight:600; }
 </style>
@@ -150,6 +158,7 @@ kbd { font-family:var(--font-mono); font-size:11px; background:var(--bg-elevated
 <body>
 <header class="page">
   <h1>Sub-terminals</h1>
+  <p style="margin-bottom:6px"><b style="color:var(--text-primary)">Amended 2026-11-09 (visibility):</b> entries are tabs on a rail, the selected one opens into the terminal, and a sub-terminal opened in the background flashes for 2 s and keeps a "new" dot until you view it. Try <i>First sub-terminal in a tab</i>, and the preset picker on the right.</p>
   <p>Mockup for <code>2026-11-02-sub-terminals-ux.md</code>. Terminals opened with <code>ade open</code> join the caller's tab as sub-terminals in a strip under the tab bar. Click entries to switch, hover for ×, right-click an entry or a main tab for its menu, focus the strip and use ← → Home End Enter Delete, and use the scenarios on the right. Keys in this page: <kbd>[</kbd> <kbd>]</kbd> stand in for ⌘[ ⌘], <kbd>k</kbd> for ⌘K (the browser owns the real ones).</p>
 </header>
 
@@ -176,7 +185,10 @@ kbd { font-family:var(--font-mono); font-size:11px; background:var(--bg-elevated
     <button class="sc" data-sc="narrow">Toggle narrow window</button>
     <button class="sc" data-sc="switcher">Tab switcher (⌘K)</button>
     <button class="sc" data-sc="closetab">Close tab "api"</button>
+    <button class="sc" data-sc="bgother">Opened while you are in another tab<code>(in "api") bin/work → ade open --name worker</code></button>
     <button class="sc" data-sc="reset">Reset</button>
+    <h2>Theme preset</h2>
+    <select id="preset" aria-label="Theme preset"></select>
     <h2>Keys</h2>
     <div class="keys">
       <kbd>⌘]</kbd> / <kbd>⌘[</kbd> next / previous terminal in the tab<br>
@@ -262,7 +274,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
   };
 
   function sub(o) {
-    return Object.assign({ id: "s" + ++uid, state: "running", agent: null, attention: false, activity: false, from: null, why: null, line: null, flash: false, busy: false, fg: false, noLE: false, restored: false, prog: null }, o);
+    return Object.assign({ id: "s" + ++uid, state: "running", agent: null, attention: false, activity: false, from: null, why: null, line: null, flash: false, busy: false, fg: false, noLE: false, restored: false, prog: null, unseen: false }, o);
   }
   function initial() {
     uid = 0;
@@ -295,7 +307,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
   function rollup(t) {
     const vs = views(t);
     const agent = vs.map((v) => v.agent).filter(Boolean).sort((a, b) => RANK[a] - RANK[b])[0] || null;
-    return { agent, activity: vs.some((v) => v.activity), attention: vs.some((v) => v.attention) };
+    return { agent, activity: vs.some((v) => v.activity), attention: vs.some((v) => v.attention), unseen: t.subs.some((v) => v.unseen) };
   }
   function renderTabbar() {
     const html = S.tabs.map((t, i) => {
@@ -306,8 +318,9 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
       const countTitle = `${t.subs.length} sub-terminal${t.subs.length === 1 ? "" : "s"}: ${running} running${exited ? `, ${exited} exited` : ""}${r.agent === "needsYou" ? " · one needs you" : ""}`;
       return `<div class="tab ${active ? "active" : ""}" data-tab="${t.id}" title="${esc(t.name)} — ${esc(t.cwd)}">
         ${r.agent ? `<span class="agent-dot" data-state="${r.agent}" title="${r.agent === "needsYou" ? "An agent here needs you" : "An agent here is waiting for you"}"></span>` : ""}
-        ${!active && r.attention && !r.activity ? `<span class="tab-attention" title="New output finished while you were away"></span>` : ""}
-        ${!active && r.activity ? `<span class="pulse" title="Producing output"></span>` : ""}
+        ${!active && r.unseen ? `<span class="tab-attention" title="New sub-terminal: not viewed yet"></span>` : ""}
+        ${!active && !r.unseen && r.attention && !r.activity ? `<span class="tab-attention" title="New output finished while you were away"></span>` : ""}
+        ${!active && !r.unseen && r.activity ? `<span class="pulse" title="Producing output"></span>` : ""}
         ${CHEV}<span class="num">${i + 1}</span><span class="label">${esc(t.name)}</span>
         ${t.subs.length ? `<span class="count" title="${countTitle}" aria-label="${countTitle}">${STACK}${t.subs.length}</span>` : ""}
         <button class="x" data-closetab="${t.id}" aria-label="Close ${esc(t.name)}">×</button>
@@ -323,7 +336,8 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
   function marks(v, inSight) {
     let h = "";
     if (v.agent) h += `<span class="agent-dot" data-state="${v.agent}" title="${v.agent === "needsYou" ? "An agent here needs you" : "An agent here is waiting for you"}"></span>`;
-    if (!inSight && v.activity) h += `<span class="pulse" title="Producing output"></span>`;
+    if (!inSight && v.unseen) h += `<span class="tab-attention" role="img" aria-label="new" title="New: not viewed yet"></span>`;
+    else if (!inSight && v.activity) h += `<span class="pulse" title="Producing output"></span>`;
     else if (!inSight && v.attention) h += `<span class="tab-attention" title="Finished while you were away"></span>`;
     return h;
   }
@@ -346,7 +360,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
       <div class="scroller">${t.subs.map((s) => {
         const sel = v === s;
         return `<div class="sub ${sel ? "sel" : ""} ${s.state === "exited" ? "dead" : ""} ${s.flash ? "flash" : ""}" role="tab" aria-selected="${sel}" aria-controls="content" tabindex="${sel ? 0 : -1}" data-view="${s.id}" data-sub="${s.id}"
-          title="${esc(s.name)} — ${esc(t.cwd)}${s.from ? `\nOpened from ${esc(s.from)}` : ""}${s.hidden ? "\nOpened in the background: only the last 1000 lines are kept until you view it." : ""}\n${stateWord(s)}">
+          title="${esc(s.name)} — ${esc(t.cwd)}${s.from ? `\nOpened from ${esc(s.from)}` : ""}${s.unseen ? "\nNew: not viewed yet" : ""}${s.hidden ? "\nOpened in the background: only the last 1000 lines are kept until you view it." : ""}\n${stateWord(s)}">
           ${marks(s, sel)}<span class="name">${esc(s.name)}</span>${status(s)}
           <button class="x" data-closesub="${s.id}" tabindex="-1" aria-label="Close ${esc(s.name)}">×</button></div>`;
       }).join("")}</div></div>`;
@@ -354,6 +368,8 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
     const sc = el.querySelector(".scroller");
     sc.scrollLeft = prevScroll;
     sc.querySelector(".sel")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    // A background arrival is scrolled into view (the selection doesn't change).
+    [...sc.querySelectorAll(".flash")].pop()?.scrollIntoView({ block: "nearest", inline: "nearest" });
     const fades = () => {
       sc.classList.toggle("fade-l", sc.scrollLeft > 2);
       sc.classList.toggle("fade-r", sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 2);
@@ -422,7 +438,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
   function show(t, viewId) {
     t.view = viewId || null;
     const v = viewOf(t);
-    v.attention = false; v.activity = false; v.hidden = false;
+    v.attention = false; v.activity = false; v.hidden = false; v.unseen = false;
     if (v.restored && !v.started) { v.started = true; v.term = (v.saved || "") + `\n<span class="dim">Restored ${new Date().toDateString()}: new shell</span>\n` + T.shell("~/src/api"); }
     render();
   }
@@ -436,7 +452,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
     log(`Showing "${viewOf(t) === t.own ? t.name : viewOf(t).name}"; focus moves to its terminal.`);
   }
   function addSub(t, o, focus) {
-    const s = sub(Object.assign({ flash: !focus, hidden: !focus }, o));
+    const s = sub(Object.assign({ flash: !focus && S.activeTab === t.id, flashed: !focus && S.activeTab === t.id, hidden: !focus, unseen: !focus }, o));
     t.subs.push(s);
     if (focus) { S.activeTab = t.id; t.view = s.id; }
     render();
@@ -525,6 +541,14 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
         startThenSettle(t, s, (x) => (x.state = "running"));
       }, 500);
     },
+    bgother() {
+      S.activeTab = "docs"; render();
+      setTimeout(() => {
+        const t = tab("api");
+        addSub(t, { name: "worker", term: T.shell("~/src/api") }); announce("worker", t.name);
+        log('Opened in "api" while you are in "docs": "api" shows the accent dot (rolled up) and its badge counts it. Click "api": the new entry flashes once and keeps its "new" dot.');
+      }, 400);
+    },
     many() {
       const t = tab("api");
       ["typecheck", "e2e: chromium", "e2e: webkit", "docs build", "queue worker", "redis", "stripe", "ngrok", "claude: billing", "tail"].forEach((n, k) =>
@@ -566,7 +590,7 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
       if (s.fg || s.noLE) { render(); return log("Checked again on click (busy check paneBusy/useGuardedClose, and the line-editor check): the shell is busy or has no line editor up, nothing inserted."); }
       s.state = "running"; s.term = T.shell("~/src/api").replace('<span class="cursor"></span>', esc(s.line) + '<span class="cursor"></span>'); render(); return log("Inserted at the prompt without Enter: review it, then press Enter."); }
     if (d.dismiss) { const s = cur().subs.find((x) => x.id === d.dismiss); s.state = "running"; render(); return log("Notice dismissed."); }
-    if (d.tab !== undefined) { S.activeTab = d.tab; const t = cur(); viewOf(t).attention = false; render(); return log(`"${t.name}" shows the view it was left on.`); }
+    if (d.tab !== undefined) { S.activeTab = d.tab; const t = cur(); viewOf(t).attention = false; t.subs.forEach((s) => { if (s.unseen && !s.flashed) { s.flash = true; s.flashed = true; } }); render(); return log(`"${t.name}" shows the view it was left on.`); }
     if (d.view !== undefined) { show(cur(), d.view); log(`Showing "${viewOf(cur()) === cur().own ? cur().name : viewOf(cur()).name}".`); }
   });
   document.addEventListener("contextmenu", (e) => {
@@ -626,23 +650,39 @@ POST /v1/token/refresh <span class="r">401</span> 6ms
 
   // ---------- gallery ----------
   const G = [
-    ["Selected", sub({ name: "dev server" }), true, "<b>In sight.</b> Elevated background, weight 500, accent bar. × always shown."],
+    ["Selected", sub({ name: "dev server" }), true, "<b>In sight.</b> The terminal's surface, open at the bottom into the terminal; 2 px accent along the top, weight 500. × always shown."],
+    ["New, not viewed yet", sub({ name: "tests", unseen: true }), false, "<b>New.</b> Opened in the background: accent dot, \"new\" in its name, until first shown. Takes the slot over activity and attention."],
+    ["Arriving", sub({ name: "tests", unseen: true, flash: true }), false, "<b>Arrival flash.</b> Accent wash and ring held 0.5 s, faded by 2 s, once. None under reduced motion: the dot alone."],
     ["Running, producing output", sub({ name: "dev server", activity: true }), false, "<b>Activity.</b> Green pulse, only when not in sight (as main tabs)."],
     ["Finished while away", sub({ name: "tests", attention: true }), false, "<b>Attention.</b> Accent dot; clears when shown."],
     ["Agent needs you", sub({ name: "claude: auth", agent: "needsYou" }), false, "<b>Needs you.</b> The existing red dot with halo, per view; rolls up to the main tab."],
     ["Agent waiting", sub({ name: "claude: billing", agent: "waiting" }), false, "<b>Waiting.</b> The existing blue dot."],
     ["Starting", sub({ name: "storybook", state: "starting" }), false, "<b>Starting.</b> Only when a command was given; clears on the typed result (at most about 10 s). No command: no spinner."],
     ["Command not typed", sub({ name: "npm", state: "notTyped", why: "the new shell was busy" }), false, "<b>Not typed.</b> Yellow ! mark; the view's notice masks the command and enables Insert command once the shell is at its prompt with a line editor up (a shell with no line editor keeps it disabled: \"This shell has no line editor; type the command yourself\")."],
-    ["Shell exited", sub({ name: "npm", state: "exited" }), false, "<b>Exited.</b> Name at 60%, “exited” in #8B929E. The shell ended (also a shell that died at start); not a pass/fail of the command, and no exit code."],
+    ["Shell exited", sub({ name: "npm", state: "exited" }), false, "<b>Exited.</b> Name at 60%, “exited” in --text-secondary (amended: #8B929E fails 4.5:1 on the tab body in five presets). The shell ended (also a shell that died at start); not a pass/fail of the command, and no exit code."],
     ["Restored", sub({ name: "npm", restored: true }), false, "<b>Restored.</b> After a restart: a new shell, started when first shown. Saved name (here from the naming rule); the label stays so it doesn't read as running."],
     ["Named by the rule", sub({ name: "npx" }), false, "<b>Default name.</b> <code>NODE_ENV=test npx vitest --token …</code> → “npx”: first word, skipping VAR=value. With no command: the folder's basename, else “Terminal”. The command line is never shown."],
   ];
   $("#cards").innerHTML = G.map(([, s, sel, cap]) => `<div class="card"><div class="demo">
-    <div class="sub ${sel ? "sel" : ""} ${s.state === "exited" ? "dead" : ""}">${marks(s, sel)}<span class="name">${esc(s.name)}</span>${status(s)}<button class="x" aria-label="Close ${esc(s.name)}" tabindex="-1">×</button></div></div>
+    <div class="sub ${sel ? "sel" : ""} ${s.state === "exited" ? "dead" : ""} ${s.flash ? "flash" : ""}" ${s.flash ? 'style="animation-iteration-count:infinite;animation-duration:3s"' : ""}>${marks(s, sel)}<span class="name">${esc(s.name)}</span>${status(s)}<button class="x" aria-label="Close ${esc(s.name)}" tabindex="-1">×</button></div></div>
     <div class="cap">${cap}</div></div>`).join("") +
-    `<div class="card"><div class="demo" style="background:var(--bg-secondary)"><div class="tab active" style="height:30px;align-self:center">${CHEV}<span class="num">1</span><span class="label">api</span><span class="count">${STACK}4</span></div>
+    `<div class="card"><div class="demo plain" style="background:var(--bg-secondary)"><div class="tab active" style="height:30px;align-self:center">${CHEV}<span class="num">1</span><span class="label">api</span><span class="count">${STACK}4</span></div>
      <div class="tab" style="height:30px;align-self:center"><span class="agent-dot" data-state="needsYou"></span>${CHEV}<span class="num">2</span><span class="label">web</span><span class="count">${STACK}2</span></div></div>
      <div class="cap"><b>Count badge.</b> Neutral, never coloured. Attention rolls into the tab's existing marks: “web” has a sub-terminal that needs you.</div></div>`;
+
+  // ---------- theme presets (values from src/stores/settingsStore.ts) ----------
+  const PRESETS = [["precision-dark","Precision",["#0A0B0D","#0F1013","#15171B","#1B1E23","#262A31","#E8EAED","#9BA1AC","#5A616D","#7C8FFF","#4A5FE0","rgba(255, 255, 255, 0.055)","rgba(255, 255, 255, 0.10)"]],["github-dark","GitHub Dark",["#0d1117","#161b22","#1c2128","#21262d","#30363d","#e6edf3","#8b949e","#484f58","#58a6ff","#2F6FD0","rgba(240, 246, 252, 0.1)","rgba(240, 246, 252, 0.15)"]],["dracula","Dracula",["#282a36","#21222c","#2d2f3d","#343746","#44475a","#f8f8f2","#b0b8d1","#6272a4","#bd93f9","#6D50C4","rgba(248, 248, 242, 0.1)","rgba(248, 248, 242, 0.15)"]],["monokai","Monokai Pro",["#2d2a2e","#221f22","#363337","#403e41","#5b595c","#fcfcfa","#c1c0c0","#727072","#ffd866","#38788F","rgba(252, 252, 250, 0.1)","rgba(252, 252, 250, 0.15)"]],["nord","Nord",["#2e3440","#272c36","#353b49","#3b4252","#434c5e","#eceff4","#d8dee9","#4c566a","#88c0d0","#52719A","rgba(236, 239, 244, 0.1)","rgba(236, 239, 244, 0.15)"]],["catppuccin","Catppuccin Mocha",["#1e1e2e","#181825","#252536","#313244","#45475a","#cdd6f4","#bac2de","#585b70","#89b4fa","#5C6FA5","rgba(205, 214, 244, 0.1)","rgba(205, 214, 244, 0.15)"]],["solarized-dark","Solarized Dark",["#002b36","#001f27","#073642","#0a4050","#586e75","#fdf6e3","#93a1a1","#586e75","#268bd2","#1F6E8C","rgba(253, 246, 227, 0.1)","rgba(253, 246, 227, 0.15)"]],["tokyo-night","Tokyo Night",["#1a1b26","#16161e","#1f2030","#24283b","#414868","#c0caf5","#a9b1d6","#565f89","#7aa2f7","#3D59A1","rgba(192, 202, 245, 0.1)","rgba(192, 202, 245, 0.15)"]],["one-dark","One Dark",["#282c34","#21252b","#2c313a","#333842","#3e4451","#abb2bf","#9da5b4","#5c6370","#61afef","#3B73A9","rgba(171, 178, 191, 0.1)","rgba(171, 178, 191, 0.15)"]]];
+  const KEYS = ["--bg-primary","--bg-secondary","--bg-tertiary","--bg-elevated","--bg-surface","--text-primary","--text-secondary","--text-muted","--accent","--accent-solid","--border","--border-strong"];
+  const sel = $("#preset");
+  sel.innerHTML = PRESETS.map(([id, name]) => `<option value="${id}">${name}</option>`).join("");
+  const applyPreset = (id) => {
+    const p = PRESETS.find((x) => x[0] === id) || PRESETS[0];
+    KEYS.forEach((k, i) => document.documentElement.style.setProperty(k, p[2][i]));
+    document.documentElement.style.setProperty("--accent-subtle", p[2][8] + "26");
+    sel.value = p[0];
+  };
+  sel.addEventListener("change", () => { applyPreset(sel.value); log(`Preset: ${sel.options[sel.selectedIndex].text}.`); });
+  applyPreset(new URLSearchParams(location.search).get("preset") || "precision-dark");
 
   render();
 })();

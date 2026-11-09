@@ -10,7 +10,8 @@ says only what the user sees. Where a UX need depends on the plan, it is
 listed under "What this spec needs from the plan".
 
 Status: owner decisions U1–U5 taken on 2026-11-02 (below); revised after
-review. Mockup: `2026-11-02-sub-terminals-mockup.html` beside this file.
+review. **Amended 2026-11-09 for visibility (V1–V6, below)** after the owner
+tried v0.23.0. Mockup: `2026-11-02-sub-terminals-mockup.html` beside this file.
 Names in it are placeholders.
 
 **Scope tags.** Everything is v1 unless tagged **[later]**: decided not to
@@ -28,6 +29,217 @@ build in v1, listed so it isn't re-proposed by accident.
 | Cut | Exit codes ("exited" only, never "exit N"). Renaming sub-terminals. Move to New Window for a single sub-terminal. |
 | Kept | Move to New Tab, ⌘K sub rows, Fleet labels. |
 | Accepted | Hidden when a tab has none; restored sub-terminals start when first shown and don't count as running. |
+
+## Amendment 2026-11-09: make the strip easy to see (V1–V6)
+
+**What happened.** The owner ran `"$ADE_HOOK_BIN" open --name test` in
+v0.23.0. The sub-terminal opened in the strip, but the owner's verdict was
+"Strip is fine, but hard to see": they did not take "test" for a tab. The
+cause is in the Look below as first written. The strip was `--bg-primary`,
+the same colour as the terminal under it, with a 5.5% white border. The
+entries that were not selected had no fill and no outline, so they read as
+loose text. The selected entry was an `--bg-elevated` chip with rounded
+corners, floating above a 2 px underline, so it read as a button. The
+arrival flash was a 15% accent wash that faded over 1.2 s. It played only
+if the strip was on screen at that moment, and nothing remained once it had
+faded.
+
+**What stays.** The strip's place under the main tab bar, its 30 px height,
+`--bg-primary` behind it, the 1 px divider and the U1–U5 decisions. The
+original reason for `--bg-primary` holds: the active main tab is
+`--bg-primary` and flows down into the strip, so the strip reads as part of
+that tab. The rule for when the strip shows also stays (V5).
+
+**Scope.** Visibility only. No new commands, menus, settings or saved
+state. Before and after: the mockup beside this file (the gallery shows
+every entry state; the preset picker switches all nine presets).
+
+### V1. Every entry is a tab (shape)
+- An entry is a tab, not a chip: 26 px high, top corners `--radius-sm`,
+  square bottom, standing on the strip's bottom edge with no gap.
+- **Body:** `--bg-tertiary` fill and a 1 px `--border-strong` outline on
+  the left, top and right, with no bottom border.
+- **Hover:** `--bg-elevated` fill and `--text-primary` text. On Solarized,
+  `--text-secondary` on `--bg-elevated` is 4.22:1, which fails 4.5:1.
+- **The rail:** the strip's bottom edge is a 1 px `--border-strong` line,
+  drawn so that a child can cover it (an inset bottom shadow, not
+  `border-bottom`). It replaces the `--border` bottom border.
+- **The own entry** has the same shape. It keeps the tab's label and the
+  chevron (U2), stays pinned first and has no ×.
+- **The divider** after the own entry stays: 16 px, `--border-strong`,
+  aligned with the middle of the entries.
+
+### V2. The selected entry opens into the terminal
+- **Fill:** `--bg-primary`, the terminal's surface (`termBg` equals
+  `bgPrimary` in all nine presets).
+- **Bottom:** it covers the rail, so it opens into the terminal below. This
+  is how the active main tab joins its content.
+- **Accent:** a 2 px `--accent` bar along its **top edge** (an inset top
+  shadow, which follows the rounded corners), as a coloured main tab has.
+  It replaces the bottom underline.
+- **Text:** `--text-primary`, weight 500. The selection is still shown by
+  more than colour: weight, the open bottom and the bar.
+- **Focus ring:** keyboard focus is a 2 px `--accent` outline at offset
+  **−3 px**, inset, because the scroller clips anything outside the 26 px
+  entry. It was +1 px.
+
+### V3. "New" mark until first shown (arrival)
+- **Which entries.** A sub-terminal added **without being shown** is
+  marked new: `ade open` without `--focus`, `bin/work`, and a grandchild
+  opener. An add that shows the sub-terminal is never marked: `--focus`,
+  and New Sub-terminal.
+- **What clears it.** The mark stays until the sub-terminal is first
+  shown, by any route: click, Enter or Space, ⌘[ / ⌘], ⌘K, a toast, or
+  closing the entry.
+- **Not saved.** Restored entries already say "restored". The window only
+  needs to know, per view, whether the view has been shown since it was
+  added. Where that lives is the developer's choice; it is not part of the
+  session format.
+- **The mark** is the existing accent dot (`.tab-attention`). It sits in
+  the attention and activity slot before the name. While an entry is new,
+  its dot **takes that slot** over activity and attention, because the
+  first thing to know is that the sub-terminal exists. The agent dot still
+  shows before it.
+- **Tooltip:** an extra line, "New: not viewed yet".
+- **Roll-up to the main tab.** If any sub-terminal of a tab is new, and the
+  tab is not the active one, the main tab shows the accent dot with the
+  title "New sub-terminal: not viewed yet". This takes the slot over the
+  rolled-up activity and attention, as on the entry. On the active tab,
+  today's rule holds: the strip shows the dot instead. The count badge
+  stays neutral and never changes colour (unchanged).
+- **Story 3** (marks per view) brings the attention dot. A new entry and
+  attention use the same dot, so an entry never shows two.
+
+### V4. A stronger arrival flash, once, and seen when you arrive
+- **What it shows.** A new entry flashes: a `--accent-subtle` wash over
+  its `--bg-tertiary` body, a 1 px inset `--accent` ring and
+  `--text-primary` text. All three hold for the first 0.5 s and fade back
+  by **2 s**. It plays **once**.
+- **When it plays.**
+  - If the entry is added while its strip is on screen, the flash plays at
+    once.
+  - If the entry is added while its tab is not in sight, the flash plays
+    the first time that tab's strip is next shown. That is still once per
+    entry, and only while the entry is still new.
+- **Narrow windows and many entries.** A flashing entry is scrolled into
+  view in the strip (`inline: "nearest"`). The selection does not change.
+  The own entry stays pinned.
+- **`prefers-reduced-motion: reduce`:** no flash and no scroll animation.
+  The V3 dot shows the arrival on its own.
+- **The announcer stays as it is** ("Sub-terminal test opened in api",
+  merged within 1 s).
+
+### V5. When the strip shows (unchanged, checked)
+- The strip still shows only while the tab has at least one sub-terminal.
+- **One sub-terminal** was the owner's case. V1 and V2 make it read as two
+  tabs, "api" open into the terminal and "test" beside it, and V3 and V4
+  mark "test" as new. No extra hint is needed.
+- **A strip with only the own entry** is not shown: it would take a row
+  from every terminal tab for nothing, and U5 puts New Sub-terminal in the
+  context menu, not on a +.
+
+### V6. Contrast on every preset
+- ADE ships nine presets (`settingsStore.ts`), **all dark**; there is no
+  light theme to check today. Every colour above is a token, so a future
+  light preset inherits the design. Before shipping, re-run the table below
+  for that preset.
+- **The "exited" and "restored" labels** change from `#8B929E` to
+  `--text-secondary`. On the new `--bg-tertiary` body, `#8B929E` falls
+  below 4.5:1 in Nord (3.58), Monokai (3.98), Solarized (4.15), One Dark
+  (4.17) and Dracula (4.23).
+
+Minimum over the nine presets (WCAG ratio):
+
+| Pair | Min | Preset at min | Need |
+|---|---|---|---|
+| `--text-secondary` on `--bg-tertiary` (entry name) | 4.86 | Solarized | 4.5 |
+| `--text-primary` on `--bg-elevated` (hover) | 5.52 | One Dark | 4.5 |
+| `--text-primary` on `--bg-primary` (selected) | 6.57 | One Dark | 4.5 |
+| `--text-primary` on the flash wash | 4.68 | One Dark | 4.5 |
+| `--accent` on `--bg-primary` (top bar, focus ring) | 4.08 | Solarized | 3 |
+| `--accent` on `--bg-tertiary` (new dot, flash ring) | 3.53 | Solarized | 3 |
+
+The tab body against the strip is only 1.06–1.17:1, so the body is not what
+marks the tab out. The outline and the rail (1.26–1.62:1) do that. A tab's
+identity is its text, and its selected state is shown by the accent bar,
+the weight and the open bottom, never by fill alone.
+
+### Acceptance criteria (write the failing test first)
+
+**Order with story 3.** As of v0.23.0 the strip draws no per-view marks or
+status yet; story 3 ("Marks per view") brings them. V1, V2, V3 (without the
+activity precedence), V4 and V5 can be built now. AC 10 and 19 bind story 3,
+or this change if it lands after story 3.
+
+Tests run in vitest and jsdom like `SubTerminalStrip.test.tsx` and
+`TabBar.subTerminal.test.tsx`. "Style" checks read the strip's CSS rules or
+the computed inline style; jsdom does not paint.
+
+**V1 · tab shape**
+1. An entry's rule sets `height: 26px`, `background: var(--bg-tertiary)`,
+   `border: 1px solid var(--border-strong)`, `border-bottom: 0` and top-only
+   radius.
+2. The strip's rule has no `border-bottom`. Its bottom edge is
+   `box-shadow: inset 0 -1px 0 var(--border-strong)`, and the strip and
+   scroller align their items to the bottom (`align-items: flex-end`).
+3. Hover sets `background: var(--bg-elevated)` and
+   `color: var(--text-primary)`.
+4. The own entry has the same class and shape, the tab's label and the
+   chevron, and no close control (the existing tests still pass).
+
+**V2 · selected**
+5. `[aria-selected="true"]` sets `background: var(--bg-primary)`, a
+   `box-shadow` with `inset 0 2px 0 var(--accent)` and weight 500. The old
+   bottom `::after` underline rule is gone.
+6. The focus rule is `outline: 2px solid var(--accent)` with
+   `outline-offset: -3px`.
+
+**V3 · new mark**
+7. With the strip mounted, a sub-terminal added without showing it renders
+   a `.tab-attention` dot in its entry. The entry's accessible name contains
+   "new" (the dot has `role="img"` and `aria-label="new"`), and its `title`
+   contains "New: not viewed yet".
+8. Showing that view clears the dot and "new". Test each route: click,
+   `showView` (which ⌘[ / ⌘], ⌘K and toasts all use) and Enter on the
+   focused entry. Showing another view does not clear it.
+9. A sub-terminal added and shown (`--focus`, New Sub-terminal) never has
+   the dot.
+10. A view that is both new and has activity shows the dot and no
+    `.activity-pulse`. The agent dot still renders before it.
+11. In `TabBar`, an inactive terminal tab with a new sub-terminal shows
+    `.tab-attention` with the title "New sub-terminal: not viewed yet", even
+    while it has activity. The active tab does not show it. The count badge's
+    inline style is unchanged.
+12. The new state is not written to the session (a save then load test:
+    restored views are not new).
+
+**V4 · flash**
+13. A new entry added while the strip is mounted gets `data-flash` and the
+    `subterm-arrive` animation, 2 s, played once. After `animationend` it
+    loses both, and the V3 dot remains.
+14. A new entry added while its tab is not active does not flash then.
+    When that tab becomes active, the entry flashes once. Making the tab
+    active again later does not flash it a second time.
+15. Under `prefers-reduced-motion: reduce` (`matchMedia` mocked) no entry
+    gets `data-flash`, and the V3 dot still renders.
+16. A flashing entry gets `scrollIntoView({ inline: "nearest" })`, and the
+    selection (`shownView`) is unchanged.
+17. The announcer's existing tests pass unchanged.
+
+**V5 · when the strip shows**
+18. The existing tests still pass: no strip with zero sub-terminals; the
+    strip appears with the first and goes with the last.
+
+**V6 · contrast**
+19. The "exited" and "restored" labels use `var(--text-secondary)`.
+20. A table test over `themePresets` checks the six minimum ratios above,
+    so that a new or edited preset that breaks one fails the build.
+
+**Keyboard (no change, regression only)**
+21. ⌘[ / ⌘] still move views and stop at the ends. ←/→, Home, End, Enter,
+    Space and Delete in the strip behave as before (the existing tests
+    pass).
+
 
 ## The model in one paragraph
 
@@ -65,29 +277,33 @@ for UI, the terminal font in the content.
 
 | Token | Value | Use here |
 |---|---|---|
-| `--bg-primary` | `#0A0B0D` | strip background (continues the active main tab into the content) |
-| `--bg-elevated` | `#1B1E23` | selected entry |
-| `--bg-tertiary` | `#15171B` | entry hover |
+| `--bg-primary` | `#0A0B0D` | strip background (continues the active main tab into the content); selected entry (V2) |
+| `--bg-elevated` | `#1B1E23` | entry hover (V1) |
+| `--bg-tertiary` | `#15171B` | entry body (V1) |
 | `--bg-surface` | `#262A31` | count badge on the main tab |
 | `--text-primary` | `#E8EAED` | selected entry name |
 | `--text-secondary` | `#9BA1AC` | other entry names, count badge text |
-| `#8B929E` | | "exited" and "restored" labels (`--text-muted` `#5A616D` fails 3:1) |
+| `--text-secondary` | | "exited" and "restored" labels (V6; was `#8B929E`, which fails on the tab body) |
 | `--yellow` | `#D9A441` | "not typed" mark and notice |
-| `--accent` | `#7C8FFF` | selected entry's 2 px underline, "new" flash, focus ring |
-| `--border` | `rgba(255,255,255,.055)` | strip bottom border, divider after the tab's own entry |
+| `--accent` | `#7C8FFF` | selected entry's 2 px top bar (V2), "new" dot and flash ring (V3, V4), focus ring |
+| `--border-strong` | `rgba(255,255,255,.10)` | the rail along the strip's bottom, entry outlines, divider (V1) |
 
-- **Strip:** 30 px high, `--bg-primary`, 1 px `--border` bottom, 12 px side
-  padding.
-- **Entry:** 24 px high, 0 10 px padding, `--radius-sm`, 12 px
+- **Strip:** 30 px high, `--bg-primary`, a 1 px `--border-strong` rail at
+  the bottom (V1), 12 px side padding.
+- **Entry:** a tab (V1): 26 px high on the rail, 0 10 px padding, top
+  corners `--radius-sm`, `--bg-tertiary` body with a `--border-strong`
+  outline, 12 px
   (`--text-sm`) Inter, 6 px gap between marks and name. Name truncates at
   160 px with an ellipsis; the full name and folder are in the tooltip
   (`"name — /full/cwd"`), as on main tabs. A tooltip never shows the command.
-- **Selected entry:** `--bg-elevated`, `--text-primary`, weight 500, a 2 px
-  `--accent` bar along its bottom edge. Not colour alone: weight and the bar.
-- **Keyboard focus** on an entry: 2 px `--accent` outline, offset 1 px.
+- **Selected entry (V2):** `--bg-primary`, open at the bottom into the
+  terminal, `--text-primary`, weight 500, a 2 px `--accent` bar along its
+  top edge. Not colour alone: weight, the open bottom and the bar.
+- **Keyboard focus** on an entry: 2 px `--accent` outline, offset −3 px
+  (V2).
 - Marks reuse the existing classes unchanged: `.agent-dot`, `.tab-attention`,
-  `.activity-pulse`. No new animation except the one-shot "new" flash and the
-  starting spinner.
+  `.activity-pulse`. No new animation except the one-shot "new" flash (V4) and
+  the starting spinner.
 
 ## When the strip shows
 
@@ -131,6 +347,7 @@ can both be "npm"; agent instructions say to pass `--name` ("dev server",
 |---|---|---|
 | Agent dot, red with halo | an agent in this view needs you | `AgentDot`, per view |
 | Agent dot, blue | an agent in this view is waiting for you | same |
+| Accent dot (`.tab-attention`) | **new**: added in the background, not shown yet (V3; takes the slot over activity) | the window, per view, not saved |
 | Accent dot (`.tab-attention`) | output finished while this view was not in sight | attention, per view |
 | Green pulse | producing output, view not in sight | activity over the view's panes, from creation |
 
@@ -153,8 +370,8 @@ it is a full terminal like any other.
 | Starting | 10 px spinner, `--text-secondary`, title "Starting: typing the command" | **only when a command was given.** Clears when the window learns the typed result (typed or not typed), at most about 10 s after the open. Opened with no command (or New Sub-terminal): no spinner, running at once. |
 | Running | none | normal |
 | Command not typed | yellow `!` mark, title "Command not typed" | normal; a notice in the view (below) |
-| Exited | "exited" in `#8B929E` | name at 60% opacity |
-| Restored | "restored" in `#8B929E`, title "Restored after restart: a new shell in <folder>. <name> was not run again." | normal |
+| Exited | "exited" in `--text-secondary` (V6) | name at 60% opacity |
+| Restored | "restored" in `--text-secondary` (V6), title "Restored after restart: a new shell in <folder>. <name> was not run again." | normal |
 
 - **Exited** is the shell ending (`exit`, an `exec`'d program ending, a
   broken rc file). No exit code is shown. It is not the typed command's
@@ -170,8 +387,11 @@ it is a full terminal like any other.
 **Close button:** 18 px ×, shown on hover and always on the selected entry,
 as main tabs. `aria-label="Close <name>"`.
 
-**The "new" flash:** an entry added in the background flashes its background
-`--accent-subtle` once (1.2 s fade). None under `prefers-reduced-motion`.
+**The "new" flash and mark:** see V3 and V4. An entry added in the
+background flashes once (2 s, accent wash and ring). If its tab was not in
+sight, the flash plays when the tab is next shown. The entry keeps an accent
+"new" dot until it is first shown. Under `prefers-reduced-motion` there is
+no flash, only the dot.
 
 ## The count on the main tab
 
@@ -325,7 +545,8 @@ Checked against `src/lib/shortcuts.ts`: ⌘[ and ⌘] (no Shift) are unbound;
   within 1 s are merged: "3 sub-terminals opened in api". A `--focus` add says
   nothing extra (focus moves, and that is announced). A not-typed result says
   "npm: command not typed" (the name, never the command).
-- Status words ("exited", "restored") are in the entry's accessible name, and
+- Status words ("exited", "restored") and "new" (V3) are in the entry's
+  accessible name, and
   the spinner and `!` mark have `aria-label`s ("starting", "command not
   typed").
 
@@ -393,7 +614,8 @@ the error to the caller. A shell that dies at once (broken rc file) shows as
 - Same behaviour as `.tabbar-strip`: entries keep their size and the strip
   scrolls horizontally, scrollbar hidden; the tab's own entry stays pinned.
 - A 24 px fade at a scrolled edge shows there is more; the selected entry is
-  scrolled into view whenever it changes, as main tabs do.
+  scrolled into view whenever it changes, as main tabs do. A background
+  arrival is scrolled into view too, without changing the selection (V4).
 - Below about 560 px window width names truncate at 96 px; marks, status and
   the selected entry's × never collapse.
 - Many: the plan's cap is 32 live opened terminals. ⌘K finds one by name. No
