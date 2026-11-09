@@ -27,6 +27,9 @@ export interface FakeEditor {
   restoreViewState(vs: ViewState): void;
   getPosition(): Position;
   setPosition(p: Position): void;
+  revealLineInCenter(line: number): void;
+  layout(): void;
+  getModel(): { getLineCount(): number };
   setScrollTop(n: number): void;
   getScrollTop(): number;
   focus(): void;
@@ -34,6 +37,9 @@ export interface FakeEditor {
   /** Counts, for assertions that read better than filtering `calls`. */
   focusCount: number;
   actions: unknown[];
+  /** Arguments of every setPosition and revealLineInCenter call. */
+  positions: Position[];
+  revealed: number[];
 }
 
 export function makeFakeEditor(initial: string): FakeEditor {
@@ -44,6 +50,8 @@ export function makeFakeEditor(initial: string): FakeEditor {
     calls: [],
     focusCount: 0,
     actions: [],
+    positions: [],
+    revealed: [],
     getValue() { return ed.value; },
     setValue(v) {
       ed.calls.push("setValue");
@@ -62,7 +70,10 @@ export function makeFakeEditor(initial: string): FakeEditor {
       ed.position = { ...vs.position };
     },
     getPosition() { return { ...ed.position }; },
-    setPosition(p) { ed.calls.push("setPosition"); ed.position = { ...p }; },
+    setPosition(p) { ed.calls.push("setPosition"); ed.positions.push({ ...p }); ed.position = { ...p }; },
+    revealLineInCenter(line) { ed.calls.push("revealLineInCenter"); ed.revealed.push(line); },
+    layout() { ed.calls.push("layout"); },
+    getModel() { return { getLineCount: () => ed.value.split("\n").length }; },
     setScrollTop(n) { ed.scrollTop = n; },
     getScrollTop() { return ed.scrollTop; },
     focus() { ed.calls.push("focus"); ed.focusCount += 1; },

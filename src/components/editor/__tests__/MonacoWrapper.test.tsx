@@ -141,3 +141,96 @@ describe("MonacoWrapper read-only", () => {
     expect(stub.editors[0].focusCount).toBe(1);
   });
 });
+
+describe("MonacoWrapper reveal", () => {
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
+
+  it("reveals the target line once per click", () => {
+    const onRevealed = vi.fn();
+    const text = lines(100);
+    const { rerender } = render(
+      <MonacoWrapper filePath="/r/a.ts" content={text} readOnly autoFocus={false} reveal={{ line: 42, nonce: 1 }} onRevealed={onRevealed} />,
+    );
+    const ed = stub.editors[0];
+    expect(ed.positions).toEqual([{ lineNumber: 42, column: 1 }]);
+    expect(ed.revealed).toEqual([42]);
+    expect(onRevealed.mock.calls).toEqual([[1]]);
+
+    // A reload with the same nonce: the place is kept, nothing re-revealed.
+    ed.calls = [];
+    rerender(
+      <MonacoWrapper filePath="/r/a.ts" content={text + "\nmore"} readOnly autoFocus={false} reveal={{ line: 42, nonce: 1 }} onRevealed={onRevealed} />,
+    );
+    expect(ed.calls).toEqual(["saveViewState", "setValue", "restoreViewState"]);
+    expect(ed.position).toEqual({ lineNumber: 42, column: 1 });
+    expect(onRevealed).toHaveBeenCalledTimes(1);
+
+    // The same line clicked again is a new nonce: revealed again.
+    rerender(
+      <MonacoWrapper filePath="/r/a.ts" content={text + "\nmore"} readOnly autoFocus={false} reveal={{ line: 42, nonce: 2 }} onRevealed={onRevealed} />,
+    );
+    expect(ed.positions).toEqual([{ lineNumber: 42, column: 1 }, { lineNumber: 42, column: 1 }]);
+    expect(ed.revealed).toEqual([42, 42]);
+    expect(onRevealed.mock.calls).toEqual([[1], [2]]);
+
+    // With a column; and the reveal going away changes nothing.
+    rerender(
+      <MonacoWrapper filePath="/r/a.ts" content={text + "\nmore"} readOnly autoFocus={false} reveal={{ line: 10, col: 5, nonce: 3 }} onRevealed={onRevealed} />,
+    );
+    expect(ed.positions[2]).toEqual({ lineNumber: 10, column: 5 });
+    rerender(<MonacoWrapper filePath="/r/a.ts" content={text + "\nmore"} readOnly autoFocus={false} onRevealed={onRevealed} />);
+    expect(ed.revealed).toEqual([42, 42, 10]);
+    // A reveal never takes focus.
+    expect(ed.focusCount).toBe(0);
+  });
+
+  it("a reveal and a reload in the same render: content first, then the line, and the next reload keeps it", () => {
+    const { rerender } = render(<MonacoWrapper filePath="/r/a.ts" content={lines(5)} readOnly autoFocus={false} />);
+    const ed = stub.editors[0];
+    ed.calls = [];
+    rerender(<MonacoWrapper filePath="/r/a.ts" content={lines(300)} readOnly autoFocus={false} reveal={{ line: 300, nonce: 7 }} />);
+    expect(ed.calls).toEqual(["saveViewState", "setValue", "restoreViewState", "layout", "setPosition", "revealLineInCenter"]);
+    expect(ed.position).toEqual({ lineNumber: 300, column: 1 });
+    rerender(<MonacoWrapper filePath="/r/a.ts" content={lines(301)} readOnly autoFocus={false} reveal={{ line: 300, nonce: 7 }} />);
+    expect(ed.position).toEqual({ lineNumber: 300, column: 1 });
+    expect(ed.revealed).toEqual([300]);
+  });
+
+  it("a reveal waits for an asynchronous mount and lands after the latest content", async () => {
+    stub.asyncMount = true;
+    const onRevealed = vi.fn();
+    const { rerender } = render(
+      <MonacoWrapper filePath="/r/a.ts" content={lines(5)} readOnly autoFocus={false} reveal={{ line: 250, nonce: 4 }} onRevealed={onRevealed} />,
+    );
+    rerender(
+      <MonacoWrapper filePath="/r/a.ts" content={lines(300)} readOnly autoFocus={false} reveal={{ line: 250, nonce: 4 }} onRevealed={onRevealed} />,
+    );
+    expect(onRevealed).not.toHaveBeenCalled();
+    await tick();
+    const ed = stub.editors[0];
+    expect(ed.calls).toEqual(["saveViewState", "setValue", "restoreViewState", "layout", "setPosition", "revealLineInCenter"]);
+    // Not clamped to the first content's 5 lines: it waited for the 300.
+    expect(ed.positions).toEqual([{ lineNumber: 250, column: 1 }]);
+    expect(onRevealed.mock.calls).toEqual([[4]]);
+    expect(ed.focusCount).toBe(0);
+  });
+
+  it("lays the editor out before revealing, so the line is centered in the real viewport", () => {
+    // @monaco-editor/react creates the editor in a display:none container, so
+    // at onMount its layout is a few pixels tall; centering then puts the line
+    // on the top row. layout() first measures the real size.
+    render(<MonacoWrapper filePath="/r/a.ts" content={lines(400)} readOnly autoFocus={false} reveal={{ line: 300, nonce: 1 }} />);
+    const ed = stub.editors[0];
+    expect(ed.calls).toEqual(["layout", "setPosition", "revealLineInCenter"]);
+  });
+
+  it("clamps a line past the end", () => {
+    const { rerender } = render(<MonacoWrapper filePath="/r/a.ts" content={lines(3)} readOnly autoFocus={false} reveal={{ line: 50, nonce: 1 }} />);
+    const ed = stub.editors[0];
+    expect(ed.positions).toEqual([{ lineNumber: 3, column: 1 }]);
+    expect(ed.revealed).toEqual([3]);
+    rerender(<MonacoWrapper filePath="/r/a.ts" content={lines(3)} readOnly autoFocus={false} reveal={{ line: 0, col: 0, nonce: 2 }} />);
+    expect(ed.positions[1]).toEqual({ lineNumber: 1, column: 1 });
+    expect(ed.revealed).toEqual([3, 1]);
+  });
+});

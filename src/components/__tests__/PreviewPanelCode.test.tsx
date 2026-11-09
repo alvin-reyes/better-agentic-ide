@@ -25,6 +25,7 @@ vi.mock("../viewer/BinaryView", () => ({
 import { invoke } from "@tauri-apps/api/core";
 import { stub } from "../editor/__tests__/monacoStub";
 import PreviewPanel from "../PreviewPanel";
+import CodeView from "../viewer/CodeView";
 import { useTabStore } from "../../stores/tabStore";
 
 const MiB = 1024 * 1024;
@@ -228,3 +229,179 @@ describe("code in the side panel", () => {
     await waitFor(() => expect(container.querySelector("h1")?.textContent).toBe("v2"));
   });
 });
+
+describe("go to line from path:line", () => {
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
+  const activeTab = () => {
+    const s = useTabStore.getState();
+    return s.tabs.find((t) => t.id === s.activeTabId)!;
+  };
+  function openAt(path: string, line: number, col?: number) {
+    act(() => {
+      const { activeTabId, setPreviewPath } = useTabStore.getState();
+      setPreviewPath(activeTabId, path, col === undefined ? { line } : { line, col });
+    });
+  }
+
+  it("a path:line link to another file lands in that file", async () => {
+    const b = deferred<ReturnType<typeof head>>();
+    let bVersion = 0;
+    h.handlers.read_text_head = ({ path }) => {
+      if (path === "/r/A.ts") return Promise.resolve(head(lines(500)));
+      bVersion += 1;
+      return bVersion === 1 ? b.promise : Promise.resolve(head(lines(401)));
+    };
+    h.handlers.watch_directory = async () => 7;
+    stub.asyncMount = true;
+    openInPanel("/r/A.ts");
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await waitFor(() => expect(stub.editors).toHaveLength(1));
+    const a = stub.editors[0];
+    expect(a.getValue()).toBe(lines(500));
+
+    openAt("/r/B.ts", 300);
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    // B's text hasn't arrived: nobody reveals, and A never does.
+    expect(stub.editors).toHaveLength(1);
+    expect(activeTab().previewReveal).toMatchObject({ path: "/r/B.ts", line: 300 });
+
+    await act(async () => { b.resolve(head(lines(400))); });
+    await waitFor(() => expect(stub.editors).toHaveLength(2));
+    const bEd = stub.editors[1];
+    expect(bEd.getValue()).toBe(lines(400));
+    expect(bEd.positions).toEqual([{ lineNumber: 300, column: 1 }]);
+    expect(bEd.revealed).toEqual([300]);
+    expect(a.calls).not.toContain("setPosition");
+    expect(a.calls).not.toContain("revealLineInCenter");
+    // Applied, so cleared on the tab; the panel file stays.
+    expect(activeTab().previewReveal).toBeFalsy();
+    expect(activeTab().previewPath).toBe("/r/B.ts");
+    // A reveal never takes focus.
+    expect(bEd.focusCount).toBe(0);
+
+    // A live reload of B keeps the place and does not reveal again.
+    const watch = h.channels[h.channels.length - 1];
+    await act(async () => { watch.onmessage?.({ type: "changed", path: "/r/B.ts" }); });
+    await waitFor(() => expect(bEd.getValue()).toBe(lines(401)));
+    expect(bEd.revealed).toEqual([300]);
+    expect(bEd.position).toEqual({ lineNumber: 300, column: 1 });
+
+    // Clicking another line of the same file moves there, in the same editor.
+    openAt("/r/B.ts", 12, 4);
+    await waitFor(() => expect(bEd.revealed).toEqual([300, 12]));
+    expect(bEd.positions[1]).toEqual({ lineNumber: 12, column: 4 });
+    expect(stub.editors).toHaveLength(2);
+  });
+
+  it("CodeView hands its editor only a reveal for its own file", () => {
+    const onRevealed = vi.fn();
+    const props = { path: "/r/A.ts", head: head(lines(500)), focusOnMount: false, onOpenInTab: vi.fn(), onRevealed };
+    const { rerender } = render(<CodeView {...props} reveal={{ path: "/r/B.ts", line: 300, nonce: 1 }} />);
+    const ed = stub.editors[0];
+    expect(ed.calls).not.toContain("setPosition");
+    expect(ed.calls).not.toContain("revealLineInCenter");
+    expect(onRevealed).not.toHaveBeenCalled();
+    rerender(<CodeView {...props} reveal={{ path: "/r/A.ts", line: 300, nonce: 2 }} />);
+    expect(ed.positions).toEqual([{ lineNumber: 300, column: 1 }]);
+    expect(onRevealed.mock.calls).toEqual([[2]]);
+  });
+
+  it("a line past the truncated part says so", async () => {
+    h.handlers.read_text_head = async () => head(lines(1000), { size: 48 * MiB, truncated: true });
+    openAt("/r/big.log", 5000);
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    statusWith("Line 5000 is past the part shown (first 2.0 MB)");
+    const ed = stub.editors[0];
+    expect(ed.positions).toEqual([{ lineNumber: 1000, column: 1 }]);
+    expect(ed.revealed).toEqual([1000]);
+    // Still said after the reveal was applied and cleared.
+    expect(activeTab().previewReveal).toBeFalsy();
+    expect(screen.getByText("Line 5000 is past the part shown (first 2.0 MB)", { exact: false })).toBeTruthy();
+
+    // A line inside the part shown: no such message.
+    openAt("/r/big.log", 10);
+    await waitFor(() => expect(ed.revealed).toEqual([1000, 10]));
+    expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
+  });
+
+  it("the last shown line of a truncated file is not past it; the next one is", async () => {
+    h.handlers.read_text_head = async () => head(lines(1000), { size: 48 * MiB, truncated: true });
+    openAt("/r/big.log", 1000);
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    expect(stub.editors[0].revealed).toEqual([1000]);
+    expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
+    openAt("/r/big.log", 1001);
+    await waitFor(() => expect(stub.editors[0].revealed).toEqual([1000, 1000]));
+    statusWith("Line 1001 is past the part shown (first 2.0 MB)");
+  });
+
+  it("a whole file that grows past 2 MiB does not claim an earlier line is past the part shown", async () => {
+    let big = false;
+    h.handlers.read_text_head = async () => (big ? head(lines(40000), { size: 3 * MiB, truncated: true }) : head(lines(1000)));
+    h.handlers.watch_directory = async () => 7;
+    openAt("/r/app.log", 5000);
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    expect(stub.editors[0].positions).toEqual([{ lineNumber: 1000, column: 1 }]);
+    big = true;
+    const watch = h.channels[h.channels.length - 1];
+    await act(async () => { watch.onmessage?.({ type: "changed", path: "/r/app.log" }); });
+    await waitFor(() => expect(stub.editors[0].getValue()).toBe(lines(40000)));
+    expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
+  });
+
+  it("a line past the end of a whole file goes to the last line without a message", async () => {
+    h.handlers.read_text_head = async () => head(lines(20));
+    openAt("/r/small.ts", 999);
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    expect(stub.editors[0].positions).toEqual([{ lineNumber: 20, column: 1 }]);
+    expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
+  });
+
+  it("rendered views ignore the line", async () => {
+    h.handlers.read_file = async ({ path }) => (String(path).endsWith(".md") ? "# Hello" : "<p>page</p>");
+    const { container } = render(<PreviewPanel onClose={vi.fn()} />);
+    openAt("/r/plan.md", 10);
+    await waitFor(() => expect(container.querySelector("h1")?.textContent).toBe("Hello"));
+    openAt("/r/page.html", 10, 2);
+    await waitFor(() => expect(container.querySelector("iframe")?.getAttribute("srcdoc")).toBe("<p>page</p>"));
+    openAt("/r/doc.pdf", 3);
+    expect((await screen.findByTestId("binary-view")).getAttribute("data-path")).toBe("/r/doc.pdf");
+    expect(screen.queryByTestId("monaco-stub")).toBeNull();
+    expect(stub.editors).toHaveLength(0);
+    expect(calls("read_text_head")).toEqual([]);
+  });
+
+  it("a remount does not re-apply an old reveal", async () => {
+    h.handlers.read_text_head = async () => head(lines(100));
+    openAt("/r/A.ts", 42);
+    const tabA = useTabStore.getState().activeTabId;
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await waitFor(() => expect(stub.editors[0]?.revealed).toEqual([42]));
+    expect(activeTab().previewReveal).toBeFalsy();
+
+    // Tab B (no panel file), then back to A: A's editor is made again.
+    act(() => { useTabStore.getState().addTab(); });
+    await waitFor(() => expect(screen.queryByTestId("monaco-stub")).toBeNull());
+    act(() => { useTabStore.getState().setActiveTab(tabA); });
+    await waitFor(() => expect(stub.editors).toHaveLength(2));
+    expect(stub.editors[1].getValue()).toBe(lines(100));
+    expect(stub.editors[1].calls).not.toContain("setPosition");
+    expect(stub.editors[1].revealed).toEqual([]);
+  });
+
+  it("closing and reopening the panel does not jump again", async () => {
+    h.handlers.read_text_head = async () => head(lines(100));
+    openAt("/r/A.ts", 42);
+    const first = render(<PreviewPanel onClose={vi.fn()} />);
+    await waitFor(() => expect(stub.editors[0]?.revealed).toEqual([42]));
+    first.unmount();
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await waitFor(() => expect(stub.editors).toHaveLength(2));
+    expect(stub.editors[1].revealed).toEqual([]);
+  });
+});
+

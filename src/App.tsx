@@ -43,7 +43,7 @@ import { useTabStore, saveSession, loadSession, shownView } from "./stores/tabSt
 import { tabFolderPtyId } from "./lib/tabDisplay";
 import { useOwnFolderCwd } from "./hooks/useOwnFolderCwd";
 import { flushNow } from "./lib/persistence";
-import { listenForFileOpens } from "./lib/openFile";
+import { handlePreviewOpen, listenForFileOpens } from "./lib/openFile";
 import { syncNow } from "./lib/sync";
 import { useSettingsStore, applyThemeToDOM } from "./stores/settingsStore";
 import { useFileBrowserStore } from "./stores/fileBrowserStore";
@@ -149,12 +149,9 @@ export default function App() {
   // follows it.
   useEffect(() => {
     const handler = (e: Event) => {
-      const path = (e as CustomEvent).detail?.path;
-      if (path) {
-        const { activeTabId, setPreviewPath } = useTabStore.getState();
-        setPreviewPath(activeTabId, path);
-      }
-      openPreviewForFile();
+      const { activeTabId, setPreviewPath } = useTabStore.getState();
+      // A path:line link also asks the panel to land on that line.
+      handlePreviewOpen((e as CustomEvent).detail, { activeTabId, setPreviewPath, openPanel: openPreviewForFile });
     };
     window.addEventListener("open-preview", handler);
     return () => window.removeEventListener("open-preview", handler);
