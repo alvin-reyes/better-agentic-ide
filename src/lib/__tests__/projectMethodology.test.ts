@@ -16,6 +16,15 @@ describe("ADE methodology", () => {
     }
   });
 
+  it("sends 'what should we improve next' to the Product Manager", () => {
+    // Claude Code delegates by the description alone, so the evaluation the
+    // vendored definition describes is reachable only if the description says so.
+    const pm = ROLES.find((r) => r.name === "product-manager")!;
+    expect(pm.description).toMatch(/evaluate what the product should improve next/);
+    expect(pm.body).toContain("## Evaluating improvements");
+    expect(pm.body).toContain("docs/improvements.md");
+  });
+
   it("writes the rules, context store, decision log, journal, knowledge store, CLAUDE.md and llms.txt", () => {
     const paths = methodologyFiles("demo").map((f) => f.path);
     expect(paths).toEqual(expect.arrayContaining([

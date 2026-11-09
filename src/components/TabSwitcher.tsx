@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes } from "../stores/tabStore";
 import { usePaneCwd, baseName } from "../stores/paneMetaStore";
 import { isPaneActive } from "../hooks/useTerminal";
 import { matchTabs, tabCwd, tabLabel, tabProject } from "../lib/tabDisplay";
@@ -28,7 +28,7 @@ export default function TabSwitcher({ onClose }: { onClose: () => void }) {
           label: tabLabel(t, cwd),
           cwd,
           project: tabProject(t, cwds, projects),
-          busy: findAllPanes(t.root).some((p) => isPaneActive(p.id)),
+          busy: allTabPanes(t).some((p) => isPaneActive(p.id)),
         };
       }),
     [tabs, cwds, projects],
