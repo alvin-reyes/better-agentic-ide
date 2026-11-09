@@ -5,7 +5,7 @@ import { routeTask, isTaskDescription } from "../data/taskRouter";
 import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
-import { runInNewTabPane, writePty } from "../lib/terminalCommands";
+import { runInNewTabPane, typeWhenReady } from "../lib/terminalCommands";
 import { paneBusy } from "../hooks/useTerminal";
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { getRole } from "../data/roles";
@@ -219,7 +219,30 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
         setLaunchError(`This terminal is running ${busy}. Choose New tab.`);
         return;
       }
-      await writePty(ptyId, cmd + "\r").catch(() => {});
+      // Once its shell's line editor is up: a tab still reading its rc files
+      // can be picked, and a line typed then can be cut. Asked once more just
+      // before typing, since a job can come to the front during that wait (an
+      // rc ending in `tmux attach`). If the terminal changed or went busy by
+      // then, or the write fails, nothing is typed and no session starts; the
+      // picker stays open and says so, for another try.
+      let busyThen: string | null = null;
+      const free = async () => {
+        busyThen = here ? await paneBusy(here.id) : null;
+        return busyThen === null;
+      };
+      let typed: boolean;
+      try {
+        typed = await typeWhenReady(ptyId, cmd, () => getActivePtyId() === ptyId, free);
+      } catch {
+        setLaunchError("The agent could not be typed into this terminal; nothing was started.");
+        return;
+      }
+      if (!typed) {
+        setLaunchError(busyThen
+          ? `This terminal is running ${busyThen}. Choose New tab.`
+          : "The terminal changed before the agent was typed; nothing was started.");
+        return;
+      }
       paneId = getActivePane()?.id ?? null;
     }
 

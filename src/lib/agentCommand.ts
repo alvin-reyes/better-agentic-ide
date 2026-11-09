@@ -1,9 +1,20 @@
 import { modelTagFor } from "./agentComposition";
+import type { LaunchRules } from "./launchRules";
 
 export type Provider = "claude" | "codex" | "deepseek" | "ollama";
 
 export interface LaunchOptions {
+  /**
+   * Permission rules every claude and deepseek launch carries, from
+   * `loadLaunchRules()`. Required, so no launch path can leave them out.
+   */
+  rules: LaunchRules;
   continuous?: boolean;
+  /**
+   * A `-p` session, which can't show a prompt: only the Orchestrator sets it.
+   * It picks the guard's headless command; with no guard it changes nothing.
+   */
+  headless?: boolean;
   ollamaModel?: string;
   /** Identifies the derived Ollama model, so a role keeps the same one. */
   roleId?: string;
@@ -45,11 +56,36 @@ export const DEEPSEEK_MODEL = "deepseek-v4-pro";
 export const UNTYPEABLE = /[^\x20-\x7e]/;
 const UNTYPEABLE_RUNS = /[^\x20-\x7e]+/g;
 
-/** The claude invocation both the claude and deepseek providers launch. */
+/**
+ * The one `--settings` value of a launch. `permissions` always. Only with a
+ * guard, `disableAllHooks: false` and the guard's hook together: a settings
+ * file's `disableAllHooks: true` would otherwise turn the guard off, and
+ * without a guard the user's hook settings stand untouched.
+ */
+function launchSettings(opts: LaunchOptions): Record<string, unknown> {
+  const { ask, guard } = opts.rules;
+  if (!guard) return { permissions: { ask } };
+  const command = opts.headless ? guard.headless : guard.interactive;
+  return {
+    permissions: { ask },
+    disableAllHooks: false,
+    hooks: { PreToolUse: [{ matcher: "Bash|Monitor", hooks: [{ type: "command", command, timeout: 5, onFailure: "block" }] }] },
+  };
+}
+
+/**
+ * The claude invocation both the claude and deepseek providers launch.
+ *
+ * `--settings` adds the ask rules to the session's own permission lists, on
+ * top of the user's and the project's files, in any folder and any mode:
+ * Claude Code asks for a tool an ask rule matches even when permissions are
+ * skipped, and the session cannot edit its own command line.
+ */
 function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
   const flags = opts.continuous ? " --dangerously-skip-permissions" : "";
+  const settings = ` --settings ${shellQuote(JSON.stringify(launchSettings(opts)))}`;
   const task = opts.task ? ` ${shellQuote(opts.task.replace(UNTYPEABLE_RUNS, " "))}` : "";
-  return `claude${flags} --append-system-prompt-file ${quotedPath}${task}`;
+  return `claude${flags}${settings} --append-system-prompt-file ${quotedPath}${task}`;
 }
 
 /**
@@ -68,7 +104,7 @@ function claudeCommand(quotedPath: string, opts: LaunchOptions): string {
 export function buildLaunchCommand(
   provider: Provider,
   rolePath: string,
-  opts: LaunchOptions = {}
+  opts: LaunchOptions
 ): LaunchResult {
   const path = shellQuote(rolePath);
 
@@ -146,6 +182,13 @@ export function buildLaunchCommand(
 }
 
 /**
+ * What the probes below build with. They only ask whether a command comes
+ * back and never launch it, so they need no real rules. Not exported, so no
+ * caller that launches can borrow it.
+ */
+const PROBE_RULES: LaunchRules = { ask: [], continuousDeny: [], guard: null };
+
+/**
  * Whether a provider has a verified role-delivery mechanism.
  *
  * Derived from `buildLaunchCommand` rather than kept as a second list, so the
@@ -153,7 +196,7 @@ export function buildLaunchCommand(
  * does. The path argument is irrelevant to the outcome.
  */
 export function supportsRoleDelivery(provider: Provider): boolean {
-  return buildLaunchCommand(provider, "/dev/null").kind === "command";
+  return buildLaunchCommand(provider, "/dev/null", { rules: PROBE_RULES }).kind === "command";
 }
 
 /**
@@ -162,6 +205,6 @@ export function supportsRoleDelivery(provider: Provider): boolean {
  * board's disabled Dispatch cannot drift from what launching does.
  */
 export function taskUnsupportedReason(provider: Provider): string | null {
-  const r = buildLaunchCommand(provider, "/dev/null", { task: "x" });
+  const r = buildLaunchCommand(provider, "/dev/null", { rules: PROBE_RULES, task: "x" });
   return r.kind === "unsupported" ? r.reason : null;
 }

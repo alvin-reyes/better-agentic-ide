@@ -43,7 +43,7 @@ ADE is a desktop IDE for macOS and Linux built around **Claude Code**, with Code
 - **Prompt scratchpad**: draft long prompts under every terminal with prompt tips and de-slop, send with one key, chain steps and reuse from history. Drafts survive crashes.
 - **Tokens & cost**: spend at API prices, cache savings and context meters, plus one-click token savers (compact paste, context guard, context diet).
 - **Anti-slop**: the ADE plugin for Claude Code (anti-slop skill, a slop check before Claude finishes, `/ade:deslop`, Web3/Go/Rust sub-agents and architect skills), plus a slop check on your uncommitted changes.
-- **MCP library & Secrets vault**: 15 curated MCP servers added to `.mcp.json` in one click, with `${NAME}` references to secrets kept in your OS keychain and never synced.
+- **MCP library & Secrets vault**: 16 curated MCP servers added to `.mcp.json` in one click, with `${NAME}` references to secrets kept in your OS keychain and never synced.
 
 ### Project setup
 

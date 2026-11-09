@@ -2,8 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import OrchestratorTab from "../OrchestratorTab";
 import { useOrchestratorStore } from "../../stores/orchestratorStore";
-import { useTabStore } from "../../stores/tabStore";
+import { useTabStore, allTabPanes } from "../../stores/tabStore";
 import { destroyInstance } from "../../hooks/useTerminal";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { __resetLaunchRulesForTests } from "../../lib/launchRules";
+
+/** MCP_ASK as Rust defines it, so the test passes on exactly what the app would. */
+const MCP_ASK = (() => {
+  const src = readFileSync(resolve(__dirname, "../../../src-tauri/src/orgo_rules.rs"), "utf8");
+  const block = src.slice(src.indexOf("pub const MCP_ASK"), src.indexOf("];", src.indexOf("pub const MCP_ASK")));
+  return [...block.matchAll(/"(mcp__[^"]+)"/g)].map((m) => m[1]);
+})();
+const SETTINGS = `--settings '${JSON.stringify({ permissions: { ask: MCP_ASK } })}'`;
 
 // OrchestratorTab imports @tauri-apps/api/core at module scope, and dispatch
 // drives it for real. Mock it the same way AgentPicker.test.tsx does, and
@@ -12,11 +23,33 @@ const tauri = vi.hoisted(() => ({
   ptyWrites: [] as { id: number; text: string }[],
   fileWrites: [] as { path: string; content: string }[],
   failFileWrite: false,
+  failRules: false,
+  ask: [] as string[],
+  guard: null as unknown,
+  /** What pty_line_editor_ready answers next; null (can't know) once empty, or false forever with `neverReady`. */
+  ready: [] as (boolean | null)[],
+  neverReady: false,
+  /** write_pty rejects, as it does once the terminal's writer has ended. */
+  failWrite: false,
+  /** What paneBusy says about the agent's pane just before typing. */
+  busy: null as string | null,
+  /** Whether a pane still holds this PTY; Rust answers null for a PTY that is gone. */
+  ptyOpen: (_id: number): boolean => true,
+  /** Every ready answer and every write, in the order they happened. */
+  events: [] as string[],
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args: Record<string, unknown> = {}) => {
     switch (command) {
+      case "launch_rules":
+        if (tauri.failRules) throw new Error("ipc down");
+        return { ask: tauri.ask, continuousDeny: [], guard: tauri.guard };
+      case "pty_line_editor_ready": {
+        const answer = !tauri.ptyOpen(Number(args.id)) ? null : tauri.neverReady ? false : tauri.ready.length ? tauri.ready.shift()! : null;
+        tauri.events.push(`ready:${answer}`);
+        return answer;
+      }
       case "create_directory":
         // Mirrors the Rust command, which expands ~ and returns the real path.
         return String(args.path).replace("~", "/Users/testuser");
@@ -25,6 +58,8 @@ vi.mock("@tauri-apps/api/core", () => ({
         tauri.fileWrites.push({ path: String(args.path), content: String(args.content) });
         return null;
       case "write_pty":
+        if (tauri.failWrite) throw new Error("the terminal is closed");
+        tauri.events.push("write");
         tauri.ptyWrites.push({
           id: Number(args.id),
           text: new TextDecoder().decode(new Uint8Array(args.data as number[])),
@@ -42,6 +77,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 // so the panes it destroys can be asserted on.
 vi.mock("../../hooks/useTerminal", () => ({
   destroyInstance: vi.fn(),
+  paneBusy: vi.fn(async () => tauri.busy),
 }));
 
 // jsdom has no layout engine, so it doesn't implement scrollIntoView.
@@ -102,7 +138,27 @@ beforeEach(() => {
   tauri.ptyWrites.length = 0;
   tauri.fileWrites.length = 0;
   tauri.failFileWrite = false;
+  tauri.failRules = false;
+  tauri.ask = MCP_ASK;
+  tauri.guard = null;
+  tauri.ready = [];
+  tauri.neverReady = false;
+  tauri.failWrite = false;
+  tauri.busy = null;
+  tauri.events.length = 0;
+  tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => allTabPanes(t).some((p) => p.ptyId === id));
+  __resetLaunchRulesForTests();
 });
+
+/** Wait, in real time, until `cond` holds (or 5 s pass). */
+async function until(cond: () => boolean) {
+  for (let i = 0; i < 100 && !cond(); i++) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+  }
+  expect(cond()).toBe(true);
+}
 
 describe("OrchestratorTab dispatch error", () => {
   it("survives a remount, because it lives in the store rather than component state", async () => {
@@ -205,10 +261,185 @@ describe("OrchestratorTab dispatch command", () => {
     // And no leading space before "Read SPEC.md".
     expect(tauri.ptyWrites.length).toBe(1);
     expect(tauri.ptyWrites[0].text).toBe(
-      "claude --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md' " +
+      `claude ${SETTINGS} --append-system-prompt-file '/Users/testuser/.ade/roles/architect-security.v6.md' ` +
         "-p 'Read SPEC.md for the full project specification and context. Your task: Wire up OAuth'\r"
     );
     expect(tauri.fileWrites[0].path).toBe("/Users/testuser/.ade/roles/architect-security.v6.md");
+  });
+
+  it("orchestrator dispatches carry Orgo's ask rules", async () => {
+    expect(MCP_ASK.length).toBeGreaterThan(20);
+    const sessionId = seedSession("Rules session", [
+      { title: "Rules auth", description: "Make a computer", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Rules auth").id, 36);
+    await act(async () => {
+      await tick();
+    });
+    expect(tauri.ptyWrites).toHaveLength(1);
+    expect(tauri.ptyWrites[0].text).toMatch(/^claude --settings '.*' --append-system-prompt-file '.*' -p '.*Make a computer'\r$/);
+    expect(tauri.ptyWrites[0].text).toContain(` ${SETTINGS} `);
+  });
+
+  it("orchestrator dispatches are built headless", async () => {
+    tauri.guard = { interactive: "GUARD-INTERACTIVE", headless: "GUARD-HEADLESS" };
+    const sessionId = seedSession("Headless session", [
+      { title: "Headless auth", description: "Make a computer", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Headless auth").id, 38);
+    await until(() => tauri.ptyWrites.length === 1);
+    expect(tauri.ptyWrites[0].text).toContain('"command":"GUARD-HEADLESS"');
+    expect(tauri.ptyWrites[0].text).not.toContain("GUARD-INTERACTIVE");
+  });
+
+  it("dispatch types the task once the shell's line editor is up", async () => {
+    tauri.ready = [false, true, true];
+    const description = "Wire up OAuth. " + "x".repeat(400 - "Wire up OAuth. ".length);
+    expect(description).toHaveLength(400);
+    const sessionId = seedSession("Ready session", [
+      { title: "Ready auth", description, agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Ready auth").id, 39);
+    await until(() => tauri.ptyWrites.length === 1);
+    // Not before the second true in a row: false, true, true, then the write.
+    expect(tauri.events).toEqual(["ready:false", "ready:true", "ready:true", "write"]);
+    const text = tauri.ptyWrites[0].text;
+    expect(text).toMatch(/^claude --settings '.*' --append-system-prompt-file '.*' -p '.*'\r$/);
+    expect(text.endsWith(`${description}'\r`)).toBe(true);
+    expect(new TextEncoder().encode(text).length).toBeGreaterThan(1024);
+    const task = useOrchestratorStore.getState().sessions.find((s) => s.id === sessionId)!.tasks[0];
+    expect(task.status).toBe("running");
+  });
+
+  it("a tab closed before typing fails the task", async () => {
+    tauri.neverReady = true;
+    const sessionId = seedSession("Closed session", [
+      { title: "Closed auth", description: "Wire up OAuth", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    const agentTabId = agentTab("Closed auth").id;
+    await attachPty(agentTabId, 40);
+    // The shell isn't ready yet, and the user closes the agent's tab meanwhile.
+    await until(() => tauri.events.includes("ready:false"));
+    await act(async () => {
+      useTabStore.getState().closeTab(agentTabId);
+    });
+    await until(() => screen.queryByRole("alert") !== null);
+    expect(tauri.ptyWrites).toEqual([]);
+    const task = useOrchestratorStore.getState().sessions.find((s) => s.id === sessionId)!.tasks[0];
+    expect(task.status).toBe("failed");
+    expect(screen.getByRole("alert").textContent).toBe(
+      'The tab for "Closed auth" was closed before its task was typed. Nothing was dispatched.',
+    );
+  });
+
+  it("a job in front of the agent's shell when typing: nothing typed, the task fails", async () => {
+    tauri.ready = [true, true];
+    tauri.busy = "tmux";
+    const sessionId = seedSession("Busy session", [
+      { title: "Busy auth", description: "Wire up OAuth", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Busy auth").id, 43);
+    await until(() => screen.queryByRole("alert") !== null);
+    expect(tauri.ptyWrites).toEqual([]);
+    const task = useOrchestratorStore.getState().sessions.find((s) => s.id === sessionId)!.tasks[0];
+    expect(task.status).toBe("failed");
+    expect(screen.getByRole("alert").textContent).toBe(
+      'The tab for "Busy auth" was running tmux when its task was due to be typed. Nothing was dispatched.',
+    );
+  });
+
+  it("a write that fails fails the task", async () => {
+    tauri.ready = [true, true];
+    tauri.failWrite = true;
+    const sessionId = seedSession("Write fails session", [
+      { title: "Unwritten auth", description: "Wire up OAuth", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    await attachPty(agentTab("Unwritten auth").id, 44);
+    await until(() => screen.queryByRole("alert") !== null);
+    const task = useOrchestratorStore.getState().sessions.find((s) => s.id === sessionId)!.tasks[0];
+    expect(task.status).toBe("failed");
+    expect(screen.getByRole("alert").textContent).toBe(
+      'The task for "Unwritten auth" could not be typed into its tab. Nothing was dispatched.',
+    );
+  });
+
+  it("no rules, no dispatch", async () => {
+    tauri.failRules = true;
+    const sessionId = seedSession("No rules session", [
+      { title: "No rules auth", description: "Wire up OAuth", agentProfileId: "backend-auth" },
+    ]);
+    useOrchestratorStore.getState().setProjectDir(sessionId, "/Users/testuser/.ade/orchestrator/proj");
+    await act(async () => {
+      render(<OrchestratorTab sessionId={sessionId} />);
+      await flush();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Dispatch All"));
+      await flush();
+    });
+    const agentTabId = agentTab("No rules auth").id;
+    await attachPty(agentTabId, 37);
+    await act(async () => {
+      await tick();
+    });
+    expect(tauri.ptyWrites).toEqual([]);
+    expect(tauri.fileWrites).toEqual([]);
+    expect(useTabStore.getState().tabs.some((t) => t.id === agentTabId)).toBe(false);
+    expect(screen.getByRole("alert").textContent).toMatch(/couldn't load its permission rules, so the agent was not started/);
   });
 
   it("dispatches into the tab it created, not whichever tab the user focused", async () => {

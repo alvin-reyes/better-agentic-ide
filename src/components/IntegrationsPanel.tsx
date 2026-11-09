@@ -23,6 +23,30 @@ type Servers = Record<string, Record<string, unknown>>;
 const errText = (e: unknown) => String((e as { message?: string })?.message ?? e);
 
 /** MCP library and secrets vault. */
+/** What `mcp_install` returns: the rules it added, and the settings files that gained one (shared first). */
+interface McpInstalled {
+  rules: string[];
+  files: string[];
+}
+
+/**
+ * The notice after an install that added ask rules. Each file is named
+ * relative to the project root when it is inside it, and absolute otherwise:
+ * a file outside is the main checkout's local file, read from a worktree.
+ */
+function rulesNotice(name: string, root: string, files: string[]): string {
+  const base = root.replace(/[\\/]+$/, "");
+  const inRoot = (f: string) => f.startsWith(base) && (f[base.length] === "/" || f[base.length] === "\\");
+  const shown = files.map((f) => (inRoot(f) ? f.slice(base.length + 1).replace(/\\/g, "/") : f));
+  const last = files[files.length - 1];
+  const where = last !== undefined && !inRoot(last) ? ", which Claude Code reads in this worktree" : "";
+  const reorder = shown.includes(".claude/settings.json") ? " The first install may reorder .claude/settings.json; every setting is kept." : "";
+  return (
+    `${name} added to .mcp.json. Agents ADE starts will always ask before ${name} creates, changes, stops or deletes a computer. ` +
+    `For sessions you start yourself, ask rules were added to ${shown.join(" and ")}${where}.${reorder} Run /mcp in Claude Code to sign in.`
+  );
+}
+
 export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: Props) {
   const [tab, setTab] = useState<"agents" | "mcp" | "secrets" | "antislop">(initialTab);
   const [root, setRoot] = useState<string | null>(null);
@@ -74,15 +98,18 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
     if (!root) return;
     setError(null);
     try {
-      await invoke("mcp_install", { project: root, name: e.id, server: e.server });
+      // The permission rules the install added (Orgo's), and the settings files that gained one.
+      const added = await invoke<McpInstalled | null>("mcp_install", { project: root, name: e.id, server: e.server });
       loadInstalled();
       const missing = (e.secrets ?? []).filter((s) => !have.has(s.name));
       setNotice(
         missing.length
           ? `${e.name} added to .mcp.json. Save ${missing.map((s) => s.name).join(", ")} in Secrets, then start Claude Code in a new terminal.`
-          : e.oauth
-            ? `${e.name} added to .mcp.json. Start Claude Code here and run /mcp to sign in.`
-            : `${e.name} added to .mcp.json. Start Claude Code in a new terminal to load it.`,
+          : added?.rules?.length
+            ? rulesNotice(e.name, root, added.files ?? [])
+            : e.oauth
+              ? `${e.name} added to .mcp.json. Start Claude Code here and run /mcp to sign in.`
+              : `${e.name} added to .mcp.json. Start Claude Code in a new terminal to load it.`,
       );
     } catch (err) {
       setError(errText(err));
@@ -184,6 +211,7 @@ export default function IntegrationsPanel({ cwd, initialTab = "mcp", onClose }: 
                           {e.needs && <span className="mcp-tag" data-warn={noTool || undefined} title={noTool ? `${e.needs} isn't on your PATH` : undefined}>{e.needs}</span>}
                         </div>
                         <p>{e.description}</p>
+                        {e.caution && <p className="mcp-caution" role="note">{e.caution}</p>}
                         {e.secrets?.map((s) => (
                           <div key={s.name} className="mcp-secret" data-ok={have.has(s.name) || undefined}>
                             <code>{s.name}</code>

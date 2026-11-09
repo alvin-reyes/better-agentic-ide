@@ -200,8 +200,9 @@ sequenceDiagram
   which story 9 waits for:
   - **Ready** is `feat/cli-guard`'s `line_editor_ready(master, shell pid)`,
     the function behind `pty_line_editor_ready`: the terminal is out of
-    canonical mode and the shell is the foreground process group
-    (`tcgetpgrp`). Rust polls it every 50 ms and types after two ready
+    canonical mode and the shell, or a nested interactive shell at its
+    prompt (a group whose leader `classify` calls a shell), is the
+    foreground process group (`tcgetpgrp`). Rust polls it every 50 ms and types after two ready
     answers in a row, as `whenLineEditorReady` does, for at most 5 s after
     the window's answer. Not ready by then: nothing is typed, `typed:false`,
     why "the shell's line editor didn't start".
