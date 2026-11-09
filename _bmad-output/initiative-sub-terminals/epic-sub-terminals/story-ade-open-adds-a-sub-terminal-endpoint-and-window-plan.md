@@ -1,7 +1,7 @@
 ---
 title: "ade open adds a sub-terminal (endpoint and window)"
 ticket: 4a
-status: ready-for-dev
+status: done
 ---
 
 # Story 4a: ade open adds a sub-terminal (endpoint and window)
@@ -159,4 +159,31 @@ Plus: every test named in A1 to A17 appears by name in the output and passes. No
 
 ## Verification (QA)
 
-_Empty until QA runs the verification command against the story's work. QA records the real output here._
+QA, 2026-11-09, PR #96, branch `st4a-open-endpoint` at `db4739b` (merge of main with PR #94 into `c17dfd6`, where the adversarial code re-review passed). Each of the six lines run from the repository root; real results:
+
+```
+npx tsc --noEmit                              exit 0
+npm test                                      exit 0   Test Files 174 passed (174); Tests 1937 passed (1937)
+(cd src-tauri && cargo test)                  exit 0   test result: ok. 573 passed; 0 failed; 1 ignored (lib); 12 passed (integration); 2 passed
+(cd relay && cargo test)                      exit 0   ok. 11 passed; 2 passed; 86 passed
+(cd mobile && npx tsc --noEmit && npx jest)   exit 0   Test Suites 1 passed; Tests 6 passed
+(cd src-tauri && cargo check -p ade-hook)     exit 0   Finished `dev` profile
+```
+
+**Criteria to tests (each name seen in the output and passing; vitest names read from the test files, the files ran green).**
+- A1: `open_is_screened_like_hook_events` ok. A2: `open_body_with_an_unknown_field_or_wrong_type_is_400` ok. A3: `a_bad_cwd_or_name_is_422`, `split_and_command_answer_not_supported_yet`, `every_open_is_422_on_windows` ok.
+- A4: `routes_by_path_and_unknown_is_404`, `hook_events_are_served_while_an_open_waits` ok. A5: `open_is_answered_on_its_own_thread`, `open_before_the_handler_is_set_is_409`, `an_admit_refusal_is_answered_with_its_status` ok. A6: `a_panicking_handler_releases_its_slot`, `a_failed_spawn_is_503_and_releases_its_slot` ok.
+- A7: `no_listener_for_the_callers_window_is_409`, `a_dead_caller_is_410`, `a_listener_is_forgotten_with_its_window` ok. A8: Rust `no_answer_is_504_then_expired_is_sent`, `a_late_answer_is_ignored` ok; vitest `a request past expiresAt does nothing`, `expired closes the sub-terminal the request added`, `expired before the terminal exists closes it once created` (`terminalOpen.test.ts`, 19 tests) pass.
+- A9: the six `claim_ok` tests (`a_pty_below_the_floor_is_not_claimed`, `a_claimed_pty_is_not_claimed_again`, `a_dead_pty_is_not_claimed`, `a_pty_of_another_window_is_not_claimed`, `a_pty_created_without_this_request_id_is_not_claimed`, `the_requests_own_pty_is_claimed`) ok.
+- A10, A11: `createAtOnce.test.tsx` (5 tests): `a focused add makes exactly one create_pty`, `a background add shown at once makes exactly one create_pty`, `a focused mount at another size gets one resize_pty after create_pty` pass (the Dev chose this file over `terminalOpen.test.ts`).
+- A12: `a_terminal_records_its_owner_and_request_id` ok (after the merge, which added `PtyInstance::new`; the fields default to `None, None, false` there and the test sets them after construction and replaces the owner as `reattach` does); the source-scan `pty::wiring_tests::the_commands_record_the_owner_and_the_request` also ok.
+- A13: `a_pane_gets_eight_then_one_a_second`, `the_thirty_third_open_shell_is_refused`, `in_flight_requests_count_toward_the_thirty_two` ok.
+- A14: vitest `a name given wins`, `"npm run dev" is named npm`, `"env TOKEN=x npm run dev" is named env`, `"FOO=1 make" is named make`, `no command names it after the folder`, `no command and no folder is named Terminal` pass.
+- A15: vitest `a sub-terminal's add is a sibling in the same tab, spawned by its view`; `SubTerminalStrip.test.tsx` (21 tests) `a tooltip says Opened from the spawner, and the tab's label for an own spawn` (asserts the exact titles `dev server — /work/api\nOpened from api` and `... Opened from dev server`) and `a sub-terminal with no spawner has no Opened from line` pass.
+- A16: vitest `the pane's terminal is created before any mount, at the caller's size`, `with no caller instance it is 24 by 80` pass.
+- A17: Rust `a_valid_request_is_answered_200_typed_true_once_claimed`, `an_error_from_the_window_is_409` ok; vitest `background add keeps selection and focus`, `--focus from the active tab switches to the new sub-terminal` pass.
+
+**Merge check (`c17dfd6` to `db4739b`).** The merge touched only `src-tauri/src/lib.rs` (four `mod` lines for cli-guard and Orgo, one extra `invoke_handler` entry) and `src-tauri/src/pty.rs` (cli-guard's `PtyInstance::new` and the writer thread). `terminal_open.rs`, `agent_status.rs`, `terminalOpen.ts`, `useTerminal.ts`, `App.tsx` and `SubTerminalStrip.tsx` are unchanged by it. `lib.rs` still has the four `terminal_open` references (the `mod`, the `OpenService` setup, `set_open_handler`, `terminal_open_listen`/`terminal_open_done`) and `App.tsx` still calls `startTerminalOpen()` once. The pty wiring tests, including `write_pty_stays_a_sync_command`, pass.
+
+**Verdict: PASS.** All six lines exit 0; every A1 to A17 test is named and passes. Not independently re-run by QA: the manual UI (no manual check gates this story). Free disk stayed at 63 GB.
+
