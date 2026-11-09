@@ -8,9 +8,18 @@ owns how the run, the preflight and the hub-tab flag work. This spec gives the
 screens, the states, the exact words and the keys. What the UX needs from the
 architecture is listed in section 14; PRD notes are in section 15.
 
-Status: **revision 4, 2026-11-09**, answering the round-3 joint review of the
+Status: **revision 5, 2026-11-09**, answering the minors of the round-4 delta
+review (n1, n2, n5, n6; m13 and m14 closed; section 16.0): the setup lock's
+holder gets copy for each `holder.key` (8.1), Set Up Hub works again after a
+failure and the "out of date" block names no made-up cause (7.2, 7.3), the
+nested-folder refusal gets a body per relation (5.6), and a Trash failure
+after Remove and Quit or a window close says what didn't happen (9.3, 9.5).
+The architecture's revision 5 (PR #101) is being made in parallel; where this
+spec waits on it, it says so.
+
+Revision 4, 2026-11-09, answered the round-3 joint review of the
 architecture's and this spec's revision 3, which came back BLOCKED (findings
-and answers: section 16.0), and the owner's decisions of the same day: a
+and answers: section 16.0a), and the owner's decisions of the same day: a
 pasted secret with a line break anywhere but at its end is refused whole
 (OB-7 AC1, kept as designed in 8.6; the PRD is being amended to match), and
 the close rules of 9.3 stand, with C4 using C1's question when it lists one
@@ -19,7 +28,7 @@ making run (OB-5 AC5). The names the architecture's revision 4 adds
 `hub_quit_answer`'s `cancelled`, `close_progress {kept_open}`, the skipped
 check's `detail: {because}`, `{refused: "unknown_plan"}`) are those of the
 architecture's revision 4 (PR #101, `b3db20e`, design 11.1 and
-`hub-onboarding.md`); 16.0 lists each. The PRD's amendment (PR #98,
+`hub-onboarding.md`); 16.0a lists each. The PRD's amendment (PR #98,
 `f873d85`) covers the paste rule, C2 and the Keychain chain.
 
 Revision 3, 2026-11-09, answered the joint review of the
@@ -354,7 +363,7 @@ surprise.
 |---|---|
 | New hub, Hub folder, inline | `<path> is in use by a setup running in another tab. Choose another folder, or wait until that setup ends.` |
 | Existing hub, Hub folder, inline (only with the option on) | `<path> is in use by a setup running in another tab. Run bin/setup and bin/doctor after that setup ends.` |
-| Set Up Hub / Open Hub pressed (a race: the other run started after the inline check) | a failure block at the top of the review (existing hub: above the field), focus on its heading, title announced assertively, **no "Checking this Mac" section** (no check ran): ✕ **`<path>` is in use by a setup running in another tab.** *Two setups can't use the same folder at once, so nothing was checked or written. Your answers are kept. Choose Back to pick another folder, or choose Set Up Hub again after that setup ends.* (Existing hub: *…Choose Open Hub again after that setup ends, or turn off Run bin/setup and bin/doctor first.*) |
+| Set Up Hub / Open Hub pressed (a race: the other run started after the inline check) | a failure block at the top of the review (existing hub: above the field), focus on its heading, title announced assertively, **no "Checking this Mac" section** (no check ran): ✕ **`<path>` is in use by a setup running in another tab.** *Two setups can't use the same folder at once, so nothing was checked or written. (`inside` and `contains` have their own sentence, below.) Your answers are kept. Choose Back to pick another folder, or choose Set Up Hub again after that setup ends.* (Existing hub: *…Choose Open Hub again after that setup ends, or turn off Run bin/setup and bin/doctor first.*) |
 
 `<path>` is the path as the developer typed it, `~`-abbreviated; when it
 differs from `in_setup.hub` only in case, a second sentence names the other:
@@ -372,8 +381,20 @@ three places (both inline rows and the review's block title):
 | `inside` | `<path> is inside <hub>, which a setup running in another tab is using.` |
 | `contains` | `<path> contains <hub>, which a setup running in another tab is using.` |
 
-The rest of each row stays ("Choose another folder, or wait until that setup
-ends." and so on).
+The rest of each inline row stays ("Choose another folder, or wait until
+that setup ends." and so on). **The review's block also changes its first body
+sentence** (revision 5, n5), because "Two setups can't use the same folder" is
+true only for `same`:
+
+| `relation` | New hub (Set Up Hub) | Existing hub (Open Hub with Run bin/setup and bin/doctor) |
+|---|---|---|
+| `same` | *Two setups can't use the same folder at once, so nothing was checked or written.* | the same |
+| `inside` | *A hub can't be made inside a folder another setup is using, so nothing was checked or written.* | *bin/setup can't run in a hub that's inside a folder another setup is using, so nothing was checked or written.* |
+| `contains` | *A hub can't be made in a folder that holds one another setup is using, so nothing was checked or written.* | *bin/setup can't run in a hub that holds a folder another setup is using, so nothing was checked or written.* |
+
+Then, for every relation: *Your answers are kept.* and the row's last
+sentence. The case-only sentence ("That tab is setting up …; on this Mac the
+two names are the same folder.") is for `same` only.
 
 **Linking is one run at a time (M-A, architecture revision 4).** Runs on
 different folders go on side by side until step (f). There, an app-wide lock
@@ -890,24 +911,57 @@ OK line names the checkouts the template's own code found (`links` passed
 `{checkouts}`): *OK · ~/src/web*. git name and email is not shown: opening a
 hub makes no commit.
 
-**The plan expired** (`hub_run_prepare` → `{refused: "unknown_plan"}`;
-architecture revision 4, m15). The plan Better Terminal made for the review
-is gone (the review sat open too long, or the window reloaded). Nothing was
-checked or written. Like the same-folder refusal (5.6): a failure block at
+**Set Up Hub after a failure works again** (revision 5, n2). After a failed
+preflight (the review stays, with its failure block) and after step (a) fails
+(7.3, the questionnaire returns on Review), **Set Up Hub** starts a new
+preflight and never lands on the "out of date" block below. The architecture's
+revision 5 either keeps the plan until the questionnaire closes or has the
+webview ask `hub_plan(answers)` again on return; either way the developer sees
+the same review. With a re-plan, the review's lists are redrawn from the new
+plan before focus lands on the failure block, and nothing more is said. If
+that re-plan fails, the block of "Review Again fails" (below) shows under the
+failure block, and Review Again is its way on.
+
+**The plan is gone** (`hub_run_prepare` → `{refused: "unknown_plan"}`;
+architecture revision 4, m15). Better Terminal no longer has the plan it made
+for the review. The copy names no cause: plans have no time limit, and a
+reload loses the review anyway, so revision 4's "sat open too long, or the
+window reloaded" was wrong; once the architecture names when this can still
+happen, the body may say so. Nothing was checked or written. Like the same-folder refusal (5.6): a failure block at
 the top of the review, focus on its heading, title announced assertively, no
 "Checking this Mac" section:
 
 > ✕ **This review is out of date, so setup didn't start.**
-> *Nothing was checked or written, and your answers are kept. Choose Review
-> Again to see the steps and commands for your answers once more, then
-> choose Set Up Hub.*
+> *Better Terminal no longer has the plan it made for this review. Nothing
+> was checked or written, and your answers are kept. Choose Review Again to
+> see the steps and commands for your answers once more, then choose Set Up
+> Hub.*
 >
-> **[Review Again]** (focused)
+> **[Review Again]** (the next Tab stop after the heading)
 
 **Review Again** asks `hub_plan(answers)` again and redraws the review from
 the new plan (the commands may differ if something changed); the block goes,
 focus moves to **Set Up Hub** (as when the review first opens), and the
 polite region says "Review updated." Back still returns to the answers.
+
+**Review Again fails** (revision 5, n2: `hub_plan` returns an error instead of
+a plan). The block stays in place and its words change; focus moves to its
+heading and the title is announced assertively:
+
+> ✕ **Better Terminal couldn't make the review again: <first line of the
+> error>.**
+> *Nothing was checked or written, and your answers are kept. Choose Review
+> Again to try once more, or Back to check your answers. If this keeps
+> happening, quit Better Terminal and open it again.*
+>
+> **[Review Again]**
+
+`<first line of the error>` is `hub_plan`'s message in plain words (for
+example "it couldn't read the bundled agent hub template"). When the error is
+an answer that no longer passes its check (a field rule), Review Again does
+what Review Setup does with an error instead: it returns to the answers with
+focus on that field and its inline error (6.4). Set Up Hub stays in the
+footer; pressing it with no plan gets the "out of date" block again.
 
 ### 7.3 When step (a) fails (OB-5 AC1)
 
@@ -922,6 +976,9 @@ title:
 > ✕ **Better Terminal couldn't unpack the agent hub template: <message>.**
 > Nothing was left behind: `~/hubs`, which setup had created, was removed.
 > Your answers are kept. Choose Set Up Hub to try again.
+
+Set Up Hub then starts a new preflight, not the "out of date" block (7.2,
+"Set Up Hub after a failure works again"; revision 5, n2).
 
 `<message>` is the unpack's own error in plain words (for example "the disk is
 full" or "permission denied writing ~/hubs"). The second sentence names only
@@ -957,12 +1014,31 @@ tab, which then shows the tour.
     and skills*, then in `--text-secondary`: *Waiting for the setup of
     `<holder.hub>` to finish linking Claude's memory. This step starts by
     itself when it's done.*
-  - a removal (`key: removal`): *Removing the hub folder*, then: *Waiting
-    for the setup of `<holder.hub>` to finish linking Claude's memory.
-    Undoing bin/setup's links starts by itself when it's done.*
+  - a removal (`key: removal`): *Removing the hub folder*, then the
+    holder's sentence below and *Undoing bin/setup's links starts by itself
+    when it's done.*
+  - Open Hub with "Run bin/setup and bin/doctor first" (8.8) waits the same
+    way at its `bin/setup`: the bar's first line is that tab's own step line,
+    then the holder's sentence and *This step starts by itself when it's
+    done.*
 
-  `<holder.hub>` is the holding run's hub folder, `~`-abbreviated; when the
-  holder is a removal, "the setup of" reads "the removal of". Nothing is
+  **The holder's sentence, by `holder.key`** (revision 5, n1; the
+  architecture's revision 5 adds `holder.key: f | removal | open_setup`):
+
+  | `holder.key` | Sentence |
+  |---|---|
+  | `f` (a new hub's step (f)) | *Waiting for the setup of `<holder.hub>` to finish linking Claude's memory.* |
+  | `open_setup` (Open Hub's `bin/setup`) | *Waiting for bin/setup in `<holder.hub>`, opened in another tab, to finish linking Claude's memory.* |
+  | `removal` (a removal's `bin/setup --unlink`) | *Waiting for the removal of `<holder.hub>` to finish undoing its links to Claude's memory.* |
+
+  `<holder.hub>` is the holding run's hub folder, `~`-abbreviated. The bar
+  grows to fit the two lines (at least 44 px) and never cuts the sentence
+  off. **The holder can change while a run waits** (the run ahead of it in
+  the queue takes the lock): the architecture sends `setup_waiting {state:
+  waiting}` again with the new holder, and the bar replaces the sentence in
+  place, `holder.key` wording and name both. Nothing is announced again (the
+  polite line names no holder, so it is still true), focus does not move, and
+  no line is printed. Nothing is
   printed in the terminal (no line kind, and no command has run; 8.2.1).
   The polite region says "Waiting for another agent hub setup to finish
   linking." once, when the wait starts. On `setup_waiting {state: done}` the
@@ -1266,7 +1342,9 @@ session's command, `claude` (or the hub's `HUB_CLAUDE`; with
 `CLAUDE_CONFIG_DIR` as 8.7). With the option: `bin/setup`, `bin/doctor`, then
 the session; a failure of `bin/setup` uses 8.5's (f) notice **without Remove
 Hub Folder** (ADE never removes a folder it did not create), and its Stop
-sentence says "…the steps after this one don't run." only.
+sentence says "…the steps after this one don't run." only. Its `bin/setup`
+takes the setup lock and can wait for it like step (f) (8.1); while it holds
+the lock, other waiting runs name it with `holder.key: open_setup`.
 
 ---
 
@@ -1469,7 +1547,13 @@ Trash fails:
   closing it once more is C3;
 - a **window close or quit that asked is cancelled**: the window stays open
   and Better Terminal keeps running, so the failure is never lost behind a
-  closed window. The other runs the confirm answered have ended as answered,
+  closed window. The Trash notice says so in one more sentence, after
+  Retry's and Keep's (revision 5, n6): after **Remove and Quit**, *Better
+  Terminal didn't quit: choose Retry or Keep, then quit again.*; after a
+  window close, *The window didn't close: choose Retry or Keep, then close it
+  again.* The assertive announcement includes it, between the title and the
+  options. A single tab closed with Remove (C1) adds nothing: the tab staying
+  open says it. The other runs the confirm answered have ended as answered,
   and their tabs close as design 6.5's runner table says; nothing is asked
   again, and tabs without a run stay open;
 - **Retry** tries the Trash again; on success the tab closes as the original
@@ -1597,7 +1681,9 @@ Trash). A red run notice:
   be loaded…"); `trash` (title **Couldn't move ~/hubs/acme-corp-staff-engineer
   to the Trash**, body "<message>. *(when (f) ran)* Claude's memory links for
   this hub were already undone (see the terminal), so they no longer point
-  here." then Retry / Keep). Keep after a Trash failure leaves the folder,
+  here." then Retry / Keep; after a quit or window close that was cancelled,
+  9.3's sentence "Better Terminal didn't quit: …" or "The window didn't
+  close: …" follows Retry's and Keep's, and stays if Retry fails again). Keep after a Trash failure leaves the folder,
   starts the login shell in it, and prints L8 with `removal_failed.left`'s
   lists, as after any Keep (above).
 - **The parent** setup created is removed only when empty; when it isn't, that
@@ -1661,6 +1747,8 @@ existing sub-terminal region is the polite one). Field errors use
 | (a) failed | (focus to the block heading) + assertive | the block's title |
 | Each step starts | none (the run bar is `role="status"` but `aria-live="off"`) | |
 | (f) or a removal waits for the setup lock (`setup_waiting {state: waiting}`) | polite, once | "Waiting for another agent hub setup to finish linking." |
+| The holder changes (`setup_waiting {state: waiting}` again) | none | (the bar's sentence changes in place) |
+| Review Again fails | (focus to the block heading) + assertive | the block's title |
 | Secret notice | polite + focus | "Store the secret grafana-token? 1 of 2. Store asks for its value in a hidden prompt…" |
 | After Store, prompt ready | polite | "Type the value for grafana-token now, then press Enter. Nothing appears while you type." |
 | Multi-line paste refused | polite | "That paste had more than one line, so none of it was sent." |
@@ -1668,7 +1756,7 @@ existing sub-terminal region is the polite one). Field errors use
 | Setup done | polite | "Agent hub set up. The persona session is starting." |
 | Stopped | polite | "Setup stopped. The hub is kept." |
 | Removed | polite + focus (Copy Summary) | "Removed ~/hubs/acme-corp-staff-engineer. 1 secret left behind. The summary is above the terminal." |
-| Removal stopped | assertive + focus | "Removal stopped: bin/setup --unlink failed. Options: Retry, Keep." |
+| Removal stopped | assertive + focus | "Removal stopped: bin/setup --unlink failed. Options: Retry, Keep." (a Trash failure after a cancelled quit or window close: title, then "Better Terminal didn't quit: choose Retry or Keep, then quit again." or the window's sentence, then the options) |
 | Removal kept | polite | "Removal stopped. The hub is kept." |
 | Close confirm (C1 to C4) | (focus, `alertdialog`) | its title |
 | Copied | polite | "Copied." |
@@ -1691,9 +1779,9 @@ existing sub-terminal region is the polite one). Field errors use
 | New tab row / palette | absent (setting off, not macOS, engagement instance) | n/a | n/a | no template → 5.3 | opens the questionnaire |
 | Questionnaire (new) | fresh, defaults | roles loading | prefilled repo; empty-slug client; parent will be created | every 6.4 row (incl. ancestor missing, parent not a folder, not a folder, unfinished, in use by another tab); roles failed; same folder in use on Set Up Hub | Review |
 | Questionnaire (existing) | empty path | checking the folder (inline git); checking after Open Hub; slow | option on, notice naming checkouts; hub.conf not readable line | missing; not a folder; not a hub; unfinished + ways; tools missing; check failed; in use; preflight failures; link refusal | finished hint; Agent hub tab opens |
-| Review | no secrets, no repos (no memory notice) | preflight checking (per check, slow line) | parent created; checkout missing; sync off | one preflight failure (each check and detail); several at once with Not checked rows; Command Line Tools stopping the rest; (a) failed | run starts |
-| Run tab | n/a | run bar, step n of m; (f) waiting for another setup to finish linking; secret "don't type yet" | secret prompt ready; multi-line paste refused; Skip | (b), (c), (c) commit check, (d), (d) prompt not hidden, (f), (f) link, (f) link check failed, (f2) notices; helper lost; Claude not found; hub.conf unreadable; background-tab dot | session started; shell after exit; stopped (L5) |
-| Removal | n/a | removing… | summary without left-behind; Remove not offered (later commits, not created) | removal stopped (unlink, Trash); kept, with `removal_failed.left`'s lists; Trash failed on close with Remove (tab stays, quit cancelled) | summary (T4 / no T4); Move to New Window hidden while it shows (m11) |
+| Review | no secrets, no repos (no memory notice) | preflight checking (per check, slow line) | parent created; checkout missing; sync off | one preflight failure (each check and detail); several at once with Not checked rows; Command Line Tools stopping the rest; (a) failed, then Set Up Hub runs again; plan gone ("out of date"); Review Again fails; in use: same, inside, contains | run starts |
+| Run tab | n/a | run bar, step n of m; (f) waiting for another setup to finish linking, one sentence per `holder.key` (`f`, `open_setup`, `removal`), and the holder changing; secret "don't type yet" | secret prompt ready; multi-line paste refused; Skip | (b), (c), (c) commit check, (d), (d) prompt not hidden, (f), (f) link, (f) link check failed, (f2) notices; helper lost; Claude not found; hub.conf unreadable; background-tab dot | session started; shell after exit; stopped (L5) |
+| Removal | n/a | removing… | summary without left-behind; Remove not offered (later commits, not created) | removal stopped (unlink, Trash); kept, with `removal_failed.left`'s lists; Trash failed on close with Remove (tab stays; quit or window close cancelled, and the notice says so) | summary (T4 / no T4); Move to New Window hidden while it shows (m11) |
 | Confirmations | n/a | n/a | n/a | n/a | remove; edit; C1 close or quit during (b); C2 busy confirm during (c)–(h); C3 close during removal; C4 batch / window / quit with a making or removing run (Remove only when one is making; Close stops a removal); C4 with one making run uses C1's question; quit during (c)–(h) asks nothing |
 | Restored | n/a | n/a | n/a | n/a | Agent hub, empty, shell; Hub removed never restored |
 
@@ -1744,6 +1832,8 @@ names.
 | Need | Provided by | UX use |
 |---|---|---|
 | M-A: a run waiting for another's linking | `setup_waiting {key: f \| removal, state: waiting \| done, holder?: {hub, tab_id?}}` | 8.1's waiting bar, 5.6, 12 |
+| n1 (architecture revision 5, in progress) | `holder.key: f \| removal \| open_setup`; `setup_waiting {state: waiting}` re-sent when the holder changes | 8.1's sentence per key, updated in place |
+| n2 (architecture revision 5, in progress) | the plan kept until the questionnaire closes, or a re-plan on return; `hub_plan`'s error | 7.2, 7.3 |
 | M-B: close-with-Remove whose Trash fails | `hub_run_close` → `{closed} \| {kept_open: {reason: trash_failed}}`; `close_progress {state: kept_open}`; `hub_quit_answer` → `{quitting} \| {cancelled: {runs}}`; `removal_failed {part: trash}` in that tab | 9.3 |
 | m1: one answer, mapped by phase | `hub_run_close` maps `keep` / `remove` / `stop_removal` by Rust's phase at the call | 9.3's mapping table |
 | m4 (architecture) / m15: Not checked | `preflight_check {state: skipped, detail: {because: <check>}}`, the first failed check in order | 7.2 |
@@ -1786,7 +1876,8 @@ Run events: `step_started {key, index, count, name}` (names `unpack`, `init`,
 secrets, 7 without), `step_ended`, `awaiting_secret`, `secret_prompt_ready`,
 `secret_paste_refused`, `step_failed {key, token, options,
 remove_unavailable?, steps_left, reason}`, `setup_waiting {key, state,
-holder?}` (`key`: `f`, `removal`; `state`: `waiting`, `done`), `awaiting_line {token, line}` (kinds `command`,
+holder?}` (`key`: `f`, `removal`; `state`: `waiting`, `done`; `holder.key`:
+`f`, `removal`, `open_setup`, revision 5), `awaiting_line {token, line}` (kinds `command`,
 `unpacked`, `secret_skipped`, `step_skipped`, `retrying`, `stopped`,
 `claude_not_found`, `hubconf_not_literal`, `removal_kept`, `removal_done`),
 `session_started`, `removal_progress`, `removal_failed {part, message,
@@ -1889,7 +1980,20 @@ written.
 
 ## 16. Review findings and answers
 
-### 16.0 Revision 4: the round-3 joint review (architecture rev 3 + UX rev 3, BLOCKED)
+### 16.0 Revision 5: the round-4 delta review (minors)
+
+| Finding | Answer in this revision | Where |
+|---|---|---|
+| **n1** `setup_waiting`'s `holder.key` | One sentence per key: `f` "Waiting for the setup of `<hub>` to finish linking Claude's memory.", `open_setup` "Waiting for bin/setup in `<hub>`, opened in another tab, to finish linking Claude's memory.", `removal` "Waiting for the removal of `<hub>` to finish undoing its links to Claude's memory." The event is re-sent when the holder changes; the bar replaces the sentence and name in place, announces nothing again, moves no focus. The bar grows to fit (the mockup's fixed 44 px cut the longest sentence off). Open Hub's `bin/setup` waits the same way (8.8) | 8.1, 8.8, 12, 13, 14.1a, 14.3 |
+| **n2** Set Up Hub after a failure | After a failed preflight or a failed (a), Set Up Hub starts a new preflight and never lands on "out of date", whichever way the architecture keeps the plan (kept until the questionnaire closes, or a re-plan on return); a failed re-plan shows the Review Again failure block | 7.2, 7.3 |
+| **n2** "out of date" cause | The made-up cause ("sat open too long, or the window reloaded") is gone; the body says only "Better Terminal no longer has the plan it made for this review."; a real cause can be added once the architecture names one. Review Again is the next Tab stop after the heading (the mockup always focused the heading) | 7.2 |
+| **n2** Review Again when `hub_plan` fails | New copy: "Better Terminal couldn't make the review again: <first line of the error>." with Review Again and Back; a field-rule error returns to the answers like Review Setup; assertive | 7.2, 12, 13 |
+| **n5** nested-folder body | The review block's first body sentence per relation, for a new and an existing hub; the case-only sentence for `same` only | 5.6 |
+| **n6** Trash fails after a quit or window close | One sentence after Retry's and Keep's: "Better Terminal didn't quit: choose Retry or Keep, then quit again." / "The window didn't close: choose Retry or Keep, then close it again."; also in the announcement; nothing added for a single tab | 9.3, 9.5, 12 |
+| **m13** C4 with one making run | **Closed.** C4 that lists exactly one run, and it is making, uses C1's question (Keep · Remove; quit: Keep and Quit · Remove and Quit), as in revision 4 | 9.3 |
+| **m14** C2 | **Closed.** C2 is the app's ordinary busy confirm, labelled "agent hub setup" (Cancel · Close), as the PRD's amendment `f873d85` says (OB-5 AC5) | 9.3 |
+
+### 16.0a Revision 4: the round-3 joint review (architecture rev 3 + UX rev 3, BLOCKED)
 
 | Finding | Answer in this revision | Where |
 |---|---|---|
