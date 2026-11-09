@@ -5,11 +5,11 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null), Channe
 
 import { useAgentStatusToasts } from "../useAgentStatusToasts";
 import { useAgentStatusStore } from "../../stores/agentStatusStore";
-import { useTabStore, type Tab } from "../../stores/tabStore";
+import { useTabStore, ownViewOnly, type Tab } from "../../stores/tabStore";
 import type { GuardToast } from "../useContextGuard";
 
 const tab = (id: string, ptyId: number): Tab => ({
-  id, name: `tab ${id}`, activePaneId: `${id}-0`, root: { type: "pane", pane: { id: `${id}-0`, ptyId } },
+  id, name: `tab ${id}`, ...ownViewOnly({ type: "pane", pane: { id: `${id}-0`, ptyId } }, `${id}-0`),
 });
 
 let focused = true;

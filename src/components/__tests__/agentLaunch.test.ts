@@ -38,6 +38,13 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 
+// The active pane is free (paneBusy), as in AgentPicker.test.tsx: these tests
+// are about the typed command, not the busy check.
+vi.mock("../../hooks/useTerminal", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/useTerminal")>()),
+  paneBusy: vi.fn(async () => null),
+}));
+
 Element.prototype.scrollIntoView = vi.fn();
 const flush = () => new Promise((r) => setTimeout(r, 0));
 

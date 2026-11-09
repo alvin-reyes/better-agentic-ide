@@ -342,6 +342,147 @@ pub fn get_pty_cwd(state: tauri::State<'_, PtyManager>, id: u32) -> Result<Strin
     pty_cwd(shell, fg)
 }
 
+/// What is running in a terminal's foreground, for the "this pane is busy"
+/// check. The frontend gets only the classification (`.ade/context/pane-busy.md`).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Fg {
+    /// No foreground process group to judge.
+    Unknown,
+    /// An interactive shell at its prompt: the pane's own, or a nested one.
+    Shell,
+    /// Anything else. `label` names it for the dialog; `names` holds both
+    /// normalised name candidates, so the frontend can match an agent's binary.
+    Busy { label: String, names: Vec<String> },
+}
+
+/// The facts read about the foreground process group's leader.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FgFacts {
+    /// Read, but never decisive on its own (see `classify`).
+    #[allow(dead_code)]
+    pub pid: u32,
+    pub name: String,
+    pub cmd: Vec<String>,
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+const SHELLS: &[&str] = &["sh", "bash", "zsh", "fish", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "elvish"];
+/// ADE cannot see inside these, and typing into one reaches whatever runs there.
+#[cfg_attr(not(unix), allow(dead_code))]
+const MULTIPLEXERS: &[&str] = &["tmux", "screen", "zellij"];
+/// Linux truncates a process's `comm` name to this many characters.
+#[cfg_attr(not(unix), allow(dead_code))]
+const COMM_LIMIT: usize = 15;
+
+/// Basename, lowercased, without a login shell's leading `-` or a nix
+/// wrapper's leading `.` and trailing `-wrapped`.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn normalise(name: &str) -> String {
+    let base = name.rsplit('/').next().unwrap_or(name).to_lowercase();
+    let base = base.strip_prefix('-').unwrap_or(&base);
+    let base = base.strip_prefix('.').unwrap_or(base);
+    base.strip_suffix("-wrapped").unwrap_or(base).to_string()
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+fn name_matches(candidate: &str, listed: &str) -> bool {
+    candidate == listed || (candidate.chars().count() == COMM_LIMIT && listed.starts_with(candidate))
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+fn listed_in(candidates: &[String], list: &[&str]) -> bool {
+    candidates.iter().any(|c| list.iter().any(|l| name_matches(c, l)))
+}
+
+/// A shell started for a prompt: after the program, only options and their
+/// values, with no `-c` and no operand (a script path).
+#[cfg_attr(not(unix), allow(dead_code))]
+fn interactive_invocation(cmd: &[String]) -> bool {
+    if cmd.is_empty() {
+        return false;
+    }
+    let mut args = cmd[1..].iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-i" | "-l" | "--login" | "--interactive" | "--norc" | "--noprofile" | "--no-config" | "-f" => {}
+            "-o" | "-C" | "--rcfile" | "--init-file" => {
+                if args.next().is_none() {
+                    return false;
+                }
+            }
+            // A cluster of the no-value flags, such as `-il`. One with `c` is `-c`.
+            a if a.len() >= 2
+                && a.starts_with('-')
+                && !a.starts_with("--")
+                && a[1..].chars().all(|c| "ilfxvuemp".contains(c)) => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Judge the foreground process. Pure: the facts are read elsewhere.
+///
+/// The pid alone never decides: an `exec tmux` keeps the shell's pid, and a
+/// nested shell at its prompt has another one. The name and argv decide.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn classify(_shell_pid: u32, fg: Option<FgFacts>) -> Fg {
+    let Some(fg) = fg else { return Fg::Unknown };
+    let argv0 = fg.cmd.first().map(|a| normalise(a)).filter(|a| !a.is_empty());
+    let name = Some(normalise(&fg.name)).filter(|n| !n.is_empty());
+    let names: Vec<String> = name.iter().chain(argv0.iter()).cloned().collect();
+    if !listed_in(&names, MULTIPLEXERS) && listed_in(&names, SHELLS) && interactive_invocation(&fg.cmd) {
+        return Fg::Shell;
+    }
+    let label = argv0.or(name).unwrap_or_else(|| "unknown program".to_string());
+    Fg::Busy { label, names }
+}
+
+/// The leader's pid, name and argv, through sysinfo. None when it is gone.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn fg_facts(pid: u32) -> Option<FgFacts> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let mut sys = System::new();
+    let target = Pid::from_u32(pid);
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[target]),
+        true,
+        ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
+    );
+    let p = sys.process(target)?;
+    Some(FgFacts {
+        pid,
+        name: p.name().to_string_lossy().into_owned(),
+        cmd: p.cmd().iter().map(|a| a.to_string_lossy().into_owned()).collect(),
+    })
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+fn foreground_job(shell_pid: u32, leader: Option<u32>) -> Fg {
+    classify(shell_pid, leader.and_then(fg_facts))
+}
+
+/// What the terminal's foreground process group is running, classified.
+#[tauri::command(async)]
+pub fn pty_foreground_job(state: tauri::State<'_, PtyManager>, id: u32) -> Result<Fg, String> {
+    #[cfg(unix)]
+    {
+        let (shell, leader) = {
+            let instances = state.instances.lock().unwrap();
+            let inst = instances.get(&id).ok_or("PTY not found")?;
+            let shell = inst.pid.ok_or("No PID")?;
+            (shell, inst.master.process_group_leader().filter(|p| *p > 0).map(|p| p as u32))
+        };
+        Ok(foreground_job(shell, leader))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (state, id);
+        Err("The foreground process is not available on this platform".to_string())
+    }
+}
+
 /// The folder of the foreground process, else the shell's. Polled every few
 /// seconds for every pane: answer from the OS directly (no child processes),
 /// falling back to lsof where that isn't available.
@@ -1035,5 +1176,182 @@ mod writer_tests {
         stop(&instances, 1);
         stop(&instances, 2);
         std::fs::remove_file(file).ok();
+    }
+}
+
+#[cfg(test)]
+mod foreground_tests {
+    use super::*;
+
+    fn facts(pid: u32, name: &str, cmd: &[&str]) -> Option<FgFacts> {
+        Some(FgFacts { pid, name: name.into(), cmd: cmd.iter().map(|s| s.to_string()).collect() })
+    }
+
+    fn label(fg: &Fg) -> Option<&str> {
+        match fg {
+            Fg::Busy { label, .. } => Some(label),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn classify_judges_by_name_argv_and_pid() {
+        let shell = 100;
+        assert_eq!(classify(shell, None), Fg::Unknown);
+        assert_eq!(classify(shell, facts(shell, "-zsh", &["-zsh"])), Fg::Shell);
+        assert_eq!(classify(shell, facts(200, "bash", &["bash", "--rcfile", "x", "-i"])), Fg::Shell, "a nested shell");
+        assert_eq!(classify(shell, facts(200, ".zsh-wrapped", &["/nix/store/abc-zsh-5.9/bin/zsh"])), Fg::Shell);
+        assert_eq!(label(&classify(shell, facts(200, "bash", &["bash", "script.sh"]))), Some("bash"));
+        assert_eq!(label(&classify(shell, facts(200, "sh", &["sh", "-c", "sleep 5; true"]))), Some("sh"));
+        assert_eq!(classify(shell, facts(200, "zsh", &["zsh", "-il"])), Fg::Shell, "combined flags");
+        assert_eq!(classify(shell, facts(200, "bash", &["bash", "-li"])), Fg::Shell, "combined flags");
+        assert_eq!(classify(shell, facts(200, "fish", &["fish", "-C", "echo hi", "--login"])), Fg::Shell, "fish -C takes a value");
+        assert_eq!(classify(shell, facts(200, "zsh", &["zsh", "-o", "RC_QUOTES"])), Fg::Shell, "-o takes a value");
+        assert!(label(&classify(shell, facts(200, "sh", &["sh", "-ic", "sleep 5"]))).is_some(), "a cluster containing c is -c");
+        assert!(label(&classify(shell, facts(200, "sh", &["sh", "-s", "a"]))).is_some(), "-s is not interactive");
+        assert!(label(&classify(shell, facts(200, "zsh", &["zsh", "-o"]))).is_some(), "-o with no value");
+        assert!(label(&classify(shell, facts(200, "bash", &[]))).is_some(), "an empty argv for a shell name");
+        assert_eq!(label(&classify(shell, facts(shell, "tmux", &["tmux"]))), Some("tmux"), "exec'd tmux");
+        assert_eq!(label(&classify(shell, facts(200, "zsh", &["tmux", "new"]))), Some("tmux"), "a multiplexer candidate wins over a shell one");
+        assert_eq!(label(&classify(shell, facts(shell, "ssh", &["ssh", "host"]))), Some("ssh"), "exec'd ssh");
+        assert_eq!(label(&classify(shell, facts(200, "vim", &["vim", "a.txt"]))), Some("vim"));
+        assert_eq!(label(&classify(shell, facts(200, "", &[]))), Some("unknown program"));
+
+        // The label is the argv[0] basename, and both candidates come back.
+        assert_eq!(
+            classify(shell, facts(200, "2.1.301", &["/Users/u/.local/bin/claude", "--x"])),
+            Fg::Busy { label: "claude".into(), names: vec!["2.1.301".into(), "claude".into()] },
+        );
+        assert_eq!(label(&classify(shell, facts(200, "Vim", &[]))), Some("vim"), "no argv: the normalised name");
+    }
+
+    #[test]
+    fn names_are_normalised_and_truncated_names_match_by_prefix() {
+        assert_eq!(normalise("/bin/-ZSH"), "zsh");
+        assert_eq!(normalise(".zsh-wrapped"), "zsh");
+        assert_eq!(normalise("/nix/store/x/bin/.bash-wrapped"), "bash");
+        assert!(name_matches("abcdefghijklmno", "abcdefghijklmnopq"), "15 characters: Linux's comm limit");
+        assert!(!name_matches("abcdefghijklmn", "abcdefghijklmnopq"), "14 characters do not match by prefix");
+        assert!(name_matches("bash", "bash"));
+        assert!(!name_matches("bas", "bash"));
+    }
+}
+
+#[cfg(all(test, unix))]
+mod foreground_pty_tests {
+    use super::*;
+    use crate::ptysink::testing::Window;
+    use std::time::{Duration, Instant};
+
+    /// A pty running `program args`, its output drained into a test window.
+    struct Pane {
+        master: Box<dyn MasterPty + Send>,
+        writer: Box<dyn Write + Send>,
+        child: Box<dyn portable_pty::Child + Send + Sync>,
+        pid: u32,
+        _window: Window,
+    }
+
+    impl Pane {
+        fn start(program: &str, args: &[&str]) -> Self {
+            let pair = NativePtySystem::default()
+                .openpty(PtySize { rows: 24, cols: 120, pixel_width: 0, pixel_height: 0 })
+                .unwrap();
+            let mut cmd = CommandBuilder::new(program);
+            cmd.args(args);
+            // No user rc files: a plain prompt, and nothing slow at start-up.
+            cmd.env("ENV", "/dev/null");
+            cmd.env("PS1", "$ ");
+            let child = pair.slave.spawn_command(cmd).unwrap();
+            drop(pair.slave);
+            let pid = child.process_id().unwrap();
+            let writer = pair.master.take_writer().unwrap();
+            let window = Window::new();
+            let sink = Arc::new(Mutex::new(Sink::new(window.out())));
+            start_reader(clone_reader(pair.master.as_ref()).unwrap(), sink, || {});
+            Pane { master: pair.master, writer, child, pid, _window: window }
+        }
+
+        fn leader(&self) -> Option<u32> {
+            self.master.process_group_leader().filter(|p| *p > 0).map(|p| p as u32)
+        }
+
+        fn job(&self) -> Fg {
+            foreground_job(self.pid, self.leader())
+        }
+
+        fn type_line(&mut self, line: &str) {
+            self.writer.write_all(format!("{line}\n").as_bytes()).unwrap();
+            self.writer.flush().unwrap();
+        }
+
+        /// Poll for up to 10 s: macOS runners can be slow to start a process.
+        fn wait_until(&self, what: &str, done: impl Fn(&Fg, Option<u32>) -> bool) -> Fg {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                let fg = self.job();
+                if done(&fg, self.leader()) {
+                    return fg;
+                }
+                assert!(Instant::now() < deadline, "timed out waiting for {what}; last saw {fg:?}");
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
+
+    impl Drop for Pane {
+        fn drop(&mut self) {
+            self.child.kill().ok();
+        }
+    }
+
+    fn busy_as(want: &'static str) -> impl Fn(&Fg, Option<u32>) -> bool {
+        move |fg, _| matches!(fg, Fg::Busy { label, .. } if label == want)
+    }
+
+    #[test]
+    fn reports_a_running_command() {
+        let mut pane = Pane::start("/bin/sh", &["-i"]);
+        pane.wait_until("the shell at its prompt", |fg, _| *fg == Fg::Shell);
+        pane.type_line("sleep 5");
+        pane.wait_until("sleep in the foreground", busy_as("sleep"));
+    }
+
+    #[test]
+    fn reports_a_running_shell_script() {
+        let dir = std::env::temp_dir().join(format!("ade-fg-script-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("script.sh");
+        std::fs::write(&script, "sleep 5\ntrue\n").unwrap();
+
+        let mut pane = Pane::start("/bin/sh", &["-i"]);
+        pane.wait_until("the shell at its prompt", |fg, _| *fg == Fg::Shell);
+        pane.type_line("sh -c 'sleep 5; true'");
+        pane.wait_until("sh -c in the foreground", busy_as("sh"));
+
+        let mut pane = Pane::start("/bin/sh", &["-i"]);
+        pane.wait_until("the shell at its prompt", |fg, _| *fg == Fg::Shell);
+        pane.type_line(&format!("bash {}", script.display()));
+        pane.wait_until("the script in the foreground", busy_as("bash"));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn reports_an_execd_process() {
+        let pane = Pane::start("/bin/sh", &["-c", "exec sleep 5"]);
+        pane.wait_until("the exec'd sleep", |fg, leader| {
+            busy_as("sleep")(fg, leader) && leader == Some(pane.pid)
+        });
+    }
+
+    #[test]
+    fn a_nested_shell_at_its_prompt_is_idle() {
+        let mut pane = Pane::start("/bin/sh", &["-i"]);
+        pane.wait_until("the shell at its prompt", |fg, _| *fg == Fg::Shell);
+        pane.type_line("sh -i");
+        let outer = pane.pid;
+        pane.wait_until("the nested shell at its prompt", |fg, leader| {
+            *fg == Fg::Shell && leader.is_some_and(|l| l != outer)
+        });
     }
 }

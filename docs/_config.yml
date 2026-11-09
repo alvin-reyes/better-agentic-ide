@@ -4,7 +4,7 @@ title: ADE
 tagline: The terminal for building products with AI
 description: >-
   ADE is a desktop terminal where your coding agents work as a team of 19 roles
-  under a methodology with a gate that decides when the work is actually done.
+  under a methodology with a gate that decides when the work is done. It runs
   Claude Code, Codex and local models.
 url: https://ade.ardata.tech
 baseurl: ""
@@ -43,3 +43,7 @@ exclude:
   - plans/
   - superpowers/
   - bmad-vendoring.md
+  - prd.md
+  - architecture.md
+  - ux-spec.md
+  - mockup.html

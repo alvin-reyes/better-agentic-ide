@@ -1,0 +1,26 @@
+# 0019: An engagement's Claude Code settings live in its profile's user-level settings; CI checks ADE's model of the merge
+
+- **Status:** Accepted (2026-11-08). Approved by the owner on 2026-11-08 with the F1 plan; accepted on 2026-11-08, when the delta review of revisions 5 to 5g of the F1 design passed. With the F1 design (sections 1 E1, E3, E5, and 8). Its open checks are closed by the session check (design appendix B) before slice 4.
+- **Revisions:** 2026-11-08 first version.
+- **Context:**
+  - PE-3 AC7, PE-5 AC4, AC6 and AC7, and PE-4 AC13 need hooks, `ask` rules, a bypass ban and file-tool denies in effect in every session of an engagement, checkouts included.
+  - They must never be written into the client's repo, and Agent status must not disturb them.
+  - Claude Code evaluates deny before allow.
+- **Decision:**
+  - **Where:** `<profile root>/claude/settings.json` (A's user scope). A's instance writes ADE's entries at creation and checks them at each start, keeping other entries.
+  - **Hooks** call ADE's helper binary by absolute path.
+  - **PE-4 AC13:** a deny set built from A's own folder name only, which matches every sibling under the engagements folder except A. It uses positive ASCII ranges, case-folded, because `ignore` 5.3.2 treats `[!x]` and `[^x]` as `[x]`. Tested: 0 wrong of 85 (design E1).
+  - **PE-5 AC6:** `disableBypassPermissionsMode: "disable"`. Claude Code 2.1.319 merges it as a restrictive key, so no checkout can undo it.
+  - **ADE's effective-settings model** (`src/lib/engagement/effectiveSettings.ts`, using the `ignore` package):
+    - lists concatenated across sources;
+    - decided deny, then ask, then allow;
+    - restrictive keys win;
+    - `Read(!...)` and `Edit(!...)` remove earlier paths.
+  - A checkout's `allow` of an AC4 command, a bypass `defaultMode`, or any `!` path rule is warned about.
+- **Consequences:**
+  - The engineer's own user-level Claude setup is absent in engagements, as D11 intends.
+  - The deny set requires ASCII engagement folder names of 3 or more characters.
+  - **Unconfirmed until the session check:** the ask-over-allow order, `ignore`'s options inside Claude Code, Glob and Grep honouring Read denies, and Windows path rules (E5-W on Windows: the complement set written in the POSIX form Claude converts Windows paths to).
+  - Under O1 option A (ADR 0023), the same `settings.json` also carries `env.HOME` (macOS) or `env.LOCALAPPDATA` (Windows) with the real value.
+  - A checkout's `!` rule can undo AC13's denies (design P3).
+  - **Recommended to the owner:** also `disableAutoMode` (design O4).

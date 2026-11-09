@@ -1,0 +1,17 @@
+# Epics of F1, personas and engagements, in build order.
+# Sharded 2026-11-08 for slice 0 (the harness, with its two prerequisite groups) and slice 1 (the profile and the rule).
+# Later slices (2 to 7) are not sharded here: they wait for the owner's order after slice 1 is Done.
+# PRD: docs/prd.md, F1.8 (slices). Architecture and the F1 gate: docs/architecture.md. Design: docs/superpowers/specs/2026-11-08-personas-and-engagements-design.md.
+
+[[epic]]
+id = 1
+slug = "epic-harness"
+title = "F1 slice 0: the isolation harness, red by design"
+covers = ["PE-4"]
+
+[[epic]]
+id = 2
+slug = "epic-profile-and-rule"
+title = "F1 slice 1: the profile and the rule"
+covers = ["PE-1", "PE-2", "PE-4", "PE-13"]
+after = [{ epic = 1, needs = "slice 0 Done: the isolation harness runs on three platforms and fails with its one verdict (architecture item 2, slice 0 rule)" }]

@@ -36,13 +36,13 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("../../hooks/useTerminal", () => ({ destroyInstance: vi.fn() }));
 
 import { runInNewTabPane, typeWhenReady } from "../terminalCommands";
-import { useTabStore } from "../../stores/tabStore";
+import { useTabStore, shownView } from "../../stores/tabStore";
 
 /** Start `runInNewTabPane` and give its new tab's pane PTY `ptyId`, as TerminalPane does once the shell starts. */
 function launch(name: string, command: string, ptyId: number) {
   const result = runInNewTabPane(name, "/p", command);
   const tab = useTabStore.getState().tabs.find((t) => t.name === name)!;
-  useTabStore.getState().setPtyId(tab.activePaneId, ptyId);
+  useTabStore.getState().setPtyId(shownView(tab).activePaneId, ptyId);
   return { result, tab };
 }
 
@@ -64,7 +64,7 @@ describe("typing a launch line", () => {
     const command = "claude " + "x".repeat(3000);
     const { result, tab } = launch("Two in a row", command, 5);
     await vi.advanceTimersByTimeAsync(2000);
-    expect(await result).toBe(tab.activePaneId);
+    expect(await result).toBe(shownView(tab).activePaneId);
     // One write, only after the fifth answer: one true is not enough, and a false resets the count.
     expect(io.events.map((e) => e.what)).toEqual(["ready:false", "ready:true", "ready:false", "ready:true", "ready:true", "write"]);
     // The whole line, whatever its length.
@@ -78,7 +78,7 @@ describe("typing a launch line", () => {
       io.answers = [answer];
       const { result, tab } = launch(`Unknown ${answer}`, "claude go", 6);
       await vi.advanceTimersByTimeAsync(300);
-      expect(await result, String(answer)).toBe(tab.activePaneId);
+      expect(await result, String(answer)).toBe(shownView(tab).activePaneId);
       expect(io.events.map((e) => e.what), String(answer)).toEqual([`ready:${answer}`, "write"]);
       expect(io.writes, String(answer)).toEqual([{ id: 6, text: "claude go\r" }]);
     }
@@ -93,7 +93,7 @@ describe("typing a launch line", () => {
     await vi.advanceTimersByTimeAsync(9_900);
     expect(io.writes).toEqual([]);
     await vi.advanceTimersByTimeAsync(200);
-    expect(await result).toBe(tab.activePaneId);
+    expect(await result).toBe(shownView(tab).activePaneId);
     expect(io.writes).toEqual([{ id: 7, text: "claude go\r" }]);
     const writeAt = io.events.find((e) => e.what === "write")!.at;
     expect(writeAt - started).toBeGreaterThanOrEqual(10_000);

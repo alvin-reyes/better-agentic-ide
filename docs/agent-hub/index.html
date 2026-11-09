@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="How to make, run and configure an AI agent hub from ai-agent-hub-template: setup, daily flow, hooks, brain, auto sync, monitors and every setting.">
+<title>Agent hub guide</title>
+<link rel="icon" href="/assets/img/favicon.png">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a sticky contents rail beside one reading column; diagrams and tables scroll inside their own boxes. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #17202b;
+  --muted: #566273;
+  --line: #dde2e9;
+  --accent: #1d5fd1;
+  --accent-soft: #e6eefc;
+  --code-bg: #eef1f5;
+  --warn: #9a5b00;
+  --warn-soft: #fff4e0;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c; --surface: #161d26; --fg: #e4e9f0; --muted: #9aa6b6; --line: #273240;
+    --accent: #7aa8ff; --accent-soft: #1b2b45; --code-bg: #1c2531; --warn: #f0b45c; --warn-soft: #2e2414;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151c; --surface: #161d26; --fg: #e4e9f0; --muted: #9aa6b6; --line: #273240;
+  --accent: #7aa8ff; --accent-soft: #1b2b45; --code-bg: #1c2531; --warn: #f0b45c; --warn-soft: #2e2414;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 17px/1.6 var(--body); }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { border-bottom: 1px solid var(--line); background: var(--surface); }
+header.top .wrap { padding-block: 40px 32px; display: grid; gap: 14px; }
+.eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; }
+h1 { font-size: clamp(32px, 5vw, 48px); margin: 0; letter-spacing: -.01em; }
+.lede { font-size: 19px; max-width: 64ch; margin: 0; color: var(--muted); }
+.lede strong { color: var(--fg); }
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; padding-block: 32px 80px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; font-size: 14.5px; max-height: calc(100vh - 40px); overflow-y: auto; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: s; }
+nav.toc li { counter-increment: s; }
+nav.toc a { display: block; padding: 4px 8px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+nav.toc a::before { content: counter(s, decimal-leading-zero) "  "; font: 12px var(--mono); color: var(--line); }
+nav.toc a:hover { background: var(--accent-soft); color: var(--fg); }
+main { min-width: 0; }
+section { padding-block: 8px 28px; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
+section:last-child { border-bottom: 0; }
+h2 { font-size: 28px; margin: 0 0 12px; scroll-margin-top: 20px; }
+h3 { font-size: 19px; margin: 28px 0 8px; }
+p, ul, ol { max-width: 70ch; }
+li + li { margin-top: 4px; }
+code { font: 0.86em var(--mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { margin: 12px 0 18px; }
+pre.cmd { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font: 14px/1.55 var(--mono); }
+pre.cmd code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+.c { color: var(--muted); }
+.tbl { overflow-x: auto; margin: 12px 0 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font: 600 12px/1.3 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+td:first-child { white-space: nowrap; }
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 14px 0 8px; overflow-x: auto; }
+.diagram pre.mermaid { margin: 0; background: none; font-family: var(--body); text-align: center; }
+.caption { font-size: 14px; color: var(--muted); margin: 0 0 20px; }
+.note { background: var(--warn-soft); border-left: 3px solid var(--warn); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; max-width: 70ch; }
+.note b { color: var(--warn); }
+.steps { counter-reset: st; list-style: none; padding: 0; display: grid; gap: 14px; }
+.steps > li { counter-increment: st; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; }
+.steps > li::before { content: counter(st); font: 600 14px/30px var(--mono); width: 30px; height: 30px; text-align: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.steps > li > div { min-width: 0; }
+.steps p { margin: 2px 0 0; }
+.tree { font: 13.5px/1.6 var(--mono); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+@media (max-width: 560px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.card h3 { margin: 0 0 6px; font-size: 17px; }
+.card p { margin: 0; font-size: 15.5px; color: var(--muted); }
+footer { color: var(--muted); font-size: 14px; padding-block: 24px 48px; border-top: 1px solid var(--line); }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  nav.toc { position: static; max-height: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--surface); }
+  nav.toc ol { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  td:first-child { white-space: normal; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <span class="eyebrow">ai-agent-hub-template · guide</span>
+    <h1>Agent hub guide</h1>
+    <p class="lede">How to make, run and configure an <strong>agent hub</strong>: a private repo of Bash and Markdown that holds the
+      <strong>context, state and history</strong> of one technical persona's work for one client, on Claude Code.
+      Every session starts with what is live, open and waiting. The agents keep it up to date. The client's code stays in its own repos.</p>
+    <p class="lede">New to it? Start with the <a href="/training/#hub">15-minute hands-on training</a>.</p>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#overview">What a hub is</a></li>
+      <li><a href="#requirements">Requirements</a></li>
+      <li><a href="#quickstart">Make a hub</a></li>
+      <li><a href="#init">bin/init options</a></li>
+      <li><a href="#personas">Personas</a></li>
+      <li><a href="#layout">What's inside</a></li>
+      <li><a href="#daily">Daily work</a></li>
+      <li><a href="#hooks">Hooks</a></li>
+      <li><a href="#deepwork">Deep work</a></li>
+      <li><a href="#brain">The brain</a></li>
+      <li><a href="#sync">Auto sync</a></li>
+      <li><a href="#schedule">Scheduled jobs</a></li>
+      <li><a href="#monitors">Monitors</a></li>
+      <li><a href="#config">hub.conf</a></li>
+      <li><a href="#models">Models and installs</a></li>
+      <li><a href="#safety">Secrets and safety</a></li>
+      <li><a href="#rules">Agent rules</a></li>
+      <li><a href="#commands">Command reference</a></li>
+      <li><a href="#newmac">A new Mac</a></li>
+      <li><a href="#upgrade">Upgrading a hub</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#template">Working on the template</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+<section id="overview">
+  <h2>What a hub is</h2>
+  <p>A hub is one private Git repo per client and role. Its <code>CLAUDE.md</code> makes Claude Code the persona you picked, such as a
+    DevOps/SRE, a staff engineer or a fractional CTO, and its folders hold the state of each work area. Hooks print that state when a
+    session starts and tell each terminal what the others changed. When a folder session ends, they journal its commits and commit its notes. Scheduled jobs push the hub,
+    run your monitors and write a morning briefing.</p>
+  <div class="grid2">
+    <div class="card"><h3>Context</h3><p>The persona, the shared rules, and each folder's <code>CLAUDE.md</code> and <code>ACCESS.md</code> (names and locations, never values).</p></div>
+    <div class="card"><h3>State</h3><p>Each folder's <code>STATE.md</code>: Live, Staged, Open, Waiting on, Next session starts with.</p></div>
+    <div class="card"><h3>History</h3><p><code>journal/&lt;UTC date&gt;.md</code>, the append-only timeline every agent and hook writes to, plus <code>memory/</code>.</p></div>
+    <div class="card"><h3>Recall</h3><p><code>bin/brain</code>: every Markdown section in a local SQLite index, searched by keyword and by meaning.</p></div>
+  </div>
+
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  subgraph HUB["Hub repo (private, Git)"]
+    direction TB
+    CM["CLAUDE.md + persona agent"]
+    F["projects/#lt;x#gt; · ops/#lt;x#gt;<br/>CLAUDE · ACCESS · STATE · memory/"]
+    J["journal/#lt;UTC date#gt;.md"]
+    HC["hub.conf<br/>(names and locations only;<br/>commit it once by hand)"]
+    BIN["bin/ scripts + hooks"]
+  end
+  subgraph MAC["This Mac (not in the repo)"]
+    direction TB
+    CC["Claude config dir<br/>projects/…/memory → hub memory<br/>skills/bmad-* → hub skills"]
+    ST["~/.agent-hub/#lt;name#gt;/<br/>logs, locks, snapshots, monitor state"]
+    KC["macOS Keychain<br/>(service = hub name)"]
+    LD["launchd jobs<br/>briefing · monitor · sync"]
+    DB[".local/brain.db<br/>(gitignored)"]
+    OL["Ollama<br/>(local embeddings)"]
+  end
+  CODE["Client code repos<br/>(own checkouts)"]
+  GH["GitHub remote<br/>(the hub's origin)"]
+  BIN -- "bin/setup links" --> CC
+  BIN --> ST
+  BIN -- "bin/secret" --> KC
+  BIN -- "bin/schedule" --> LD
+  BIN -- "bin/brain" --> DB
+  DB -. vectors .- OL
+  F -- "ACCESS.md Code table" --> CODE
+  HUB -- "bin/sync" --> GH
+  </pre></div>
+  <p class="caption">Where everything lives. The hub repo travels between Macs. Secrets, logs, the search index and links into Claude stay on each Mac.</p>
+</section>
+
+<section id="requirements">
+  <h2>Requirements</h2>
+  <p>The scripts target <b>macOS</b> and Bash 3.2 or later. They use launchd, the Keychain (<code>security</code>), notifications and
+    Terminal or iTerm through <code>osascript</code>, and BSD <code>stat</code> and <code>date</code>.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Tool</th><th>Used for</th><th>Needed?</th></tr></thead>
+    <tbody>
+      <tr><td><code>claude</code></td><td>Claude Code: every session, the briefing</td><td>Yes</td></tr>
+      <tr><td><code>git</code>, <code>python3</code></td><td>the hub itself; <code>bin/init</code>, <code>bin/work</code>, <code>bin/changes</code>, <code>bin/brain</code></td><td>Yes</td></tr>
+      <tr><td><code>gh</code></td><td>creating the hub from the template, cloning client repos, checking repo access</td><td>Yes, for GitHub use</td></tr>
+      <tr><td><code>gitleaks</code></td><td>the secret check. Without it the pre-commit hook only warns, so hand and session-end commits go in unscanned, and <code>bin/sync --auto</code> refuses to run</td><td>Yes</td></tr>
+      <tr><td><code>ssh</code>, <code>curl</code>, <code>node</code></td><td><code>bin/remote</code>, the staging check, and tools the agents may need. <code>bin/doctor</code> checks for all three</td><td>Checked</td></tr>
+      <tr><td>Ollama + <code>nomic-embed-text</code></td><td>meaning-based search in <code>bin/brain</code></td><td>Optional (keyword search works without it)</td></tr>
+      <tr><td><code>timeout</code> / <code>gtimeout</code></td><td>monitor and index time limits</td><td>Optional (a built-in fallback is used)</td></tr>
+    </tbody>
+  </table></div>
+  <p>Add more tools for <code>bin/doctor</code> to check with <code>HUB_TOOLS="kubectl terraform"</code> in <code>hub.conf</code>.</p>
+</section>
+
+<section id="quickstart">
+  <h2>Make a hub</h2>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  A["Create a private repo from the template<br/>gh repo create … --template"] --> B["bin/init --persona … --client … --owner …"]
+  B --> B1["writes hub.conf"]
+  B --> B2["renders CLAUDE.md, ACCESS.md, README.md<br/>and .claude/agents/#lt;persona#gt;.md"]
+  B --> B3["bin/new for each folder:<br/>CLAUDE · ACCESS · STATE · memory · settings · agent"]
+  B --> B4["git init (only if no .git yet),<br/>hooks path .githooks, first journal entry"]
+  B1 & B2 & B3 & B4 --> K["commit and push once by hand<br/>(bin/init commits nothing; bin/sync never stages hub.conf)"]
+  K --> C["bin/setup<br/>link memory + BMAD skills into the Claude config dir"]
+  C --> D["ollama pull nomic-embed-text<br/>bin/brain index"]
+  D --> E["bin/doctor until what you need is OK<br/>bin/secret --set #lt;name#gt; for each secret"]
+  E --> F["bin/schedule install<br/>briefing · monitor · sync"]
+  F --> G["claude (or your --claude wrapper)<br/>at the hub root"]
+  </pre></div>
+  <p class="caption">From template to first session.</p>
+
+  <ol class="steps">
+    <li><div><b>Create the repo from the template and clone it.</b>
+      <pre class="cmd"><code>gh repo create my-acme-sre --private --template alvin-reyes/ai-agent-hub-template --clone
+cd my-acme-sre</code></pre>
+      <p>Without GitHub: run <code>bin/init … --dest ~/Project/acme-sre</code> from a template checkout. It copies the template to that new folder
+        first, leaving out <code>.git</code>, <code>hub.conf</code>, <code>repos/</code> and <code>_bmad-output/</code>. The folder must not exist yet.
+        Add a private remote there (<code>git remote add origin &lt;url&gt;</code>). Without an origin, sync commits but never pushes, and still logs <code>synced</code>.</p></div></li>
+    <li><div><b>Pick a persona and initialize.</b>
+      <pre class="cmd"><code>bin/init --list                                   <span class="c"># the personas</span>
+bin/init --persona devops-sre --client "Acme Corp" --owner "Sam Lee" \
+  --repo acme/infra=~/code/infra --remote deploy@staging.acme.com:22 --remote-key ~/.ssh/acme \
+  --staging-url https://staging.acme.com --secret grafana-token --briefing 08:00</code></pre>
+      <p><code>--persona</code>, <code>--client</code> and <code>--owner</code> are required. <code>bin/init</code> never overwrites a hub that already has a
+        <code>hub.conf</code>, and it writes no secrets.</p></div></li>
+    <li><div><b>Commit and push the hub once, by hand.</b>
+      <pre class="cmd"><code>git add -A &amp;&amp; git commit -m "Initialize the hub" &amp;&amp; git push -u origin main</code></pre>
+      <p><code>bin/init</code> commits nothing, and <code>bin/sync</code>'s path list leaves out <code>hub.conf</code>. Without this commit, a fresh clone has no <code>hub.conf</code>:
+        its hub name falls back to the folder name, which changes the state folder, launchd labels and Keychain service, and it has no secret names to check.
+        Pushing with <code>-u</code> also sets the upstream that auto sync needs before it can scan commits ahead of a push.
+        Commit <code>hub.conf</code> by hand again whenever you edit it.</p></div></li>
+    <li><div><b>Link it into Claude and check what this Mac can reach.</b>
+      <pre class="cmd"><code>bin/setup                          <span class="c"># memory + skills links, git hooks</span>
+ollama pull nomic-embed-text       <span class="c"># once per Mac, optional</span>
+bin/brain index
+bin/doctor                         <span class="c"># OK / MISSING per tool, login, repo, box, secret</span>
+bin/secret --set grafana-token     <span class="c"># hidden prompt; never an argument</span></code></pre></div></li>
+    <li><div><b>Turn on the scheduled jobs.</b>
+      <pre class="cmd"><code>bin/schedule install               <span class="c"># weekday briefing, monitor + sync every 30 min</span></code></pre></div></li>
+    <li><div><b>Start working.</b>
+      <pre class="cmd"><code>claude                             <span class="c"># at the hub root: the main agent (use your --claude wrapper if you set one)</span>
+bin/work ops/environments          <span class="c"># deep work in one folder's repo, in a new Terminal</span></code></pre></div></li>
+  </ol>
+</section>
+
+<section id="init">
+  <h2><code>bin/init</code> options</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Option</th><th>Sets</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td><code>--persona &lt;slug&gt;</code></td><td>the role (a file in <code>personas/</code>); <code>--list</code> shows them</td><td>required</td></tr>
+      <tr><td><code>--client</code>, <code>--owner</code></td><td>who the work is for, and who the agent works for</td><td>required</td></tr>
+      <tr><td><code>--name</code></td><td>the hub name (a-z, 0-9, <code>-</code>), also the Keychain service and launchd label</td><td><code>&lt;client slug&gt;-&lt;persona&gt;</code></td></tr>
+      <tr><td><code>--dest &lt;dir&gt;</code></td><td>copy the template to a new folder first</td><td>initialize in place</td></tr>
+      <tr><td><code>--folders "projects/a ops/b"</code></td><td>the work areas, each <code>projects/&lt;name&gt;</code> or <code>ops/&lt;name&gt;</code></td><td>the persona's</td></tr>
+      <tr><td><code>--repo owner/name[=checkout]</code></td><td>code repos (repeatable); rows go into the <b>first</b> folder's Code table, where deep work happens</td><td>none</td></tr>
+      <tr><td><code>--code-owner &lt;org&gt;</code></td><td>the GitHub owner for repos named without one</td><td>none</td></tr>
+      <tr><td><code>--remote user@host[:port]</code></td><td>the box <code>bin/remote</code> reaches over SSH</td><td>none (port 22)</td></tr>
+      <tr><td><code>--remote-key</code>, <code>--remote-dir</code></td><td>the SSH key path, and the directory commands run in</td><td>none</td></tr>
+      <tr><td><code>--staging-url</code></td><td>a URL <code>bin/doctor</code> checks (2xx, 3xx or 401 is OK)</td><td>none</td></tr>
+      <tr><td><code>--secret &lt;name&gt;</code></td><td>secret <b>names</b> <code>bin/doctor</code> checks for in the Keychain (repeatable; a-z, 0-9, <code>-</code>)</td><td>none</td></tr>
+      <tr><td><code>--briefing HH:MM</code></td><td>the weekday morning-briefing time, this Mac's local time</td><td><code>08:00</code></td></tr>
+      <tr><td><code>--claude &lt;cmd&gt;</code></td><td>the Claude install to run: <code>claude</code>, or a wrapper that sets its own <code>CLAUDE_CONFIG_DIR</code></td><td><code>claude</code></td></tr>
+      <tr><td><code>--claude-config-dir &lt;dir&gt;</code></td><td>that install's config dir, where memory and skills are linked</td><td>read from the wrapper's <code>export CLAUDE_CONFIG_DIR=</code>, else <code>~/.claude</code></td></tr>
+      <tr><td><code>--model M</code>, <code>--effort E</code></td><td>deep-work sessions; the model also seeds the persona agent at init; effort is <code>low|medium|high|xhigh|max</code> and applies to <code>bin/work</code> only</td><td>the persona's model</td></tr>
+      <tr><td><code>--agent-model M</code></td><td>the folder agents' model (written when each is made) and <code>bin/work</code>'s specialist agents</td><td><code>sonnet</code></td></tr>
+      <tr><td><code>--briefing-model M</code></td><td>the morning briefing</td><td><code>haiku</code></td></tr>
+      <tr><td><code>--brain-path &lt;path&gt;</code></td><td>extra folders, files or globs the brain indexes (repeatable; quote globs)</td><td>none</td></tr>
+      <tr><td><code>--embed-model M</code>, <code>--ollama-url URL</code></td><td>the local embedding model and Ollama address</td><td><code>nomic-embed-text</code>, <code>http://localhost:11434</code></td></tr>
+      <tr><td><code>--auto-sync on|off</code></td><td><code>HUB_AUTO_SYNC</code>: push every 30 minutes and at each folder session's end</td><td><code>on</code></td></tr>
+    </tbody>
+  </table></div>
+  <p><code>bin/init</code> fills <code>{{CLIENT}}</code> and <code>{{OWNER}}</code> in the persona text. It sets BMAD's <code>project_name</code> and
+    <code>output_folder</code> in <code>_bmad/config.toml</code> and creates <code>memory/MEMORY.md</code>. It runs <code>git init</code> on <code>main</code> when there is no <code>.git</code> yet,
+    sets <code>core.hooksPath .githooks</code>, makes every folder with <code>bin/new</code> and journals <i>"Hub initialized from ai-agent-hub-template"</i>.</p>
+</section>
+
+<section id="personas">
+  <h2>Personas</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Slug</th><th>Role</th><th>Default folders</th><th>Model</th></tr></thead>
+    <tbody>
+      <tr><td><code>data-engineer</code></td><td>Data Engineer</td><td>projects/pipelines, projects/warehouse, projects/reporting, ops/data-quality</td><td>sonnet</td></tr>
+      <tr><td><code>devops-sre</code></td><td>DevOps / Site Reliability Engineer</td><td>ops/environments, ops/ci-cd, ops/monitoring, ops/security</td><td>sonnet</td></tr>
+      <tr><td><code>engineering-manager</code></td><td>Engineering Manager</td><td>projects/team, projects/delivery, projects/client</td><td>sonnet</td></tr>
+      <tr><td><code>fractional-cto</code></td><td>Fractional CTO</td><td>projects/strategy, projects/proposals, projects/vendors, projects/client</td><td>opus</td></tr>
+      <tr><td><code>frontend-engineer</code></td><td>Frontend Engineer</td><td>projects/web, projects/design-system, projects/client</td><td>sonnet</td></tr>
+      <tr><td><code>ml-ai-engineer</code></td><td>ML / AI Engineer</td><td>projects/models, projects/agents, projects/evals, projects/proposals</td><td>opus</td></tr>
+      <tr><td><code>mobile-engineer</code></td><td>Mobile Engineer</td><td>projects/ios, projects/android, projects/releases</td><td>sonnet</td></tr>
+      <tr><td><code>qa-test-engineer</code></td><td>QA / Test Engineer</td><td>projects/app, projects/test-plans, ops/environments</td><td>sonnet</td></tr>
+      <tr><td><code>security-engineer</code></td><td>Security Engineer</td><td>ops/security, ops/access, projects/app, projects/reviews</td><td>opus</td></tr>
+      <tr><td><code>solutions-architect</code></td><td>Solutions Architect</td><td>projects/architecture, projects/proposals, projects/client</td><td>opus</td></tr>
+      <tr><td><code>staff-software-engineer</code></td><td>Staff Software Engineer</td><td>projects/app, projects/proposals, projects/client, ops/environments</td><td>opus</td></tr>
+      <tr><td><code>tech-lead</code></td><td>Tech Lead</td><td>projects/app, projects/planning, projects/client</td><td>sonnet</td></tr>
+      <tr><td><code>technical-product-manager</code></td><td>Technical Product Manager</td><td>projects/roadmap, projects/specs, projects/client</td><td>sonnet</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Add a persona</h3>
+  <p>Copy a file in <code>personas/</code>. Keep its front matter and use <code>{{CLIENT}}</code> and <code>{{OWNER}}</code> in the body, then write the persona's habits:</p>
+  <pre class="cmd"><code>---
+title: DevOps / Site Reliability Engineer
+folders: ops/environments ops/ci-cd ops/monitoring ops/security
+model: sonnet
+briefing_focus: Report failing checks, expiring certificates, backups not verified, and cost changes.
+---
+
+## Who you are
+
+You are the **DevOps / Site Reliability Engineer** for {{CLIENT}}, working for {{OWNER}}. …</code></pre>
+  <p><code>briefing_focus</code> is added to the morning briefing's prompt. <code>model</code> becomes the hub's default session model.</p>
+</section>
+
+<section id="layout">
+  <h2>What's inside a hub</h2>
+<pre class="cmd tree"><code>my-acme-sre/
+├── CLAUDE.md              <span class="c"># the persona + shared rules, git boundaries, token budget (rendered)</span>
+├── ACCESS.md              <span class="c"># shared access: code, remote box, services, credential LOCATIONS, permissions</span>
+├── README.md              <span class="c"># this hub's commands and folders (rendered)</span>
+├── hub.conf               <span class="c"># who the agent is and what it can reach (names only)</span>
+├── .claude/
+│   ├── settings.json      <span class="c"># hub-root hooks</span>
+│   ├── agents/&lt;persona&gt;.md <span class="c"># the persona agent</span>
+│   ├── agents/&lt;folder&gt;.md  <span class="c"># one named agent per folder (ops/x → ops-x)</span>
+│   └── skills/bmad-*      <span class="c"># BMAD v6 skills</span>
+├── projects/&lt;name&gt;/  ·  ops/&lt;name&gt;/
+│   ├── CLAUDE.md          <span class="c"># what this work is; imports ACCESS, memory index, STATE</span>
+│   ├── ACCESS.md          <span class="c"># Code, Machines, Services, Credentials, Permissions, Undo</span>
+│   ├── STATE.md           <span class="c"># Live · Staged · Open · Waiting on · Next session starts with</span>
+│   ├── memory/MEMORY.md   <span class="c"># the folder's memory index</span>
+│   ├── monitors.d/*.sh    <span class="c"># optional read-only checks</span>
+│   ├── .claude/agents/*.md <span class="c"># optional specialist agents, passed by bin/work --agents</span>
+│   └── .claude/settings.json <span class="c"># the folder's hooks (used by bin/work)</span>
+├── memory/MEMORY.md       <span class="c"># hub-wide facts, people, gotchas</span>
+├── journal/YYYY-MM-DD.md  <span class="c"># one file per UTC day, append only</span>
+├── bin/                   <span class="c"># the scripts</span>
+├── templates/  personas/  launchd/
+├── .ade/  _bmad/  _bmad-output/   <span class="c"># methodology rules, BMAD config and output</span>
+├── .githooks/pre-commit   <span class="c"># refuses repos/, files over 1 MB, secrets</span>
+└── .local/brain.db        <span class="c"># the search index (gitignored)</span></code></pre>
+
+  <h3>A folder's files</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>File</th><th>Holds</th></tr></thead>
+    <tbody>
+      <tr><td><code>CLAUDE.md</code></td><td>Two lines on what the work is, plus folder rules: code changes only in this folder's repos, on a branch, as a draft PR; update STATE and the journal at the end. It imports <code>@ACCESS.md</code>, <code>@memory/MEMORY.md</code> and <code>@STATE.md</code>.</td></tr>
+      <tr><td><code>ACCESS.md</code></td><td><b>Code</b> table (Repo · Checkout · Default branch · Who merges · CI), <b>Machines</b>, <b>Services</b>, <b>Credentials</b> (locations only), <b>Permissions</b> and <b>Undo</b> (live change → rollback command). The Code table's Checkout column is what <code>bin/work</code>, <code>bin/setup</code> and the hooks read.</td></tr>
+      <tr><td><code>STATE.md</code></td><td><code>Updated:</code> then <b>Live</b>, <b>Staged</b>, <b>Open</b>, <b>Waiting on</b>, <b>Next session starts with</b>. <code>bin/context</code> prints the first lines of Live, Open, Waiting on and Next session.</td></tr>
+      <tr><td><code>memory/</code></td><td>One fact per file with a <code>description:</code> in its front matter, indexed in <code>MEMORY.md</code>. Never secrets, phone numbers or contact email addresses.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Make a new work area with <code>bin/new projects/&lt;name&gt;</code> or <code>bin/new ops/&lt;name&gt;</code>. It never overwrites existing files (it prints
+    <code>kept</code>), and it runs <code>bin/setup</code> to link the new folder's memory.</p>
+  <p>A journal entry looks like this:</p>
+  <pre class="cmd"><code>## 09:42 UTC · ops/environments
+Rotated the staging TLS cert; expires 2027-02-01. Waiting on the client for the prod window.</code></pre>
+</section>
+
+<section id="daily">
+  <h2>Daily work</h2>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  BR["08:00 weekday · bin/briefing<br/>read-only summary → journal + notification"] --> S
+  S["claude at the hub root<br/>SessionStart prints every folder's state + recent journal"] --> P["Main agent proposes the day's tasks:<br/>waiting on you, due, broken"]
+  P --> OK{"Your go?"}
+  OK -- "a folder task" --> AG["Spawn that folder's agent<br/>(.claude/agents/#lt;folder#gt;.md)<br/>it loads its own context"]
+  OK -- "deep work" --> W["bin/work #lt;folder#gt;<br/>new Terminal in the repo checkout"]
+  OK -- "cross-folder judgement" --> PA["Persona agent<br/>(.claude/agents/#lt;persona#gt;.md)"]
+  AG & PA --> U["Agent updates STATE.md<br/>+ bin/journal #lt;folder#gt; …"]
+  W --> U2["Stop hook asks for a STATE update after new commits<br/>SessionEnd journals commits, commits folder, starts sync"]
+  U & U2 --> R["Main agent confirms STATE + journal,<br/>reports to you in a few lines"]
+  R --> SY["bin/sync --auto (every 30 min and each session end)<br/>pushes the hub"]
+  </pre></div>
+  <p class="caption">A day in the hub. Hub commits come from the main agent, <code>bin/sync</code>, and a folder session's end (that folder and the journal only). Code is committed only in the client repos.</p>
+  <ul>
+    <li><b>Main agent</b> (a session at the hub root, started with the hub's Claude install) reads the state and proposes tasks. On your go, it spawns each folder's named agent with
+      the task, not the history. It never does a folder's work without reading that folder's CLAUDE.md, ACCESS.md and STATE.md first.</li>
+    <li><b>Folder agents</b> (<code>projects/app</code> → <code>app</code>, <code>ops/ci-cd</code> → <code>ops-ci-cd</code>) work only in their folder's repos.
+      They stage production changes for you and end with five lines or fewer.</li>
+    <li><b>The persona agent</b> handles work that spans folders or needs judgement: planning, trade-offs, proposals, client emails, reviews
+      and deploy decisions.</li>
+    <li>Several terminals can run at once. The <code>UserPromptSubmit</code> hook tells each one what the others changed since its last prompt.</li>
+  </ul>
+</section>
+
+<section id="hooks">
+  <h2>Hooks</h2>
+  <p>The hub root's hooks are in <code>.claude/settings.json</code>. Each folder's hooks are in <code>&lt;folder&gt;/.claude/settings.json</code>, made from
+    <code>templates/folder-settings.json</code>. <code>bin/work</code> passes that file with <code>--settings</code>, because a deep-work session runs in the client's
+    checkout, outside the hub.</p>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant You
+  participant S as Folder session (bin/work)
+  participant H as Hub scripts
+  participant R as Client repo
+  You->>S: bin/work ops/environments
+  S->>H: SessionStart · bin/context #lt;folder#gt; --rules
+  H-->>S: hub rules + Tools + hub memory index, STATE.md, last 5 journal entries
+  loop every prompt
+    You->>S: prompt
+    S->>H: UserPromptSubmit · bin/changes #lt;folder#gt;
+    H-->>S: other folders' STATE updates, new journal lines, new or updated memory
+  end
+  S->>R: commits on a branch
+  S->>H: Stop · bin/stop-check #lt;folder#gt;
+  H-->>S: block once per new commit: "update STATE.md and the journal"
+  S->>H: PreCompact · bin/journal (note what was in progress)
+  You->>S: exit
+  S->>H: SessionEnd · bin/session-end #lt;folder#gt;
+  H->>H: journal the session's commits and pushed branches
+  H->>H: bin/brain index (≤120 s), commit folder + journal
+  H->>H: start bin/sync --auto in the background
+  </pre></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Event</th><th>Hub root</th><th>Folder session</th></tr></thead>
+    <tbody>
+      <tr><td>SessionStart</td><td><code>bin/context</code>: every folder's Live, Open, Waiting on and Next, flagged <i>"state may be stale"</i> when a repo has commits newer than STATE.md, plus the last 8 journal entries</td><td><code>bin/context &lt;folder&gt; --rules</code>: the hub's Shared rules, Tools, Git boundaries and Token budget, plus the hub memory index, the folder's STATE.md and its last 5 journal entries</td></tr>
+      <tr><td>UserPromptSubmit</td><td><code>bin/changes</code></td><td><code>bin/changes &lt;folder&gt;</code>; also shows hub-root journal entries. Its own folder isn't echoed back</td></tr>
+      <tr><td>PreCompact</td><td>journals a reminder to update the folders' STATE.md</td><td>journals that STATE.md and the entry should say what was in progress</td></tr>
+      <tr><td>Stop</td><td>none</td><td><code>bin/stop-check</code>: blocks once per new commit when a repo is ahead of STATE.md; without repos, a reminder if STATE.md wasn't updated today (UTC)</td></tr>
+      <tr><td>SessionEnd</td><td>none</td><td><code>bin/session-end</code>: journals commits since the session started (first transcript line, else the last 8 hours), refreshes the brain, commits the folder and the journal, and starts <code>bin/sync --auto</code></td></tr>
+    </tbody>
+  </table></div>
+  <p><code>bin/changes</code> keeps one snapshot per session in <code>~/.agent-hub/&lt;name&gt;/changes-seen.&lt;session_id&gt;</code>. The first prompt only records
+    a baseline. Output is capped at 40 lines, journal text is trimmed to 200 characters, and snapshots older than 7 days are removed.</p>
+</section>
+
+<section id="deepwork">
+  <h2>Deep work: <code>bin/work</code></h2>
+  <pre class="cmd"><code>bin/work [--claude CMD] [--model M] [--effort low|medium|high|xhigh|max] [--prompt TEXT] [--no-remote]
+         [--agent-model [name=]M] [--agent-effort [name=]E] &lt;projects|ops&gt;/&lt;name&gt; [repo]</code></pre>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  A["bin/work #lt;folder#gt; [repo]"] --> B{"Code table rows<br/>in ACCESS.md?"}
+  B -- "none, or a (none …) row" --> H["work in the hub folder itself"]
+  B -- yes --> C["pick [repo] by owner/name or name,<br/>else the first row"]
+  C -- "no match" --> X1["error: no repo #lt;x#gt; · exit 2"]
+  C --> O{"Checkout empty and row says<br/>checkout owned by #lt;folder#gt;?"}
+  O -- yes --> X2["error: run bin/work #lt;that folder#gt;"]
+  O -- no --> D{"checkout exists?"}
+  D -- yes --> E["use it"]
+  D -- "no" --> F["use ~/Project/#lt;name#gt; (AGENT_CODE_DIR),<br/>cloning it with gh if missing;<br/>record the path in ACCESS.md"]
+  E & F & H --> G["build: cd dir, AGENT_FOLDER=…, claude --settings #lt;folder#gt;/.claude/settings.json<br/>--agents (the folder's specialist agents, if any) --model --effort<br/>--remote-control #lt;folder name#gt; -- #lt;prompt#gt;"]
+  G --> T["open a new Terminal (or iTerm) window"]
+  </pre></div>
+  <ul>
+    <li><b>Remote Control</b> is on for every session, named after the folder (<code>projects/acme</code> → <code>acme</code>), so you can follow it from your phone.
+      <code>--no-remote</code> turns it off. Use that with API-key wrappers such as OpenRouter or Ollama, because Remote Control needs a claude.ai login.</li>
+    <li><code>--prompt "&lt;task&gt;"</code> sends the session's first message.</li>
+    <li><b>Specialist agents.</b> Markdown agent files in <code>&lt;folder&gt;/.claude/agents/</code> (front matter <code>name</code>, <code>description</code>, optional <code>tools</code> and <code>model</code>) are passed to the session as <code>--agents</code>.
+      <code>bin/new</code> doesn't create any; add them yourself. <code>HUB_AGENT_MODEL</code> is their default model.
+      <code>--agent-model sonnet</code> or <code>--agent-effort high</code> sets all of them, and <code>--agent-model reviewer=opus</code> sets one; the named value wins.
+      With no specialist agents, these options exit with <i>"has no specialist agents"</i>. The folder's named agent in the hub's <code>.claude/agents/</code> is for the main agent at the hub root, not for <code>bin/work</code>.</li>
+    <li>A repo row marked <code>checkout owned by &lt;folder&gt;</code> with an empty Checkout sends you to that folder instead.</li>
+    <li><code>WORK_DRY=1</code> prints the command without opening a window. <code>AGENT_TERMINAL=iterm</code> uses iTerm.</li>
+  </ul>
+</section>
+
+<section id="brain">
+  <h2>The brain: searchable memory</h2>
+  <p><code>bin/brain</code> keeps every Markdown and text section of the hub in one SQLite file, <code>.local/brain.db</code>. That covers STATE, memory,
+    the journal, notes, docs and the paths in <code>HUB_BRAIN_PATHS</code>. The file is gitignored, and there is one per hub, so clients never mix.
+    Files stay the source of truth, and the index is rebuilt from them.</p>
+  <pre class="cmd"><code>ollama pull nomic-embed-text                               <span class="c"># once per Mac</span>
+bin/brain index                                            <span class="c"># incremental; --full rebuilds</span>
+bin/brain search "what did the client decide about SMS"    <span class="c"># file:line, heading, snippet</span>
+bin/brain search -n 15 --json "cert expiry"
+bin/brain status                                           <span class="c"># files, sections, embedded, stale, model, db</span></code></pre>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  subgraph IDX["bin/brain index"]
+    direction TB
+    S1["walk the hub + HUB_BRAIN_PATHS<br/>.md and .txt"] --> S2["skip unchanged files (hash)"]
+    S2 --> S3["split at headings;<br/>long sections at blank lines (≤2000 chars)"]
+    S3 --> S4["drop any section that looks like a secret"]
+    S4 --> S5["FTS5 row + Ollama vector<br/>(batches of 32)"]
+  end
+  subgraph Q["bin/brain search"]
+    direction TB
+    Q1["keyword: FTS5 bm25, top 50"] --> RR["rank fusion<br/>score += 1 / (60 + rank)"]
+    Q2["meaning: cosine vs query vector, top 50"] --> RR
+    RR --> OUT["top 8 (or -n N):<br/>path:line · heading · snippet"]
+  end
+  S5 --> Q1
+  S5 --> Q2
+  </pre></div>
+  <ul>
+    <li>Without Ollama, indexing and search still work, by keyword only. Vectors are added on a later run once the model is reachable.</li>
+    <li>Not indexed: <code>.git</code>, <code>.claude</code>, <code>_bmad</code>, <code>_bmad-output</code>, <code>repos</code>, <code>node_modules</code>,
+      <code>.local</code>, <code>templates</code>, <code>personas</code>, <code>tests</code>, <code>test</code>, <code>launchd</code>, <code>dist</code>, <code>build</code>,
+      <code>runs</code>, <code>vendor</code>, <code>target</code> and every hidden folder. The same list applies inside <code>HUB_BRAIN_PATHS</code> folders, so a client <code>test/</code> or <code>build/</code> folder there is skipped too.</li>
+    <li>A memory file's <code>name</code> and <code>description</code> title its first section.</li>
+    <li>A folder session's end re-indexes (the hub root has no SessionEnd hook), and <code>bin/doctor</code> reports a stale index or a missing embedding model.</li>
+  </ul>
+</section>
+
+<section id="sync">
+  <h2>Auto sync</h2>
+  <p><code>bin/sync</code> commits and pushes <b>hub files only</b>: <code>README.md CLAUDE.md ACCESS.md memory journal reports projects ops docs bin templates tests
+    .claude .githooks .github .gitignore .bigfiles-allow launchd .ade _bmad _bmad-output llms.txt</code>. It never commits <code>repos/</code> or other staged files.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Mode</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>bin/sync</code></td><td>Review only: lists pending changes and a diff stat, and notes untracked files under <code>.claude/</code> that <code>--yes</code> would include.</td></tr>
+      <tr><td><code>bin/sync --yes</code></td><td>Commits <code>sync &lt;date&gt; &lt;time&gt;</code> (through the pre-commit hook) and pushes.</td></tr>
+      <tr><td><code>bin/sync --auto</code></td><td>The same, unattended, with the safeguards below. It runs every 30 minutes and at each folder session's end. Exit 0 means synced, nothing to do or skipped. Exit 1 means refused or failed.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  A["bin/sync --auto"] --> B{"HUB_AUTO_SYNC=0?"}
+  B -- yes --> X1["log: skipped (off) · exit 0"]
+  B -- no --> C{"lock free?<br/>(stale: owner gone or #gt;2 h old)"}
+  C -- no --> X2["log: another sync is running · exit 0"]
+  C -- yes --> D{"git busy?<br/>index.lock, merge, rebase,<br/>cherry-pick, revert"}
+  D -- yes --> X3["log: skipped: git is busy · exit 0"]
+  D -- no --> E{"gitleaks installed and<br/>hooks path = .githooks?"}
+  E -- no --> X4["log: refused · exit 1"]
+  E -- yes --> F["stage the hub paths"]
+  F --> G{"staged hub files, or<br/>commits ahead of upstream?"}
+  G -- no --> X5["log: nothing to sync · exit 0"]
+  G -- yes --> CM{"commit the hub files only<br/>(pre-commit: repos/, #gt;1 MB, gitleaks)"}
+  CM -- refused --> X8["unstage · log: failed: commit refused · exit 1"]
+  CM -- "ok (or nothing new to commit)" --> OR{"origin remote?"}
+  OR -- no --> X9["log: synced (local commit only, nothing pushed)"]
+  OR -- yes --> H{"upstream set and<br/>commits ahead?"}
+  H -- yes --> SC["gitleaks scan of every commit to push"]
+  SC -- "secret found" --> X6["log: refused, nothing pushed · exit 1"]
+  SC -- clean --> I{"git push"}
+  H -- "no upstream" --> I
+  I -- ok --> OK["log: synced #lt;hash#gt; #lt;subject#gt;"]
+  I -- rejected --> J{"other files staged?"}
+  J -- yes --> X10["log: failed, no rebase · commit kept locally · exit 1"]
+  J -- no --> K["one pull --rebase --autostash, push again<br/>(never force)"]
+  K -- ok --> OK2["log: synced after rebase"]
+  K -- fails --> X7["abort rebase · commit kept locally · exit 1"]
+  </pre></div>
+  <p>Each run writes one line to <code>~/.agent-hub/&lt;name&gt;/logs/sync.log</code>. To turn auto sync off, set <code>HUB_AUTO_SYNC=0</code> in <code>hub.conf</code>
+    (or run <code>bin/init --auto-sync off</code> on a new hub), then run <code>bin/schedule install</code> again. That removes the sync job, and session end stops pushing.</p>
+  <p>The secret scan of commits about to be pushed runs only when the branch has an upstream. That's why the first push is done by hand with <code>-u</code>. Paths in the list that don't exist are skipped.</p>
+</section>
+
+<section id="schedule">
+  <h2>Scheduled jobs</h2>
+  <pre class="cmd"><code>bin/schedule install     <span class="c"># write + load the launchd jobs (run again after pulling new jobs)</span>
+bin/schedule status      <span class="c"># loaded / absent for each</span>
+bin/schedule uninstall</code></pre>
+  <div class="tbl"><table>
+    <thead><tr><th>Job (label)</th><th>When</th><th>Runs</th><th>Log</th></tr></thead>
+    <tbody>
+      <tr><td><code>ai.agent-hub.&lt;name&gt;.briefing</code></td><td>Mon–Fri at <code>HUB_BRIEFING_HOUR:MINUTE</code>, local time</td><td><code>bin/briefing</code></td><td><code>logs/briefing.log</code></td></tr>
+      <tr><td><code>ai.agent-hub.&lt;name&gt;.monitor</code></td><td>every 30 minutes</td><td><code>bin/monitor</code></td><td><code>logs/monitor.log</code></td></tr>
+      <tr><td><code>ai.agent-hub.&lt;name&gt;.sync</code></td><td>every 30 minutes (not installed when <code>HUB_AUTO_SYNC=0</code>)</td><td><code>bin/sync --auto</code></td><td><code>logs/sync.log</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>Plists go to <code>~/Library/LaunchAgents</code> and logs to <code>~/.agent-hub/&lt;name&gt;/logs/</code>. A job sees only the plist's PATH
+    (<code>~/.local/bin</code>, <code>/opt/homebrew/bin</code>, <code>/usr/local/bin</code>, <code>/usr/bin</code>, <code>/bin</code>), not your shell profile.</p>
+  <h3>The morning briefing</h3>
+  <p><code>bin/briefing</code> runs the hub's Claude install with <code>-p</code> on the briefing model (Haiku by default). It can only use Read, Grep, Glob,
+    <code>bin/context</code> and <code>bin/brain search</code>. It writes a briefing of 25 lines or fewer covering five things: what's live and healthy,
+    anything broken, what's waiting on you, the client or others, upcoming calls and deadlines, and the top five tasks with their folders. It adds the persona's
+    <code>briefing_focus</code>. The briefing goes to the journal, and a notification says <i>"Morning briefing is in the journal"</i>. A failure is journaled as <i>"briefing failed"</i>.
+    <code>MONITOR_QUIET=1</code> silences the briefing's notification as well as the monitors'.</p>
+</section>
+
+<section id="monitors">
+  <h2>Monitors</h2>
+  <p>A monitor is any executable <code>projects/&lt;x&gt;/monitors.d/*.sh</code> or <code>ops/&lt;x&gt;/monitors.d/*.sh</code>. It must be <b>read-only</b>.
+    The first line of its output is its status, and any line starting with <code>ALERT</code> raises an alert.</p>
+  <pre class="cmd"><code>#!/bin/bash
+# ops/environments/monitors.d/staging.sh
+code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' https://staging.example.com/health)
+echo "$(date -u '+%a %H:%M UTC') | staging health $code"
+[ "$code" = 200 ] || echo "ALERT staging health returned $code"</code></pre>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  A["bin/monitor<br/>(every 30 min)"] --> B["run each monitor<br/>(timeout MONITOR_TIMEOUT=300 s, first 20 lines)"]
+  B --> C["status = first line,<br/>leading timestamp stripped"]
+  C --> D{"status changed,<br/>or first run?"}
+  D -- yes --> J["journal: monitor #lt;file#gt;: #lt;output#gt;"]
+  B --> E{"ALERT line and<br/>not already alerting?"}
+  E -- yes --> J
+  E -- yes --> N["macOS notification<br/>(MONITOR_QUIET=1 silences)"]
+  </pre></div>
+  <p>A leading timestamp such as <code>Fri 10:05 UTC |</code> or <code>2026-10-30 10:05Z |</code> is ignored when comparing statuses, so a new time alone
+    doesn't count as a change. An alert is journaled once and clears when a run has no <code>ALERT</code> line. State is kept in <code>~/.agent-hub/&lt;name&gt;/monitor-state/</code>.</p>
+</section>
+
+<section id="config">
+  <h2><code>hub.conf</code></h2>
+  <p><code>bin/init</code> writes this file and every script sources it. It holds <b>names and locations only, never secrets</b>. Commit it by hand after each
+    edit, because <code>bin/sync</code> doesn't include it.</p>
+  <h3>Which edits take effect</h3>
+  <ul>
+    <li><b>Read on every run:</b> the Claude install and config dir, <code>HUB_MODEL</code> and <code>HUB_EFFORT</code> (for <code>bin/work</code>), the briefing model and focus, the remote box, staging URL,
+      secret names, repos, code owner, tools, brain paths, embedding settings and auto sync. Re-run <code>bin/schedule install</code> after changing the briefing time or auto sync,
+      and <code>bin/setup</code> after changing the Claude install or config dir.</li>
+    <li><b>Written once, at creation:</b> the client, owner, title and persona model go into <code>CLAUDE.md</code>, <code>ACCESS.md</code>, <code>README.md</code> and the persona agent.
+      <code>HUB_AGENT_MODEL</code> goes into each folder agent file when <code>bin/new</code> makes it. The remote box, staging URL and secret names also go into <code>ACCESS.md</code>.
+      Changing those keys later changes nothing in those files, so edit the files too.</li>
+    <li><b>Don't rename <code>HUB_NAME</code></b> on a working hub. It moves the state folder and the launchd labels, and the old jobs keep running
+      (run <code>bin/schedule uninstall</code> first). The Keychain service stays the old name unless you also change <code>HUB_KEYCHAIN_SERVICE</code>.</li>
+  </ul>
+  <div class="tbl"><table>
+    <thead><tr><th>Key</th><th>Meaning</th><th>Env override</th></tr></thead>
+    <tbody>
+      <tr><td><code>HUB_NAME</code></td><td>hub name; also the state folder <code>~/.agent-hub/&lt;name&gt;</code></td><td></td></tr>
+      <tr><td><code>HUB_PERSONA</code>, <code>HUB_PERSONA_TITLE</code></td><td>persona slug and title</td><td></td></tr>
+      <tr><td><code>HUB_CLIENT</code>, <code>HUB_OWNER</code></td><td>client and owner names</td><td></td></tr>
+      <tr><td><code>HUB_CLAUDE</code></td><td>the Claude install <code>bin/work</code> and <code>bin/briefing</code> run (start the hub-root session with the same command)</td><td><code>AGENT_CLAUDE</code>, <code>bin/work --claude</code></td></tr>
+      <tr><td><code>HUB_CLAUDE_CONFIG_DIR</code></td><td>its config dir (memory + skills links)</td><td>shell <code>CLAUDE_CONFIG_DIR</code> when unset</td></tr>
+      <tr><td><code>HUB_MODEL</code>, <code>HUB_EFFORT</code></td><td>deep-work sessions (<code>bin/work</code>). The persona agent's model is written once, at init; effort doesn't apply to it</td><td><code>bin/work --model / --effort</code></td></tr>
+      <tr><td><code>HUB_AGENT_MODEL</code></td><td>new folder agents (<code>bin/new</code>) and <code>bin/work</code>'s specialist agents</td><td><code>bin/work --agent-model</code></td></tr>
+      <tr><td><code>HUB_BRIEFING_MODEL</code></td><td>the briefing</td><td><code>AGENT_BRIEFING_MODEL</code></td></tr>
+      <tr><td><code>HUB_CODE_OWNER</code></td><td>GitHub owner for bare repo names</td><td><code>AGENT_CODE_OWNER</code></td></tr>
+      <tr><td><code>HUB_REPOS</code></td><td>repos <code>bin/doctor</code> checks you can read</td><td></td></tr>
+      <tr><td><code>HUB_REMOTE_HOST</code>, <code>_USER</code>, <code>_PORT</code>, <code>_KEY</code>, <code>_DIR</code></td><td>the SSH box for <code>bin/remote</code></td><td><code>AGENT_REMOTE_*</code></td></tr>
+      <tr><td><code>HUB_STAGING_URL</code></td><td>checked by <code>bin/doctor</code></td><td><code>AGENT_STAGING_URL</code></td></tr>
+      <tr><td><code>HUB_SECRETS</code></td><td>secret names <code>bin/doctor</code> checks for</td><td></td></tr>
+      <tr><td><code>HUB_KEYCHAIN_SERVICE</code></td><td>Keychain service name (default: the hub name)</td><td><code>AGENT_KEYCHAIN_SERVICE</code></td></tr>
+      <tr><td><code>HUB_BRIEFING_HOUR</code>, <code>HUB_BRIEFING_MINUTE</code></td><td>briefing time, local</td><td></td></tr>
+      <tr><td><code>HUB_BRIEFING_FOCUS</code></td><td>extra instruction for the briefing (from the persona)</td><td></td></tr>
+      <tr><td><code>HUB_TOOLS</code></td><td>extra tools <code>bin/doctor</code> checks</td><td></td></tr>
+      <tr><td><code>HUB_BRAIN_PATHS</code></td><td>extra paths for the brain (space-separated)</td><td><code>AGENT_BRAIN_PATHS</code></td></tr>
+      <tr><td><code>HUB_EMBED_MODEL</code>, <code>HUB_OLLAMA_URL</code></td><td>embedding model and Ollama address</td><td><code>AGENT_EMBED_MODEL</code>, <code>AGENT_OLLAMA_URL</code></td></tr>
+      <tr><td><code>HUB_AUTO_SYNC</code></td><td><code>1</code> (default) or <code>0</code></td><td><code>AGENT_AUTO_SYNC</code> (session end only)</td></tr>
+    </tbody>
+  </table></div>
+  <p>Other environment knobs: <code>AGENT_STATE</code> (state folder), <code>AGENT_CODE_DIR</code> (where <code>bin/work</code> clones, default <code>~/Project</code>),
+    <code>AGENT_TERMINAL=iterm</code>, <code>WORK_DRY=1</code>, <code>MONITOR_TIMEOUT</code>, <code>MONITOR_QUIET=1</code>, <code>AGENT_SYNC_LOG</code>,
+    <code>AGENT_SYNC_LOCK</code>, <code>AGENT_SYNC_CMD</code>, <code>SCHEDULE_DRY=1</code>, <code>DOCTOR_OFFLINE=1</code>. Tests use <code>HUB</code> and <code>CLAUDE_HOME</code>.</p>
+</section>
+
+<section id="models">
+  <h2>Models and Claude installs</h2>
+  <p>Every hub pins one Claude install (<code>HUB_CLAUDE</code>) and its config dir (<code>HUB_CLAUDE_CONFIG_DIR</code>). That way <code>bin/setup</code> links memory and
+    skills into the right place wherever you run it, and <code>bin/doctor</code> tells you when a link is missing.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Setting</th><th>Used by</th><th>Override for one run</th></tr></thead>
+    <tbody>
+      <tr><td><code>HUB_MODEL</code>, <code>HUB_EFFORT</code></td><td>deep-work sessions; <code>HUB_MODEL</code> also seeds the persona agent's <code>model:</code> at init</td><td><code>bin/work --model M --effort E</code>, or edit the agent file</td></tr>
+      <tr><td><code>HUB_AGENT_MODEL</code></td><td>seeds each folder agent's <code>model:</code> when <code>bin/new</code> makes it; default for <code>bin/work</code>'s specialist agents</td><td><code>bin/work --agent-model [name=]M</code>, or edit the agent file</td></tr>
+      <tr><td><code>HUB_BRIEFING_MODEL</code></td><td><code>bin/briefing</code></td><td><code>AGENT_BRIEFING_MODEL=M bin/briefing</code></td></tr>
+      <tr><td><code>HUB_CLAUDE</code></td><td><code>bin/work</code> and <code>bin/briefing</code>; start the hub-root session with this command too</td><td><code>bin/work --claude CMD</code>, <code>AGENT_CLAUDE=CMD</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>Other providers, such as OpenRouter, Ollama or a second account, work through a wrapper command passed as <code>--claude</code>. <code>bin/init</code> reads the wrapper's
+    <code>export CLAUDE_CONFIG_DIR=…</code> line to find its config dir. If you use a wrapper, start the hub-root session with it as well. Plain <code>claude</code> would use
+    another config dir, without the hub's memory and skill links.</p>
+  <h3>How memory is linked</h3>
+  <p>Claude Code keeps auto-memory per working directory under <code>&lt;config dir&gt;/projects/&lt;encoded path&gt;/memory</code>. <code>bin/setup</code> replaces each
+    of these with a symlink into the hub, so memory is committed and travels with the repo:</p>
+  <ul>
+    <li>the hub root → <code>memory/</code></li>
+    <li>each folder → <code>&lt;folder&gt;/memory/</code></li>
+    <li>each checkout in a folder's Code table → that folder's <code>memory/</code>. A checkout shared by two folders goes to the first one that claims it, and a folder that
+      has the phrase <code>memory owned by</code> anywhere in its <code>ACCESS.md</code> is processed last, so another folder that lists the same checkout claims it first.
+      Later claimants get a warning.</li>
+  </ul>
+  <p>Existing memory there is copied in first, and the old folder is kept as <code>.bak-&lt;time&gt;</code>. BMAD skills are linked into
+    <code>&lt;config dir&gt;/skills/</code> unless a skill with that name already exists and isn't the hub's.</p>
+</section>
+
+<section id="safety">
+  <h2>Secrets and safety</h2>
+  <ul>
+    <li><b>Secrets live in the macOS Keychain</b> under the hub's service name. <code>bin/secret --set &lt;name&gt;</code> reads the value from a hidden prompt.
+      <code>bin/secret &lt;name&gt;</code> prints it for <code>$(…)</code> use only. <code>--has</code>, <code>--forget</code> and <code>--list</code> (names only) do what they say.</li>
+    <li><b>The pre-commit hook</b> (<code>.githooks/pre-commit</code>) refuses anything under <code>repos/</code>, files over 1 MB (unless listed in
+      <code>.bigfiles-allow</code>) and anything gitleaks flags. <b>If gitleaks isn't installed, the hook only warns</b> and the commit goes through, so install it on every Mac.</li>
+    <li><b>Auto sync</b> also scans every commit about to be pushed, including ones made with <code>--no-verify</code>, when the branch has an upstream. It never force-pushes.</li>
+    <li><b>The brain</b> never indexes a section that looks like a key, token, password or private key.</li>
+    <li><b>Gitignored:</b> <code>repos/</code>, <code>.local/</code>, <code>.env*</code>, <code>*.jsonl</code>, PDFs and images, <code>.claude/settings.local.json</code>.</li>
+    <li><b><code>bin/remote</code></b> runs SSH in batch mode with a 10 s connect timeout. Agents may run read-only commands. Anything that writes needs your word for that change.</li>
+    <li><b><code>bin/doctor</code></b> never prints a secret and always exits 0.</li>
+  </ul>
+</section>
+
+<section id="rules">
+  <h2>Agent rules</h2>
+  <p>The rendered <code>CLAUDE.md</code> binds every agent in the hub. In short:</p>
+  <ul>
+    <li><b>Verified, not vibed.</b> Work test-first in the client repo. Tests and a live check decide Done, and agents report real output, failures included.</li>
+    <li><b>Every answer cites a source</b> opened in this session: <code>path:line</code>, a URL, a command's output or a hub file. Without one the answer is "unverified".</li>
+    <li>Code changes go in the client's repos, on a branch, with small commits and tests. They follow each repo's own rules.</li>
+    <li>Commits and PRs carry only the owner's git identity, with no AI attribution.</li>
+    <li>Deploys, writes to shared systems and anything production need the owner's word for that change. Each deploy is verified live and journaled.</li>
+    <li>Client decisions belong to the client and are recorded with who and when. Messages to the client are drafts only.</li>
+    <li>Proposals include a <b>Revenue / cost impact</b> section with numbers, sources and labelled assumptions (<code>templates/proposal.md</code>).</li>
+    <li>Token budget: read on demand, send long output to a file, reuse STATE and the journal, keep replies short.</li>
+    <li><b>BMAD v6</b> skills (<code>bmad-prd</code>, <code>bmad-spec</code>, <code>bmad-ticket</code>, <code>bmad-build</code>, <code>bmad-code-review</code>, …) are used
+      for planning and builds. Their output stays in the hub's <code>_bmad-output/</code>, never in the client repo. The ADE rules in <code>.ade/rules.md</code> win
+      over BMAD.</li>
+  </ul>
+</section>
+
+<section id="commands">
+  <h2>Command reference</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Command</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>bin/init …</code> / <code>--list</code></td><td>turn the template into a hub; list personas</td></tr>
+      <tr><td><code>bin/setup</code></td><td>link memory and skills into the Claude config dir; set the git hooks path</td></tr>
+      <tr><td><code>bin/doctor</code></td><td>OK / MISSING for tools, the Claude install, memory link, brain index, SSH key, GitHub login, repos, remote box, staging, embeddings, secrets</td></tr>
+      <tr><td><code>bin/context [folder] [--rules]</code></td><td>every folder's state, or one folder's state and journal</td></tr>
+      <tr><td><code>bin/work [opts] &lt;folder&gt; [repo]</code></td><td>deep work in a new Terminal in the folder's checkout</td></tr>
+      <tr><td><code>bin/new projects/&lt;name&gt;</code> · <code>ops/&lt;name&gt;</code></td><td>a new folder and its agent; never overwrites</td></tr>
+      <tr><td><code>bin/journal &lt;folder&gt; "&lt;text&gt;"</code></td><td>one dated entry (<code>hub</code> for the root)</td></tr>
+      <tr><td><code>bin/brain index [--full]</code> · <code>search [-n N] [--json] &lt;q&gt;</code> · <code>status</code></td><td>the searchable memory</td></tr>
+      <tr><td><code>bin/remote &lt;cmd&gt;</code></td><td>a command on the remote box over SSH, in <code>HUB_REMOTE_DIR</code></td></tr>
+      <tr><td><code>bin/secret &lt;name&gt;</code> · <code>--set</code> · <code>--has</code> · <code>--forget</code> · <code>--list</code></td><td>Keychain secrets</td></tr>
+      <tr><td><code>bin/sync</code> · <code>--yes</code> · <code>--auto</code></td><td>review, commit and push hub files</td></tr>
+      <tr><td><code>bin/schedule install|uninstall|status</code></td><td>the launchd jobs</td></tr>
+      <tr><td><code>bin/briefing</code></td><td>the morning briefing, now</td></tr>
+      <tr><td><code>bin/monitor</code></td><td>run every monitor now</td></tr>
+      <tr><td><code>bin/changes</code>, <code>bin/stop-check</code>, <code>bin/session-end</code></td><td>hooks (run by Claude Code, not by hand)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="newmac">
+  <h2>A new Mac or a fresh clone</h2>
+  <p>STATE.md, memory, the journal and ACCESS.md are committed, so a fresh clone starts with full context:</p>
+  <pre class="cmd"><code>gh repo clone &lt;you&gt;/my-acme-sre &amp;&amp; cd my-acme-sre
+bin/setup &amp;&amp; bin/brain index
+bin/doctor                     <span class="c"># shows what this Mac is missing</span>
+bin/secret --set &lt;name&gt;        <span class="c"># for each secret doctor lists</span>
+bin/schedule install</code></pre>
+  <p>Secrets, SSH keys and files outside the repo (downloads, PDFs) don't travel. <code>bin/doctor</code> lists what's missing. This works only if <code>hub.conf</code> was committed
+    (see <a href="#quickstart">Make a hub</a>).</p>
+  <div class="note"><b>Clone to the same absolute path.</b> Several committed files hold the first Mac's absolute paths:
+    each folder's <code>.claude/settings.json</code> (the hook commands), <code>HUB_CLAUDE_CONFIG_DIR</code> in <code>hub.conf</code>, and <code>output_folder</code> in <code>_bmad/config.toml</code>.
+    Use the same user name and folder. Otherwise, fix those values: move each folder's <code>.claude/settings.json</code> aside and run <code>bin/new &lt;folder&gt;</code> again,
+    edit <code>hub.conf</code> and <code>_bmad/config.toml</code>, then run <code>bin/setup</code> and <code>bin/schedule install</code>.</div>
+</section>
+
+<section id="upgrade">
+  <h2>Upgrading a hub made before auto sync</h2>
+  <ol>
+    <li>Folder sessions only hear about hub changes through the <code>UserPromptSubmit</code> hook, and <code>bin/new</code> keeps an existing folder settings file. For each folder,
+      move <code>&lt;folder&gt;/.claude/settings.json</code> aside and run <code>bin/new &lt;folder&gt;</code> again, or add this line under <code>"hooks"</code>:
+      <pre class="cmd"><code>"UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "\"/path/to/hub\"/bin/changes projects/&lt;x&gt;" }] }],</code></pre></li>
+    <li>Run <code>bin/schedule install</code> again to load the monitor and sync jobs.</li>
+    <li>Auto sync is on unless <code>hub.conf</code> says <code>HUB_AUTO_SYNC=0</code>. It needs gitleaks and <code>bin/setup</code>; without them every run is refused and logged.</li>
+  </ol>
+</section>
+
+<section id="troubleshooting">
+  <h2>Troubleshooting</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>You see</th><th>Do</th></tr></thead>
+    <tbody>
+      <tr><td><code>MISSING hub memory link</code></td><td><code>bin/setup</code> (check <code>HUB_CLAUDE_CONFIG_DIR</code> points at the install you use)</td></tr>
+      <tr><td><code>MISSING brain index … changed since indexing</code></td><td><code>bin/brain index</code></td></tr>
+      <tr><td><code>MISSING embeddings</code></td><td><code>ollama pull nomic-embed-text</code>; search stays keyword-only until then</td></tr>
+      <tr><td><code>MISSING remote ssh</code></td><td>load the key (<code>ssh-add</code>) or check the host; never copy the key into the hub</td></tr>
+      <tr><td><code>MISSING secret &lt;name&gt;</code></td><td><code>bin/secret --set &lt;name&gt;</code></td></tr>
+      <tr><td>sync.log: <code>refused: gitleaks not installed</code></td><td><code>brew install gitleaks</code></td></tr>
+      <tr><td>sync.log: <code>refused: core.hooksPath is not .githooks</code></td><td><code>bin/setup</code></td></tr>
+      <tr><td>sync.log: <code>refused: gitleaks found a secret</code></td><td>remove it from the unpushed commits; nothing was pushed</td></tr>
+      <tr><td>sync.log: <code>failed: push rejected and other files are staged</code></td><td>commit or unstage those files, then <code>bin/sync --yes</code></td></tr>
+      <tr><td>sync.log: <code>failed: commit refused (pre-commit hook, …)</code></td><td>run <code>bin/sync --yes</code> to see the hook's reason (<code>repos/</code>, over 1 MB, or a secret)</td></tr>
+      <tr><td>sync.log: <code>skipped: git is busy (index.lock)</code> on every run</td><td>a crashed git left <code>.git/index.lock</code>; delete it when no git command is running</td></tr>
+      <tr><td>sync.log says <code>synced</code>, but nothing reaches GitHub</td><td>no <code>origin</code>: <code>git remote add origin &lt;url&gt;</code>, then <code>git push -u origin main</code></td></tr>
+      <tr><td>Deep-work hooks fail with "no such file"</td><td>the hub moved; see <a href="#newmac">A new Mac</a></td></tr>
+      <tr><td><code>REFUSED: … is over 1 MB</code></td><td>keep it out, or list it in <code>.bigfiles-allow</code></td></tr>
+      <tr><td>A monitor works by hand but not on schedule</td><td>launchd jobs only see the plist's PATH; use full paths, and keep it under 300 s</td></tr>
+      <tr><td>Briefing failed in the journal</td><td>run <code>bin/briefing</code> by hand; check <code>logs/briefing.log</code> and that <code>HUB_CLAUDE</code> is logged in</td></tr>
+      <tr><td><code>work: … has no owner</code></td><td>write <code>owner/name</code> in ACCESS.md or set <code>HUB_CODE_OWNER</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="template">
+  <h2>Working on the template</h2>
+  <ul>
+    <li>Keep it client-neutral: no client, person, host or account names outside <code>tests/</code> fixtures (<code>tests/test_root.sh</code> checks).</li>
+    <li>Hub rules live in <code>templates/hub/CLAUDE.md</code>, personas in <code>personas/&lt;slug&gt;.md</code>, and folder files in <code>templates/</code>.</li>
+    <li>The <code>bin/</code> scripts are covered by <code>tests/test_*.sh</code>, which run against a throwaway copy with stubbed tools. The verification command is:</li>
+  </ul>
+  <pre class="cmd"><code>bash tests/run.sh       <span class="c"># every tests/test_*.sh prints ok; exit 0 = green</span></code></pre>
+</section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">Generated from the scripts in <a href="https://github.com/alvin-reyes/ai-agent-hub-template">ai-agent-hub-template</a>. When this page and a script disagree, the script is right.</div>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  // Diagrams render in the reader's light or dark scheme.
+  mermaid.initialize({ startOnLoad: true, securityLevel: "strict",
+    theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "neutral",
+    flowchart: { htmlLabels: true, curve: "basis" } });
+</script>
+</html>

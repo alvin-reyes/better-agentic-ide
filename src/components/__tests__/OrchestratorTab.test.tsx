@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import OrchestratorTab from "../OrchestratorTab";
 import { useOrchestratorStore } from "../../stores/orchestratorStore";
-import { useTabStore, findAllPanes } from "../../stores/tabStore";
+import { useTabStore, allTabPanes } from "../../stores/tabStore";
 import { destroyInstance } from "../../hooks/useTerminal";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -138,7 +138,7 @@ beforeEach(() => {
   tauri.ready = [];
   tauri.neverReady = false;
   tauri.events.length = 0;
-  tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => t.root && findAllPanes(t.root).some((p) => p.ptyId === id));
+  tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => allTabPanes(t).some((p) => p.ptyId === id));
   __resetLaunchRulesForTests();
 });
 

@@ -6,7 +6,7 @@ import { useTabStore } from "../stores/tabStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAgentTrackerStore } from "../stores/agentTrackerStore";
 import { runInNewTabPane, typeWhenReady } from "../lib/terminalCommands";
-import { hasActiveProcess } from "../hooks/useTerminal";
+import { paneBusy } from "../hooks/useTerminal";
 import { usePaneCwd } from "../stores/paneMetaStore";
 import { getRole } from "../data/roles";
 import { supportsRoleDelivery, type Provider } from "../lib/agentCommand";
@@ -160,24 +160,35 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
   const [choice, setChoice] = useState<PickerItem | null>(null);
   const [target, setTarget] = useState<"current" | "new">("current");
   const currentPtyId = getActivePtyId();
+  // What the active pane is running (paneBusy), "checking" until it answers.
+  const [currentBusy, setCurrentBusy] = useState<string | null | "checking">("checking");
+  const busyCheck = useRef(0);
 
   /**
    * Whether "This terminal" is a real option. A pane already running something
    * cannot take an agent: the launch command would be typed into that process's
    * stdin and discarded, while the tracker still recorded a session, so the
-   * fleet showed an agent that was never started.
+   * fleet showed an agent that was never started. Not offered while the check
+   * is still running either.
    */
-  const canUseCurrent = useCallback(() => {
-    if (currentPtyId === null) return false;
-    const pane = getActivePane();
-    return !(pane && hasActiveProcess(pane.id));
-  }, [currentPtyId, getActivePane]);
+  const canUseCurrent = useCallback(
+    () => currentPtyId !== null && currentBusy === null,
+    [currentPtyId, currentBusy],
+  );
 
   const launchItem = useCallback((item: PickerItem) => {
     // A terminal already running something can't take a new agent.
-    setTarget(canUseCurrent() ? "current" : "new");
+    const check = ++busyCheck.current;
+    setCurrentBusy("checking");
+    setTarget("new");
     setChoice(item);
-  }, [canUseCurrent]);
+    const pane = getActivePane();
+    void (pane ? paneBusy(pane.id) : Promise.resolve(null)).then((busy) => {
+      if (check !== busyCheck.current) return;
+      setCurrentBusy(busy);
+      if (busy === null) setTarget("current");
+    });
+  }, [getActivePane]);
 
   const runAgent = useCallback(async (item: PickerItem, where: "current" | "new") => {
     const spec: AgentSpec = { roleId: item.roleId, domainId: item.domainId, provider: activeProvider };
@@ -200,6 +211,14 @@ export default function AgentPicker({ onClose }: AgentPickerProps) {
       paneId = await runInNewTabPane(item.name, cwd, cmd);
       if (!paneId) return;
     } else {
+      // Checked again at the point of typing: a disabled option can still be
+      // the target (hover, then Enter), and the pane may have changed.
+      const here = getActivePane();
+      const busy = here ? await paneBusy(here.id) : null;
+      if (busy) {
+        setLaunchError(`This terminal is running ${busy}. Choose New tab.`);
+        return;
+      }
       // Once its shell's line editor is up: a tab still reading its rc files
       // can be picked, and a line typed then can be cut. If the terminal
       // changed by then, nothing is typed and no session starts; the picker

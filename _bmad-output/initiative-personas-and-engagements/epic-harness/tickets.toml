@@ -1,0 +1,793 @@
+# F1 slice 0: the isolation harness. Prerequisites first (pa, pb1 to pb7: DevOps, owner's order), then the harness (h1 to h22), then the isolation job's set-up (pc1 to pc4).
+# Gate: architecture.md, "F1 stories (gate D28)", items 1 to 5. Design: docs/superpowers/specs/2026-11-08-personas-and-engagements-design.md, sections 15, 20, 21.
+# Every entry runs the local lines of architecture item 1 and the backend jobs of item 3. Isolation runs follow the slice 0 rule in the epic notes (Q1).
+
+# ---------- Prerequisite (a): the stub, owner merges ----------
+
+[[entry]]
+id = "pa"
+type = "story"
+title = "DevOps: dispatch-only stub isolation.yml on main, and its dispatch test"
+description = '''Prerequisite (a) of F1 slice 0. Architecture item 4 and "Depends on (DevOps)". Owner: DevOps. The owner merges it to main; slice 0 does not start until its result is recorded.
+
+Adds .github/workflows/isolation.yml on main with on: workflow_dispatch only, no concurrency group, and one job that prints the word stub and exits 1, so a stub run can never be green. It adds no other file.
+
+Then the acceptance test (architecture item 4, minor 7 of revision 5b). DevOps pushes a throwaway branch whose isolation.yml differs from the stub only in printing branch-file (and exiting 1). It runs gh workflow run isolation.yml --ref <throwaway>, reads the log, and records in this story's Verification section the run URL and which string the log shows.
+- branch-file means dispatch runs the branch's file. Item 4 stands as written.
+- stub means it does not. Then this story's Verification section says so, and the fallback applies before slice 0 starts: isolation.yml also runs on push to story branches, QA does not dispatch it, and those push runs count under item 4's rule. The owner decides before slice 0 starts.
+Delete the throwaway branch afterwards.
+
+Acceptance, each checked by the recorded output:
+(1) main's isolation.yml exists, is dispatch-only, and a dispatch of main's stub run ends red with stub in its log.
+(2) The throwaway branch's dispatch run is recorded with its URL and the string its log shows.
+(3) The throwaway branch is deleted (git ls-remote shows no such branch).
+(4) ci.yml is unchanged.'''
+verify = '''The workflow file is on main; the throwaway dispatch run URL and its string are in the Verification section; the throwaway branch is gone. Local lines and CI are not affected (no code changes); the stub run is red by design. Isolation: not applicable (a workflow stub, no harness code).'''
+covers = ["PE-4"]
+after = []
+hitl = true
+risk = "high"
+
+# ---------- Prerequisite (b): DevOps runner set-up and backend-job changes, in order ----------
+
+[[entry]]
+id = "pb1"
+type = "story"
+title = "DevOps: backend jobs run the ade-hook tests"
+description = '''Prerequisite (b), step 1. Owner: DevOps. Edits only .github/workflows/ci.yml.
+
+In each of the three backend jobs (ids backend, backend-macos, backend-windows), adds after its existing test step a step named ade-hook tests that runs cargo test --locked -p ade-hook in src-tauri. ade-hook is already a workspace member, but cargo test in src-tauri does not compile it (design 20, architecture item 3). No other job changes. This is the first ci.yml edit of the F1 line: the later DevOps stories and h1 are serialised after it.
+
+Acceptance:
+(1) In each backend job's log, a step named ade-hook tests runs and its test binary reports ok for each test it contains.
+(2) A job whose ade-hook tests fail is red: checked on a throwaway branch with one planted failing assertion in ade-hook's own test, then reverted before merge (the revert is recorded).
+(3) No other job, and no other step of the three, changes.'''
+verify = '''Local: cd src-tauri && cargo test --locked -p ade-hook exits 0. CI: the three backend jobs are green on the story's SHA and each log shows the ade-hook tests step. The planted-failure run is recorded. Isolation: not applicable (CI wiring only).'''
+covers = ["PE-4"]
+after = ["pa"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h1"
+type = "story"
+title = "Isotest crate skeleton, workspace member, and its CI line"
+description = '''F1 slice 0, first build story. Owner: this epic. Architecture item 1 ("from slice 0 ... cd src-tauri && cargo test -p isotest") and item 3.
+
+Creates src-tauri/isotest: a library and a binary crate named isotest. Adds it to members in src-tauri/Cargo.toml (members = ["ade-hook", "isotest"]). Sets rust-version = "1.79" in the isotest and ade-hook manifests (design 20: each F1 crate, the app crate gets it in h5). The binary prints its crate version and nothing else. Adds to each of the three backend jobs, after the ade-hook tests step of pb1, a step cargo test --locked -p isotest. This is the second ci.yml edit, which is why pb2 waits for it. Cargo.lock is updated and committed.
+
+Acceptance, each a test or a recorded line:
+(1) isotest_crate_has_a_unit_test: a test in isotest that asserts the crate's name constant, so cargo test -p isotest runs at least one test and reports it ok.
+(2) cargo test --locked -p isotest exits 0 with Cargo.lock committed.
+(3) The three backend jobs show a step cargo test --locked -p isotest, green.
+(4) The binary's --version output equals the crate version in Cargo.toml (a test).'''
+verify = '''Local: all eight lines of architecture item 1 exit 0 (the six lines plus cd src-tauri && cargo test -p isotest and cd src-tauri && cargo test -p ade-hook). CI: the three backend jobs green with the isotest step, log lines recorded. Isolation: not required for this story (Q1).'''
+covers = ["PE-4"]
+after = ["pb1"]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = "pb2"
+type = "story"
+title = "DevOps: platform-tests check in each backend job"
+description = '''Prerequisite (b), step 2. Owner: DevOps. Architecture item 3, "the platform-test check".
+
+Creates src-tauri/platform-tests.txt with a header comment and no entries. Format: one entry per line, <platform> <crate> <test path>; platform is linux, macos or windows; crate is app (the src-tauri package), ade-hook or isotest; test path is the test's full path as cargo prints it. Adds scripts/check-platform-tests.mjs (the checker, DevOps's choice of location; state it in the plan) and a step named platform tests in each backend job after the test steps. The Tests step tees its output to a file the checker reads. The checker keeps only the lines whose platform is the job's own (linux for backend, macos for backend-macos, windows for backend-windows), requires each to appear in the output as "test <path> ... ok", and prints platform tests: <n> listed, <n> ok, with each name. It exits 1 for a listed test that is missing, ignored, or failed. A list with no entries for the platform passes with 0 listed, 0 ok.
+
+Acceptance, each a test of the checker in scripts/tests (run by npm test, or the plan names the vitest include that picks it up):
+(1) an ok listed test passes;
+(2) a listed test missing from the output fails;
+(3) a listed test printed as ignored fails;
+(4) a listed test printed as FAILED fails;
+(5) entries for another platform are not required.
+Plus: each backend job's log shows the platform tests line.'''
+verify = '''Local: all eight lines of architecture item 1 exit 0, and the checker's tests appear in npm test by name. CI: the three backend jobs green, each log printing platform tests: 0 listed, 0 ok. Isolation: not required (CI wiring and a script, Q1).'''
+covers = ["PE-4"]
+after = ["h1"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "pb3"
+type = "story"
+title = "DevOps: zsh and fish on the Linux backend job, with a precondition step"
+description = '''Prerequisite (b), step 3. Owner: DevOps. Architecture item 3's table, row backend.
+
+The backend job (ubuntu-22.04) installs zsh and fish (apt-get install zsh fish; 22.04's fish is 3.3). Adds scripts/ci/linux-precondition.sh (one of the per-platform precondition scripts, runnable locally) and a step named precondition before the Tests step. The script runs zsh -c "exit 0" and fish -c "exit 0", prints each shell's version, and fails with precondition failed: zsh or precondition failed: fish when one is missing.
+
+Acceptance:
+(1) The job log shows the zsh and fish versions before Tests.
+(2) A fixture test runs the script with PATH holding no fish and fails naming fish (run in npm test or by a shell test the plan names).
+(3) The step order is precondition, then Tests.'''
+verify = '''Local: all eight lines exit 0; the fixture test passes. CI: the backend job green, its log shows the two versions before Tests. Isolation: not required (CI set-up, Q1).'''
+covers = ["PE-4"]
+after = ["pb2"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "pb4"
+type = "story"
+title = "DevOps: Linux tests under one dbus-run-session, with the Secret Service round trip"
+description = '''Prerequisite (b), step 4. Owner: DevOps. Architecture item 3, row backend, and "Depends on": "On Linux the precondition checks run inside the same dbus-run-session as cargo test".
+
+The backend job installs gnome-keyring, dbus-x11 and libsecret-tools (the plan names the exact tool that reads and writes a Secret Service item). The Tests step becomes one step, dbus-run-session -- bash -eo pipefail scripts/ci/linux-tests.sh. The script, in this order:
+(1) gnome-keyring-daemon --unlock --components=secrets, with an empty password on stdin, so the default login collection exists and is unlocked;
+(2) the precondition: store one Secret Service item, read it back, delete it (the round trip fails by name as precondition failed: secret service); then the step from pb3 (zsh and fish);
+(3) cargo test --locked, cargo test --locked -p ade-hook, cargo test --locked -p isotest, and the platform tests check of pb2 over the captured output.
+Any failure stops the script before the next step.
+
+Acceptance:
+(1) The job log shows the unlock line and the round trip inside the one bus, before cargo runs.
+(2) A shell fixture runs linux-tests.sh with the Secret Service step pointed at a missing bus and fails before any cargo command runs (the fixture checks that no cargo line was printed).
+(3) The job log shows the three cargo test lines and the platform tests line, all inside one dbus-run-session.'''
+verify = '''Local: all eight lines exit 0; the shell fixture passes. CI: backend job green, log shows the round trip and the three cargo test lines inside one bus. Isolation: not required (CI set-up, Q1).'''
+covers = ["PE-4"]
+after = ["pb3"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "pb5"
+type = "story"
+title = "DevOps: fish on the macOS backend job, with a precondition step"
+description = '''Prerequisite (b), step 5. Owner: DevOps. Architecture item 3, row backend-macos.
+
+The backend-macos job runs brew install fish, then a precondition step named precondition before Tests. Adds scripts/ci/macos-precondition.sh (runnable locally) that runs fish -c "exit 0", zsh -c "exit 0" and bash -c "exit 0" (zsh and bash ship with macOS), prints the versions, and fails with precondition failed: <shell> by name.
+
+Acceptance:
+(1) The job log shows the fish, zsh and bash versions before Tests.
+(2) A fixture run with PATH holding no fish fails naming fish.
+(3) The order is precondition, then Tests.'''
+verify = '''Local: all eight lines exit 0; the fixture passes. CI: backend-macos green, log shows the three versions before Tests. Isolation: not required (CI set-up, Q1).'''
+covers = ["PE-4"]
+after = ["pb4"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "pb6"
+type = "story"
+title = "DevOps: CI keychain on the macOS backend job, with a precondition step"
+description = '''Prerequisite (b), step 6. Owner: DevOps. Architecture item 3, row backend-macos, and design section 10.
+
+Before Tests, the backend-macos job creates a CI keychain: security create-keychain with a password generated per job and never printed, unlock-keychain, set-keychain-settings with no lock timeout, default-keychain set to it, and list-keychains with it first, then the login keychain. Adds a precondition step named precondition that stores one generic password item in it, reads it back, and deletes it, failing as precondition failed: keychain.
+
+Acceptance:
+(1) The log shows the round trip.
+(2) The keychain password does not appear in the job log (the test is a grep of the log for the generated value, which must find nothing; the step masks it).
+(3) The round trip finishes without a dialog (the job does not wait on a prompt; the log shows the step's end time).
+(4) The Keychain vault tests (added later, PE-7) are not in this story.'''
+verify = '''Local: all eight lines exit 0. CI: backend-macos green; log shows the round trip and no password; grep of the log for the generated value finds nothing. Isolation: not required (CI set-up, Q1).'''
+covers = ["PE-4"]
+after = ["pb5"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "pb7"
+type = "story"
+title = "DevOps: Windows precondition step on the backend job"
+description = '''Prerequisite (b), step 7. Owner: DevOps. Architecture item 3, row backend-windows: "DevOps confirms in slice 0". This is the first Windows check on a runner.
+
+Adds scripts/ci/windows-precondition.ps1 and a step named precondition before Tests in backend-windows. It runs one Credential Manager round trip (write, read back, delete one generic credential; the plan names the method, since cmdkey cannot read a secret back), runs pwsh -c "exit 0" and powershell -c "exit 0" (Windows PowerShell 5.1), and prints the PSReadLine module version from Get-Module -ListAvailable PSReadLine. Any failure names the check: precondition failed: credential manager, pwsh, powershell or PSReadLine.
+
+Acceptance:
+(1) The log shows the round trip, the pwsh and powershell versions and the PSReadLine version.
+(2) The step runs before Tests.
+(3) A throwaway run with pwsh removed from PATH fails naming pwsh, then is reverted (the revert is recorded).
+(4) The result is recorded in the Verification section, including whether any precondition failed on the image as shipped. A failure is a finding for the owner, not a reason to skip.'''
+verify = '''Local: all eight lines exit 0. CI: backend-windows green, log shows the four checks before Tests; the planted run is recorded. Isolation: not required (CI set-up, Q1).'''
+covers = ["PE-4"]
+after = ["pb6"]
+hitl = false
+risk = "medium"
+
+# ---------- Slice 0: the harness ----------
+
+[[entry]]
+id = "h2"
+type = "story"
+title = "Shared test helpers: require_shell, require_secret_service, require_keychain, require_console"
+description = '''F1 slice 0. Design 20 ("Test support"); architecture item 3, minor 3 of revision 5b.
+
+Creates src-tauri/src/test_require.rs, the one test-support module that listed platform tests may use for preconditions. It holds four helpers, each returning the value or panicking, never returning Option or Result:
+- require_shell(name: &str) -> PathBuf (for example require_shell("fish"));
+- require_secret_service() -> ();
+- require_keychain() -> ();
+- require_console() -> ().
+Each panic message begins with precondition missing: and names what is missing. Each helper takes its lookup as a parameter (a seam: a function for which, a closure for the probe), so a test can inject absence. The file is shared into ade-hook and isotest with #[path], as ade-hook shares hook_forward.rs. No ADE code uses the helpers in this story.
+
+Acceptance:
+(1) require_shell_returns_the_found_path (injected lookup finds the path).
+(2) require_shell_panics_naming_the_missing_shell (injected lookup finds nothing; the panic message names fish).
+(3) require_secret_service_panics_naming_the_bus (probe fails).
+(4) require_keychain_panics_naming_the_keychain (probe fails).
+(5) require_console_panics_naming_the_console (injected console check fails).
+(6) The helper file has no return of Option or Result (a grep test in the static test of h3, or a unit test on the signatures).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test. CI: the three backend jobs green. Isolation: not required (no I/O in this change, Q1).'''
+covers = ["PE-4"]
+after = ["h1"]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = "h3"
+type = "story"
+title = "Static test: the rules for listed platform tests and platform-only modules"
+description = '''F1 slice 0. Architecture item 3 ("Platform-only tests live in modules named windows_only, macos_only or linux_only"; the static test's rules) and design 20 ("Tests first"; the listed-test rules, M-C and minor 3 of revision 5b).
+
+Adds src-tauri/tests/platform_tests.rs, a static test run by cargo test on every platform. It reads the source of src-tauri/src, src-tauri/tests, src-tauri/ade-hook/src and src-tauri/isotest/src (parsed with syn; the dependency is Q3) and enforces the rules that concern listed tests:
+(a) A #[test] function inside a module named windows_only, macos_only or linux_only must be listed in src-tauri/platform-tests.txt for that platform.
+(b) A listed test's body (any test named in the list) must not contain: a return; a string literal containing skip in any case; #[ignore]; a direct call of which, std::env::var, var_os, vars or vars_os; exists, try_exists, is_file, is_dir, metadata or symlink_metadata inside a condition; or Command::new with a string-literal program. A condition is: the scrutinee of if, if let, while, while let, match and let-else; a match arm guard; either operand of && and ||; the receiver of bool::then and then_some; the expression argument of matches! with its guard. The assert family (assert!, assert_eq!, assert_ne! and debug_ forms) is allowed.
+(c) A let whose initializer calls one of those primitives, with the bound name used in a condition later in the same body, is rejected. assert!(ok) is allowed. Names are followed, not bindings.
+Each rule has a fixture in src-tauri/tests/fixtures/platform_tests/ that must be flagged, and an allowed fixture that must pass.
+
+Acceptance, each a test in platform_tests.rs:
+(1) platform_list_missing_listed_test_is_flagged.
+(2) platform_list_rejects_return.
+(3) platform_list_rejects_skip_string (any case).
+(4) platform_list_rejects_ignore_attribute.
+(5) platform_list_rejects_lookup_in_condition.
+(6) platform_list_rejects_bound_lookup_then_branched.
+(7) platform_list_allows_assert_on_exists.
+(8) platform_list_rejects_command_new_with_literal_program.
+(9) platform_module_test_must_be_listed.
+(10) the static test passes on the current tree (no listed test exists yet).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (10) appear by name in cd src-tauri && cargo test. CI: the three backend jobs green (the static test runs on each). Isolation: not required (static, no I/O, Q1).'''
+covers = ["PE-4"]
+after = ["h2", "pb2"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h4"
+type = "story"
+title = "Frozen legacy list of target-gated tests, with its ceiling"
+description = '''F1 slice 0. Architecture item 3, "the legacy list" (minor 2 of revision 5b).
+
+Writes src-tauri/platform-tests-legacy.txt, one entry per line, from the tree this story starts on: fn <file> <test path> for each target-gated #[test] function, and mod <file> <module path> for each target-gated test module. Architecture item 3 counts 53 functions and 3 gated modules (pty.rs lines 646, 754 and 934). The list is generated by the parser of h3, then checked in. If the parser finds a different number, the story stops and reports the difference, and does not edit the count the architecture states.
+
+Extends the static test of h3: (a) a stale entry (its function or module no longer exists, or exists without the gate) fails; (b) every target-gated test or module outside the three platform modules must match an entry; (c) the entry count must be at most the constant LEGACY_CEILING in the test's own source, which this story sets to the count it writes. A story may lower the ceiling; raising it is a change to the gate and needs the owner.
+
+Acceptance:
+(1) legacy_list_has_no_stale_entries.
+(2) legacy_list_covers_every_gated_test.
+(3) legacy_count_within_ceiling.
+(4) A fixture adding a new gated test outside a platform module fails (legacy_rule_flags_new_gated_test).
+(5) A fixture removing a gated test leaves its entry stale and fails (legacy_rule_flags_stale_entry).
+(6) The entry count written equals the parser's count, recorded in the Verification section.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test. CI: the three backend jobs green. Isolation: not required (static, Q1).'''
+covers = ["PE-4"]
+after = ["h3"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h5"
+type = "story"
+title = "fsx: absolute paths, same_path, the no-follow walk and the no-follow delete"
+description = '''F1 slice 0. Design section 20 ("Links are never followed", "Long paths", "Path equality"); ADR 0015 (no-follow delete). The file is Q2's assumption: src-tauri/src/fsx.rs.
+
+Creates the fsx module with only the functions the harness uses in slice 0. Adds rust-version = "1.79" to the src-tauri package manifest (design 20).
+- absolute(path): refuses a relative path with an error (a programming error, design 20).
+- same_path(a, b): both canonicalised where they exist; on Windows a leading \\?\ or \\?\UNC\ removed and the rest compared ordinal, ignoring case; on macOS and Linux byte-equal.
+- walk_no_follow(root): symlink_metadata only; every symbolic link, and on Windows every reparse point (junctions included), is recorded and never entered.
+- remove_tree_no_follow(path): built on std::fs::remove_dir_all, which removes a link or junction and not its target.
+Platform-only tests are added to src-tauri/platform-tests.txt in this story, as windows entries with crate app.
+
+Acceptance:
+(1) same_path_vectors: case, \\?\ and \\?\UNC\ prefixes, and non-ASCII names (every platform).
+(2) absolute_refuses_relative_path.
+(3) walk_records_a_symlink_and_does_not_enter_it: a planted link to a sentinel folder holding a marker name (every platform).
+(4) remove_tree_removes_a_link_not_its_target: the sentinel folder is intact (every platform). This is the planted-link test design section 20 requires.
+(5) windows_only: junction_is_recorded_and_not_entered.
+(6) windows_only: junction_is_removed_as_a_link.
+(7) windows_only: a tree whose deepest path passes 400 characters is walked and deleted (long_path_walk_and_delete).
+(8) The three windows_only tests are in platform-tests.txt with the platform windows and crate app.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (4) appear by name in cd src-tauri && cargo test. CI: the three backend jobs green; the backend-windows job prints the three windows tests as ok in platform tests: 3 listed, 3 ok. Isolation: not required for this story (Q1); it is the first I/O code in the harness.'''
+covers = ["PE-4"]
+after = ["h1", "pb2"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "h6"
+type = "story"
+title = "Scanner: marker encodings over bytes and names"
+description = '''F1 slice 0. Design 15.4 ("How a marker is found") and ADR 0020, the marker encodings.
+
+Adds isotest/src/scan/markers.rs. Pure functions, no I/O. Markers are lowercase ASCII letters and digits. The search folds ASCII case in the haystack and finds each marker as: raw bytes; JSON \uXXXX per character, in either hex case; UTF-16LE and UTF-16BE; base64 and base64url at all three alignments; ROT13. A file name, folder name and registry name go through the same search.
+
+Acceptance, each a test in isotest:
+(1) find_raw_bytes.
+(2) find_json_escape_either_hex_case.
+(3) find_utf16le.
+(4) find_utf16be.
+(5) find_base64_three_alignments (three tests, one per offset).
+(6) find_base64url.
+(7) find_rot13.
+(8) find_case_folded.
+(9) find_nothing_in_clean_text.
+(10) name_is_searched (a haystack that is a file name holding the marker).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (10) appear by name in cd src-tauri && cargo test -p isotest. CI: the three backend jobs green. Isolation: not required (pure functions, Q1).'''
+covers = ["PE-4"]
+after = ["h1"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h7"
+type = "story"
+title = "Scanner: LevelDB and Snappy, gzip, zlib and brotli streams"
+description = '''F1 slice 0. Design 15.4 ("Snappy", "gzip, zlib and brotli").
+
+Adds the container readers to isotest/src/scan. LevelDB .ldb and .sst tables are read block by block, each Snappy block decompressed before the search. .log files are searched raw and as log records. gzip, zlib and brotli streams are detected by their header bytes and decompressed. Chromium localStorage values carry a 0 or 1 prefix byte (UTF-16LE or Latin-1); both are covered. Crates: snappy, flate2 and brotli (Q3; the plan names the versions).
+
+Acceptance, each a test building its own input in memory:
+(1) find_in_snappy_block.
+(2) find_in_ldb_table: a table built by the test, its data block Snappy-compressed.
+(3) find_in_log_record.
+(4) find_in_gzip, (5) find_in_zlib, (6) find_in_brotli.
+(7) a stream whose header is absent is searched raw, not decompressed (raw_when_no_header).
+(8) find_localstorage_prefix_byte (both encodings).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (8) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required (in-memory readers, Q1).'''
+covers = ["PE-4"]
+after = ["h6"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h8"
+type = "story"
+title = "Scanner: SQLite main file, WAL and SHM, and cell decoding"
+description = '''F1 slice 0. Design 15.4 ("SQLite"); measured: WebKit's localStorage value as UTF-16 in localstorage.sqlite3-wal (E7.2).
+
+Adds the SQLite reader to isotest/src/scan. The main database file, its -wal and -shm files, are searched raw, freed pages included. The database is also opened read-only with immutable=1, and every TEXT and BLOB cell is searched in its stored encoding. Crate: rusqlite with the bundled feature (Q3).
+
+Acceptance, each a test that builds its database in the test:
+(1) find_in_sqlite_main_freed_page: a deleted row's marker is found in the raw main file.
+(2) find_in_wal_frame.
+(3) find_in_shm.
+(4) find_utf16_text_cell: a TEXT cell stored as UTF-16.
+(5) find_blob_cell.
+(6) The database is opened with immutable=1 (a test of the open flags through the reader's constructor).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (6) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required (reads files it creates in the test, Q1).'''
+covers = ["PE-4"]
+after = ["h6"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h9"
+type = "story"
+title = "Scanner: plists and OLE compound files"
+description = '''F1 slice 0. Design 15.4 ("plists", "OLE compound files").
+
+Adds two readers to isotest/src/scan. Plists: binary and XML, parsed with the plist crate, every string and data value searched; NSKeyedArchiver-encoded .sfl* recent lists searched through their archived strings; a file that does not parse is searched raw. OLE compound files (jump lists): every stream searched raw and as UTF-16LE. Crates: plist and cfb (Q3).
+
+Acceptance:
+(1) find_in_binary_plist.
+(2) find_in_xml_plist.
+(3) find_in_archived_sfl (an NSKeyedArchiver fixture built by the test).
+(4) unparsable_plist_is_searched_raw.
+(5) find_in_ole_stream_raw.
+(6) find_in_ole_stream_utf16le.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (6) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required (Q1).'''
+covers = ["PE-4"]
+after = ["h6"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h10"
+type = "story"
+title = "Exemptions: the file, pattern and registry grammar, loaded and checked"
+description = '''F1 slice 0. Design 15.4 ("Exemptions") and O8, approved by the owner with the architecture. ADR 0020 (every exemption after slice 0 needs the owner's approval).
+
+Adds isotest/src/exemptions.rs and isotest/exemptions.toml, which holds only a header comment in this story. The starting list of design 15.4 is added by the kind-4 review (h22), not here.
+
+Each entry has reason and platform (macos, linux or windows) and exactly one of:
+- file: an exact path starting at a named root ($CACHE, $TEMP, ~, %LOCALAPPDATA%, <harness home>; the plan lists the named roots it uses);
+- pattern: a path starting at a named root, each segment a literal or a glob limited to that segment, with the placeholders <id> (harness bundle id), <hex> (one or more hex digits), <n> (one or more decimal digits) and * (any characters but the separator). No **;
+- registry: an HKCU key path with the same segment grammar and a value-name pattern, or * for the key's values, never its subkeys.
+Load-time rules, the load fails naming the entry: every pattern contains <id> or an app-specific literal segment from the fixed list (com.apple.metal, com.apple.metalfe, EBWebView, claude, ade-<hex>.sock, ade-<hex>.lock, and any the owner adds); * is never the first segment after the root. An exempt path or value that holds a marker is still a finding; the caller reports it.
+
+Acceptance, each a test:
+(1) loads_a_valid_pattern.
+(2) refuses_double_star.
+(3) refuses_pattern_without_app_literal.
+(4) refuses_star_as_first_segment (for example $CACHE/*/x), and accepts $CACHE/<id>/*.
+(5) hex_placeholder_matches_only_hex.
+(6) registry_value_pattern_never_matches_subkeys.
+(7) exempt_path_with_marker_is_a_finding.
+(8) file_entry_matches_exact_path_only.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (8) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required (grammar and matching, Q1).'''
+covers = ["PE-4"]
+after = ["h6"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h11"
+type = "story"
+title = "Attribution: default-owned stand-ins, tier-2 attributable paths, phases, links"
+description = '''F1 slice 0. Design 15.2 (order, phases, attribution, default-owned locations, the blind spot), 15.3 (two tiers and the attributable rule), 15.6 (the stand-in table, minor 4).
+
+Adds isotest/src/attribution.rs with four parts:
+(1) The default-owned location table, a stand-in written out for today's code (15.2, minor 4): the harness bundle id's app data and local app data; ~/.ade/; ~/.claude/ and ~/.claude.json; today's crash log path; the stand-in registry file (default app data, engagements/registry.json, written by h16); the per-bundle webview, cache and HTTP-storage folders of the harness bundle id on each platform, as the design lists them.
+(2) The attributable rule for tier 2: a path is attributable when one of its components equals or starts with the harness bundle id, better-terminal, claude or claude-cli-nodejs, or matches ^ade(-[0-9a-f]{16}(\.sock|\.lock)?)?$; components, not substrings; or when it lies under a folder ADE created in the run.
+(3) Phase attribution (15.2, "Attribution"): a change in a default-owned location gets the marker rule when only the default runs or when both run; a change elsewhere gets A's rule when only A runs or when both run. A's allowed locations in slice 0 are the stand-in A root and the stand-in profile root of h16.
+(4) Link recording: every link is recorded with its target string, which is searched; never entered.
+
+Acceptance, each a test:
+(1) default_table_covers_every_stand_in_row.
+(2) attributable_matches_components_not_substrings (upgrade-x and facade-x are not attributable).
+(3) planted_link_recorded_not_followed (a link to a sentinel holding a marker; the marker is not reported as found through the link; the sentinel stays intact).
+(4) phase_rules_table: one row per phase and location class, asserting the rule.
+(5) allowed_locations_are_a_and_its_profile_root.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required (pure rules over paths, Q1).'''
+covers = ["PE-4"]
+after = ["h5", "h10"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "h12"
+type = "story"
+title = "Verdict: every finding kept, one ordered verdict, the determinism keys"
+description = '''F1 slice 0. Design 15.5 ("The checks and the one verdict", "Deterministic"), ADR 0020 (one verdict).
+
+Adds isotest/src/verdict.rs. It computes every check and keeps every finding of every kind, then prints one verdict: the first failing check of this order, else pass:
+1 step could not run;
+2 scanner blind (a marker the scenario wrote was found nowhere);
+3 marker of A found outside A's allowed locations;
+4 write outside A's allowed locations (while A's process existed, no marker, not exempt);
+5 B changed (B's files or secret entries differ byte for byte);
+6 marker not in A (positive control);
+pass.
+The verdict strings are exactly these, for example marker of A found outside A's allowed locations.
+Each finding carries its kind, marker role, path, encoding and offset.
+Keys, one per finding: (marker role, finding kind, location class: A's allowed, exempt or neither, normalised store root). The normalised store root is the LevelDB folder for a table or log, the SQLite main path for its -wal, -shm and journal, the plist's path, else the file's path. The harness home, profile ids, per-run ids and numeric file sequence numbers are replaced by placeholders. Offset, file within a store and encoding are reported and never part of the key.
+
+Acceptance, each a test:
+(1) verdict_order: for each pair of failing checks, the earlier one is printed.
+(2) every_finding_is_kept_under_one_verdict.
+(3) key_ignores_offset_and_encoding.
+(4) key_normalises_a_leveldb_folder.
+(5) key_replaces_run_ids_and_sequence_numbers.
+(6) pass_when_no_finding.
+(7) report_lists_every_kind_4_path.
+(8) verdict_strings_match_the_table_exactly.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (8) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required (pure, Q1).'''
+covers = ["PE-4"]
+after = ["h11"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "h13"
+type = "story"
+title = "Driver endpoint behind the isotest-driver feature, and the compiled harness home"
+description = '''F1 slice 0. Design 15.1 ("Driver", "Never shipped"), 4.1 ("The harness home"), ADR 0020. ADR 0016 (harness home).
+
+Adds, in src-tauri, the cargo feature isotest-driver (off by default; release.yml never passes it). With the feature:
+- a loopback endpoint on 127.0.0.1 with a random port and a random token. Its port and token go to <harness home>/.isotest/driver.json, the path derived from the compiled root, never from a caller's variable.
+- the compiled root ADE_ISOTEST_HOME, read with env! at build time; a harness build without it fails to compile.
+- commands for the driver, which call the same Tauri commands the UI calls, plus quiesce (15.2 P1a: one flush of the state and the WebKit store, then the snapshot timer, sync and the 20 s session timer and further store flushes stopped) and quit-as-a-user (the close path, which runs saveSession, flushNow and the store flush).
+- a #[used] static byte string __ade_isotest_driver_build__, compiled only under the feature.
+Without the feature there is no endpoint and no sentinel.
+
+Acceptance:
+(1) driver_json_written_under_compiled_home (under the feature).
+(2) request_without_token_refused_and_changes_nothing.
+(3) quiesce_stops_timers (a flag check or a paused clock test).
+(4) without_feature_no_endpoint_and_no_sentinel (a cfg test that asserts absence in the default build).
+(5) the compiled root is the value of ADE_ISOTEST_HOME in the build (test reads the env! value).'''
+verify = '''Local: all eight lines exit 0 and tests (1), (2), (4), (5) appear by name in cd src-tauri && cargo test (feature-off tests) and cd src-tauri && cargo test --features isotest-driver (feature-on tests, the plan adds this line for the story). CI: three backend jobs green. Isolation: the change opens a socket and writes files, so it is part of the harness; the slice rule (Q1) applies.'''
+covers = ["PE-4"]
+after = ["h1"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h14"
+type = "story"
+title = "Frontend driver: window.__adeDriver under VITE_ADE_ISOTEST only"
+description = '''F1 slice 0. Design 15.1 ("Driver": frontend steps run through window.__adeDriver, a module compiled only under VITE_ADE_ISOTEST).
+
+Adds a module that exports window.__adeDriver only when the Vite define VITE_ADE_ISOTEST is "1"; otherwise the module is not included. The driver drives real elements by data-testid and dispatches the events a click or keypress would: pointer events for click, keydown and input events for typing. Adds data-testid attributes to existing elements only where a step needs one; no behaviour changes.
+
+Acceptance, each a vitest test:
+(1) driver_is_undefined_when_the_define_is_off (the module is loaded with the define off).
+(2) click_dispatches_pointer_events.
+(3) type_dispatches_input_events.
+(4) a missing testid throws an error naming the testid (a step's "could not run").
+(5) the data-testid additions change no existing assertion (npm test passes unchanged).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (4) appear by name in npm test. CI: three backend jobs green (the frontend job is not part of the gate, architecture item 3). Isolation: not required (test-only frontend code, Q1).'''
+covers = ["PE-4"]
+after = ["pa"]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = "h15"
+type = "story"
+title = "check-no-driver: the release check and the with-feature, without-feature unit check"
+description = '''F1 slice 0. Design 15.1 ("Never shipped", minor 1). ADR 0020 (the release check).
+
+Adds scripts/check-no-driver.sh. It fails when the built binary contains the sentinel __ade_isotest_driver_build__ or the bundle id com.betterterminal.isotest, or when the frontend dist folder contains __adeDriver. Adds one step to release.yml's build job that runs it after the build (the only change to release.yml). Adds the unit check of 15.1: a CI step builds src-tauri once with --features isotest-driver and once without, and asserts that the script fails on the first and passes on the second (the plan names the job).
+
+Acceptance:
+(1) A fixture binary holding the sentinel fails the script.
+(2) A fixture binary without it passes.
+(3) A fixture dist holding __adeDriver fails.
+(4) A fixture dist without it passes.
+(5) The with-feature and without-feature build check passes in CI (the step is named).
+(6) release.yml has one added step and no other change.'''
+verify = '''Local: all eight lines exit 0; fixtures (1) to (4) pass when run by the script's own test. CI: three backend jobs green; the build-with-and-without check step is green on the story's SHA. Isolation: not required (release check, Q1).'''
+covers = ["PE-4"]
+after = ["h13", "h14"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h16"
+type = "story"
+title = "Harness build, the harness home for today's binary, and the stand-ins for A and B"
+description = '''F1 slice 0. Design 15.1 ("Harness build"), 15.6 ("Stand-ins"), 4.1 (the harness home). Q4: slice 0 redirects today's binary by environment, since the rebuild that reads ADE_ISOTEST_HOME lands in slice 1.
+
+(1) Harness build config. Adds src-tauri/tauri.isotest.conf.json, a config override that gives the bundle identifier com.betterterminal.isotest and bundles ade-hook exactly as tauri.release.conf.json does. The build is cargo tauri build --features isotest-driver with VITE_ADE_ISOTEST=1 and ADE_ISOTEST_HOME=<the job's home root>. The build fails fast when the helper is missing.
+(2) Harness home for today's binary. The runner starts the binary with HOME, USERPROFILE, APPDATA, LOCALAPPDATA, TMPDIR and the four XDG_*_HOME variables set under the harness home.
+(3) Stand-ins. Create A: A's root at <harness home>/Engagements/<client marker>-<name marker>/, an empty stand-in profile root, and a row for A in the stand-in registry file <default app data>/engagements/registry.json (the registry's place, so the registry exemption is exercised). Start A's instance: today's binary, started normally with the driver attached; the default stores serve it too. Create and start B the same way.
+The markers are lowercase, from the run's random seed.
+
+Acceptance, each a test in isotest run with a fake driver seam:
+(1) stand_in_create_writes_root_and_registry_row.
+(2) stand_in_root_name_is_the_two_markers.
+(3) harness_env_sets_every_redirect_variable.
+(4) harness_home_compiled_root_is_used_for_driver_json.
+(5) build_config_names_the_bundle_id_and_bundles_the_helper (a test reads the override file).
+The real build and run are exercised by the isolation job (pc3), not by cargo test.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required for this story on its own (Q1); the harness build is first run by pc3.'''
+covers = ["PE-4"]
+after = ["h13", "h15"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "h17"
+type = "story"
+title = "Scenario steps through today's UI: terminals, notes, Orchestrator, paste, recording, workspace, snapshot, crash log"
+description = '''F1 slice 0. Design 15.6 ("Every other slice-1 step runs through today's code") and PRD PE-4 AC9's slice-1 scenario list.
+
+Adds isotest/src/steps/ui.rs. Each step calls the driver (h13, h14) and writes its own distinct marker, recorded with its role. Steps:
+- open terminal tabs and a split, type a command containing a marker;
+- a sub-terminal (New Sub-terminal, already shipped);
+- a Scratchpad entry, a note, a draft;
+- an Orchestrator message;
+- a pasted image (the paste command, with a fixture PNG);
+- a recording, started and stopped;
+- a saved workspace;
+- a local snapshot;
+- a crash-log entry (the command the plan names, which writes through ADE's own error path).
+
+Acceptance, each a test with a fake driver:
+(1) step_terminal_sends_the_typed_command.
+(2) step_sub_terminal_sends_new_sub_terminal.
+(3) step_scratchpad_note_draft_each_send_their_command (one test per step).
+(4) step_orchestrator_message_sends_the_message.
+(5) step_paste_sends_the_fixture_image.
+(6) step_recording_starts_and_stops.
+(7) step_workspace_and_snapshot_send_their_commands.
+(8) step_crash_log_writes_the_marker_through_the_error_path.
+(9) A driver rejection makes the step return could not run with the step's name.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (9) appear by name in cd src-tauri && cargo test -p isotest and npm test where the driver is used. CI: three backend jobs green. Isolation: not required for this story on its own (Q1).'''
+covers = ["PE-4"]
+after = ["h16", "h14"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h18"
+type = "story"
+title = "Scenario steps: temp variables, role-file agent launch, Agent status, and the real Claude Code mcp steps"
+description = '''F1 slice 0. Design 15.1 ("Real Claude Code, no account"), 15.6, PRD PE-4 AC9 and AC11.
+
+Adds isotest/src/steps/agent.rs with four steps. Each writes its marker.
+(1) A file created through each temp-folder variable from a terminal: TMPDIR, TMP, TEMP and CLAUDE_CODE_TMPDIR.
+(2) The agent launch with a role file. The role file goes to the default's ade/roles stand-in path. The agent the launch starts is Q6, held in unknown: the step cannot be built until the architect and owner name it.
+(3) Agent status turned on and then off, where Agent status is offered (not on Windows, PRD PE-4 AC9).
+(4) The real Claude Code steps, in A's root (checkouts come in slice 4): claude mcp add --scope user <marker>srv -- <a command that exits 1>, then claude mcp list. The pinned version (pc1) is installed by the job. The steps never sign in and make no model call.
+
+Acceptance, each a test with a fake shell or driver:
+(1) step_temp_file_per_variable.
+(2) step_agent_status_is_skipped_on_windows.
+(3) step_mcp_add_argv_is_exact.
+(4) step_claude_refused_when_the_version_differs_from_the_pin (reads the pin, fails could not run).
+(5) step_claude_never_runs_login_or_model_prompt (argv and env contain no login command).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required for this story on its own (Q1). The role-file launch test waits for Q6.'''
+covers = ["PE-4"]
+after = ["h17", "pc1"]
+hitl = false
+risk = "medium"
+unknown = "Q6: which agent the role-file launch starts, and whether it is a real Claude Code session. The design names no model-free launch for it (architect and owner). Until it is named, the role-file step is not built; steps (1), (3) and (4) may be."
+
+[[entry]]
+id = "h19"
+type = "story"
+title = "Phased runner: B, baseline, P1a to P1c, P2 and the snapshots"
+description = '''F1 slice 0. Design 15.2 ("Order, phases and attribution"); ADR 0020 (phases). P3 is not built here (slice 4).
+
+Adds isotest/src/run.rs, the runner, which runs in this order and takes a snapshot at each marked point:
+- B: create B through the stand-in, run B's short scenario with B's markers, quit B, and record B's secret entries (none in slice 0).
+- Baseline S0: refuse to start when any ADE process is running (the runner checks the process list).
+- P1a: the default creates A (the stand-in, typed through the UI). Then quiesce through the driver (h13). Snapshot S1a.
+- P1b: the default starts A (the stand-in). Both run until A reports through the driver that its workspace is open. Snapshot S1b while both run.
+- P1c: the default quits the way a user does (quit-as-a-user). Snapshot S1.
+- P2: A alone runs the steps of h17 and h18, then A quits. Snapshot S2.
+- Attribution by phase (h11).
+Every step has a timeout. A step error or timeout is "step could not run".
+
+Acceptance, each a test with a fake driver and fake snapshots:
+(1) phase_order_is_fixed (the recorded sequence).
+(2) baseline_refuses_when_an_ade_process_runs.
+(3) quiesce_comes_before_snapshot_s1a.
+(4) a_step_timeout_is_step_could_not_run.
+(5) both_run_window_snapshots_are_taken_while_both_run (S1b).
+(6) p3_is_not_run_in_slice_0 (the phase list has no P3).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (6) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required for this story on its own (Q1); the phased run first happens in pc3's jobs.'''
+covers = ["PE-4"]
+after = ["h12", "h16", "h18"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "h20"
+type = "story"
+title = "Run output: the job summary, the JSON report, and the keys file"
+description = '''F1 slice 0. Design 15.5 ("The job summary", "every kind-4 path"), 15.6 ("The CI job's summary"). Q5: slice 0 has no rebuild.
+
+Adds the output writer: a job summary (written to GITHUB_STEP_SUMMARY when set, else stdout) and two files per run: isotest-report.json (every finding, with path, encoding and offset) and keys.json (the sorted keys of h12). The summary prints, in this order: the commit SHA (GITHUB_SHA, or a flag), the platform, the verdict, launcher: none (slice 0), the count of each finding kind, every kind-4 path, and the artifact name.
+
+Acceptance, each a test:
+(1) summary_prints_each_count_kind.
+(2) summary_lists_every_kind_4_path.
+(3) summary_has_sha_platform_and_the_launcher_line.
+(4) keys_json_is_sorted_and_stable (same findings, same bytes).
+(5) report_json_round_trips.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required for this story on its own (Q1).'''
+covers = ["PE-4"]
+after = ["h19"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "h21"
+type = "story"
+title = "EXPECTED: the expected-to-fail mark and the single-run check"
+description = '''F1 slice 0. Design 15.6 ("The mark"); architecture item 2 ("slice 0 only"); ADR 0020 (EXPECTED).
+
+Adds src-tauri/isotest/EXPECTED with exactly one line: xfail: marker of A found outside A's allowed locations. Adds the subcommand isotest check-expected --expected <file> --report <file>. It is green when the report's verdict equals the xfail line's expectation exactly; red on pass, on any other verdict, or when the run did not finish. It refuses an EXPECTED file with more than one line, or with a line that is not an xfail line.
+
+The refusal of xfail after slice 1 is story e30's, not this one (minor 10): this story's runs need the xfail line.
+
+Acceptance, each a test:
+(1) check_expected_green_on_exact_verdict.
+(2) check_expected_red_on_pass.
+(3) check_expected_red_on_another_verdict (for example write outside A's allowed locations).
+(4) check_expected_red_on_unfinished_run.
+(5) expected_file_must_hold_exactly_one_xfail_line (a second line, or expect: pass, is refused).'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (5) appear by name in cd src-tauri && cargo test -p isotest. CI: three backend jobs green. Isolation: not required for this story on its own (Q1).'''
+covers = ["PE-4"]
+after = ["h20"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "pc1"
+type = "story"
+title = "DevOps: pinned Claude Code for the isolation job, and docs/ops.md for the F1 set-up"
+description = '''DevOps, slice 0. Design 15.1 ("Real Claude Code, no account", "DevOps pins it in docs/ops.md"). Q11: docs/ops.md does not exist in the repository; this story creates it as the F1 ops document, with a section for the isolation job.
+
+Pins the Claude Code version the isolation job installs. The design measured 2.1.319 (E7); the assumption is that the pin is 2.1.319 unless the owner names another. The pin is written in one place in docs/ops.md and in a file the h16 step reads (src-tauri/isotest/claude-pin.txt, one line). The install is the package DevOps names, with its version set from the pin. RC-2 runs the current version and is not built here.
+
+Acceptance:
+(1) The isolation job prints claude --version and fails when it differs from the pin (a fixture check in scripts/tests).
+(2) The pin is stated in docs/ops.md once, and in claude-pin.txt once; a test asserts they match.
+(3) docs/ops.md describes the isolation job's set-up in the sections the design names (the runner set-up of pb3 to pb7 and pc2), as far as this story reaches.'''
+verify = '''Local: all eight lines exit 0; the pin-match test passes. CI: the job prints the version and the pin matches. Isolation: not required (installs a tool, Q1).'''
+covers = ["PE-4"]
+after = ["pa"]
+hitl = false
+risk = "low"
+
+[[entry]]
+id = "pc2"
+type = "story"
+title = "DevOps: the Linux fallback set-up for the isolation runners"
+description = '''DevOps, slice 0. Design 4.3 ("The CI fallback set-up"), architecture "Depends on" (the Linux fallback set-up of section 4.3).
+
+For the isolation job's Ubuntu runners, adds a set-up step that starts Xvfb on :99; creates /run/user/<uid> owned by the runner user; starts dbus-daemon --session at /run/user/<uid>/bus; and runs gnome-keyring-daemon unlocked on that bus, the same unlock as pb4. The set-up prints the socket paths and the bus address. The fallback path of the rebuild finds these by the rules of design 4.3; in slice 0 no rebuild runs (Q5).
+
+Acceptance:
+(1) The set-up step prints XDG_RUNTIME_DIR, the bus address and the display.
+(2) A check that /run/user/<uid>/bus exists and is owned by the runner user, green.
+(3) An X request to :99 succeeds (for example xdpyinfo), green.
+(4) The step runs before the harness build in the isolation job (checked in pc3).'''
+verify = '''Local: all eight lines exit 0. CI: an isolation-job run (the workflow of pc3) or a throwaway run of the Ubuntu set-up shows the three checks green. Isolation: not required for this story on its own (Q1).'''
+covers = ["PE-4"]
+after = ["pb4", "pc1"]
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "pc3"
+type = "story"
+title = "DevOps: the isolation workflow: three platforms, two fresh runners, the harness and the scenario"
+description = '''DevOps, slice 0. Architecture item 2 and item 4; design 15.1, 15.5, 15.6; ADR 0020.
+
+Replaces the stub of pa with the real .github/workflows/isolation.yml. The trigger is workflow_dispatch; push is added only when pa recorded the fallback (stub). No concurrency group (item 4: isolation runs never cancel each other).
+
+A matrix of three platforms with two jobs each. Each job runs on its own fresh GitHub-hosted runner (never twice on one runner). Each job:
+- installs the pinned Claude Code (pc1);
+- sets up its platform: Linux, pc2; macOS, the CI keychain of pb6 linked into the harness home (design 4.1); Windows, the precondition of pb7;
+- builds the harness (h16) and runs the phased scenario (h19), then check-expected (h21);
+- writes the report and keys (h20) and uploads them as artifacts named by platform and run.
+The job summary is h20's. The launch suite is not in slice 0.
+
+Acceptance:
+(1) gh workflow run isolation.yml --ref <branch> starts six jobs, two per platform.
+(2) Every job's log shows the harness build line, the verdict, and the launcher: none (slice 0) line.
+(3) A job is green exactly when check-expected passes for its run.
+(4) No state is shared between the two jobs of a platform (each job's log shows a fresh runner name).
+(5) The workflow file uses no concurrency group.'''
+verify = '''Local: all eight lines exit 0. CI: a dispatch run of isolation.yml on the story's SHA with six jobs, each job's summary recorded; ci.yml's three backend jobs green for the SHA. Isolation: this story builds the job; its own counted runs are cited in pc4 (item 4). Those runs must end with the xfail verdict on both runners.'''
+covers = ["PE-4"]
+after = ["h21", "pc1", "pc2", "pb6", "pb7"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "pc4"
+type = "story"
+title = "DevOps: compare the two runs of each platform, and the slice 0 gate run"
+description = '''DevOps, slice 0. Architecture item 2 ("slice 0 only", two runs), item 4 (how runs are cited); design 15.5 ("Deterministic").
+
+Adds a final job, compare, to isolation.yml. It downloads both runs' keys.json and report for each platform, and fails unless, for each platform: both verdicts equal the xfail line exactly, and the two sets of marker-finding keys are equal. Kind-4 findings are reported and not compared. It prints a table with the platform, each run's verdict and whether the keys are equal. A missing artifact is red. The comparison is a script (scripts/compare-isolation.mjs) with its own tests.
+
+This is the last slice 0 build story. Its Verification section carries the QA same-SHA runs for the slice gate, cited as architecture item 4 says (gh run list for the SHA, the gh run view JSON with headSha, event and attempt, and each job's summary).
+
+Acceptance:
+(1) compare_green_when_verdicts_and_keys_match (script test).
+(2) compare_red_when_keys_differ.
+(3) compare_red_when_a_run_is_missing.
+(4) compare_ignores_kind_4_paths.
+(5) The compare job is green on the story's SHA for every platform, two runs each.'''
+verify = '''Local: all eight lines exit 0 and tests (1) to (4) pass in npm test. CI: the story's SHA has counted runs of isolation.yml on all three platforms, two runners each, all green, with the compare job green; the ci.yml backend jobs are green for the SHA. The runs are cited as architecture item 4 says. Isolation: required (this is the slice 0 gate), item 2's slice 0 rule.'''
+covers = ["PE-4"]
+after = ["pc3"]
+hitl = false
+risk = "high"
+
+[[entry]]
+id = "h22"
+type = "spike"
+title = "Kind-4 review of slice 0's runs, and the owner's approval of new exemptions"
+description = '''Spike, slice 0's last gate. Design 15.6 ("The kind-4 review"); architecture item 2 ("slice 0 is not Done until the list is complete and the owner has approved the new exemptions"); O8.
+
+Who waits on the answer: slice 1 (its `e29` and `e30`). Where it is recorded: this spike's plan file (Verification section) and the epic's notes.
+
+The architect lists every kind-4 finding of pc4's counted runs, per platform, with its path. Each is marked as one of: exempt, owner to approve (with the pattern); ADE write, fixed in slice 1 (with the story); or OS noise misattributed, rule refined (with the rule change). The owner approves each new exemption. Approved patterns go into src-tauri/isotest/exemptions.toml in one commit, checked by h10's loader. Slice 0 is Done when the list is complete and approved.
+
+Acceptance:
+(1) Every kind-4 path from the counted runs appears in the list, with a mark.
+(2) Each new exemption has the owner's approval recorded.
+(3) exemptions.toml loads (h10's test passes).
+(4) The approved exemptions do not hide a marker (an exempt path that holds a marker is still a finding; a test asserts it).'''
+verify = '''The list and the owner's approvals are in this spike's Verification section; cd src-tauri && cargo test -p isotest passes with the approved exemptions loaded. Isolation: not a code change beyond the exemptions file; the runs cited in pc4 are the evidence.'''
+covers = ["PE-4"]
+after = ["pc4"]
+hitl = true
+risk = "high"

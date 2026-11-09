@@ -1,0 +1,26 @@
+# 0008: One shell quoter, safe in sh, bash, zsh and fish
+
+- Status: Accepted (owner, 2026-10-17), with the plan `_bmad-output/plan-hermes-provider.md` (Story A).
+- Context:
+  - ADE types commands into the user's interactive shell in a pane: agent launches for every provider (`src/lib/agentCommand.ts`), the orchestrator's `-p` task (`OrchestratorTab.tsx:319`) and contract actions (`src/lib/contracts.ts`, `contractRunner.ts`), the forge trace command (`ContractsWorkbench.tsx:145`) and the plugin installer (`AntiSlopTab.tsx:29`). Arguments in those commands come from settings, role paths, story file names and tasks, and some of them come from a cloned repository.
+  - Two copies of the same POSIX quoter exist, and two more builders hand-roll quoting: one interpolates names into single quotes unescaped, and one double-quotes a path, so `$` and backticks still expand. The two quoters wrap the value in single quotes and write `'` as `'\''`.
+  - That is safe in sh, bash and zsh, but not in fish. Inside fish single quotes, `\'` and `\\` are escapes ([fish language docs](https://fishshell.com/docs/current/language.html), "Quotes"). So a value containing a backslash before a quote can end the string early and run what follows. For example, `a\'; touch X; #` quotes to `'a\'\''; touch X; #'`, which fish runs as `touch X`.
+  - zsh with `RC_QUOTES` set reads `''` inside a single-quoted string as a literal quote. A quoter that puts two quoted segments side by side can therefore be misread there.
+- Decision:
+  - **One quoter.** `shellQuote` in `src/lib/shellQuote.ts` is the only function that quotes a word for a command ADE types into a pane. `agentCommand.ts`, `contracts.ts`, `AntiSlopTab.tsx` and `ContractsWorkbench.tsx` all use it, and a source scan in the tests fails on a new hand-rolled quote. `contracts.ts` keeps its bare-word fast path (`^[\w./-]+$` is left unquoted) and delegates every other value.
+  - **Its output means the same word in sh, bash, zsh (with or without `RC_QUOTES`) and fish.**
+    - The value is split into maximal runs of characters other than `'` and `\`.
+    - Each run is wrapped in single quotes.
+    - Each `'` becomes `\'` outside quotes, and each `\` becomes `\\` outside quotes.
+    - The empty string is `''`.
+    - Two quoted runs are never adjacent, and no backslash ever appears inside quotes. That is the subset all four shells read the same way.
+  - **What it does not do.** It does not make control characters typeable. Callers still collapse them (`UNTYPEABLE` in `agentCommand.ts`), because a line editor acts on them even inside quotes.
+  - **Out of scope.** It does not cover PowerShell. A provider that needs a POSIX construct returns `unsupported` on Windows.
+  - **Tests.** They prove the property in two ways:
+    - by running real `sh` and `bash` (and `zsh` and `fish` when present);
+    - by reference tokenizers for POSIX and fish written from those shells' documented quoting rules, which run everywhere and are themselves checked against the real shells on random input.
+- Consequences:
+  - Every existing provider's launch becomes injection-safe in fish, and future command builders get the property by using the one quoter.
+  - Output changes only for values containing `\` or starting or ending with `'`. Ordinary paths and tasks quote exactly as before, so existing expectations stay valid.
+  - Other shell constructs in a command (`VAR=value cmd`, `$(…)`, `&&`) still need each shell's support: fish 3.1 for `VAR=value cmd`, and 3.4 for `"$(…)"`. The quoter does not change that, and the guide states the minimums.
+  - A new command builder that hand-rolls its own quoting should fail review against this ADR.

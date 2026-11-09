@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act, waitFor, cleanup } from "@testing-library/react";
 import AgentPicker from "../AgentPicker";
-import { useTabStore, findAllPanes } from "../../stores/tabStore";
+import { useTabStore, allTabPanes } from "../../stores/tabStore";
 import { useAgentTrackerStore } from "../../stores/agentTrackerStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { AGENT_CATEGORIES } from "../../data/curatedAgents";
 import { ROLES_FILTER } from "../../data/pickerItems";
 import { AGENT_COLOR_HEX } from "../../data/agentColors";
+import { decideBusy, type Fg } from "../../lib/paneBusy";
 
 // AgentPicker's mount effect calls invoke("check_command_exists", ...) for
 // each provider to detect installed CLIs. Outside a real Tauri runtime there
@@ -61,6 +62,15 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 /** Orgo's ask rules, which every Claude Code launch carries (see launchRules.ts). */
 const SETTINGS = `--settings '{"permissions":{"ask":["mcp__*orgo*__*create*"]}}'`;
+// What paneBusy says about the active pane. Free by default; the busy-pane
+// tests below make it a Hermes or an Ollama pane through the real decision.
+const busy = vi.hoisted(() => ({
+  paneBusy: vi.fn<(paneId: string) => Promise<string | null>>(async () => null),
+}));
+vi.mock("../../hooks/useTerminal", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/useTerminal")>()),
+  paneBusy: busy.paneBusy,
+}));
 
 // jsdom has no layout engine, so it doesn't implement scrollIntoView.
 // AgentPicker calls it (via a ref effect) to keep the selected row visible.
@@ -117,12 +127,14 @@ async function clickRow(name: string) {
 }
 
 beforeEach(() => {
+  busy.paneBusy.mockReset();
+  busy.paneBusy.mockImplementation(async () => null);
   tauri.ptyWrites.length = 0;
   tauri.fileWrites.length = 0;
   tauri.ready = [];
   tauri.neverReady = false;
   tauri.events.length = 0;
-  tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => t.root && findAllPanes(t.root).some((p) => p.ptyId === id));
+  tauri.ptyOpen = (id) => useTabStore.getState().tabs.some((t) => allTabPanes(t).some((p) => p.ptyId === id));
   useSettingsStore.getState().setDefaultProvider("claude");
 });
 
@@ -352,5 +364,97 @@ describe("AgentPicker", () => {
     const spans = [...suggested.querySelectorAll<HTMLElement>("span")];
     expect(spans.some((sp) => AGENT_CATEGORIES.includes(sp.textContent as never)), "a category badge is shown").toBe(true);
     for (const sp of spans) expect(sp.getAttribute("style") ?? "", sp.textContent ?? "").not.toMatch(literal);
+  });
+});
+
+describe("AgentPicker over a busy pane", () => {
+  /** paneBusy as the real decision makes it for a Hermes or an Ollama pane. */
+  const asPane = (kind: "hermes" | "ollama") => async (paneId: string) => {
+    const ollama: Fg = { kind: "busy", label: "ollama", names: ["ollama", "ollama"] };
+    return decideBusy({
+      sessions: kind === "hermes"
+        ? [{ paneId, provider: "hermes", agentName: "Hermes Architect", status: "running" }]
+        : [{ paneId, provider: "ollama", agentName: "Ollama Developer", status: "completed" }],
+      sample: async () => (kind === "ollama" ? ollama : { kind: "shell" }),
+      wait: async () => {},
+      fallback: () => null,
+    });
+  };
+  const thisTerminal = () => screen.getByText(/This terminal/).closest("button") as HTMLButtonElement;
+  const newTab = () => screen.getByText(/New tab/).closest("button") as HTMLButtonElement;
+  const pick = async (name: string) => {
+    await act(async () => {
+      fireEvent.click(screen.getAllByText(name)[0]);
+      await flush();
+    });
+  };
+  const input = () => screen.getByPlaceholderText("Search agents or describe a task...");
+
+  it("a busy or unchecked pane is never offered as This terminal, whatever the provider", async () => {
+    // Still checking: not offered, and C does nothing.
+    let answer: (v: string | null) => void = () => {};
+    busy.paneBusy.mockImplementation(() => new Promise((r) => { answer = r; }));
+    await renderPicker();
+    attachPty(21);
+    await pick("Auth Architect");
+    expect(thisTerminal().disabled).toBe(true);
+    await act(async () => {
+      fireEvent.keyDown(input(), { key: "c" });
+      await flush();
+    });
+    expect(tauri.ptyWrites).toHaveLength(0);
+    expect(tauri.fileWrites).toHaveLength(0);
+    // The check answers: free.
+    await act(async () => {
+      answer(null);
+      await flush();
+    });
+    expect(thisTerminal().disabled).toBe(false);
+    expect(thisTerminal().getAttribute("aria-pressed")).toBe("true");
+  });
+
+  for (const kind of ["hermes", "ollama"] as const) {
+    it(`preselects New tab over a ${kind} pane`, async () => {
+      busy.paneBusy.mockImplementation(asPane(kind));
+      await renderPicker();
+      attachPty(22);
+      await pick("Auth Architect");
+      expect(thisTerminal().disabled).toBe(true);
+      expect(newTab().getAttribute("aria-pressed")).toBe("true");
+      expect(thisTerminal().getAttribute("aria-pressed")).toBe("false");
+    });
+  }
+
+  it("Enter on This terminal over a busy pane types nothing", async () => {
+    busy.paneBusy.mockImplementation(asPane("hermes"));
+    await renderPicker();
+    attachPty(23);
+    const paneId = useTabStore.getState().getActivePane()!.id;
+    const sessionsBefore = useAgentTrackerStore.getState().sessions.filter((s) => s.paneId === paneId).length;
+    await pick("Auth Architect");
+    // React 19 drops onMouseEnter on a disabled button, so hovering it does not
+    // make it the target.
+    fireEvent.mouseEnter(thisTerminal());
+    expect(thisTerminal().getAttribute("aria-pressed")).toBe("false");
+
+    // The way "current" is still reached over a busy pane: it was free when
+    // the picker asked, and an agent started in it before Enter.
+    await act(async () => {
+      fireEvent.click(screen.getByText(/Back \(Esc\)/));
+      await flush();
+    });
+    busy.paneBusy.mockImplementationOnce(async () => null);
+    await pick("Auth Architect");
+    fireEvent.mouseEnter(thisTerminal());
+    expect(thisTerminal().getAttribute("aria-pressed")).toBe("true");
+    await act(async () => {
+      fireEvent.keyDown(input(), { key: "Enter" });
+      await flush();
+    });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe(
+      "This terminal is running Hermes Architect. Choose New tab.",
+    ));
+    expect(tauri.ptyWrites).toHaveLength(0);
+    expect(useAgentTrackerStore.getState().sessions.filter((s) => s.paneId === paneId)).toHaveLength(sessionsBefore);
   });
 });

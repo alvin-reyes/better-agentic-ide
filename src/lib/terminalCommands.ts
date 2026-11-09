@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useTabStore, findAllPanes } from "../stores/tabStore";
+import { useTabStore, allTabPanes, shownView } from "../stores/tabStore";
 
 /** Send text to a PTY as if typed. */
 export function writePty(id: number, text: string): Promise<void> {
@@ -73,13 +73,14 @@ export async function runInNewTab(name: string, cwd: string | undefined, command
  */
 export async function runInNewTabPane(name: string, cwd: string | undefined, command: string): Promise<string | null> {
   const tabId = useTabStore.getState().addTab(name, cwd);
-  const paneId = useTabStore.getState().tabs.find((t) => t.id === tabId)?.activePaneId;
+  const opened = useTabStore.getState().tabs.find((t) => t.id === tabId);
+  const paneId = opened ? shownView(opened).activePaneId : undefined;
   if (!paneId) return null;
   for (let i = 0; i < 32; i++) {
     await new Promise((r) => setTimeout(r, 250));
     const tab = useTabStore.getState().tabs.find((t) => t.id === tabId);
     if (!tab) return null; // Closed before its shell started.
-    const ptyId = findAllPanes(tab.root).find((p) => p.id === paneId)?.ptyId ?? null;
+    const ptyId = allTabPanes(tab).find((p) => p.id === paneId)?.ptyId ?? null;
     if (ptyId !== null) {
       const stillOpen = () => useTabStore.getState().tabs.some((t) => t.id === tabId);
       return (await typeWhenReady(ptyId, command, stillOpen)) ? paneId : null;
