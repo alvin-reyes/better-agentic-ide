@@ -1,7 +1,7 @@
 repo: https://github.com/alvin-reyes/ade-setup
-release: v1.0.1
-ref: 8a587fe4e9323939377f3868e9645aac38ea71a6
-vendored: 2026-10-10
+release: v1.0.4
+ref: c0c9c441c8e97655937b333801d0ca81f90d209c
+vendored: 2026-11-08
 
 The role definitions ADE ships, vendored and pinned the way .bmad-core is.
 These markdown files are the source: src/data/roles.ts parses them and holds

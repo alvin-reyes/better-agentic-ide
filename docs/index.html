@@ -8,10 +8,10 @@ description: ADE is a desktop terminal where your coding agents work as a team o
   <div class="wrap">
     <div class="hero-copy">
       <div class="hero-mark"><img src="{{ img }}logo.svg" width="76" height="76" alt=""></div>
-      <a class="pill" href="#new"><b>NEW</b><span>BMAD v6 or v4 per project, and a safe switch between them →</span></a>
-      <p class="hero-kicker">The IDE built for Claude Code developers and architects</p>
-      <h1>Verified, <span class="grad-text">not&nbsp;vibed.</span></h1>
-      <p class="sub">A desktop terminal where your agents work as a team of roles: architect, developer, QA. Nothing ships until the gate says it&rsquo;s done.</p>
+      <a class="pill" href="#new"><b>v0.21.1</b><span>Sub-terminals, and more →</span></a>
+      <p class="hero-kicker">Verified, not vibed &middot; for Claude Code developers and architects</p>
+      <h1>A team of agents. <span class="grad-text">One gate for&nbsp;Done.</span></h1>
+      <p class="sub">ADE orchestrates your developer tooling with BMAD&nbsp;v6 roles. A PM, an architect and a designer plan; a reviewer tries to break the plan; developers build stories in parallel git worktrees; QA runs the one verification command that decides when the work is done.</p>
       <div class="hero-cta">
         <a class="btn btn-ghost" href="{{ site.repo }}">View the source</a>
         <a class="btn btn-primary" href="#downloads" data-download="auto">
@@ -56,6 +56,148 @@ description: ADE is a desktop terminal where your coding agents work as a team o
     </figure>
   </div>
 </section>
+
+<section class="section orx" id="orchestration">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Orchestration</span>
+      <h2>Orchestrate your developer tooling with a team of agents.</h2>
+      <p>Many agents, each in its own lane and on its own model, working one plan. BMAD v6 decides who does what, the verification command decides when it is done, and an agent hub remembers all of it between sessions.</p>
+    </div>
+
+    <figure class="orx-fig">
+      <figcaption>
+        <span class="orx-num">A</span>
+        <div>
+          <h3>One plan, many agents: BMAD v6 in every project</h3>
+          <p>Planning roles write the artifacts, a reviewer that cannot patch attacks them, and you approve. Then the plan is sharded into stories that developer agents build in parallel, each in its own git worktree, and QA runs the one command that decides Done. The stage board shows every ticket&rsquo;s stage live and dispatches the next agent.</p>
+        </div>
+      </figcaption>
+      <div class="orx-scroll" tabindex="0" aria-label="BMAD v6 orchestration diagram, scrolls sideways">
+<svg class="orx-svg" viewBox="0 0 1080 540" role="img" aria-labelledby="orx-a-t orx-a-d"><title id="orx-a-t">BMAD v6 orchestration in ADE</title><desc id="orx-a-d">You brief the product manager, architect and designer, who write the PRD, the architecture with its verification command, and the UX spec. The read-only adversarial reviewer sends material flaws back. You approve, which fixes the verification command; the stage board shows it and dispatches agents. The scrum master shards the plan into stories, a developer takes each one in its own worktree, test first, and QA runs the verification command: green is Done with a verdict in .ade/gates, red goes back to the story.</desc><defs><marker id="mA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="orx-arrow" d="M0,0 L10,5 L0,10 z"/></marker><marker id="mAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="orx-arrow orx-arrow--back" d="M0,0 L10,5 L0,10 z"/></marker></defs><rect class="orx-band" x="0" y="0" width="1080" height="250" rx="14"/><text class="orx-phase" x="18" y="26" text-anchor="start">PLAN  →  APPROVE</text><rect class="orx-band" x="0" y="262" width="1080" height="278" rx="14"/><text class="orx-phase" x="84" y="288" text-anchor="start">SHARD  →  BUILD  →  VERIFY</text><g class="orx-node orx-node--you"><rect x="20" y="108" width="120" height="64" rx="10"/><text class="orx-t" x="36" y="136">You</text><text class="orx-s" x="36" y="153">the owner</text></g><g class="orx-node orx-node--role" data-agent-color="purple"><rect x="200" y="40" width="210" height="60" rx="10"/><rect class="orx-tick" x="200" y="52" width="3" height="36" rx="1.5"/><text class="orx-t" x="216" y="66">Product Manager</text><text class="orx-s" x="216" y="83">PRD · bmad-prd</text></g><g class="orx-node orx-node--role" data-agent-color="blue"><rect x="200" y="110" width="210" height="60" rx="10"/><rect class="orx-tick" x="200" y="122" width="3" height="36" rx="1.5"/><text class="orx-t" x="216" y="136">Architect</text><text class="orx-s" x="216" y="153">names the verify command</text></g><g class="orx-node orx-node--role" data-agent-color="pink"><rect x="200" y="180" width="210" height="60" rx="10"/><rect class="orx-tick" x="200" y="192" width="3" height="36" rx="1.5"/><text class="orx-t" x="216" y="206">Designer</text><text class="orx-s" x="216" y="223">UX spec · bmad-ux</text></g><path class="orx-edge" d="M140,140 C170,140 170,70 198,70" marker-end="url(#mA)"/><path class="orx-edge" d="M140,140 C170,140 170,140 198,140" marker-end="url(#mA)"/><path class="orx-edge" d="M140,140 C170,140 170,210 198,210" marker-end="url(#mA)"/><g class="orx-node orx-node--role" data-agent-color="red"><rect x="470" y="110" width="210" height="60" rx="10"/><rect class="orx-tick" x="470" y="122" width="3" height="36" rx="1.5"/><text class="orx-t" x="486" y="136">Adversarial reviewer</text><text class="orx-s" x="486" y="153">read-only · blocks</text></g><path class="orx-edge" d="M410,70 C440,70 440,140 468,140" marker-end="url(#mA)"/><path class="orx-edge" d="M410,140 C440,140 440,140 468,140" marker-end="url(#mA)"/><path class="orx-edge" d="M410,210 C440,210 440,140 468,140" marker-end="url(#mA)"/><path class="orx-edge orx-edge--back" d="M560,108 C560,58 470,46 413,58" marker-end="url(#mAr)"/><text class="orx-l orx-l--back" x="470" y="44" text-anchor="start">material flaw → revise</text><g class="orx-node orx-node--you"><rect x="730" y="110" width="160" height="60" rx="10"/><text class="orx-t" x="746" y="136">You approve</text><text class="orx-s" x="746" y="153">fixes the command</text></g><path class="orx-edge" d="M680,140 L728,140" marker-end="url(#mA)"/><g class="orx-node orx-node--ade"><rect x="915" y="110" width="155" height="60" rx="10"/><text class="orx-t" x="931" y="136">Stage board</text><text class="orx-s" x="931" y="153">approve · dispatch</text></g><path class="orx-edge orx-edge--dash" d="M890,140 L913,140" marker-end="url(#mA)"/><path class="orx-edge" d="M810,170 V256 H60 V378" marker-end="url(#mA)"/><g class="orx-node orx-node--role" data-agent-color="cyan"><rect x="20" y="380" width="170" height="60" rx="10"/><rect class="orx-tick" x="20" y="392" width="3" height="36" rx="1.5"/><text class="orx-t" x="36" y="406">Scrum Master</text><text class="orx-s" x="36" y="423">shards · bmad-ticket</text></g><g class="orx-node orx-node--role" data-agent-color="green"><rect x="250" y="312" width="220" height="56" rx="10"/><rect class="orx-tick" x="250" y="324" width="3" height="32" rx="1.5"/><text class="orx-t" x="266" y="336">Developer · story 1</text><text class="orx-s" x="266" y="353">own worktree, test first</text></g><path class="orx-edge" d="M190,410 C220,410 220,340 248,340" marker-end="url(#mA)"/><path class="orx-edge" d="M470,340 C500,340 500,410 528,410" marker-end="url(#mA)"/><g class="orx-node orx-node--role" data-agent-color="green"><rect x="250" y="382" width="220" height="56" rx="10"/><rect class="orx-tick" x="250" y="394" width="3" height="32" rx="1.5"/><text class="orx-t" x="266" y="406">Developer · story 2</text><text class="orx-s" x="266" y="423">own worktree, test first</text></g><path class="orx-edge" d="M190,410 C220,410 220,410 248,410" marker-end="url(#mA)"/><path class="orx-edge" d="M470,410 C500,410 500,410 528,410" marker-end="url(#mA)"/><g class="orx-node orx-node--role" data-agent-color="green"><rect x="250" y="452" width="220" height="56" rx="10"/><rect class="orx-tick" x="250" y="464" width="3" height="32" rx="1.5"/><text class="orx-t" x="266" y="476">Developer · story 3</text><text class="orx-s" x="266" y="493">own worktree, test first</text></g><path class="orx-edge" d="M190,410 C220,410 220,480 248,480" marker-end="url(#mA)"/><path class="orx-edge" d="M470,480 C500,480 500,410 528,410" marker-end="url(#mA)"/><g class="orx-node orx-node--role" data-agent-color="yellow"><rect x="530" y="380" width="210" height="60" rx="10"/><rect class="orx-tick" x="530" y="392" width="3" height="36" rx="1.5"/><text class="orx-t" x="546" y="406">QA</text><text class="orx-s" x="546" y="423">runs the verify command</text></g><g class="orx-node orx-node--done"><rect x="810" y="380" width="200" height="60" rx="10"/><text class="orx-t" x="826" y="406">Done</text><text class="orx-s" x="826" y="423">verdict in .ade/gates</text></g><path class="orx-edge" d="M740,410 L808,410" marker-end="url(#mA)"/><g class="orx-pill"><rect x="750" y="400" width="49" height="20" rx="10"/><text class="orx-l" x="774" y="414" text-anchor="middle">green</text></g><path class="orx-edge orx-edge--back" d="M635,440 C635,505 540,512 472,488" marker-end="url(#mAr)"/><text class="orx-l orx-l--back" x="645" y="512" text-anchor="start">red → back to the story</text></svg>
+      </div>
+    </figure>
+
+    <figure class="orx-fig">
+      <figcaption>
+        <span class="orx-num">B</span>
+        <div>
+          <h3>Focus terminals: one per folder, each with its own agent and model</h3>
+          <p>An <a href="{{ '/agent-hub/' | relative_url }}">agent hub</a> is a private repo for one client, made from the <code>ai-agent-hub-template</code>. <code>bin/work &lt;folder&gt;</code> opens a focus terminal in that folder&rsquo;s checkout with its named agent and the folder&rsquo;s hooks. Each one picks its own model and effort: <code>--model</code> for the session, <code>--agent-model</code> for the folder&rsquo;s specialist agents, all of them or one by name.</p>
+        </div>
+      </figcaption>
+      <div class="orx-scroll" tabindex="0" aria-label="Agent hub and focus terminals diagram, scrolls sideways">
+<svg class="orx-svg" viewBox="0 0 1080 440" role="img" aria-labelledby="orx-b-t orx-b-d"><title id="orx-b-t">One agent hub, many focus terminals</title><desc id="orx-b-d">An agent hub is a private repo for one client: the persona agent, STATE, memory and journal in Markdown, BMAD v6 and hub.conf. bin/work opens a focus terminal per folder, each in its own checkout with its named agent and its own models and effort. At session end every terminal feeds the brain, a local SQLite index with keywords and Ollama vectors, and sync, which scans with gitleaks and pushes every 30 minutes and at session end.</desc><defs><marker id="mB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="orx-arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs><rect class="orx-hub" x="20" y="20" width="270" height="400" rx="14"/><text class="orx-t orx-t--big" x="40" y="52" text-anchor="start">Agent hub</text><text class="orx-s" x="40" y="72" text-anchor="start">a private repo, one client</text><g class="orx-node"><rect x="40" y="92" width="230" height="62" rx="10"/><text class="orx-t" x="56" y="119">Persona agent</text><text class="orx-s" x="56" y="136">--model · HUB_MODEL</text></g><g class="orx-node"><rect x="40" y="172" width="230" height="62" rx="10"/><text class="orx-t" x="56" y="199">STATE · memory · journal</text><text class="orx-s" x="56" y="216">Markdown, in git</text></g><g class="orx-node"><rect x="40" y="252" width="230" height="62" rx="10"/><text class="orx-t" x="56" y="279">BMAD v6</text><text class="orx-s" x="56" y="296">_bmad · 33 skills</text></g><g class="orx-node"><rect x="40" y="332" width="230" height="62" rx="10"/><text class="orx-t" x="56" y="359">hub.conf</text><text class="orx-s" x="56" y="376">names and locations</text></g><g class="orx-term"><rect x="350" y="20" width="420" height="120" rx="10"/><path class="orx-term-bar" d="M360,20 H760 A10,10 0 0 1 770,30 V48 H350 V30 A10,10 0 0 1 360,20 Z"/><circle cx="366" cy="34" r="3.5"/><circle cx="378" cy="34" r="3.5"/><circle cx="390" cy="34" r="3.5"/><text class="orx-cmd" x="404" y="38">$ bin/work projects/app</text><text class="orx-t" x="368" y="76">Focus terminal · acme/app checkout</text><text class="orx-s" x="368" y="98">agent app · --model opus</text><text class="orx-s" x="368" y="116">specialists · --agent-model sonnet</text></g><path class="orx-edge" d="M290,220 C320,220 320,80 348,80" marker-end="url(#mB)"/><path class="orx-edge" d="M770,80 C800,80 800,115 828,115" marker-end="url(#mB)"/><path class="orx-edge" d="M770,80 C800,80 800,325 828,325" marker-end="url(#mB)"/><g class="orx-term"><rect x="350" y="160" width="420" height="120" rx="10"/><path class="orx-term-bar" d="M360,160 H760 A10,10 0 0 1 770,170 V188 H350 V170 A10,10 0 0 1 360,160 Z"/><circle cx="366" cy="174" r="3.5"/><circle cx="378" cy="174" r="3.5"/><circle cx="390" cy="174" r="3.5"/><text class="orx-cmd" x="404" y="178">$ bin/work ops/ci-cd</text><text class="orx-t" x="368" y="216">Focus terminal · acme/infra checkout</text><text class="orx-s" x="368" y="238">agent ops-ci-cd · --effort high</text><text class="orx-s" x="368" y="256">one specialist · --agent-model name=opus</text></g><path class="orx-edge" d="M290,220 C320,220 320,220 348,220" marker-end="url(#mB)"/><path class="orx-edge" d="M770,220 C800,220 800,115 828,115" marker-end="url(#mB)"/><path class="orx-edge" d="M770,220 C800,220 800,325 828,325" marker-end="url(#mB)"/><g class="orx-term"><rect x="350" y="300" width="420" height="120" rx="10"/><path class="orx-term-bar" d="M360,300 H760 A10,10 0 0 1 770,310 V328 H350 V310 A10,10 0 0 1 360,300 Z"/><circle cx="366" cy="314" r="3.5"/><circle cx="378" cy="314" r="3.5"/><circle cx="390" cy="314" r="3.5"/><text class="orx-cmd" x="404" y="318">$ bin/work projects/proposals</text><text class="orx-t" x="368" y="356">Focus terminal · no repo, in the hub</text><text class="orx-s" x="368" y="378">agent proposals</text><text class="orx-s" x="368" y="396">Remote Control on, named proposals</text></g><path class="orx-edge" d="M290,220 C320,220 320,360 348,360" marker-end="url(#mB)"/><path class="orx-edge" d="M770,360 C800,360 800,115 828,115" marker-end="url(#mB)"/><path class="orx-edge" d="M770,360 C800,360 800,325 828,325" marker-end="url(#mB)"/><g class="orx-pill"><rect x="288" y="210" width="63" height="20" rx="10"/><text class="orx-l" x="319" y="224" text-anchor="middle">context</text></g><g class="orx-node orx-node--ade"><rect x="830" y="40" width="230" height="150" rx="10"/><text class="orx-t" x="846" y="95">Brain</text><text class="orx-s" x="846" y="112">bin/brain · .local/brain.db</text><text class="orx-s" x="846" y="128">FTS5 keywords + Ollama</text><text class="orx-s" x="846" y="144">vectors, on this Mac</text></g><g class="orx-node orx-node--ade"><rect x="830" y="250" width="230" height="150" rx="10"/><text class="orx-t" x="846" y="305">Sync</text><text class="orx-s" x="846" y="322">bin/sync --auto</text><text class="orx-s" x="846" y="338">gitleaks scan, then push</text><text class="orx-s" x="846" y="354">every 30 min + session end</text></g><g class="orx-pill"><rect x="754" y="210" width="91" height="20" rx="10"/><text class="orx-l" x="800" y="224" text-anchor="middle">session end</text></g></svg>
+      </div>
+    </figure>
+
+    <figure class="orx-fig">
+      <figcaption>
+        <span class="orx-num">C</span>
+        <div>
+          <h3>Brain sync: every session leaves the next one smarter</h3>
+          <p>When a focus session ends, its hook commits the folder&rsquo;s notes and the journal, indexes them into the brain, and pushes the hub. The brain is SQLite keyword search plus vectors from a local Ollama model, so nothing leaves the Mac. Sync refuses to run without gitleaks, never force-pushes, and never touches the client&rsquo;s code.</p>
+        </div>
+      </figcaption>
+      <div class="orx-scroll" tabindex="0" aria-label="Brain and sync loop diagram, scrolls sideways">
+<svg class="orx-svg" viewBox="0 0 1080 256" role="img" aria-labelledby="orx-c-t orx-c-d"><title id="orx-c-t">Brain and sync loop</title><desc id="orx-c-d">A focus session ends; the session-end hook commits the folder&#x27;s files and the journal, bin/brain indexes the changed sections, and bin/sync --auto scans with gitleaks and pushes the hub, not the client&#x27;s code, to its private GitHub repo. launchd also runs sync every 30 minutes. The next session&#x27;s SessionStart hook loads STATE, and bin/brain search finds the rest. The brain file is gitignored, so each Mac indexes the same Markdown into its own brain.</desc><defs><marker id="mC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="orx-arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs><g class="orx-node"><rect x="20" y="70" width="182" height="72" rx="10"/><text class="orx-t" x="36" y="102">Focus session</text><text class="orx-s" x="36" y="119">work in one folder</text></g><path class="orx-edge" d="M202,106 L232,106" marker-end="url(#mC)"/><g class="orx-node"><rect x="234" y="70" width="182" height="72" rx="10"/><text class="orx-t" x="250" y="102">Session end</text><text class="orx-s" x="250" y="119">commit folder + journal</text></g><path class="orx-edge" d="M416,106 L446,106" marker-end="url(#mC)"/><g class="orx-node orx-node--ade"><rect x="448" y="70" width="182" height="72" rx="10"/><text class="orx-t" x="464" y="102">bin/brain index</text><text class="orx-s" x="464" y="119">incremental, on this Mac</text></g><path class="orx-edge" d="M630,106 L660,106" marker-end="url(#mC)"/><g class="orx-node orx-node--ade"><rect x="662" y="70" width="182" height="72" rx="10"/><text class="orx-t" x="678" y="102">bin/sync --auto</text><text class="orx-s" x="678" y="119">gitleaks → push</text></g><path class="orx-edge" d="M844,106 L874,106" marker-end="url(#mC)"/><g class="orx-node"><rect x="876" y="70" width="182" height="72" rx="10"/><text class="orx-t" x="892" y="102">Private GitHub repo</text><text class="orx-s" x="892" y="119">the hub, never the code</text></g><g class="orx-node orx-node--tag"><rect x="662" y="8" width="182" height="36" rx="10"/><text class="orx-t" x="678" y="30">launchd · every 30 min</text></g><path class="orx-edge" d="M753,44 L753,68" marker-end="url(#mC)"/><path class="orx-edge orx-edge--back" d="M946,142 V196 H111 V144" marker-end="url(#mC)"/><text class="orx-l" x="528" y="222" text-anchor="middle">next session: the SessionStart hook loads STATE; bin/brain search finds the rest</text><text class="orx-l orx-l--soft" x="528" y="244" text-anchor="middle">any Mac that pulls the hub indexes the same Markdown into its own brain</text></svg>
+      </div>
+    </figure>
+
+    <figure class="orx-fig orx-next" id="coming-next">
+      <figcaption>
+        <span class="orx-num">D</span>
+        <div>
+          <span class="compose-label">Coming next &middot; planned, not shipped yet</span>
+          <h3>Agents on DeepSeek, GLM and Meta Muse</h3>
+          <p>Planned for the agent hub template: Claude Code agents that run on other providers through their Anthropic-compatible APIs. Each provider is opt-in per hub, and its API key stays in the macOS Keychain. One session will hand tasks to agents on different providers and models with <code>bin/agent</code>: read-only by default, with every answer returned as untrusted data. Meta Muse support depends on confirming Meta&rsquo;s endpoint.</p>
+        </div>
+      </figcaption>
+      <div class="orx-scroll" tabindex="0" aria-label="Planned provider delegation diagram, scrolls sideways">
+<svg class="orx-svg" viewBox="0 0 1080 330" role="img" aria-labelledby="orx-d-t orx-d-d"><title id="orx-d-t">Planned: one session delegating to agents on other providers</title><desc id="orx-d-d">Planned, not shipped. A Claude Code session on Anthropic hands tasks with bin/agent to three agents, each Claude Code running on another provider through its Anthropic-compatible API: a coder on DeepSeek, a reviewer on GLM from Zhipu z.ai, and a researcher on Meta Muse, which depends on confirming Meta's endpoint. Each provider is opt-in per hub and its API key stays in the macOS Keychain. Agents are read-only by default, and each answer comes back framed as untrusted data.</desc><defs><marker id="mD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="orx-arrow" d="M0,0 L10,5 L0,10 z"/></marker></defs><text class="orx-phase" x="20" y="22" text-anchor="start">PLANNED  ·  NOT SHIPPED YET</text><g class="orx-node orx-node--you"><rect x="20" y="120" width="250" height="90" rx="10"/><text class="orx-t" x="38" y="152">Your session</text><text class="orx-s" x="38" y="172">Claude Code on Anthropic</text><text class="orx-s" x="38" y="190">e.g. Opus, plans the work</text></g><path class="orx-edge" d="M270,165 C330,165 330,75 418,75" marker-end="url(#mD)"/><path class="orx-edge" d="M270,165 L418,165" marker-end="url(#mD)"/><path class="orx-edge" d="M270,165 C330,165 330,255 418,255" marker-end="url(#mD)"/><g class="orx-pill"><rect x="292" y="155" width="84" height="20" rx="10"/><text class="orx-l" x="334" y="169" text-anchor="middle">bin/agent</text></g><g class="orx-node orx-node--ade"><rect x="420" y="40" width="300" height="70" rx="10"/><text class="orx-t" x="438" y="68">Coder · DeepSeek</text><text class="orx-s" x="438" y="88">Claude Code → DeepSeek API</text></g><g class="orx-node orx-node--ade"><rect x="420" y="130" width="300" height="70" rx="10"/><text class="orx-t" x="438" y="158">Reviewer · GLM (Zhipu z.ai)</text><text class="orx-s" x="438" y="178">Claude Code → z.ai API</text></g><g class="orx-node orx-node--tag"><rect x="420" y="220" width="300" height="70" rx="10"/><text class="orx-t" x="438" y="248">Researcher · Meta Muse</text><text class="orx-s" x="438" y="268">pending: Meta's endpoint</text></g><path class="orx-edge orx-edge--dash" d="M720,75 C780,75 780,165 818,165" marker-end="url(#mD)"/><path class="orx-edge orx-edge--dash" d="M720,165 L818,165" marker-end="url(#mD)"/><path class="orx-edge orx-edge--dash" d="M720,255 C780,255 780,165 818,165" marker-end="url(#mD)"/><g class="orx-node"><rect x="820" y="120" width="240" height="90" rx="10"/><text class="orx-t" x="838" y="152">Framed answers</text><text class="orx-s" x="838" y="172">untrusted data, read-only</text><text class="orx-s" x="838" y="190">back to your session</text></g><text class="orx-l" x="570" y="318" text-anchor="middle">each provider opt-in per hub · API keys in the macOS Keychain</text></svg>
+      </div>
+    </figure>
+
+    <div class="orx-cards">
+      <article class="orx-card">
+        <span class="compose-label">In ADE</span>
+        <h3>Sub-terminals</h3>
+        <p>Give one terminal tab several shells: New Sub-terminal in the tab&rsquo;s menu, <kbd>&#8984;[</kbd> and <kbd>&#8984;]</kbd> to switch. Closing one checks whether it is busy first, and they come back with the session. Scrollback never goes into the repo.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Different agents, different models</span>
+        <h3>The right model for each job</h3>
+        <p>The hub sets defaults per persona, and <code>hub.conf</code> or the command line overrides them: one model for focus sessions and the persona agent, one for folder specialists (default Sonnet), and one for the morning briefing (default Haiku).</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Agent hub</span>
+        <h3>Everything the hub does</h3>
+        <p>Thirteen personas, focus terminals, state and memory, the brain, auto sync, monitors and the access tools: one card each in the tour below.</p>
+        <a class="more" href="#agent-hub">See the agent hub tour <span aria-hidden="true">&darr;</span></a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section hub-tour" id="agent-hub">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">Agent hub</span>
+      <h2>A hub that remembers each client&rsquo;s work.</h2>
+      <p>The agent hub template turns a private repo into an AI technical persona for one client: its context, state and history in Bash and Markdown, while the client&rsquo;s code stays in its own repos. Every session starts with what is live, open and waiting.</p>
+    </div>
+    <div class="orx-cards hub-cards">
+      <article class="orx-card">
+        <span class="compose-label">Thirteen personas</span>
+        <h3>Pick a role, run <code>bin/init</code></h3>
+        <p>Staff engineer, DevOps/SRE, data, ML/AI, mobile, frontend, QA, security, solutions architect, tech lead, engineering manager, technical PM or fractional CTO. <code>bin/init</code> writes the hub for one client and owner.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Focus terminals</span>
+        <h3>One terminal per work area</h3>
+        <p><code>bin/work &lt;folder&gt;</code> opens the folder&rsquo;s code checkout with its named agent, hooks and model. <code>--model</code> and <code>--agent-model</code> set the session and its specialists per run.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">State, memory, journal</span>
+        <h3>Nothing lives only in a chat</h3>
+        <p>Each folder keeps <code>STATE.md</code> (live, open, waiting on, next) and <code>memory/</code>; the journal is the shared timeline. Hooks show every terminal what the others changed since its last prompt.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">The brain</span>
+        <h3>One brain for every agent</h3>
+        <p>All of the hub&rsquo;s work lives in one SQLite brain: STATE, memory, the journal and notes, plus any other folders you point it at with <code>--brain-path</code>. Every agent is told to run <code>bin/brain search</code> before it asks or re-derives, so each one starts with the context of the whole hub. FTS5 keywords plus vectors from a local Ollama model; nothing leaves the Mac.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Auto sync</span>
+        <h3>Pushed, and scanned first</h3>
+        <p><code>bin/sync --auto</code> commits and pushes the hub every 30 minutes and at each session end: refused without gitleaks, every commit scanned before the push, one rebase retry, never a force push.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Monitors and briefing</span>
+        <h3>Watching while you&rsquo;re away</h3>
+        <p>launchd runs read-only monitors every 30 minutes (an <code>ALERT</code> line journals once and notifies) and a weekday morning briefing on Haiku.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">Access</span>
+        <h3>Reach the box, keep the secrets</h3>
+        <p><code>bin/remote</code> for SSH to the client&rsquo;s box, <code>bin/secret</code> for the macOS Keychain (names in the repo, never values), and <code>bin/doctor</code> for what this Mac can reach.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">BMAD v6 inside</span>
+        <h3>The same discipline as ADE</h3>
+        <p>BMAD v6 skills for PRDs, specs, stories, builds and reviews ship in the hub, under the ADE rules: the verification command decides Done.</p>
+      </article>
+      <article class="orx-card">
+        <span class="compose-label">The guide</span>
+        <h3>Every setting, with diagrams</h3>
+        <p>Making a hub, the daily flow, the hooks, the brain, auto sync, monitors and troubleshooting.</p>
+        <a class="more" href="{{ '/agent-hub/' | relative_url }}">Read the agent hub guide <span aria-hidden="true">&rarr;</span></a>
+        <a class="more" href="{{ '/training/#hub' | relative_url }}">Or take the 15-minute training <span aria-hidden="true">&rarr;</span></a>
+      </article>
+    </div>
+  </div>
+</section>
+
 
 <section class="section" id="features">
   <div class="wrap">
@@ -388,7 +530,7 @@ _bmad-output/        <span class="c"># tickets and planning documents</span>
 
     <div class="new-strip" id="new">
       <span class="badge">New</span>
-      <p><strong>Switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>BMAD v6</strong>, <strong>Project setup</strong>, <strong>Anti-slop</strong>, <strong>MCP library</strong> and <strong>Secrets vault</strong>.</p>
+      <p><strong>v0.21.1:</strong> <strong>Sub-terminals</strong> (several shells in one tab, <kbd>&#8984;[</kbd> and <kbd>&#8984;]</kbd> to switch), a <strong>busy check</strong> before any terminal closes, and <strong>sharp text with many tabs</strong> (the WebGL renderer now follows the tabs on screen). <a href="{{ site.repo }}/releases/tag/v0.21.1">Release notes</a>. Recently: the <strong>agent hub guide</strong>, <strong>switching between BMAD v4 and v6</strong>, the <strong>stage board</strong>, <strong>BMAD v6</strong>, <strong>Anti-slop</strong>, the <strong>MCP library</strong> and the <strong>Secrets vault</strong>.</p>
     </div>
   </div>
 </section>
