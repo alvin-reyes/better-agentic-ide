@@ -2716,6 +2716,13 @@ the chosen persona's front matter in the bundled template.
 - **Q8. T1 and T2** are template changes. Confirm they go into the template's backlog,
   so ADE never edits `hub.conf` itself.
 
+**Owner answers (2026-11-09).** All eight answered; each as recommended:
+- Q1: F2 makes agent hubs from the bundled template now; F1 engagements become a third choice when F1's flag turns on.
+- Q2: default role Staff Software Engineer. Q3: a new project folder only pre-fills the repo, no new prompt.
+- Q4: hubs default to `~/hubs/<hub name>`. Q5: keep both palette entries (guided setup and S4b's "New hub from template…").
+- Q6: the choice never shows in new windows. Q7: `bin/schedule install` stays opt-in.
+- Q8: T1 (bin/init provider options) goes into the template's backlog; ADE never edits `hub.conf` itself. T2 is the template story W1 (bin/work opens sub-terminals in ADE), already in progress.
+
 ### F2.10 Risks
 
 - **The template moves.** A changed `bin/init` option breaks the questionnaire. OB-5
