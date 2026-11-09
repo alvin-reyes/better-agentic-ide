@@ -104,7 +104,7 @@ The owner decided on 2026-11-10 (story 9's sixth re-check) to ship v0.23.1 with 
 - **B1 in general:** a function on the line named like a guarded CLI (`gh() { :; }; gh repo delete o/r` follows the function, not gh), and `command`/`builtin`/wrappers past such a function. Only `ade open --`'s typed command is fixed (amendment 6).
 - **B2:** disk text that runs its arguments (a script whose body is `"$@"`, given `gh repo delete …`).
 - **M1:** a file changed earlier on the line by a writer the guard doesn't model, then run or sourced.
-- **M2:** `PATH` assigned on the line, or a path-named `gh` (`./gh`, `/tmp/x/gh`) the guard doesn't treat as gh.
+- **M2:** `PATH` assigned on the line, or a path-named `gh` (`./gh`, `/tmp/x/gh`) the guard doesn't treat as gh. Also zsh `setopt pathdirs` (or `zsh -o pathdirs`): `sub/y.sh` runs `<PATH dir>/sub/y.sh` when the current folder has no executable copy.
 - **M3:** startup files: `ZDOTDIR`, `HOME`, `--rcfile`, `--init-file`, `ENV` pointing a nested shell at other text.
 - **m1:** runners outside the list: `script`, `at`, `osascript`, `vim`, and `awk`/`perl`/`python` code strings.
 - **m3:** the `~`/`HOME` exception (the session's home stands in for `~` while nothing can assign HOME) needs the owner's sign-off.
