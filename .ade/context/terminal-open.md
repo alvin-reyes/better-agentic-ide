@@ -40,6 +40,7 @@ ade open [--cwd DIR] [--split right|down] [--name NAME] [--focus] [-- COMMAND [A
   - `create_pty` always strips inherited entries for these folders. It
     prepends its own only when it sets the `ADE_*` variables.
   - Agents and scripts use `"$ADE_HOOK_BIN" open`.
+  - The command guard judges `open`'s words after variable resolution, which fails closed (ADR 0011 amendment 4; `cli-guard.md`, "Variable resolution fails closed"): a builtin that may assign, or a command the guard can't name, earlier on the line makes `$X` unknown, so `"$ADE_HOOK_BIN" $X …` asks.
 - **The working folder:** `$PWD` when it is absolute and it and `getcwd`
   canonicalise to the same existing folder; else `getcwd`.
 - **`--cwd`:** joined to the working folder,

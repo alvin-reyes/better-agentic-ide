@@ -1078,6 +1078,29 @@ impl Parser {
                 self.i += 2;
                 ps.part(Part::Param { name: (c as char).to_string(), plain: true, quoted, inner: Vec::new() });
             }
+            // zsh's `$=X` (split), `$~X` (glob) and `$^X` (rc-expand), alone
+            // or combined: not plain, so the value is never known text.
+            Some(b'=' | b'~' | b'^') => {
+                let mut j = self.i + 1;
+                while matches!(self.src.get(j), Some(b'=' | b'~' | b'^')) {
+                    j += 1;
+                }
+                let Some(&c) = self.src.get(j) else { return Ok(false) };
+                let end = if is_name_start(c) {
+                    let mut e = j;
+                    while self.src.get(e).is_some_and(|&b| is_name(b)) {
+                        e += 1;
+                    }
+                    e
+                } else if c.is_ascii_digit() || matches!(c, b'@' | b'*' | b'#' | b'?' | b'-' | b'$' | b'!') {
+                    j + 1
+                } else {
+                    return Ok(false);
+                };
+                let name = String::from_utf8_lossy(&self.src[j..end]).into_owned();
+                self.i = end;
+                ps.part(Part::Param { name, plain: false, quoted, inner: Vec::new() });
+            }
             _ => return Ok(false),
         }
         Ok(true)

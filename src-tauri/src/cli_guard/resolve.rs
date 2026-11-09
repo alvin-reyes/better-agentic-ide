@@ -157,6 +157,9 @@ pub struct Scope<'s> {
     /// hides what it assigns. Unquoted text the guard knows may then split
     /// anywhere, and joined text (`"$*"`) is not joined with a space.
     pub ifs_open: bool,
+    /// Command words with an expansion the pre-pass couldn't name yet
+    /// (`$S/bin/x`): [`Guard::settle`] resolves each or disqualifies.
+    pub pending: Vec<Word>,
 }
 
 impl<'s> Scope<'s> {
@@ -172,6 +175,7 @@ impl<'s> Scope<'s> {
             cwd,
             heredocs: &script.heredocs,
             ifs_open: false,
+            pending: Vec::new(),
         };
         prepass(&mut sc, &script.list, true);
         for h in &script.heredocs {
@@ -250,7 +254,11 @@ fn prepass_cmd<'s>(sc: &mut Scope<'s>, c: &'s Cmd, top: bool) {
             sc.funcs.insert(name.clone(), body);
             prepass_cmd(sc, body, false);
         }
-        Cmd::Coproc(b) => prepass_cmd(sc, b, false),
+        // `coproc NAME …` assigns the array NAME (IFS too).
+        Cmd::Coproc(b) => {
+            sc.disq = true;
+            prepass_cmd(sc, b, false)
+        }
         Cmd::Arith { assigns } => sc.disq |= assigns,
         Cmd::Cond(words) => {
             for w in words {
@@ -272,8 +280,9 @@ fn prepass_parts(sc: &mut Scope, parts: &[Part]) {
         match p {
             Part::Sub { list, .. } | Part::ProcSub { list } => prepass_owned(sc, list),
             Part::Param { name, plain: false, inner, .. } => {
-                // `${x=v}` and `${x:=v}` assign; `${!x:=v}` assigns the name in `$x`.
-                if matches!(inner.first(), Some(Part::Lit { text, .. }) if text.starts_with('=') || text.starts_with(":=")) {
+                // `${x=v}`, `${x:=v}` and zsh's `${x::=v}` assign; `${!x:=v}`
+                // assigns the name in `$x`.
+                if matches!(inner.first(), Some(Part::Lit { text, .. }) if text.starts_with('=') || text.starts_with(":=") || text.starts_with("::=")) {
                     sc.ev(name, 0, false, None);
                     sc.ifs_open = true;
                 }
@@ -342,7 +351,112 @@ fn prepass_simple(sc: &mut Scope, s: &Simple, top: bool) {
     }
 }
 
+/// Builtins that may assign variables, change options or run text in ways
+/// the pre-pass doesn't follow: each one disqualifies the line (no variable
+/// resolves, `IFS` is open). bash and zsh, module builtins included.
+const DISQUALIFY: &[&str] = &[
+    "eval", "source", ".", "trap", "getopts", "fc", "r", "enable", "zmodload", "autoload", "functions", "sched", "zle", "compgen",
+    "zparseopts", "setopt", "unsetopt", "emulate", "zstyle", "zformat", "zregexparse", "strftime", "sysread", "sysopen", "syserror", "zsystem",
+    "zselect", "zsocket", "ztcp", "zpty", "zstat", "pcre_match", "pcre_compile", "zgetattr", "zlistattr",
+];
+
+/// Names that run a builtin which may assign, or look through to one: a
+/// pending command word that resolves to one of these disqualifies.
+const SPECIAL: &[&str] = &[
+    "builtin", "command", "noglob", "nocorrect", "-", "exec", "export", "readonly", "declare", "typeset", "local", "integer", "float", "private", "read",
+    "vared", "getln", "mapfile", "readarray", "unset", "printf", "print", "let", "wait", "stat", "set", "shift",
+];
+
+/// `named_command`'s marker for a command word to settle after the pre-pass.
+const PENDING: &str = "\0pending";
+
+/// `set -o NAME`s that leave word splitting and parameter values alone.
+const SAFE_SET_OPTIONS: &[&str] = &["errexit", "nounset", "pipefail", "xtrace", "verbose", "noclobber", "noglob", "errtrace", "functrace", "noexec", "monitor", "notify", "hashall"];
+
+/// A named command, its arguments, and whether a wrapper was looked through.
+type Named<'w> = Option<(String, &'w [Word], bool)>;
+
+/// What a simple command's words run, looking through the wrappers that
+/// run a builtin in this shell (`builtin`, `command`, zsh's `noglob`,
+/// `nocorrect` and `-`). `Err` when the guard can't name it with
+/// certainty: a computed or glob name, or a wrapper with a computed target.
+/// `Ok(None)` when no command runs. A computed first word that isn't a
+/// quoted path comes back named [`PENDING`], for [`Guard::settle`].
+fn named_command(words: &[Word]) -> Result<Named<'_>, ()> {
+    let mut k = 0;
+    let mut wrapped = false;
+    loop {
+        let Some(w) = words.get(k) else { return Ok(None) };
+        let name = match certain_name(w) {
+            Some(n) => n,
+            // A path: an external command.
+            None if k == 0 && external_path(w) => return Ok(Some((String::new(), &words[1..], wrapped))),
+            None if k == 0 => return Ok(Some((PENDING.into(), &words[1..], wrapped))),
+            None => return Err(()),
+        };
+        match name.as_str() {
+            "builtin" | "command" | "noglob" | "nocorrect" | "-" => {
+                k += 1;
+                wrapped = true;
+                // `command -p`, `-v`, `-V`, `--`: options, then the target.
+                while let Some(o) = words.get(k) {
+                    let o = certain_name(o).ok_or(())?;
+                    if !o.starts_with('-') || o == "-" {
+                        break;
+                    }
+                    k += 1;
+                    if o == "--" {
+                        break;
+                    }
+                }
+            }
+            _ => return Ok(Some((name, &words[k + 1..], wrapped))),
+        }
+    }
+}
+
+/// A command word that surely names a file, never a builtin: every
+/// expansion in it is quoted (so it is one word), it has no unquoted glob
+/// character, and it holds a literal `/`.
+fn external_path(w: &Word) -> bool {
+    let mut slash = false;
+    for p in &w.parts {
+        match p {
+            Part::Lit { text, quoted } => {
+                slash |= text.contains('/');
+                if !quoted && text.contains(['*', '?', '[', '{', '}']) {
+                    return false;
+                }
+            }
+            Part::Param { quoted, .. } | Part::Sub { quoted, .. } | Part::Arith { quoted, .. } if *quoted => {}
+            _ => return false,
+        }
+    }
+    slash
+}
+
+/// A word's text when it is literal and can't expand to anything else (no
+/// unquoted glob or brace character).
+fn certain_name(w: &Word) -> Option<String> {
+    for p in &w.parts {
+        if let Part::Lit { text, quoted: false } = p {
+            if text.contains(['*', '?', '[', '{', '}']) {
+                return None;
+            }
+        }
+    }
+    w.literal()
+}
+
 /// The assignments a simple command makes, and the disqualifiers it holds.
+///
+/// The rule (ADR 0011 amendment 4): a command the guard can't name with
+/// certainty disqualifies the line, since it may be an assignment builtin
+/// or set IFS. A named one is either an assignment builtin, whose assigned
+/// names are recorded (as unknown values, except a plain `export`/`readonly`
+/// `NAME=value`), a builtin on [`DISQUALIFY`], or a command that can't touch
+/// the shell's variables. Any argument of an assignment builtin the guard
+/// can't read disqualifies too.
 fn simple_assigns(sc: &mut Scope, s: &Simple, top: bool) {
     for a in &s.assigns {
         prepass_parts(sc, &a.value.parts);
@@ -358,24 +472,52 @@ fn simple_assigns(sc: &mut Scope, s: &Simple, top: bool) {
     for r in &s.redirs {
         prepass_parts(sc, &r.target.parts);
     }
-    let Some(name) = s.words.first().and_then(Word::literal) else { return };
-    let args = &s.words[1..];
+    let (name, args, wrapped) = match named_command(&s.words) {
+        Ok(Some((n, _, _))) if n == PENDING => {
+            sc.pending.push(s.words[0].clone());
+            return;
+        }
+        Ok(Some(n)) => n,
+        Ok(None) => return,
+        Err(()) => {
+            sc.disq = true;
+            return;
+        }
+    };
     let lit = |w: &Word| w.literal();
+    // Every literal word that isn't an option is a name the builtin may
+    // assign; a word the guard can't read disqualifies.
+    let names_all = |sc: &mut Scope, args: &[Word]| {
+        for w in args {
+            match lit(w) {
+                Some(t) if t.starts_with('-') || t.starts_with('+') => {}
+                // zsh's `read NAME?prompt`.
+                Some(t) => sc.ev(t.split('?').next().unwrap_or(""), w.pos, false, None),
+                None => sc.disq = true,
+            }
+        }
+    };
+    if DISQUALIFY.contains(&name.as_str()) {
+        sc.disq = true;
+        return;
+    }
     match name.as_str() {
-        "eval" | "source" | "." | "getopts" => sc.disq = true,
+        // `exec 3>&1` only redirects; `exec CMD` is not followed.
+        "exec" if !args.is_empty() => sc.disq = true,
         "export" | "readonly" => {
             for w in args {
                 match (assignment(w), lit(w)) {
                     (Some(a), _) => {
-                        let plain = !a.append && !a.array;
+                        let plain = !a.append && !a.array && !wrapped;
                         sc.ev(&a.name, a.pos, top, plain.then_some(a.value));
                     }
-                    (None, Some(_)) => {}
+                    (None, Some(t)) if t.starts_with('-') || t.starts_with('+') => {}
+                    (None, Some(t)) => sc.ev(&t, w.pos, false, None),
                     (None, None) => sc.disq = true,
                 }
             }
         }
-        "declare" | "typeset" | "local" => {
+        "declare" | "typeset" | "local" | "integer" | "float" | "private" => {
             for w in args {
                 match (assignment(w), lit(w)) {
                     (Some(a), _) => sc.ev(&a.name, a.pos, false, None),
@@ -389,39 +531,41 @@ fn simple_assigns(sc: &mut Scope, s: &Simple, top: bool) {
                 }
             }
         }
-        "read" => {
+        "read" | "vared" | "getln" => {
+            names_all(sc, args);
+            sc.ev("REPLY", 0, false, None);
+        }
+        "mapfile" | "readarray" => {
+            names_all(sc, args);
+            sc.ev("MAPFILE", 0, false, None);
+        }
+        "unset" => names_all(sc, args),
+        // `printf -v NAME` (bash and zsh) and zsh's `print -v NAME`: the
+        // word after any option cluster holding `v` is a name.
+        "printf" | "print" => {
             let mut k = 0;
-            while k < args.len() {
-                match lit(&args[k]) {
-                    Some(t) if t.starts_with('-') && t.len() > 1 => {
-                        let last = t.chars().last().unwrap();
-                        if "adinNptu".contains(last) {
-                            if last == 'a' {
-                                if let Some(n) = args.get(k + 1).and_then(lit) {
-                                    sc.ev(&n, args[k].pos, false, None);
-                                }
-                            }
-                            k += 1;
-                        }
+            while let Some(w) = args.get(k) {
+                let Some(t) = lit(w) else {
+                    sc.disq = true;
+                    break;
+                };
+                if t == "--" || !t.starts_with('-') || t == "-" {
+                    break;
+                }
+                if let Some(at) = t.find('v') {
+                    // `-vNAME` or `-v NAME`: both are recorded (a computed
+                    // NAME disqualifies as the loop reaches it).
+                    sc.ev(&t[at + 1..], w.pos, false, None);
+                    if let Some(n) = args.get(k + 1).and_then(lit) {
+                        sc.ev(&n, w.pos, false, None);
                     }
-                    Some(t) => sc.ev(&t, args[k].pos, false, None),
-                    None => sc.disq = true,
+                } else if t.len() == 2 && "CuxXfa".contains(&t[1..]) {
+                    // zsh print's options that take the next word as a value.
+                    k += 1;
                 }
                 k += 1;
             }
-            if args.is_empty() {
-                sc.ev("REPLY", 0, false, None);
-            }
         }
-        "printf" => match args.first().and_then(lit) {
-            Some(t) if t == "-v" => match args.get(1).and_then(lit) {
-                Some(n) => sc.ev(&n, args[1].pos, false, None),
-                None => sc.disq = true,
-            },
-            Some(t) if t.starts_with("-v") => sc.ev(&t[2..], args[0].pos, false, None),
-            None if !args.is_empty() && matches!(args[0].parts.first(), Some(Part::Lit { text, .. }) if text.starts_with("-v")) => sc.disq = true,
-            _ => {}
-        },
         "let" => {
             for w in args {
                 match lit(w) {
@@ -434,42 +578,89 @@ fn simple_assigns(sc: &mut Scope, s: &Simple, top: bool) {
                 }
             }
         }
-        "mapfile" | "readarray" => {
-            let mut named = false;
+        // bash 5.1's `wait -p NAME`.
+        "wait" => {
+            if args.iter().any(|w| lit(w).is_none_or(|t| t.starts_with('-') && t.contains('p'))) {
+                sc.disq = true;
+            }
+        }
+        // zsh's `stat -A`/`-H NAME` (zsh/stat loaded as `stat`).
+        "stat" => {
+            if args.iter().any(|w| lit(w).is_none_or(|t| t.starts_with('-') && !t.starts_with("--") && (t.contains('A') || t.contains('H')))) {
+                sc.disq = true;
+            }
+        }
+        // `set`'s operands reset `$1`…; zsh's `-y` and `-o shwordsplit`
+        // split every unquoted expansion.
+        "set" => {
             let mut k = 0;
-            while k < args.len() {
-                match lit(&args[k]) {
-                    Some(t) if t.starts_with('-') => {
-                        if t.len() == 2 && "dnOsuCc".contains(&t[1..]) {
-                            k += 1;
-                        }
+            while let Some(w) = args.get(k) {
+                let Some(t) = lit(w) else {
+                    sc.disq = true;
+                    break;
+                };
+                if t == "--" || t == "-" || !(t.starts_with('-') || t.starts_with('+')) {
+                    sc.disq = true;
+                    break;
+                }
+                let flags = &t[1..];
+                if flags.chars().any(|c| !"euxvCo".contains(c)) {
+                    sc.disq = true;
+                }
+                if flags.ends_with('o') {
+                    k += 1;
+                    let safe = args.get(k).and_then(lit).is_some_and(|n| SAFE_SET_OPTIONS.contains(&n.replace('_', "").to_ascii_lowercase().as_str()));
+                    if !safe {
+                        sc.disq = true;
                     }
-                    Some(t) => {
-                        sc.ev(&t, args[k].pos, false, None);
-                        named = true;
-                    }
-                    None => sc.disq = true,
                 }
                 k += 1;
             }
-            if !named {
-                sc.ev("MAPFILE", 0, false, None);
-            }
         }
-        "unset" => {
-            for w in args {
-                match lit(w) {
-                    Some(t) if !t.starts_with('-') => sc.ev(&t, w.pos, false, None),
-                    Some(_) => {}
-                    None => sc.disq = true,
-                }
-            }
-        }
+        "shift" => sc.disq = true,
         _ => {}
     }
 }
 
 impl<'c, 'a> Guard<'c, 'a> {
+    /// After the pre-pass: each pending command word must resolve, assuming
+    /// no pending word disqualifies, to one non-empty word that is not a
+    /// builtin that may assign ([`SPECIAL`], [`DISQUALIFY`]). Then the assumption
+    /// holds; otherwise the line is disqualified and IFS is open.
+    pub fn settle(&self, sc: &mut Scope) {
+        let pending = std::mem::take(&mut sc.pending);
+        let benign = |t: &str| !(SPECIAL.contains(&t) || DISQUALIFY.contains(&t));
+        if pending.iter().any(|w| self.certain_text(sc, w).is_none_or(|t| t.is_empty() || !benign(&t))) {
+            sc.disq = true;
+            sc.ifs_open = true;
+        }
+    }
+
+    /// A word's text when every expansion in it resolves and it stays one
+    /// word with no glob.
+    fn certain_text(&self, sc: &Scope, w: &Word) -> Option<String> {
+        let mut out = String::new();
+        for (k, p) in w.parts.iter().enumerate() {
+            match p {
+                Part::Lit { text, quoted } => {
+                    if !quoted && text.contains(['*', '?', '[', '{', '}']) {
+                        return None;
+                    }
+                    out.push_str(text);
+                }
+                Part::Param { name, plain: true, quoted, inner } if inner.is_empty() && name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && !modifier_next(&w.parts, k) => {
+                    let v = self.resolve(sc, name, w.pos, 1)?;
+                    if !quoted && (sc.ifs_open || !plain_text(&v)) {
+                        return None;
+                    }
+                    out.push_str(&v);
+                }
+                _ => return None,
+            }
+        }
+        Some(out)
+    }
+
     /// The strict value of `$name` used at `use_pos`, if it resolves.
     pub fn resolve(&self, sc: &Scope, name: &str, use_pos: usize, depth: u32) -> Option<String> {
         if name == "HOME" && !sc.vars.contains_key("HOME") {
@@ -504,7 +695,7 @@ impl<'c, 'a> Guard<'c, 'a> {
                         out.push_str(text);
                     }
                 }
-                Part::Param { name: n, plain: true, inner, .. } if inner.is_empty() && n.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') => {
+                Part::Param { name: n, plain: true, inner, .. } if inner.is_empty() && n.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && !modifier_next(&v.parts, k) => {
                     out.push_str(&self.resolve(sc, n, e.pos, depth + 1)?);
                 }
                 _ => return None,
@@ -514,7 +705,11 @@ impl<'c, 'a> Guard<'c, 'a> {
     }
 
     /// `$1`, `$@`, `$*` and `$#` when the scope's arguments are bound.
+    /// Not after a disqualifier: `shift`, `set --` or `eval` may reset them.
     fn positional(&self, sc: &Scope, name: &str) -> Option<Vec<W>> {
+        if sc.disq {
+            return None;
+        }
         let args = sc.args.as_ref()?;
         match name {
             "@" | "*" => Some(args.clone()),
@@ -585,6 +780,11 @@ impl<'c, 'a> Guard<'c, 'a> {
                         _ => None,
                     };
                     let all = name == "@" || name == "*";
+                    // zsh's `$X:t` (a modifier) is computed text.
+                    if modifier_next(&w.parts, k) {
+                        atoms.push((if *quoted { Q_PH } else { U_PH }, false));
+                        continue;
+                    }
                     if positional && *plain && subscript.is_none() {
                         if let Some(vals) = self.positional(sc, name) {
                             if name == "@" && *quoted && w.parts.len() == 1 {
@@ -679,13 +879,14 @@ impl<'c, 'a> Guard<'c, 'a> {
     pub fn expand_text(&mut self, sc: &mut Scope, parts: &[Part]) -> String {
         let w = Word { parts: parts.to_vec(), pos: usize::MAX };
         let mut text = String::new();
-        for p in &w.parts {
+        for (k, p) in w.parts.iter().enumerate() {
             match p {
                 Part::Lit { text: t, .. } => text.push_str(t),
                 Part::Param { name, plain, inner, .. } => {
                     for ip in inner {
                         self.part_subs(sc, ip);
                     }
+                    let plain = *plain && !modifier_next(&w.parts, k);
                     match plain.then(|| self.resolve(sc, name, usize::MAX, 1)).flatten() {
                         Some(v) => text.push_str(&v),
                         None => text.push(Q_PH),
@@ -723,6 +924,12 @@ fn literal_heredoc(sc: &Scope, list: &List) -> Option<String> {
         }
     }
     Some(text.trim_end_matches('\n').to_string())
+}
+
+/// The part after `parts[k]` starts a zsh modifier (`$X:t`, `$1:h`, `$X:&`).
+/// `${X}:t` reads the same here, which only makes it computed too.
+fn modifier_next(parts: &[Part], k: usize) -> bool {
+    matches!(parts.get(k + 1), Some(Part::Lit { text, .. }) if text.strip_prefix(':').and_then(|t| t.chars().next()).is_some_and(|c| c.is_ascii_alphabetic() || c == '&'))
 }
 
 fn home_text(ctx: &Ctx) -> Option<String> {

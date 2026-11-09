@@ -42,6 +42,16 @@ Decided in ADR 0011 (`decisions/0011-cli-library-guarded-by-a-command-hook.md`, 
 
 Measured in a debug build on this machine (Story 1, AC10): a 256 KB script parses in 160 to 200 ms, an ltmain.sh-shaped one in 140 to 170 ms, and a full 4 MB budget (250 KB parsed, the rest name-scanned) in 170 to 180 ms.
 
+## Variable resolution fails closed (`resolve.rs`, ADR 0011 amendment 4)
+
+A variable resolves only under the strict conditions (one literal, unconditional, top-level assignment before the use) and only while the line has no disqualifier. A disqualifier stops all resolution, unbinds `$1`… and opens IFS (unquoted known text may split).
+
+- A command the pre-pass can't name with certainty disqualifies: a computed or glob name, or a wrapper (`builtin`, `command` and its options, zsh's `noglob`, `nocorrect`, `-`) with a computed target. Two exceptions, both sound: a word whose expansions are all quoted and which holds a literal `/` is a file, never a builtin; any other computed command word must resolve, after the pre-pass, to one non-empty word that is not an assignment or disqualifying builtin (`$S/bin/x` with `S` assigned, `"$ADE_HOOK_BIN"`).
+- Disqualifying builtins: `eval`, `source`, `.`, `trap` (any), `getopts`, `fc`, `exec CMD`, `coproc`, `shift`, `set` with operands or options other than `-e -u -x -v -C` and safe `-o` names, `setopt`/`unsetopt`/`emulate`, and zsh's `zparseopts`, `zmodload`, `autoload` and the module builtins that assign (`zstyle`, `sysread`, `zstat`, …). The list is `DISQUALIFY` in `resolve.rs`.
+- Assignment builtins record every name they may assign as unknown, plain or through a wrapper: `export`/`readonly` (a plain unwrapped `NAME=value` keeps its value), `declare`/`typeset`/`local`/`integer`/`float`/`private`, `read`/`vared`/`getln` (zsh `NAME?prompt`), `mapfile`/`readarray`, `unset`, `printf -v`/zsh `print -v`, `let`, `wait -p`, zsh `stat -A`, and `${x=v}`, `${x:=v}`, `${x::=v}`. A computed argument to one disqualifies. Assigning `IFS` opens IFS.
+- zsh: `$=X`, `$~X`, `$^X` and `${=…}`, `${~…}`, `${^…}` may split, quoted or not; an expansion followed by `:` and a letter or `&` (`$X:t`) is computed.
+- Everyday commands are unaffected: a command named by a literal that isn't one of these builtins (`git`, `npm`, `ls`, `echo`, `cd`) can't assign the shell's variables.
+
 ## The table format (`tables.rs`)
 
 - `CLIS`: each guarded CLI's id, bins and `(npm package, bin)` pairs. v1: gh only.
