@@ -2303,9 +2303,9 @@ clarification for slice 0.
 <!-- F5 begins -->
 ## F5: Extensive prompt templates
 
-- **Status:** Draft, revision 4, 2026-11-10. Revisions 1 to 3 were BLOCKED by the
-  adversarial review; revision 4 answers the delta review of revision 3 (two new
-  blockers, twelve minors). Not approved, not sharded. Next: the adversarial
+- **Status:** Draft, revision 5, 2026-11-10. Revisions 1 to 4 were BLOCKED by the
+  adversarial review; revision 5 answers the delta check of revision 4 (one
+  blocker, one major, four minors). Not approved, not sharded. Next: the adversarial
   reviewer's delta check, then the owner's answers to F5.10.
 - **Number:** F2 is the onboarding PRD (PR #98, approved, not built), F3 the
   per-view viewer PRD (PR #112, approved), and F4 the workspaces PRD (PR #113,
@@ -2326,11 +2326,15 @@ clarification for slice 0.
     implement → test → review); sending to any agent: the active session, a chosen
     sub-terminal, or a specific agent or persona, using what ADE already has.
   - Owner rules this PRD applies: **never a line starting with `!`** is sent; and
-    **client paths never sync** for workspace and checkout paths: F4 OQ-5, approved
-    by the owner 2026-11-10 (WS-7 AC3), which strips those paths from every synced
-    key WS-7 AC3 lists. F5's own rules that template text, typed values, the
-    marked draft and template sends stay out of sync (D7) go further than F4 OQ-5
-    and are F5's own decision, put to the owner as OQ-15.
+    **workspace and checkout paths are stripped from the keys F4 WS-7 AC3 strips**:
+    F4 OQ-5, approved by the owner 2026-11-10. That rule covers only the keys WS-7
+    AC3's table strips. The same table marks `better-terminal-prompt-history` and
+    `better-terminal-saved-notes` "not stripped: the engineer's own text", and
+    `ade-scratchpad-draft` "not stripped by F4"; the owner confirmed on 2026-11-10
+    that typed text syncs as today. F5 touches none of the stripped keys. Keeping
+    auto-filled paths, template text and typed values out of the prompt history,
+    saved notes, mine templates and the draft's export is therefore **F5's own
+    extension** (D7), not F4 OQ-5, and is put to the owner as OQ-15 and OQ-17.
 - **History:**
   - 2026-11-10, revision 1: first draft, from the owner's answers above.
   - 2026-11-10, revision 2: answers the adversarial review (BLOCKED). Safe text
@@ -2384,6 +2388,20 @@ clarification for slice 0.
     (Run Chain for today's 3 chains in S1); a fallback when the other side of a
     [Second] criterion is withdrawn (F5.8); distinct labels for the two "Send
     anyway" ticks (PT-4 AC4, PT-15 AC3); OQ-18's line is the F1 revision after 9m.
+  - 2026-11-10, revision 5: answers the delta check of revision 4 (abe97e9,
+    BLOCKED). **B1:** F4 OQ-5 is cited only for the keys F4 WS-7 AC3 strips; F4
+    approved the prompt history and saved notes as not stripped (typed text syncs
+    as today, owner 2026-11-10), so keeping auto-filled paths and template text out
+    of notes, templates, history and the draft is F5's own extension (Source, D7,
+    PT-11 AC4, OQ-15, OQ-17); OQ-15's alternatives say what happens to auto-filled
+    paths; the refusal message makes no claim about sync. **M1:** PT-16 AC1 adds a
+    bounded form root and no scrolling ancestor between it and the panel root while
+    the form is open (the list area gets `overflow: hidden`), string-tested; PT-16
+    AC4 repeats it for each dock. **Minors:** Duplicate of a repo template moves to
+    S4 (PT-8 AC2, F5.8); only panes **moved** into a detached window lose
+    bracketed paste mode, and the fix is S5's new PT-6 AC9 (F5.0, PT-6 AC5, F5.9,
+    Risks); a matching F2 cross-reference line for the owner (F5.8, new OQ-20); the
+    save refusal covers only **absolute** auto-filled paths (PT-11 AC4).
 
 ### F5.0 What exists today (checked on `origin/main` at 2d65a7f)
 
@@ -2495,9 +2513,12 @@ clarification for slice 0.
   selection made inside it.
 - **Bracketed paste mode.** xterm.js tracks whether the program in a pane turned
   bracketed paste on (`ESC [?2004h`) as `modes.bracketedPasteMode`. When a pane is
-  re-hosted (moved to or opened in a detached window, a new xterm instance on the
-  same PTY), that mode is **lost**: the new instance starts with it off, and the
-  agent, which turned it on once at start, does not send it again. Probed by hand
+  **moved** into a detached window (Move to New Window: a new xterm instance on the
+  same, already running PTY), that mode is **lost**: the new instance starts with it
+  off, and the agent, which turned it on once at start, does not send it again. A
+  pane **started** in a detached window (for example an `ade open` sub-terminal
+  opened there) receives the agent's `ESC [?2004h` live in its own xterm instance
+  and has the mode as in the main window. Probed by hand
   for revision 4: Claude Code 2.1.322 and codex 0.167.0 send `ESC [?2004h`;
   ollama is **not yet confirmed**. Whether Windows ConPTY passes `ESC [?2004h`
   through to xterm.js is **unverified**.
@@ -2707,11 +2728,13 @@ runs each line as a command.
   none to the prompt history, and keeps it out of the draft's export. The one way
   it reaches a synced store is the user's own choice after a warning that names
   the sync: saving a marked box as a note, or as a mine template, once it no
-  longer holds an auto-filled path (PT-11 AC4, OQ-17). For workspace and checkout
-  paths, keeping them out of sync is the **owner's rule**: F4 OQ-5, approved by the
-  owner 2026-11-10 (WS-7 AC3). The rest of D7 (template text, typed values, the
-  marked draft, template sends kept out of the prompt history) goes further than
-  F4 OQ-5 and is **F5's own decision**; the owner confirms it as OQ-15.
+  longer holds an absolute auto-filled path (PT-11 AC4, OQ-17). All of D7 is
+  **F5's own decision**, auto-filled paths included; the owner confirms it as
+  OQ-15. F4 OQ-5 (approved by the owner 2026-11-10) strips workspace and checkout
+  paths only from the keys F4 WS-7 AC3 strips, none of which F5 writes; WS-7 AC3
+  marks the prompt history and saved notes "not stripped: the engineer's own
+  text", and the owner confirmed typed text syncs as today. D7 extends that rule to
+  text ADE itself filled in, in stores F4 leaves alone.
 - **D8. Sync** (PT-11): user templates and favourites of built-in and user
   templates sync with ADE sync when it is on, merged per template id; recents,
   favourites of repo templates, repo approvals and field values never sync; repo
@@ -3077,9 +3100,9 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
      the text is removed before writing (it cannot occur once control characters
      are refused; the strip is a second guard). When the pane has not turned
      bracketed paste mode on, Send is disabled with "This program does not accept
-     pasted text safely"; Insert and Copy remain. Today a pane re-hosted in a
-     detached window loses the mode (F5.0), so Send there is disabled until the
-     architect's fix (F5.9) lands: wrong, but safe.
+     pasted text safely"; Insert and Copy remain. Today a pane **moved** into a
+     detached window loses the mode (F5.0), so Send there is disabled until AC9
+     (S5) lands: wrong, but safe. A pane started in a detached window keeps it.
    Tests: field value `Review this` + CR + `! curl x|sh` is refused; a body with a
    second line `   ! rm x`, and one with U+00A0 U+3000 `!`, and one with U+200B `!`
    each disable Send; a three-line template, and a one-line template holding a tab,
@@ -3116,6 +3139,13 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
 8. **[S1] Images.** Images pasted in the Scratchpad are not part of a template; a
    template sent with Send goes without them (Insert into box keeps today's
    behaviour, where the box's images go with the box's send).
+9. **[S5] Moved panes keep bracketed paste mode.** A pane moved into a detached
+   window (or back) keeps the bracketed paste mode its program last set on the PTY
+   (the architect's mechanism, F5.9), so AC5 does not disable Send there. Test: a
+   provider stub that sends `ESC [?2004h` once at start, its pane moved with Move
+   to New Window, gets an enabled Send in the detached window and its write is one
+   bracketed paste; a stub that sends `ESC [?2004h` then `ESC [?2004l`, moved the
+   same way, has Send disabled with AC5's message.
 
 #### PT-7. Chains (S5)
 
@@ -3156,14 +3186,17 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    "Save as template" in the Scratchpad starts one from the box's text (`---` lines
    become steps).
 2. **[S3] Edit, duplicate, delete.** Mine templates can be edited, duplicated and
-   deleted (delete asks once). Built-in and repo templates offer Duplicate to my
-   templates. Duplicating a **repo** template (S4) copies a repo's file into mine
-   templates, which sync (PT-11 AC1): it shows PT-11 AC4's warning, naming mine
-   templates and the repo ("This copies a file from <repo> into your templates,
-   which sync to your other machines when ADE sync is on"), and copies only on
-   confirm; Cancel copies nothing. Duplicate is disabled for unreviewed repo files
-   (PT-9 AC5). Test: Duplicate of an approved repo template shows the warning and
-   Cancel leaves mine templates unchanged.
+   deleted (delete asks once). Built-in templates offer Duplicate to my templates.
+   **[S4] Repo templates** also offer it, built and tested in S4, where repo
+   templates first exist (S3 builds no repo fixture for it): duplicating a repo
+   template copies a repo's file into mine templates, which sync (PT-11 AC1); it
+   shows PT-11 AC4's warning, naming mine templates and the repo ("This copies a
+   file from <repo> into your templates, which sync to your other machines when
+   ADE sync is on"), and copies only on confirm; Cancel copies nothing. Duplicate is
+   disabled for unreviewed repo files (PT-9 AC5). Tests: S3, Duplicate of a
+   built-in template adds a mine template; S4, Duplicate of an approved repo
+   template shows the warning and Cancel leaves mine templates unchanged, and
+   Duplicate of an unreviewed one is disabled.
 3. **[S3] Validation.** Saving checks PT-1 (control characters included); an invalid
    template is not saved and the editor says why.
 4. **[S3] Secret warning.** Saving a template that holds secret-shaped text warns
@@ -3320,7 +3353,8 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    in `PERSISTED_KEYS` or in an F5 list of ephemeral keys with a reason, and is not
    in `SHARED_KEYS` or `DEVICE_KEYS` unless PT-11 AC1 puts it there. ADR 0017's
    static key test is not on `main`; when it lands, F5's list folds into it.
-4. **[S1] Template text stays on this machine** (D7, F5's own decision, OQ-15):
+4. **[S1] Template text stays on this machine** (D7, F5's own decision and its
+   own extension of F4 OQ-5 to stores F4 leaves alone, OQ-15):
    - **Send from the form** adds **no entry** to `better-terminal-prompt-history`
      (a shared key) or to any other store ADE sync exports. Recents (local) record
      which template was sent. The form never sends to the Orchestrator (PT-6 AC1).
@@ -3341,15 +3375,19 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
      - **Run Chain** (a marked box holding `---` lines) is disabled until S5, and
        from S5 follows PT-7;
      - **⌘S (save as note)** and **Save as template** (S3) are **refused while
-       the box still holds an auto-filled path**: any value ADE filled into
-       `cwd`, `project`, `file` or `open_file` at Insert that still appears in
-       the box's text. The message lists those paths: "This text holds paths
-       from your folders (…). Saved notes sync to your other machines, and
-       workspace paths never sync. Remove them to save." Reason: F4 OQ-5
-       (approved by the owner 2026-11-10, WS-7 AC3) makes "workspace and
-       checkout paths never sync" an owner rule, and F5 does not tell a
-       workspace path from any other auto-filled path, so it treats them all
-       alike. Once no auto-filled path remains, ⌘S shows "This note holds
+       the box still holds an absolute auto-filled path**: any value ADE filled
+       into `cwd`, `project`, `file` or `open_file` at Insert that is an
+       absolute path (it starts with `/`, `~`, a drive letter and `:`, or `\\`)
+       and still appears in the box's text. A relative value (a `file` or
+       `open_file` of `README.md`) names no client folder and does not block the
+       save. The message lists those paths and makes no claim about sync:
+       "This text still contains folder paths ADE filled in (…). Remove them to
+       save." Reason: F5's own extension (D7, OQ-17), not F4 OQ-5: F4 approved
+       saved notes as "not stripped: the engineer's own text", so typed text,
+       paths the user typed included, syncs in notes as today; F5 keeps out only
+       what ADE itself filled in, and does not tell a workspace path from any
+       other absolute path, so it treats them all alike. Once no absolute
+       auto-filled path remains, ⌘S shows "This note holds
        template text. Saved notes sync to your other machines when ADE sync is
        on." and saves only when the user confirms; Cancel saves nothing. Save as
        template shows the same warning, naming mine templates. (OQ-17: refusing
@@ -3366,7 +3404,10 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    first five, ADE sync's export holds neither marker, in the shared state or under
    `devices/`, and `better-terminal-orchestrator` and `better-terminal-saved-notes`
    do not hold them; after the sixth, only `better-terminal-saved-notes` holds
-   `TYPED_MARKER_51`, and nothing holds `PATH_MARKER_c0`. A further test:
+   `TYPED_MARKER_51`, and nothing holds `PATH_MARKER_c0`. The refusal's text
+   contains no "sync". A template whose only auto-filled value is a relative
+   `file` of `README.md`, inserted then saved with ⌘S, shows the confirm warning
+   (not the refusal) and saves on confirm. A further test:
    a marked box on a pane whose busy check is mocked as `shell` gets no `writePty`
    call from Send to Terminal or ⌘Enter. (Recommended in OQ-11; the alternative,
    strip auto-filled values from history, cannot strip what the user retyped.)
@@ -3475,8 +3516,22 @@ them.
    with the Templates tab's 160 px strip as it is on `main`) for the template list,
    the preview and the form. Where the list area is too short for the form, the form
    takes the composer's place while it is open (the box's text, draft and images
-   are kept and shown again on Back, Insert or Send). The form is built so its
-   actions cannot scroll away:
+   are kept and shown again on Back, Insert or Send). PR #114 (approved, 8b6cf4f)
+   puts the form in the list area, which scrolls on its own, so the form is built
+   so its actions cannot scroll away:
+   - the **form root** (marked `data-f5-form`) is a **bounded column**: a flex
+     column (`display: flex`, `flex-direction: column`) or a grid with rows, with
+     `min-height: 0`, filling its container (`flex: 1 1 0` or `height: 100%`,
+     the architect picks); its height comes from the panel, never from its
+     content;
+   - **no scrolling ancestor** sits between the form root and the panel root
+     while the form is open: the container that holds the form (the list area,
+     or the composer's place when the form takes it) carries `data-f5-form-open`
+     while the form shows, and the stylesheet gives `[data-f5-form-open]`
+          `overflow: hidden` (replacing its own scroll); no other element between the
+     form root and the
+     panel root has `overflow` or `overflow-y` of `auto` or `scroll`, in an
+     inline style or a stylesheet rule;
    - the fields and the rendered text sit in **one field area**, the form's only
      scroll container (marked `data-f5-scroll`);
    - **Insert, Send, Copy and Back** sit in a **fixed action area** (marked
@@ -3488,9 +3543,18 @@ them.
    Test (jsdom, which computes no layout, as PR #114 revision 2 tests its panel):
    every action button is a descendant of `[data-f5-actions]` and of no
    `[data-f5-scroll]`; every field input is inside `[data-f5-scroll]`; the form has
-   exactly one `[data-f5-scroll]`; and a string test on the stylesheet finds the
-   rules above for those selectors. Pixel visibility at the panel's minimum size is
-   checked by the designer's review, not by S1's tests.
+   exactly one `[data-f5-scroll]`; with the form open in the list area, and again
+   in the composer's place, the form's container has `data-f5-form-open` and,
+      walking from `[data-f5-form]` up to the panel root, no element's inline style
+   sets `overflow` or `overflow-y` to `auto` or `scroll`;
+   and a string test on the stylesheet finds the rules above for
+   `[data-f5-form]`, `[data-f5-form-open]`, `[data-f5-scroll]` and
+   `[data-f5-actions]`, and finds no rule setting `overflow` or `overflow-y` to
+   `auto` or `scroll` for any class or attribute selector carried by an element on
+   that walk, except on the form's container, where `[data-f5-form-open]`
+   overrides it with `overflow: hidden`.
+   Pixel visibility at the panel's minimum size is checked by the designer's
+   review, not by S1's tests.
 2. **[S1] Explicit Insert.** Filling a template never changes the box; only **Insert
    into box** does. PR #114 revision 2 (c45c7b0) dropped its live composer (F5.0),
    so the two agree; the designer coordinates them.
@@ -3506,11 +3570,16 @@ them.
    and in `DetachedApp`; Escape on the empty list closes the panel in the main
    window and leaves it open in `DetachedApp`.
 4. **[Second] Both of PR #114's docks.** Once PR #114's docks are built, AC1's
-   structure holds in both: with the panel root's `data-placement` set to `right`
-   and to `bottom`, the action buttons are inside `[data-f5-actions]` and outside
-   `[data-f5-scroll]`, and the stylesheet's rules for those selectors are not
-   overridden by any `[data-placement]` or `[data-chrome]` rule (string test, as
-   PR #114 revision 2's TR-4 and TR-29). F5 slice: S1; goes with whichever of F5 S1
+   structure holds in both, each dock tested on its own: with the panel root's
+   `data-placement` set to `right` and to `bottom`, the action buttons are inside
+   `[data-f5-actions]` and outside `[data-f5-scroll]`; the form root is the bounded
+   column of AC1; the form's container has `data-f5-form-open` and no element between the
+   form root and the panel root scrolls (AC1's DOM walk, per dock); and no
+   `[data-placement]` or `[data-chrome]` rule overrides AC1's rules for
+   `[data-f5-form]`, `[data-f5-form-open]`, `[data-f5-scroll]` or
+   `[data-f5-actions]`, or sets `overflow` or `overflow-y` to `auto` or `scroll` on
+      an element of that walk (string test, as PR #114 revision 2's TR-4 and TR-29).
+   F5 slice: S1; goes with whichever of F5 S1
    and PR #114's Thoughts-panel dock story merges second (F5.8's [Second] table).
 
 ### F5.8 Slices
@@ -3522,9 +3591,9 @@ is sharded by the scrum-master into stories.
 |---|---|---|---|
 | **S1. Engine and today's prompts** (MVP) | The file format and parser; today's 24 prompts and 3 chains migrated (chains Insert-only); the Templates tab with search, browse and plain-text preview; the fill form with auto fields and the secret rules; safe send to the active pane (agent pane check, confirmations, safe text, bracketed paste); template text kept out of sync; PT-15's send-time checks for every source (tested with fixture templates of each source until S3, S4 and S6 add those sources) | PT-1; PT-2 AC1, AC2, AC4, AC5 (S1 part), AC6 (S1 part); PT-3 AC1 to AC3, AC6; PT-4; PT-5 AC1 to AC6; PT-6 AC1 to AC5, AC8; PT-11 AC2 to AC6; PT-12; PT-13 AC1; PT-14 AC1 (static part), AC2; PT-15; PT-16 AC1 to AC3; [Second]: F5.1's and PT-6 AC2's hub-tab part, PT-5 AC7, PT-13 AC2, PT-14 AC1 (timing), PT-16 AC4 | nothing to ship; its [Second] hub-tab part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
 | **S2. Library growth** | The built-in library grown to at least 130 single prompts meeting PT-2 AC3's prompt rows and AC5's checks | PT-2 AC3 (prompt rows), AC5 (counts) | S1; OQ-2 answered |
-| **S3. Mine, favourites, recents, palette** | Create, edit, duplicate, delete; Save as template; favourites and recents; templates in the command palette; mine templates sync with the per-id merge | PT-2 AC6 (S3 part); PT-3 AC4, AC5; PT-8 AC1 to AC4, AC6; PT-11 AC1; [Second]: PT-11 AC7 and AC8 (mine templates, favourites, recents) | S1 |
-| **S4. Hub and project templates** | The template folder in the project and the hub, review by content hash, Save to this project | PT-9 (AC1's hub-folder part [Second]); [Second]: PT-11 AC7 and AC8 (repo approvals, repo templates) | S1, and S3 (Save to this project uses S3's template editor); its [Second] hub-folder part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
-| **S5. Chains and other targets** | Chain templates (at least 20) with safe auto-advance or step-by-step; send to any terminal or a new agent by role (not the Orchestrator, OQ-16) | PT-2 AC3 (chain row); PT-6 AC6 (hub-tab part [Second]), AC7; PT-7 | S1; its [Second] hub-tab part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
+| **S3. Mine, favourites, recents, palette** | Create, edit, duplicate, delete; Save as template; favourites and recents; templates in the command palette; mine templates sync with the per-id merge | PT-2 AC6 (S3 part); PT-3 AC4, AC5; PT-8 AC1, AC2 (built-in and mine part), AC3, AC4, AC6; PT-11 AC1; [Second]: PT-11 AC7 and AC8 (mine templates, favourites, recents) | S1 |
+| **S4. Hub and project templates** | The template folder in the project and the hub, review by content hash, Save to this project | PT-8 AC2 (repo-template part); PT-9 (AC1's hub-folder part [Second]); [Second]: PT-11 AC7 and AC8 (repo approvals, repo templates) | S1, and S3 (Save to this project uses S3's template editor); its [Second] hub-folder part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
+| **S5. Chains and other targets** | Chain templates (at least 20) with safe auto-advance or step-by-step; send to any terminal or a new agent by role (not the Orchestrator, OQ-16); Send in a pane moved into a detached window | PT-2 AC3 (chain row); PT-6 AC6 (hub-tab part [Second]), AC7, AC9 (moved panes keep bracketed paste mode); PT-7 | S1; its [Second] hub-tab part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
 | **S6. Share and import** | Export; import from a file or a pasted link with the preview | PT-8 AC5; PT-10 | S3 |
 
 **[Second] criteria.** Each is owed by the F5 slice named here, and goes with
@@ -3580,10 +3649,25 @@ context note) still holds, but nothing binds F1's stories. F1's slice-1 stories 
 already sharded, so the scrum-master adds the line to that story's ticket when the
 owner approves.
 
-**F2 and PR #114.** F2 slice 1 (approved, not built) and PR #114's stories are not
-yet sharded, so the scrum-master writes F5's obligations into their tickets when
-they are sharded, and into the context note now (F5.9). No F2 text change is asked:
-F5's hub-tab parts only read what F2 slice 1 builds.
+**F2 amendment for the owner (OQ-20).** F2 slice 1 (approved, not built) is not
+yet sharded, so the scrum-master writes F5's obligations into its tickets when it
+is sharded, and into the context note now (F5.9). A ticket written from the context
+note binds only if F2's sharding reads the note; F1's line exists because F1's
+stories are already sharded and a PRD line is what a sharding reads. For the same
+reason, and for consistency with F1, F5 asks the owner to approve one line in F2.8
+(Dependencies and what ships first), in the F2 revision after 5.1 (F2's latest, on
+the onboarding branch); no F2 requirement changes, F5 only reads what F2 slice 1
+builds:
+
+> **F5 cross-reference:** the F2 slice-1 story delivering the hub tab and the OB-6
+> AC2 `hub.conf` reader carries F5's hub-tab parts of F5.1 and PT-6 AC2 (F5 S1),
+> PT-9 AC1 (F5 S4) and PT-6 AC6 (F5 S5), each if it merges into `main` after the F5
+> slice named for it (F5.8, `.ade/context/f5-merges-second.md`).
+
+**PR #114** is a UX spec, not a PRD, so it has no requirements section to carry
+such a line; its stories are not yet sharded, and the scrum-master writes F5's
+obligations (PT-13 AC2, PT-16 AC4) into their tickets when they are, and into the
+context note now.
 
 Suggested order: S1, then S2 and S3 in either order, then S4 (after S3), S5 and S6
 (after S3). S5 is the most security-sensitive and should not be rushed.
@@ -3638,11 +3722,12 @@ template seeded. It is an F2 change and is not in F5 as recommended.
     write per provider, and records it). Probe so far: Claude Code 2.1.322 and
     codex 0.167.0 send `ESC [?2004h`; ollama is not yet confirmed, and if it never
     turns the mode on, its panes get Insert and Copy only (PT-6 AC5);
-  - **bracketed paste mode survives re-hosting:** a pane moved to or opened in a
-    detached window must keep the PTY's bracketed paste mode (for example by
-    recording `ESC [?2004h` and `ESC [?2004l` per PTY on the Rust side, or carrying
-    the mode with the pane), so Send there is not wrongly disabled. Until this
-    lands every Send in a detached window is disabled (PT-6 AC5): wrong, but safe;
+  - **bracketed paste mode survives a move (F5 S5, PT-6 AC9):** a pane moved into
+    a detached window (or back) must keep the PTY's bracketed paste mode (for
+    example by recording `ESC [?2004h` and `ESC [?2004l` per PTY on the Rust side,
+    or carrying the mode with the pane), so Send there is not wrongly disabled.
+    Panes started in a detached window are not affected. Until S5 lands, Send in a
+    moved pane is disabled (PT-6 AC5): wrong, but safe;
   - **Windows check:** verify on Windows whether ConPTY passes `ESC [?2004h` from
     the agent through to xterm.js. If it does not, the mode is never on there, and
     every Windows Send is disabled in practice (OQ-10); record the result in
@@ -3678,8 +3763,10 @@ template seeded. It is an F2 change and is not in F5 as recommended.
 - **Scrum-master:** shard S1 first; write each [Second] obligation of F5.8's table
   into the F5 slice's ticket and the other side's ticket, and create
   `.ade/context/f5-merges-second.md`; mark a [Second] criterion "orphaned" there
-  and tell the PM when its other work is withdrawn (F5.8); add the F1.8 line to F1's tickets once the
-  owner approves it (OQ-18); F5-XR1 into tickets.
+    and tell the PM when its other work is withdrawn (F5.8); add the F1.8 line to F1's
+  tickets once the
+  owner approves it (OQ-18), and the F2.8 line to F2 slice 1's tickets once the
+  owner approves it (OQ-20); F5-XR1 into tickets.
 - **QA:** PT-5 AC6, PT-6 AC3 to AC5, PT-7 AC4, PT-9 AC5, PT-10 AC6, PT-11 AC4 and
   PT-15 are the security tests; each must fail against today's code where today's
   code differs (sendChain's timeout send, Send into a shell, raw multi-line writes,
@@ -3693,7 +3780,8 @@ template seeded. It is an F2 change and is not in F5 as recommended.
 
 Each has the PM's recommendation; answering "as recommended" accepts them all.
 Revision 2 changed OQ-2, OQ-4 and OQ-5 and added OQ-10 to OQ-14; revision 3 added
-OQ-15 to OQ-18; revision 4 changed OQ-10, OQ-15, OQ-17 and OQ-18 and added OQ-19.
+OQ-15 to OQ-18; revision 4 changed OQ-10, OQ-15, OQ-17 and OQ-18 and added OQ-19;
+revision 5 changed OQ-11, OQ-15, OQ-16 and OQ-17 and added OQ-20.
 
 - **OQ-1. Where repo templates live.** Recommended: `.ade/prompts/` in hubs and
   projects alike (D3): one place, already pushed by the hub's sync, no clash with
@@ -3741,8 +3829,9 @@ OQ-15 to OQ-18; revision 4 changed OQ-10, OQ-15, OQ-17 and OQ-18 and added OQ-19
   practice Insert and Copy only until the architect finds a way.
 - **OQ-11. Template text and the prompt history.** Recommended: template sends add
   no entry to the synced prompt history, and inserted template text is kept out of
-  the draft's sync export (PT-11 AC4), so no auto-filled path or typed value ever
-  syncs. Alternative: a separate, device-only history for template sends (more
+  the draft's sync export (PT-11 AC4), so no auto-filled path or typed value
+    syncs except what the user saves after OQ-17's warning. Alternative: a separate,
+  device-only history for template sends (more
   work, same privacy).
 - **OQ-12. Tracking the hub template change.** Recommended: file F5-XR1 as an issue
   in the template's own repo and give the PM its number for F5.8 and the context
@@ -3754,27 +3843,40 @@ OQ-15 to OQ-18; revision 4 changed OQ-10, OQ-15, OQ-17 and OQ-18 and added OQ-19
   status removes the tick for Claude Code. Stricter alternative: no Send at all
   without live agent status (Insert and Copy only), which removes Send for every
   non-Claude-Code provider and every project without agent status.
-- **OQ-15. Template text and field values never sync (D7).** For workspace and
-  checkout paths this is already your rule: F4 OQ-5, approved 2026-11-10 (WS-7
-  AC3). The rest is F5's own decision. Recommended: yes; template text, auto-filled
+- **OQ-15. Template text and field values never sync (D7).** This is F5's own
+  decision, auto-filled paths included. F4 OQ-5 (approved 2026-11-10) strips
+  workspace and checkout paths only from the keys F4 WS-7 AC3 strips; it leaves
+  the prompt history and saved notes as the engineer's own text, and you confirmed
+  typed text syncs as today. So F4 OQ-5 does not keep auto-filled paths out of the
+  stores F5 writes to; only D7 does. Recommended: yes; template text, auto-filled
   paths and typed values stay out of every store ADE sync exports, except where the
-  user saves a marked box with no auto-filled path left as a note or template after
-  a warning (OQ-17). Alternative: let template text and typed values sync like any
-  typed text (simpler; values reach the sync repo). Auto-filled workspace paths
-  stay out either way, by F4 OQ-5.
+  user saves a marked box with no absolute auto-filled path left as a note or
+  template after a warning (OQ-17). Alternatives: **(a)** let template text and
+  typed values sync like any typed text (simpler): a template send adds a
+  prompt-history entry, the marked draft is exported, and ⌘S saves after the
+  warning; **auto-filled paths then sync too**, in the history, the draft and
+  notes, because F4 does not strip those keys and F5 would not either. **(b)** as
+  (a), but F5 still keeps absolute auto-filled paths out: a send whose text still
+  holds one adds no prompt-history entry, the draft is kept out of the export while
+  it holds one, and ⌘S and Save as template are refused as in PT-11 AC4.
 - **OQ-16. No Orchestrator target in F5.** Your brief named the active session, a
   sub-terminal and a specific agent or persona; revision 2 also offered the
   Orchestrator, whose chat is a synced store. Recommended: drop it from F5 (no
   template Send, no marked-box Send there; Insert and Copy remain) and bring it
   back later with a way to keep template text out of its export. Alternative: keep
   it and let template text sync through the Orchestrator's chat (needs OQ-15
-  answered "no").
+  answered with alternative (a) or (b); under (b) a send holding an absolute
+  auto-filled path is still refused there).
 - **OQ-17. Saving a marked box as a note or template.** Saved notes and mine
-  templates sync, and F4 OQ-5 (approved 2026-11-10) says workspace and checkout
-  paths never sync. Recommended: **refuse** ⌘S and Save as template while the box
-  still holds any path ADE auto-filled (`cwd`, `project`, `file`, `open_file`),
-  listing those paths in the message; once none remains, warn that the note
-  syncs and save on confirm (PT-11 AC4). Why refuse rather than remove: removing
+  templates sync. F4 approved saved notes as "not stripped: the engineer's own
+  text" (WS-7 AC3), so this is F5's own extension (D7), covering only paths ADE
+  filled in. Recommended: **refuse** ⌘S and Save as template while the box still
+  holds an **absolute** path ADE auto-filled (`cwd`, `project`, `file`,
+  `open_file`), listing those paths in a message that makes no claim about sync
+  ("This text still contains folder paths ADE filled in (…). Remove them to
+  save."); a relative value such as `README.md` does not block; once none
+    remains, warn that the note syncs and save on confirm (PT-11 AC4). Why refuse
+  rather than remove: removing
   the paths silently changes the user's text and can leave a note that no longer
   makes sense, while refusing shows exactly what would have synced. Alternative:
   remove the auto-filled paths on save, naming them in the warning. Stricter:
@@ -3797,6 +3899,12 @@ OQ-15 to OQ-18; revision 4 changed OQ-10, OQ-15, OQ-17 and OQ-18 and added OQ-19
   PT-11 AC4 to match. Alternatives: accept the step back until S5 (the user
   inserts the chain and sends each step by hand); or keep today's Run Chain for a
   marked box until S5 (not recommended: it is the unsafe path).
+- **OQ-20. One line in F2.8.** Approve the F2 amendment in F5.8: F2 slice 1's hub-tab
+  story carries F5's hub-tab [Second] parts (F5.1 and PT-6 AC2, PT-6 AC6, PT-9 AC1)
+  when it merges after F5's slice, matching OQ-18's line in F1. It goes in the F2
+  revision after 5.1. No F2 requirement changes. Recommended: approve, for
+  consistency with F1. Alternative: rely on the context note and the tickets
+  written at F2's sharding, with no F2 line.
 
 ### F5.11 Risks
 
@@ -3832,8 +3940,9 @@ OQ-15 to OQ-18; revision 4 changed OQ-10, OQ-15, OQ-17 and OQ-18 and added OQ-19
   Safe (nothing runs) but confusing; the architect checks a real version (F5.9).
 - **Bracketed paste everywhere.** Every write needs the pane's bracketed paste mode
   (PT-6 AC5), so an agent CLI that never turns it on gets Insert and Copy only
-  (ollama is not yet confirmed). Until the architect makes the mode survive
-  re-hosting (F5.9), every Send in a detached window is disabled.
+  (ollama is not yet confirmed). Until S5's PT-6 AC9 makes the mode survive a
+  move (F5.9), Send in a pane **moved** into a detached window is disabled; panes
+  started there are not affected.
 - **Windows Send may be always disabled.** If ConPTY does not pass
   `ESC [?2004h` through (unverified, F5.9), no Windows pane ever has bracketed
   paste mode on, so every Windows Send is disabled in practice and Windows users
