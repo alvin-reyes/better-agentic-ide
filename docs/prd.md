@@ -11,6 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
+| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Draft, revision 1, 2026-11-10 |
 
 ---
 
@@ -2296,3 +2297,308 @@ clarification for slice 0.
   (PE-13 AC9, AC10, slice 1, RC-2, F1.12). Then revision 9c's line edits, against
   the approved architecture, and revision 9d's minors (the history lists them).
 <!-- F1 ends -->
+
+---
+
+<!-- F3 begins -->
+## F3: Each sub-terminal has its own file and code viewer
+
+- **Status:** Draft, revision 1, 2026-11-10. Not reviewed, not approved, not sharded.
+- **Number:** F2 is taken by the open PRD for agentic-environment onboarding (PR #98).
+  If that PR is withdrawn, this stays F3.
+- **Source:** the owner, 2026-11-10: *"each tab has to have their own file viewer,
+  code viewer"*. Asked to scope it, the owner decided:
+  - the unit is the **sub-terminal (view)**, not the top-level tab. In a hub tab the
+    main persona terminal shows the hub's files and a focus session sub-terminal
+    shows its own checkout; ⌘[ / ⌘] swaps the viewers with the terminal;
+  - each view remembers its root folder (which follows its terminal's folder), its
+    expanded tree, the file open in the code viewer with its scroll and line
+    position, whether each panel is open and its width, and all of it comes back
+    with the session after ADE restarts.
+- **History:**
+  - 2026-11-10, revision 1: first draft, from the owner's decisions above.
+
+### F3.1 Terms
+
+- **View:** a tab's own terminal or one of its sub-terminals, as in the
+  sub-terminals UX spec (`docs/superpowers/specs/2026-11-02-sub-terminals-ux.md`).
+  A tab without sub-terminals has one view.
+- **View in sight:** the view the window is showing (the shown view of the active
+  tab).
+- **File viewer:** the file browser panel, toggled with ⌘B.
+- **Code viewer:** the side panel toggled with ⌘⇧B (the Preview panel). It shows a
+  text file in the code editor and other kinds (Markdown, HTML, image, PDF, DOCX,
+  binary) in their viewers.
+- **Viewer state:** what one view remembers, and nothing else:
+  1. **root**, the folder the file viewer lists;
+  2. **expanded folders**, a set of absolute folder paths;
+  3. **open file**, the path shown in the code viewer, or none; for a text file in
+     the code editor also its **position**: the first visible line and the cursor's
+     line and column;
+  4. **layout**: whether the file viewer is open and its width, and whether the
+     code viewer is open and its width.
+- **Active folder:** the current folder of the view's active pane (the pane with
+  focus in that view's split tree).
+
+### F3.2 Problem
+
+Today the file viewer is one global panel. Its root follows the folder of the
+**tab's own** terminal, polled every 3 seconds, so a focus session sub-terminal in
+`~/hub/atomic-stays` still shows the hub's files. Its expanded tree resets whenever
+the root changes, and only its open/closed state and width survive a restart. The
+code viewer's file is held per tab, so every sub-terminal in a tab shares one file;
+whether the code viewer is open is held once for the whole window and is lost on
+restart, its width is never saved, and the line the editor was on is never kept.
+An engineer who switches between the persona terminal and a focus session loses
+their place in both every time.
+
+### F3.3 Users
+
+The engineer running several terminals in one tab: a hub's persona terminal plus
+sub-terminals opened by `ade open` or New Sub-terminal (focus sessions on
+checkouts, dev servers, test runners), switching between them with ⌘[ / ⌘], the
+strip, the tab switcher, a toast or the fleet.
+
+### F3.4 Goals (measurable)
+
+- **G1.** Showing a view always shows that view's viewer state: in the F3.7 tests,
+  0 cases where a view shows another view's root, file, expanded folders or layout.
+- **G2.** After an ADE restart, every restored view shows the viewer state it had
+  when the session was last saved, subject only to the missing-path rules (VV-8).
+- **G3.** No new prompt, dialog or setting is added: the feature is invisible
+  until the engineer switches views.
+
+### F3.5 Non-goals (deliberately out)
+
+- File and code viewers in **detached windows** (Move to New Window). They have
+  neither panel today and this feature does not add them (OQ-3).
+- A per-view **Show hidden files** setting. It stays one global preference (D2).
+- Remembering a scroll position in the non-code viewers (Markdown, HTML, image,
+  PDF, DOCX): the file is remembered, the position is not (OQ-2).
+- More than one open file per code viewer (no editor tabs inside the panel).
+- Viewer state in **saved workspaces** (Settings -> Workspace) or in **ADE sync**.
+  Viewer state holds local paths; it stays on the machine, like `ade-session`.
+- Reopening closed sub-terminals or their viewer state (the sub-terminals spec
+  already rules out reopening sub-terminals).
+- The code viewer's path box and auto-refresh toggle: unchanged, not per view.
+
+### F3.6 Decisions
+
+- **D1. A new view copies its layout, not its content.** A brand-new view starts
+  with the layout (both panels' open/closed state and widths) of the view it was
+  opened from, an empty expanded set and no open file; its root is its own
+  terminal's folder. Why copy rather than start closed: today the panels are
+  global, so an engineer who works with the file viewer open sees it in every new
+  terminal. Starting every new sub-terminal with both panels closed would make the
+  focus session (the owner's own example, the case this feature exists for) open
+  bare, and would cost a ⌘B per sub-terminal. Why not copy the content: the new
+  view's folder differs, so the source's expanded folders and open file would be
+  someone else's place. (OQ-1 asks the owner to confirm.)
+- **D2. Show hidden files stays global.** It is a preference about how the engineer
+  likes to see files, not about the work in a view; per view it would need setting
+  again in every sub-terminal, and the owner's list of what a view remembers does
+  not include it. Toggling it applies to every view at once and is still saved in
+  `ade-file-browser` as today.
+- **D3. The open file is no longer per tab.** The tab-level preview file is
+  replaced by each view's open file; the tab's existing value moves to its own view
+  (VV-9).
+- **D4. Root follows the active pane.** A view's root is its active folder; with
+  split panes, focusing another pane in the same view moves the root to that pane's
+  folder (today the root follows the own view's active pane in the same way).
+
+### F3.7 Requirements
+
+#### VV-1. Each view has its own viewer (MVP)
+
+As an engineer, I want each terminal in a tab to keep its own file viewer and code
+viewer, so switching terminals never loses my place.
+
+1. **Switching swaps the viewer.** Whenever the view in sight changes (⌘[ / ⌘],
+   a click on the strip, a tab switcher row, an agent-status toast, the fleet, a
+   tab switch, closing the view in sight), the file viewer and the code viewer show
+   the new view's viewer state, all four parts of it. Test: tab T has its own view
+   in `/hub` and sub-terminal S in `/hub/atomic-stays`; open `/hub/a.md` in the own
+   view and `/hub/atomic-stays/b.ts` in S; ⌘] shows root `/hub/atomic-stays` and
+   `b.ts`; ⌘[ shows root `/hub` and `a.md`.
+2. **Root follows the view's terminal.** After `cd` in a view's active pane, that
+   view's file viewer lists the new folder within 3 seconds while the view is in
+   sight; no other view's root changes. A view not in sight shows its current
+   active folder at the latest when it is next shown. Test: `cd src` in S moves S's
+   root to `/hub/atomic-stays/src` and leaves the own view's root at `/hub`.
+   Focusing the other pane of a split view moves the root to that pane's folder
+   (D4).
+3. **Expanded folders per view.** Expanding or collapsing a folder changes only
+   the view in sight. A folder shown in the tree is expanded exactly when its path
+   is in the view's expanded set, so `cd` away and back shows the same folders
+   expanded. Tests: expand `src/` in S, ⌘[ then ⌘] shows `src/` expanded in S and
+   not in the own view; in S, `cd ..` then `cd atomic-stays` shows `src/` expanded.
+4. **Open file per view.** Opening a file (file viewer click, a `path:line` click
+   in a terminal, the code viewer's path box, Open ARCHIVE.md and the board's
+   links) sets the open file of the view in sight only. A file opened from a
+   detached window still goes to the main window's view in sight, as today. Test:
+   a `path:line` click in S changes S's open file and not the own view's.
+5. **Position per view.** For a text file in the code editor, the view remembers
+   the first visible line and the cursor's line and column, and showing the view
+   again restores both exactly. A `path:line` click lands on its line instead and
+   that becomes the remembered position. Test: in S scroll `b.ts` so line 120 is
+   first visible, put the cursor on line 130 column 5, ⌘[ then ⌘]: line 120 is
+   first visible and the cursor is at 130:5.
+6. **Layout per view.** ⌘B, ⌘⇧B, the palette's toggles and dragging either
+   panel's edge change only the view in sight. Test: close the file viewer in S and
+   widen the code viewer to 700 px; ⌘[ shows the own view's file viewer open and
+   its code viewer at its own width; ⌘] shows S's file viewer closed and its code
+   viewer at 700 px.
+7. **Focus unchanged.** Switching views never moves focus into either panel; the
+   existing focus rules of the code viewer (opening a file never takes focus, ⌘⇧B
+   does, closing with focus inside returns it to the terminal) hold per view.
+8. **Non-terminal tabs** (browser, editor, orchestrator, fleet, contracts) each
+   hold one viewer state of their own, so switching to them and back never changes
+   a terminal view's state. Their file viewer has no root, as the orchestrator tab
+   has today (OQ-4).
+
+#### VV-2. A brand-new view (MVP)
+
+1. A sub-terminal created by `ade open` or New Sub-terminal starts with root = its
+   terminal's starting folder, an empty expanded set, no open file, and the layout
+   of the view it was opened from (D1): the spawning view for `ade open`, the
+   tab's view in sight for New Sub-terminal. It does not change the source's state.
+   Tests: with the own view's file viewer open at 300 px and code viewer closed,
+   `ade open` from it in `/hub/atomic-stays` creates a view whose file viewer is
+   open at 300 px listing `/hub/atomic-stays`, code viewer closed, no file; `ade
+   open` without focus leaves the view in sight's state untouched.
+2. A new top-level terminal tab (new tab, New Tab dialog, a project opened) takes
+   its own view's layout from the view in sight when it was created, with no open
+   file and no expanded folders. With no view in sight (first launch on a fresh
+   install) the defaults are: file viewer closed, 240 px; code viewer closed,
+   480 px (today's defaults).
+3. **Move to New Tab** on a sub-terminal is not a new view: its viewer state moves
+   with it unchanged and becomes the new tab's own view's state.
+
+#### VV-3. Closing (MVP)
+
+1. Closing a sub-terminal discards its viewer state. The view now in sight shows
+   its own state, unchanged.
+2. Closing a tab (×, ⌘W, Close Others, Close to the Right) discards the viewer
+   state of every view in it, except what VV-4 AC3 keeps for Reopen Closed Tab.
+3. Test: after closing S, the next session save contains no viewer state for S.
+
+#### VV-4. Duplicate, Move to New Window, Reopen Closed Tab (MVP)
+
+1. **Duplicate** gives the new tab's own view a copy of the source tab's own
+   view's whole viewer state (root follows the new terminal, which starts in the
+   same folder). After that the two are independent. Sub-terminals are not
+   duplicated today, so nothing of theirs is copied. Test: duplicate T; the copy
+   shows `/hub`, `a.md` at the same position and the same layout; expanding a
+   folder in the copy leaves T unchanged.
+2. **Move to New Window** takes the tab's views and their viewer states out of the
+   main window: the main window's other views are unchanged, and its next session
+   save holds nothing of the moved tab. The detached window shows no file viewer or
+   code viewer, as today (F3.5, OQ-3).
+3. **Reopen Closed Tab** brings back the own view's viewer state as it was when the
+   tab closed (expanded set, open file and position, layout; root follows the
+   reopened terminal's folder). Sub-terminals' states are not reopened. This holds
+   for the closed tabs ADE already keeps (the 20 most recent, in memory, not across
+   a restart). Test: close T with `a.md` open at line 40, reopen: `a.md` at line 40,
+   same layout.
+
+#### VV-5. A "Hub removed" tab (MVP, only if F2 lands)
+
+F2 (OB-5 AC4) keeps a tab whose hub was removed as a "Hub removed" shell in the
+home folder, never saved or restored. When a tab becomes "Hub removed", every view
+in it gets: root = its terminal's folder (the home folder), an empty expanded set
+and no open file (they named paths inside the removed hub); its layout is kept.
+Like the tab, its viewer states are never saved, never restored and never brought
+back by Reopen Closed Tab. Test: after Remove, the file viewer lists the home
+folder, the code viewer is empty, and the saved session contains none of the hub's
+paths from viewer state.
+
+#### VV-6. Restart (MVP)
+
+1. Every session save includes the viewer state of every view it saves (own views
+   and sub-terminals). After a restart each restored view shows that state when it
+   is shown; a restored sub-terminal shows it on first show, before its shell
+   reports a folder. Test: set distinct states in T's own view and S, quit, start:
+   each view shows its own root, expanded folders, open file at its position and
+   layout, and the view in sight is the one that was in sight.
+2. Viewer state is saved where the session is (device-only, never synced, never
+   in a saved workspace). Test: ADE sync's export contains no viewer-state path.
+3. A session saved by an older ADE, without viewer state, loads without error and
+   is migrated (VV-9).
+
+#### VV-7. Limits (MVP)
+
+1. One viewer state per existing view; a closed view's state is not kept (except
+   VV-4 AC3's in-memory closed tabs, at most 20).
+2. At most 500 expanded folders per view; expanding a 501st drops the one expanded
+   longest ago. Test: expand 501 folders; the first one is no longer in the set.
+3. Viewer state holds paths, positions, flags and widths only, never file contents
+   or tree listings. Test: the saved state of a view with a 1 MB file open is
+   under 64 KB.
+4. Widths are clamped to the panels' existing limits on restore (code viewer
+   280 to 900 px).
+
+#### VV-8. When a remembered folder or file no longer exists (MVP)
+
+1. **Root folder gone.** The root always follows the terminal's actual folder, so
+   a restored view whose folder is gone lists whatever folder its shell starts in.
+   No error is shown.
+2. **Expanded folder gone.** It is dropped from the set when its parent is next
+   listed; nothing is shown.
+3. **Open file gone** (at restore, or deleted while open): the code viewer, if
+   open, shows "<path> no longer exists" in its body. The file stays remembered
+   until the engineer opens another file; if it exists again when the view is next
+   shown or ADE restarts, it opens at its remembered position. Test: delete `b.ts`,
+   restart: S's code viewer shows the notice; restore `b.ts`, ⌘[ then ⌘]: `b.ts`
+   shows at its position.
+4. **Position past the end** (the file got shorter): the cursor goes to the last
+   line and the first visible line is clamped so the last line is in view.
+5. The open file does not have to be under the root: `cd` elsewhere keeps the open
+   file.
+
+#### VV-9. Migrating from the global viewer (MVP)
+
+1. On the first start of a version with this feature, `ade-file-browser`'s
+   `isOpen` and `width` become the file viewer layout of every view in the
+   restored session and of the VV-2 AC2 defaults. Every view's code viewer starts
+   closed at 480 px (neither was saved before).
+2. Each saved tab's preview file becomes its own view's open file, at the top;
+   sub-terminals start with no open file.
+3. `showHidden` stays in `ade-file-browser`, global (D2).
+4. Migration runs once; after it, changing one view never changes another.
+   `ade-file-browser` keeps its shape so an older ADE still starts (it reads the
+   last migrated values).
+5. Tests: a session saved by the previous release with `ade-file-browser`
+   `{isOpen: true, width: 300, showHidden: true}` and a tab previewing `x.md`
+   restores with every view's file viewer open at 300 px, hidden files shown, and
+   `x.md` open in the own view only.
+
+### F3.8 Open questions for the owner
+
+- **OQ-1. New view layout.** Copy the layout from the view it was opened from
+  (D1), or start every new sub-terminal with both panels closed? *Recommend copy*:
+  a focus session should open looking like where you just were; closed costs a ⌘B
+  per sub-terminal.
+- **OQ-2. Position in non-code viewers.** Remember scroll position for Markdown
+  and PDF too? *Recommend not now*: the owner asked for the code viewer's
+  position; Markdown and PDF can follow if missed.
+- **OQ-3. Detached windows.** Add the file viewer and code viewer to Move to New
+  Window windows? *Recommend later, as its own feature*: they have neither panel
+  today, so it is new UI, not per-view memory.
+- **OQ-4. Non-terminal tabs' file viewer.** Today a browser or editor tab keeps
+  showing the previous terminal's folder by accident. Show no folder (VV-1 AC8),
+  or a contracts tab's root for a contracts tab? *Recommend no folder*, with a
+  contracts tab listing its contracts root as the one exception only if the owner
+  wants it.
+- **OQ-5. Expanded-folder cap.** 500 per view (VV-7 AC2)? *Recommend 500*: far
+  above normal use, and it bounds the saved session.
+
+### F3.9 Handoff
+
+- **Architect:** where viewer state lives (the tab store's views, a store keyed by
+  view, or both), how a hidden view's root is kept current without polling every
+  view, the session format change and its migration, and Move to New Tab's and
+  Duplicate's copies. Record the viewer-state contract in `.ade/context/`.
+- **Designer:** the "no longer exists" notice (VV-8 AC3) and the no-folder state
+  for non-terminal tabs (VV-1 AC8). No other new UI.
+- **Adversarial reviewer:** review this section before approval.
+<!-- F3 ends -->
