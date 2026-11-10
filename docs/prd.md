@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits, OQ-13 awaits confirmation (every open question answered: OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10 and OQ-12 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; no open questions (every question answered: OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -2329,11 +2329,11 @@ clarification for slice 0.
 ## F4: Workspaces (one multi-folder workspace per agent hub)
 
 - **Status:** Approved 2026-11-10 (owner), revision 3.1. Every open question is
-  answered (F4.10): OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10 and OQ-12 at the
-  recommendation, OQ-11 not now. Revision 3.2 (2026-11-10) answers the check of the
-  approval edits (BLOCKED on M1 and minors; F4.12's fourth table) and asks one
-  question, OQ-13 (WS-1 AC8's two cases, written at the recommendation), which the
-  owner confirms before S1 is sharded. Not sharded. Revision 1's
+  answered (F4.10): OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the
+  recommendation, OQ-11 not now; F4 has no open questions. Revision 3.2 (2026-11-10)
+  answers the check of the approval edits (BLOCKED on M1 and minors; F4.12's fourth
+  table) and asked one question, OQ-13 (WS-1 AC8's two cases), which the owner
+  answered yes to both on 2026-11-10 (revision 3.3). Not sharded. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
   finding and folded in the owner's decisions of 2026-11-10; the delta review of
   revision 2 BLOCKED it on one finding (N-B1) and listed minors, which revision 3
@@ -2456,6 +2456,12 @@ clarification for slice 0.
     wording (m1), the *Workspace* row's "can have exactly one" (m2) and a corrected
     note on the textual merge conflict with 9l (m3). The approval of revision 3.1's
     other answers stands; the history entry above records what was approved then.
+  - 2026-11-10, revision 3.3 (the owner answered OQ-13 yes to both): wording only,
+    no requirement, slice or gate changed. WS-1 AC8's two cases stand as written: a
+    checkout hidden by WS-3 stays covered, and after the workspace closes a terminal
+    that was inside a covered checkout gets no setup question for the rest of its
+    life, while a new terminal opened there later is set up as today. OQ-13 is marked
+    answered; F4 has no open questions again (Status, index row, F4.10, F4.12 m6).
 
 ### F4.1 Terms
 
@@ -2755,8 +2761,7 @@ checkout the hub records, without my listing them again.
    there, shows no setup question and adds nothing to `ade-project-setup-done`;
    asking for setup there sets it up; with no workspace open, the same checkout is
    set up automatically as today.
-   Two cases, written at the recommendation (OQ-13, awaiting the owner's
-   confirmation): **a hidden checkout stays covered**: a discovered checkout the
+   Two cases, confirmed by the owner 2026-11-10 (OQ-13): **a hidden checkout stays covered**: a discovered checkout the
    engineer hid (WS-3) is still one of the workspace's discovered checkouts for this
    criterion; and **closing the workspace does not start setup**: a terminal whose
    folder was inside a covered checkout while the workspace was open gets no
@@ -3287,7 +3292,7 @@ persona's file browser, which is the owner's whole ask.
 
 ### F4.10 Open questions for the owner
 
-All answered by the owner on 2026-11-10 (History, last entry); F4 has no open
+All answered by the owner on 2026-11-10 (History, last two entries); F4 has no open
 questions. Each question is kept as asked, with its answer after its title.
 
 - **OQ-1. One meaning for "workspace" across F1 and F4 (D1).** **Answered 2026-11-10
@@ -3363,7 +3368,8 @@ questions. Each question is kept as asked, with its answer after its title.
   requirement changes. *Recommend yes*: F3 S1 is designed (PR #116) and will likely
   be sharded and reviewed before F4 is approved, and without the line F3's own text
   never tells its reviewer about the obligation.
-- **OQ-13. WS-1 AC8's two cases (revision 3.2, open).** WS-1 AC8 is written at
+- **OQ-13. WS-1 AC8's two cases (revision 3.2).** **Answered 2026-11-10 (owner): yes
+  to both** (WS-1 AC8 unchanged; its "awaiting confirmation" note removed). WS-1 AC8 is written at
   these recommendations; confirm them before S1 is sharded. (a) Does a discovered
   checkout the engineer hid (WS-3) stay covered? *Recommend yes*: hiding a folder
   from the file browser does not make it any less the client's repo. (b) When the
@@ -3509,6 +3515,6 @@ questions. Each question is kept as asked, with its answer after its title.
 | **m2** F1.1 *Workspace* row | "can have exactly one", matching F4.5 (F1 revision 9m). |
 | **m3** F1 9m's history sentence on 9l | Corrected: 9l and 9m both edit the F1 index row, F1's Status and the end of the history, so the merge conflict is textual; keep both, 9l before 9m. |
 | **m4** OQ-5's answer line and Source | "the keys WS-7 AC3's table strips". |
-| **m6** WS-1 AC8's hidden checkouts and after-close behaviour | Written at the recommendation (hidden stays covered; no setup question for the rest of the terminal's life), with tests; OQ-13 asks the owner to confirm. |
+| **m6** WS-1 AC8's hidden checkouts and after-close behaviour | Written at the recommendation (hidden stays covered; no setup question for the rest of the terminal's life), with tests; OQ-13 asked the owner to confirm, and the owner confirmed both on 2026-11-10. |
 | **m7** a workspace tab named after its hub folder | WS-7 AC3's `ade-session` names row strips it (OQ-5's rule); the test includes such a tab. |
 <!-- F4 ends -->
