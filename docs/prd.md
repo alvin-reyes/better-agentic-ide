@@ -11,6 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
+| F5 | [Extensive prompt templates](#f5-extensive-prompt-templates) | Draft, revision 1, 2026-11-10 (not reviewed) |
 
 ---
 
@@ -2296,3 +2297,724 @@ clarification for slice 0.
   (PE-13 AC9, AC10, slice 1, RC-2, F1.12). Then revision 9c's line edits, against
   the approved architecture, and revision 9d's minors (the history lists them).
 <!-- F1 ends -->
+
+---
+
+<!-- F5 begins -->
+## F5: Extensive prompt templates
+
+- **Status:** Draft, revision 1, 2026-11-10. Not reviewed, not approved, not sharded.
+  Next: the adversarial reviewer, then the owner's answers to F5.10.
+- **Number:** F2 is the open onboarding PRD (PR #98), F3 the per-view viewer PRD
+  (PR #112), and F4 the workspaces PRD being written (branch `prd-workspaces`). If
+  any of them is withdrawn, this stays F5.
+- **Source:** the owner, 2026-11-10: *"we need to have extensive prompt templates
+  available"*. Asked to scope it, the owner chose all four sources and all four
+  features:
+  - **sources:** a big built-in library organised by task and by role (PM,
+    architect, designer, scrum master, developer, QA, DevOps, security, data,
+    blockchain and more), matching ADE's agent roles and BMAD v6; the user's own
+    templates (create, edit, import, export); per-hub and per-project templates
+    stored in the repo, shared and versioned with git; community or shareable
+    templates (share as a file or link, import someone else's set);
+  - **features:** fill-in fields (`{{placeholders}}` with a small form, auto-filled
+    where possible: current folder, selected file, git branch, the file open in the
+    preview panel, the selection); search, categories, favourites and recently used,
+    from the Thoughts panel and from the command palette; multi-step chains (plan →
+    implement → test → review); sending to any agent: the active session, a chosen
+    sub-terminal, or a specific agent or persona, using what ADE already has.
+- **History:**
+  - 2026-11-10, revision 1: first draft, from the owner's answers above.
+
+### F5.0 What exists today (checked on `origin/main` at 2d65a7f)
+
+- **The templates.** `src/components/Scratchpad.tsx` hard-codes `PROMPT_TEMPLATES`:
+  27 entries of `{name, category, prompt}`. 24 single prompts in five categories
+  (Code 6, Debug 5, Arch 4, Git 4, AI 5) and 3 in a sixth category, Chain ("Design
+  Session", "Code Review Chain", "Debug Chain"), whose steps are separated by a
+  `---` line. Blanks are empty `**Label:** ` lines or bracketed text such as
+  `[DESCRIBE FEATURE]`; there are no placeholders and no form.
+- **Where they show.** The Thoughts panel's Templates tab (a 160 px high list of
+  buttons). Choosing one calls `loadText`: it replaces the text box's content,
+  closes the tab and focuses the box. No search, favourites, recents, user
+  templates or command palette entry (`src/components/CommandPalette.tsx` has none).
+- **Sending.** "Send to Terminal" (`send`) writes the box's text plus `\r` to the
+  **active pane's** PTY, whatever runs there (an agent or a plain shell); an
+  Orchestrator tab gets it in its chat instead (the `orchestrator-send` event).
+  Pasted images go after the text as file paths. Sent text joins the prompt history
+  (`better-terminal-prompt-history`, last 50).
+- **Chains.** When the box holds `\n---\n`, the button becomes "Run Chain (n
+  steps)" (`sendChain`, around `Scratchpad.tsx:663`): it writes step 1, waits 2 s,
+  then polls `isPaneActive` once a second until the pane looks idle for 1.5 s, and
+  writes the next step. After 600 checks (about 10 minutes) it **sends the next step
+  anyway**. Idle is judged from terminal output only, so a Claude Code permission
+  prompt also looks idle. Cancel stops between steps.
+- **Agents ADE can already reach.**
+  - A running pane: `writePty` to its PTY. Every view (sub-terminal) of every tab
+    has panes with PTYs (ADR 0014, `.ade/context/terminal-open.md`).
+  - Whether a pane runs an agent: agent status (`.ade/context/agent-events.md`,
+    Claude Code hooks, opt-in per project, not on Windows) gives `needsYou`,
+    `waiting`, `working`, `ready` or `finished` per PTY; the busy check
+    (`.ade/context/pane-busy.md`, `pty_foreground_job`, not on Windows) names the
+    foreground program; the agent tracker (`agentTrackerStore`) knows the sessions
+    ADE launched.
+  - A new agent with a role: `prepareAgentLaunch(spec, cwd, {task})`
+    (`src/lib/agentLaunch.ts`), shared by the agent picker and the board's
+    Dispatch. The roles come from `vendor/ade-setup/agents/` (19 roles) and
+    `src/data/curatedAgents.ts`. The opening task is typed on a shell command line,
+    and anything outside printable ASCII, line breaks included, becomes a space.
+  - The Orchestrator: `orchestrator-send`.
+  - `ade open`: lets a process **inside** a terminal open a sub-terminal through the
+    hook endpoint. ADE's own UI does not use it; it adds views directly.
+- **Stores and sync.** `PERSISTED_KEYS` (`src/lib/persistence.ts`) lists every
+  `localStorage` key saved to `state/kv`; ADR 0017 requires a static test that every
+  key is persisted or listed as ephemeral with a reason. ADE sync
+  (`src-tauri/src/sync.rs`) pushes `SHARED_KEYS` (settings, saved workspaces, prompt
+  history, saved notes, orchestrator, agent tracker, `ade-bmad-dismissed`) and
+  `DEVICE_KEYS` (`ade-session`, `ade-scratchpad-draft`, under `devices/<device>/`),
+  strips `anthropicApiKey` and scrollback, and never pushes vault values. ADE's
+  vault puts secrets into every new terminal's environment.
+- **Parsing.** The repo has no YAML library; `src/lib/frontmatter.ts` reads only
+  top-level scalar front matter, on purpose.
+
+### F5.1 Terms
+
+- **Template:** a named, reusable prompt. Either a **single prompt** or a **chain**.
+- **Chain:** a template made of 2 to 20 **steps**, each a prompt, sent one after
+  another to the same agent.
+- **Field:** a `{{name}}` placeholder in a template's text. Filling a template
+  replaces every field with a value. An **auto field** is one ADE can fill from the
+  context (F5.7, PT-5); every other field is a **typed field**.
+- **Rendered text:** a template's text (every step, for a chain) after its fields
+  are filled. This is what is sent.
+- **Source:** where a template comes from. Four kinds:
+  - **built-in:** ships with ADE, read-only;
+  - **mine:** the user's own, stored in ADE's profile;
+  - **repo:** a file in a hub's or project's `.ade/prompts/` folder (PT-9);
+  - **imported:** a template the user imported from a file or link becomes **mine**
+    once imported, and keeps an `imported` marker and its origin (PT-10).
+- **Agent target:** a place a rendered template can be sent: a pane whose program is
+  a known agent CLI (PT-6 AC2), the Orchestrator's chat, or a new agent ADE starts.
+  A plain shell is never an agent target.
+- **Active session:** the active pane of the shown view of the active tab, or the
+  Orchestrator when the active tab is an Orchestrator tab (today's `send`). F4 may
+  refine "active"; F5 uses today's tabs, views and panes.
+- **Secret source:** the OS secret store (Keychain and its equivalents, ADE's
+  vault), environment variables, and the contents of any file.
+- **Secret-shaped text:** text the **secret detector** matches. The detector covers at
+  least private-key blocks, cloud access keys (AWS, GCP service-account JSON),
+  GitHub, GitLab, Slack, Stripe, Anthropic and OpenAI tokens, JWTs, and
+  `NAME=value` or `NAME: value` lines where NAME ends in `KEY`, `TOKEN`, `SECRET`,
+  `PASSWORD` or `PASSWD` (case-insensitive) and the value is 8 characters or more.
+  The architect picks the implementation (PT-11 AC6 needs one detector everywhere).
+- **Hidden characters:** Unicode format characters (category Cf: bidi overrides and
+  isolates, zero-width characters, tags), control characters other than tab and
+  line feed, and line or paragraph separators (Zl, Zp).
+
+### F5.2 Problem
+
+ADE's agents are only as good as the prompts people give them. Today ADE offers 27
+generic prompts with blank lines to fill by hand, none of them for the roles ADE
+itself is built around (product manager, architect, designer, scrum master, QA,
+DevOps, adversarial reviewer) or for BMAD v6's workflows. People who have a good
+prompt keep it in a notes app and paste it; a team cannot share its prompts with the
+repo they apply to; and the one multi-step feature, chains, can type the next step
+into an agent that is waiting for a permission answer.
+
+### F5.3 Users and jobs
+
+- **Developer in a project:** "When I start a task, I want a proven prompt for it
+  with the file, branch and folder already filled in, so I spend seconds, not
+  minutes, writing a good prompt."
+- **Role-based engineer (ADE's persona model):** "When I act as QA or architect on
+  a project, I want the prompts for that role, matching the agents and BMAD steps
+  ADE installs."
+- **Team lead or hub owner:** "I want our team's prompts in the repo, reviewed and
+  versioned like code, so everyone sends the same prompt for the same job."
+- **Prompt author in the community:** "I want to share a set of prompts as a file
+  or link, and import someone else's set safely."
+
+### F5.4 Goals (measurable)
+
+- **G1. Extensive.** When S1 and S4 have both shipped, the built-in library holds at
+  least **150** templates meeting the coverage table of PT-2 AC3; the library test
+  counts them (PT-2 AC5).
+- **G2. Fast to use.** For a template whose fields are all auto fields, picking it
+  from the Templates tab's search and sending it to the active session takes no
+  more than **3 key presses** after the search text (e.g. ↓, Enter to pick, ⌘Enter
+  to send). Search over **2,000** templates updates the result list within
+  **100 ms** (median of 20 runs in the unit test). Measured by PT-3 AC6 and PT-14
+  AC2.
+- **G3. No secret is ever auto-filled.** The auto-fill test (PT-5 AC6) finds none
+  of its secret markers in any filled field, in every slice.
+- **G4. Nothing runs by itself.** No template, chain, repo template or import ever
+  makes ADE press Enter in a plain shell, send to an agent waiting for a permission
+  answer, or make a network request without a user's click (PT-6 AC3, PT-7 AC4,
+  PT-10 AC6).
+- **G5. Shared through git.** A template committed to a hub's or project's
+  `.ade/prompts/` shows in ADE on another machine after a `git pull`, with no other
+  step than opening the template list (PT-9 AC3).
+
+### F5.5 Non-goals (deliberately out)
+
+- A hosted marketplace, registry, ratings or gallery. Sharing is by file or by a
+  link the user pastes (PT-10). A gallery is a later feature (OQ-6).
+- Automatic updates of imported sets. An import is a one-time copy.
+- Logic in templates: no conditionals, loops, includes, scripts, or values computed
+  from other values. Fields are plain text substitution.
+- Auto fields that read a secret source (F5.1): no `{{env.X}}`, no file contents, no
+  vault values (PT-5).
+- Sending one template to several agents at once (fan-out), sending to the phone, or
+  to remote agents.
+- A new `ade` CLI verb for templates. `ade open` is unchanged (PT-6 AC7).
+- ADE committing or pushing repo templates. A hub's own sync script and the user's
+  git do that (PT-9).
+- Chain auto-advance on Windows, where ADE has no agent status (PT-7 AC3 gives
+  step-by-step there).
+- Usage telemetry. Recents and favourites stay in the profile (PT-11).
+- Generating templates with an LLM.
+
+### F5.6 Decisions
+
+- **D1. One file format for every source.** A template is one Markdown file with
+  front matter (PT-1). Built-in, repo, exported and imported templates are all such
+  files, and a user template is stored as the same text, so moving a template
+  between sources is a copy.
+- **D2. Built-in library lives in this repo,** in `templates/prompts/`, one file per
+  template, grouped in folders by task, and is bundled with the app as a resource.
+  It is versioned with ADE releases (PT-2 AC6). It replaces `PROMPT_TEMPLATES`.
+- **D3. Repo templates live in `.ade/prompts/`** at the top of a hub or project
+  (the git top level), for hubs and projects alike: one place, beside the `.ade/`
+  files ADE projects already have, and inside what a hub's own sync script already
+  commits and pushes. The owner suggested `templates/prompts/` in hubs; OQ-1 asks
+  to confirm the change.
+- **D4. Sending never presses Enter outside an agent.** A template is sent only to
+  an agent target; in a plain shell ADE only offers Insert into box and Copy
+  (PT-6). A shell would run each line of the template as a command.
+- **D5. Chains advance on agent status, never on silence.** A chain sends the next
+  step only when agent status reports the previous step accepted and the agent idle
+  at its prompt; on a permission prompt or a timeout it pauses (PT-7). Where agent
+  status is unavailable, the user sends each step.
+- **D6. Every template is untrusted text at send time.** Whatever its source, the
+  full rendered text (every step) is shown before the first send, hidden characters
+  are made visible, and a step that starts with `!` (Claude Code's shell mode) is
+  refused (PT-6 AC5, PT-7 AC2). Imported sets also get a preview before they are
+  saved (PT-10).
+- **D7. Field values are never stored by F5.** Recents and favourites record which
+  template, never what it was filled with. Once inserted or sent, the text follows
+  today's rules for the box's draft and the prompt history (PT-11 AC4).
+- **D8. Sync** (PT-11): user templates and favourites of built-in and user
+  templates sync with ADE sync when it is on; recents, favourites of repo templates
+  and field values never sync; repo templates travel only with their repo's git;
+  built-in templates ship with the app.
+- **D9. No network by itself.** ADE fetches a template link only when the user
+  pastes it and presses Fetch; no URL scheme handler, no background refresh (PT-10).
+
+### F5.7 Requirements
+
+Each criterion is tagged with the slice that delivers it ([S1] to [S5], F5.8).
+[Second] marks a criterion whose test needs unbuilt F1 work; it goes with whichever
+story merges into `main` second (the F3 D14 rule).
+
+#### PT-1. The template file format (MVP)
+
+1. **[S1] One file, one template.** A template is a UTF-8 Markdown file with a front
+   matter block and a body. The front matter holds:
+   - `id` (required): lowercase letters, digits, `-` and `.`, 3 to 80 characters,
+     unique within its source;
+   - `title` (required): F1's text rule (1 to 80 characters, no Cc or Cf);
+   - `description` (optional, up to 280 characters);
+   - `task` (required): one task category from PT-2 AC3's list, or any text for
+     mine and repo templates;
+   - `roles` (optional): zero or more role ids (PT-2 AC3);
+   - `tags` (optional): up to 12 words;
+   - `kind`: `prompt` (default) or `chain`;
+   - `fields` (optional): for each field, its `name`, a `label`, an optional
+     `default`, whether it is `multiline`, and whether it is `optional`;
+   - `requires` (optional): `bmad-v6` or `bmad-v4`, for templates that call BMAD
+     skills or tasks;
+   - `revision` (built-in only): an integer, raised on each change;
+   - `based_on` (optional): `<id>@<revision>` of the built-in it was copied from;
+   - `origin` (imported only): the file name or URL it came from, and the import
+     date.
+   Unknown keys are kept but ignored. The architect chooses the exact syntax
+   (F5.9), within these names.
+2. **[S1] Steps.** A chain's body is split into steps by a step marker the architect
+   chooses, such that a Markdown horizontal rule (`---`) inside a step does not
+   split it. Each step may have a short name ("Plan", "Implement"). A chain with
+   fewer than 2 or more than 20 steps is invalid.
+3. **[S1] Fields.** `{{name}}` marks a field (`name`: letters, digits and `_`, 1 to
+   40 characters, case-sensitive). `\{{` writes literal braces. A field may appear
+   any number of times, in any step, and gets one value everywhere. A field used in
+   the body but not declared in `fields` is a typed field labelled with its name.
+   Filling is **one pass**: a value that itself contains `{{x}}` is inserted
+   literally and never expanded. Test: a value `{{branch}}` typed into field `a`
+   leaves the literal text `{{branch}}` in the rendered text.
+4. **[S1] Limits.** A template file is at most 32 KB; a rendered step at most 32 KB.
+   A file over the limit, with broken front matter, a missing required key, an
+   invalid `id`, or an invalid chain is **skipped and reported** (source, file,
+   reason) in the Templates tab; it never stops the other templates loading. Test:
+   a folder with one valid and four invalid files lists the valid one and four
+   reasons.
+5. **[S1] Round trip.** Parsing a template file and writing it back (export,
+   PT-8 AC5) gives a file that parses to the same template. Test over every
+   built-in template.
+
+#### PT-2. The built-in library (MVP: prompts in S1, chains in S4)
+
+1. **[S1] It replaces today's list.** `PROMPT_TEMPLATES` is removed; its 24 single
+   prompts are in the library under their current titles, with their bracketed and
+   empty `**Label:** ` blanks turned into fields. Its 3 chains join in S4. Test: each
+   of today's 24 titles is found by searching its title.
+2. **[S1] Read-only.** A built-in template cannot be edited or deleted in ADE.
+   "Duplicate to my templates" makes a **mine** copy with `based_on` set (PT-8).
+3. **[S1, S4] Coverage.** The library holds at least **150** templates: at least
+   **130** single prompts in S1 and at least **20** chains in S4. It covers:
+   - **Roles** (each with at least 6 templates whose `roles` include it): product
+     manager, architect, designer (UX), scrum master, developer, QA, DevOps,
+     adversarial reviewer, security engineer, data engineer, blockchain (Solidity,
+     Solana, audit), AI/ML engineer, SRE, technical writer, release manager,
+     engineering manager. Role ids are those of `vendor/ade-setup/agents/` where one
+     exists there, else a new id listed in `templates/prompts/README.md`.
+   - **Tasks** (each with at least 6 templates): plan and spec, implement, test,
+     debug, refactor, review, architecture, UX and copy, git and release, docs,
+     performance, security, data and migrations, infrastructure and CI, incident and
+     on-call, research and brainstorm.
+   - **BMAD v6** (at least 20, `requires: bmad-v6`): a template for each BMAD v6
+     skill ADE installs in a project's `.claude/skills/` that a person starts by
+     prompt (for example product brief, PRD, architecture, UX, spec, ticket
+     slicing, build, code review, review, retrospective, correct course), worded
+     to invoke that skill.
+   - **ADE's own flow** (at least 8): Plan → Approve → Shard → Build → Verify
+     prompts for its sub-agents (product-manager, architect, designer,
+     scrum-master, developer, qa, devops, adversarial-reviewer).
+   - **Chains** (S4, at least 20): including plan → implement → test → review,
+     bug report → reproduce → fix → regression test, spec → adversarial review →
+     revise, and story → test-first build → verify. Today's 3 chains count.
+   A template may count toward several rows.
+4. **[S1] BMAD fit.** A template with `requires: bmad-v6` (or `bmad-v4`) is shown
+   with a "BMAD v6" badge and sorted after the others when the active terminal's
+   project has no BMAD of that version (as `src/lib/projectMethodology.ts` detects
+   it); it is never hidden. Test: in a fixture project without BMAD, a
+   `requires: bmad-v6` template is listed with the badge, after a template without
+   `requires` that matches the same search.
+5. **[S1] The library test.** A unit test over `templates/prompts/`, part of the
+   verification command, fails unless: every file parses (PT-1); ids are unique;
+   every id ever shipped (kept in a list in that folder) is still present or listed
+   as removed; the counts of AC3 for the slices shipped so far hold; every field is
+   declared or an auto field; no template contains hidden characters,
+   secret-shaped text, an absolute path, or a step starting with `!`; and every
+   `roles` id exists.
+6. **[S1] Versioning.** The library's version is ADE's version. A changed built-in
+   template gets a higher `revision`; its id never changes and a removed id is
+   never reused. Each release's notes list the templates added, changed and
+   removed. A favourite of a removed template stays in Favourites as "No longer in
+   the library", and can be removed. A **mine** copy whose `based_on` revision is
+   older than the library's shows "The built-in template changed" with a
+   side-by-side view (S2). Test: a fixture library at revision 2 marks a copy
+   `based_on: x@1`.
+7. **Curation.** ADE's maintainers write and review the library through pull
+   requests to this repo; the owner approves the coverage list (OQ-2). Library
+   changes pass the library test and an adversarial review like any artifact.
+
+#### PT-3. Finding templates (MVP: Templates tab in S1; palette, favourites, recents in S2)
+
+1. **[S1] Search.** The Thoughts panel's Templates tab has a search box, focused when
+   the tab opens. It matches the words typed against title, description, tags,
+   task, role names and the body, title matches ranked first; every word must
+   match (any order, case- and accent-insensitive). Test: "qa flaky" finds a
+   template titled "Triage a flaky test" with role QA, ranked above one that has
+   "flaky" only in its body.
+2. **[S1] Browse.** Without search text the tab lists templates grouped by task,
+   with filters by role and by source (built-in, mine, each repo). Each entry
+   shows its title, source, `kind` (a chain shows its step count) and badges.
+3. **[S1] Preview.** Moving the highlight to a template shows its description and
+   full text (every step), with fields marked.
+4. **[S2] Command palette.** The command palette lists templates: typing part of a
+   template's title, with or without the prefix `Template:`, lists it under the
+   category "Templates", using AC1's matching. Enter opens its fill form (PT-4).
+   Test: palette input "Template: flaky" lists "Triage a flaky test"; Enter opens
+   the form.
+5. **[S2] Favourites and recents.** Any template can be starred; Favourites is a
+   group at the top of the Templates tab and of the palette's "Templates" results.
+   Recently used lists the last 20 templates sent or inserted, newest first.
+   Neither records field values (D7). Test: fill and send a template with value
+   `marker-123`; no stored value anywhere in the profile holds `marker-123` apart
+   from the prompt history and the draft (PT-11 AC4).
+6. **[S1] Keyboard.** The whole flow (search, move, pick, fill, send) works with
+   the keyboard alone; ↑/↓ move, Enter picks, Escape goes back one step. G2's
+   3-key bound is tested with a template whose fields are all auto fields.
+
+#### PT-4. Filling fields (MVP)
+
+1. **[S1] The form.** Picking a template with fields opens a small form: one input
+   per field in first-use order, auto fields already filled (PT-5) and marked as
+   such, defaults filled, the first empty required field focused. Below it, the
+   rendered text updates as the user types. A template without fields skips the
+   form and goes straight to the rendered text with its actions.
+2. **[S1] Actions.** The form offers **Insert into box** (puts the rendered text in
+   the Scratchpad box, as today's `loadText` does), **Send** to the chosen target
+   (PT-6), and **Copy**. Send stays disabled, saying which, while a required field
+   is empty.
+3. **[S1] Multiline.** A multiline field takes several lines; Enter adds a line,
+   ⌘Enter (Ctrl+Enter on Linux and Windows) sends.
+4. **[S1] Visible text.** The rendered text shows hidden characters (F5.1) as
+   visible marks (for example `⟨U+202E⟩`) with a warning line, whatever the source,
+   and Send stays enabled only after the user ticks "Send anyway". Test: a mine
+   template containing U+202E shows the mark and the warning, and Send needs the
+   tick.
+
+#### PT-5. Auto fields and secrets (MVP)
+
+1. **[S1] The auto fields.** These names are filled from the context of the
+   **target** (PT-6), or of the active session before a target is chosen:
+   - `cwd`: the target terminal's current folder (ADR 0021's tracking);
+   - `project`: the git top level of `cwd`, else `cwd`;
+   - `branch`: the current git branch of `project`; a detached head gives the
+     short commit; outside git, empty;
+   - `file`: the file selected in the file browser;
+   - `open_file`: the file open in the preview panel or code viewer;
+   - `selection`: the text selected, when the template was picked, in the focused
+     terminal, code viewer, editor or preview, at most 16 KB (more is not filled,
+     with a note);
+   - `date`: today's date, `YYYY-MM-DD`.
+   Paths inside `project` are filled relative to it; others as absolute paths.
+   With F3 S1, `file` and `open_file` are those of the target's view. Any other
+   name is a typed field. Test per name, over a fixture repo.
+2. **[S1] Never a secret source.** No auto field reads a secret source (F5.1). A
+   name such as `env_HOME`, `env.X`, `file:/path` or `secret` is a typed field, left
+   empty. Test: a template using `{{env.HOME}}`, `{{file:/etc/hosts}}` and
+   `{{ANTHROPIC_API_KEY}}`, with those variables set in ADE's process and in the
+   target's environment, opens with all three empty.
+3. **[S1] No contents of secret files.** `file` and `open_file` are paths, never
+   contents. `selection` is not filled when its text comes from a file whose name
+   matches the secret-file list: `.env` and `.env.*` (except `.env.example`,
+   `.env.sample`, `.env.template`), `*.pem`, `*.key`, `*.p12`, `*.pfx`,
+   `*.keystore`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `.npmrc`, `.pypirc`,
+   `.netrc`, `credentials`, `credentials.*`, `*.tfvars`, and `.git-credentials`.
+4. **[S1] No secret-shaped selection.** `selection` is not filled when it holds
+   secret-shaped text, or the value of any secret ADE's vault holds. The field
+   stays empty with the note "Not filled: the selection looks like a secret"; the
+   user may paste it in by hand. The vault comparison must not bring vault values
+   into the webview (the architect's mechanism, F5.9).
+5. **[S1] Visible and editable.** Every auto-filled value is shown in the form and
+   can be changed before sending; nothing is sent that the form did not show.
+6. **[S1] The secret test.** With a vault fixture holding `VAULT_MARKER_7f3a`, a
+   `.env` file holding `ENV_MARKER_91c2`, a terminal whose screen shows
+   `ghp_` followed by 36 characters, and a template using every auto field plus
+   `{{env.TOKEN}}`: selecting text in the `.env` file, then in the terminal, then a
+   line equal to the vault value, and opening the template each time, leaves no
+   marker and no token in any field or in the rendered text.
+7. **[Second] Engagement folders (F1).** In the default profile, when the target
+   terminal **has been in an engagement's folders** (F1 PE-4 AC4's term), no auto
+   field is filled from it (all are empty, with the note "Not filled in a terminal
+   that has been in an engagement"). Goes with whichever of F5 S1 and the F1 story
+   that delivers PE-4 AC4 merges second; tested under F1's D28 gate.
+
+#### PT-6. Sending to an agent (MVP: active session in S1; other targets in S4)
+
+1. **[S1] Default target.** Send goes to the active session.
+2. **[S1] Agent target check.** A pane is an agent target when, at send time, agent
+   status reports a live session for its PTY, or the busy check's `names` include a
+   known agent CLI's binary (`binaryFor(provider)`), or, where the busy check is not
+   available (Windows), the agent tracker has a running session in that pane.
+   Anything else (a shell, another program, unknown) is not.
+3. **[S1] Never into a shell.** When the target is not an agent target, Send is
+   disabled with "This terminal is not running an agent", and Insert into box and
+   Copy remain. ADE never writes a template's rendered text to a PTY that is not an
+   agent target. Test: with the busy check mocked as `shell`, Send is disabled and
+   a spy on `writePty` sees no call with the rendered text, for every source.
+4. **[S1] Not while it asks.** ADE never sends to a pane whose agent status is
+   `needsYou`; Send waits, showing "The agent is waiting for your answer", and
+   sends nothing until the state changes and the user presses Send again. When
+   agent status is off for a pane that is **not in sight**, Send to it is disabled
+   ("Turn on agent status to send to a terminal you can't see"), because a hidden
+   permission prompt could take the text as its answer. Test: a mocked `needsYou`
+   pane gets no write.
+5. **[S1] No shell mode.** A rendered prompt or step whose first non-space character
+   is `!` is not sent (Claude Code runs such a line as a shell command); the form
+   says why. Insert into box and Copy remain. Test: field value `! rm x` at the
+   start of a template's body disables Send.
+6. **[S4] Other targets.** The form's target picker offers:
+   - **a terminal:** any pane in the window's tabs and their views (sub-terminals)
+     that passes AC2, listed by tab, view name and agent; hub tabs (F2) appear as
+     their persona session;
+   - **the Orchestrator:** an open Orchestrator tab's chat (single prompts only);
+   - **a new agent:** a role from the role catalog and a provider, started with
+     today's `prepareAgentLaunch` (the agent picker's and Dispatch's path) in a new
+     sub-terminal of the active tab or a new tab, in the target folder; the
+     rendered text (step 1, for a chain) becomes its first prompt **with its line
+     breaks kept**. Test: a three-line template sent to a new agent arrives as three
+     lines (the transcript or a provider stub shows them).
+   A template with `roles` preselects an open terminal running an agent of the
+   first such role (from the agent tracker), else "New <role> agent".
+7. **[S4] `ade open` unchanged.** F5 adds no verb or flag to `ade open` and does not
+   use it from the UI: ADE's UI opens sub-terminals directly, as ADR 0014 says.
+8. **[S1] Images.** Images pasted in the Scratchpad are not part of a template; a
+   template sent with Send goes without them (Insert into box keeps today's
+   behaviour, where the box's images go with the box's send).
+
+#### PT-7. Chains (S4)
+
+1. **[S4] Filled once, shown whole.** A chain's fields are filled once, in one form,
+   for all steps; the form shows every rendered step, numbered and named.
+2. **[S4] Checks before start.** A chain does not start if any rendered step fails
+   PT-6 AC5 (`!`), or holds hidden characters the user has not accepted (PT-4 AC4).
+3. **[S4] Auto-advance only on agent status.** **Run** is offered only when the
+   target has live agent status (D5). Otherwise (agent status off, a provider
+   without hooks, Windows), the chain runs **step by step**: ADE shows "Send step
+   n of m" and sends each step only when the user presses it, under PT-6's rules.
+4. **[S4] When the next step goes.** In Run, ADE sends step n+1 only after agent
+   status has shown step n accepted (`working`) and then idle at its prompt
+   (`finished`, `ready` or `waiting`). It never sends while the state is `working`
+   or `needsYou`. If step n is not accepted within 30 s, or not idle after the step
+   time limit (default 30 minutes, a setting), the chain **pauses**; it never sends
+   on a timeout. Tests over a mocked status stream: `working → needsYou → working →
+   finished` sends the next step only after `finished`; a stream stuck in `working`
+   past the limit pauses with nothing sent.
+5. **[S4] Control.** Pause, Resume and Cancel at any time; the strip of the target
+   tab shows "Chain: step n of m". If the user types into the target pane during a
+   run, the chain pauses. Closing the target pane cancels it. Test: a keystroke to
+   the target pane while waiting pauses the chain.
+6. **[S4] History.** A chain adds one entry to the prompt history, as today.
+7. **[S4] Today's typed chains.** Text typed in the box with `---` lines follows the
+   same rules (Run only with agent status, never on a timeout, never on `needsYou`)
+   if the owner agrees (OQ-4); otherwise today's behaviour stays.
+
+#### PT-8. My templates (S2; import and export in S5)
+
+1. **[S2] Create.** "New template" opens an editor with the PT-1 fields and a body;
+   "Save as template" in the Scratchpad starts one from the box's text (`---` lines
+   become steps).
+2. **[S2] Edit, duplicate, delete.** Mine templates can be edited, duplicated and
+   deleted (delete asks once). Built-in and repo templates offer Duplicate to my
+   templates.
+3. **[S2] Validation.** Saving checks PT-1; an invalid template is not saved and the
+   editor says why.
+4. **[S2] Secret warning.** Saving a template that holds secret-shaped text warns
+   ("This looks like a secret. Templates sync to your sync repo") and saves only
+   after the user confirms (OQ-9).
+5. **[S5] Export.** Any selection of mine templates (or all) exports as one file:
+   a single template as its `.md` file; several as one bundle file the architect
+   defines (a single text file or an archive of `.md` files). An export holds no
+   field values, favourites or recents, and warns on secret-shaped text as AC4.
+6. **[S2] Limits.** Up to 1,000 mine templates; the 1,001st is refused with a
+   message.
+
+#### PT-9. Hub and project templates (S3)
+
+1. **[S3] Where.** ADE reads `*.md` files under `.ade/prompts/` (subfolders up to 3
+   deep, which become sub-groups) at the top of: the active terminal's project (git
+   top level of its folder), and, for a hub tab, its hub folder (a finished hub,
+   F2). No other folders are scanned. Symbolic links leading outside that folder are
+   not followed. At most 500 files per repo; the rest are reported as skipped.
+2. **[S3] Shown as repo templates.** They are listed with a source badge (the repo's
+   folder name, "Hub" or "Project") and are read-only in the list. **Edit** opens
+   the file in ADE's editor; **Save to this project** (from the template editor)
+   writes a new file into that repo's `.ade/prompts/`, creating the folder if
+   needed. ADE never commits, pushes or stages these files.
+3. **[S3] Fresh.** Files added, changed or removed on disk are reflected the next
+   time the Templates tab or the palette's template list opens. Test: add a file,
+   reopen the tab, it is listed; delete it, reopen, it is gone.
+4. **[S3] Sharing is git.** A hub's own sync script already commits and pushes the
+   hub's `.ade/`; in a project, the user commits as with any file. ADE sync never
+   carries repo templates (PT-11 AC2).
+5. **[S3] First use per repo.** The first time ADE finds `.ade/prompts/` in a repo,
+   its templates are listed under "Not yet reviewed" until the user opens that
+   repo's set preview (every title and full text) and chooses **Use these prompts**;
+   the choice is remembered on this machine per repo folder. A hub that ADE
+   created (F2's run) is reviewed from the start (OQ-5).
+6. **[S3] Same rules.** Repo templates follow PT-4 AC4, PT-5 and PT-6 like any
+   template; nothing in a repo file can make ADE send, run or fetch anything.
+
+#### PT-10. Sharing and importing others' sets (S5)
+
+1. **[S5] Share.** Sharing is exporting (PT-8 AC5): the user sends the file or puts
+   it anywhere reachable by an `https` link (a gist, a repo's raw file).
+2. **[S5] Import from a file.** "Import templates…" accepts a template `.md` file or
+   a bundle (at most 1 MB and 500 templates). ADE parses it **without sending or
+   running anything** and shows the **import preview** (AC4).
+3. **[S5] Import from a link.** The user pastes an `https://` URL and presses
+   **Fetch**. ADE makes one `GET` (no cookies, no credentials, no custom headers,
+   redirects only to `https`, at most 5, 10 s timeout, at most 1 MB), then shows the
+   import preview. Any other scheme is refused. ADE registers no URL scheme handler,
+   so no web page or other app can start an import.
+4. **[S5] The import preview.** Lists every template in the file: title, kind, step
+   count, fields, `requires`, and the **full text of every step**, with hidden
+   characters made visible (PT-4 AC4), secret-shaped text, steps starting with `!`,
+   and steps starting with `/` (slash commands) flagged. Templates that fail PT-1
+   are listed as skipped with a reason. Nothing is saved until the user chooses
+   **Import** (all or a selection); Cancel leaves no trace.
+5. **[S5] Imported is mine, marked.** Imported templates become mine templates with
+   an `imported` marker and `origin` (file name or URL, date). An id clash with an
+   existing mine template asks: Replace, Keep both (the new one gets a suffix) or
+   Skip; the default is Keep both. Import never touches built-in or repo templates.
+6. **[S5] No network by itself.** Opening ADE, the Templates tab, the palette, the
+   import dialog or the preview, searching, filling and sending make **no network
+   request** for templates; only Fetch does, once per press. Imported templates
+   never refresh. Test: with a spy on the HTTP layer, the whole S1 to S5 flow except
+   Fetch makes no template request, and Fetch makes exactly one.
+7. **[S5] Imported chains.** The first Run or step of an imported chain shows the
+   full rendered chain once more and needs an explicit **Start**.
+
+#### PT-11. Sync, privacy and engagements (each slice)
+
+1. **[S2] What syncs.** When ADE sync is on, mine templates (imported ones
+   included) and favourites of built-in and mine templates sync, as a shared key
+   (`SHARED_KEYS`). Recommended by the PM and the owner's brief (OQ-8).
+2. **[S1–S5] What never syncs.** Recents, favourites of repo templates (they name
+   repo folders), the per-repo "Use these prompts" choices, field values, and repo
+   templates never go into ADE sync (neither `SHARED_KEYS` nor `DEVICE_KEYS`).
+   Built-in templates ship with the app and are never stored in the profile. Test:
+   an ADE sync export after using templates of every source holds no recents, no
+   repo path and no field value.
+3. **[S1] Stores.** Every new `localStorage` key F5 adds is in `PERSISTED_KEYS` or
+   listed as ephemeral with a reason (ADR 0017's static test).
+4. **[S1] Field values.** F5 stores no field value. Once the user inserts or sends
+   rendered text, it follows today's rules: the box's draft (`ade-scratchpad-draft`,
+   a device key) and the prompt history (`better-terminal-prompt-history`, shared).
+5. **[S1] Nothing leaves the machine by F5 itself.** Apart from ADE sync (AC1) and a
+   user's Fetch (PT-10 AC3), F5 sends nothing anywhere; there is no telemetry of
+   template use.
+6. **[S1] One detector.** The secret detector used by PT-5, PT-8 AC4, PT-10 AC4 and
+   the library test is one implementation.
+7. **[Second] Engagement instances (F1).** An engagement instance has its own
+   profile (F1 D14), so its mine templates, favourites and recents are its own and
+   its sync is off (F1 D3). Built-in templates are the same everywhere. Repo
+   templates come from that engagement's repos only. Whether the default profile's
+   mine templates are also offered, read-only, in engagement instances is OQ-3 (it
+   would be an F1 allowed inflow and needs an F1 change).
+8. **[Second] The default profile never records an engagement's repo.** In the
+   default profile, recents, favourites and "Use these prompts" choices never
+   record a repo template whose repo is inside an engagement's root or checkouts
+   (F1 PE-2 AC5's path rule). Goes with F1's PE-4 AC4 story, as PT-5 AC7.
+
+#### PT-12. Today's behaviour kept (S1)
+
+1. Typing in the box, Send to Terminal, pasted images, history, saved notes and the
+   Orchestrator path work as today. Insert into box is today's template behaviour.
+2. Until S4, chain templates are not listed; typed `---` chains in the box work as
+   today (PT-7 AC7 decides S4).
+
+#### PT-13. Accessibility (S1)
+
+1. Every control has an accessible name; the form's auto-filled and not-filled notes
+   are announced; the chain progress (S4) is announced through an `aria-live`
+   region. Keyboard flow per PT-3 AC6.
+
+#### PT-14. Performance (S1)
+
+1. Loading the built-in library adds at most 100 ms to the Templates tab's first
+   open and nothing to app start (it loads on first use).
+2. Search over 2,000 templates updates within 100 ms (median of 20 runs, unit
+   test); G2.
+
+### F5.8 Slices
+
+Each slice is its own release step, passes the verification command on its own, and
+is sharded by the scrum-master into stories.
+
+| Slice | Delivers | Criteria | Depends on |
+|---|---|---|---|
+| **S1. Format, library, search, fields** (MVP) | The file format; at least 130 built-in single prompts replacing `PROMPT_TEMPLATES`; the Templates tab with search, browse and preview; the fill form with auto fields and the secret rules; Send to the active session, only into an agent and never during a permission prompt | every [S1] criterion: PT-1; PT-2 AC1 to AC6 (prompt counts); PT-3 AC1 to AC3, AC6; PT-4; PT-5 AC1 to AC6; PT-6 AC1 to AC5, AC8; PT-11 AC2 to AC6; PT-12; PT-13; PT-14 | nothing |
+| **S2. Mine, favourites, recents, palette** | Create, edit, duplicate, delete; Save as template; favourites and recents; templates in the command palette; mine templates sync | PT-2 AC6 (changed-built-in notice); PT-3 AC4, AC5; PT-8 AC1 to AC4, AC6; PT-11 AC1 | S1 |
+| **S3. Hub and project templates** | `.ade/prompts/` in the project and the hub, first-use review, Save to this project | PT-9 | S1 (S2 for Save to this project, which uses its editor) |
+| **S4. Chains and other targets** | Chain templates (at least 20) with safe auto-advance or step-by-step; send to any terminal, the Orchestrator, or a new agent by role | PT-2 AC3 (chain count); PT-6 AC6, AC7; PT-7 | S1 |
+| **S5. Share and import** | Export; import from a file or a pasted link with the preview | PT-8 AC5; PT-10 | S2 |
+
+**[Second] criteria:** PT-5 AC7, PT-11 AC7 and AC8 go with whichever of their F5
+slice and the F1 story that delivers PE-4 AC4 (F1 slice 4, not yet sharded) merges
+into `main` second, under F1's D28 gate. The obligation is written into F5's ticket
+at sharding and into the `.ade/context/` note F5 creates. Until then they are rules
+for the code; only their tests wait.
+
+Suggested order: S1, S2, then S3, S4 and S5 in any order (S5 after S2). S4 is the
+most security-sensitive and should not be rushed behind S3.
+
+**Cross-repo dependency (the agent hub template).** The template should ship an
+`.ade/prompts/` folder with a short README (what goes there, the format, that
+templates are shared through the hub's git) and, optionally, starter prompts for
+its personas. Its sync script already pushes `.ade/`, so no script change is needed
+for D3. If the owner chooses `templates/prompts/` instead (OQ-1), the template's
+scaffolding scripts also read `templates/`, so the change must keep them from
+treating `templates/prompts/` as a scaffold. This is tracked in the template's own
+repo; F5 S3 does not wait for it (ADE reads the folder whether or not the template
+seeds it).
+
+### F5.9 Handoff
+
+- **Architect:**
+  - the front matter syntax and a parser for nested `fields` (the repo has no YAML
+    library; `src/lib/frontmatter.ts` is scalar-only by design), the step marker
+    (PT-1 AC2), the bundle format (PT-8 AC5);
+  - where mine templates live in the profile (a `state/kv` key, or files in the
+    profile's app data) and the key names: in `PERSISTED_KEYS`, ADR 0017's static
+    test, and `SHARED_KEYS` for D8's synced part only;
+  - the agent target check (PT-6 AC2) over agent status, `pty_foreground_job` and
+    the tracker, and the Windows fallback;
+  - a chain runner that replaces `sendChain`'s silence polling with agent-status
+    stepping (PT-7 AC4), and how a new agent's first prompt keeps its line breaks
+    (PT-6 AC6: today `prepareAgentLaunch` collapses them on the command line);
+  - the secret detector (one implementation, PT-11 AC6), and comparing a selection
+    with vault values without bringing them into the webview (PT-5 AC4);
+  - the link fetch (PT-10 AC3), in Rust, within the app's CSP;
+  - how `templates/prompts/` is bundled (`tauri.conf.json` resources) and loaded
+    lazily (PT-14).
+- **Designer:** the Templates tab (search, groups, filters, preview), the fill form
+  and its notes, the target picker, the chain strip, the template editor, the
+  first-use review of a repo set and the import preview; palette entries.
+- **Scrum-master:** shard S1 first; write the [Second] obligations into tickets.
+- **QA:** PT-5 AC6, PT-6 AC3 to AC5, PT-7 AC4 and PT-10 AC6 are the security tests;
+  each must fail against today's code where today's code differs (sendChain's
+  timeout send, Send into a shell).
+- **DevOps:** bundling the library; release notes listing library changes (PT-2
+  AC6).
+- **Library authors:** write the S1 library against PT-2 AC3 once the owner
+  confirms OQ-2.
+
+### F5.10 Open questions for the owner
+
+Each has the PM's recommendation; answering "as recommended" accepts them all.
+
+- **OQ-1. Where repo templates live.** Recommended: `.ade/prompts/` in hubs and
+  projects alike (D3): one place, already pushed by the hub's sync, no clash with
+  the hub's scaffolding `templates/` folder. Alternative: `templates/prompts/` in
+  hubs, as first suggested, and `.ade/prompts/` in projects.
+- **OQ-2. "Extensive" = 150.** Recommended: at least 150 built-in templates (130
+  prompts in S1, 20 chains in S4) with PT-2 AC3's coverage of 16 roles and 16
+  tasks, 20 BMAD v6 and 8 ADE-flow templates. Confirm the number and the lists, and
+  whether the maintainers (with agents, reviewed by PR) write them.
+- **OQ-3. Mine templates in engagements.** Recommended: yes, the default profile's
+  mine templates are offered read-only in engagement instances, as a new F1 allowed
+  inflow (default → engagement, never back). Needs an F1 change and your approval
+  there. Otherwise each engagement starts with built-in and repo templates only.
+- **OQ-4. Today's typed `---` chains.** Recommended: yes, apply PT-7's safe stepping
+  to them in S4. Today a chain sends the next step after 10 minutes even if the
+  agent is still working, and can type into a permission prompt.
+- **OQ-5. Review a repo's prompts once.** Recommended: yes for projects (a cloned
+  repo's prompts are someone else's text), not for hubs ADE created (PT-9 AC5).
+- **OQ-6. Links only, no gallery.** Recommended: in F5, share by file or pasted
+  `https` link only; no URL scheme handler and no hosted gallery. A curated
+  community gallery can be a later feature.
+- **OQ-7. Library home.** Recommended: the library lives in this repo
+  (`templates/prompts/`), not vendored from another repo as the roles are, so it is
+  reviewed and versioned with ADE's releases.
+- **OQ-8. What syncs.** Recommended: mine templates and favourites of built-in and
+  mine templates sync; recents and anything naming a repo never sync (PT-11).
+- **OQ-9. A secret in a template.** Recommended: warn and save on confirm (PT-8 AC4).
+  Stricter alternative: refuse to save secret-shaped text at all.
+
+### F5.11 Risks
+
+- **Prompt injection through shared text.** A repo or imported template can tell an
+  agent to do harm. Mitigated by showing the full text before sending (PT-4, PT-10
+  AC4), first-use review (PT-9 AC5), hidden-character marks, and the `!` refusal;
+  not eliminated: the agent's own permission rules remain the last guard.
+- **Library quality at 150.** A large library of weak prompts is worse than a small
+  good one. Mitigated by review per PR and the coverage table; the owner may lower
+  the number (OQ-2).
+- **Agent status coverage.** Run needs agent status (Claude Code hooks, opt-in,
+  not Windows); other providers get step-by-step. Acceptable by D5.
+- **Selections with secrets the detector misses.** The detector is heuristic. The
+  form always shows the value, so the user sees what goes out (PT-5 AC5).
+<!-- F5 ends -->
