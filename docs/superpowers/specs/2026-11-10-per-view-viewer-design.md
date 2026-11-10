@@ -1,6 +1,6 @@
 # Per-view file browser and preview panel: design for F3 slice S1
 
-- **Status:** Proposed, revision 2, 2026-11-10. Not approved. Revision 1 was blocked by the adversarial review (B1 to B3, majors M1 to M5, seven minors); section 17 maps each finding to its change. Needs the adversarial review of revision 2, then the owner's approval.
+- **Status:** Proposed, revision 2.1, 2026-11-10. Not approved. Revision 1 was blocked by the adversarial review (B1 to B3, majors M1 to M6, seven minors); section 17 maps each finding to its change. Revision 2 passed its delta review; revision 2.1 makes that review's four pre-sharding text fixes and records its eight build fixes as story notes (section 17.1). Needs the owner's approval.
 - **PRD:** `docs/prd.md` section F3, revision 6, approved by the owner on 2026-11-10 (PR #112), with OQ-5 to OQ-12 answered at their recommendations.
 - **Scope:** slice S1 (every [S1] criterion of F3.7). Section 10 sets out what S2 to S5 decide, as far as those decisions constrain S1's data model, and what each later slice changes.
 - **Decisions:** ADR 0031 (where viewer state lives and how it is matched, saved and kept local) and ADR 0032 (per-view open file; partly supersedes ADR 0009).
@@ -52,7 +52,7 @@ flowchart LR
     PC[usePaneCwd<br/>cwds by paneId]
     PF[paneFolder.readPaneFolder<br/>latest request per pane wins]
     VR[viewerRoot<br/>terminalRoot sync, nonTerminalRoot async]
-    FBS[fileBrowserStore<br/>gen, root, listings, showHidden]
+    FBS[fileBrowserStore<br/>gen, roots, listings, showHidden]
     FB[FileBrowser.tsx]
     PP[PreviewPanel.tsx + CodeView + MonacoWrapper]
     APP[App.tsx<br/>restore order, focus rule]
@@ -89,12 +89,12 @@ flowchart LR
 |---|---|---|
 | `src/stores/viewerStore.ts` | new | In-memory viewer state per viewer key: layout, expanded set, open file and position, opener folder, last in sight. Holds the window's sequence counter, the hydrated-but-unclaimed `pending` pool, the transient `path:line` reveals and the transient last-resolved roots of non-terminal tabs. Reconciles with the tab store (5.1). Enforces the 500-folder cap (4.5). It has no I/O. |
 | `src/lib/viewerSeed.ts` | new | `seedLayout(newKey, sourceKey)` and `takeSeed(key)`. A module-level map with no imports, so `tabStore` can pass a new view's layout source to reconciliation as an argument, without a `View` field and without an import cycle (5.1). |
-| `src/lib/viewerPersist.ts` | new | Load (`hydrateViewerState`), `endRestore`, the pure builder (`buildSavedViewerState`), the snapshot-and-filter step (`prepareViewerWrite`), the throttled writer (`startViewerPersistence`, main window only), `flushViewerState()`, and the commit/lean/remove calls that `saveSession`'s ladder uses. Also writes the `ade-file-browser` mirror (VV-9 AC4). |
+| `src/lib/viewerPersist.ts` | new | Load (`hydrateViewerState`), `endRestore`, the pure builder (`buildSavedViewerState`), the snapshot-and-filter step (`prepareViewerWrite`), the throttled writer (`startViewerPersistence`, main window only), `flushViewerState()`, and the commit/lean/remove calls that `saveSession`'s ladder uses. Also writes the `ade-file-browser` mirror (VV-9 AC4; built in story 3, section 7.4). |
 | `src/lib/viewerFilter.ts` | new | `setViewerPathFilter(f)` and `viewerPathFilter()`. The default keeps every path (section 8). |
 | `src/lib/viewerRoot.ts` | new | `terminalRoot(view)`, synchronous, from `usePaneCwd`, `savedCwd` and `initialCwd`. `nonTerminalRoot(tab, state)`, asynchronous, the D7 chain. |
 | `src/lib/paneFolder.ts` | new | `readPaneFolder(paneId)`: the only reader of a pane's folder. It calls `getPtyCwd` and writes `usePaneCwd`, dropping any result older than the latest request for that pane. It is the seam that OSC 7 later feeds. |
 | `src/stores/tabStore.ts` | changed | `View.viewerKey` (saved). View creators call `seedLayout`. `Tab.previewPath` and `Tab.previewReveal` are removed (story 4). `SavedTab.viewerKey` and `SavedView.viewerKey` are added, written **last** in each record. `loadSession` validates keys and records legacy `previewPath`s for `takeLegacyPreviews()`. `saveSession` gets the VV-7 AC7 ladder (7.3). |
-| `src/stores/fileBrowserStore.ts` | changed | Keeps `showHidden` (global, D2). The tree becomes `{ gen, viewerKey, rootPath, listings }` for the view in sight (6.3). `isOpen` and `width` leave it and become layout. `loadDirectory` rejects on error. |
+| `src/stores/fileBrowserStore.ts` | changed | Keeps `showHidden` (global, D2). The tree becomes `{ gen, viewerKey, roots, listings }` for the view in sight (6.3). `isOpen` and `width` leave it and become layout. `loadDirectory` rejects on error. `setRootPath`, `expandNode`, `collapseNode` and `refreshTree` are replaced (6.3). |
 | `src/components/FileBrowser.tsx` | changed | Shows the view in sight: root by `viewerRoot`, expansion by the view's expanded set. Its own 3 s poll is removed; it reads `usePaneCwd` (section 6). |
 | `src/components/PreviewPanel.tsx`, `viewer/CodeView.tsx` | changed | File, reveal and width come from the view in sight's state. CodeView keys the editor by `viewerKey + path` and passes `initialView` and `onViewChange`. |
 | `src/components/editor/MonacoWrapper.tsx` | changed | Optional `initialView` and `onViewChange` props (section 9). The file tab passes neither, so it is unchanged. |
@@ -245,7 +245,7 @@ The cap is a property of the in-memory set, so the tree and the saved set always
 2. For each live key with no state, create one, in this order of precedence:
    1. **`pending[key]` exists** (a restore is under way): move it into `states`. This is the restored view's own saved state;
    2. **`takeSeed(key)` names a source key with a state**: copy that state's `layout` (clamped), with an empty `expanded`, `file: null` and `seen: 0` (D1, VV-2);
-   3. **otherwise** the defaults (VV-9 AC1, section 5.3). During a restore, the key is added to `restoredByDefault` (used by 5.2 step 4).
+   3. **otherwise** the defaults (VV-9 AC1, section 5.3). If the store's `restoring` flag is set, the key is added to `restoredByDefault` (used by 5.2 step 4). `restoring` is set by `hydrateViewerState()` and cleared by `endRestore()`; it never depends on whether `pending` is empty, because a first run after the upgrade has no `ade-viewer-state` at all (empty `pending`) and is exactly the case whose legacy `previewPath` must still apply.
 
    For a non-terminal tab created by a seed, also record `opener` (6.2) from the seed's source view. A restored non-terminal tab keeps its saved `opener`.
 3. Delete the state, reveal and resolved root of each stored key that is no longer live. This covers closing a sub-terminal or a tab (VV-3) and Move to New Window (VV-4 AC2: `detachTab` removes the tab from the main store, so its states go, and the next save holds nothing of it). `pending` is **not** touched here; it is cleared by `endRestore`.
@@ -273,13 +273,13 @@ try {
 startViewerPersistence();    // 5. only now may ade-viewer-state be written
 ```
 
-1. **`hydrateViewerState()`** parses `ade-viewer-state` (4.3), applies the load cap (4.5), puts every valid state into `pending` (not `states`) and raises `seq` (4.4). At this moment `states` holds only `tab-1`'s module-init defaults.
+1. **`hydrateViewerState()`** sets `restoring = true` (whether or not anything is read), parses `ade-viewer-state` (4.3), applies the load cap (4.5), puts every valid state into `pending` (not `states`) and raises `seq` (4.4). At this moment `states` holds only `tab-1`'s module-init defaults.
 2. **`loadSession()`** sets the restored tabs. The subscription runs `reconcile()`:
    - each restored view whose key is in `pending` takes that state (VV-6 AC1);
    - `tab-1` is no longer live, so its default state is deleted. Hydrate never wrote over a state reconcile had made, and reconcile never makes a default for a key that has a saved state, because `pending` is consulted first;
    - a restored view without a pending state gets the defaults (D12) and joins `restoredByDefault`;
    - the view in sight changes from `tab-1`'s to the restored one, so it gets `seen = next()`, which is above every restored number.
-3. **`endRestore()`** clears `pending`: a stored state whose key no restored view carries is dropped (VV-6 AC1). If `loadSession` found no session (fresh install, or it threw), the same happens and `tab-1` keeps its defaults.
+3. **`endRestore()`** clears `pending` and, after step 4, `restoring`: a stored state whose key no restored view carries is dropped (VV-6 AC1). If `loadSession` found no session (fresh install, or it threw), the same happens and `tab-1` keeps its defaults.
 4. **Legacy `previewPath`** (VV-9 AC2, D3): `loadSession` records, for each restored tab whose saved record had a `previewPath`, `ownViewKey -> path`; `endRestore` reads it with `takeLegacyPreviews()`. For a key in `restoredByDefault`, `file = { path, pos: null }`. A key that took a hydrated state keeps it. Sub-terminals take nothing.
 5. `endRestore` marks the store dirty, so the first write after the restore records the reconciled set. Until `startViewerPersistence()` has run, `flushViewerState()` is a no-op, so nothing can overwrite `ade-viewer-state` with `tab-1`'s defaults mid-restore.
 
@@ -315,10 +315,10 @@ sequenceDiagram
   TS-->>APP: render (tabs changed: today's 2 s session save is scheduled, unchanged)
   APP->>APP: panel had focus and S's layout closes it? focus S's active pane (VV-1 AC7)
   APP->>PF: readPaneFolder(S.activePaneId) (immediate, VV-1 AC2)
-  APP->>FBS: show(S.key, terminalRoot(S)) : gen = g+1, listings = {} (last known root, never another view's)
+  APP->>FBS: show(S.key, [terminalRoot(S)]) : new key, so gen = g+1, listings = {}, queue cleared (last known root, never another view's)
   FBS->>FBS: list root and visible expanded folders, at most 4 at a time, each tagged g+1
   PF->>PC: setCwd(S.activePaneId, "/tmp") (only if still the latest request for that pane)
-  PC-->>APP: root changed: show(S.key, "/tmp") : gen = g+2; results tagged g+1 are dropped
+  PC-->>APP: root changed: show(S.key, ["/tmp"]) : same key, so listings and queued requests outside /tmp are dropped, and so are results that arrive for them
   VS-->>VP: state changed (seen): dirty; throttle, at most one write per 2 s
   VP->>VP: snapshot; await filter(paths of snapshot); build from the snapshot; write gen w
   VP->>LS: setItem("ade-viewer-state", json) unless a newer write gen already landed
@@ -349,7 +349,7 @@ sequenceDiagram
   3. else the home folder (`homeDir()` from `@tauri-apps/api/path`).
 
   A candidate counts only if `invoke("list_directory", { path })` resolves. That command rejects for a missing folder, so no new Rust command is needed. The check is repeated each time the tab is shown, so a deleted folder falls through the chain (VV-11 AC2).
-- **Guarded.** `FileBrowser` takes a token `t = ++resolveToken` before it calls `nonTerminalRoot`. The result is applied (`resolvedRoots[key] = root`, then `fileBrowserStore.show(key, root)`) only if `t` is still the latest token **and** `key` is still `inSight`. A slow resolution for a tab that has since left sight is dropped.
+- **Guarded.** `FileBrowser` takes a token `t = ++resolveToken` before it calls `nonTerminalRoot`. The result is applied (`resolvedRoots[key] = root`, then `fileBrowserStore.show(key, [root])`) only if `t` is still the latest token **and** `key` is still `inSight`. A slow resolution for a tab that has since left sight is dropped.
 - **Interim state while resolving.** The panel shows the tab's `resolvedRoots[key]` from earlier in this run, if any, with its tree listed as usual; otherwise a blank header and an empty tree. It never shows another view's root or tree. `resolvedRoots` is transient: never saved, deleted with the state.
 - **Fixed, not following.** The resolver never reads `usePaneCwd`, so no `cd` anywhere moves the root (VV-11 AC3).
 
@@ -358,19 +358,35 @@ sequenceDiagram
 `fileBrowserStore` no longer holds `TreeNode.isExpanded` or a cached tree. It holds:
 
 ```ts
-{ gen: number; viewerKey: ViewerKey | null; rootPath: string | null;
+{ gen: number; viewerKey: ViewerKey | null; roots: string[];               // in display order; S1 always passes one root
   listings: Record<string, { entries: FileEntry[] } | "loading" | "error">;   // by absolute folder path
   showHidden: boolean }
 ```
 
-- **`show(key, root)`** sets `gen = gen + 1`, `viewerKey`, `rootPath` and `listings = {}`, then requests the root's listing. It is called whenever the view in sight or its displayed root changes. Nothing from the previous view survives it: the tree is empty until the new root's listing arrives (the interim state of a terminal view).
+- **`roots` is a list** so that F4's workspace tabs (WS-4, WS-5 AC2) can show several roots in the own view without a second tree. In S1 every caller passes exactly one root: `[terminalRoot(view)]` or `[nonTerminalRoot(...)]`. The roots shown are **derived at show time and never stored**: F4 derives a workspace tab's own view's roots from WS-1 and its record, and uses `terminalRoot(ownView)` as the current root and the folder to reveal (section 10.6).
+- **`show(key, roots)`**:
+  - **A different key** (the view in sight changed): `gen = gen + 1`, set `viewerKey` and `roots`, `listings = {}`, and **clear the listing queue** (requests not yet started are discarded, not merely dropped when they return; in-flight ones are dropped on arrival by `gen`). Then request each root's listing. Nothing from the previous view survives: the tree is empty until the new roots' listings arrive (the interim state of a terminal view).
+  - **The same key, other roots** (a `cd`, or F4 adding or removing a root): `gen` is kept. Every listing, queued request and in-flight result whose path is not a root in the new list or below one is dropped (an in-flight one on arrival, by the same "under a current root" check). Listings under a root that stays are **kept**, so a `cd` in a workspace's own view reloads no root, and a `cd` from `/a` to `/a/b` in a single-root view keeps `/a/b`'s listings. New roots are requested.
+  - **The same key and the same roots**: nothing.
+  It is called whenever the view in sight or its displayed roots change.
 - **Rendering.** A folder row is expanded exactly when its path is in `states[viewerKey].expanded`. Its children are `listings[path]`. If an expanded folder is rendered and has no listing, the renderer requests one. So only folders whose every ancestor up to the root is expanded are ever listed: a folder hidden under a collapsed one is not listed until it can be seen. This replaces `refreshTree`'s rebuild of every expanded folder.
 - **Bounded.** Listing requests go through one queue with at most **4** `list_directory` calls in flight (`list_directory` is an async command, so they run in parallel off the main thread). A view with 30 visible expanded folders costs 30 calls, 4 at a time, instead of 30 in sequence.
-- **Every result is guarded.** Each request captures `gen`. A result whose `gen` is not the current one is dropped, so a listing for a previous view or root never lands in the tree. This covers the root listing (which replaces `setRootPath`'s unguarded `.then`), every child listing, and the watcher refresh.
-- **Errors reach the caller.** `loadDirectory(path)` no longer catches: it resolves with the entries or rejects. The queue maps a rejection to `listings[path] = "error"`, which renders as an expanded folder with no children (as today's `[]` does) and **removes nothing** from the expanded set (VV-8 AC2).
+- **Every result is guarded.** Each request captures `gen`. A result whose `gen` is not the current one, or whose path is no longer a current root or below one, is dropped, so a listing for a previous view or root never lands in the tree. This covers the root listing (which replaces `setRootPath`'s unguarded `.then`), every child listing, and the watcher refresh.
+- **Errors reach the caller, and the caller is only the queue.** `loadDirectory(path)` no longer catches: it resolves with the entries or rejects. The queue is its **only** caller, and it maps a rejection to `listings[path] = "error"`, which renders as an expanded folder with no children (as today's `[]` does) and **removes nothing** from the expanded set (VV-8 AC2). No rejection leaves the queue, so none reaches `main.tsx`'s `unhandledrejection` handler, which would write the reason (and the path in it) to the crash log through `log_error`.
+- **The callers that today would get a rejection are replaced**, so none of them is left awaiting `loadDirectory`:
+
+  | Today (`fileBrowserStore`) | Replaced by | Called from |
+  |---|---|---|
+  | `setRootPath(path)` | `show(key, roots)` | `App` on a view change (6.1), `FileBrowser` on a root change (6.1, 6.2) |
+  | `expandNode(path)` | `viewerStore.expand(key, path)`, then `fileBrowserStore.request(path)` if the folder has no listing | `FileBrowser`'s tree row |
+  | `collapseNode(path)` | `viewerStore.collapse(key, path)` | `FileBrowser`'s tree row |
+  | `refreshTree()` | `refreshListings()`: re-list, through the queue under the current `gen`, every folder that has a listing | the `watch_directory` handler (`FileBrowser.tsx:196`) **and the toolbar Refresh button** (`FileBrowser.tsx:321`) |
+
+  `request` and `refreshListings` return nothing (`void`); they only enqueue. The four old actions are deleted, so `tsc` finds any caller left.
+- **A folder whose `metadata()` fails is pruned.** `list_directory` (`lib.rs:86`) skips an entry whose `metadata()` fails (`continue`), so such a child folder is absent from a successful listing of its parent and the rule below removes it from the expanded set. This is accepted as rare (a permissions race or a dangling entry); the folder can be expanded again once it reads.
 - **A gone folder is pruned on success only.** When a listing of folder P succeeds (current `gen`), every path in the view's expanded set that is a **direct child** of P and is not a folder in that listing is removed by `viewerStore.pruneMissing(key, P, childFolders)`, together with every expanded path below it (they lie under a folder that no longer exists, and would otherwise hold places in the cap forever). Nothing is shown (VV-8 AC2).
 - **Expand and collapse** call `viewerStore.expand(key, path)` / `collapse(key, path)` for the view in sight. They change no `fileBrowserStore` state except, for an expand, requesting the folder's listing if it has none.
-- **Watcher refresh.** On a `watch_directory` event (500 ms debounce, as today), every folder that currently has a listing is re-listed through the same queue under the current `gen`. Each result replaces its entry when it arrives, so the old entries stay on screen until then; an error leaves the old entry.
+- **Watcher refresh.** There is one `watch_directory` per root in `roots` (one in S1), started and stopped as `show` changes the list. On a `watch_directory` event (500 ms debounce, as today), `refreshListings()` re-lists every folder that currently has a listing, through the same queue under the current `gen`. Each result replaces its entry when it arrives, so the old entries stay on screen until then; an error leaves the old entry.
 - `showHidden` filters at render, as today, so toggling it lists nothing again.
 
 ## 7. Saving
@@ -385,6 +401,7 @@ sequenceDiagram
 - **`flushViewerState()`** is called by `saveSession` (7.3):
   - if the store is clean and no throttled write is pending, it writes nothing and returns the last prepared write (7.2), so the ladder can still go lean or remove;
   - otherwise it cancels the pending throttled write, prepares and writes at once, and **restarts the throttle window** from that write, so the next throttled write is at least 2 s later;
+  - **while a flush is in progress, the throttled writer starts no write**: a timer that fires then is re-armed for after the flush. So no write can take a higher generation than the flush's during the flush, and the ladder's `commit(P.lean)` is never refused by a write that landed in between;
   - before `startViewerPersistence()` has run (tests, a detached window, mid-restore) it is a no-op and returns `null`; `saveSession` then runs today's ladder alone.
   The one way two viewer writes can come less than 2 s apart is a throttled write followed by the flush of a session save. That flush happens only when a session save happens, which VV-14 does not change, so viewer changes alone still cause at most one write per 2 s.
 - **Position updates do not re-render.** `PreviewPanel` and `CodeView` select `file.path` and `layout` with `zustand`'s equality selectors, never `file.pos`.
@@ -397,7 +414,9 @@ A write has three phases. Only the second is asynchronous.
 2. **Filter.** `decisions = await viewerPathFilter()(paths)`. A result that is not an array of the same length is a failure; a non-`true` element is a refusal. On failure, see section 8.
 3. **Build** (`buildSavedViewerState(snap, inSight, keep, { lean })`, pure and synchronous). `keep(p)` is `true` only if the filter returned `true` for exactly that path string in phase 2. **A path with no decision is refused**, so a path that reached the store after the snapshot can never be saved unfiltered: it is not in `snap`, and if it were, it would have no decision. Both the full and the lean string are built here from the same snapshot and kept as `{ w, full, lean }`, the **last prepared write**.
 
-**Commit.** `commit(prepared, mode)` writes `prepared[mode]` only if `prepared.w >= lastCommitted`, then sets `lastCommitted = prepared.w`. So an older write that finishes its filter after a newer one has landed never lands last, while the ladder (7.3) may still replace a generation's full value with its own lean value or remove it. `removeViewerState(w)` follows the same rule.
+**Commit.** `commit(prepared, mode)` writes `prepared[mode]` only if `prepared.w >= lastCommitted`, then sets `lastCommitted = prepared.w`. So an older write that finishes its filter after a newer one has landed never lands last, while the ladder (7.3) may still replace a generation's full value with its own lean value.
+
+**Remove ignores the generation.** `removeViewerState()` always removes the key, sets `lastCommitted = writeGen` (the highest generation taken so far, so every write still in its filter phase is discarded when it resolves) and marks the store dirty. Removal is the ladder's way to free quota for the session; it must never be refused because a throttled write landed between the flush and the session's `setItem`.
 
 **The builder's steps:**
 
@@ -425,14 +444,14 @@ A write has three phases. Only the second is asynchronous.
 
 `saveSession` is already asynchronous (it awaits `getPtyCwd` per pane). Its viewer steps are:
 
-- **Step 0** happens first and is the only asynchronous viewer step: `const P = await flushViewerState()`. When it writes, it commits `P.full`; if that `setItem` throws, it commits `P.lean`; if that throws, `removeViewerState(P.w)`. Every viewer failure is caught here and never reaches `ade-session`.
+- **Step 0** is the only asynchronous viewer step: `const P = await flushViewerState()`. It runs **after the per-pane `getPtyCwd` awaits and just before the session's first `JSON.stringify`/`setItem`** (`tabStore.ts:792`), so nothing asynchronous happens between the flush and the session write: no throttled write can land in between (7.1). When it writes, it commits `P.full`; if that `setItem` throws, it commits `P.lean`; if that throws, `removeViewerState()`. Every viewer failure is caught here and never reaches `ade-session`.
 - The rest of the ladder is **synchronous** and uses only `P.full` and `P.lean`, the strings built in step 0 from one filtered snapshot. No filter call and no await happens between session retries. If `P` is `null` (persistence not started), the viewer rows below are skipped and the ladder is today's.
 
 | Step | Condition | Action |
 |---|---|---|
 | 1 | `json.length > MAX_SESSION_SIZE` | commit `P.lean` (unless already lean); then today's scrollback tail (`tail(…, 10000)`) |
 | 2 | `setItem(ade-session)` throws | commit `P.lean` (unless already lean), retry the session with the same scrollback |
-| 3 | still throws | `removeViewerState(P.w)`, retry the session **with the same scrollback** |
+| 3 | still throws | `removeViewerState()` (never refused, 7.2), retry the session **with the same scrollback** |
 | 4 | still throws | today's: strip `serializedBuffer`, retry (viewer state already removed) |
 | 5 | still throws | today's last resort: `removeItem(ade-session)` |
 
@@ -448,6 +467,7 @@ A write has three phases. Only the second is asynchronous.
 
 ### 7.4 The `ade-file-browser` mirror (VV-9 AC4)
 
+- **Built in story 3, not story 2.** Until story 3, ⌘B and the browser drag still write `fileBrowserStore.isOpen`/`width` and `ade-file-browser` as today, and every view's `layout.browserOpen`/`browserWidth` stays at its load-time default. A mirror shipped in story 2 would write that stale default over the engineer's ⌘B choice on the next view switch. So the mirror, `setShowHidden`'s read-modify-write and VV-9 AC4 all land in story 3, together with ⌘B and the drag writing the view's layout.
 - `viewerPersist` subscribes to the main window's view in sight's `layout.browserOpen` and `layout.browserWidth`.
 - When either shown value differs from the last one written (a ⌘B, a drag, the palette, or a switch), it does a read-modify-write of `ade-file-browser` that keeps `showHidden`. A switch to the same values writes nothing.
 - `setShowHidden` writes `showHidden` alone, by the same read-modify-write.
@@ -596,6 +616,16 @@ S1's data model is fixed so that S2 to S5 add to it without changing what S1 sav
 | VV-12 AC4 [Second] (isolation scan) | All viewer-state I/O is `localStorage` on `ade-viewer-state`/`ade-session`, through `state_write`. |
 | VV-13 | The filter hook (section 8). |
 
+### 10.6 F4 WS-5 AC2: a workspace tab's own view (merges second)
+
+The owner approved F4 on 2026-11-10, including OQ-12: F3.8's "Merges second" gains the line "F3 S1 carries F4 WS-5 AC2 … and replaces F4 WS-5 AC1's tests, if it merges into `main` after F4 S1". The PRD line is the product manager's; this section is what the design does about it.
+
+- **Carrier: story 3** (the file browser per view). It is conditional by F3 D14's one trigger: if F4 S1 is on `main` when story 3 is reviewed (and again before it merges, if F4 S1 merged in between), story 3 builds WS-5 AC2 and **replaces** WS-5 AC1's tests with WS-5 AC2's test (AC1 and AC2 disagree when a sub-terminal is in sight, so they are never in one gate). If F4 S1 is not on `main`, F4 S1 carries AC2 instead.
+- **Built unconditionally in story 3: `roots[]`** (6.3). `fileBrowserStore.show(key, roots)` takes a list, and a same-key change of roots keeps every listing under a root that stays. So a `cd` in a workspace's own view reloads no root: it changes only the current root and the folder to reveal. Single-root views pass a one-element list.
+- **What F4 reads from F3, and what F3 does not store.** WS-5 AC2 says F3's viewer state for the own view has a "root" holding the active folder. **F3 S1 stores no root** (4.1): it derives it with `terminalRoot(view)` (`usePaneCwd.cwds[activePaneId] ?? savedCwd ?? initialCwd`). F4 uses `terminalRoot(ownView)` as the current root and the reveal target, and takes the listed roots from WS-1 and its record, never from viewer state. The expanded set (absolute paths under any root, a root's own path meaning its row is expanded), the open file, position, layout, caps, sync and engagement rules are F3's, unchanged. F4's product manager is told this (it does not change WS-5 AC2's behaviour, only the word "holds").
+- **A workspace tab's roots** come from one function, `viewerRoots(tab, view)`, which in S1 returns `[terminalRoot(view)]` or `[nonTerminalRoot(...)]`; F4 adds the workspace case for the own view (and WS-5 AC3's extra root). Sub-terminals of a workspace tab keep the single root.
+- **Recorded on both sides:** the scrum-master writes WS-5 AC2 (with the replacement of AC1's tests) into story 3's ticket, and F4 S1's ticket names F3 S1 story 3 (F4.8: F3 S1's ticket exists, so no `.ade/context/f4-merges-second.md` is needed).
+
 ## 11. Failure modes
 
 | Failure | Handling |
@@ -631,15 +661,18 @@ Every test runs under `npm test` (vitest), except the Rust lines. Each test file
 
 | Criterion | Story | Test file | Notes |
 |---|---|---|---|
-| VV-2 AC1, AC2; VV-6 AC4; VV-7 AC1, AC2, AC5; VV-9 AC1, AC2 | 1 | `src/stores/__tests__/viewerStore.test.ts` | Reconciliation, seeds, defaults, `expand` eviction (VV-7 AC2's three cases, `Date.now` constant and backwards), the load cap on a hydrated 600-entry set, width clamps on hydrate, copy and default |
+| VV-2 AC2; VV-6 AC4; VV-7 AC1, AC2, AC5; VV-9 AC1, AC2 | 1 | `src/stores/__tests__/viewerStore.test.ts` | Reconciliation, seeds (the store half of VV-2 AC1: layout copied, nothing else, the source untouched, as a design test; the criterion itself is story 3's), defaults, `expand` eviction (VV-7 AC2's three cases, `Date.now` constant and backwards), the load cap on a hydrated 600-entry set, width clamps on hydrate, copy and default |
 | VV-2 AC3 (conditional, D14) | 1 | `viewerStore.test.ts` | Only if sub-terminals story 5 is on `main` at review |
 | (load order) | 1 | `src/stores/__tests__/viewerRestore.test.ts` | Hydrate → `loadSession` → `endRestore`: claimed by key, `tab-1`'s state gone, unclaimed dropped, `seq` above every saved number, legacy `previewPath` only for default states |
 | `sync.rs` field strip | 1 | `src-tauri/src/sync.rs` tests | `viewerKey` and `previewPath` removed at every depth (a hand-built value) |
-| VV-3; VV-4 AC2; VV-6 AC3; VV-7 AC6, AC7; VV-9 AC3, AC4, AC5; VV-12 AC1, AC2, AC4 (S1 part); VV-14 | 2 | `src/lib/__tests__/viewerSave.test.ts`, `viewerPersist.test.ts` (pure builder), `viewerLocalOnly.test.ts` | Store-level actions only; no component is rendered |
+| VV-3; VV-4 AC2; VV-6 AC3; VV-7 AC6, AC7; VV-9 AC3, AC5; VV-12 AC1, AC2, AC4 (S1 part); VV-14 | 2 | `src/lib/__tests__/viewerSave.test.ts`, `viewerPersist.test.ts` (pure builder), `viewerLocalOnly.test.ts` | Store-level actions only; no component is rendered |
 | VV-12 AC1 | 2 | `src-tauri/src/sync.rs` tests on the golden fixture (12.2) | — |
 | VV-12 AC3, VV-12 AC4 [Second], VV-13 (conditional, D14) | 2 | as F3.8 names them | Only if the other story is on `main` at review |
 | (filter, write generation) | 2 | `viewerSave.test.ts` | Snapshot decisions; a path added during the await is not written; an older write resolving last is discarded; a rejecting filter writes layout-only and warns on the 1st and 10th failure |
-| VV-1 AC2, AC3; VV-8 AC1, AC2; VV-11 AC1 to AC4 | 3 | `src/components/__tests__/perViewRoot.test.tsx`, `src/lib/__tests__/nonTerminalRoot.test.ts`, `src/stores/__tests__/fileBrowserTree.test.ts` | `getPtyCwd` mocked (12.4); `project_root`, `list_directory` and `homeDir` mocked; stale-`gen` listing dropped; a listing error removes nothing; at most 4 listings in flight |
+| (ladder race) | 2 | `viewerSave.test.ts` | A throttled write made dirty during `saveSession`'s per-pane awaits does not start during the flush; with the quota set so step 3 runs, `ade-viewer-state` is removed even when a throttled write landed earlier with a higher generation |
+| VV-1 AC2, AC3; VV-2 AC1; VV-8 AC1, AC2; VV-9 AC4; VV-11 AC1 to AC4 | 3 | `src/components/__tests__/perViewRoot.test.tsx`, `src/lib/__tests__/nonTerminalRoot.test.ts`, `src/stores/__tests__/fileBrowserTree.test.ts`, `src/lib/__tests__/fileBrowserMirror.test.ts` | `getPtyCwd` mocked (12.4); `project_root`, `list_directory` and `homeDir` mocked; stale-`gen` listing dropped; `show()` with a new key clears the queue (a queued request never calls `list_directory`); a same-key roots change keeps listings under a remaining root; a listing error removes nothing; at most 4 listings in flight; VV-2 AC1 with its listing (`ade open` in `/hub/atomic-stays` lists that folder) |
+| (rejecting listings) | 3 | `fileBrowserTree.test.ts` | `list_directory` rejects with an error whose message holds the path, through every entry point (`show`, expand, `refreshListings` from the watcher and from the toolbar Refresh): no `unhandledrejection` event fires (a listener on `window`, plus vitest's own unhandled-error check), and `invoke` is never called with `log_error` |
+| F4 WS-5 AC2 (conditional, 10.6) | 3 | as F4 names it | Only if F4 S1 is on `main` at story 3's review; it then replaces WS-5 AC1's tests |
 | VV-1 AC1, AC4, AC6, AC7, AC8; VV-8 AC9; VV-11 AC5 | 4 | `src/components/__tests__/perViewPanels.test.tsx` | Renders `App`'s panel area with two views |
 | VV-1 AC5 (code); VV-6 AC1; VV-7 AC3; VV-8 AC3, AC4; same file in two views | 5 | `src/components/__tests__/codePosition.test.tsx`, `viewerRestart.test.tsx` | 9.4; VV-6 AC1 is the end-to-end restart (fresh modules) over every built part |
 
@@ -670,6 +703,10 @@ A Rust test also asserts that `"ade-viewer-state"` is in neither `SHARED_KEYS` n
 | `src/stores/__tests__/session.test.ts`, "a single-view tab saves the same JSON as before the refactor" (byte-for-byte against `fixtures/session-golden.json`) | 1 | Every saved tab now carries a random `viewerKey` | `goldenState()` sets a fixed `viewerKey` on each view after `ownViewOnly`. The test asserts each saved tab's `viewerKey` equals its fixed key, then deletes `viewerKey` from every tab (and `subViews` entry), re-serializes, and compares with `GOLDEN` byte for byte. `saveSession` writes `viewerKey` last (4.2), so deleting it restores the exact old record. **The golden file is not regenerated**: it is the pre-refactor capture, and that is its point |
 | `session.test.ts`, the other four tests | 1 | none | unchanged; they also check that `loadSession` still accepts sessions with no keys |
 | Every `View` literal under `tsc`: `subTerminalCallSites.test.tsx` (2), `TabBar.subTerminal.test.tsx` (1), `useOwnFolderCwd.test.tsx` (2), `detachWindow.test.ts` (2), `tabDisplay.test.ts` (2), `subViewSession.test.ts` (2), `tabViews.test.ts` (3), and the 3 in `tabStore.ts` itself | 1 | `View.viewerKey` is required | Each literal gains `viewerKey: testKey(n)` from a new helper `src/stores/__tests__/viewerKeys.ts` (`testKey(n)` = `n` in hex, left-padded to 32). `npx tsc --noEmit` finds every literal; the list above is from `grep -E 'restored: (false|true)'` at `6e0ec17` |
+| `src/lib/__tests__/detachWindow.test.ts:70`, "the detached window holds the payload as a tab with one own view" | 1 | It compares the whole `View` with `toEqual`, and `tabFromDetached` mints a random `viewerKey` through `ownViewOnly` | The expected object gains `viewerKey: expect.stringMatching(/^[0-9a-f]{32}$/)`; every other field is compared as before. (`testKey(n)` cannot be used: the key is minted, not given) |
+| `src/stores/__tests__/subViewSession.test.ts:56`, "a tab with sub-terminals round-trips its subViews and shownView" | 1 | `toEqual` on the saved `subViews`, which now carry `viewerKey` | `tabWithSubTerminals()`'s views get fixed keys (`testKey(n)`), and each expected `subViews` entry gains `viewerKey: testKey(n)`, written last as `saveSession` writes it |
+| `subViewSession.test.ts:136`, the exact key set of a saved sub-terminal | 1 | `Object.keys(sub)` now includes `viewerKey` | The expected set becomes `["activePaneId", "id", "name", "root", "viewerKey"]`. **Adding `viewerKey` to this guard is deliberate**: the guard exists so that no run-scoped or private field (`spawnedBy`, `restored`, status, command) reaches the saved record; `viewerKey` is meant to be saved (ADR 0031), is an opaque random id, and is stripped from the sync export by `sync.rs`. The forbidden-word list in the same test is unchanged |
+| `src/components/__tests__/subTerminalCallSites.test.tsx`, "FileBrowser shows the own folder" (lines 105-113) | 3 | VV-1 AC2 reverses it: the file browser now shows the **view in sight**, not the own view. Also, once `FileBrowser`'s 3 s poll is gone, `FileBrowser` fetches no folder, and nothing in this render calls `readPaneFolder` (that call is `App`'s, 6.1) | Renamed "FileBrowser shows the view in sight". With the sub-terminal in sight it calls `readPaneFolder("sub-pane")` itself (what `App` does on a view change), then asserts the root `/elsewhere/src` is shown and listed and `/code/shop/src` is neither; then `showView(t, "own")` and `readPaneFolder("own-pane")`, and asserts the reverse. The palette tests in the same file are unchanged (the palette still follows the own view) |
 | `src/stores/__tests__/previewPerTab.test.ts` (9 `it` blocks) | 4 | `Tab.previewPath`, `setPreviewPath` and `previewReveal` are removed | File deleted. Each case moves to `src/stores/__tests__/viewerOpenFile.test.ts`, per view: starts with no document → a new view's `file` is `null`; each tab's document separate → each view's; setting one leaves others → `openFile(k1)` leaves `k2`; switching changes which is current → `inSight`'s file; clearing keeps the rest → `openFile(k, null)` keeps layout and expanded; survives the panel closing → `layout.previewOpen = false` keeps `file`; a path aimed at a gone tab → `openFile` on an unknown key is a no-op; a target line is per request and never saved → `reveals[k]` set, absent from `ade-viewer-state` and `ade-session`; a reveal cleared once applied, not a newer one → `clearReveal(k, nonce)` |
 | `src/lib/__tests__/openFile.test.ts`, "App's open-preview handler sets the file and its line on the active tab, then opens the panel" | 4 | `handlePreviewOpen`'s deps change from `{activeTabId, setPreviewPath, openPanel}` to `{inSightKey, openFile, openPanel}` | Same assertions against the view in sight: `openFile` called with `(key, path, at)`; the end-to-end part asserts `viewerStore.reveals[inSight]`; the source check of `App.tsx` stays. The other four tests are unchanged |
 | `src/components/__tests__/PreviewPanelCode.test.tsx` | 4 | Its helper calls `setPreviewPath(activeTabId, …)`; four assertions read `activeTab().previewReveal` / `.previewPath` | The helper becomes `openInSight(path, at?)` = `viewerStore.openFile(inSightKey(), path, at)`; the assertions read `viewerStore.reveals[k]` and `states[k].file.path`. Behaviour asserted is unchanged |
@@ -677,6 +714,8 @@ A Rust test also asserts that `"ade-viewer-state"` is in neither `SHARED_KEYS` n
 | `src/components/__tests__/PreviewPanelOpenClose.test.tsx` | 4 | It opens a file with `setPreviewPath` and reads open state from `usePreviewPanel()` | The file is opened with `openInSight`; open/closed is read from `states[inSight].layout.previewOpen`; `usePreviewPanel()` still supplies the focus request. Both tests keep their assertions |
 | `MonacoWrapper.test.tsx` | 5 | none expected: the new props are optional | unchanged; story 5 runs it with the extended stub |
 | code-viewer story 5's AC4 test ("a plain click sets that tab's `previewPath`") | 4 | the field is gone | rewritten to "sets the open file of the view in sight" (ADR 0032) |
+
+**This table is re-checked at sharding.** It was drawn at `6e0ec17`, before code-viewer stories 3 and 5 landed (section 14). Once both are on `main`, the scrum-master re-runs the mapping (`npx tsc --noEmit` after adding `viewerKey`, and `grep -rn "previewPath\|previewReveal\|setRootPath\|expandNode\|collapseNode\|refreshTree\|rootPath" src`) and adds any test those stories brought to the story that breaks it.
 
 ### 12.4 Mocking the folder report (VV-1 AC2)
 
@@ -708,13 +747,28 @@ cd src-tauri && cargo test          # sync.rs: viewerKey strip, the key not expo
 
 Five stories, built **in sequence**: 1 → 2 → 3 → 4 → 5. No two run in parallel: all of them change `tabStore.ts`, `viewerStore.ts` or `App.tsx`, and each one's tests use what the earlier ones built. Every criterion is assigned to the first story at which its whole test can run; no criterion is split across stories. The table in 12.1 lists each story's test files.
 
-1. **Keys, the store and view creation.** `View.viewerKey`, minting and validation, `SavedTab`/`SavedView.viewerKey` (written last), `viewerSeed`, `viewerStore` with reconciliation (including the module-init run), defaults, `expand`/`collapse`/eviction, `hydrateViewerState` with the load cap, `endRestore`, legacy `previewPath` (while `Tab.previewPath` still exists), the `sync.rs` field strip, and the existing-test updates of 12.3 rows 1 to 3. **No writer yet**: `ade-viewer-state` is read, never written. Criteria: VV-2 AC1, AC2; VV-6 AC4; VV-7 AC1, AC2, AC5; VV-9 AC1, AC2. **Conditional: VV-2 AC3**, as "the story that builds view creation and moves" (F3.9): its test is store-level (move S's `View` to a new tab; the new tab's own view carries S's key and S's state, unchanged).
-2. **Saving.** `PERSISTED_KEYS`, the snapshot-filter-build-commit pipeline, the write generation, the throttle and `flushViewerState`, the caps, the `saveSession` ladder, the filter hook and its failure path, the `ade-file-browser` mirror and `setShowHidden`'s read-modify-write, the golden fixture (both halves), and the Rust key-set test. Every test drives store actions (`expand`, `openFile`, `recordPosition`, `setLayout`, `showView`); none needs a component. Criteria: VV-3; VV-4 AC2; VV-6 AC3; VV-7 AC6, AC7; VV-9 AC3, AC4, AC5; VV-12 AC1, AC2, AC4 (S1 part); VV-14. **Conditional: VV-13 and VV-12 AC4's [Second] part** (the story that builds the session save, F3.9), and **VV-12 AC3** (it owns "what leaves the machine"). This story carries F3.9's two VV-12 AC4 minors (12.1).
-3. **File browser per view.** `paneFolder`, `viewerRoot`, the lazy guarded tree (6.3), `loadDirectory` rejecting, pruning, `FileBrowser` reading the view in sight, ⌘B and the browser drag writing layout, non-terminal roots and the opener. Criteria: VV-1 AC2, AC3; VV-8 AC1, AC2; VV-11 AC1 to AC4 (AC4's restart uses story 2's save).
+1. **Keys, the store and view creation.** `View.viewerKey`, minting and validation, `SavedTab`/`SavedView.viewerKey` (written last), `viewerSeed`, `viewerStore` with reconciliation (including the module-init run), defaults, `expand`/`collapse`/eviction, `hydrateViewerState` with the load cap and the `restoring` flag, `endRestore`, legacy `previewPath` (while `Tab.previewPath` still exists), the `sync.rs` field strip, and the existing-test updates of 12.3 for story 1 (the session golden, the `View` literals, `detachWindow.test.ts:70`, `subViewSession.test.ts:56` and `:136`). **No writer yet**: `ade-viewer-state` is read, never written. Criteria: VV-2 AC2; VV-6 AC4; VV-7 AC1, AC2, AC5; VV-9 AC1, AC2. **Conditional: VV-2 AC3**, as "the story that builds view creation and moves" (F3.9): its test is store-level (move S's `View` to a new tab; the new tab's own view carries S's key and S's state, unchanged).
+2. **Saving.** `PERSISTED_KEYS`, the snapshot-filter-build-commit pipeline, the write generation, the throttle and `flushViewerState`, the caps, the `saveSession` ladder, the filter hook and its failure path, the golden fixture (both halves), and the Rust key-set test. **Not** the `ade-file-browser` mirror (story 3, 7.4). Every test drives store actions (`expand`, `openFile`, `recordPosition`, `setLayout`, `showView`); none needs a component. Criteria: VV-3; VV-4 AC2; VV-6 AC3; VV-7 AC6, AC7; VV-9 AC3, AC5; VV-12 AC1, AC2, AC4 (S1 part); VV-14. **Conditional: VV-13 and VV-12 AC4's [Second] part** (the story that builds the session save, F3.9), and **VV-12 AC3** (it owns "what leaves the machine"). This story carries F3.9's two VV-12 AC4 minors (12.1).
+3. **File browser per view.** `paneFolder`, `viewerRoot` (and `viewerRoots`, 10.6), the lazy guarded tree with `roots[]` (6.3), `loadDirectory` rejecting, the replacements of `setRootPath`/`expandNode`/`collapseNode`/`refreshTree` (the toolbar Refresh included), pruning, `FileBrowser` reading the view in sight, ⌘B and the browser drag writing layout, **the `ade-file-browser` mirror and `setShowHidden`'s read-modify-write** (7.4), non-terminal roots and the opener, 12.3's `subTerminalCallSites` row, and the update of `.ade/context/terminal-open.md:346`: "The file browser and the palette's BMAD switch and 'Set up project' follow the own view too" becomes "The palette's BMAD switch and 'Set up project' follow the own view too; the file browser shows the view in sight (F3, `.ade/context/viewer-state.md`)". Criteria: VV-1 AC2, AC3; VV-2 AC1; VV-8 AC1, AC2; VV-9 AC4; VV-11 AC1 to AC4 (AC4's restart uses story 2's save). **Conditional: F4 WS-5 AC2** (10.6).
 4. **Preview panel per view.** The open file, reveal and layout of the panel from the view in sight; removing `Tab.previewPath`/`previewReveal`; `handlePreviewOpen`; the focus rule; 12.3's preview rows; `side-panel-files.md`. Criteria: VV-1 AC1, AC4, AC6, AC7, AC8; VV-8 AC9; VV-11 AC5.
-5. **Code position.** `MonacoWrapper`'s props, the restore sequence, `CodeView`'s key, the stub extension. Criteria: VV-1 AC5 (code); VV-8 AC3, AC4; VV-6 AC1 (the end-to-end restart: every part of it is built by now); VV-7 AC3 (the `ZQX-MARK` scan through a file opened in the panel with a recorded position, and a save).
+5. **Code position.** `MonacoWrapper`'s props, the restore sequence, `CodeView`'s key, the stub extension. Criteria: VV-1 AC5 (code); VV-8 AC3, AC4; VV-6 AC1 (the end-to-end restart: every part of it is built by now); VV-7 AC3, with **the PRD's own test kept as written**: open a Markdown file whose headings and body contain `ZQX-MARK`, scroll to a heading, save; `ade-session`, `ade-viewer-state` and `ade-file-browser` contain no `ZQX-MARK`, neither in the raw stored string nor in any string value after `JSON.parse` (which covers JSON escapes). In S1 a Markdown file records no position (S2), so the test also passes once S2 adds the anchor digest, which is when it bites. A second case does the same with a code file whose text holds the marker and a recorded code position. The file paths in both cases hold no marker.
 
-**Recorded on both sides (F3.9):** the scrum-master writes VV-2 AC3 into story 1 and sub-terminals story 5; VV-12 AC3 into story 2 and phone-watch story 8; VV-12 AC4's [Second] part into story 2 and the F1 story for PE-4 AC9; VV-13 into story 2 and `.ade/context/f3-merges-second.md` (PE-4 AC4 is not yet sharded).
+**Recorded on both sides (F3.9):** the scrum-master writes VV-2 AC3 into story 1 and sub-terminals story 5; VV-12 AC3 into story 2 and phone-watch story 8; VV-12 AC4's [Second] part into story 2 and the F1 story for PE-4 AC9; VV-13 into story 2 and `.ade/context/f3-merges-second.md` (PE-4 AC4 is not yet sharded); **F4 WS-5 AC2** (with the replacement of WS-5 AC1's tests) into story 3 and F4 S1's ticket (10.6).
+
+**Build notes for the stories** (from the delta review of revision 2; the scrum-master copies each into the story named):
+
+| # | Story | Note | Where |
+|---|---|---|---|
+| 5 | 3 | The `ade-file-browser` mirror ships in story 3 with ⌘B and the drag writing layout, never earlier; otherwise story 2 writes the default layout over the engineer's ⌘B choice | 7.4 |
+| 6 | 3 | Carries F4 WS-5 AC2 if F4 S1 merged first, replacing WS-5 AC1's tests; builds `roots[]` either way; F3 derives the root with `terminalRoot(view)` and never stores it | 6.3, 10.6 |
+| 7 | 2 | `saveSession`'s viewer flush runs after the per-pane awaits, just before the session's `JSON.stringify`/`setItem`; no throttled write starts during a flush; `removeViewerState()` ignores the generation | 7.1 to 7.3 |
+| 8 | 3 | `setRootPath` → `show(key, roots)`; `expandNode` → `viewerStore.expand` + `request`; `collapseNode` → `viewerStore.collapse`; `refreshTree` → `refreshListings()`, which the toolbar Refresh (`FileBrowser.tsx:321`) and the watcher call. Test: a rejecting `list_directory` never reaches an unhandled rejection or `log_error` | 6.3, 12.1 |
+| 9 | 3 | `show()` with a new key clears the listing queue, not only drops stale results | 6.3 |
+| 10 | 1, 2 | Build against `buildSavedViewerState(snap, inSightKey, keep, { lean })` | 7.2, `viewer-state.md` |
+| 11 | 5 | VV-7 AC3 keeps the PRD's Markdown `ZQX-MARK` test; the code case is added, not substituted | 15 story 5 |
+| 12 | sharding | Re-run the 12.3 mapping after code-viewer stories 3 and 5 land | 12.3 |
+| — | 1 | `restoredByDefault` is driven by the `restoring` flag `hydrateViewerState()` sets, not by `pending` being non-empty | 5.1, 5.2 |
+| — | 3 | A child whose `metadata()` fails is absent from `list_directory` and so pruned; accepted as rare | 6.3 |
 
 ## 16. Owner questions
 
@@ -738,7 +792,8 @@ Five stories, built **in sequence**: 1 → 2 → 3 → 4 → 5. No two run in pa
 | M2 async races | Per-pane latest-request rule in `readPaneFolder`; `gen` on every listing; token on `nonTerminalRoot`; interim state defined; `loadDirectory` rejects so errors remove nothing; lazy tree, 4 listings at a time | 6.1 to 6.3 |
 | M3 VV-13 filter | One snapshot, decisions only for its paths, no decision = refused; write generation; layout-only value on failure; `console.warn` on the 1st and every 10th failure | 7.2, 8 |
 | M4 VV-7 AC7 ladder | "Remove viewer state, retry with full scrollback" before the strip; viewer state no longer counted against `MAX_SESSION_SIZE`, with the reason; the ladder after step 0 is synchronous on step 0's strings; the PRD test's quota pinned | 7.3 |
-| M5 existing tests | Each breaking test listed with its story and replacement; session golden kept by stripping fixed keys; regeneration command for the new fixture | 12.2, 12.3 |
+| M5 existing tests | Each breaking test listed with its story and replacement; session golden kept by stripping fixed keys; regeneration command for the new fixture (completed in revision 2.1: `detachWindow.test.ts:70`, `subViewSession.test.ts:56` and `:136`, `subTerminalCallSites.test.tsx` "FileBrowser shows the own folder") | 12.2, 12.3 |
+| M6 rebase onto the PRD approval | The branch took the F3 approval commits `002f26d` and `6e0ec17` by merge `35f7283` (force-push is refused here, so a merge, not a rebase); the design cites the approved revision 6 | header, section 2 |
 | Minor: flush | No-op when clean; resets the throttle window when it writes | 7.1 |
 | Minor: partial trim | The last view is trimmed partly; sizes recomputed by serializing | 7.2 |
 | Minor: VV-12 AC4 test | `startAutoSave({ snapshots: false })`; listeners explained | 12.1 |
@@ -746,3 +801,15 @@ Five stories, built **in sequence**: 1 → 2 → 3 → 4 → 5. No two run in pa
 | Minor: ADR 0031 Move to New Window | True only after S3; stated | 4.2, 10.3, ADR 0031 |
 | Minor: `layoutFrom` | Passed through `seedLayout`, not a `View` field | 4.2, 5.1 |
 | Minor: Q1 | Kept as an owner question with its code and PRD cost | 16 |
+
+### 17.1 Revision 2.1 (the delta review of revision 2: passed, with fixes)
+
+| Fix | Change | Where |
+|---|---|---|
+| 1. Tests missing from 12.3 | Rows for `subTerminalCallSites.test.tsx` "FileBrowser shows the own folder" (story 3, rewritten for the view in sight, `readPaneFolder` called by the test), `detachWindow.test.ts:70` (format check on the minted key), `subViewSession.test.ts:56` and `:136` (the guard's new `viewerKey` is deliberate) | 12.3 |
+| 2. Context Store drift | Story 3 updates `.ade/context/terminal-open.md:346`: the file browser part reversed, the palette part kept | 15 story 3 |
+| 3. M6 | Row added | 17 |
+| 4. VV-2 AC1's listing | VV-2 AC1 moves to story 3; story 1 keeps the seed tests as design tests | 12.1, 15 |
+| 5 to 12 | Build notes in the story split | 15 |
+| `restoredByDefault` | Driven by a `restoring` flag set by hydrate | 5.1, 5.2 |
+| `metadata()` failures | Stated and accepted | 6.3 |
