@@ -48,3 +48,9 @@ Story B.
   (a restored sub-terminal not yet shown): it is not sampled, so not running.
 - Nothing outside `useGuardedClose` and the store's own callers should call
   `closeTab`/`closePane`/`closeView` for a user's close.
+
+## F5 send gate (proposed, ADR 0034)
+
+- F5 adds `pty_send_gate`, which returns this classification together with the
+  foreground pgid and the live agent status, and the sync `write_pty_guarded`. Both
+  are in `prompt-templates.md`. `pty_foreground_job` is unchanged.
