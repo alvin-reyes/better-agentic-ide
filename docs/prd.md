@@ -11,6 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Draft, revision 1, 2026-11-10; not reviewed. F2 (PR #98) and F3 (PR #112) add their rows when they merge |
 
 ---
 
@@ -2296,3 +2297,570 @@ clarification for slice 0.
   (PE-13 AC9, AC10, slice 1, RC-2, F1.12). Then revision 9c's line edits, against
   the approved architecture, and revision 9d's minors (the history lists them).
 <!-- F1 ends -->
+---
+
+<!-- F4 begins -->
+## F4: Workspaces (one multi-folder workspace per agent hub)
+
+- **Status:** Draft, revision 1, 2026-11-10. Not reviewed, not approved, not sharded.
+  Next: adversarial review, the owner's answers to F4.10, then the designer (the
+  file browser's roots, the palette entries, the renamed settings section) and the
+  architect (where the workspace record lives, discovery, the sync strip).
+- **Number:** F2 is the open PRD for agentic-environment onboarding (PR #98) and F3
+  the open PRD for per-view file and code viewers (PR #112), so this is F4. Each of
+  the three PRs adds its own row to the feature index at the top of this file and
+  its own delimited section; whichever merges second and third must rebase and keep
+  every row (the index table and the section order are the only conflict). If #98
+  or #112 is withdrawn, this stays F4.
+- **Source:** the owner, 2026-11-10: *"we need to support workspaces"*. Asked to
+  scope it, the owner said:
+  - a workspace is a **multi-folder project**, like a VS Code workspace: one project
+    made of several folders and repos, shown together in the file browser;
+  - there is **one workspace per agent hub**. Opening a hub opens its workspace. The
+    workspace's folders are the hub folder plus the hub's code checkouts.
+- **Builds on, does not repeat:**
+  - F2 (PR #98, approved, not built): finished and unfinished hubs (F2.5), **Open
+    Hub** (OB-2 AC2, the button name in F2's design), hub tabs and the hub-tab flag
+    (OB-14), project setup kept out of hubs (OB-13), privacy (OB-10);
+  - F3 (PR #112, draft): views, viewer state, the root that follows a view's
+    terminal (VV-1 AC2), viewer state never leaving the machine (VV-12) and no
+    engagement paths in the default profile (VV-13);
+  - F1 (approved): engagements, their folders (engagement root and checkouts), the
+    registry, the isolation rule (D14), PE-4 AC4 (no engagement paths in the default
+    profile), PE-8 (adding checkouts), PE-10 (focus terminals), PE-13 (one instance
+    and one workspace per engagement), D16 and D24 (the word "workspace");
+  - the agent hub template's own record of a hub's checkouts: the **Code** table of
+    the hub's `ACCESS.md` files, which the template's scripts read (its focus-work
+    command reads it to pick the checkout a focus session works in, and records a
+    checkout it clones there).
+- **History:**
+  - 2026-11-10, revision 1: first draft, from the owner's answers above.
+
+### F4.1 Terms
+
+- **Hub:** an agent hub made from the hub template, as F2 defines it. Only a
+  **finished hub** (F2.5: a `hub.conf` at its top, committed) has a workspace. An
+  unfinished hub, or a folder without `hub.conf`, has none (WS-2 AC4).
+- **Hub folder:** the hub's top folder, the one holding `hub.conf`.
+- **Workspace:** the folders one hub (or, with F1's flag on, one engagement) is made
+  of, shown together, and the tabs opened on them. It has exactly one owner, its
+  hub or engagement, and is identified by that owner's folder (the hub folder, or
+  the engagement root), compared as F1 PE-2 AC5 compares paths (symlinks resolved,
+  case as the volume compares it). This replaces F1's definition only if the owner
+  approves the F1 change in OQ-1; until then, F4's "workspace" means this and F1's
+  means its own (D1).
+- **Workspace folder:** one top-level entry of a workspace, shown as a **root** in
+  the file browser. Its kinds:
+  - **the hub folder** (always first, never removable);
+  - **a discovered checkout**: a checkout path read from the hub's Code tables
+    (WS-1);
+  - **an added folder**: one the engineer added by hand (WS-3).
+- **Code table:** the table under the `## Code` heading of an `ACCESS.md` file, with
+  the columns Repo, Checkout, Default branch, Who merges and CI. The hub has one at
+  its top and one in each **work folder** (the folders the template's own scripts
+  treat as work folders: each folder under the hub's `projects/` and `ops/`).
+- **Checkout row:** a Markdown table row (a line starting with `|`) anywhere in one
+  of those `ACCESS.md` files whose second cell (Checkout, in the Code table),
+  trimmed, starts with `/` or `~`. This is the template's own rule, word for word
+  (its scripts read every such row, so a row appended below the table still
+  counts), so ADE and the template agree on which rows name a checkout; any other
+  row (a header, the separator, a "(none ...)" row, an empty or relative Checkout)
+  names none.
+- **Missing checkout:** a checkout row whose path, with a leading `~` read as the
+  home folder, is not an existing folder on this machine (not cloned yet, moved,
+  deleted, or on a volume that is not mounted).
+- **Hidden folder:** a discovered checkout the engineer removed from the workspace
+  by hand. ADE remembers that it is hidden; the hub's files are not changed (WS-3).
+- **Workspace tab:** a hub tab (F2 OB-14 AC5's flag) opened by opening a hub. It
+  carries the workspace it belongs to; its sub-terminals belong to the same
+  workspace. A plain tab that `cd`s into a hub is not a workspace tab (as F2 OB-14
+  AC4 keeps it plain).
+- **Workspace record:** what ADE keeps about a workspace on this machine: the hub
+  folder's path, its added folders, its hidden folders, the order of its roots and
+  when it was last opened. Discovered checkouts are not kept: they are read again
+  from the hub every time (WS-1 AC5).
+- **Current root:** for a view of a workspace tab, the workspace folder that holds
+  the view's active folder (F3's term: the folder of the view's active pane). When
+  several do (a checkout inside the hub folder), the deepest one.
+- **Tab sets:** the new name for today's *Settings → Workspace → Saved Workspaces*
+  (`WorkspacePreset`, `better-terminal-workspaces` in `src/stores/settingsStore.ts`),
+  which saves only each tab's name and split direction and whose Load reopens tabs
+  with those names only (D2).
+
+### F4.2 Problem
+
+Today the file browser has a single root (`rootPath` in
+`src/stores/fileBrowserStore.ts`) that follows the tab's terminal folder. A hub is
+one project spread over several folders: the hub folder with its persona, rules and
+work folders, plus one checkout per client repo, usually elsewhere on disk
+(`~/Project/<repo>`). An engineer working a hub sees only one of those at a time,
+and only by `cd`-ing there, which also moves the terminal; a focus session in a
+checkout loses sight of the hub's STATE and ACCESS files, and the persona terminal
+in the hub cannot see the code it is talking about. The hub already records its
+checkouts, but nothing in ADE reads that record. Meanwhile "workspace" already names
+two other things: today's *Settings → Workspace* entries (tab names only) and F1's
+live set of an instance's terminals, so a third meaning would leave three.
+
+### F4.3 Users and jobs
+
+- **The engineer running an agent hub** (F2's developer): opens the hub, talks to
+  the persona in the hub folder, starts focus sessions in checkouts, and wants to
+  read and open files in any of the hub's folders without leaving the terminal they
+  are in.
+- **The contractor with F1 engagements:** wants the same in an engagement, where the
+  folders are the engagement root and its checkouts, and wants no other client's
+  folder to appear.
+
+### F4.4 Goals (measurable)
+
+- **G1.** Opening a finished hub shows, in the file browser, the hub folder and every
+  checkout its Code tables name (missing ones marked), with 0 hub programs run and 0
+  files written into the hub or any checkout. Measured by WS-1 and WS-2's tests.
+- **G2.** Workspace folder paths never leave the machine: 0 workspace-record paths in
+  ADE sync's export, the phone relay, tab sets, snapshots or logs (WS-7).
+- **G3.** After a restart, every workspace tab shows the same roots, in the same
+  order, with the same added and hidden folders, as when the session was last saved
+  (WS-6).
+- **G4.** One concept: after F4, the word "workspace" has one meaning in the UI and
+  in this PRD (D1, D2, OQ-1, OQ-2).
+
+### F4.5 Non-goals (deliberately out)
+
+- **Search across folders and quick-open.** ADE has neither today: no file search,
+  no file filter in the file browser and no quick-open (the palette's only search is
+  *Search in Terminal*, `TerminalSearch.tsx`). F4 adds none. If they are added later,
+  they must search every root of the workspace in sight; that is noted for that
+  feature, not specified here (F4.9).
+- **Writing the hub.** ADE never writes `ACCESS.md`, `hub.conf` or any file of the
+  hub or a checkout to change a workspace. Adding or hiding a folder changes only
+  ADE's workspace record. Adding a repo to the hub stays the template's job (its
+  focus-work command, or editing `ACCESS.md` by hand).
+- **Cloning a missing checkout.** ADE marks it (WS-1 AC4) and does nothing else; the
+  template's focus-work command clones it.
+- **Workspaces not tied to a hub or engagement.** No "new empty workspace", no
+  `.code-workspace` import or export. A plain tab stays as it is today.
+- **Several workspaces per hub,** or a workspace per work folder.
+- **Per-workspace settings** (theme, font, environment, secrets). Secrets per hub stay
+  the template's (`bin/secret`); per-engagement ones stay F1's.
+- **Closing a workspace as a unit.** Closing its tabs closes it; there is no
+  separate command.
+- **Remembering a workspace's tabs beyond today's session restore.** A workspace's
+  tabs are saved and restored with the session, as every tab is (WS-6).
+- **Changing the tab sets feature** beyond its name (D2).
+
+### F4.6 Decisions
+
+- **D1. One word, one meaning: a workspace belongs to a hub or an engagement.** An
+  engagement is not a workspace; it **has** exactly one, whose folders are its
+  engagement root and its checkouts, the same folders F1.1 already calls "an
+  engagement's folders". A hub has exactly one, whose folders are the hub folder and
+  its checkouts. The two differ only in where the folder list comes from (the
+  registry for an engagement, the Code tables for a hub, WS-1 and WS-8). This keeps
+  F1's "one workspace per engagement" true word for word: in an engagement's
+  instance every tab belongs to the engagement, so its workspace's tabs are the
+  instance's tabs. What changes is the default profile: it is no longer "one
+  workspace" but plain tabs plus one workspace per open hub. That needs F1's
+  glossary entry (and D16, D24) amended, which needs the owner's approval (OQ-1).
+- **D2. Today's saved workspaces become "tab sets".** They save tab names and split
+  directions only, and Load restores names only, so they are a layout, not a
+  workspace. The UI renames them (the settings tab *Workspace* becomes *Tabs*;
+  *Saved Workspaces* becomes *Tab Sets*; *Save Current Workspace* becomes *Save
+  Current Tabs*). Their store key (`better-terminal-workspaces`), their data and
+  their behaviour do not change, so nothing migrates. This is the relabel F1 D24
+  already allows the designer, taken one step further (the section's title and tab
+  too). Retiring them is OQ-2.
+- **D3. Discovery reads files, never runs hub code.** ADE reads the Code tables as
+  text. It never sources `hub.conf`, never runs a hub script, and never follows a
+  path that a hub file computes. Opening a folder must not run code from it (G1).
+- **D4. The record stays on the machine.** The workspace record is local, per
+  profile, and never exported by ADE sync, relayed or put in tab sets (WS-7).
+  Discovered checkouts are never stored at all.
+- **D5. Workspaces live in the default profile for hubs and in the engagement's
+  instance for engagements, never across.** A default-profile workspace never shows
+  an engagement's folder (WS-8 AC4); an engagement's workspace never shows a folder
+  outside the engagement (WS-8 AC2).
+- **D6. Focus views show the workspace, not only their checkout** (recommended; OQ-3
+  asks the owner, since it refines F3's decision that a focus session sub-terminal
+  "shows its own checkout"). A view of a workspace tab shows every root of the
+  workspace, with its current root expanded down to its active folder and marked.
+  The checkout is still what the focus view shows first; the rest of the workspace
+  is one level away, collapsed. Rejected: showing only the checkout (the F3 rule),
+  because a focus session's work usually needs the hub's STATE and ACCESS files or a
+  sibling repo, and two ways of showing a workspace tab's views would be one too many.
+- **D7. Opening a hub that is already open brings its workspace forward.** No second
+  workspace tab and no second persona session: the template's own focus-work
+  command already refuses a second session per folder, and two persona sessions on
+  one hub would contend for its memory and journal. This narrows F2's Open Hub (OB-2
+  AC2), which says only that it opens a hub tab (OQ-4).
+
+### F4.7 Requirements
+
+#### WS-1. A hub's workspace and its folders (MVP, S1)
+
+As an engineer running a hub, I want its workspace to hold the hub folder and every
+checkout the hub records, without my listing them again.
+
+1. **The folders.** A hub's workspace's roots are, in this order: the hub folder;
+   then each discovered checkout, in the order its checkout row appears, reading the
+   hub's top-level `ACCESS.md` first and then each work folder's `ACCESS.md` in name
+   order (by Unicode code point); then the added folders, in the order they were
+   added. Hidden folders are left out. The engineer may reorder roots other than the
+   hub folder (WS-3 AC5); a saved order wins over this default for the roots it
+   names, and new roots go after them in the default order.
+2. **Discovery.** A checkout row's path is the Checkout cell trimmed, with a leading
+   `~` replaced by the home folder; no other expansion (no `$VAR`, no globs, no
+   relative paths). Which rows count is the checkout-row rule (F4.1). A path is read
+   as written, never through a shell. Test: fixture hubs whose
+   `ACCESS.md` files hold rows with `/abs`, `~/rel`, `$HOME/x`, `./x`, `(none, works
+   in the hub)`, an empty cell, a header row, a separator row and a row appended
+   after the table; the roots are exactly the `/abs` and `~/rel` paths (the latter
+   under the test's home), in the order of AC1, and the same rows the template's own
+   lister returns for that fixture.
+3. **Duplicates and nesting.** A folder named by several rows (in one file or
+   several), or both discovered and added, appears once, at its first position.
+   Paths are compared as F1 PE-2 AC5 compares them. A workspace folder inside
+   another one (a checkout under the hub folder) is still its own root, and also
+   appears inside its parent's tree. The hub folder named as a checkout is not
+   listed twice. Test: two rows naming `/x/api` and `/x/api/` and, on a
+   case-insensitive volume, `/X/api`, give one root; a symlink `/y` to `/x/api`
+   gives one root; a checkout `<hub>/repos/web` is a root and is under the hub's
+   root too.
+4. **A missing checkout** is shown as a root, in its place, marked missing, with its
+   path; it cannot be expanded and opens nothing. It is never created, cloned or
+   written. When the folder appears (cloned by the template's focus-work command,
+   for example), it becomes an ordinary root at the next refresh (AC5). The engineer
+   may hide it (WS-3). Test: a fixture row naming a folder that does not exist gives
+   a missing root; creating the folder and refreshing makes it expandable, in the
+   same place; nothing was written at that path by ADE.
+5. **Refresh.** Discovery runs when the workspace is opened or restored, on the
+   palette's **Refresh Workspace Folders**, and (S2) within 5 seconds of a change to
+   any of the hub's `ACCESS.md` files while the workspace is open (WS-5 AC3).
+   Discovered checkouts are never stored; a row removed from the hub's files
+   disappears from the workspace at the next refresh. Test: removing a row and
+   refreshing removes its root; its hidden flag, if any, is dropped too (WS-3 AC3).
+6. **Read-only.** Discovery and every F4 action write nothing into the hub folder or
+   any workspace folder, and run no program from them (D3). Test: with a fixture
+   hub whose `hub.conf` and every script under `bin/` write a marker file when run
+   or sourced, opening, refreshing, adding, hiding and reordering leave the hub and
+   each checkout byte-for-byte unchanged (`git status --porcelain` empty, no marker
+   file anywhere), and no process is started in them.
+7. **Bad input.** A Code table that cannot be read (no permission, not UTF-8 in
+   part, larger than the read limit of WS-9) costs only its rows: the other files'
+   rows are still listed, and the workspace shows one notice naming the file that
+   could not be read. Test: a work folder's `ACCESS.md` without read permission
+   gives the other files' roots and a notice naming that file.
+
+#### WS-2. Opening a workspace (MVP, S1; recents and palette S2)
+
+As an engineer, I want every way of opening a hub to open its workspace.
+
+1. **Open Hub** (F2 OB-2 AC2) opens the hub's workspace: a workspace tab in the hub
+   folder, whose file browser shows WS-1's roots, and the persona session F2 starts
+   there. Test: Open Hub on a fixture hub with two checkouts (one missing) gives a
+   workspace tab whose file browser shows three roots in WS-1's order.
+2. **Opening a hub folder.** Choosing a finished hub's folder anywhere ADE opens a
+   folder as a new tab (the New tab dialog's folder picker, Open project and its
+   recent projects) opens that hub's workspace, exactly as Open Hub does, with its
+   option to run `bin/setup` off. A folder **inside** a hub (a work folder, say)
+   opens as today, a plain tab. Test: picking the hub folder in the New tab dialog
+   gives a workspace tab; picking `<hub>/projects/acme` gives a plain tab.
+3. **Already open (D7).** Opening a hub whose workspace is shown in any tab of this
+   window or another window of the instance brings the most recently used of those
+   tabs forward, and starts nothing. Test: opening the same hub twice, by Open Hub
+   and then by the New tab dialog, leaves one workspace tab and one persona session.
+4. **Not a hub.** An unfinished hub, or a folder without `hub.conf`, opens no
+   workspace: Open Hub refuses it as F2 OB-2 AC2 says, and the New tab dialog opens
+   it as a plain tab as today. Test: each case gives no workspace tab.
+5. **Recent workspaces (S2).** The palette's **Open Workspace…** lists the last 10
+   workspaces opened in this profile, most recent first, each by the hub folder's
+   name and its full path with the home folder shown as `~` (ADE reads nothing from
+   `hub.conf` for this). Choosing one opens it as
+   AC1 does (Open Hub). An entry whose hub folder no longer exists, or is no longer a
+   finished hub, is shown as unavailable and offers **Remove from list**; it never
+   opens. The same list has **Open Hub Folder…**, which takes a folder and behaves as
+   AC2. Test: open three hubs; the list shows them newest first; delete one's folder;
+   it shows unavailable and opens nothing; Remove from list removes it.
+6. **Palette entries (S1 and S2).** S1: **Refresh Workspace Folders**, **Add Folder
+   to Workspace…**, **Remove Folder from Workspace…**, **Show Hidden Workspace
+   Folders**, each present only when the tab in sight is a workspace tab. S2:
+   **Open Workspace…** (AC5), present in the default profile whenever F2's entries
+   are (F2.13). Test: each entry is absent with a plain tab in sight and present
+   with a workspace tab in sight.
+
+#### WS-3. Adding, hiding and ordering folders by hand (MVP, S1)
+
+As an engineer, I want to add a folder the hub does not record, and drop one I do
+not need, without editing the hub.
+
+1. **Add.** **Add Folder to Workspace…** (the palette, and the file browser's
+   workspace menu) takes a folder and adds it as a root at the end. It is refused,
+   with a message and nothing changed, when it is: not an existing folder; already a
+   root (compared as WS-1 AC3); a folder that would break D5 (WS-8 AC4 in the
+   default profile; WS-8 AC2 in an engagement instance); or over the limit of WS-9.
+   Test: each refusal changes nothing; a valid add appears last and survives a
+   restart.
+2. **Remove.** **Remove Folder from Workspace…** on an added folder removes it from
+   the record. On a discovered checkout it **hides** it: the root disappears, and the
+   record keeps the path as hidden. The hub folder cannot be removed or hidden (the
+   entry is disabled for it, and says why). Removing or hiding never touches the
+   folder or the hub's files (WS-1 AC6). Test: hide a discovered checkout; it is gone
+   from the file browser, still in the hub's `ACCESS.md`, and still gone after a
+   refresh and a restart.
+3. **Show hidden.** **Show Hidden Workspace Folders** lists the hidden checkouts that
+   the hub's files still name, and can show each again in its WS-1 place. A hidden
+   path that the hub's files no longer name is dropped from the record at the next
+   refresh. Test: show again restores the root in its place; removing the row from
+   `ACCESS.md` and refreshing drops the hidden entry.
+4. **A new discovered checkout is shown.** A checkout that appears in the hub's files
+   after the workspace was created is shown, not hidden: hiding is per path, never
+   "show only what I had". Test: add a row to `ACCESS.md`, refresh, the root appears.
+5. **Order.** The engineer may move a root up or down (the hub folder stays first).
+   The order is part of the record. Test: move the third root above the second;
+   restart; the order holds.
+
+#### WS-4. The file browser with several roots (MVP, S1)
+
+As an engineer, I want each folder of the workspace as its own collapsible group.
+
+1. In a workspace tab the file browser shows one **root row** per workspace folder,
+   in WS-1's order, each labelled with the folder's name, and each with its full path available (tooltip or the like; the
+   designer's). Each root is collapsible on its own; below a root row its tree
+   behaves as the single-root tree does today (expand, collapse, open a file, hidden
+   files per the global *Show hidden files* setting).
+2. A missing root (WS-1 AC4) is visibly different from an existing one, by text and
+   not by colour alone, and is not expandable.
+3. Opening a file from any root opens it as a file opens from the file browser today
+   (the preview panel or an editor tab, whichever today's code does; F3 and the
+   code-viewer plan may change that, F4 does not).
+4. Plain tabs are unchanged: one root, following the terminal's folder.
+5. **Keyboard and screen reader.** Root rows are reachable with the keyboard, expand
+   and collapse with the arrow keys as tree items do, and announce their name, that
+   they are a workspace folder, and missing when they are. Test: a component test
+   drives the roots with arrow keys and checks the accessible names and expanded
+   states.
+
+#### WS-5. Which root a view shows: the workspace and F3 (MVP, S1; per view S3)
+
+As an engineer switching between the persona terminal and focus sessions, I want the
+file browser to show the whole workspace, opened at the folder I am working in.
+
+1. **Before F3 S1 is built** (one file browser per tab): a workspace tab's file
+   browser shows the workspace, with the current root of the tab's own terminal
+   expanded down to that terminal's folder, that folder scrolled into view and
+   marked. Following a `cd` (today's 3-second poll) reveals the new folder the same
+   way; it never removes a root and never collapses a root the engineer expanded.
+   Test: with the pane-folder report stubbed, `cd` from `<hub>` to `/x/api/src`
+   reveals `src` under the `/x/api` root, and the hub's root stays as it was.
+2. **With F3 (S3, D6, OQ-3).** Each view of a workspace tab (the persona's own view
+   and each sub-terminal, such as a focus session in a checkout) shows the whole
+   workspace, with its own current root expanded to its active folder and marked.
+   F3's viewer state applies per view across all roots: the expanded set holds paths
+   under any root (a root's own path in the set means the root is expanded), so each
+   view keeps its own expansions; F3's open file, position and layout are unchanged.
+   A view seen for the first time has only its current root expanded. Test (F3 VV-1
+   AC1's fixture, as a workspace): the own view in `<hub>` and focus sub-terminal S
+   in checkout `/x/api`; ⌘] shows every root, with `/x/api` expanded and marked and
+   the hub's root collapsed; ⌘[ shows every root with the hub's root expanded and
+   `/x/api` as the own view left it.
+3. **Outside the workspace.** When a view's active folder is in no workspace folder
+   (`cd /tmp`), the file browser shows the workspace's roots and, after them, one
+   extra root for that folder, marked as not part of the workspace. It is not added
+   to the record and disappears when the view's active folder is back inside the
+   workspace. Test: `cd /tmp` adds a marked `/tmp` root last; `cd <hub>` removes it;
+   the record never held `/tmp`.
+4. **Live refresh (S2).** While a workspace is open, a change to any of its hub's
+   `ACCESS.md` files (a row added by the template's focus-work command after it
+   clones a checkout, say) is reflected within 5 seconds, with no action from the
+   engineer. Test: append a checkout row; within 5 s the root appears.
+
+#### WS-6. Saved and restored (MVP, S1)
+
+1. Workspace tabs are saved and restored with the session as hub tabs are (F2 OB-14:
+   no scrollback, no command re-run). On restore, each workspace tab gets its
+   workspace back: discovery runs again (WS-1 AC5), and the record's added folders,
+   hidden folders and order apply. Test: a workspace with an added folder, a hidden
+   checkout and a custom order, restarted, shows the same roots in the same order.
+2. The workspace record is kept per profile in a local store (D4) and survives a
+   restart and an upgrade. Each hub's record is kept while the hub is in the recent
+   list or open in a tab; a record for neither is dropped. Test: open 11 hubs one
+   after another, closing each one's tabs; the first hub's record is dropped when the
+   eleventh is opened, and a hub still open in a tab keeps its record however many
+   others are opened.
+3. A restored workspace tab whose hub folder is gone, or no longer a finished hub, is
+   restored as a hub tab showing one missing root (the hub folder) and a notice; it
+   discovers nothing and runs nothing. Test: delete the hub folder between runs; the
+   tab restores with the notice and no other root.
+4. Duplicate, Reopen Closed Tab and Move to New Window keep the workspace with the
+   hub-tab flag, as F2 OB-14 AC5 keeps the flag. Test: each gives a tab of the same
+   workspace (same roots).
+
+#### WS-7. Paths stay on the machine (MVP, S1)
+
+1. **Not synced.** The workspace record and the recent workspaces list are in no
+   store that ADE sync exports (neither `SHARED_KEYS` nor `DEVICE_KEYS` in
+   `src-tauri/src/sync.rs`, or stripped from that export as scrollback is; the
+   architect chooses). Test: with markers in a workspace's hub path, added folder,
+   hidden folder and a missing checkout's path, ADE sync's export holds none of them.
+2. **Not in tab sets, not relayed, not logged.** Saving a tab set writes no workspace
+   folder other than what it writes for any tab today. The phone relay never gets a
+   workspace folder: a workspace tab is sent as F2 OB-14 AC2 sends a hub tab ("Agent
+   hub"), and no root's name or path is sent. Nothing of the record goes to
+   snapshots, the agent tracker or logs. Test: the same markers are absent from a
+   saved tab set, the agent tracker store, ADE's logs, and (once phone-watch story 8
+   exists, merges-second rule of F3 D14) the relay payload.
+3. **Client paths never sync (owner, 2026-11-10).** F2 OB-10 AC2 lets a hub tab's
+   folder reach the sync repo inside `ade-session` (a device key) when Sync is on,
+   and every view's folder, a checkout included, goes there too. F4 asks the owner to
+   strip, from that export, the folders of every workspace tab and its views, as
+   scrollback is stripped (OQ-5). If approved: test, a session with a workspace tab
+   and a focus sub-terminal in a checkout exports neither folder, and restores both
+   locally.
+4. ADE stores no persona, client or repo name from `hub.conf` or `ACCESS.md`; the
+   record holds only paths, the hidden flags, the order and the last-opened time.
+
+#### WS-8. Engagements (F1's flag on; S4)
+
+As a contractor, I want an engagement's workspace to be its root and checkouts, and
+never another client's folder.
+
+1. **One workspace per engagement (D1).** In engagement A's instance, the workspace's
+   roots are A's engagement root, then A's checkouts as A's instance knows them
+   (PE-10 AC3), in the registry's order, then added folders. Every terminal tab of
+   A's instance is a tab of this workspace. It is opened when A's instance starts and
+   is the only workspace there: Open Workspace… and Open Hub do not exist in an
+   engagement instance (F2.13). Test: A's instance with two checkouts shows three
+   roots in every tab.
+2. **Only A's folders.** In A's instance, Add Folder to Workspace… accepts only a
+   folder inside A's root or a checkout of A (an added folder is a shortcut, never a
+   new place). A new checkout is added through PE-8 AC5 (the default profile checks
+   it), and appears as a root once A's instance knows it. Test: adding `/tmp` or a
+   folder of engagement B from A's instance is refused, and A's profile holds no
+   path of B (PE-8 AC5's assertion).
+3. **Stored in A's profile.** A's workspace record lives in A's profile only (the
+   isolation rule, D14), and A's instance has sync off (F1 D3). Test: it joins F1's
+   isolation test (PE-4 AC9): the record's markers are found nowhere outside A's
+   profile, root and checkouts.
+4. **Never in the default profile.** A hub workspace in the default profile never
+   shows, records or lists an engagement's folder: a discovered checkout inside an
+   engagement's root or checkout is not shown (the workspace shows one notice, "1
+   folder belongs to an engagement and is not shown", naming the engagement, which
+   the default profile knows), adding one is refused naming the engagement, and an
+   engagement root is never in Open Workspace…. This is F1 PE-4 AC4 for F4's stores.
+   Test: joining PE-4 AC4's test, a fixture hub naming A's checkout shows the notice
+   and no root for it, and no default-profile store holds the path.
+
+#### WS-9. Limits (MVP, S1)
+
+1. **Folders.** At most 50 roots per workspace (hub folder, discovered checkouts and
+   added folders, hidden ones not counted). Discovered checkouts past 50 are not
+   shown and one notice says how many were left out; an add past 50 is refused.
+   Test: a fixture naming 60 checkouts shows 50 roots and "10 folders not shown".
+2. **Files read.** Discovery reads only the hub's top-level `ACCESS.md` and one per
+   work folder, never recursively; at most 1 MB of each (WS-1 AC7 for a larger one)
+   and at most 200 work folders (the rest are skipped with a notice).
+3. **Time.** For a hub with 20 checkouts on a local disk, the roots are shown within
+   1 second of the workspace tab appearing, and a missing checkout on an unmounted or
+   unreachable network path never delays the others by more than 2 seconds (it is
+   shown missing when its check times out). Test: a stubbed folder check that hangs
+   for one checkout shows the other roots within the bound.
+4. **Recent list.** 10 entries (WS-2 AC5).
+
+#### WS-10. Tab sets: today's saved workspaces, renamed (MVP, S1)
+
+1. The settings tab *Workspace* is labelled *Tabs*, its section *Saved Workspaces* is
+   *Tab Sets*, *Save Current Workspace* is *Save Current Tabs*, and the empty state
+   and placeholder use "tab set" (exact copy: the designer's). The Tour and the user
+   guide follow. No other change: the same store key, entries, Save, Load and Delete.
+   Test: a store holding entries written by today's code shows them unchanged under
+   *Tab Sets*, and Load opens the same tabs as before.
+2. The word "workspace" appears in the UI only for F4's workspaces. Test: a scan of
+   the UI strings finds "workspace" only in F4's entries.
+
+### F4.8 Slices
+
+| Slice | Delivers | Criteria | Depends on |
+|---|---|---|---|
+| **S1. A hub's workspace** (MVP) | Discovery from the Code tables, missing checkouts, multi-root file browser, opening by Open Hub and by a hub folder, bring forward, add/hide/order, restore, local-only record, limits, tab sets renamed | WS-1 AC1 to AC4, AC5 (open, restore, palette refresh), AC6, AC7; WS-2 AC1 to AC4, AC6 (S1 entries); WS-3; WS-4; WS-5 AC1, AC3; WS-6; WS-7 AC1, AC2, AC4 (AC3 if the owner approves OQ-5); WS-9; WS-10 | F2 slice 1 (Open Hub, the hub-tab flag). Works with or without F3 |
+| **S2. Recents and live refresh** (Next) | Open Workspace… with the recent list and Open Hub Folder…; refresh on `ACCESS.md` change | WS-2 AC5, AC6 (S2 entry); WS-1 AC5 (live part); WS-5 AC4 | S1 |
+| **S3. Per view, with F3** (Next) | Each view of a workspace tab shows the workspace at its own current root, with F3's per-view expansions | WS-5 AC2 | S1 and F3 S1. If F3 S1 merges after F4 S1, WS-5 AC2 goes with whichever of F4 S3 and F3 S1 merges second (F3 D14's rule) |
+| **S4. Engagements** (Next, F1's flag) | The engagement's workspace from the registry, PE-8 route for new checkouts, engagement paths kept out of the default profile's workspaces | WS-8 | S1 and the F1 stories that deliver PE-4 AC4, AC9, PE-8 AC5 and PE-10 AC3. WS-8 AC3 and AC4 run under F1's D28 gate |
+
+S1 is useful alone: a hub's folders together in one file browser, which is the
+owner's whole ask. S2 to S4 are independent of each other after S1.
+
+### F4.9 Constraints, dependencies and notes for other features
+
+- **F2 dependency.** S1 needs F2 slice 1's Open Hub and hub-tab flag. F4 narrows Open
+  Hub on an already-open hub to "bring forward" (D7, OQ-4), and asks for F2 OB-10 AC2
+  to change (OQ-5). Both need the owner's approval as F2 changes.
+- **F3 interplay.** F4 S1 works on today's single per-tab file browser. With F3, a
+  view's "root" in a workspace tab is the workspace, and its viewer state's expanded
+  set spans all roots (WS-5 AC2). F3's caps (VV-7), sync rule (VV-12) and engagement
+  rule (VV-13) apply to those expansions unchanged.
+- **F1 amendment.** D1 needs F1's glossary entry *Workspace*, the "How the terms
+  relate" bullet on the default profile, D16 and D24 amended (OQ-1). No F1
+  requirement changes: PE-13 AC5's "A's workspace is restored" stays true.
+- **For a later search or quick-open feature:** it searches every root of the
+  workspace in sight, skips missing roots, and keeps F1's and WS-8's folder rules.
+- **Public repo.** This section names the hub template's files and folders as F2
+  does, and never the template's repository.
+- **Platforms.** Discovery and the file browser work wherever ADE runs; hubs are
+  made on macOS today (F2), so S1's tests use fixture hubs and run on every CI OS.
+
+### F4.10 Open questions for the owner
+
+- **OQ-1. One meaning for "workspace" across F1 and F4 (D1).** Amend F1's glossary so
+  a workspace is "the folders of one hub or engagement, and the tabs opened on
+  them": an engagement still has exactly one (its root and checkouts), and the
+  default profile has plain tabs plus one workspace per open hub. Or keep F1's
+  meaning (an instance's live set of terminals) and give F4's concept another name
+  (for example "hub folders")? *Recommend amend F1*: it is your word for this
+  feature, F1's requirements stay true as written, and an engagement and a hub then
+  share one concept instead of competing.
+- **OQ-2. Today's saved workspaces (D2).** Rename them *Tab Sets* and keep them
+  unchanged, or retire them (they restore only tab names, and F2 OB-14 AC5 already
+  needs work to carry a hub tab through them)? *Recommend rename now*, decide
+  retirement separately: no data loss, nothing migrates, and the name clash is gone.
+- **OQ-3. A focus session's file browser (D6).** Show the whole workspace with its
+  checkout expanded and marked, or only its own checkout (F3's wording)? *Recommend
+  the whole workspace*: the checkout is still where the view opens, and the hub's
+  STATE and ACCESS and sibling repos are one click away.
+- **OQ-4. Opening an open hub (D7).** Bring its workspace tab forward instead of
+  opening a second hub tab and persona session (a change to F2's Open Hub)?
+  *Recommend yes*: the template refuses a second session per folder, and two persona
+  sessions in one hub contend for its memory and journal.
+- **OQ-5. Client paths in the sync export (WS-7 AC3).** F2 OB-10 AC2, approved, lets a
+  hub tab's folder reach your sync repo inside `ade-session`, and any view's folder,
+  a checkout included, does today. You said client paths must never sync. Strip the
+  folders of workspace tabs and their views from that export (they still restore on
+  this machine)? *Recommend yes, for every workspace tab*, own hubs included: one
+  rule is simpler to test than telling own hubs from client hubs, and a folder path
+  from another machine is of no use on this one.
+- **OQ-6. Opening a hub folder from the New tab dialog (WS-2 AC2).** Should it open
+  the workspace and start the persona session, as Open Hub does, instead of a plain
+  terminal there (today)? *Recommend yes*: one meaning for "open a hub". A plain
+  shell in the hub is still a `cd` away, and a work folder inside the hub still
+  opens plain.
+- **OQ-7. Limits (WS-9).** 50 roots, 10 recent workspaces, 1 MB per `ACCESS.md`, 200
+  work folders? *Recommend yes*: well above a real hub (a handful of repos), and they
+  bound the time to show a workspace. *Default: these numbers*, unless you say
+  otherwise.
+
+### F4.11 Handoff
+
+- **Adversarial reviewer:** this section, against F1, F2 (#98), F3 (#112), the hub
+  template's Code-table rule and today's `fileBrowserStore.ts` and
+  `settingsStore.ts`.
+- **Designer:** root rows (label, path, missing and not-in-workspace marks, the
+  current-root mark), the file browser's workspace menu, the palette entries, Show
+  Hidden Workspace Folders, the Tabs/Tab Sets relabel, and the notices of WS-1 AC7,
+  WS-6 AC3, WS-8 AC4 and WS-9 AC1.
+- **Architect:** the workspace record's store and its exclusion from sync (WS-7 AC1),
+  the sync strip if OQ-5 is approved, discovery's parser and its agreement test with
+  the template's own lister (WS-1 AC2), the folder check's timeout (WS-9 AC3), the
+  file watch (S2), how the multi-root tree fits `fileBrowserStore.ts` and F3's viewer
+  state, and how an engagement instance learns its checkouts (WS-8 AC1). An ADR for
+  the record's store and one for the "workspace" meaning if OQ-1 is approved.
+- **Scrum-master:** after approval, shard S1 first; write WS-5 AC2's merges-second
+  obligation into F4 S3's and F3 S1's tickets.
+<!-- F4 ends -->
