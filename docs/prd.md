@@ -10,7 +10,7 @@ approval, and the change is noted in that section's history.
 
 | ID | Feature | Status |
 |---|---|---|
-| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10) |
+| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10) |
 | F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; no open questions (every question answered: OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
@@ -30,7 +30,9 @@ approval, and the change is noted in that section's history.
   and revision 9k the slice-1 gaps raised by the starter draft and the UX spec
   (confirmed by the owner 2026-11-08), and revision 9m the wording amendment of
   F4 OQ-1 and OQ-2 (approved by the owner 2026-11-10; revision 9l, a
-  cross-reference to F3 D14, is on the F3 branch, PR #112). Not sharded.
+  cross-reference to F3 D14, is on the F3 branch, PR #112), and revision 9n the
+  F5 cross-reference and allowed inflow 9 (F5 OQ-18 and OQ-3, approved by the
+  owner 2026-11-10). Not sharded.
 - **Source:** the owner's intent, 2026-11-08: *"I want the ADE to be a AI Agent for
   Engineers to build their persona based on their roles and responsibility that they
   can use for multiple work opportunities."* The owner also wants the behaviours of
@@ -310,6 +312,19 @@ approval, and the change is noted in that section's history.
     Status and the end of this history, so merging the second of the two branches
     gives a textual conflict on those lines; resolve it by keeping both revisions'
     text, 9l before 9m. Neither changes a line the other's requirements depend on.
+  - 2026-11-10, revision 9n (the owner approved F5, prompt templates, PR #115,
+    revision 5, on 2026-11-10, answering F5 OQ-18 and OQ-3 yes): F1.8 gains the
+    F5 cross-reference line: the F1 stories delivering PE-4 AC4 and giving
+    engagement instances their own profile (slice 1) carry F5's [Second] criteria
+    PT-5 AC7, PT-11 AC7 and AC8 if they merge into `main` after the F5 slice named
+    for them (F5.8, `.ade/context/f5-merges-second.md`). The isolation rule gains
+    **allowed inflow 9**: the default profile's own prompt templates (F5's "mine"
+    templates), offered read-only in engagement instances, never written from them
+    and never flowing back; F5 S3 builds it, no F1 story does. No other
+    requirement, slice or gate changed. 9l (F3 branch), 9m and 9n all edit the F1
+    row of the index table, F1's Status and the end of this history; merging the
+    branches gives textual conflicts on those lines, resolved by keeping every
+    revision's text in the order 9l, 9m, 9n.
 
 ### F1.1 Glossary and definitions
 
@@ -392,6 +407,15 @@ outside are the **allowed inflows**:
    path. Entries and project folders are matched on exact paths, never on Claude
    Code's folder-name slug alone, because different paths can share a slug (`/x/a-b`
    and `/x/a/b` both become `-x-a-b`).
+9. the default profile's own prompt templates (F5's "mine" templates, F5 PT-11
+   AC7), offered **read-only** in A's instance: A reads their current text when its
+   Templates tab lists templates and writes nothing to the default profile; A's
+   favourites, recents and copies of them stay in A's profile. Nothing flows back
+   from A, and A never sees another engagement's templates. They are the
+   engineer's own text as written in the default profile: unlike a persona (PE-1
+   AC5), ADE does not check them for engagement identifiers, and F5 keeps
+   absolute paths ADE filled in out of them (F5 PT-11 AC4). F5 S3 builds this
+   inflow (revision 9n, F5 OQ-3); no F1 story does.
 
 **What the default profile does with engagements.** The default profile is the one
 place that knows every engagement. It reads the registry and, for each registered
@@ -1848,6 +1872,10 @@ ranking and indexing design are the architect's.
      The scenario gains closing A from inside, its reopening by the default profile,
      and the restored-tabs positive control.
   7. The flag story, including PE-13 AC7's release-build test.
+- **F5 cross-reference:** the F1 story delivering PE-4 AC4 carries F5's PT-5 AC7 and
+  PT-11 AC8, and the slice-1 story giving engagement instances their own profile
+  carries F5's PT-11 AC7, each if it merges into `main` after the F5 slice named for
+  it (F5.8, `.ade/context/f5-merges-second.md`).
 - **Restored tabs and focus terminals.** Restoring tabs, panes and sub-terminals of the
   main window builds on today's session store; sub-terminals opened by hand are
   already shipped and saved there. Saving and restoring tabs in other windows is new
