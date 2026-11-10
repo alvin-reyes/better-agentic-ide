@@ -2314,9 +2314,9 @@ clarification for slice 0.
 <!-- F3 begins -->
 ## F3: Each sub-terminal has its own file and code viewer
 
-- **Status:** Approved 2026-11-10 (owner), revision 6. Every open question
-  (OQ-5 to OQ-12) is answered at its recommendation (F3.10). Revision 3 was
-  blocked by the re-review on N1, with majors N2 to N5; revision 4 answered them. The delta review
+- **Status:** Approved 2026-11-10 (owner), revision 6. Every open question (OQ-5 to
+  OQ-12) is answered at its recommendation (F3.10). Revision 3 was blocked by the
+  re-review on N1, with majors N2 to N5; revision 4 answered them. The delta review
   of revision 4 closed N2, N4, N5 and the minors and blocked on B1 and B2, with
   majors M1 to M3 and six minors; revision 5 answers them. The delta review of
   revision 5 closed every revision-4 finding and blocked on N1, with major N2 and
