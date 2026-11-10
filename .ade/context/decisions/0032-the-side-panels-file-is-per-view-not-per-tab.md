@@ -1,6 +1,6 @@
 # 0032: The side panel's file is per view, not per tab (partly supersedes 0009)
 
-- Status: Proposed (2026-11-10), with revision 2.1 of the F3 S1 design `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md`. The owner answered PRD F3 OQ-9 with (a) on 2026-11-10; this ADR is accepted when the owner approves that design. It supersedes only the per-tab file model of ADR 0009, and ADR 0009 stays in force for everything else.
+- Status: Accepted (2026-11-10, owner), with the F3 S1 design `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md` approved at revision 2.1 plus the Q1 change. The owner answered PRD F3 OQ-9 with (a) on 2026-11-10. It supersedes only the per-tab file model of ADR 0009, and ADR 0009 stays in force for everything else.
 - Context:
   - ADR 0009 made the Preview panel the one read-only viewer for clicked files, and held its file per tab (`Tab.previewPath`, with `Tab.previewReveal` for `path:line`).
   - PRD F3 (approved 2026-11-10) makes the **view** the unit: each terminal, sub-terminal and non-terminal tab has its own open file, position, and panel open state and width, all saved across restarts (D3, VV-1, VV-6).

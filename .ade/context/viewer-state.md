@@ -58,7 +58,7 @@ type Position =
 - Widths are clamped: file browser 180..500, preview panel 280..900.
 - The root is **not stored**:
   - for a terminal view it is `usePaneCwd.cwds[activePaneId] ?? savedCwd ?? initialCwd`;
-  - for a non-terminal tab it is the tab's own folder (editor: `project_root` of the file's folder; contracts: `contractsRoot`; orchestrator: `projectDir` from S4), else `opener`, else the home folder. A folder counts only if `list_directory` resolves.
+  - for a non-terminal tab it is the tab's own folder (editor: `project_root` of the file's folder; contracts: `contractsRoot`; orchestrator: `projectDir` from S4), else `opener`, else the home folder. A folder counts only if `list_directory` resolves. `opener` is recorded once, when the tab is created: the source view's `terminalRoot` for a terminal source, the source tab's last resolved root this run for a non-terminal source, else `null` (owner's Q1, 2026-11-10).
   - **For F4** (WS-5 AC2): F3 has no stored "root" field. The own view's active folder is `terminalRoot(ownView)`; F4 uses it as the current root and the folder to reveal, and takes a workspace's listed roots from WS-1 and its record, never from viewer state. `viewerRoots(tab, view)` returns the roots to show; F3 S1 returns one, F4 adds the workspace case for the own view.
 
 ## Defaults (a view with no state)

@@ -1,6 +1,6 @@
 # 0031: Viewer state lives in its own local key, matched by a stable view key
 
-- Status: Proposed (2026-11-10), revised with revision 2.1 of the F3 S1 design `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md`. It is accepted when the owner approves that design.
+- Status: Accepted (2026-11-10, owner), with the F3 S1 design `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md` approved at revision 2.1 plus the Q1 change. Proposed earlier the same day.
 - Context:
   - PRD F3 (revision 6, approved 2026-11-10) gives each view (terminal, sub-terminal or non-terminal tab) its own file browser and preview panel state, and saves that state across restarts. Each of the following PRD rules shapes where that state can live:
     - **D15:** match a state to its view by the saved session's structure or a stable key, never by the run-scoped `tab-N`/`view-N`/`pane-N` ids, which restart every run.
