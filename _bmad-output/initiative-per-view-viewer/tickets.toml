@@ -2,7 +2,7 @@
 # Sharded 2026-11-10 from the approved PRD (docs/prd.md F3 revision 6 plus the opener-folder change), the approved design
 # (docs/superpowers/specs/2026-11-10-per-view-viewer-design.md, section 15) and ADRs 0031 and 0032.
 # The stories of slices S2 to S5 are not sharded here: they wait for the owner's order after S1 is Done.
-# Stories are built in order 1, 2, 3, 4, 5. Story s1a waits on code-viewer stories cv3 and cv5 (initiative-code-viewer).
+# Stories are built in order s1a, s1b1, s1b2, s1b3, s1c, s1d, s1e. Story s1a waits on code-viewer stories cv3 and cv5 (initiative-code-viewer) and on PRs #112, #116 and #118 merged to main (its unknown field).
 # Merges second (F3.8, D14): .ade/context/f3-merges-second.md, and the mirror criteria in the other tickets.
 
 [[epic]]

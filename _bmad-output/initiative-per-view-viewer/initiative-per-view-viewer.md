@@ -13,6 +13,6 @@ Spec: `docs/prd.md` section F3 (revision 6, with the opener-folder change, PR #1
 
 ## Blockers and order
 
-- Owner's OQ-9 (a): code-viewer stories 3 and 5 (`_bmad-output/plan-code-viewer-panel.md`, sharded in `_bmad-output/initiative-code-viewer/`) land first. Story s1a is held by its `unknown` field until both are Done on main.
-- Five stories, one after another: s1a, s1b, s1c, s1d, s1e.
-- Conditional criteria (merge order, not sharding order): VV-2 AC3 (s1a), VV-12 AC3 and VV-12 AC4 [Second] (s1b), VV-13 (s1b, its F1 side not yet sharded), F4 WS-5 AC2 (s1c).
+- Owner's OQ-9 (a): code-viewer stories 3 and 5 (`_bmad-output/plan-code-viewer-panel.md`, sharded in `_bmad-output/initiative-code-viewer/`) land first. Story s1a is held by its `unknown` field until both are merged to main, and PRs #112, #116 and #118 are merged to main.
+- Seven stories, one after another: s1a, s1b1, s1b2, s1b3, s1c, s1d, s1e (s1b was split on the adversarial review of PR #118).
+- Conditional criteria (merge order, not sharding order): VV-2 AC3 (s1a), VV-12 AC3, VV-12 AC4 [Second] and VV-13 (s1b3, its F1 side not yet sharded for VV-13), F4 WS-5 AC2 (s1c).
