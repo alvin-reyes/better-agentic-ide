@@ -10,7 +10,7 @@ approval, and the change is noted in that section's history.
 
 | ID | Feature | Status |
 |---|---|---|
-| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10) |
+| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10; revision 9o adds the identifier check to inflow 9, decided by the owner 2026-11-10) |
 | F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; no open questions (every question answered: OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
@@ -32,7 +32,8 @@ approval, and the change is noted in that section's history.
   F4 OQ-1 and OQ-2 (approved by the owner 2026-11-10; revision 9l, a
   cross-reference to F3 D14, is on the F3 branch, PR #112), and revision 9n the
   F5 cross-reference and allowed inflow 9 (F5 OQ-18 and OQ-3, approved by the
-  owner 2026-11-10). Not sharded.
+  owner 2026-11-10), and revision 9o the identifier check on inflow 9 (the
+  owner's decision of 2026-11-10, F5 revision 5.1). Not sharded.
 - **Source:** the owner's intent, 2026-11-08: *"I want the ADE to be a AI Agent for
   Engineers to build their persona based on their roles and responsibility that they
   can use for multiple work opportunities."* The owner also wants the behaviours of
@@ -325,6 +326,18 @@ approval, and the change is noted in that section's history.
     row of the index table, F1's Status and the end of this history; merging the
     branches gives textual conflicts on those lines, resolved by keeping every
     revision's text in the order 9l, 9m, 9n.
+  - 2026-11-10, revision 9o (the owner's decision of 2026-11-10, with F5 revision
+    5.1, PR #115): the default profile's mine templates are checked for engagement
+    identifiers exactly as personas are (PE-1 AC5), when saved, imported or synced
+    in, and re-checked when an engagement is created or its identifiers change. A
+    template naming a blocking identifier of engagement B is left out of allowed
+    inflow 9 in every engagement other than B, with a visible note; its save is not
+    refused, the gentler of the two options the owner offered, which PE-1 AC5
+    allows because its save block rests on a persona being live in every
+    engagement (D1). Warning identifiers warn. Inflow 9 drops "ADE does not check
+    them for engagement identifiers". F5 S3 builds the check under F5 PT-11 AC7's
+    test; no F1 requirement, slice or gate changed. Like 9n, 9o edits the F1 index
+    row, F1's Status and the end of this history; keep the order 9l, 9m, 9n, 9o.
 
 ### F1.1 Glossary and definitions
 
@@ -408,14 +421,23 @@ outside are the **allowed inflows**:
    Code's folder-name slug alone, because different paths can share a slug (`/x/a-b`
    and `/x/a/b` both become `-x-a-b`).
 9. the default profile's own prompt templates (F5's "mine" templates, F5 PT-11
-   AC7), offered **read-only** in A's instance: A reads their current text when its
-   Templates tab lists templates and writes nothing to the default profile; A's
-   favourites, recents and copies of them stay in A's profile. Nothing flows back
-   from A, and A never sees another engagement's templates. They are the
-   engineer's own text as written in the default profile: unlike a persona (PE-1
-   AC5), ADE does not check them for engagement identifiers, and F5 keeps
-   absolute paths ADE filled in out of them (F5 PT-11 AC4). F5 S3 builds this
-   inflow (revision 9n, F5 OQ-3); no F1 story does.
+   AC7), offered **read-only** in A's instance: A reads their current text each
+   time its Templates tab lists templates and writes nothing to the default
+   profile; A's favourites, recents and copies of them stay in A's profile.
+   Nothing flows back from A, and A never sees another engagement's templates.
+   **Identifier check** (the owner, 2026-11-10): the default profile checks each
+   of these templates for engagement identifiers exactly as PE-1 AC5 checks a
+   persona, when it is saved, imported or arrives by sync, and checks them all
+   again when an engagement is created or its identifiers change. A template
+   naming a blocking identifier of engagement B is **left out of this inflow** in
+   every engagement other than B, with a visible note in the default profile; its
+   save is not refused, because unlike a persona (live in every engagement, D1) it
+   reaches only the engagements the check lets it reach. A warning identifier
+   warns, as in PE-1 AC5. A template not yet checked against the current registry
+   is not offered, and a withheld template's text is in nothing A's instance reads.
+   F5 also keeps absolute paths ADE filled in out of these templates (F5 PT-11
+   AC4). F5 S3 builds this inflow and its check, under F5 PT-11 AC7's test
+   (revisions 9n and 9o, F5 OQ-3); no F1 story does.
 
 **What the default profile does with engagements.** The default profile is the one
 place that knows every engagement. It reads the registry and, for each registered
