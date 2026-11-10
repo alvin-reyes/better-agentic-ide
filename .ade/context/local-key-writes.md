@@ -1,6 +1,6 @@
 # Writing shared local keys
 
-- **Decided in:** ADR 0033 (revision 2).
+- **Decided in:** ADR 0033 (revision 3).
 - **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, sections 2 and 3.
 
 ## The rule
@@ -43,4 +43,4 @@ Do not copy their pattern. F-1 moves them to operation-level writes.
 - `queue(key)` records the key only.
 - `flush()`, and its retry after a failed `state_write`, read each queued key's value from `localStorage` at flush time. `null` means remove.
 - After applying a cross-window settings event, the main window calls `flushNow()` (`applyThoughtsDock` in `src/lib/thoughtsDockSync.ts`).
-- After a snapshot restore, `state_write` (`src-tauri/src/state.rs`) drops every write until restart (`RESTORE_PENDING`). `suspendAutoSave()` still stops the calling window's timers.
+- After a snapshot restore, `state_write` (`src-tauri/src/state.rs`) drops every write until restart. The flag is a `RestoreGuard` in Tauri managed state, not a static; only `guarded_write` (the `state_write` command) checks it and only `guarded_restore` (the `state_restore_snapshot` command) sets it, before the swap and under one lock, clearing it if the restore fails. `write_batch` knows nothing of it. `suspendAutoSave()` still stops the calling window's flush timer and pending batch; it does not stop the 10-minute snapshot interval, which never writes `kv/`.

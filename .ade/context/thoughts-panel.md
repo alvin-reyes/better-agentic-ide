@@ -1,7 +1,8 @@
 # Thoughts panel: dock, keys, event, layout
 
-- **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, revision 2. UX: `2026-11-10-thoughts-panel-right-ux.md` (approved 2026-11-10).
-- **Owner decision 2026-11-10:** the visible right dock ships after F3 S1 s1a to s1d (PR #118). Until then every window passes `dock="bottom"` to `PanelLayout`, and Scratchpad gets no `onDockChange`, so it shows no dock control.
+- **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, revision 3. UX: `2026-11-10-thoughts-panel-right-ux.md` (approved 2026-11-10).
+- **Owner decision 2026-11-10:** the visible right dock ships after F3 S1 s1a to s1d (PR #118: s1a, s1b1, s1b2, s1b3, s1c, s1d). Until then every window passes `dock="bottom"` to `PanelLayout`, and Scratchpad gets no `onDockChange`, so it shows no dock control.
+- Scratchpad's `placement` and `slot` props are optional until step 3a, which makes them required; with `placement` absent it is the bottom dock as today. `onDockChange` stays optional.
 
 ## Setting
 
@@ -38,10 +39,10 @@ Both keys are in `PERSISTED_KEYS`, and in neither `SHARED_KEYS` nor `DEVICE_KEYS
   - Each slot is `PanelSlot { width, max, onResize(width, final) }`. `max` is `largestFit`.
   - The Thoughts slot adds `placement: Placement | null`.
 - **Resizing.** A panel calls `onResize(w, false)` while dragging. The host lays out with that value and writes nothing. The panel calls `onResize(w, true)` at the drag end, on a key step or on a size button. The host clamps to `[min, max]` and calls `onCommit` once.
-- **Holders.**
+- **Holders**, all routed by `useLayoutHolders(inSightKey, { boardOpen, thoughtsOpen, viewerPanels })` in `src/hooks/useLayoutHolders.ts`, which returns `{ saved, open, onCommit }`. App and DetachedApp (`viewerPanels: false` until F3 S3) both call it; neither window calls `setLayout` or `writeThoughtsLayoutField` itself. A commit reaches its own panel's holder and no other.
   - Thoughts: `useThoughtsWidth().commit`, which writes the field and then sets state.
   - File browser and Preview: `viewerStore.setLayout(inSightKey, …)`, after s1c and s1d.
-  - Board: App state, not persisted.
+  - Board: the hook's state, not persisted.
 - No component works out its own width, and fitting never commits a width.
 - Open flags:
   - file browser and Preview: `viewerStore.states[inSight].layout`;

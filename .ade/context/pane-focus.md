@@ -1,7 +1,9 @@
 # Focusing what is in sight
 
 - **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, section 5. UX: `2026-11-10-thoughts-panel-right-ux.md`, "Keyboard and focus", TR-25.
-- **Shared with:** F3 S1 VV-1 AC7 (story s1d), which reuses this helper. It is built by the Thoughts focus story, which lands before s1d. If s1d starts first, s1d builds it as written here and the Thoughts story reuses it.
+- **Shared with:** F3 S1 VV-1 AC7 (story s1d). It is built only by Thoughts step 2, the focus story; s1d never builds it.
+  - If `paneFocus.ts` is on main when s1d is pulled, s1d's view-switch focus move calls `focusInSightSoon()` and `closePreviewFocus` calls `focusInSight()`.
+  - If it is not, s1d writes its focus rule in `previewFocus.ts` (its ticket's fallback), and Thoughts step 2, landing later, moves both calls onto this helper, removes s1d's local lookup, and leaves VV-1 AC7's tests unchanged and green.
 
 ## The attributes
 
