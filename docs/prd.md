@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
-| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Approved by the owner, 2026-11-09 (revision 4 + minors; revision 4's delta review passed; owner answered Q1 to Q13); revision 5 applies F4's approved amendments (owner, 2026-11-10); not sharded |
+| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Approved by the owner, 2026-11-09 (revision 4 + minors; revision 4's delta review passed; owner answered Q1 to Q13); revision 5 applies F4's approved amendments (owner, 2026-11-10), revision 5.1 the check of them; not sharded |
 
 ---
 
@@ -2319,7 +2319,9 @@ clarification for slice 0.
   which the owner's approval required folded in, with an explicit allowance for
   the manual `AGENT_TERMINAL` override (F2.12). Amended the same day by the
   owner's decisions of 2026-11-09 (History). Revision 5 applies the F2 changes the
-  owner approved with F4 on 2026-11-10 (History, last entry). Not sharded. Next: the designer
+  owner approved with F4 on 2026-11-10 (History); revision 5.1 answers the
+  check of those edits (History, last entry). Not sharded; F2's design and UX need
+  a revision for revisions 5 and 5.1 first (F2.11). Next: the designer
   (screens and copy) and the architect (design spec, ADRs and slice plan), F2.11.
 - **Source:** the owner, 2026-11-09: *"in ADE a user can choose to open terminal or set
   up your agentic environment with questions to configure the ai-agent for the
@@ -2420,6 +2422,17 @@ clarification for slice 0.
     OB-14 AC5). The hub-tab text says how a hub tab and F4's workspace mark relate
     (F2.5, OB-14 AC6): F4 never sets the hub-tab flag (F4 D9). No other F2
     requirement changed.
+  - 2026-11-10, revision 5.1: the check of the F4 approval edits BLOCKED on two
+    majors. M1: ADE sync's import replaces a shared key's whole local value when
+    the repo copy is newer, so "this Mac keeps and restores them" broke once a
+    second Mac exported; OB-10 AC2 and OB-14 AC5 now require the import to keep
+    this Mac's stripped fields (merge or re-apply), each with a two-Mac test,
+    designed once by the architect with F4 WS-7 AC3. M2: revision 5 now reaches
+    F2.8 (slice 1 names the sync strip; OB-14 AC1 to AC5 in slice 1, AC6 with F4
+    S1) and F2.11 (revision-5 lines for the architect and the designer, and the
+    note that F2's design and UX need a revision before sharding). Minor m5: OB-14
+    AC6's New-tab rule covers a finished hub's folder only; an unfinished one
+    opens a plain tab.
 
 ### F2.1 Problem
 
@@ -3253,12 +3266,24 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      sub-terminal's name are left out of the exported `ade-session`, and a tab set's
      hub-tab entry is exported without its folder, so none of them reaches the
      developer's own sync repo when Settings → Sync is on; this Mac keeps and
-     restores them. F4 WS-7 AC3 applies the same strip to every F4 workspace tab and
-     to the other synced keys it lists (one strip, designed once). The review step
-     says so (OB-3 AC3). Test: with Settings → Sync on and path markers in a hub
-     tab's folder, a sub-terminal's folder and name, and a tab set holding the tab,
-     ADE sync's export holds none of the markers, and a relaunch on this Mac
-     restores the tab in its folder.
+     restores them. **The import keeps them too:** today ADE sync's import
+     (`import_state`, `src-tauri/src/sync.rs`) replaces a shared key's whole local
+     value when the repo copy is newer and puts back only secret fields, which would
+     lose this Mac's stripped folders as soon as another Mac exports the key. So when
+     sync imports a key the strip applies to (tab sets here), this Mac keeps the
+     stripped fields it holds locally for every entry still there after the import,
+     by merging them into the imported value or applying them again after it; an
+     entry the other Mac deleted stays deleted. `ade-session` is a device key that
+     sync does not import today; if it ever does, the same rule holds. F4 WS-7 AC3
+     applies the same strip and import rule to every F4 workspace tab and to the
+     other synced keys it lists: one strip, designed once by the architect for F2
+     and F4. The review step says so (OB-3 AC3). Test: with Settings → Sync on and
+     path markers in a hub tab's folder, a sub-terminal's folder and name, and a tab
+     set holding the tab, ADE sync's export holds none of the markers, and a
+     relaunch on this Mac restores the tab in its folder. **Two-Mac case:** Mac A
+     exports; Mac B imports, later saves another tab set and exports; A imports B's
+     newer copy; A's tab set still opens the hub tab in its hub folder, and A's next
+     export still holds none of the markers.
    - **Claude's config folder** holds the hub's path in a folder name:
      `~/.claude/projects/<encoded hub path>` (in the Claude config folder as
      `bin/setup` resolves it; `~/.claude` by default), and one for each work area
@@ -3492,8 +3517,11 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
      Mac, as for any tab's folder, and opening it there opens a hub tab, empty and
      labelled "Agent hub". ADE sync's export carries the entry without its folder
      (OB-10 AC2; F4 OQ-5), so on another Mac Load opens it as a plain tab labelled
-     "Agent hub" in the home folder. The review step's notice (OB-3 AC3) says the
-     folder path is kept in tab sets too, on this Mac only;
+     "Agent hub" in the home folder. When this Mac imports another Mac's later copy
+     of the tab sets, it keeps its own entries' folders and flags (OB-10 AC2's
+     import rule), so Load on this Mac still opens the hub tab in its folder. The
+     review step's notice (OB-3 AC3) says the folder path is kept in tab sets too,
+     on this Mac only;
    - a saved session restores it as AC1 says.
    ADE's rules for a hub tab (AC1 to AC3) follow the flag in each case.
    `.ade/context/remote-tabs.md` records the flag for the relay: that a tab entry
@@ -3502,12 +3530,18 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
    F2's slice 1, and the other follows it. Tests: each operation on a hub tab gives
    a hub tab (label, empty screen, no scrollback in the saved session or the
    tab set, "Agent hub" in the tracker); a plain tab in a hub folder duplicated
-   or moved stays plain.
+   or moved stays plain. **Two-Mac case** for tab sets: Mac A saves a tab set
+   holding a hub tab and exports; Mac B imports it, later saves another tab set and
+   exports; A imports B's newer copy; Load of A's tab set on A opens a hub tab in
+   its hub folder, and Load of it on B opens a plain tab labelled "Agent hub" in
+   the home folder.
 6. **Hub tabs and F4's workspaces** (owner, 2026-11-10, F4 PR #113). F4's
    workspace mark is a separate mark from the hub-tab flag (F4 D9), and F4 never
-   sets the flag: a hub folder opened from the New tab dialog, Open project or
-   recent projects is a plain-shell tab with F4's workspace mark only, as F2.5 has
-   it, and AC1 to AC3 do not apply to it. A hub tab of a finished hub opened by the
+   sets the flag: a **finished** hub's folder opened from the New tab dialog, Open
+   project or recent projects is a plain-shell tab with F4's workspace mark only,
+   as F2.5 has it, and AC1 to AC3 do not apply to it; an **unfinished** hub's
+   folder opened that way is a plain tab with neither mark (F4 WS-2 AC8's
+   finished-hub check decides). A hub tab of a finished hub opened by the
    existing-hub choice (OB-2 AC2) carries both marks. **The run's tab becomes a
    workspace tab** (F4 OQ-8, F4 WS-2 AC7): when the run commits `hub.conf` (step
    (c)), the run's tab gains F4's workspace mark and keeps its flag, and its file
@@ -3547,8 +3581,11 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
 
 1. **Slice 1, ships first (needs S2, S4a and the persona list; S3 to reach users):**
    OB-1, OB-2, OB-3 with questions 2 to 7 and 9 and the review step, OB-4 without
-   (e) and (g), OB-5 (its (e) and (g) parts arrive with them), OB-6, OB-7, OB-10,
-   OB-11, OB-13, OB-14. With them, the public fixture template, OB-5 AC6/AC7's
+   (e) and (g), OB-5 (its (e) and (g) parts arrive with them), OB-6, OB-7, OB-10
+   (including AC2's sync strip and its import rule), OB-11, OB-13, and OB-14 AC1 to
+   AC5 (AC5 including the tab-set strip and its import rule); OB-14 AC6 with F4 S1
+   (F4 WS-2 AC7), because the workspace mark it needs does not exist in F2's slice
+   1. With them, the public fixture template, OB-5 AC6/AC7's
    tests in `ci.yml`'s `backend-macos` job, and their release gates in
    `release.yml` with S3's structure-test assertions.
 2. **Slice 2:** OB-8 (question 8, step (e)) with question 18's default that follows
@@ -3660,6 +3697,26 @@ F2 is approved (2026-11-09, revision 4 + minors). Next, in parallel:
   literals (OB-6 AC2); recording the first-launch answer (OB-1 AC1); moving a
   folder to the Trash; the OB-7 AC3 and OB-10 AC1 scans. The slice plan follows
   F2.8 and OB-3's slice column.
+- **Revision 5 (F4's approved amendments, 2026-11-10) and 5.1, for both:**
+  - **Architect:** the sync strip for hub tabs (OB-10 AC2, OB-14 AC5) and its
+    import rule (this Mac keeps its stripped folders and flags when sync imports
+    another Mac's later copy, by merge or re-apply), designed once with F4 WS-7
+    AC3; bring-forward for an already-open hub, with no `bin/setup` or
+    `bin/doctor` (OB-2 AC2); the run's tab becoming a workspace tab (OB-14 AC6,
+    built with F4 S1).
+  - **Designer:** the "This hub is already open. bin/setup was not run; close the
+    hub's tabs to run it." notice (OB-2 AC2, exact copy the designer's); OB-3
+    AC3's changed review-step wording (the hub folder kept on this Mac, in the
+    saved session and tab sets, and left out of what sync pushes); and Load of a
+    tab set holding a hub tab on another Mac (a plain tab labelled "Agent hub" in
+    the home folder, OB-14 AC5).
+  - **F2's design and UX need a revision before F2 is sharded.** The approved F2
+    design (`docs/superpowers/specs/2026-11-09-onboarding-design.md` on the
+    onboarding design branch, around line 2170) still says a hub tab's folder
+    syncs with the session and tab sets, and F2's UX spec was written before
+    revision 5. The architect and the designer revise them for revision 5 and 5.1 (the strip, the import rule,
+    bring-forward, the notice, the review-step wording, Load on another Mac);
+    the PM does not edit them.
 - **The agent hub template:** T1, T3, T4 (with its since-time), T5 (Q13), and
   W1's detection (the `capabilities:` probe on stdout with stdin from
   `/dev/null`), its exit handling after Q9 and the `AGENT_TERMINAL` override
@@ -3749,6 +3806,14 @@ F2 is approved (2026-11-09, revision 4 + minors). Next, in parallel:
 | **n5** the refusal gives no way for this hub to take a checkout over from a live hub | **OB-4 AC2**: a "move the claim" way on: remove or repoint the link deliberately, with the exact `rm <link>` command, then confirm again; tested. |
 | **n6** OB-12 AC1 does not say which stream carries the `capabilities:` line | **OB-12 AC1**: on stdout (story 9's T10 asserts stdout); W1 reads stdout only; test with the line on stderr only. |
 | owner's condition: the manual override | **OB-12 AC1**: the developer's `AGENT_TERMINAL=terminal` / `iterm` (the hint of ADE's exit-1 message) opens a window on purpose and is allowed; only the automatic paths never open a window outside Better Terminal; tests for both values. **AC2** notes it is not an exit path. |
+
+**Check of the F4 approval edits (F2 revision 5, c55fe3b; F4 921c2e9): BLOCKED on M1 and M2; answered in revision 5.1.**
+
+| Finding | Answer in revision 5.1 |
+|---|---|
+| **M1** this Mac's stripped fields are lost once another Mac exports: `import_state` replaces a shared key's whole local value, `restore_secrets` puts back only secret fields | OB-10 AC2 and OB-14 AC5: the import keeps this Mac's stripped fields (merge or re-apply), each with a two-Mac test; designed once by the architect with F4 WS-7 AC3 (F2.11). |
+| **M2** revision 5 never reaches F2's slices, handoff or design | F2.8 slice 1 names the sync strip (OB-10 AC2, OB-14 AC5) and reads "OB-14 AC1 to AC5; AC6 with F4 S1 (WS-2 AC7)"; F2.11 has revision-5 lines for the architect and the designer, and records that F2's design and UX need a revision before F2 is sharded. |
+| **m5** OB-14 AC6 and unfinished hubs | AC6's New-tab rule covers a finished hub's folder only; an unfinished one opens a plain tab with neither mark. |
 
 ### F2.13 F1 and F2 together
 
