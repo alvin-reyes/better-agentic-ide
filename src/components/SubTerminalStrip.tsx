@@ -5,6 +5,7 @@ import { tabCwd, tabLabel } from "../lib/tabDisplay";
 import { focusActiveTerminal } from "../hooks/useTerminal";
 import { useOpenStatus, openStatusOf, clearOpenStatus } from "../lib/terminalOpen";
 import SubTerminalNotice from "./SubTerminalNotice";
+import "./SubTerminalStrip.css";
 
 /** The id of the content area the strip's entries control (App sets it). */
 export const SUB_TERMINAL_CONTENT_ID = "tab-content";
@@ -12,29 +13,9 @@ export const SUB_TERMINAL_CONTENT_ID = "tab-content";
 const MERGE_MS = 1000;
 
 // Hover, selection, the focus ring and the flash need pseudo-classes, so the
-// strip carries its own rules (the UX spec's Look).
-const STRIP_CSS = `
-.subterm-strip { display: flex; align-items: center; height: 30px; padding: 0 12px; background: var(--bg-primary); border-bottom: 1px solid var(--border); gap: 2px; user-select: none; flex-shrink: 0; }
-.subterm-scroller { display: flex; align-items: center; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; min-width: 0; flex: 1 1 auto; height: 100%; }
-.subterm-scroller::-webkit-scrollbar { display: none; }
-.subterm-divider { width: 1px; height: 16px; background: var(--border); margin: 0 6px 0 4px; flex-shrink: 0; }
-.subterm-entry { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: var(--radius-sm); color: var(--text-secondary); font-family: var(--font-ui); font-size: var(--text-sm); cursor: pointer; flex-shrink: 0; position: relative; white-space: nowrap; outline: none; }
-.subterm-entry:hover { background: var(--bg-tertiary); }
-.subterm-entry[aria-selected="true"] { background: var(--bg-elevated); color: var(--text-primary); font-weight: 500; }
-.subterm-entry[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 1px; background: var(--accent); }
-.subterm-entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.subterm-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-.subterm-close { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-right: -4px; border-radius: var(--radius-sm); color: var(--text-secondary); opacity: 0; flex-shrink: 0; }
-.subterm-entry:hover .subterm-close, .subterm-entry[aria-selected="true"] .subterm-close { opacity: 0.6; }
-.subterm-close:hover { opacity: 1 !important; background: var(--accent-subtle); color: var(--text-primary); }
-@media (max-width: 560px) { .subterm-name { max-width: 96px; } }
-.subterm-spinner { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--text-secondary); border-top-color: transparent; flex-shrink: 0; animation: subterm-spin 0.9s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .subterm-spinner { animation: none; } }
-.subterm-not-typed { color: var(--yellow); font-weight: 700; flex-shrink: 0; }
-@keyframes subterm-spin { to { transform: rotate(360deg); } }
-@keyframes subterm-flash { from { background-color: var(--accent-subtle); } to { background-color: transparent; } }
-`;
-
+// strip carries its own rules (the UX spec's Look) in SubTerminalStrip.css. A
+// bundled stylesheet, not a style element: the built app's CSP has a nonce in
+// style-src, so a style element React inserts is blocked (hotfix 0.23.2).
 const VISUALLY_HIDDEN: CSSProperties = {
   position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap",
 };
@@ -227,7 +208,6 @@ export default function SubTerminalStrip({ tabId }: { tabId: string }) {
 
   return (
     <>
-      <style>{STRIP_CSS}</style>
       <div
       className="subterm-strip"
       role="tablist"

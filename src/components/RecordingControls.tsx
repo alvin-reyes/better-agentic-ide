@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRecordingStore } from "../hooks/useTerminalRecording";
+import "./RecordingControls.css";
 
 export function formatDuration(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -67,12 +68,6 @@ export default function RecordingControls({ paneId }: RecordingControlsProps) {
         }}
       />
       {recording ? formatDuration(elapsed) : "REC"}
-      <style>{`
-        @keyframes recording-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-      `}</style>
     </button>
   );
 }

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useTabStore } from "../stores/tabStore";
+import "./BrowserTab.css";
 
 interface BrowserTabProps {
   tabId: string;
@@ -218,15 +219,6 @@ export default function BrowserTab({ tabId, initialUrl }: BrowserTabProps) {
           }}
         />
       )}
-
-      <style>{`
-        @keyframes loading-bar {
-          0% { transform: scaleX(0); transform-origin: left; }
-          50% { transform: scaleX(1); transform-origin: left; }
-          51% { transform: scaleX(1); transform-origin: right; }
-          100% { transform: scaleX(0); transform-origin: right; }
-        }
-      `}</style>
     </div>
   );
 }
