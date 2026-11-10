@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
-| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Approved by the owner, 2026-11-09 (revision 4 + minors; revision 4's delta review passed; owner answered Q1 to Q13); revision 5 applies F4's approved amendments (owner, 2026-11-10), revision 5.1 the check of them; not sharded |
+| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Approved by the owner, 2026-11-09 (revision 4 + minors; revision 4's delta review passed; owner answered Q1 to Q13); revision 5 applies F4's approved amendments (owner, 2026-11-10), revision 5.1 the check of them; revision 5.2 adds the F5 cross-reference (F5 OQ-20, owner, 2026-11-10); not sharded |
 
 ---
 
@@ -2320,8 +2320,9 @@ clarification for slice 0.
   the manual `AGENT_TERMINAL` override (F2.12). Amended the same day by the
   owner's decisions of 2026-11-09 (History). Revision 5 applies the F2 changes the
   owner approved with F4 on 2026-11-10 (History); revision 5.1 answers the
-  check of those edits (History, last entry). Not sharded; F2's design and UX need
-  a revision for revisions 5 and 5.1 first (F2.11). Next: the designer
+  check of those edits (History); revision 5.2 adds the F5 cross-reference line
+  the owner approved with F5 on 2026-11-10 (History, last entry). Not sharded;
+  F2's design and UX need a revision for revisions 5 and 5.1 first (F2.11). Next: the designer
   (screens and copy) and the architect (design spec, ADRs and slice plan), F2.11.
 - **Source:** the owner, 2026-11-09: *"in ADE a user can choose to open terminal or set
   up your agentic environment with questions to configure the ai-agent for the
@@ -2433,6 +2434,13 @@ clarification for slice 0.
     note that F2's design and UX need a revision before sharding). Minor m5: OB-14
     AC6's New-tab rule covers a finished hub's folder only; an unfinished one
     opens a plain tab.
+  - 2026-11-10, revision 5.2: the owner approved F5 (prompt templates, PR #115,
+    revision 5) on 2026-11-10, answering F5 OQ-20 yes. F2.8 gains one line: the
+    slice-1 story delivering the hub tab and the OB-6 AC2 `hub.conf` reader
+    carries F5's hub-tab [Second] parts (F5.1 and PT-6 AC2, PT-9 AC1, PT-6 AC6) if
+    it merges into `main` after the F5 slice named for each (F5.8,
+    `.ade/context/f5-merges-second.md`). No F2 requirement, slice or gate changed;
+    F5 only reads what slice 1 builds.
 
 ### F2.1 Problem
 
@@ -3597,6 +3605,11 @@ T3 and T4 are not blocking: slice 1 states T3's absence in G4 and lists the link
 and `.bak-` folders by path while T4 is missing. Story 8 is not blocking either:
 slice 1 ships the hub-tab flag and, if story 8 is not there yet, leaves the masking
 to story 8 under `.ade/context/remote-tabs.md`.
+
+- **F5 cross-reference:** the F2 slice-1 story delivering the hub tab and the OB-6
+  AC2 `hub.conf` reader carries F5's hub-tab parts of F5.1 and PT-6 AC2 (F5 S1),
+  PT-9 AC1 (F5 S4) and PT-6 AC6 (F5 S5), each if it merges into `main` after the F5
+  slice named for it (F5.8, `.ade/context/f5-merges-second.md`).
 
 ### F2.9 Open questions for the owner
 
