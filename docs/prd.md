@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1 (every open question answered: OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10 and OQ-12 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits, OQ-13 awaits confirmation (every open question answered: OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10 and OQ-12 at the recommendation, OQ-11 not now; one slice of MVP, not sharded). F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -303,8 +303,13 @@ approval, and the change is noted in that section's history.
     row; PE-2 AC2 and AC10; PE-4 AC1, AC4 and AC9 (its scenario and positive
     control); PE-10's title, story, AC1, AC4 and AC6; PE-12 AC1 and AC2; PE-13's
     title, AC5 and AC6; F1.8's slice 6 and its note; D9's feature list; D16; D24;
-    the designer handoff. Revision 9l (F3 D14 cross-reference) is on the F3 branch
-    (PR #112); the two touch different lines.
+    the designer handoff; and, after the F4 check of 2026-11-10, PE-10 AC4's test
+    (B's instance's tabs, including panes and sub-terminals) and the *Workspace* row's
+    "can have exactly one", matching F4.5. Revision 9l (F3 D14 cross-reference) is on
+    the F3 branch (PR #112). 9l and 9m both edit the F1 row of the index table, F1's
+    Status and the end of this history, so merging the second of the two branches
+    gives a textual conflict on those lines; resolve it by keeping both revisions'
+    text, 9l before 9m. Neither changes a line the other's requirements depend on.
 
 ### F1.1 Glossary and definitions
 
@@ -327,7 +332,7 @@ Every requirement below uses these terms with exactly these meanings.
 | **Default launcher** | The one code path through which ADE starts the default profile's instance, whatever triggered the start (PE-13 AC9). It builds the instance's environment and working folder from the engineer's OS login session (or the defined headless fallback), never from its caller. No other code in ADE starts the default instance. The guarantee does not rest on the launcher alone: the started process itself, whenever it becomes the default instance, discards the environment and working folder it inherited and rebuilds them the same way, whoever started it (PE-13 AC9). |
 | **Engagement starter** | The one code path through which the default profile starts an engagement's instance (PE-13 AC1). Its interface takes an engagement's profile and cannot name the default profile. Together with the default launcher, it is the only code in ADE that starts ADE's binary (PE-13 AC9, the one-launcher test). |
 | **Instance's tabs** | The live set of windows, tabs, panes and sub-terminals of one instance, with each terminal's name and folder. An instance has exactly one such set, so an engagement has exactly one. Its terminals may be in the engagement root, a work area or a checkout; all of them belong to the engagement. Today ADE saves the main window's tabs, panes and sub-terminals; it does not save tabs moved to another window, so restoring those is new work (PE-13 AC5). (Called the instance's "workspace" before revision 9m.) |
-| **Workspace** | F4's meaning only (F4.1, owner 2026-11-10): the folders of one hub, shown together, and the tabs opened on them. Engagements' workspaces are later work (F4 D11); when they come, an engagement has exactly one (its root and checkouts). F1 uses the word for nothing else. |
+| **Workspace** | F4's meaning only (F4.1, owner 2026-11-10): the folders of one hub, shown together, and the tabs opened on them. Engagements' workspaces are later work (F4 D11); when they come, an engagement can have exactly one (its root and checkouts), as F4.5 says. F1 uses the word for nothing else. |
 | **Tab set** | Today's feature in *Settings → Tabs* (`better-terminal-workspaces`; called *Saved Workspaces*, under *Settings → Workspace*, until F4 WS-10 renames it): a named copy of an instance's tab names and splits, which **Load** reopens. It is a layout. Tab sets are per profile like every other store. |
 | **Focus terminal** | A terminal of an engagement's instance opened for focused or deep work, among the same instance's tabs: from inside one of its terminals, or from ADE's UI as focus work on a work area (PE-10 AC1, AC5). |
 | **Engagement identifier** | Any of these, as the engineer typed them for an engagement. **Blocking:** the engagement name, the client name, the engagement root path and checkout paths (whole paths). **Warning only:** code repo names and the last folder name of the root and of each checkout, which are often generic (`api`, `web`, `infra`). Work-area names and secret names are not identifiers: they often come from the persona or are generic (`api`, `GITHUB_TOKEN`). |
@@ -1343,7 +1348,8 @@ need it.
    checkouts is refused with a message, and nothing opens.
 4. **Never into another engagement.** A request that reaches another instance (for
    example B's, with A's terminal's credentials) is refused and opens nothing in B.
-   Test: such a request gets a refusal, and B's tabs are unchanged.
+   Test: such a request gets a refusal, and B's instance's tabs (F1.1), including
+   panes and sub-terminals, are unchanged.
 5. **Focus work on a work area.** Asking for focus work on a work area, from ADE's UI
    or from a terminal, opens a focus terminal in the work area's checkout (or the work
    area's folder when it has no repo), whose session starts with that work area's
@@ -2324,7 +2330,10 @@ clarification for slice 0.
 
 - **Status:** Approved 2026-11-10 (owner), revision 3.1. Every open question is
   answered (F4.10): OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10 and OQ-12 at the
-  recommendation, OQ-11 not now; F4 has no open questions. Not sharded. Revision 1's
+  recommendation, OQ-11 not now. Revision 3.2 (2026-11-10) answers the check of the
+  approval edits (BLOCKED on M1 and minors; F4.12's fourth table) and asks one
+  question, OQ-13 (WS-1 AC8's two cases, written at the recommendation), which the
+  owner confirms before S1 is sharded. Not sharded. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
   finding and folded in the owner's decisions of 2026-11-10; the delta review of
   revision 2 BLOCKED it on one finding (N-B1) and listed minors, which revision 3
@@ -2365,7 +2374,8 @@ clarification for slice 0.
   2026-11-10). Before approving F4 the owner had **not** said "client paths never
   sync" in those words; F4 proposed that rule for workspace paths as OQ-5, and the
   owner approved it on 2026-11-10: workspace and checkout paths are stripped from
-  every synced key WS-7 AC3 lists. For workspace paths, that rule is now the owner's
+  the keys WS-7 AC3's table strips (not the engineer's typed text, which the table
+  leaves unstripped). For workspace paths, that rule is now the owner's
   decision (F4 OQ-5), not an inference.
 - **Builds on, does not repeat:**
   - F2 (PR #98, approved, not built): finished and unfinished hubs (F2.5), **Open
@@ -2434,6 +2444,18 @@ clarification for slice 0.
     cross-reference line, written in F3.8 and F3's history). The Source says the
     sync rule for workspace paths is now the owner's (OQ-5), and the note for F5
     (F4.9) says what F5 can now cite.
+  - 2026-11-10, revision 3.2: the check of the approval edits BLOCKED on M1 (sync's
+    import replaces a shared key's whole local value, so the strip would lose this
+    machine's paths once a second machine exports) and listed minors. WS-7 AC3 now
+    requires the import to keep this machine's stripped fields, by merge or re-apply,
+    with a two-machine test, designed once by the architect for F2 and F4 (G2, F4.11);
+    a workspace tab named after its hub folder has that name stripped (m7, under
+    OQ-5); OQ-5's answer line and the Source say "the keys WS-7 AC3's table strips"
+    (m4); WS-1 AC8 gains its hidden-checkout and after-close cases at the
+    recommendation, asked as OQ-13 (m6). F1 revision 9m gains PE-10 AC4's test
+    wording (m1), the *Workspace* row's "can have exactly one" (m2) and a corrected
+    note on the textual merge conflict with 9l (m3). The approval of revision 3.1's
+    other answers stands; the history entry above records what was approved then.
 
 ### F4.1 Terms
 
@@ -2534,8 +2556,9 @@ already records its checkouts, but nothing in ADE reads that record. Meanwhile
 - **G2.** F4's own stores (the workspace record and the recent list) never leave the
   machine: 0 of their paths in ADE sync's export, the phone relay, tab sets or logs
   (WS-7 AC1, AC2). And 0 workspace or checkout paths in ADE sync's export from any
-  other synced key WS-7 AC3's table strips, while this machine keeps and restores them
-  (WS-7 AC3; OQ-5, approved by the owner 2026-11-10).
+  other synced key WS-7 AC3's table strips, while this machine keeps and restores them,
+  also after importing another machine's later copy (WS-7 AC3; OQ-5, approved by the
+  owner 2026-11-10).
 - **G3.** After a restart, every workspace tab shows the same roots, in the same
   order, with the same added and hidden folders, as when the session was last saved
   (WS-6).
@@ -2732,6 +2755,17 @@ checkout the hub records, without my listing them again.
    there, shows no setup question and adds nothing to `ade-project-setup-done`;
    asking for setup there sets it up; with no workspace open, the same checkout is
    set up automatically as today.
+   Two cases, written at the recommendation (OQ-13, awaiting the owner's
+   confirmation): **a hidden checkout stays covered**: a discovered checkout the
+   engineer hid (WS-3) is still one of the workspace's discovered checkouts for this
+   criterion; and **closing the workspace does not start setup**: a terminal whose
+   folder was inside a covered checkout while the workspace was open gets no
+   automatic setup and no setup question for the rest of that terminal's life, even
+   after the workspace closes. Tests: with a checkout hidden, a terminal that `cd`s
+   into it writes no ADE file and shows no question; with a plain tab's terminal inside
+   a covered checkout, closing the workspace's last workspace tab and then running a command
+   there writes no ADE file and shows no question; a new terminal opened in that
+   checkout after the workspace closed is set up as today.
 
 #### WS-2. Opening a workspace (MVP, S1; recents and palette S2)
 
@@ -3011,24 +3045,44 @@ folder I am working in, and each focus session to keep its own checkout (D6).
 3. **The sync strip (OQ-5, approved by the owner 2026-11-10).** Today and under F2,
    these keys, which ADE sync exports when Settings → Sync is on, can hold a
    workspace folder's path (and so, by default, a client's name). ADE sync's export
-   strips them as the last column says, while this machine keeps and restores them;
-   F2 revision 5 amends OB-10 AC2 and OB-14 AC5 to match:
+   strips them as the last column says, while this machine keeps and restores them,
+   including after it imports another machine's later copy of the key (the import
+   rule below); F2 revisions 5 and 5.1 amend OB-10 AC2 and OB-14 AC5 to match:
 
    | Key (sync group) | What can hold the path | Today, and under F2 before the strip | The strip (OQ-5) |
    |---|---|---|---|
    | `ade-session` (device key, exported to `devices/<device>/`; only `serializedBuffer` stripped) | each pane's `savedCwd`, own view and sub-terminals (a focus session's checkout included); the workspace mark F4 adds | F2 OB-10 AC2 keeps the hub folder there, synced | stripped for every pane of every workspace tab, and the workspace mark; restored locally |
-   | `ade-session`: sub-terminal names (`SavedView.name`) and tab names | a name taken from a checkout or hub folder (`ade open` names, a renamed tab) | hub tabs are named "Agent hub" (OB-14 AC1); sub-terminal names are not masked | sub-terminal names of workspace tabs stripped; restored locally |
+   | `ade-session`: sub-terminal names (`SavedView.name`) and tab names | a name taken from a checkout or hub folder (`ade open` names, a renamed tab, a tab named after its folder) | hub tabs are named "Agent hub" (OB-14 AC1); sub-terminal names are not masked | sub-terminal names of workspace tabs stripped; a workspace tab's own name stripped when it is the hub folder's name (its last folder name), as OQ-5's rule; both restored locally |
    | `better-terminal-workspaces` (tab sets, **shared**: every machine) | a hub tab's folder | F2 OB-14 AC5 saves it | a workspace tab is saved without its folder; Load opens it as a plain tab named "Agent hub" in the home folder |
    | `better-terminal-orchestrator` (**shared**) | a session's `projectDir` (`orchestratorStore.ts:38`) | any folder, a hub or checkout included | `projectDir` inside any workspace folder known to this profile is left out of the export |
    | `better-terminal-agent-tracker` (**shared**) | a session's `cwd` (`agentTrackerStore.ts:25`) | F2 OB-14 AC3 keeps the hub folder out only for tabs with the hub-tab flag (Open Hub, the run tab); unflagged workspace tabs (a hub folder opened from the New tab dialog, Open project or recent projects, D9) put the hub folder into this shared key, and into recent projects (`ade-recent-projects`, local), as today; a sub-terminal's checkout is not covered | no `cwd` inside any workspace folder known to this profile, for any pane of a workspace tab or not |
    | `better-terminal-prompt-history`, `better-terminal-saved-notes` (**shared**) | text the engineer typed | as typed | not stripped: the engineer's own text (stated, not changed) |
 | `ade-scratchpad-draft` (device key, exported to `devices/<device>/`) | the scratchpad box's draft, typed or inserted | as typed today; **F5 (PR #115) PT-11 AC4** keeps the draft out of sync's export while it holds inserted template text, and keeps template sends out of `better-terminal-prompt-history` | not stripped by F4: the engineer's own text; F5's rule applies as F5 says |
 
+   **The import keeps this machine's paths.** Today ADE sync's import
+   (`import_state`, `src-tauri/src/sync.rs`) replaces a shared key's whole local value
+   whenever the repo copy is newer, and puts back only the secret fields
+   (`restore_secrets`). With the strip, that would lose this machine's paths as soon
+   as another machine exports the key. So, when sync imports a key the strip applies
+   to, this machine keeps every stripped field it holds locally for the entries that
+   are still there after the import (a tab set's workspace-tab folder, an orchestrator
+   session's `projectDir`, an agent-tracker entry's `cwd`), whether by merging the
+   imported value with them or by applying them again after the import. An entry the
+   other machine deleted stays deleted. `ade-session` is a device key, which sync does
+   not import today; if it ever does, the same rule holds. How entries are matched,
+   and whether it is a merge or a re-apply, is the architect's, designed once for this
+   criterion and F2 OB-10 AC2 and OB-14 AC5.
+
    F4's own record and recent list are in no synced key (AC1). Test: a session with a
-   workspace tab, a focus sub-terminal named after a
+   workspace tab named after its hub folder, a focus sub-terminal named after a
    checkout, a tab set holding the workspace tab, an orchestrator session and an agent
    run in the checkout, each with path markers; ADE sync's export holds none of the
-   markers, and this machine restores the session's folders and names. F2's
+   markers, and this machine restores the session's folders and names. **Two-machine
+   case:** machine A exports; machine B imports, then later writes each shared key in
+   the table (saves another tab set, adds an orchestrator session and an agent run)
+   and exports; A imports B's newer copies; A's tab set still loads the workspace tab
+   in its hub folder, A's orchestrator session still has its `projectDir` and A's
+   tracker entry its `cwd`, and A's next export still holds none of the markers. F2's
    review-step notice (OB-3 AC3) tells the engineer the paths stay on this Mac.
 4. ADE stores no persona, client or repo name read from `hub.conf` or `ACCESS.md`; the
    record holds only paths, the hidden flags, the order, the last-opened time and the
@@ -3143,7 +3197,10 @@ persona's file browser, which is the owner's whole ask.
   workspace tab (OQ-8), and strips hub and workspace paths from sync's export, which
   changes OB-10 AC2 and OB-14 AC5 (OQ-5). The owner approved each as an F2 change on
   2026-11-10, and F2 revision 5 writes them into F2 (on PR #98's branch), with the
-  tab-set wording of OQ-2. Note for F2: F2's own finished-hub check (OB-2
+  tab-set wording of OQ-2; F2 revision 5.1 adds WS-7 AC3's import rule (this
+  machine keeps its stripped fields when sync imports another machine's copy) to
+  OB-10 AC2 and OB-14 AC5. F2's design and UX still say hub paths sync and need a
+  revision before F2 is sharded (F2.11). Note for F2: F2's own finished-hub check (OB-2
   AC2) has the same exposure as WS-2 AC8 (a hub's git config naming programs); F4
   does not change F2, and recommends F2's design use the same check, including the
   top-level rule (F4.1). F4 never sets F2's hub-tab flag (D9), so a hub folder opened
@@ -3256,7 +3313,7 @@ questions. Each question is kept as asked, with its answer after its title.
   *Recommend yes*: running `bin/setup` under a live persona session would relink the
   memory it is using, and the engineer can close the hub's tabs and run it.
 - **OQ-5. Workspace paths in the sync export (WS-7 AC3).** **Answered 2026-11-10
-  (owner): yes**, for every synced key in WS-7 AC3's table (F2 changes to OB-10 AC2
+  (owner): yes**, for the keys WS-7 AC3's table strips (F2 changes to OB-10 AC2
   and OB-14 AC5, F2 revision 5). Strip, from ADE sync's
   export, every workspace path in the keys WS-7 AC3 lists (`ade-session`'s pane
   folders and sub-terminal names for workspace tabs, tab sets' hub-tab folders, the
@@ -3306,6 +3363,15 @@ questions. Each question is kept as asked, with its answer after its title.
   requirement changes. *Recommend yes*: F3 S1 is designed (PR #116) and will likely
   be sharded and reviewed before F4 is approved, and without the line F3's own text
   never tells its reviewer about the obligation.
+- **OQ-13. WS-1 AC8's two cases (revision 3.2, open).** WS-1 AC8 is written at
+  these recommendations; confirm them before S1 is sharded. (a) Does a discovered
+  checkout the engineer hid (WS-3) stay covered? *Recommend yes*: hiding a folder
+  from the file browser does not make it any less the client's repo. (b) When the
+  workspace closes, does automatic setup then fire for a terminal already inside a
+  covered checkout? *Recommend no setup question for the rest of that terminal's
+  life*: the terminal was opened as part of the workspace, and a question appearing
+  only because a tab was closed elsewhere would surprise; a new terminal opened there
+  later is set up as today.
 
 ### F4.11 Handoff
 
@@ -3320,8 +3386,10 @@ questions. Each question is kept as asked, with its answer after its title.
   WS-2 AC3's message and the notices of WS-1 AC2, AC7, WS-6 AC2, AC3 and WS-9 AC1,
   AC5.
 - **Architect:** the workspace record's store and its exclusion from sync (WS-7 AC1),
-  the sync strip (WS-7 AC3, OQ-5), designed once with F2 OB-10 AC2's strip for hub
-  tabs (F2 revision 5), WS-1 AC8's check in automatic project setup, discovery's
+  the sync strip (WS-7 AC3, OQ-5) and its import rule (this machine keeps its
+  stripped fields when it imports another machine's later copy, by merge or
+  re-apply), designed once with F2 OB-10 AC2's and OB-14 AC5's strip for hub tabs (F2
+  revision 5), WS-1 AC8's check in automatic project setup, discovery's
   parser and its frozen fixture (WS-1
   AC2), the finished-hub check (WS-2 AC8), the per-root bound and non-blocking reads
   (WS-9 AC2, AC3), the watches (WS-9 AC6, S2), how the multi-root tree fits
@@ -3431,4 +3499,16 @@ questions. Each question is kept as asked, with its answer after its title.
 | minor: `state_snapshot` does not copy every store file | WS-7 AC2: only `state/kv/` files, recordings excluded; restoring a snapshot can bring back an older record, and both stay on the machine. F4.11's m8 note corrected. |
 | minor: text left wrong by D9 | WS-2 AC5 and OQ-9: an unflagged hub folder goes into recent projects as today; WS-7 AC3's agent-tracker row: unflagged workspace tabs put the hub folder into `better-terminal-agent-tracker` (shared) and recent projects, which is the disclosure if OQ-5 is declined. |
 | minor: palette entries while a hub is unfinished | WS-2 AC6 and WS-6 AC3: only Refresh Workspace Folders; Add, Remove and Show Hidden are hidden until the hub is finished again, with a test. |
+
+**Check of the approval edits (921c2e9 and F2 c55fe3b): BLOCKED on M1 and M2 (M2 is F2's); answered in revision 3.2.**
+
+| Finding | Answer in revision 3.2 |
+|---|---|
+| **M1** "this machine keeps and restores them" breaks once a second machine syncs: `import_state` replaces a shared key's whole local value when the repo copy is newer, and `restore_secrets` puts back only secret fields | WS-7 AC3: the import keeps this machine's stripped fields (merge or re-apply), with a two-machine test; G2 and the architect handoff (F4.11) say so; designed once for F2 OB-10 AC2, OB-14 AC5 and F4. F2 revision 5.1 makes the same change. |
+| **m1** PE-10 AC4's test | "B's instance's tabs (F1.1), including panes and sub-terminals, are unchanged" (F1 revision 9m). |
+| **m2** F1.1 *Workspace* row | "can have exactly one", matching F4.5 (F1 revision 9m). |
+| **m3** F1 9m's history sentence on 9l | Corrected: 9l and 9m both edit the F1 index row, F1's Status and the end of the history, so the merge conflict is textual; keep both, 9l before 9m. |
+| **m4** OQ-5's answer line and Source | "the keys WS-7 AC3's table strips". |
+| **m6** WS-1 AC8's hidden checkouts and after-close behaviour | Written at the recommendation (hidden stays covered; no setup question for the rest of the terminal's life), with tests; OQ-13 asks the owner to confirm. |
+| **m7** a workspace tab named after its hub folder | WS-7 AC3's `ade-session` names row strips it (OQ-5's rule); the test includes such a tab. |
 <!-- F4 ends -->
