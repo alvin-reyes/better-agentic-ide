@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
-| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Approved by the owner, 2026-11-09 (revision 4 + minors; revision 4's delta review passed; owner answered Q1 to Q13); not sharded |
+| F2 | [Agentic-environment onboarding](#f2-agentic-environment-onboarding) | Approved by the owner, 2026-11-09 (revision 4 + minors; revision 4's delta review passed; owner answered Q1 to Q13); revision 5 applies F4's approved amendments (owner, 2026-11-10); not sharded |
 
 ---
 
@@ -2318,7 +2318,8 @@ clarification for slice 0.
   every finding of it; revision 4's delta review PASSED with six minors (n1 to n6),
   which the owner's approval required folded in, with an explicit allowance for
   the manual `AGENT_TERMINAL` override (F2.12). Amended the same day by the
-  owner's decisions of 2026-11-09 (History, last entry). Not sharded. Next: the designer
+  owner's decisions of 2026-11-09 (History). Revision 5 applies the F2 changes the
+  owner approved with F4 on 2026-11-10 (History, last entry). Not sharded. Next: the designer
   (screens and copy) and the architect (design spec, ADRs and slice plan), F2.11.
 - **Source:** the owner, 2026-11-09: *"in ADE a user can choose to open terminal or set
   up your agentic environment with questions to configure the ai-agent for the
@@ -2408,6 +2409,17 @@ clarification for slice 0.
     are compared after `~` expansion, NFC-normalised, case-folded on a
     case-insensitive volume. Tests added: `/x/a/b` beside a run to `/x/a` and
     `/x/a` beside a run to `/x/a/b` are refused; `/x/ab` beside `/x/a` is allowed.
+  - 2026-11-10, revision 5: the owner approved F4 (workspaces, PR #113, revision
+    3.1) on 2026-11-10, with these F2 changes: **F4 OQ-4**, a hub that is already
+    open is brought forward and `bin/setup` does not re-run (OB-2 AC2); **F4 OQ-5**,
+    ADE sync's export strips the hub folder and every path of a hub tab, while this
+    Mac keeps and restores them (OB-10 AC2, OB-14 AC5, the review step OB-3 AC3);
+    **F4 OQ-8**, the run's tab becomes an F4 workspace tab when the run commits
+    `hub.conf` (new OB-14 AC6, built and tested by F4 S1); **F4 OQ-1 and OQ-2**,
+    today's saved workspaces are called tab sets (OB-3 AC3, OB-5 AC4, OB-10 AC2,
+    OB-14 AC5). The hub-tab text says how a hub tab and F4's workspace mark relate
+    (F2.5, OB-14 AC6): F4 never sets the hub-tab flag (F4 D9). No other F2
+    requirement changed.
 
 ### F2.1 Problem
 
@@ -2494,7 +2506,8 @@ where the developer is.
   with a `hub.conf` that is not committed is an **unfinished hub**.
 - **Hub tab:** the run's terminal tab, a tab ADE opens for an existing hub (OB-2 AC2),
   and every sub-terminal opened from either (OB-12). OB-14 says what ADE keeps
-  about them.
+  about them. F4's **workspace tab** (F4.1) is a separate mark that F4 sets; F4
+  never sets the hub-tab flag (OB-14 AC6).
 - **Persona session:** Claude Code started with the hub's Claude install and Claude
   config folder in the hub folder, where the hub's `CLAUDE.md` holds the persona and
   its SessionStart hook prints the state.
@@ -2586,6 +2599,18 @@ where the developer is.
    undo and contains the sentence that ADE refuses a checkout already linked to
    another hub (and not the earlier sentence that `bin/setup` replaces such a
    link).
+   **Already open** (owner, 2026-11-10, F4 OQ-4; F4 D7, WS-2 AC3). When the chosen
+   finished hub is already open in this instance (a hub tab for that hub folder, or
+   F4's workspace tab of that hub, in any window; folders compared as OB-4 AC7
+   compares them), the existing-hub choice opens no new tab and starts no second
+   persona session: it brings the most recently used of those tabs forward. If the
+   option to run `bin/setup` first is on, neither `bin/setup` nor `bin/doctor` runs,
+   and ADE says so: "This hub is already open. bin/setup was not run; close the
+   hub's tabs to run it." (exact copy: the designer's). Two persona sessions in one
+   hub would both write its STATE and journal, and `bin/setup` under a live session
+   would relink the memory it is using. Tests: choosing an open hub leaves one hub
+   tab and one persona session and brings that tab forward, from any window; with
+   the option on, no script runs and the message is shown.
 3. **New hub at an existing path:** a hub folder path that is a finished hub is
    refused inline with an offer to use it as an existing hub instead (AC2). Any other
    existing path, an unfinished hub included, is refused ("already exists"); the run
@@ -2680,8 +2705,9 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
 3. **The review step** lists every answer, the folders the run will create (the hub
    folder, and its parent when OB-2 AC4 applies), and the exact commands the run
    will execute, in order, before anything is written. It says the hub folder's name
-   holds the client's name and is kept in ADE's saved session, and in any saved
-   workspace the developer saves with the hub tab in it (OB-14). Confirming runs
+   holds the client's name and is kept on this Mac in ADE's saved session, and in any
+   tab set the developer saves with the hub tab in it (OB-14), and that ADE sync
+   leaves it out of what it pushes (OB-10 AC2). Confirming runs
    the preflight (OB-4 AC2) and then starts the run; Back keeps the answers. Test: the
    listed `bin/init` command equals the one the run executes.
    - **The memory notice.** When question 7 has a repo with a checkout, the review
@@ -2979,14 +3005,14 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
      open as a **"Hub removed"** tab (owner, 2026-11-09): it starts the
      developer's login shell in the home folder, since the hub folder is gone.
      It is no longer a hub tab, and it is never saved or restored: not in the
-     saved session, not in a saved workspace, not brought back by a relaunch or
+     saved session, not in a tab set, not brought back by a relaunch or
      by Reopen Closed Tab, and its scrollback is never saved (it shows the hub's
      path).
    Tests (both): after Remove at a failed (f), the tab is labelled "Hub
    removed" and shows a shell prompt whose working folder is the home folder;
    the left-behind list and its commands are visible, stay visible after other
    tabs are used, and are gone once dismissed; the saved session, and a
-   workspace saved while the tab is open, hold no entry for it; after a
+   tab set saved while the tab is open, hold no entry for it; after a
    relaunch, and after closing it and choosing Reopen Closed Tab, no such tab
    exists.
 5. **Closing the hub tab, or quitting, during the run.**
@@ -3219,12 +3245,20 @@ where it decides the hub kind; it does nothing in slice 1, so slice 1 does not s
    the relayed traffic finds no answer, except the hub folder's path as AC2 allows.
    The relayed-traffic part applies once phone-watch story 8 exists (F2.8).
 2. **What ADE does keep and send about a hub,** stated honestly:
-   - **The hub folder's path** (which holds the client's name by default) is kept in
-     ADE's saved session (`ade-session`), as every tab's folder is, so the tab can be
-     restored (owner's answer to Q11), and in a saved workspace that holds the tab
-     (OB-14 AC5). The session and saved workspaces stay on this Mac, and both are
-     pushed to the developer's own sync repo when Settings → Sync is on. The
-     review step says so (OB-3 AC3).
+   - **The hub folder's path** (which holds the client's name by default) is kept on
+     this Mac in ADE's saved session (`ade-session`), as every tab's folder is, so
+     the tab can be restored (owner's answer to Q11), and in a tab set that holds the
+     tab (OB-14 AC5). **ADE sync's export strips it** (owner, 2026-11-10, F4 OQ-5):
+     for a hub tab, every pane's folder (sub-terminals included) and every
+     sub-terminal's name are left out of the exported `ade-session`, and a tab set's
+     hub-tab entry is exported without its folder, so none of them reaches the
+     developer's own sync repo when Settings → Sync is on; this Mac keeps and
+     restores them. F4 WS-7 AC3 applies the same strip to every F4 workspace tab and
+     to the other synced keys it lists (one strip, designed once). The review step
+     says so (OB-3 AC3). Test: with Settings → Sync on and path markers in a hub
+     tab's folder, a sub-terminal's folder and name, and a tab set holding the tab,
+     ADE sync's export holds none of the markers, and a relaunch on this Mac
+     restores the tab in its folder.
    - **Claude's config folder** holds the hub's path in a folder name:
      `~/.claude/projects/<encoded hub path>` (in the Claude config folder as
      `bin/setup` resolves it; `~/.claude` by default), and one for each work area
@@ -3452,10 +3486,14 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
    - **Reopen Closed Tab** reopens a hub tab as a hub tab, empty (its scrollback
      was never kept);
    - **Move to New Window** keeps the flag; the tab is the same tab;
-   - **saved workspaces** (Settings → Workspace, layouts only): saving one that
-     holds a hub tab saves the flag with the tab's folder, as for any tab's folder,
-     and opening it opens a hub tab, empty and labelled "Agent hub". The review
-     step's notice (OB-3 AC3) says the folder path is kept in saved workspaces too;
+   - **tab sets** (Settings → Tabs, layouts only; *Saved Workspaces* under
+     Settings → Workspace until F4 WS-10 renames them, owner 2026-11-10, F4 OQ-2):
+     saving one that holds a hub tab saves the flag with the tab's folder on this
+     Mac, as for any tab's folder, and opening it there opens a hub tab, empty and
+     labelled "Agent hub". ADE sync's export carries the entry without its folder
+     (OB-10 AC2; F4 OQ-5), so on another Mac Load opens it as a plain tab labelled
+     "Agent hub" in the home folder. The review step's notice (OB-3 AC3) says the
+     folder path is kept in tab sets too, on this Mac only;
    - a saved session restores it as AC1 says.
    ADE's rules for a hub tab (AC1 to AC3) follow the flag in each case.
    `.ade/context/remote-tabs.md` records the flag for the relay: that a tab entry
@@ -3463,8 +3501,19 @@ Step (c) would then commit them, and the hub would no longer be what `bin/init` 
    folder. **It is created by whichever ships first** of phone-watch story 8 and
    F2's slice 1, and the other follows it. Tests: each operation on a hub tab gives
    a hub tab (label, empty screen, no scrollback in the saved session or the
-   workspace, "Agent hub" in the tracker); a plain tab in a hub folder duplicated
+   tab set, "Agent hub" in the tracker); a plain tab in a hub folder duplicated
    or moved stays plain.
+6. **Hub tabs and F4's workspaces** (owner, 2026-11-10, F4 PR #113). F4's
+   workspace mark is a separate mark from the hub-tab flag (F4 D9), and F4 never
+   sets the flag: a hub folder opened from the New tab dialog, Open project or
+   recent projects is a plain-shell tab with F4's workspace mark only, as F2.5 has
+   it, and AC1 to AC3 do not apply to it. A hub tab of a finished hub opened by the
+   existing-hub choice (OB-2 AC2) carries both marks. **The run's tab becomes a
+   workspace tab** (F4 OQ-8, F4 WS-2 AC7): when the run commits `hub.conf` (step
+   (c)), the run's tab gains F4's workspace mark and keeps its flag, and its file
+   browser shows the hub's workspace; if the hub is later removed and the tab becomes
+   the "Hub removed" tab (OB-5 AC4), it loses both. F4 S1, which depends on F2's
+   slice 1, builds and tests this; F2's run must not prevent it.
 
 ### F2.7 Constraints
 
