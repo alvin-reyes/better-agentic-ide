@@ -1,28 +1,46 @@
 # Writing shared local keys
 
-- **Decided in:** ADR 0033.
+- **Decided in:** ADR 0033 (revision 2).
 - **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, sections 2 and 3.
 
 ## The rule
 
-- A JSON `localStorage` key that more than one window reads or writes is written with `writeJsonFields(key, patch, base)` (`src/lib/storage.ts`). In one synchronous step it:
-  1. re-reads the key;
-  2. applies `patch` to the top-level fields;
-  3. writes the result.
-- `base` is the window's full copy. It is used only when the key is absent or unreadable.
+It applies to a JSON `localStorage` key that **more than one window writes**. In one synchronous step, the writer:
+
+1. re-reads the key;
+2. changes only what it means to change;
+3. writes the result;
+4. updates its own store with `set`.
+
+- **Objects: field-level.** Use `writeJsonFields(key, patch, base)` (`src/lib/storage.ts`). It applies `patch` to the top-level fields. `base`, the window's full copy, is used only when the key is absent or unreadable.
+- **Arrays: operation-level.** Re-read the array and apply one operation to it: add (with the key's de-duplication), remove by id or by value (never by index), or replace one entry by id. Cap it, write it, then set the store from what was written.
 - **Never write a window's whole in-memory copy of such a key**, from any window, main or detached. In particular, never call `persistSettings(get())` after load.
 - A handler that applies another window's change (a Tauri event) updates its store with `set` and writes nothing.
+- **This is best effort across windows.** Writes to one key within the time `localStorage` takes to reach every window can lose one field until the next write. Do not build anything that needs more.
 
 ## Keys under the rule
 
-- `better-terminal-settings`: every `settingsStore` setter, through `save(patch)`.
+- `better-terminal-settings`: every `settingsStore` setter, through `save(patch)`. Load-time migrations are applied in memory only and must stay in the code. Unset fields stay absent and follow their default.
 - `ade-thoughts-layout`: through `writeThoughtsLayoutField` (`src/lib/thoughtsLayout.ts`).
-- `ade-file-browser`: F3 S1 story 3's `setShowHidden` read-modify-write and the mirror.
+- `ade-file-browser`: F3 s1c's `setShowHidden` read-modify-write and the mirror.
 
-Keys with a single writer may use plain `setItem`: `ade-session`, `ade-viewer-state` and `ade-thoughts-dock-notice`.
+## Known exceptions (follow-up F-1)
+
+These are written whole from stale copies today, in both kinds of window:
+
+- `better-terminal-prompt-history` (`Scratchpad.tsx` `saveHistory`);
+- `better-terminal-saved-notes` (`Scratchpad.tsx` `persistNotes`);
+- `better-terminal-agent-tracker` (`agentTrackerStore.ts` `persistSessions`).
+
+Do not copy their pattern. F-1 moves them to operation-level writes.
+
+## Single writer: plain `setItem` allowed
+
+`ade-session`, `ade-viewer-state`, `ade-thoughts-dock-notice`, `better-terminal-workspaces`, `better-terminal-orchestrator` and `ade-bmad-dismissed`. These are written by the main window only. If a detached window starts writing one, it comes under the rule.
 
 ## Disk queue (`src/lib/persistence.ts`)
 
 - `queue(key)` records the key only.
 - `flush()`, and its retry after a failed `state_write`, read each queued key's value from `localStorage` at flush time. `null` means remove.
-- After applying a cross-window settings event, the main window calls `flushNow()`.
+- After applying a cross-window settings event, the main window calls `flushNow()` (`applyThoughtsDock` in `src/lib/thoughtsDockSync.ts`).
+- After a snapshot restore, `state_write` (`src-tauri/src/state.rs`) drops every write until restart (`RESTORE_PENDING`). `suspendAutoSave()` still stops the calling window's timers.
