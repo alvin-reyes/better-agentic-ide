@@ -40,7 +40,7 @@ type TextHead = { text: string; size: number; truncated: boolean; binary: boolea
 - **Open in tab** (`addEditorTab(path)`) shows only for a plain text head. Truncated: "Showing the first 2.0 MB of N MB." and "Too large to open in a tab". Lossy: "Not UTF-8 text, can't be edited in a tab". Binary: "Binary file (N MB), not shown." and no editor. A failed read: "Can't open <name>: <reason>". Every such message is `role="status"` `aria-live="polite"` (`Status` in `viewer/shared.tsx`).
 - `TextHead`, `PANEL_TEXT_MAX_BYTES` (2 MiB) and `formatSize` live in `src/lib/textHead.ts`.
 - **Focus:** the panel root is `role="complementary"` `aria-label="Preview"`; its body region has `tabIndex={-1}`. `App` passes `focusRequest`, bumped only when ⌘⇧B or the palette opens the panel and reset to 0 on close; the panel serves a new value once, to the code editor after it mounts (else the body), and drops it when the file changes. Closing goes through `closePreviewFocus(panelEl)` (`src/lib/previewFocus.ts`), which focuses `.xterm-helper-textarea` when focus is inside the panel.
-- Live follow is still today's `watch_directory` effect until Story 3. With LIVE on it reloads every kind, code included, on a `changed` event for the path (it filters by the file's extension, so a file without one isn't followed).
+- Live follow: see Story 3 below (the `watch_directory` effect is gone).
 - Tab-only views: a terminal click on a `.mmd` or a contract ABI/IDL `.json` now shows it as code in the panel; the diagram and ABI views are reached with *Open in tab*.
 - **Focus rules in code:** `usePreviewPanel()` in `src/lib/previewFocus.ts` holds `open` and `focusRequest` for App: `toggle` (⌘⇧B, palette) bumps the request when opening, `openForFile` (the `open-preview` event) opens without one, `close` runs `closePreviewFocus` and resets the request to 0. In the panel a served request is spent: `MonacoWrapper`'s `onFocused` (through `CodeView`) or focusing the body clears it, so a later reload or remount of the same file never takes focus.
 
@@ -54,3 +54,12 @@ type TextHead = { text: string; size: number; truncated: boolean; binary: boolea
 - **Truncated files:** a reveal past the shown text of a truncated head shows "Line N is past the part shown (first 2.0 MB)" (`role="status"`) until the next reveal for that file; the cursor goes to the last shown line. Past the end of a whole file: last line, no message.
 - Markdown, HTML, PDF, Word and images ignore the reveal; it stays on the tab until the next `setPreviewPath`.
 
+## Live follow (Story 3)
+
+- The panel follows its file with `watch_file` only, never `watch_directory`, for every kind, while the user's LIVE toggle is on. Watch health is per-path state in `PreviewPanel` (`live | stale | arming | failed | off`), separate from the toggle, which the panel never flips.
+- Any event re-reads, 150 ms after the last and at most 1 s after the first. A `removed` marks the watch `stale`; the next good read re-arms (unwatch the old id, new `watch_file`). One `watch_file` in flight at a time, generation-checked; a late or superseded id is unwatched at once. One re-read after every successful arm.
+- **"Not found" is read from the error text:** a read error matching `(os error 2)`, `(os error 3)`, "No such file" or "cannot find the file/path" means the file is gone: "Deleted on disk" (`role="status"`) over the last content, the watch is dropped, and the panel re-checks at 2 s doubling to 30 s (the backoff also doubles on failed arms and resets on a good arm). Other errors show "Can't open <name>: <reason>". A change to the Rust error format for a missing file must keep one of these.
+- Footer: "● LIVE" while the toggle is on and the status is `live`, `stale` or `arming`; "Not live: <reason>" (`role="status"`) for `failed`, and for `off` ("the file is missing").
+- Results: a read is applied only if it is newer than the last applied read and for the current path.
+- A `path:line` re-click on the file shown, past the end of the whole (not truncated) text the editor holds, re-reads the file and holds the reveal until that read settles.
+- `BinaryView` keeps its view while only `reloadKey` changes; a failed read is "Can't open <name>: <reason>" in a `Status`.
