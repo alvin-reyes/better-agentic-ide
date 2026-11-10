@@ -1,6 +1,6 @@
 # Thoughts panel: dock, keys, event, layout
 
-- **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, revision 3. UX: `2026-11-10-thoughts-panel-right-ux.md` (approved 2026-11-10).
+- **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, revision 4. UX: `2026-11-10-thoughts-panel-right-ux.md` (approved 2026-11-10).
 - **Owner decision 2026-11-10:** the visible right dock ships after F3 S1 s1a to s1d (PR #118: s1a, s1b1, s1b2, s1b3, s1c, s1d). Until then every window passes `dock="bottom"` to `PanelLayout`, and Scratchpad gets no `onDockChange`, so it shows no dock control.
 - Scratchpad's `placement` and `slot` props are optional until step 3a, which makes them required; with `placement` absent it is the bottom dock as today. `onDockChange` stays optional.
 
@@ -33,13 +33,13 @@ Both keys are in `PERSISTED_KEYS`, and in neither `SHARED_KEYS` nor `DEVICE_KEYS
 
 ## Layout
 
-- The pure module is `src/lib/panelLayout.ts`. It exports `layoutPanels`, `largestFit`, `thoughtsChrome`, `listSplit`, `PANEL_RANGES` and the types `Panel`, `Dock`, `Placement`, `Chrome`, `LayoutInput` and `LayoutResult`. It does no I/O. `PANEL_RANGES` equals F3's clamps (file browser 180..500, Preview 280..900) and `BOARD_WIDTH` (280..720).
+- The pure module is `src/lib/panelLayout.ts`. It exports `layoutPanels`, `largestFit`, `thoughtsChrome`, `listSplit`, `PANEL_RANGES` and the types `Panel`, `Dock`, `Placement`, `Chrome`, `LayoutInput`, `LayoutResult`, `PanelSlot` and `ThoughtsSlot`. The slot types live here (step 1a), not in `PanelLayout.tsx`, so Scratchpad (step 1c) can import them before the host exists; import them from `src/lib/panelLayout.ts` only. It does no I/O. `PANEL_RANGES` equals F3's clamps (file browser 180..500, Preview 280..900) and `BOARD_WIDTH` (280..720).
 - The host is `src/components/PanelLayout.tsx`, rendered by `App.tsx` and `DetachedApp.tsx`. It renders a wrapper with exactly [main row, Scratchpad] and `data-placement`.
 - Its props are `{ dock, inSightKey, open, saved, onCommit(panel, width), fileBrowser?(slot), main, preview?(slot), board?(slot), thoughts(slot) }`.
   - Each slot is `PanelSlot { width, max, onResize(width, final) }`. `max` is `largestFit`.
   - The Thoughts slot adds `placement: Placement | null`.
 - **Resizing.** A panel calls `onResize(w, false)` while dragging. The host lays out with that value and writes nothing. The panel calls `onResize(w, true)` at the drag end, on a key step or on a size button. The host clamps to `[min, max]` and calls `onCommit` once.
-- **Holders**, all routed by `useLayoutHolders(inSightKey, { boardOpen, thoughtsOpen, viewerPanels })` in `src/hooks/useLayoutHolders.ts`, which returns `{ saved, open, onCommit }`. App and DetachedApp (`viewerPanels: false` until F3 S3) both call it; neither window calls `setLayout` or `writeThoughtsLayoutField` itself. A commit reaches its own panel's holder and no other.
+- **Holders**, all routed by `useLayoutHolders(inSightKey, { boardOpen, thoughtsOpen, viewerPanels })` in `src/hooks/useLayoutHolders.ts`, which returns `{ saved, open, onCommit }`. App and DetachedApp (`viewerPanels: false` until F3 S3) both call it; neither window writes a width itself (no `writeThoughtsLayoutField`, `browserWidth`, `previewWidth` or `rightWidth` in `App.tsx` or `DetachedApp.tsx`). The open toggles are not routed by the hook: F3's ⌘B and ⌘⇧B keep writing `layout.browserOpen` and `layout.previewOpen` through `setLayout` in App's toggle handlers. A commit reaches its own panel's holder and no other.
   - Thoughts: `useThoughtsWidth().commit`, which writes the field and then sets state.
   - File browser and Preview: `viewerStore.setLayout(inSightKey, …)`, after s1c and s1d.
   - Board: the hook's state, not persisted.

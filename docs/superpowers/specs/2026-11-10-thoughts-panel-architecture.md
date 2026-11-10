@@ -1,6 +1,6 @@
 # Thoughts panel dock: architecture note
 
-- **Status:** Revision 3, 2026-11-10. Revision 1 (50cefee) was blocked by review (B1, M1 to M4, m1 to m8); revision 2 (1291a96) was blocked by the delta review (B1: section 4 stale against PR #118 at 67310e5; M-A, M-B, M-C and five minors). The persistence decisions of revision 1 passed and are kept: field-level setters, and a disk queue that holds keys and reads them at flush time. Section 9 lists each finding and where it is answered. Not yet approved.
+- **Status:** Revision 4, 2026-11-10. Revision 1 (50cefee) was blocked by review (B1, M1 to M4, m1 to m8); revision 2 (1291a96) was blocked by the delta review (B1: section 4 stale against PR #118 at 67310e5; M-A, M-B, M-C and five minors); revision 3 (7808785) was blocked by the second delta review (N1: nothing tested that the commands use the restore guard; N2 to N7). The persistence decisions of revision 1 passed and are kept: field-level setters, and a disk queue that holds keys and reads them at flush time. Section 9 lists each finding and where it is answered. Not yet approved.
 - **Owner decision (2026-11-10, answer to Q1):** the visible right dock ships **after** F3 S1 stories s1a to s1d. PR #118 (`_bmad-output/initiative-per-view-viewer/epic-slice-1-viewer-state/tickets.toml`, at 67310e5) shards them as seven stories, s1a, s1b1, s1b2, s1b3, s1c, s1d and s1e, so "s1a to s1d" now means s1a, s1b1, s1b2, s1b3, s1c and s1d. The internals may be built in parallel. Section 4 is ordered by this decision.
 - **UX amendment it builds:** [`2026-11-10-thoughts-panel-right-ux.md`](2026-11-10-thoughts-panel-right-ux.md), revision 3, approved by the owner 2026-11-10 (PR #114). TR-1 to TR-31 are its criteria; this note does not restate them. Section 4.3 maps every TR to a step.
 - **Scope.** This is a UI layout feature. The note decides only what the scrum-master needs to shard it: the module layout, how settings and layout are written, the disk race, sequencing against F3 S1, the focus helper, and the new keys. Anything else follows the UX spec.
@@ -13,11 +13,11 @@ The name **`PanelLayout`** stays. The code splits into one pure module, one I/O 
 
 | File | Kind | Exports |
 | --- | --- | --- |
-| `src/lib/panelLayout.ts` | pure | `layoutPanels`, `largestFit`, `thoughtsChrome`, `listSplit`, `PANEL_RANGES`, and the types below |
+| `src/lib/panelLayout.ts` | pure | `layoutPanels`, `largestFit`, `thoughtsChrome`, `listSplit`, `PANEL_RANGES`, and the types below, including the slot types `PanelSlot` and `ThoughtsSlot` (step 1a, so step 1c can import them before 3a creates `PanelLayout.tsx`) |
 | `src/lib/thoughtsLayout.ts` | I/O | `readThoughtsLayout()` (clamps on read, falls back to defaults), `writeThoughtsLayoutField(field, value)` (field-level, section 2) |
 | `src/hooks/useThoughtsWidth.ts` | hook | `useThoughtsWidth(): { width, commit(width) }`, the window's holder of the saved right-dock width (section 1.2) |
 | `src/hooks/useLayoutHolders.ts` | hook | `useLayoutHolders(inSightKey, flags): { saved, open, onCommit }`, the one place that routes a committed width to its holder (section 1.2). App and DetachedApp both call it. |
-| `src/components/PanelLayout.tsx` + `PanelLayout.css` | component | `default PanelLayout`, the types `PanelSlot` and `ThoughtsSlot` |
+| `src/components/PanelLayout.tsx` + `PanelLayout.css` | component | `default PanelLayout`. It imports `PanelSlot` and `ThoughtsSlot` from `panelLayout.ts` and does not re-export them; every user imports them from `src/lib/panelLayout.ts`. |
 
 ```ts
 // src/lib/panelLayout.ts
@@ -35,6 +35,14 @@ export interface LayoutInput {
 export interface LayoutResult {
   placement: Placement | null;                      // null: Thoughts closed
   widths: Partial<Record<Panel, number>> & { main: number };
+}
+export interface PanelSlot {
+  width: number;                              // the fitted width to render (layoutPanels)
+  max: number;                                // largestFit(input, panel): "Widest that fits", aria-valuemax
+  onResize(width: number, final: boolean): void;
+}
+export interface ThoughtsSlot extends PanelSlot {
+  placement: Placement | null;                // width and max apply only when "right"
 }
 export const PANEL_RANGES: Record<Panel, { min: number; max: number; initial: number }>;
 // fileBrowser 180..500 (240), preview 280..900 (480), board 280..720 (380), thoughts 280..640 (360)
@@ -54,14 +62,7 @@ Both `App.tsx` and `DetachedApp.tsx` render it, and both feed its `saved`, `open
 
 ```ts
 // src/components/PanelLayout.tsx
-export interface PanelSlot {
-  width: number;                              // the fitted width to render (layoutPanels)
-  max: number;                                // largestFit(input, panel): "Widest that fits", aria-valuemax
-  onResize(width: number, final: boolean): void;
-}
-export interface ThoughtsSlot extends PanelSlot {
-  placement: Placement | null;                // width and max apply only when "right"
-}
+import type { Dock, Panel, PanelSlot, ThoughtsSlot } from "../lib/panelLayout";
 interface PanelLayoutProps {
   dock: Dock;
   inSightKey: string;                         // viewerKey of the view in sight (M1, section 1.3)
@@ -120,14 +121,22 @@ export function useLayoutHolders(inSightKey: string, flags: LayoutFlags): {
 - The open flags come from the same holders: `layout.browserOpen` and `layout.previewOpen` of the view in sight, and the `boardOpen` and `thoughtsOpen` flags the window passes in (section 1.4).
 - DetachedApp passes neither `fileBrowser` nor `preview` render props until F3 S3; `viewerPanels: false` gives the `saved` and `open` values above.
 
-**Test A-5** (step 3a, `src/hooks/__tests__/useLayoutHolders.test.ts`, `renderHook` with the real `viewerStore` and a `localStorage` seeded with `ade-thoughts-layout` and two views' layouts):
+**Test A-5** (step 3a, `src/hooks/__tests__/useLayoutHolders.test.ts`, `renderHook` with the real `tabStore` and `viewerStore`).
+
+**Setup (N4).** Seeding `ade-viewer-state` in `localStorage` would do nothing: `viewerStore` reads that key only through `hydrateViewerState()`, `loadSession()` and `endRestore()`, and its reconciliation drops every state whose view is not live in `tabStore`. So the views are made live and their layouts set through the stores:
+1. `localStorage` is cleared and seeded with `ade-thoughts-layout` = `{ rightWidth: 360 }` only.
+2. `useTabStore.getState().addView(activeTabId, { name: "B" })` adds a second view to the active tab. Reconciliation gives both views a state. `keyA` and `keyB` are read from the tab's views' `viewerKey`.
+3. `setLayout(keyA, { browserWidth: 240, previewWidth: 480 })` and `setLayout(keyB, { browserWidth: 360, previewWidth: 600 })`, so the two views differ.
+4. `renderHook(({ key }) => useLayoutHolders(key, flags), { initialProps: { key: keyA } })`, with `flags = { boardOpen: true, thoughtsOpen: true, viewerPanels: true }`.
+
+"View B unchanged" below means `states[keyB].layout` is deep-equal to its value after step 3.
 - `onCommit("thoughts", 400)`: `ade-thoughts-layout.rightWidth` is 400 and `saved.thoughts` is 400; both views' `layout` in `viewerStore` and `saved.board` are unchanged.
-- `onCommit("fileBrowser", 300)`: `states[inSightKey].layout.browserWidth` is 300 and `saved.fileBrowser` is 300; the other view's layout, `ade-thoughts-layout` and `saved.board` are unchanged.
-- `onCommit("preview", 700)`: only `states[inSightKey].layout.previewWidth` changes.
+- `onCommit("fileBrowser", 300)`: `states[keyA].layout.browserWidth` is 300 and `saved.fileBrowser` is 300; view B, `ade-thoughts-layout` and `saved.board` are unchanged.
+- `onCommit("preview", 700)`: only `states[keyA].layout.previewWidth` changes.
 - `onCommit("board", 500)`: only `saved.board` changes; nothing is written to `localStorage` and `viewerStore` is unchanged.
-- Rerendering with the other view's key: `saved.fileBrowser` and `saved.preview` are that view's values, and a commit lands on that view only.
+- Rerendering with `key: keyB`: `saved.fileBrowser` is 360 and `saved.preview` is 600, and `onCommit("fileBrowser", 400)` changes `states[keyB].layout.browserWidth` only; `states[keyA].layout` keeps its values from the steps above.
 - With `viewerPanels: false`: `open.fileBrowser` and `open.preview` are `false`, the saved values are `initial`, and `onCommit("fileBrowser", 300)` changes nothing.
-- A string test: `App.tsx` and `DetachedApp.tsx` each call `useLayoutHolders(` and neither calls `setLayout(` or `writeThoughtsLayoutField(` itself.
+- A string test (N3): `App.tsx` and `DetachedApp.tsx` each call `useLayoutHolders(`. Neither contains `writeThoughtsLayoutField(`, `browserWidth`, `previewWidth` or `rightWidth`. It does **not** forbid `setLayout(`: the open toggles stay where F3 puts them. s1c's ⌘B writes `layout.browserOpen` and s1d's ⌘⇧B writes `layout.previewOpen` through `setLayout(inSightKey, { …Open })` in App's toggle handlers, and either story may land before 3a. Only widths are routed by the hook.
 
 ### 1.3 Cause of a move, and the one announcer
 
@@ -295,7 +304,7 @@ The guarantees above hold for writes separated by more than the time it takes a 
 
 ### 3.4 Snapshot restore and other windows (m4, M-B)
 
-- `suspendAutoSave()` acts only in the window that calls it, the main window's Settings → Sync. It sets `suspended`, drops the pending batch and clears the flush timer. It does **not** stop the 10-minute `state_snapshot` interval (`startAutoSave`'s `setInterval`), and it does nothing in detached windows.
+- `suspendAutoSave()` acts only in the window that calls it, the main window's Settings → Sync. Today it sets `suspended`, drops the pending batch and clears the flush timer (step 1b changes it to keep the queued keys; see below). It does **not** stop the 10-minute `state_snapshot` interval (`startAutoSave`'s `setInterval`), and it does nothing in detached windows.
 - So after a restore, a detached window's settings write (the dock), a Thoughts layout write, a history or notes write, or an agent-tracker write can still call `state_write` and overwrite the restored files before the restart that loads them. With the keys-only queue the value written is that window's current `localStorage`, which is exactly what the restore meant to replace.
 - The snapshot interval that keeps running is harmless: `state_snapshot` copies `kv/` into a new snapshot and prunes the oldest. It never writes `kv/`. It is left as it is.
 
@@ -303,28 +312,49 @@ The guarantees above hold for writes separated by more than the time it takes a 
 
 ```rust
 // src-tauri/src/state.rs
-#[derive(Default)]
-pub struct RestoreGuard(std::sync::Mutex<bool>); // true: a restore is pending until restart
+#[derive(Default, Clone)]
+pub struct RestoreGuard(std::sync::Arc<std::sync::Mutex<bool>>); // true: a restore is pending until restart
 
-/// The only writer that checks the guard. Used by the state_write command and by tests A-3, A-6 and A-7.
+impl RestoreGuard {
+    /// Lock; set the flag; run `restore`; on Err clear the flag; unlock. The lock is held
+    /// for the whole of `restore`. guarded_restore is this with restore_snapshot; test A-8
+    /// passes a closure that pauses, to hold a restore open while a write arrives.
+    pub(crate) fn restoring(&self, restore: impl FnOnce() -> std::io::Result<()>) -> std::io::Result<()>;
+}
+
+/// The only writer that checks the guard. Used by the state_write command and by tests A-3, A-6, A-7, A-8.
 pub fn guarded_write(kv: &Path, entries: &HashMap<String, Option<String>>, guard: &RestoreGuard) -> std::io::Result<()>;
 // lock; if *pending { return Ok(()) } (nothing written); else write_batch(kv, entries); unlock.
 
 /// The only restorer that sets the guard. Used by the state_restore_snapshot command and by tests A-3 and A-6.
 pub fn guarded_restore(state_dir: &Path, name: &str, now_ms: u64, guard: &RestoreGuard) -> std::io::Result<()>;
-// lock; *pending = true; restore_snapshot(state_dir, name, now_ms);
-// on Err: *pending = false and return the error; unlock.
+// guard.restoring(|| restore_snapshot(state_dir, name, now_ms))
+
+#[tauri::command]
+pub async fn state_write(app: tauri::AppHandle, guard: tauri::State<'_, RestoreGuard>,
+                         entries: HashMap<String, Option<String>>) -> Result<(), String>;
+// let guard = guard.inner().clone(); let kv = state_dir(&app)?.join("kv");
+// tauri::async_runtime::spawn_blocking(move || guarded_write(&kv, &entries, &guard))
+//     .await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
+
+#[tauri::command]
+pub async fn state_restore_snapshot(app: tauri::AppHandle, guard: tauri::State<'_, RestoreGuard>,
+                                    name: String) -> Result<(), String>;
+// the same shape around guarded_restore(&dir, &name, now_ms(), &guard)
 ```
 
-- **Where the flag lives.** `lib.rs` registers `.manage(state::RestoreGuard::default())` next to the other managers. `state_write` and `state_restore_snapshot` each take `guard: tauri::State<'_, RestoreGuard>` and call `guarded_write` or `guarded_restore`. Nothing else reads or sets it.
+- **Where the flag lives.** `lib.rs` registers `.manage(state::RestoreGuard::default())` next to the other managers. `state_write` and `state_restore_snapshot` each take `guard: tauri::State<'_, RestoreGuard>` and call `guarded_write` or `guarded_restore`. Nothing else reads or sets it. A missing `.manage` would make Tauri reject every call of both commands at runtime ("state not managed"), so test A-9 checks the registration (below).
 - **Where it is not.** `write_batch` and `restore_snapshot` are unchanged and know nothing of the guard. `write_batch` is shared with `sync.rs`'s `import_state` and with the existing `state.rs` and `sync.rs` tests, which keep calling it directly.
 - **No window between the swap and the flag.** `guarded_restore` sets the flag **before** `restore_snapshot` starts, so before the rename that swaps `kv/`. It holds the lock for the whole restore, so a `state_write` that arrives during the restore waits for the outcome instead of being dropped:
   - the restore succeeds: the waiting write sees the flag and is dropped;
-  - the restore fails: the flag is cleared before the lock is released, and the waiting write lands as normal. A failed restore loses no write.
-- The commands run on Tauri's thread pool (`#[tauri::command(async)]` on a sync `fn`), so a write blocked for the length of a restore blocks no UI thread. A poisoned lock is recovered with `into_inner()`, never unwrapped.
+  - the restore fails: the flag is cleared before the lock is released, and the waiting write lands as normal.
+- **Which thread waits (N7).** Today both commands are sync `fn`s under `#[tauri::command(async)]`. tauri-macros 2.5.4 wraps such a body in a future and hands it to `respond_async_serialized`, which runs it with `tauri::async_runtime::spawn`. So the body runs **on a tokio worker thread**, not on a separate thread pool and not through `spawn_blocking`. A write waiting on the lock there would hold a tokio worker for the length of the restore, and with as many waiting windows as workers it would stall every other async command. So the two commands become `async fn`s that run their bodies with `tauri::async_runtime::spawn_blocking`, as `sync.rs`'s `sync_now` already does around `SYNC_LOCK`. A waiting write then holds a blocking-pool thread, never a tokio worker and never the main thread. `RestoreGuard` wraps an `Arc` and derives `Clone` so the closure can own it (`State<'_, _>` is not `'static`). A poisoned lock is recovered with `into_inner()`, never unwrapped.
 - While the flag is set, `state_write` returns `Ok(())`, not an error, so no window's retry loop spins.
 - The flag lives as long as the process. The restart that loads the snapshot starts with a fresh guard.
-- The JS-side `suspendAutoSave()` stays. A failed restore leaves the main window suspended until restart, as today; this feature does not change that.
+- **The main window after a failed restore (N5).** `SyncSettings`' `restore` calls `flushNow()`, then `suspendAutoSave()`, then `state_restore_snapshot`. Today a failure leaves that window suspended until restart, so its later changes never reach disk. Once the guard clears its flag on failure, resuming is safe, so step 1b adds `resumeAutoSave()` to `persistence.ts`, and `restore`'s `catch` calls it before showing "Restore failed".
+  - With the keys-only queue (section 3), `queue(key)` still records the key while suspended but starts no timer. `suspendAutoSave()` clears the timer and keeps the recorded keys. `resumeAutoSave()` clears `suspended` and flushes, so every key changed during the suspension is written with its current value. After a successful restore nothing calls it, and the recorded keys are never flushed.
+  - So "a failed restore loses no write" holds in Rust from step 1f, and in the main window from step 1b. Between the two, the main window stays suspended after a failed restore, as it does today.
+  - It does not hold if the failed restore also failed to put `kv/` back (`restore_snapshot`'s rollback rename failing after the swap rename failed). Then `kv/` is missing, and the next write recreates it with that batch alone. This is today's behaviour for every window and is not changed here.
 - **The message.** `SyncSettings.tsx`'s success message becomes: "Snapshot restored. Auto-save is paused in every window until you restart ADE, which loads it."
 - **Out of scope, unchanged:** `sync_now`'s `import_state` writes `kv/` through `write_batch` and is not guarded. A sync pull after a restore can still import shared keys over restored ones, as it can today.
 
@@ -332,7 +362,28 @@ pub fn guarded_restore(state_dir: &Path, name: &str, now_ms: u64, guard: &Restor
 - **A-3:** after `guarded_restore` succeeds, `guarded_write` of a new value leaves the kv folder byte for byte as the restore left it, and returns `Ok`.
 - **A-6:** `guarded_restore` with a name that is not a snapshot returns `Err`, and a following `guarded_write` lands.
 - **A-7:** with a fresh guard, `guarded_write` writes exactly as `write_batch` does (the existing write test, through the guard).
+- **A-8, a write arriving mid-restore (threaded, N7).** Set up as A-3: a kv folder and one snapshot. Then, in `std::thread::scope`:
+  1. Thread R calls `guard.restoring(|| { started.send(()); gate.recv(); restore_snapshot(dir, name, now) })`.
+  2. The test waits for `started`; R now holds the lock with the flag set. Thread W calls `guarded_write(kv, {"k": "new"}, &guard)` and sends its result on `done`.
+  3. `done.recv_timeout(200 ms)` must time out: W is waiting on the lock.
+  4. The test sends on `gate`. R returns `Ok`. `done.recv()` gives `Ok(())`, and the kv folder is byte for byte the restored snapshot, with no `"k"`.
+  - **Its failure twin:** the same, but R's closure returns `Err` after the gate. R returns `Err`, W returns `Ok(())`, and the kv folder holds `"k"` = `"new"`.
+  - The 200 ms wait cannot fail a correct build, because a correct W cannot finish before the gate opens. A slow machine can only make a broken build pass by chance, never fail a correct one.
+- **A-9, the wiring test (N1).** A string test in the same module, over `include_str!("lib.rs")` and `include_str!("state.rs")`:
+  - `lib.rs` contains `.manage(state::RestoreGuard::default())`, and its `generate_handler!` still lists `state::state_write` and `state::state_restore_snapshot`.
+  - Take the text from `pub async fn state_write(` to the next line that is exactly `}`. Its signature (up to the first `{`) names `RestoreGuard`. Its body (after that `{`) contains `guarded_write(` and `spawn_blocking(`, and no `write_batch(`.
+  - Take `pub async fn state_restore_snapshot(` the same way. Its signature names `RestoreGuard`. Its body contains `guarded_restore(` and `spawn_blocking(`, and, once every `guarded_restore(` is removed from it, no `restore_snapshot(`.
+  - The commands come before the `tests` module in `state.rs`, so the first match of each signature is the command.
 - A string test (`src/lib/__tests__/restoreMessage.test.ts`) asserts that `SyncSettings.tsx` contains "paused in every window".
+
+**Why A-9 is a string test and not a `tauri::test` mock app.** A mock-app test would invoke `state_write` after `state_restore_snapshot` through IPC, which is the stronger check. It is not adopted, because it would need three changes that are not this feature's:
+- `tauri`'s `test` feature is not enabled in `src-tauri/Cargo.toml`;
+- every `state` command takes `tauri::AppHandle`, which is `AppHandle<Wry>`, so a `MockRuntime` app cannot call them unless they become generic over `R: Runtime`;
+- `state_dir` resolves `app.path().app_data_dir()`, so a mock-app test would write into the real user's Application Support folder unless the state directory were made injectable.
+
+A-9 catches the two builds the review named: `state_write` still calling `write_batch`, and `lib.rs` missing the `.manage`. A-3 and A-6 to A-8 prove what `guarded_write`, `guarded_restore` and `restoring` do. Together they cover the command path, short of Tauri's own dispatch.
+
+**Test A-10, step 1b** (`src/lib/__tests__/persistence.test.ts`, `invoke` mocked): `suspendAutoSave()`; set a persisted key through the wrapped `setItem`; no `state_write` happens; `resumeAutoSave()`; the next `state_write` carries the key's current value. And `src/components/__tests__/SyncSettings.restore.test.tsx`: with `window.confirm` returning `true` and `state_restore_snapshot` rejecting, clicking a snapshot's Restore calls `resumeAutoSave` (spied) once and shows "Restore failed"; with it resolving, `resumeAutoSave` is not called.
 
 ## 4. Interplay with F3 S1 (PR #118)
 
@@ -378,18 +429,25 @@ flowchart LR
   T1e --> T3a
   T2 --> T3a
   T1b --> T3b
+  T1d --> T3b
+  T1f --> T3b
+  T1f --> T1b
   classDef any stroke-dasharray: 4 2
 ```
+
+- **1d → 3b:** TR-9's entry half (the palette entry for the dock) needs 1d's `keywords`.
+- **1f → 3b:** 3b is the first step in which a detached window writes `better-terminal-settings` (`setThoughtsDock`), so it must not ship before the restore guard. The edge is also implied by 1f → 1b → 3b; it is drawn so that the reason is not lost if 1b's dependency changes.
+- **1f → 1b:** 1b's `resumeAutoSave()` after a failed restore is safe only once the guard clears its flag on failure (section 3.4).
 
 The F3 constraints on steps 1b and 2 are "never in flight beside" rules, not edges; the table after the list gives them.
 
 1. **Step 1: any time, in parallel with any F3 story** (dashed boxes). None of these touches a file in 4.1.
-   - **1a.** The pure module, `writeJsonFields`, and `thoughtsLayout.ts`.
-   - **1c.** The panel's internals: `Scratchpad.tsx` and `Scratchpad.css`. Depends on 1a for `thoughtsLayout.ts` and `thoughtsChrome`. **Its new props, `placement`, `slot` (a `ThoughtsSlot`) and `onDockChange`, are optional.** With `placement` absent Scratchpad lays out as the bottom dock and takes its height from its own state, as today, so both windows keep rendering it unchanged until 3a. Step 3a makes `placement` and `slot` required and both windows pass them. `onDockChange` stays optional for good: its absence is what hides the dock controls (section 4.2 item 5).
+   - **1a.** The pure module (with the slot types `PanelSlot` and `ThoughtsSlot`), `writeJsonFields`, and `thoughtsLayout.ts`.
+   - **1c.** The panel's internals: `Scratchpad.tsx` and `Scratchpad.css`. Depends on 1a for `thoughtsLayout.ts`, `thoughtsChrome` and the `ThoughtsSlot` type, which it imports from `src/lib/panelLayout.ts`. **Its new props, `placement`, `slot` (a `ThoughtsSlot`) and `onDockChange`, are optional.** With `placement` absent Scratchpad lays out as the bottom dock and takes its height from its own state, as today, so both windows keep rendering it unchanged until 3a. Step 3a makes `placement` and `slot` required and both windows pass them. `onDockChange` stays optional for good: its absence is what hides the dock controls (section 4.2 item 5).
    - **1d.** The palette's `keywords`, in `CommandPalette.tsx`. s1d changes App's toggle handlers, not the palette's item type.
    - **1e.** `announceStore` and `SubTerminalAnnouncer`'s third source.
-   - **1f. The restore guard** (section 3.4): `state.rs` (`RestoreGuard`, `guarded_write`, `guarded_restore`, the two commands), `lib.rs` (`.manage`), the `SyncSettings.tsx` message, and tests A-3, A-6, A-7. It is its own story because it shares no file and no test with 1b: it is Rust plus one message, and it is independent of the dock, so it can land first and be verified alone.
-2. **Step 1b: settings and persistence.** It edits `persistence.ts` and `persistence.test.ts` (s1b1) and the `sync.rs` `tests` module (s1a, s1b3), so it **never runs beside s1a, s1b1 or s1b3**. It may run beside s1b2, s1c, s1d or s1e, or while no F3 story is in flight.
+   - **1f. The restore guard** (section 3.4): `state.rs` (`RestoreGuard`, `restoring`, `guarded_write`, `guarded_restore`, the two commands as `async fn` over `spawn_blocking`), `lib.rs` (`.manage`), the `SyncSettings.tsx` success message, and tests A-3, A-6, A-7, A-8 and A-9. It is its own story because it is Rust plus one message, independent of the dock, so it can land first and be verified alone. It does not touch `persistence.ts`, so it keeps no F3 constraint.
+2. **Step 1b: settings and persistence, after 1f merges.** It edits `persistence.ts` and `persistence.test.ts` (s1b1) and the `sync.rs` `tests` module (s1a, s1b3), so it **never runs beside s1a, s1b1 or s1b3**. It may run beside s1b2, s1c, s1d or s1e, or while no F3 story is in flight. It also adds `resumeAutoSave()` and the `catch` in `SyncSettings.tsx`'s `restore` (section 3.4, test A-10), which is why it waits for 1f; 1f is small and has no F3 constraint, so this costs no F3 slot.
    - **The Rust key-set test.** s1b3 adds a Rust test asserting `"ade-viewer-state"` is in neither `SHARED_KEYS` nor `DEVICE_KEYS`; step 1b needs the same assertion for `"ade-thoughts-layout"` and `"ade-thoughts-dock-notice"` (TR-3). There is **one** such test, named `local_only_keys_are_in_neither_shared_nor_device_keys`, over a list of keys. Whichever of s1b3 and 1b lands first adds it with its own keys; whichever lands second **extends its list** and adds no second test.
    - The TypeScript key tests in `persistence.test.ts` are separate `it` blocks (s1b1's for `ade-viewer-state`, 1b's for the two Thoughts keys). Neither extends the other; the second to land rebases over the first.
 3. **Step 2: the focus helper and the open-state lift.** It edits `App.tsx` (s1a, s1b2, s1c, s1d), `TerminalPane.tsx` (s1c) and `previewFocus.ts` (s1d), so it **never runs beside s1a, s1b2, s1c or s1d**. It may run beside s1b1, s1b3 or s1e, or while no F3 story is in flight.
@@ -399,7 +457,7 @@ The F3 constraints on steps 1b and 2 are "never in flight beside" rules, not edg
    - **The s1d rule (the ticket's version, adopted here and in `pane-focus.md`):** if `src/lib/paneFocus.ts` is on main when s1d is pulled, s1d's VV-1 AC7 focus move calls `focusInSightSoon()` and `closePreviewFocus` already calls `focusInSight()`. If it is not, s1d writes the rule in `previewFocus.ts` as its ticket says, and **step 2 owns the move**: it replaces s1d's view-switch focus move with `focusInSightSoon()` and `closePreviewFocus`'s with `focusInSight()`, removes s1d's local lookup, and leaves VV-1 AC7's tests unchanged and green. s1d never builds `paneFocus.ts`.
 4. **Step 3a: the layout host and `useLayoutHolders`, after s1d merges** (owner decision), and after steps 1a, 1c, 1e and 2. It may run beside s1e, which touches none of its files. The host reads the file-browser and Preview widths and open flags from `viewerStore` through `useLayoutHolders` and commits them with `setLayout` (section 1.2). Nothing adds App-held Preview state only for F3 to remove it.
    - **The windows pass `dock="bottom"` to `PanelLayout` until 3b**, whatever the setting says. 3a's tests drive the host's `dock` prop directly.
-5. **Step 3b: the visible right dock**, after 3a and 1b.
+5. **Step 3b: the visible right dock**, after 3a, 1b, 1d and 1f.
    - The windows pass the setting as `dock`.
    - The dock controls: the header dock button and "Bottom while narrow" (Scratchpad renders them only when the window passes `onDockChange`), the Settings radio group, the palette entry, and the upgrade notice.
    - `startThoughtsDockSync` is registered in both windows. DetachedApp mounts `SubTerminalAnnouncer`.
@@ -411,7 +469,7 @@ Before 3b, no story shows the right dock or a dock control. The bottom panel's o
 
 | F3 in flight | 1a, 1c, 1d, 1e, 1f | 1b | 2 | 3a | 3b |
 | --- | --- | --- | --- | --- | --- |
-| none | yes | yes | yes (after 1c) | after s1d only | after 3a |
+| none | yes | yes (after 1f) | yes (after 1c) | after s1d only | after 3a, 1b, 1d, 1f |
 | s1a | yes | **no** | **no** | no (order) | no (order) |
 | s1b1 | yes | **no** | yes | no (order) | no (order) |
 | s1b2 | yes | yes | **no** | no (order) | no (order) |
@@ -426,7 +484,7 @@ Follow-up F-1's history and notes half also edits `Scratchpad.tsx`: it starts af
 - **s1d, build item 3, the cross-reference:** replace "the Thoughts dock story (ordered by the owner after s1a to s1d) adopts paneFocus.ts" with "Thoughts step 2 (the focus helper story) adopts it: it moves this item's view-switch focus move to `focusInSightSoon()` and `closePreviewFocus` to `focusInSight()`, and VV-1 AC7's tests stay unchanged." In its first sentence, name the calls: "the focus move in this item calls `focusInSightSoon()`; `closePreviewFocus` calls `focusInSight()`".
 - **s1b3, build item 3:** name the second Rust test `local_only_keys_are_in_neither_shared_nor_device_keys`, over a list of keys. "If Thoughts step 1b has already added this test, add `"ade-viewer-state"` to its list instead of adding a test." Its `verify` line's "the Rust key-set test passing by name" then refers to that name.
 - **s1a, s1b1, s1b3:** a note that Thoughts step 1b must not be in flight beside them. **s1a, s1b2, s1c, s1d:** the same for Thoughts step 2.
-- **Thoughts stories:** shard 1f as its own story; step 2 depends on 1c merged; 3a depends on 2 merged; 1c's props are optional until 3a; F-1's Scratchpad half depends on 1c and is never beside step 2.
+- **Thoughts stories:** shard 1f as its own story; 1b depends on 1f merged; step 2 depends on 1c merged; 3a depends on 2 merged; 3b depends on 3a, 1b, 1d and 1f merged; 1c's props are optional until 3a, and 1c imports `PanelSlot` and `ThoughtsSlot` from 1a's `panelLayout.ts`; F-1's Scratchpad half depends on 1c and is never beside step 2.
 - Shard F-1 (section 2.1) as its own story, as before.
 
 ### 4.3 Every TR mapped to a step
@@ -434,11 +492,11 @@ Follow-up F-1's history and notes half also edits `Scratchpad.tsx`: it starts af
 | Step | Carries |
 | --- | --- |
 | **1a** pure functions and the layout key | TR-10, TR-11, TR-12, TR-13 (function half: the `largestFit` values and the clamp on commit, on the function), TR-15, TR-17a, TR-20 (`thoughtsChrome`), TR-21 (`listSplit`), TR-31, TR-3 (TS half: the three fields restored and clamped on read, unreadable to default) |
-| **1b** settings and persistence | TR-1, TR-2 (sender half: `setThoughtsDock` does a field write and `emit`; listener half: `applyThoughtsDock` sets and writes nothing; main window settles the notice), TR-3 (`isPersistedKey`, and the Rust key-set test of 4.2 item 2), TR-30, A-1, A-2, A-4 |
+| **1b** settings and persistence | TR-1, TR-2 (sender half: `setThoughtsDock` does a field write and `emit`; listener half: `applyThoughtsDock` sets and writes nothing; main window settles the notice), TR-3 (`isPersistedKey`, and the Rust key-set test of 4.2 item 2), TR-30, A-1, A-2, A-4, A-10 (`resumeAutoSave` after a failed restore) |
 | **1c** panel internals (`Scratchpad.tsx`/`.css`, tested by rendering `Scratchpad` with `placement`, a `ThoughtsSlot` and `onDockChange` passed in, and once with none of them to show the bottom dock unchanged) | TR-5, TR-6, TR-18 (handle half: role, name, `aria-valuemin`, `aria-valuemax` = `slot.max`, `aria-valuenow`, the keys calling `onResize(w, true)`, the "Widest that fits" state at `slot.max`), TR-19, TR-20 (`data-chrome`), TR-21 (splitter half), TR-22, TR-23, TR-26, TR-28, TR-29 (`Scratchpad.css`) |
 | **1d** palette | TR-9 (keyword half: items accept `keywords`, search matches one) |
 | **1e** announcer | the m8 tests (section 1.3) |
-| **1f** restore guard | A-3, A-6, A-7, the message string test (section 3.4) |
+| **1f** restore guard | A-3, A-6, A-7, A-8 (threaded: a write mid-restore waits, then is dropped on success and lands on failure), A-9 (wiring: `.manage` in `lib.rs`, the commands call `guarded_write` and `guarded_restore`), the message string test (section 3.4) |
 | **2** focus helper and open-state lift | TR-25, the tests in section 5.2, and, if s1d merged first, the move of s1d's focus calls with VV-1 AC7's tests green |
 | **3a** layout host and `useLayoutHolders` | TR-4, TR-13 (rendered half, section 4.4), TR-14, TR-17b, A-5 (section 1.2), TR-18 (end to end, on `useLayoutHolders`: a test harness renders `PanelLayout` fed by `useLayoutHolders` and the real `Scratchpad`; the handle shows 360 from a seeded `ade-thoughts-layout`; a → key step commits once, `ade-thoughts-layout.rightWidth` becomes 344, and the slot's width becomes 344; plus A-5's string test that both windows use the hook), TR-29 (`PanelLayout.css` joins the `it.each`), the `PANEL_RANGES` agreement test, the section 1.3 announcement rules |
 | **3b** visible right dock | TR-7, TR-8, TR-9 (entry half), TR-16, TR-24, TR-27, TR-2 (registration: the `App.tsx` string test; DetachedApp through TR-24) |
@@ -532,8 +590,9 @@ Each attempt re-reads the view in sight, so it always targets the current view. 
 | Two windows write one key within the propagation delay | Best effort (3.2). One field can be lost until the next write of that key. A flush always writes the value the flushing window sees. |
 | `state_write` fails | The retry re-reads the queued keys, so it writes the newest values, never a stale batch. |
 | A window writes after a snapshot restore | `state_write` drops it in Rust through `guarded_write` (3.4). |
-| A window writes while a restore is running | The write waits on the guard's lock. It is dropped if the restore succeeds and lands if it fails (3.4). |
-| A restore fails | `guarded_restore` clears the flag before releasing the lock; other windows keep saving. The main window stays suspended until restart, as today. |
+| A window writes while a restore is running | The write waits on the guard's lock, on a blocking-pool thread (`spawn_blocking`), never a tokio worker. It is dropped if the restore succeeds and lands if it fails (3.4, test A-8). |
+| `lib.rs` loses `.manage(RestoreGuard)`, or a command stops calling the guarded function | Test A-9 fails. Without it, Tauri would reject every `state_write` with "state not managed", or writes would go around the guard. |
+| A restore fails | `guarded_restore` clears the flag before releasing the lock; other windows keep saving. From step 1b the main window calls `resumeAutoSave()` and flushes what changed meanwhile (A-10); before 1b it stays suspended until restart, as today. |
 | A sync pull after a restore | Not guarded; `import_state` can import shared keys over restored ones, as today. Out of scope (3.4). |
 | A drag pushes past the room | The host clamps to `largestFit` on every move and on commit. The handle shows "Widest that fits". |
 | A view switch moves Thoughts | It is silent (1.3), and the same nodes keep focus (TR-17b). |
@@ -546,7 +605,19 @@ Each attempt re-reads the view in sight, so it always targets the current view. 
 
 ## 9. Review findings and where they are answered
 
-### 9.1 Revision 3: the delta review of revision 2
+### 9.1 Revision 4: the delta review of revision 3
+
+| Finding | Answer |
+| --- | --- |
+| N1 (major): nothing tests that the commands use the guard | 3.4, test A-9: a string test that `lib.rs` registers `.manage(state::RestoreGuard::default())` and lists both commands, that `state_write`'s body calls `guarded_write` and not `write_batch`, and that `state_restore_snapshot`'s body calls `guarded_restore` and no bare `restore_snapshot`. 3.4 also says why a `tauri::test` mock app is not used (no `test` feature; commands bound to `AppHandle<Wry>`; `state_dir` resolves the real app data folder). |
+| N2: slot types needed by 1c before 3a | 1 (table), 1.1, 4.2 item 1: `PanelSlot` and `ThoughtsSlot` live in `src/lib/panelLayout.ts` (step 1a); `PanelLayout.tsx` imports them |
+| N3: A-5's string test clashes with s1c's ⌘B and s1d's ⌘⇧B | 1.2: the test forbids width writes only (`writeThoughtsLayoutField(`, `browserWidth`, `previewWidth`, `rightWidth`); open toggles stay in App's toggle handlers through `setLayout` |
+| N4: how A-5's two layouts reach `viewerStore` | 1.2: two live views through `addView` on the active tab, layouts set with `setLayout`; only `ade-thoughts-layout` is seeded in `localStorage` |
+| N5: "a failed restore loses no write" holds only in Rust | 3.4: step 1b adds `resumeAutoSave()`, called in `restore`'s `catch`; keys changed while suspended are flushed on resume (A-10); the sentence is scoped to "from 1b"; 4.2 adds 1f → 1b |
+| N6: missing edges | 4.2: 1d → 3b (TR-9's entry half needs `keywords`), 1f → 3b (3b is the first detached write of `better-terminal-settings`); item 5, the in-flight table and the ticket list agree |
+| N7: wrong thread claim; no threaded test | 3.4: the claim is corrected (tauri-macros 2.5.4 runs a sync `#[tauri::command(async)]` body through `async_runtime::spawn` on a tokio worker); the two commands become `async fn` over `spawn_blocking`, like `sync_now`; test A-8 holds a restore open with `RestoreGuard::restoring` and checks that a write waits, then is dropped on success and lands on failure |
+
+### 9.2 Revision 3: the delta review of revision 2
 
 | Finding | Answer |
 | --- | --- |
@@ -563,7 +634,7 @@ Each attempt re-reads the view in sight, so it always targets the current view. 
 | minor: the restore guard's story | 4.2 item 1: its own step, 1f |
 | minor: TR-24's Scratchpad mock | 4.3: the mock renders its root at `slot.width`; the host's `data-main-width` |
 
-### 9.2 Revision 2: the review of revision 1
+### 9.3 Revision 2: the review of revision 1
 
 | Finding | Answer |
 | --- | --- |

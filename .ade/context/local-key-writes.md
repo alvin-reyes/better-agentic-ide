@@ -1,6 +1,6 @@
 # Writing shared local keys
 
-- **Decided in:** ADR 0033 (revision 3).
+- **Decided in:** ADR 0033 (revision 4).
 - **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, sections 2 and 3.
 
 ## The rule
@@ -43,4 +43,5 @@ Do not copy their pattern. F-1 moves them to operation-level writes.
 - `queue(key)` records the key only.
 - `flush()`, and its retry after a failed `state_write`, read each queued key's value from `localStorage` at flush time. `null` means remove.
 - After applying a cross-window settings event, the main window calls `flushNow()` (`applyThoughtsDock` in `src/lib/thoughtsDockSync.ts`).
-- After a snapshot restore, `state_write` (`src-tauri/src/state.rs`) drops every write until restart. The flag is a `RestoreGuard` in Tauri managed state, not a static; only `guarded_write` (the `state_write` command) checks it and only `guarded_restore` (the `state_restore_snapshot` command) sets it, before the swap and under one lock, clearing it if the restore fails. `write_batch` knows nothing of it. `suspendAutoSave()` still stops the calling window's flush timer and pending batch; it does not stop the 10-minute snapshot interval, which never writes `kv/`.
+- After a snapshot restore, `state_write` (`src-tauri/src/state.rs`) drops every write until restart. The flag is a `RestoreGuard` in Tauri managed state, not a static; only `guarded_write` (the `state_write` command) checks it and only `guarded_restore` (the `state_restore_snapshot` command) sets it, before the swap and under one lock, clearing it if the restore fails. `write_batch` knows nothing of it. `state_write` and `state_restore_snapshot` are `async fn`s that run their bodies with `tauri::async_runtime::spawn_blocking`, so a write waiting on the guard holds a blocking-pool thread, not a tokio worker. Test A-9 (a string test in `state.rs`) checks that `lib.rs` registers `.manage(state::RestoreGuard::default())` and that the two commands call `guarded_write` and `guarded_restore`.
+- `suspendAutoSave()` stops the calling window's flush timer; it does not stop the 10-minute snapshot interval, which never writes `kv/`. While suspended, `queue(key)` still records the key but starts no timer. If the restore fails, `SyncSettings` calls `resumeAutoSave()`, which clears `suspended` and flushes the recorded keys with their current values. After a successful restore nothing resumes until restart.
