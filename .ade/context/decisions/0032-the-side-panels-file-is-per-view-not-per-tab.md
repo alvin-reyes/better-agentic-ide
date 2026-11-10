@@ -1,0 +1,33 @@
+# 0032: The side panel's file is per view, not per tab (partly supersedes 0009)
+
+- Status: Accepted (2026-11-10, owner), with the F3 S1 design `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md` approved at revision 2.1 plus the Q1 change. The owner answered PRD F3 OQ-9 with (a) on 2026-11-10. It supersedes only the per-tab file model of ADR 0009, and ADR 0009 stays in force for everything else.
+- Context:
+  - ADR 0009 made the Preview panel the one read-only viewer for clicked files, and held its file per tab (`Tab.previewPath`, with `Tab.previewReveal` for `path:line`).
+  - PRD F3 (approved 2026-11-10) makes the **view** the unit: each terminal, sub-terminal and non-terminal tab has its own open file, position, and panel open state and width, all saved across restarts (D3, VV-1, VV-6).
+  - The code-viewer plan's open stories overlap F3:
+    - story 3: live follow, "Deleted on disk";
+    - story 5: file browser clicks open the panel;
+    - story 6: `previewPath` survives a restart and Reopen Closed Tab.
+  - The owner answered OQ-9 with option (a) on 2026-11-10: land stories 3 and 5 first, and let F3 replace story 6.
+- Decision:
+  - **Per view.**
+    - `Tab.previewPath` and `Tab.previewReveal` are removed.
+    - The open file and its position are part of each view's viewer state (ADR 0031), in `viewerStore` under the view's `viewerKey`.
+    - Pending `path:line` reveals move to `viewerStore.reveals`, by the same key. They are still applied once and never saved.
+    - The panel's open state and width are per view too, so `usePreviewPanel` keeps only the ⌘⇧B focus request.
+  - **A click lands in the panel of the view in sight.** ADR 0009's rule "files clicked … open in the active tab's panel" now reads "in the panel of the main window's view in sight". Detached windows still send their clicks to the main window until F3 S3.
+  - **Legacy field.** A saved `previewPath` becomes the own view's open file on load, unless that view has viewer state of its own. Sub-terminals take nothing from it. It is never written again, and `sync.rs` strips it if it is ever present.
+  - **The code-viewer plan, under OQ-9 (a):**
+    - Story 3 is unchanged. Its per-path watch state stays in the panel component and is not viewer state.
+    - Story 5 is unchanged in behaviour. Its AC4 clause "with an editor tab active, a plain click sets that tab's `previewPath`" becomes "sets the open file of the view in sight". F3 S1 rewrites that assertion.
+    - **Story 6 is not built.** F3 VV-6 (S1) replaces its restart part, and F3 VV-4 AC3 (S5) its Reopen Closed Tab part.
+    - The plan's exclusion "PDF page and zoom reset on reload" is replaced by F3 VV-8 AC8 when F3 S2 lands.
+  - **Unchanged from ADR 0009:** one panel, read-only, Monaco reached through `MonacoWrapper`, bounded reads (`read_text_head`), one watch per file, and modifier-click to open a tab.
+- Consequences:
+  - Two terminals in one tab no longer share a file. Switching views swaps the file, its position and the panel's layout.
+  - `MonacoWrapper` gains optional `initialView` and `onViewChange` props for the per-view code position. The file tab passes neither, so it is unchanged.
+  - The side panel's editor is keyed by view and file (`viewerKey + path`), not by file alone, so the same file open in two views is two editors, each with its own position.
+  - The tests built on the per-tab field (`previewPerTab.test.ts`, the open-preview case of `openFile.test.ts`, and the helpers of the three `PreviewPanel*` tests) move to the view in sight in the F3 S1 story that removes the field (design section 12.3).
+  - The "Store" and "App" bullets of `.ade/context/side-panel-files.md` (Go to line) are updated by the F3 S1 story that removes the tab fields.
+  - The file browser likewise shows the view in sight, not the own view. F3 S1 story 3 updates `.ade/context/terminal-open.md`, which says the file browser follows the own view; the palette's own-view rule there is unchanged.
+  - VV-7 AC3's test is the PRD's Markdown `ZQX-MARK` scan, kept as written, with a code-file case added.

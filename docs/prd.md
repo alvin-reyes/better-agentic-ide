@@ -10,7 +10,8 @@ approval, and the change is noted in that section's history.
 
 | ID | Feature | Status |
 |---|---|---|
-| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
+| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
+| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10; opener folder from a non-terminal tab (F3.1, VV-11 AC2), approved by the owner 2026-11-10 |
 
 ---
 
@@ -26,8 +27,9 @@ approval, and the change is noted in that section's history.
   revision 9h delete's left-behind-process and part-way cases, revision 9i
   the text check's restatement of that case's limit, revision 9j the final
   text check's second restatement of that limit and its widening of that case,
-  and revision 9k the slice-1 gaps raised by the starter draft and the UX spec
-  (confirmed by the owner 2026-11-08). Not sharded.
+  revision 9k the slice-1 gaps raised by the starter draft and the UX spec
+  (confirmed by the owner 2026-11-08), and revision 9l a cross-reference to F3
+  D14 (owner sign-off 2026-11-10). Not sharded.
 - **Source:** the owner's intent, 2026-11-08: *"I want the ADE to be a AI Agent for
   Engineers to build their persona based on their roles and responsibility that they
   can use for multiple work opportunities."* The owner also wants the behaviours of
@@ -288,6 +290,11 @@ approval, and the change is noted in that section's history.
     `/private/tmp` (`/tmp`) and `/var/tmp` are refused like the OS temp folder,
     and a missing engagements folder with engagements registered in it is refused
     as registered, even when its parent is missing too (an unmounted drive).
+  - 2026-11-10, revision 9l: cross-reference to F3 D14; no requirement changed;
+    owner sign-off 2026-11-10. F1.8 gains one line: the F1 stories that deliver
+    PE-4 AC4 and PE-13 AC5 carry F3's [Second] criteria if they merge into `main`
+    after the F3 story named for them (F3 D14, F3.8,
+    `.ade/context/f3-merges-second.md`).
 
 ### F1.1 Glossary and definitions
 
@@ -1824,6 +1831,11 @@ ranking and indexing design are the architect's.
      The scenario gains closing A from inside, its reopening by the default profile,
      and the restored-workspace positive control.
   7. The flag story, including PE-13 AC7's release-build test.
+- **F3 cross-reference:** when the story delivering PE-4 AC4 or PE-13 AC5 is
+  sharded, the story delivering PE-4 AC4 carries F3's VV-13, and the one
+  delivering PE-13 AC5 the [Second] halves of F3's VV-6 AC5 and VV-10 AC6, if it
+  merges into `main` after the F3 story named for them (F3 D14, F3.8,
+  `.ade/context/f3-merges-second.md`).
 - **Workspace and focus terminals.** Restoring tabs, panes and sub-terminals of the
   main window builds on today's session store; sub-terminals opened by hand are
   already shipped and saved there. Saving and restoring tabs in other windows is new
@@ -2296,3 +2308,1381 @@ clarification for slice 0.
   (PE-13 AC9, AC10, slice 1, RC-2, F1.12). Then revision 9c's line edits, against
   the approved architecture, and revision 9d's minors (the history lists them).
 <!-- F1 ends -->
+
+---
+
+<!-- F3 begins -->
+## F3: Each sub-terminal has its own file and code viewer
+
+- **Status:** Approved 2026-11-10 (owner), revision 6. Every open question (OQ-5 to
+  OQ-12) is answered at its recommendation (F3.10). Revision 3 was blocked by the
+  re-review on N1, with majors N2 to N5; revision 4 answered them. The delta review
+  of revision 4 closed N2, N4, N5 and the minors and blocked on B1 and B2, with
+  majors M1 to M3 and six minors; revision 5 answers them. The delta review of
+  revision 5 closed every revision-4 finding and blocked on N1, with major N2 and
+  minors m1 to m5; revision 6 answers them. The final review of revision 6 left
+  three minors: the third is applied in F1.8 (revision 9l), the other two go to
+  sharding (F3.9). On 2026-11-10 the owner, approving F4 (PR #113), signed off a
+  cross-reference line in F3.8 for F4 WS-5 AC2 and the tab-set wording (History,
+  "F4 cross-reference"); no F3 requirement changed. On 2026-11-10 the owner approved one
+  change: a tab opened from a non-terminal tab takes that tab's own folder as its
+  opener folder (F3.1, VV-11 AC2; History, last entry). Not sharded.
+- **Number:** F2 is taken by the open PRD for agentic-environment onboarding (PR #98).
+  If that PR is withdrawn, this stays F3.
+- **Source:** the owner, 2026-11-10: *"each tab has to have their own file viewer,
+  code viewer"*. Asked to scope it, the owner decided:
+  - the unit is the **sub-terminal (view)**, not the top-level tab. In a hub tab the
+    main persona terminal shows the hub's files and a focus session sub-terminal
+    shows its own checkout; ⌘[ / ⌘] swaps the panels with the terminal;
+  - each view remembers its root folder (which follows its terminal's folder), its
+    expanded tree, the file open in the code viewer with its scroll and line
+    position, whether each panel is open and its width, and all of it comes back
+    with the session after ADE restarts.
+
+  The owner answered revision 1's open questions on 2026-11-10:
+  - **OQ-1:** a new view copies the layout of the view it was opened from (D1 kept);
+  - **OQ-2:** yes, remember the position in the Markdown, PDF and other non-code
+    viewers too (D5);
+  - **OQ-3:** yes, Move to New Window windows get both panels with the same per-view
+    behaviour (D6);
+  - **OQ-4:** yes, non-terminal tabs show a folder of their own (D7);
+  - **OQ-5:** not answered with revision 1; answered 2026-11-10 with the rest.
+
+  On 2026-11-10 the owner approved revision 6 and answered OQ-5 to OQ-12, each at
+  its recommendation (F3.10), and signed off F1.8's one-line cross-reference.
+- **History:**
+  - 2026-11-10, revision 1: first draft, from the owner's decisions above.
+  - 2026-11-10, revision 2: the owner's answers to OQ-1 to OQ-4 folded in. Added
+    positions for every viewer kind, detached windows, folders for non-terminal tabs,
+    decisions D5 to D9, and four slices.
+  - 2026-11-10, revision 3: answers the blocking review of revision 2. Viewer state
+    never leaves the machine and holds no file content (VV-12, D11); the default
+    profile saves no engagement path in it (VV-13, F1 PE-4 AC4); byte caps per view
+    and per session that never cost the session (VV-7); saving cost unchanged
+    (VV-14); a default for any view without viewer state replaces the one-time
+    migration (VV-9, D12); the HTML position's security rules restated against the
+    app's CSP (VV-1 AC5, OQ-6); S2 tested over a geometry seam (D13); detached
+    windows can hold several views (D6); dependencies on the code-viewer plan
+    (D10, OQ-9); terms aligned with F1 D9. Scope: S1 trimmed; Duplicate, Reopen
+    Closed Tab and the "Hub removed" rule moved to a new slice S5; editor and
+    contracts folders and the opener folder moved into S1; the new "no longer
+    exists" notice dropped in favour of the existing ones.
+  - 2026-11-10, revision 4: answers the re-review of revision 3. Three criteria
+    that depend on unbuilt work (Move to New Tab, the phone relay payload, F1 PE-4)
+    leave S1's Done gate and land with whichever ships second, each with the story
+    and gate that carry its test (D14, F3.8). D11 restated honestly: the anchor
+    digest bounds size and keeps heading text out of the store, and is not a
+    secrecy measure. The new → old → new test is a fixture with a close and a
+    reorder, and viewer state is never matched by a run-scoped id (VV-9 AC5, D15).
+    Byte caps get a unit, a rule for when the parts that are never trimmed exceed
+    the session cap, and a saved "last in sight" time (VV-7 AC6). The architect
+    amends or replaces ADR 0009 (F3.9). Minor fixes: one collapse rule, symlinks
+    and case in VV-13, the webview's store counts as on the machine, the HTML
+    restore direction, the Monaco stub, the seam in G2, a mocked folder report,
+    PE-13 AC5's scope, the menu label, and when `ade-file-browser` is written.
+  - 2026-11-10, revision 5: answers the delta review of revision 4. One trigger for
+    [Second] criteria: whichever story **merges second** into `main` carries the
+    criterion and its test, checked at its review against `main`, and the
+    obligation is written into both sides' tickets at S1's sharding (D14, F3.8,
+    F3.9). VV-12 AC4 gets a concrete S1 test (every key viewer state writes is
+    `ade-session` or persisted) plus a [Second] scan in F1's isolation test. The
+    new → old → new fixture now runs in a fresh module, across two old runs, with
+    an id that changed owner (VV-9 AC5). VV-13 AC2's symlink and case assertions
+    are limited to viewer state, and Windows uses a directory junction. The D15
+    stable key is classified as viewer state. Minor fixes: a sequence number
+    orders expansions and "last in sight", the Monaco stub needs an extension, an
+    immediate folder fetch on show counts, F2 is cited as proposed.
+  - 2026-11-10, revision 6: answers the delta review of revision 5. VV-12 AC4's S1
+    test matches `persistence.ts`: `state_write` is allowed when every key in its
+    `entries` passes `isPersistedKey`, every other file-writing command is banned,
+    and the test runs with auto-save started; the `localStorage` check covers the
+    keys whose written value carries a viewer-state marker (N1, m3). D14 no longer
+    claims every dependent story is sharded: F1's PE-4 AC4 and PE-13 AC5 are not
+    (F1's initiative covers slices 0 and 1), so a "not yet sharded" case records
+    the obligation in a `.ade/context/` note and in F1.8, which gains a one-line
+    cross-reference; PE-13 AC5 / S3 joins the "Merges second" table and F3.9's
+    mirror list, and the saved half of VV-10 AC6 (and of VV-6 AC5) is [Second],
+    out of S3's gate (N2). Minor fixes: the new → old → new fixture's ids are
+    those the previous release's code would produce (m1); every module holding
+    the store is re-imported after `vi.resetModules` (m2); sequence numbers are
+    renumbered when states move between windows (m4); the scrum-master names the
+    one S1 story that carries each conditional criterion (m5).
+  - 2026-11-10, approval: the owner approved revision 6. OQ-5 to OQ-12 answered at
+    their recommendations: 500 expanded folders (OQ-5); the HTML position only with
+    the CSP and sandbox unchanged, else dropped (OQ-6); one fallback chain (OQ-7);
+    slices in the order S1, S2, S4, S5, S3 (OQ-8); option (a), code-viewer stories
+    3 and 5 land first and F3 replaces story 6 and the PDF-reload exclusion (OQ-9);
+    real-webview checks later, not blocking (OQ-10); caps of 32 KB and 256 KB
+    (OQ-11); the merges-second rule (OQ-12). The owner signed off F1.8's
+    cross-reference (F1 revision 9l), worded per the final review's minor 3; its
+    minors 1 and 2 are left to sharding (F3.9). No requirement changed.
+  - 2026-11-10, F4 cross-reference (the owner approved F4 revision 3.1 on
+    2026-11-10, answering F4 OQ-12, OQ-1 and OQ-2 yes): F3.8's "Merges second" part
+    gains one line, F4 WS-5 AC2, modelled on F1 revision 9l; F3 S1's reviewer now
+    sees the obligation in F3's own text. Today's saved workspaces are renamed tab
+    sets (F4 WS-10), so F3.1's *Leaves the machine*, F3.5's non-goal and VV-12 AC2
+    say "tab set". VV-12 AC1 notes that F4's approved sync strip (F4 OQ-5, WS-7 AC3)
+    removes a workspace tab's folders and sub-terminal names from the export, which
+    is F4's, so AC1's "everything the export carries today" and its test's tab
+    names and folders are those of tabs that are not F4 workspace tabs. D6's
+    reading of F1 PE-13 AC5 quotes F1's words before F1 revision 9m ("A's instance's
+    tabs are restored" since). No F3 requirement, slice or gate changed.
+  - 2026-11-10, opener folder from a non-terminal tab: a change to this approved
+    section, approved by the owner on 2026-11-10 (the architect's Q1). A tab opened
+    from a non-terminal tab (editor, contracts, browser) now takes that tab's own
+    folder, its last resolved root in this run, as its opener folder, instead of
+    the home folder; a source not shown in this run still gives the home folder.
+    Changed: F3.1's *Opener folder* and VV-11 AC2, which gains the test for both
+    cases. No other requirement, slice or gate changed.
+
+### F3.1 Terms
+
+The panel names follow F1 D9 ("the file browser, file viewer and preview panel").
+The owner's "file viewer" and "code viewer" are, in this section, the **file
+browser** and the **preview panel**; F1's "file viewer" (the editor tab) is not
+changed here except as VV-11 says.
+
+- **View:** a tab's own terminal or one of its sub-terminals, as in the
+  sub-terminals UX spec (`docs/superpowers/specs/2026-11-02-sub-terminals-ux.md`).
+  A tab without sub-terminals has one view. A **non-terminal tab** (browser,
+  editor, orchestrator, fleet, contracts) also counts as one view for this feature.
+- **View in sight:** the view a window is showing (the shown view of its active
+  tab). The main window and each detached window have their own.
+- **Detached window:** a window made by Move to New Window. It holds one tab, which
+  may hold several views (D6).
+- **File browser:** the file tree panel, toggled with ⌘B. Width 180 to 500 px
+  (`FileBrowser.tsx`).
+- **Preview panel:** the side panel toggled with ⌘⇧B, which the owner calls the code
+  viewer. Width 280 to 900 px. It shows each file in one of the **kinds** below,
+  chosen by the file's extension (`viewerKind`, `src/lib/viewerKind.ts`).
+- **Viewer state:** what one view remembers, and nothing else:
+  1. **root**, the folder the file browser lists (for a non-terminal tab, with its
+     **opener folder**, below);
+  2. **expanded folders**, a set of absolute folder paths, each with the time it was
+     last expanded and its **sequence number** (below; the eviction order of VV-7
+     AC2 and AC6; saved with the set and counted in its bytes);
+  3. **open file**, the path shown in the preview panel, or none, and its
+     **position** as defined for its kind below;
+  4. **layout**: whether the file browser is open and its width, and whether the
+     preview panel is open and its width;
+  5. **last in sight**, the time the view was last the view in sight, with its
+     sequence number (the drop and trim order of VV-7 AC6; saved and counted in its
+     bytes);
+  6. **stable key**, if the architect stores viewer state apart from the view's
+     saved record (D15): an opaque random id, nothing else. It is viewer state: it
+     is counted in the view's bytes, held to VV-7 AC3's allowed list, and kept out
+     of every export by VV-12 like the rest.
+- **Sequence number.** One counter per window's session that only ever increases:
+  every folder expansion and every time a view comes into sight takes its next
+  value. It is saved with the session and continues after a restart (the next
+  value is one more than the highest saved). Wherever F3 says "expanded longest
+  ago", "least recently in sight" or the like, the order is that of the sequence
+  numbers, not of the times: two events in the same millisecond, or a system clock
+  set backwards, never change the order. (The architect may drop the times and
+  keep only the sequence numbers; the order is the same.)
+  **Across windows** (S3): each window's counter is its own, so numbers from two
+  windows are never compared as they stand. When viewer states enter a window's
+  session from another window (Move to New Window, a detached tab's states saved
+  into or restored in the main window's session, D6, or any later move back),
+  they are **renumbered on arrival**: their numbers keep their own relative
+  order and are shifted to start one above the receiving window's highest
+  number, and that window's next value is one above the highest after the shift.
+  So within one view and within one window's session the order is always
+  defined, and states that arrive count as more recent than everything already
+  there. No order is defined between states held in different windows, and no
+  rule of F3 needs one.
+- **Position, per kind.** The preview panel's kinds, the components that show them
+  (`src/components/viewer/`, all used through `PreviewPanel.tsx`), and what
+  position means for each:
+
+  | Kind (extensions) | Shown by | Position remembered | When the file changed since |
+  |---|---|---|---|
+  | **Code** (any other text) | `CodeView.tsx` (read-only editor) | first visible line; cursor line and column | lines are kept by number and clamped to the file (VV-8 AC4) |
+  | **Markdown** (`.md`, `.markdown`) | `MarkdownView.tsx` | the **anchor heading** (the last heading whose top is at or above the top of the visible area), stored as its **anchor digest** (D11) and its **occurrence**; the distance in px from that heading to the top of the visible area; and the **scroll fraction** (scrolled distance / scrollable distance, 0 to 1) | the heading with the same digest and occurrence is put at the same distance; if it is gone, the saved scroll fraction is used; above the first heading, the fraction is used |
+  | **HTML** (`.html`, `.htm`) | the sandboxed page frame in `PreviewPanel.tsx` (not `HtmlView.tsx`, which only editor tabs use) | scroll fraction | the same fraction of the new page (D5, OQ-6) |
+  | **PDF** (`.pdf`) | `PdfView.tsx` | page number, fraction down that page (0 to 1), and zoom | the same page and fraction if the page still exists, else the last page at its top; zoom is kept, clamped to the viewer's range |
+  | **Word** (`.docx`) | `DocxView.tsx` | scroll fraction | the same fraction of the new document |
+  | **Image** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.bmp`, `.ico`) | `ImageView.tsx` | none: an image is fitted to the panel and never scrolls or zooms | nothing to restore |
+  | **Not shown** (a text file read as binary, or a read error) | `PreviewPanel.tsx` notices | none | nothing to restore |
+
+  `BinaryView.tsx` only loads PDF, Word and image files for the views above, and
+  `shared.tsx` holds helpers; neither is a kind. `AbiView.tsx` (contract ABIs and
+  IDLs) and `HtmlView.tsx` appear only in editor tabs, never in the preview panel,
+  so they have no position here. A PDF position means the same whether pages are
+  shown one at a time or in one scrolling column (an uncommitted single-column
+  rewrite of `PdfView.tsx` exists in the main checkout; the definition holds for
+  both). For a code file shown truncated (first 2 MB), the position is within the
+  part shown.
+- **Heading slug and occurrence.** A heading's **slug** is
+  `headingSlug(text)` (`src/lib/docLinks.ts`, the function `MarkdownView` already
+  uses for heading ids) of the heading's rendered text: trimmed, lower-cased, every
+  character that is not a letter, digit, whitespace or `-` removed, each whitespace
+  character replaced by `-`. Its **occurrence** is the number of headings (`h1` to
+  `h6`, in document order) before it with the same slug, counting from 0.
+- **Anchor digest:** a fixed-length digest of a heading's slug, at least 128 bits
+  long (D11). The function is the architect's; equal slugs give equal digests, and
+  at that length two different headings in one file giving the same digest is not a
+  case anyone needs to handle. It is **not a secrecy measure**: a short or common
+  heading can be found again by trying candidate slugs. It bounds the stored size
+  and keeps the raw heading text out of the store; what keeps viewer state private
+  is VV-12 and VV-13 (D11).
+- **Content changed:** the file's content differs from when its position was
+  recorded: a live reload while it is shown, an edit while the view is not in
+  sight, or an edit between two runs of ADE.
+- **Active folder:** the current folder of the view's active pane (the pane with
+  focus in that view's split tree), as ADE last learned it: from the shell's folder
+  report at each prompt (OSC 7, ADR 0021) where shell integration runs, otherwise
+  from today's 3-second poll.
+- **Opener folder:** for a non-terminal tab, the folder of the view that was in
+  sight when the tab was created (its **source**), recorded once at creation. A
+  terminal source gives its active folder. A non-terminal source (an editor,
+  contracts or browser tab, for example) gives its own folder, which is the last
+  root it resolved in this run (the folder its file browser last listed); if the
+  source has not been shown in this run (a tab restored with the session and not
+  yet opened), the opener folder is unknown, so the new tab lists the home folder
+  (VV-11 AC2). Owner, 2026-11-10 (the architect's Q1); before that, a
+  non-terminal source gave no folder and the new tab listed the home folder.
+- **Leaves the machine:** written to the ADE sync repo, a tab set (today's saved
+  workspaces, renamed by F4 WS-10; `better-terminal-workspaces`, which ADE sync
+  shares), the phone relay, or
+  anything else sent over the network or stored outside this machine's **local
+  stores**. The local stores are the app's data folder and the webview's own
+  storage, where `localStorage` and so `ade-session` live (on macOS
+  `~/Library/WebKit/<app identifier>/`, today `com.betterterminal.dev`; its
+  equivalents on Linux and Windows). Writing viewer state to `ade-session` or any
+  other local store is not leaving the machine; that store being exported is
+  (VV-12 AC1).
+
+### F3.2 Problem
+
+Today the file browser is one global panel. Its root follows the folder of the
+**tab's own** terminal, polled every 3 seconds, so a focus session sub-terminal in
+`~/hub/atomic-stays` still shows the hub's files. Its expanded tree resets whenever
+the root changes, and only its open/closed state and width survive a restart. The
+preview panel's file is held per tab (`previewPath`), so every sub-terminal in a tab
+shares one file, and it is lost on restart: `saveSession` never writes it
+(`tabStore.ts`), so the restore path that reads it finds nothing. Whether the
+preview panel is open is held once for the whole window and is lost on restart, its
+width is never saved, and neither the line the editor was on nor the place in a
+Markdown file or PDF is kept. A browser, editor or fleet tab keeps showing the
+previous terminal's folder by accident, and the orchestrator tab shows none.
+Detached windows have neither panel, so a file clicked in one opens in the main
+window. An engineer who switches between the persona terminal and a focus session
+loses their place in both every time.
+
+### F3.3 Users
+
+The engineer running several terminals in one tab: a hub's persona terminal plus
+sub-terminals opened by `ade open` or New Sub-terminal (focus sessions on
+checkouts, dev servers, test runners), switching between them with ⌘[ / ⌘], the
+strip, the tab switcher, a toast or the fleet; reading specs, Markdown notes and
+PDFs beside them; sometimes moving a tab to its own window.
+
+### F3.4 Goals (measurable)
+
+- **G1.** Showing a view always shows that view's viewer state: in the F3.7 tests,
+  0 cases where a view shows another view's root, file, position, expanded folders
+  or layout, in the main window or a detached window.
+- **G2.** After an ADE restart, every restored view shows the viewer state it had
+  when the session was last saved, at its position for every kind in F3.1, subject
+  only to the missing-path and changed-content rules (VV-8), the byte caps (VV-7)
+  and the engagement rule (VV-13). For Markdown, PDF, Word and HTML this is
+  measured over the geometry seam (D13) until real-webview checks join under
+  OQ-10; code positions are measured against the Monaco test stub (VV-1 AC5).
+- **G3.** No new prompt, dialog, setting or notice is added. The only new UI is the
+  two panels in detached windows (VV-10).
+- **G4.** Viewer state never leaves the machine and never costs the session: 0
+  viewer-state paths in the sync export, and 0 sessions removed, or saved more
+  often, because of viewer state (VV-7, VV-12, VV-14).
+
+### F3.5 Non-goals (deliberately out)
+
+- A per-view **Show hidden files** setting. It stays one global preference (D2).
+- A per-view **app folder**. The app-wide folder that the context guard, project
+  setup, contract actions and the fleet use (`activeCwd`, `useOwnFolderCwd` in
+  `App.tsx`) stays on the tab's own view, as today.
+- More than one open file per preview panel (no editor tabs inside the panel).
+- Zoom or pan for images; zoom for Markdown, HTML or Word. Only what each viewer
+  already lets the engineer do is remembered.
+- The position inside an **editor tab's own editor** or its ABI, diagram and HTML
+  views. Editor tabs get a file browser and preview panel state like any view
+  (VV-11); their main editor is unchanged.
+- Viewer state in **tab sets**, **ADE sync** or the **phone relay** (VV-12).
+- **Saving detached windows** across a restart and a **move back** to the main
+  window. Neither exists today and this feature adds neither; when another feature
+  saves detached tabs, their viewer states go with them (D6, VV-10 AC6).
+- **Reopen Closed Tab for non-terminal tabs.** Today only terminal tabs are kept for
+  reopening (`closeTab`), and F3 does not change which tabs are kept (VV-4 AC3).
+- Reopening closed sub-terminals or their viewer state (the sub-terminals spec
+  already rules out reopening sub-terminals).
+- What a detached **non-terminal** tab shows in its body (today only the pane area,
+  `DetachedApp.tsx`). F3 adds its panels in S3 and nothing else.
+- The preview panel's path box and auto-refresh toggle: unchanged, not per view.
+
+### F3.6 Decisions
+
+- **D1. A new view copies its layout, not its content.** A brand-new view starts
+  with the layout (both panels' open/closed state and widths) of the view it was
+  opened from, an empty expanded set and no open file; its root is its own
+  terminal's folder. Why copy rather than start closed: today the panels are
+  global, so an engineer who works with the file browser open sees it in every new
+  terminal. Starting every new sub-terminal with both panels closed would make the
+  focus session (the owner's own example) open bare, and would cost a ⌘B per
+  sub-terminal. Why not copy the content: the new view's folder differs, so the
+  source's expanded folders and open file would be someone else's place. Confirmed
+  by the owner, 2026-11-10 (OQ-1).
+- **D2. Show hidden files stays global.** It is a preference about how the engineer
+  likes to see files, not about the work in a view; per view it would need setting
+  again in every sub-terminal, and the owner's list of what a view remembers does
+  not include it. Toggling it applies to every view in every open window and is
+  still saved in `ade-file-browser` as today.
+- **D3. The open file is no longer per tab.** The tab-level `previewPath` is
+  replaced by each view's open file. Nothing is migrated, because no released ADE
+  saves `previewPath`; if a session does hold one (written by code-viewer story 6,
+  should it ship first, D10), it becomes the tab's own view's open file (VV-9 AC2).
+- **D4. Root follows the active pane.** A terminal view's root is its active
+  folder; with split panes, focusing another pane in the same view moves the root
+  to that pane's folder (today the root follows the own view's active pane in the
+  same way). Non-terminal tabs have no pane folder and follow D7 instead.
+- **D5. Every preview kind remembers a position** (owner, 2026-11-10, OQ-2), as
+  defined per kind in F3.1. Markdown uses a heading anchor first because a heading
+  survives edits above it and a change of panel width, which a pixel offset or a
+  fraction does not; the fraction is the fallback. PDF keeps zoom with the page
+  because a fraction of a page means a different place at a different zoom. HTML and
+  Word use a fraction: neither has anchors that are stable across edits. The HTML
+  page runs in a sandboxed `srcdoc` frame that the app cannot see into, so its
+  position needs the frame to report it, under the security rules of VV-1 AC5; if
+  those cannot all be met, the HTML position is dropped, never the rules (OQ-6).
+- **D6. Detached windows get both panels; their states go wherever their tab goes**
+  (owner, 2026-11-10, OQ-3). Checked in the code: only the main window saves the
+  session (`saveSession`, called from `App.tsx`); a detached window
+  (`DetachedApp.tsx`) never writes `ade-session`, the moved tab leaves the main
+  window's tabs (`detachTab`), and closing the window kills its terminals. So a
+  detached tab is not saved today. A detached window holds one tab, but **not
+  always one view**: `DetachedApp` starts terminal-open handling
+  (`startTerminalOpen`), so `ade open` from a terminal in a detached window adds a
+  sub-terminal to that tab (`addView`). The detached window shows no strip, so only
+  the tab's shown view is visible. Move to New Window itself stays hidden for a tab
+  with sub-terminals until sub-terminals story 5.
+  - **In S1** nothing changes inside a detached window: it has no panels, and its
+    views, including sub-terminals added there by `ade open`, need no viewer state
+    yet. Nothing in a detached window changes any main-window view's state.
+  - **From S3** every view in a detached window has its own viewer state by the
+    rules of VV-1, including sub-terminals added there by `ade open` (VV-2 AC1,
+    layout from the spawning view). The view in sight is the tab's shown view,
+    whatever made it shown.
+  - **Saving.** F1 PE-13 AC5 will save the tabs of other windows and bring them back
+    in the main window. As written, PE-13 AC5 covers an **engagement's** instance
+    ("A's workspace is restored"); it does not by its words cover the default
+    profile. If the architect builds it as session code shared by every instance,
+    the default profile gains it too; if not, detached tabs in the default profile
+    stay unsaved until some later feature saves them. The rule below applies to
+    PE-13 AC5 and to any such later feature, in either profile: once a detached tab
+    is saved, its views' viewer states are saved with it, by VV-6 and every limit of
+    VV-7, VV-12 and VV-13, and restored with it, their sequence numbers renumbered
+    on arrival (F3.1). Of the story that saves detached tabs and F3 S3, whichever
+    **merges second** carries this and its test, by the rule of D14. The story
+    that delivers PE-13 AC5 (F1 slice 6) is not sharded yet, so the obligation is
+    recorded by D14's "not yet sharded" case (F3.8, F1.8).
+  - There is no move back today (the sub-terminals UX spec says "No move back in").
+    Any later move back carries the views' states unchanged.
+- **D7. Non-terminal tabs show a folder of their own** (owner, 2026-11-10, OQ-4).
+  Each tab type's folder comes from what the tab already knows; the root is set by
+  these rules, not by any terminal, and does not move with `cd` anywhere:
+
+  | Tab type | Its folder (checked in the code) | Slice |
+  |---|---|---|
+  | Editor | the project root of its file (`editorFilePath`): the nearest folder above it holding `.git`, by the rule ADE already uses (`project_root`); the file's own folder when there is none | S1 |
+  | Contracts | its contracts root (`contractsRoot`) | S1 |
+  | Orchestrator | its session's project folder (`projectDir`, saved with the session), which exists once the orchestrator has planned tasks; none before that | S4 (opener folder until then) |
+  | Fleet | none: the fleet tab holds no folder of its own | S1 |
+  | Browser | none of its own (a URL is not a folder) | S1 |
+
+  **When a tab has no folder of its own, or its folder does not exist,** the root is
+  the tab's opener folder; if that is unknown or does not exist, the home folder.
+  So a non-terminal tab's file browser always lists a folder. The opener-folder rule
+  and the editor and contracts rows are in S1 so that S1 does not take away the
+  folder these tabs show today (they show the previous terminal's); only the
+  orchestrator's project folder waits for S4. The fallback chain for the fleet and
+  for the orchestrator before planning is the PM's extension of the owner's browser
+  rule, accepted by the owner 2026-11-10 (OQ-7).
+- **D8. At most 500 expanded folders per view** (owner, 2026-11-10, OQ-5). Byte caps (VV-7 AC6) bound the saved
+  size whatever the paths' length.
+- **D9. F3 ships in five slices** (F3.8). Slice 1 is the owner's original request,
+  as small as it can be without breaking anything that works today, and is useful
+  alone. Slices 2 to 5 each build only on slice 1.
+- **D10. F3 and the code-viewer plan** (`_bmad-output/plan-code-viewer-panel.md`,
+  ADR 0009, approved). Its stories 3 (live follow, "Deleted on disk"), 5 (file
+  browser clicks open the preview panel) and 6 (`previewPath` survives a restart
+  and Reopen Closed Tab) are still open and overlap F3. F3 is written so S1 does not
+  need them: VV-1 AC4 names "opened in the preview panel by any route" rather than
+  the file browser click, VV-8 AC3 reuses whichever notice exists, and VV-9 AC2
+  takes a `previewPath` if one was saved. Where F3 and the plan disagree, F3
+  replaces the plan: VV-6 replaces story 6's restart part, VV-4 AC3 (S5) its Reopen
+  Closed Tab part, and VV-8 AC8 (S2) replaces the plan's exclusion of the PDF page
+  and zoom across a live reload (owner's OQ-2 answer). Order (owner, 2026-11-10,
+  OQ-9 option (a)): stories 3 and 5 land before S1, and F3 replaces story 6 and
+  the plan's PDF-reload exclusion; story 6 is not built.
+- **D11. Viewer state stores no raw file text; the digest is for size, not
+  secrecy.** For a Markdown anchor, viewer state stores the heading's anchor digest
+  (F3.1, at least 128 bits) and occurrence, never the slug or heading text.
+  Everything else in viewer state is paths, numbers, flags, widths and times. What
+  the digest does: it is fixed in size, so the byte caps (VV-7 AC6) need no special
+  case for long headings, and the raw heading text is not written to the store.
+  What it does **not** do: hide the heading. An unkeyed digest of a short or common
+  slug ("usage", "install") can be found by trying candidates, so the PRD makes no
+  claim that a heading cannot be recovered from viewer state. Viewer state is kept
+  private by two other rules: it never leaves the machine (VV-12), and in the
+  default profile nothing of an engagement's files is saved at all, because an
+  open file inside an engagement is saved as none, with no position or digest
+  (VV-13). VV-13 filters by the file's path, so it does not rely on the digest.
+  Revision 3 called the digest "one-way, cannot be read back"; that was not true
+  for short headings and is withdrawn.
+- **D12. A default, not a migration.** Any view that has no viewer state when it is
+  restored, whatever the reason (a session from an older ADE, a session rewritten by
+  an older ADE after a newer one, a state dropped by a cap, the first start of any
+  slice), gets the defaults of VV-9. There is no one-time migration step, so a
+  downgrade and upgrade in any order cannot leave a view without a state or with
+  another view's state.
+- **D13. S2 is tested over a geometry seam.** jsdom does no layout, so pixel and
+  fraction criteria cannot be checked there. Each viewer reads the numbers a
+  position needs (scroll offsets, heading tops, page sizes, scrollable height)
+  through one small interface and restores through it; tests replace it with fixed
+  numbers, and the tolerances in VV-1 AC5 and VV-8 are of that arithmetic. A
+  real-webview check per kind joins when the desktop e2e harness (ADR 0030, PR #108)
+  exists and the owner approves its line in the verification command (OQ-10).
+- **D14. Criteria that depend on unbuilt work go with whichever story merges
+  second.** Some F3 behaviours rest on stories that are not built yet: Move
+  to New Tab (sub-terminals story 5), the phone relay's tab payload
+  (`remote_tabs_set`, phone-watch story 8), F1's isolation test (F1 PE-4 AC9), the
+  default profile's knowledge of engagements (F1 PE-4 AC4) and the saving of
+  detached tabs (F1 PE-13 AC5, which meets F3 S3, not S1). Not all of them are
+  sharded:
+  - **sharded:** sub-terminals story 5, phone-watch story 8 and the F1 story that
+    delivers PE-4 AC9 (the isolation test, in F1's slice 1 tickets) each have a
+    ticket in a `tickets.toml` under `_bmad-output/`;
+  - **not yet sharded:** PE-4 AC4 (F1 slice 4) and PE-13 AC5 (F1 slice 6). F1's
+    sharded initiative covers slices 0 and 1 only and names PE-13 AC5 restore as
+    out of it
+    (`_bmad-output/initiative-personas-and-engagements/initiative-personas-and-engagements.md`),
+    and no ticket names PE-4 AC4.
+
+  Sharding order therefore cannot be the trigger (it would differ by row and
+  could put a criterion on a story that does not exist yet), and "ships second" is
+  known only after the fact. The one trigger is **merge order into `main`**,
+  checked at review:
+  - each such criterion is tagged **[Second]** and is a requirement on F3 from the
+    start; it is written, as a conditional criterion, into the F3 story of its
+    slice (S1, or S3 for PE-13 AC5) when that slice is sharded (F3.9);
+  - on the other side: if the dependent story has a ticket, the mirror
+    conditional criterion is written into that ticket at the same time. If it is
+    **not yet sharded**, the obligation is recorded in the `.ade/context/` note of
+    F3.9 and in F1's own section (F1.8 carries a cross-reference line naming these
+    F3 criteria), so that F1's sharding of that slice writes the mirror criterion
+    into the story it creates. Either way both sides carry the obligation before
+    either is built;
+  - whichever of the two stories **merges into `main` second** must include the
+    criterion and its test. Its reviewer checks against `main` as it stands at
+    that review: if the other story is already on `main`, the criterion and its
+    passing test must be in this change, or it does not merge. If the other story
+    is not yet on `main`, this change needn't carry it, and the obligation stays
+    on the other story's ticket;
+  - so two stories built at the same time cannot both skip it: the first to merge
+    leaves the other with the obligation, which its review against `main` then
+    finds. A change whose review predates the other story's merge is checked again
+    against `main` before it merges.
+  This is the rule D6 already uses for detached-tab saving (and F2, PR #98,
+  proposed, uses for its own phone payload). F3.8 names the stories and the gate
+  for each.
+- **D15. Viewer state is matched to its view by the saved session's structure,
+  never by a run-scoped id.** Tab, view and pane ids are counters that restart at 1
+  on every run (`newTabId`, `newViewId`, `newPaneId`, `tabStore.ts:220-224`), and
+  restore gives every tab and view a new one. So a state saved under `tab-2` or
+  `view-3` would be applied to whatever gets that number next run, which after an
+  older release closed or reordered tabs is a different view. Each view's viewer
+  state is therefore either stored inline in that view's own record in the saved
+  session (the tab's record for its own view, its `subViews` entry for a
+  sub-terminal), or stored elsewhere under a **stable key**: a random key made when
+  the view is created, written in that view's saved record, and never reused. The
+  architect chooses which (F3.9). A state whose key no restored view carries is
+  dropped (VV-6 AC1). The stable key is viewer state (F3.1): it is an opaque random
+  id (at least 128 bits, carrying nothing about the view's folder or files), it
+  never leaves the machine, and it is stripped from ADE sync's export with the rest
+  of viewer state (VV-12 AC1). A view keeps its key for as long as it lives,
+  including through Move to New Tab (VV-2 AC3) and Move to New Window (VV-4 AC2,
+  VV-10 AC2); a view made from another (Duplicate, VV-4 AC1) or brought back
+  (Reopen Closed Tab, VV-4 AC3) gets a new key with the copied state.
+
+### F3.7 Requirements
+
+Each acceptance criterion is tagged with the slice that delivers it: **[S1]** to
+**[S5]** (F3.8). A requirement without tags is [S1]. A criterion tagged
+**[Second]** depends on a story that is not built yet. It is not in its slice's
+Done gate (S1's, or S3's for VV-6 AC5 and VV-10 AC6) unless that slice's story
+merges into `main` second; whichever of the two stories merges second carries it
+and its test, checked at its review against `main` (D14; F3.8 names the stories
+and gate for each).
+
+#### VV-1. Each view has its own panels (MVP)
+
+As an engineer, I want each terminal in a tab to keep its own file browser and
+preview panel, so switching terminals never loses my place.
+
+1. **[S1] Switching swaps the panels.** Whenever the view in sight changes (⌘[ / ⌘],
+   a click on the strip, a tab switcher row, an agent-status toast, the fleet, a
+   tab switch, closing the view in sight), the file browser and the preview panel
+   show the new view's viewer state: its root, expanded folders, open file with its
+   position, and layout. Test: tab T has its own
+   view in `/hub` and sub-terminal S in `/hub/atomic-stays`; open `/hub/a.ts` in the
+   own view and `/hub/atomic-stays/b.ts` in S; ⌘] shows root `/hub/atomic-stays` and
+   `b.ts`; ⌘[ shows root `/hub` and `a.ts`.
+2. **[S1] Root follows the view's terminal.** A view's root is its active folder.
+   While the view is in sight, after `cd` in its active pane, the file browser lists
+   the new folder within 3 seconds of ADE learning the folder (at the next prompt by
+   OSC 7 under ADR 0021's shell integration; by today's 3-second poll where it does
+   not run). When a view comes into sight, its root is the latest active folder ADE
+   knows for it at that moment, with no wait for a poll; it is not left at the
+   folder it had when it was last shown. An immediate fetch of the active pane's
+   folder when the view comes into sight counts as no wait (today
+   `FileBrowser.tsx` fetches at once and then every 3 s); waiting for the next
+   3-second tick does not. Until such a fetch returns, the file browser may show
+   the last folder ADE knew for that view, never another view's root. No other
+   view's root changes. Test, with
+   the folder report mocked (today's poll of the pane's folder replaced by a stub
+   the test drives; OSC 7 under ADR 0021 is not built, and when it is, the same
+   test drives it through the same stub): S's reported folder changes to
+   `/hub/atomic-stays/src`, which moves S's root there and leaves the own view's
+   root at `/hub`; with S not in sight, its reported folder changes to `/tmp`, then
+   ⌘] shows `/tmp` once the stub's pending reads have resolved, with fake timers
+   not advanced (so no 3-second tick runs in between). Focusing the other pane of a
+   split view moves the root to that pane's reported folder (D4).
+3. **[S1] Expanded folders per view.** Expanding or collapsing a folder changes
+   only the view in sight. A folder shown in the tree is expanded exactly when its
+   path is in the view's expanded set, so `cd` away and back shows the same folders
+   expanded. Collapsing a folder removes only that folder from the set; folders
+   expanded below it stay in the set, hidden, and show expanded again when it is
+   re-expanded. Re-expanding a folder adds it back to the set with the current time
+   as its expansion time (VV-7 AC2 uses the same rule). Tests: expand `src/` in S, ⌘[ then ⌘] shows `src/` expanded in S and
+   not in the own view; in S, `cd ..` then `cd atomic-stays` shows `src/` expanded;
+   expand `src/` and `src/lib/`, collapse `src/`, expand `src/`: `src/lib/` is
+   expanded.
+4. **[S1] Open file per view.** Opening a file in the preview panel, by any route
+   that opens one there today or later (a `path:line` click in a terminal, the
+   panel's path box, Open ARCHIVE.md, the board's links, and the file browser once
+   code-viewer story 5 makes its click open the panel, D10), sets the open file of
+   the view in sight only. Test: a `path:line` click in S changes S's open file and
+   not the own view's. **[S1]** Until slice 3, a file opened from a detached window
+   still goes to the main window's view in sight, as today; **[S3]** from slice 3 it
+   opens in the detached window's own view in sight (VV-10 AC4).
+5. **Position per view, for every kind.** The view remembers the position of its
+   open file as defined for its kind in F3.1, and showing the view again restores
+   it. The position is recorded while the engineer scrolls or moves the cursor, and
+   at the latest when the view leaves sight or the session is saved. Restoring
+   never takes focus and never changes another view's position.
+   - **[S1] Code.** Showing the view again restores the first visible line and the
+     cursor exactly. A `path:line` click lands on its line instead and that becomes
+     the remembered position. Test, with `@monaco-editor/react` replaced by the
+     stub `src/components/editor/__tests__/monacoStub.tsx` (which, like the real
+     editor, resets the cursor and scroll when its value is set, and can mount late
+     with `asyncMount`), **extended** by the S1 story so that the first visible
+     line can be set and read: today the stub has `setScrollTop`/`getScrollTop`
+     but no line height, first visible line or `getVisibleRanges`, so the
+     extension adds a fixed line height and `getVisibleRanges` (or an equivalent
+     the architect picks) that agree with its scroll top: in S scroll `b.ts` so line 120 is first
+     visible, put the cursor on line 130 column 5, ⌘[ then ⌘]: line 120 is first
+     visible and the cursor is at 130:5, with `asyncMount` both off and on.
+   - **[S2] When a restore happens.** A Markdown, PDF, Word or HTML position is
+     restored once the content has **finished drawing**: every image and diagram in
+     it has loaded or failed (Markdown), the pages around the remembered page have
+     rendered (PDF), the document has rendered (Word), or the frame's `load` event
+     has fired (HTML); or 3 seconds after the content was first shown, whichever
+     comes first. A scroll by the engineer (wheel, keys, scrollbar, touch, a link or
+     heading click) before then cancels the pending restore; the engineer's place
+     wins and becomes the remembered position.
+   - **[S2] Markdown.** The anchor heading (matched by digest and occurrence) is put
+     back at the remembered distance from the top of the visible area, within 4 px
+     of the geometry seam's numbers (D13). Test, over the seam: a document whose
+     `## Usage` is below a diagram that finishes drawing 200 px taller than its
+     placeholder, remembered 30 px above the top, is restored with `## Usage` 30 px
+     above the top after the diagram's draw, within 4 px; a wheel event before the
+     draw cancels the restore.
+   - **[S2] PDF.** The same page, fraction down it within 0.01, and zoom. Test, over
+     the seam: a 10-page PDF remembered at 40 % down page 7 at zoom 150 % is
+     restored to page 7, 40 % (within 0.01), at 150 %.
+   - **[S2] Word.** The same scroll fraction, within 0.01. Test, over the seam: a
+     `.docx` remembered at fraction 0.6 is restored to 0.6, within 0.01.
+   - **[S2] HTML.** The same scroll fraction, within 0.01, once the frame has
+     loaded, reported and restored by the frame itself under these rules, each with
+     its own test:
+     1. the app's Content Security Policy (`csp` in `src-tauri/tauri.conf.json`,
+        today `script-src 'self' 'wasm-unsafe-eval'`, no `'unsafe-inline'`) is
+        unchanged. Test: the `csp` string equals today's. The frame is a `srcdoc`
+        frame and inherits that policy, so no inline script runs in it; the CSP is
+        the thing that must not be weakened to make a reporter run;
+     2. the frame's `sandbox` attribute is unchanged (`allow-scripts`, no
+        `allow-same-origin`). Test: the attribute equals today's;
+     3. the reporter is an external script file served from `'self'`, added to the
+        page as a `<script src>` element, never an inline script or an event-handler
+        attribute. Test: the markup given to the frame contains the reporter only as
+        `<script src="...">` with an empty body, and no other script the app added;
+     4. the app's listener acts only on a message whose `event.source` is the
+        frame's own `contentWindow` and whose payload is a finite number; it clamps
+        that number to 0 to 1 before use. Tests: a message from another window is
+        ignored; `NaN`, `Infinity`, a string and an object are ignored; `1.7` is
+        recorded as 1 and `-0.2` as 0;
+     5. the reporter is inserted after the page's `<!DOCTYPE>` (if any), never
+        before it, so the page keeps its rendering mode. Test: a page that starts
+        with `<!DOCTYPE html>` still starts with it after insertion; a page without
+        one gets none;
+     6. the restore direction has the same guard: the app sends the frame only a
+        number, and the reporter acts only on a message whose `event.source` is
+        `window.parent` and whose payload is a finite number, clamped to 0 to 1
+        before it scrolls. Tests, against the reporter script: a message from any
+        other source (the page itself, a nested frame) is ignored; `NaN`,
+        `Infinity`, a string and an object are ignored; `1.7` scrolls to the
+        bottom and `-0.2` to the top.
+     If the reporter cannot run in the sandboxed frame under rules 1 to 3 (the
+     architect confirms), the HTML file is still remembered and opens at its top,
+     and the HTML position is dropped (OQ-6).
+   - **[S2] Image and not-shown files.** Nothing is remembered and nothing is
+     restored beyond the open file itself.
+6. **[S1] Layout per view.** ⌘B, ⌘⇧B, the palette's toggles and dragging either
+   panel's edge change only the view in sight. Test: close the file browser in S and
+   widen the preview panel to 700 px; ⌘[ shows the own view's file browser open and
+   its preview panel at its own width; ⌘] shows S's file browser closed and its
+   preview panel at 700 px.
+7. **[S1] Focus.** Switching views never moves focus into either panel; the existing
+   focus rules of the preview panel (opening a file never takes focus, ⌘⇧B does,
+   closing with focus inside returns it to the terminal) hold per view. When a
+   switch closes a panel that has focus (the new view has that panel closed), focus
+   goes to the new view's active pane; for a non-terminal tab, to the tab's own
+   content, as a tab switch does today. Test: focus inside S's open file browser,
+   ⌘[ to the own view whose file browser is closed: focus is in the own view's
+   active pane.
+8. **[S1] Non-terminal tabs** (browser, editor, orchestrator, fleet, contracts) each
+   hold one viewer state of their own, so switching to them and back never changes
+   a terminal view's state, and their root follows D7 and VV-11; their expanded
+   folders, open file, position and layout follow AC3 to AC6.
+
+#### VV-2. A brand-new view (MVP)
+
+1. **[S1]** A sub-terminal created by `ade open` or New Sub-terminal starts with
+   root = its terminal's starting folder, an empty expanded set, no open file, and
+   the layout of the view it was opened from (D1): the spawning view for `ade
+   open`, the tab's view in sight for New Sub-terminal. It does not change the
+   source's state. Tests: with the own view's file browser open at 300 px and
+   preview panel closed, `ade open` from it in `/hub/atomic-stays` creates a view
+   whose file browser is open at 300 px listing `/hub/atomic-stays`, preview panel
+   closed, no file; `ade open` without focus leaves the view in sight's state
+   untouched.
+2. **[S1]** A new top-level tab of any type (new tab, New Tab dialog, a project
+   opened, Duplicate, Reopen Closed Tab, a browser, editor, orchestrator, fleet or
+   contracts tab) takes its own view's layout from the view in sight when it was
+   created, with no open file and no expanded folders, until S5 changes Duplicate
+   and Reopen Closed Tab (VV-4). With no view in sight (first launch on a fresh
+   install) it gets the VV-9 defaults. A fleet, contracts or editor tab that is
+   focused instead of created (it already exists) keeps its own state.
+3. **[Second] Move to New Tab** on a sub-terminal is not a new view: its viewer
+   state moves with it unchanged and becomes the new tab's own view's state;
+   otherwise the view's state would be discarded while the view lives on (against
+   VV-7 AC1). The view keeps its stable key, if there is one (D15). Move to New Tab
+   does not exist yet (sub-terminals story 5), so this goes with whichever of F3 S1
+   and sub-terminals story 5 merges into `main` second (D14, F3.8); it is in S1's
+   Done gate only if S1 merges second. Test: Move S to a new tab: the new tab shows
+   S's root, expanded folders, `b.ts` at its position and S's layout.
+
+#### VV-3. Closing (MVP)
+
+1. Closing a sub-terminal discards its viewer state. The view now in sight shows
+   its own state, unchanged.
+2. Closing a tab (×, ⌘W, Close, Close Others, Close Tabs to the Right) discards the viewer
+   state of every view in it, except what VV-4 AC3 keeps from S5.
+3. Test: after closing S, the next session save contains no viewer state for S.
+
+#### VV-4. Duplicate, Move to New Window, Reopen Closed Tab
+
+1. **[S5] Duplicate** of a terminal tab gives the new tab's own view a copy of the
+   source tab's own view's whole viewer state (root follows the new terminal, which
+   starts in the same folder). After that the two are independent. Sub-terminals are
+   not duplicated today, so nothing of theirs is copied. Duplicate of a non-terminal
+   tab creates a terminal tab today; that new tab gets a brand-new view's state by
+   VV-2 AC2 (the layout only). Test: with `a.ts` open in T's own view at line 40,
+   duplicate T; the copy shows `/hub`, `a.ts` at line 40 and the same layout;
+   expanding a folder in the copy leaves T unchanged.
+2. **Move to New Window** takes the tab's views and their viewer states out of the
+   main window. **[S1]** The main window's other views are unchanged, and its next
+   session save holds nothing of the moved tab. Until slice 3 the detached window
+   shows neither panel, as today. **[S3]** From slice 3 the moved views' states go
+   with them into the detached window (VV-10).
+3. **[S5] Reopen Closed Tab** brings back the own view's viewer state as it was when
+   the tab closed (expanded set, open file and position, layout; root follows the
+   reopened terminal's folder). It applies to the tabs ADE already keeps for
+   reopening (terminal tabs only, the 20 most recent, in memory, not across a
+   restart) and keeps no other tab; sub-terminals' states are not reopened. Test:
+   close T with `a.ts` open at line 40, reopen: `a.ts` at line 40, same layout.
+
+#### VV-5. A "Hub removed" tab (S5, only if F2 lands)
+
+Moved out of S1 and reduced to a constraint, because F2's own rules already keep
+it consistent: F2 (OB-5 AC4) keeps a tab whose hub was removed as a "Hub removed"
+shell, never saved or restored, so its views' viewer states are not saved either
+(VV-6 saves only the views it saves), and paths inside the removed hub behave as
+missing paths (VV-8). **[S5]** When a tab becomes "Hub removed", every view in it
+gets root = its terminal's folder, an empty expanded set and no open file; its
+layout is kept; Reopen Closed Tab never brings it back. Test: after Remove, the
+file browser lists the home folder, the preview panel is empty, and neither the
+saved session nor the closed-tab list holds any of the hub's paths from viewer
+state.
+
+#### VV-6. Restart (MVP)
+
+1. **[S1]** Every session save includes the viewer state of every view it saves
+   (own views, sub-terminals and non-terminal tabs), subject to VV-7, VV-12 and
+   VV-13. After a restart each restored view shows that state when it is shown; a
+   restored sub-terminal shows it on first show, before its shell reports a folder.
+   A state is applied only to the view it was saved for, found by the saved
+   session's structure or a stable key, never by a tab, view or pane id (D15); a
+   state whose view is not in the restored session is dropped. Test: set distinct states in T's own view and
+   S, quit, start: each view shows its own root, expanded folders, open file at its
+   position and layout, and the view in sight is the one that was in sight.
+2. **[S2]** Positions of every kind (F3.1) are saved and restored the same way.
+   Test, over the seam: a Markdown file in T's own view, a PDF in S and a `.docx` in
+   a third sub-terminal, each remembered as in VV-1 AC5, are saved and come back at
+   their positions after a restart.
+3. **[S1]** Viewer state is saved only on this machine (VV-12).
+4. **[S1]** A view restored without viewer state gets the defaults (VV-9).
+5. **[S3]** Detached tabs are not saved today, so neither are their views' states.
+   **[Second]** Once a detached tab is saved, its views' states are saved with it
+   (D6); this half goes with whichever of F3 S3 and the F1 story that delivers
+   PE-13 AC5 merges into `main` second, and is tested by VV-10 AC6's [Second]
+   test (D14, F3.8).
+
+#### VV-7. Limits (MVP)
+
+1. **[S1]** One viewer state per existing view; a closed view's state is not kept
+   (except VV-4 AC3's in-memory closed tabs from S5, at most 20).
+2. **[S1] Expanded-folder cap.** At most 500 expanded folders per view (D8). Each
+   folder in the set has the time it was last expanded. Collapsing a folder removes
+   it from the set and re-expanding it adds it back with the current time (VV-1
+   AC3); showing, listing or scrolling past a folder never changes its time.
+   Folders hidden under a collapsed folder stay in the set and count toward the
+   cap. Expanding a 501st folder evicts the folder expanded longest ago. An evicted
+   folder shows collapsed; folders expanded below it stay in the set and show
+   expanded when it is expanded again, exactly as after a collapse (VV-1 AC3). The
+   expansion times are saved with the set (F3.1), so the eviction order is the same
+   after a restart. "Longest ago" is by sequence number (F3.1). Tests: expand 501
+   folders; the first one is no longer in the set; expand 500, collapse and
+   re-expand the first, expand one more: the second is evicted, not the first;
+   repeat both with `Date.now()` stubbed to one constant value, and again with it
+   stepping backwards 1 s per expansion: the same folders are evicted.
+3. **[S1] No raw file text.** Viewer state holds paths, numbers, flags, widths,
+   times, sequence numbers, anchor digests and the stable key (an opaque random
+   id, D15) only (D11), never file contents, heading text or slugs,
+   rendered output or tree listings. The anchor digest keeps raw heading text out
+   of the store; it is not a promise that the heading cannot be recovered (D11).
+   Test: open a Markdown file whose headings and body contain the marker
+   `ZQX-MARK`, scroll to a heading, save: the saved session and any other store
+   holding viewer state contain no `ZQX-MARK`, in plain text or in any encoding the
+   store uses (JSON escapes included). The test proves only that raw text is not
+   stored; that the heading stays private is VV-12's and VV-13's test.
+4. **[S2]** Position data per kind is at most: code, three whole numbers; Markdown,
+   one anchor digest, an occurrence, a distance and a fraction; PDF, a page number,
+   a fraction and a zoom; HTML and Word, one fraction. Test: a Markdown file whose
+   first heading is 1,000 characters long saves a digest of the same fixed length as
+   for a 5-character heading, at least 128 bits long.
+5. **[S1] Widths are clamped** to the panels' limits (file browser 180 to 500 px,
+   preview panel 280 to 900 px) wherever a width enters a view: on restore, when a
+   new view copies a layout (D1), and when a default is taken from
+   `ade-file-browser` (VV-9). Tests: a saved file-browser width of 900 restores as
+   500; an `ade-file-browser` width of 50 gives views 180. **[S2]** A restored zoom
+   is clamped to the PDF viewer's range (today 33 % to 200 % as the viewer labels
+   it), and a fraction to 0 to 1.
+6. **[S1] Byte caps.**
+   - **Unit.** Every size here is the number of UTF-8 bytes of the JSON
+     serialization of the thing measured, exactly as it is written to the store
+     (quotes and escapes included); 1 KB = 1,024 bytes. A view's size is that of
+     its viewer-state part alone (whatever the architect's shape, F3.9), not of
+     the tab, panes or scrollback around it.
+   - **Paths.** A path whose serialized JSON string is longer than 4,096 bytes (by
+     the same measure) is not stored: an expanded folder that long is left out of
+     the saved set, an open file that long is saved as none, and a root or opener
+     folder that long is saved as none (the view then follows VV-9 AC1 on
+     restore).
+   - **Per view.** One view's saved viewer state is at most **32 KB** (OQ-11).
+     Over it, the saved expanded set loses the folders expanded longest ago (by
+     their saved expansion times) until it fits. The parts that are never trimmed
+     (root, open file, position, layout, last in sight, opener folder) are each at
+     most 4,096 bytes of path plus a few numbers, so they always fit in 32 KB.
+   - **All views.** All saved viewer state together is at most **256 KB**
+     (OQ-11). Over it: first, saved expanded sets are trimmed the same way,
+     starting with the view least recently in sight (by its saved last-in-sight
+     time), and the view in sight last; if every expanded set is empty and the
+     total is still over 256 KB (which takes dozens of views with paths near
+     4,096 bytes), whole viewer states are dropped, the view least recently in
+     sight first and the view in sight last. "Least recently in sight" is by the
+     saved sequence number (F3.1). A view whose state was dropped gets the
+     defaults of VV-9 AC1 on restore (D12).
+   - Trimming and dropping change only what is saved, never what the running views
+     show.
+   - Tests: a view with 500 expanded folders of 200-character paths (about
+     100 KB) saves at most 32 KB, keeping the most recently expanded; 30 such views
+     save at most 256 KB in all, the view in sight keeping the most; a path of
+     4,097 bytes in UTF-8 (multibyte characters, fewer than 4,097 characters) is
+     not stored, one of 4,000 bytes is; 80 views whose root and open file are each
+     about 4,000 bytes long, with no expanded folders, save at most 256 KB, the
+     view in sight keeps its state and the views dropped are the least recently in
+     sight; after a restart, the eviction and drop orders are the same as before
+     it; with `Date.now()` stubbed to one constant value, the drop order is the
+     order the views were last in sight.
+7. **[S1] Never at the session's cost.** Viewer state is trimmed before scrollback:
+   when a session save is over ADE's size limit or the store is full, the saved
+   expanded sets are dropped first, and only then does today's scrollback trimming
+   and stripping run (`saveSession`, `tabStore.ts`). Viewer state never causes the
+   session to be removed: if the session still cannot be written with scrollback
+   stripped, it is written with no viewer state before ADE falls back to removing
+   it. If viewer state is kept in a store of its own, failing to write it never
+   affects `ade-session`. Test: with the store's limit set just above the session's
+   size without viewer state, and 30 views each at the 32 KB cap: the session is
+   saved, every tab and folder restores, and scrollback is kept if it fits once
+   viewer state is dropped.
+
+#### VV-8. When a remembered folder or file no longer exists, or changed (MVP)
+
+1. **[S1] Root folder gone.** A terminal view's root always follows the terminal's
+   actual folder, so a restored view whose folder is gone lists whatever folder
+   its shell starts in. No error is shown. A non-terminal tab whose folder is gone
+   uses the next folder in D7's chain.
+2. **[S1] Expanded folder gone.** It is dropped from the set when its parent is next
+   listed; nothing is shown.
+3. **[S1] Open file gone** (at restore, or deleted while open): the preview panel, if
+   open, shows the notice it already shows for that case, and no new one: "Can't
+   open <name>: <reason>" (`PreviewPanel.tsx`) when the file cannot be read, and,
+   once code-viewer story 3 has landed, its "Deleted on disk" banner for a file
+   deleted while shown (D10). The file stays remembered, with its position, until
+   the engineer opens another file; if it exists again when the view is next shown
+   or ADE restarts, it opens at its remembered position (by the changed-content
+   rules below if it changed). Test: delete `b.ts`, restart: S's preview panel shows
+   "Can't open b.ts: ..."; restore `b.ts`, ⌘[ then ⌘]: `b.ts` shows at its position.
+4. **[S1] Code changed: position past the end** (the file got shorter): the cursor
+   goes to the last line and the first visible line is clamped so the last line is
+   in view. Lines still in the file are restored by number, even if text moved.
+5. **[S2] Markdown changed.** The anchor heading is found by its digest and
+   occurrence in the new content and put back at its distance; if it is no longer
+   there, the saved fraction of the new document is used. Tests, over the seam:
+   insert 50 lines above `## Usage` while the view is not in sight, show it:
+   `## Usage` is at its distance; rename `## Usage` to `## Use`, show it: the scroll
+   fraction is the saved one.
+6. **[S2] PDF changed.** If the remembered page still exists, it is shown at the
+   saved fraction; otherwise the last page at its top. Zoom is kept. Test: shrink a
+   10-page PDF remembered at page 7 to 5 pages: page 5, at its top.
+7. **[S2] HTML or Word changed.** The saved fraction of the new content is used.
+8. **[S2] Live reload.** When the preview panel reloads the file shown because it
+   changed on disk (auto-refresh on), the position is kept by the same rules, so
+   the engineer is not thrown to the top. For PDF this replaces the code-viewer
+   plan's "PDF page and zoom reset on reload" exclusion (D10). Tests, over the seam:
+   with a Markdown file shown at `## Usage`, append a paragraph to the end: `## Usage`
+   stays at its distance; with a PDF at page 7, 40 %, zoom 150 %, reload it: the same
+   page, fraction and zoom.
+9. **[S1]** The open file does not have to be under the root: `cd` elsewhere keeps
+   the open file.
+
+#### VV-9. A view without viewer state (MVP)
+
+Replaces revision 2's one-time migration (D12).
+
+1. **[S1] Defaults.** A view that has no viewer state when it is restored or created
+   with nothing to copy from gets: root by its terminal or D7; an empty expanded
+   set; no open file; the file browser open or closed and at the width saved in
+   `ade-file-browser` (`isOpen`, `width`, clamped by VV-7 AC5), or closed at 240 px
+   if that is absent; the preview panel closed at 480 px (neither was ever saved).
+   **[S2]** A Markdown, HTML or Word file without a saved position opens at fraction
+   0, a PDF at page 1, its top, at the viewer's default zoom. **[S4]** An
+   orchestrator tab without a recorded opener folder and without a project folder
+   lists the home folder.
+2. **[S1] A saved tab-level file.** If a restored tab carries a `previewPath` (D3),
+   it becomes its own view's open file, at the top, unless that view has viewer
+   state of its own; sub-terminals take nothing from it.
+3. **[S1] Show hidden** stays in `ade-file-browser`, global (D2).
+4. **[S1] Older ADE.** `ade-file-browser` keeps its shape, and the main window
+   keeps writing its `isOpen` and `width` from the main window's view in sight's
+   file browser whenever either shown value changes: by ⌘B, a drag, the palette,
+   **and** a view or tab switch that shows a file browser with a different open
+   state or width. So an older ADE starts with the last file browser layout the
+   main window showed. A switch that shows the same values writes nothing. These
+   writes are of `ade-file-browser` only, never a session save (VV-14).
+   **[S3]** Detached windows never write `isOpen` or `width`; a Show hidden toggle
+   in any window writes `showHidden` alone, leaving the other two fields as they
+   are (D2). An older ADE ignores or drops viewer state it does not know; nothing
+   breaks either way. Tests: switch from a view with the file browser open at
+   300 px to one closed at 240 px: `ade-file-browser` holds `isOpen: false`,
+   `width: 240`; switch between two views with the same layout: no write;
+   **[S3]** drag the file browser in a detached window: `ade-file-browser` is
+   unchanged.
+5. **[S1] Tests.**
+   - a session saved by the previous release with `ade-file-browser`
+     `{isOpen: true, width: 300, showHidden: true}` restores with every view's file
+     browser open at 300 px, hidden files shown, preview panels closed at 480 px, and
+     no open file;
+   - **new → old → new**, as a fixture, not by running an older build. The
+     "previous release's save" is defined as: the session exactly as the previous
+     release's `saveSession` writes it, rebuilt from the fields that release
+     knows, with every field it does not know dropped (including any viewer-state
+     field and any stable key, D15). That field list is the previous release's
+     saved-session types (`SavedTab`, `SavedView` and the pane records in
+     `tabStore.ts` at that release's tag), written into the test. The saved `id`
+     of every tab, view and pane in the fixture is **the id the previous
+     release's code would produce** in that run, by its own counters
+     (`newTabId`, `newViewId`, `newPaneId`) and the order in which its code calls
+     them on load, restore and create; the test writes down how it derived them
+     from that release's code. (No simple rule is stated here because the code
+     has none: today the store mints `tab-1` and `pane-1` for its initial tab
+     when the module loads, so tabs restored by `loadSession` start at `tab-2`,
+     `tabStore.ts:349`.)
+     - **Fresh modules.** Each simulated run (the F3 save and the F3 load) starts
+       with `vi.resetModules()`, so the id counters (module-level,
+       `tabStore.ts:220-224`) start from 0 as on a real start, and is then
+       followed by a new import of **every module the run uses that holds the
+       store**: the tab store itself and each module that imports it (the
+       components rendered, the persistence and session code, `useTerminal`).
+       A module imported before the reset keeps the old store and the old
+       counters, so no reference from before the reset may be used after it. No
+       other session test may leave the counters advanced for this one.
+     - **Steps.** Run 1 (F3 build) saves tabs T1 (own view + sub-terminal S), T2
+       and T3, each view with a distinct state; any separate viewer-state store is
+       kept as written. Old run A (fixture): loads that session, closes T1, moves
+       T3 before T2, and saves. Old run B (fixture): loads run A's save, opens a
+       new terminal tab T4 with a sub-terminal, and saves. Each old run's ids are
+       those the previous release's code would produce (above). Run 2 (F3
+       build, fresh modules) loads run B's save, with the separate store, if any, still holding every
+       state run 1 wrote.
+     - **Precondition, checked by the test.** At least one record in run B's
+       save carries a saved `id` (tab or view) that belonged to a different view
+       in run 1's save (with the close and the reorder, T3 or T4 ends up with an
+       id that another tab carried in run 1; which one depends on the ids the
+       previous release's code produces, so the test computes it from the
+       fixture rather than assuming it). The test fails its own setup if the
+       fixture does not have this, so an implementation that matches states by
+       saved `id` fields cannot pass.
+     - **Expected.** Run 2 loads without error; every view shows either its own
+       run-1 state or the defaults of AC1; no view shows another view's state: T2
+       and T3 do not take each other's, T4 and its sub-terminal get the defaults,
+       and nothing of T1 or S appears in any view. A state stored inline is lost
+       in this round trip and the view gets the defaults; that is accepted (D12);
+   - **[S2]** a session saved by slice 1 (code positions only) restores its code
+     positions unchanged and every other kind at its top.
+
+#### VV-10. Detached windows (Next, slice 3)
+
+As an engineer who moves a tab to its own window, I want the file browser and
+preview panel there too, with each view keeping its own place, so moving a tab never
+costs me my files.
+
+1. **[S3] Both panels.** A detached window shows the file browser and the preview
+   panel for its view in sight (the tab's shown view, D6), toggled with ⌘B and ⌘⇧B
+   and resized by dragging their edges, as in the main window. Each view in it has
+   its own viewer state, and VV-1 AC1 to AC8 hold inside the window, including for a
+   detached non-terminal tab, whose panels follow D7 (its body is unchanged, F3.5).
+   A sub-terminal added in the window by `ade open` gets its state by VV-2 AC1. Test:
+   in a detached T, `ade open` from T's terminal in `/hub/atomic-stays` creates a
+   view whose state has T's layout and root `/hub/atomic-stays`, and T's own state
+   is unchanged.
+2. **[S3] Moving carries the states.** Move to New Window gives every moved view its
+   whole viewer state unchanged: expanded folders, open file and position, layout;
+   the root follows its terminal, which keeps its folder. The detached window first
+   shows the view that was in sight in the moved tab. Test: in T, open `a.ts` at
+   line 40 with the file browser at 300 px and `src/` expanded, Move to New Window:
+   the new window shows `/hub` with `src/` expanded, `a.ts` at line 40, the file
+   browser at 300 px.
+3. **[S3] Independent windows.** Nothing done in a detached window changes any view
+   in the main window or in another detached window, and the other way round.
+   Show hidden files is the exception (D2): toggling it in any window applies in
+   every open window within 1 second. Test: collapse `src/` and close the preview
+   panel in the detached T; the main window's views are unchanged; toggle Show
+   hidden in the main window: the detached window shows hidden files within
+   1 second.
+4. **[S3] Files open where they were clicked.** A file opened from a detached
+   window (a `path:line` click in its terminal, its file browser, its preview
+   panel's path box) opens in that window's view in sight, at the clicked line, and
+   opens its preview panel if closed, as the main window does. It no longer goes to
+   the main window. Test: a `path:line` click in the detached T opens the file there
+   at that line; the main window's view in sight is unchanged.
+5. **[S3] Fitting a small window.** A detached window opens at 900 × 600 px today.
+   When the remembered widths do not fit, the panels give way as the designer
+   specifies, but the remembered widths are not changed by the fit: only a drag
+   changes them. Test: move a view whose file browser is 300 px and preview panel
+   700 px; resize nothing; the view's remembered widths are still 300 and 700 px.
+6. **Saved with the tab, or not at all (D6).**
+   - **[S3] Not saved while detached tabs are not.** While detached tabs are not
+     saved, a detached window's views' states are never written, and the main
+     window's session save holds nothing of them. Test: detach T, change its
+     state, quit, start: the saved session has no viewer state of T.
+   - **[Second] Saved with a saved detached tab.** Once a detached tab is saved (F1
+     PE-13 AC5 or any later feature), its views' states are saved and restored with
+     it under every rule of VV-6, VV-7, VV-12 and VV-13, their sequence numbers
+     renumbered on arrival (F3.1). Not in S3's Done gate unless S3 merges second:
+     whichever of F3 S3 and the F1 story that delivers PE-13 AC5 merges into
+     `main` second carries this and its test (D14, F3.8). Test: with detached-tab
+     saving in place, detach T, change its views' states, quit, start: T comes
+     back in the main window with its views' states, and an expansion made after
+     the restart in T's view is newer, by sequence number, than every expansion
+     T brought back.
+7. **[S3] Closing.** Closing a detached window discards its views' states, as
+   closing a tab does. It is not offered by Reopen Closed Tab, as today.
+8. **[S3] Detached views are views.** VV-2 AC1, VV-3, VV-7 and VV-8 apply inside a
+   detached window.
+
+#### VV-11. A folder for non-terminal tabs (MVP for S1 rows; Next for S4)
+
+As an engineer, I want a browser, editor, orchestrator, fleet or contracts tab to
+show a folder that belongs to it, instead of whichever terminal I was last in.
+
+1. **[S1] Its own folder.** A non-terminal tab's file browser lists the folder D7
+   gives its type. Tests: an editor tab for `/hub/atomic-stays/src/app.ts` in a
+   repository rooted at `/hub/atomic-stays` lists `/hub/atomic-stays`; an editor tab
+   for `/tmp/notes/x.md` (no repository) lists `/tmp/notes`; a contracts tab for
+   `/hub/atomic-stays/contracts` lists that folder. **[S4]** An orchestrator tab
+   whose session has project folder `~/ade-projects/shop` lists it.
+2. **[S1] When none can be found.** A tab with no folder of its own (a browser or
+   fleet tab, or an orchestrator tab until S4), or whose folder does not exist when
+   the tab is shown, lists its opener folder; if that is unknown or does not exist,
+   the home folder. No error is shown. Tests: a browser tab opened while S (in
+   `/hub/atomic-stays`) is in sight lists `/hub/atomic-stays`; delete that folder and
+   show the tab again: it lists the home folder; a fleet tab opened on a fresh
+   install with no terminal folder known lists the home folder. A tab opened from a
+   non-terminal tab takes that tab's own folder (F3.1, *Opener folder*): a browser
+   tab opened while an editor tab on `/x/repo/a.ts` is in sight, that editor tab
+   listing `/x/repo`, lists `/x/repo`; after a restart, a browser tab opened from a
+   restored editor tab that has not been shown in this run lists the home folder.
+3. **[S1] Fixed, not following.** The root never changes because a terminal's
+   folder changes. Test: `cd /tmp` in every terminal; the browser tab still lists
+   `/hub/atomic-stays`. **[S4]** It changes only when the tab's own folder appears
+   or comes back: an orchestrator's root moves to its project folder within 3
+   seconds of the project folder being created while the tab is in sight, or when
+   the tab is next shown; a folder that was gone and exists again is used when the
+   tab is next shown.
+4. **[S1] Saved.** The opener folder is part of the tab's viewer state and is saved
+   with the session, so a restored browser or fleet tab lists the same folder.
+   Test: quit and start with the browser tab above: it lists `/hub/atomic-stays`.
+5. **[S1] Its own state.** Each such tab keeps its own expanded folders, open file,
+   position and layout (VV-1 AC8). Reopen Closed Tab does not apply to these tabs
+   (F3.5).
+
+#### VV-12. Viewer state stays on this machine (MVP)
+
+1. **[S1] Not in ADE sync.** Today `ade-session` is a device key that ADE sync
+   exports to `devices/<device>/ade-session`, stripping only scrollback
+   (`serializedBuffer`, `SESSION_LOCAL_FIELDS` and `value_for_repo` in
+   `src-tauri/src/sync.rs`). Viewer state must not reach the sync repo: either it is
+   stripped from that export like scrollback, or it is kept in a store that is
+   never exported (not in `SHARED_KEYS` or `DEVICE_KEYS`); the architect chooses.
+   Everything the export carries today, it still carries. The stable key (D15), if
+   used, is viewer state and is stripped with it. Test: with distinct viewer states
+   in an own view, a sub-terminal (`subViews`) and a non-terminal tab, each holding
+   root, expanded folders, open file, position and layout with unique path markers,
+   ADE sync's export contains none of those markers, none of the viewer-state
+   fields and none of the views' stable keys, and still contains the tabs' names
+   and folders. (F4's approved sync strip, F4 WS-7 AC3, removes an F4 workspace
+   tab's folders and sub-terminal names from the export; that is F4's criterion, and
+   this test's tabs are not workspace tabs.)
+2. **[S1] Not in tab sets.** Saving a tab set (Settings → Tabs; Settings →
+   Workspace before F4 WS-10 renames it) writes no viewer state. Test: the saved tab
+   set holds none of the markers.
+3. **[Second] Not to the phone.** Viewer state is never sent to the phone relay (the
+   phone sees title, project, state and age only, as phone-remote story 2a relays
+   today; F2, PR #98, proposed, states the same in its OB-14 AC2). The relay's tab
+   payload (`remote_tabs_set`, phone-watch story 8) is not built, so there is
+   nothing to test in S1; this goes with whichever of F3 S1 and phone-watch story 8
+   merges into `main` second (D14, F3.8). Test: the payload built for the relay from
+   a tab with viewer state holds none of the markers and none of the stable keys.
+4. In an engagement's own instance (F1), viewer state is kept in that instance's
+   profile like the rest of its session, and nowhere else.
+   - **[S1] Only the known local keys, and to disk only through the state
+     store.** Viewer state is written only to `localStorage` keys that pass
+     `isPersistedKey` (`src/lib/persistence.ts`: the `PERSISTED_KEYS` set, which
+     holds `ade-session`, or the `ade-rec-` prefix). It reaches disk only the way
+     every persisted key does today: auto-save's flush sends it with
+     `invoke("state_write", { entries })` into the profile's own state folder.
+     No other Tauri command that writes a file carries it. (F1 gives each profile
+     its own webview storage, F1 D19, and its own app data, F1 D14, so those
+     keys and that folder are the profile's.) Test: start auto-save with `startAutoSave()` as
+     `src/lib/__tests__/persistence.test.ts` does (and undo it after with
+     `__resetForTests`), put spies on `localStorage.setItem` and on the Tauri
+     `invoke` bridge, run every action that changes or saves viewer state (a view
+     switch, expand and collapse, opening a file, a position change, a panel
+     drag, a session save, and the trim and drop paths of VV-7 AC6 and AC7), then
+     `flushNow()`. Expected:
+     - every `localStorage` key whose written value carries one of the test's
+       viewer-state markers passes `isPersistedKey`;
+     - every `state_write` call has an `entries` object whose every key passes
+       `isPersistedKey`;
+     - every other `invoke` call is to a command on an allowlist written in the
+       test, and that list holds no command that writes a file (today that rules
+       out, among others, `write_text_file`, `create_directory`,
+       `save_temp_image`, `state_restore_snapshot`, `vault_set`,
+       `sync_set_config`). `state_snapshot`, which auto-save calls on start, may
+       be on the list: it takes no arguments and only copies the profile's own
+       state folder that `state_write` wrote. The reviewer checks the allowlist
+       against the commands in `src-tauri/src`.
+   - **[Second] Scanned with F1's isolation test.** F1's isolation test (PE-4
+     AC9) also gives A's instance viewer state holding markers of A (an expanded
+     folder, an open Markdown file scrolled past a heading, a non-terminal tab's
+     opener folder) and finds none of them outside A's profile, root and
+     checkouts. This goes with whichever of F3 S1 and the F1 story that delivers
+     PE-4 AC9 merges into `main` second (D14, F3.8), under F1's D28 gate.
+
+#### VV-13. No engagement paths in the default profile (MVP, [Second] with F1 PE-4)
+
+Mirrors F1 PE-4 AC4 (approved): in the default profile, ADE puts no engagement's
+paths into its stores, and ADE sync never carries one. Applies once F1 PE-4 is
+built; before that there are no engagements and nothing to test. VV-13 goes with
+whichever of F3 S1 and the F1 story that delivers PE-4 AC4 (F1 slice 4, not yet
+sharded) merges into `main` second, so it is in S1's Done gate only if S1 merges second; its test runs under
+F1's D28 gate (D14, F3.8).
+
+1. **[Second]** In the default profile, saved viewer state never holds a path inside
+   any engagement's root or checkouts, nor a position or anchor digest of a file
+   there. "Inside" is decided as F1 PE-2 AC5 decides it: paths are compared after
+   resolving symlinks, and as the file system compares them (case-insensitively on
+   case-insensitive volumes). The filter works on the file's path, so it does not
+   rely on the anchor digest (D11).
+   At each save: an expanded folder there is left out of the saved set; an open file
+   there is saved as none, with no position; an opener folder there is saved as
+   none (so a restored tab falls back to the home folder). A view that has been in
+   A's folders (PE-4 AC4's term) saves none of A's paths or digests, including
+   after it leaves A's folders. While ADE runs, the view keeps showing them; only
+   what is saved is filtered.
+2. **[Second] Test,** joining PE-4 AC4's test and run under F1's D28 gate: in the
+   default profile, a terminal opened in A's root through ADE's folder picker
+   expands `src/`, opens A's `README.md` (a heading holding a marker of A) scrolled
+   past that heading, and opens a file in A's root from the path box; a second
+   terminal opened in a folder `L` outside A that is a symlink to A's `src/`
+   expands a folder under `L` and opens a file under `L`; on a case-insensitive
+   volume, a third terminal opens a file through A's root spelled in other case.
+   On Windows, `L` is a directory junction (`mklink /J`), which needs no
+   privilege; creating a true symbolic link there needs Developer Mode or the
+   create-symlink privilege, which CI runners are not assumed to have. Each
+   terminal then `cd`s to the home folder and a session save runs. Expected:
+   - the default profile's files, the stores the OS keeps for the app (including
+     the webview's storage) and the default profile's sync export contain no
+     marker of A and no path spelled through A's root, from viewer state or
+     anywhere else (PE-4 AC4's own assertion, which this test joins);
+   - **viewer state** in those stores holds no path under `L` and no path into
+     A's folders in another case, and no position or digest of a file reached
+     either way. These two assertions are about viewer state only: whether other
+     stores (`ade-recent-projects`, tab names, saved folders) may hold `L` or an
+     other-case spelling is F1's rule (PE-2 AC5 resolves paths that way, PE-4 AC4
+     does not yet say it for every store). F1 may adopt the same rule in PE-4; that
+     is an F1 change and needs the owner's approval there.
+
+#### VV-14. Remembering costs no extra saving (MVP)
+
+Today `App.tsx` saves the session 2 s after any change to the tabs and every 20 s,
+and each save serializes every terminal's scrollback.
+
+1. **[S1]** Recording positions, expanding or collapsing folders, and dragging a
+   panel's edge never make the session save more often than it does today, and
+   never cause an extra scrollback serialization. If viewer state is written on a
+   schedule of its own, each such write costs at most the viewer state's own bytes
+   (VV-7 AC6) and happens at most once per 2 seconds. Test: with a spy on the
+   scrollback serializer and on session saves, 100 scroll and cursor changes and 20
+   folder expansions over 5 seconds cause no session save and no scrollback
+   serialization that the same 5 seconds without them would not have caused.
+
+### F3.8 Slices
+
+F3 ships in five slices (D9). Each is a separate release step with its own stories
+and passes the verification command on its own. The scrum-master shards each slice
+into stories; the tags in F3.7 say which acceptance criteria each slice delivers.
+
+| Slice | Delivers | Acceptance criteria | Depends on |
+|---|---|---|---|
+| **S1. Per-view state, main window** (MVP) | Each view in the main window has its own root, expanded folders, open file with code position, and layout; non-terminal tabs list their own folder or their opener's; restart with defaults, limits, missing files; stays on the machine; no extra saving | every [S1] criterion: VV-1 AC1 to AC4, AC5 (code), AC6 to AC8; VV-2 AC1, AC2; VV-3; VV-4 AC2 (main window part); VV-6 AC1, AC3, AC4; VV-7 AC1 to AC3, AC5 (widths), AC6, AC7; VV-8 AC1 to AC4, AC9; VV-9 AC1 to AC5 (S1 parts); VV-11 AC1 to AC5 (S1 parts); VV-12 AC1, AC2, AC4 (S1 part); VV-14. **Not** VV-2 AC3, VV-12 AC3, VV-12 AC4's [Second] part or VV-13, unless S1 merges second: see "Merges second" below | nothing required by its criteria. Lands after code-viewer stories 3 and 5 (owner, OQ-9 (a)) |
+| **S2. Positions in the other viewers** (Next) | Markdown, HTML, PDF and Word positions, kept across switches, restarts, changed content and live reloads | every [S2] criterion: VV-1 AC5 (when a restore happens, Markdown, PDF, Word, HTML, image); VV-6 AC2; VV-7 AC4, AC5 (zoom); VV-8 AC5 to AC8; VV-9 AC1 and AC5 (S2 parts) | S1. HTML position only if the architect confirms the reporter meets VV-1 AC5's rules under the unchanged CSP and sandbox, else dropped (OQ-6); the other kinds do not wait. Real-webview checks join later and do not block S2 (OQ-10) |
+| **S3. Detached windows** (Next) | Both panels in detached windows, states carried in, files opening in the window | every [S3] criterion: VV-1 AC4 (detached part); VV-4 AC2 (detached part); VV-6 AC5 ([S3] half); VV-10 AC1 to AC5, AC6 ([S3] half), AC7, AC8. **Not** the [Second] halves of VV-6 AC5 and VV-10 AC6, unless S3 merges second: see "Merges second" below | S1. Positions of other kinds ride along once S2 is in. Saving detached states arrives with F1 PE-13 AC5 (D6) |
+| **S4. Orchestrator project folder** (Next) | An orchestrator tab lists its project folder; a gone folder that comes back is used again | every [S4] criterion: VV-9 AC1 (S4 part); VV-11 AC1 and AC3 (S4 parts) | S1 |
+| **S5. Carrying state to copies and reopened tabs** (Next) | Duplicate and Reopen Closed Tab bring the source's viewer state; the "Hub removed" rule | every [S5] criterion: VV-3 AC2 (exception); VV-4 AC1, AC3; VV-7 AC1 (exception); VV-5 (only if F2 lands) | S1 |
+
+**Merges second (D14).** These are F3 requirements whose tests need a story that
+is not built. Each goes with whichever of the two stories merges into `main`
+second; its reviewer checks against `main` at that review, and again before
+merging if the other story merged in between. The obligation is recorded on both
+sides when the F3 slice is sharded (F3.9): in the other story's ticket if it has
+one, otherwise ("not yet sharded") in the `.ade/context/` note and in F1.8's
+cross-reference line, so that F1's sharding of that slice writes it into the
+story it creates.
+
+| Criterion | F3 side | The other story (not built) | Sharded? | If the F3 story merges second | If the other story merges second | Gate |
+|---|---|---|---|---|---|---|
+| VV-2 AC3 (Move to New Tab carries the state) | S1 | Move to New Tab, sub-terminals story 5 (`_bmad-output/initiative-sub-terminals/epic-sub-terminals/tickets.toml`) | yes | S1 carries the criterion and its test | sub-terminals story 5 carries them | the verification command (`docs/architecture.md`) |
+| VV-12 AC3 (nothing to the phone) | S1 | the relay's tab payload `remote_tabs_set`, phone-watch story 8 (`_bmad-output/initiative-phone-remote/epic-phone-watch/tickets.toml`) | yes | S1 carries them | phone-watch story 8 carries them | the verification command |
+| VV-12 AC4, [Second] part (viewer state in F1's isolation scan) | S1 | F1's isolation test, the F1 story that delivers PE-4 AC9 (F1 slice 1, `_bmad-output/initiative-personas-and-engagements/`) | yes | S1 carries them, joining PE-4 AC9's test | that F1 story carries them | F1 D28 (the verification command plus green CI runs of the isolation test on macOS, Linux and Windows) |
+| VV-13 AC1, AC2 (no engagement paths in the default profile) | S1 | the default profile's knowledge of engagements, the F1 story that delivers PE-4 AC4 (F1 slice 4) | **no**: no ticket names PE-4 AC4 | S1 carries them, joining PE-4 AC4's test | the F1 story that F1's slice-4 sharding creates for PE-4 AC4 carries them | F1 D28 |
+| VV-6 AC5 and VV-10 AC6, [Second] halves (a saved detached tab keeps its views' states) | S3 | saving the tabs of other windows, the F1 story that delivers PE-13 AC5 (F1 slice 6) | **no**: F1's initiative excludes PE-13 AC5 restore | S3 carries them | the F1 story that F1's slice-6 sharding creates for PE-13 AC5 carries them | the verification command, and F1 D28 if the test joins F1's isolation scenario |
+
+F3 S1 carries F4 WS-5 AC2 (a workspace tab's own view shows the workspace's roots,
+each sub-terminal its single root) and replaces F4 WS-5 AC1's tests, if it merges
+into `main` after F4 S1 (F3 D14's rule; F4.8; F3 S1's ticket, or
+`.ade/context/f4-merges-second.md` if that ticket did not exist at F4 S1's
+sharding). (Signed off by the owner 2026-11-10, F4 OQ-12.)
+
+Until it lands, each is still a rule for the code (S1 must not send viewer state to
+any relay, nor make Move to New Tab drop a state once it exists, nor write viewer
+state outside its profile; S3 must not write a detached view's state anywhere
+but with its tab); it is only its test that waits.
+
+S2 to S5 do not depend on each other and can be built in any order or in parallel
+after S1. Order (owner, 2026-11-10, OQ-8): S1, then S2 (it completes OQ-2, the most-used part),
+then S4 (small), then S5, then S3 (the most new UI, and it gains most once
+sub-terminals story 5 lets tabs with sub-terminals move). The owner may reorder S2
+to S5 without changing any criterion (OQ-8).
+
+### F3.9 Handoff
+
+- **Architect:** where viewer state lives (the tab store's views, a store keyed by
+  view, or its own storage key), how a hidden view's root is kept current without
+  polling every view (ADR 0021's OSC 7 reports), the session format change, the
+  defaults of VV-9, and Move to New Tab's copy. Also:
+  - **ADR 0009:** F3 replaces ADR 0009's per-tab `previewPath` model with an open
+    file per view (D3, D10). Write an amendment to ADR 0009 or a successor ADR that
+    supersedes that part of it, and say which of the code-viewer plan's stories 3,
+    5 and 6 it changes, per the owner's OQ-9 answer (a): stories 3 and 5 land
+    first and unchanged, story 6 is replaced. The PRD does not edit ADRs;
+  - **matching states to views (D15):** inline in each view's saved record, or a
+    separate store under a stable key written in that record; never a tab, view or
+    pane id. Choose one and record it;
+  - **storage:** any new storage key goes in `PERSISTED_KEYS`
+    (`src/lib/persistence.ts`), must pass ADR 0017's static key test (every
+    `localStorage` key persisted or listed as ephemeral with a reason), and must not
+    be in `SHARED_KEYS` or `DEVICE_KEYS` (`src-tauri/src/sync.rs`); or, if viewer
+    state stays in `ade-session`, its fields join the export strip (VV-12 AC1);
+  - **saving:** the sequence number that orders expansions and "last in sight"
+    (F3.1), the byte caps, unit, trim and drop order of VV-7 AC6 and AC7, the engagement
+    filter of VV-13 (where the default profile learns engagement folders, F1), and a
+    save schedule that meets VV-14;
+  - **S2:** the geometry seam (D13); how each viewer reports and restores its
+    position and signals "finished drawing" (VV-1 AC5); the anchor digest function
+    (D11: at least 128 bits, no key needed, not a secrecy measure); whether an external `'self'` reporter can run in the sandboxed `srcdoc`
+    frame under the unchanged CSP and sandbox (VV-1 AC5, OQ-6; if not, the HTML
+    position is dropped). Amend the code-viewer plan's PDF reload exclusion as
+    D10 says (OQ-9 (a));
+  - **S3:** how a detached window receives its views' states. ADR 0017 replaces
+    `detachWindow.ts`'s JavaScript window creation with a Rust command, so plan the
+    hand-over against that command, not today's window URL. Also how the detached
+    window's panels avoid writing the main window's saved state, how Show hidden
+    reaches every open window, how D6's saving rule meets F1 PE-13 AC5, and where
+    the renumbering of sequence numbers on arrival happens (F3.1);
+  - **S4:** how an orchestrator's project folder reaches the tab's root.
+
+  Record the viewer-state contract, including the position shape per kind and the
+  caps, in `.ade/context/`.
+- **Designer:** the two panels in a detached window (VV-10: placement under its
+  title bar, how they fit a 900 × 600 window, AC5). No other new UI: the missing-file
+  notices are the existing ones (VV-8 AC3), and the empty "no folder" state for
+  non-terminal tabs is no longer needed from S1.
+- **Scrum-master:** shard by slice (F3.8), using the [S1] to [S5] tags; one slice's
+  stories never carry another slice's criteria. The [Second] criteria (VV-2 AC3,
+  VV-12 AC3, VV-12 AC4's [Second] part and VV-13 on S1; the [Second] halves of
+  VV-6 AC5 and VV-10 AC6 on S3) follow F3.8's "Merges second" table. The trigger
+  is merge order into `main`, not sharding order: some other stories are
+  sharded and some are not (D14). When S1 is sharded, and again for its rows when
+  S3 is sharded:
+  - name, for each conditional criterion, the **one** story of that slice that
+    carries it (for example the story that builds the session save for VV-13 and
+    VV-12 AC4's [Second] part, the story that builds view creation and moves for
+    VV-2 AC3). No conditional criterion is split across stories or left to "the
+    slice"; the named story's reviewer is the one who checks it against `main`;
+  - write each [Second] criterion into that story as a **conditional
+    criterion**: "if <the other story> is on `main` when this story is reviewed,
+    this story includes <criterion> and its test";
+  - **other story sharded** (sub-terminals story 5, phone-watch story 8, the F1
+    story that delivers PE-4 AC9): write the mirror conditional criterion into
+    its ticket, naming the F3 story;
+  - **other story not yet sharded** (the F1 stories for PE-4 AC4, F1 slice 4, and
+    PE-13 AC5, F1 slice 6), or a ticket that cannot be edited (closed or owned
+    elsewhere): record the obligation in one `.ade/context/` note
+    (`.ade/context/f3-merges-second.md`) that lists each criterion, the named F3
+    story, the other story (or the F1 slice and acceptance criterion it will
+    come from) and the gate, and link it from the F3 story. F1.8 already carries
+    a cross-reference line to these criteria, so F1's sharding of slices 4 and
+    6 reads the note and writes the mirror criterion into the story it creates;
+  - either way, the obligation is recorded on both sides before either story
+    is built, so whichever merges second is held to it at its review.
+
+  Two minors from the final review of revision 6 are left to sharding; write them
+  into the S1 story that carries VV-12 AC4:
+  - VV-12 AC4's test uses `startAutoSave({ snapshots: false })`, so
+    `state_snapshot` then drops off the test's allowlist of commands;
+  - the allowlist's read commands must be checked so that none of them writes.
+- **Adversarial reviewer:** revision 6 passed the final review (three minors: the
+  third applied in F1.8, the other two left to sharding above).
+
+### F3.10 Open questions for the owner
+
+None open. OQ-1 to OQ-4 were answered on 2026-11-10 (see Source), and OQ-5 to
+OQ-12 on 2026-11-10 with the approval of revision 6, each at its recommendation.
+Revision 2's question about Reopen Closed
+Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
+
+- **OQ-5. Expanded-folder cap.** 500 per view (VV-7 AC2)? *Default: 500* (D8),
+  unless the owner says otherwise. **Answered 2026-11-10:** 500 (D8).
+- **OQ-6. HTML position.** The HTML page runs in a sandboxed `srcdoc` frame. That
+  frame inherits the app's Content Security Policy, which allows scripts only from
+  the app itself (`script-src 'self'`, no inline scripts), so the risk is not the
+  frame's sandbox but the CSP: making a scroll reporter run must never mean loosening
+  the CSP. The proposal is an external reporter script from the app itself, with
+  the CSP and the sandbox unchanged, a listener in the app that accepts only a
+  number from that frame, and, for restoring, a reporter that accepts only a finite
+  number from `window.parent` (VV-1 AC5's six rules, each tested). Accept that, or drop the HTML
+  position (the HTML file is remembered and opens at its top)? *Recommend accept*,
+  provided the architect confirms the reporter runs under the unchanged CSP and
+  sandbox; drop the HTML position if not, rather than change either.
+  **Answered 2026-11-10:** accepted as recommended; the HTML position only with
+  the CSP and sandbox unchanged, else dropped.
+- **OQ-7. The fallback folder.** The owner gave "the folder of the terminal view it
+  was opened from, else the home folder" for a browser tab. Apply the same chain to
+  the fleet tab, to an orchestrator tab before it has a project folder, and to any
+  tab whose own folder is gone (D7)? *Recommend yes*: one rule, and the file browser
+  is never empty. **Answered 2026-11-10:** yes, one fallback chain (D7).
+- **OQ-8. Slices.** Ship F3 as the five slices of F3.8, S1 first and then S2, S4,
+  S5, S3? *Recommend yes*: S1 is the original ask, is useful alone, and takes away
+  nothing that works today. **Answered 2026-11-10:** yes, S1, S2, S4, S5, S3
+  (F3.8).
+- **OQ-9. The code-viewer plan's open stories** (ADR 0009, D10). Stories 3, 5 and 6
+  overlap F3. Options: (a) land stories 3 and 5 before F3 S1, and let F3 replace
+  story 6 (S1's VV-6 for its restart part, S5's VV-4 AC3 for its Reopen Closed Tab
+  part) and the plan's PDF-reload exclusion (S2's VV-8 AC8); (b) land all three
+  first; (c) F3 replaces all three. *Recommend (a)*: stories 3 and 5 are small,
+  approved and independent of where state lives, and S1 then rests on their
+  behaviour (file browser clicks open the panel, the "Deleted on disk" banner);
+  story 6 saves the file per tab, which S1 replaces at once, so building it first is
+  work thrown away. **Answered 2026-11-10:** (a); stories 3 and 5 land first, and
+  F3 replaces story 6 and the PDF-reload exclusion (D10).
+- **OQ-10. Real-webview checks for S2.** S2's criteria are tested over a geometry
+  seam (D13), which proves the arithmetic but not that a real webview lands on the
+  heading. Add one real-webview check per kind when the desktop e2e harness (ADR
+  0030, PR #108) exists, as a new line in the verification command that the owner
+  approves? *Recommend yes, but not as a blocker for S2*: S2 is Done on the seam
+  tests under the current verification command, and the real-webview checks join
+  when the harness and the owner's approval of its line are in place.
+  **Answered 2026-11-10:** yes, later and not blocking (D13).
+- **OQ-11. Byte caps.** 32 KB per view and 256 KB in all for saved viewer state
+  (VV-7 AC6)? *Recommend yes*: far above normal use (a view with 100 expanded folders
+  of 100-character paths is about 10 KB), and small next to the session's 5 MB
+  limit. *Default: these numbers*, unless the owner says otherwise.
+  **Answered 2026-11-10:** yes, 32 KB per view and 256 KB in all (VV-7 AC6).
+- **OQ-12. Criteria that merge second** (D14, F3.8). Move to New Tab carrying the
+  state (VV-2 AC3), nothing to the phone (VV-12 AC3), viewer state in F1's
+  isolation scan (VV-12 AC4's [Second] part) and no engagement paths in the
+  default profile (VV-13) cannot be tested until sub-terminals story 5,
+  phone-watch story 8 and F1 PE-4 exist; a saved detached tab keeping its views'
+  states (VV-6 AC5 and VV-10 AC6, [Second] halves) cannot be tested until F1
+  PE-13 AC5 exists. Keep them out of their slice's Done gate (S1's, or S3's)
+  unless that slice merges into `main` second, and make whichever of the two
+  stories merges second carry each, checked at its review against `main`, with
+  the obligation recorded on both sides when the F3 slice is sharded (in the
+  other story's ticket, or, for F1 stories not yet sharded, in a `.ade/context/`
+  note and F1.8's cross-reference)? *Recommend yes*: it is the
+  rule D6 uses, it is checkable at review time, two stories built at once cannot
+  both skip it, S1 stays testable today, and no requirement is dropped.
+  **Answered 2026-11-10:** yes, the merges-second rule (D14, F3.8).
+<!-- F3 ends -->
