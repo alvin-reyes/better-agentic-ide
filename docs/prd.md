@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
-| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded) |
+| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10 |
 
 ---
 
@@ -2322,7 +2322,9 @@ clarification for slice 0.
   revision 5 closed every revision-4 finding and blocked on N1, with major N2 and
   minors m1 to m5; revision 6 answers them. The final review of revision 6 left
   three minors: the third is applied in F1.8 (revision 9l), the other two go to
-  sharding (F3.9). Not sharded.
+  sharding (F3.9). On 2026-11-10 the owner, approving F4 (PR #113), signed off a
+  cross-reference line in F3.8 for F4 WS-5 AC2 and the tab-set wording (History,
+  last entry); no F3 requirement changed. Not sharded.
 - **Number:** F2 is taken by the open PRD for agentic-environment onboarding (PR #98).
   If that PR is withdrawn, this stays F3.
 - **Source:** the owner, 2026-11-10: *"each tab has to have their own file viewer,
@@ -2412,6 +2414,17 @@ clarification for slice 0.
     (OQ-11); the merges-second rule (OQ-12). The owner signed off F1.8's
     cross-reference (F1 revision 9l), worded per the final review's minor 3; its
     minors 1 and 2 are left to sharding (F3.9). No requirement changed.
+  - 2026-11-10, F4 cross-reference (the owner approved F4 revision 3.1 on
+    2026-11-10, answering F4 OQ-12, OQ-1 and OQ-2 yes): F3.8's "Merges second" part
+    gains one line, F4 WS-5 AC2, modelled on F1 revision 9l; F3 S1's reviewer now
+    sees the obligation in F3's own text. Today's saved workspaces are renamed tab
+    sets (F4 WS-10), so F3.1's *Leaves the machine*, F3.5's non-goal and VV-12 AC2
+    say "tab set". VV-12 AC1 notes that F4's approved sync strip (F4 OQ-5, WS-7 AC3)
+    removes a workspace tab's folders and sub-terminal names from the export, which
+    is F4's, so AC1's "everything the export carries today" and its test's tab
+    names and folders are those of tabs that are not F4 workspace tabs. D6's
+    reading of F1 PE-13 AC5 quotes F1's words before F1 revision 9m ("A's instance's
+    tabs are restored" since). No F3 requirement, slice or gate changed.
 
 ### F3.1 Terms
 
@@ -2513,8 +2526,9 @@ changed here except as VV-11 says.
   from today's 3-second poll.
 - **Opener folder:** for a non-terminal tab, the active folder of the view that
   was in sight when the tab was created, recorded once at creation.
-- **Leaves the machine:** written to the ADE sync repo, a saved workspace
-  (`better-terminal-workspaces`, which ADE sync shares), the phone relay, or
+- **Leaves the machine:** written to the ADE sync repo, a tab set (today's saved
+  workspaces, renamed by F4 WS-10; `better-terminal-workspaces`, which ADE sync
+  shares), the phone relay, or
   anything else sent over the network or stored outside this machine's **local
   stores**. The local stores are the app's data folder and the webview's own
   storage, where `localStorage` and so `ade-session` live (on macOS
@@ -2577,7 +2591,7 @@ PDFs beside them; sometimes moving a tab to its own window.
 - The position inside an **editor tab's own editor** or its ABI, diagram and HTML
   views. Editor tabs get a file browser and preview panel state like any view
   (VV-11); their main editor is unchanged.
-- Viewer state in **saved workspaces**, **ADE sync** or the **phone relay** (VV-12).
+- Viewer state in **tab sets**, **ADE sync** or the **phone relay** (VV-12).
 - **Saving detached windows** across a restart and a **move back** to the main
   window. Neither exists today and this feature adds neither; when another feature
   saves detached tabs, their viewer states go with them (D6, VV-10 AC6).
@@ -3347,9 +3361,12 @@ show a folder that belongs to it, instead of whichever terminal I was last in.
    root, expanded folders, open file, position and layout with unique path markers,
    ADE sync's export contains none of those markers, none of the viewer-state
    fields and none of the views' stable keys, and still contains the tabs' names
-   and folders.
-2. **[S1] Not in saved workspaces.** Saving a workspace (Settings → Workspace)
-   writes no viewer state. Test: the saved workspace holds none of the markers.
+   and folders. (F4's approved sync strip, F4 WS-7 AC3, removes an F4 workspace
+   tab's folders and sub-terminal names from the export; that is F4's criterion, and
+   this test's tabs are not workspace tabs.)
+2. **[S1] Not in tab sets.** Saving a tab set (Settings → Tabs; Settings →
+   Workspace before F4 WS-10 renames it) writes no viewer state. Test: the saved tab
+   set holds none of the markers.
 3. **[Second] Not to the phone.** Viewer state is never sent to the phone relay (the
    phone sees title, project, state and age only, as phone-remote story 2a relays
    today; F2, PR #98, proposed, states the same in its OB-14 AC2). The relay's tab
@@ -3481,6 +3498,12 @@ story it creates.
 | VV-12 AC4, [Second] part (viewer state in F1's isolation scan) | S1 | F1's isolation test, the F1 story that delivers PE-4 AC9 (F1 slice 1, `_bmad-output/initiative-personas-and-engagements/`) | yes | S1 carries them, joining PE-4 AC9's test | that F1 story carries them | F1 D28 (the verification command plus green CI runs of the isolation test on macOS, Linux and Windows) |
 | VV-13 AC1, AC2 (no engagement paths in the default profile) | S1 | the default profile's knowledge of engagements, the F1 story that delivers PE-4 AC4 (F1 slice 4) | **no**: no ticket names PE-4 AC4 | S1 carries them, joining PE-4 AC4's test | the F1 story that F1's slice-4 sharding creates for PE-4 AC4 carries them | F1 D28 |
 | VV-6 AC5 and VV-10 AC6, [Second] halves (a saved detached tab keeps its views' states) | S3 | saving the tabs of other windows, the F1 story that delivers PE-13 AC5 (F1 slice 6) | **no**: F1's initiative excludes PE-13 AC5 restore | S3 carries them | the F1 story that F1's slice-6 sharding creates for PE-13 AC5 carries them | the verification command, and F1 D28 if the test joins F1's isolation scenario |
+
+F3 S1 carries F4 WS-5 AC2 (a workspace tab's own view shows the workspace's roots,
+each sub-terminal its single root) and replaces F4 WS-5 AC1's tests, if it merges
+into `main` after F4 S1 (F3 D14's rule; F4.8; F3 S1's ticket, or
+`.ade/context/f4-merges-second.md` if that ticket did not exist at F4 S1's
+sharding). (Signed off by the owner 2026-11-10, F4 OQ-12.)
 
 Until it lands, each is still a rule for the code (S1 must not send viewer state to
 any relay, nor make Move to New Tab drop a state once it exists, nor write viewer
