@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Draft, revision 3, 2026-11-10; answers the delta review of revision 2, awaiting a delta check. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Draft, revision 3.1, 2026-11-10; revision 3 passed its final delta check, 3.1 folds in its four minors; awaiting the owner's answers. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -2302,12 +2302,13 @@ clarification for slice 0.
 <!-- F4 begins -->
 ## F4: Workspaces (one multi-folder workspace per agent hub)
 
-- **Status:** Draft, revision 3, 2026-11-10. Not approved, not sharded. Revision 1's
+- **Status:** Draft, revision 3.1, 2026-11-10. Not approved, not sharded. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
   finding and folded in the owner's decisions of 2026-11-10; the delta review of
   revision 2 BLOCKED it on one finding (N-B1) and listed minors, which revision 3
-  answers (History; F4.12 maps each finding to its answer). Next: a delta check, the
-  owner's answers to F4.10, then
+  answers (History; F4.12 maps each finding to its answer). Revision 3 passed its final
+  delta check; revision 3.1 folds in that check's four minors. Next: the owner's
+  answers to F4.10, then
   the designer (root rows, palette entries, the renamed settings section) and the
   architect (the record's store, discovery, the finished-hub check, the watches, the
   sync strip if OQ-5 is approved).
@@ -2382,6 +2383,14 @@ clarification for slice 0.
     while (WS-6 AC2, AC3, m7); the finished-hub check requires the hub folder to be
     its repository's top level (F4.1, WS-2 AC8, m10); local snapshots stated (WS-7
     AC2, m8). The remaining minors are sharding notes (F4.11).
+  - 2026-11-10, revision 3.1: revision 3 passed its final delta check; its four minors
+    folded in. The merge-order check for WS-5 AC1 runs at review and again before
+    merging, if F3 S1 merged in between (F3 D14; F4.8, F4.11). WS-7 AC2: snapshots
+    copy only `state/kv/` files, recordings excluded, and restoring one can bring back
+    an older record. D9's consequences stated: an unflagged hub folder goes into
+    recent projects and the agent tracker as today (WS-2 AC5, OQ-9, WS-7 AC3). While a
+    workspace tab's hub is unfinished, the palette offers only Refresh (WS-2 AC6,
+    WS-6 AC3).
 
 ### F4.1 Terms
 
@@ -2705,8 +2714,10 @@ Hub to start the persona.
    workspaces opened in this profile, most recent first, each by the hub folder's name
    and its full path with the home folder shown as `~` (ADE reads nothing from
    `hub.conf` for this). The list is F4's own, local and not synced (WS-7 AC1), and
-   separate from the New tab dialog's recent projects, which keep hub folders out (F2
-   OB-14 AC3; OQ-9). Choosing one opens it as AC2 does (plain login shell, no persona;
+   separate from the New tab dialog's recent projects. Recent projects keep a hub
+   folder out only for a tab with F2's hub-tab flag (F2 OB-14 AC3: Open Hub, the run
+   tab); a hub folder opened from the New tab dialog or from recent projects has no
+   flag (D9), so it goes into recent projects as it does today (OQ-9). Choosing one opens it as AC2 does (plain login shell, no persona;
    D8). An entry whose hub folder no longer exists, or is no longer a finished hub, is
    shown as unavailable and offers **Remove from list**; it never opens. Entries are
    checked only while the list is shown, each at most once per 10 seconds and under
@@ -2716,9 +2727,14 @@ Hub to start the persona.
    removes it; showing the list twice within 10 seconds checks each entry once.
 6. **Palette entries (S1 and S2).** S1: **Refresh Workspace Folders**, **Add Folder
    to Workspace…**, **Remove Folder from Workspace…**, **Show Hidden Workspace
-   Folders**, each present only when the tab in sight is a workspace tab. S2: **Open
+   Folders**, each present only when the tab in sight is a workspace tab. While that
+   tab's hub is not a finished hub for now (WS-6 AC3), only Refresh Workspace Folders
+   is present; the other three are hidden until the hub is finished again. S2: **Open
    Workspace…** (AC5), present wherever F2's entries are. Test: each entry is absent
-   with a plain tab in sight and present with a workspace tab in sight.
+   with a plain tab in sight and present with a workspace tab in sight; with a
+   workspace tab whose hub folder is missing, or whose `hub.conf` is made untracked,
+   only Refresh is present, and all four return once the hub is finished again and
+   refreshed.
 7. **F2's run tab (if the owner approves OQ-8).** F2's run tab becomes a workspace
    tab when the run commits `hub.conf` (step (c)), the moment the hub becomes a
    finished hub: its own view's file browser then shows WS-1's roots. Before that it
@@ -2879,8 +2895,12 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    checkout still hidden; a checked-in fixture record in S1's format is read by the
    current code.
 3. **A restored workspace tab whose hub changed.** In both cases below the tab keeps
-   its workspace mark (so Refresh Workspace Folders stays in the palette) and the
-   record is kept unchanged (AC2); nothing of it is dropped or rewritten.
+   its workspace mark and the record is kept unchanged (AC2); nothing of it is dropped
+   or rewritten. While the hub is not a finished hub, the palette offers only
+   **Refresh Workspace Folders** for the tab; Add Folder to Workspace…, Remove Folder
+   from Workspace… and Show Hidden Workspace Folders are hidden until the hub is
+   finished again (WS-2 AC6), so no hand change is made to a record that cannot be
+   shown.
    - Hub folder gone (deleted, moved, or on a volume that is not mounted): restored
      showing one missing root (the hub folder) and a notice; it discovers nothing and
      runs nothing; it becomes a full workspace again at the next refresh once the
@@ -2894,7 +2914,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    - F2's "Hub removed" tab is never saved or restored (F2 OB-5 AC4), so it never
      comes back as a workspace tab.
    Test: each of the first two cases between runs gives its tab and notice, no other
-   root, and the record unchanged; restoring the hub and refreshing gives the full
+   root, the record unchanged, and only Refresh Workspace Folders in the palette; restoring the hub and refreshing gives the full
    workspace with the record applied.
 4. **Duplicate, Reopen Closed Tab, Move to New Window** keep the workspace mark, and
    the hub-tab flag when the tab has it, as F2 OB-14 AC5 keeps the flag (D9). Duplicate gives a second,
@@ -2916,10 +2936,12 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    nothing from the workspace record or the recent list (what F2 OB-14 AC5 writes for a
    hub tab is F2's, and OQ-5's). Nothing of the record or the recent list goes to
    the agent tracker or logs. **Local snapshots are allowed:** ADE's local snapshots
-   (`state_snapshot`, which copies every store file of the profile's `state/` folder
-   into `state/snapshots/` on this machine) may hold the record and the list if the
-   architect keeps them in that store, because snapshots never leave the machine; a
-   snapshot is never exported by sync, relayed or put in a tab set. Test: the record's markers for an added and
+   (`state_snapshot`, which copies the profile's `state/kv/` files, recordings
+   excluded, into `state/snapshots/` on this machine) may hold the record and the list
+   if the architect keeps them in that store, because snapshots never leave the
+   machine; a snapshot is never exported by sync, relayed or put in a tab set.
+   Restoring a snapshot (`state_restore_snapshot`) can bring back an older workspace
+   record and recent list in place of the current ones; both stay on this machine. Test: the record's markers for an added and
    a hidden folder are absent from a saved tab set, the agent tracker store and ADE's
    logs. **[Second] The relay:** a workspace tab is sent as F2 OB-14 AC2 sends a hub
    tab ("Agent hub") when it carries the hub-tab flag, and as a plain tab in the hub
@@ -2939,7 +2961,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    | `ade-session`: sub-terminal names (`SavedView.name`) and tab names | a name taken from a checkout or hub folder (`ade open` names, a renamed tab) | hub tabs are named "Agent hub" (OB-14 AC1); sub-terminal names are not masked | sub-terminal names of workspace tabs stripped; restored locally |
    | `better-terminal-workspaces` (tab sets, **shared**: every machine) | a hub tab's folder | F2 OB-14 AC5 saves it | a workspace tab is saved without its folder; Load opens it as a plain tab named "Agent hub" in the home folder |
    | `better-terminal-orchestrator` (**shared**) | a session's `projectDir` (`orchestratorStore.ts:38`) | any folder, a hub or checkout included | `projectDir` inside any workspace folder known to this profile is left out of the export |
-   | `better-terminal-agent-tracker` (**shared**) | a session's `cwd` (`agentTrackerStore.ts:25`) | F2 OB-14 AC3 keeps the hub folder out; a sub-terminal's checkout is not covered | no `cwd` inside any workspace folder known to this profile, for any pane of a workspace tab or not |
+   | `better-terminal-agent-tracker` (**shared**) | a session's `cwd` (`agentTrackerStore.ts:25`) | F2 OB-14 AC3 keeps the hub folder out only for tabs with the hub-tab flag (Open Hub, the run tab); unflagged workspace tabs (a hub folder opened from the New tab dialog, Open project or recent projects, D9) put the hub folder into this shared key, and into recent projects (`ade-recent-projects`, local), as today; a sub-terminal's checkout is not covered | no `cwd` inside any workspace folder known to this profile, for any pane of a workspace tab or not |
    | `better-terminal-prompt-history`, `better-terminal-saved-notes` (**shared**) | text the engineer typed | as typed | not stripped: the engineer's own text (stated, not changed) |
 | `ade-scratchpad-draft` (device key, exported to `devices/<device>/`) | the scratchpad box's draft, typed or inserted | as typed today; **F5 (PR #115) PT-11 AC4** keeps the draft out of sync's export while it holds inserted template text, and keeps template sends out of `better-terminal-prompt-history` | not stripped by F4: the engineer's own text; F5's rule applies as F5 says |
 
@@ -3023,7 +3045,7 @@ references stay stable.
 
 | Slice | Delivers | Criteria | Depends on |
 |---|---|---|---|
-| **S1. A hub's workspace** (MVP, macOS) | Discovery by ADE's rules, missing checkouts, multi-root file browser in the own view, opening by Open Hub (persona) and by a hub folder (plain shell), bring forward, add/hide/order, restore, record keeping, F4's local-only stores, limits and hostile paths, tab sets renamed | WS-1 AC1 to AC4, AC5 (open, restore, palette refresh), AC6, AC7; WS-2 AC1 to AC4, AC6 (S1 entries), AC8 (AC7 if the owner approves OQ-8); WS-3; WS-4; WS-5 AC1 **only if F3 S1 is not on `main` when F4 S1 is reviewed** (otherwise WS-5 AC2 instead, as F4 S1 then merges second), AC3; WS-6; WS-7 AC1, AC2 (not its [Second] relay part unless S1 merges second), AC4 (AC3's strip if the owner approves OQ-5); WS-9; WS-10. **[Second]:** WS-5 AC2 with F3 S1; WS-7 AC2's relay part with phone-watch story 8 | F2 slice 1 (Open Hub, the hub-tab flag). Works with or without F3 S1 |
+| **S1. A hub's workspace** (MVP, macOS) | Discovery by ADE's rules, missing checkouts, multi-root file browser in the own view, opening by Open Hub (persona) and by a hub folder (plain shell), bring forward, add/hide/order, restore, record keeping, F4's local-only stores, limits and hostile paths, tab sets renamed | WS-1 AC1 to AC4, AC5 (open, restore, palette refresh), AC6, AC7; WS-2 AC1 to AC4, AC6 (S1 entries), AC8 (AC7 if the owner approves OQ-8); WS-3; WS-4; WS-5 AC1 **only if F3 S1 is not on `main` when F4 S1 is reviewed, and again before merging, if F3 S1 merged in between (F3 D14)** (otherwise WS-5 AC2 instead, as F4 S1 then merges second), AC3; WS-6; WS-7 AC1, AC2 (not its [Second] relay part unless S1 merges second), AC4 (AC3's strip if the owner approves OQ-5); WS-9; WS-10. **[Second]:** WS-5 AC2 with F3 S1; WS-7 AC2's relay part with phone-watch story 8 | F2 slice 1 (Open Hub, the hub-tab flag). Works with or without F3 S1 |
 | **S2. Recents and live refresh** (Next) | Open Workspace… with the recent list and Open Hub Folder…; refresh on `ACCESS.md` change | WS-2 AC5, AC6 (S2 entry); WS-1 AC5 (live part); WS-5 AC4 | S1 |
 
 **Merges second** (F3 D14's rule, one trigger: merge order into `main`, checked at
@@ -3037,7 +3059,9 @@ review):
 **WS-5 AC1 and AC2 never share a gate.** With a sub-terminal in sight, AC1 shows the
 workspace (one browser per tab) and AC2 shows the sub-terminal's single root, so the
 two cannot both pass on one build. F4 S1's gate holds AC1 only while F3 S1 is not on
-`main`. If F4 S1 merges first, it is built and reviewed against AC1; the story that
+`main`: checked when F4 S1 is reviewed, and again before merging, if F3 S1 merged in
+between (F3 D14); if it did, F4 S1 now merges second and is built and reviewed against
+AC2 before it merges. If F4 S1 merges first, it is built and reviewed against AC1; the story that
 merges second (F3 S1) carries AC2 and **replaces** AC1's tests with AC2's, and that
 replacement is part of the mirror written into F3 S1's ticket. If F3 S1 merges first,
 F4 S1 is built against AC2 and AC1 is never built.
@@ -3177,11 +3201,14 @@ persona's file browser, which is the owner's whole ask.
   `hub.conf` is committed, so the new hub's folders show at once? *Recommend yes*: it
   is the hub's first tab and already a hub tab, and without this the engineer must
   open the hub again to see its workspace.
-- **OQ-9. Hub paths in F4's recent list (WS-2 AC5).** F2 OB-14 AC3 keeps hub folders
-  out of the New tab dialog's recent projects; F4's Open Workspace… keeps them in its
-  own list, which is local, never synced (WS-7 AC1) and separate from recent projects.
-  Accept that? *Recommend yes*: the list is the feature, it never leaves the machine,
-  and recent projects stay as F2 says.
+- **OQ-9. Hub paths in F4's recent list (WS-2 AC5).** F2 OB-14 AC3 keeps the folder
+  of a tab with the hub-tab flag (Open Hub, the run tab) out of the New tab dialog's
+  recent projects; a hub folder opened from the New tab dialog or from recent
+  projects has no flag (D9), so it goes into recent projects as it does today. F4's
+  Open Workspace… keeps every opened workspace's hub folder in its own list, which is
+  local, never synced (WS-7 AC1) and separate from recent projects. Accept that?
+  *Recommend yes*: the list is the feature, it never leaves the machine, and recent
+  projects behave as F2 and D9 say.
 - **OQ-10. Automatic project setup in discovered checkouts (F4.9).** Keep automatic
   project setup out of an open workspace's discovered checkouts (asked-for setup
   stays possible)? *Recommend yes*, as a new S1 criterion if you approve: a client's
@@ -3201,9 +3228,9 @@ persona's file browser, which is the owner's whole ask.
 
 ### F4.11 Handoff
 
-- **Adversarial reviewer:** a delta check of revision 3 against the delta review of
-  revision 2 (F4.12's second table), F3 (#112) and F3 S1's design (#116), F5 (#115),
-  and F1 at 2d65a7f for F4.9's line numbers.
+- **Adversarial reviewer:** revision 3 passed its final delta check; revision 3.1
+  folds in its four minors (F4.12's third table). No further review unless the
+  owner's answers to F4.10 change a requirement.
 - **Designer:** root rows (label, disambiguated label, path, missing, not-answering
   and not-in-workspace marks, the current-root mark), the file browser's workspace
   menu, the palette entries, Show Hidden Workspace Folders, the Tabs/Tab Sets relabel,
@@ -3221,7 +3248,10 @@ persona's file browser, which is the owner's whole ask.
     the replacement of WS-5 AC1's tests) into **F3 S1's ticket if it exists**; only
     if it does not, create `.ade/context/f4-merges-second.md` with the same, for F3's
     sharding to copy into F3 S1's ticket;
-  - put WS-5 AC1 in S1's gate only if F3 S1 is not on `main` (F4.8).
+  - put WS-5 AC1 in S1's gate only if F3 S1 is not on `main` (F4.8), and copy the
+    merge-order check into the S1 ticket: checked when S1 is reviewed, and again
+    before merging, if F3 S1 merged in between (F3 D14); if it did, S1 swaps AC1 for
+    WS-5 AC2 before it merges.
 
   **Sharding notes from the delta review of revision 2** (write each into the S1
   story it concerns):
@@ -3242,7 +3272,8 @@ persona's file browser, which is the owner's whole ask.
     and (b) Rust tests for the marker fixture (no marker written, the hub and
     checkouts byte-for-byte unchanged) driving discovery, refresh and the
     finished-hub check directly.
-  - **m8, local snapshots.** `state_snapshot` copies every kv file of `state/`; WS-7
+  - **m8, local snapshots.** `state_snapshot` copies the `state/kv/` files, recordings
+    excluded (revision 3.1); WS-7
     AC2 allows snapshots to hold the workspace record and the recent list, since
     they stay on the machine. The test asserts the snapshot folder is not in any
     sync export, not that the record is absent from snapshots.
@@ -3306,4 +3337,13 @@ persona's file browser, which is the owner's whole ask.
 | **m10** a parent repository can satisfy the finished-hub check | F4.1 and WS-2 AC8 require the hub folder to be its repository's top level, with a test. |
 | **m8** local snapshots copy every kv file | WS-7 AC2 allows local snapshots; sharding note (F4.11). |
 | **m1, m5, m6, m9, m11** | Sharding notes (F4.11). |
+
+**Final delta check of revision 3 (2e895fb): passed; minors folded in as revision 3.1.**
+
+| Finding | Answer in revision 3.1 |
+|---|---|
+| minor: merge order can change between review and merge | WS-5 AC1's gate is checked again before merging, if F3 S1 merged in between (F3 D14): F4.8's S1 cell and paragraph, and F4.11's sharding step, which copies it into the S1 ticket. |
+| minor: `state_snapshot` does not copy every store file | WS-7 AC2: only `state/kv/` files, recordings excluded; restoring a snapshot can bring back an older record, and both stay on the machine. F4.11's m8 note corrected. |
+| minor: text left wrong by D9 | WS-2 AC5 and OQ-9: an unflagged hub folder goes into recent projects as today; WS-7 AC3's agent-tracker row: unflagged workspace tabs put the hub folder into `better-terminal-agent-tracker` (shared) and recent projects, which is the disclosure if OQ-5 is declined. |
+| minor: palette entries while a hub is unfinished | WS-2 AC6 and WS-6 AC3: only Refresh Workspace Folders; Add, Remove and Show Hidden are hidden until the hub is finished again, with a test. |
 <!-- F4 ends -->
