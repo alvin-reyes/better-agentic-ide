@@ -13,11 +13,180 @@ import { useTabStore } from "../stores/tabStore";
 // module's static graph (and chunk), loaded only when a text file is shown.
 const CodeView = lazy(() => import("./viewer/CodeView"));
 
+/** What `watch_file` sends: only the event's kind matters, never its path. */
 interface WatchEvent {
   type: "changed" | "created" | "removed" | "error";
   path?: string;
-  content?: string;
   message?: string;
+}
+
+/**
+ * The health of the panel's watch, per path, apart from the user's LIVE/STATIC
+ * toggle. `stale`: a `removed` arrived, so the OS may have dropped the watch
+ * and the next good read replaces it. `arming`: a `watch_file` is in flight.
+ * `off`: the file is missing. `failed`: the watch could not be made or broke.
+ */
+type WatchStatus = "live" | "failed" | "off" | "stale" | "arming";
+interface WatchState {
+  path: string;
+  status: WatchStatus;
+  reason?: string;
+}
+
+const QUIET_MS = 150;
+const MAX_WAIT_MS = 1000;
+const RECHECK_MIN_MS = 2000;
+const RECHECK_MAX_MS = 30000;
+
+/** A read that failed because the file (or its folder) is not there. */
+function isNotFound(err: string): boolean {
+  return /\(os error [23]\)|No such file|cannot find the (file|path)/i.test(err);
+}
+
+/**
+ * Following one path live, while it is the panel's file and LIVE is on. One
+ * `watch_file` in flight at a time: a re-arm asked for meanwhile only sets
+ * `rearmAgain`, and a result whose generation is not the current one, or that
+ * lands after this follow closed, is unwatched at once. The re-check backoff
+ * doubles on every failed read and failed arm, and resets on a good arm.
+ */
+interface Follow {
+  path: string;
+  closed: boolean;
+  status: WatchStatus;
+  gen: number;
+  id: number | null;
+  arming: boolean;
+  rearmAgain: boolean;
+  backoff: number;
+  quiet?: ReturnType<typeof setTimeout>;
+  maxWait?: ReturnType<typeof setTimeout>;
+  recheck?: ReturnType<typeof setTimeout>;
+  publish: (w: WatchState) => void;
+  read: () => void;
+}
+
+function unwatchId(id: number | null) {
+  invoke("unwatch_directory", { id }).catch(() => {});
+}
+
+function setStatus(f: Follow, status: WatchStatus, reason?: string) {
+  f.status = status;
+  f.publish({ path: f.path, status, reason });
+}
+
+function dropWatch(f: Follow) {
+  if (f.id !== null) unwatchId(f.id);
+  f.id = null;
+}
+
+function arm(f: Follow) {
+  if (f.closed) return;
+  if (f.arming) {
+    f.rearmAgain = true;
+    return;
+  }
+  dropWatch(f);
+  f.arming = true;
+  const gen = ++f.gen;
+  setStatus(f, "arming");
+  const channel = new Channel<WatchEvent>();
+  // Events of the current arm only, in flight or done; a superseded or late
+  // watch is ignored.
+  channel.onmessage = (event) => {
+    if (!f.closed && gen === f.gen) onWatchEvent(f, event);
+  };
+  invoke<number>("watch_file", { path: f.path, onEvent: channel }).then(
+    (id) => {
+      if (f.closed || gen !== f.gen) {
+        unwatchId(id);
+        return;
+      }
+      f.arming = false;
+      f.id = id;
+      if (f.rearmAgain) {
+        f.rearmAgain = false;
+        arm(f);
+        return;
+      }
+      f.backoff = RECHECK_MIN_MS;
+      if (f.status === "arming") setStatus(f, "live");
+      // A write between the last read and the watch registering is seen only
+      // by reading again.
+      f.read();
+    },
+    (err) => {
+      if (f.closed || gen !== f.gen) return;
+      f.arming = false;
+      if (f.rearmAgain) {
+        f.rearmAgain = false;
+        arm(f);
+        return;
+      }
+      setStatus(f, "failed", String(err));
+      scheduleRecheck(f);
+    },
+  );
+}
+
+function onWatchEvent(f: Follow, event: WatchEvent) {
+  if (event.type === "error") {
+    setStatus(f, "failed", event.message ?? "the watch stopped");
+    scheduleRecheck(f);
+    return;
+  }
+  // The kind is not trusted (merged FSEvents flags, rename-writes): any event
+  // re-reads, and the read decides. A removed may mean a dead watch.
+  if (event.type === "removed" && (f.status === "live" || f.status === "arming")) setStatus(f, "stale");
+  scheduleReread(f);
+}
+
+/** 150 ms after the last event, and at most 1 s after the first. */
+function scheduleReread(f: Follow) {
+  const fire = () => {
+    clearTimeout(f.quiet);
+    clearTimeout(f.maxWait);
+    f.quiet = f.maxWait = undefined;
+    f.read();
+  };
+  clearTimeout(f.quiet);
+  f.quiet = setTimeout(fire, QUIET_MS);
+  if (f.maxWait === undefined) f.maxWait = setTimeout(fire, MAX_WAIT_MS);
+}
+
+function scheduleRecheck(f: Follow) {
+  clearTimeout(f.recheck);
+  const delay = f.backoff;
+  f.backoff = Math.min(f.backoff * 2, RECHECK_MAX_MS);
+  f.recheck = setTimeout(() => {
+    f.recheck = undefined;
+    f.read();
+  }, delay);
+}
+
+/** A good read: the re-check stops, and a watch that isn't sound is made again. */
+function readSucceeded(f: Follow) {
+  clearTimeout(f.recheck);
+  f.recheck = undefined;
+  if (f.status === "stale" || f.status === "off" || f.status === "failed") arm(f);
+}
+
+/** The file is gone: drop the watch (and any arm in flight) and re-check. */
+function readNotFound(f: Follow) {
+  f.gen++;
+  f.arming = false;
+  f.rearmAgain = false;
+  dropWatch(f);
+  setStatus(f, "off", "the file is missing");
+  scheduleRecheck(f);
+}
+
+function closeFollow(f: Follow) {
+  f.closed = true;
+  clearTimeout(f.quiet);
+  clearTimeout(f.maxWait);
+  clearTimeout(f.recheck);
+  dropWatch(f);
 }
 
 /** The mode badge for each kind: label, background, text color. */
@@ -71,15 +240,34 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
   const { width, onDragStart } = useDragWidth(280, 900, 480);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [watch, setWatch] = useState<WatchState | null>(null);
+  /** The path whose last read said it is gone; its last content stays. */
+  const [deletedPath, setDeletedPath] = useState<string | null>(null);
+  const followRef = useRef<Follow | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  // Each load has an id; a result is applied only if it is the latest load
-  // and still for the file shown, so a slow read of the last file never wins.
+  // Each load has an id; a result is applied only if it is newer than the last
+  // one applied and still for the file shown, so a slow read of the last file,
+  // or an older read of this one, never wins.
   const requestRef = useRef(0);
+  const appliedRef = useRef(0);
   const pathRef = useRef(filePath);
   pathRef.current = filePath;
   // Only what was read for the file shown now; never a previous file's.
   const current = loaded && loaded.path === filePath ? loaded : null;
+
+  // A path:line click on the file shown, past the end of the whole text the
+  // editor holds: the file may have grown with no event yet, so the reveal
+  // waits for a fresh read. Decided while rendering, before the editor sees it.
+  const [seenReveal, setSeenReveal] = useState<number | null>(null);
+  const [heldReveal, setHeldReveal] = useState<number | null>(null);
+  if (reveal && reveal.nonce !== seenReveal) {
+    setSeenReveal(reveal.nonce);
+    const shown = current?.head;
+    if (reveal.path === filePath && shown && !shown.truncated && !shown.binary && reveal.line > shown.text.split("\n").length) {
+      setHeldReveal(reveal.nonce);
+    }
+  }
 
   /** Opening a document means setting it on the tab; the effect below loads it. */
   const openFile = useCallback((path: string) => {
@@ -92,28 +280,51 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
     if (!resolved) return;
     const fileKind = viewerKind(resolved);
     const id = ++requestRef.current;
-    const stillWanted = () => id === requestRef.current && resolved === pathRef.current;
+    const stillWanted = () => id > appliedRef.current && resolved === pathRef.current;
+    const following = () => {
+      const f = followRef.current;
+      return f && !f.closed && f.path === resolved ? f : null;
+    };
+    const succeeded = () => {
+      setDeletedPath((p) => (p === resolved ? null : p));
+      const f = following();
+      if (f) readSucceeded(f);
+    };
 
     // PDF, Word and images: BinaryView reads the bytes itself.
     if (isBinaryKind(fileKind)) {
       setReloadKey((n) => n + 1);
       setLastUpdate(new Date());
+      succeeded();
       return;
     }
     try {
       if (fileKind === "text") {
         const head = await invoke<TextHead>("read_text_head", { path: resolved, maxBytes: PANEL_TEXT_MAX_BYTES });
         if (!stillWanted()) return;
+        appliedRef.current = id;
         setLoaded({ path: resolved, head });
       } else {
         const text = await invoke<string>("read_file", { path: resolved });
         if (!stillWanted()) return;
+        appliedRef.current = id;
         setLoaded({ path: resolved, text });
       }
       setLastUpdate(new Date());
+      succeeded();
     } catch (err) {
       if (!stillWanted()) return;
-      setLoaded({ path: resolved, error: String(err) });
+      appliedRef.current = id;
+      const message = String(err);
+      if (isNotFound(message)) {
+        // "Deleted on disk" over the last content, if there is any.
+        setDeletedPath(resolved);
+        setLoaded((prev) => (prev && prev.path === resolved && prev.error === undefined ? prev : { path: resolved, error: message }));
+        const f = following();
+        if (f) readNotFound(f);
+      } else {
+        setLoaded({ path: resolved, error: message });
+      }
     }
   }, []);
 
@@ -122,7 +333,7 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
   // goes at once, so its editor unmounts, and any read in flight for it is
   // dropped.
   useEffect(() => {
-    requestRef.current++;
+    appliedRef.current = ++requestRef.current;
     setLoaded(null);
     if (filePath) {
       setInputPath(filePath);
@@ -134,6 +345,15 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
       setInputPath("");
     }
   }, [filePath, loadContent]);
+
+  useEffect(() => {
+    if (heldReveal === null) return;
+    let gone = false;
+    loadContent(pathRef.current).finally(() => {
+      if (!gone) setHeldReveal((n) => (n === heldReveal ? null : n));
+    });
+    return () => { gone = true; };
+  }, [heldReveal, loadContent]);
 
   // ⌘⇧B focus. A new request is remembered for the file shown when it came
   // and served once that file can take it, then spent: the editor reports
@@ -164,47 +384,38 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
     if (filePath) useTabStore.getState().addEditorTab(filePath);
   }, [filePath]);
 
-  // Set up file watcher for auto-refresh
+  // Follow the file live with watch_file while LIVE is on. A new path, the
+  // toggle going off or the panel closing stops it: timers cleared, watch
+  // dropped, and a watch still in flight is unwatched when it lands.
   useEffect(() => {
-    if (!filePath || !autoRefresh) return;
-
-    const dir = filePath.substring(0, filePath.lastIndexOf("/"));
-    const filename = filePath.substring(filePath.lastIndexOf("/") + 1);
-    const ext = filename.split(".").pop() ?? "";
-
-    if (!dir) return;
-
-    let watcherId: number | null = null;
-    let cancelled = false;
-
-    const channel = new Channel<WatchEvent>();
-    channel.onmessage = (event) => {
-      if (cancelled) return;
-      if (event.type === "changed" && event.path === filePath) {
-        loadContent(filePath);
-      }
+    if (!filePath || !autoRefresh) {
+      setWatch(null);
+      return;
+    }
+    const f: Follow = {
+      path: filePath,
+      closed: false,
+      status: "arming",
+      gen: 0,
+      id: null,
+      arming: false,
+      rearmAgain: false,
+      backoff: RECHECK_MIN_MS,
+      publish: setWatch,
+      read: () => { loadContent(filePath); },
     };
-
-    invoke<number>("watch_directory", {
-      dir,
-      extensions: [ext],
-      onEvent: channel,
-    }).then((id) => {
-      if (cancelled) {
-        invoke("unwatch_directory", { id }).catch(() => {});
-      } else {
-        watcherId = id;
-      }
-    }).catch(() => {});
-
+    followRef.current = f;
+    arm(f);
     return () => {
-      cancelled = true;
-      if (watcherId !== null) {
-        invoke("unwatch_directory", { id: watcherId }).catch(() => {});
-      }
+      closeFollow(f);
+      if (followRef.current === f) followRef.current = null;
     };
   }, [filePath, autoRefresh, loadContent]);
 
+  const pathWatch = autoRefresh && watch && watch.path === filePath ? watch : null;
+  const showsLive = !!pathWatch && (pathWatch.status === "live" || pathWatch.status === "stale" || pathWatch.status === "arming");
+  const notLive = pathWatch && (pathWatch.status === "failed" || pathWatch.status === "off") ? pathWatch.reason ?? "" : null;
+  const deleted = deletedPath !== null && deletedPath === filePath && !current?.error;
 
   const handleOpen = () => {
     openFile(inputPath);
@@ -430,6 +641,8 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
           </div>
         )}
 
+        {deleted && <Status>Deleted on disk</Status>}
+
         {kind && current?.error && (
           <Status>Can't open {filePath.split("/").pop() || filePath}: {current.error}</Status>
         )}
@@ -468,7 +681,7 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
             <CodeView
               path={filePath}
               head={current.head}
-              reveal={reveal}
+              reveal={reveal && reveal.nonce === heldReveal ? null : reveal}
               onRevealed={revealApplied}
               focusOnMount={wantsFocus}
               onFocused={focusServed}
@@ -494,11 +707,12 @@ export default function PreviewPanel({ onClose, focusRequest = 0 }: PreviewPanel
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
             {filePath.split("/").pop()}
           </span>
-          {autoRefresh && (
+          {showsLive && (
             <span style={{ color: "var(--accent)", flexShrink: 0 }}>
               ● LIVE
             </span>
           )}
+          {notLive !== null && <Status inline>Not live: {notLive}</Status>}
           {lastUpdate && (
             <span style={{ flexShrink: 0 }}>
               {lastUpdate.toLocaleTimeString()}

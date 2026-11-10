@@ -224,6 +224,27 @@ describe("MonacoWrapper reveal", () => {
     expect(ed.calls).toEqual(["layout", "setPosition", "revealLineInCenter"]);
   });
 
+  it("a reload does not jump back to the target line", () => {
+    const onRevealed = vi.fn();
+    const { rerender } = render(
+      <MonacoWrapper filePath="/r/a.ts" content={lines(100)} readOnly autoFocus={false} reveal={{ line: 42, nonce: 1 }} onRevealed={onRevealed} />,
+    );
+    const ed = stub.editors[0];
+    // The reader moves on after the reveal.
+    ed.setPosition({ lineNumber: 80, column: 3 });
+    ed.calls = [];
+    // Live reloads, with the reveal still pending on the tab and after it is cleared.
+    rerender(
+      <MonacoWrapper filePath="/r/a.ts" content={lines(101)} readOnly autoFocus={false} reveal={{ line: 42, nonce: 1 }} onRevealed={onRevealed} />,
+    );
+    rerender(<MonacoWrapper filePath="/r/a.ts" content={lines(102)} readOnly autoFocus={false} onRevealed={onRevealed} />);
+    expect(ed.value).toBe(lines(102));
+    expect(ed.calls).not.toContain("setPosition");
+    expect(ed.calls).not.toContain("revealLineInCenter");
+    expect(ed.position).toEqual({ lineNumber: 80, column: 3 });
+    expect(onRevealed).toHaveBeenCalledTimes(1);
+  });
+
   it("clamps a line past the end", () => {
     const { rerender } = render(<MonacoWrapper filePath="/r/a.ts" content={lines(3)} readOnly autoFocus={false} reveal={{ line: 50, nonce: 1 }} />);
     const ed = stub.editors[0];

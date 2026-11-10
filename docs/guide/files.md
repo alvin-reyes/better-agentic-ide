@@ -36,7 +36,11 @@ Click a file path in the terminal and the file opens in the preview panel beside
 - **Binary files** (a NUL byte near the start, as in a `.zip` or UTF-16 text) aren't shown: the panel says "Binary file, not shown" with its size.
 - **Markdown, HTML, PDFs, Word documents and images** render as they do in the file tab. PDFs page and zoom with the same viewer the file tab uses, so they render the same on macOS and Linux.
 
-With **LIVE** on (the button in the panel's header), the panel refreshes whenever the file is saved, handy for watching an agent write a spec or a source file.
+With **LIVE** on (the button in the panel's header), the panel follows the file as it changes, handy for watching an agent write a spec or a source file. It refreshes shortly after each write, and about once a second while a file keeps growing, such as a log. Your scroll position and cursor stay where they were.
+
+- **Deleted on disk:** if the file is deleted, the panel keeps showing its last content under a "Deleted on disk" note, and checks for it every few seconds (less often the longer it is gone, at most every 30 seconds). When the file comes back, for example after a rebuild of `dist/` or a `git checkout`, the note goes and the panel follows the new file.
+- **Not live:** if the file can't be watched, the footer says "Not live" with the reason, and the panel tries again after its next good read of the file. Your LIVE/STATIC choice is not changed, and another file starts fresh. Refresh always shows the file as it is now.
+- On macOS, a folder moved away with nothing put in its place may show no note; the panel picks the file up again when it is back.
 
 HTML in the preview may run scripts, for pages that need them. They run isolated from the app.
 

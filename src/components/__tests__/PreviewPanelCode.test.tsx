@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, act, fireEvent, waitFor, cleanup } from "@testing-library/react";
 
 type Handler = (args: Record<string, unknown>) => unknown;
 const h = vi.hoisted(() => ({
@@ -82,7 +82,9 @@ describe("code in the side panel", () => {
     openInPanel("/r/src/App.tsx");
     const { container } = render(<PreviewPanel onClose={vi.fn()} />);
     await screen.findByTestId("monaco-stub");
-    expect(calls("read_text_head")).toEqual([["read_text_head", { path: "/r/src/App.tsx", maxBytes: 2097152 }]]);
+    // The open, and the re-read once the watch is armed (3-AC8d).
+    const call = ["read_text_head", { path: "/r/src/App.tsx", maxBytes: 2097152 }];
+    await waitFor(() => expect(calls("read_text_head")).toEqual([call, call]));
     const last = stub.renders[stub.renders.length - 1];
     expect(last.language).toBe("typescript");
     expect((last.options as Record<string, unknown>).ariaLabel).toBe("App.tsx, read-only");
@@ -219,11 +221,11 @@ describe("code in the side panel", () => {
   it("documents stay live", async () => {
     let version = 1;
     h.handlers.read_file = async () => `# v${version}`;
-    h.handlers.watch_directory = async () => 7;
+    h.handlers.watch_file = async () => 7;
     openInPanel("/r/docs/plan.md");
     const { container } = render(<PreviewPanel onClose={vi.fn()} />);
     await waitFor(() => expect(container.querySelector("h1")?.textContent).toBe("v1"));
-    expect(calls("watch_directory")).toHaveLength(1);
+    expect(calls("watch_file")).toHaveLength(1);
     version = 2;
     await act(async () => { h.channels[0].onmessage?.({ type: "changed", path: "/r/docs/plan.md" }); });
     await waitFor(() => expect(container.querySelector("h1")?.textContent).toBe("v2"));
@@ -249,9 +251,10 @@ describe("go to line from path:line", () => {
     h.handlers.read_text_head = ({ path }) => {
       if (path === "/r/A.ts") return Promise.resolve(head(lines(500)));
       bVersion += 1;
-      return bVersion === 1 ? b.promise : Promise.resolve(head(lines(401)));
+      // The open and the re-read after the watch is armed both get B's first text.
+      return bVersion <= 2 ? b.promise : Promise.resolve(head(lines(401)));
     };
-    h.handlers.watch_directory = async () => 7;
+    h.handlers.watch_file = async () => 7;
     stub.asyncMount = true;
     openInPanel("/r/A.ts");
     render(<PreviewPanel onClose={vi.fn()} />);
@@ -340,7 +343,7 @@ describe("go to line from path:line", () => {
   it("a whole file that grows past 2 MiB does not claim an earlier line is past the part shown", async () => {
     let big = false;
     h.handlers.read_text_head = async () => (big ? head(lines(40000), { size: 3 * MiB, truncated: true }) : head(lines(1000)));
-    h.handlers.watch_directory = async () => 7;
+    h.handlers.watch_file = async () => 7;
     openAt("/r/app.log", 5000);
     render(<PreviewPanel onClose={vi.fn()} />);
     await screen.findByTestId("monaco-stub");
@@ -405,3 +408,469 @@ describe("go to line from path:line", () => {
   });
 });
 
+
+describe("follow the file live", () => {
+  const A = "/r/src/A.ts";
+  const B = "/r/src/B.ts";
+  const NOT_FOUND = (p: string) => `Failed to read ${p}: No such file or directory (os error 2)`;
+  type Chan = { onmessage: ((e: unknown) => void) | null };
+
+  // The file on disk, per path: its text, or null when missing.
+  let disk: Record<string, string | null>;
+  // What each watch_file call does, in order; when empty, it returns the next id.
+  let watchPlan: (() => Promise<number>)[];
+  let nextId: number;
+
+  const reads = (p: string) => calls("read_text_head").filter((c) => (c[1] as { path: string }).path === p).length;
+  const watches = (p?: string) => calls("watch_file").filter((c) => p === undefined || (c[1] as { path: string }).path === p);
+  const chan = (n: number) => (calls("watch_file")[n][1] as { onEvent: Chan }).onEvent;
+  const unwatched = () => calls("unwatch_directory").map((c) => (c[1] as { id: number }).id);
+  const badge = () => screen.queryByText("● LIVE");
+  const notLive = () => screen.queryByText(/^Not live/);
+  const toggle = () => screen.getByTitle(/Auto-refresh/);
+
+  async function tick(ms = 0) {
+    await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  }
+  async function settle() {
+    for (let i = 0; i < 6; i++) await tick(0);
+  }
+  async function emit(c: Chan, type: string, extra: Record<string, unknown> = {}) {
+    await act(async () => { c.onmessage?.({ type, path: A, ...extra }); });
+  }
+  async function openA() {
+    openInPanel(A);
+    const r = render(<PreviewPanel onClose={vi.fn()} />);
+    await settle();
+    return r;
+  }
+  const lastEditor = () => stub.editors[stub.editors.length - 1];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    disk = { [A]: "a1", [B]: "b1" };
+    watchPlan = [];
+    nextId = 0;
+    h.handlers.read_text_head = async ({ path }) => {
+      const t = disk[String(path)];
+      if (t == null) throw NOT_FOUND(String(path));
+      return head(t);
+    };
+    h.handlers.read_file = async () => "# doc";
+    h.handlers.watch_file = () => (watchPlan.shift() ?? (async () => ++nextId))();
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("watches only its file", async () => {
+    await openA();
+    expect(watches().map((c) => (c[1] as { path: string }).path)).toEqual([A]);
+    expect(calls("watch_directory")).toEqual([]);
+    openInPanel("/r/docs/plan.md");
+    await settle();
+    expect(watches("/r/docs/plan.md")).toHaveLength(1);
+    expect(calls("watch_directory")).toEqual([]);
+  });
+
+  it("debounces bursts", async () => {
+    await openA();
+    const before = reads(A);
+    await emit(chan(0), "changed");
+    await tick(50);
+    await emit(chan(0), "changed");
+    await tick(50);
+    await emit(chan(0), "changed");
+    await tick(149);
+    expect(reads(A)).toBe(before);
+    await tick(1);
+    expect(reads(A)).toBe(before + 1);
+    await tick(5000);
+    expect(reads(A)).toBe(before + 1);
+  });
+
+  it("continuous appends still refresh", async () => {
+    await openA();
+    const before = reads(A);
+    for (let t = 0; t < 3000; t += 50) {
+      await emit(chan(0), "changed");
+      await tick(50);
+    }
+    expect(reads(A) - before).toBeGreaterThanOrEqual(3);
+  });
+
+  it("removed then created", async () => {
+    await openA();
+    // Each kind schedules a re-read.
+    for (const kind of ["changed", "created", "removed"]) {
+      const before = reads(A);
+      await emit(chan(watches().length - 1), kind);
+      await tick(150);
+      expect(reads(A), kind).toBeGreaterThan(before);
+      await settle();
+    }
+    // A rename-write: removed, then created, and the file is there.
+    disk[A] = "a2";
+    const c = chan(watches().length - 1);
+    await emit(c, "removed");
+    await emit(c, "created");
+    await tick(150);
+    await settle();
+    expect(screen.queryByText("Deleted on disk")).toBeNull();
+    expect(lastEditor().getValue()).toBe("a2");
+  });
+
+  it("created then removed", async () => {
+    await openA();
+    const ed = stub.editors[0];
+    expect(ed.getValue()).toBe("a1");
+    disk[A] = null;
+    await emit(chan(0), "created");
+    await emit(chan(0), "removed");
+    await tick(150);
+    await settle();
+    statusWith("Deleted on disk");
+    expect(screen.getByTestId("monaco-stub")).toBeTruthy();
+    expect(ed.getValue()).toBe("a1");
+    // It comes back: the re-check's good read clears the banner.
+    disk[A] = "a3";
+    await tick(2000);
+    await settle();
+    expect(screen.queryByText("Deleted on disk")).toBeNull();
+    expect(lastEditor().getValue()).toBe("a3");
+  });
+
+  it("a folder replaced before the re-read is watched again", async () => {
+    await openA();
+    expect(watches()).toHaveLength(1);
+    // The folder went and came back within the debounce: the read succeeds.
+    await emit(chan(0), "removed");
+    await tick(150);
+    await settle();
+    expect(unwatched()).toEqual([1]);
+    expect(watches()).toHaveLength(2);
+    const all = vi.mocked(invoke).mock.calls;
+    expect(all.findIndex((c) => c[0] === "unwatch_directory")).toBeLessThan(all.indexOf(watches()[1]));
+    // The new watch (id 2) is followed.
+    let before = reads(A);
+    await emit(chan(1), "changed");
+    await tick(150);
+    expect(reads(A)).toBe(before + 1);
+    await settle();
+
+    // A removed inside a burst that ends with the 1 s max wait.
+    before = reads(A);
+    for (let i = 0; i < 20; i++) {
+      await emit(chan(1), i === 5 ? "removed" : "changed");
+      await tick(50);
+    }
+    expect(reads(A)).toBeGreaterThan(before);
+    await tick(150);
+    await settle();
+    expect(unwatched()).toEqual([1, 2]);
+    expect(watches()).toHaveLength(3);
+    before = reads(A);
+    await emit(chan(2), "changed");
+    await tick(150);
+    expect(reads(A)).toBe(before + 1);
+  });
+
+  it("a deleted folder that comes back is followed again", async () => {
+    await openA();
+    disk[A] = null;
+    await emit(chan(0), "removed");
+    await tick(150);
+    await settle();
+    statusWith("Deleted on disk");
+    expect(unwatched()).toEqual([1]);
+    expect(watches()).toHaveLength(1);
+    // Re-checks at 2, 4, 8, 16, then 30 s, 30 s; no watch while reads fail.
+    for (const gap of [2000, 4000, 8000, 16000, 30000, 30000]) {
+      const before = reads(A);
+      await tick(gap - 1);
+      expect(reads(A), `${gap} ms`).toBe(before);
+      await tick(1);
+      expect(reads(A), `${gap} ms`).toBe(before + 1);
+    }
+    expect(watches()).toHaveLength(1);
+    // The folder and file are back.
+    disk[A] = "a-new";
+    const beforeBack = reads(A);
+    await tick(30000);
+    await settle();
+    expect(screen.queryByText("Deleted on disk")).toBeNull();
+    expect(lastEditor().getValue()).toBe("a-new");
+    expect(watches()).toHaveLength(2);
+    // The good read, then one re-read after the new watch.
+    expect(reads(A)).toBe(beforeBack + 2);
+    const before = reads(A);
+    disk[A] = "a-newer";
+    await emit(chan(1), "changed");
+    await tick(150);
+    await settle();
+    expect(reads(A)).toBe(before + 1);
+    expect(lastEditor().getValue()).toBe("a-newer");
+  });
+
+  it("a failed watch is per file and never flips the toggle", async () => {
+    watchPlan.push(async () => { throw "inotify watch limit reached"; });
+    await openA();
+    statusWith("Not live: inotify watch limit reached");
+    expect(toggle().textContent).toBe("LIVE");
+    expect(badge()).toBeNull();
+    // The next good read of A (the re-check) tries the watch again.
+    watchPlan.push(async () => { throw "inotify watch limit reached"; });
+    await tick(2000);
+    await settle();
+    expect(watches(A)).toHaveLength(2);
+
+    // B starts fresh.
+    openInPanel(B);
+    await settle();
+    expect(watches(B)).toHaveLength(1);
+    expect(badge()).toBeTruthy();
+    expect(notLive()).toBeNull();
+
+    // Back on A, the file present: watched again.
+    openInPanel(A);
+    await settle();
+    expect(watches(A)).toHaveLength(3);
+    expect(badge()).toBeTruthy();
+    expect(notLive()).toBeNull();
+
+    // An error event on a live watch is a failure too.
+    await emit(chan(watches().length - 1), "error", { message: "watcher died" });
+    statusWith("Not live: watcher died");
+    expect(toggle().textContent).toBe("LIVE");
+
+    // STATIC: no watch, no re-check.
+    fireEvent.click(toggle());
+    await settle();
+    expect(toggle().textContent).toBe("STATIC");
+    const w = watches().length;
+    const r = reads(A);
+    await tick(60000);
+    expect(watches()).toHaveLength(w);
+    expect(reads(A)).toBe(r);
+  });
+
+  it("a tab switch mid-reload", async () => {
+    await openA();
+    await emit(chan(0), "changed");
+    const r = reads(A);
+    act(() => {
+      useTabStore.getState().addTab();
+      const { activeTabId, setPreviewPath } = useTabStore.getState();
+      setPreviewPath(activeTabId, B);
+    });
+    await settle();
+    expect(unwatched()).toContain(1);
+    await tick(60000);
+    expect(reads(A)).toBe(r);
+  });
+
+  it("closing the panel stops the re-check", async () => {
+    const { unmount } = await openA();
+    await emit(chan(0), "error", { message: "watcher died" });
+    await emit(chan(0), "changed");
+    const r = reads(A);
+    unmount();
+    expect(unwatched()).toContain(1);
+    await tick(60000);
+    expect(reads(A)).toBe(r);
+  });
+
+  it("a late watch is unwatched", async () => {
+    const late = deferred<number>();
+    watchPlan.push(() => late.promise);
+    await openA();
+    openInPanel(B);
+    await settle();
+    const lateChan = chan(0);
+    await act(async () => { late.resolve(41); });
+    await settle();
+    expect(unwatched()).toContain(41);
+    const r = reads(A);
+    await emit(lateChan, "changed");
+    await tick(5000);
+    expect(reads(A)).toBe(r);
+
+    // The same after the panel closed.
+    const late2 = deferred<number>();
+    watchPlan.push(() => late2.promise);
+    openInPanel(A);
+    await settle();
+    cleanup();
+    await act(async () => { late2.resolve(42); });
+    await settle();
+    expect(unwatched()).toContain(42);
+  });
+
+  it("re-arms never leak a watcher", async () => {
+    await openA();
+    const pending = deferred<number>();
+    watchPlan.push(() => pending.promise);
+    await emit(chan(0), "removed");
+    await tick(150);
+    await settle();
+    expect(watches()).toHaveLength(2);
+    // Two more re-arm triggers while that watch_file is in flight.
+    for (let i = 0; i < 2; i++) {
+      await emit(chan(1), "removed");
+      await tick(150);
+      await settle();
+      expect(watches()).toHaveLength(2);
+    }
+    await act(async () => { pending.resolve(2); });
+    await settle();
+    expect(watches()).toHaveLength(3);
+    await tick(10000);
+    await settle();
+    expect(watches()).toHaveLength(3);
+    // Ids 1, 2, 3: every one but the last unwatched, the last still registered.
+    expect([...new Set(unwatched())].sort()).toEqual([1, 2]);
+  });
+
+  it("a watch that keeps failing backs off", async () => {
+    const fail = async (): Promise<number> => { throw "ENOSPC"; };
+    h.handlers.watch_file = () => (watchPlan.shift() ?? fail)();
+    await openA();
+    for (const gap of [2000, 4000, 8000, 16000, 30000, 30000]) {
+      const before = reads(A);
+      await tick(gap - 1);
+      expect(reads(A), `${gap} ms`).toBe(before);
+      await tick(1);
+      await settle();
+      expect(reads(A), `${gap} ms`).toBe(before + 1);
+    }
+    // A successful arm resets the interval.
+    watchPlan.push(async () => 7);
+    await tick(30000);
+    await settle();
+    expect(notLive()).toBeNull();
+    await emit(chan(watches().length - 1), "error", { message: "ENOSPC" });
+    const before = reads(A);
+    await tick(1999);
+    expect(reads(A)).toBe(before);
+    await tick(1);
+    expect(reads(A)).toBe(before + 1);
+  });
+
+  it("a write before the watch registers is not missed", async () => {
+    const arm = deferred<number>();
+    watchPlan.push(() => arm.promise);
+    await openA();
+    expect(reads(A)).toBe(1);
+    expect(stub.editors[0].getValue()).toBe("a1");
+    disk[A] = "a2";
+    await act(async () => { arm.resolve(1); });
+    await settle();
+    expect(reads(A)).toBe(2);
+    expect(stub.editors[0].getValue()).toBe("a2");
+    await tick(10000);
+    expect(reads(A)).toBe(2);
+    // Likewise after a re-arm: the event's re-read, then one after the new watch.
+    await emit(chan(0), "removed");
+    await tick(150);
+    await settle();
+    expect(watches()).toHaveLength(2);
+    expect(reads(A)).toBe(4);
+  });
+
+  it("the badge does not flicker during a re-arm", async () => {
+    await openA();
+    expect(badge()).toBeTruthy();
+    const pending = deferred<number>();
+    watchPlan.push(() => pending.promise);
+    await emit(chan(0), "removed");
+    // stale
+    expect(badge()).toBeTruthy();
+    expect(notLive()).toBeNull();
+    await tick(150);
+    await settle();
+    // arming
+    expect(watches()).toHaveLength(2);
+    expect(badge()).toBeTruthy();
+    expect(notLive()).toBeNull();
+    await act(async () => { pending.resolve(2); });
+    await settle();
+    expect(badge()).toBeTruthy();
+    expect(notLive()).toBeNull();
+
+    // A rejected re-arm: failed.
+    watchPlan.push(async () => { throw "no watcher"; });
+    await emit(chan(1), "removed");
+    await tick(150);
+    await settle();
+    statusWith("Not live: no watcher");
+    expect(badge()).toBeNull();
+
+    // A not-found read: off.
+    disk[A] = null;
+    await tick(2000);
+    await settle();
+    statusWith("Not live: the file is missing");
+    expect(badge()).toBeNull();
+
+    // Back, and a successful re-arm: LIVE.
+    disk[A] = "a2";
+    await tick(4000);
+    await settle();
+    expect(badge()).toBeTruthy();
+    expect(notLive()).toBeNull();
+  });
+});
+
+describe("re-clicking path:line on the file shown", () => {
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
+  function openAt(path: string, line: number) {
+    act(() => {
+      const { activeTabId, setPreviewPath } = useTabStore.getState();
+      setPreviewPath(activeTabId, path, { line });
+    });
+  }
+
+  it("re-clicking a line past the stale text re-reads the file first", async () => {
+    let n = 20;
+    h.handlers.read_text_head = async () => head(lines(n));
+    // Held, so the only reads are the open's and the clicks'.
+    h.handlers.watch_file = () => new Promise<number>(() => {});
+    openInPanel("/r/grow.log");
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    expect(calls("read_text_head")).toHaveLength(1);
+    // Inside the text the editor holds: no read.
+    openAt("/r/grow.log", 10);
+    await waitFor(() => expect(stub.editors[0].revealed).toEqual([10]));
+    expect(calls("read_text_head")).toHaveLength(1);
+    // Past it: read again.
+    n = 40;
+    openAt("/r/grow.log", 30);
+    expect(calls("read_text_head")).toHaveLength(2);
+    await waitFor(() => expect(stub.editors[0].revealed).toEqual([10, 30]));
+  });
+
+  it("the reveal waits for the re-read, then lands on the line", async () => {
+    const later = deferred<ReturnType<typeof head>>();
+    let first = true;
+    h.handlers.read_text_head = () => {
+      if (first) { first = false; return Promise.resolve(head(lines(20))); }
+      return later.promise;
+    };
+    h.handlers.watch_file = () => new Promise<number>(() => {});
+    openInPanel("/r/grow.log");
+    render(<PreviewPanel onClose={vi.fn()} />);
+    await screen.findByTestId("monaco-stub");
+    const ed = stub.editors[0];
+    openAt("/r/grow.log", 30);
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    // Not clamped to the stale 20 lines.
+    expect(ed.positions).toEqual([]);
+    await act(async () => { later.resolve(head(lines(40))); });
+    await waitFor(() => expect(ed.positions).toEqual([{ lineNumber: 30, column: 1 }]));
+    expect(ed.getValue()).toBe(lines(40));
+
+    // Still past the end of the whole file after the re-read: the last line, no message.
+    openAt("/r/grow.log", 99);
+    await waitFor(() => expect(ed.positions[1]).toEqual({ lineNumber: 40, column: 1 }));
+    expect(screen.queryByText("is past the part shown", { exact: false })).toBeNull();
+  });
+});
