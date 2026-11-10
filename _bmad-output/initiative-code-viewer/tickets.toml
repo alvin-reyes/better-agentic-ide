@@ -1,0 +1,9 @@
+# Epics of the code viewer in the side panel (_bmad-output/plan-code-viewer-panel.md), for the stories not yet built.
+# Stories 1, 2 and 4 are Done on main. This initiative holds stories 3 and 5, sharded 2026-11-10 because F3 S1 (initiative-per-view-viewer)
+# is held until they are Done (owner's OQ-9 (a)). Story 6 is not built (replaced by F3 VV-6 and VV-4 AC3).
+
+[[epic]]
+id = 1
+slug = "epic-code-viewer"
+title = "Code viewer plan: follow the file live, and clicks land in the panel"
+covers = []

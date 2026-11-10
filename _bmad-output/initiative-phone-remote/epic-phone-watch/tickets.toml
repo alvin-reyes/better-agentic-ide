@@ -178,6 +178,8 @@ Acceptance:
 (6) The bridge sends a stored pair_confirm again after each welcome and every 60 s while the pair is pending (injected clock), and re-sends a lost pair_abort or pair_decline after each welcome until pair_state answers.
 (7) On reconnect with the pairing view open and no reveal received, the bridge sends pair_abort for the old slot, opens a new slot and redraws the QR (the UI is story 9's).
 (8) welcome reconciliation touches only the entries under its own relay URL and identity key.
+(9) CONDITIONAL MIRROR, F3 VV-12 AC3 (nothing to the phone; F3.8 "Merges second", D14; added 2026-11-10 by the F3 S1 sharding). If F3 S1 story s1b (_bmad-output/initiative-per-view-viewer/epic-slice-1-viewer-state, ticket s1b) is on main when this ticket is reviewed, and again before merge if it lands in between, this ticket also carries VV-12 AC3: the payload this bridge builds for the relay from a tab with viewer state holds none of the viewer state's markers and none of the views' viewerKeys. The payload picks its fields and never spreads a View. Test, in this ticket's remote_tabs_set tests: "the relay tab payload holds no viewer state and no viewer key". If F3 S1 story s1b is not on main, F3 story s1b carries the criterion.
+
 Spec tests: remote_tabs_set including two windows that both have tab-1 and a window closing; panes rolled up into tabs; the sink only signalling; KeyStore in memory; the dev and release services differing; Remote off closing the connection; and the state-file and re-send tests in (5) and (6).'''
 verify = "The approved verification command passes; the bridge tests above pass, including two windows that both have tab-1 and a closing window; the app-state tests show each record surviving a restart."
 covers = []

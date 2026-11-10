@@ -1,0 +1,86 @@
+# Code viewer in the side panel: stories 3 and 5 of _bmad-output/plan-code-viewer-panel.md (approved 2026-10-17, ready-for-dev).
+# Stories 1, 2 and 4 are Done on main (QA records in .ade/session.md). Story 6 is not built: F3 S1 (VV-6) replaces its restart part,
+# and S5 (VV-4 AC3) its Reopen Closed Tab part (ADR 0032). Build order: 3, then 5.
+# Verification for both: the seven "In force" lines of docs/architecture.md (each from the repository root, each exits 0). The plan's
+# "same five lines" predates the architecture's seven, and In force says every story runs its lines.
+# Plan text, the review triage and the Implementation Notes stay in the plan file; the criteria below are copied from it, unchanged.
+
+[[entry]]
+id = "cv3"
+type = "story"
+title = "Follow the file live"
+description = '''Code viewer plan, story 3 (_bmad-output/plan-code-viewer-panel.md, "Story 3: Follow the file live"). Depends on stories 1, 2 and 4, all Done on main.
+
+Summary. The side panel follows its file live with watch_file (story 1's command), not the folder-wide watch_directory. Watch health is per-path state, separate from the user's LIVE/STATIC toggle. A deleted file shows a "Deleted on disk" banner until it comes back. A BinaryView keeps its view during a reload.
+
+Code map.
+- src/components/PreviewPanel.tsx:104-142: today's watch_directory effect (extensions: [ext], default withContent, errors swallowed, reloads only on changed with event.path === filePath).
+- src-tauri/src/watcher.rs:186-190: every Modify, renames included, becomes changed.
+- src/components/viewer/BinaryView.tsx:17-25: setData(null) on every reloadKey change.
+
+Rules (plan, Story 3 section): the panel calls watch_file with the path and never watch_directory. Watch status is watch: { path, status: "live" | "failed" | "off" | "stale" | "arming", reason? } per path. The LIVE badge shows when the user's toggle is on and status is live, stale or arming for the current path; "Not live: <reason>" shows only for failed, and for off while the file is missing. Any event re-reads; "deleted" is decided by a not-found read and cleared by a good one. A removed event marks the watch stale and the next good read re-arms it. Re-arms run one at a time with a rearmAgain flag; a stale watch id is unwatched at once; backoff 2, 4, 8, 16, 30 s is kept across failed arms and reset only by a successful arm. One re-read after every successful arm.
+
+Acceptance criteria (fake timers; watch_file mocked to capture the channel and return ids; read_text_head mocked per call):
+1. The panel calls watch_file with the path and never watch_directory. -- PreviewPanelCode.test.tsx "watches only its file"
+2. Three events 50 ms apart cause one read_text_head call, 150 ms after the last. -- "debounces bursts"
+3. An event every 50 ms for 3 s causes a re-read at least every 1 s (at least 3 calls). -- "continuous appends still refresh"
+4. Each of changed, created, removed schedules a re-read. Sequence removed then created with the file present: no "Deleted on disk" after the re-read. Sequence created then removed with the file gone (read rejects with not-found): "Deleted on disk" in a role="status" element and the editor keeps its last text; a later successful read clears it. -- "removed then created", "created then removed"
+4b. Folder event, file already back (N1 fast path): with a live watch (id 1), a removed event and then a re-read that succeeds: unwatch_directory(1) is called, then watch_file again (id 2), and an event on id 2's channel triggers a reload. The same holds when the removed arrives inside a burst that ends with the 1 s max wait. -- "a folder replaced before the re-read is watched again"
+5. Folder deleted and re-created (N1 slow path): after a removed whose re-read rejects with not-found, the panel unwatches the old id and makes no further watch_file call while reads keep failing; it re-reads at 2 s, 4 s, 8 s, capped at 30 s. When a read succeeds, the banner clears, the new text is shown, watch_file is called again, and an event on the new channel triggers a reload. -- "a deleted folder that comes back is followed again"
+6. Per-path watch failure (N2): watch_file rejects for A: "Not live: <reason>" in a role="status" element, and the LIVE/STATIC toggle still reads LIVE. Opening B: watch_file(B) is called, B shows LIVE with no "Not live". Back on A with the file present: the next successful read calls watch_file(A) again. An error event on a live watch behaves like the rejection. With the toggle on STATIC, no watch and no re-check run. -- "a failed watch is per file and never flips the toggle"
+7. Switching tab (another previewPath), or closing the panel, with a re-read or re-check timer pending: the timers are cleared, the watch is stopped with unwatch_directory, and advancing fake timers 60 s causes zero read_text_head calls for the old path. -- "a tab switch mid-reload", "closing the panel stops the re-check"
+8. A watch_file that resolves after the panel moved to another path (or unmounted): its id is passed to unwatch_directory at once, and its events are ignored. -- "a late watch is unwatched"
+8b. Two re-arm triggers while the first watch_file is pending: only one watch_file call is in flight at a time; when it resolves, exactly one more arm runs; every id returned except the last has been passed to unwatch_directory. -- "re-arms never leak a watcher"
+8c. watch_file rejecting on every arm while reads succeed: re-check reads happen at 2, 4, 8, 16, 30, 30 s (not every 2 s); a successful arm resets the interval. -- "a watch that keeps failing backs off"
+8d. Re-read after arming: on opening a file, watch_file resolving triggers exactly one more read_text_head for the path (two in total for the open, with no events); likewise after each re-arm in 4b and 5. If the file changed between the first read and the arm, the newer text is shown. -- "a write before the watch registers is not missed"
+8e. Badge: LIVE (no "Not live") while status is stale or arming during a re-arm (watch_file held pending); "Not live: <reason>" when watch_file rejects (failed), and when a read fails with not-found (off); LIVE again after a successful re-arm. -- "the badge does not flicker during a re-arm"
+9. A content reload does not re-apply an earlier reveal (no setPosition call after the reload). -- MonacoWrapper.test.tsx "a reload does not jump back to the target line"
+10. BinaryView: changing only reloadKey keeps the current view rendered (no "Loading...") until the new bytes resolve; changing path shows "Loading...". -- src/components/viewer/__tests__/BinaryView.test.tsx "a reload keeps the current view"
+
+Docs (3): files.md: live updates, the deleted banner, "Not live".
+
+Manual checks (not gating Done, pending the owner): scroll halfway down a file and let an agent edit it: the view does not move. A loop appending to a log that is open: updates about once a second. Save from vim (rename-write): updates, no lasting banner. Delete the file: banner. rm -rf dist && npm run build with a dist file open, then rebuild: followed on Linux and macOS. The macOS mv gap is documented, not a failure.
+
+Out of scope: any change to how the file tab loads, edits or saves files; the file tab's dead "keep the cursor" branch in MonacoWrapper; PDF page and zoom reset on reload (pre-existing, out of scope; F3 S2 changes it under D10).
+
+Note for the F3 S1 stories: F3 story s1d rewrites nothing here. Story s1e's "Deleted on disk" test relies on this story.'''
+verify = "The seven In-force lines each exit 0, with the named tests of items 1 to 10 (including 4b, 8b to 8e) passing by name, and the BinaryView test passing. Manual checks listed above are recorded for the owner, not gating."
+covers = []
+after = []
+hitl = false
+risk = "medium"
+
+[[entry]]
+id = "cv5"
+type = "story"
+title = "File browser clicks land in the panel; modifier-click opens a tab"
+description = '''Code viewer plan, story 5 (_bmad-output/plan-code-viewer-panel.md, "Story 5: File browser clicks land in the panel; modifier-click opens a tab"). Depends on story 4 (Done on main), shares openFile.ts and the open callback's options. Built after cv3.
+
+Summary. A file clicked in the file browser opens in the side panel; a modifier-click (⌘ on macOS, Ctrl on Linux) opens an editor tab instead. A terminal link activated with the modifier opens a tab too. From a detached window, the modifier-click sends inTab to the main window.
+
+Code map.
+- src/components/FileBrowser.tsx:70-82: handleClick opens every file with addEditorTab.
+- src/lib/terminalFileLinks.ts:199: activate(event, text).
+- src/lib/openFile.ts:32,37-39: the emitTo payload and listenForFileOpens.
+- src/lib/shortcuts.ts:14: IS_MAC.
+
+Rules: openFileFromTerminal(path, { inTab }) adds an editor tab for path (addEditorTab, which focuses an existing tab for that file) and dispatches no open-preview. Without inTab it dispatches open-preview. Story 5 adds opensInTab(e: { metaKey, ctrlKey }, mac = IS_MAC) and sets inTab from the MouseEvent that xterm passes to activate(event, text). FileBrowser.handleClick calls openFileFromTerminal(path, { inTab: opensInTab(e) }). The detached-window payload and listenForFileOpens carry inTab.
+
+Acceptance criteria:
+1. opensInTab is true for { metaKey: true } on macOS and { ctrlKey: true } on Linux; false for a plain click on either, Ctrl on macOS and ⌘ on Linux. -- openFile.test.ts "which click opens a tab"
+2. openFileFromTerminal(p, { inTab: true }) adds an editor tab for p and dispatches no open-preview; from a detached window the emitted payload has inTab: true, and listenForFileOpens receiving it adds a tab. -- "a modifier-click opens a tab, also from a detached window"
+3. A terminal link activated with the platform modifier passes inTab: true. -- terminalFileLinks.test.ts "a modifier-click link opens a tab"
+4. Clicking a file in the file browser dispatches open-preview and adds no tab; ⌘-clicking (macOS) adds the tab; clicking a folder still expands it; with an editor tab active, a plain click sets that tab's previewPath. -- src/components/__tests__/FileBrowserOpen.test.tsx "a file opens in the panel, modifier-click in a tab"
+
+Note for F3 S1 (owner's OQ-9 (a), .ade/context/viewer-state.md): F3 story s1d rewrites the last clause of item 4 to "sets the open file of the view in sight" (ADR 0032). That is the same behaviour. Build item 4 as written here; s1d changes the test later.
+
+Docs (5): files.md: "Click a file in the browser and it opens in the panel beside the terminal; ⌘-click (Ctrl-click on Linux) or Open in tab opens it in a tab, where you can edit it." Same in terminal.md. Extend .ade/context/side-panel-files.md with the modifier rule.
+
+Manual checks (not gating Done, pending the owner): in the file browser click a file (panel), ⌘-click it (tab); on Linux, Ctrl-click. ⌘-click in the terminal opens a tab and does not also select text. In a detached window, ⌘-click a path: a tab opens in the main window.
+
+Out of scope: editing in the panel; the file tab's own behaviour.'''
+verify = "The seven In-force lines each exit 0, with the named tests of items 1 to 4 passing by name."
+covers = []
+after = ["cv3"]
+hitl = false
+risk = "medium"
