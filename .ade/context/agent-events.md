@@ -145,3 +145,10 @@ Turning Agent status off drops the sessions whose `cwd` is in the project.
 - Not yet built (deferred): the "not receiving events" warning with its
   process-tree poll and no-children backstop; the worktree "turn on here too"
   offer.
+
+## F5: live status (proposed, ADR 0034)
+
+- `Core::live_state(pty, fg_pgid, …)` counts only the sessions whose `(pid, start)` is
+  alive and in the PTY's foreground job. It is read by `pty_send_gate` and
+  `write_pty_guarded` (`prompt-templates.md`). The stream and `pane_state` are
+  unchanged.
