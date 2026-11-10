@@ -1,6 +1,6 @@
 # Thoughts panel on the right, vertical: UX amendment
 
-- Status: **revision 3**, for adversarial re-review and the owner's approval. Revision 1 was blocked (B1 to B3, M1 to M6, minors). The delta review of revision 2 (c45c7b0) closed B1, B3, M1, M2, M4, M5 and M6 and blocked on N1, with majors M-a to M-d and minors; "Changes in revision 3" maps each of those to the section that answers it.
+- Status: **Approved 2026-11-10 (owner), revision 3.** Revision 1 was blocked (B1 to B3, M1 to M6, minors). The delta review of revision 2 (c45c7b0) closed B1, B3, M1, M2, M4, M5 and M6 and blocked on N1, with majors M-a to M-d and minors; "Changes in revision 3" maps each of those to the section that answers it. The final review's seven minors are folded in after approval (see "Final review minors").
 - Date: 2026-11-10
 - Owner's words: "maybe we move the thought or scratch pad on a right side, so it's vertical", then "or have an option of either at the bottom or right side".
 - Mockup: [`2026-11-10-thoughts-panel-right-mockup.html`](2026-11-10-thoughts-panel-right-mockup.html)
@@ -33,7 +33,10 @@ The Thoughts panel can sit in one of two **docks**: **Right** (new, the default)
 2. **Existing users move to the right too, with a one-time notice** (see "Upgrading users").
 3. **The dock choice syncs**: it is the same on all of the user's Macs. It is a shared setting, `thoughtsDock` in `better-terminal-settings`, which is already in `SHARED_KEYS` (see "Persistence and sync").
 
-Still recommended, not yet decided: Thoughts at the far right with the Preview to its left (Recommendation 1), window-wide rather than per view (Recommendation 3). See "Owner questions".
+4. **Thoughts takes the far right edge**, with the Preview and board to its left (Recommendation 1).
+5. **Dark presets only:** checking Precision and Nord is enough; no light theme is needed (see "Themes").
+
+Window-wide rather than per view (Recommendation 3) was approved with the spec.
 
 ## Recommendation 1: where it sits next to the Preview panel
 
@@ -164,6 +167,8 @@ Today a view switch (⌘[ / ⌘]) never changes which panels are open: the file 
 
 **Widths do not follow live.** A width or height drag writes its field (above) but sends no event. Other open windows keep the width they show and read the saved value the next time they open (a detached window when it is opened again, the main window at the next launch). A window's width suits its own size, and moving another window's panel while the user drags in this one would be surprising. Because writes are field-level, a window that shows an older width never writes it back unless the user drags in that window. Other Macs get the change at their **next launch**, when sync imports shared keys; a running Mac does not change under the user. As for every setting, the most recent write of `better-terminal-settings` on any Mac wins at the next sync.
 
+**Remaining risk: the disk race (for the architect).** The field-level write keeps `localStorage` right, but disk is written separately: each window mirrors its own writes to disk through its own persistence queue (`startAutoSave` in `main.tsx`). If the main window has a settings write queued (say the user just changed the font) and a detached window then changes the dock, the detached window's disk write can land first and the main window's queued write, flushed later, puts its whole `better-terminal-settings` on disk with the **old** `thoughtsDock`. `localStorage` still shows the new dock, so nothing looks wrong until the next launch reads the disk copy and the dock is back where it was. **Suggested fix:** when the main window receives `ade://thoughts-dock`, it sets the dock in its store (as above) and then **flushes its persistence queue**, so its next disk write carries the new dock. The architect chooses the mechanism; the story that adds `setThoughtsDock` should test the ordering (main write queued, detached dock change, main flush: disk has the new dock).
+
 ## The three ways to switch docks
 
 All three call `setThoughtsDock`.
@@ -213,6 +218,7 @@ A full-height column (from under the tab bar to the bottom of the layout wrapper
 - A 6 px handle on the left edge, `cursor: col-resize`, with the same 3 px accent line on hover as the Preview's.
 - **Keyboard.** The handle is focusable: `role="separator"`, `aria-orientation="vertical"`, `aria-label="Resize Thoughts"`, `aria-valuemin` 280, `aria-valuemax` the largest width that fits now (at most 640), `aria-valuenow` the shown width. **←** widens by 16 px, **→** narrows by 16 px, **Shift** makes it 64 px, **Home** goes to 280, **End** to `aria-valuemax`, **Enter** resets to 360 (clamped to what fits). Double-click also resets.
 - **Single pointer** (WCAG 2.5.7). A click on the handle that doesn't move it more than 3 px opens a small popover beside it with three buttons: **Narrower**, **Wider** (64 px each) and **Reset width**. Focus goes to the first button; Escape or a click outside closes it and returns focus to the handle. The handle's tooltip says "Drag to resize, or click for size buttons".
+- **At its limit.** When a drag, a key or a size button reaches `largestFit` (the widest that fits now) or the minimum, the size stops there and the handle **shows it**: its line turns `var(--yellow)`, full height and 3 px wide (as the hover line, in yellow), and a tooltip beside the handle says **"Widest that fits: 300 px"** (or "Narrowest: 280 px"). The tooltip stays while the pointer keeps pushing past the limit and goes when the drag ends or comes back inside the range; for a key or button it shows for about 1.5 s. Screen readers get it from the handle: `aria-valuenow` equals `aria-valuemax` (or `aria-valuemin`), with `aria-valuetext` "300 pixels, widest that fits". No new live region. The same applies to the bottom dock's height handle ("Tallest that fits", "Shortest: 120 px"). Mockup frame 9, middle.
 
 ### Chrome tiers (M6)
 
@@ -324,6 +330,7 @@ While due, the notice shows under the header whenever the panel is open:
 - **Focus goes to the active pane.** ⌘J, Escape and closing the panel return focus to the terminal of the **active pane of the view in sight** (`shownView(tab).activePaneId`), not the first terminal in the document as today. For a non-terminal tab, focus goes to the tab's own content, as a tab switch does.
 - **The pane-to-terminal link.** `TerminalPane`'s root element gains **`data-pane-id="<pane id>"`**. The helper finds `[data-pane-id="<active pane id>"] .xterm-helper-textarea` and focuses it; if that pane has no terminal input yet, it does nothing (no fallback to the first terminal).
 - **One helper, five callers.** It replaces the first-terminal query in `App.tsx:290` (⌘J), `DetachedApp.tsx:48` (⌘J), `Scratchpad.tsx:1088` (the text box's Escape), `useKeybindings.ts:171` (Escape) and **`previewFocus.ts` `closePreviewFocus`** (closing the Preview with focus inside), which uses the same query today. The ⌘J three-case logic moves out of `App.tsx` and `DetachedApp.tsx` into one shared function both call.
+- **Shared with F3 S1 (PR #116, approved).** F3 S1 also needs the active pane's terminal input. **Whichever of this amendment's story and F3 S1 lands first records the `data-pane-id` attribute and the focus helper in `.ade/context/`** (a small file: the attribute, the helper's name and signature, and that it never falls back to the first terminal); the second reuses it rather than adding its own.
 - Tab order: see "Moving between docks".
 
 ## Accessibility
@@ -337,7 +344,7 @@ While due, the notice shows under the header whenever the panel is open:
 
 ## Themes
 
-ADE's nine theme presets are all dark (Precision is the default). The panel uses only theme tokens (`--bg-secondary`, `--border`, `--accent`, `--text-*`), so it follows every preset. The mockup shows Precision and Nord, the preset with the lightest surfaces.
+ADE's nine theme presets are all dark (Precision is the default). The panel uses only theme tokens (`--bg-secondary`, `--border`, `--accent`, `--text-*`), so it follows every preset. The mockup shows Precision and Nord, the preset with the lightest surfaces. The owner confirmed (2026-11-10) that these two are enough and that no light theme is needed.
 
 ## CSP
 
@@ -346,7 +353,7 @@ Since 0.23.2, `index.html` has no inline `<style>` (the splash links `/splash.cs
 ## Note for PR #109 (sub-terminal strip)
 
 - **Strip overflow.** With Thoughts on the right the main view is narrower: 360 px at 1440 with the file browser and Preview open, 320 at the minimum. The strip sits above the main view, so with entry names up to 160 px it shows about two entries before it scrolls. PR #109's "scroll the new entry into view" (V4) matters more, and its mockup should include a 320–360 px strip.
-- **One announcer per window.** The main window already has a single polite live region: **`SubTerminalAnnouncer`** (`SubTerminalStrip.tsx:251`, mounted once at `App.tsx:457`). Thoughts adds **no live region of its own**; its move messages go through that announcer, which becomes the window's one announcer (it already listens to two sources, the tab store and `useOpenStatus`; Thoughts is a third). `DetachedApp` has no announcer today and mounts the same one. How Thoughts hands it text (for example a small announce store it subscribes to, as it does to the other two) is the architect's call. The announcer shows one message at a time, so a second message within a moment replaces the first; that is why Thoughts still does not announce moves caused by an F3 view switch, the case where a sub-terminal message and a Thoughts message could arrive together.
+- **One announcer per window.** The main window already has a single polite live region: **`SubTerminalAnnouncer`** (`SubTerminalStrip.tsx:251`, mounted once at `App.tsx:457`). Thoughts adds **no live region of its own**; its move messages go through that announcer, which becomes the window's one announcer (it already listens to two sources, the tab store and `useOpenStatus`; Thoughts is a third). `DetachedApp` has no announcer today and mounts the same one. **Mounting it there also announces sub-terminal events in detached windows** (opened, closed, not typed), which detached windows do not do today; **this is intended**: a detached window can open sub-terminals, and its screen-reader user should hear them as the main window's does. How Thoughts hands it text (for example a small announce store it subscribes to, as it does to the other two) is the architect's call. The announcer shows one message at a time, so a second message within a moment replaces the first; that is why Thoughts still does not announce moves caused by an F3 view switch, the case where a sub-terminal message and a Thoughts message could arrive together.
 
 ## States checklist
 
@@ -395,15 +402,15 @@ Each is written so a test can be written first. "Panel" is the Thoughts panel. A
 - **TR-10** `layoutPanels` is a pure function of `windowWidth`, `dock`, `open`, `saved` and `previous`; it returns `placement` and the width of every open panel and of the main view, and never mutates `saved` (test: deep-frozen input, and equal to a copy after the call).
 - **TR-11** Table tests: every row of "Widths at real window sizes" returns exactly the placement and widths listed. The last two rows (900 px detached with panels) are where detached-window narrow placement is tested until F3 S3 gives a detached window panels to render.
 - **TR-12** Give-way order: with the window at 1440, the file browser 300, the Preview 700, the board 380 and Thoughts 360, the result is file browser 200, Preview 280, board 280, Thoughts 360, main 320 (Preview, then board, then file browser; Thoughts untouched). At 1100 with the file browser 240, the Preview 480 and Thoughts 400, Thoughts gives way last: 180 · 280 · 320, main 320.
-- **TR-13** Fitting never writes: rendering the 1440 case of TR-12 leaves the saved file browser width at 300 in `ade-file-browser` and the saved Thoughts width at 360 in `ade-thoughts-layout`. `largestFit` at 1440 with the file browser 240, the Preview 480 and Thoughts 360 returns **Thoughts 640, file browser 480, Preview 520**; at 1100 with Thoughts 400 it returns **Thoughts 320, file browser 180, Preview 280**; in the 1440 case of TR-12 it returns Thoughts 380. A Thoughts drag ending at 420 at 1100 saves 320; a Preview drag ending at 600 at 1440 saves 520; a file browser drag ending at 500 at 1440 saves 480. The Thoughts handle's `aria-valuemax` equals `largestFit` for Thoughts.
+- **TR-13** Fitting never writes: rendering the 1440 case of TR-12 leaves the saved file browser width at 300 in `ade-file-browser` and the saved Thoughts width at 360 in `ade-thoughts-layout`. (The stub panels in TR-14's host cannot write, so this rendered check alone proves little; **TR-10's frozen-input test is the real guard that fitting never writes**, and this rendered check should use the real `FileBrowser`, which owns the `ade-file-browser` write, rather than a stub.) `largestFit` at 1440 with the file browser 240, the Preview 480 and Thoughts 360 returns **Thoughts 640, file browser 480, Preview 520**; at 1100 with Thoughts 400 it returns **Thoughts 320, file browser 180, Preview 280**; in the 1440 case of TR-12 it returns Thoughts 380. A Thoughts drag ending at 420 at 1100 saves 320; a Preview drag ending at 600 at 1440 saves 520; a file browser drag ending at 500 at 1440 saves 480. The Thoughts handle's `aria-valuemax` equals `largestFit` for Thoughts.
 - **TR-14** The components apply the result: rendering the **layout host** (not `App`, which no test renders) with `window.innerWidth` 1440, stub panels and the open flags and saved widths of TR-12 gives each panel's root `style.width` equal to the function's width and `flex: none` (Preview 280px, board 280px, file browser 200px, Thoughts 360px). A `resize` event to 1100 re-renders with the new widths. `PreviewPanel` and `BoardPanel` render the `width` prop they are given (no `useDragWidth` state of their own).
 
 **Placement, narrow windows, view switches (M2)**
 
-- **TR-15** With `previous` null: 1060 px with the file browser and Preview open → `"right"` (room 280); 1059 → `"bottom"`. With `previous = { placement: "bottom", open: same }`: 1060 and 1083 → `"bottom"`; 1084 → `"right"`. With `previous = { placement: "bottom", dock: "bottom", open: same }` and the dock now Right, 1070 → `"right"` (a dock change skips hysteresis); the same with `previous.dock` `"right"` → `"bottom"`. With `previous = { placement: "bottom", open: { …, preview: true } }` and now the Preview closed at 1000 → `"right"` (no hysteresis on a panel change).
+- **TR-15** With `previous` null: 1060 px with the file browser and Preview open → `"right"` (room 280); 1059 → `"bottom"`. With `previous = { placement: "bottom", dock: "right", open: same }` (the narrow fallback; without `dock: "right"` rule 2 would not apply): 1060 and 1083 → `"bottom"`; 1084 → `"right"`. With `previous = { placement: "bottom", dock: "bottom", open: same }` and the dock now Right, 1070 → `"right"` (a dock change skips hysteresis); the same with `previous.dock` `"right"` → `"bottom"`. With `previous = { placement: "bottom", open: { …, preview: true } }` and now the Preview closed at 1000 → `"right"` (no hysteresis on a panel change).
 - **TR-16** Placed bottom for width, the header shows "Bottom while narrow", the dock button is enabled and named "Keep Thoughts at the bottom", clicking it sets the dock to `"bottom"` and removes the note; before that click the setting is still `"right"`.
 - **TR-17a** (now, on the function) At 1000 px with the dock Right, `previous = { placement: "right", dock: "right", open: { fileBrowser: true, thoughts: true } }` and now `open` also has the Preview: the placement is `"bottom"`; with the Preview then closed again and `previous` the bottom result: `"right"` at once (no hysteresis).
-- **TR-17b** (**after F3 S1**, when a view switch can change the open panels) An F3 view switch to a view with the Preview open, in a 1000 px window with the file browser open, moves the panel to the bottom with the same nodes and focus (TR-5's checks), and the announcer says nothing for that move.
+- **TR-17b** (**after F3 S1**, when a view switch can change the open panels) An F3 view switch to a view with the Preview open, in a 1000 px window with the file browser open, moves the panel to the bottom with the same nodes and focus (TR-5's checks), and the announcer says nothing for that move. **Note for the scrum-master:** TR-17b is carried by **whichever story lands after F3 S1** (this amendment's story if F3 S1 is merged first, otherwise F3 S1's own story or the next one that touches a view switch); it must not be dropped because neither story owns it on its own.
 
 **Right dock**
 
@@ -419,11 +426,11 @@ Each is written so a test can be written first. "Panel" is the Thoughts panel. A
 
 **Detached windows (B3)**
 
-- **TR-24** Rendering `DetachedApp` (with mocks, as `detachedTerminalOpen.test.tsx` does today) at `innerWidth` 900 with the dock Right places the panel right at 360 px with the terminal at 540. An `ade://thoughts-dock` event flips it. Its dock button calls the field-level `setThoughtsDock` (TR-30). ⌘J passes the three cases of "Keyboard and focus". No upgrade notice renders there. (Detached placement with panels open is TR-11's last two rows until F3 S3, whose own tests render it.)
+- **TR-24** Rendering `DetachedApp` (with mocks, as `detachedTerminalOpen.test.tsx` does today) at `innerWidth` 900 with the dock Right places the panel right at 360 px with the terminal at 540. An `ade://thoughts-dock` event flips it. Its dock button calls the field-level `setThoughtsDock` (TR-30). ⌘J passes the three cases of "Keyboard and focus". No upgrade notice renders there. `SubTerminalAnnouncer` is mounted there, so a sub-terminal opened in it is announced (intended; see "Note for PR #109"). (Detached placement with panels open is TR-11's last two rows until F3 S3, whose own tests render it.)
 
 **Focus**
 
-- **TR-25** `TerminalPane`'s root has `data-pane-id`. The focus helper, run on a DOM with two panes (`data-pane-id` "a" and "b", each holding an `.xterm-helper-textarea`) and the active pane "b", focuses b's textarea, and with no textarea in "b" focuses nothing. Its callers are tested without rendering `App`: `useKeybindings`' Escape (with `renderHook`), Scratchpad's close button and text-box Escape, `closePreviewFocus`, and the shared ⌘J function each focus pane "b". In a rendered `DetachedApp` (mocked as in TR-24, the mock panes carrying `data-pane-id`), ⌘J and Escape focus the active pane. A string test finds no `querySelector(".xterm-helper-textarea")` without a `data-pane-id` scope in those five files.
+- **TR-25** `TerminalPane`'s root has `data-pane-id`. The focus helper, run on a DOM with two panes (`data-pane-id` "a" and "b", each holding an `.xterm-helper-textarea`) and the active pane "b", focuses b's textarea, and with no textarea in "b" focuses nothing. Its callers are tested without rendering `App`: `useKeybindings`' Escape (with `renderHook`), Scratchpad's close button and text-box Escape, `closePreviewFocus`, and the shared ⌘J function each focus pane "b". In a rendered `DetachedApp` (mocked as in TR-24, the mock panes carrying `data-pane-id`), ⌘J and Escape focus the active pane. A string test over those five files finds no unscoped terminal-input query in **any** of its forms: the literal `querySelector(".xterm-helper-textarea")` (either quote style), the generic `querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")` (or any `querySelector<…>(…)`) and **`querySelector(TERMINAL_INPUT_SELECTOR)`** (`previewFocus.ts` reaches the selector through that constant, so a test that matches only the literal would miss it). Each match must be inside the helper, scoped by `[data-pane-id=…]`. The test must fail on today's code in all five files before the change.
 
 **Bottom dock**
 
@@ -450,10 +457,22 @@ Each is written so a test can be written first. "Panel" is the Thoughts panel. A
 - Single-pointer alternatives for the file browser's and Preview's own handles (they have the same gap today; a separate change).
 - Escape closing the panel in detached windows (unchanged).
 
-## Owner questions
+## Owner questions (resolved 2026-11-10)
 
-1. **"Both themes":** ADE has nine dark presets and no light theme. The mockup checks Precision and Nord. Did you mean those, or is a light theme planned?
-2. **Order on the right:** Thoughts at the far edge, the Preview and board to its left (recommended). Or the Preview at the far edge, so Thoughts sits next to the terminal it sends to? (The cost: the text box would jump each time a file opens or closes.)
+1. **"Both themes":** answered: checking **Precision and Nord is enough**; the presets stay dark and no light theme is needed. The mockup checks those two.
+2. **Order on the right:** answered: **Thoughts takes the far right edge** (recommended), with the Preview and board to its left.
+
+## Final review minors (folded in after approval, 2026-11-10)
+
+| Minor | What changed | Where |
+| --- | --- | --- |
+| 1 Disk race | Each window has its own persistence queue, so a queued main-window settings write can flush after a detached dock change and lose the dock on disk while `localStorage` shows it. Stated as a remaining risk; the fix for the architect: flush the main window's queue when `ade://thoughts-dock` arrives | Persistence and sync |
+| 2 TR-15 hysteresis case | `previous` has `dock: "right"` | TR-15 |
+| 3 TR-25 string test | Names `TERMINAL_INPUT_SELECTOR` and the generic `querySelector<…>` form so all five callers are caught | TR-25 |
+| 4 TR-13 | TR-10's frozen-input test is the real guard; the rendered check uses the real `FileBrowser` | TR-13 |
+| 5 DetachedApp announcer | Mounting `SubTerminalAnnouncer` there also announces sub-terminal events in detached windows; intended | Note for PR #109; TR-24 |
+| 6 F3 S1 coordination | Whichever lands first records the `data-pane-id` focus helper in `.ade/context/`; TR-17b is carried by whichever story lands after F3 S1 (scrum-master note) | Keyboard and focus; TR-17b |
+| 7 Drag at its limit | The handle turns yellow with a "Widest that fits" tooltip at `largestFit` (and at the minimum), with `aria-valuetext` | The right dock, Width and resize; mockup frame 9 |
 
 ## Changes in revision 3
 
