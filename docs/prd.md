@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
-| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10 |
+| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded); F4 cross-reference and tab-set wording, approved by the owner 2026-11-10; opener folder from a non-terminal tab (F3.1, VV-11 AC2), approved by the owner 2026-11-10 |
 
 ---
 
@@ -2324,7 +2324,9 @@ clarification for slice 0.
   three minors: the third is applied in F1.8 (revision 9l), the other two go to
   sharding (F3.9). On 2026-11-10 the owner, approving F4 (PR #113), signed off a
   cross-reference line in F3.8 for F4 WS-5 AC2 and the tab-set wording (History,
-  last entry); no F3 requirement changed. Not sharded.
+  "F4 cross-reference"); no F3 requirement changed. On 2026-11-10 the owner approved one
+  change: a tab opened from a non-terminal tab takes that tab's own folder as its
+  opener folder (F3.1, VV-11 AC2; History, last entry). Not sharded.
 - **Number:** F2 is taken by the open PRD for agentic-environment onboarding (PR #98).
   If that PR is withdrawn, this stays F3.
 - **Source:** the owner, 2026-11-10: *"each tab has to have their own file viewer,
@@ -2425,6 +2427,13 @@ clarification for slice 0.
     names and folders are those of tabs that are not F4 workspace tabs. D6's
     reading of F1 PE-13 AC5 quotes F1's words before F1 revision 9m ("A's instance's
     tabs are restored" since). No F3 requirement, slice or gate changed.
+  - 2026-11-10, opener folder from a non-terminal tab: a change to this approved
+    section, approved by the owner on 2026-11-10 (the architect's Q1). A tab opened
+    from a non-terminal tab (editor, contracts, browser) now takes that tab's own
+    folder, its last resolved root in this run, as its opener folder, instead of
+    the home folder; a source not shown in this run still gives the home folder.
+    Changed: F3.1's *Opener folder* and VV-11 AC2, which gains the test for both
+    cases. No other requirement, slice or gate changed.
 
 ### F3.1 Terms
 
@@ -2524,8 +2533,15 @@ changed here except as VV-11 says.
   focus in that view's split tree), as ADE last learned it: from the shell's folder
   report at each prompt (OSC 7, ADR 0021) where shell integration runs, otherwise
   from today's 3-second poll.
-- **Opener folder:** for a non-terminal tab, the active folder of the view that
-  was in sight when the tab was created, recorded once at creation.
+- **Opener folder:** for a non-terminal tab, the folder of the view that was in
+  sight when the tab was created (its **source**), recorded once at creation. A
+  terminal source gives its active folder. A non-terminal source (an editor,
+  contracts or browser tab, for example) gives its own folder, which is the last
+  root it resolved in this run (the folder its file browser last listed); if the
+  source has not been shown in this run (a tab restored with the session and not
+  yet opened), the opener folder is unknown, so the new tab lists the home folder
+  (VV-11 AC2). Owner, 2026-11-10 (the architect's Q1); before that, a
+  non-terminal source gave no folder and the new tab listed the home folder.
 - **Leaves the machine:** written to the ADE sync repo, a tab set (today's saved
   workspaces, renamed by F4 WS-10; `better-terminal-workspaces`, which ADE sync
   shares), the phone relay, or
@@ -3332,7 +3348,11 @@ show a folder that belongs to it, instead of whichever terminal I was last in.
    the home folder. No error is shown. Tests: a browser tab opened while S (in
    `/hub/atomic-stays`) is in sight lists `/hub/atomic-stays`; delete that folder and
    show the tab again: it lists the home folder; a fleet tab opened on a fresh
-   install with no terminal folder known lists the home folder.
+   install with no terminal folder known lists the home folder. A tab opened from a
+   non-terminal tab takes that tab's own folder (F3.1, *Opener folder*): a browser
+   tab opened while an editor tab on `/x/repo/a.ts` is in sight, that editor tab
+   listing `/x/repo`, lists `/x/repo`; after a restart, a browser tab opened from a
+   restored editor tab that has not been shown in this run lists the home folder.
 3. **[S1] Fixed, not following.** The root never changes because a terminal's
    folder changes. Test: `cd /tmp` in every terminal; the browser tab still lists
    `/hub/atomic-stays`. **[S4]** It changes only when the tab's own folder appears
