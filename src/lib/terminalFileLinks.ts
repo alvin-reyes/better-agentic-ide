@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ILink, ILinkProvider, Terminal } from "@xterm/xterm";
-import type { OpenFileOptions } from "./openFile";
+import { opensInTab, type OpenFileOptions } from "./openFile";
 
 /**
  * Clickable file paths in terminal output: whatever Claude (or any command)
@@ -173,7 +173,8 @@ function overlaps(a: CellRange, b: CellRange): boolean {
 /**
  * Register the provider on a terminal. `getCwd` gives the folder relative
  * paths resolve against; `open` receives the absolute path of a clicked file
- * and the line and column of its `:line:col` suffix, when it had one.
+ * and the line and column of its `:line:col` suffix, when it had one, with
+ * `inTab` when the click held the platform's modifier (⌘, or Ctrl on Linux).
  */
 export function registerFileLinks(
   term: Terminal,
@@ -223,7 +224,7 @@ export function registerFileLinks(
           range: { start: f.start, end: f.end },
           text: f.path,
           decorations: { underline: true, pointerCursor: true },
-          activate: () => open(f.abs, lineColOf(f)),
+          activate: (event) => open(f.abs, { ...lineColOf(f), ...(opensInTab(event) ? { inTab: true } : {}) }),
         }));
         callback(links.length > 0 ? links : undefined);
       })();

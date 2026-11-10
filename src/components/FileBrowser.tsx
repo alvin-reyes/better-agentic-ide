@@ -3,6 +3,7 @@ import { shortcutLabel } from "../lib/shortcuts";
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { useFileBrowserStore, type TreeNode, type FileEntry } from "../stores/fileBrowserStore";
 import { useTabStore, ownView } from "../stores/tabStore";
+import { openFileFromTerminal, opensInTab } from "../lib/openFile";
 import { getPtyCwd } from "../hooks/useTerminal";
 
 interface WatchEvent {
@@ -67,7 +68,7 @@ function FileTreeNode({ node, depth, showHidden }: { node: TreeNode; depth: numb
 
   if (!showHidden && node.entry.isHidden) return null;
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
     if (node.entry.isDir) {
       if (node.isExpanded) {
         collapseNode(node.entry.path);
@@ -75,9 +76,9 @@ function FileTreeNode({ node, depth, showHidden }: { node: TreeNode; depth: numb
         expandNode(node.entry.path);
       }
     } else {
-      // Every file opens in a file tab, which picks the viewer for its type
-      // (PDF, .docx, image, rendered markdown/HTML, or the code editor).
-      useTabStore.getState().addEditorTab(node.entry.path);
+      // A file opens in the side panel; with the platform's modifier
+      // (⌘, or Ctrl on Linux) it opens in a file tab instead.
+      openFileFromTerminal(node.entry.path, { inTab: opensInTab(e) });
     }
   };
 

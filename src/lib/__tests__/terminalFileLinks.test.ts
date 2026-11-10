@@ -3,6 +3,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import { invoke } from "@tauri-apps/api/core";
 import type { ILink, ILinkProvider, Terminal } from "@xterm/xterm";
 import { findPathCandidates, registerFileLinks, stitchRows } from "../terminalFileLinks";
+import { IS_MAC } from "../shortcuts";
 
 const paths = (t: string) => findPathCandidates(t).map((c) => c.path);
 
@@ -87,6 +88,30 @@ describe("registerFileLinks", () => {
     expect(open.mock.calls[1][1]).not.toHaveProperty("col");
     expect(open.mock.calls[2]).toEqual(["/r/c.md", {}]);
     expect(open.mock.calls[2][1]).not.toHaveProperty("line");
+  });
+
+  it("a modifier-click link opens a tab", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) =>
+      cmd === "resolve_file_paths" ? (args as { paths: string[] }).paths.map((p) => `/r/${p}`) : null);
+    const open = vi.fn();
+    const { term, links } = fakeTerminal("error in src/App.tsx:42:7 and c.md");
+    registerFileLinks(term, async () => "/r", open);
+    const found = await links();
+    // The platform's modifier (⌘ on macOS, Ctrl elsewhere), and the other one.
+    const modifier = IS_MAC ? { metaKey: true } : { ctrlKey: true };
+    const other = IS_MAC ? { ctrlKey: true } : { metaKey: true };
+    found![0].activate(new MouseEvent("click", modifier), found![0].text);
+    found![1].activate(new MouseEvent("click", modifier), found![1].text);
+    found![0].activate(new MouseEvent("click", other), found![0].text);
+    found![0].activate(new MouseEvent("click"), found![0].text);
+    expect(open.mock.calls).toEqual([
+      ["/r/src/App.tsx", { line: 42, col: 7, inTab: true }],
+      ["/r/c.md", { inTab: true }],
+      ["/r/src/App.tsx", { line: 42, col: 7 }],
+      ["/r/src/App.tsx", { line: 42, col: 7 }],
+    ]);
+    expect(open.mock.calls[2][1]).not.toHaveProperty("inTab");
+    expect(open.mock.calls[3][1]).not.toHaveProperty("inTab");
   });
 
   it("a path Claude Code broke across rows keeps its line and column", async () => {

@@ -10,7 +10,7 @@ Press {% include key.html mac="⌘B" other="Ctrl+Shift+B" %} to show the folder 
 
 ## File viewer
 
-Click a file in the browser and it opens in a tab with the right view. (A [file path clicked in the terminal]({{ '/guide/terminal/' | relative_url }}#clickable-files) opens in the [preview panel](#preview-panel) instead.)
+Click a file in the browser and it opens in the [preview panel](#preview-panel) beside the terminal; ⌘-click (Ctrl-click on Linux) or *Open in tab* opens it in a tab, where you can edit it. (A [file path clicked in the terminal]({{ '/guide/terminal/' | relative_url }}#clickable-files) works the same way.) A tab shows each file with the right view:
 
 | File | How it opens |
 |---|---|
@@ -28,7 +28,7 @@ In rendered documents, links behave the way you'd expect: web links open in your
 
 ## Preview panel
 
-Click a file path in the terminal and the file opens in the preview panel beside it, whatever kind of file it is. The terminal keeps focus. Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to show or hide the panel; opening it this way moves focus into it, and <kbd>Esc</kbd> gives focus back to the terminal. (With text selected in the panel's editor, the first <kbd>Esc</kbd> clears the selection and a second one returns to the terminal.) Each tab has its own file in the panel.
+Click a file path in the terminal, or a file in the file browser, and the file opens in the preview panel beside the terminal, whatever kind of file it is. The terminal keeps focus. Press {% include key.html mac="⌘⇧B" other="Ctrl+Alt+Shift+B" %} to show or hide the panel; opening it this way moves focus into it, and <kbd>Esc</kbd> gives focus back to the terminal. (With text selected in the panel's editor, the first <kbd>Esc</kbd> clears the selection and a second one returns to the terminal.) Each tab has its own file in the panel.
 
 - **Code and other text** shows read-only in the same Monaco editor as the file tab, with syntax highlighting. *Open in tab* opens the file in a tab, where you can edit and save it. That includes Mermaid (`.mmd`) files and contract ABI/IDL `.json` files, which the panel shows as code: their diagram and ABI views are in the tab.
 - **Large files:** a text file over 2 MB shows its first 2 MB ("Showing the first 2.0 MB of 48.3 MB."). It has no *Open in tab*.
