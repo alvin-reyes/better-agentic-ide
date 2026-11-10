@@ -1,6 +1,6 @@
 # 0032: The side panel's file is per view, not per tab (partly supersedes 0009)
 
-- Status: Proposed (2026-11-10), with the F3 S1 design `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md`. It is accepted when the owner approves that design and answers PRD F3 OQ-9. It supersedes only the per-tab file model of ADR 0009, and ADR 0009 stays in force for everything else.
+- Status: Proposed (2026-11-10), with revision 2 of the F3 S1 design `docs/superpowers/specs/2026-11-10-per-view-viewer-design.md`. The owner answered PRD F3 OQ-9 with (a) on 2026-11-10; this ADR is accepted when the owner approves that design. It supersedes only the per-tab file model of ADR 0009, and ADR 0009 stays in force for everything else.
 - Context:
   - ADR 0009 made the Preview panel the one read-only viewer for clicked files, and held its file per tab (`Tab.previewPath`, with `Tab.previewReveal` for `path:line`).
   - PRD F3 (approved 2026-11-10) makes the **view** the unit: each terminal, sub-terminal and non-terminal tab has its own open file, position, and panel open state and width, all saved across restarts (D3, VV-1, VV-6).
@@ -8,7 +8,7 @@
     - story 3: live follow, "Deleted on disk";
     - story 5: file browser clicks open the panel;
     - story 6: `previewPath` survives a restart and Reopen Closed Tab.
-  - The owner is asked (OQ-9) to choose option (a): land stories 3 and 5 first, and let F3 replace story 6.
+  - The owner answered OQ-9 with option (a) on 2026-11-10: land stories 3 and 5 first, and let F3 replace story 6.
 - Decision:
   - **Per view.**
     - `Tab.previewPath` and `Tab.previewReveal` are removed.
@@ -26,5 +26,6 @@
 - Consequences:
   - Two terminals in one tab no longer share a file. Switching views swaps the file, its position and the panel's layout.
   - `MonacoWrapper` gains optional `initialView` and `onViewChange` props for the per-view code position. The file tab passes neither, so it is unchanged.
+  - The side panel's editor is keyed by view and file (`viewerKey + path`), not by file alone, so the same file open in two views is two editors, each with its own position.
+  - The tests built on the per-tab field (`previewPerTab.test.ts`, the open-preview case of `openFile.test.ts`, and the helpers of the three `PreviewPanel*` tests) move to the view in sight in the F3 S1 story that removes the field (design section 12.3).
   - The "Store" and "App" bullets of `.ade/context/side-panel-files.md` (Go to line) are updated by the F3 S1 story that removes the tab fields.
-  - If the owner chooses OQ-9 (b) or (c) instead, this ADR is revised before S1 is sharded: (b) builds story 6 and then removes it; (c) folds stories 3 and 5 into F3.
