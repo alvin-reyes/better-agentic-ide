@@ -1,7 +1,7 @@
 # Thoughts panel dock: architecture note
 
-- **Status:** Revision 4, 2026-11-10. Revision 1 (50cefee) was blocked by review (B1, M1 to M4, m1 to m8); revision 2 (1291a96) was blocked by the delta review (B1: section 4 stale against PR #118 at 67310e5; M-A, M-B, M-C and five minors); revision 3 (7808785) was blocked by the second delta review (N1: nothing tested that the commands use the restore guard; N2 to N7). The persistence decisions of revision 1 passed and are kept: field-level setters, and a disk queue that holds keys and reads them at flush time. Section 9 lists each finding and where it is answered. Not yet approved.
-- **Owner decision (2026-11-10, answer to Q1):** the visible right dock ships **after** F3 S1 stories s1a to s1d. PR #118 (`_bmad-output/initiative-per-view-viewer/epic-slice-1-viewer-state/tickets.toml`, at 67310e5) shards them as seven stories, s1a, s1b1, s1b2, s1b3, s1c, s1d and s1e, so "s1a to s1d" now means s1a, s1b1, s1b2, s1b3, s1c and s1d. The internals may be built in parallel. Section 4 is ordered by this decision.
+- **Status:** Revision 5, 2026-11-10. Revision 1 (50cefee) was blocked by review (B1, M1 to M4, m1 to m8); revision 2 (1291a96) was blocked by the delta review (B1: section 4 stale against PR #118 at 67310e5; M-A, M-B, M-C and five minors); revision 3 (7808785) was blocked by the second delta review (N1: nothing tested that the commands use the restore guard; N2 to N7); revision 4 (4ca205f) was blocked by the third delta review (R4-1: a failed second restore cleared the flag that an earlier successful restore had set, and the main window then resumed auto-save; R4-2 to R4-6). The persistence decisions of revision 1 passed and are kept: field-level setters, and a disk queue that holds keys and reads them at flush time. Section 9 lists each finding and where it is answered. Not yet approved.
+- **Owner decision (2026-11-10, answer to Q1):** the visible right dock ships **after** F3 S1 stories s1a to s1d. PR #118, merged to main at 97d70a0 (`_bmad-output/initiative-per-view-viewer/epic-slice-1-viewer-state/tickets.toml`, unchanged from 67310e5), shards them as seven stories, s1a, s1b1, s1b2, s1b3, s1c, s1d and s1e, so "s1a to s1d" now means s1a, s1b1, s1b2, s1b3, s1c and s1d. The internals may be built in parallel. Section 4 is ordered by this decision.
 - **UX amendment it builds:** [`2026-11-10-thoughts-panel-right-ux.md`](2026-11-10-thoughts-panel-right-ux.md), revision 3, approved by the owner 2026-11-10 (PR #114). TR-1 to TR-31 are its criteria; this note does not restate them. Section 4.3 maps every TR to a step.
 - **Scope.** This is a UI layout feature. The note decides only what the scrum-master needs to shard it: the module layout, how settings and layout are written, the disk race, sequencing against F3 S1, the focus helper, and the new keys. Anything else follows the UX spec.
 - **Verification command:** unchanged. It is the seven lines under "In force" in `docs/architecture.md`, each run from the repository root, each exiting 0. TR-3's Rust test and the restore guard's tests (section 3.4) run under `cd src-tauri && cargo test`. Everything else runs under `npm test`, and the types are checked by `npx tsc --noEmit`.
@@ -125,7 +125,7 @@ export function useLayoutHolders(inSightKey: string, flags: LayoutFlags): {
 
 **Setup (N4).** Seeding `ade-viewer-state` in `localStorage` would do nothing: `viewerStore` reads that key only through `hydrateViewerState()`, `loadSession()` and `endRestore()`, and its reconciliation drops every state whose view is not live in `tabStore`. So the views are made live and their layouts set through the stores:
 1. `localStorage` is cleared and seeded with `ade-thoughts-layout` = `{ rightWidth: 360 }` only.
-2. `useTabStore.getState().addView(activeTabId, { name: "B" })` adds a second view to the active tab. Reconciliation gives both views a state. `keyA` and `keyB` are read from the tab's views' `viewerKey`.
+2. `useTabStore.getState().addView(activeTabId, { name: "B", cwd: null })` adds a second view to the active tab (`NewView` requires `cwd: string | null`, `tabStore.ts` lines 212 to 217). Reconciliation gives both views a state. `keyA` and `keyB` are read from the tab's views' `viewerKey`.
 3. `setLayout(keyA, { browserWidth: 240, previewWidth: 480 })` and `setLayout(keyB, { browserWidth: 360, previewWidth: 600 })`, so the two views differ.
 4. `renderHook(({ key }) => useLayoutHolders(key, flags), { initialProps: { key: keyA } })`, with `flags = { boardOpen: true, thoughtsOpen: true, viewerPanels: true }`.
 
@@ -302,7 +302,7 @@ The guarantees above hold for writes separated by more than the time it takes a 
 
 `PERSISTED_KEYS` gains `"ade-thoughts-layout"` and `"ade-thoughts-dock-notice"` (section 6).
 
-### 3.4 Snapshot restore and other windows (m4, M-B)
+### 3.4 Snapshot restore and other windows (m4, M-B, R4-1)
 
 - `suspendAutoSave()` acts only in the window that calls it, the main window's Settings → Sync. Today it sets `suspended`, drops the pending batch and clears the flush timer (step 1b changes it to keep the queued keys; see below). It does **not** stop the 10-minute `state_snapshot` interval (`startAutoSave`'s `setInterval`), and it does nothing in detached windows.
 - So after a restore, a detached window's settings write (the dock), a Thoughts layout write, a history or notes write, or an agent-tracker write can still call `state_write` and overwrite the restored files before the restart that loads them. With the keys-only queue the value written is that window's current `localStorage`, which is exactly what the restore meant to replace.
@@ -313,67 +313,143 @@ The guarantees above hold for writes separated by more than the time it takes a 
 ```rust
 // src-tauri/src/state.rs
 #[derive(Default, Clone)]
-pub struct RestoreGuard(std::sync::Arc<std::sync::Mutex<bool>>); // true: a restore is pending until restart
+pub struct RestoreGuard(std::sync::Arc<std::sync::Mutex<bool>>); // true: a restore has succeeded in this process
 
 impl RestoreGuard {
-    /// Lock; set the flag; run `restore`; on Err clear the flag; unlock. The lock is held
-    /// for the whole of `restore`. guarded_restore is this with restore_snapshot; test A-8
-    /// passes a closure that pauses, to hold a restore open while a write arrives.
+    /// Lock; run `restore`; on Ok set the flag; unlock. The lock is held for the whole of
+    /// `restore`. On Err the flag is not written, so it keeps the value it had before the
+    /// call. No code sets the flag to false.
+    /// guarded_restore is this with restore_snapshot; test A-8 passes a closure that
+    /// pauses, to hold a restore open while a write arrives.
     pub(crate) fn restoring(&self, restore: impl FnOnce() -> std::io::Result<()>) -> std::io::Result<()>;
 }
 
-/// The only writer that checks the guard. Used by the state_write command and by tests A-3, A-6, A-7, A-8.
+/// The only writer that checks the guard. Used by the state_write command and by tests A-3, A-6, A-6b, A-7, A-8, A-11.
 pub fn guarded_write(kv: &Path, entries: &HashMap<String, Option<String>>, guard: &RestoreGuard) -> std::io::Result<()>;
-// lock; if *pending { return Ok(()) } (nothing written); else write_batch(kv, entries); unlock.
+// lock; if the flag is set { return Ok(()) } (nothing written); else write_batch(kv, entries); unlock.
 
-/// The only restorer that sets the guard. Used by the state_restore_snapshot command and by tests A-3 and A-6.
+/// The only restorer that sets the guard. Used by the state_restore_snapshot command and by tests A-3, A-6 and A-6b.
 pub fn guarded_restore(state_dir: &Path, name: &str, now_ms: u64, guard: &RestoreGuard) -> std::io::Result<()>;
 // guard.restoring(|| restore_snapshot(state_dir, name, now_ms))
 
 #[tauri::command]
 pub async fn state_write(app: tauri::AppHandle, guard: tauri::State<'_, RestoreGuard>,
                          entries: HashMap<String, Option<String>>) -> Result<(), String>;
-// let guard = guard.inner().clone(); let kv = state_dir(&app)?.join("kv");
+// let guard = guard.inner().clone();
+// let kv = state_dir(&app)?.join("kv");
 // tauri::async_runtime::spawn_blocking(move || guarded_write(&kv, &entries, &guard))
 //     .await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
 
 #[tauri::command]
 pub async fn state_restore_snapshot(app: tauri::AppHandle, guard: tauri::State<'_, RestoreGuard>,
                                     name: String) -> Result<(), String>;
-// the same shape around guarded_restore(&dir, &name, now_ms(), &guard)
+// let guard = guard.inner().clone();
+// let dir = state_dir(&app)?;
+// tauri::async_runtime::spawn_blocking(move || guarded_restore(&dir, &name, now_ms(), &guard))
+//     .await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
 ```
 
-- **Where the flag lives.** `lib.rs` registers `.manage(state::RestoreGuard::default())` next to the other managers. `state_write` and `state_restore_snapshot` each take `guard: tauri::State<'_, RestoreGuard>` and call `guarded_write` or `guarded_restore`. Nothing else reads or sets it. A missing `.manage` would make Tauri reject every call of both commands at runtime ("state not managed"), so test A-9 checks the registration (below).
+- **Where the flag lives.** `lib.rs` registers `.manage(state::RestoreGuard::default())` next to the other managers. `state_write` and `state_restore_snapshot` each take `guard: tauri::State<'_, RestoreGuard>`, clone it with `guard.inner().clone()`, and pass that clone to `guarded_write` or `guarded_restore`. Nothing else reads or sets it. A missing `.manage` would make Tauri reject every call of both commands at runtime ("state not managed"), so test A-9 checks the registration (below).
 - **Where it is not.** `write_batch` and `restore_snapshot` are unchanged and know nothing of the guard. `write_batch` is shared with `sync.rs`'s `import_state` and with the existing `state.rs` and `sync.rs` tests, which keep calling it directly.
-- **No window between the swap and the flag.** `guarded_restore` sets the flag **before** `restore_snapshot` starts, so before the rename that swaps `kv/`. It holds the lock for the whole restore, so a `state_write` that arrives during the restore waits for the outcome instead of being dropped:
+- **The flag only goes from false to true (R4-1).** `restoring` writes the flag in one place: it sets it to `true` after `restore` has returned `Ok`. It never saves, clears or puts back a value, and no other code writes the flag. So a restore that fails leaves the flag as it found it:
+
+  | Flag before | The restore returns | Flag after | A later `state_write` |
+  | --- | --- | --- | --- |
+  | false | `Ok` | true | dropped |
+  | false | `Err` | false | lands |
+  | true | `Ok` | true | dropped; `kv/` holds the second snapshot |
+  | true | `Err` | **true** | **dropped; `kv/` still holds the earlier restore** |
+
+  Revision 4 set the flag first and cleared it to `false` on `Err`, which made the last row "false, lands": a failed second restore let every window write over the first one.
+- **No window between the swap and the flag.** `restoring` takes the lock before `restore_snapshot` starts, so before the rename that swaps `kv/`, and sets the flag before it releases the lock. `guarded_write` needs the same lock, so no write can run between the swap and the flag. A `state_write` that arrives during a restore waits for the outcome instead of being dropped:
   - the restore succeeds: the waiting write sees the flag and is dropped;
-  - the restore fails: the flag is cleared before the lock is released, and the waiting write lands as normal.
-- **Which thread waits (N7).** Today both commands are sync `fn`s under `#[tauri::command(async)]`. tauri-macros 2.5.4 wraps such a body in a future and hands it to `respond_async_serialized`, which runs it with `tauri::async_runtime::spawn`. So the body runs **on a tokio worker thread**, not on a separate thread pool and not through `spawn_blocking`. A write waiting on the lock there would hold a tokio worker for the length of the restore, and with as many waiting windows as workers it would stall every other async command. So the two commands become `async fn`s that run their bodies with `tauri::async_runtime::spawn_blocking`, as `sync.rs`'s `sync_now` already does around `SYNC_LOCK`. A waiting write then holds a blocking-pool thread, never a tokio worker and never the main thread. `RestoreGuard` wraps an `Arc` and derives `Clone` so the closure can own it (`State<'_, _>` is not `'static`). A poisoned lock is recovered with `into_inner()`, never unwrapped.
+  - the restore fails and no restore succeeded before it: the flag is still `false`, and the waiting write lands as normal;
+  - the restore fails after an earlier success: the flag is still `true`, and the waiting write is dropped.
+- **Why "leave the flag alone on `Err`" and not "refuse a second restore" (R4-1).** The review offered both. Refusing is not chosen, for three reasons:
+  1. A second restore before the restart works today, and is useful: the user picked the wrong snapshot and picks another. `restore_snapshot` swaps `kv/` again and keeps the first restore's content as its pre-restore snapshot. Refusing would take that away.
+  2. `SyncSettings` keeps showing a Restore button on every snapshot after a success (lines 195 to 202). If Rust refused, every one of those buttons would fail until restart, so the buttons would have to be hidden or disabled too. That is a UI change, the Designer's, and this note would be forcing it.
+  3. It is the smaller change. There is no new error path and no saved value. The property the review asked for, "a success is never undone", is visible in the code: nothing assigns `false`.
+  - A panic inside `restore` also leaves the flag as it was, for the same reason. A poisoned lock is recovered with `into_inner()`, never unwrapped.
+- **Which thread waits (N7).** Today both commands are sync `fn`s under `#[tauri::command(async)]`. tauri-macros 2.5.4 wraps such a body in a future and hands it to `respond_async_serialized`, which runs it with `tauri::async_runtime::spawn`. So the body runs **on a tokio worker thread**, not on a separate thread pool and not through `spawn_blocking`. A write waiting on the lock there would hold a tokio worker for the length of the restore, and with as many waiting windows as workers it would stall every other async command. So the two commands become `async fn`s that run their bodies with `tauri::async_runtime::spawn_blocking`, as `sync.rs`'s `sync_now` already does around `SYNC_LOCK`. A waiting write then holds a blocking-pool thread, never a tokio worker and never the main thread. `RestoreGuard` wraps an `Arc` and derives `Clone` so the closure can own it (`State<'_, _>` is not `'static`). Test A-11 checks that a clone shares the flag.
 - While the flag is set, `state_write` returns `Ok(())`, not an error, so no window's retry loop spins.
 - The flag lives as long as the process. The restart that loads the snapshot starts with a fresh guard.
-- **The main window after a failed restore (N5).** `SyncSettings`' `restore` calls `flushNow()`, then `suspendAutoSave()`, then `state_restore_snapshot`. Today a failure leaves that window suspended until restart, so its later changes never reach disk. Once the guard clears its flag on failure, resuming is safe, so step 1b adds `resumeAutoSave()` to `persistence.ts`, and `restore`'s `catch` calls it before showing "Restore failed".
-  - With the keys-only queue (section 3), `queue(key)` still records the key while suspended but starts no timer. `suspendAutoSave()` clears the timer and keeps the recorded keys. `resumeAutoSave()` clears `suspended` and flushes, so every key changed during the suspension is written with its current value. After a successful restore nothing calls it, and the recorded keys are never flushed.
-  - So "a failed restore loses no write" holds in Rust from step 1f, and in the main window from step 1b. Between the two, the main window stays suspended after a failed restore, as it does today.
-  - It does not hold if the failed restore also failed to put `kv/` back (`restore_snapshot`'s rollback rename failing after the swap rename failed). Then `kv/` is missing, and the next write recreates it with that batch alone. This is today's behaviour for every window and is not changed here.
-- **The message.** `SyncSettings.tsx`'s success message becomes: "Snapshot restored. Auto-save is paused in every window until you restart ADE, which loads it."
+
+**The main window: resume after a failed restore, but never after a successful one (N5, R4-1).**
+
+- `SyncSettings`' `restore` (lines 86 to 99) calls `flushNow()`, then `suspendAutoSave()`, then `state_restore_snapshot`. Today a failure leaves that window suspended until restart, so its later changes never reach disk. Step 1b lets it resume.
+- **How a second restore fails in practice.** After a successful restore the snapshot list still shows a Restore button for every entry. The list is read at mount (line 59) and after a successful restore (line 95), and at no other time. `restore_snapshot` keeps 21 snapshots (`MAX_SNAPSHOTS + 1`), and the next 10-minute `state_snapshot` prunes to 20. So with Settings left open, an old entry can be gone from disk, and a click on it returns `Err` ("snapshot not found"). Any I/O error does the same.
+- Revision 4 resumed in every `catch`. After a success followed by such a failure, the main window would have flushed its pre-restore values. So the resume is latched, in `persistence.ts`, where `suspended` already lives:
+
+```ts
+// src/lib/persistence.ts (step 1b)
+let restoredThisRun = false;               // module state, next to `suspended`; reset by __resetForTests
+export function suspendAutoSave(): void;   // sets suspended, clears the flush timer, keeps the queued keys
+export function markRestored(): void;      // restoredThisRun = true; suspended = true; clears the flush timer
+export function resumeAutoSave(): boolean; // restoredThisRun: does nothing and returns false.
+                                           // Otherwise: clears suspended, flushes, returns true.
+```
+
+```ts
+// src/components/SyncSettings.tsx, restore(name), after step 1b
+try {
+  await flushNow();
+  suspendAutoSave();
+  await invoke("state_restore_snapshot", { name });
+  markRestored();                          // the first statement after the await
+  setRestoreMsg("Snapshot restored. Auto-save is paused in every window until you restart ADE, which loads it.");
+  invoke<string[]>("state_list_snapshots").then(setSnapshots).catch(() => {});
+} catch (e) {
+  const resumed = resumeAutoSave();        // false once a restore has succeeded in this run
+  setRestoreMsg(resumed
+    ? `Restore failed: ${e}`
+    : `Restore failed: ${e}. The snapshot restored earlier still loads when you restart ADE. Auto-save stays paused in every window until then.`);
+}
+```
+
+- `resumeAutoSave()` is the only code that clears `suspended` (apart from the test seam), and it refuses once `restoredThisRun` is set. `markRestored()` is the only code that sets it. After `markRestored()`, this window never calls `state_write` again in this run: `flush()` returns early while `suspended`, and `queue(key)` starts no timer.
+- `markRestored()` sets `suspended` itself. So it holds even if two restores overlap and the failing one resumed just before the other succeeded.
+- With the keys-only queue (section 3), `queue(key)` still records the key while suspended but starts no timer. `suspendAutoSave()` clears the timer and keeps the recorded keys. A `resumeAutoSave()` that returns `true` flushes them, so every key changed during the suspension is written with its current value. After a successful restore they are never flushed.
+- **Why a latch in `persistence.ts` and not "hide Restore once a restore succeeds" (R4-1).** The review offered both. Hiding is not chosen:
+  1. `SyncSettings` is mounted only while the Sync tab is shown (`SettingsPanel.tsx` line 868: `store.settingsTab === "sync" && <SyncSettings />`). State in the component is lost when the user leaves the tab, and the buttons would be back. So hiding would need a flag that outlives the component anyway. The flag is the fix; hiding would be an extra on top of it.
+  2. Hiding removes the second restore, which the Rust choice above keeps.
+  3. The latch is inside the one function that could do the harm, as the Rust flag is inside `guarded_write`. A later caller of `resumeAutoSave()` cannot get it wrong.
+  - The words of the second failure message are the Designer's to change. Test A-10b pins only "Restore failed" and "paused in every window".
+- **What holds, and from which step.**
+  - **A failed restore loses no write, when no restore has succeeded earlier in the run.** In Rust from step 1f: the flag is still `false` and writes land. In the main window from step 1b: it resumes and flushes. Between the two steps the main window stays suspended after a failed restore, as it does today.
+  - **Once a restore has succeeded, nothing in the run undoes it,** whatever later restores do. In Rust from step 1f: the flag stays set and every window's write is dropped. In the main window: before 1b it has no way to resume; from 1b `resumeAutoSave()` refuses. If the latch were ever bypassed, the resumed flush would still be dropped in Rust.
+  - Neither holds if a failed restore also failed to put `kv/` back (`restore_snapshot`'s rollback rename failing after the swap rename failed). Then `kv/` is missing and its old content sits in `.kv-old-<ms>`. With no earlier success, the next write recreates `kv/` with that batch alone; this is today's behaviour and is not changed. After an earlier success, no write recreates it, and at the restart `hydrateFromDisk` finds no saved key and seeds disk from the window's `localStorage`, as on a first run, so the earlier restore is lost. Two renames failing in a row in one folder is a failing disk. It is not handled further.
+- **The message.** `SyncSettings.tsx`'s success message becomes: "Snapshot restored. Auto-save is paused in every window until you restart ADE, which loads it." (step 1f).
 - **Out of scope, unchanged:** `sync_now`'s `import_state` writes `kv/` through `write_batch` and is not guarded. A sync pull after a restore can still import shared keys over restored ones, as it can today.
 
 **Tests, step 1f** (`state.rs`'s `tests` module, each with its own `tmp` folder and its own `RestoreGuard::default()`):
 - **A-3:** after `guarded_restore` succeeds, `guarded_write` of a new value leaves the kv folder byte for byte as the restore left it, and returns `Ok`.
 - **A-6:** `guarded_restore` with a name that is not a snapshot returns `Err`, and a following `guarded_write` lands.
+- **A-6b, its twin after a success (R4-1).** Set up as A-3, and `guarded_restore` succeeds. Then, on the same guard:
+  1. `guarded_restore` with a name that is not a snapshot (`"9999"`) returns `Err`. A following `guarded_write` returns `Ok`, and the kv folder is byte for byte as the first restore left it.
+  2. `guard.restoring(|| Err(std::io::Error::other("disk")))` returns `Err` (any I/O error, not only a bad name). A following `guarded_write` is dropped in the same way.
+  3. A second `guarded_restore` of a real snapshot returns `Ok`, and a following `guarded_write` is still dropped.
+  - Revision 4's `restoring` fails case 1: the write lands.
 - **A-7:** with a fresh guard, `guarded_write` writes exactly as `write_batch` does (the existing write test, through the guard).
-- **A-8, a write arriving mid-restore (threaded, N7).** Set up as A-3: a kv folder and one snapshot. Then, in `std::thread::scope`:
-  1. Thread R calls `guard.restoring(|| { started.send(()); gate.recv(); restore_snapshot(dir, name, now) })`.
-  2. The test waits for `started`; R now holds the lock with the flag set. Thread W calls `guarded_write(kv, {"k": "new"}, &guard)` and sends its result on `done`.
-  3. `done.recv_timeout(200 ms)` must time out: W is waiting on the lock.
-  4. The test sends on `gate`. R returns `Ok`. `done.recv()` gives `Ok(())`, and the kv folder is byte for byte the restored snapshot, with no `"k"`.
-  - **Its failure twin:** the same, but R's closure returns `Err` after the gate. R returns `Err`, W returns `Ok(())`, and the kv folder holds `"k"` = `"new"`.
-  - The 200 ms wait cannot fail a correct build, because a correct W cannot finish before the gate opens. A slow machine can only make a broken build pass by chance, never fail a correct one.
-- **A-9, the wiring test (N1).** A string test in the same module, over `include_str!("lib.rs")` and `include_str!("state.rs")`:
-  - `lib.rs` contains `.manage(state::RestoreGuard::default())`, and its `generate_handler!` still lists `state::state_write` and `state::state_restore_snapshot`.
-  - Take the text from `pub async fn state_write(` to the next line that is exactly `}`. Its signature (up to the first `{`) names `RestoreGuard`. Its body (after that `{`) contains `guarded_write(` and `spawn_blocking(`, and no `write_batch(`.
-  - Take `pub async fn state_restore_snapshot(` the same way. Its signature names `RestoreGuard`. Its body contains `guarded_restore(` and `spawn_blocking(`, and, once every `guarded_restore(` is removed from it, no `restore_snapshot(`.
-  - The commands come before the `tests` module in `state.rs`, so the first match of each signature is the command.
+- **A-8, a write arriving mid-restore (threaded, N7, R4-3).** Set up as A-3: a kv folder and one snapshot. `WAIT` is 5 s. The whole test body runs inside one `std::thread::scope` closure, and **all four channels are created inside that closure**: `gate`, `started`, `r_done` and `w_done`.
+  1. Thread R takes the `gate` receiver and the `started` and `r_done` senders. It runs `guard.restoring(|| { let _ = started.send(()); let _ = gate.recv(); restore_snapshot(dir, name, now) })` and sends the result on `r_done`.
+  2. `started.recv_timeout(WAIT)` must be `Ok`: R now holds the lock. Thread W then calls `guarded_write(kv, {"k": "new"}, &guard)` and sends its result on `w_done`.
+  3. `w_done.recv_timeout(200 ms)` must be `Err(Timeout)`: W is waiting on the lock.
+  4. The test sends on `gate`. `r_done.recv_timeout(WAIT)` must give `Ok(())`. `w_done.recv_timeout(WAIT)` must give `Ok(())`. The kv folder is byte for byte the restored snapshot, with no `"k"`.
+  - **Its failure twin:** the same, but R's closure returns `Err` after the gate. R's result is `Err`, W's is `Ok(())`, and the kv folder holds `"k"` = `"new"`.
+  - **It fails, it does not hang.** The test thread never calls `recv()` or `join()`; every wait it makes is a `recv_timeout`. R's `gate.recv()` is the only wait without a timeout, and it ends when the `gate` sender is dropped. The sender is a local of the scope closure, so a failed expectation, which panics there, drops it while unwinding, before the scope joins its threads. R then returns and releases the lock, W returns, and the scope ends with the test failed. R and W send with `let _ =`, because the receiver may be gone by then.
+  - The 200 ms wait cannot fail a correct build, because a correct W cannot finish before the gate opens. A slow machine can only make a broken build pass by chance, never fail a correct one. R's `gate.recv()` has no timeout for the same reason: a timeout there could open the gate early on a stalled machine and fail step 3 on a correct build.
+- **A-9, the wiring test (N1, R4-2).** A string test in the same module, over `include_str!("lib.rs")` and `include_str!("state.rs")`.
+  - **It reads production code only.** Each file is cut at its first line that is exactly `mod tests {`; the test asserts that line exists, and reads only what comes before it. A-9's own literals are inside `state.rs`'s `tests` module, so they can never be what a check matches. The test also asserts that `pub async fn state_write(` and `pub async fn state_restore_snapshot(` each occur exactly once in that part of `state.rs`.
+  - **It reads no comment.** Each line is cut at its first `//`. The test asserts there is no `/*` in the production part of `state.rs`, nor in `lib.rs`'s builder chain (from the line `tauri::Builder::default()` to the line that starts with `.run(`). `lib.rs` has one `/*` today, in a path string at line 135, outside the chain; `state.rs` has none.
+  - **`lib.rs`.** In the builder chain, one line, trimmed, is exactly `.manage(state::RestoreGuard::default())`, one is exactly `state::state_write,` and one is exactly `state::state_restore_snapshot,`. A commented-out line starts with `//` and is empty after the cut.
+  - **`state_write`.** Take the text from `pub async fn state_write(` to the next line that is exactly `}`. Split it at the first `{` into signature and body, and remove all whitespace from both.
+    - The signature contains `guard:tauri::State<'_,RestoreGuard>`.
+    - The body contains `letguard=guard.inner().clone();`, and `letguard` occurs in it once (no second binding shadows the clone).
+    - The body contains `guarded_write(&kv,&entries,&guard)` and `spawn_blocking(`.
+    - The body contains no `RestoreGuard` (so no `RestoreGuard::default()` and no `RestoreGuard(`) and no `write_batch(`.
+  - **`state_restore_snapshot`,** the same way. The signature contains `guard:tauri::State<'_,RestoreGuard>`. The body contains `letguard=guard.inner().clone();` once, `guarded_restore(&dir,&name,now_ms(),&guard)` and `spawn_blocking(`. It contains no `RestoreGuard`, and, once every `guarded_restore(` is removed from it, no `restore_snapshot(`.
+  - These strings are the command bodies in the code block above. A developer who renames `kv`, `dir` or `guard` changes A-9 in the same commit.
+- **A-11, a clone shares the flag (R4-2).** A behaviour test, not a check for `Arc<` on the struct line: `let a = RestoreGuard::default(); let b = a.clone();`. `b.restoring(|| Ok(()))` succeeds. Then `guarded_write(kv, {"k": "new"}, &a)` returns `Ok` and writes nothing. A second `RestoreGuard::default()` is not affected: the same write through it lands. A `Clone` that copied the flag would fail the first half, whatever the field's type is called.
 - A string test (`src/lib/__tests__/restoreMessage.test.ts`) asserts that `SyncSettings.tsx` contains "paused in every window".
 
 **Why A-9 is a string test and not a `tauri::test` mock app.** A mock-app test would invoke `state_write` after `state_restore_snapshot` through IPC, which is the stronger check. It is not adopted, because it would need three changes that are not this feature's:
@@ -381,17 +457,26 @@ pub async fn state_restore_snapshot(app: tauri::AppHandle, guard: tauri::State<'
 - every `state` command takes `tauri::AppHandle`, which is `AppHandle<Wry>`, so a `MockRuntime` app cannot call them unless they become generic over `R: Runtime`;
 - `state_dir` resolves `app.path().app_data_dir()`, so a mock-app test would write into the real user's Application Support folder unless the state directory were made injectable.
 
-A-9 catches the two builds the review named: `state_write` still calling `write_batch`, and `lib.rs` missing the `.manage`. A-3 and A-6 to A-8 prove what `guarded_write`, `guarded_restore` and `restoring` do. Together they cover the command path, short of Tauri's own dispatch.
+**What A-9 does and does not prove.** It catches the slips the reviews named: `state_write` still calling `write_batch`; `lib.rs` missing the `.manage`, or having it only in a comment; a command that takes the managed guard and then passes a fresh `RestoreGuard::default()`; and a check satisfied by the test's own text. A-3, A-6, A-6b, A-7, A-8 and A-11 prove what `guarded_write`, `guarded_restore`, `restoring` and a clone do. Together they cover the command path, short of Tauri's own dispatch. A-9 is still a check on text: it is a tripwire for mistakes, not a proof against an edit written to get around it, and code review remains the second check on these two commands.
 
-**Test A-10, step 1b** (`src/lib/__tests__/persistence.test.ts`, `invoke` mocked): `suspendAutoSave()`; set a persisted key through the wrapped `setItem`; no `state_write` happens; `resumeAutoSave()`; the next `state_write` carries the key's current value. And `src/components/__tests__/SyncSettings.restore.test.tsx`: with `window.confirm` returning `true` and `state_restore_snapshot` rejecting, clicking a snapshot's Restore calls `resumeAutoSave` (spied) once and shows "Restore failed"; with it resolving, `resumeAutoSave` is not called.
+**Tests, step 1b.**
 
-## 4. Interplay with F3 S1 (PR #118)
+- `src/lib/__tests__/persistence.test.ts`, `invoke` mocked, fake timers:
+  - **A-10, resume after a failure.** `suspendAutoSave()`; set a persisted key through the wrapped `setItem`; advance the timers past the flush delay: no `state_write`. `resumeAutoSave()` returns `true`, and the next `state_write` carries the key's current value.
+  - **A-10b, no resume after a success (R4-1).** `suspendAutoSave()`; set a persisted key; `markRestored()`. Then the second attempt: `suspendAutoSave()`; `resumeAutoSave()` returns `false`; set another persisted key; `await flushNow()`; advance the timers past the retry delay; dispatch `visibilitychange` with the document hidden. `invoke` was never called with `"state_write"`.
+  - **The overlap case.** `suspendAutoSave()`; `resumeAutoSave()` returns `true`; `markRestored()`; set a persisted key; advance the timers: no `state_write`.
+- `src/components/__tests__/SyncSettings.restore.test.tsx`. It uses the **real** `persistence` module (`startAutoSave({ snapshots: false })` before each test, `__resetForTests()` after), so it tests what reaches `state_write`, not which function was called. `invoke` is mocked by command name, `state_list_snapshots` returns two names, `window.confirm` returns `true`, and the timers are fake.
+  - **First restore rejects:** the message is "Restore failed: …" without "paused". A persisted key set afterwards reaches `state_write` once the flush delay has passed: the window resumed.
+  - **First restore resolves:** the message contains "paused in every window". A persisted key set afterwards never reaches `state_write`, however far the timers advance.
+  - **A-10b's twin: a success, then a rejected second restore (R4-1).** Click Restore on the first snapshot; `state_restore_snapshot` resolves. Clear `invoke`'s call log. Set a persisted key. Click Restore on the second snapshot; `state_restore_snapshot` rejects with "snapshot not found". Set another persisted key and advance the timers past the retry delay. The message contains "Restore failed" and "paused in every window", and `invoke` was not called with `"state_write"` after the log was cleared. Revision 4's `catch` fails this: its resume flushes both keys.
 
-F3 S1 is seven stories built **in order, never two in parallel**: s1a, s1b1, s1b2, s1b3, s1c, s1d, s1e (`tickets.toml` at 67310e5). "After" below means merged to main.
+## 4. Interplay with F3 S1 (PR #118, merged)
+
+F3 S1 is seven stories built **in order, never two in parallel**: s1a, s1b1, s1b2, s1b3, s1c, s1d, s1e (`tickets.toml` on main; PR #118 merged at 97d70a0, with the tickets unchanged from 67310e5). "After" below means merged to main.
 
 ### 4.1 Files both features change (m1, B1)
 
-From the tickets in PR #118 at 67310e5:
+From the tickets on main (PR #118, merged at 97d70a0; unchanged from 67310e5):
 
 | F3 S1 story | Its files that this feature also changes | Thoughts step that changes them |
 | --- | --- | --- |
@@ -409,7 +494,7 @@ Files no F3 S1 story touches: `Scratchpad.tsx`/`.css`, `CommandPalette.tsx`, `Su
 
 ```mermaid
 flowchart LR
-  subgraph F3["F3 S1 (PR #118), in sequence"]
+  subgraph F3["F3 S1 (on main), in sequence"]
     s1a --> s1b1 --> s1b2 --> s1b3 --> s1c --> s1d --> s1e
   end
   T1a["1a pure + layout key"]:::any
@@ -437,7 +522,10 @@ flowchart LR
 
 - **1d → 3b:** TR-9's entry half (the palette entry for the dock) needs 1d's `keywords`.
 - **1f → 3b:** 3b is the first step in which a detached window writes `better-terminal-settings` (`setThoughtsDock`), so it must not ship before the restore guard. The edge is also implied by 1f → 1b → 3b; it is drawn so that the reason is not lost if 1b's dependency changes.
-- **1f → 1b:** 1b's `resumeAutoSave()` after a failed restore is safe only once the guard clears its flag on failure (section 3.4).
+- **1f → 1b (R4-6):** 1b gives the main window a way to resume auto-save, and resuming must never undo an earlier successful restore. What guarantees that for every window and every caller is the guard keeping its flag: once a restore has succeeded, a resumed flush is dropped in Rust like any other write (section 3.4). So `resumeAutoSave()` must not be on main before the guard is.
+  - 1b's own `restoredThisRun` latch stops the main window from resuming at all. The guard is what makes a mistake there harmless.
+  - Revision 4 gave the reason as "safe only once the guard clears its flag on failure". That was wrong: with no guard at all, a write after a failed restore lands anyway.
+  - The two steps also both edit `restore` in `SyncSettings.tsx` (1f its success message, 1b the `markRestored()` call and the `catch`), so they could not be in flight together in any case.
 
 The F3 constraints on steps 1b and 2 are "never in flight beside" rules, not edges; the table after the list gives them.
 
@@ -446,8 +534,8 @@ The F3 constraints on steps 1b and 2 are "never in flight beside" rules, not edg
    - **1c.** The panel's internals: `Scratchpad.tsx` and `Scratchpad.css`. Depends on 1a for `thoughtsLayout.ts`, `thoughtsChrome` and the `ThoughtsSlot` type, which it imports from `src/lib/panelLayout.ts`. **Its new props, `placement`, `slot` (a `ThoughtsSlot`) and `onDockChange`, are optional.** With `placement` absent Scratchpad lays out as the bottom dock and takes its height from its own state, as today, so both windows keep rendering it unchanged until 3a. Step 3a makes `placement` and `slot` required and both windows pass them. `onDockChange` stays optional for good: its absence is what hides the dock controls (section 4.2 item 5).
    - **1d.** The palette's `keywords`, in `CommandPalette.tsx`. s1d changes App's toggle handlers, not the palette's item type.
    - **1e.** `announceStore` and `SubTerminalAnnouncer`'s third source.
-   - **1f. The restore guard** (section 3.4): `state.rs` (`RestoreGuard`, `restoring`, `guarded_write`, `guarded_restore`, the two commands as `async fn` over `spawn_blocking`), `lib.rs` (`.manage`), the `SyncSettings.tsx` success message, and tests A-3, A-6, A-7, A-8 and A-9. It is its own story because it is Rust plus one message, independent of the dock, so it can land first and be verified alone. It does not touch `persistence.ts`, so it keeps no F3 constraint.
-2. **Step 1b: settings and persistence, after 1f merges.** It edits `persistence.ts` and `persistence.test.ts` (s1b1) and the `sync.rs` `tests` module (s1a, s1b3), so it **never runs beside s1a, s1b1 or s1b3**. It may run beside s1b2, s1c, s1d or s1e, or while no F3 story is in flight. It also adds `resumeAutoSave()` and the `catch` in `SyncSettings.tsx`'s `restore` (section 3.4, test A-10), which is why it waits for 1f; 1f is small and has no F3 constraint, so this costs no F3 slot.
+   - **1f. The restore guard** (section 3.4): `state.rs` (`RestoreGuard`, `restoring`, `guarded_write`, `guarded_restore`, the two commands as `async fn` over `spawn_blocking`), `lib.rs` (`.manage`), the `SyncSettings.tsx` success message, and tests A-3, A-6, A-6b, A-7, A-8, A-9 and A-11. It is its own story because it is Rust plus one message, independent of the dock, so it can land first and be verified alone. It does not touch `persistence.ts`, so it keeps no F3 constraint.
+2. **Step 1b: settings and persistence, after 1f merges.** It edits `persistence.ts` and `persistence.test.ts` (s1b1) and the `sync.rs` `tests` module (s1a, s1b3), so it **never runs beside s1a, s1b1 or s1b3**. It may run beside s1b2, s1c, s1d or s1e, or while no F3 story is in flight. It also adds `markRestored()` and `resumeAutoSave()` to `persistence.ts`, and the `markRestored()` call and the `catch` to `SyncSettings.tsx`'s `restore` (section 3.4, tests A-10 and A-10b), which is why it waits for 1f (the 1f → 1b edge above); 1f is small and has no F3 constraint, so this costs no F3 slot.
    - **The Rust key-set test.** s1b3 adds a Rust test asserting `"ade-viewer-state"` is in neither `SHARED_KEYS` nor `DEVICE_KEYS`; step 1b needs the same assertion for `"ade-thoughts-layout"` and `"ade-thoughts-dock-notice"` (TR-3). There is **one** such test, named `local_only_keys_are_in_neither_shared_nor_device_keys`, over a list of keys. Whichever of s1b3 and 1b lands first adds it with its own keys; whichever lands second **extends its list** and adds no second test.
    - The TypeScript key tests in `persistence.test.ts` are separate `it` blocks (s1b1's for `ade-viewer-state`, 1b's for the two Thoughts keys). Neither extends the other; the second to land rebases over the first.
 3. **Step 2: the focus helper and the open-state lift.** It edits `App.tsx` (s1a, s1b2, s1c, s1d), `TerminalPane.tsx` (s1c) and `previewFocus.ts` (s1d), so it **never runs beside s1a, s1b2, s1c or s1d**. It may run beside s1b1, s1b3 or s1e, or while no F3 story is in flight.
@@ -480,23 +568,27 @@ Before 3b, no story shows the right dock or a dock control. The bottom panel's o
 
 Follow-up F-1's history and notes half also edits `Scratchpad.tsx`: it starts after 1c merges and never runs beside step 2.
 
-**Ticket changes for the scrum-master** (PR #118 and the Thoughts stories):
+**Ticket changes for the scrum-master (R4-5).** PR #118 is merged (97d70a0), and its tickets are unchanged from 67310e5, the commit this note was checked against. So the F3 changes below are **follow-up edits to `_bmad-output/initiative-per-view-viewer/epic-slice-1-viewer-state/tickets.toml` on main**, for the scrum-master to make in a new change. They are not edits to PR #118, and this PR (#117) does not make them, because the tickets are the scrum-master's. Until they are made, the tickets on main carry the old wording quoted below.
+
+F3 S1 tickets, on main:
 - **s1d, build item 3, the cross-reference:** replace "the Thoughts dock story (ordered by the owner after s1a to s1d) adopts paneFocus.ts" with "Thoughts step 2 (the focus helper story) adopts it: it moves this item's view-switch focus move to `focusInSightSoon()` and `closePreviewFocus` to `focusInSight()`, and VV-1 AC7's tests stay unchanged." In its first sentence, name the calls: "the focus move in this item calls `focusInSightSoon()`; `closePreviewFocus` calls `focusInSight()`".
 - **s1b3, build item 3:** name the second Rust test `local_only_keys_are_in_neither_shared_nor_device_keys`, over a list of keys. "If Thoughts step 1b has already added this test, add `"ade-viewer-state"` to its list instead of adding a test." Its `verify` line's "the Rust key-set test passing by name" then refers to that name.
 - **s1a, s1b1, s1b3:** a note that Thoughts step 1b must not be in flight beside them. **s1a, s1b2, s1c, s1d:** the same for Thoughts step 2.
-- **Thoughts stories:** shard 1f as its own story; 1b depends on 1f merged; step 2 depends on 1c merged; 3a depends on 2 merged; 3b depends on 3a, 1b, 1d and 1f merged; 1c's props are optional until 3a, and 1c imports `PanelSlot` and `ThoughtsSlot` from 1a's `panelLayout.ts`; F-1's Scratchpad half depends on 1c and is never beside step 2.
-- Shard F-1 (section 2.1) as its own story, as before.
+
+Thoughts stories, not yet sharded:
+- Shard 1f as its own story; 1b depends on 1f merged; step 2 depends on 1c merged; 3a depends on 2 merged; 3b depends on 3a, 1b, 1d and 1f merged; 1c's props are optional until 3a, and 1c imports `PanelSlot` and `ThoughtsSlot` from 1a's `panelLayout.ts`; F-1's Scratchpad half depends on 1c and is never beside step 2.
+- Shard F-1 (section 2.1) as its own story.
 
 ### 4.3 Every TR mapped to a step
 
 | Step | Carries |
 | --- | --- |
 | **1a** pure functions and the layout key | TR-10, TR-11, TR-12, TR-13 (function half: the `largestFit` values and the clamp on commit, on the function), TR-15, TR-17a, TR-20 (`thoughtsChrome`), TR-21 (`listSplit`), TR-31, TR-3 (TS half: the three fields restored and clamped on read, unreadable to default) |
-| **1b** settings and persistence | TR-1, TR-2 (sender half: `setThoughtsDock` does a field write and `emit`; listener half: `applyThoughtsDock` sets and writes nothing; main window settles the notice), TR-3 (`isPersistedKey`, and the Rust key-set test of 4.2 item 2), TR-30, A-1, A-2, A-4, A-10 (`resumeAutoSave` after a failed restore) |
+| **1b** settings and persistence | TR-1, TR-2 (sender half: `setThoughtsDock` does a field write and `emit`; listener half: `applyThoughtsDock` sets and writes nothing; main window settles the notice), TR-3 (`isPersistedKey`, and the Rust key-set test of 4.2 item 2), TR-30, A-1, A-2, A-4, A-10 (`resumeAutoSave` after a failed restore), A-10b (after a success and then a rejected second restore: no resume and no `state_write`) |
 | **1c** panel internals (`Scratchpad.tsx`/`.css`, tested by rendering `Scratchpad` with `placement`, a `ThoughtsSlot` and `onDockChange` passed in, and once with none of them to show the bottom dock unchanged) | TR-5, TR-6, TR-18 (handle half: role, name, `aria-valuemin`, `aria-valuemax` = `slot.max`, `aria-valuenow`, the keys calling `onResize(w, true)`, the "Widest that fits" state at `slot.max`), TR-19, TR-20 (`data-chrome`), TR-21 (splitter half), TR-22, TR-23, TR-26, TR-28, TR-29 (`Scratchpad.css`) |
 | **1d** palette | TR-9 (keyword half: items accept `keywords`, search matches one) |
 | **1e** announcer | the m8 tests (section 1.3) |
-| **1f** restore guard | A-3, A-6, A-7, A-8 (threaded: a write mid-restore waits, then is dropped on success and lands on failure), A-9 (wiring: `.manage` in `lib.rs`, the commands call `guarded_write` and `guarded_restore`), the message string test (section 3.4) |
+| **1f** restore guard | A-3, A-6, A-6b (a failed restore after a successful one leaves writes dropped), A-7, A-8 (threaded: a write mid-restore waits, then is dropped on success and lands on failure; every wait of the test is bounded), A-9 (wiring: `.manage` in `lib.rs` on a code line, each command passes the clone of its managed guard to `guarded_write` or `guarded_restore`), A-11 (a clone shares the flag), the message string test (section 3.4) |
 | **2** focus helper and open-state lift | TR-25, the tests in section 5.2, and, if s1d merged first, the move of s1d's focus calls with VV-1 AC7's tests green |
 | **3a** layout host and `useLayoutHolders` | TR-4, TR-13 (rendered half, section 4.4), TR-14, TR-17b, A-5 (section 1.2), TR-18 (end to end, on `useLayoutHolders`: a test harness renders `PanelLayout` fed by `useLayoutHolders` and the real `Scratchpad`; the handle shows 360 from a seeded `ade-thoughts-layout`; a → key step commits once, `ade-thoughts-layout.rightWidth` becomes 344, and the slot's width becomes 344; plus A-5's string test that both windows use the hook), TR-29 (`PanelLayout.css` joins the `it.each`), the `PANEL_RANGES` agreement test, the section 1.3 announcement rules |
 | **3b** visible right dock | TR-7, TR-8, TR-9 (entry half), TR-16, TR-24, TR-27, TR-2 (registration: the `App.tsx` string test; DetachedApp through TR-24) |
@@ -590,9 +682,11 @@ Each attempt re-reads the view in sight, so it always targets the current view. 
 | Two windows write one key within the propagation delay | Best effort (3.2). One field can be lost until the next write of that key. A flush always writes the value the flushing window sees. |
 | `state_write` fails | The retry re-reads the queued keys, so it writes the newest values, never a stale batch. |
 | A window writes after a snapshot restore | `state_write` drops it in Rust through `guarded_write` (3.4). |
-| A window writes while a restore is running | The write waits on the guard's lock, on a blocking-pool thread (`spawn_blocking`), never a tokio worker. It is dropped if the restore succeeds and lands if it fails (3.4, test A-8). |
-| `lib.rs` loses `.manage(RestoreGuard)`, or a command stops calling the guarded function | Test A-9 fails. Without it, Tauri would reject every `state_write` with "state not managed", or writes would go around the guard. |
-| A restore fails | `guarded_restore` clears the flag before releasing the lock; other windows keep saving. From step 1b the main window calls `resumeAutoSave()` and flushes what changed meanwhile (A-10); before 1b it stays suspended until restart, as today. |
+| A window writes while a restore is running | The write waits on the guard's lock, on a blocking-pool thread (`spawn_blocking`), never a tokio worker. It is dropped if that restore succeeds, or if an earlier restore in this run succeeded. It lands only if that restore fails and none succeeded before it (3.4, tests A-8 and A-6b). |
+| `lib.rs` loses `.manage(RestoreGuard)`, or a command stops calling the guarded function, or passes it a guard that is not the managed one | Test A-9 fails. Without it, Tauri would reject every `state_write` with "state not managed", or writes would go around the guard. |
+| A restore fails, and no restore has succeeded in this run | The flag was never set, so other windows keep saving (A-6). From step 1b the main window's `resumeAutoSave()` returns `true` and flushes what changed meanwhile (A-10); before 1b it stays suspended until restart, as today. |
+| A restore fails after an earlier one succeeded in this run (a snapshot pruned since the list was read, or an I/O error) | Nothing is undone. Nothing sets the guard's flag to false, so every window's write stays dropped (A-6b). The main window's `resumeAutoSave()` returns `false` and it stays suspended (A-10b). The message says that the restore failed and that the earlier one still loads at restart (3.4). |
+| A restore's swap fails and its rollback fails too | `kv/` is missing and its old content is in `.kv-old-<ms>`. With no earlier success the next write recreates `kv/`, as today. After an earlier success no write does, and the restart seeds disk from `localStorage`, so the earlier restore is lost. Not handled further (3.4). |
 | A sync pull after a restore | Not guarded; `import_state` can import shared keys over restored ones, as today. Out of scope (3.4). |
 | A drag pushes past the room | The host clamps to `largestFit` on every move and on commit. The handle shows "Widest that fits". |
 | A view switch moves Thoughts | It is silent (1.3), and the same nodes keep focus (TR-17b). |
@@ -605,19 +699,32 @@ Each attempt re-reads the view in sight, so it always targets the current view. 
 
 ## 9. Review findings and where they are answered
 
-### 9.1 Revision 4: the delta review of revision 3
+### 9.1 Revision 5: the delta review of revision 4
 
 | Finding | Answer |
 | --- | --- |
-| N1 (major): nothing tests that the commands use the guard | 3.4, test A-9: a string test that `lib.rs` registers `.manage(state::RestoreGuard::default())` and lists both commands, that `state_write`'s body calls `guarded_write` and not `write_batch`, and that `state_restore_snapshot`'s body calls `guarded_restore` and no bare `restore_snapshot`. 3.4 also says why a `tauri::test` mock app is not used (no `test` feature; commands bound to `AppHandle<Wry>`; `state_dir` resolves the real app data folder). |
+| R4-1 (major): a failed second restore cleared the flag that an earlier successful restore had set, and the main window then resumed | 3.4. **Rust:** `restoring` writes the flag only after `Ok`, and nothing sets it to false, so on `Err` it has its previous value (the review's first option, without a save and put-back; the state table). "Refuse a second restore" is not chosen, with three reasons. **JS:** a `restoredThisRun` latch in `persistence.ts`, set by `markRestored()`, makes `resumeAutoSave()` refuse and return `false`. "Hide Restore" is not chosen, with three reasons. **Tests:** A-6b (the Rust twin of A-6), A-10b, and A-10b's twin on `SyncSettings` with the real `persistence` module. Section 7's rows, ADR 0033 and `local-key-writes.md` now say the same thing. |
+| R4-2: string test A-9 can be fooled | 3.4, A-9: each body must contain `let guard = guard.inner().clone();` once, pass `&guard` to the guarded function, and name no `RestoreGuard`; every match is on a line cut at `//`, with `/*` asserted absent; every match is before `mod tests {`, and each command signature occurs once. A-11 is a behaviour test that a clone shares the flag. 3.4 also says what a string test cannot prove. |
+| R4-3: threaded test A-8 can hang | 3.4, A-8: every wait of the test thread is a `recv_timeout` (5 s for `started`, `r_done` and `w_done`; 200 ms for the wait that must time out); no `join()`; all channels are created inside the `thread::scope` closure, so a panic drops the gate sender and R returns |
+| R4-4: A-5's setup fails `tsc` | 1.2: `addView(activeTabId, { name: "B", cwd: null })` |
+| R4-5: PR #118 has merged | Header, 4, 4.1, and 4.2 "Ticket changes for the scrum-master": the F3 changes are follow-up edits to `tickets.toml` on main, not edits to PR #118 |
+| R4-6: the reason for the 1f → 1b edge | 4.2: resuming must never undo an earlier successful restore, which needs the guard to keep its flag; revision 4's reason is withdrawn |
+
+### 9.2 Revision 4: the delta review of revision 3
+
+Rows marked "revised" were answered again in revision 5 (9.1).
+
+| Finding | Answer |
+| --- | --- |
+| N1 (major): nothing tests that the commands use the guard | 3.4, test A-9: a string test that `lib.rs` registers `.manage(state::RestoreGuard::default())` and lists both commands, that `state_write`'s body calls `guarded_write` and not `write_batch`, and that `state_restore_snapshot`'s body calls `guarded_restore` and no bare `restore_snapshot` (revised: R4-2). 3.4 also says why a `tauri::test` mock app is not used (no `test` feature; commands bound to `AppHandle<Wry>`; `state_dir` resolves the real app data folder). |
 | N2: slot types needed by 1c before 3a | 1 (table), 1.1, 4.2 item 1: `PanelSlot` and `ThoughtsSlot` live in `src/lib/panelLayout.ts` (step 1a); `PanelLayout.tsx` imports them |
 | N3: A-5's string test clashes with s1c's ⌘B and s1d's ⌘⇧B | 1.2: the test forbids width writes only (`writeThoughtsLayoutField(`, `browserWidth`, `previewWidth`, `rightWidth`); open toggles stay in App's toggle handlers through `setLayout` |
-| N4: how A-5's two layouts reach `viewerStore` | 1.2: two live views through `addView` on the active tab, layouts set with `setLayout`; only `ade-thoughts-layout` is seeded in `localStorage` |
-| N5: "a failed restore loses no write" holds only in Rust | 3.4: step 1b adds `resumeAutoSave()`, called in `restore`'s `catch`; keys changed while suspended are flushed on resume (A-10); the sentence is scoped to "from 1b"; 4.2 adds 1f → 1b |
+| N4: how A-5's two layouts reach `viewerStore` | 1.2: two live views through `addView` on the active tab, layouts set with `setLayout`; only `ade-thoughts-layout` is seeded in `localStorage` (revised: R4-4) |
+| N5: "a failed restore loses no write" holds only in Rust | 3.4: step 1b adds `resumeAutoSave()`, called in `restore`'s `catch`; keys changed while suspended are flushed on resume (A-10); the sentence is scoped to "from 1b"; 4.2 adds 1f → 1b (revised: R4-1 latches the resume, R4-6 restates the edge's reason) |
 | N6: missing edges | 4.2: 1d → 3b (TR-9's entry half needs `keywords`), 1f → 3b (3b is the first detached write of `better-terminal-settings`); item 5, the in-flight table and the ticket list agree |
-| N7: wrong thread claim; no threaded test | 3.4: the claim is corrected (tauri-macros 2.5.4 runs a sync `#[tauri::command(async)]` body through `async_runtime::spawn` on a tokio worker); the two commands become `async fn` over `spawn_blocking`, like `sync_now`; test A-8 holds a restore open with `RestoreGuard::restoring` and checks that a write waits, then is dropped on success and lands on failure |
+| N7: wrong thread claim; no threaded test | 3.4: the claim is corrected (tauri-macros 2.5.4 runs a sync `#[tauri::command(async)]` body through `async_runtime::spawn` on a tokio worker); the two commands become `async fn` over `spawn_blocking`, like `sync_now`; test A-8 holds a restore open with `RestoreGuard::restoring` and checks that a write waits, then is dropped on success and lands on failure (revised: R4-3) |
 
-### 9.2 Revision 3: the delta review of revision 2
+### 9.3 Revision 3: the delta review of revision 2
 
 | Finding | Answer |
 | --- | --- |
@@ -626,7 +733,7 @@ Each attempt re-reads the view in sight, so it always targets the current view. 
 | B1: the key-set test | 4.2 item 2: one Rust test, `local_only_keys_are_in_neither_shared_nor_device_keys`; whichever of s1b3 and 1b lands second extends its list; the s1b3 ticket change is listed |
 | B1: ticket changes | 4.2, "Ticket changes for the scrum-master" |
 | M-A: 1c and 2 both edit `Scratchpad.tsx` | 4.2 (edge 1c → 2; 1c's `placement`, `slot` and `onDockChange` optional until 3a), 1.4 |
-| M-B: `RESTORE_PENDING` and `cargo test` | 3.4 (`RestoreGuard` in Tauri managed state, no static; `guarded_write` and `guarded_restore` used only by the two commands and the tests; `write_batch` untouched; flag set before the swap under one lock, cleared on failure) |
+| M-B: `RESTORE_PENDING` and `cargo test` | 3.4 (`RestoreGuard` in Tauri managed state, no static; `guarded_write` and `guarded_restore` used only by the two commands and the tests; `write_batch` untouched; flag set before the swap under one lock, cleared on failure; revised in revision 5, R4-1: the flag is set on success under that lock and never cleared) |
 | M-C: layout routing in `App.tsx` | 1.2 (`useLayoutHolders`, used by App and DetachedApp; test A-5 with `renderHook`), 4.3 (TR-18's end-to-end half on the hook) |
 | minor: "both ship in the same release" | 4.2 item 5: dropped; 3a alone is a consistent release |
 | minor: the restore message | 3.4: "paused in every window" |
@@ -634,7 +741,7 @@ Each attempt re-reads the view in sight, so it always targets the current view. 
 | minor: the restore guard's story | 4.2 item 1: its own step, 1f |
 | minor: TR-24's Scratchpad mock | 4.3: the mock renders its root at `slot.width`; the host's `data-main-width` |
 
-### 9.3 Revision 2: the review of revision 1
+### 9.4 Revision 2: the review of revision 1
 
 | Finding | Answer |
 | --- | --- |

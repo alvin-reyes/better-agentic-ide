@@ -1,6 +1,6 @@
 # 0033: Shared local keys are written field by field, and the disk queue reads at flush time
 
-- **Status:** Proposed (2026-11-10), revision 4. With the Thoughts panel dock architecture note, revision 4.
+- **Status:** Proposed (2026-11-10), revision 5. With the Thoughts panel dock architecture note, revision 5.
 - **Context:**
   - Every app window holds its own copy of each store. It reads that copy once, when its JS loads. `localStorage` is shared by all the windows.
   - Settings setters today write the window's whole copy (`persistSettings(get())`). The Thoughts dock (UX amendment 2026-11-10, N1) is the first setting that a detached window writes. A whole-copy write from a window opened before a theme, font or API-key change would put the old values back, and sync would carry them to every Mac.
@@ -22,8 +22,9 @@
   - A listener that applies another window's change (for example `ade://thoughts-dock`) calls `set` only and writes nothing.
   - The disk queue holds keys, not values. `flush()` and its retry read `localStorage` at flush time.
   - The main window calls `flushNow()` after applying `ade://thoughts-dock`.
-  - After a snapshot restore, `state_write` in Rust drops every write until the process restarts, because every window's writes meet there. The flag is a `RestoreGuard` held in Tauri managed state (not a process-wide static, so parallel `cargo test` threads each use their own), set before the swap and cleared if the restore fails (note section 3.4). The two commands run their bodies with `spawn_blocking`, so a write waiting on the guard never holds a tokio worker. A string test checks that `lib.rs` manages the guard and that the commands call the guarded functions.
-  - If a restore fails, the main window resumes auto-save (`resumeAutoSave()`) and flushes the keys changed while it was suspended, so a failed restore loses no write in either Rust or the main window.
+  - After a snapshot restore, `state_write` in Rust drops every write until the process restarts, because every window's writes meet there. The flag is a `RestoreGuard` held in Tauri managed state (not a process-wide static, so parallel `cargo test` threads each use their own). It is set under the guard's lock, which is held for the whole restore, once the restore has succeeded. Nothing sets it back to false: a restore that fails leaves it as it was (note section 3.4). The two commands run their bodies with `spawn_blocking`, so a write waiting on the guard never holds a tokio worker. A string test checks that `lib.rs` manages the guard and that each command passes its managed guard to the guarded function.
+  - If a restore fails and no restore has succeeded earlier in the run, the main window resumes auto-save (`resumeAutoSave()`) and flushes the keys changed while it was suspended. Such a failed restore loses no write, in Rust or in the main window.
+  - Once a restore has succeeded, nothing in the run undoes it. A later restore that fails leaves the guard's flag set, so every window's write stays dropped. `resumeAutoSave()` then does nothing, because `markRestored()` set `restoredThisRun` in `persistence.ts`, so the main window stays suspended. A second restore before the restart is still allowed; refusing it was considered and not chosen (note section 3.4).
   - **Known exceptions:** the three array keys above. They are left as they are by the Thoughts work and are fixed by follow-up F-1 (architecture note, section 2.1).
 - **Consequences:**
   - A stale window can no longer undo another window's change in `localStorage` or on disk, whichever window flushes last, provided the two writes are further apart than the time a write takes to reach every window.

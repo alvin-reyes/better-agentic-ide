@@ -1,7 +1,7 @@
 # Thoughts panel: dock, keys, event, layout
 
-- **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, revision 4. UX: `2026-11-10-thoughts-panel-right-ux.md` (approved 2026-11-10).
-- **Owner decision 2026-11-10:** the visible right dock ships after F3 S1 s1a to s1d (PR #118: s1a, s1b1, s1b2, s1b3, s1c, s1d). Until then every window passes `dock="bottom"` to `PanelLayout`, and Scratchpad gets no `onDockChange`, so it shows no dock control.
+- **Design:** `docs/superpowers/specs/2026-11-10-thoughts-panel-architecture.md`, revision 5. UX: `2026-11-10-thoughts-panel-right-ux.md` (approved 2026-11-10).
+- **Owner decision 2026-11-10:** the visible right dock ships after F3 S1 s1a to s1d (PR #118, merged: s1a, s1b1, s1b2, s1b3, s1c, s1d). Until then every window passes `dock="bottom"` to `PanelLayout`, and Scratchpad gets no `onDockChange`, so it shows no dock control.
 - Scratchpad's `placement` and `slot` props are optional until step 3a, which makes them required; with `placement` absent it is the bottom dock as today. `onDockChange` stays optional.
 
 ## Setting
