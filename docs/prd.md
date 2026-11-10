@@ -10,8 +10,8 @@ approval, and the change is noted in that section's history.
 
 | ID | Feature | Status |
 |---|---|---|
-| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
-| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Draft, revision 6, 2026-11-10 (answers the delta review of revision 5; five slices) |
+| F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9l adds a cross-reference to F3 D14, signed off by the owner 2026-11-10) |
+| F3 | [Each sub-terminal has its own file and code viewer](#f3-each-sub-terminal-has-its-own-file-and-code-viewer) | Approved 2026-11-10 (owner), revision 6 (every open question, OQ-5 to OQ-12, answered at its recommendation; five slices; not sharded) |
 
 ---
 
@@ -27,8 +27,9 @@ approval, and the change is noted in that section's history.
   revision 9h delete's left-behind-process and part-way cases, revision 9i
   the text check's restatement of that case's limit, revision 9j the final
   text check's second restatement of that limit and its widening of that case,
-  and revision 9k the slice-1 gaps raised by the starter draft and the UX spec
-  (confirmed by the owner 2026-11-08). Not sharded.
+  revision 9k the slice-1 gaps raised by the starter draft and the UX spec
+  (confirmed by the owner 2026-11-08), and revision 9l a cross-reference to F3
+  D14 (owner sign-off 2026-11-10). Not sharded.
 - **Source:** the owner's intent, 2026-11-08: *"I want the ADE to be a AI Agent for
   Engineers to build their persona based on their roles and responsibility that they
   can use for multiple work opportunities."* The owner also wants the behaviours of
@@ -289,6 +290,11 @@ approval, and the change is noted in that section's history.
     `/private/tmp` (`/tmp`) and `/var/tmp` are refused like the OS temp folder,
     and a missing engagements folder with engagements registered in it is refused
     as registered, even when its parent is missing too (an unmounted drive).
+  - 2026-11-10, revision 9l: cross-reference to F3 D14; no requirement changed;
+    owner sign-off 2026-11-10. F1.8 gains one line: the F1 stories that deliver
+    PE-4 AC4 and PE-13 AC5 carry F3's [Second] criteria if they merge into `main`
+    after the F3 story named for them (F3 D14, F3.8,
+    `.ade/context/f3-merges-second.md`).
 
 ### F1.1 Glossary and definitions
 
@@ -1825,7 +1831,11 @@ ranking and indexing design are the architect's.
      The scenario gains closing A from inside, its reopening by the default profile,
      and the restored-workspace positive control.
   7. The flag story, including PE-13 AC7's release-build test.
-- **F3 cross-reference:** when slice 4 or 6 is sharded, the story delivering PE-4 AC4 carries F3's VV-13, and the one delivering PE-13 AC5 the [Second] halves of F3's VV-6 AC5 and VV-10 AC6, if it merges into `main` after the F3 story named for them (F3 D14, F3.8, `.ade/context/f3-merges-second.md`).
+- **F3 cross-reference:** when the story delivering PE-4 AC4 or PE-13 AC5 is
+  sharded, the story delivering PE-4 AC4 carries F3's VV-13, and the one
+  delivering PE-13 AC5 the [Second] halves of F3's VV-6 AC5 and VV-10 AC6, if it
+  merges into `main` after the F3 story named for them (F3 D14, F3.8,
+  `.ade/context/f3-merges-second.md`).
 - **Workspace and focus terminals.** Restoring tabs, panes and sub-terminals of the
   main window builds on today's session store; sub-terminals opened by hand are
   already shipped and saved there. Saving and restoring tabs in other windows is new
@@ -2304,12 +2314,15 @@ clarification for slice 0.
 <!-- F3 begins -->
 ## F3: Each sub-terminal has its own file and code viewer
 
-- **Status:** Draft, revision 6, 2026-11-10. Revision 3 was blocked by the
-  re-review on N1, with majors N2 to N5; revision 4 answered them. The delta review
+- **Status:** Approved 2026-11-10 (owner), revision 6. Every open question
+  (OQ-5 to OQ-12) is answered at its recommendation (F3.10). Revision 3 was
+  blocked by the re-review on N1, with majors N2 to N5; revision 4 answered them. The delta review
   of revision 4 closed N2, N4, N5 and the minors and blocked on B1 and B2, with
   majors M1 to M3 and six minors; revision 5 answers them. The delta review of
   revision 5 closed every revision-4 finding and blocked on N1, with major N2 and
-  minors m1 to m5; revision 6 answers them. Not approved, not sharded.
+  minors m1 to m5; revision 6 answers them. The final review of revision 6 left
+  three minors: the third is applied in F1.8 (revision 9l), the other two go to
+  sharding (F3.9). Not sharded.
 - **Number:** F2 is taken by the open PRD for agentic-environment onboarding (PR #98).
   If that PR is withdrawn, this stays F3.
 - **Source:** the owner, 2026-11-10: *"each tab has to have their own file viewer,
@@ -2329,7 +2342,10 @@ clarification for slice 0.
   - **OQ-3:** yes, Move to New Window windows get both panels with the same per-view
     behaviour (D6);
   - **OQ-4:** yes, non-terminal tabs show a folder of their own (D7);
-  - **OQ-5:** not answered; the recommended 500 stays as the default (D8).
+  - **OQ-5:** not answered with revision 1; answered 2026-11-10 with the rest.
+
+  On 2026-11-10 the owner approved revision 6 and answered OQ-5 to OQ-12, each at
+  its recommendation (F3.10), and signed off F1.8's one-line cross-reference.
 - **History:**
   - 2026-11-10, revision 1: first draft, from the owner's decisions above.
   - 2026-11-10, revision 2: the owner's answers to OQ-1 to OQ-4 folded in. Added
@@ -2387,6 +2403,15 @@ clarification for slice 0.
     the store is re-imported after `vi.resetModules` (m2); sequence numbers are
     renumbered when states move between windows (m4); the scrum-master names the
     one S1 story that carries each conditional criterion (m5).
+  - 2026-11-10, approval: the owner approved revision 6. OQ-5 to OQ-12 answered at
+    their recommendations: 500 expanded folders (OQ-5); the HTML position only with
+    the CSP and sandbox unchanged, else dropped (OQ-6); one fallback chain (OQ-7);
+    slices in the order S1, S2, S4, S5, S3 (OQ-8); option (a), code-viewer stories
+    3 and 5 land first and F3 replaces story 6 and the PDF-reload exclusion (OQ-9);
+    real-webview checks later, not blocking (OQ-10); caps of 32 KB and 256 KB
+    (OQ-11); the merges-second rule (OQ-12). The owner signed off F1.8's
+    cross-reference (F1 revision 9l), worded per the final review's minor 3; its
+    minors 1 and 2 are left to sharding (F3.9). No requirement changed.
 
 ### F3.1 Terms
 
@@ -2650,9 +2675,8 @@ PDFs beside them; sometimes moving a tab to its own window.
   folder these tabs show today (they show the previous terminal's); only the
   orchestrator's project folder waits for S4. The fallback chain for the fleet and
   for the orchestrator before planning is the PM's extension of the owner's browser
-  rule (OQ-7).
-- **D8. At most 500 expanded folders per view.** The owner did not answer OQ-5, so
-  the recommended cap stands as the default. Byte caps (VV-7 AC6) bound the saved
+  rule, accepted by the owner 2026-11-10 (OQ-7).
+- **D8. At most 500 expanded folders per view** (owner, 2026-11-10, OQ-5). Byte caps (VV-7 AC6) bound the saved
   size whatever the paths' length.
 - **D9. F3 ships in five slices** (F3.8). Slice 1 is the owner's original request,
   as small as it can be without breaking anything that works today, and is useful
@@ -2666,8 +2690,9 @@ PDFs beside them; sometimes moving a tab to its own window.
   takes a `previewPath` if one was saved. Where F3 and the plan disagree, F3
   replaces the plan: VV-6 replaces story 6's restart part, VV-4 AC3 (S5) its Reopen
   Closed Tab part, and VV-8 AC8 (S2) replaces the plan's exclusion of the PDF page
-  and zoom across a live reload (owner's OQ-2 answer). The recommended order is in
-  OQ-9.
+  and zoom across a live reload (owner's OQ-2 answer). Order (owner, 2026-11-10,
+  OQ-9 option (a)): stories 3 and 5 land before S1, and F3 replaces story 6 and
+  the plan's PDF-reload exclusion; story 6 is not built.
 - **D11. Viewer state stores no raw file text; the digest is for size, not
   secrecy.** For a Markdown anchor, viewer state stores the heading's anchor digest
   (F3.1, at least 128 bits) and occurrence, never the slug or heading text.
@@ -3434,8 +3459,8 @@ into stories; the tags in F3.7 say which acceptance criteria each slice delivers
 
 | Slice | Delivers | Acceptance criteria | Depends on |
 |---|---|---|---|
-| **S1. Per-view state, main window** (MVP) | Each view in the main window has its own root, expanded folders, open file with code position, and layout; non-terminal tabs list their own folder or their opener's; restart with defaults, limits, missing files; stays on the machine; no extra saving | every [S1] criterion: VV-1 AC1 to AC4, AC5 (code), AC6 to AC8; VV-2 AC1, AC2; VV-3; VV-4 AC2 (main window part); VV-6 AC1, AC3, AC4; VV-7 AC1 to AC3, AC5 (widths), AC6, AC7; VV-8 AC1 to AC4, AC9; VV-9 AC1 to AC5 (S1 parts); VV-11 AC1 to AC5 (S1 parts); VV-12 AC1, AC2, AC4 (S1 part); VV-14. **Not** VV-2 AC3, VV-12 AC3, VV-12 AC4's [Second] part or VV-13, unless S1 merges second: see "Merges second" below | nothing required. Recommended after code-viewer stories 3 and 5 (OQ-9) |
-| **S2. Positions in the other viewers** (Next) | Markdown, HTML, PDF and Word positions, kept across switches, restarts, changed content and live reloads | every [S2] criterion: VV-1 AC5 (when a restore happens, Markdown, PDF, Word, HTML, image); VV-6 AC2; VV-7 AC4, AC5 (zoom); VV-8 AC5 to AC8; VV-9 AC1 and AC5 (S2 parts) | S1. HTML waits for OQ-6 if the reporter cannot meet VV-1 AC5's rules; the other kinds do not wait. Real-webview checks wait for OQ-10 |
+| **S1. Per-view state, main window** (MVP) | Each view in the main window has its own root, expanded folders, open file with code position, and layout; non-terminal tabs list their own folder or their opener's; restart with defaults, limits, missing files; stays on the machine; no extra saving | every [S1] criterion: VV-1 AC1 to AC4, AC5 (code), AC6 to AC8; VV-2 AC1, AC2; VV-3; VV-4 AC2 (main window part); VV-6 AC1, AC3, AC4; VV-7 AC1 to AC3, AC5 (widths), AC6, AC7; VV-8 AC1 to AC4, AC9; VV-9 AC1 to AC5 (S1 parts); VV-11 AC1 to AC5 (S1 parts); VV-12 AC1, AC2, AC4 (S1 part); VV-14. **Not** VV-2 AC3, VV-12 AC3, VV-12 AC4's [Second] part or VV-13, unless S1 merges second: see "Merges second" below | nothing required by its criteria. Lands after code-viewer stories 3 and 5 (owner, OQ-9 (a)) |
+| **S2. Positions in the other viewers** (Next) | Markdown, HTML, PDF and Word positions, kept across switches, restarts, changed content and live reloads | every [S2] criterion: VV-1 AC5 (when a restore happens, Markdown, PDF, Word, HTML, image); VV-6 AC2; VV-7 AC4, AC5 (zoom); VV-8 AC5 to AC8; VV-9 AC1 and AC5 (S2 parts) | S1. HTML position only if the architect confirms the reporter meets VV-1 AC5's rules under the unchanged CSP and sandbox, else dropped (OQ-6); the other kinds do not wait. Real-webview checks join later and do not block S2 (OQ-10) |
 | **S3. Detached windows** (Next) | Both panels in detached windows, states carried in, files opening in the window | every [S3] criterion: VV-1 AC4 (detached part); VV-4 AC2 (detached part); VV-6 AC5 ([S3] half); VV-10 AC1 to AC5, AC6 ([S3] half), AC7, AC8. **Not** the [Second] halves of VV-6 AC5 and VV-10 AC6, unless S3 merges second: see "Merges second" below | S1. Positions of other kinds ride along once S2 is in. Saving detached states arrives with F1 PE-13 AC5 (D6) |
 | **S4. Orchestrator project folder** (Next) | An orchestrator tab lists its project folder; a gone folder that comes back is used again | every [S4] criterion: VV-9 AC1 (S4 part); VV-11 AC1 and AC3 (S4 parts) | S1 |
 | **S5. Carrying state to copies and reopened tabs** (Next) | Duplicate and Reopen Closed Tab bring the source's viewer state; the "Hub removed" rule | every [S5] criterion: VV-3 AC2 (exception); VV-4 AC1, AC3; VV-7 AC1 (exception); VV-5 (only if F2 lands) | S1 |
@@ -3463,7 +3488,7 @@ state outside its profile; S3 must not write a detached view's state anywhere
 but with its tab); it is only its test that waits.
 
 S2 to S5 do not depend on each other and can be built in any order or in parallel
-after S1. Suggested order: S1, then S2 (it completes OQ-2, the most-used part),
+after S1. Order (owner, 2026-11-10, OQ-8): S1, then S2 (it completes OQ-2, the most-used part),
 then S4 (small), then S5, then S3 (the most new UI, and it gains most once
 sub-terminals story 5 lets tabs with sub-terminals move). The owner may reorder S2
 to S5 without changing any criterion (OQ-8).
@@ -3477,7 +3502,8 @@ to S5 without changing any criterion (OQ-8).
   - **ADR 0009:** F3 replaces ADR 0009's per-tab `previewPath` model with an open
     file per view (D3, D10). Write an amendment to ADR 0009 or a successor ADR that
     supersedes that part of it, and say which of the code-viewer plan's stories 3,
-    5 and 6 it changes, once the owner answers OQ-9. The PRD does not edit ADRs;
+    5 and 6 it changes, per the owner's OQ-9 answer (a): stories 3 and 5 land
+    first and unchanged, story 6 is replaced. The PRD does not edit ADRs;
   - **matching states to views (D15):** inline in each view's saved record, or a
     separate store under a stable key written in that record; never a tab, view or
     pane id. Choose one and record it;
@@ -3493,8 +3519,9 @@ to S5 without changing any criterion (OQ-8).
   - **S2:** the geometry seam (D13); how each viewer reports and restores its
     position and signals "finished drawing" (VV-1 AC5); the anchor digest function
     (D11: at least 128 bits, no key needed, not a secrecy measure); whether an external `'self'` reporter can run in the sandboxed `srcdoc`
-    frame under the unchanged CSP (VV-1 AC5, OQ-6). Amend the code-viewer plan's PDF
-    reload exclusion as D10 says, once the owner answers OQ-9;
+    frame under the unchanged CSP and sandbox (VV-1 AC5, OQ-6; if not, the HTML
+    position is dropped). Amend the code-viewer plan's PDF reload exclusion as
+    D10 says (OQ-9 (a));
   - **S3:** how a detached window receives its views' states. ADR 0017 replaces
     `detachWindow.ts`'s JavaScript window creation with a Rust command, so plan the
     hand-over against that command, not today's window URL. Also how the detached
@@ -3537,16 +3564,24 @@ to S5 without changing any criterion (OQ-8).
     6 reads the note and writes the mirror criterion into the story it creates;
   - either way, the obligation is recorded on both sides before either story
     is built, so whichever merges second is held to it at its review.
-- **Adversarial reviewer:** review this revision before approval.
+
+  Two minors from the final review of revision 6 are left to sharding; write them
+  into the S1 story that carries VV-12 AC4:
+  - VV-12 AC4's test uses `startAutoSave({ snapshots: false })`, so
+    `state_snapshot` then drops off the test's allowlist of commands;
+  - the allowlist's read commands must be checked so that none of them writes.
+- **Adversarial reviewer:** revision 6 passed the final review (three minors: the
+  third applied in F1.8, the other two left to sharding above).
 
 ### F3.10 Open questions for the owner
 
-OQ-1 to OQ-4 were answered on 2026-11-10 (see Source). OQ-5 was not, so its
-recommendation stands as the default (D8). Revision 2's question about Reopen Closed
+None open. OQ-1 to OQ-4 were answered on 2026-11-10 (see Source), and OQ-5 to
+OQ-12 on 2026-11-10 with the approval of revision 6, each at its recommendation.
+Revision 2's question about Reopen Closed
 Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
 
 - **OQ-5. Expanded-folder cap.** 500 per view (VV-7 AC2)? *Default: 500* (D8),
-  unless the owner says otherwise.
+  unless the owner says otherwise. **Answered 2026-11-10:** 500 (D8).
 - **OQ-6. HTML position.** The HTML page runs in a sandboxed `srcdoc` frame. That
   frame inherits the app's Content Security Policy, which allows scripts only from
   the app itself (`script-src 'self'`, no inline scripts), so the risk is not the
@@ -3558,14 +3593,17 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   position (the HTML file is remembered and opens at its top)? *Recommend accept*,
   provided the architect confirms the reporter runs under the unchanged CSP and
   sandbox; drop the HTML position if not, rather than change either.
+  **Answered 2026-11-10:** accepted as recommended; the HTML position only with
+  the CSP and sandbox unchanged, else dropped.
 - **OQ-7. The fallback folder.** The owner gave "the folder of the terminal view it
   was opened from, else the home folder" for a browser tab. Apply the same chain to
   the fleet tab, to an orchestrator tab before it has a project folder, and to any
   tab whose own folder is gone (D7)? *Recommend yes*: one rule, and the file browser
-  is never empty.
+  is never empty. **Answered 2026-11-10:** yes, one fallback chain (D7).
 - **OQ-8. Slices.** Ship F3 as the five slices of F3.8, S1 first and then S2, S4,
   S5, S3? *Recommend yes*: S1 is the original ask, is useful alone, and takes away
-  nothing that works today.
+  nothing that works today. **Answered 2026-11-10:** yes, S1, S2, S4, S5, S3
+  (F3.8).
 - **OQ-9. The code-viewer plan's open stories** (ADR 0009, D10). Stories 3, 5 and 6
   overlap F3. Options: (a) land stories 3 and 5 before F3 S1, and let F3 replace
   story 6 (S1's VV-6 for its restart part, S5's VV-4 AC3 for its Reopen Closed Tab
@@ -3574,7 +3612,8 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   approved and independent of where state lives, and S1 then rests on their
   behaviour (file browser clicks open the panel, the "Deleted on disk" banner);
   story 6 saves the file per tab, which S1 replaces at once, so building it first is
-  work thrown away.
+  work thrown away. **Answered 2026-11-10:** (a); stories 3 and 5 land first, and
+  F3 replaces story 6 and the PDF-reload exclusion (D10).
 - **OQ-10. Real-webview checks for S2.** S2's criteria are tested over a geometry
   seam (D13), which proves the arithmetic but not that a real webview lands on the
   heading. Add one real-webview check per kind when the desktop e2e harness (ADR
@@ -3582,10 +3621,12 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   approves? *Recommend yes, but not as a blocker for S2*: S2 is Done on the seam
   tests under the current verification command, and the real-webview checks join
   when the harness and the owner's approval of its line are in place.
+  **Answered 2026-11-10:** yes, later and not blocking (D13).
 - **OQ-11. Byte caps.** 32 KB per view and 256 KB in all for saved viewer state
   (VV-7 AC6)? *Recommend yes*: far above normal use (a view with 100 expanded folders
   of 100-character paths is about 10 KB), and small next to the session's 5 MB
   limit. *Default: these numbers*, unless the owner says otherwise.
+  **Answered 2026-11-10:** yes, 32 KB per view and 256 KB in all (VV-7 AC6).
 - **OQ-12. Criteria that merge second** (D14, F3.8). Move to New Tab carrying the
   state (VV-2 AC3), nothing to the phone (VV-12 AC3), viewer state in F1's
   isolation scan (VV-12 AC4's [Second] part) and no engagement paths in the
@@ -3600,4 +3641,5 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   note and F1.8's cross-reference)? *Recommend yes*: it is the
   rule D6 uses, it is checkable at review time, two stories built at once cannot
   both skip it, S1 stays testable today, and no requirement is dropped.
+  **Answered 2026-11-10:** yes, the merges-second rule (D14, F3.8).
 <!-- F3 ends -->
