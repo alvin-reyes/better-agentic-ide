@@ -1825,6 +1825,7 @@ ranking and indexing design are the architect's.
      The scenario gains closing A from inside, its reopening by the default profile,
      and the restored-workspace positive control.
   7. The flag story, including PE-13 AC7's release-build test.
+- **F3 cross-reference:** when slice 4 or 6 is sharded, the story delivering PE-4 AC4 carries F3's VV-13, and the one delivering PE-13 AC5 the [Second] halves of F3's VV-6 AC5 and VV-10 AC6, if it merges into `main` after the F3 story named for them (F3 D14, F3.8, `.ade/context/f3-merges-second.md`).
 - **Workspace and focus terminals.** Restoring tabs, panes and sub-terminals of the
   main window builds on today's session store; sub-terminals opened by hand are
   already shipped and saved there. Saving and restoring tabs in other windows is new
@@ -2303,11 +2304,12 @@ clarification for slice 0.
 <!-- F3 begins -->
 ## F3: Each sub-terminal has its own file and code viewer
 
-- **Status:** Draft, revision 5, 2026-11-10. Revision 3 was blocked by the
+- **Status:** Draft, revision 6, 2026-11-10. Revision 3 was blocked by the
   re-review on N1, with majors N2 to N5; revision 4 answered them. The delta review
   of revision 4 closed N2, N4, N5 and the minors and blocked on B1 and B2, with
-  majors M1 to M3 and six minors; revision 5 answers them. Not approved, not
-  sharded.
+  majors M1 to M3 and six minors; revision 5 answers them. The delta review of
+  revision 5 closed every revision-4 finding and blocked on N1, with major N2 and
+  minors m1 to m5; revision 6 answers them. Not approved, not sharded.
 - **Number:** F2 is taken by the open PRD for agentic-environment onboarding (PR #98).
   If that PR is withdrawn, this stays F3.
 - **Source:** the owner, 2026-11-10: *"each tab has to have their own file viewer,
@@ -2370,6 +2372,21 @@ clarification for slice 0.
     stable key is classified as viewer state. Minor fixes: a sequence number
     orders expansions and "last in sight", the Monaco stub needs an extension, an
     immediate folder fetch on show counts, F2 is cited as proposed.
+  - 2026-11-10, revision 6: answers the delta review of revision 5. VV-12 AC4's S1
+    test matches `persistence.ts`: `state_write` is allowed when every key in its
+    `entries` passes `isPersistedKey`, every other file-writing command is banned,
+    and the test runs with auto-save started; the `localStorage` check covers the
+    keys whose written value carries a viewer-state marker (N1, m3). D14 no longer
+    claims every dependent story is sharded: F1's PE-4 AC4 and PE-13 AC5 are not
+    (F1's initiative covers slices 0 and 1), so a "not yet sharded" case records
+    the obligation in a `.ade/context/` note and in F1.8, which gains a one-line
+    cross-reference; PE-13 AC5 / S3 joins the "Merges second" table and F3.9's
+    mirror list, and the saved half of VV-10 AC6 (and of VV-6 AC5) is [Second],
+    out of S3's gate (N2). Minor fixes: the new → old → new fixture's ids are
+    those the previous release's code would produce (m1); every module holding
+    the store is re-imported after `vi.resetModules` (m2); sequence numbers are
+    renumbered when states move between windows (m4); the scrum-master names the
+    one S1 story that carries each conditional criterion (m5).
 
 ### F3.1 Terms
 
@@ -2416,6 +2433,17 @@ changed here except as VV-11 says.
   numbers, not of the times: two events in the same millisecond, or a system clock
   set backwards, never change the order. (The architect may drop the times and
   keep only the sequence numbers; the order is the same.)
+  **Across windows** (S3): each window's counter is its own, so numbers from two
+  windows are never compared as they stand. When viewer states enter a window's
+  session from another window (Move to New Window, a detached tab's states saved
+  into or restored in the main window's session, D6, or any later move back),
+  they are **renumbered on arrival**: their numbers keep their own relative
+  order and are shifted to start one above the receiving window's highest
+  number, and that window's next value is one above the highest after the shift.
+  So within one view and within one window's session the order is always
+  defined, and states that arrive count as more recent than everything already
+  there. No order is defined between states held in different windows, and no
+  rule of F3 needs one.
 - **Position, per kind.** The preview panel's kinds, the components that show them
   (`src/components/viewer/`, all used through `PreviewPanel.tsx`), and what
   position means for each:
@@ -2596,9 +2624,11 @@ PDFs beside them; sometimes moving a tab to its own window.
     stay unsaved until some later feature saves them. The rule below applies to
     PE-13 AC5 and to any such later feature, in either profile: once a detached tab
     is saved, its views' viewer states are saved with it, by VV-6 and every limit of
-    VV-7, VV-12 and VV-13, and restored with it. Of the story that saves detached
-    tabs and F3 S3, whichever **merges second** carries this and its test, by the
-    rule of D14.
+    VV-7, VV-12 and VV-13, and restored with it, their sequence numbers renumbered
+    on arrival (F3.1). Of the story that saves detached tabs and F3 S3, whichever
+    **merges second** carries this and its test, by the rule of D14. The story
+    that delivers PE-13 AC5 (F1 slice 6) is not sharded yet, so the obligation is
+    recorded by D14's "not yet sharded" case (F3.8, F1.8).
   - There is no move back today (the sub-terminals UX spec says "No move back in").
     Any later move back carries the views' states unchanged.
 - **D7. Non-terminal tabs show a folder of their own** (owner, 2026-11-10, OQ-4).
@@ -2667,17 +2697,35 @@ PDFs beside them; sometimes moving a tab to its own window.
   real-webview check per kind joins when the desktop e2e harness (ADR 0030, PR #108)
   exists and the owner approves its line in the verification command (OQ-10).
 - **D14. Criteria that depend on unbuilt work go with whichever story merges
-  second.** Some S1-scoped behaviours rest on stories that are not built yet: Move
+  second.** Some F3 behaviours rest on stories that are not built yet: Move
   to New Tab (sub-terminals story 5), the phone relay's tab payload
-  (`remote_tabs_set`, phone-watch story 8) and the default profile's knowledge of
-  engagements and F1's isolation test (F1 PE-4). Those stories are already sharded
-  (their `tickets.toml` under `_bmad-output/`), so "sharded second" would always
-  put the criteria in S1, and "ships second" is known only after the fact. The one
-  trigger is therefore **merge order into `main`**, checked at review:
+  (`remote_tabs_set`, phone-watch story 8), F1's isolation test (F1 PE-4 AC9), the
+  default profile's knowledge of engagements (F1 PE-4 AC4) and the saving of
+  detached tabs (F1 PE-13 AC5, which meets F3 S3, not S1). Not all of them are
+  sharded:
+  - **sharded:** sub-terminals story 5, phone-watch story 8 and the F1 story that
+    delivers PE-4 AC9 (the isolation test, in F1's slice 1 tickets) each have a
+    ticket in a `tickets.toml` under `_bmad-output/`;
+  - **not yet sharded:** PE-4 AC4 (F1 slice 4) and PE-13 AC5 (F1 slice 6). F1's
+    sharded initiative covers slices 0 and 1 only and names PE-13 AC5 restore as
+    out of it
+    (`_bmad-output/initiative-personas-and-engagements/initiative-personas-and-engagements.md`),
+    and no ticket names PE-4 AC4.
+
+  Sharding order therefore cannot be the trigger (it would differ by row and
+  could put a criterion on a story that does not exist yet), and "ships second" is
+  known only after the fact. The one trigger is **merge order into `main`**,
+  checked at review:
   - each such criterion is tagged **[Second]** and is a requirement on F3 from the
-    start; it is written, as a conditional criterion, into the F3 S1 story **and**
-    into the dependent story's ticket when S1 is sharded (F3.9), so both sides
-    carry the obligation;
+    start; it is written, as a conditional criterion, into the F3 story of its
+    slice (S1, or S3 for PE-13 AC5) when that slice is sharded (F3.9);
+  - on the other side: if the dependent story has a ticket, the mirror
+    conditional criterion is written into that ticket at the same time. If it is
+    **not yet sharded**, the obligation is recorded in the `.ade/context/` note of
+    F3.9 and in F1's own section (F1.8 carries a cross-reference line naming these
+    F3 criteria), so that F1's sharding of that slice writes the mirror criterion
+    into the story it creates. Either way both sides carry the obligation before
+    either is built;
   - whichever of the two stories **merges into `main` second** must include the
     criterion and its test. Its reviewer checks against `main` as it stands at
     that review: if the other story is already on `main`, the criterion and its
@@ -2714,10 +2762,11 @@ PDFs beside them; sometimes moving a tab to its own window.
 
 Each acceptance criterion is tagged with the slice that delivers it: **[S1]** to
 **[S5]** (F3.8). A requirement without tags is [S1]. A criterion tagged
-**[Second]** depends on a story that is not built yet. It is not in S1's Done
-gate unless S1 merges into `main` second; whichever of the two stories merges
-second carries it and its test, checked at its review against `main` (D14; F3.8
-names the stories and gate for each).
+**[Second]** depends on a story that is not built yet. It is not in its slice's
+Done gate (S1's, or S3's for VV-6 AC5 and VV-10 AC6) unless that slice's story
+merges into `main` second; whichever of the two stories merges second carries it
+and its test, checked at its review against `main` (D14; F3.8 names the stories
+and gate for each).
 
 #### VV-1. Each view has its own panels (MVP)
 
@@ -2947,8 +2996,11 @@ state.
    their positions after a restart.
 3. **[S1]** Viewer state is saved only on this machine (VV-12).
 4. **[S1]** A view restored without viewer state gets the defaults (VV-9).
-5. **[S3]** Detached tabs are not saved today, so neither are their views' states;
-   once a detached tab is saved, its views' states are saved with it (D6).
+5. **[S3]** Detached tabs are not saved today, so neither are their views' states.
+   **[Second]** Once a detached tab is saved, its views' states are saved with it
+   (D6); this half goes with whichever of F3 S3 and the F1 story that delivers
+   PE-13 AC5 merges into `main` second, and is tested by VV-10 AC6's [Second]
+   test (D14, F3.8).
 
 #### VV-7. Limits (MVP)
 
@@ -3123,28 +3175,39 @@ Replaces revision 2's one-time migration (D12).
      field and any stable key, D15). That field list is the previous release's
      saved-session types (`SavedTab`, `SavedView` and the pane records in
      `tabStore.ts` at that release's tag), written into the test. The saved `id`
-     of every tab, view and pane in the fixture is the one the previous release
-     would write: its restore numbers tabs, views and panes from 1 in saved order
-     (`newTabId`, `newViewId`, `newPaneId`), and anything it creates during the
-     run takes the next number.
+     of every tab, view and pane in the fixture is **the id the previous
+     release's code would produce** in that run, by its own counters
+     (`newTabId`, `newViewId`, `newPaneId`) and the order in which its code calls
+     them on load, restore and create; the test writes down how it derived them
+     from that release's code. (No simple rule is stated here because the code
+     has none: today the store mints `tab-1` and `pane-1` for its initial tab
+     when the module loads, so tabs restored by `loadSession` start at `tab-2`,
+     `tabStore.ts:349`.)
      - **Fresh modules.** Each simulated run (the F3 save and the F3 load) starts
-       with `vi.resetModules()` and a new import of the tab store, so its id
-       counters (module-level, `tabStore.ts:220-224`) start from 0 as on a real
-       start. No other session test may leave the counters advanced for this one.
+       with `vi.resetModules()`, so the id counters (module-level,
+       `tabStore.ts:220-224`) start from 0 as on a real start, and is then
+       followed by a new import of **every module the run uses that holds the
+       store**: the tab store itself and each module that imports it (the
+       components rendered, the persistence and session code, `useTerminal`).
+       A module imported before the reset keeps the old store and the old
+       counters, so no reference from before the reset may be used after it. No
+       other session test may leave the counters advanced for this one.
      - **Steps.** Run 1 (F3 build) saves tabs T1 (own view + sub-terminal S), T2
        and T3, each view with a distinct state; any separate viewer-state store is
        kept as written. Old run A (fixture): loads that session, closes T1, moves
        T3 before T2, and saves. Old run B (fixture): loads run A's save, opens a
        new terminal tab T4 with a sub-terminal, and saves. Each old run's ids are
-       rewritten by the numbering rule above. Run 2 (F3 build, fresh modules)
-       loads run B's save, with the separate store, if any, still holding every
+       those the previous release's code would produce (above). Run 2 (F3
+       build, fresh modules) loads run B's save, with the separate store, if any, still holding every
        state run 1 wrote.
      - **Precondition, checked by the test.** At least one record in run B's
        save carries a saved `id` (tab or view) that belonged to a different view
-       in run 1's save (for example T3, now first, saved as `tab-1`, which was
-       T1's id in run 1; and T4, saved as `tab-3`, which was T3's). The
-       test fails its own setup if the fixture does not have this, so an
-       implementation that matches states by saved `id` fields cannot pass.
+       in run 1's save (with the close and the reorder, T3 or T4 ends up with an
+       id that another tab carried in run 1; which one depends on the ids the
+       previous release's code produces, so the test computes it from the
+       fixture rather than assuming it). The test fails its own setup if the
+       fixture does not have this, so an implementation that matches states by
+       saved `id` fields cannot pass.
      - **Expected.** Run 2 loads without error; every view shows either its own
        run-1 state or the defaults of AC1; no view shows another view's state: T2
        and T3 do not take each other's, T4 and its sub-terminal get the defaults,
@@ -3193,15 +3256,21 @@ costs me my files.
    specifies, but the remembered widths are not changed by the fit: only a drag
    changes them. Test: move a view whose file browser is 300 px and preview panel
    700 px; resize nothing; the view's remembered widths are still 300 and 700 px.
-6. **[S3] Saved with the tab, or not at all (D6).** While detached tabs are not
-   saved, a detached window's views' states are never written, and the main window's
-   session save holds nothing of them. Once a detached tab is saved (F1 PE-13 AC5 or
-   any later feature), its views' states are saved and restored with it under every
-   rule of VV-6, VV-7, VV-12 and VV-13; whichever of that story and S3 merges into
-   `main` second carries this (D14). Tests:
-   today, detach T, change its state, quit, start: the saved session has no viewer
-   state of T; with detached-tab saving in place, the same steps bring T back in the
-   main window with its views' states.
+6. **Saved with the tab, or not at all (D6).**
+   - **[S3] Not saved while detached tabs are not.** While detached tabs are not
+     saved, a detached window's views' states are never written, and the main
+     window's session save holds nothing of them. Test: detach T, change its
+     state, quit, start: the saved session has no viewer state of T.
+   - **[Second] Saved with a saved detached tab.** Once a detached tab is saved (F1
+     PE-13 AC5 or any later feature), its views' states are saved and restored with
+     it under every rule of VV-6, VV-7, VV-12 and VV-13, their sequence numbers
+     renumbered on arrival (F3.1). Not in S3's Done gate unless S3 merges second:
+     whichever of F3 S3 and the F1 story that delivers PE-13 AC5 merges into
+     `main` second carries this and its test (D14, F3.8). Test: with detached-tab
+     saving in place, detach T, change its views' states, quit, start: T comes
+     back in the main window with its views' states, and an expansion made after
+     the restart in T's view is newer, by sequence number, than every expansion
+     T brought back.
 7. **[S3] Closing.** Closing a detached window discards its views' states, as
    closing a tab does. It is not offered by Reopen Closed Tab, as today.
 8. **[S3] Detached views are views.** VV-2 AC1, VV-3, VV-7 and VV-8 apply inside a
@@ -3265,16 +3334,33 @@ show a folder that belongs to it, instead of whichever terminal I was last in.
    a tab with viewer state holds none of the markers and none of the stable keys.
 4. In an engagement's own instance (F1), viewer state is kept in that instance's
    profile like the rest of its session, and nowhere else.
-   - **[S1] Only the known local keys.** Viewer state is written only to
-     `localStorage` keys that are `ade-session` or in `PERSISTED_KEYS`
-     (`src/lib/persistence.ts`), and never through a Tauri command that writes a
-     file. (F1 gives each profile its own webview storage, F1 D19, so those keys
-     are the profile's.) Test: with spies on `localStorage.setItem` and on the
-     Tauri `invoke` bridge, run every action that changes or saves viewer state
-     (a view switch, expand and collapse, opening a file, a position change, a
-     panel drag, a session save, and the trim and drop paths of VV-7 AC6 and
-     AC7): every key written is `ade-session` or in `PERSISTED_KEYS`, and no
-     `invoke` call carries any of the test's viewer-state path markers.
+   - **[S1] Only the known local keys, and to disk only through the state
+     store.** Viewer state is written only to `localStorage` keys that pass
+     `isPersistedKey` (`src/lib/persistence.ts`: the `PERSISTED_KEYS` set, which
+     holds `ade-session`, or the `ade-rec-` prefix). It reaches disk only the way
+     every persisted key does today: auto-save's flush sends it with
+     `invoke("state_write", { entries })` into the profile's own state folder.
+     No other Tauri command that writes a file carries it. (F1 gives each profile
+     its own webview storage, F1 D19, and its own app data, F1 D14, so those
+     keys and that folder are the profile's.) Test: start auto-save with `startAutoSave()` as
+     `src/lib/__tests__/persistence.test.ts` does (and undo it after with
+     `__resetForTests`), put spies on `localStorage.setItem` and on the Tauri
+     `invoke` bridge, run every action that changes or saves viewer state (a view
+     switch, expand and collapse, opening a file, a position change, a panel
+     drag, a session save, and the trim and drop paths of VV-7 AC6 and AC7), then
+     `flushNow()`. Expected:
+     - every `localStorage` key whose written value carries one of the test's
+       viewer-state markers passes `isPersistedKey`;
+     - every `state_write` call has an `entries` object whose every key passes
+       `isPersistedKey`;
+     - every other `invoke` call is to a command on an allowlist written in the
+       test, and that list holds no command that writes a file (today that rules
+       out, among others, `write_text_file`, `create_directory`,
+       `save_temp_image`, `state_restore_snapshot`, `vault_set`,
+       `sync_set_config`). `state_snapshot`, which auto-save calls on start, may
+       be on the list: it takes no arguments and only copies the profile's own
+       state folder that `state_write` wrote. The reviewer checks the allowlist
+       against the commands in `src-tauri/src`.
    - **[Second] Scanned with F1's isolation test.** F1's isolation test (PE-4
      AC9) also gives A's instance viewer state holding markers of A (an expanded
      folder, an open Markdown file scrolled past a heading, a non-terminal tab's
@@ -3287,8 +3373,8 @@ show a folder that belongs to it, instead of whichever terminal I was last in.
 Mirrors F1 PE-4 AC4 (approved): in the default profile, ADE puts no engagement's
 paths into its stores, and ADE sync never carries one. Applies once F1 PE-4 is
 built; before that there are no engagements and nothing to test. VV-13 goes with
-whichever of F3 S1 and the F1 story that delivers PE-4 AC4 merges into `main`
-second, so it is in S1's Done gate only if S1 merges second; its test runs under
+whichever of F3 S1 and the F1 story that delivers PE-4 AC4 (F1 slice 4, not yet
+sharded) merges into `main` second, so it is in S1's Done gate only if S1 merges second; its test runs under
 F1's D28 gate (D14, F3.8).
 
 1. **[Second]** In the default profile, saved viewer state never holds a path inside
@@ -3350,26 +3436,31 @@ into stories; the tags in F3.7 say which acceptance criteria each slice delivers
 |---|---|---|---|
 | **S1. Per-view state, main window** (MVP) | Each view in the main window has its own root, expanded folders, open file with code position, and layout; non-terminal tabs list their own folder or their opener's; restart with defaults, limits, missing files; stays on the machine; no extra saving | every [S1] criterion: VV-1 AC1 to AC4, AC5 (code), AC6 to AC8; VV-2 AC1, AC2; VV-3; VV-4 AC2 (main window part); VV-6 AC1, AC3, AC4; VV-7 AC1 to AC3, AC5 (widths), AC6, AC7; VV-8 AC1 to AC4, AC9; VV-9 AC1 to AC5 (S1 parts); VV-11 AC1 to AC5 (S1 parts); VV-12 AC1, AC2, AC4 (S1 part); VV-14. **Not** VV-2 AC3, VV-12 AC3, VV-12 AC4's [Second] part or VV-13, unless S1 merges second: see "Merges second" below | nothing required. Recommended after code-viewer stories 3 and 5 (OQ-9) |
 | **S2. Positions in the other viewers** (Next) | Markdown, HTML, PDF and Word positions, kept across switches, restarts, changed content and live reloads | every [S2] criterion: VV-1 AC5 (when a restore happens, Markdown, PDF, Word, HTML, image); VV-6 AC2; VV-7 AC4, AC5 (zoom); VV-8 AC5 to AC8; VV-9 AC1 and AC5 (S2 parts) | S1. HTML waits for OQ-6 if the reporter cannot meet VV-1 AC5's rules; the other kinds do not wait. Real-webview checks wait for OQ-10 |
-| **S3. Detached windows** (Next) | Both panels in detached windows, states carried in, files opening in the window | every [S3] criterion: VV-1 AC4 (detached part); VV-4 AC2 (detached part); VV-6 AC5; VV-10 | S1. Positions of other kinds ride along once S2 is in. Saving detached states arrives with F1 PE-13 AC5 (D6) |
+| **S3. Detached windows** (Next) | Both panels in detached windows, states carried in, files opening in the window | every [S3] criterion: VV-1 AC4 (detached part); VV-4 AC2 (detached part); VV-6 AC5 ([S3] half); VV-10 AC1 to AC5, AC6 ([S3] half), AC7, AC8. **Not** the [Second] halves of VV-6 AC5 and VV-10 AC6, unless S3 merges second: see "Merges second" below | S1. Positions of other kinds ride along once S2 is in. Saving detached states arrives with F1 PE-13 AC5 (D6) |
 | **S4. Orchestrator project folder** (Next) | An orchestrator tab lists its project folder; a gone folder that comes back is used again | every [S4] criterion: VV-9 AC1 (S4 part); VV-11 AC1 and AC3 (S4 parts) | S1 |
 | **S5. Carrying state to copies and reopened tabs** (Next) | Duplicate and Reopen Closed Tab bring the source's viewer state; the "Hub removed" rule | every [S5] criterion: VV-3 AC2 (exception); VV-4 AC1, AC3; VV-7 AC1 (exception); VV-5 (only if F2 lands) | S1 |
 
 **Merges second (D14).** These are F3 requirements whose tests need a story that
 is not built. Each goes with whichever of the two stories merges into `main`
 second; its reviewer checks against `main` at that review, and again before
-merging if the other story merged in between. The obligation is written into both
-stories' tickets at S1's sharding (F3.9).
+merging if the other story merged in between. The obligation is recorded on both
+sides when the F3 slice is sharded (F3.9): in the other story's ticket if it has
+one, otherwise ("not yet sharded") in the `.ade/context/` note and in F1.8's
+cross-reference line, so that F1's sharding of that slice writes it into the
+story it creates.
 
-| Criterion | The other story (not built) | If F3 S1 merges second | If the other story merges second | Gate |
-|---|---|---|---|---|
-| VV-2 AC3 (Move to New Tab carries the state) | Move to New Tab, sub-terminals story 5 (`_bmad-output/initiative-sub-terminals/epic-sub-terminals/tickets.toml`) | S1 carries the criterion and its test | sub-terminals story 5 carries them | the verification command (`docs/architecture.md`) |
-| VV-12 AC3 (nothing to the phone) | the relay's tab payload `remote_tabs_set`, phone-watch story 8 (`_bmad-output/initiative-phone-remote/epic-phone-watch/tickets.toml`) | S1 carries them | phone-watch story 8 carries them | the verification command |
-| VV-12 AC4, [Second] part (viewer state in F1's isolation scan) | F1's isolation test, the F1 story that delivers PE-4 AC9 (`_bmad-output/initiative-personas-and-engagements/`) | S1 carries them, joining PE-4 AC9's test | that F1 story carries them | F1 D28 (the verification command plus green CI runs of the isolation test on macOS, Linux and Windows) |
-| VV-13 AC1, AC2 (no engagement paths in the default profile) | the default profile's knowledge of engagements, the F1 story that delivers PE-4 AC4 (same folder) | S1 carries them, joining PE-4 AC4's test | that F1 story carries them | F1 D28 |
+| Criterion | F3 side | The other story (not built) | Sharded? | If the F3 story merges second | If the other story merges second | Gate |
+|---|---|---|---|---|---|---|
+| VV-2 AC3 (Move to New Tab carries the state) | S1 | Move to New Tab, sub-terminals story 5 (`_bmad-output/initiative-sub-terminals/epic-sub-terminals/tickets.toml`) | yes | S1 carries the criterion and its test | sub-terminals story 5 carries them | the verification command (`docs/architecture.md`) |
+| VV-12 AC3 (nothing to the phone) | S1 | the relay's tab payload `remote_tabs_set`, phone-watch story 8 (`_bmad-output/initiative-phone-remote/epic-phone-watch/tickets.toml`) | yes | S1 carries them | phone-watch story 8 carries them | the verification command |
+| VV-12 AC4, [Second] part (viewer state in F1's isolation scan) | S1 | F1's isolation test, the F1 story that delivers PE-4 AC9 (F1 slice 1, `_bmad-output/initiative-personas-and-engagements/`) | yes | S1 carries them, joining PE-4 AC9's test | that F1 story carries them | F1 D28 (the verification command plus green CI runs of the isolation test on macOS, Linux and Windows) |
+| VV-13 AC1, AC2 (no engagement paths in the default profile) | S1 | the default profile's knowledge of engagements, the F1 story that delivers PE-4 AC4 (F1 slice 4) | **no**: no ticket names PE-4 AC4 | S1 carries them, joining PE-4 AC4's test | the F1 story that F1's slice-4 sharding creates for PE-4 AC4 carries them | F1 D28 |
+| VV-6 AC5 and VV-10 AC6, [Second] halves (a saved detached tab keeps its views' states) | S3 | saving the tabs of other windows, the F1 story that delivers PE-13 AC5 (F1 slice 6) | **no**: F1's initiative excludes PE-13 AC5 restore | S3 carries them | the F1 story that F1's slice-6 sharding creates for PE-13 AC5 carries them | the verification command, and F1 D28 if the test joins F1's isolation scenario |
 
 Until it lands, each is still a rule for the code (S1 must not send viewer state to
 any relay, nor make Move to New Tab drop a state once it exists, nor write viewer
-state outside its profile); it is only its test that waits.
+state outside its profile; S3 must not write a detached view's state anywhere
+but with its tab); it is only its test that waits.
 
 S2 to S5 do not depend on each other and can be built in any order or in parallel
 after S1. Suggested order: S1, then S2 (it completes OQ-2, the most-used part),
@@ -3408,7 +3499,8 @@ to S5 without changing any criterion (OQ-8).
     `detachWindow.ts`'s JavaScript window creation with a Rust command, so plan the
     hand-over against that command, not today's window URL. Also how the detached
     window's panels avoid writing the main window's saved state, how Show hidden
-    reaches every open window, and how D6's saving rule meets F1 PE-13 AC5;
+    reaches every open window, how D6's saving rule meets F1 PE-13 AC5, and where
+    the renumbering of sequence numbers on arrival happens (F3.1);
   - **S4:** how an orchestrator's project folder reaches the tab's root.
 
   Record the viewer-state contract, including the position shape per kind and the
@@ -3419,18 +3511,30 @@ to S5 without changing any criterion (OQ-8).
   non-terminal tabs is no longer needed from S1.
 - **Scrum-master:** shard by slice (F3.8), using the [S1] to [S5] tags; one slice's
   stories never carry another slice's criteria. The [Second] criteria (VV-2 AC3,
-  VV-12 AC3, VV-12 AC4's [Second] part, VV-13) follow F3.8's "Merges second"
-  table. The trigger is merge order into `main`, not sharding order: the other
-  stories are already sharded. When S1 is sharded:
-  - write each [Second] criterion into the S1 story as a **conditional
+  VV-12 AC3, VV-12 AC4's [Second] part and VV-13 on S1; the [Second] halves of
+  VV-6 AC5 and VV-10 AC6 on S3) follow F3.8's "Merges second" table. The trigger
+  is merge order into `main`, not sharding order: some other stories are
+  sharded and some are not (D14). When S1 is sharded, and again for its rows when
+  S3 is sharded:
+  - name, for each conditional criterion, the **one** story of that slice that
+    carries it (for example the story that builds the session save for VV-13 and
+    VV-12 AC4's [Second] part, the story that builds view creation and moves for
+    VV-2 AC3). No conditional criterion is split across stories or left to "the
+    slice"; the named story's reviewer is the one who checks it against `main`;
+  - write each [Second] criterion into that story as a **conditional
     criterion**: "if <the other story> is on `main` when this story is reviewed,
     this story includes <criterion> and its test";
-  - write the mirror conditional criterion into each dependent ticket
-    (sub-terminals story 5, phone-watch story 8, and the F1 stories that deliver
-    PE-4 AC4 and AC9), naming F3 S1. If a ticket cannot be edited (it is closed
-    or owned elsewhere), record the obligation instead in one `.ade/context/`
-    note (for example `.ade/context/f3-merges-second.md`) that lists each
-    criterion, both stories and the gate, and link it from S1;
+  - **other story sharded** (sub-terminals story 5, phone-watch story 8, the F1
+    story that delivers PE-4 AC9): write the mirror conditional criterion into
+    its ticket, naming the F3 story;
+  - **other story not yet sharded** (the F1 stories for PE-4 AC4, F1 slice 4, and
+    PE-13 AC5, F1 slice 6), or a ticket that cannot be edited (closed or owned
+    elsewhere): record the obligation in one `.ade/context/` note
+    (`.ade/context/f3-merges-second.md`) that lists each criterion, the named F3
+    story, the other story (or the F1 slice and acceptance criterion it will
+    come from) and the gate, and link it from the F3 story. F1.8 already carries
+    a cross-reference line to these criteria, so F1's sharding of slices 4 and
+    6 reads the note and writes the mirror criterion into the story it creates;
   - either way, the obligation is recorded on both sides before either story
     is built, so whichever merges second is held to it at its review.
 - **Adversarial reviewer:** review this revision before approval.
@@ -3486,10 +3590,14 @@ Tab for non-terminal tabs is not asked: F3 no longer extends it (F3.5).
   state (VV-2 AC3), nothing to the phone (VV-12 AC3), viewer state in F1's
   isolation scan (VV-12 AC4's [Second] part) and no engagement paths in the
   default profile (VV-13) cannot be tested until sub-terminals story 5,
-  phone-watch story 8 and F1 PE-4 exist. Keep them out of S1's Done gate unless
-  S1 merges into `main` second, and make whichever of the two stories merges
-  second carry each, checked at its review against `main`, with the obligation
-  written into both stories' tickets at S1's sharding? *Recommend yes*: it is the
+  phone-watch story 8 and F1 PE-4 exist; a saved detached tab keeping its views'
+  states (VV-6 AC5 and VV-10 AC6, [Second] halves) cannot be tested until F1
+  PE-13 AC5 exists. Keep them out of their slice's Done gate (S1's, or S3's)
+  unless that slice merges into `main` second, and make whichever of the two
+  stories merges second carry each, checked at its review against `main`, with
+  the obligation recorded on both sides when the F3 slice is sharded (in the
+  other story's ticket, or, for F1 stories not yet sharded, in a `.ade/context/`
+  note and F1.8's cross-reference)? *Recommend yes*: it is the
   rule D6 uses, it is checkable at review time, two stories built at once cannot
   both skip it, S1 stays testable today, and no requirement is dropped.
 <!-- F3 ends -->
