@@ -1,39 +1,60 @@
 import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { IS_MAC } from "./shortcuts";
+import { useTabStore } from "../stores/tabStore";
 
 const MAIN_WINDOW = "main";
 const OPEN_FILE_EVENT = "open-file";
 
-/** Where in the file to land: the 1-based line and column of a `path:line:col` link. */
+/**
+ * Where in the file to land: the 1-based line and column of a `path:line:col`
+ * link. `inTab` opens the file in an editor tab instead of the side panel.
+ */
 export interface OpenFileOptions {
   line?: number;
   col?: number;
+  inTab?: boolean;
 }
 
 /** What "open-preview" and the detached window's "open-file" carry. */
 type OpenFilePayload = { path: string } & OpenFileOptions;
 
 /** The payload, with only the keys that are set. */
-function payloadOf(path: string, { line, col }: OpenFileOptions): OpenFilePayload {
+function payloadOf(path: string, { line, col, inTab }: OpenFileOptions): OpenFilePayload {
   return {
     path,
     ...(line !== undefined ? { line } : {}),
     ...(col !== undefined ? { col } : {}),
+    ...(inTab ? { inTab } : {}),
   };
+}
+
+/**
+ * Whether a click asks for an editor tab instead of the side panel: ⌘-click
+ * on macOS, Ctrl-click elsewhere.
+ */
+export function opensInTab(e: { metaKey: boolean; ctrlKey: boolean }, mac = IS_MAC): boolean {
+  return mac ? e.metaKey : e.ctrlKey;
 }
 
 /**
  * Show a file in the active tab's side panel, whatever its kind: code,
  * documents, images (ADR 0009), at a line when one is given. App owns the
- * "open-preview" event.
+ * "open-preview" event. With `inTab` the file opens in an editor tab instead
+ * (an existing tab for it is focused), and nothing goes to the panel.
  */
 function openFileHere(path: string, opts: OpenFileOptions): void {
+  if (opts.inTab) {
+    useTabStore.getState().addEditorTab(path);
+    return;
+  }
   window.dispatchEvent(new CustomEvent("open-preview", { detail: payloadOf(path, opts) }));
 }
 
 /**
- * Open a file clicked in a terminal. Detached windows have no preview panel
- * or tab bar, so they hand the file, and its line, to the main window.
+ * Open a file clicked in a terminal or the file browser. Detached windows
+ * have no preview panel or tab bar, so they hand the file, its line and
+ * `inTab` to the main window.
  */
 export function openFileFromTerminal(path: string, opts: OpenFileOptions = {}): void {
   let label = MAIN_WINDOW;

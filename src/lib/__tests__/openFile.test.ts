@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: win
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }));
 
 import { emitTo, listen } from "@tauri-apps/api/event";
-import { handlePreviewOpen, listenForFileOpens, openFileFromTerminal, revealTargetOf } from "../openFile";
+import { handlePreviewOpen, listenForFileOpens, openFileFromTerminal, opensInTab, revealTargetOf } from "../openFile";
 import { useTabStore } from "../../stores/tabStore";
 
 describe("openFileFromTerminal", () => {
@@ -103,6 +103,64 @@ describe("openFileFromTerminal", () => {
     // App hands the whole event detail to it.
     const app = readFileSync(resolve(__dirname, "../../App.tsx"), "utf8");
     expect(app).toMatch(/handlePreviewOpen\(\(e as CustomEvent\)\.detail,/);
+  });
+
+  it("which click opens a tab", () => {
+    const plain = { metaKey: false, ctrlKey: false };
+    const mac = true;
+    const linux = false;
+    expect(opensInTab({ metaKey: true, ctrlKey: false }, mac)).toBe(true);
+    expect(opensInTab({ metaKey: false, ctrlKey: true }, linux)).toBe(true);
+    expect(opensInTab(plain, mac)).toBe(false);
+    expect(opensInTab(plain, linux)).toBe(false);
+    expect(opensInTab({ metaKey: false, ctrlKey: true }, mac)).toBe(false);
+    expect(opensInTab({ metaKey: true, ctrlKey: false }, linux)).toBe(false);
+  });
+
+  it("a modifier-click opens a tab, also from a detached window", async () => {
+    const editorPaths = () => useTabStore.getState().tabs.filter((t) => t.type === "editor").map((t) => t.editorFilePath);
+    const details: unknown[] = [];
+    const onDetail = (e: Event) => details.push((e as CustomEvent).detail);
+    window.addEventListener("open-preview", onDetail);
+    try {
+      openFileFromTerminal("/r/src/App.tsx", { inTab: true });
+      expect(editorPaths()).toEqual(["/r/src/App.tsx"]);
+      expect(details).toEqual([]);
+      // The same file again focuses its tab, it does not add another.
+      openFileFromTerminal("/r/src/App.tsx", { inTab: true });
+      expect(editorPaths()).toEqual(["/r/src/App.tsx"]);
+      expect(details).toEqual([]);
+
+      // Without it the file goes to the panel, and the event names no inTab.
+      openFileFromTerminal("/r/a.ts", { inTab: false });
+      expect(details).toEqual([{ path: "/r/a.ts" }]);
+      expect(details[0]).not.toHaveProperty("inTab");
+      expect(editorPaths()).toEqual(["/r/src/App.tsx"]);
+
+      // A detached window hands inTab to the main window and opens nothing itself.
+      win.label = "detached-1";
+      vi.mocked(emitTo).mockClear();
+      openFileFromTerminal("/r/b.ts", { line: 3, inTab: true });
+      openFileFromTerminal("/r/c.ts", { inTab: false });
+      expect(vi.mocked(emitTo).mock.calls).toEqual([
+        ["main", "open-file", { path: "/r/b.ts", line: 3, inTab: true }],
+        ["main", "open-file", { path: "/r/c.ts" }],
+      ]);
+      expect(editorPaths()).toEqual(["/r/src/App.tsx"]);
+      expect(details).toHaveLength(1);
+      win.label = "main";
+
+      // ... and the main window, receiving it, adds the tab.
+      vi.mocked(listen).mockClear();
+      await listenForFileOpens();
+      const handler = vi.mocked(listen).mock.calls[0][1] as (e: { payload: unknown }) => void;
+      handler({ payload: { path: "/r/b.ts", line: 3, inTab: true } });
+      expect(editorPaths()).toEqual(["/r/src/App.tsx", "/r/b.ts"]);
+      expect(details).toHaveLength(1);
+    } finally {
+      win.label = "main";
+      window.removeEventListener("open-preview", onDetail);
+    }
   });
 
   it("opensInPreview is gone", () => {
