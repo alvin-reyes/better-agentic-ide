@@ -82,7 +82,7 @@ Set `RPC_URL` in your shell (or use a name from `[rpc_endpoints]` in `foundry.to
 
 ## ABI viewer
 
-Open any compiled artifact (from the panel's **ABIs** list, the file browser, or a path printed in the terminal) and it shows the contract's interface instead of raw JSON:
+Open any compiled artifact (from the panel's **ABIs** list, or with a ⌘-click, Ctrl-click on Windows and Linux, in the file browser or on a path printed in the terminal) and it shows the contract's interface instead of raw JSON:
 
 - **Read** functions (view/pure) and **Write** functions, with inputs, outputs and `payable`
 - **Events** with their indexed parameters and topic hash
