@@ -11,6 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
+| F5 | [Extensive prompt templates](#f5-extensive-prompt-templates) | Approved 2026-11-10 (owner), revision 5; every open question (OQ-1 to OQ-20) answered at the recommendation; F1 revision 9n and F2 revision 5.2 carry its cross-references and OQ-3's inflow; revision 5.1 adds the owner's identifier check on that inflow (F1 revision 9o) and the review minors; not sharded |
 
 ---
 
@@ -2296,3 +2297,1824 @@ clarification for slice 0.
   (PE-13 AC9, AC10, slice 1, RC-2, F1.12). Then revision 9c's line edits, against
   the approved architecture, and revision 9d's minors (the history lists them).
 <!-- F1 ends -->
+
+---
+
+<!-- F5 begins -->
+## F5: Extensive prompt templates
+
+- **Status:** Approved 2026-11-10 (owner), revision 5. Revisions 1 to 4 were
+  BLOCKED by the adversarial review; revision 5 answered the delta check of
+  revision 4, and its final review's minors (n1 to n5) are folded in. The owner
+  answered all twenty open questions at the recommendation (F5.10); F5 has no open
+  questions. The F1 and F2 amendments the owner approved with it are written as F1
+  revision 9n (OQ-18, OQ-3) and F2 revision 5.2 (OQ-20). Revision 5.1 adds the
+  owner's identifier check on OQ-3's inflow (2026-11-10; F1 revision 9o), the
+  review minors m1 to m3 and the S1 architect's notes. Not sharded. Next: the
+  architect and the designer (F5.9), then the scrum-master shards S1.
+- **Number:** F2 is the onboarding PRD (PR #98, approved, not built), F3 the
+  per-view viewer PRD (PR #112, approved), and F4 the workspaces PRD (PR #113,
+  approved 2026-11-10). If any of them is withdrawn, this stays F5.
+- **Source:** the owner, 2026-11-10: *"we need to have extensive prompt templates
+  available"*. Asked to scope it, the owner chose all four sources and all four
+  features:
+  - **sources:** a big built-in library organised by task and by role (PM,
+    architect, designer, scrum master, developer, QA, DevOps, security, data,
+    blockchain and more), matching ADE's agent roles and BMAD v6; the user's own
+    templates (create, edit, import, export); per-hub and per-project templates
+    stored in the repo, shared and versioned with git; community or shareable
+    templates (share as a file or link, import someone else's set);
+  - **features:** fill-in fields (`{{placeholders}}` with a small form, auto-filled
+    where possible: current folder, selected file, git branch, the file open in the
+    preview panel, the selection); search, categories, favourites and recently used,
+    from the Thoughts panel and from the command palette; multi-step chains (plan →
+    implement → test → review); sending to any agent: the active session, a chosen
+    sub-terminal, or a specific agent or persona, using what ADE already has.
+  - Owner rules this PRD applies: **never a line starting with `!`** is sent; and
+    **workspace and checkout paths are stripped from the keys F4 WS-7 AC3 strips**:
+    F4 OQ-5, approved by the owner 2026-11-10. That rule covers only the keys WS-7
+    AC3's table strips. The same table marks `better-terminal-prompt-history` and
+    `better-terminal-saved-notes` "not stripped: the engineer's own text", and
+    `ade-scratchpad-draft` "not stripped by F4"; the owner confirmed on 2026-11-10
+    that typed text syncs as today. F5 adds nothing of its own to the stripped
+    keys. Keeping auto-filled paths, template text and typed values out of the
+    prompt history, saved notes, mine templates and the draft's export is
+    therefore **F5's own extension** (D7), not F4 OQ-5, and the owner approved it
+    (OQ-15, OQ-17).
+- **History:**
+  - 2026-11-10, revision 1: first draft, from the owner's answers above.
+  - 2026-11-10, revision 2: answers the adversarial review (BLOCKED). Safe text
+    (PT-6 AC5: control characters refused, CRLF normalised, every `!` line refused,
+    bracketed paste); honest send gating (D4, G4, PT-6 AC2 to AC4: the busy check
+    must name an agent binary, agent status only as an extra gate, per-send
+    confirmation without live status, Windows confirms each send, "in sight"
+    dropped); template text kept out of synced stores (PT-11 AC4); repo templates
+    approved per file by content hash (PT-9 AC5); new PT-15 (untrusted text at send
+    time) and PT-16 (Thoughts panel fit); plain-text previews; per-value engagement
+    filter; a meaningful 150 count; storage cap and per-id sync merge; precise
+    folder and symlink rules; new-agent launch types after start. **Slices
+    renumbered:** revision 1's S1 is split into S1 (engine and the 24 migrated
+    prompts) and S2 (library growth to 130); revision 1's S2, S3, S4, S5 are now
+    S3, S4, S5, S6.
+  - 2026-11-10, revision 3: answers the delta review of revision 2 (BLOCKED).
+    **B1:** the Orchestrator is no longer a template target, nor the target of a
+    marked box's Send (PT-6 AC1, AC6, PT-11 AC4); saving a marked box as a note or
+    as a template warns that it syncs (PT-11 AC4, OQ-17); PT-11 AC4's test covers
+    both paths. **B2:** PT-14 AC1's timing and PR #114's docks (new PT-16 AC4) are
+    [Second]; S1 tests today's panel. **B3:** each [Second] criterion names its F5
+    slice (F5.8 table); the F1.8 mirror line is listed as an F1 amendment for the
+    owner (F5.8, OQ-18). **Majors:** the agent binaries include the hub's Claude
+    install (F5.1); a marked box's Send and Run Chain are gated like the form
+    (PT-11 AC4); D7 is F5's own decision (OQ-15); the continuous-mode record and
+    the pid-in-job check are named as new work (PT-15 AC3, F5.9); F5 overrides
+    PR #114's live composer and Escape at e2ec174 (PT-16). **Minors:** every write
+    is one bracketed paste; new risks (`\r` after the paste, Claude Code's input
+    box); root commits without git; sandboxed HTML previews; PT-1 AC4's six
+    reasons; Fix Bug's `1. `; `get_pty_cwd`; `binaryFor`'s file; scoped tests in
+    PT-3 AC5 and PT-11 AC4; PT-14 AC2 as a budget; several sessions on one PTY;
+    G4's "cannot tell".
+  - 2026-11-10, revision 4: answers the delta review of revision 3 (c4c0b69,
+    BLOCKED). **N-B1:** the hub-tab parts need F2, which is not built: the
+    `HUB_CLAUDE` agent binary (F5.1, PT-6 AC2), hub tabs in the target picker
+    (PT-6 AC6) and the hub folder as a template folder (PT-9 AC1) are [Second],
+    owed by S1, S5 and S4 against F2 slice 1's hub tab and its OB-6 AC2 reader
+    (F5.8 table and Depends-on cells); a wrapper that `exec`s `claude` already
+    matches today. **N-B2:** PT-16 AC1 and AC4 are restated as structure jsdom can
+    check (a fixed action area outside the one scrolling field area, tested through
+    the DOM, `data-` attributes and the stylesheet, as PR #114 revision 2 does).
+    **Minors:** bracketed paste mode lost when a pane is re-hosted in a detached
+    window (F5.0, F5.9, fails safe); Windows ConPTY and `ESC [?2004h` (F5.9, OQ-10,
+    Risks); the `\r`-after-paste check for codex and ollama, with probe results
+    (F5.0, F5.9); PT-7 AC2's "unavailable" for any step; F4 approved, F4 OQ-5 cited
+    as the owner rule for workspace paths (Source, D7, OQ-15) and OQ-17 now
+    recommends refusing to save a marked box that still holds auto-filled paths
+    (PT-11 AC4); PR #114 revision 2 (c45c7b0) cited; PT-13 through the window's one
+    announcer; Escape in detached windows (PT-16 AC3); Duplicate of a repo template
+    warns and is disabled for unreviewed files (PT-8 AC2, PT-9 AC5); new OQ-19
+    (Run Chain for today's 3 chains in S1); a fallback when the other side of a
+    [Second] criterion is withdrawn (F5.8); distinct labels for the two "Send
+    anyway" ticks (PT-4 AC4, PT-15 AC3); OQ-18's line is the F1 revision after 9m.
+  - 2026-11-10, revision 5: answers the delta check of revision 4 (abe97e9,
+    BLOCKED). **B1:** F4 OQ-5 is cited only for the keys F4 WS-7 AC3 strips; F4
+    approved the prompt history and saved notes as not stripped (typed text syncs
+    as today, owner 2026-11-10), so keeping auto-filled paths and template text out
+    of notes, templates, history and the draft is F5's own extension (Source, D7,
+    PT-11 AC4, OQ-15, OQ-17); OQ-15's alternatives say what happens to auto-filled
+    paths; the refusal message makes no claim about sync. **M1:** PT-16 AC1 adds a
+    bounded form root and no scrolling ancestor between it and the panel root while
+    the form is open (the list area gets `overflow: hidden`), string-tested; PT-16
+    AC4 repeats it for each dock. **Minors:** Duplicate of a repo template moves to
+    S4 (PT-8 AC2, F5.8); only panes **moved** into a detached window lose
+    bracketed paste mode, and the fix is S5's new PT-6 AC9 (F5.0, PT-6 AC5, F5.9,
+    Risks); a matching F2 cross-reference line for the owner (F5.8, new OQ-20); the
+    save refusal covers only **absolute** auto-filled paths (PT-11 AC4).
+  - 2026-11-10, approved (owner), revision 5: the owner approved F5 with every
+    open question answered at the recommendation (F5.10). Applied: **OQ-19**, the 3
+    built-in chains are sent step by step from S1 (PT-7 AC1 to AC3, no Run; PT-2
+    AC1, PT-7, PT-11 AC4, PT-12 AC2, F5.8's S1 and S5 rows); **OQ-3**, the default
+    profile's mine templates are offered read-only in engagement instances (PT-11
+    AC7), written into F1 as allowed inflow 9; **OQ-18**, the F1.8 cross-reference
+    line, written with OQ-3's inflow as F1 revision 9n (PR #113's branch, after 9m);
+    **OQ-20**, the F2.8 cross-reference line, written as F2 revision 5.2 (PR #98's
+    branch); the other answers confirm text already in F5 (D3, PT-7 AC7, PT-8 AC6,
+    PT-11 AC4, F5.8, F5.9). The final review's minors: **n1**, F5 adds nothing of
+    its own to the stripped keys (Source); **n2**, PT-16 AC1's walk also checks that
+    the form's container is a flex column with `min-height: 0` or has a definite
+    height; **n3**, the walk rejects Tailwind `overflow(-y)?-(auto|scroll)` classes;
+    **n4**, the cascade caveat for when PR #114 moves the list area's scroll into a
+    stylesheet (PT-16 AC1); **n5**, indentation fixed (PT-16 AC1 and AC4, F5.9,
+    OQ-11, OQ-17).
+  - 2026-11-10, revision 5.1 (owner decision and review minors, PR #115):
+    **owner decision**, the default profile's mine templates are checked for
+    engagement identifiers exactly as personas (F1 PE-1 AC5) when saved, imported
+    or synced in, and re-checked when an engagement is created or changes; a
+    template naming engagement B's blocking identifier is left out of inflow 9 in
+    every engagement other than B, with a visible note, and its save is not
+    refused; warning identifiers warn; with a test (PT-11 AC7, OQ-3, F1.8
+    amendments paragraph; F1 revision 9o drops F1's "ADE does not check them").
+    **m1**, PT-7 AC3's step-by-step mode asks no tick when live status is at its
+    input, matching PT-12 AC2; **m2**, a PT-7 AC2 test (a step 3 with a `!` line,
+    an unaccepted hidden character or an unticked PT-15 flag: "Send step 1" never
+    enables) and PT-12 AC2's test mocks `working` after step 1 and checks that
+    step 2 waits; **m3**, PT-11 AC7's "read when the tab lists templates"
+    rewritten. **S1 architect's notes (PR #119):** any `{{…}}` is a field, one
+    with a name that is not valid is a typed field never auto-filled, and
+    built-in templates use valid names only (PT-1 AC3, PT-5 AC2); `selection`'s
+    "editor" is the side panel's code viewer, and editor tabs do not count in S1
+    (PT-5 AC1); PT-12 AC2 and PT-11 AC4 already match OQ-19 (a marked box's Run
+    Chain stays disabled in S1), unchanged.
+
+### F5.0 What exists today (checked on `origin/main` at 2d65a7f)
+
+- **The templates.** `src/components/Scratchpad.tsx` hard-codes `PROMPT_TEMPLATES`:
+  27 entries of `{name, category, prompt}`. 24 single prompts in five categories
+  (Code 6, Debug 5, Arch 4, Git 4, AI 5) and 3 in a sixth category, Chain ("Design
+  Session", "Code Review Chain", "Debug Chain"), whose steps are separated by a
+  `---` line. Blanks are empty `**Label:** ` lines, bracketed text such as
+  `[DESCRIBE FEATURE]`, `- ` list items, and empty code fences (Explain Code, Debug
+  Error, Investigate Logs, Convert/Translate); there are no placeholders and no form.
+- **Where they show.** The Thoughts panel's Templates tab (a 160 px high strip of
+  chips). Choosing one calls `loadText`: it replaces the text box's content, closes
+  the tab and focuses the box. No search, favourites, recents, user templates or
+  command palette entry (`src/components/CommandPalette.tsx` has none). PR #114
+  (UX, open) docks the panel on the right by default and keeps a bottom dock, where
+  the list area stays short.
+- **Escape.** `useKeybindings.ts:161`: in the main window, Escape anywhere (no
+  modifier) closes the Thoughts panel and focuses the terminal; inside the text box,
+  Escape blurs it and focuses the terminal. **Detached windows**
+  (`src/DetachedApp.tsx`) have no `useKeybindings`: there Escape only returns focus
+  from the text box to the terminal and never closes the panel (as PR #114
+  revision 2 records).
+- **Announcements.** The main window has one polite live region,
+  `SubTerminalAnnouncer` (`SubTerminalStrip.tsx:251`, mounted once in `App.tsx`),
+  which shows one message at a time. `DetachedApp` has none today. PR #114
+  (revision 3) speaks through one announcer per window and adds no live region of
+  its own in the panel.
+- **Sending.** "Send to Terminal" (`send`) writes the box's text plus `\r` to the
+  **active pane's** PTY with `writePty` (`src/lib/terminalCommands.ts`): raw bytes,
+  no bracketed paste, whatever runs there (an agent or a plain shell). A line break
+  in the text is a carriage return to a shell. An Orchestrator tab gets the text in
+  its chat instead (the `orchestrator-send` event): `sendMessage` → `addMessage`,
+  then `persistSessions` writes `better-terminal-orchestrator`, a **synced** key
+  (`SHARED_KEYS`, `sync.rs:41`). Pasted images go after the text as file paths.
+  Sent text joins the prompt history (`better-terminal-prompt-history`, last 50), a
+  **synced** key. ⌘S (`saveNote`) saves the box's text to
+  `better-terminal-saved-notes`, also **synced** (`sync.rs:40`).
+- **Chains.** When the box holds `\n---\n`, the button becomes "Run Chain (n
+  steps)" (`sendChain`, around `Scratchpad.tsx:663`): it writes step 1, waits 2 s,
+  then polls `isPaneActive` once a second until the pane looks idle for 1.5 s, and
+  writes the next step. After 600 checks (about 10 minutes) it **sends the next step
+  anyway**. Idle is judged from terminal output only, so a Claude Code permission
+  prompt also looks idle. Cancel stops between steps.
+- **Agents ADE can already reach, and how far each signal can be trusted.**
+  - A running pane: `writePty` to its PTY. Every view (sub-terminal) of every tab
+    has panes with PTYs (ADR 0014, `.ade/context/terminal-open.md`).
+  - **Agent status** (`.ade/context/agent-events.md`): Claude Code hooks, opt-in per
+    project, Claude Code only, refused on Windows. It gives `needsYou`, `waiting`,
+    `working`, `ready` or `finished` per PTY. A hook call can take up to 2 s, so
+    status can lag the screen by up to 2 s. Status is posted with the per-terminal
+    token, which every process in that terminal holds, so anything running there
+    can forge it. A session that reported no `pid` is never dropped by the liveness
+    check.
+  - **The busy check** (`.ade/context/pane-busy.md`, `pty_foreground_job`, not on
+    Windows) names the foreground program (`names`), matched against
+    `binaryFor(provider)` (`src/data/providers.ts`; `deepseek` runs `claude`). It
+    returns names and a state only: no process group id and no pids.
+    `agent_status_watch` carries the state per PTY, not the reporting session's
+    `pid`. Binding a status to the foreground job is therefore new Rust work.
+  - **The agent tracker** (`agentTrackerStore`) knows the sessions ADE launched; on
+    Windows it ends a session at the first output idle. Its `AgentSession` has no
+    record of continuous mode; only the launch call's `opts.continuous`
+    (`src/lib/agentLaunch.ts`) knows it.
+  - **A hub's persona session** (F2 OB-6, PR #98) runs the hub's Claude install,
+    `HUB_CLAUDE` from `hub.conf` (for example `claude-work`), which
+    `binaryFor("claude")` does not match by name. **None of this is on `main`:**
+    F2's hub tab and its OB-6 AC2 `hub.conf` reader are F2 slice 1, not built. A
+    wrapper script such as `claude-caiden` that `exec`s `claude` already matches
+    today: after the `exec` the foreground process is `claude`, and the busy
+    check's `names` hold its normalised name and argv[0] basename
+    (`.ade/context/pane-busy.md`). Only an install whose running process is not
+    named `claude` needs the hub rule.
+  - A new agent with a role: `prepareAgentLaunch(spec, cwd, {task})`
+    (`src/lib/agentLaunch.ts`), shared by the agent picker and the board's
+    Dispatch. The launchable role catalog is `ROLES` (the picker's `ROLE_ITEMS`,
+    `src/data/pickerItems.ts`), 19 roles from `vendor/ade-setup/agents/`, plus the
+    curated pairs of `src/data/curatedAgents.ts`. Only `claude` and `deepseek`
+    accept an opening task (`taskUnsupportedReason` in `src/lib/agentCommand.ts`:
+    `ollama` refuses one, `codex` is unsupported). The task is typed on a shell
+    command line, so anything outside printable ASCII, line breaks included,
+    becomes a space; the line is subject to the terminal's 1024-byte input line
+    limit; and the task lands in the shell's history and in `ps` output. Continuous
+    mode launches with `--dangerously-skip-permissions`.
+  - The Orchestrator: `orchestrator-send`.
+  - `ade open`: lets a process **inside** a terminal open a sub-terminal through the
+    hook endpoint. ADE's own UI does not use it; it adds views directly.
+- **Every terminal holds the vault.** `create_pty` (`src-tauri/src/pty.rs:273`) puts
+  every vault secret into every new terminal's environment, so any agent ADE starts
+  can read them.
+- **Stores and sync.** `PERSISTED_KEYS` (`src/lib/persistence.ts`) lists every
+  `localStorage` key saved to `state/kv`. ADR 0017's static key test is **not on
+  `main`**. ADE sync (`src-tauri/src/sync.rs`) pushes `SHARED_KEYS` (settings, saved
+  workspaces, prompt history, saved notes, orchestrator, agent tracker,
+  `ade-bmad-dismissed`), merged **last-writer-wins per whole key** by mtime, and
+  `DEVICE_KEYS` (`ade-session`, `ade-scratchpad-draft`, exported under
+  `devices/<device>/`), strips `anthropicApiKey` and scrollback, and never pushes
+  vault values.
+- **Content Security Policy** (`tauri.conf.json`): `connect-src` already allows any
+  `http:` and `https:`, and `frame-src` allows `http: https:`. The CSP binds the
+  webview only, not Rust.
+- **BMAD v6.** `src-tauri/resources/bmad-v6/` at `VERSION` `bda3c59 6.13.0-next`
+  holds 34 `SKILL.md` files: 30 skills a person can start, plus 3 `bmod-*`
+  metadata skills ("never invoke") and one sample inside `bmad-toolsmith`.
+- **Parsing.** The repo has no YAML library; `src/lib/frontmatter.ts` reads only
+  top-level scalar front matter, on purpose. It has no git library either (no `git2`
+  or `gix` in `src-tauri/Cargo.toml`).
+- **Previews.** The preview panel shows HTML in a sandboxed `iframe`
+  (`sandbox="allow-scripts"`, an opaque origin), so ADE's own code cannot read a
+  selection made inside it.
+- **Bracketed paste mode.** xterm.js tracks whether the program in a pane turned
+  bracketed paste on (`ESC [?2004h`) as `modes.bracketedPasteMode`. When a pane is
+  **moved** into a detached window (Move to New Window: a new xterm instance on the
+  same, already running PTY), that mode is **lost**: the new instance starts with it
+  off, and the agent, which turned it on once at start, does not send it again. A
+  pane **started** in a detached window (for example an `ade open` sub-terminal
+  opened there) receives the agent's `ESC [?2004h` live in its own xterm instance
+  and has the mode as in the main window. Probed by hand
+  for revision 4: Claude Code 2.1.322 and codex 0.167.0 send `ESC [?2004h`;
+  ollama is **not yet confirmed**. Whether Windows ConPTY passes `ESC [?2004h`
+  through to xterm.js is **unverified**.
+- **PR #114** (Thoughts panel UX, open). Revision 2 (c45c7b0) dropped the live
+  composer ("composer shows the filled prompt", its M5: F5 uses Insert into box)
+  and flagged the Escape clash with `useKeybindings.ts:161`, leaving how the two
+  combine to F5. It tests layout through pure functions written to `data-`
+  attributes and string tests on `Scratchpad.css`, never CSS layout, which jsdom
+  does not compute (its "Testable requirements", TR-4, TR-20, TR-29). Revision 3
+  (0d8aee2) keeps both and announces through the window's one announcer.
+
+### F5.1 Terms
+
+- **Template:** a named, reusable prompt. Either a **single prompt** or a **chain**.
+- **Chain:** a template made of 2 to 20 **steps**, each a prompt, sent one after
+  another to the same agent.
+- **Field:** a `{{name}}` placeholder in a template's text. Filling a template
+  replaces every field with a value. An **auto field** is one ADE can fill from the
+  context (PT-5); every other field is a **typed field**.
+- **Rendered text:** a template's text (every step, for a chain) after its fields
+  are filled. This is what is sent.
+- **Source:** where a template comes from. Four kinds:
+  - **built-in:** ships with ADE, read-only;
+  - **mine:** the user's own, stored in ADE's profile;
+  - **repo:** a file in a repo's template folder (PT-9);
+  - **imported:** a template the user imported from a file or link becomes **mine**
+    once imported, and keeps an `imported` marker and its origin (PT-10). For every
+    send-time rule an imported template counts as **non-built-in**, as do mine and
+    repo templates.
+- **Target pane:** the terminal pane a Send writes to. Before the user picks another
+  target (S5), it is the **active pane**: the active pane of the shown view of the
+  active tab. An Orchestrator tab has no target pane: templates are never sent to
+  the Orchestrator in F5 (PT-6 AC1). F4 (PR #113) groups folders into workspaces and
+  does not change which pane is active, so F5 uses today's tabs, views and panes.
+- **Agent binaries:** `binaryFor(provider)` (`src/data/providers.ts`) for every
+  provider in `PROVIDERS` (S1). **[Second]** plus, for a pane in a hub tab (F2),
+  the file name of that hub's Claude install: `HUB_CLAUDE` from the hub's
+  `hub.conf`, read exactly as F2 OB-6 AC2 reads it (literal values only, never by
+  running `hub.conf`). A `HUB_CLAUDE` that F2's rule cannot read adds nothing. Test:
+  a hub tab whose `hub.conf` has `HUB_CLAUDE=claude-work`, with the busy check
+  mocked as naming `claude-work`, is an agent pane; with `HUB_CLAUDE=$(evil)` it is
+  not. This part needs F2 slice 1's hub tab and its OB-6 AC2 reader, neither of
+  which is on `main`: F5 slice S1 owes it, and it goes with whichever of F5 S1 and
+  that F2 story merges second (F5.8's [Second] table). Until then a hub session
+  whose process is named `claude` (a wrapper that `exec`s it) is an agent pane
+  through `binaryFor`, and any other hub install is not, which fails safe (Send
+  disabled, Insert and Copy remain).
+- **Agent pane:** a pane where, at the moment of writing, the busy check's `names`
+  include an agent binary. Only the busy check can make a pane an agent pane; agent
+  status and the tracker never do on their own. When the busy check gives no answer
+  (an error, no names: "cannot tell"), the pane is not an agent pane. Where the busy
+  check does not exist (Windows), no pane is known to be an agent pane (PT-6 AC2).
+- **Live agent status:** agent status for the target PTY whose session reported a
+  `pid` that is alive, has the reported start time, and is a process of the pane's
+  foreground job (new Rust work, F5.9: today neither the busy check nor
+  `agent_status_watch` exposes the job's pids or the session's `pid`). A session
+  without a `pid`, or whose `pid` is not in the foreground job, is not live. **When
+  one PTY has several sessions** with live status, the most cautious one decides:
+  any live `needsYou` or `working` session blocks a send, and the PTY is at its
+  input only when every live session is.
+- **At its input:** live agent status of `ready`, `finished` or `waiting`.
+- **Secret source:** the OS secret store (Keychain and its equivalents, ADE's
+  vault), environment variables, and the contents of any file.
+- **Secret-shaped text:** text the **secret detector** matches. The detector covers at
+  least private-key blocks, cloud access keys (AWS, GCP service-account JSON),
+  GitHub, GitLab, Slack, Stripe, Anthropic and OpenAI tokens, JWTs, and
+  `NAME=value` or `NAME: value` lines where NAME ends in `KEY`, `TOKEN`, `SECRET`,
+  `PASSWORD` or `PASSWD` (case-insensitive) and the value is 8 characters or more.
+  The architect picks the implementation (PT-11 AC6 needs one detector everywhere).
+- **Control characters:** C0 (U+0000 to U+001F), DEL (U+007F) and C1 (U+0080 to
+  U+009F), **except** tab (U+0009) and line feed (U+000A). They are refused, never
+  shown with an override (PT-6 AC5).
+- **Hidden characters:** Unicode format characters (category Cf: bidi overrides and
+  isolates, zero-width characters, tags, U+FEFF), and line or paragraph separators
+  (Zl, Zp). They are shown as marks and need a per-send tick (PT-4 AC4).
+- **Line-start whitespace:** what ADE skips before the first character of a line
+  when checking it for `!` or `/`: every character with the Unicode `White_Space`
+  property (tab, space, U+00A0, U+1680, U+2000 to U+200A, U+202F, U+205F, U+3000 and
+  the rest of the property) and every hidden character.
+
+### F5.2 Problem
+
+ADE's agents are only as good as the prompts people give them. Today ADE offers 27
+generic prompts with blank lines to fill by hand, none of them for the roles ADE
+itself is built around (product manager, architect, designer, scrum master, QA,
+DevOps, adversarial reviewer) or for BMAD v6's workflows. People who have a good
+prompt keep it in a notes app and paste it; a team cannot share its prompts with the
+repo they apply to; and the one multi-step feature, chains, can type the next step
+into an agent that is waiting for a permission answer, or into a plain shell, which
+runs each line as a command.
+
+### F5.3 Users and jobs
+
+- **Developer in a project:** "When I start a task, I want a proven prompt for it
+  with the file, branch and folder already filled in, so I spend seconds, not
+  minutes, writing a good prompt."
+- **Role-based engineer (ADE's persona model):** "When I act as QA or architect on
+  a project, I want the prompts for that role, matching the agents and BMAD steps
+  ADE installs."
+- **Team lead or hub owner:** "I want our team's prompts in the repo, reviewed and
+  versioned like code, so everyone sends the same prompt for the same job."
+- **Prompt author in the community:** "I want to share a set of prompts as a file
+  or link, and import someone else's set safely."
+
+### F5.4 Goals (measurable)
+
+- **G1. Extensive.** When S2 and S5 have both shipped, the built-in library holds at
+  least **150** templates that pass PT-2 AC5's quality checks and meet PT-2 AC3's
+  coverage table, each counting toward at most 3 coverage rows; the library test
+  counts them.
+- **G2. Fast to use.** For a template whose fields are all auto fields, sent to an
+  agent pane whose status is live and at its input, picking it from the Templates
+  tab's search and sending it takes no more than **3 key presses** after the search
+  text (e.g. ↓, Enter to pick, ⌘Enter to send). Search over **2,000** templates is
+  designed to update the result list within **100 ms**; CI enforces a 300 ms budget
+  per search (PT-14 AC2). Measured by PT-3 AC6 and PT-14.
+- **G3. No secret is ever auto-filled.** The auto-fill test (PT-5 AC6) finds none
+  of its secret markers in any filled field, in every slice.
+- **G4. ADE does not type a template where it can tell it would do harm.** Stated
+  exactly (PT-6 AC2 to AC5, PT-7, PT-10 AC6):
+  - On macOS and Linux, ADE never writes a template's text to a pane unless the busy
+    check names an agent binary there (F5.1): a pane it shows running something
+    else, or where it cannot tell (an error or no names), gets nothing, with no
+    confirmation to override it. On Windows, which has no busy check, ADE writes
+    only after the user confirms that send.
+  - "A template's text" includes text inserted into the box from a template, while
+    the box is marked (PT-11 AC4): its Send to Terminal and ⌘Enter pass the same
+    gates as the form's Send.
+  - ADE never writes to a pane whose live agent status is `needsYou` or `working`.
+  - Where agent status is not live (off, a provider without hooks, Windows), ADE
+    cannot see a permission prompt. It writes only after the user confirms, **for
+    that send**, that the agent is at its input. There the user's confirmation, not
+    ADE, is the guard against typing into a permission prompt.
+  - Agent status can lag the screen by up to 2 s. A permission prompt that appeared
+    less than 2 s before the write may not yet be known; ADE re-reads status at the
+    moment of writing, and cannot close that window.
+  - No text with a control character, and no line starting with `!`, is ever sent.
+  - No template, chain, repo template or import makes a network request without a
+    user's press of Fetch.
+- **G5. Shared through git.** A template committed to a repo's template folder shows
+  in ADE on another machine after a `git pull`, with no other step than opening the
+  template list and reviewing changed files (PT-9 AC3, AC5).
+
+### F5.5 Non-goals (deliberately out)
+
+- A hosted marketplace, registry, ratings or gallery. Sharing is by file or by a
+  link the user pastes (PT-10). A gallery is a later feature (OQ-6).
+- Automatic updates of imported sets. An import is a one-time copy.
+- Logic in templates: no conditionals, loops, includes, scripts, or values computed
+  from other values. Fields are plain text substitution.
+- Auto fields that read a secret source (F5.1): no `{{env.X}}`, no file contents, no
+  vault values (PT-5).
+- Sending one template to several agents at once (fan-out), sending to the phone, or
+  to remote agents.
+- Sending templates to the Orchestrator. Its chat is a synced store (F5.0, D7); it
+  can come back as a later feature with a way to keep template text out of sync's
+  export (OQ-16).
+- A new `ade` CLI verb for templates. `ade open` is unchanged (PT-6 AC7).
+- ADE committing or pushing repo templates. A hub's own sync script and the user's
+  git do that (PT-9).
+- Scanning F4's other workspace roots for repo templates (PT-9 AC1).
+- Chain auto-advance without live agent status, including all of Windows (PT-7 AC3
+  gives step-by-step there).
+- Usage telemetry. Recents and favourites stay in the profile (PT-11).
+- Generating templates with an LLM.
+- Defending against a process inside the target terminal that forges agent status
+  or names itself after an agent binary. It already runs in the user's terminal
+  with the vault in its environment; F5's gates are against mistakes and hostile
+  **text**, not hostile local programs.
+
+### F5.6 Decisions
+
+- **D1. One file format for every source.** A template is one Markdown file with
+  front matter (PT-1). Built-in, repo, exported and imported templates are all such
+  files, and a user template is stored as the same text, so moving a template
+  between sources is a copy.
+- **D2. Built-in library lives in this repo,** in `templates/prompts/`, one file per
+  template, grouped in folders by task, and is bundled with the app as a resource.
+  It is versioned with ADE releases (PT-2 AC6). It replaces `PROMPT_TEMPLATES`.
+- **D3. Repo templates live in `.ade/prompts/`** at the git top level of a hub or
+  project (PT-9 AC1): one place, beside the `.ade/` files ADE projects already have,
+  and inside what a hub's own sync script already commits and pushes. The owner
+  suggested `templates/prompts/` in hubs; the owner confirmed the change (OQ-1).
+- **D4. Template text goes only to an agent, and the user confirms what ADE cannot
+  see** (PT-6). On macOS and Linux a Send needs the busy check to name an agent
+  binary (never agent status or the tracker alone); live agent status, where it
+  exists, can only block a send, and spares the per-send confirmation when it shows
+  the agent at its input. Without live status, each send needs the user's
+  confirmation. On Windows, where no busy check exists, each send needs the user's
+  confirmation that the terminal runs an agent at its input (OQ-10 offers
+  Insert-only instead). A plain shell would run each line as a command; a
+  permission prompt would take digits and Enter as an answer. The same gates apply
+  to the box's Send while it holds inserted template text (PT-11 AC4).
+- **D5. Chains advance on live agent status, never on silence.** A chain sends the
+  next step only when live agent status reports the previous step accepted and the
+  agent back at its input; on a permission prompt or a timeout it pauses (PT-7).
+  Without live status, the user sends and confirms each step.
+- **D6. Every template is untrusted text at send time.** Whatever its source, the
+  full rendered text (every step) is shown before the first send as plain text;
+  control characters are refused; hidden characters are made visible; a line that
+  starts with `!` is refused; for non-built-in sources, slash-command lines and the
+  source are flagged at send time (PT-4 AC4, PT-6 AC5, PT-15).
+- **D7. Field values and template text never sync on their own.** Recents and
+  favourites record which template, never what it was filled with. Rendered
+  template text, and with it every auto-filled path and typed value, stays out of
+  every store ADE sync exports (PT-11 AC4): F5 sends none to the Orchestrator, adds
+  none to the prompt history, and keeps it out of the draft's export. The one way
+  it reaches a synced store is the user's own choice after a warning that names
+  the sync: saving a marked box as a note, or as a mine template, once it no
+  longer holds an absolute auto-filled path (PT-11 AC4, OQ-17). All of D7 is
+  **F5's own decision**, auto-filled paths included; the owner confirms it as
+  OQ-15. F4 OQ-5 (approved by the owner 2026-11-10) strips workspace and checkout
+  paths only from the keys F4 WS-7 AC3 strips, none of which F5 writes; WS-7 AC3
+  marks the prompt history and saved notes "not stripped: the engineer's own
+  text", and the owner confirmed typed text syncs as today. D7 extends that rule to
+  text ADE itself filled in, in stores F4 leaves alone.
+- **D8. Sync** (PT-11): user templates and favourites of built-in and user
+  templates sync with ADE sync when it is on, merged per template id; recents,
+  favourites of repo templates, repo approvals and field values never sync; repo
+  templates travel only with their repo's git; built-in templates ship with the app.
+- **D9. No network by itself.** ADE fetches a template link only when the user
+  pastes it and presses Fetch; no URL scheme handler, no background refresh (PT-10).
+- **D10. Repo templates are approved per file, by content.** A repo template can be
+  filled or sent only when this machine has approved that exact file content (its
+  SHA-256) in that repo; a new or changed file waits for review (PT-9 AC5).
+
+### F5.7 Requirements
+
+Each criterion is tagged with the slice that delivers it ([S1] to [S6], F5.8).
+[Second] marks a criterion whose test needs unbuilt work in another feature or PR;
+F5.8's [Second] table names, for each, the F5 slice that owes it and the other
+work, and it goes with whichever of the two merges into `main` second (the F3 D14
+rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropped.
+
+#### PT-1. The template file format (MVP)
+
+1. **[S1] One file, one template.** A template is a UTF-8 Markdown file with a front
+   matter block and a body. The front matter holds:
+   - `id` (required): lowercase letters, digits, `-` and `.`, 3 to 80 characters,
+     unique within its source;
+   - `title` (required): F1's text rule (1 to 80 characters, no Cc or Cf);
+   - `description` (optional, up to 280 characters);
+   - `task` (required): one task category from PT-2 AC3's list, or any text for
+     mine and repo templates;
+   - `roles` (optional): zero or more role ids (PT-2 AC3);
+   - `tags` (optional): up to 12 words;
+   - `kind`: `prompt` (default) or `chain`;
+   - `fields` (optional): for each field, its `name`, a `label`, an optional
+     `default`, whether it is `multiline`, and whether it is `optional`;
+   - `requires` (optional): `bmad-v6` or `bmad-v4`, for templates that call BMAD
+     skills or tasks;
+   - `skill` (required with `requires: bmad-v6`): the BMAD v6 skill it invokes
+     (PT-2 AC5);
+   - `revision` (built-in only): an integer, raised on each change;
+   - `based_on` (optional): `<id>@<revision>` of the built-in it was copied from;
+   - `updated` (mine only): when it was last saved, for the sync merge (PT-11 AC1);
+   - `origin` (imported only): the file name or URL it came from (PT-10 AC5), and
+     the import date.
+   Unknown keys are kept but ignored. The architect chooses the exact syntax
+   (F5.9), within these names.
+2. **[S1] Steps.** A chain's body is split into steps by a step marker the architect
+   chooses, such that a Markdown horizontal rule (`---`) inside a step does not
+   split it. Each step may have a short name ("Plan", "Implement"). A chain with
+   fewer than 2 or more than 20 steps is invalid.
+3. **[S1] Fields.** Any `{{…}}` marks a field, its name being the text between the
+   braces. A **valid name** is letters, digits and `_`, 1 to 40 characters,
+   case-sensitive. A field whose name is not valid (`{{env.HOME}}`,
+   `{{file:/etc/hosts}}`) is still a field: a typed field labelled with its text as
+   written, left empty for the user to type, **never auto-filled** (PT-5 AC2); the
+   file is not skipped for it. Built-in templates use valid names only (a library
+   test fails on any other). `\{{` writes literal braces. A field may appear
+   any number of times, in any step, and gets one value everywhere. A field used in
+   the body but not declared in `fields` is a typed field labelled with its name.
+   Filling is **one pass**: a value that itself contains `{{x}}` is inserted
+   literally and never expanded. Test: a value `{{branch}}` typed into field `a`
+   leaves the literal text `{{branch}}` in the rendered text.
+4. **[S1] Limits and invalid files.** A template file is at most 32 KB; a rendered
+   step at most 32 KB. On reading, CRLF line ends become LF. A file is **skipped and
+   reported** (source, file, reason) in the Templates tab when it is over the limit,
+   has broken front matter, a missing required key, an invalid `id`, an invalid
+   chain, or a control character anywhere (front matter or body): six reasons; a
+   skipped file never stops the other templates loading. Test: a folder with one
+   valid file and seven invalid ones (one for each of the first five reasons, and
+   two for the control-character reason: one holding `\r` alone, one holding
+   U+001B) lists the valid one and seven skip reports covering all six reasons.
+5. **[S1] Round trip.** Parsing a template file and writing it back (export,
+   PT-8 AC5) gives a file that parses to the same template. Test over every
+   built-in template.
+6. **[S1] Hidden characters in every text.** Titles, descriptions, tags, field
+   labels and defaults, and step names follow PT-4 AC4 wherever they are shown
+   (list, preview, form, review, import preview): hidden characters show as marks.
+   Test: a mine template whose title and one field label hold U+202E shows the mark
+   in the list and the form.
+
+#### PT-2. The built-in library (MVP: migration in S1, growth in S2, chains in S5)
+
+1. **[S1] It replaces today's list.** `PROMPT_TEMPLATES` is removed. Its 24 single
+   prompts are in the library under their current titles, with every blank turned
+   into a field: empty `**Label:** ` lines, bracketed text, empty `- ` items, empty
+   numbered items (Fix Bug's `1. `), and the empty code fences of Explain Code,
+   Debug Error, Investigate Logs and Convert/Translate (a multiline field inside
+   the fence). Its 3 chains are in the
+   library as chain templates, sent **step by step** from S1 (PT-7 AC1 to AC3, no
+   Run; OQ-19) and with Run from S5 (PT-12 AC2). Test: for each of today's 27
+   entries, the library template with each field filled with exactly the text
+   that stood at its blank (empty for an
+   empty blank, the bracketed text for a bracket) renders, byte for byte, to
+   today's `prompt` (steps joined by today's `\n---\n` for the chains), and is
+   found by searching its title.
+2. **[S1] Read-only.** A built-in template cannot be edited or deleted in ADE.
+   "Duplicate to my templates" (S3) makes a **mine** copy with `based_on` set
+   (PT-8).
+3. **[S2, S5] Coverage.** The library holds at least **150** templates: at least
+   **130** single prompts by the end of S2 and at least **20** chains in S5. It
+   covers:
+   - **Roles** (each with at least 6 templates whose `roles` include it): product
+     manager, architect, designer (UX), scrum master, developer, QA, DevOps,
+     adversarial reviewer, security engineer, data engineer, blockchain (Solidity,
+     Solana, audit), AI/ML engineer, SRE, technical writer, release manager,
+     engineering manager. Role ids are those of `vendor/ade-setup/agents/` where one
+     exists there, else a new id listed in `templates/prompts/README.md`.
+   - **Tasks** (each with at least 6 templates): plan and spec, implement, test,
+     debug, refactor, review, architecture, UX and copy, git and release, docs,
+     performance, security, data and migrations, infrastructure and CI, incident and
+     on-call, research and brainstorm.
+   - **BMAD v6** (at least 20, `requires: bmad-v6`): at least 20 **distinct**
+     skills of PT-2 AC5's pinned list, each with a template whose `skill` names it
+     and whose text invokes it.
+   - **ADE's own flow** (exactly 8 rows, one per sub-agent): for each of the 8
+     sub-agents in `.claude/agents/` (product-manager, architect, designer,
+     scrum-master, developer, qa, devops, adversarial-reviewer), at least one
+     template whose `roles` is that sub-agent alone and whose `tags` include
+     `ade-flow`; the test maps them one to one.
+   - **Chains** (S5, at least 20): including plan → implement → test → review,
+     bug report → reproduce → fix → regression test, spec → adversarial review →
+     revise, and story → test-first build → verify. Today's 3 chains count.
+   **A template counts toward at most 3 rows** of this table (the library test
+   counts each template's first 3 matching rows in the order role, task, BMAD,
+   ADE flow, chain), so 150 means 150 distinct, useful templates.
+4. **[S1] BMAD fit.** A template with `requires: bmad-v6` (or `bmad-v4`) is shown
+   with a "BMAD v6" badge and sorted after the others when the target pane's
+   project has no BMAD of that version (as `src/lib/projectMethodology.ts` detects
+   it); it is never hidden. Test: in a fixture project without BMAD, a
+   `requires: bmad-v6` template is listed with the badge, after a template without
+   `requires` that matches the same search.
+5. **[S1] The library test.** A unit test over `templates/prompts/`, part of the
+   verification command, fails unless:
+   - every file parses (PT-1); ids are unique; every id ever shipped (kept in a list
+     in that folder) is still present or listed as removed;
+   - no two templates have the same **normalised body** (lowercased, every run of
+     whitespace one space, every field written `{{}}`), and every template that
+     counts toward AC3 has a body of at least **200 characters** once field markers
+     are removed (the 27 migrated templates are kept as they are and count only if
+     they meet it);
+   - the counts of AC3 for the slices shipped so far hold, with the 3-row cap;
+   - every field is declared or an auto field; every `roles` id exists;
+   - no template contains a control or hidden character, secret-shaped text, an
+     absolute path, or a line starting with `!` (after line-start whitespace);
+   - every `skill` is in the pinned BMAD v6 list: the 30 startable skills under
+     `src-tauri/resources/bmad-v6/skills/` at `VERSION` `bda3c59 6.13.0-next`
+     (bmad, bmad-advanced-elicitation, bmad-agent-analyst, bmad-agent-architect,
+     bmad-agent-dev, bmad-agent-pm, bmad-agent-ux-designer, bmad-architecture,
+     bmad-brainstorming, bmad-build, bmad-build-auto, bmad-code-review,
+     bmad-correct-course, bmad-customize, bmad-deep-recon, bmad-eval,
+     bmad-forge-idea, bmad-party-mode, bmad-prd, bmad-prfaq, bmad-product-brief,
+     bmad-project-context, bmad-qa-generate-e2e-tests, bmad-retrospective,
+     bmad-review, bmad-spec, bmad-ticket, bmad-toolsmith, bmad-ux,
+     bmad-walkthrough); the `bmod-*` metadata skills and the toolsmith's sample
+     skill are excluded. The list and the pinned `VERSION` are a fixture of the
+     test; when the bundled `VERSION` changes, the test fails until a maintainer
+     updates the list and every affected template.
+   The S1 version runs over the migrated 27; the count rows start binding in S2.
+6. **Versioning.**
+   - **[S1]** The library's version is ADE's version. A changed built-in template
+     gets a higher `revision`; its id never changes and a removed id is never
+     reused. Each release's notes list the templates added, changed and removed.
+   - **[S3]** A favourite of a removed template stays in Favourites as "No longer in
+     the library", and can be removed. A **mine** copy whose `based_on` revision is
+     older than the library's shows "The built-in template changed" with a
+     side-by-side view. Test: a fixture library at revision 2 marks a copy
+     `based_on: x@1`, and a favourite of a removed id shows the notice.
+7. **Curation.** ADE's maintainers write and review the library through pull
+   requests to this repo; the owner approves the coverage list (OQ-2). Library
+   changes pass the library test and an adversarial review like any artifact.
+
+#### PT-3. Finding templates (MVP: Templates tab in S1; palette, favourites, recents in S3)
+
+1. **[S1] Search.** The Thoughts panel's Templates tab has a search box, focused when
+   the tab opens. It matches the words typed against title, description, tags,
+   task, role names and the body, title matches ranked first; every word must
+   match (any order, case- and accent-insensitive). Test: "qa flaky" finds a
+   template titled "Triage a flaky test" with role QA, ranked above one that has
+   "flaky" only in its body.
+2. **[S1] Browse.** Without search text the tab lists templates grouped by task,
+   with filters by role and by source (built-in, mine, each repo). Each entry
+   shows its title, source, `kind` (a chain shows its step count) and badges.
+3. **[S1] Preview as plain text.** Moving the highlight to a template shows its
+   description and full text (every step), with fields marked. Every place F5
+   shows template text (preview, form, repo review, import preview) shows it as
+   **plain text**, never as HTML or rendered Markdown: no element, link, image or
+   frame is created from template text. Test: a template whose body holds
+   `<iframe src="https://example.test/">`, `<img src=x onerror=…>` and
+   `![x](https://example.test/a.png)` shows those characters literally, adds no
+   `iframe`, `img` or `a` element, and makes no network request (spy).
+4. **[S3] Command palette.** The command palette lists templates: typing part of a
+   template's title, with or without the prefix `Template:`, lists it under the
+   category "Templates", using AC1's matching. Enter opens its fill form (PT-4).
+   Test: palette input "Template: flaky" lists "Triage a flaky test"; Enter opens
+   the form.
+5. **[S3] Favourites and recents.** Any template can be starred; Favourites is a
+   group at the top of the Templates tab and of the palette's "Templates" results.
+   Recently used lists the last 20 templates sent or inserted, newest first.
+   Neither records field values (D7). Test: fill and send a template with typed
+   value `marker-123`, and insert it into the box; no value in F5's own stores
+   (favourites, recents, mine templates, repo approvals, every key on F5's PT-11
+   AC3 list) and nothing in ADE sync's export holds `marker-123`. (The box's local
+   draft may hold it after Insert; terminal scrollback is not F5's store.)
+6. **[S1] Keyboard.** The whole flow (search, move, pick, fill, send) works with
+   the keyboard alone; ↑/↓ move, Enter picks, Escape goes back one step (PT-16
+   AC3). G2's 3-key bound is tested with a template whose fields are all auto
+   fields and a mocked agent pane with live status at its input.
+
+#### PT-4. Filling fields (MVP)
+
+1. **[S1] The form.** Picking a template with fields opens a small form: one input
+   per field in first-use order, auto fields already filled (PT-5) and marked as
+   such, defaults filled, the first empty required field focused. Below it, the
+   rendered text updates as the user types. A template without fields skips the
+   form and goes straight to the rendered text with its actions. The Scratchpad
+   box is not changed while the form is open.
+2. **[S1] Actions.** The form offers **Insert into box** (puts the rendered text in
+   the Scratchpad box, as today's `loadText` does), **Send** to the target pane
+   (PT-6), and **Copy**. Send stays disabled, saying why, while a required field
+   is empty or a check of PT-6 or PT-15 is not met.
+3. **[S1] Multiline.** A multiline field takes several lines; Enter adds a line,
+   ⌘Enter (Ctrl+Enter on Linux and Windows) sends.
+4. **[S1] Visible text.** The rendered text shows hidden characters (F5.1) as
+   visible marks (for example `⟨U+202E⟩`) with a warning line, whatever the source,
+   and Send stays enabled only after the user ticks **"Send with hidden
+   characters"** for that send. Its label differs from PT-15 AC3's tick, so the two
+   are never confused when both show. Control characters are not covered by the
+   tick: they are refused (PT-6 AC5). Test: a mine template containing U+202E shows
+   the mark and the warning, and Send needs the tick named "Send with hidden
+   characters".
+5. **[S1] Field values.** A typed or pasted field value has CRLF turned into LF as
+   it is entered. A value holding a control character (F5.1) after that is refused:
+   the field shows "This value holds a control character (U+001B)" and Send,
+   Insert and Copy stay disabled until it is removed. There is no override.
+
+#### PT-5. Auto fields and secrets (MVP)
+
+1. **[S1] The auto fields.** These names are filled from the context of the
+   **target pane** and its view:
+   - `cwd`: the target terminal's current folder, as `get_pty_cwd`
+     (`src-tauri/src/pty.rs:518`) reports it;
+   - `project`: the git top level of `cwd`, else `cwd`;
+   - `branch`: the current branch of `project`, read from the repo's `HEAD` file
+     (following a worktree's `.git` file to its git dir) **without starting git**,
+     so no git hook or `core.fsmonitor` program can run; a detached head gives the
+     short commit; outside git, empty;
+   - `file`: the file selected in the target view's file browser;
+   - `open_file`: the file open in the target view's preview panel or code viewer;
+   - `selection`: the **last non-empty selection made in the target view** (its
+     terminal panes, its side panel's code viewer, or its preview panel; a
+     selection in an editor tab does not count in S1) before the template was
+     picked, at most 16 KB (more is not filled, with a note). A selection in the
+     Thoughts panel itself never counts. A selection inside an HTML preview never
+     counts either: the preview is a sandboxed `iframe` with an opaque origin, so
+     ADE cannot read it (F5.0); the user copies and pastes it by hand.
+   - `date`: today's date, `YYYY-MM-DD`.
+   Paths inside `project` are filled relative to it; others as absolute paths.
+   Before F3 S1 ships per-view panels, "the target view's" file browser and preview
+   are the window's. Any other name is a typed field. Test per name, over a fixture
+   repo; for `branch`, a fixture repo whose `core.fsmonitor` and `post-checkout`
+   hook write a marker file shows the branch and leaves no marker.
+2. **[S1] Never a secret source.** No auto field reads a secret source (F5.1). A
+   name such as `env_HOME`, `env.X`, `file:/path` or `secret` is a typed field, left
+   empty: `env.X` and `file:/path` are fields whose names are not valid (PT-1
+   AC3), and `env_HOME`, `secret` and `ANTHROPIC_API_KEY` are valid names that are
+   not auto fields. Test: a
+   template using `{{env.HOME}}`, `{{file:/etc/hosts}}` and
+   `{{ANTHROPIC_API_KEY}}`, with those variables set in ADE's process and in the
+   target's environment, opens with all three as typed fields, empty.
+3. **[S1] No contents of secret files.** `file` and `open_file` are paths, never
+   contents. `selection` is not filled when its text comes from a file whose name
+   matches the secret-file list: `.env` and `.env.*` (except `.env.example`,
+   `.env.sample`, `.env.template`), `.envrc`, `*.pem`, `*.key`, `*.p12`, `*.pfx`,
+   `*.keystore`, `*.jks`, `*.ppk`, `id_rsa*`, `id_dsa*`, `id_ed25519*`, `id_ecdsa*`,
+   `.npmrc`, `.pypirc`, `.netrc`, `.pgpass`, `.htpasswd`, `credentials`,
+   `credentials.*`, `*.tfvars`, `*.tfstate` (and `*.tfstate.backup`),
+   `.git-credentials`, `*service-account*.json`, `.kube/config` and
+   `.docker/config.json` (the last two matched on the last two path parts).
+4. **[S1] No secret-shaped selection.** `selection` is not filled when it holds
+   secret-shaped text, or when it **contains** (as a substring, anywhere) the value
+   of any secret ADE's vault holds that is 8 characters or longer, or equals a
+   shorter one. The field stays empty with the note "Not filled: the selection
+   looks like a secret"; the user may paste it in by hand. The vault comparison
+   must not bring vault values into the webview (the architect's mechanism, F5.9).
+   Test: with vault value `VAULT_MARKER_7f3a`, the selection
+   `export X=VAULT_MARKER_7f3a; echo ok` is not filled.
+5. **[S1] Visible and editable.** Every auto-filled value is shown in the form and
+   can be changed before sending; nothing is sent that the form did not show.
+6. **[S1] The secret test.** With a vault fixture holding `VAULT_MARKER_7f3a`, a
+   `.env` file holding `ENV_MARKER_91c2`, a terminal whose screen shows
+   `ghp_` followed by 36 characters, and a template using every auto field plus
+   `{{env.TOKEN}}`: selecting text in the `.env` file, then in the terminal, then a
+   line containing the vault value, and opening the template each time, leaves no
+   marker and no token in any field or in the rendered text.
+7. **[Second] Engagement paths (F1).** In the default profile, each auto-filled
+   value is checked on its own:
+   - `cwd`, `project`, `file` and `open_file` are not filled when **that path** is
+     inside an engagement's root or checkouts by F1 PE-2 AC5's path rule (symlinks
+     and case resolved);
+   - `branch` is not filled when `project` is not;
+   - `selection` is not filled when it comes from a file inside an engagement's
+     root or checkouts, or from a terminal that **has been in an engagement's
+     folders** (F1 PE-4 AC4's term);
+   - and, as before, no field is filled from a target terminal that has been in an
+     engagement's folders.
+   Each empty field says "Not filled: an engagement's path". Test: a default-profile
+   terminal that never entered an engagement, with `open_file` set to a file inside
+   an engagement checkout, leaves `open_file` empty and fills `cwd`. F5 slice: S1.
+   Goes with whichever of F5 S1 and the F1 story that delivers PE-4 AC4 merges
+   second (F5.8's [Second] table, and the F1.8 amendment F5.8 lists); tested under
+   F1's D28 gate.
+
+#### PT-6. Sending to an agent (MVP: active pane in S1; other targets in S5)
+
+1. **[S1] Default target.** Send goes to the target pane: the active pane. On an
+   Orchestrator tab, Send is disabled with "Templates can't be sent to the
+   Orchestrator: its chat syncs to your other machines"; Insert into box and Copy
+   remain. Reason: the Orchestrator's chat is stored in
+   `better-terminal-orchestrator`, a synced key (F5.0, D7). The Orchestrator can
+   become a target later, once its store can keep template text out of sync's
+   export (F5.5). Test: on an Orchestrator tab, Send is disabled and no
+   `orchestrator-send` event carries the rendered text.
+2. **[S1] Agent pane check.** Every check below runs again at the moment of the
+   write, not only when the form opens.
+   - **macOS and Linux:** the target must be an **agent pane** (F5.1: the busy
+     check names an agent binary). Agent status and the tracker never make a pane
+     an agent pane, and when the busy check cannot tell, Send is disabled, with no
+     confirmation offered. This is an AND with AC4 and AC5.
+   - **[Second] The hub's Claude install.** A pane in a hub tab whose busy check
+     names that hub's `HUB_CLAUDE` is an agent pane (F5.1's test). F5 slice S1;
+     goes with whichever of F5 S1 and F2 slice 1's hub tab and OB-6 AC2 reader
+     merges second (F5.8's [Second] table). S1's own tests cover `binaryFor` only.
+   - **Windows** (no busy check): no pane is known to be an agent pane. Send to an
+     existing terminal needs, **for each send**, the user's confirmation "This
+     terminal is running an agent, waiting at its input" (a tick next to Send,
+     cleared after every send and whenever the form reopens). OQ-10 offers
+     Insert-only on Windows instead.
+3. **[S1] Never into a known shell.** When the busy check shows the target is not
+   an agent pane (a shell, another program, unknown), Send is disabled with "This
+   terminal is not running an agent", and Insert into box and Copy remain. ADE
+   never writes a template's rendered text to such a PTY. Test: with the busy check
+   mocked as `shell`, and again as `busy` with `names` `["python3"]`, and with
+   agent status mocked as live and `ready` for that PTY, Send is disabled and a spy
+   on `writePty` sees no call with the rendered text, for every source.
+4. **[S1] Not while it asks, and confirmed when ADE cannot see.** On an agent pane:
+   - **live status `needsYou` or `working`:** Send waits, showing "The agent is
+     waiting for your answer" or "The agent is working", and sends nothing until
+     the state is at its input and the user presses Send again;
+   - **live status at its input** (`ready`, `finished`, `waiting`): Send writes;
+   - **no live status** (agent status off for the project, a provider without
+     hooks, a session without a `pid`, or a `pid` outside the foreground job): Send
+     needs, **for each send**, the tick "The agent is at its input, not at a
+     question, and its input is empty" (cleared after every send). The form says
+     why: "ADE can't see this agent's prompts. A permission question would take
+     this text as its answer."
+   There is no "in sight" rule. Tests: a mocked live `needsYou` pane gets no write;
+   a pane with no status gets no write until the tick, and the tick does not carry
+   to the next send; status posted without a `pid`, or with a `pid` that is not in
+   the foreground job, is treated as no live status.
+5. **[S1] Safe text.** What ADE writes to a PTY for a template is checked and shaped
+   so that no part of it can act as a command or a key press:
+   - **No control characters.** Rendered text holding a control character (F5.1) is
+     never written. Template files holding one are skipped (PT-1 AC4); field values
+     holding one are refused (PT-4 AC5). No override exists.
+   - **No `!` lines.** If **any line** of the rendered text (any step, for a chain)
+     starts with `!` after line-start whitespace (F5.1), Send is disabled with
+     "Line n starts with `!`: Claude Code would run it as a shell command"; Insert
+     into box and Copy remain. This applies to every source, the built-in library
+     included, and to lines that come from field values.
+   - **Always one bracketed paste.** Every rendered text, one line or many, is
+     written as one bracketed paste (`ESC [200~`, the text, `ESC [201~`) followed
+     by one `\r`. Reason: a raw line feed is Enter to a shell, and a raw tab
+     (allowed in text) acts as a Tab key press (completion) in an agent's input;
+     inside a paste both are text. Any `ESC [200~` or `ESC [201~` sequence inside
+     the text is removed before writing (it cannot occur once control characters
+     are refused; the strip is a second guard). When the pane has not turned
+     bracketed paste mode on, Send is disabled with "This program does not accept
+     pasted text safely"; Insert and Copy remain. Today a pane **moved** into a
+     detached window loses the mode (F5.0), so Send there is disabled until AC9
+     (S5) lands: wrong, but safe. A pane started in a detached window keeps it.
+   Tests: field value `Review this` + CR + `! curl x|sh` is refused; a body with a
+   second line `   ! rm x`, and one with U+00A0 U+3000 `!`, and one with U+200B `!`
+   each disable Send; a three-line template, and a one-line template holding a tab,
+   are each written as exactly one bracketed paste and one `\r` (spy on
+   `writePty`); a pane without bracketed paste mode gets no write.
+6. **[S5] Other targets.** The form's target picker offers:
+   - **a terminal:** any pane in the window's tabs and their views (sub-terminals),
+     listed by tab, view name and agent, each under AC2 to AC5;
+   - **[Second] hub tabs** (F2) appear as their persona session. F5 slice S5; goes
+     with whichever of F5 S5's target-picker story and F2 slice 1's hub tab and
+     OB-6 AC2 reader merges second (F5.8's [Second] table). Until then a hub tab
+     is listed like any other tab;
+   - **not the Orchestrator:** the picker never lists an Orchestrator tab (AC1's
+     reason);
+   - **a new agent:** a role from the **launchable role catalog** (`ROLES` /
+     `ROLE_ITEMS`) and a provider that accepts an opening task (`claude` or
+     `deepseek` today; the picker derives the list from `taskUnsupportedReason`, so
+     it follows `agentCommand.ts`), started with today's `prepareAgentLaunch` in a
+     new sub-terminal of the active tab or a new tab, in the target folder, **with
+     no opening task on the command line**. Once the new pane is an agent pane, the
+     rendered text (step 1, for a chain) is sent to it as an ordinary Send under
+     AC2 to AC5 and PT-15 (with live status at its input it goes without a tick;
+     otherwise the form waits for the tick). Reason: a command-line task loses its
+     line breaks, is cut by the terminal's 1024-byte input line limit, and lands in
+     the shell's history and in `ps`, with any auto-filled path. Test: a three-line
+     template sent to a new agent arrives as three lines at the provider stub
+     (F5.9), and the launch command the stub's shell receives holds none of its
+     text.
+   A template with `roles` preselects an open terminal running an agent of the
+   first such role (from the agent tracker); otherwise, **only when that role is in
+   the launchable role catalog**, "New <role> agent"; otherwise the active pane.
+7. **[S5] `ade open` unchanged.** F5 adds no verb or flag to `ade open` and does not
+   use it from the UI: ADE's UI opens sub-terminals directly, as ADR 0014 says.
+8. **[S1] Images.** Images pasted in the Scratchpad are not part of a template; a
+   template sent with Send goes without them (Insert into box keeps today's
+   behaviour, where the box's images go with the box's send).
+9. **[S5] Moved panes keep bracketed paste mode.** A pane moved into a detached
+   window (or back) keeps the bracketed paste mode its program last set on the PTY
+   (the architect's mechanism, F5.9), so AC5 does not disable Send there. Test: a
+   provider stub that sends `ESC [?2004h` once at start, its pane moved with Move
+   to New Window, gets an enabled Send in the detached window and its write is one
+   bracketed paste; a stub that sends `ESC [?2004h` then `ESC [?2004l`, moved the
+   same way, has Send disabled with AC5's message.
+
+#### PT-7. Chains (S5; AC1 to AC3 for today's 3 chains in S1, OQ-19)
+
+1. **[S1, S5] Filled once, shown whole.** A chain's fields are filled once, in one
+   form, for all steps; the form shows every rendered step, numbered and named.
+2. **[S1, S5] Checks before start.** A chain does not start if any rendered step
+   fails PT-6 AC5 (control characters, any `!` line, or bracketed paste unavailable on
+   the target pane, which blocks every step, one line or many, since every write
+   is a bracketed paste) or holds hidden characters the user has not accepted (PT-4
+   AC4), or if PT-15's flags have not been ticked. Test (S1, step-by-step form):
+   three fixture 3-step chains, the first with a `!` line in step 3, the second
+   with a hidden character in step 3 the user has not accepted, the third with a
+   PT-15 flag on step 3 left unticked; on an agent pane mocked live and `ready`,
+   "Send step 1 of 3" never enables in any of the three forms (fields filled,
+   nothing else done), and a spy on `writePty` sees no call; in the first form it
+   never enables at all, and in the others only once the hidden character is
+   accepted or the flag ticked.
+3. **[S1, S5] Auto-advance only on live agent status.** In S1 (today's 3 built-in
+   chains only, OQ-19) **Run** is never offered: every chain runs step by step as
+   below. From S5, **Run** is offered only when the target is an agent pane with
+   live agent status (D5). Otherwise (agent status off, a provider without hooks,
+   all of Windows), the chain runs **step by step**: ADE shows "Send step n of m"
+   and sends each step only when the user presses it, each step gated like any
+   Send (PT-6 AC2 to AC5, PT-15; PT-12 AC2): with live status at its input
+   (`ready`, `finished`, `waiting`) no tick is asked; with no live status, PT-6
+   AC4's per-send tick; on Windows, PT-6 AC2's per-send tick.
+4. **[S5] When the next step goes.** In Run, ADE sends step n+1 only after live
+   agent status has shown step n accepted (`working`) and then at its input. It
+   never sends while the state is `working` or `needsYou`, and checks PT-6 AC2 to
+   AC5 again before each write. If step n is not accepted within 30 s, or not idle
+   after the step time limit (default 30 minutes, a setting), or status stops being
+   live, the chain **pauses**; it never sends on a timeout. Tests over a mocked
+   status stream: `working → needsYou → working → finished` sends the next step
+   only after `finished`; a stream stuck in `working` past the limit pauses with
+   nothing sent; a stream whose `pid` leaves the foreground job pauses.
+5. **[S5] Control.** Pause, Resume and Cancel at any time; the strip of the target
+   tab shows "Chain: step n of m". If the user types into the target pane during a
+   run, the chain pauses. Closing the target pane cancels it. Test: a keystroke to
+   the target pane while waiting pauses the chain.
+6. **[S5] History.** A chain sent from a template adds no entry to the synced prompt
+   history (PT-11 AC4).
+7. **[S5] Today's typed chains.** Text typed in the box with `---` lines follows the
+   same rules (Run only with live agent status, never on a timeout, never on
+   `needsYou`), as the owner approved (OQ-4).
+
+#### PT-8. My templates (S3; import and export in S6)
+
+1. **[S3] Create.** "New template" opens an editor with the PT-1 fields and a body;
+   "Save as template" in the Scratchpad starts one from the box's text (`---` lines
+   become steps).
+2. **[S3] Edit, duplicate, delete.** Mine templates can be edited, duplicated and
+   deleted (delete asks once). Built-in templates offer Duplicate to my templates.
+   **[S4] Repo templates** also offer it, built and tested in S4, where repo
+   templates first exist (S3 builds no repo fixture for it): duplicating a repo
+   template copies a repo's file into mine templates, which sync (PT-11 AC1); it
+   shows PT-11 AC4's warning, naming mine templates and the repo ("This copies a
+   file from <repo> into your templates, which sync to your other machines when
+   ADE sync is on"), and copies only on confirm; Cancel copies nothing. Duplicate is
+   disabled for unreviewed repo files (PT-9 AC5). Tests: S3, Duplicate of a
+   built-in template adds a mine template; S4, Duplicate of an approved repo
+   template shows the warning and Cancel leaves mine templates unchanged, and
+   Duplicate of an unreviewed one is disabled.
+3. **[S3] Validation.** Saving checks PT-1 (control characters included); an invalid
+   template is not saved and the editor says why.
+4. **[S3] Secret warning.** Saving a template that holds secret-shaped text warns
+   ("This looks like a secret. Templates sync to your sync repo") and saves only
+   after the user confirms (OQ-9).
+5. **[S6] Export.** Any selection of mine templates (or all) exports as one file:
+   a single template as its `.md` file; several as one bundle file the architect
+   defines (a single text file or an archive of `.md` files, within PT-10 AC2's
+   limits). An export holds no field values, favourites or recents, and warns on
+   secret-shaped text as AC4.
+6. **[S3] Limits.** At most **1,000** mine templates and **2 MB** in total (the sum of
+   their files' UTF-8 sizes), each at most 32 KB (PT-1 AC4). A save or import that
+   would pass either limit is refused with a message naming the limit; nothing is
+   half-saved. Reason: 1,000 × 32 KB is more than a browser's `localStorage` quota
+   for the whole app. The owner confirmed 2 MB (OQ-13).
+
+#### PT-9. Hub and project templates (S4)
+
+1. **[S4] Where.** A repo's **template folder** is `<top>/.ade/prompts/`, where
+   `<top>` is the git top level of the target pane's current folder, and
+   **[Second]** for a hub tab, also of its hub folder (a finished hub, F2). The hub
+   folder part needs F2 slice 1's hub tab and its OB-6 AC2 reader, not on `main`:
+   F5 slice S4 owes it and it goes with whichever of F5 S4 and that F2 story merges
+   second (F5.8's [Second] table); until then a hub's templates show only while
+   the target pane's folder is inside the hub. No other folder is scanned: not F4's
+   other workspace roots, not parent folders, not submodules. Inside the template
+   folder ADE reads `*.md` **regular files** only, in subfolders up to 3 deep (which
+   become sub-groups), at most 500 files per repo (the rest reported as skipped).
+   - Symbolic links, junctions, FIFOs, sockets and devices inside the folder are
+     skipped and reported, files and subfolders alike.
+   - If `<top>/.ade` or `<top>/.ade/prompts` is itself a symbolic link or junction
+     whose target, resolved by F1 PE-2 AC5's path rule, is outside `<top>`, the repo
+     has **no** template folder: nothing is read, and "Save to this project" is
+     refused ("This repo's .ade/prompts points outside the repo"). A link that
+     resolves inside `<top>` is followed.
+   - The architect makes the checks hold at the time of the read (no gap between
+     check and open).
+   Test: fixtures with `.ade` linked to `/tmp/x`, `.ade/prompts` linked to `~`, a
+   prompt file linked to `~/.ssh/config`, and a FIFO named `a.md` read nothing
+   from outside the repo, never block, and report each.
+2. **[S4] Shown as repo templates.** They are listed with a source badge (the repo's
+   folder name, "Hub" or "Project") and are read-only in the list. **Edit** opens
+   the file in ADE's editor; **Save to this project** (from the template editor of
+   S3) writes a new file into that repo's template folder, creating `.ade/prompts/`
+   if needed, under AC1's link rule. ADE never commits, pushes or stages these
+   files.
+3. **[S4] Fresh.** Files added, changed or removed on disk are reflected the next
+   time the Templates tab or the palette's template list opens. Test: add a file,
+   reopen the tab, it is listed (under "Not yet reviewed"); delete it, reopen, it
+   is gone.
+4. **[S4] Sharing is git.** A hub's own sync script already commits and pushes the
+   hub's `.ade/`; in a project, the user commits as with any file. ADE sync never
+   carries repo templates (PT-11 AC2).
+5. **[S4] Review by content.** A repo template can be filled, inserted, copied or
+   sent only when this machine has **approved its exact content** in that repo.
+   - **The approval record** holds, per repo, the repo's identity and, per file,
+     its path inside the template folder and the SHA-256 of its bytes. The repo's
+     identity is its top-level folder **and** the root commit ids reachable from
+     its current `HEAD` (read from git's object store without starting git, as
+     `branch` is); a different repo cloned to the same folder has other root
+     commits and inherits nothing. A repo with no commits yet keeps approvals for
+     the running session only.
+   - **What that costs, and how it fails.** ADE has no git library (F5.0), so
+     reading root commits without git means parsing loose objects **and pack
+     files** (new work, F5.9). Root commits are per branch: a branch with another
+     history (an orphan branch, an unrelated merge) can give another identity.
+     Every such case **fails safe**: an identity ADE cannot read, or one that
+     differs, means "no approvals", so files show as "Not yet reviewed", never as
+     approved.
+   - **Unreviewed files** are listed in two groups: "Not yet reviewed" (a file with
+     no approval) and "Changed since you reviewed" (a file whose path was approved
+     with another hash). Their entries show title and source only; picking one
+     opens the review, never the form. Send, Insert into box, Copy, Duplicate to
+     my templates (PT-8 AC2) and filling are disabled for them.
+   - **The review** shows each file's full text as plain text (PT-3 AC3) with
+     PT-4 AC4's marks and PT-15's flags, and for a changed file what changed.
+     **Approve** records that file's current hash; "Approve all shown" records
+     every shown file's hash. A file approved and then changed on disk is
+     unreviewed again.
+   - A file written by **Save to this project** is approved with the hash of what
+     ADE wrote.
+   - Every repo's templates need review, hubs included, starter prompts that a hub
+     template seeds included (OQ-5). F2's run marks nothing reviewed.
+   - The record is local: never synced (PT-11 AC2), and in the default profile it
+     never records an engagement's repo (PT-11 AC8).
+   Tests: an unreviewed file cannot be filled or sent (spy on `writePty`); changing
+   one byte of an approved file moves it to "Changed since you reviewed"; deleting
+   the repo and cloning a different repo with an identical file name to the same
+   folder shows it as "Not yet reviewed".
+6. **[S4] Same rules.** Repo templates follow PT-4, PT-5, PT-6 and PT-15 like any
+   template; nothing in a repo file can make ADE send, run or fetch anything.
+
+#### PT-10. Sharing and importing others' sets (S6)
+
+1. **[S6] Share.** Sharing is exporting (PT-8 AC5): the user sends the file or puts
+   it anywhere reachable by an `https` link (a gist, a repo's raw file).
+2. **[S6] Import from a file.** "Import templates…" accepts a template `.md` file or
+   a bundle. Limits: the file at most 1 MB; once unpacked, at most 4 MB in total and
+   500 entries, each entry at most 32 KB; entry paths relative, at most 3 folders
+   deep and 255 bytes, with no `..`, absolute path, drive letter, link or device
+   entry. A bundle outside the limits is refused whole. ADE parses it **without
+   sending, running or writing anything** and shows the **import preview** (AC4).
+   Test: bundles with a `../x.md` entry, a link entry, and 5 MB unpacked are each
+   refused with nothing written.
+3. **[S6] Import from a link.** The user pastes an `https://` URL and presses
+   **Fetch**. ADE makes one `GET` from Rust (no cookies, no credentials, no custom
+   headers, TLS certificates verified against the system's trust store with no way
+   to skip it, redirects only to `https`, at most 5, 10 s timeout, at most 1 MB),
+   then shows the import preview. Any other scheme, and any URL with a user name or
+   password in it, is refused. ADE registers no URL scheme handler, so no web page
+   or other app can start an import.
+4. **[S6] The import preview.** Lists every template in the file: title, kind, step
+   count, fields, `requires`, and the **full text of every step** as plain text
+   (PT-3 AC3), with hidden characters made visible (PT-4 AC4), and secret-shaped
+   text, `!` lines and `/` lines flagged. Templates that fail PT-1 (control
+   characters included) are listed as skipped with a reason. Nothing is saved until
+   the user chooses **Import** (all or a selection); Cancel leaves no trace.
+5. **[S6] Imported is mine, marked.** Imported templates become mine templates with
+   an `imported` marker and `origin`: the file name, or the URL **without its query
+   and fragment** (they can hold access tokens), and the date. An id clash with an
+   existing mine template asks: Replace, Keep both (the new one gets a suffix) or
+   Skip; the default is Keep both. Import never touches built-in or repo templates.
+   Test: importing from `https://h.test/a.md?token=abc#x` stores origin
+   `https://h.test/a.md`.
+6. **[S6] No network by itself.** Opening ADE, the Templates tab, the palette, the
+   import dialog or the preview, searching, filling and sending make **no network
+   request** for templates; only Fetch does, once per press. Imported templates
+   never refresh. Test: with a spy on the HTTP layer, the whole S1 to S6 flow except
+   Fetch makes no template request, and Fetch makes exactly one. (The CSP does not
+   enforce this: `connect-src` already allows any `https` from the webview, and the
+   CSP does not bind Rust. The test does.)
+7. **[S6] Imported chains.** The first Run or step of an imported chain shows the
+   full rendered chain once more and needs an explicit **Start**.
+
+#### PT-11. Sync, privacy and engagements (each slice)
+
+1. **[S3] What syncs.** When ADE sync is on, mine templates (imported ones
+   included) and favourites of built-in and mine templates sync, as shared state.
+   They merge **per template id**, not per key: each template carries `updated`, a
+   deleted template leaves a tombstone (its id and deletion time) for 90 days, and
+   for each id the newer of the two machines' versions wins; favourites merge the
+   same way per template id. Today's whole-key last-writer-wins merge of
+   `SHARED_KEYS` is not enough (the architect's mechanism). Test: Mac A adds
+   template `a`, Mac B adds template `b` and deletes `c`, both sync in either order,
+   and both end with `a` and `b` and without `c`. Recommended by the PM and the
+   owner's brief (OQ-8).
+2. **[S1–S6] What never syncs.** Recents, favourites of repo templates (they name
+   repo folders), repo approvals (PT-9 AC5), field values, rendered template text,
+   and repo templates never go into ADE sync (neither `SHARED_KEYS` nor
+   `DEVICE_KEYS`), except template text the user saves as a note or mine template
+   after PT-11 AC4's warning. Built-in templates ship with the app and are never stored in the
+   profile.
+3. **[S1] Stores.** S1 adds its own static test: every `localStorage` key F5 adds is
+   in `PERSISTED_KEYS` or in an F5 list of ephemeral keys with a reason, and is not
+   in `SHARED_KEYS` or `DEVICE_KEYS` unless PT-11 AC1 puts it there. ADR 0017's
+   static key test is not on `main`; when it lands, F5's list folds into it.
+4. **[S1] Template text stays on this machine** (D7, F5's own decision and its
+   own extension of F4 OQ-5 to stores F4 leaves alone, OQ-15):
+   - **Send from the form** adds **no entry** to `better-terminal-prompt-history`
+     (a shared key) or to any other store ADE sync exports. Recents (local) record
+     which template was sent. The form never sends to the Orchestrator (PT-6 AC1).
+   - **Insert into box** marks the box as holding template text (a **marked
+     box**). The mark stays while the box holds any text, whatever the user types
+     or deletes after Insert, and clears only when the box is emptied. While the
+     box is marked:
+     - the box's draft (`ade-scratchpad-draft`, a device key that ADE sync exports
+       under `devices/<device>/`) is kept out of sync's export;
+     - **Send to Terminal and ⌘Enter** (every path that calls the box's send) pass
+       the same checks as the form's Send: PT-6 AC2 to AC5 (agent pane, live status
+       or the per-send tick, the Windows tick, no control characters, no `!`
+       line, bracketed paste) and PT-15 for the template's source, over the box's
+       whole text. A failing check disables the box's Send with the same message.
+       The send adds no prompt-history entry;
+     - **on an Orchestrator tab**, the box's Send is disabled with PT-6 AC1's
+       message, so no `orchestrator-send` carries it;
+     - **Run Chain** (a marked box holding `---` lines) is disabled until S5,
+       with a message pointing to the chain template's step-by-step form (PT-12
+       AC2, OQ-19), and from S5 follows PT-7;
+     - **⌘S (save as note)** and **Save as template** (S3) are **refused while
+       the box still holds an absolute auto-filled path**: any value ADE filled
+       into `cwd`, `project`, `file` or `open_file` at Insert that is an
+       absolute path (it starts with `/`, `~`, a drive letter and `:`, or `\\`)
+       and still appears in the box's text. A relative value (a `file` or
+       `open_file` of `README.md`) names no client folder and does not block the
+       save. The message lists those paths and makes no claim about sync:
+       "This text still contains folder paths ADE filled in (…). Remove them to
+       save." Reason: F5's own extension (D7, OQ-17), not F4 OQ-5: F4 approved
+       saved notes as "not stripped: the engineer's own text", so typed text,
+       paths the user typed included, syncs in notes as today; F5 keeps out only
+       what ADE itself filled in, and does not tell a workspace path from any
+       other absolute path, so it treats them all alike. Once no absolute
+       auto-filled path remains, ⌘S shows "This note holds
+       template text. Saved notes sync to your other machines when ADE sync is
+       on." and saves only when the user confirms; Cancel saves nothing. Save as
+       template shows the same warning, naming mine templates. (OQ-17, approved:
+       refusing rather than removing the paths silently.)
+   - The architect chooses the mechanism (an unexported store or stripping on
+     export, as for scrollback).
+   Test: a template with typed value `TYPED_MARKER_51` and an auto-filled `open_file`
+   path holding `PATH_MARKER_c0` (in a folder the target terminal has never been
+   in, so it cannot reach sync through `ade-session`'s `savedCwd`), used six ways:
+   sent from the form; Insert into box then Send to Terminal; Insert into box on an
+   Orchestrator tab then Send (disabled) and ⌘Enter; Insert into box then ⌘S
+   (refused, naming `PATH_MARKER_c0`); Insert into box, delete the path, then ⌘S
+   and Cancel; and Insert into box, delete the path, then ⌘S and confirm. After the
+   first five, ADE sync's export holds neither marker, in the shared state or under
+   `devices/`, and `better-terminal-orchestrator` and `better-terminal-saved-notes`
+   do not hold them; after the sixth, only `better-terminal-saved-notes` holds
+   `TYPED_MARKER_51`, and nothing holds `PATH_MARKER_c0`. The refusal's text
+   contains no "sync". A template whose only auto-filled value is a relative
+   `file` of `README.md`, inserted then saved with ⌘S, shows the confirm warning
+   (not the refusal) and saves on confirm. A further test:
+   a marked box on a pane whose busy check is mocked as `shell` gets no `writePty`
+   call from Send to Terminal or ⌘Enter. (Approved in OQ-11; the alternative,
+   strip auto-filled values from history, cannot strip what the user retyped.)
+5. **[S1] Nothing leaves the machine by F5 itself.** Apart from ADE sync (AC1) and a
+   user's Fetch (PT-10 AC3), F5 sends nothing anywhere; there is no telemetry of
+   template use.
+6. **[S1] One detector.** The secret detector used by PT-5, PT-8 AC4, PT-10 AC4 and
+   the library test is one implementation.
+7. **[Second] Engagement instances (F1).** An engagement instance has its own
+   profile (F1 D14), so its mine templates, favourites, recents and repo approvals
+   are its own and its sync is off (F1 D3). Built-in templates are the same
+   everywhere. Repo templates come from that engagement's repos only. The default
+   profile's mine templates are also offered, **read-only**, in engagement
+   instances (OQ-3; F1 allowed inflow 9, F1 revision 9o), except those the
+   identifier check below withholds: A's Templates tab lists them in a group of
+   their own, marked as coming from the default profile, and A reads their current
+   text each time the tab lists templates. From A they can be previewed, filled,
+   inserted, sent, copied and duplicated into A's own mine templates, but not
+   edited or deleted; A's favourites and recents of them stay in A's profile, and
+   nothing A does is written to the default profile. Nothing flows from an
+   engagement to the default profile, and no engagement sees another engagement's
+   mine templates.
+   - **Identifier check** (the owner, 2026-11-10). The default profile checks each
+     of its mine templates for engagement identifiers exactly as F1 PE-1 AC5 checks
+     a persona: its whole text (every front-matter value and every step),
+     case-insensitive whole words, identifiers shorter than 3 characters skipped,
+     against every engagement in the registry. It checks a template when it is
+     saved (S3: New template, edit, Save as template, Duplicate), imported (S6,
+     PT-10, when import exists) or arrives by ADE sync, and checks every mine
+     template again when an engagement is created or its identifiers change. A
+     template not yet checked against the current registry is not offered in any
+     engagement.
+   - **A blocking identifier withholds, it does not block the save.** A template
+     that names a blocking identifier (F1.1: engagement name, client name, root or
+     checkout path) of engagement B is **left out of inflow 9 in every engagement
+     other than B**; it saves, stays usable in the default profile, and is offered
+     in B only if it names no other engagement's blocking identifier. The save
+     shows the note "Not offered in other engagements: it names <identifier>
+     (engagement <name>)", and the default profile's list marks the template the
+     same way for as long as the match stands. Reason: PE-1 AC5 blocks a persona's
+     save because a persona is live in every engagement (D1); a mine template is
+     live only in the default profile and, through inflow 9, in the engagements
+     this check lets it reach, so leaving it out keeps every other engagement from
+     seeing the client detail without refusing the engineer's own text. A withheld
+     template's text is in nothing A's instance reads for inflow 9, and A's list
+     shows no sign of it.
+   - **A warning identifier warns.** A match on a warning identifier (code repo
+     names, the last folder name of a root or checkout) shows PE-1 AC5's warning
+     naming the identifier and the engagement; the template saves and is still
+     offered. The registry's "not a client detail" acknowledgements (PE-1 AC5) apply
+     here too.
+   Test: with a mine template in the default profile, A's list shows it in that
+   group with no Edit or Delete; favouriting, sending and duplicating it from A
+   leaves every file of the default profile unchanged; a mine template created in
+   A appears neither in the default profile's list nor in engagement B's.
+   Identifier-check test, with engagements A (client `Globex`, root `~/eng/a`) and
+   B (client `Initech`, a checkout `~/src/api`) in the registry: template `t1`
+   holding `Initech` and `TPL_MARKER_t1` saves with the note naming `Initech` and
+   B, is marked in the default profile's list, is offered in B and not in A, and no
+   file A's instance reads for inflow 9 holds `TPL_MARKER_t1`; `t2` holding
+   `~/eng/a` is offered in A and not in B; `t3` holding `Initech` and `Globex` is
+   offered in neither; `t4` holding only `api` saves with the warning and is
+   offered in both, and with no warning once `api` is acknowledged; `t5` holding
+   `Hooli`, saved before engagement C (client `Hooli`) is created, is offered in A
+   and B until C is created and in neither afterwards; and `t6` holding `Initech`,
+   arriving by ADE sync with no save on this machine, is not offered in A. No save
+   in this test is refused.
+   F5 slices: S3 (mine templates, favourites, recents, the identifier check; S6
+   runs the same check on import) and S4 (repo approvals, repo templates); the
+   other work is F1's engagement instances with their own profile (F1 slice 1,
+   F5.8's [Second] table).
+8. **[Second] The default profile never records an engagement's repo.** In the
+   default profile, recents, favourites and repo approvals never record a repo
+   template whose repo is inside an engagement's root or checkouts (F1 PE-2 AC5's
+   path rule). F5 slices: S3 (recents, favourites) and S4 (repo approvals). Goes
+   with F1's PE-4 AC4 story, as PT-5 AC7 (F5.8's [Second] table).
+
+#### PT-12. Today's behaviour kept (S1)
+
+1. Typing in the box, Send to Terminal, pasted images, history, saved notes and the
+   Orchestrator path work as today for text the user typed into an unmarked box.
+   Insert into box is today's template behaviour, except PT-11 AC4's rules for a
+   marked box (gated Send, no Orchestrator, no Run Chain until S5, the note
+   warning).
+2. Until S5, today's 3 chains are listed as chain templates offered with Insert
+   into box, Copy and **step-by-step sending** (PT-7 AC1 to AC3, OQ-19): one form
+   for all steps, then "Send step n of m", each step gated like any Send (PT-6 AC2
+   to AC5, PT-15); there is no Run and nothing is sent on a timeout. Other chain
+   templates come in S5. Typed `---` chains in the box run as today until S5 (PT-7
+   AC7). Test: in S1, each of the 3 chain templates' forms shows Insert, Copy and
+   "Send step 1 of m" and no Run; after step 1 is sent, nothing more is written
+   until the user presses "Send step 2 of m"; with live status mocked as `working`
+   after step 1, pressing "Send step 2 of m" shows "The agent is working" and
+   writes nothing, and step 2 is written only once the status is mocked back to
+   `ready` and the user presses it again; with live status `ready`, no tick is
+   shown; with the busy check mocked as `shell`, the step button is disabled.
+
+#### PT-13. Accessibility (S1)
+
+1. Every control has an accessible name; the form's auto-filled, not-filled,
+   confirmation and flag notes are announced; the chain progress (S5) is announced.
+   F5 announces only through **the window's single announcer**
+   (`SubTerminalAnnouncer` in the main window, F5.0; PR #114 keeps one per window)
+   and adds no `aria-live` region of its own. Keyboard flow per PT-3 AC6. Test: in
+   the main window, a not-filled note's text reaches `SubTerminalAnnouncer`, and
+   the Templates tab renders no element with `aria-live`.
+2. **[Second] Detached windows.** A detached window has no announcer today (F5.0),
+   so there F5 announces nothing (and adds no region) until PR #114's per-window
+   announcer exists; then F5's notes reach it, tested as AC1 in `DetachedApp`. F5
+   slice S1; goes with whichever of F5 S1 and the PR #114 story that gives
+   detached windows their announcer merges second (F5.8's [Second] table).
+
+#### PT-14. Performance (S1)
+
+1. **Nothing at app start.**
+   - **[S1]** The library loads on first use: a static test checks that no module
+     imported at app start imports the library or its loader (only a dynamic
+     import does).
+   - **[Second]** The first open of the Templates tab shows the list within
+     **500 ms** on the Linux desktop e2e runner of ADR 0030, measured in e2e. ADR
+     0030 is Proposed and its runner is not built, so this part goes with whichever
+     of F5 S1 and the story that builds that runner merges second (F5.8's [Second]
+     table).
+2. **[S1] Search.** A unit test builds an index of 2,000 generated templates, runs
+   3 warm-up searches, then 20 timed searches, and fails if any timed search takes
+   more than **300 ms** on CI's runner. G2's 100 ms is the design target; the test
+   is a budget with 3× slack so runner noise does not make it flaky.
+
+#### PT-15. Untrusted text at send time (S1)
+
+S1 builds these checks for every source and tests them with fixture templates of
+each source; they apply to mine, repo and imported templates as S3, S4 and S6 add
+them.
+
+
+1. **[S1] Source badge.** The form shows the template's source next to Send:
+   "Built-in", "Mine", "Imported from <origin>" or "Repo: <folder name>". Test per
+   source.
+2. **[S1] Slash-command lines.** For every non-built-in source, each line of the
+   rendered text that starts with `/` after line-start whitespace is listed above
+   Send ("Line n runs a slash command: /…"), and Send needs the tick "Send these
+   commands" for that send. The same applies to any `/` line that came from an
+   auto-filled value (for example a selection), whatever the source. Shown at send
+   time, not only in the import preview or review. Test: a mine template with
+   `/clear` on line 3 needs the tick; a built-in template with no `/` line does not;
+   a built-in template whose `selection` holds `/compact` needs it.
+3. **[S1] Permissions bypassed.** When ADE knows the target agent was launched with
+   permission prompts bypassed (ADE launched it in continuous mode,
+   `--dangerously-skip-permissions`), the form shows
+   "This agent runs without permission prompts: it will act on this text without
+   asking", and for a non-built-in source Send needs the tick **"Send to an agent
+   without permission prompts"** for that send (a label distinct from PT-4 AC4's
+   tick). **This is new work:** today `AgentSession` has no continuous-mode field;
+   only `prepareAgentLaunch`'s `opts.continuous` (`src/lib/agentLaunch.ts`) knows
+   it. S1 records it on the tracker's session at launch (sessions restored from
+   older storage have no record and show no warning). Test: a tracker session
+   launched with `continuous: true` records it, shows the warning and, for a mine
+   template, needs the tick.
+4. **[S1] Why this matters (shown in the review and import help).** Every ADE
+   terminal's environment holds the vault's secrets (`pty.rs:273`), so a template
+   that tells an agent to print its environment or post files elsewhere can reach
+   them. F5 cannot judge intent; it shows the text, the source and the risky lines,
+   and the agent's own permission rules remain the last guard.
+
+#### PT-16. Fitting the Thoughts panel (S1)
+
+1. **[S1] Today's panel.** F5 uses the panel's list area (today's bottom panel,
+   with the Templates tab's 160 px strip as it is on `main`) for the template list,
+   the preview and the form. Where the list area is too short for the form, the form
+   takes the composer's place while it is open (the box's text, draft and images
+   are kept and shown again on Back, Insert or Send). PR #114 (approved, 8b6cf4f)
+   puts the form in the list area, which scrolls on its own, so the form is built
+   so its actions cannot scroll away:
+   - the **form root** (marked `data-f5-form`) is a **bounded column**: a flex
+     column (`display: flex`, `flex-direction: column`) or a grid with rows, with
+     `min-height: 0`, filling its container (`flex: 1 1 0` or `height: 100%`,
+     the architect picks); its height comes from the panel, never from its
+     content;
+   - **no scrolling ancestor** sits between the form root and the panel root
+     while the form is open: the container that holds the form (the list area,
+     or the composer's place when the form takes it) carries `data-f5-form-open`
+     while the form shows, and the stylesheet gives `[data-f5-form-open]`
+     `overflow: hidden` (replacing its own scroll); no other element between the
+     form root and the panel root has `overflow` or `overflow-y` of `auto` or
+     `scroll`, in an inline style, a stylesheet rule or a Tailwind class
+     (`overflow-auto`, `overflow-scroll`, `overflow-y-auto`, `overflow-y-scroll`);
+   - the **form's container bounds the form**: it is a flex column
+     (`display: flex`, `flex-direction: column`) with `min-height: 0`, or it has a
+     definite height (a fixed length, or `100%` of a bounded parent), by inline
+     style, stylesheet rule or class, so the form root's height comes from the
+     panel and never from the form's content;
+   - the fields and the rendered text sit in **one field area**, the form's only
+     scroll container (marked `data-f5-scroll`);
+   - **Insert, Send, Copy and Back** sit in a **fixed action area** (marked
+     `data-f5-actions`) that is a sibling of the field area, never inside it, and
+     follows it in DOM order;
+   - the stylesheet gives the field area `overflow-y: auto` and `min-height: 0`
+     and the action area `flex: none` (or the grid equivalent the architect picks),
+     with no rule that hides or shrinks the action area.
+   **Cascade caveat.** On `main` the list area scrolls through a Tailwind class
+   or an inline style, which `[data-f5-form-open]` overrides cleanly only while
+   no stylesheet rule sets it. If PR #114 moves that scroll into a stylesheet
+   rule, an attribute selector alone has the same specificity as one class, so
+   source order decides and a rule placed later wins. The override must then
+   outrank every rule that sets `overflow` or `overflow-y` on the container:
+   more specific (for example the list area's class together with
+   `[data-f5-form-open]`), or equally specific and placed after it in the same
+   stylesheet.
+   Test (jsdom, which computes no layout, as PR #114 revision 2 tests its panel):
+   every action button is a descendant of `[data-f5-actions]` and of no
+   `[data-f5-scroll]`; every field input is inside `[data-f5-scroll]`; the form has
+   exactly one `[data-f5-scroll]`; with the form open in the list area, and again
+   in the composer's place, the form's container has `data-f5-form-open` and is a
+   flex column with `min-height: 0` or has a definite height (by inline style,
+   class or stylesheet rule), and, walking from `[data-f5-form]` up to the panel
+   root, no element's inline style sets `overflow` or `overflow-y` to `auto` or
+   `scroll` and no element carries a class matching `overflow(-y)?-(auto|scroll)`;
+   and a string test on the stylesheet finds the rules above for
+   `[data-f5-form]`, `[data-f5-form-open]`, `[data-f5-scroll]` and
+   `[data-f5-actions]`, and finds no rule setting `overflow` or `overflow-y` to
+   `auto` or `scroll` for any class or attribute selector carried by an element on
+   that walk, except on the form's container, where the `[data-f5-form-open]`
+   rule overrides it with `overflow: hidden` and outranks it (the cascade caveat).
+   Pixel visibility at the panel's minimum size is checked by the designer's
+   review, not by S1's tests.
+2. **[S1] Explicit Insert.** Filling a template never changes the box; only **Insert
+   into box** does. PR #114 revision 2 (c45c7b0) dropped its live composer (F5.0),
+   so the two agree; the designer coordinates them.
+3. **[S1] Escape.** In the main window today any Escape closes the Thoughts panel
+   (`useKeybindings.ts:161`); in a detached window Escape never closes it (F5.0).
+   PR #114 revision 2 (c45c7b0) flagged the clash and left the combination to F5,
+   which sets it here. Inside the Templates tab, Escape goes back one step and does
+   not reach the window's own handler: from the form to the list, from search text
+   to an empty search. Only from the list with an empty search does Escape do what
+   that window does today: in the main window it closes the panel; in a detached
+   window it returns focus to the terminal and the panel stays open. Tests: Escape
+   in the form returns to the list with the panel still open, in the main window
+   and in `DetachedApp`; Escape on the empty list closes the panel in the main
+   window and leaves it open in `DetachedApp`.
+4. **[Second] Both of PR #114's docks.** Once PR #114's docks are built, AC1's
+   structure holds in both, each dock tested on its own: with the panel root's
+   `data-placement` set to `right` and to `bottom`, the action buttons are inside
+   `[data-f5-actions]` and outside `[data-f5-scroll]`; the form root is the bounded
+   column of AC1 in a container that bounds it; the form's container has
+   `data-f5-form-open` and no element between the form root and the panel root
+   scrolls (AC1's DOM walk, per dock); and no `[data-placement]` or
+   `[data-chrome]` rule overrides AC1's rules for `[data-f5-form]`,
+   `[data-f5-form-open]`, `[data-f5-scroll]` or `[data-f5-actions]`, or sets
+   `overflow` or `overflow-y` to `auto` or `scroll` on an element of that walk
+   without being outranked by AC1's override (string test, as PR #114 revision
+   2's TR-4 and TR-29).
+   F5 slice: S1; goes with whichever of F5 S1
+   and PR #114's Thoughts-panel dock story merges second (F5.8's [Second] table).
+
+### F5.8 Slices
+
+Each slice is its own release step, passes the verification command on its own, and
+is sharded by the scrum-master into stories.
+
+| Slice | Delivers | Criteria | Depends on |
+|---|---|---|---|
+| **S1. Engine and today's prompts** (MVP) | The file format and parser; today's 24 prompts and 3 chains migrated (the 3 chains sent step by step, no Run, OQ-19); the Templates tab with search, browse and plain-text preview; the fill form with auto fields and the secret rules; safe send to the active pane (agent pane check, confirmations, safe text, bracketed paste); template text kept out of sync; PT-15's send-time checks for every source (tested with fixture templates of each source until S3, S4 and S6 add those sources) | PT-1; PT-2 AC1, AC2, AC4, AC5 (S1 part), AC6 (S1 part); PT-3 AC1 to AC3, AC6; PT-4; PT-5 AC1 to AC6; PT-6 AC1 to AC5, AC8; PT-7 AC1 to AC3 (today's 3 chains, step by step only); PT-11 AC2 to AC6; PT-12; PT-13 AC1; PT-14 AC1 (static part), AC2; PT-15; PT-16 AC1 to AC3; [Second]: F5.1's and PT-6 AC2's hub-tab part, PT-5 AC7, PT-13 AC2, PT-14 AC1 (timing), PT-16 AC4 | nothing to ship; its [Second] hub-tab part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
+| **S2. Library growth** | The built-in library grown to at least 130 single prompts meeting PT-2 AC3's prompt rows and AC5's checks | PT-2 AC3 (prompt rows), AC5 (counts) | S1 (OQ-2 approved) |
+| **S3. Mine, favourites, recents, palette** | Create, edit, duplicate, delete; Save as template; favourites and recents; templates in the command palette; mine templates sync with the per-id merge | PT-2 AC6 (S3 part); PT-3 AC4, AC5; PT-8 AC1, AC2 (built-in and mine part), AC3, AC4, AC6; PT-11 AC1; [Second]: PT-11 AC7 and AC8 (mine templates, favourites, recents) | S1 |
+| **S4. Hub and project templates** | The template folder in the project and the hub, review by content hash, Save to this project | PT-8 AC2 (repo-template part); PT-9 (AC1's hub-folder part [Second]); [Second]: PT-11 AC7 and AC8 (repo approvals, repo templates) | S1, and S3 (Save to this project uses S3's template editor); its [Second] hub-folder part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
+| **S5. Chains and other targets** | Chain templates (at least 20) with safe auto-advance or step-by-step; send to any terminal or a new agent by role (not the Orchestrator, OQ-16); Send in a pane moved into a detached window | PT-2 AC3 (chain row); PT-6 AC6 (hub-tab part [Second]), AC7, AC9 (moved panes keep bracketed paste mode); PT-7 (AC1 to AC3 for every chain template, with Run; AC4 to AC7) | S1; its [Second] hub-tab part waits on F2 slice 1's hub tab and OB-6 AC2 reader |
+| **S6. Share and import** | Export; import from a file or a pasted link with the preview | PT-8 AC5; PT-10 | S3 |
+
+**[Second] criteria.** Each is owed by the F5 slice named here, and goes with
+whichever of that slice's story and the other work merges into `main` second, the
+merge order checked at review (F3 D14's rule). A criterion split over two F5 slices
+is owed in part by each. Until then each is a rule for the code; only its test
+waits. The obligation is written into both sides' tickets at F5 sharding and into
+the `.ade/context/` note F5 creates (`.ade/context/f5-merges-second.md`).
+
+**If the other work is withdrawn** (its PR closed unmerged, its ADR rejected, its
+slice dropped from its PRD), the criterion does not wait for ever and is not
+silently dropped. The scrum-master marks it "orphaned" in
+`.ade/context/f5-merges-second.md`, and the PM amends F5 in its next revision,
+with the owner's approval, to do one of two things: rebind it to the work that
+replaces the withdrawn one, or drop its test because what it guards no longer
+exists. Its rule for the code stays where it still means something. The expected
+outcome for each:
+- **F2 slice 1** withdrawn: no hub tabs exist, so the hub-tab parts of F5.1,
+  PT-6 AC2, PT-6 AC6 and PT-9 AC1 are dropped.
+- **F1's PE-4 AC4 story or slice 1** withdrawn: PT-5 AC7, PT-11 AC7 and AC8 are
+  rebound to whatever replaces engagement isolation, or dropped with it.
+- **ADR 0030 rejected:** PT-14 AC1's 500 ms timing is rebound to the e2e runner
+  the architect adopts instead; if none, it stays a design target with no test,
+  and the static part keeps binding.
+- **PR #114 withdrawn:** PT-16 AC4 is dropped (AC1 already holds for today's
+  panel); PT-13 AC2 is rebound to whatever gives detached windows an announcer,
+  or dropped, and F5 then adds no region there.
+
+| Criterion | F5 slice | Other work |
+|---|---|---|
+| PT-5 AC7 (engagement paths not auto-filled) | S1 | The F1 story that delivers PE-4 AC4 (F1 slice 4, not yet sharded), under F1's D28 gate |
+| PT-11 AC7 (engagement instances have their own templates, favourites, recents and approvals) | S3 (mine templates, favourites, recents) and S4 (repo approvals, repo templates) | F1's engagement instances with their own profile (F1 slice 1, PE-4 AC1, D14), under F1's D28 gate |
+| PT-11 AC8 (the default profile never records an engagement's repo) | S3 (recents, favourites) and S4 (repo approvals) | The F1 story that delivers PE-4 AC4 (F1 slice 4) |
+| F5.1 and PT-6 AC2, hub-tab part (`HUB_CLAUDE` is an agent binary) | S1 | F2 slice 1's hub tab and its OB-6 AC2 `hub.conf` reader (F2 approved, not built) |
+| PT-6 AC6, hub-tab part (hub tabs listed as their persona session) | S5 | F2 slice 1's hub tab and its OB-6 AC2 reader |
+| PT-9 AC1, hub-folder part (a hub tab's hub folder is a template folder) | S4 | F2 slice 1's hub tab and its OB-6 AC2 reader |
+| PT-13 AC2 (announcements in detached windows) | S1 | PR #114's story that gives each detached window its announcer |
+| PT-14 AC1, timing part (500 ms first open) | S1 | The story that builds ADR 0030's Linux desktop e2e runner (ADR 0030 is Proposed) |
+| PT-16 AC4 (both docks) | S1 | PR #114's Thoughts-panel dock story |
+
+**F1 amendments (OQ-18 and OQ-3, approved by the owner 2026-11-10; written as F1
+revision 9n, after 9m, on the F4 branch, PR #113).** F1's stories carry F5's
+[Second] criteria only if F1 says so, as F1 revision 9l did for F3 D14, so F1.8
+carries this line beside the F3 cross-reference (no F1 requirement changes):
+
+> **F5 cross-reference:** the F1 story delivering PE-4 AC4 carries F5's PT-5 AC7 and
+> PT-11 AC8, and the slice-1 story giving engagement instances their own profile
+> carries F5's PT-11 AC7, each if it merges into `main` after the F5 slice named for
+> it (F5.8, `.ade/context/f5-merges-second.md`).
+
+F1's slice-1 stories are already sharded, so the scrum-master adds the line to that
+story's ticket now. Revision 9n also adds F1's **allowed inflow 9** for OQ-3: the
+default profile's mine templates, offered read-only in engagement instances, never
+written from them and never flowing back (PT-11 AC7). F1 revision 9o (the owner,
+2026-11-10, with F5 revision 5.1) adds the identifier check: a template naming
+another engagement's blocking identifier (PE-1 AC5) is left out of the inflow. F5
+S3 builds it, under PT-11 AC7's [Second] test; no F1 story does.
+
+**F2 amendment (OQ-20, approved by the owner 2026-11-10; written as F2 revision
+5.2 on the onboarding branch, PR #98).** F2 slice 1 (approved, not built) is not
+yet sharded, so the scrum-master writes F5's obligations into its tickets when it
+is sharded, and into the context note now (F5.9). A ticket written from the context
+note binds only if F2's sharding reads the note; F1's line exists because F1's
+stories are already sharded and a PRD line is what a sharding reads. For the same
+reason, and for consistency with F1, F2.8 (Dependencies and what ships first)
+carries one line; no F2 requirement changes, F5 only reads what F2 slice 1 builds:
+
+> **F5 cross-reference:** the F2 slice-1 story delivering the hub tab and the OB-6
+> AC2 `hub.conf` reader carries F5's hub-tab parts of F5.1 and PT-6 AC2 (F5 S1),
+> PT-9 AC1 (F5 S4) and PT-6 AC6 (F5 S5), each if it merges into `main` after the F5
+> slice named for it (F5.8, `.ade/context/f5-merges-second.md`).
+
+**PR #114** is a UX spec, not a PRD, so it has no requirements section to carry
+such a line; its stories are not yet sharded, and the scrum-master writes F5's
+obligations (PT-13 AC2, PT-16 AC4) into their tickets when they are, and into the
+context note now.
+
+Suggested order: S1, then S2 and S3 in either order, then S4 (after S3), S5 and S6
+(after S3). S5 is the most security-sensitive and should not be rushed.
+
+**Cross-repo dependency F5-XR1 (the agent hub template).** Tracking reference:
+**F5-XR1**. The owner files it in the template's own repo and records the issue
+number here and in the `.ade/context/` note F5 creates at S4 sharding (OQ-12). The
+template should ship an `.ade/prompts/` folder with a short README (what goes there,
+the format, that templates are shared through the hub's git and reviewed on each
+machine) and, optionally, starter prompts for its personas. **Starter prompts the
+template seeds are not trusted automatically**: they appear under "Not yet reviewed"
+like any repo template (PT-9 AC5). Its sync script already pushes `.ade/`, so no
+script change is needed for D3. F5 S4 does not wait for F5-XR1.
+
+**No F2 dependency for review (OQ-5 approved at the recommendation).** Exempting
+hubs ADE created from review would need F2's run to write a local, unsynced record
+of each hub it created and of the hashes of the template files ADE itself wrote,
+never inferred from files on disk, and it would still not cover starter prompts the
+template seeded. It would have been an F2 change and is not in F5.
+
+### F5.9 Handoff
+
+- **Architect:**
+  - the front matter syntax and a parser for nested `fields` (the repo has no YAML
+    library; `src/lib/frontmatter.ts` is scalar-only by design), the step marker
+    (PT-1 AC2), the bundle format and its unpack limits (PT-8 AC5, PT-10 AC2);
+  - where mine templates live in the profile (a `state/kv` key, or files in the
+    profile's app data) within PT-8 AC6's 2 MB; the key names; the per-id sync merge
+    with tombstones (PT-11 AC1), since `sync.rs` merges whole keys today; how
+    template text is kept out of the prompt history and the draft's export (PT-11
+    AC4); and how an engagement instance reads the default profile's mine
+    templates read-only, writing nothing there (PT-11 AC7, F1 allowed inflow 9),
+    and how the default profile's identifier check (PT-11 AC7) keeps a withheld
+    template's text out of what A reads, without A learning another engagement's
+    identifiers;
+  - the agent pane check (PT-6 AC2): the agent binaries, and, once F2 slice 1's
+    hub tab and OB-6 AC2 reader are on `main` ([Second], F5.8), reading a hub's
+    `HUB_CLAUDE` through that reader (F5.1); binding live agent status to the
+    busy check's foreground job, which is **new Rust work**: `pty_foreground_job`
+    returns names and a state only (no process group id or pids), and
+    `agent_status_watch` carries only the state, not the session's `pid`; status
+    as a blocking gate only, with the several-sessions rule (F5.1); re-checking at
+    write time; the Windows confirmation;
+  - the marked box (PT-11 AC4): one gate shared by the form's Send and the box's
+    Send, ⌘Enter and Run Chain; the note and Save-as-template warnings; recording
+    continuous mode on the tracker's session (PT-15 AC3);
+  - safe writing (PT-6 AC5): control-character refusal, CRLF normalisation, the `!`
+    line check with line-start whitespace, one bracketed paste for every write and
+    the check that the pane turned bracketed paste mode on (xterm's mode state);
+    **check against real versions of Claude Code, codex and ollama** that the `\r`
+    written right after `ESC [201~` submits the prompt and is not swallowed by
+    their paste handling (if it is, the architect picks a delay or a separate
+    write per provider, and records it). Probe so far: Claude Code 2.1.322 and
+    codex 0.167.0 send `ESC [?2004h`; ollama is not yet confirmed, and if it never
+    turns the mode on, its panes get Insert and Copy only (PT-6 AC5);
+  - **bracketed paste mode survives a move (F5 S5, PT-6 AC9):** a pane moved into
+    a detached window (or back) must keep the PTY's bracketed paste mode (for
+    example by recording `ESC [?2004h` and `ESC [?2004l` per PTY on the Rust side,
+    or carrying the mode with the pane), so Send there is not wrongly disabled.
+    Panes started in a detached window are not affected. Until S5 lands, Send in a
+    moved pane is disabled (PT-6 AC5): wrong, but safe;
+  - **Windows check:** verify on Windows whether ConPTY passes `ESC [?2004h` from
+    the agent through to xterm.js. If it does not, the mode is never on there, and
+    every Windows Send is disabled in practice (OQ-10); record the result in
+    F5.0 and tell the PM;
+  - a chain runner that replaces `sendChain`'s silence polling with live-status
+    stepping (PT-7 AC4), and the new-agent flow that launches with no task and
+    sends step 1 once the pane is an agent pane (PT-6 AC6);
+  - the secret detector (one implementation, PT-11 AC6), and comparing a selection
+    with vault values (substring) without bringing them into the webview (PT-5 AC4);
+  - reading `HEAD` and root commits without starting git (PT-5 AC1, PT-9 AC5): with
+    no git library in `Cargo.toml`, root commits need loose-object and pack-file
+    parsing (or a library the architect adds by ADR), and every failure must mean
+    "no approvals" (PT-9 AC5); the
+    template-folder link checks without a check-then-open gap (PT-9 AC1); the
+    approval record (PT-9 AC5);
+  - the link fetch (PT-10 AC3) in Rust, with verified TLS. The CSP does not apply to
+    Rust, and the webview's `connect-src` already allows any `https`, so PT-10 AC6's
+    test, not the CSP, is what keeps fetching to Fetch;
+  - how `templates/prompts/` is bundled (`tauri.conf.json` resources) and loaded
+    lazily (PT-14 AC1).
+- **Provider stub (for tests).** An executable named `claude`, put first on `PATH`
+  in the test's terminal, that: turns bracketed paste mode on (`ESC [?2004h`);
+  prints a prompt marker; records every byte it receives on standard input,
+  unchanged, to a file the test names; and records its own command line (`argv`) to
+  that file's sibling. It never runs what it receives. The busy check then names
+  `claude`, so the pane is an agent pane. PT-6 AC5, PT-6 AC6 and PT-7 tests read
+  the recorded bytes. The QA and architect agree its location in the S1 story.
+- **Designer:** the Templates tab (search, groups, filters, plain-text preview), the
+  fill form with its notes, ticks, source badge and flags, its fit in both docks
+  and Escape (PT-16), the target picker, the chain strip, the template editor, the
+  repo review with "Not yet reviewed" and "Changed since you reviewed", the import
+  preview; palette entries. Coordinate with PR #114.
+- **Scrum-master:** shard S1 first; write each [Second] obligation of F5.8's table
+  into the F5 slice's ticket and the other side's ticket, and create
+  `.ade/context/f5-merges-second.md`; mark a [Second] criterion "orphaned" there
+  and tell the PM when its other work is withdrawn (F5.8); add F1 revision 9n's
+  F1.8 line to F1's slice-1 tickets now (OQ-18), and F2 revision 5.2's F2.8 line to
+  F2 slice 1's tickets when it is sharded (OQ-20); F5-XR1 into tickets.
+- **QA:** PT-5 AC6, PT-6 AC3 to AC5, PT-7 AC4, PT-9 AC5, PT-10 AC6, PT-11 AC4 and
+  PT-15 are the security tests; each must fail against today's code where today's
+  code differs (sendChain's timeout send, Send into a shell, raw multi-line writes,
+  template text in the synced history).
+- **DevOps:** bundling the library; release notes listing library changes (PT-2
+  AC6); the e2e timing of PT-14 AC1 once ADR 0030's runner exists.
+- **Library authors:** write the S2 library against PT-2 AC3 and AC5 (OQ-2, confirmed
+  by the owner: the maintainers write it, with agents, reviewed by PR).
+
+### F5.10 Open questions for the owner (all answered 2026-11-10)
+
+**Answered by the owner on 2026-11-10: every question at the PM's recommendation.**
+Each is marked below, the text above applies the answers, and F5 has no open
+questions. Each had the PM's recommendation; answering "as recommended" accepted
+them all. Revision 2 changed OQ-2, OQ-4 and OQ-5 and added OQ-10 to OQ-14; revision
+3 added OQ-15 to OQ-18; revision 4 changed OQ-10, OQ-15, OQ-17 and OQ-18 and added
+OQ-19; revision 5 changed OQ-11, OQ-15, OQ-16 and OQ-17 and added OQ-20.
+
+- **OQ-1. Where repo templates live.** **Answered 2026-11-10: as recommended.**
+  Recommended: `.ade/prompts/` in hubs and projects alike (D3): one place, already
+  pushed by the hub's sync, no clash with the hub's scaffolding `templates/` folder.
+  Alternative: `templates/prompts/` in hubs, as first suggested, and `.ade/prompts/`
+  in projects.
+- **OQ-2. "Extensive" = 150, made meaningful.** **Answered 2026-11-10: as
+  recommended.** Recommended: at least 150 built-in templates (130 prompts by S2, 20
+  chains in S5) covering 16 roles and 16 tasks, 20 distinct BMAD v6 skills from the
+  pinned list of 30, and the 8 ADE sub-agents one to one; each template counts
+  toward at most 3 rows; bodies unique and at least 200 characters. Confirm the
+  number, the lists and the quality bar, and whether the maintainers (with agents,
+  reviewed by PR) write them.
+- **OQ-3. Mine templates in engagements.** **Answered 2026-11-10: as recommended
+  (PT-11 AC7; F1 allowed inflow 9, F1 revision 9n). Amended by the owner
+  2026-11-10 (revision 5.1, F1 revision 9o):** the default profile's mine templates
+  are checked for engagement identifiers exactly as personas are (F1 PE-1 AC5),
+  when saved, imported or synced in. A template naming a blocking identifier of
+  engagement B is left out of inflow 9 in every engagement other than B, with a
+  visible note in the default profile; its save is not refused (PE-1 blocks a
+  persona's save only because a persona is live in every engagement, which a
+  withheld template is not). Warning identifiers warn, as for personas. Recommended: yes, the default
+  profile's mine templates are offered read-only in engagement instances, as a new
+  F1 allowed inflow (default → engagement, never back). Needs an F1 change and your
+  approval there. Otherwise each engagement starts with built-in and repo templates
+  only.
+- **OQ-4. Today's typed `---` chains.** **Answered 2026-11-10: as recommended.**
+  Recommended: yes, apply PT-7's safe stepping (Run only with live agent status,
+  per-step confirmation otherwise) to them in S5. Today a chain sends the next step
+  after 10 minutes even if the agent is still working, and can type into a
+  permission prompt or a shell.
+- **OQ-5. Review repo prompts by content, everywhere.** **Answered 2026-11-10: as
+  recommended.** Recommended (changed in revision 2): every repo's templates are
+  reviewed per file by content hash, hubs included, and starter prompts a hub
+  template seeds included; files ADE writes by Save to this project are approved as
+  written. Alternative: exempt hubs ADE created, which needs an F2 change (a local
+  record written at F2's run) and still cannot cover seeded files.
+- **OQ-6. Links only, no gallery.** **Answered 2026-11-10: as recommended.**
+  Recommended: in F5, share by file or pasted `https` link only; no URL scheme
+  handler and no hosted gallery. A curated community gallery can be a later feature.
+- **OQ-7. Library home.** **Answered 2026-11-10: as recommended.** Recommended: the
+  library lives in this repo (`templates/prompts/`), not vendored from another repo
+  as the roles are, so it is reviewed and versioned with ADE's releases.
+- **OQ-8. What syncs.** **Answered 2026-11-10: as recommended.** Recommended: mine
+  templates and favourites of built-in and mine templates sync, merged per template
+  id; recents, repo approvals, template text and anything naming a repo never sync
+  (PT-11).
+- **OQ-9. A secret in a template.** **Answered 2026-11-10: as recommended.**
+  Recommended: warn and save on confirm (PT-8 AC4). Stricter alternative: refuse to
+  save secret-shaped text at all.
+- **OQ-10. Sending on Windows.** **Answered 2026-11-10: as recommended.** Windows
+  has no busy check and no agent status, so ADE cannot tell an agent from a shell or
+  see a permission prompt. Recommended: allow Send with a per-send confirmation that
+  the terminal runs an agent at its input (PT-6 AC2), and chains step by step.
+  Stricter alternative: on Windows, templates offer Insert into box and Copy only,
+  and the new-agent target (S5) still works with a confirmed first send. **Note:**
+  it is unverified whether ConPTY passes `ESC [?2004h` through (F5.0, F5.9's Windows
+  check). If it does not, PT-6 AC5 disables every Windows Send whatever you answer
+  here, so Windows is in practice Insert and Copy only until the architect finds a
+  way.
+- **OQ-11. Template text and the prompt history.** **Answered 2026-11-10: as
+  recommended.** Recommended: template sends add no entry to the synced prompt
+  history, and inserted template text is kept out of the draft's sync export (PT-11
+  AC4), so no auto-filled path or typed value syncs except what the user saves after
+  OQ-17's warning. Alternative: a separate, device-only history for template sends
+  (more work, same privacy).
+- **OQ-12. Tracking the hub template change.** **Answered 2026-11-10: as recommended
+  (the owner files F5-XR1; its issue number is recorded at S4 sharding).**
+  Recommended: file F5-XR1 as an issue in the template's own repo and give the PM
+  its number for F5.8 and the context note. The public repo names only "F5-XR1".
+- **OQ-13. Mine templates size cap.** **Answered 2026-11-10: as recommended.**
+  Recommended: 1,000 templates and 2 MB in total (PT-8 AC6). Confirm, or name
+  another total under the app's storage quota.
+- **OQ-14. Sending without live agent status.** **Answered 2026-11-10: as
+  recommended.** Recommended: allowed, with a per-send confirmation that the agent
+  is at its input (PT-6 AC4); turning on agent status removes the tick for Claude
+  Code. Stricter alternative: no Send at all without live agent status (Insert and
+  Copy only), which removes Send for every non-Claude-Code provider and every
+  project without agent status.
+- **OQ-15. Template text and field values never sync (D7).** **Answered 2026-11-10:
+  as recommended.** This is F5's own decision, auto-filled paths included. F4 OQ-5
+  (approved 2026-11-10) strips workspace and checkout paths only from the keys F4
+  WS-7 AC3 strips; it leaves the prompt history and saved notes as the engineer's
+  own text, and you confirmed typed text syncs as today. So F4 OQ-5 does not keep
+  auto-filled paths out of the stores F5 writes to; only D7 does. Recommended: yes;
+  template text, auto-filled paths and typed values stay out of every store ADE sync
+  exports, except where the user saves a marked box with no absolute auto-filled
+  path left as a note or template after a warning (OQ-17). Alternatives: **(a)** let
+  template text and typed values sync like any typed text (simpler): a template send
+  adds a prompt-history entry, the marked draft is exported, and ⌘S saves after the
+  warning; **auto-filled paths then sync too**, in the history, the draft and notes,
+  because F4 does not strip those keys and F5 would not either. **(b)** as (a), but
+  F5 still keeps absolute auto-filled paths out: a send whose text still holds one
+  adds no prompt-history entry, the draft is kept out of the export while it holds
+  one, and ⌘S and Save as template are refused as in PT-11 AC4.
+- **OQ-16. No Orchestrator target in F5.** **Answered 2026-11-10: as recommended.**
+  Your brief named the active session, a sub-terminal and a specific agent or
+  persona; revision 2 also offered the Orchestrator, whose chat is a synced store.
+  Recommended: drop it from F5 (no template Send, no marked-box Send there; Insert
+  and Copy remain) and bring it back later with a way to keep template text out of
+  its export. Alternative: keep it and let template text sync through the
+  Orchestrator's chat (needs OQ-15 answered with alternative (a) or (b); under (b) a
+  send holding an absolute auto-filled path is still refused there).
+- **OQ-17. Saving a marked box as a note or template.** **Answered 2026-11-10: as
+  recommended.** Saved notes and mine templates sync. F4 approved saved notes as
+  "not stripped: the engineer's own text" (WS-7 AC3), so this is F5's own extension
+  (D7), covering only paths ADE filled in. Recommended: **refuse** ⌘S and Save as
+  template while the box still holds an **absolute** path ADE auto-filled (`cwd`,
+  `project`, `file`, `open_file`), listing those paths in a message that makes no
+  claim about sync ("This text still contains folder paths ADE filled in (…). Remove
+  them to save."); a relative value such as `README.md` does not block; once none
+  remains, warn that the note syncs and save on confirm (PT-11 AC4). Why refuse
+  rather than remove: removing the paths silently changes the user's text and can
+  leave a note that no longer makes sense, while refusing shows exactly what would
+  have synced. Alternative: remove the auto-filled paths on save, naming them in the
+  warning. Stricter: refuse to save template text as a note at all.
+- **OQ-18. One line in F1.8.** **Answered 2026-11-10: as recommended (F1 revision
+  9n).** Approve the F1 amendment in F5.8: F1's PE-4 AC4 story and its slice-1
+  engagement-instance story carry F5's [Second] criteria (PT-5 AC7, PT-11 AC7, AC8)
+  when they merge after F5's, as F1 revision 9l did for F3. It goes in the F1
+  revision after 9m (F1's latest, on the F4 branch). No F1 requirement changes.
+  Recommended: approve.
+- **OQ-19. Today's 3 chains in S1.** **Answered 2026-11-10: as recommended (PT-2
+  AC1, PT-7 AC1 to AC3, PT-11 AC4, PT-12 AC2 and F5.8 changed to match).** Today a
+  user picks "Design Session", "Code Review Chain" or "Debug Chain" and presses Run
+  Chain. In S1 they are Insert-only and a marked box's Run Chain is disabled until
+  S5 (PT-11 AC4, PT-12 AC2), which is a step back for anyone who uses them. Today's
+  Run Chain is also the unsafe path F5 exists to fix (it sends after 10 minutes,
+  into a shell or a permission prompt). Recommended: bring PT-7's **step-by-step**
+  mode (PT-7 AC1 to AC3, no Run) into S1 for the 3 built-in chains only: one form,
+  "Send step n of m", each step gated like any Send. That keeps the chains usable
+  without the unsafe auto-advance; auto-advance (Run) and new chains stay in S5. If
+  you accept, the PM moves PT-7 AC1 to AC3 (built-in chains) into S1 and changes
+  PT-12 AC2 and PT-11 AC4 to match. Alternatives: accept the step back until S5 (the
+  user inserts the chain and sends each step by hand); or keep today's Run Chain for
+  a marked box until S5 (not recommended: it is the unsafe path).
+- **OQ-20. One line in F2.8.** **Answered 2026-11-10: as recommended (F2 revision
+  5.2).** Approve the F2 amendment in F5.8: F2 slice 1's hub-tab story carries F5's
+  hub-tab [Second] parts (F5.1 and PT-6 AC2, PT-6 AC6, PT-9 AC1) when it merges
+  after F5's slice, matching OQ-18's line in F1. It goes in the F2 revision after
+  5.1. No F2 requirement changes. Recommended: approve, for consistency with F1.
+  Alternative: rely on the context note and the tickets written at F2's sharding,
+  with no F2 line.
+
+### F5.11 Risks
+
+- **Prompt injection through shared text.** A repo or imported template can tell an
+  agent to do harm, and every terminal holds the vault's secrets (PT-15 AC4).
+  Mitigated by plain-text display of the full text before sending, review by
+  content hash (PT-9 AC5), hidden-character marks, the `!` and control-character
+  refusals, slash-command and bypass flags at send time, and the source badge (PT-15);
+  not eliminated: the agent's own permission rules remain the last guard.
+- **The per-send tick becomes a reflex.** Users who send many templates without live
+  agent status may tick without looking. Mitigated by clearing it after each send
+  and by naming why it is there; turning on agent status removes it for Claude Code.
+  OQ-14 offers the stricter path.
+- **Status lag.** Agent status can trail the screen by up to 2 s (G4). A permission
+  prompt raised in that window can take a gated send. Accepted and stated.
+- **Library quality at 150.** A large library of weak prompts is worse than a small
+  good one. Mitigated by the uniqueness, length and 3-row rules, review per PR, and
+  the coverage table; the owner may lower the number (OQ-2).
+- **Agent status coverage.** Run needs live agent status (Claude Code hooks, opt-in,
+  not Windows); other providers get step-by-step with confirmations. Acceptable by
+  D5.
+- **Selections with secrets the detector misses.** The detector is heuristic. The
+  form always shows the value, so the user sees what goes out (PT-5 AC5).
+- **BMAD drift.** A new bundled BMAD version renames or drops skills. The pinned
+  list fails the library test until templates are updated (PT-2 AC5).
+- **ADE cannot see Claude Code's input box.** A send is pasted after whatever the
+  user has already typed there: a half-written draft joins the template's text,
+  and a `!` the user typed first turns the whole paste into a shell command
+  (Claude Code's bash mode). ADE checks only the text it writes. Mitigated by the
+  per-send tick's wording where status is not live; not eliminated.
+- **The Enter after the paste.** Claude Code's paste handling might swallow a `\r`
+  that arrives right after `ESC [201~`, so a Send would paste without submitting.
+  Safe (nothing runs) but confusing; the architect checks a real version (F5.9).
+- **Bracketed paste everywhere.** Every write needs the pane's bracketed paste mode
+  (PT-6 AC5), so an agent CLI that never turns it on gets Insert and Copy only
+  (ollama is not yet confirmed). Until S5's PT-6 AC9 makes the mode survive a
+  move (F5.9), Send in a pane **moved** into a detached window is disabled; panes
+  started there are not affected.
+- **Windows Send may be always disabled.** If ConPTY does not pass
+  `ESC [?2004h` through (unverified, F5.9), no Windows pane ever has bracketed
+  paste mode on, so every Windows Send is disabled in practice and Windows users
+  get Insert and Copy only, whatever OQ-10 says.
+- **Repo identity per branch.** Root commits are read per `HEAD`, so switching to
+  a branch with another history shows that repo's templates as unreviewed again
+  (PT-9 AC5). Safe, at the cost of a second review.
+<!-- F5 ends -->
