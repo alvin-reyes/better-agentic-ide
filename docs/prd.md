@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08) |
-| F5 | [Extensive prompt templates](#f5-extensive-prompt-templates) | Approved 2026-11-10 (owner), revision 5; every open question (OQ-1 to OQ-20) answered at the recommendation; F1 revision 9n and F2 revision 5.2 carry its cross-references and OQ-3's inflow; not sharded |
+| F5 | [Extensive prompt templates](#f5-extensive-prompt-templates) | Approved 2026-11-10 (owner), revision 5; every open question (OQ-1 to OQ-20) answered at the recommendation; F1 revision 9n and F2 revision 5.2 carry its cross-references and OQ-3's inflow; revision 5.1 adds the owner's identifier check on that inflow (F1 revision 9o) and the review minors; not sharded |
 
 ---
 
@@ -2308,7 +2308,9 @@ clarification for slice 0.
   revision 4, and its final review's minors (n1 to n5) are folded in. The owner
   answered all twenty open questions at the recommendation (F5.10); F5 has no open
   questions. The F1 and F2 amendments the owner approved with it are written as F1
-  revision 9n (OQ-18, OQ-3) and F2 revision 5.2 (OQ-20). Not sharded. Next: the
+  revision 9n (OQ-18, OQ-3) and F2 revision 5.2 (OQ-20). Revision 5.1 adds the
+  owner's identifier check on OQ-3's inflow (2026-11-10; F1 revision 9o), the
+  review minors m1 to m3 and the S1 architect's notes. Not sharded. Next: the
   architect and the designer (F5.9), then the scrum-master shards S1.
 - **Number:** F2 is the onboarding PRD (PR #98, approved, not built), F3 the
   per-view viewer PRD (PR #112, approved), and F4 the workspaces PRD (PR #113,
@@ -2422,6 +2424,25 @@ clarification for slice 0.
     **n4**, the cascade caveat for when PR #114 moves the list area's scroll into a
     stylesheet (PT-16 AC1); **n5**, indentation fixed (PT-16 AC1 and AC4, F5.9,
     OQ-11, OQ-17).
+  - 2026-11-10, revision 5.1 (owner decision and review minors, PR #115):
+    **owner decision**, the default profile's mine templates are checked for
+    engagement identifiers exactly as personas (F1 PE-1 AC5) when saved, imported
+    or synced in, and re-checked when an engagement is created or changes; a
+    template naming engagement B's blocking identifier is left out of inflow 9 in
+    every engagement other than B, with a visible note, and its save is not
+    refused; warning identifiers warn; with a test (PT-11 AC7, OQ-3, F1.8
+    amendments paragraph; F1 revision 9o drops F1's "ADE does not check them").
+    **m1**, PT-7 AC3's step-by-step mode asks no tick when live status is at its
+    input, matching PT-12 AC2; **m2**, a PT-7 AC2 test (a step 3 with a `!` line,
+    an unaccepted hidden character or an unticked PT-15 flag: "Send step 1" never
+    enables) and PT-12 AC2's test mocks `working` after step 1 and checks that
+    step 2 waits; **m3**, PT-11 AC7's "read when the tab lists templates"
+    rewritten. **S1 architect's notes (PR #119):** any `{{…}}` is a field, one
+    with a name that is not valid is a typed field never auto-filled, and
+    built-in templates use valid names only (PT-1 AC3, PT-5 AC2); `selection`'s
+    "editor" is the side panel's code viewer, and editor tabs do not count in S1
+    (PT-5 AC1); PT-12 AC2 and PT-11 AC4 already match OQ-19 (a marked box's Run
+    Chain stays disabled in S1), unchanged.
 
 ### F5.0 What exists today (checked on `origin/main` at 2d65a7f)
 
@@ -2803,8 +2824,13 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    chooses, such that a Markdown horizontal rule (`---`) inside a step does not
    split it. Each step may have a short name ("Plan", "Implement"). A chain with
    fewer than 2 or more than 20 steps is invalid.
-3. **[S1] Fields.** `{{name}}` marks a field (`name`: letters, digits and `_`, 1 to
-   40 characters, case-sensitive). `\{{` writes literal braces. A field may appear
+3. **[S1] Fields.** Any `{{…}}` marks a field, its name being the text between the
+   braces. A **valid name** is letters, digits and `_`, 1 to 40 characters,
+   case-sensitive. A field whose name is not valid (`{{env.HOME}}`,
+   `{{file:/etc/hosts}}`) is still a field: a typed field labelled with its text as
+   written, left empty for the user to type, **never auto-filled** (PT-5 AC2); the
+   file is not skipped for it. Built-in templates use valid names only (a library
+   test fails on any other). `\{{` writes literal braces. A field may appear
    any number of times, in any step, and gets one value everywhere. A field used in
    the body but not declared in `fields` is a typed field labelled with its name.
    Filling is **one pass**: a value that itself contains `{{x}}` is inserted
@@ -2997,7 +3023,8 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    - `file`: the file selected in the target view's file browser;
    - `open_file`: the file open in the target view's preview panel or code viewer;
    - `selection`: the **last non-empty selection made in the target view** (its
-     terminal panes, code viewer, editor or preview) before the template was
+     terminal panes, its side panel's code viewer, or its preview panel; a
+     selection in an editor tab does not count in S1) before the template was
      picked, at most 16 KB (more is not filled, with a note). A selection in the
      Thoughts panel itself never counts. A selection inside an HTML preview never
      counts either: the preview is a sandboxed `iframe` with an opaque origin, so
@@ -3010,9 +3037,12 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    hook write a marker file shows the branch and leaves no marker.
 2. **[S1] Never a secret source.** No auto field reads a secret source (F5.1). A
    name such as `env_HOME`, `env.X`, `file:/path` or `secret` is a typed field, left
-   empty. Test: a template using `{{env.HOME}}`, `{{file:/etc/hosts}}` and
+   empty: `env.X` and `file:/path` are fields whose names are not valid (PT-1
+   AC3), and `env_HOME`, `secret` and `ANTHROPIC_API_KEY` are valid names that are
+   not auto fields. Test: a
+   template using `{{env.HOME}}`, `{{file:/etc/hosts}}` and
    `{{ANTHROPIC_API_KEY}}`, with those variables set in ADE's process and in the
-   target's environment, opens with all three empty.
+   target's environment, opens with all three as typed fields, empty.
 3. **[S1] No contents of secret files.** `file` and `open_file` are paths, never
    contents. `selection` is not filled when its text comes from a file whose name
    matches the secret-file list: `.env` and `.env.*` (except `.env.example`,
@@ -3176,14 +3206,23 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    fails PT-6 AC5 (control characters, any `!` line, or bracketed paste unavailable on
    the target pane, which blocks every step, one line or many, since every write
    is a bracketed paste) or holds hidden characters the user has not accepted (PT-4
-   AC4), or if PT-15's flags have not been ticked.
+   AC4), or if PT-15's flags have not been ticked. Test (S1, step-by-step form):
+   three fixture 3-step chains, the first with a `!` line in step 3, the second
+   with a hidden character in step 3 the user has not accepted, the third with a
+   PT-15 flag on step 3 left unticked; on an agent pane mocked live and `ready`,
+   "Send step 1 of 3" never enables in any of the three forms (fields filled,
+   nothing else done), and a spy on `writePty` sees no call; in the first form it
+   never enables at all, and in the others only once the hidden character is
+   accepted or the flag ticked.
 3. **[S1, S5] Auto-advance only on live agent status.** In S1 (today's 3 built-in
    chains only, OQ-19) **Run** is never offered: every chain runs step by step as
    below. From S5, **Run** is offered only when the target is an agent pane with
    live agent status (D5). Otherwise (agent status off, a provider without hooks,
    all of Windows), the chain runs **step by step**: ADE shows "Send step n of m"
-   and sends each step only when the user presses it, with PT-6 AC4's per-send
-   tick (and on Windows PT-6 AC2's).
+   and sends each step only when the user presses it, each step gated like any
+   Send (PT-6 AC2 to AC5, PT-15; PT-12 AC2): with live status at its input
+   (`ready`, `finished`, `waiting`) no tick is asked; with no live status, PT-6
+   AC4's per-send tick; on Windows, PT-6 AC2's per-send tick.
 4. **[S5] When the next step goes.** In Run, ADE sends step n+1 only after live
    agent status has shown step n accepted (`working`) and then at its input. It
    never sends while the state is `working` or `needsYou`, and checks PT-6 AC2 to
@@ -3445,20 +3484,64 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    are its own and its sync is off (F1 D3). Built-in templates are the same
    everywhere. Repo templates come from that engagement's repos only. The default
    profile's mine templates are also offered, **read-only**, in engagement
-   instances (OQ-3; F1 allowed inflow 9, F1 revision 9n): A's Templates tab lists
-   them in a group of their own, marked as coming from the default profile, read
-   when the tab lists templates. From A they can be previewed, filled, inserted,
-   sent, copied and duplicated into A's own mine templates, but not edited or
-   deleted; A's favourites and recents of them stay in A's profile, and nothing A
-   does is written to the default profile. Nothing flows from an engagement to the
-   default profile, and no engagement sees another engagement's mine templates.
+   instances (OQ-3; F1 allowed inflow 9, F1 revision 9o), except those the
+   identifier check below withholds: A's Templates tab lists them in a group of
+   their own, marked as coming from the default profile, and A reads their current
+   text each time the tab lists templates. From A they can be previewed, filled,
+   inserted, sent, copied and duplicated into A's own mine templates, but not
+   edited or deleted; A's favourites and recents of them stay in A's profile, and
+   nothing A does is written to the default profile. Nothing flows from an
+   engagement to the default profile, and no engagement sees another engagement's
+   mine templates.
+   - **Identifier check** (the owner, 2026-11-10). The default profile checks each
+     of its mine templates for engagement identifiers exactly as F1 PE-1 AC5 checks
+     a persona: its whole text (every front-matter value and every step),
+     case-insensitive whole words, identifiers shorter than 3 characters skipped,
+     against every engagement in the registry. It checks a template when it is
+     saved (S3: New template, edit, Save as template, Duplicate), imported (S6,
+     PT-10, when import exists) or arrives by ADE sync, and checks every mine
+     template again when an engagement is created or its identifiers change. A
+     template not yet checked against the current registry is not offered in any
+     engagement.
+   - **A blocking identifier withholds, it does not block the save.** A template
+     that names a blocking identifier (F1.1: engagement name, client name, root or
+     checkout path) of engagement B is **left out of inflow 9 in every engagement
+     other than B**; it saves, stays usable in the default profile, and is offered
+     in B only if it names no other engagement's blocking identifier. The save
+     shows the note "Not offered in other engagements: it names <identifier>
+     (engagement <name>)", and the default profile's list marks the template the
+     same way for as long as the match stands. Reason: PE-1 AC5 blocks a persona's
+     save because a persona is live in every engagement (D1); a mine template is
+     live only in the default profile and, through inflow 9, in the engagements
+     this check lets it reach, so leaving it out keeps every other engagement from
+     seeing the client detail without refusing the engineer's own text. A withheld
+     template's text is in nothing A's instance reads for inflow 9, and A's list
+     shows no sign of it.
+   - **A warning identifier warns.** A match on a warning identifier (code repo
+     names, the last folder name of a root or checkout) shows PE-1 AC5's warning
+     naming the identifier and the engagement; the template saves and is still
+     offered. The registry's "not a client detail" acknowledgements (PE-1 AC5) apply
+     here too.
    Test: with a mine template in the default profile, A's list shows it in that
    group with no Edit or Delete; favouriting, sending and duplicating it from A
    leaves every file of the default profile unchanged; a mine template created in
    A appears neither in the default profile's list nor in engagement B's.
-   F5 slices: S3 (mine templates, favourites, recents) and S4 (repo approvals, repo
-   templates); the other work is F1's engagement instances with their own profile
-   (F1 slice 1, F5.8's [Second] table).
+   Identifier-check test, with engagements A (client `Globex`, root `~/eng/a`) and
+   B (client `Initech`, a checkout `~/src/api`) in the registry: template `t1`
+   holding `Initech` and `TPL_MARKER_t1` saves with the note naming `Initech` and
+   B, is marked in the default profile's list, is offered in B and not in A, and no
+   file A's instance reads for inflow 9 holds `TPL_MARKER_t1`; `t2` holding
+   `~/eng/a` is offered in A and not in B; `t3` holding `Initech` and `Globex` is
+   offered in neither; `t4` holding only `api` saves with the warning and is
+   offered in both, and with no warning once `api` is acknowledged; `t5` holding
+   `Hooli`, saved before engagement C (client `Hooli`) is created, is offered in A
+   and B until C is created and in neither afterwards; and `t6` holding `Initech`,
+   arriving by ADE sync with no save on this machine, is not offered in A. No save
+   in this test is refused.
+   F5 slices: S3 (mine templates, favourites, recents, the identifier check; S6
+   runs the same check on import) and S4 (repo approvals, repo templates); the
+   other work is F1's engagement instances with their own profile (F1 slice 1,
+   F5.8's [Second] table).
 8. **[Second] The default profile never records an engagement's repo.** In the
    default profile, recents, favourites and repo approvals never record a repo
    template whose repo is inside an engagement's root or checkouts (F1 PE-2 AC5's
@@ -3479,8 +3562,11 @@ rule). Every [Second] criterion is in exactly one F5 slice row, so none is dropp
    templates come in S5. Typed `---` chains in the box run as today until S5 (PT-7
    AC7). Test: in S1, each of the 3 chain templates' forms shows Insert, Copy and
    "Send step 1 of m" and no Run; after step 1 is sent, nothing more is written
-   until the user presses "Send step 2 of m"; with the busy check mocked as
-   `shell`, the step button is disabled.
+   until the user presses "Send step 2 of m"; with live status mocked as `working`
+   after step 1, pressing "Send step 2 of m" shows "The agent is working" and
+   writes nothing, and step 2 is written only once the status is mocked back to
+   `ready` and the user presses it again; with live status `ready`, no tick is
+   shown; with the busy check mocked as `shell`, the step button is disabled.
 
 #### PT-13. Accessibility (S1)
 
@@ -3704,8 +3790,10 @@ carries this line beside the F3 cross-reference (no F1 requirement changes):
 F1's slice-1 stories are already sharded, so the scrum-master adds the line to that
 story's ticket now. Revision 9n also adds F1's **allowed inflow 9** for OQ-3: the
 default profile's mine templates, offered read-only in engagement instances, never
-written from them and never flowing back (PT-11 AC7). F5 S3 builds it, under PT-11
-AC7's [Second] test; no F1 story does.
+written from them and never flowing back (PT-11 AC7). F1 revision 9o (the owner,
+2026-11-10, with F5 revision 5.1) adds the identifier check: a template naming
+another engagement's blocking identifier (PE-1 AC5) is left out of the inflow. F5
+S3 builds it, under PT-11 AC7's [Second] test; no F1 story does.
 
 **F2 amendment (OQ-20, approved by the owner 2026-11-10; written as F2 revision
 5.2 on the onboarding branch, PR #98).** F2 slice 1 (approved, not built) is not
@@ -3756,7 +3844,10 @@ template seeded. It would have been an F2 change and is not in F5.
     with tombstones (PT-11 AC1), since `sync.rs` merges whole keys today; how
     template text is kept out of the prompt history and the draft's export (PT-11
     AC4); and how an engagement instance reads the default profile's mine
-    templates read-only, writing nothing there (PT-11 AC7, F1 allowed inflow 9);
+    templates read-only, writing nothing there (PT-11 AC7, F1 allowed inflow 9),
+    and how the default profile's identifier check (PT-11 AC7) keeps a withheld
+    template's text out of what A reads, without A learning another engagement's
+    identifiers;
   - the agent pane check (PT-6 AC2): the agent binaries, and, once F2 slice 1's
     hub tab and OB-6 AC2 reader are on `main` ([Second], F5.8), reading a hub's
     `HUB_CLAUDE` through that reader (F5.1); binding live agent status to the
@@ -3852,7 +3943,14 @@ OQ-19; revision 5 changed OQ-11, OQ-15, OQ-16 and OQ-17 and added OQ-20.
   number, the lists and the quality bar, and whether the maintainers (with agents,
   reviewed by PR) write them.
 - **OQ-3. Mine templates in engagements.** **Answered 2026-11-10: as recommended
-  (PT-11 AC7; F1 allowed inflow 9, F1 revision 9n).** Recommended: yes, the default
+  (PT-11 AC7; F1 allowed inflow 9, F1 revision 9n). Amended by the owner
+  2026-11-10 (revision 5.1, F1 revision 9o):** the default profile's mine templates
+  are checked for engagement identifiers exactly as personas are (F1 PE-1 AC5),
+  when saved, imported or synced in. A template naming a blocking identifier of
+  engagement B is left out of inflow 9 in every engagement other than B, with a
+  visible note in the default profile; its save is not refused (PE-1 blocks a
+  persona's save only because a persona is live in every engagement, which a
+  withheld template is not). Warning identifiers warn, as for personas. Recommended: yes, the default
   profile's mine templates are offered read-only in engagement instances, as a new
   F1 allowed inflow (default → engagement, never back). Needs an F1 change and your
   approval there. Otherwise each engagement starts with built-in and repo templates
