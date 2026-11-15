@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10; revision 9o adds the identifier check to inflow 9, decided by the owner 2026-11-10) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.10 (2026-11-15, **approved by the owner 2026-11-15**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); revision 3.11 (**pending owner approval**) strips every tab's path fields from `ade-session` (S0b; the design's O-3) and asks **OQ-22 (open)** (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.10 (2026-11-15, **approved by the owner 2026-11-15**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); revisions 3.11 and 3.12 (**pending owner approval**) strip every tab's path fields and generated names from `ade-session` (S0b; the design's O-3, OQ-22) and ask **OQ-23 (open)** (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -2394,11 +2394,13 @@ clarification for slice 0.
   review of 3.7 (F4.12's eighth table), revision 3.9 answers the delta review of 3.8
   (the ninth), and revision 3.10 answers that of 3.9 (the tenth) with the owner's
   follow-up answer, and gives the owner's approval list (History, 3.10). Revision
-  3.10 is the approved text. **Revision 3.11 (2026-11-15) is pending the owner's
-  approval of its text:** it applies the owner's answer to the design's O-3 (strip
-  every tab's path fields from `ade-session`'s export) as slice S0b, and asks one
-  question, OQ-22 (open). Not sharded; S0 (F4.8) comes first, then S0b once 3.11
-  is approved. Revision 1's
+  3.10 is the approved text. **Revisions 3.11 and 3.12 (2026-11-15) are pending the
+  owner's approval of their text:** they apply the owner's answers to the design's
+  O-3 and to OQ-22 as slice S0b. Every tab's path fields are left out of
+  `ade-session`'s export, and generated names are replaced by generic ones. 3.12
+  also answers the review of 3.11, records the design's O-2 as answered, and asks
+  one question, OQ-23 (open). Not sharded; S0 (F4.8) comes first, then S0b once
+  3.11 and 3.12 are approved. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
   finding and folded in the owner's decisions of 2026-11-10; the delta review of
   revision 2 BLOCKED it on one finding (N-B1) and listed minors, which revision 3
@@ -2751,6 +2753,49 @@ clarification for slice 0.
        `ade-session`: typed tab names, plain sub-terminal names, and names ADE
        derived from a path. Stripping the derived names is OQ-22, open (recommend
        yes).
+  - 2026-11-15, revision 3.12 (**pending the owner's approval, with 3.11**; 3.10
+    stays the approved text). It records the owner's answer to OQ-22 (yes, the
+    generated names) and the design's O-2 (no fresh start; design revision 5). It
+    answers the review of 3.11 (one major, in OQ-22's wording, and three minors;
+    F4.12's eleventh table):
+    - S0b's criterion names the path each name is compared with, the active pane's
+      for a terminal tab;
+    - it says plainly that a typed name equal to its folder's last part is replaced
+      too;
+    - `previewPath` is listed in case a later build saves it, since `saveSession`
+      on `main` does not, and the test writes it by hand. This corrects revision
+      3.5's "What still syncs", which listed `previewPath` as if `main` exported it;
+    - `browserUrl` is disclosed, and OQ-23 asks about `file://` and local
+      addresses;
+    - limit (b) and OQ-16 record O-2's answer.
+
+    **What the owner approves (revisions 3.11 and 3.12 together, requirement
+    level; the text in WS-7 AC3 and F4.8 governs; this replaces 3.11's list):**
+    1. **Every tab's paths out of `ade-session` (the design's O-3, the owner).**
+       Every `savedCwd`, `editorFilePath`, `contractsRoot` and `previewPath`, at any
+       depth, is left out of `ade-session`'s export, for every tab, workspace or
+       not, own views and sub-terminals included. `previewPath` is listed for a
+       later build, as `main` does not save it.
+    2. **Generated names replaced (OQ-22, the owner).** In the export only, a name
+       equal to the last part of its own path, or to ADE's form of it (a contracts
+       tab's `⬡ ` prefix), becomes "Editor", "Contracts" or "Terminal". A terminal
+       tab is compared with its active pane's folder, a sub-terminal with its own
+       active pane's. A typed name that happens to match is replaced too. Every
+       other typed name keeps syncing.
+    3. **Nothing changes on this machine.** The key is never imported, so the local
+       session, every tab's own name, folder, file, contracts root and preview are
+       kept. The phone relay is out of scope.
+    4. **The device file.** This machine's file under `devices/<device>/` holds none
+       of the four fields and no generated name after its next export, which runs
+       when the session has changed. Earlier values stay in the history (F4 offers
+       no fresh start, the design's O-2), and an older build keeps writing its own.
+    5. **Delivery.** It ships as S0b, after S0, on every OS, with no dependency on
+       F2, F3 or S1. F3 s1a's `previewPath` and S1's allowlist overlap without
+       conflict.
+    6. **Scope disclosure, replacing 3.10's item 10.** What still syncs in
+       `ade-session` is typed names and a browser tab's address (`browserUrl`).
+       Whether to leave out `file://` and local addresses is OQ-23, open (recommend
+       yes to both).
 
 ### F4.1 Terms
 
@@ -2900,8 +2945,8 @@ already records its checkouts, but nothing in ADE reads that record. Meanwhile
   orchestrator and agent-tracker rows and the criteria that go with them (the
   import and unreadable rules for those two keys, OQ-14's cleanup, OQ-15's notice,
   OQ-18's and OQ-21's Dispatch rules and OQ-20's run-folder and fleet rules), and
-  S0b's strip of every tab's path fields from `ade-session` (revision 3.11), which
-  apply on every OS where ADE sync runs (F4.9's Platforms).
+  S0b's strip of every tab's path fields and generated names from `ade-session`
+  (revisions 3.11 and 3.12), which apply on every OS where ADE sync runs (F4.9's Platforms).
 
 ### F4.6 Decisions
 
@@ -3379,7 +3424,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
 
    | Key (sync group) | What can hold the path | Today, and under F2 before the strip | The strip (OQ-5; for the orchestrator and the agent tracker, the owner's decision of 2026-11-15) |
    |---|---|---|---|
-   | `ade-session` (device key, exported to `devices/<device>/`; only `serializedBuffer` stripped) | each pane's `savedCwd`, own view and sub-terminals (a focus session's checkout included); an editor tab's `editorFilePath`, a contracts tab's `contractsRoot`, a tab's `previewPath`; the workspace mark F4 adds | F2 OB-10 AC2 keeps the hub folder there, synced | **for every tab, workspace or not** (S0b; the owner, 2026-11-15, the design's O-3; revision 3.11, pending owner approval): every `savedCwd`, `editorFilePath`, `contractsRoot` and `previewPath`, at any depth, left out of the export. And for every workspace tab (S1): every pane stripped, and the workspace mark. All restored locally; the key is never imported |
+   | `ade-session` (device key, exported to `devices/<device>/`; only `serializedBuffer` stripped) | each pane's `savedCwd`, own view and sub-terminals (a focus session's checkout included); an editor tab's `editorFilePath`, a contracts tab's `contractsRoot`, a tab's `previewPath` (once a build saves it; `saveSession` on `main` does not); names ADE generated from those paths; the workspace mark F4 adds | F2 OB-10 AC2 keeps the hub folder there, synced | **for every tab, workspace or not** (S0b; the owner, 2026-11-15, the design's O-3 and OQ-22; revisions 3.11 and 3.12, pending owner approval): every `savedCwd`, `editorFilePath`, `contractsRoot` and `previewPath`, at any depth, left out of the export, and every generated name replaced by a generic one. And for every workspace tab (S1): every pane stripped, and the workspace mark. All restored locally; the key is never imported |
    | `ade-session`: sub-terminal names (`SavedView.name`) and tab names | a name taken from a checkout or hub folder (`ade open` names, a renamed tab, a tab named after its folder) | hub tabs are named "Agent hub" (OB-14 AC1); sub-terminal names are not masked | sub-terminal names of workspace tabs stripped; a workspace tab's own name stripped when it is the hub folder's name (its last folder name), as OQ-5's rule; both restored locally |
    | `better-terminal-workspaces` (tab sets, **shared**: every machine) | a hub tab's folder | F2 OB-14 AC5 saves it | a workspace tab is saved without its folder; Load opens it as a plain tab named "Agent hub" in the home folder |
    | `better-terminal-orchestrator` (**shared**) | a session's `projectDir` (`orchestratorStore.ts:38`) | a folder ADE made on the machine that wrote it, under that machine's `~/.ade/orchestrator/`, named after the session and the time (on `main` the only way it is set), so the path holds that machine's home folder (often the user's name) and the session's name | every session's `projectDir`, whatever the folder, is left out of the export; this machine keeps its own |
@@ -3387,62 +3432,99 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    | `better-terminal-prompt-history`, `better-terminal-saved-notes` (**shared**) | text the engineer typed | as typed | not stripped: the engineer's own text (stated, not changed) |
 | `ade-scratchpad-draft` (device key, exported to `devices/<device>/`) | the scratchpad box's draft, typed or inserted | as typed today; **F5 (PR #115) PT-11 AC4** keeps the draft out of sync's export while it holds inserted template text, and keeps template sends out of `better-terminal-prompt-history` | not stripped by F4: the engineer's own text; F5's rule applies as F5 says |
 
-   **What still syncs** (revision 3.11, pending owner approval; 3.10's text named
-   the four path fields below as still syncing). The owner's "strip all paths" is
-   these two fields. The owner then answered the design's O-3 on 2026-11-15: yes,
-   strip the remaining path fields of `ade-session` for every tab (the next
-   criterion, S0b). After S0b, what still syncs in `ade-session` is **names, not
-   paths**:
-   - tab names the engineer typed;
-   - a plain tab's sub-terminal names;
-   - names ADE derives from a path: an editor tab named after its file, a contracts
-     tab named after its folder, and a tab or sub-terminal named after its folder.
+   **What still syncs** (revisions 3.11 and 3.12, pending owner approval; 3.10's
+   text named the four path fields below as still syncing). The owner's "strip all
+   paths" is these two fields. The owner then answered the design's O-3 on
+   2026-11-15: yes, strip the remaining path fields of `ade-session` for every tab.
+   And OQ-22, the same day: yes, replace the names ADE generates from a path (the
+   next criterion, S0b). After S0b, what still syncs in `ade-session` is:
+   - **tab names and sub-terminal names the engineer typed**, except one that
+     happens to equal its own folder's last part, which is replaced like a
+     generated one (below);
+   - **a browser tab's address** (`browserUrl`), which can be a `file://` address or
+     a local server's address with a path, and so can hold a folder's path or a
+     repository's name. Whether S0b leaves some of these out is OQ-23, open.
 
-   These can hold a folder's or a repository's name, and so a client's, but never
-   a path. The owner's answer named only the path fields, so names keep syncing.
-   Whether to strip the names ADE derived from a path is OQ-22, open. A workspace
+   These can hold a folder's or a repository's name, and so a client's. A workspace
    tab named after its hub folder, and a workspace tab's sub-terminal names, are
-   already stripped (the names row above, S1).
+   stripped by S1 (the names row above).
 
-   **Every tab's path fields are left out of `ade-session`'s export** (the owner,
-   2026-11-15, the design's O-3; written by the product manager in revision 3.11,
-   pending owner approval; slice S0b).
-   - **The rule:** every field named `savedCwd`, `editorFilePath`, `contractsRoot` or
-     `previewPath`, at any depth of the exported value, is left out, for every tab,
-     workspace or not, and for every pane of its own view and of its sub-terminals.
-     This is the rule today's export already applies to `serializedBuffer`, with
-     four more names. It needs no hub, no workspace and no F2. It applies on every
-     OS where ADE sync runs, and its tests are Rust tests in all three Rust CI jobs.
+   **Every tab's path fields and generated names are left out of `ade-session`'s
+   export** (the owner, 2026-11-15, the design's O-3 and OQ-22; written by the
+   product manager in revisions 3.11 and 3.12, pending owner approval; slice S0b).
+   - **The path fields:** every field named `savedCwd`, `editorFilePath`,
+     `contractsRoot` or `previewPath`, at any depth of the exported value, is left
+     out, for every tab, workspace or not, and for every pane of its own view and of
+     its sub-terminals. This is the rule today's export already applies to
+     `serializedBuffer`, with four more names. `saveSession` on `main` does not
+     write `previewPath` (only the restore reads it), so that name is listed in
+     case a later build saves it.
+   - **Generated names:** in the export, a name is replaced by a generic one when it
+     is generated, meaning it equals the last part of its own path, or ADE's own
+     form of that last part. Today the only such form is a contracts tab's `⬡ `
+     followed by its folder's last part. The name is compared with:
+     - for an editor tab, its `editorFilePath`, and it becomes "Editor";
+     - for a contracts tab, its `contractsRoot`, and it becomes "Contracts";
+     - for a terminal tab, its own view's **active pane's** `savedCwd`, the pane ADE
+       names it from, and it becomes "Terminal";
+     - for a sub-terminal, its own active pane's `savedCwd`, and it becomes
+       "Terminal".
+
+     **A typed name that happens to equal that last part is replaced too**: the
+     rule looks only at the name and its path, not at who wrote it. Any other name
+     is exported as it is. The local name is never changed. The export compares
+     each name with its path before it removes that path; how is the architect's.
+   - **It needs no hub, no workspace and no F2.** It applies on every OS where ADE
+     sync runs, and its tests are Rust tests in all three Rust CI jobs.
    - **This machine is unchanged:** `ade-session` is exported to this machine's
      device folder and never imported, so the local session file, and every tab's
-     folder, file, contracts root and preview after a restart, are as they were.
+     name, folder, file, contracts root and preview after a restart, are as they
+     were. The phone relay is out of scope: WS-7 AC2 governs what it sends.
    - **The device's own file:** once this machine next exports `ade-session`, its
-     file under `devices/<device>/` holds none of the four fields. Export runs, as
-     today, when the session has changed since the last export. OQ-14's cleanup
-     covers only the orchestrator and tracker keys, so an unchanged session's old
-     file is not rewritten until then. Earlier values
-     stay in the sync repository's history (limit (b)). A machine still on an
-     earlier build keeps writing them into its own device file (limit (a)).
+     file under `devices/<device>/` holds none of the four fields and no generated
+     name. Export runs, as today, when the session has changed since the last
+     export. OQ-14's cleanup covers only the orchestrator and tracker keys, so an
+     unchanged session's old file is not rewritten until then. Earlier values stay
+     in the sync repository's history (limit (b)). A machine still on an earlier
+     build keeps writing them into its own device file (limit (a)).
    - **Overlap with F3 and S1:** F3's story s1a also leaves `previewPath` out (F3
-     VV-12), and S1's allowlist rebuilds a workspace tab. The rules agree, so
-     whichever of S0b, F3 s1a and S1 merges second resolves only a textual conflict
-     (F4.9).
+     VV-12), and S1's allowlist rebuilds a workspace tab, renaming one named after
+     its hub folder. The rules agree, so whichever of S0b, F3 s1a and S1 merges
+     second resolves only a textual conflict (F4.9).
 
-   Test: a session holding a plain tab whose own view and sub-terminal panes each
-   have a `savedCwd` with a marker, an editor tab with an `editorFilePath` marker, a
-   contracts tab with a `contractsRoot` marker, and a tab with a `previewPath`
-   marker; with sync on, `run_sync`. Then:
+   Test (`run_sync` with sync on). The session holds:
+   - a plain terminal tab whose own view and sub-terminal panes each have a
+     `savedCwd` with a marker;
+   - an editor tab with an `editorFilePath` marker;
+   - a contracts tab with a `contractsRoot` marker;
+   - a tab with a `previewPath` marker, written into the saved session by hand,
+     since `saveSession` on `main` does not write it.
+
+   And these names:
+   - an editor tab named after its file;
+   - a contracts tab named `⬡ ` plus its folder's last part;
+   - a terminal tab named after its active pane's folder;
+   - a sub-terminal named after its active pane's folder;
+   - a terminal tab named after the folder of a pane that is **not** its active
+     pane;
+   - a tab whose name the engineer typed, "Client notes";
+   - a typed name that equals its active pane's folder's last part.
+
+   Then:
    - this machine's `devices/<device>/ade-session` file in the repository's working
      tree holds none of the markers and none of the four field names;
-   - every other field of the session (tab ids, types, names, splits) is there as
-     saved;
+   - the first four names are "Editor", "Contracts", "Terminal" and "Terminal";
+   - the tab named after a non-active pane's folder keeps its name;
+   - "Client notes" is there as typed;
+   - the typed name equal to its folder's last part is "Terminal";
+   - every other field of the session (tab ids, types, splits) is there as saved;
    - the local `ade-session` file is byte-for-byte unchanged, so a restart reopens
-     each tab as before.
+     each tab, with its own name, as before.
 
-   And: a repository device file written with those markers by an earlier build.
-   After the local session next changes (a tab is added) and this machine syncs,
-   its device file holds none of them. Until the session changes, export does not
-   rewrite that file, as today.
+   And: a repository device file written with those markers and names by an earlier
+   build. After the local session next changes (a tab is added) and this machine
+   syncs, its device file holds none of them. Until the session changes, export
+   does not rewrite that file, as today.
 
    **What the two rows change, for everyone** (the trade-off of the owner's
    decision). Before, a synced orchestrator session and agent run carried the folder
@@ -3613,9 +3695,9 @@ folder I am working in, and each focus session to keep its own checkout (D6).
      the repository runs this build. The release notes say so (the owner, OQ-17; a
      devops item, F4.11).
    - (b) The sync repository is a git repository: what was committed before this
-     build stays in its history, and F4 does not rewrite it (the owner, OQ-16). The
-     design's question O-2, whether to offer starting the repository afresh, stays
-     open and separate.
+     build stays in its history, and F4 does not rewrite it (the owner, OQ-16).
+     The owner answered the design's O-2 no on 2026-11-15 (design revision 5): F4
+     offers no way to start the sync repository afresh (revision 3.12).
    - (c) **Values imported before this build:** a machine that synced before it
      upgraded already holds other machines' `projectDir` and `cwd` values for the
      entries it imported then. This build cannot tell them from its own, so they stay
@@ -3782,7 +3864,7 @@ references stay stable.
 | Slice | Delivers | Criteria | Depends on |
 |---|---|---|---|
 | **S0. Folders out of sync** (MVP, every OS where ADE sync runs; ships ahead of S1, the owner, 2026-11-15, OQ-19) | WS-7 AC3's orchestrator and agent-tracker rows for everyone, without hubs or workspaces: the strip of every `projectDir` and `cwd`, this machine's own values kept on import, and the shared import mechanism that F2 and S1 reuse; with them, the Dispatch and fleet fixes that the strip makes visible | WS-7 AC3: the two rows; the import rule for those two keys (keep this machine's own, and never take another machine's); the unreadable rule for those two keys; the cleanup of the repository's current files (OQ-14); the skipped-key notice in Settings → Sync (OQ-15); per-task Dispatch makes the folder first (OQ-18 (i)); a recorded folder that does not exist counts as none (OQ-21); every agent run records its folder, and the fleet joins only this launch's runs to live panes (OQ-20 (b′)); the hub-tab rule only if S0 merges into `main` after F2 slice 1 (F4.8's "Merges second"). Test cases S0 carries: the orchestrator and tracker parts of the one-machine test (a session and a run in a checkout path and in a folder that is in no workspace); **No hub** in a profile with no workspace record; the orchestrator and tracker parts of the **Two-machine case**; **Each machine keeps its own**; **A copy that holds another machine's folders**; **Unreadable**; **Paths from before**; the skipped-key Rust and frontend tests; the per-task Dispatch tests (the folder, the failure and the three click orders); the two missing-folder tests; the fleet's four tests (recording, same machine, across machines, imported before this build); the **Hub tab** test only if S0 merges second | None (not F2 slice 1, not F3 S1). S1 takes the rest of WS-7 AC3: the `ade-session`, names and tab-set rows, the import rule for tab sets, the one-machine test's workspace-tab, sub-terminal and tab-set parts, the two-machine test's tab-set part, and the **No hub** variants that need the workspace record (record unreadable, record from a newer build) |
-| **S0b. Every tab's paths out of `ade-session`** (MVP, every OS where ADE sync runs; after S0; the owner, 2026-11-15, the design's O-3; revision 3.11, pending owner approval) | `savedCwd`, `editorFilePath`, `contractsRoot` and `previewPath` left out of `ade-session`'s export for every tab, workspace or not | WS-7 AC3: "Every tab's path fields are left out of `ade-session`'s export". Test cases: its marker test (device file holds none, other fields kept, local file byte-for-byte unchanged) and its earlier-build device-file case. The design calls it a small follow-up story after S0; the story's name is the architect's and the scrum-master's | S0, for order only (both change `value_for_repo`, as the design recommends). Not F2, not F3, not S1. F3 s1a and S1 overlap without conflict (F4.9) |
+| **S0b. Every tab's paths and generated names out of `ade-session`** (MVP, every OS where ADE sync runs; after S0; the owner, 2026-11-15, the design's O-3 and OQ-22; revisions 3.11 and 3.12, pending owner approval) | `savedCwd`, `editorFilePath`, `contractsRoot` and `previewPath` left out of `ade-session`'s export for every tab, workspace or not, and generated names replaced by "Terminal", "Editor" or "Contracts" in the export | WS-7 AC3: "Every tab's path fields and generated names are left out of `ade-session`'s export"; OQ-23's `browserUrl` rule too, if the owner answers yes (next revision). Test cases: its marker-and-name test (device file holds no marker; the four generated names replaced; a name from a non-active pane's folder and a typed name kept; a typed name equal to its folder's last part replaced; the `previewPath` marker written by hand; local file byte-for-byte unchanged) and its earlier-build device-file case. The design calls it a small follow-up story after S0; the story's name is the architect's and the scrum-master's | S0, for order only (both change `value_for_repo`, as the design recommends). Not F2, not F3, not S1. F3 s1a and S1 overlap without conflict (F4.9) |
 | **S1. A hub's workspace** (MVP, macOS; after S0) | Discovery by ADE's rules, missing checkouts, multi-root file browser in the own view, opening by Open Hub (persona) and by a hub folder (plain shell), bring forward, add/hide/order, restore, record keeping, F4's local-only stores, the sync strip, no automatic setup in checkouts, the run tab as a workspace tab, limits and hostile paths, tab sets renamed | WS-1 AC1 to AC4, AC5 (open, restore, palette refresh), AC6 to AC8; WS-2 AC1 to AC4, AC6 (S1 entries), AC7, AC8; WS-3; WS-4; WS-5 AC1 **only if F3 S1 is not on `main` when F4 S1 is reviewed, and again before merging, if F3 S1 merged in between (F3 D14)** (otherwise WS-5 AC2 instead, as F4 S1 then merges second), AC3; WS-6; WS-7 AC1, AC2 (not its [Second] relay part unless S1 merges second), AC3 (the sync strip: only what S0 does not carry), AC4; WS-9; WS-10. **[Second]:** WS-5 AC2 with F3 S1; WS-7 AC2's relay part with phone-watch story 8 | F2 slice 1 (Open Hub, the hub-tab flag). Works with or without F3 S1 |
 | **S2. Recents and live refresh** (Next) | Open Workspace… with the recent list and Open Hub Folder…; refresh on `ACCESS.md` change | WS-2 AC5, AC6 (S2 entry); WS-1 AC5 (live part); WS-5 AC4 | S1 |
 
@@ -3827,7 +3909,8 @@ persona's file browser, which is the owner's whole ask.
   orchestrator and agent-tracker rows and their criteria (the import and unreadable
   rules for those two keys, OQ-14's cleanup, OQ-15's notice, OQ-18's and OQ-21's
   Dispatch rules, OQ-20's run-folder and fleet rules), and S0b's strip of every
-  tab's path fields from `ade-session` (revision 3.11), need no hub and no
+  tab's path fields and generated names from `ade-session` (revisions 3.11 and
+  3.12), need no hub and no
   workspace, and apply on every OS where ADE sync runs (F4.5). Their sync tests are Rust tests on ADE sync's
   existing harness and run in all three Rust CI jobs: `backend` (ubuntu-22.04),
   `backend-macos` and `backend-windows` (windows-latest), each running `cargo test
@@ -3971,8 +4054,9 @@ OQ-1 to OQ-13 were answered by the owner on 2026-11-10, and OQ-14 to OQ-21 on
 2026-11-15 (History; revision 3.8 applies the answers). OQ-14 to OQ-21 (revisions
 3.5 to 3.7) came from applying the owner's decision of 2026-11-15 to WS-7 AC3. The
 owner also answered the design's O-3 on 2026-11-15 (WS-7 AC3, S0b; revision
-3.11). **OQ-22 is open** (revision 3.11). Each question is kept as asked, with its
-answer after its title once it has one.
+3.11), OQ-22 the same day (revision 3.12), and the design's O-2 (no fresh start;
+design revision 5). **OQ-23 is open** (revision 3.12). Each question is kept as
+asked, with its answer after its title once it has one.
 
 - **OQ-1. One meaning for "workspace" across F1 and F4 (D1).** **Answered 2026-11-10
   (owner): yes, amend F1** (F1 revision 9m). Amend F1 so a workspace
@@ -4077,7 +4161,8 @@ answer after its title once it has one.
   yet (F4.11).
 - **OQ-16. Folders in the sync repository's history (WS-7 AC3).** **Answered
   2026-11-15 (owner): yes**: the history is not rewritten, and the design's O-2
-  stays a separate open question. Accept
+  stays a separate open question. (The owner later answered O-2 no, the same day:
+  F4 offers no fresh start; design revision 5, PRD revision 3.12.) Accept
   that folders synced before this build stay in the sync repository's git history,
   because F4 does not rewrite it? *Recommend yes for S1*: rewriting the history
   needs a forced push, which breaks every other machine's copy of the repository.
@@ -4175,7 +4260,13 @@ answer after its title once it has one.
   unlikely, since the folder sits under ADE's own `~/.ade/orchestrator/`, which the
   engineer does not normally touch.
 - **OQ-22. Names ADE derived from a path, in `ade-session`'s export (WS-7 AC3,
-  revision 3.11).** **Open.** After S0b no path leaves `ade-session`, but some names
+  revision 3.11).** **Answered 2026-11-15 (owner): yes**, strip the generated
+  names: in the export only, each becomes a generic name ("Terminal", "Editor",
+  "Contracts"); the local name does not change, and the phone relay is out of scope.
+  Revision 3.12 writes the criterion: a name is generated when it equals the last
+  part of its own path, or ADE's own form of it (the contracts tab's `⬡ ` prefix),
+  with a terminal tab compared with its active pane's folder. A typed name that
+  happens to equal that last part is replaced too. As asked: After S0b no path leaves `ade-session`, but some names
   ADE derived from a path still sync: an editor tab named after its file, a
   contracts tab named after its folder, and a tab or sub-terminal named after its
   folder. A repository's or client's name is often one of these. Replace such a
@@ -4187,6 +4278,21 @@ answer after its title once it has one.
   per name, and the key is never imported, so this machine loses nothing. If no,
   "What still syncs" stays the disclosure. If yes, the product manager adds the
   criterion and its test to S0b in the next revision.
+- **OQ-23. Browser tab addresses in `ade-session`'s export (WS-7 AC3, revision
+  3.12).** **Open.** A browser tab's address (`browserUrl`) is saved and still
+  syncs. It can be a `file://` address, which is a path on this machine, or a local
+  server's address with a path (a new browser tab starts at
+  `http://localhost:3000`). Should S0b also leave out a `browserUrl` that:
+  - (a) starts with `file://`? *Recommend yes*: it is a path, the same as the four
+    fields S0b already leaves out.
+  - (b) points to this machine (host `localhost`, `127.0.0.1` or `::1`, any port)?
+    *Recommend yes*: a local server's paths often mirror the project's folders, and
+    the address means nothing on another machine.
+
+  In both cases the whole field is left out, and this machine loses nothing, since
+  the key is never imported. Other addresses (for example a code host's page for a
+  repository) keep syncing, and "What still syncs" says so. If yes to either, the
+  product manager adds the criterion and its test to S0b in the next revision.
 
 ### F4.11 Handoff
 
@@ -4201,8 +4307,10 @@ answer after its title once it has one.
   the delta review of 3.8 (the ninth), and revision 3.10 that of 3.9 (the tenth),
   with the owner's follow-up answer on older run history. The check of 3.10 came
   back PASS WITH MINORS, and the owner approved 3.4 to 3.10 as written on
-  2026-11-15 (History). Revision 3.11 (S0b, OQ-22) needs its own review before the
-  owner approves it.
+  2026-11-15 (History). The review of revision 3.11 (S0b) found one major, in
+  OQ-22's wording, and three minors. Revision 3.12 answers them (F4.12's eleventh
+  table), and a delta check of 3.12 comes before the owner approves 3.11 and
+  3.12.
 - **Designer:** root rows (label, disambiguated label, path, missing, not-answering
   and not-in-workspace marks, the current-root mark), the file browser's workspace
   menu, the palette entries, Show Hidden Workspace Folders, the Tabs/Tab Sets relabel,
@@ -4227,8 +4335,10 @@ answer after its title once it has one.
   with its failure case and one folder per session (OQ-18); a recorded folder that
   does not exist (OQ-21); and every agent run recording its folder, with the fleet
   joining only this launch's runs to live panes, with no `cwd` recorded in a
-  flagged hub tab (OQ-20 (b′)). For S0b (revision 3.11, once approved): the four
-  path fields added to `ade-session`'s left-out names, and the story's name. Then
+  flagged hub tab (OQ-20 (b′)). For S0b (revisions 3.11 and 3.12, once approved):
+  the four path fields added to `ade-session`'s left-out names, the generated-name
+  rule (comparing each name with its path before that path is removed), and the
+  story's name. Then
   WS-1 AC8's check
   in automatic project setup, discovery's parser and its frozen fixture (WS-1 AC2), the finished-hub check (WS-2 AC8), the per-root bound and non-blocking reads
   (WS-9 AC2, AC3), the watches (WS-9 AC6, S2), how the multi-root tree fits
@@ -4236,9 +4346,9 @@ answer after its title once it has one.
   record's store and one for the "workspace" meaning (OQ-1, approved).
 - **Scrum-master:** after approval, shard S0 first (F4.8: its criteria, test
   cases and gate as that row lists them, every OS; the owner, OQ-19), which does
-  not wait on F2 slice 1, then S0b once revision 3.11 is approved (F4.8's row, every
-  OS; with OQ-22's criterion if the owner answers yes), then S1 with the rest of
-  WS-7 AC3. At S0's sharding,
+  not wait on F2 slice 1, then S0b once revisions 3.11 and 3.12 are approved
+  (F4.8's row, every OS; with OQ-23's rule if the owner answers yes), then S1 with
+  the rest of WS-7 AC3. At S0's sharding,
   write the hub-tab rule's mirror (F4.8's "Merges second") into the ticket of F2
   slice 1's story that adds the hub-tab flag, if it exists; only if it does not,
   into `.ade/context/f4-merges-second.md`. That file, when used, holds one section
@@ -4453,4 +4563,13 @@ answer after its title once it has one.
 | **Major** upgrading drops existing picker and board history | The owner decided on 2026-11-15 to accept the one-time loss rather than keep the old pane join for those entries. WS-7 AC3's consequences and criterion and OQ-20's record each state it in the same sentence; the same-machine test gains a fourth case (an entry from before this build with no `cwd` shows under "Unknown project"). |
 | minor: `.ade/context/f4-merges-second.md` serves two mirrors | It holds one section per mirror, WS-5 AC2's for F3 S1 and the hub-tab rule's for F2 slice 1 (F4.8, F4.11). |
 | the owner summary | The History's 3.10 entry gives the ten-line list the owner approves, with items 1, 2, 4, 6, 7 and 8 corrected as the review asked. |
+
+**Review of revision 3.11 (119e017): S0b's criterion, test, slice row and the F2 and F3 notes ready; one major and three minors; answered in revision 3.12, with the owner's answer to OQ-22.**
+
+| Finding | Answer in revision 3.12 |
+|---|---|
+| **Major** OQ-22's wording | OQ-22 is answered yes and its criterion is written. A name is generated when it equals the last part of its own path, or ADE's own form of it (`⬡ ` plus the folder, for contracts tabs). A terminal tab is compared with its active pane's `savedCwd`. A typed name that equals that last part is replaced too, stated plainly. The test covers an editor tab, a contracts tab, a terminal tab and a sub-terminal named after their paths, a name from a non-active pane's folder (kept), a typed name (kept), and a typed name equal to its folder's last part (replaced). |
+| minor 1: `previewPath` is never saved on `main` | Kept in S0b's list for a later build. The row's "What can hold the path" cell says "once a build saves it", and the test writes the marker by hand. The 3.12 History entry corrects revision 3.5's listing. |
+| minor 2: `browserUrl` still syncs | Disclosed in "What still syncs". OQ-23 asks whether S0b should leave out `file://` and local addresses, recommending yes to both. |
+| minor 3: O-2 is stale | Limit (b) and OQ-16 record the owner's answer (no fresh start; design revision 5, b7a6477). F4.10's lead-in says so. |
 <!-- F4 ends -->
