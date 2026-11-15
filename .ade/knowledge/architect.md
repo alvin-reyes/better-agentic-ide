@@ -95,3 +95,8 @@
   - `syn` 2.0.117 is in `src-tauri/Cargo.lock` transitively, but `src-tauri` has no `[dev-dependencies]`; naming it is a new direct dependency. Static rules can use a small lexer in a `cfg(test)` module instead.
   - The Windows CI job's display name is `Backend on Windows (compile + test)` (`ci.yml:222`).
   - A PRD's status line can lag an owner approval relayed by the coordinator: say both.
+- 2026-11-15: F4 design revision 5 (one major after revision 4's delta review; owner answered O-2 to O-6 as recommended).
+  - Coalescing is only safe for calls whose answer is a value (`fstatat`, `readlinkat`); waiters must hold no thread or descriptor, or one hung call fills the pool.
+  - Before marking a whole volume on four parked reads, probe its mount point from outside the pool: cloud-backed files (iCloud, File Provider) download on read, so slow reads do not prove a dead volume.
+  - Static rules for "no file-system access" must be an allowlist of paths a module may name; a denylist misses `crate::path_exists`, `state::read_json` and other crates.
+  - The verification command is defined once, in `docs/architecture.md`; the relay-pairing design's "Verification" section only records piece 2a's approval and now points there. Per-story gate additions approved by the owner go there too, with what QA records.

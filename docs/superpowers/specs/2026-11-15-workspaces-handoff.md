@@ -6,20 +6,22 @@ the UX are approved.
 ## State
 
 - **PRD:** F4 is approved by the owner at revision 3.3 (`docs/prd.md`, branch
-  `prd-workspaces`, PR #113). **Revisions 3.4 to 3.10 (3.10 is 0652d41) were approved
-  by the owner on 2026-11-15**; they apply "strip all paths", record the answers to
-  OQ-14 to OQ-21 (OQ-20 as (b′), with the one-time loss accepted) and add the hub-tab
-  rule. The PRD's status line at that commit still says "pending" until the product
-  manager records the approval. Not merged, not sharded.
+  `prd-workspaces`, PR #113). **Revisions 3.4 to 3.10 were approved by the owner on
+  2026-11-15** (recorded at e1206c0); they apply "strip all paths", record the answers
+  to OQ-14 to OQ-21 (OQ-20 as (b′), with the one-time loss accepted) and add the
+  hub-tab rule. A PRD amendment for the design's O-3 (story w15) is still to be written.
+  Not merged, not sharded.
 - **Design** (branch `arch-f4`): `2026-11-15-workspaces-design.md`, with
   `.ade/context/workspaces.md`, `.ade/context/sync-local-fields.md` and ADRs 0037 to
   0041 (Proposed, numbers provisional). Revision 1 was BLOCKED in adversarial review
   (`2026-11-15-workspaces-design-review-1.md`). Revision 2 (3c9354a) was BLOCKED in its
   delta review on three new blockers. Revision 3 (bf2de65) closed them all; its delta
-  review found no new blocker and five majors. **Revision 4 is written** and answers
-  each (its section 24). It has not had its delta review. Nothing in it was compiled or
-  run on a Mac. It proposes 16 stories (three for S0, which ships first on every OS;
-  thirteen for S1; section 17), and reconciles itself with PRD 3.10 row by row
+  review found no new blocker and five majors; revision 4 (d8b9164) answered them, and
+  its delta review found one major and called the design ready for approval once it is
+  fixed. **Revision 5 is written** and fixes it (its section 25), and records the
+  owner's answers to O-2 to O-6. It has not had its delta check. Nothing in it was compiled or
+  run on a Mac. It proposes 17 stories (three for S0, which ships first on every OS;
+  thirteen for S1; w15 after S0 once its PRD amendment is approved; section 17), and reconciles itself with PRD 3.10 row by row
   (section 21).
 - **UX** (branch `ux-f4`): `2026-11-15-workspaces-ux.md` and
   `2026-11-15-workspaces-mockup.html`. Draft 1 was BLOCKED in adversarial review: one
@@ -45,15 +47,10 @@ instance started, and record `cwd` in the agent picker and `dispatchAgent`.
 ## Still open for the owner
 
 - A new shortcut, ⌘⇧E "Focus File Browser" (UX).
-- The proposed gate addition for the macOS-only tests of stories w2, w4, w5 and w11
-  (`docs/architecture.md`, marked NOT in force; design O-4).
-- The proposed gate addition of a green `backend-windows` run for S0's w12a and w12c
-  (`docs/architecture.md`, marked NOT in force; design O-6).
-- Offer a way to start the sync repository afresh? (design O-2; OQ-16 accepted that
-  history keeps old folders.)
-- Accept the four infrastructure stories w2 to w5 against `CLAUDE.md`'s "vertically
-  sliced" rule? (design O-5)
-- Extend "strip all paths" to `ade-session`'s path fields for every tab? (design O-3)
+- Approval of the design itself (revision 5), after its delta check. O-2 to O-6 were
+  answered on 2026-11-15 as recommended; the two gate additions (O-4 for w2, w4, w5,
+  w11; O-6 for w12a, w12c) are in force in `docs/architecture.md`.
+- The PRD amendment for O-3 (story w15), when the product manager writes it.
 - The product questions each revision lists (design section 19, P-1 to P-15; UX section
   23, P1 to P23), among
   them: what a workspace tab shows in a detached window, whether opening a workspace
@@ -66,8 +63,9 @@ instance started, and record `cwd` in the agent picker and `dispatchAgent`.
    and D-1 to D-5; the Checking state is back because opening now streams; D-5 is the
    skipped-key line in Settings → Sync).
 2. Delta review of each by the adversarial reviewer.
-3. The product manager records the owner's approval of 3.4 to 3.10 in the PRD's status
-   line and answers the product questions (design section 19, P-1 to P-15).
+3. The product manager writes the PRD amendment for O-3 (story w15) and answers the
+   product questions (design section 19, P-1 to P-15). The designer's copy for the
+   skipped-key line (D-5) must exist before S0 is sharded.
 4. The owner approves the design and the UX; the architect records it in
    `.ade/session.md`.
 5. The scrum-master shards S0 first (w12a to w12c, every OS, no F2), writing the hub-tab

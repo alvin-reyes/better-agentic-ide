@@ -878,6 +878,11 @@ builds the app and submits it to TestFlight. The bundle id is
 The owner approved this on 2026-10-14 for piece 2a: the three existing checks,
 plus two.
 
+**The project's command now lives in `docs/architecture.md`, section "Verification
+command".** It holds these five lines unchanged, plus the lines and the per-story
+additions approved since. This section records what piece 2a added and why; where the
+two differ, `docs/architecture.md` is the rule.
+
 - `npx tsc --noEmit`. The root `tsconfig.json` `include` adds
   `packages/protocol`.
 - `npm test`. The vitest `include` adds `packages/protocol/**/*.test.ts`.
