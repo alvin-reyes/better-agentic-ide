@@ -11,7 +11,7 @@ approval, and the change is noted in that section's history.
 | ID | Feature | Status |
 |---|---|---|
 | F1 | [Personas and engagements](#f1-personas-and-engagements) | Approved by the owner 2026-11-08 (revision 9, fixed as revisions 9a and 9b; delta checks clean; revision 9c aligns it with the approved architecture; revision 9d fixes the delta review's minors; revision 9e adds delete's could-not-check case; revision 9f fixes its tests; revision 9g fixes them again and adds delete's not-answering case; revision 9h adds delete's left-behind-process and part-way cases; revision 9i restates that case's limit to match the design; revision 9j restates it again and widens the case to any process in A's roots, to match design 5f; revision 9k closes the slice-1 gaps the starter draft and the UX spec raised, confirmed by the owner 2026-11-08; revision 9m rewords "workspace" and "saved workspace" for F4 (F4 OQ-1, OQ-2), approved by the owner 2026-11-10; revision 9n adds the F5 cross-reference and allowed inflow 9, the default profile's prompt templates read-only in engagements (F5 OQ-18, OQ-3), approved by the owner 2026-11-10; revision 9o adds the identifier check to inflow 9, decided by the owner 2026-11-10) |
-| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.10 (2026-11-15, **text pending owner approval**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); no open questions (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
+| F4 | [Workspaces (one multi-folder workspace per agent hub)](#f4-workspaces-one-multi-folder-workspace-per-agent-hub) | Approved 2026-11-10 (owner), revision 3.1; revision 3.2 answers the check of the approval edits; revision 3.3 records OQ-13's answer; revisions 3.4 to 3.10 (2026-11-15, **approved by the owner 2026-11-15**) strip every orchestrator `projectDir` and agent-tracker `cwd` from sync for everyone (G2, WS-7 AC3; the owner's decision of 2026-11-15) and record the owner's answers to OQ-14 to OQ-21 (2026-11-15); no open questions (OQ-1, OQ-2, OQ-4, OQ-5, OQ-7 to OQ-10, OQ-12 and OQ-13 at the recommendation, OQ-11 not now; OQ-14 to OQ-21 answered 2026-11-15); S0 and S1 of MVP, not sharded. F2 (PR #98, approved) and F3 (PR #112, approved) add their rows when they merge |
 
 ---
 
@@ -2384,7 +2384,7 @@ clarification for slice 0.
   answers the check of the approval edits (BLOCKED on M1 and minors; F4.12's fourth
   table) and asked one question, OQ-13 (WS-1 AC8's two cases), which the owner
   answered yes to both on 2026-11-10 (revision 3.3). **Revisions 3.4 to 3.10
-  (2026-11-15) are pending the owner's approval of their text:** they apply the
+  (2026-11-15) were approved by the owner as written on 2026-11-15:** they apply the
   owner's decision of 2026-11-15 on design review blocker B3 ("strip all paths": an
   orchestrator session's `projectDir` and an agent-tracker entry's `cwd` are never
   synced, for anyone) to G2, WS-7 AC3 and F4.9's notes for F2 and F5. Revisions 3.5
@@ -2394,9 +2394,8 @@ clarification for slice 0.
   review of 3.7 (F4.12's eighth table), revision 3.9 answers the delta review of 3.8
   (the ninth), and revision 3.10 answers that of 3.9 (the tenth) with the owner's
   follow-up answer, and gives the owner's approval list (History, 3.10). F4 has no
-  open questions. Until the owner
-  approves the text of 3.4 to 3.10, revision 3.3 is the approved text. Not sharded;
-  S0 (F4.8) comes first. Revision 1's
+  open questions. Revision 3.10 is the approved text. Not sharded; S0 (F4.8) comes
+  first. Revision 1's
   adversarial review BLOCKED it (B1 to B4, majors, minors); revision 2 answered every
   finding and folded in the owner's decisions of 2026-11-10; the delta review of
   revision 2 BLOCKED it on one finding (N-B1) and listed minors, which revision 3
@@ -2699,17 +2698,24 @@ clarification for slice 0.
        the strip keeps it out of sync (D9).
     8. **Fleet (OQ-20 (b′), a fix to a bug already on `main`).** The fleet joins
        only runs this instance started in this launch to live panes. Earlier runs
-       that recorded a folder keep their project and cost. Runs recorded before
-       this build by the agent picker or the board have no `cwd` and show under
-       "Unknown project" with no cost, a one-time loss the owner accepted. Runs
-       imported on this build show under "Unknown project"; runs imported before
-       this build still show under the other machine's folder.
+       that recorded a folder keep their project and cost, but no tab. Runs
+       recorded before this build by the agent picker or the board have no `cwd`
+       and show under "Unknown project" with no cost, a one-time loss the owner
+       accepted. Runs imported on this build show under "Unknown project"; runs
+       imported before this build still show under the other machine's folder.
     9. **Delivery (OQ-19).** All of this ships first as S0, on every OS, with no
        dependency on F2. The hub-tab rule goes with whichever of S0 and F2 slice 1
        merges second. S1 keeps the workspace-dependent rows.
     10. **Scope disclosure.** Other `ade-session` paths still sync: plain tabs'
         `savedCwd`, `editorFilePath`, `contractsRoot`, `previewPath` and typed
         names. Whether to strip them too is the design's question O-3, open.
+  - 2026-11-15: **approved by the owner**, revisions 3.4 to 3.10 as written, after
+    the check of 3.10 came back PASS WITH MINORS. The owner approved against the
+    ten-line list above, with item 8 worded "older runs keep their own project and
+    cost but no tab, except older picker and board runs → Unknown project"; the
+    reviewer's optional fix, "keep their project and cost, but no tab", is applied
+    to item 8 so the list matches that wording and the text. Revision 3.10 is now
+    F4's approved text. Next: the scrum-master shards S0 (F4.8, F4.11).
 
 ### F4.1 Terms
 
@@ -2807,7 +2813,8 @@ already records its checkouts, but nothing in ADE reads that record. Meanwhile
   F4's own actions run 0 programs from the hub, its checkouts or its git config and
   write 0 files into them. (F2's persona session, started by Open Hub, is F2's and
   outside this count, D3.) Measured by WS-1 AC6 and WS-2 AC8's tests.
-- **G2** (revisions 3.4 and 3.5, pending owner approval). F4's own stores (the
+- **G2** (revisions 3.4 and 3.5, approved by the owner with 3.4 to 3.10 on
+  2026-11-15). F4's own stores (the
   workspace record and the recent list) never leave the machine: 0 of their paths in
   ADE sync's export, the phone relay, tab sets or logs (WS-7 AC1, AC2). And 0
   workspace or checkout paths in ADE sync's export from any other synced key WS-7
@@ -3316,7 +3323,7 @@ folder I am working in, and each focus session to keep its own checkout (D6).
    tab holds none of the record's markers and no root name.
 3. **The sync strip (OQ-5, approved by the owner 2026-11-10; its orchestrator and
    agent-tracker rows widened by the owner's decision of 2026-11-15; revisions 3.4
-   to 3.10, pending owner approval; OQ-14 to OQ-21 answered by the owner
+   to 3.10, approved by the owner 2026-11-15; OQ-14 to OQ-21 answered by the owner
    2026-11-15).** Today and under F2,
    these keys, which ADE sync exports when Settings → Sync is on, can hold a
    workspace folder's path (and so, by default, a client's name). ADE sync's export
@@ -3751,8 +3758,8 @@ persona's file browser, which is the owner's whole ask.
   tab-set wording of OQ-2; F2 revision 5.1 adds WS-7 AC3's import rule (this
   machine keeps its stripped fields when sync imports another machine's copy) to
   OB-10 AC2 and OB-14 AC5. Revisions 3.4 to 3.10 (the owner's decision of
-  2026-11-15 and the owner's answers to OQ-14 to OQ-21 of the same day, pending the
-  owner's approval of their text) widen WS-7 AC3's
+  2026-11-15 and the owner's answers to OQ-14 to OQ-21 of the same day; approved
+  by the owner 2026-11-15) widen WS-7 AC3's
   orchestrator and agent-tracker rows: every `projectDir` and every `cwd` is left out
   of sync's export, for every folder and everyone. Every rule they add (the import
   never takes another machine's value, unreadable values, the cleanup of OQ-14, the
@@ -3847,7 +3854,7 @@ persona's file browser, which is the owner's whole ask.
   the keys WS-7 AC3's table strips. F5 should cite "F4 OQ-5, approved by the owner
   2026-11-10 (WS-7 AC3)", not F3 VV-12 or F4 WS-7 AC1 and AC2; text F5 itself keeps
   out of sync (its draft and prompt-history rules) stays F5's own rule (F5 D7).
-  Revisions 3.4 to 3.10 (pending the owner's approval of their text): since the
+  Revisions 3.4 to 3.10 (approved by the owner 2026-11-15): since the
   owner's decision of 2026-11-15, an orchestrator session's `projectDir` and an
   agent-tracker entry's `cwd` are never synced, for any folder or anyone. F5 may cite
   that as "the owner's decision of 2026-11-15 (F4 WS-7 AC3)", for those two fields
@@ -4086,9 +4093,9 @@ title.
   and revision 3.7 that of 3.6 (the seventh); revision 3.8 answers that of 3.7 (the
   eighth) and applies the owner's answers to OQ-14 to OQ-21; revision 3.9 answers
   the delta review of 3.8 (the ninth), and revision 3.10 that of 3.9 (the tenth),
-  with the owner's follow-up answer on older run history. The reviewer asks only
-  for a check of 3.10's new sentence before the owner approves the text of 3.4 to
-  3.10, using the summary in the History's 3.10 entry.
+  with the owner's follow-up answer on older run history. The check of 3.10 came
+  back PASS WITH MINORS, and the owner approved 3.4 to 3.10 as written on
+  2026-11-15 (History).
 - **Designer:** root rows (label, disambiguated label, path, missing, not-answering
   and not-in-workspace marks, the current-root mark), the file browser's workspace
   menu, the palette entries, Show Hidden Workspace Folders, the Tabs/Tab Sets relabel,
